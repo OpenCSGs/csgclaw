@@ -11,7 +11,7 @@ Run commands via `exec` inside the current agent container.
 
 ## Registries
 
-- **opencsg** (primary): `https://csgclaw.opencsg.com` — searched first
+- **opencsg** (primary): `https://claw.opencsg.com` — searched first
 - **clawhub** (official): `https://clawhub.ai` — used when opencsg has no hits
 
 Slugs are **case-sensitive**. Copy exact `SLUG` and `REGISTRY` from search output.

@@ -9,12 +9,12 @@ import (
 	"csgclaw/internal/config"
 )
 
-func TestSkillConfigForEnvironmentUsesStageRegistry(t *testing.T) {
+func TestSkillConfigForEnvironmentUsesDefaultRegistryForStage(t *testing.T) {
 	cfg := skillConfigForEnvironment(config.SkillConfig{}, auth.Environment{
 		OpenCSGBaseURL: auth.StageOpenCSGBaseURL,
 		CSGHubBaseURL:  auth.StageCSGHubBaseURL,
 	})
-	if got, want := cfg.BaseURL, "https://csgclaw.opencsg-stg.com"; got != want {
+	if got, want := cfg.BaseURL, config.DefaultSkillBaseURL; got != want {
 		t.Fatalf("BaseURL = %q, want %q", got, want)
 	}
 	if !cfg.OfficialBaseURLSet || cfg.OfficialBaseURL != "" {

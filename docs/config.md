@@ -276,14 +276,14 @@ The old template Hub URL `https://csgclaw.opencsg.com` is no longer rewritten au
 
 `csgclaw skill` uses two skill registries by default:
 
-- **opencsg** (primary): `https://csgclaw.opencsg.com`
+- **opencsg** (primary): `https://claw.opencsg.com`
 - **clawhub** (official): `https://clawhub.ai`
 
 `skill search` queries opencsg first and returns immediately when there are hits; it only queries clawhub.ai when opencsg returns no results.
 
 Use `--registry opencsg` or `--registry clawhub` on `get` / `install` to target one registry. Omit it to try opencsg first, then clawhub.
 
-The Web UI uses the same registry service and install path as the CLI. If no `[skill]` registry is configured, the Web UI derives the default registry from the active OpenCSG login environment; staging uses `https://csgclaw.opencsg-stg.com` and disables the secondary registry.
+The Web UI remote Skill list uses the OpenCSG public Skill catalog from the active login environment: production uses `https://hub.opencsg.com`, and staging uses `https://opencsg-stg.com`. The CLI `csgclaw skill` registry remains separate and uses `https://claw.opencsg.com` for both production and staging logins.
 
 Supported registry APIs:
 
@@ -297,7 +297,7 @@ Browse skills with `search`; there is no catalog list endpoint on the current re
 
 ```toml
 [skill]
-base_url = "https://csgclaw.opencsg.com"
+base_url = "https://claw.opencsg.com"
 official_base_url = "https://clawhub.ai"
 token = "${SKILL_TOKEN}"
 non_suspicious_only = true

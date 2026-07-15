@@ -70,15 +70,8 @@ func skillConfigForEnvironment(cfg config.SkillConfig, env auth.Environment) con
 }
 
 func defaultSkillRegistryBaseURL(env auth.Environment) string {
-	if isStageOpenCSGEnvironment(env) {
-		return "https://csgclaw.opencsg-stg.com"
-	}
 	if isDefaultOpenCSGEnvironment(env) {
 		return config.DefaultSkillBaseURL
-	}
-	if baseURL := strings.TrimRight(strings.TrimSpace(env.CSGHubBaseURL), "/"); baseURL != "" &&
-		baseURL != auth.DefaultCSGHubBaseURL {
-		return baseURL
 	}
 	return config.DefaultSkillBaseURL
 }

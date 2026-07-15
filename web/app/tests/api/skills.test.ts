@@ -7,6 +7,7 @@ const AGENTICHUB_SKILLS_URL =
 const SERVER_CONFIG_RESPONSE = JSON.stringify({
   hub_official_url: "https://opencsg-stg.example.test/",
 });
+const UNAUTHENTICATED_AUTH_RESPONSE = JSON.stringify({ authenticated: false });
 
 function mockFetch(handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
   const fetchMock = vi.fn<typeof fetch>(handler);
@@ -30,6 +31,9 @@ describe("skills API", () => {
 
   it("normalizes AgenticHub skills as readonly official skills", async () => {
     const fetchMock = mockFetch(async (input) => {
+      if (String(input) === "api/v1/auth/status") {
+        return new Response(UNAUTHENTICATED_AUTH_RESPONSE, { status: 200 });
+      }
       if (String(input) === "api/v1/server/config") {
         return new Response(SERVER_CONFIG_RESPONSE, { status: 200 });
       }
@@ -68,12 +72,41 @@ describe("skills API", () => {
         source: "official",
       },
     ]);
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/auth/status", expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith("api/v1/server/config", expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith(AGENTICHUB_SKILLS_URL, expect.objectContaining({ credentials: "omit" }));
   });
 
+  it("uses the authenticated staging OpenCSG site for the remote skill catalog", async () => {
+    const fetchMock = mockFetch(async (input) => {
+      if (String(input) === "api/v1/auth/status") {
+        return new Response(
+          JSON.stringify({
+            authenticated: true,
+            opencsg_base_url: "https://opencsg-stg.com",
+            base_url: "https://csgclaw.opencsg-stg.com",
+            ai_gateway_base_url: "https://aigateway.opencsg-stg.com/v1",
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    });
+
+    await fetchAgenticHubOfficialSkillsPage();
+
+    expect(fetchMock).not.toHaveBeenCalledWith("api/v1/server/config", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://opencsg-stg.com/api/v1/skills?page=1&per=16&search=&sort=trending&source=",
+      expect.objectContaining({ credentials: "omit" }),
+    );
+  });
+
   it("uses the configured official Hub URL", async () => {
     const fetchMock = mockFetch(async (input) => {
+      if (String(input) === "api/v1/auth/status") {
+        return new Response(UNAUTHENTICATED_AUTH_RESPONSE, { status: 200 });
+      }
       if (String(input) === "api/v1/server/config") {
         return new Response(JSON.stringify({ hub_official_url: "https://opencsg-stg.com/" }), { status: 200 });
       }
@@ -90,6 +123,9 @@ describe("skills API", () => {
 
   it("loads an AgenticHub official skills page with pagination metadata", async () => {
     const fetchMock = mockFetch(async (input) => {
+      if (String(input) === "api/v1/auth/status") {
+        return new Response(UNAUTHENTICATED_AUTH_RESPONSE, { status: 200 });
+      }
       if (String(input) === "api/v1/server/config") {
         return new Response(SERVER_CONFIG_RESPONSE, { status: 200 });
       }
@@ -125,6 +161,9 @@ describe("skills API", () => {
 
   it("uses the path-derived title when the API title is generic", async () => {
     mockFetch(async (input) => {
+      if (String(input) === "api/v1/auth/status") {
+        return new Response(UNAUTHENTICATED_AUTH_RESPONSE, { status: 200 });
+      }
       if (String(input) === "api/v1/server/config") {
         return new Response(SERVER_CONFIG_RESPONSE, { status: 200 });
       }
@@ -163,6 +202,9 @@ describe("skills API", () => {
 
   it("passes the AgenticHub official skills search parameter", async () => {
     const fetchMock = mockFetch(async (input) => {
+      if (String(input) === "api/v1/auth/status") {
+        return new Response(UNAUTHENTICATED_AUTH_RESPONSE, { status: 200 });
+      }
       if (String(input) === "api/v1/server/config") {
         return new Response(SERVER_CONFIG_RESPONSE, { status: 200 });
       }
@@ -180,12 +222,13 @@ describe("skills API", () => {
     );
   });
 
-  it("does not fall back to a default Hub URL when server config fails", async () => {
+  it("does not fall back to a default Hub URL when auth and server config fail", async () => {
     const fetchMock = mockFetch(async () => new Response("unavailable", { status: 500 }));
 
     await expect(fetchAgenticHubOfficialSkillsPage()).rejects.toMatchObject({ status: 500 });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/auth/status", expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith("api/v1/server/config", expect.any(Object));
   });
 

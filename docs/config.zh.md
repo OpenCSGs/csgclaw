@@ -275,14 +275,14 @@ enabled = true
 
 `csgclaw skill` 默认同时搜索两个 skill 注册表：
 
-- **opencsg**（主）：`https://csgclaw.opencsg.com`，优先
+- **opencsg**（主）：`https://claw.opencsg.com`，优先
 - **clawhub**（官方）：`https://clawhub.ai`
 
 `skill search` 先查 opencsg，有结果即返回；仅当 opencsg 无结果时才查 clawhub.ai。
 
 `get` / `install` 可用 `--registry opencsg` 或 `--registry clawhub` 指定；省略时先查 opencsg，再查 clawhub。
 
-Web UI 使用与 CLI 相同的 registry 服务和安装路径。如果没有配置 `[skill]` registry，Web UI 会根据当前 OpenCSG 登录环境推导默认 registry；stg 环境使用 `https://csgclaw.opencsg-stg.com`，并关闭次注册表。
+Web UI 的远端 Skill 列表使用当前登录环境对应的 OpenCSG 公开 Skill catalog：生产环境使用 `https://hub.opencsg.com`，stg 环境使用 `https://opencsg-stg.com`。CLI `csgclaw skill` registry 与此独立，无论生产或 stg 登录环境都使用 `https://claw.opencsg.com`。
 
 当前 registry 支持的 API：
 
@@ -296,7 +296,7 @@ Web UI 使用与 CLI 相同的 registry 服务和安装路径。如果没有配�
 
 ```toml
 [skill]
-base_url = "https://csgclaw.opencsg.com"
+base_url = "https://claw.opencsg.com"
 official_base_url = "https://clawhub.ai"
 token = "${SKILL_TOKEN}"
 non_suspicious_only = true
