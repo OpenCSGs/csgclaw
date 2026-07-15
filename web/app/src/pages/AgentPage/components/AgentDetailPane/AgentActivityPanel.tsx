@@ -1414,7 +1414,7 @@ function ActivityMessageDetail({ message, t }: { message: IMMessage; t: Translat
       content={message.content}
       message={message}
       actionBusy=""
-      actionError={{ key: "", message: "" }}
+      actionFeedback={{ key: "", message: "" }}
       onAction={() => undefined}
       t={t}
     />

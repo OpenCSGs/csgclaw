@@ -2,7 +2,7 @@ import { Fragment, memo, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
-import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
+import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 import { IconImage } from "@/components/ui/Icons";
 import { isAgentRunning, resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import {
@@ -36,7 +36,7 @@ export type ConversationMessageListProps = {
   emptyStateSlot?: ReactNode;
   locale: LocaleCode;
   messageActionBusy: string;
-  messageActionError: MessageActionError;
+  messageActionFeedback: MessageActionFeedback;
   messageListRef: RefObject<HTMLElement | null>;
   onCancelProfilePreviewClose?: () => void;
   onCloseProfilePreview?: () => void;
@@ -57,7 +57,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   emptyStateSlot,
   locale,
   messageActionBusy,
-  messageActionError,
+  messageActionFeedback,
   messageListRef,
   t,
   theme,
@@ -159,7 +159,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                       content={message.content}
                       message={message}
                       actionBusy={messageActionBusy}
-                      actionError={messageActionError}
+                      actionFeedback={messageActionFeedback}
                       enableLongMessageCollapse={own}
                       longMessageExpanded={own ? expandedLongMessages[messageStateKey] === true : undefined}
                       onAction={onMessageAction}

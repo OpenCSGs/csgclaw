@@ -57,10 +57,7 @@ import {
   agentToDraft,
   isAgentProfileDraftComplete,
   isAgentProfileMarkedComplete,
-  availableManagerRebuildRuntimeOptions,
-  collectManagerTemplateVariants,
   composeLegacyRuntimeKind,
-  defaultManagerRebuildImageForRuntime,
   defaultWorkerImageForRuntime,
   draftMCPServersForSave,
   draftRuntimeOptionsForSave,
@@ -99,7 +96,6 @@ import type {
   AgentLike,
   AgentProfileLike,
   AgentTemplateLike,
-  RuntimeKind,
 } from "@/models/agents";
 import { isDirectConversation, localIdentitiesMatch, upsertUserInData } from "@/models/conversations";
 import { mcpServersFromMap } from "@/models/mcp";
@@ -115,13 +111,9 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace } from "@/models/slashCommands";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { workspaceQueryKeys } from "./workspaceQueries";
-import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
+import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 import type { IMConversation, IMUser } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
-
-type ManagerRebuildOptions = {
-  runtimeKind?: RuntimeKind;
-};
 
 type AgentModalMode = "create" | "edit";
 type AgentAction = "delete" | "recreate" | "start" | "stop" | "upgrade";
@@ -446,10 +438,6 @@ export function useAgentController({
   const [cliproxyAuthBusy, setCLIProxyAuthBusy] = useState("");
   const [agentsError, setAgentsError] = useState("");
   const [showAgentModal, setShowAgentModal] = useState(false);
-  const [showManagerRebuildModal, setShowManagerRebuildModal] = useState(false);
-  const [managerRebuildError, setManagerRebuildError] = useState("");
-  const [managerRebuildRuntimeKind, setManagerRebuildRuntimeKind] = useState<RuntimeKind>("codex");
-  const [managerRebuildImage, setManagerRebuildImage] = useState("");
   const [agentModalMode, setAgentModalMode] = useState<AgentModalMode>("create");
   const [agentCreateBotKind, setAgentCreateBotKind] = useState(BOT_CREATE_KIND_WORKER);
   const [agentCreateMode, setAgentCreateMode] = useState<AgentCreateMode>("template");
@@ -459,8 +447,11 @@ export function useAgentController({
   const [agentError, setAgentError] = useState("");
   const [agentProgress, setAgentProgress] = useState<AgentCreateProgressState | null>(null);
   const [agentActionBusy, setAgentActionBusy] = useState("");
-  const [messageActionBusy] = useState("");
-  const [messageActionError, setMessageActionError] = useState<MessageActionError>({ key: "", message: "" });
+  const [messageActionBusy, setMessageActionBusy] = useState("");
+  const [messageActionFeedback, setMessageActionFeedback] = useState<MessageActionFeedback>({
+    key: "",
+    message: "",
+  });
   const [agentPageDraft, setAgentPageDraft] = useState<AgentDraft | null>(null);
   const [agentPageSavedDraft, setAgentPageSavedDraft] = useState<AgentDraft | null>(null);
   const [agentPageBusy, setAgentPageBusy] = useState(false);
@@ -661,12 +652,6 @@ export function useAgentController({
     [data, activeConversationId],
   );
 
-  const managerTemplateVariants = collectManagerTemplateVariants(hubTemplates);
-  const managerRuntimeOptions = availableManagerRebuildRuntimeOptions(
-    managerTemplateVariants,
-    bootstrapConfig,
-    managerAgent?.runtime_kind ?? undefined,
-  );
   const agentsDisplayError =
     agentsError || (agentsQuery.isError ? errorMessage(agentsQuery.error, t("agentActionFailed")) : "");
   const teamsQuery = useQuery({
@@ -769,7 +754,7 @@ export function useAgentController({
     t,
   );
 
-  const progressBusy = agentBusy || agentActionBusy === `${MANAGER_AGENT_ID}:recreate`;
+  const progressBusy = agentBusy;
 
   const clearAgentPageNotice = useCallback(() => {
     if (agentPageNoticeTimerRef.current !== null) {
@@ -780,18 +765,25 @@ export function useAgentController({
     setAgentPageNoticeTone("warning");
   }, []);
 
-  const showAgentPageNotice = useCallback((message: string, tone: AgentPageNoticeTone = "warning") => {
-    if (agentPageNoticeTimerRef.current !== null) {
-      window.clearTimeout(agentPageNoticeTimerRef.current);
-    }
-    setAgentPageNotice(message);
-    setAgentPageNoticeTone(tone);
-    agentPageNoticeTimerRef.current = window.setTimeout(() => {
-      setAgentPageNotice("");
-      setAgentPageNoticeTone("warning");
-      agentPageNoticeTimerRef.current = null;
-    }, 5000);
-  }, []);
+  const showAgentPageNotice = useCallback(
+    (message: string, tone: AgentPageNoticeTone = "warning", durationMs = 5000) => {
+      if (agentPageNoticeTimerRef.current !== null) {
+        window.clearTimeout(agentPageNoticeTimerRef.current);
+        agentPageNoticeTimerRef.current = null;
+      }
+      setAgentPageNotice(message);
+      setAgentPageNoticeTone(tone);
+      if (durationMs <= 0) {
+        return;
+      }
+      agentPageNoticeTimerRef.current = window.setTimeout(() => {
+        setAgentPageNotice("");
+        setAgentPageNoticeTone("warning");
+        agentPageNoticeTimerRef.current = null;
+      }, durationMs);
+    },
+    [],
+  );
 
   useEffect(
     () => () => {
@@ -941,113 +933,49 @@ export function useAgentController({
     }
   }
 
-  function openManagerRebuildModal(item: AgentLike | null | undefined = managerAgent) {
-    const initialRuntimeKind = normalizeRuntimeKind(
-      item?.runtime_kind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind || managerRebuildRuntimeKind,
-    );
-    const fallbackRuntimeKind = managerRuntimeOptions[0]?.value || "codex";
-    const resolvedRuntimeKind = managerRuntimeOptions.some((option) => option.value === initialRuntimeKind)
-      ? initialRuntimeKind
-      : fallbackRuntimeKind;
-    const currentImage = String(item?.image ?? managerAgent?.image ?? "").trim();
-    const resolvedImage = defaultManagerRebuildImageForRuntime(
-      managerTemplateVariants,
-      resolvedRuntimeKind,
-      bootstrapConfig,
-      currentImage,
-    );
-    setManagerRebuildRuntimeKind(resolvedRuntimeKind);
-    setManagerRebuildImage(resolvedImage);
-    setManagerRebuildError("");
-    setShowManagerRebuildModal(true);
-  }
-
-  function updateManagerRebuildRuntimeKind(runtimeKind: string): void {
-    const nextRuntimeKind = normalizeRuntimeKind(runtimeKind);
-    setManagerRebuildRuntimeKind(nextRuntimeKind);
-    setManagerRebuildError("");
-    setManagerRebuildImage(
-      defaultManagerRebuildImageForRuntime(
-        managerTemplateVariants,
-        nextRuntimeKind,
-        bootstrapConfig,
-        managerAgent?.image || "",
-      ),
-    );
-  }
-
-  async function requestManagerRebuild(options: ManagerRebuildOptions = {}): Promise<void> {
+  async function requestManagerRebuild(): Promise<void> {
     if (managerRuntimeUnavailable) {
       throw new Error(managerRuntimeWarning || t("managerCodexMissingWarning"));
     }
-    const runtimeKind = normalizeRuntimeKind(
-      options.runtimeKind ||
-        managerAgent?.runtime_kind ||
-        bootstrapConfig?.runtime_kind ||
-        managerRuntimeOptions[0]?.value ||
-        "codex",
-    );
-    const rebuiltAgent = await createManagerAgentRequest({
-      runtime_kind: runtimeKind,
-    });
+    const rebuiltAgent = await createManagerAgentRequest();
     await refreshAgentsWithUpdatedAgent(rebuiltAgent);
-    await syncAgentStateUntilRunning(MANAGER_AGENT_ID);
+    const runningAgent = await syncAgentStateUntilRunning(MANAGER_AGENT_ID);
+    if (!isAgentRunning(runningAgent)) {
+      throw new Error(t("managerRecreateNotRunning"));
+    }
     await refreshManagerProfile();
     await refreshWorkspaceBootstrapConfig();
   }
 
-  async function rebuildManagerFromBrowser(options: ManagerRebuildOptions = {}): Promise<boolean> {
+  async function rebuildManagerFromBrowser(): Promise<string> {
     setAgentActionBusy(`${MANAGER_AGENT_ID}:recreate`);
-    setManagerRebuildError("");
-    const runtimeKind = normalizeRuntimeKind(
-      options.runtimeKind ||
-        managerAgent?.runtime_kind ||
-        bootstrapConfig?.runtime_kind ||
-        managerRuntimeOptions[0]?.value ||
-        "codex",
-    );
-    setAgentProgress(startAgentCreateProgress(runtimeKind));
     try {
-      await requestManagerRebuild(options);
-      setAgentProgress((current) =>
-        current
-          ? { ...current, percent: 100, status: "done", index: Math.max(0, (current.steps?.length || 1) - 1) }
-          : current,
-      );
-      return true;
+      await requestManagerRebuild();
+      return "";
     } catch (err) {
-      setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
-      setManagerRebuildError(errorMessage(err, t("agentActionFailed")));
-      return false;
+      return errorMessage(err, t("agentActionFailed"));
     } finally {
       setAgentActionBusy("");
     }
   }
 
-  async function confirmManagerRebuild(): Promise<void> {
-    if (agentActionBusy) {
-      return;
-    }
-    const selectedRuntimeKind = normalizeRuntimeKind(
-      managerRebuildRuntimeKind || managerAgent?.runtime_kind || bootstrapConfig?.runtime_kind || "codex",
-    );
-    setMessageActionError({ key: "", message: "" });
-    const rebuilt = await rebuildManagerFromBrowser({ runtimeKind: selectedRuntimeKind });
-    if (rebuilt) {
-      setShowManagerRebuildModal(false);
-      setAgentProgress(null);
-    }
-  }
-
-  async function handleMessageAction(action: MessageAction | null | undefined, _message?: MessageLike | null) {
+  async function handleMessageAction(action: MessageAction | null | undefined, message?: MessageLike | null) {
     if (!action || action.id !== ACTION_REBUILD_MANAGER) {
       return;
     }
     if (messageActionBusy || agentActionBusy) {
       return;
     }
-    setMessageActionError({ key: "", message: "" });
-    openManagerRebuildModal(managerAgent);
+    const key = `${message?.id || "message"}:${action.id}`;
+    setMessageActionBusy(key);
+    setMessageActionFeedback({ key, message: t("managerRecreateInProgress"), tone: "info" });
+    const rebuildError = await rebuildManagerFromBrowser();
+    if (rebuildError) {
+      setMessageActionFeedback({ key, message: rebuildError, tone: "error" });
+    } else {
+      setMessageActionFeedback({ key, message: t("managerRecreateSucceeded"), tone: "success" });
+    }
+    setMessageActionBusy("");
   }
 
   async function refreshAgents(options: FetchAgentsOptions = {}) {
@@ -1719,7 +1647,15 @@ export function useAgentController({
       return;
     }
     if (action === "recreate" && isManagerAgent(item)) {
-      openManagerRebuildModal(item);
+      clearAgentOperationError(item);
+      showAgentPageNotice(t("managerRecreateInProgress"), "info", 0);
+      const rebuildError = await rebuildManagerFromBrowser();
+      if (rebuildError) {
+        clearAgentPageNotice();
+        setAgentOperationError(item, rebuildError);
+      } else {
+        showAgentPageNotice(t("managerRecreateSucceeded"), "success");
+      }
       return;
     }
     setAgentActionBusy(`${item.id}:${action}`);
@@ -2221,7 +2157,7 @@ export function useAgentController({
     managerProfileIncomplete,
     managerRuntimeUnavailable,
     messageActionBusy,
-    messageActionError,
+    messageActionFeedback,
     openAgentDirectMessage,
     notificationAgentItems,
     openCreateAgentModal,
@@ -2346,25 +2282,6 @@ export function useAgentController({
             onSave: saveAgent,
           }
         : null,
-    managerRebuildModalProps: showManagerRebuildModal
-      ? {
-          t,
-          runtimeOptions: managerRuntimeOptions,
-          runtimeKind: managerRebuildRuntimeKind,
-          image: managerRebuildImage,
-          runtimeWarning: managerRuntimeWarning,
-          busy: agentActionBusy === `${MANAGER_AGENT_ID}:recreate`,
-          error: managerRebuildError,
-          progress: agentProgress,
-          onRuntimeKindChange: updateManagerRebuildRuntimeKind,
-          onClose: () => {
-            setShowManagerRebuildModal(false);
-            setManagerRebuildError("");
-            setAgentProgress(null);
-          },
-          onConfirm: confirmManagerRebuild,
-        }
-      : null,
     createTeamModalProps: showCreateTeamModal
       ? {
           t,

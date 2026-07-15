@@ -1,21 +1,21 @@
 import { Button } from "@/components/ui";
 import { StructuredMessageTitleBlock } from "./StructuredMessageCard";
-import type { ActionCardPayload, MessageActionError, MessageLike } from "./types";
+import type { ActionCardPayload, MessageActionFeedback, MessageLike } from "./types";
 
 export type ActionCardProps = {
   busyKey?: string;
   data: ActionCardPayload;
-  error?: MessageActionError | null;
+  feedback?: MessageActionFeedback | null;
   message?: MessageLike | null;
   onAction?: ActionCardPayload["actions"][number] extends infer Action
     ? (action: Action, message?: MessageLike | null) => void
     : never;
 };
 
-export function ActionCard({ data, message, busyKey, error, onAction }: ActionCardProps) {
-  const actionError = data.actions?.some((action) => `${message?.id || "message"}:${action.id}` === error?.key)
-    ? error?.message
-    : "";
+export function ActionCard({ data, message, busyKey, feedback, onAction }: ActionCardProps) {
+  const actionFeedback = data.actions?.some((action) => `${message?.id || "message"}:${action.id}` === feedback?.key)
+    ? feedback
+    : null;
 
   return (
     <div className="structured-message action-card">
@@ -41,7 +41,14 @@ export function ActionCard({ data, message, busyKey, error, onAction }: ActionCa
           })}
         </div>
       ) : null}
-      {actionError ? <div className="structured-message-action-error">{actionError}</div> : null}
+      {actionFeedback?.message ? (
+        <div
+          className={`structured-message-action-feedback ${actionFeedback.tone || "error"}`}
+          role={actionFeedback.tone === "error" ? "alert" : "status"}
+        >
+          {actionFeedback.message}
+        </div>
+      ) : null}
       {data.fallback ? <div className="structured-message-subtitle">{data.fallback}</div> : null}
     </div>
   );

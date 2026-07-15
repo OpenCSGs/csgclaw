@@ -4,7 +4,7 @@ import type { Location, NavigateFunction } from "react-router-dom";
 import type { FetchAgentsOptions } from "@/api/agents";
 import type { FetchVersionOptions } from "@/api/app";
 import type { AgentDetailPaneProps } from "@/pages/AgentPage/components";
-import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
+import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, IMUser, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
@@ -210,7 +210,7 @@ export type UseConversationControllerArgs = {
   managerProfileIncomplete: boolean | null;
   managerRuntimeUnavailable?: boolean | null;
   messageActionBusy: string;
-  messageActionError: MessageActionError;
+  messageActionFeedback: MessageActionFeedback;
   messageListActive?: boolean;
   navigatePane: WorkspaceNavigationController["navigatePane"];
   onMessageAction: (

@@ -17,7 +17,7 @@ export function MessageContent({
   content,
   message,
   actionBusy,
-  actionError,
+  actionFeedback,
   enableLongMessageCollapse = false,
   longMessageExpanded,
   onAction,
@@ -93,7 +93,7 @@ export function MessageContent({
           data={structured as ActionCardPayload}
           message={message}
           busyKey={actionBusy}
-          error={actionError}
+          feedback={actionFeedback}
           onAction={onAction}
         />
       );

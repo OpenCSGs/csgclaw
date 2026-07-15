@@ -103,7 +103,7 @@ function managerChatProps(conversation: IMConversation): ConversationPaneProps {
     mentionIndex: 0,
     mentionableUsersByName: new Map(),
     messageActionBusy: "",
-    messageActionError: {},
+    messageActionFeedback: {},
     messageListRef: createRef<HTMLElement>(),
     onApplyMention: () => {},
     onApplySlashCandidate: () => {},

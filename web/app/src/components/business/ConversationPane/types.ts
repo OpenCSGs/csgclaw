@@ -16,7 +16,7 @@ import type {
 } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { ThemeMode } from "@/shared/theme/theme";
-import type { MessageAction, MessageActionError, MessageLike } from "@/components/business/MessageContent/types";
+import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 
 export type BooleanStateSetter = Dispatch<SetStateAction<boolean>>;
 export type MentionPickerUser = ComposerMentionUser & Pick<IMUser, "avatar" | "role">;
@@ -57,7 +57,7 @@ export type ConversationPaneProps = {
   mentionIndex: number;
   mentionableUsersByName: Map<string, ComposerMentionUser>;
   messageActionBusy: string;
-  messageActionError: MessageActionError;
+  messageActionFeedback: MessageActionFeedback;
   messageListRef: RefObject<HTMLElement | null>;
   memberActionBusyID?: string;
   memberActionError?: string;

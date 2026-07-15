@@ -331,7 +331,7 @@ export function useWorkspaceController() {
     managerProfileIncomplete: agent.managerProfileIncomplete,
     managerRuntimeUnavailable: agent.managerRuntimeUnavailable,
     messageActionBusy: agent.messageActionBusy,
-    messageActionError: agent.messageActionError,
+    messageActionFeedback: agent.messageActionFeedback,
     navigatePane,
     onMessageAction: agent.handleMessageAction,
     onProviderLogin: agent.loginCLIProxyProvider,
@@ -377,7 +377,7 @@ export function useWorkspaceController() {
     managerProfileIncomplete: agent.managerProfileIncomplete,
     managerRuntimeUnavailable: agent.managerRuntimeUnavailable,
     messageActionBusy: agent.messageActionBusy,
-    messageActionError: agent.messageActionError,
+    messageActionFeedback: agent.messageActionFeedback,
     messageListActive: floatingChatOpen,
     navigatePane: ignoreFloatingChatNavigation,
     onMessageAction: agent.handleMessageAction,
@@ -921,6 +921,5 @@ export function useWorkspaceController() {
         }
       : null,
     agentProfileModalProps: agent.agentProfileModalProps,
-    managerRebuildModalProps: agent.managerRebuildModalProps,
   };
 }

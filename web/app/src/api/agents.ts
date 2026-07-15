@@ -27,10 +27,6 @@ export type FetchAgentOptions = {
   cacheBust?: boolean;
 };
 
-export type CreateManagerAgentOptions = {
-  runtime_kind?: RuntimeKind;
-};
-
 export type FetchAgentLogsOptions = {
   lines?: number;
 };
@@ -205,18 +201,11 @@ export function deleteAgentSkillRequest(agentID: string, skillName: string): Pro
   );
 }
 
-export function createManagerAgentRequest(options: CreateManagerAgentOptions = {}): Promise<AgentLike> {
-  const payload: { id: string; replace: boolean; runtime?: { name: RuntimeName; sandbox_enabled: boolean } } = {
+export function createManagerAgentRequest(): Promise<AgentLike> {
+  const payload = {
     id: MANAGER_AGENT_ID, // Legacy contract: id: "u-manager",
     replace: true,
   };
-  if (options.runtime_kind) {
-    const runtimeSelection = resolveRuntimeSelection({ runtime_kind: options.runtime_kind });
-    payload.runtime = {
-      name: runtimeSelection.runtime_name,
-      sandbox_enabled: runtimeSelection.sandbox_enabled,
-    };
-  }
   return post("api/v1/agents", payload);
 }
 

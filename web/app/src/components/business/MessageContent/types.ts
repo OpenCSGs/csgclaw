@@ -12,9 +12,10 @@ export type MessageAction = {
   style?: "danger" | "default" | string;
 };
 
-export type MessageActionError = {
+export type MessageActionFeedback = {
   key?: string;
   message?: string;
+  tone?: "error" | "info" | "success";
 };
 
 export type StructuredMessagePayload = {
@@ -40,7 +41,7 @@ export type ParsedStructuredMessage = StructuredMessagePayload | ActionCardPaylo
 
 export type MessageContentProps = {
   actionBusy?: string;
-  actionError?: MessageActionError | null;
+  actionFeedback?: MessageActionFeedback | null;
   content?: string | null;
   enableLongMessageCollapse?: boolean;
   longMessageExpanded?: boolean;

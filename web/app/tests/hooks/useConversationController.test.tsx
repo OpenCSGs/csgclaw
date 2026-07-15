@@ -121,7 +121,7 @@ function renderConversationController(
         managerProfile: null,
         managerProfileIncomplete: false,
         messageActionBusy: "",
-        messageActionError: { key: "", message: "" },
+        messageActionFeedback: { key: "", message: "" },
         messageListActive,
         navigatePane: vi.fn(),
         onMessageAction: vi.fn(),

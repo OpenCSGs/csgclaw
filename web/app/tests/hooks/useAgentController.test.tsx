@@ -7,6 +7,7 @@ import {
   batchDeleteAgentMCPServersRequest,
   batchAddAgentSkillsRequest,
   createBotRequest,
+  createManagerAgentRequest,
   createNotificationBotRequest,
   deleteAgentRequest,
   deleteAgentSkillRequest,
@@ -40,6 +41,7 @@ import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { ApiError } from "@/api/client";
 import { AGENT_AVATAR_OPTIONS } from "@/shared/avatarOptions";
+import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
@@ -70,6 +72,7 @@ vi.mock("@/api/agents", async () => {
     batchDeleteAgentMCPServersRequest: vi.fn(),
     batchAddAgentSkillsRequest: vi.fn(),
     createBotRequest: vi.fn(),
+    createManagerAgentRequest: vi.fn(),
     createNotificationBotRequest: vi.fn(),
     deleteAgentRequest: vi.fn(),
     deleteAgentSkillRequest: vi.fn(),
@@ -287,6 +290,7 @@ describe("useAgentController", () => {
     vi.mocked(fetchAgentProfileModels).mockReset();
     vi.mocked(batchAddAgentSkillsRequest).mockReset();
     vi.mocked(createBotRequest).mockReset();
+    vi.mocked(createManagerAgentRequest).mockReset();
     vi.mocked(createNotificationBotRequest).mockReset();
     vi.mocked(deleteAgentRequest).mockReset();
     vi.mocked(deleteAgentSkillRequest).mockReset();
@@ -326,6 +330,11 @@ describe("useAgentController", () => {
         },
       ],
       role: "worker",
+    });
+    vi.mocked(createManagerAgentRequest).mockResolvedValue({
+      ...oldAgent,
+      image: "",
+      runtime_kind: "codex",
     });
     vi.mocked(createNotificationBotRequest).mockResolvedValue({
       bot_type: "notification",
@@ -457,6 +466,167 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.savedDraft?.image).toBe(latestImage);
     expect(runAgentActionRequest).toHaveBeenCalledWith("u-manager", "upgrade");
     expect(fetchAgent).toHaveBeenLastCalledWith("u-manager", { cacheBust: true });
+  });
+
+  it("recreates the manager directly from the agent action without opening a modal", async () => {
+    const recreatedManager: AgentLike = {
+      ...oldAgent,
+      image: "",
+      runtime_kind: "codex",
+      status: "running",
+    };
+    let resolveRecreate!: (value: AgentLike) => void;
+    const pendingRecreate = new Promise<AgentLike>((resolve) => {
+      resolveRecreate = resolve;
+    });
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(recreatedManager);
+    vi.mocked(createManagerAgentRequest).mockReturnValue(pendingRecreate);
+
+    const { result } = renderHook(() => useAgentControllerHarness({ agents: [recreatedManager] }).controller, {
+      wrapper: createWrapper(),
+    });
+
+    let recreatePromise!: Promise<void>;
+    act(() => {
+      recreatePromise = result.current.agentViewProps.onRecreate(recreatedManager) as Promise<void>;
+    });
+
+    await waitFor(() => expect(result.current.agentViewProps.notice).toBe("managerRecreateInProgress"));
+    expect(result.current.agentViewProps.noticeTone).toBe("info");
+    expect(result.current.agentViewProps.busyKey).toBe("u-manager:recreate");
+
+    await act(async () => {
+      resolveRecreate(recreatedManager);
+      await recreatePromise;
+    });
+
+    expect(createManagerAgentRequest).toHaveBeenCalledWith();
+    expect(runAgentActionRequest).not.toHaveBeenCalled();
+    expect(result.current).not.toHaveProperty("managerRebuildModalProps");
+    expect(result.current.agentViewProps.notice).toBe("managerRecreateSucceeded");
+    expect(result.current.agentViewProps.noticeTone).toBe("success");
+  });
+
+  it("recreates the manager directly from a chat action card and keeps card busy feedback", async () => {
+    const recreatedManager: AgentLike = {
+      ...oldAgent,
+      image: "",
+      runtime_kind: "codex",
+      status: "running",
+    };
+    let resolveRecreate!: (value: AgentLike) => void;
+    const pendingRecreate = new Promise<AgentLike>((resolve) => {
+      resolveRecreate = resolve;
+    });
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(recreatedManager);
+    vi.mocked(createManagerAgentRequest).mockReturnValue(pendingRecreate);
+
+    const { result } = renderHook(() => useAgentControllerHarness({ agents: [recreatedManager] }).controller, {
+      wrapper: createWrapper(),
+    });
+
+    let recreatePromise!: Promise<void>;
+    act(() => {
+      recreatePromise = result.current.handleMessageAction(
+        { id: ACTION_REBUILD_MANAGER, label: "Recreate" },
+        { id: "message-1" },
+      );
+    });
+
+    await waitFor(() => expect(result.current.messageActionBusy).toBe(`message-1:${ACTION_REBUILD_MANAGER}`));
+    expect(result.current.messageActionFeedback).toEqual({
+      key: `message-1:${ACTION_REBUILD_MANAGER}`,
+      message: "managerRecreateInProgress",
+      tone: "info",
+    });
+
+    await act(async () => {
+      resolveRecreate(recreatedManager);
+      await recreatePromise;
+    });
+
+    expect(createManagerAgentRequest).toHaveBeenCalledWith();
+    expect(result.current.messageActionBusy).toBe("");
+    expect(result.current.messageActionFeedback).toEqual({
+      key: `message-1:${ACTION_REBUILD_MANAGER}`,
+      message: "managerRecreateSucceeded",
+      tone: "success",
+    });
+  });
+
+  it("reports manager recreation failure when the replacement never reaches running", async () => {
+    vi.useFakeTimers();
+    try {
+      const stalledManager: AgentLike = {
+        ...oldAgent,
+        image: "",
+        runtime_kind: "codex",
+        status: "starting",
+      };
+      vi.mocked(fetchAgent).mockReset();
+      vi.mocked(fetchAgent).mockResolvedValue(stalledManager);
+      vi.mocked(createManagerAgentRequest).mockResolvedValue(stalledManager);
+
+      const { result } = renderHook(() => useAgentControllerHarness({ agents: [stalledManager] }).controller, {
+        wrapper: createWrapper(),
+      });
+
+      let recreatePromise!: Promise<void>;
+      act(() => {
+        recreatePromise = result.current.handleMessageAction(
+          { id: ACTION_REBUILD_MANAGER, label: "Recreate" },
+          { id: "message-1" },
+        );
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+        await recreatePromise;
+      });
+
+      expect(result.current.messageActionFeedback).toEqual({
+        key: `message-1:${ACTION_REBUILD_MANAGER}`,
+        message: "managerRecreateNotRunning",
+        tone: "error",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows manager recreation failures on both direct action surfaces", async () => {
+    const manager: AgentLike = {
+      ...oldAgent,
+      image: "",
+      runtime_kind: "codex",
+      status: "running",
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(manager);
+    vi.mocked(createManagerAgentRequest).mockRejectedValue(new Error("Manager recreate failed"));
+
+    const { result } = renderHook(() => useAgentControllerHarness({ agents: [manager] }).controller, {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.agentViewProps.onRecreate(manager);
+    });
+
+    expect(result.current.agentViewProps.notice).toBe("");
+    expect(result.current.agentViewProps.saveError).toBe("Manager recreate failed");
+
+    await act(async () => {
+      await result.current.handleMessageAction({ id: ACTION_REBUILD_MANAGER, label: "Recreate" }, { id: "message-1" });
+    });
+
+    expect(result.current.messageActionFeedback).toEqual({
+      key: `message-1:${ACTION_REBUILD_MANAGER}`,
+      message: "Manager recreate failed",
+      tone: "error",
+    });
   });
 
   it("deletes an agent through the agent delete endpoint", async () => {

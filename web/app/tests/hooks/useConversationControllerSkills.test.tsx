@@ -68,7 +68,7 @@ function useConversationControllerHarness() {
     managerProfile: null,
     managerProfileIncomplete: false,
     messageActionBusy: "",
-    messageActionError: { key: "", message: "" },
+    messageActionFeedback: { key: "", message: "" },
     navigatePane: vi.fn(),
     onMessageAction: vi.fn(),
     onProviderLogin: vi.fn(),

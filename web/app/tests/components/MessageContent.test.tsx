@@ -256,11 +256,11 @@ describe("MessageContent", () => {
     );
   });
 
-  it("disables the busy action and shows action errors for the matching message", () => {
+  it("disables the busy action and shows action feedback for the matching message", () => {
     render(
       <MessageContent
         actionBusy="message-1:rebuild-manager"
-        actionError={{ key: "message-1:rebuild-manager", message: "Rebuild failed" }}
+        actionFeedback={{ key: "message-1:rebuild-manager", message: "Recreating Manager...", tone: "info" }}
         content={JSON.stringify({
           actions: [{ id: ACTION_REBUILD_MANAGER, label: "Rebuild manager" }],
           title: "Manager needs rebuild",
@@ -274,7 +274,25 @@ describe("MessageContent", () => {
     const button = screen.getByRole("button");
     expect(button).toBeDisabled();
     expect(button).toHaveTextContent("...");
-    expect(screen.getByText("Rebuild failed")).toBeInTheDocument();
+    expect(screen.getByText("Recreating Manager...")).toHaveClass("info");
+  });
+
+  it("shows successful action feedback for the matching message", () => {
+    render(
+      <MessageContent
+        actionFeedback={{ key: "message-1:rebuild-manager", message: "Manager recreated.", tone: "success" }}
+        content={JSON.stringify({
+          actions: [{ id: ACTION_REBUILD_MANAGER, label: "Rebuild manager" }],
+          title: "Manager needs rebuild",
+          type: CSGCLAW_ACTION_CARD_TYPE,
+        })}
+        message={{ id: "message-1" }}
+        onAction={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Manager recreated.");
+    expect(screen.getByText("Manager recreated.")).toHaveClass("success");
   });
 
   it("renders notifier cards as structured content", () => {

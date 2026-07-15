@@ -54,7 +54,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     mentionIndex,
     mentionableUsersByName,
     messageActionBusy,
-    messageActionError,
+    messageActionFeedback,
     messageListRef,
     onApplyMention,
     onApplySlashCandidate = (_name) => {},
@@ -234,7 +234,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         currentUserID={currentUserID}
         locale={locale}
         messageActionBusy={messageActionBusy}
-        messageActionError={messageActionError}
+        messageActionFeedback={messageActionFeedback}
         messageListRef={messageListRef}
         t={t}
         theme={theme}

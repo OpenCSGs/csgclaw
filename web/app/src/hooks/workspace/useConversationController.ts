@@ -478,7 +478,7 @@ export function useConversationController({
   t,
   theme,
   messageActionBusy,
-  messageActionError,
+  messageActionFeedback,
   messageListActive = true,
 }: UseConversationControllerArgs) {
   const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
@@ -1674,7 +1674,7 @@ export function useConversationController({
       onSendMessage: sendMessage,
       composerError,
       messageActionBusy,
-      messageActionError,
+      messageActionFeedback,
       onMessageAction,
       activeThreadRootID,
       activeThreadView,

@@ -205,7 +205,7 @@ function renderThreadPane({
         mentionIndex={mentionIndex}
         mentionableUsersByName={new Map([["manager", users[1]]])}
         messageActionBusy=""
-        messageActionError={{}}
+        messageActionFeedback={{}}
         messageListRef={createRef<HTMLElement>()}
         memberActionBusyID={memberActionBusyID}
         memberActionError={memberActionError}
@@ -456,7 +456,7 @@ describe("ConversationPane", () => {
           mentionIndex={0}
           mentionableUsersByName={new Map()}
           messageActionBusy=""
-          messageActionError={{}}
+          messageActionFeedback={{}}
           messageListRef={createRef<HTMLElement>()}
           memberActionBusyID=""
           memberActionError=""
@@ -554,7 +554,7 @@ describe("ConversationPane", () => {
           mentionIndex={0}
           mentionableUsersByName={new Map()}
           messageActionBusy=""
-          messageActionError={{}}
+          messageActionFeedback={{}}
           messageListRef={createRef<HTMLElement>()}
           onApplyMention={() => {}}
           onClearRoomMessages={() => {}}

@@ -339,11 +339,22 @@
   width: fit-content;
 }
 
-.structured-message-action-error {
-  color: var(--danger);
+.structured-message-action-feedback {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
+}
+
+.structured-message-action-feedback.error {
+  color: var(--danger);
+}
+
+.structured-message-action-feedback.info {
+  color: color-mix(in oklab, var(--primary-strong) 72%, var(--text));
+}
+
+.structured-message-action-feedback.success {
+  color: var(--success-700);
 }
 
 .structured-message-details {

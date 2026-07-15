@@ -4,6 +4,7 @@ import {
   batchAddAgentMCPServersRequest,
   batchDeleteAgentMCPServersRequest,
   batchAddAgentSkillsRequest,
+  createManagerAgentRequest,
   deleteAgentSkillRequest,
   fetchAgentMCPServers,
   startFeishuRegistrationRequest,
@@ -29,6 +30,27 @@ describe("agents API", () => {
       "api/v1/agents/u-manager/skills:batchAdd",
       expect.objectContaining({
         body: JSON.stringify({ names: ["alpha", "beta"] }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("recreates the manager without overriding its runtime or image", async () => {
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(JSON.stringify({ id: "u-manager", role: "manager", status: "running" }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createManagerAgentRequest();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/agents",
+      expect.objectContaining({
+        body: JSON.stringify({ id: "u-manager", replace: true }),
         method: "POST",
       }),
     );
