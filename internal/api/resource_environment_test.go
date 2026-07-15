@@ -41,7 +41,7 @@ func TestSkillConfigForEnvironmentKeepsConfiguredRegistry(t *testing.T) {
 func TestApplyOpenCSGEnvironmentToHubConfigUsesLoginHubURL(t *testing.T) {
 	cfg := applyOpenCSGEnvironmentToHubConfig(config.HubConfig{}, auth.Environment{
 		CSGHubBaseURL: auth.StageCSGHubBaseURL,
-	})
+	}, false)
 	resolved := cfg.Resolved()
 	var official config.HubRegistryConfig
 	for _, registry := range resolved.Registries {
@@ -51,6 +51,27 @@ func TestApplyOpenCSGEnvironmentToHubConfigUsesLoginHubURL(t *testing.T) {
 		}
 	}
 	if got, want := official.URL, auth.StageCSGHubBaseURL; got != want {
+		t.Fatalf("official URL = %q, want %q", got, want)
+	}
+}
+
+func TestApplyOpenCSGEnvironmentToHubConfigPreservesExplicitOfficialURL(t *testing.T) {
+	cfg := applyOpenCSGEnvironmentToHubConfig(config.HubConfig{
+		Registries: []config.HubRegistryConfig{
+			{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, URL: "https://hub.example.test", Enabled: true},
+		},
+	}, auth.Environment{
+		CSGHubBaseURL: auth.StageCSGHubBaseURL,
+	}, true)
+	resolved := cfg.Resolved()
+	var official config.HubRegistryConfig
+	for _, registry := range resolved.Registries {
+		if registry.Name == config.DefaultOfficialHubRegistryName {
+			official = registry
+			break
+		}
+	}
+	if got, want := official.URL, "https://hub.example.test"; got != want {
 		t.Fatalf("official URL = %q, want %q", got, want)
 	}
 }

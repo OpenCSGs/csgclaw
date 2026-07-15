@@ -14,7 +14,6 @@ type UserSettings struct {
 	ShowUpgrade              bool
 	SandboxProvider          string
 	HubLocalPath             string
-	HubOfficialURL           string
 	DefaultManagerTemplate   string
 	DefaultWorkerTemplate    string
 	SupportedSandboxProvider []string
@@ -24,7 +23,6 @@ func UserSettingsFromConfig(cfg Config) UserSettings {
 	resolved := cfg.Sandbox.Resolved()
 	resolvedHub := cfg.Hub.Resolved()
 	local := findHubRegistry(resolvedHub.Registries, DefaultHubPublishRegistry)
-	official := findHubRegistry(resolvedHub.Registries, DefaultOfficialHubRegistryName)
 	return UserSettings{
 		ListenAddr:               cfg.Server.ListenAddr,
 		AdvertiseBaseURL:         cfg.Server.AdvertiseBaseURL,
@@ -32,7 +30,6 @@ func UserSettingsFromConfig(cfg Config) UserSettings {
 		ShowUpgrade:              cfg.Server.ShowUpgrade,
 		SandboxProvider:          resolved.Provider,
 		HubLocalPath:             local.Path,
-		HubOfficialURL:           official.URL,
 		DefaultManagerTemplate:   cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
 		DefaultWorkerTemplate:    cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
 		SupportedSandboxProvider: SupportedSandboxProviders(),
@@ -74,16 +71,11 @@ func ApplyUserSettings(cfg Config, settings UserSettings) (Config, error) {
 func applyHubUserSettings(hub HubConfig, settings UserSettings) HubConfig {
 	hub = hub.Resolved()
 	localPath := strings.TrimSpace(settings.HubLocalPath)
-	officialURL := strings.TrimSpace(strings.TrimRight(settings.HubOfficialURL, "/"))
 	for i, registry := range hub.Registries {
 		switch strings.TrimSpace(registry.Name) {
 		case DefaultHubPublishRegistry:
 			if strings.TrimSpace(registry.Kind) == HubRegistryKindLocal && localPath != "" {
 				registry.Path = localPath
-			}
-		case DefaultOfficialHubRegistryName:
-			if strings.TrimSpace(registry.Kind) == HubRegistryKindRemote && officialURL != "" {
-				registry.URL = officialURL
 			}
 		}
 		hub.Registries[i] = registry

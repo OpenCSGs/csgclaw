@@ -13,7 +13,6 @@ export type ConfigSettings = {
   sandbox_provider: string;
   supported_sandbox_providers?: string[];
   hub_local_path: string;
-  hub_official_url: string;
   default_manager_template: string;
   default_worker_template: string;
 };
@@ -29,7 +28,6 @@ export type ConfigSettingsDraft = {
   show_upgrade: boolean;
   sandbox_provider: string;
   hub_local_path: string;
-  hub_official_url: string;
   default_manager_template: string;
   default_worker_template: string;
 };
@@ -41,7 +39,6 @@ export type ConfigSettingsUpdatePayload = {
   show_upgrade: boolean;
   sandbox_provider: string;
   hub_local_path: string;
-  hub_official_url: string;
   default_manager_template: string;
   default_worker_template: string;
 };
@@ -87,7 +84,6 @@ export function normalizeConfigSettings(source: unknown): ConfigSettings | null 
       ? value.supported_sandbox_providers.map((item) => String(item || "").trim()).filter(Boolean)
       : [],
     hub_local_path: String(value.hub_local_path || "").trim(),
-    hub_official_url: normalizeURLField(String(value.hub_official_url || "")),
     default_manager_template: String(value.default_manager_template || "").trim(),
     default_worker_template: String(value.default_worker_template || "").trim(),
   };
@@ -149,7 +145,6 @@ export function configSettingsToDraft(settings: ConfigSettings): ConfigSettingsD
     show_upgrade: settings.show_upgrade,
     sandbox_provider: settings.sandbox_provider,
     hub_local_path: settings.hub_local_path,
-    hub_official_url: normalizeURLField(settings.hub_official_url),
     default_manager_template: settings.default_manager_template,
     default_worker_template: settings.default_worker_template,
   };
@@ -162,7 +157,6 @@ export function configDraftToUpdatePayload(draft: ConfigSettingsDraft): ConfigSe
     show_upgrade: draft.show_upgrade,
     sandbox_provider: draft.sandbox_provider,
     hub_local_path: draft.hub_local_path.trim(),
-    hub_official_url: normalizeURLField(draft.hub_official_url),
     default_manager_template: draft.default_manager_template,
     default_worker_template: draft.default_worker_template,
   };

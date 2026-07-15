@@ -29,8 +29,11 @@ func (h *Handler) currentOpenCSGEnvironment(r *http.Request) auth.Environment {
 	return env
 }
 
-func applyOpenCSGEnvironmentToHubConfig(cfg config.HubConfig, env auth.Environment) config.HubConfig {
+func applyOpenCSGEnvironmentToHubConfig(cfg config.HubConfig, env auth.Environment, preserveOfficial bool) config.HubConfig {
 	cfg = cfg.Resolved()
+	if preserveOfficial {
+		return cfg
+	}
 	hubURL := strings.TrimRight(strings.TrimSpace(env.CSGHubBaseURL), "/")
 	if hubURL == "" {
 		hubURL = config.DefaultOfficialHubRegistryURL
@@ -53,8 +56,20 @@ func (h *Handler) hubServiceForRequest(r *http.Request) (*hub.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r))
+	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r), cfg.HasExplicitOfficialHubRegistry())
 	return hub.NewService(hubCfg, hub.DefaultStoreFactory)
+}
+
+func (h *Handler) officialHubBaseURLForRequest(r *http.Request, cfg config.Config) string {
+	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r), cfg.HasExplicitOfficialHubRegistry())
+	resolved := hubCfg.Resolved()
+	for _, registry := range resolved.Registries {
+		if strings.TrimSpace(registry.Name) == config.DefaultOfficialHubRegistryName &&
+			strings.TrimSpace(registry.Kind) == config.HubRegistryKindRemote {
+			return strings.TrimRight(strings.TrimSpace(registry.URL), "/")
+		}
+	}
+	return ""
 }
 
 func skillConfigForEnvironment(cfg config.SkillConfig, env auth.Environment) config.SkillConfig {

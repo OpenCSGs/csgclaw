@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"csgclaw/internal/config"
 	skilllocal "csgclaw/internal/skill/local"
 	skillremote "csgclaw/internal/skill/remote"
 )
@@ -43,7 +42,7 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	baseURL := strings.TrimRight(strings.TrimSpace(config.UserSettingsFromConfig(cfg).HubOfficialURL), "/")
+	baseURL := strings.TrimRight(strings.TrimSpace(h.officialHubBaseURLForRequest(r, cfg)), "/")
 	if baseURL == "" {
 		http.Error(w, "official Hub URL is not configured", http.StatusBadRequest)
 		return

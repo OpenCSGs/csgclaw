@@ -45,7 +45,6 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 		ShowUpgrade:            false,
 		SandboxProvider:        DockerProvider,
 		HubLocalPath:           "/new/hub",
-		HubOfficialURL:         "https://hub.example.com/",
 		DefaultManagerTemplate: "builtin.manager-codex",
 		DefaultWorkerTemplate:  "builtin.picoclaw-worker",
 	})
@@ -68,7 +67,7 @@ func TestApplyUserSettingsUpdatesExposedFields(t *testing.T) {
 	if got, want := resolvedHub.Registries[1].Path, "/new/hub"; got != want {
 		t.Fatalf("local hub path = %q, want %q", got, want)
 	}
-	if got, want := resolvedHub.Registries[2].URL, "https://hub.example.com"; got != want {
+	if got, want := resolvedHub.Registries[2].URL, DefaultOfficialHubRegistryURL; got != want {
 		t.Fatalf("official hub URL = %q, want %q", got, want)
 	}
 	if got, want := resolvedHub.Registries[3].URL, "https://team.example.com"; got != want {

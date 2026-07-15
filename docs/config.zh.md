@@ -242,12 +242,6 @@ path = "~/.csgclaw/hub"
 enabled = true
 
 [[hub.registries]]
-name = "official"
-kind = "remote"
-url = "https://hub.opencsg.com"
-enabled = true
-
-[[hub.registries]]
 name = "team"
 kind = "remote"
 url = "https://hub.example.com"

@@ -1,8 +1,6 @@
 import { del, get, request } from "@/api/client";
 import { fetchAuthStatus } from "@/api/auth";
-import { fetchServerConfig } from "@/api/config";
 import { normalizeAuthStatus } from "@/models/auth";
-import { normalizeConfigSettings } from "@/models/configSettings";
 import { SKILL_SOURCE_OFFICIAL } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 
@@ -114,12 +112,7 @@ async function officialHubBaseURL(): Promise<string> {
   if (authBaseURL) {
     return authBaseURL;
   }
-  const settings = normalizeConfigSettings(await fetchServerConfig());
-  const baseURL = normalizeOfficialHubBaseURL(settings?.hub_official_url || "");
-  if (!baseURL) {
-    throw new Error("Official Hub URL is not configured");
-  }
-  return baseURL;
+  return "https://hub.opencsg.com";
 }
 
 async function officialHubBaseURLFromAuthStatus(): Promise<string> {

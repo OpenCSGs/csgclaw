@@ -219,6 +219,16 @@ func hasRemoteHubRegistryURLRewrite(registries []rawHubRegistryConfig) bool {
 	return false
 }
 
+func (c Config) HasExplicitOfficialHubRegistry() bool {
+	for _, registry := range c.raw.hub.Registries {
+		if parseRawStringValue(registry.Name) == DefaultOfficialHubRegistryName &&
+			parseRawStringValue(registry.Kind) == HubRegistryKindRemote {
+			return true
+		}
+	}
+	return false
+}
+
 func (c SandboxConfig) Resolved() SandboxConfig {
 	c.Provider = normalizeSandboxProvider(c.Provider)
 	if c.Provider == "" {

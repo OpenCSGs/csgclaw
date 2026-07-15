@@ -236,7 +236,6 @@ type ConfigSettingsResponse struct {
 	SandboxProvider           string   `json:"sandbox_provider"`
 	SupportedSandboxProviders []string `json:"supported_sandbox_providers,omitempty"`
 	HubLocalPath              string   `json:"hub_local_path"`
-	HubOfficialURL            string   `json:"hub_official_url"`
 	DefaultManagerTemplate    string   `json:"default_manager_template"`
 	DefaultWorkerTemplate     string   `json:"default_worker_template"`
 }
@@ -248,7 +247,6 @@ type UpdateConfigSettingsRequest struct {
 	ShowUpgrade            bool   `json:"show_upgrade"`
 	SandboxProvider        string `json:"sandbox_provider"`
 	HubLocalPath           string `json:"hub_local_path,omitempty"`
-	HubOfficialURL         string `json:"hub_official_url,omitempty"`
 	DefaultManagerTemplate string `json:"default_manager_template"`
 	DefaultWorkerTemplate  string `json:"default_worker_template"`
 }

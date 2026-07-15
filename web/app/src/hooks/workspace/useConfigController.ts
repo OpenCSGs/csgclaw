@@ -18,7 +18,6 @@ const emptyDraft = (): ConfigSettingsDraft => ({
   show_upgrade: true,
   sandbox_provider: "boxlite",
   hub_local_path: "",
-  hub_official_url: "",
   default_manager_template: "",
   default_worker_template: "",
 });
