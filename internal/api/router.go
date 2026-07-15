@@ -126,6 +126,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		})
 		r.Get("/bootstrap", h.getIMBootstrap)
 		r.Get("/events", h.getIMEvents)
+		r.Get("/attachments/{id}", h.handleAttachmentByID)
 		r.Route("/rooms", func(r chi.Router) {
 			r.Get("/", h.listRooms)
 			r.Post("/", h.createRoom)

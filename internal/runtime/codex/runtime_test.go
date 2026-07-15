@@ -187,12 +187,8 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 		t.Fatalf("runtime metadata binary path = %q", meta.BinaryPath)
 	}
 
-	authRaw, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "auth.json"))
-	if err != nil {
-		t.Fatalf("read seeded runtime auth: %v", err)
-	}
-	if string(authRaw) != `{"tokens":{"access_token":"access","refresh_token":"refresh"}}` {
-		t.Fatalf("runtime auth = %q, want copied host auth", string(authRaw))
+	if _, err := os.Stat(filepath.Join(root, "agent-alice", ".codex", "home", "auth.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("managed proxy runtime auth stat error = %v, want missing", err)
 	}
 
 	assertRuntimeConfigContains(t, filepath.Join(root, "agent-alice", ".codex", "home", configFileName),
@@ -366,6 +362,12 @@ func TestRefreshCodexHomeAgentsFileAddsManagerConnectorRules(t *testing.T) {
 		"Do not rely on connector tokens from environment variables",
 		"external Codex GitHub app connector",
 		"reconnect the CSGClaw GitHub OAuth connector",
+		"Historical Attachment Recovery",
+		"csgclaw-cli message list --channel <current_channel> --room-id <target_room_id>",
+		"jq '[.[] as $message | ($message.attachments // [])[]",
+		"/api/v1/attachments/<attachment-id>",
+		"curl -fsS -H \"Authorization: Bearer ${CSGCLAW_ACCESS_TOKEN:?}\"",
+		"until durable CSGClaw history has been checked",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("manager AGENTS.md missing %q in %q", want, text)
@@ -944,6 +946,70 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		`memories.generate_memories = false`,
 		`memories.use_memories = false`,
 	)
+}
+
+func TestRuntimeCreateRemovesStaleAuthForManagedProxy(t *testing.T) {
+	root := t.TempDir()
+	runtimeAuthPath := filepath.Join(root, "agent-alice", ".codex", "home", "auth.json")
+	if err := os.MkdirAll(filepath.Dir(runtimeAuthPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(runtimeAuthPath, []byte(`{"tokens":{"refresh_token":"stale-refresh"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentName string) (string, error) {
+			return filepath.Join(root, agentName), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        "u-alice",
+				Name:      "alice",
+				RuntimeID: h.RuntimeID,
+				Profile: agentruntime.Profile{
+					ModelID: "gpt-5.5",
+					BaseURL: "https://runtime.example/v1",
+					APIKey:  "runtime-key",
+				},
+			}, nil
+		},
+		Manager: fakeManager{
+			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+				return &Session{
+					RuntimeID:    spec.RuntimeID,
+					AgentID:      spec.AgentID,
+					AgentName:    spec.AgentName,
+					SessionID:    "sess-managed-auth",
+					BinaryPath:   spec.BinaryPath,
+					WorkspaceDir: spec.WorkspaceDir,
+					HomeDir:      spec.HomeDir,
+					CodexHomeDir: spec.CodexHomeDir,
+					StderrPath:   spec.StderrPath,
+					ProcessID:    os.Getpid(),
+					CreatedAt:    time.Now().UTC(),
+					StartedAt:    time.Now().UTC(),
+				}, nil
+			},
+		},
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+		Profile: agentruntime.Profile{
+			ModelID: "gpt-5.5",
+			BaseURL: "https://runtime.example/v1",
+			APIKey:  "runtime-key",
+		},
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := os.Stat(runtimeAuthPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("managed proxy runtime auth stat error = %v, want missing", err)
+	}
 }
 
 func TestRuntimeCreateWritesConfigWhenHostAuthIsSeeded(t *testing.T) {

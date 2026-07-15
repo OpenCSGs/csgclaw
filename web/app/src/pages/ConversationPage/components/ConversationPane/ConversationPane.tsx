@@ -93,12 +93,15 @@ export function ConversationPane({
   onProviderLogin,
   draftSegments,
   draftText,
+  attachmentDrafts,
   mentionableUsersByName,
   onSyncComposer,
   onComposerKeyDown,
   onComposerCompositionStart,
   onComposerCompositionEnd,
   onSendMessage,
+  onAddAttachments,
+  onRemoveAttachment,
   composerError,
   messageActionBusy,
   messageActionError,
@@ -111,10 +114,13 @@ export function ConversationPane({
   threadLoading,
   threadError,
   threadDraftSegments,
+  threadAttachmentDrafts,
   onOpenThread,
   onCloseThread,
   onThreadDraftChange,
   onSendThreadReply,
+  onAddThreadAttachments,
+  onRemoveThreadAttachment,
   agentDetailPanelProps,
 }: ConversationPaneProps) {
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
@@ -178,6 +184,7 @@ export function ConversationPane({
       loading={threadLoading}
       error={threadError}
       draftSegments={threadDraftSegments}
+      attachmentDrafts={threadAttachmentDrafts}
       disabled={composerDisabled}
       usersById={usersById}
       locale={locale}
@@ -186,6 +193,8 @@ export function ConversationPane({
       t={t}
       onClose={onCloseThread}
       onDraftChange={onThreadDraftChange}
+      onAddAttachments={onAddThreadAttachments}
+      onRemoveAttachment={onRemoveThreadAttachment}
       onCancelProfilePreviewClose={onCancelProfilePreviewClose}
       onCloseProfilePreview={onCloseProfilePreview}
       onOpenAgentDetail={onOpenAgentDetail}
@@ -263,6 +272,7 @@ export function ConversationPane({
         composerError={composerError}
         draftSegments={draftSegments}
         draftText={draftText}
+        attachmentDrafts={attachmentDrafts}
         editorRef={editorRef}
         managerProfile={managerProfile}
         managerProvider={managerProvider}
@@ -277,6 +287,7 @@ export function ConversationPane({
         workingParticipants={workingParticipants}
         onApplyMention={onApplyMention}
         onApplySlashCandidate={onApplySlashCandidate}
+        onAddAttachments={onAddAttachments}
         onComposerCompositionEnd={onComposerCompositionEnd}
         onComposerCompositionStart={onComposerCompositionStart}
         onComposerKeyDown={onComposerKeyDown}
@@ -286,6 +297,7 @@ export function ConversationPane({
         onProviderLogin={onProviderLogin}
         onSaveConnectorConfig={onSaveConnectorConfig}
         onSendMessage={onSendMessage}
+        onRemoveAttachment={onRemoveAttachment}
         onSyncComposer={onSyncComposer}
       />
       {sidePanel}

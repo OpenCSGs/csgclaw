@@ -2,6 +2,7 @@ import { del, get, post } from "@/api/client";
 import type { IMConversation, IMMessage, IMUser, MessageRelation, ThreadView } from "@/models/conversations";
 
 export type SendMessagePayload = {
+  attachments?: File[];
   content: string;
   relates_to?: MessageRelation | null;
   room_id: string;
@@ -51,6 +52,15 @@ export type CreateUserPayload = Partial<IMUser> & {
 };
 
 export function sendMessageRequest(payload: SendMessagePayload): Promise<IMMessage> {
+  if (payload.attachments?.length) {
+    const formData = new FormData();
+    const { attachments, ...messagePayload } = payload;
+    formData.set("payload", JSON.stringify(messagePayload));
+    attachments.forEach((file) => {
+      formData.append("files", file, file.name);
+    });
+    return post("api/v1/messages", undefined, { body: formData });
+  }
   return post("api/v1/messages", payload);
 }
 

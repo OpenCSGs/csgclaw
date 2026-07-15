@@ -26,6 +26,7 @@ type ParticipantEvent struct {
 	Sender        ParticipantSender         `json:"sender"`
 	SenderID      string                    `json:"sender_id,omitempty"`
 	Text          string                    `json:"text"`
+	Attachments   []MessageAttachment       `json:"attachments,omitempty"`
 	Timestamp     string                    `json:"timestamp"`
 	Mentions      []string                  `json:"mentions,omitempty"`
 	ThreadRootID  string                    `json:"thread_root_id,omitempty"`
@@ -73,6 +74,7 @@ type ParticipantSendMessageRequest struct {
 	TopicID      string                     `json:"topic_id,omitempty"`
 	Metadata     map[string]any             `json:"metadata,omitempty"`
 	Context      *ParticipantMessageContext `json:"context,omitempty"`
+	Attachments  []MessageAttachmentUpload  `json:"attachments,omitempty"`
 }
 
 func (r ParticipantSendMessageRequest) ResolvedRoomID() string {
@@ -371,6 +373,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 		},
 		SenderID:      sender.ID,
 		Text:          text,
+		Attachments:   cloneMessageAttachments(message.Attachments),
 		Timestamp:     fmt.Sprintf("%d", message.CreatedAt.UnixMilli()),
 		Mentions:      mentions,
 		ThreadContext: participantThreadContext(room, threadRootID),

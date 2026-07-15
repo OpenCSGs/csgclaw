@@ -9,7 +9,6 @@ import {
   inviteRoomUsersRequest,
   removeRoomUserRequest,
   sendMessageRequest,
-  startThreadRequest,
 } from "@/api/im";
 import { fetchAgentSkills, fetchAgentSkillsFile } from "@/api/agents";
 import {
@@ -30,6 +29,7 @@ import {
   THREAD_RELATION_TYPE,
   threadKey,
   threadMessageKey,
+  threadHasReplies,
   threadViewKey,
   upsertConversationInData,
 } from "@/models/conversations";
@@ -54,6 +54,16 @@ import {
 import { WorkspacePaneTypes } from "@/models/routing";
 import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
 import {
+  type AttachmentSelectionResult,
+  createAttachmentDrafts,
+  formatAttachmentSize,
+  MAX_ATTACHMENT_FILE_BYTES,
+  MAX_ATTACHMENT_MESSAGE_BYTES,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  selectAttachmentFiles,
+  type AttachmentDraft,
+} from "@/models/attachments";
+import {
   agentActivityToolMergeKey,
   isTerminalAgentActivityTool,
   parseAgentActivity,
@@ -63,7 +73,15 @@ import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkil
 import { localizeError } from "@/shared/i18n";
 import { AgentActivityKinds, AgentActivityMsgTypes } from "@/shared/constants/messages";
 import type { AgentLike } from "@/models/agents";
-import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, UsersById } from "@/models/conversations";
+import type {
+  IMConversation,
+  IMMessage,
+  IMServerEvent,
+  IMUser,
+  ThreadView,
+  TranslateFn,
+  UsersById,
+} from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { UseConversationControllerArgs } from "./types";
 import { messageListScrollKey, useMessageListAutoScroll } from "./useMessageListAutoScroll";
@@ -83,6 +101,7 @@ type ComposerMentionState = {
 
 type DraftsByConversationId = Record<string, ComposerSegment[]>;
 type DraftsByThreadKey = Record<string, ComposerSegment[]>;
+type AttachmentDraftsByKey = Record<string, AttachmentDraft[]>;
 
 type OpenCreateRoomOptions = {
   description?: string;
@@ -108,6 +127,54 @@ function clearThreadDraftsForConversation(current: DraftsByThreadKey, conversati
     next[key] = value;
   }
   return changed ? next : current;
+}
+
+function clearAttachmentDraftsForConversation(
+  current: AttachmentDraftsByKey,
+  conversationID: string,
+): AttachmentDraftsByKey {
+  const prefix = `${conversationID}:`;
+  let changed = false;
+  const next: AttachmentDraftsByKey = {};
+  for (const [key, value] of Object.entries(current)) {
+    if (key === conversationID || key.startsWith(prefix)) {
+      changed = true;
+      continue;
+    }
+    next[key] = value;
+  }
+  return changed ? next : current;
+}
+
+function updateAttachmentDrafts(
+  current: AttachmentDraftsByKey,
+  key: string,
+  drafts: AttachmentDraft[],
+): AttachmentDraftsByKey {
+  if (!key) {
+    return current;
+  }
+  if (drafts.length === 0) {
+    if (!current[key]) {
+      return current;
+    }
+    const { [key]: _removed, ...rest } = current;
+    return rest;
+  }
+  return { ...current, [key]: drafts };
+}
+
+function attachmentSelectionError(selection: AttachmentSelectionResult, t: TranslateFn): string {
+  if (selection.fileTooLarge) {
+    return t("attachmentTooLarge", { size: formatAttachmentSize(MAX_ATTACHMENT_FILE_BYTES) });
+  }
+  if (selection.countExceeded) {
+    return t("attachmentLimitExceeded", { count: MAX_ATTACHMENTS_PER_MESSAGE });
+  }
+  if (selection.totalTooLarge) {
+    return t("attachmentTotalTooLarge", { size: formatAttachmentSize(MAX_ATTACHMENT_MESSAGE_BYTES) });
+  }
+  return "";
 }
 
 function conversationMemberParticipantIDs(conversation: IMConversation | null | undefined): Set<string> {
@@ -416,6 +483,8 @@ export function useConversationController({
 }: UseConversationControllerArgs) {
   const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
   const [threadDraftsByKey, setThreadDraftsByKey] = useState<DraftsByThreadKey>({});
+  const [attachmentDraftsByConversationId, setAttachmentDraftsByConversationId] = useState<AttachmentDraftsByKey>({});
+  const [threadAttachmentDraftsByKey, setThreadAttachmentDraftsByKey] = useState<AttachmentDraftsByKey>({});
   const [activeThreadRootID, setActiveThreadRootID] = useState("");
   const [activeThreadView, setActiveThreadView] = useState<ThreadView | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -587,6 +656,10 @@ export function useConversationController({
     [draftsByConversationId, activeConversationId],
   );
   const draftText = useMemo(() => segmentsToPlainText(draftSegments), [draftSegments]);
+  const attachmentDrafts = useMemo(
+    () => attachmentDraftsByConversationId[activeConversationId] ?? [],
+    [attachmentDraftsByConversationId, activeConversationId],
+  );
   const slashPickerEnabled = Boolean((hasActiveConversationAgent || logAgent?.id) && !slashPickerDismissed);
   const slashPickerState = useMemo(
     () =>
@@ -608,6 +681,12 @@ export function useConversationController({
     return activeThreadDraftKey ? (threadDraftsByKey[activeThreadDraftKey] ?? []) : [];
   }, [activeThreadDraftKey, threadDraftsByKey]);
   const activeThreadDraft = useMemo(() => segmentsToPlainText(activeThreadDraftSegments), [activeThreadDraftSegments]);
+  const activeThreadAttachmentDrafts = useMemo(() => {
+    if (!activeThreadDraftKey) {
+      return [];
+    }
+    return threadAttachmentDraftsByKey[activeThreadDraftKey] ?? [];
+  }, [activeThreadDraftKey, threadAttachmentDraftsByKey]);
   const threadSlashPickerEnabled = Boolean((logAgent?.id || hasActiveConversationAgent) && activeThreadDraftKey);
   const threadSlashPickerState = useMemo(
     () =>
@@ -960,7 +1039,7 @@ export function useConversationController({
       setComposerError(t("authRequired"));
       return;
     }
-    if (!data?.current_user_id || !activeConversation || !draftText.trim()) {
+    if (!data?.current_user_id || !activeConversation || (!draftText.trim() && attachmentDrafts.length === 0)) {
       return;
     }
 
@@ -979,6 +1058,7 @@ export function useConversationController({
         room_id: activeConversation.id,
         sender_id: data.current_user_id,
         content,
+        attachments: attachmentDrafts.map((draft) => draft.file),
       });
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       messageListAutoScroll.follow("smooth");
@@ -1001,11 +1081,29 @@ export function useConversationController({
     if (conversationID !== activeConversationId) {
       selectConversation(conversationID);
     }
+
+    const conversation = data?.rooms.find((item) => item.id === conversationID);
+    const root = isThreadReply(message) ? (conversation?.messages.find((item) => item.id === rootID) ?? null) : message;
+    if (!root?.id) {
+      return;
+    }
+
+    const shouldLoadPersistedThread = isThreadReply(message) || threadHasReplies(root.thread);
     setThreadError("");
-    setThreadLoading(true);
     setActiveThreadRootID(rootID);
+    setActiveThreadView({
+      room_id: conversationID,
+      root,
+      replies: [],
+      summary: shouldLoadPersistedThread ? root.thread : null,
+    });
+    setThreadLoading(shouldLoadPersistedThread);
+    if (!shouldLoadPersistedThread) {
+      return;
+    }
+
     try {
-      const view = await startThreadRequest(conversationID, { root_message_id: rootID });
+      const view = await fetchThreadRequest(conversationID, rootID);
       setActiveThreadView(view);
       setBootstrapData((current) => applyThreadToData(current, conversationID, view));
     } catch (err) {
@@ -1043,12 +1141,17 @@ export function useConversationController({
       setThreadError(t("authRequired"));
       return;
     }
-    if (!activeThreadDraft.trim()) {
+    if (!activeThreadDraft.trim() && activeThreadAttachmentDrafts.length === 0) {
       return;
     }
     const serializedDraft = serializeComposerSegments(activeThreadDraftSegments);
     const text = normalizeSlashShorthandForPayload(serializedDraft);
-    if (!data?.current_user_id || !activeConversation || !activeThreadRootID || !text.trim()) {
+    if (
+      !data?.current_user_id ||
+      !activeConversation ||
+      !activeThreadRootID ||
+      (!text.trim() && activeThreadAttachmentDrafts.length === 0)
+    ) {
       return;
     }
 
@@ -1058,12 +1161,14 @@ export function useConversationController({
         room_id: activeConversation.id,
         sender_id: data.current_user_id,
         content: text,
+        attachments: activeThreadAttachmentDrafts.map((draft) => draft.file),
         relates_to: {
           rel_type: THREAD_RELATION_TYPE,
           event_id: activeThreadRootID,
         },
       });
       setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, []));
+      setThreadAttachmentDraftsByKey((current) => updateAttachmentDrafts(current, activeThreadDraftKey, []));
       setActiveThreadView((current) => appendReplyToThreadView(current, created) ?? null);
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       await refreshThreadView(activeConversation.id, activeThreadRootID);
@@ -1211,6 +1316,8 @@ export function useConversationController({
       delete next[roomID];
       return next;
     });
+    setAttachmentDraftsByConversationId((current) => clearAttachmentDraftsForConversation(current, roomID));
+    setThreadAttachmentDraftsByKey((current) => clearAttachmentDraftsForConversation(current, roomID));
     setComposerError("");
     setSubmitError("");
     if (activeConversationId === roomID) {
@@ -1239,6 +1346,7 @@ export function useConversationController({
 
     setBootstrapData((current) => upsertConversationInData(current, clearedRoom));
     setThreadDraftsByKey((current) => clearThreadDraftsForConversation(current, roomID));
+    setThreadAttachmentDraftsByKey((current) => clearAttachmentDraftsForConversation(current, roomID));
     setComposerError("");
     setSubmitError("");
     if (activeConversationId === roomID) {
@@ -1409,8 +1517,67 @@ export function useConversationController({
     }
     if (activeConversationId) {
       setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, []));
+      setAttachmentDraftsByConversationId((current) => updateAttachmentDrafts(current, activeConversationId, []));
     }
     setComposerMentionState(null);
+  }
+
+  function addComposerAttachments(files: File[]): void {
+    if (!activeConversationId || files.length === 0) {
+      return;
+    }
+    const selection = selectAttachmentFiles(files, attachmentDrafts);
+    setComposerError(attachmentSelectionError(selection, t));
+    if (selection.files.length === 0) {
+      return;
+    }
+    const nextDrafts = createAttachmentDrafts(selection.files, attachmentDrafts.length);
+    setAttachmentDraftsByConversationId((current) => {
+      const existing = current[activeConversationId] ?? [];
+      return updateAttachmentDrafts(current, activeConversationId, [...existing, ...nextDrafts]);
+    });
+  }
+
+  function removeComposerAttachment(id: string): void {
+    if (!activeConversationId) {
+      return;
+    }
+    setAttachmentDraftsByConversationId((current) =>
+      updateAttachmentDrafts(
+        current,
+        activeConversationId,
+        (current[activeConversationId] ?? []).filter((draft) => draft.id !== id),
+      ),
+    );
+  }
+
+  function addThreadAttachments(files: File[]): void {
+    if (!activeThreadDraftKey || files.length === 0) {
+      return;
+    }
+    const selection = selectAttachmentFiles(files, activeThreadAttachmentDrafts);
+    setThreadError(attachmentSelectionError(selection, t));
+    if (selection.files.length === 0) {
+      return;
+    }
+    const nextDrafts = createAttachmentDrafts(selection.files, activeThreadAttachmentDrafts.length);
+    setThreadAttachmentDraftsByKey((current) => {
+      const existing = current[activeThreadDraftKey] ?? [];
+      return updateAttachmentDrafts(current, activeThreadDraftKey, [...existing, ...nextDrafts]);
+    });
+  }
+
+  function removeThreadAttachment(id: string): void {
+    if (!activeThreadDraftKey) {
+      return;
+    }
+    setThreadAttachmentDraftsByKey((current) =>
+      updateAttachmentDrafts(
+        current,
+        activeThreadDraftKey,
+        (current[activeThreadDraftKey] ?? []).filter((draft) => draft.id !== id),
+      ),
+    );
   }
 
   function clearComposerError() {
@@ -1496,6 +1663,9 @@ export function useConversationController({
       onProviderLogin,
       draftSegments,
       draftText,
+      attachmentDrafts,
+      onAddAttachments: addComposerAttachments,
+      onRemoveAttachment: removeComposerAttachment,
       mentionableUsersByName,
       onSyncComposer: syncComposerFromEditor,
       onComposerKeyDown,
@@ -1511,6 +1681,7 @@ export function useConversationController({
       threadLoading,
       threadError,
       threadDraftSegments: activeThreadDraftSegments,
+      threadAttachmentDrafts: activeThreadAttachmentDrafts,
       onOpenThread: openThread,
       onCloseThread: closeThread,
       onThreadDraftChange: (segments: ComposerSegment[]) => {
@@ -1524,6 +1695,8 @@ export function useConversationController({
         }
       },
       onSendThreadReply: sendThreadReply,
+      onAddThreadAttachments: addThreadAttachments,
+      onRemoveThreadAttachment: removeThreadAttachment,
       onRemoveMember: removeRoomMember,
       memberActionBusyID,
       memberActionError,

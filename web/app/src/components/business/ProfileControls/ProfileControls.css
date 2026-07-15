@@ -177,16 +177,16 @@
 }
 
 .model-option-label {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  display: inline-flex;
   align-items: center;
   gap: 9px;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
 }
 
 .model-option-label.no-avatar {
-  grid-template-columns: minmax(0, 1fr);
   gap: 0;
 }
 
@@ -194,7 +194,19 @@
   display: block;
 }
 
+.csg-select-trigger .csg-select-value > .model-option-label.single-line {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.csg-select-trigger .csg-select-value > .model-option-label.single-line .model-option-copy {
+  display: block;
+  min-width: 0;
+}
+
 .model-option-avatar {
+  flex: 0 0 24px;
   width: 24px;
   height: 24px;
   display: block;
@@ -205,14 +217,19 @@
 }
 
 .model-option-copy {
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   display: grid;
   gap: 1px;
+  overflow: hidden;
 }
 
 .model-option-model,
 .model-option-provider {
+  display: block;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -488,22 +505,6 @@
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--field);
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.model-provider-model-list::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.model-provider-model-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.model-provider-model-list::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .model-provider-model-row {

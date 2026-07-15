@@ -1,24 +1,5 @@
 .messages {
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.messages::-webkit-scrollbar,
-.thread-panel-body::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.messages::-webkit-scrollbar-track,
-.thread-panel-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.messages::-webkit-scrollbar-thumb,
-.thread-panel-body::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .chat-panel {
@@ -51,16 +32,13 @@
 
 .message-hover-actions {
   position: absolute;
-  top: 32px;
-  right: 8px;
+  top: calc(100% + 2px);
+  right: 0;
+  bottom: auto;
   z-index: 2;
-  display: flex;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%);
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
+  transition: opacity 140ms ease;
 }
 
 .message-row:hover .message-hover-actions,
@@ -69,7 +47,6 @@
   pointer-events: auto;
 }
 
-.thread-hover-button,
 .thread-action-button,
 .thread-latest-reply {
   border: 1px solid var(--line);
@@ -84,8 +61,6 @@
     color 160ms ease;
 }
 
-.thread-hover-button:hover,
-.thread-hover-button:focus-visible,
 .thread-action-button:hover,
 .thread-latest-reply:hover {
   border-color: var(--primary);
@@ -93,21 +68,44 @@
   color: var(--primary-strong);
 }
 
-.thread-hover-button {
-  position: relative;
-  width: 36px;
-  height: 36px;
+.message-action-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.message-action-button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
   padding: 0;
   display: grid;
   place-items: center;
-  background: var(--panel-strong);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
 }
 
-.thread-hover-icon,
-.thread-hover-button .svg-icon {
-  width: 18px;
-  height: 18px;
+.message-action-button:hover,
+.message-action-button:focus-visible {
+  background: transparent;
+  color: var(--text);
+}
+
+.message-action-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.message-action-button svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.2;
 }
 
 .message-thread-actions {
@@ -304,14 +302,12 @@
   display: grid;
   align-content: start;
   gap: 16px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
 }
 
 .thread-root,
 .thread-replies {
   display: grid;
-  gap: 10px;
+  gap: 20px;
 }
 
 .thread-message {
@@ -351,7 +347,25 @@ button.thread-message-avatar:focus-visible {
 }
 
 .thread-message-main {
+  position: relative;
   min-width: 0;
+}
+
+.thread-message-actions {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  bottom: auto;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.thread-message:hover .thread-message-actions,
+.thread-message:focus-within .thread-message-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .thread-message-bubble {
@@ -454,6 +468,33 @@ button.thread-message-avatar:focus-visible {
 .thread-send-button .svg-icon {
   width: 14px;
   height: 14px;
+}
+
+.thread-composer {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.thread-composer .attachment-draft-strip {
+  grid-column: 1 / -1;
+}
+
+.thread-composer-editor {
+  grid-column: 1;
+}
+
+.thread-attach-button,
+.btn.thread-attach-button {
+  grid-column: 2;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  align-self: end;
+}
+
+.thread-send-button,
+.btn.thread-send-button {
+  grid-column: 3;
+  align-self: end;
 }
 
 .thread-dialog-content {

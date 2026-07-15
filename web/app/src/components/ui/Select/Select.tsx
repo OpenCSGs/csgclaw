@@ -170,6 +170,7 @@ export type SelectProps = Omit<SelectRootProps, "children"> & {
   placeholder?: ReactNode;
   searchable?: boolean;
   searchPlaceholder?: string;
+  selectedLabel?: ReactNode;
   size?: SelectSize;
   triggerClassName?: string;
   triggerProps?: Omit<SelectTriggerProps, "children" | "className" | "placeholder" | "size">;
@@ -197,6 +198,7 @@ export function Select({
   placeholder,
   searchable = false,
   searchPlaceholder = "Search",
+  selectedLabel,
   size = "md",
   triggerClassName,
   triggerProps,
@@ -259,7 +261,9 @@ export function Select({
       }}
       {...props}
     >
-      <SelectTrigger className={triggerClassName} placeholder={placeholder} size={size} {...triggerProps} />
+      <SelectTrigger className={triggerClassName} placeholder={placeholder} size={size} {...triggerProps}>
+        {selectedLabel}
+      </SelectTrigger>
       <SelectContent ref={contentRef} className={contentClassName} {...resolvedContentProps}>
         {children ??
           (options ? (

@@ -1,10 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import { Button } from "@/components/ui";
 import { IconImage } from "@/components/ui/Icons";
 import { resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
+import type { AttachmentDraft } from "@/models/attachments";
 import {
   areComposerSegmentsEqual,
   getCollapsedSelectionTextOffset,
@@ -38,6 +39,9 @@ import {
 } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { ThemeMode } from "@/shared/theme/theme";
+import { AttachmentDraftStrip, MessageAttachments } from "./ConversationAttachments";
+import { ConversationMessageActions } from "./ConversationMessageActions";
+import { filesFromDataTransfer } from "./attachmentFiles";
 import { MentionPicker } from "./MentionPicker";
 import { MessageTimestamp } from "./MessageTime";
 import { SlashPicker } from "./SlashPicker";
@@ -57,6 +61,7 @@ export type ConversationThreadPanelProps = {
   agents?: AgentLike[];
   disabled: boolean;
   draftSegments: ComposerSegment[];
+  attachmentDrafts?: AttachmentDraft[];
   error: string;
   loading: boolean;
   locale: LocaleCode;
@@ -67,8 +72,10 @@ export type ConversationThreadPanelProps = {
   onCloseProfilePreview?: () => void;
   onDismissThreadSlashPicker?: () => void;
   onDraftChange: (segments: ComposerSegment[]) => void;
+  onAddAttachments?: (files: File[]) => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onRemoveAttachment?: (id: string) => void;
   onSend: () => VoidOrPromise;
   onSetThreadSlashIndex?: (index: number) => void;
   showToolCalls: boolean;
@@ -88,6 +95,7 @@ export function ConversationThreadPanel({
   loading,
   error,
   draftSegments,
+  attachmentDrafts = [],
   disabled,
   usersById,
   locale,
@@ -96,6 +104,7 @@ export function ConversationThreadPanel({
   t,
   onClose,
   onDraftChange,
+  onAddAttachments = () => {},
   threadSlashCandidates = [],
   threadSlashIndex = 0,
   threadSlashPickerLoading = false,
@@ -107,11 +116,13 @@ export function ConversationThreadPanel({
   onCloseProfilePreview,
   onOpenAgentDetail,
   onPreviewUser,
+  onRemoveAttachment = () => {},
   mentionableUsers = [],
   onSend,
 }: ConversationThreadPanelProps) {
   const threadBodyRef = useRef<HTMLDivElement | null>(null);
   const threadEditorRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [mentionState, setMentionState] = useState<ThreadMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const root = thread?.root ?? null;
@@ -234,6 +245,13 @@ export function ConversationThreadPanel({
     });
   }
 
+  function handleFiles(files: File[]) {
+    if (disabled || files.length === 0) {
+      return;
+    }
+    onAddAttachments(files);
+  }
+
   return (
     <aside className="thread-panel" aria-label={t("threadPanelTitle")}>
       <div className="thread-panel-header">
@@ -242,7 +260,12 @@ export function ConversationThreadPanel({
           <div className="thread-panel-title truncate">
             {visibleRoot ? (
               <MessagePreviewText
-                content={thread?.summary?.context_summary?.root_excerpt || visibleRoot.content || ""}
+                content={
+                  thread?.summary?.context_summary?.root_excerpt ||
+                  visibleRoot.content ||
+                  visibleRoot.attachments?.[0]?.name ||
+                  t("attachment")
+                }
               />
             ) : (
               t("noVisibleMessages")
@@ -297,7 +320,23 @@ export function ConversationThreadPanel({
           )}
         </div>
       </div>
-      <div className="thread-composer">
+      <div
+        className="thread-composer"
+        onDragOver={(event) => {
+          if (disabled || filesFromDataTransfer(event.dataTransfer).length === 0) {
+            return;
+          }
+          event.preventDefault();
+        }}
+        onDrop={(event) => {
+          const files = filesFromDataTransfer(event.dataTransfer);
+          if (files.length === 0) {
+            return;
+          }
+          event.preventDefault();
+          handleFiles(files);
+        }}
+      >
         {threadSlashPickerOpen ? (
           <SlashPicker
             candidates={threadSlashCandidates}
@@ -318,6 +357,7 @@ export function ConversationThreadPanel({
             onSelect={insertThreadMention}
           />
         ) : null}
+        <AttachmentDraftStrip drafts={attachmentDrafts} t={t} onRemove={onRemoveAttachment} />
         <div
           ref={threadEditorRef}
           contentEditable={!disabled}
@@ -402,8 +442,17 @@ export function ConversationThreadPanel({
           }}
           onKeyUp={(event) => syncThreadMentionState(event.currentTarget)}
           onPaste={(event) => {
-            event.preventDefault();
+            const files = filesFromDataTransfer(event.clipboardData);
             const pasted = event.clipboardData?.getData("text/plain") ?? "";
+            if (files.length > 0) {
+              event.preventDefault();
+              handleFiles(files);
+              if (!pasted) {
+                return;
+              }
+            } else {
+              event.preventDefault();
+            }
             const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
             if (segments.some((segment) => segment.type === "mention")) {
               insertComposerSegmentsAtSelection(segments);
@@ -416,10 +465,32 @@ export function ConversationThreadPanel({
             syncThreadDraft(threadEditorRef.current);
           }}
         />
+        <input
+          ref={fileInputRef}
+          className="sr-only"
+          type="file"
+          multiple
+          aria-label={t("addAttachment")}
+          onChange={(event) => {
+            handleFiles(Array.from(event.currentTarget.files || []));
+            event.currentTarget.value = "";
+          }}
+        />
+        <Button
+          className="thread-attach-button"
+          aria-label={t("addAttachment")}
+          title={t("addAttachment")}
+          disabled={disabled}
+          iconOnly
+          variant="tertiaryGray"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Paperclip aria-hidden="true" size={18} />
+        </Button>
         <Button
           variant="primary"
           className="thread-send-button"
-          disabled={disabled || !segmentsToPlainText(draftSegments || []).trim()}
+          disabled={disabled || (!segmentsToPlainText(draftSegments || []).trim() && attachmentDrafts.length === 0)}
           onClick={onSend}
         >
           <span aria-hidden="true">{IconImage("send")}</span>
@@ -498,9 +569,13 @@ function ThreadMessage({
           <span className="message-author">{name}</span>
           <MessageTimestamp parts={timestampParts} />
         </div>
-        <div className="thread-message-bubble">
-          <MessageContent key={`${message.id}:${theme}`} content={message.content} message={message} t={t} />
-        </div>
+        {message.content ? (
+          <div className="thread-message-bubble">
+            <MessageContent key={`${message.id}:${theme}`} content={message.content} message={message} t={t} />
+          </div>
+        ) : null}
+        <MessageAttachments attachments={message.attachments} t={t} />
+        <ConversationMessageActions className="thread-message-actions" content={message.content} t={t} />
       </div>
     </div>
   );

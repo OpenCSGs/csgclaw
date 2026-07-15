@@ -26,7 +26,7 @@ const labels: Record<string, string> = {
   noTeams: "No teams yet.",
   normalTasksTab: "Tasks",
   notificationsSection: "Notifications",
-  resourcesModelProvidersSection: "Model Providers",
+  resourcesModelProvidersSection: "Models",
   resourcesSkillsLabel: "Skills",
   resourcesMCPLabel: "MCP",
   resourcesTab: "Resources",
@@ -226,14 +226,14 @@ describe("WorkspaceSidebar", () => {
     expect(document.querySelector('[data-workspace-section="hub-templates"]')).toBeInTheDocument();
     expect(document.querySelector('[data-workspace-section="models"]')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Model Providers" }));
+    fireEvent.click(screen.getByRole("button", { name: "Models" }));
 
     expect(onSelectModelProvider).toHaveBeenCalledWith(props.modelProviders?.providers[0]);
     expect(document.querySelector('[data-workspace-section="models"]')).toBeInTheDocument();
     expect(onToggleWorkspaceGroup).toHaveBeenCalledWith("models");
   });
 
-  it("shows counts for every resource navigation item", () => {
+  it("omits counts from resource navigation items", () => {
     renderSidebar({
       hub: {
         loaded: true,
@@ -298,9 +298,10 @@ describe("WorkspaceSidebar", () => {
       },
     });
 
-    expect(screen.getByRole("button", { name: "Templates" })).toHaveTextContent("2");
-    expect(screen.getByRole("button", { name: "Skills" })).toHaveTextContent("3");
-    expect(screen.getByRole("button", { name: "Model Providers" })).toHaveTextContent("4");
+    expect(screen.getByRole("button", { name: "Templates" })).toHaveTextContent("Templates");
+    expect(screen.getByRole("button", { name: "Templates" })).not.toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: "Skills" })).not.toHaveTextContent("3");
+    expect(screen.getByRole("button", { name: "Models" })).not.toHaveTextContent("4");
   });
 
   it("keeps the contextual sidebar visible when the primary rail is collapsed", () => {

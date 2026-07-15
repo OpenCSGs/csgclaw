@@ -445,6 +445,24 @@ describe("conversation model helpers", () => {
     expect(views[0].summary?.context_summary?.root_excerpt).toBe("Root excerpt");
   });
 
+  it("does not expose threads until they have a reply", () => {
+    const root = {
+      ...message("root-1", "2026-05-15T00:00:00Z"),
+      thread: {
+        reply_count: 0,
+        root_id: "root-1",
+      },
+    };
+
+    expect(
+      conversationThreadViews(
+        room("general", "2026-05-15T00:00:00Z", {
+          messages: [root],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
   it("removes deleted users from users, room members, and their messages", () => {
     const current = {
       rooms: [

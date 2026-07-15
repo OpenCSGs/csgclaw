@@ -23,37 +23,40 @@ const (
 
 // sessionMessageLine is the on-disk jsonl shape. blob_ref points at spillover payload.
 type sessionMessageLine struct {
-	ID        string           `json:"id"`
-	SenderID  string           `json:"sender_id"`
-	Kind      string           `json:"kind,omitempty"`
-	Content   string           `json:"content"`
-	Event     *EventPayload    `json:"event,omitempty"`
-	Metadata  map[string]any   `json:"metadata,omitempty"`
-	CreatedAt string           `json:"created_at"`
-	Mentions  []Mention        `json:"mentions"`
-	RelatesTo *MessageRelation `json:"relates_to,omitempty"`
-	Thread    *ThreadSummary   `json:"thread,omitempty"`
-	BlobRef   string           `json:"blob_ref,omitempty"`
+	ID          string              `json:"id"`
+	SenderID    string              `json:"sender_id"`
+	Kind        string              `json:"kind,omitempty"`
+	Content     string              `json:"content"`
+	Event       *EventPayload       `json:"event,omitempty"`
+	Metadata    map[string]any      `json:"metadata,omitempty"`
+	CreatedAt   string              `json:"created_at"`
+	Mentions    []Mention           `json:"mentions"`
+	RelatesTo   *MessageRelation    `json:"relates_to,omitempty"`
+	Thread      *ThreadSummary      `json:"thread,omitempty"`
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
+	BlobRef     string              `json:"blob_ref,omitempty"`
 }
 
 type sessionMessageBlob struct {
-	Content string         `json:"content,omitempty"`
-	Event   *EventPayload  `json:"event,omitempty"`
-	Thread  *ThreadSummary `json:"thread,omitempty"`
+	Content     string              `json:"content,omitempty"`
+	Event       *EventPayload       `json:"event,omitempty"`
+	Thread      *ThreadSummary      `json:"thread,omitempty"`
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
 }
 
 func messageToSessionLine(message Message) sessionMessageLine {
 	return sessionMessageLine{
-		ID:        message.ID,
-		SenderID:  message.SenderID,
-		Kind:      message.Kind,
-		Content:   message.Content,
-		Event:     message.Event,
-		Metadata:  message.Metadata,
-		CreatedAt: message.CreatedAt.UTC().Format(timeRFC3339Nano),
-		Mentions:  message.Mentions,
-		RelatesTo: message.RelatesTo,
-		Thread:    message.Thread,
+		ID:          message.ID,
+		SenderID:    message.SenderID,
+		Kind:        message.Kind,
+		Content:     message.Content,
+		Event:       message.Event,
+		Metadata:    message.Metadata,
+		CreatedAt:   message.CreatedAt.UTC().Format(timeRFC3339Nano),
+		Mentions:    message.Mentions,
+		RelatesTo:   message.RelatesTo,
+		Thread:      message.Thread,
+		Attachments: message.Attachments,
 	}
 }
 
@@ -63,16 +66,17 @@ func sessionLineToMessage(line sessionMessageLine) (Message, error) {
 		return Message{}, err
 	}
 	return Message{
-		ID:        line.ID,
-		SenderID:  line.SenderID,
-		Kind:      line.Kind,
-		Content:   line.Content,
-		Event:     line.Event,
-		Metadata:  line.Metadata,
-		CreatedAt: createdAt,
-		Mentions:  line.Mentions,
-		RelatesTo: line.RelatesTo,
-		Thread:    line.Thread,
+		ID:          line.ID,
+		SenderID:    line.SenderID,
+		Kind:        line.Kind,
+		Content:     line.Content,
+		Event:       line.Event,
+		Metadata:    line.Metadata,
+		CreatedAt:   createdAt,
+		Mentions:    line.Mentions,
+		RelatesTo:   line.RelatesTo,
+		Thread:      line.Thread,
+		Attachments: cloneMessageAttachments(line.Attachments),
 	}, nil
 }
 
@@ -198,6 +202,7 @@ func decodeSessionMessageLine(sessionsRoot string, line []byte) (Message, error)
 	message.Content = blob.Content
 	message.Event = blob.Event
 	message.Thread = blob.Thread
+	message.Attachments = cloneMessageAttachments(blob.Attachments)
 	return message, nil
 }
 
@@ -307,9 +312,10 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 		return nil, "", err
 	}
 	blob := sessionMessageBlob{
-		Content: message.Content,
-		Event:   message.Event,
-		Thread:  message.Thread,
+		Content:     message.Content,
+		Event:       message.Event,
+		Thread:      message.Thread,
+		Attachments: message.Attachments,
 	}
 	blobData, err := json.Marshal(blob)
 	if err != nil {
@@ -326,6 +332,7 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 	line.Content = ""
 	line.Event = nil
 	line.Thread = nil
+	line.Attachments = nil
 	line.BlobRef = relativeRef
 	data, err = json.Marshal(line)
 	if err != nil {

@@ -576,6 +576,75 @@ func TestHandleAgentIncludesRuntimeOptionSchemas(t *testing.T) {
 	}
 }
 
+func TestHandleManagerOmitsRuntimeOptionSchemas(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	if err := writeSeededAgents(statePath, []agent.Agent{
+		{
+			ID:          agent.ManagerUserID,
+			Name:        agent.ManagerName,
+			RuntimeID:   "rt-agent-manager",
+			RuntimeKind: agent.RuntimeKindCodex,
+			Role:        agent.RoleManager,
+			Status:      string(agentruntime.StateRunning),
+			CreatedAt:   time.Date(2026, 6, 13, 8, 0, 0, 0, time.UTC),
+		},
+	}); err != nil {
+		t.Fatalf("writeSeededAgents() error = %v", err)
+	}
+	svc, err := agent.NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		statePath,
+		agent.WithRuntime(fakeCompatRuntime{
+			kind: agent.RuntimeKindCodex,
+			schemas: []agentruntime.RuntimeOptionSchema{
+				{
+					Key:   "local_workspace_dir",
+					Path:  "local_workspace_dir",
+					Label: "Local Workspace Dir",
+					Type:  "directory",
+				},
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+agent.ManagerUserID, nil)
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got agentResponse
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(got.RuntimeOptionSchemas) != 0 || len(got.Runtime.OptionSchemas) != 0 {
+		t.Fatalf("manager runtime option schemas = %#v / %#v, want none", got.RuntimeOptionSchemas, got.Runtime.OptionSchemas)
+	}
+
+	patchRec := httptest.NewRecorder()
+	patchReq := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/agents/"+agent.ManagerUserID,
+		strings.NewReader(`{"runtime_options":{"local_workspace_dir":"/tmp/manager"}}`),
+	)
+	patchReq.Header.Set("Content-Type", "application/json")
+	srv.Routes().ServeHTTP(patchRec, patchReq)
+	if patchRec.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH status = %d, want %d; body=%s", patchRec.Code, http.StatusBadRequest, patchRec.Body.String())
+	}
+	if !strings.Contains(patchRec.Body.String(), "manager runtime options are managed automatically") {
+		t.Fatalf("PATCH body = %q, want managed runtime options error", patchRec.Body.String())
+	}
+}
+
 func TestHandleFeishuRoomsMembers(t *testing.T) {
 	feishuSvc := feishu.NewServiceWithCreateChatAndAddMembers(
 		map[string]feishu.AppConfig{
@@ -866,6 +935,72 @@ func TestHandleAgentsListExposesLinkedLocalUser(t *testing.T) {
 	}
 	if len(got[0].Participants) != 1 || got[0].Participants[0].UserID != "user-dahym7" {
 		t.Fatalf("participants = %+v, want linked local user", got[0].Participants)
+	}
+}
+
+func TestHandleAgentResponsesExposeLinkedLocalUserWithoutCSGClawParticipant(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{
+		{ID: "agent-dahym7", Name: "qa", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
+	})
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: im.AdminUserID,
+		Users: []im.User{
+			{ID: im.AdminUserID, Name: "admin", Role: "admin"},
+			{ID: "user-dahym7", Name: "qa", Role: agent.RoleWorker, Avatar: "avatar/3D-5.png"},
+		},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "pt-dahym7-feishu",
+		Channel:         participant.ChannelFeishu,
+		Type:            participant.TypeAgent,
+		Name:            "qa",
+		AgentID:         "agent-dahym7",
+		ChannelUserKind: participant.ChannelUserKindAppID,
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+
+	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc}
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		listResult bool
+	}{
+		{name: "list", method: http.MethodGet, path: "/api/v1/agents?include_participants=true", listResult: true},
+		{name: "get", method: http.MethodGet, path: "/api/v1/agents/agent-dahym7?include_participants=true"},
+		{name: "patch", method: http.MethodPatch, path: "/api/v1/agents/agent-dahym7", body: `{"description":"updated"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			srv.Routes().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+			var got apitypes.Agent
+			if tt.listResult {
+				var items []apitypes.Agent
+				if err := json.NewDecoder(rec.Body).Decode(&items); err != nil {
+					t.Fatalf("decode response: %v", err)
+				}
+				if len(items) != 1 {
+					t.Fatalf("len(agents) = %d, want 1; body=%s", len(items), rec.Body.String())
+				}
+				got = items[0]
+			} else if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if got.UserID != "user-dahym7" || got.UserName != "qa" {
+				t.Fatalf("agent user = %q/%q, want user-dahym7/qa; body=%s", got.UserID, got.UserName, rec.Body.String())
+			}
+			if tt.method == http.MethodGet && (len(got.Participants) != 1 || got.Participants[0].Channel != participant.ChannelFeishu) {
+				t.Fatalf("participants = %+v, want only the existing Feishu participant", got.Participants)
+			}
+		})
 	}
 }
 

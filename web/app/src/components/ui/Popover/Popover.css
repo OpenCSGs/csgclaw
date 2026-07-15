@@ -1,0 +1,26 @@
+.csg-popover-content {
+  z-index: var(--z-portal-popover);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  transform-origin: var(--radix-popover-content-transform-origin);
+  animation: csg-popover-pop 120ms ease;
+}
+
+@keyframes csg-popover-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+:root[data-theme="dark"] .csg-popover-content {
+  background: var(--panel-strong);
+}

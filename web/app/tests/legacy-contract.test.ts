@@ -114,6 +114,9 @@ describe("legacy UI contract", () => {
     expect(source).not.toContain('className="thread-context"');
     expect(source).not.toContain('t("threadContext")');
     expect(styles).toContain(".message-row:hover .message-hover-actions");
+    expect(styles).toMatch(/\.message-hover-actions\s*\{[\s\S]*top:\s*calc\(100% \+ 2px\);/);
+    expect(styles).toMatch(/\.thread-message-actions\s*\{[\s\S]*top:\s*calc\(100% \+ 2px\);/);
+    expect(styles).not.toContain("bottom: -15px");
     expect(styles).toContain("[data-tooltip]:hover::after");
     expect(source).toContain("message-thread-actions has-thread-summary");
     expect(source).toContain("const threadBodyRef = useRef<HTMLDivElement | null>(null);");
@@ -129,9 +132,16 @@ describe("legacy UI contract", () => {
     expect(styles).toContain(".chat-panel.has-thread-panel > .messages");
     expect(styles).toMatch(/\.chat-panel\.has-thread-panel > \.messages[\s\S]*min-width:\s*0;/);
     expect(styles).toMatch(/\.message-row\s*\{[\s\S]*max-width:\s*min\(100%, 76%, 840px\);/);
-    expect(styles).toMatch(/\.messages\s*\{[\s\S]*scrollbar-width:\s*thin;/);
-    expect(styles).toContain(".messages::-webkit-scrollbar");
+  });
+
+  it("uses one transient scrollbar contract across the app", () => {
+    expect(styles).toContain("*::-webkit-scrollbar");
     expect(styles).toContain("width: 6px;");
+    expect(styles).toContain("height: 6px;");
+    expect(styles).toContain('*[data-scrollbar-active="true"]::-webkit-scrollbar-thumb');
+    expect(styles).toContain("scrollbar-width: thin;");
+    expect(source).toContain('document.addEventListener("scroll", handleScroll, true);');
+    expect(source).toContain("const SCROLLBAR_HIDE_DELAY_MS = 700;");
   });
 
   it("keeps the full exec_command activity label visible", () => {
@@ -148,12 +158,9 @@ describe("legacy UI contract", () => {
     );
   });
 
-  it("keeps the mention picker scrollbar slim", () => {
-    expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*scrollbar-width:\s*thin;/);
+  it("keeps the mention picker layered and compact", () => {
     expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*z-index:\s*var\(--z-portal-popover\);/);
     expect(styles).toMatch(/\.mention-picker\s*\{[\s\S]*bottom:\s*calc\(100% \+ 8px\);/);
-    expect(styles).toContain(".mention-picker::-webkit-scrollbar");
-    expect(styles).toContain(".mention-picker::-webkit-scrollbar-thumb");
     expect(styles).toMatch(/\.mention-option\s*\{[\s\S]*min-height:\s*56px;/);
   });
 
@@ -168,16 +175,12 @@ describe("legacy UI contract", () => {
   it("keeps the model provider page scrollable inside the fixed workspace panel", () => {
     const panelRule = styleRule(".chat-panel:has(> .model-provider-page)");
     const pageRule = styleRule(".model-provider-page");
-    const modelListRule = styleRule(".model-provider-model-list");
 
     expect(panelRule).toContain("grid-template-rows: minmax(0, 1fr);");
     expect(pageRule).toContain("height: auto;");
     expect(pageRule).toContain("min-height: 100%;");
     expect(pageRule).toContain("overflow-x: hidden;");
     expect(pageRule).toContain("overflow-y: auto;");
-    expect(modelListRule).toContain("scrollbar-width: thin;");
-    expect(styles).toContain(".model-provider-page::-webkit-scrollbar");
-    expect(styles).toContain(".model-provider-model-list::-webkit-scrollbar");
   });
 
   it("shows agent running status dots in direct message rows", () => {

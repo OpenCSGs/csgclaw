@@ -2,9 +2,13 @@ package im
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -101,6 +105,208 @@ func TestCreateMessagePersistsUserIDsAndMentionNames(t *testing.T) {
 	mentions := arrayOfMaps(lines[len(lines)-1]["mentions"])
 	if len(mentions) != 1 || stringField(mentions[0], "id") != "user-worker" {
 		t.Fatalf("persisted mentions = %+v, want user-worker", mentions)
+	}
+}
+
+func TestCreateMessageWithAttachmentStoresObjectAndBlob(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "im", "state.json")
+	svc, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatalf("NewServiceFromPath() error = %v", err)
+	}
+	if _, _, err := svc.EnsureAgentUser(EnsureAgentUserRequest{ID: "agent-worker", Name: "worker", Role: "worker"}); err != nil {
+		t.Fatalf("EnsureAgentUser(worker) error = %v", err)
+	}
+	room, err := svc.CreateRoom(CreateRoomRequest{
+		Title:     "Ops",
+		CreatorID: "user-admin",
+		MemberIDs: []string{"user-worker"},
+	})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+
+	payload, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	if err != nil {
+		t.Fatalf("decode PNG fixture: %v", err)
+	}
+	sum := sha256.Sum256(payload)
+	wantSHA := hex.EncodeToString(sum[:])
+	msg, err := svc.CreateMessage(CreateMessageRequest{
+		RoomID:   room.ID,
+		SenderID: "user-admin",
+		Attachments: []MessageAttachmentUpload{{
+			Name:      "diagram.png",
+			MediaType: "image/png",
+			Data:      payload,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage() error = %v", err)
+	}
+	if msg.Content != "" {
+		t.Fatalf("message content = %q, want attachment-only message", msg.Content)
+	}
+	if len(msg.Attachments) != 1 {
+		t.Fatalf("attachments = %+v, want one attachment", msg.Attachments)
+	}
+	att := msg.Attachments[0]
+	if att.Name != "diagram.png" || att.Kind != "image" || att.MediaType != "image/png" {
+		t.Fatalf("attachment = %+v, want sanitized image metadata", att)
+	}
+	if att.SizeBytes != int64(len(payload)) || att.SHA256 != wantSHA {
+		t.Fatalf("attachment size/sha = %d/%s, want %d/%s", att.SizeBytes, att.SHA256, len(payload), wantSHA)
+	}
+	if att.Width != 1 || att.Height != 1 {
+		t.Fatalf("attachment dimensions = %dx%d, want 1x1", att.Width, att.Height)
+	}
+	if att.DownloadURL == "" || !strings.HasPrefix(att.DownloadURL, "/api/v1/attachments/") {
+		t.Fatalf("download_url = %q, want API attachment URL", att.DownloadURL)
+	}
+	if !strings.Contains(att.DownloadURL, "?token=") {
+		t.Fatalf("download_url = %q, want attachment capability token", att.DownloadURL)
+	}
+
+	objectPath := filepath.Join(filepath.Dir(path), "assets", "objects", att.ID+".json")
+	var object map[string]any
+	readJSONFileForTest(t, objectPath, &object)
+	if stringField(object, "room_id") != room.ID || stringField(object, "message_id") != msg.ID {
+		t.Fatalf("object room/message = %+v, want %s/%s", object, room.ID, msg.ID)
+	}
+	blobPath := filepath.Join(filepath.Dir(path), "assets", "blobs", "sha256", wantSHA[:2], wantSHA)
+	if got, err := os.ReadFile(blobPath); err != nil || string(got) != string(payload) {
+		t.Fatalf("blob data = %q, err=%v, want original payload", string(got), err)
+	}
+	if runtime.GOOS != "windows" {
+		for _, privateFile := range []string{objectPath, blobPath} {
+			info, err := os.Stat(privateFile)
+			if err != nil {
+				t.Fatalf("stat %s: %v", privateFile, err)
+			}
+			if got := info.Mode().Perm(); got != 0o600 {
+				t.Fatalf("permissions for %s = %o, want 600", privateFile, got)
+			}
+		}
+		assetsInfo, err := os.Stat(filepath.Join(filepath.Dir(path), "assets"))
+		if err != nil {
+			t.Fatalf("stat attachment assets dir: %v", err)
+		}
+		if got := assetsInfo.Mode().Perm(); got != 0o700 {
+			t.Fatalf("attachment assets dir permissions = %o, want 700", got)
+		}
+	}
+
+	workspaceRoot := t.TempDir()
+	materialized, err := svc.MaterializeAttachment(
+		att.ID,
+		workspaceRoot,
+		filepath.ToSlash(filepath.Join(".csgclaw", "attachments", room.ID, msg.ID)),
+	)
+	if err != nil {
+		t.Fatalf("MaterializeAttachment() error = %v", err)
+	}
+	if materialized.WorkspacePath == "" {
+		t.Fatal("MaterializeAttachment() workspace_path is empty")
+	}
+	materializedPath := filepath.Join(workspaceRoot, filepath.FromSlash(materialized.WorkspacePath))
+	if got, err := os.ReadFile(materializedPath); err != nil || string(got) != string(payload) {
+		t.Fatalf("materialized attachment = %q, err=%v, want original payload", string(got), err)
+	}
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(materializedPath)
+		if err != nil {
+			t.Fatalf("stat materialized attachment: %v", err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("materialized attachment permissions = %o, want 600", got)
+		}
+	}
+
+	reloaded, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatalf("NewServiceFromPath(reload) error = %v", err)
+	}
+	messages, err := reloaded.ListMessages(room.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	var reloadedMsg Message
+	for _, candidate := range messages {
+		if candidate.ID == msg.ID {
+			reloadedMsg = candidate
+			break
+		}
+	}
+	if reloadedMsg.ID == "" || len(reloadedMsg.Attachments) != 1 || reloadedMsg.Attachments[0].ID != att.ID {
+		t.Fatalf("reloaded messages = %+v, want persisted attachment", messages)
+	}
+}
+
+func TestCreateMessageRejectsUnsafeAttachmentName(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "im", "state.json")
+	svc, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatalf("NewServiceFromPath() error = %v", err)
+	}
+	room, err := svc.CreateRoom(CreateRoomRequest{Title: "Uploads", CreatorID: "user-admin"})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+
+	_, err = svc.CreateMessage(CreateMessageRequest{
+		RoomID:   room.ID,
+		SenderID: "user-admin",
+		Attachments: []MessageAttachmentUpload{{
+			Name:      "../secret.txt",
+			MediaType: "text/plain",
+			Data:      []byte("secret"),
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "filename") || !strings.Contains(err.Error(), "unsafe") {
+		t.Fatalf("CreateMessage() error = %v, want unsafe filename rejection", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(filepath.Dir(path), "assets", "objects"))
+	if err != nil {
+		t.Fatalf("read attachment objects: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("attachment objects = %d, want none after rejected upload", len(entries))
+	}
+}
+
+func TestClearRoomMessagesCleansAttachmentObjectsAndBlobs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "im", "state.json")
+	svc, err := NewServiceFromPath(path)
+	if err != nil {
+		t.Fatalf("NewServiceFromPath() error = %v", err)
+	}
+	room, err := svc.CreateRoom(CreateRoomRequest{Title: "Uploads", CreatorID: "user-admin"})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+	message, err := svc.CreateMessage(CreateMessageRequest{
+		RoomID:   room.ID,
+		SenderID: "user-admin",
+		Attachments: []MessageAttachmentUpload{{
+			Name:      "note.txt",
+			MediaType: "text/plain",
+			Data:      []byte("cleanup me"),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage() error = %v", err)
+	}
+	attachment := message.Attachments[0]
+	objectPath := filepath.Join(filepath.Dir(path), "assets", "objects", attachment.ID+".json")
+	blobPath := filepath.Join(filepath.Dir(path), "assets", "blobs", "sha256", attachment.SHA256[:2], attachment.SHA256)
+
+	if _, err := svc.ClearRoomMessages(room.ID); err != nil {
+		t.Fatalf("ClearRoomMessages() error = %v", err)
+	}
+	for _, removedPath := range []string{objectPath, blobPath} {
+		if _, err := os.Stat(removedPath); !os.IsNotExist(err) {
+			t.Fatalf("os.Stat(%q) error = %v, want removed attachment asset", removedPath, err)
+		}
 	}
 }
 

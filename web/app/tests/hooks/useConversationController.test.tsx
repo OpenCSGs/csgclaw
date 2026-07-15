@@ -7,6 +7,7 @@ import type { AgentLike } from "@/models/agents";
 
 const subscribeIMEventsMock = vi.fn();
 const apiMocks = vi.hoisted(() => ({
+  fetchThreadRequest: vi.fn(),
   sendMessageRequest: vi.fn(),
 }));
 
@@ -18,6 +19,7 @@ vi.mock("@/api/im", async () => {
   const actual = await vi.importActual<typeof import("@/api/im")>("@/api/im");
   return {
     ...actual,
+    fetchThreadRequest: apiMocks.fetchThreadRequest,
     sendMessageRequest: apiMocks.sendMessageRequest,
   };
 });
@@ -142,7 +144,65 @@ describe("useConversationController", () => {
   beforeEach(() => {
     subscribeIMEventsMock.mockReset();
     subscribeIMEventsMock.mockReturnValue(() => {});
+    apiMocks.fetchThreadRequest.mockReset();
     apiMocks.sendMessageRequest.mockReset();
+  });
+
+  it("keeps an unopened thread local until the first reply is sent", async () => {
+    const root: IMMessage = {
+      id: "msg-root",
+      content: "Start here",
+      created_at: "2026-07-14T09:29:00Z",
+      sender_id: "u-admin",
+    };
+    const { result } = renderConversationController({ data: dataWithMessages([root]) });
+
+    await act(async () => {
+      await result.current.conversationViewProps.onOpenThread(root);
+    });
+
+    expect(apiMocks.fetchThreadRequest).not.toHaveBeenCalled();
+    expect(result.current.activeThreadRootID).toBe("msg-root");
+    expect(result.current.conversationViewProps.activeThreadView).toMatchObject({
+      room_id: "room-1",
+      root,
+      replies: [],
+      summary: null,
+    });
+
+    act(() => {
+      result.current.conversationViewProps.onCloseThread();
+    });
+
+    expect(result.current.activeThreadRootID).toBe("");
+    expect(result.current.conversationViewProps.activeThreadView).toBeNull();
+  });
+
+  it("loads a persisted thread when the root already has replies", async () => {
+    const root: IMMessage = {
+      id: "msg-root",
+      content: "Start here",
+      created_at: "2026-07-14T09:29:00Z",
+      sender_id: "u-admin",
+      thread: {
+        reply_count: 1,
+        root_id: "msg-root",
+      },
+    };
+    apiMocks.fetchThreadRequest.mockResolvedValue({
+      room_id: "room-1",
+      root,
+      replies: [{ id: "msg-reply", content: "Reply", sender_id: "u-demo" }],
+      summary: root.thread,
+    });
+    const { result } = renderConversationController({ data: dataWithMessages([root]) });
+
+    await act(async () => {
+      await result.current.conversationViewProps.onOpenThread(root);
+    });
+
+    expect(apiMocks.fetchThreadRequest).toHaveBeenCalledWith("room-1", "msg-root");
+    expect(result.current.conversationViewProps.activeThreadView?.replies).toHaveLength(1);
   });
 
   it("opens create-room modal from a direct message", () => {

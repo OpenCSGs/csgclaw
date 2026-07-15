@@ -114,7 +114,7 @@ export function MessageContent({
 }
 
 function isBlankTurnPlaceholder(content: string | null | undefined): boolean {
-  return typeof content === "string" && content.replace(/\u200b/g, "").trim() === "";
+  return typeof content === "string" && content.includes("\u200b") && content.replace(/\u200b/g, "").trim() === "";
 }
 
 function renderSlashCommandText(command: ReturnType<typeof parseSlashCommand>): string {

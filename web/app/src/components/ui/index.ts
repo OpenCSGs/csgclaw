@@ -4,4 +4,5 @@ export * from "./Dialog";
 export * from "./DropdownMenu";
 export * from "./FormControls";
 export * from "./Icons";
+export * from "./Popover";
 export * from "./Select";

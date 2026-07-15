@@ -17,11 +17,15 @@ import (
 	"csgclaw/internal/codexcli"
 )
 
-const appServerStopTimeout = 3 * time.Second
+const (
+	appServerStopTimeout          = 3 * time.Second
+	appServerTurnInterruptTimeout = 5 * time.Second
+)
 
 var (
-	appServerSemanticInactivityTimeout  = 2 * time.Minute
-	appServerFirstTurnNoProgressTimeout = 90 * time.Second
+	appServerSemanticInactivityTimeout  = 10 * time.Minute
+	appServerFirstTurnNoProgressTimeout = 5 * time.Minute
+	appServerMaximumTurnDuration        = 30 * time.Minute
 )
 
 var appServerCommandContext = codexcli.AppServerCommandContext
@@ -615,13 +619,14 @@ type appServerTurnWaiter struct {
 }
 
 type appServerTurnResult struct {
-	success    bool
-	stopReason string
-	err        error
-	turnID     string
-	activity   string
-	started    bool
-	progress   bool
+	success           bool
+	stopReason        string
+	err               error
+	turnID            string
+	activity          string
+	started           bool
+	progress          bool
+	assistantActivity bool
 }
 
 func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTurnWaiter, error) {
@@ -726,7 +731,7 @@ func (w *appServerTurnWaiter) setTurnID(turnID string) {
 func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSession, waiter *appServerTurnWaiter) (PromptResponse, error) {
 	semanticTimeout := appServerSemanticInactivityTimeout
 	if semanticTimeout <= 0 {
-		semanticTimeout = 2 * time.Minute
+		semanticTimeout = 10 * time.Minute
 	}
 	noProgressTimeout := appServerFirstTurnNoProgressTimeout
 	if noProgressTimeout <= 0 {
@@ -734,6 +739,14 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 	}
 	semanticTimer := time.NewTimer(semanticTimeout)
 	defer semanticTimer.Stop()
+	maximumDuration := appServerMaximumTurnDuration
+	var maximumTimer *time.Timer
+	var maximumC <-chan time.Time
+	if maximumDuration > 0 {
+		maximumTimer = time.NewTimer(maximumDuration)
+		maximumC = maximumTimer.C
+		defer maximumTimer.Stop()
+	}
 
 	var noProgressTimer *time.Timer
 	var noProgressC <-chan time.Time
@@ -788,7 +801,7 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 				noProgressTimer = time.NewTimer(noProgressTimeout)
 				noProgressC = noProgressTimer.C
 			}
-			if result.progress {
+			if result.progress || result.assistantActivity {
 				stopNoProgress()
 			}
 			if result.err != nil {
@@ -811,7 +824,7 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 					"last_activity", strings.TrimSpace(waiter.lastActivity),
 				)
 			}
-			return PromptResponse{}, m.appServerTurnTimeoutError(live, waiter, "codex app-server no progress timeout", noProgressTimeout)
+			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "initial assistant activity", noProgressTimeout)
 		case <-semanticTimer.C:
 			if live.appClient != nil {
 				live.appClient.logDebug("codex app-server turn semantic inactivity timeout",
@@ -822,24 +835,79 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 					"last_activity", strings.TrimSpace(waiter.lastActivity),
 				)
 			}
-			return PromptResponse{}, m.appServerTurnTimeoutError(live, waiter, "codex semantic inactivity timeout", semanticTimeout)
+			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "app-server inactivity", semanticTimeout)
+		case <-maximumC:
+			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "maximum turn duration", maximumDuration)
 		case <-ctx.Done():
+			m.stopAppServerTurn(live, waiter, "prompt context canceled")
 			return PromptResponse{}, ctx.Err()
 		}
 	}
 }
 
-func (m *appServerManager) appServerTurnTimeoutError(live *liveSession, waiter *appServerTurnWaiter, marker string, timeout time.Duration) error {
-	spec := live.spec
-	return fmt.Errorf("%s after %s: runtime_id=%s thread_id=%s turn_id=%s last_activity=%s stderr_tail=%s",
-		marker,
-		timeout,
-		strings.TrimSpace(spec.RuntimeID),
-		strings.TrimSpace(waiter.threadID),
-		strings.TrimSpace(waiter.turnID),
-		strings.TrimSpace(waiter.lastActivity),
-		m.stderrTail(spec, 2048),
-	)
+func (m *appServerManager) failTimedOutAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string, timeout time.Duration) error {
+	m.stopAppServerTurn(live, waiter, reason)
+	return fmt.Errorf("Codex stopped responding after %s. The turn was canceled; try again", timeout)
+}
+
+func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string) {
+	interruptErr := m.interruptAppServerTurn(live, waiter)
+	stderrTail := m.stderrTail(live.spec, 2048)
+	if live.appClient != nil {
+		live.appClient.logError("codex app-server turn stopped",
+			"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
+			"thread_id", strings.TrimSpace(waiter.threadID),
+			"turn_id", strings.TrimSpace(waiter.turnID),
+			"reason", strings.TrimSpace(reason),
+			"last_activity", strings.TrimSpace(waiter.lastActivity),
+			"interrupt_error", interruptErr,
+			"stderr_tail", stderrTail,
+		)
+	}
+	if interruptErr == nil {
+		return
+	}
+	stopCtx, cancel := context.WithTimeout(context.Background(), appServerStopTimeout)
+	defer cancel()
+	if err := m.Stop(stopCtx, SessionHandle{RuntimeID: live.spec.RuntimeID}); err != nil && live.appClient != nil {
+		live.appClient.logError("stop codex app-server after turn interrupt failure",
+			"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
+			"error", err,
+		)
+	}
+}
+
+func (m *appServerManager) interruptAppServerTurn(live *liveSession, waiter *appServerTurnWaiter) error {
+	if live == nil || live.appClient == nil {
+		return fmt.Errorf("codex app-server client is unavailable")
+	}
+	threadID := strings.TrimSpace(waiter.threadID)
+	turnID := strings.TrimSpace(waiter.turnID)
+	if threadID == "" || turnID == "" {
+		return fmt.Errorf("codex app-server turn identity is incomplete")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), appServerTurnInterruptTimeout)
+	defer cancel()
+	if _, err := live.appClient.request(ctx, "turn/interrupt", map[string]any{
+		"threadId": threadID,
+		"turnId":   turnID,
+	}); err != nil {
+		return fmt.Errorf("interrupt codex app-server turn: %w", err)
+	}
+
+	for {
+		select {
+		case result := <-waiter.ch:
+			if result.err != nil || result.success {
+				return nil
+			}
+		case <-live.done:
+			return nil
+		case <-ctx.Done():
+			return fmt.Errorf("wait for interrupted codex app-server turn: %w", ctx.Err())
+		}
+	}
 }
 
 func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSession, stdout io.Reader) {

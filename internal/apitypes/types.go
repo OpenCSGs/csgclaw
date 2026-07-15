@@ -61,25 +61,48 @@ type Mention struct {
 }
 
 type Message struct {
-	ID        string           `json:"id"`
-	SenderID  string           `json:"sender_id"`
-	Kind      string           `json:"kind,omitempty"`
-	Content   string           `json:"content"`
-	Event     *EventPayload    `json:"event,omitempty"`
-	Metadata  map[string]any   `json:"metadata,omitempty"`
-	CreatedAt time.Time        `json:"created_at"`
-	Mentions  []Mention        `json:"mentions"`
-	RelatesTo *MessageRelation `json:"relates_to,omitempty"`
-	Thread    *ThreadSummary   `json:"thread,omitempty"`
+	ID          string              `json:"id"`
+	SenderID    string              `json:"sender_id"`
+	Kind        string              `json:"kind,omitempty"`
+	Content     string              `json:"content"`
+	Event       *EventPayload       `json:"event,omitempty"`
+	Metadata    map[string]any      `json:"metadata,omitempty"`
+	CreatedAt   time.Time           `json:"created_at"`
+	Mentions    []Mention           `json:"mentions"`
+	RelatesTo   *MessageRelation    `json:"relates_to,omitempty"`
+	Thread      *ThreadSummary      `json:"thread,omitempty"`
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
+}
+
+type MessageAttachment struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Kind          string    `json:"kind"`
+	MediaType     string    `json:"media_type"`
+	SizeBytes     int64     `json:"size_bytes"`
+	SHA256        string    `json:"sha256"`
+	CreatedAt     time.Time `json:"created_at"`
+	DownloadURL   string    `json:"download_url"`
+	PreviewURL    string    `json:"preview_url,omitempty"`
+	Width         int       `json:"width,omitempty"`
+	Height        int       `json:"height,omitempty"`
+	WorkspacePath string    `json:"workspace_path,omitempty"`
+}
+
+type MessageAttachmentUpload struct {
+	Name      string `json:"name,omitempty"`
+	MediaType string `json:"media_type,omitempty"`
+	Data      []byte `json:"-"`
 }
 
 type CreateMessageRequest struct {
-	RoomID    string           `json:"room_id"`
-	SenderID  string           `json:"sender_id"`
-	Content   string           `json:"content"`
-	MentionID string           `json:"mention_id,omitempty"`
-	Metadata  map[string]any   `json:"metadata,omitempty"`
-	RelatesTo *MessageRelation `json:"relates_to,omitempty"`
+	RoomID      string                    `json:"room_id"`
+	SenderID    string                    `json:"sender_id"`
+	Content     string                    `json:"content"`
+	MentionID   string                    `json:"mention_id,omitempty"`
+	Metadata    map[string]any            `json:"metadata,omitempty"`
+	RelatesTo   *MessageRelation          `json:"relates_to,omitempty"`
+	Attachments []MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type MessageRelation struct {

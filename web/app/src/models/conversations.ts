@@ -9,6 +9,7 @@ import {
 } from "@/models/agentActivity";
 import { renderSlashCommandPreviewText } from "@/models/slashCommands";
 import type { WorkspaceTeam } from "@/models/tasks";
+import type { MessageAttachment } from "@/models/attachments";
 
 export type LocaleCode = "zh" | "en" | string;
 export type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -97,6 +98,7 @@ export type ThreadState = {
 };
 
 export type IMMessage = {
+  attachments?: MessageAttachment[] | null;
   id?: string;
   content: string;
   created_at?: string;
@@ -427,12 +429,16 @@ export function formatThreadReplyCount(count: number | null | undefined, t: Tran
   return t("threadReplies", { count: Number(count) || 0 });
 }
 
+export function threadHasReplies(summary: ThreadSummary | null | undefined): boolean {
+  return Number(summary?.reply_count) > 0;
+}
+
 export function conversationThreadViews(conversation: IMConversation | null | undefined): ThreadView[] {
   if (!conversation?.messages?.length) {
     return [];
   }
   return conversation.messages
-    .filter((message) => message.thread)
+    .filter((message) => threadHasReplies(message.thread))
     .map((message) => ({
       room_id: conversation.id,
       root: message,

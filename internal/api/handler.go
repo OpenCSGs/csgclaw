@@ -671,12 +671,13 @@ func bootstrapRuntimeKind(runtime string) string {
 }
 
 type createMessageRequest struct {
-	RoomID    string              `json:"room_id"`
-	SenderID  string              `json:"sender_id"`
-	Content   string              `json:"content"`
-	MentionID string              `json:"mention_id,omitempty"`
-	Metadata  map[string]any      `json:"metadata,omitempty"`
-	RelatesTo *im.MessageRelation `json:"relates_to,omitempty"`
+	RoomID      string                       `json:"room_id"`
+	SenderID    string                       `json:"sender_id"`
+	Content     string                       `json:"content"`
+	MentionID   string                       `json:"mention_id,omitempty"`
+	Metadata    map[string]any               `json:"metadata,omitempty"`
+	RelatesTo   *im.MessageRelation          `json:"relates_to,omitempty"`
+	Attachments []im.MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type addRoomMembersRequest struct {
@@ -969,7 +970,7 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.publishUpdatedAgentUser(updated)
-		writeJSON(w, http.StatusOK, h.presentAgentResponse(updated))
+		writeJSON(w, http.StatusOK, h.presentAgentForRequest(r, updated))
 	case http.MethodDelete:
 		var err error
 		if h.participant != nil {
@@ -2220,9 +2221,9 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req createMessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+	req, err := parseCreateMessageHTTP(w, r)
+	if err != nil {
+		writeMessagePayloadError(w, err)
 		return
 	}
 
@@ -2499,38 +2500,57 @@ func (h *Handler) presentAgentsForRequest(r *http.Request, items []agent.Agent) 
 	for _, item := range items {
 		out = append(out, h.presentAgentResponse(item))
 	}
-	if h == nil || h.participant == nil {
-		return out
+	var byAgent map[string][]apitypes.Participant
+	if h != nil && h.participant != nil {
+		byAgent = participantsByAgentID(h.presentParticipants(h.participant.List(participant.ListOptions{})))
 	}
-	byAgent := participantsByAgentID(h.presentParticipants(h.participant.List(participant.ListOptions{})))
 	for i := range out {
-		items := byAgent[out[i].ID]
-		out[i].ParticipantIDs, out[i].ParticipantNames = participantSummaries(items)
-		out[i].UserID, out[i].UserName = agentLocalUserSummary(items)
+		participantItems := byAgent[out[i].ID]
+		out[i].ParticipantIDs, out[i].ParticipantNames = participantSummaries(participantItems)
+		out[i].UserID, out[i].UserName = agentLocalUserSummary(participantItems)
 		if includeParticipants(r) {
-			out[i].Participants = items
+			out[i].Participants = participantItems
 		}
+		h.backfillAgentLocalUser(&out[i])
 	}
 	return out
 }
 
 func (h *Handler) presentAgentForRequest(r *http.Request, item agent.Agent) agentResponse {
 	resp := h.presentAgentResponse(item)
-	if h == nil || h.participant == nil {
-		return resp
+	if h != nil && h.participant != nil {
+		items := h.presentParticipants(h.participant.List(participant.ListOptions{AgentID: item.ID}))
+		resp.ParticipantIDs, resp.ParticipantNames = participantSummaries(items)
+		resp.UserID, resp.UserName = agentLocalUserSummary(items)
+		if includeParticipants(r) {
+			resp.Participants = items
+		}
 	}
-	items := h.presentParticipants(h.participant.List(participant.ListOptions{AgentID: item.ID}))
-	resp.ParticipantIDs, resp.ParticipantNames = participantSummaries(items)
-	resp.UserID, resp.UserName = agentLocalUserSummary(items)
-	if includeParticipants(r) {
-		resp.Participants = items
-	}
+	h.backfillAgentLocalUser(&resp)
 	return resp
+}
+
+func (h *Handler) backfillAgentLocalUser(resp *agentResponse) {
+	if h == nil || h.im == nil || resp == nil || strings.TrimSpace(resp.UserID) != "" {
+		return
+	}
+	expectedUserID := localUserIDFromAny(resp.ID)
+	if expectedUserID == "" {
+		return
+	}
+	user, ok := h.im.User(expectedUserID)
+	if !ok || localUserIDFromAny(user.ID) != expectedUserID {
+		return
+	}
+	resp.UserID = strings.TrimSpace(user.ID)
+	resp.UserName = strings.TrimSpace(user.Name)
 }
 
 func (h *Handler) presentAgentResponse(item agent.Agent) agentResponse {
 	resp := presentAgent(item)
-	resp.RuntimeOptionSchemas = h.runtimeOptionSchemasForKind(item.RuntimeKind)
+	if item.ID != agent.ManagerUserID && item.Role != agent.RoleManager {
+		resp.RuntimeOptionSchemas = h.runtimeOptionSchemasForKind(item.RuntimeKind)
+	}
 	resp.Runtime.OptionSchemas = runtimeOptionSchemasForAPI(resp.RuntimeOptionSchemas)
 	return resp
 }
@@ -2931,12 +2951,13 @@ func (r createMessageRequest) toServiceRequest() (im.CreateMessageRequest, error
 	}
 
 	return im.CreateMessageRequest{
-		RoomID:    roomID,
-		SenderID:  r.SenderID,
-		Content:   r.Content,
-		MentionID: r.MentionID,
-		Metadata:  r.Metadata,
-		RelatesTo: r.RelatesTo,
+		RoomID:      roomID,
+		SenderID:    r.SenderID,
+		Content:     r.Content,
+		MentionID:   r.MentionID,
+		Metadata:    r.Metadata,
+		RelatesTo:   r.RelatesTo,
+		Attachments: r.Attachments,
 	}, nil
 }
 

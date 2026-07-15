@@ -16,21 +16,6 @@
   overflow-y: auto;
   padding: 24px 32px 28px;
   background: var(--bg);
-  scrollbar-width: thin;
-  scrollbar-color: var(--gray-400) transparent;
-}
-
-.model-provider-page::-webkit-scrollbar {
-  width: 6px;
-}
-
-.model-provider-page::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.model-provider-page::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--gray-400) 70%, transparent);
 }
 
 .model-provider-page.empty {

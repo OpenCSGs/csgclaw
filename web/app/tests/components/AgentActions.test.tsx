@@ -332,6 +332,17 @@ describe("agent action visibility", () => {
       id: "agent-manager",
       name: "manager",
       role: "manager",
+      runtime_kind: "codex",
+      runtime: {
+        option_schemas: [
+          {
+            key: "local_workspace_dir",
+            path: "local_workspace_dir",
+            label: "Local Workspace Dir",
+            type: "directory",
+          },
+        ],
+      },
     };
     const draft = agentToDraft(manager);
 
@@ -370,6 +381,7 @@ describe("agent action visibility", () => {
     expect(screen.queryByRole("button", { name: "Edit name" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit description" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Local Workspace Dir")).not.toBeInTheDocument();
   });
 
   it("shows Feishu connect and reconnect controls in the agent detail channels section", async () => {

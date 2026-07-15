@@ -114,33 +114,6 @@
   scroll-padding-block: 8px;
 }
 
-.hub-template-list,
-.hub-inspector-panel {
-  scrollbar-color: transparent transparent;
-  scrollbar-width: thin;
-}
-
-.hub-template-list.is-scrolling,
-.hub-inspector-panel.is-scrolling {
-  scrollbar-color: color-mix(in srgb, var(--muted) 58%, transparent) transparent;
-}
-
-.hub-template-list::-webkit-scrollbar,
-.hub-inspector-panel::-webkit-scrollbar {
-  width: 8px;
-}
-
-.hub-template-list::-webkit-scrollbar-thumb,
-.hub-inspector-panel::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 999px;
-}
-
-.hub-template-list.is-scrolling::-webkit-scrollbar-thumb,
-.hub-inspector-panel.is-scrolling::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--muted) 44%, transparent);
-}
-
 .hub-template-card {
   position: relative;
   z-index: 0;

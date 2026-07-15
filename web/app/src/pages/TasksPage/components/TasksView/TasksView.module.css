@@ -112,29 +112,6 @@
   overflow-x: auto;
   overflow-y: hidden;
   padding: 8px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--gray-400) 58%, transparent) transparent;
-}
-
-.tasksKanbanScroll::-webkit-scrollbar {
-  height: 5px;
-}
-
-.taskBoardColumnBody::-webkit-scrollbar {
-  width: 5px;
-}
-
-.tasksKanbanScroll::-webkit-scrollbar-track,
-.taskBoardColumnBody::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tasksKanbanScroll::-webkit-scrollbar-thumb,
-.taskBoardColumnBody::-webkit-scrollbar-thumb {
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--gray-400) 62%, transparent);
-  background-clip: content-box;
 }
 
 .tasksKanban {
@@ -212,8 +189,6 @@
   overscroll-behavior-x: auto;
   padding: 4px;
   border-radius: var(--radius-md);
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--gray-400) 58%, transparent) transparent;
 }
 
 .taskBoardCard {
@@ -649,21 +624,6 @@
   overflow: auto;
   padding: 26px 30px 30px;
   border-right: 1px solid var(--line);
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--gray-400) 58%, transparent) transparent;
-}
-
-.taskDetailMain::-webkit-scrollbar {
-  width: 5px;
-}
-
-.taskDetailMain::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.taskDetailMain::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--gray-400) 62%, transparent);
 }
 
 .detailBlock {
@@ -1454,23 +1414,6 @@
   overflow-y: auto;
   padding-right: 4px;
   border-top: 1px solid var(--line);
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--gray-400) 58%, transparent) transparent;
-}
-
-.scheduledTaskRunList::-webkit-scrollbar {
-  width: 5px;
-}
-
-.scheduledTaskRunList::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.scheduledTaskRunList::-webkit-scrollbar-thumb {
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--gray-400) 62%, transparent);
-  background-clip: content-box;
 }
 
 .scheduledTaskRunRow {

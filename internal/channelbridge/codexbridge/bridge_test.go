@@ -400,6 +400,46 @@ func TestServiceInjectsChannelContextForFeishuEvents(t *testing.T) {
 	})
 }
 
+func TestServiceInjectsChannelContextForLocalCSGClawEvents(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:   "csgclaw",
+		MessageID: "msg-local",
+		RoomID:    "room-local",
+		ChatType:  "direct",
+		Text:      "find the file I sent earlier",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"manager": {{events: stream, errs: errs}},
+		},
+	}
+	prompter := &fakePrompter{}
+
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "manager", RuntimeID: "rt-manager", SessionID: "sess-manager"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	waitFor(t, func() bool {
+		texts := prompter.texts()
+		return len(texts) == 1 &&
+			strings.Contains(texts[0], "channel: csgclaw") &&
+			strings.Contains(texts[0], "room_id: room-local") &&
+			strings.Contains(texts[0], "participant_id: manager") &&
+			strings.Contains(texts[0], "Current message:\nfind the file I sent earlier")
+	})
+}
+
 func TestServiceEnsuresConversationSessionAndInjectsHiddenThreadContext(t *testing.T) {
 	t.Parallel()
 
@@ -469,6 +509,53 @@ func TestServiceEnsuresConversationSessionAndInjectsHiddenThreadContext(t *testi
 	if got := prompter.ensureCalls(); len(got) != 1 || got[0].conversationKey != "room-1:msg-root" {
 		t.Fatalf("EnsureSession calls = %+v, want one thread conversation key", got)
 	}
+}
+
+func TestServiceAddsAttachmentManifestToPrompt(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		MessageID: "m-attach",
+		RoomID:    "room-1",
+		Text:      "please inspect",
+		Attachments: []MessageAttachment{{
+			ID:            "att-1",
+			Name:          "diagram.png",
+			Kind:          "image",
+			MediaType:     "image/png",
+			SizeBytes:     42,
+			SHA256:        "abc123",
+			DownloadURL:   "/api/v1/attachments/att-1",
+			WorkspacePath: ".csgclaw/attachments/room-1/m-attach/att-1-diagram.png",
+		}},
+	}
+
+	sink := runtimecodex.NewEventSink()
+	client := &fakeBotClient{
+		streams: map[string][]streamResult{
+			"u-codex": {{events: stream, errs: errs}},
+		},
+	}
+	prompter := &fakePrompter{}
+	svc := NewService(client, prompter, sink)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "u-codex", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	waitFor(t, func() bool {
+		texts := prompter.texts()
+		return len(texts) == 1 &&
+			strings.Contains(texts[0], "please inspect") &&
+			strings.Contains(texts[0], "Attached files:") &&
+			strings.Contains(texts[0], "diagram.png") &&
+			strings.Contains(texts[0], ".csgclaw/attachments/room-1/m-attach/att-1-diagram.png")
+	})
 }
 
 func TestServiceUsesConversationScopedSessionAndTopLevelFinalReply(t *testing.T) {
@@ -1950,6 +2037,64 @@ func TestHTTPClientSendMessageUsesParticipantRoute(t *testing.T) {
 	}
 	if got.MessageID != "m-1" {
 		t.Fatalf("MessageID = %q, want %q", got.MessageID, "m-1")
+	}
+}
+
+func TestHTTPClientSendMessageUsesMultipartForAttachments(t *testing.T) {
+	t.Parallel()
+
+	client := &HTTPClient{
+		BaseURL: "http://example.test",
+		Token:   "secret",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if err := req.ParseMultipartForm(1024); err != nil {
+					t.Fatalf("ParseMultipartForm() error = %v", err)
+				}
+				var payload SendMessageRequest
+				if err := json.Unmarshal([]byte(req.FormValue("payload")), &payload); err != nil {
+					t.Fatalf("decode multipart payload: %v", err)
+				}
+				if payload.RoomID != "room-1" || payload.Text != "generated report" || payload.ThreadRootID != "msg-root" {
+					t.Fatalf("multipart payload = %+v", payload)
+				}
+				files := req.MultipartForm.File["files"]
+				if len(files) != 1 || files[0].Filename != "report.txt" {
+					t.Fatalf("multipart files = %+v, want report.txt", files)
+				}
+				file, err := files[0].Open()
+				if err != nil {
+					t.Fatalf("open multipart file: %v", err)
+				}
+				defer file.Close()
+				data, err := io.ReadAll(file)
+				if err != nil || string(data) != "report contents" {
+					t.Fatalf("multipart file = %q, err=%v", data, err)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`{"message_id":"m-attach"}`)),
+				}, nil
+			}),
+		},
+	}
+
+	response, err := client.SendMessage(context.Background(), "u-codex", SendMessageRequest{
+		RoomID:       "room-1",
+		Text:         "generated report",
+		ThreadRootID: "msg-root",
+		Attachments: []MessageAttachmentUpload{{
+			Name:      "report.txt",
+			MediaType: "text/plain",
+			Data:      []byte("report contents"),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	if response.MessageID != "m-attach" {
+		t.Fatalf("MessageID = %q, want m-attach", response.MessageID)
 	}
 }
 

@@ -412,26 +412,17 @@
 }
 
 .conversation :global(.composer-editor) {
-  min-height: 58px;
+  min-height: 52px;
   max-height: 118px;
-  padding: 13px 56px 12px 12px;
-  font-size: var(--text-sm-size);
+  padding: 12px 12px 6px;
+  font-size: 14px;
 }
 
 .conversation :global(.composer-placeholder) {
-  top: 13px;
+  top: 12px;
   left: 12px;
-  right: 56px;
-  font-size: var(--text-sm-size);
-}
-
-.conversation :global(.composer-send-button) {
-  right: 8px;
-  bottom: 8px;
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
-  min-height: 40px;
+  right: 12px;
+  font-size: 13px;
 }
 
 .conversation :global(.composer-tip) {

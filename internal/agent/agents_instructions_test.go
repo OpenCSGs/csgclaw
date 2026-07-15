@@ -112,6 +112,14 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForMan
 		"Do not rely on connector tokens from environment variables",
 		"Do not treat an empty result from an external Codex GitHub app connector as proof",
 		"reconnect the CSGClaw GitHub OAuth connector",
+		"Historical Attachment Recovery",
+		"csgclaw-cli message list --channel <current_channel> --room-id <target_room_id>",
+		"jq '[.[] as $message | ($message.attachments // [])[]",
+		"runtime-local cache copies, not as the durable attachment index",
+		"GET $CSGCLAW_BASE_URL/api/v1/attachments/<attachment-id>",
+		"curl -fsS -H \"Authorization: Bearer ${CSGCLAW_ACCESS_TOKEN:?}\"",
+		"Use the stable attachment ID for authenticated downloads",
+		"until durable CSGClaw history has been checked",
 	} {
 		if !strings.Contains(manager, want) {
 			t.Fatalf("manager runtime instructions missing %q in %q", want, manager)
@@ -119,7 +127,9 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForMan
 	}
 
 	worker := RenderRuntimeAgentsInstructionsBlock("agent-worker", "Stay concise.")
-	if strings.Contains(worker, "GitHub Connector Access") || strings.Contains(worker, "`GITHUB_TOKEN`") {
+	if strings.Contains(worker, "GitHub Connector Access") ||
+		strings.Contains(worker, "Historical Attachment Recovery") ||
+		strings.Contains(worker, "`GITHUB_TOKEN`") {
 		t.Fatalf("worker runtime instructions include manager connector guidance: %q", worker)
 	}
 }

@@ -1,7 +1,7 @@
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button as CSGButton } from "@/components/ui/Button";
 import { TrashIcon } from "@/components/ui/Icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { IMUser, TranslateFn } from "@/models/conversations";
 import { toggleSelection } from "@/shared/lib/collections";
@@ -72,8 +72,6 @@ export function InviteMembersModal({
   onInvite,
   onPreviewUser,
 }: InviteMembersModalProps) {
-  const [isScrolling, setIsScrolling] = useState(false);
-  const scrollTimerRef = useRef<number | null>(null);
   const candidateIDs = candidates.map((user) => user.id).filter(Boolean);
   const allCandidatesSelected = candidateIDs.length > 0 && candidateIDs.every((id) => inviteUserIDs.includes(id));
   const selectedMemberCount = candidateIDs.filter((id) => inviteUserIDs.includes(id)).length;
@@ -88,22 +86,8 @@ export function InviteMembersModal({
     window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      if (scrollTimerRef.current) {
-        window.clearTimeout(scrollTimerRef.current);
-      }
     };
   }, [onClose]);
-
-  function onScrollContent() {
-    setIsScrolling(true);
-    if (scrollTimerRef.current) {
-      window.clearTimeout(scrollTimerRef.current);
-    }
-    scrollTimerRef.current = window.setTimeout(() => {
-      setIsScrolling(false);
-      scrollTimerRef.current = null;
-    }, 700);
-  }
 
   return (
     <div className="modal-backdrop">
@@ -118,7 +102,7 @@ export function InviteMembersModal({
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
-        <div className={`invite-members-content${isScrolling ? " is-scrolling" : ""}`} onScroll={onScrollContent}>
+        <div className="invite-members-content">
           <div className="field member-management-section">
             <span>{t("currentMembers")}</span>
             <div className="selection-list create-room-member-list">

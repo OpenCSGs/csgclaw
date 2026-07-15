@@ -457,14 +457,12 @@ export function HubDetailPane({
     }
     return "template";
   }, [mcpServers.length, selectedResourceType, skills.length, templates.length]);
-  const [isInspectorScrolling, setIsInspectorScrolling] = useState(false);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
   const [mcpDetailError, setMCPDetailError] = useState("");
   const [mcpFormError, setMCPFormError] = useState("");
-  const inspectorScrollTimerRef = useRef<number | null>(null);
   useEffect(() => {
     if (mcpCreateDialogOpen) {
       setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
@@ -480,26 +478,6 @@ export function HubDetailPane({
     setMCPDetailDocument(formatMCPServerDocument(selectedMCPServer.name, selectedMCPServer.config));
     setMCPDetailError("");
   }, [selectedMCPServer]);
-  useEffect(
-    () => () => {
-      if (inspectorScrollTimerRef.current) {
-        window.clearTimeout(inspectorScrollTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  function handleInspectorScroll() {
-    setIsInspectorScrolling(true);
-    if (inspectorScrollTimerRef.current) {
-      window.clearTimeout(inspectorScrollTimerRef.current);
-    }
-    inspectorScrollTimerRef.current = window.setTimeout(() => {
-      setIsInspectorScrolling(false);
-      inspectorScrollTimerRef.current = null;
-    }, 900);
-  }
-
   async function handleDeleteSkillConfirm() {
     const deleted = await onDeleteSkill?.(selectedSkill);
     if (deleted) {
@@ -571,10 +549,7 @@ export function HubDetailPane({
           <strong>{t("resourcesEmpty")}</strong>
         </div>
       ) : (
-        <div
-          className={`hub-workbench hub-inspector-panel ${isInspectorScrolling ? "is-scrolling" : ""}`}
-          onScroll={handleInspectorScroll}
-        >
+        <div className="hub-workbench hub-inspector-panel">
           {activeResourceType === "template" && selectedTemplate ? (
             <>
               <div className="hub-inspector-hero">
