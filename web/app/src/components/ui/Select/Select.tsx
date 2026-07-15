@@ -83,10 +83,19 @@ export type SelectContentProps = ComponentPropsWithoutRef<typeof RadixSelect.Con
   portalContainer?: ComponentPropsWithoutRef<typeof RadixSelect.Portal>["container"];
 };
 
+function defaultSelectPortalContainer() {
+  if (typeof document === "undefined") {
+    return undefined;
+  }
+  return document.getElementById("root") ?? undefined;
+}
+
 export const SelectContent = forwardRef<ComponentRef<typeof RadixSelect.Content>, SelectContentProps>(
   function SelectContent({ children, className, portalContainer, position = "popper", sideOffset = 6, ...props }, ref) {
+    const resolvedPortalContainer = portalContainer ?? defaultSelectPortalContainer();
+
     return (
-      <RadixSelect.Portal container={portalContainer}>
+      <RadixSelect.Portal container={resolvedPortalContainer}>
         <RadixSelect.Content
           ref={ref}
           className={classNames("csg-select-content overflow-hidden", className)}
