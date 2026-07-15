@@ -106,6 +106,9 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	if got.HubLocalPath == "" {
 		t.Fatalf("GET hub local path = empty, want populated default")
 	}
+	if got.HubOfficialURLEffective != config.DefaultOfficialHubRegistryURL {
+		t.Fatalf("HubOfficialURLEffective = %q, want %q", got.HubOfficialURLEffective, config.DefaultOfficialHubRegistryURL)
+	}
 
 	body, err := json.Marshal(apitypes.UpdateConfigSettingsRequest{
 		ListenAddr:             "127.0.0.1:19080",
@@ -144,6 +147,9 @@ func TestHandleServerConfigGetPut(t *testing.T) {
 	}
 	if saved.HubLocalPath != "/tmp/team-hub" {
 		t.Fatalf("saved hub local path=%q, want updated value", saved.HubLocalPath)
+	}
+	if saved.HubOfficialURLEffective != config.DefaultOfficialHubRegistryURL {
+		t.Fatalf("saved HubOfficialURLEffective = %q, want %q", saved.HubOfficialURLEffective, config.DefaultOfficialHubRegistryURL)
 	}
 
 	data, err := os.ReadFile(configPath)

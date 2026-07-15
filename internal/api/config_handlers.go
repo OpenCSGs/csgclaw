@@ -35,7 +35,7 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, serverConfigView(path, cfg))
+		writeJSON(w, http.StatusOK, h.serverConfigView(r, path, cfg))
 	case http.MethodPut:
 		var req apitypes.UpdateConfigSettingsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -93,13 +93,13 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		writeJSON(w, http.StatusOK, serverConfigView(path, cfg))
+		writeJSON(w, http.StatusOK, h.serverConfigView(r, path, cfg))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func serverConfigView(path string, cfg config.Config) apitypes.ConfigSettingsResponse {
+func (h *Handler) serverConfigView(r *http.Request, path string, cfg config.Config) apitypes.ConfigSettingsResponse {
 	settings := config.UserSettingsFromConfig(cfg)
 	token := strings.TrimSpace(settings.AccessToken)
 	effective := agent.ResolveManagerBaseURLForSandboxProvider(cfg.Server, cfg.Sandbox.Resolved().Provider)
@@ -117,6 +117,7 @@ func serverConfigView(path string, cfg config.Config) apitypes.ConfigSettingsRes
 		SandboxProvider:           settings.SandboxProvider,
 		SupportedSandboxProviders: settings.SupportedSandboxProvider,
 		HubLocalPath:              settings.HubLocalPath,
+		HubOfficialURLEffective:   h.officialHubBaseURLForRequest(r, cfg),
 		DefaultManagerTemplate:    settings.DefaultManagerTemplate,
 		DefaultWorkerTemplate:     settings.DefaultWorkerTemplate,
 	}

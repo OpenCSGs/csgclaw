@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"csgclaw/internal/auth"
@@ -89,5 +91,39 @@ func TestCurrentOpenCSGEnvironmentPrefersLoginSiteOverStoredHubURL(t *testing.T)
 	env := (&Handler{}).currentOpenCSGEnvironment(httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil))
 	if got, want := env.CSGHubBaseURL, auth.StageCSGHubBaseURL; got != want {
 		t.Fatalf("CSGHubBaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestOfficialHubBaseURLForRequestPreservesExplicitOfficialRegistry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[hub]
+default_registry = "builtin"
+default_publish_registry = "local"
+
+[[hub.registries]]
+name = "official"
+kind = "remote"
+url = "https://hub.example.test"
+enabled = true
+`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{
+			Authenticated:  true,
+			OpenCSGBaseURL: auth.StageOpenCSGBaseURL,
+			BaseURL:        auth.StageCSGHubBaseURL,
+		}, nil
+	})
+	defer restore()
+
+	got := (&Handler{}).officialHubBaseURLForRequest(httptest.NewRequest(http.MethodGet, "/api/v1/server/config", nil), cfg)
+	if want := "https://hub.example.test"; got != want {
+		t.Fatalf("officialHubBaseURLForRequest() = %q, want %q", got, want)
 	}
 }

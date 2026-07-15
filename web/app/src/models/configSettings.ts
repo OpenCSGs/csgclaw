@@ -13,6 +13,7 @@ export type ConfigSettings = {
   sandbox_provider: string;
   supported_sandbox_providers?: string[];
   hub_local_path: string;
+  hub_official_url_effective?: string;
   default_manager_template: string;
   default_worker_template: string;
 };
@@ -84,6 +85,7 @@ export function normalizeConfigSettings(source: unknown): ConfigSettings | null 
       ? value.supported_sandbox_providers.map((item) => String(item || "").trim()).filter(Boolean)
       : [],
     hub_local_path: String(value.hub_local_path || "").trim(),
+    hub_official_url_effective: normalizeURLField(String(value.hub_official_url_effective || "")),
     default_manager_template: String(value.default_manager_template || "").trim(),
     default_worker_template: String(value.default_worker_template || "").trim(),
   };

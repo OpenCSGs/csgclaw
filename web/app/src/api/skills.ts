@@ -1,6 +1,8 @@
 import { del, get, request } from "@/api/client";
 import { fetchAuthStatus } from "@/api/auth";
+import { fetchServerConfig } from "@/api/config";
 import { normalizeAuthStatus } from "@/models/auth";
+import { normalizeConfigSettings } from "@/models/configSettings";
 import { SKILL_SOURCE_OFFICIAL } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 
@@ -108,11 +110,24 @@ function agenticHubOfficialSkillsPath(baseURL: string, page: number, search: str
 }
 
 async function officialHubBaseURL(): Promise<string> {
+  const configBaseURL = await officialHubBaseURLFromServerConfig();
+  if (configBaseURL) {
+    return configBaseURL;
+  }
   const authBaseURL = await officialHubBaseURLFromAuthStatus();
   if (authBaseURL) {
     return authBaseURL;
   }
   return "https://hub.opencsg.com";
+}
+
+async function officialHubBaseURLFromServerConfig(): Promise<string> {
+  try {
+    const settings = normalizeConfigSettings(await fetchServerConfig());
+    return normalizeOfficialHubBaseURL(settings?.hub_official_url_effective || "");
+  } catch (_) {
+    return "";
+  }
 }
 
 async function officialHubBaseURLFromAuthStatus(): Promise<string> {

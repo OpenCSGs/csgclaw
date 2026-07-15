@@ -21,6 +21,7 @@ describe("configSettings model", () => {
       sandbox_provider: "docker",
       supported_sandbox_providers: ["boxlite", "docker", "csghub"],
       hub_local_path: "/tmp/hub",
+      hub_official_url_effective: "https://hub.example.com/",
       default_manager_template: "builtin.manager-codex",
       default_worker_template: "builtin.picoclaw-worker",
     });
@@ -28,6 +29,7 @@ describe("configSettings model", () => {
     expect(got?.access_token_preview).toBe("your...");
     expect(got?.access_token).toBe("");
     expect(got?.hub_local_path).toBe("/tmp/hub");
+    expect(got?.hub_official_url_effective).toBe("https://hub.example.com");
   });
 
   it("parses and formats listen addresses", () => {

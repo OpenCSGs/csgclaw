@@ -12,6 +12,8 @@ import (
 )
 
 const registrySkillPageSize = 16
+const registrySkillMaxPageSize = 50
+const registrySkillMaxPage = 100
 
 type registrySkillSearchResponse struct {
 	HasMore  bool                    `json:"has_more"`
@@ -41,9 +43,9 @@ func (h *Handler) handleSkillRegistrySearch(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "search query is required", http.StatusBadRequest)
 		return
 	}
-	page := positiveQueryInt(r, "page", 1)
-	per := positiveQueryInt(r, "per", registrySkillPageSize)
-	limit := page * per
+	page := boundedPositiveQueryInt(r, "page", 1, registrySkillMaxPage)
+	per := boundedPositiveQueryInt(r, "per", registrySkillPageSize, registrySkillMaxPageSize)
+	limit := page*per + 1
 	svc, err := h.skillRegistryServiceForRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -54,15 +56,7 @@ func (h *Handler) handleSkillRegistrySearch(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	start := (page - 1) * per
-	if start > len(items) {
-		start = len(items)
-	}
-	end := start + per
-	if end > len(items) {
-		end = len(items)
-	}
-	hasMore := len(items) >= limit
+	start, end, hasMore := registrySkillPageBounds(len(items), page, per)
 	var nextPage *int
 	if hasMore {
 		next := page + 1
@@ -156,7 +150,23 @@ func writeRegistrySkillInstallError(w http.ResponseWriter, err error) {
 	}
 }
 
+func registrySkillPageBounds(total, page, per int) (int, int, bool) {
+	start := (page - 1) * per
+	if start > total {
+		start = total
+	}
+	end := start + per
+	if end > total {
+		end = total
+	}
+	return start, end, total > page*per
+}
+
 func positiveQueryInt(r *http.Request, key string, fallback int) int {
+	return boundedPositiveQueryInt(r, key, fallback, 0)
+}
+
+func boundedPositiveQueryInt(r *http.Request, key string, fallback, maxValue int) int {
 	value := strings.TrimSpace(r.URL.Query().Get(key))
 	if value == "" {
 		return fallback
@@ -164,6 +174,9 @@ func positiveQueryInt(r *http.Request, key string, fallback int) int {
 	var parsed int
 	if _, err := fmt.Sscanf(value, "%d", &parsed); err != nil || parsed <= 0 {
 		return fallback
+	}
+	if maxValue > 0 && parsed > maxValue {
+		return maxValue
 	}
 	return parsed
 }
