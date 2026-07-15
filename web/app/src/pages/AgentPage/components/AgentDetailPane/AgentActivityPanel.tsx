@@ -1037,17 +1037,20 @@ function AgentActivityToolbar({
             ) : null}
           </DropdownMenuContent>
         </DropdownMenuRoot>
-        <Button
-          className="agent-activity-toolbar-refresh"
-          variant="secondaryGray"
-          size="sm"
-          disabled={refreshDisabled}
-          aria-label={t("agentActivityRefresh")}
-          title={t("agentActivityRefresh")}
-          onClick={onRefresh}
-        >
-          <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
-        </Button>
+        <Tooltip content={t("agentActivityRefresh")}>
+          <span>
+            <Button
+              className="agent-activity-toolbar-refresh"
+              variant="secondaryGray"
+              size="sm"
+              disabled={refreshDisabled}
+              aria-label={t("agentActivityRefresh")}
+              onClick={onRefresh}
+            >
+              <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
+            </Button>
+          </span>
+        </Tooltip>
       </div>
       {selectedFilterOptions.length ? (
         <div className="agent-activity-selected-filters" aria-label={t("agentActivitySelectedFiltersLabel")}>

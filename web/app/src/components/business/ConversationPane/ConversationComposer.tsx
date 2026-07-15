@@ -2,7 +2,7 @@ import { memo, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { ArrowUp, Paperclip, Plus } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
-import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger } from "@/components/ui";
+import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, Tooltip } from "@/components/ui";
 import { IconImage } from "@/components/ui/Icons";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentProfileLike } from "@/models/agents";
@@ -225,18 +225,21 @@ export const ConversationComposer = memo(function ConversationComposer({
               event.currentTarget.value = "";
             }}
           />
-          <Button
-            variant="primary"
-            className="composer-send-button"
-            aria-label={t("send")}
-            title={t("send")}
-            disabled={sendDisabled}
-            iconOnly
-            size="lg"
-            onClick={onSendMessage}
-          >
-            <ArrowUp aria-hidden="true" size={22} strokeWidth={2.25} />
-          </Button>
+          <Tooltip content={t("send")}>
+            <span>
+              <Button
+                variant="primary"
+                className="composer-send-button"
+                aria-label={t("send")}
+                disabled={sendDisabled}
+                iconOnly
+                size="lg"
+                onClick={onSendMessage}
+              >
+                <ArrowUp aria-hidden="true" size={22} strokeWidth={2.25} />
+              </Button>
+            </span>
+          </Tooltip>
         </div>
       </div>
       {composerError ? <div className="form-error composer-error">{composerError}</div> : null}
@@ -315,20 +318,23 @@ function ComposerAddMenu({
 
   return (
     <PopoverRoot>
-      <PopoverTrigger asChild>
-        <Button
-          aria-haspopup="dialog"
-          aria-label={t("composerAdd")}
-          className="composer-add-button"
-          disabled={disabled}
-          iconOnly
-          size="lg"
-          title={t("composerAdd")}
-          variant="tertiaryGray"
-        >
-          <Plus aria-hidden="true" size={24} strokeWidth={1.8} />
-        </Button>
-      </PopoverTrigger>
+      <Tooltip content={t("composerAdd")}>
+        <PopoverTrigger asChild>
+          <span>
+            <Button
+              aria-haspopup="dialog"
+              aria-label={t("composerAdd")}
+              className="composer-add-button"
+              disabled={disabled}
+              iconOnly
+              size="lg"
+              variant="tertiaryGray"
+            >
+              <Plus aria-hidden="true" size={24} strokeWidth={1.8} />
+            </Button>
+          </span>
+        </PopoverTrigger>
+      </Tooltip>
       <PopoverContent aria-label={t("composerAdd")} className="composer-add-popover" role="dialog" side="top">
         <section className="composer-add-section" aria-label={t("composerAdd")}>
           <div className="composer-add-section-label">{t("composerAdd")}</div>

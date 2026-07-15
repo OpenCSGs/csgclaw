@@ -54,17 +54,18 @@ function AttachmentDraftItem({
         <span className="attachment-name truncate">{draft.name}</span>
         <span className="attachment-size">{formatAttachmentSize(draft.sizeBytes)}</span>
       </span>
-      <Button
-        aria-label={t("removeAttachment")}
-        className="attachment-remove-button"
-        iconOnly
-        size="sm"
-        title={t("removeAttachment")}
-        variant="tertiaryGray"
-        onClick={() => onRemove(draft.id)}
-      >
-        <X aria-hidden="true" size={14} />
-      </Button>
+      <Tooltip content={t("removeAttachment")}>
+        <Button
+          aria-label={t("removeAttachment")}
+          className="attachment-remove-button"
+          iconOnly
+          size="sm"
+          variant="tertiaryGray"
+          onClick={() => onRemove(draft.id)}
+        >
+          <X aria-hidden="true" size={14} />
+        </Button>
+      </Tooltip>
     </div>
   );
 }

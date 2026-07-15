@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
+  Tooltip,
 } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import type { VoidOrPromise } from "./types";
@@ -103,18 +104,21 @@ export function ConversationAgentLogsDialog({
             <DialogDescription>{agentName}</DialogDescription>
           </div>
           <div className="agent-logs-header-actions">
-            <Button
-              className="icon-button agent-logs-refresh"
-              aria-label={t("refreshLogs")}
-              title={t("refreshLogs")}
-              loading={loading}
-              loadingLabel={t("agentLogsLoading")}
-              onClick={onRefresh}
-            >
-              <span className="icon-button-mark" aria-hidden="true">
-                <RefreshCw size={18} strokeWidth={2} />
+            <Tooltip content={t("refreshLogs")}>
+              <span>
+                <Button
+                  className="icon-button agent-logs-refresh"
+                  aria-label={t("refreshLogs")}
+                  loading={loading}
+                  loadingLabel={t("agentLogsLoading")}
+                  onClick={onRefresh}
+                >
+                  <span className="icon-button-mark" aria-hidden="true">
+                    <RefreshCw size={18} strokeWidth={2} />
+                  </span>
+                </Button>
               </span>
-            </Button>
+            </Tooltip>
             <DialogCloseButton className="icon-button" label={t("close")} />
           </div>
         </DialogHeader>

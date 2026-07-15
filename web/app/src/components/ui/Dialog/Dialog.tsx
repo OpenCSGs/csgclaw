@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef, HTMLAttributes } from "react";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { classNames } from "@/shared/lib/classNames";
 
 export type DialogRootProps = ComponentPropsWithoutRef<typeof RadixDialog.Root>;
@@ -108,22 +109,18 @@ export type DialogCloseButtonProps = Omit<ComponentPropsWithoutRef<typeof Button
 };
 
 export const DialogCloseButton = forwardRef<HTMLButtonElement, DialogCloseButtonProps>(function DialogCloseButton(
-  { className, label, title = label, ...props },
+  { className, label, title, ...props },
   ref,
 ) {
-  return (
+  const button = (
     <DialogClose asChild>
-      <Button
-        ref={ref}
-        className={classNames("csg-dialog-close", className)}
-        aria-label={label}
-        title={title}
-        {...props}
-      >
+      <Button ref={ref} className={classNames("csg-dialog-close", className)} aria-label={label} {...props}>
         <span className="icon-button-mark" aria-hidden="true">
           <X size={18} strokeWidth={2} />
         </span>
       </Button>
     </DialogClose>
   );
+
+  return <Tooltip content={title ?? label}>{button}</Tooltip>;
 });

@@ -78,6 +78,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   Select,
+  Tooltip,
 } from "@/components/ui";
 import { AgentActivityPanel } from "./AgentActivityPanel";
 
@@ -1123,17 +1124,20 @@ function AgentMCPPanel({
               <span>{t("profileMCPServers")}</span>
               <small className="agent-section-count-badge">{servers.length}</small>
             </div>
-            <Button
-              className="agent-skill-add-button"
-              variant="secondaryGray"
-              size="sm"
-              aria-label={t("agentMCPAdd")}
-              title={t("agentMCPAdd")}
-              disabled={addBusy}
-              onClick={onOpenAddMCP}
-            >
-              <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-            </Button>
+            <Tooltip content={t("agentMCPAdd")}>
+              <span>
+                <Button
+                  className="agent-skill-add-button"
+                  variant="secondaryGray"
+                  size="sm"
+                  aria-label={t("agentMCPAdd")}
+                  disabled={addBusy}
+                  onClick={onOpenAddMCP}
+                >
+                  <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+                </Button>
+              </span>
+            </Tooltip>
           </div>
           {addError ? <div className="form-error">{addError}</div> : null}
           {deleteError ? <div className="form-error">{deleteError}</div> : null}
@@ -1147,17 +1151,20 @@ function AgentMCPPanel({
                       <Server aria-hidden="true" size={14} strokeWidth={2} />
                       <span>{server.name}</span>
                     </div>
-                    <Button
-                      className="agent-skill-icon-button"
-                      variant="outlineDanger"
-                      size="sm"
-                      aria-label={t("agentDeleteMCP")}
-                      title={t("agentDeleteMCP")}
-                      disabled={deleteBusy}
-                      onClick={() => onRequestDeleteMCP(server)}
-                    >
-                      <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
-                    </Button>
+                    <Tooltip content={t("agentDeleteMCP")}>
+                      <span>
+                        <Button
+                          className="agent-skill-icon-button"
+                          variant="outlineDanger"
+                          size="sm"
+                          aria-label={t("agentDeleteMCP")}
+                          disabled={deleteBusy}
+                          onClick={() => onRequestDeleteMCP(server)}
+                        >
+                          <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                        </Button>
+                      </span>
+                    </Tooltip>
                   </div>
                   <p className="agent-skill-description">{server.description || "-"}</p>
                 </article>
@@ -1403,17 +1410,20 @@ function AgentSkillsPanel({
               <span>{t("agentSkillsTitle")}</span>
               <small className="agent-section-count-badge">{skills.length}</small>
             </div>
-            <Button
-              className="agent-skill-add-button"
-              variant="secondaryGray"
-              size="sm"
-              aria-label={t("agentSkillAdd")}
-              title={t("agentSkillAdd")}
-              disabled={skillCandidatesLoading || skillAddBusy}
-              onClick={onOpenAddSkills}
-            >
-              <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-            </Button>
+            <Tooltip content={t("agentSkillAdd")}>
+              <span>
+                <Button
+                  className="agent-skill-add-button"
+                  variant="secondaryGray"
+                  size="sm"
+                  aria-label={t("agentSkillAdd")}
+                  disabled={skillCandidatesLoading || skillAddBusy}
+                  onClick={onOpenAddSkills}
+                >
+                  <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+                </Button>
+              </span>
+            </Tooltip>
           </div>
           {skillsError ? <div className="form-error">{skillsError}</div> : null}
           {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
@@ -1426,17 +1436,20 @@ function AgentSkillsPanel({
                 <article key={skill.name} className="agent-skill-card">
                   <div className="agent-skill-card-header">
                     <div className="agent-skill-name">{skill.name}</div>
-                    <Button
-                      className="agent-skill-icon-button"
-                      variant="outlineDanger"
-                      size="sm"
-                      aria-label={t("agentDeleteSkill")}
-                      title={t("agentDeleteSkill")}
-                      disabled={skillDeleteBusy}
-                      onClick={() => onRequestDeleteSkill(skill)}
-                    >
-                      <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
-                    </Button>
+                    <Tooltip content={t("agentDeleteSkill")}>
+                      <span>
+                        <Button
+                          className="agent-skill-icon-button"
+                          variant="outlineDanger"
+                          size="sm"
+                          aria-label={t("agentDeleteSkill")}
+                          disabled={skillDeleteBusy}
+                          onClick={() => onRequestDeleteSkill(skill)}
+                        >
+                          <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                        </Button>
+                      </span>
+                    </Tooltip>
                   </div>
                   <p className="agent-skill-description">{skill.description || "-"}</p>
                 </article>

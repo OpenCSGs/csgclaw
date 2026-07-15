@@ -3,7 +3,7 @@ import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2 } from "lucid
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
@@ -277,15 +277,18 @@ export function ModelProviderPage() {
             </Button>
           ) : null}
           {!provider.builtin ? (
-            <Button
-              variant="outlineDanger"
-              aria-label={t("agentDelete")}
-              title={t("agentDelete")}
-              onClick={removeProvider}
-              disabled={Boolean(busy)}
-            >
-              <Trash2 size={16} aria-hidden="true" />
-            </Button>
+            <Tooltip content={t("agentDelete")}>
+              <span>
+                <Button
+                  variant="outlineDanger"
+                  aria-label={t("agentDelete")}
+                  onClick={removeProvider}
+                  disabled={Boolean(busy)}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                </Button>
+              </span>
+            </Tooltip>
           ) : null}
         </div>
       </header>

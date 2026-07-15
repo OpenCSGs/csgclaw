@@ -417,16 +417,17 @@ export function FloatingChat({
   }
 
   const headerAccessory = (
-    <Button
-      className={classNames("icon-button", styles.collapseButton)}
-      aria-label={t("floatingChatCollapse")}
-      title={t("floatingChatCollapse")}
-      onClick={() => onOpenChange(false)}
-    >
-      <span className="icon-button-mark" aria-hidden="true">
-        <Minus size={17} strokeWidth={2.2} />
-      </span>
-    </Button>
+    <Tooltip content={t("floatingChatCollapse")}>
+      <Button
+        className={classNames("icon-button", styles.collapseButton)}
+        aria-label={t("floatingChatCollapse")}
+        onClick={() => onOpenChange(false)}
+      >
+        <span className="icon-button-mark" aria-hidden="true">
+          <Minus size={17} strokeWidth={2.2} />
+        </span>
+      </Button>
+    </Tooltip>
   );
 
   return (

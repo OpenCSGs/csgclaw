@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { IconImage } from "@/components/ui/Icons";
 import { resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
@@ -272,11 +272,13 @@ export function ConversationThreadPanel({
             )}
           </div>
         </div>
-        <Button className="icon-button" aria-label={t("close")} title={t("close")} onClick={onClose}>
-          <span className="icon-button-mark" aria-hidden="true">
-            <X size={18} strokeWidth={2} />
-          </span>
-        </Button>
+        <Tooltip content={t("close")}>
+          <Button className="icon-button" aria-label={t("close")} onClick={onClose}>
+            <span className="icon-button-mark" aria-hidden="true">
+              <X size={18} strokeWidth={2} />
+            </span>
+          </Button>
+        </Tooltip>
       </div>
       <div ref={threadBodyRef} className="thread-panel-body">
         {loading && !root ? <div className="thread-empty">{t("loading")}</div> : null}
@@ -476,17 +478,20 @@ export function ConversationThreadPanel({
             event.currentTarget.value = "";
           }}
         />
-        <Button
-          className="thread-attach-button"
-          aria-label={t("addAttachment")}
-          title={t("addAttachment")}
-          disabled={disabled}
-          iconOnly
-          variant="tertiaryGray"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Paperclip aria-hidden="true" size={18} />
-        </Button>
+        <Tooltip content={t("addAttachment")}>
+          <span>
+            <Button
+              className="thread-attach-button"
+              aria-label={t("addAttachment")}
+              disabled={disabled}
+              iconOnly
+              variant="tertiaryGray"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip aria-hidden="true" size={18} />
+            </Button>
+          </span>
+        </Tooltip>
         <Button
           variant="primary"
           className="thread-send-button"

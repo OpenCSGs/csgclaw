@@ -1,7 +1,6 @@
 import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { classNames } from "@/shared/lib/classNames";
-import { Tooltip } from "../Tooltip";
 
 export type ButtonVariant =
   | "primary"
@@ -62,7 +61,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     loading = false,
     loadingLabel,
     size = "md",
-    title,
     type = "button",
     variant = "secondaryGray",
     "aria-busy": ariaBusy,
@@ -75,7 +73,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const childAccessibleLabel =
     typeof children === "string" || typeof children === "number" ? String(children) : undefined;
 
-  const button = (
+  return (
     <button
       ref={ref}
       type={type}
@@ -101,8 +99,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ) : null}
     </button>
   );
-
-  return title ? <Tooltip content={title}>{button}</Tooltip> : button;
 });
 
 export type IconButtonProps = Omit<ButtonProps, "aria-label" | "children" | "iconOnly"> & {
@@ -112,11 +108,11 @@ export type IconButtonProps = Omit<ButtonProps, "aria-label" | "children" | "ico
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { icon, label, markClassName, title = label, ...props },
+  { icon, label, markClassName, ...props },
   ref,
 ) {
   return (
-    <Button ref={ref} iconOnly aria-label={label} title={title} {...props}>
+    <Button ref={ref} iconOnly aria-label={label} {...props}>
       <span className={markClassName} aria-hidden="true">
         {icon}
       </span>
