@@ -1,0 +1,34 @@
+.csg-tooltip-content {
+  z-index: var(--z-tooltip);
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--gray-700);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: none;
+  transform-origin: var(--radix-tooltip-content-transform-origin);
+  animation: csg-tooltip-fade 120ms ease;
+}
+
+@keyframes csg-tooltip-fade {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+:root[data-theme="dark"] .csg-tooltip-content {
+  border-color: var(--gray-700);
+  background: var(--gray-900);
+  color: var(--white);
+}

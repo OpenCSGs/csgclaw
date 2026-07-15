@@ -9,7 +9,7 @@ import {
   RefreshCw,
   SquareTerminal,
 } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { AgentRuntimeStatuses } from "@/models/agentRuntimes";
 import type { AgentRuntime, AgentRuntimeStatus } from "@/models/agentRuntimes";
 import type { TranslateFn } from "@/models/conversations";
@@ -161,7 +161,9 @@ function RuntimeCard({
           <div className={styles.pathRow}>
             <SquareTerminal size={15} aria-hidden="true" />
             <span>{t("computerRuntimeExecutable")}</span>
-            <code title={runtime.path}>{runtime.path}</code>
+            <Tooltip content={runtime.path}>
+              <code>{runtime.path}</code>
+            </Tooltip>
           </div>
         ) : null}
         {visibleError ? (

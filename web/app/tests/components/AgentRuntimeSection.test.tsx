@@ -121,7 +121,7 @@ describe("AgentRuntimeSection", () => {
     );
 
     expect(screen.getByText("Installed")).toBeInTheDocument();
-    expect(screen.getByTitle(path)).toHaveTextContent(path);
+    expect(screen.getByText(path)).not.toHaveAttribute("title");
     expect(screen.queryByRole("button", { name: "Install" })).not.toBeInTheDocument();
   });
 

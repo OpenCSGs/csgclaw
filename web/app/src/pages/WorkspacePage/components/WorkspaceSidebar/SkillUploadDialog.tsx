@@ -10,6 +10,7 @@ import {
   DialogRoot,
   DialogTitle,
   TextInput,
+  Tooltip,
 } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import { hasSkillName, remoteSkillInstallName } from "@/models/skillhub";
@@ -279,33 +280,35 @@ export function SkillUploadDialog({
                         </>
                       );
                       return (
-                        <div className={styles.remoteRow} key={installKey} title={description}>
-                          {item.remoteURL ? (
-                            <a
-                              className={styles.remoteLink}
-                              href={item.remoteURL}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                        <Tooltip key={installKey} content={description}>
+                          <div className={styles.remoteRow}>
+                            {item.remoteURL ? (
+                              <a
+                                className={styles.remoteLink}
+                                href={item.remoteURL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {rowContent}
+                              </a>
+                            ) : (
+                              <span className={styles.remoteLink}>{rowContent}</span>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              loading={remoteInstallBusy === installKey}
+                              disabled={!onInstallRemoteSkill || Boolean(remoteInstallBusy)}
+                              onClick={() => void handleRemoteInstall(item, { replace: installed })}
                             >
-                              {rowContent}
-                            </a>
-                          ) : (
-                            <span className={styles.remoteLink}>{rowContent}</span>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            loading={remoteInstallBusy === installKey}
-                            disabled={!onInstallRemoteSkill || Boolean(remoteInstallBusy)}
-                            onClick={() => void handleRemoteInstall(item, { replace: installed })}
-                          >
-                            {remoteInstallBusy === installKey
-                              ? t("resourcesSkillRemoteInstalling")
-                              : installed
-                                ? t("resourcesSkillRemoteReplaceAction")
-                                : t("resourcesSkillRemoteInstallAction")}
-                          </Button>
-                        </div>
+                              {remoteInstallBusy === installKey
+                                ? t("resourcesSkillRemoteInstalling")
+                                : installed
+                                  ? t("resourcesSkillRemoteReplaceAction")
+                                  : t("resourcesSkillRemoteInstallAction")}
+                            </Button>
+                          </div>
+                        </Tooltip>
                       );
                     })}
                     {remoteSkillsLoadingMore ? (

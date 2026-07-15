@@ -1,5 +1,5 @@
 import { AgentCreateProgress, type AgentCreateProgressProps } from "@/components/business/ProfileControls";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { formatRuntimeKindLabel, normalizeRuntimeKind } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import { ModalCloseButton } from "./ModalCloseButton";
@@ -62,13 +62,15 @@ export function ManagerRebuildModal({
               </div>
               <label className="field manager-rebuild-image-field">
                 <span>{t("agentImage")}</span>
-                <div className="manager-rebuild-image-select manager-rebuild-image-readonly" title={selectedImage}>
-                  {selectedImage ? (
-                    <ImageReferenceLabel image={selectedImage} />
-                  ) : (
-                    <span className="manager-rebuild-image-placeholder">{t("agentImagePlaceholder")}</span>
-                  )}
-                </div>
+                <Tooltip content={selectedImage}>
+                  <div className="manager-rebuild-image-select manager-rebuild-image-readonly">
+                    {selectedImage ? (
+                      <ImageReferenceLabel image={selectedImage} />
+                    ) : (
+                      <span className="manager-rebuild-image-placeholder">{t("agentImagePlaceholder")}</span>
+                    )}
+                  </div>
+                </Tooltip>
               </label>
             </div>
           </section>
@@ -100,18 +102,20 @@ export function ManagerRebuildModal({
 function ImageReferenceLabel({ image }: { image: string }) {
   const { context, name, suffix } = imageReferenceParts(image);
   return (
-    <span className="manager-rebuild-image-option" title={image}>
-      <span className="sr-only">{image}</span>
-      <span className="manager-rebuild-image-primary" aria-hidden="true">
-        <span className="manager-rebuild-image-name">{name}</span>
-        {suffix ? <span className="manager-rebuild-image-tag">{suffix}</span> : null}
-      </span>
-      {context ? (
-        <span className="manager-rebuild-image-context" aria-hidden="true">
-          {context}
+    <Tooltip content={image}>
+      <span className="manager-rebuild-image-option">
+        <span className="sr-only">{image}</span>
+        <span className="manager-rebuild-image-primary" aria-hidden="true">
+          <span className="manager-rebuild-image-name">{name}</span>
+          {suffix ? <span className="manager-rebuild-image-tag">{suffix}</span> : null}
         </span>
-      ) : null}
-    </span>
+        {context ? (
+          <span className="manager-rebuild-image-context" aria-hidden="true">
+            {context}
+          </span>
+        ) : null}
+      </span>
+    </Tooltip>
   );
 }
 

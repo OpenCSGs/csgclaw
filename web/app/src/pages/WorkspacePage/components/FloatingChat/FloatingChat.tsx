@@ -3,7 +3,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as Reac
 import { Bot, MessageCircle, Minus } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import type { LocaleCode, ThreadView, TranslateFn } from "@/models/conversations";
 import { placeCaretAtEnd, renderComposerSegments } from "@/models/composer";
 import { classNames } from "@/shared/lib/classNames";
@@ -401,16 +401,17 @@ export function FloatingChat({
             onOpen={handleGuideOpen}
           />
         ) : null}
-        <button
-          type="button"
-          className={styles.launcher}
-          aria-label={t("floatingChatOpen")}
-          title={t("floatingChatOpen")}
-          onClick={handleLauncherClick}
-          onPointerDown={handleLauncherPointerDown}
-        >
-          <MessageCircle size={21} strokeWidth={2.1} aria-hidden="true" />
-        </button>
+        <Tooltip content={t("floatingChatOpen")}>
+          <button
+            type="button"
+            className={styles.launcher}
+            aria-label={t("floatingChatOpen")}
+            onClick={handleLauncherClick}
+            onPointerDown={handleLauncherPointerDown}
+          >
+            <MessageCircle size={21} strokeWidth={2.1} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </div>
     );
   }

@@ -8,6 +8,7 @@ import { MessagePreviewText } from "@/components/business/MessageContent";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
+import { Tooltip } from "@/components/ui";
 import { TrashIcon } from "@/components/ui/Icons";
 import type { IMConversation, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
 
@@ -75,15 +76,16 @@ export function ConversationSection({
             <button
               className="btn btn-outline-danger btn-sm conversation-delete-button"
               aria-label={`${t("deleteRoom")} ${conversation.title}`}
-              title={`${t("deleteRoom")} ${conversation.title}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onDelete(conversation.id);
               }}
             >
-              <span className="conversation-delete-icon" aria-hidden="true">
-                <TrashIcon />
-              </span>
+              <Tooltip content={`${t("deleteRoom")} ${conversation.title}`}>
+                <span className="conversation-delete-icon" aria-hidden="true">
+                  <TrashIcon />
+                </span>
+              </Tooltip>
             </button>
           </div>
         );

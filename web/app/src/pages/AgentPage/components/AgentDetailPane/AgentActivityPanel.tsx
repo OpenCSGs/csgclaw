@@ -28,6 +28,7 @@ import { AgentActivityKinds, AgentActivityMsgTypes } from "@/shared/constants/me
 import { subscribeIMEvents } from "@/shared/realtime/imEvents";
 import {
   Button,
+  Tooltip,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -973,26 +974,28 @@ function AgentActivityToolbar({
       </div>
       <div className="agent-activity-controls">
         <div className="agent-activity-sort" role="group" aria-label={t("agentActivitySortLabel")}>
-          <button
-            type="button"
-            className={classNames("agent-activity-sort-button", sortMode === "chronological" && "active")}
-            aria-pressed={sortMode === "chronological"}
-            title={t("agentActivityChronological")}
-            onClick={() => onSortModeChange("chronological")}
-          >
-            <ArrowDownNarrowWide aria-hidden="true" size={15} strokeWidth={2} />
-            <span>{t("agentActivityChronological")}</span>
-          </button>
-          <button
-            type="button"
-            className={classNames("agent-activity-sort-button", sortMode === "newest_first" && "active")}
-            aria-pressed={sortMode === "newest_first"}
-            title={t("agentActivityNewestFirst")}
-            onClick={() => onSortModeChange("newest_first")}
-          >
-            <ArrowUpNarrowWide aria-hidden="true" size={15} strokeWidth={2} />
-            <span>{t("agentActivityNewestFirst")}</span>
-          </button>
+          <Tooltip content={t("agentActivityChronological")}>
+            <button
+              type="button"
+              className={classNames("agent-activity-sort-button", sortMode === "chronological" && "active")}
+              aria-pressed={sortMode === "chronological"}
+              onClick={() => onSortModeChange("chronological")}
+            >
+              <ArrowDownNarrowWide aria-hidden="true" size={15} strokeWidth={2} />
+              <span>{t("agentActivityChronological")}</span>
+            </button>
+          </Tooltip>
+          <Tooltip content={t("agentActivityNewestFirst")}>
+            <button
+              type="button"
+              className={classNames("agent-activity-sort-button", sortMode === "newest_first" && "active")}
+              aria-pressed={sortMode === "newest_first"}
+              onClick={() => onSortModeChange("newest_first")}
+            >
+              <ArrowUpNarrowWide aria-hidden="true" size={15} strokeWidth={2} />
+              <span>{t("agentActivityNewestFirst")}</span>
+            </button>
+          </Tooltip>
         </div>
         <DropdownMenuRoot>
           <DropdownMenuTrigger asChild>
@@ -1092,22 +1095,25 @@ function AgentActivityTimeline({
     <div className="agent-activity-timeline-wrap">
       <div className="agent-activity-timeline" role="navigation" aria-label={t("agentActivityTimelineLabel")}>
         {entries.map((entry) => (
-          <button
+          <Tooltip
             key={entry.id}
-            type="button"
-            className={classNames(
-              "agent-activity-timeline-segment",
-              entry.kind,
-              selectedEntryID === entry.id && "selected",
-            )}
-            aria-label={t("agentActivityTimelineSegment", {
-              index: entry.index,
-              label: activityEntryLabel(entry, t),
-              time: formatActivityTime(entry.createdAt, locale),
-            })}
-            title={`${activityEntryLabel(entry, t)} #${entry.index} ${formatActivityTime(entry.createdAt, locale)}`}
-            onClick={() => onEntrySelect(entry.id)}
-          />
+            content={`${activityEntryLabel(entry, t)} #${entry.index} ${formatActivityTime(entry.createdAt, locale)}`}
+          >
+            <button
+              type="button"
+              className={classNames(
+                "agent-activity-timeline-segment",
+                entry.kind,
+                selectedEntryID === entry.id && "selected",
+              )}
+              aria-label={t("agentActivityTimelineSegment", {
+                index: entry.index,
+                label: activityEntryLabel(entry, t),
+                time: formatActivityTime(entry.createdAt, locale),
+              })}
+              onClick={() => onEntrySelect(entry.id)}
+            />
+          </Tooltip>
         ))}
       </div>
     </div>
@@ -1286,9 +1292,9 @@ function AgentActivityRow({
             <span className="agent-activity-row-text">{row.summary || "-"}</span>
           </div>
         )}
-        <span className="agent-activity-row-room" title={entry.roomTitle || entry.roomID}>
-          {entry.roomTitle || entry.roomID}
-        </span>
+        <Tooltip content={entry.roomTitle || entry.roomID}>
+          <span className="agent-activity-row-room">{entry.roomTitle || entry.roomID}</span>
+        </Tooltip>
         <span className="agent-activity-row-seq">#{entry.index}</span>
         <time className="agent-activity-row-time" dateTime={entry.createdAt}>
           {formatActivityTime(entry.createdAt, locale)}

@@ -661,14 +661,14 @@
 }
 
 :global(:root[data-theme="dark"]) .button:hover:not(:disabled),
-:global(:root[data-theme="dark"]) .button:focus-visible,
-:global(:root[data-theme="dark"]) .active {
-  background: var(--panel-strong);
+:global(:root[data-theme="dark"]) .button:focus-visible {
+  background: color-mix(in srgb, var(--gray-800) 72%, var(--surface));
   color: var(--white);
 }
 
 :global(:root[data-theme="dark"]) .active {
   background: var(--gray-800);
+  color: var(--white);
 }
 
 :global(:root[data-theme="dark"]) .alertDot {

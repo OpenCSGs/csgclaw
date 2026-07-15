@@ -6,3 +6,4 @@ export * from "./FormControls";
 export * from "./Icons";
 export * from "./Popover";
 export * from "./Select";
+export * from "./Tooltip";

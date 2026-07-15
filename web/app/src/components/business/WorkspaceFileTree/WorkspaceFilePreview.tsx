@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogRoot,
   DialogTitle,
+  Tooltip,
 } from "@/components/ui";
 import type { WorkspaceFile } from "@/models/workspace";
 import "./WorkspaceFilePreview.css";
@@ -143,16 +144,13 @@ export function WorkspaceFilePreview({
                         </Button>
                       </div>
                     ) : null}
-                    <DialogClose asChild>
-                      <button
-                        type="button"
-                        className="workspace-preview-close-button"
-                        aria-label={closeText}
-                        title={closeText}
-                      >
-                        <X size={18} strokeWidth={2} aria-hidden="true" />
-                      </button>
-                    </DialogClose>
+                    <Tooltip content={closeText}>
+                      <DialogClose asChild>
+                        <button type="button" className="workspace-preview-close-button" aria-label={closeText}>
+                          <X size={18} strokeWidth={2} aria-hidden="true" />
+                        </button>
+                      </DialogClose>
+                    </Tooltip>
                   </div>
                 </DialogHeader>
                 <DialogBody className="workspace-preview-dialog-body">

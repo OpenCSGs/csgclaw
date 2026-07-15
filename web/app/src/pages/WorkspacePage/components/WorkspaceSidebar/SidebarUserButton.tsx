@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink, LogIn, LogOut, Monitor, SlidersHorizontal } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { MoonIcon, SidebarGearIcon, SunIcon } from "@/components/ui/Icons";
 import { isAuthenticated } from "@/models/auth";
 import type { AuthStatus } from "@/models/auth";
@@ -224,25 +224,26 @@ export function SidebarUserButton({
 
   return (
     <div ref={rootRef} className={classNames(styles.root, presentation === "row" ? styles.rootRow : styles.rootIcon)}>
-      <button
-        type="button"
-        className={classNames(
-          styles.button,
-          presentation === "row" ? styles.buttonRow : styles.buttonIcon,
-          active && styles.active,
-        )}
-        aria-label={t("settings")}
-        aria-current={active ? "page" : undefined}
-        aria-expanded={onOpenSettings ? undefined : open}
-        title={t("settings")}
-        onClick={handlePrimaryClick}
-      >
-        <span className={styles.settingsMark} aria-hidden="true">
-          <SidebarGearIcon size={24} />
-        </span>
-        {presentation === "row" ? <span className={styles.buttonLabel}>{t("settings")}</span> : null}
-        {upgradeAttention ? <span className={styles.alertDot} aria-hidden="true"></span> : null}
-      </button>
+      <Tooltip content={presentation === "icon" ? t("settings") : null}>
+        <button
+          type="button"
+          className={classNames(
+            styles.button,
+            presentation === "row" ? styles.buttonRow : styles.buttonIcon,
+            active && styles.active,
+          )}
+          aria-label={t("settings")}
+          aria-current={active ? "page" : undefined}
+          aria-expanded={onOpenSettings ? undefined : open}
+          onClick={handlePrimaryClick}
+        >
+          <span className={styles.settingsMark} aria-hidden="true">
+            <SidebarGearIcon size={24} />
+          </span>
+          {presentation === "row" ? <span className={styles.buttonLabel}>{t("settings")}</span> : null}
+          {upgradeAttention ? <span className={styles.alertDot} aria-hidden="true"></span> : null}
+        </button>
+      </Tooltip>
       {open ? (
         <div className={styles.menu} role="menu" aria-label={t("settings")}>
           <div className={styles.group}>
@@ -307,32 +308,32 @@ export function SidebarUserButton({
           <div className={styles.csghubPanel}>
             <div className={styles.csghubSummary}>
               {!accountAuthenticated ? (
-                <button
-                  type="button"
-                  className={styles.csghubExpand}
-                  aria-expanded={accountPanelOpen}
-                  aria-label={t("csghubToggleEnvironmentPanel")}
-                  title={t("csghubToggleEnvironmentPanel")}
-                  onClick={() => setAccountPanelOpen((value) => !value)}
-                >
-                  <ChevronRight
-                    className={classNames(styles.summaryChevron, accountPanelOpen && styles.open)}
-                    size={15}
-                    strokeWidth={2.3}
-                    aria-hidden="true"
-                  />
-                </button>
+                <Tooltip content={t("csghubToggleEnvironmentPanel")}>
+                  <button
+                    type="button"
+                    className={styles.csghubExpand}
+                    aria-expanded={accountPanelOpen}
+                    aria-label={t("csghubToggleEnvironmentPanel")}
+                    onClick={() => setAccountPanelOpen((value) => !value)}
+                  >
+                    <ChevronRight
+                      className={classNames(styles.summaryChevron, accountPanelOpen && styles.open)}
+                      size={15}
+                      strokeWidth={2.3}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </Tooltip>
               ) : null}
               <span className={styles.summaryMain}>
                 <span className={styles.kicker}>{t("csghubAccount")}</span>
                 {showAuthEnvironmentLabel ? <span className={styles.envChip}>{authEnvironmentLabel}</span> : null}
               </span>
-              <span
-                className={classNames(styles.state, accountAuthenticated && styles.authenticated)}
-                title={accountSummaryLabel}
-              >
-                <span className={styles.stateText}>{accountSummaryLabel}</span>
-              </span>
+              <Tooltip content={accountSummaryLabel}>
+                <span className={classNames(styles.state, accountAuthenticated && styles.authenticated)}>
+                  <span className={styles.stateText}>{accountSummaryLabel}</span>
+                </span>
+              </Tooltip>
             </div>
             {!accountAuthenticated && accountPanelOpen ? (
               <div className={styles.env}>
@@ -353,20 +354,21 @@ export function SidebarUserButton({
                       ))}
                       <option value="custom">{t("csghubEnvCustom")}</option>
                     </select>
-                    <button
-                      type="button"
-                      className={classNames(
-                        styles.advancedToggle,
-                        showAuthEnvironmentAdvanced && styles.advancedToggleOpen,
-                      )}
-                      aria-label={t("csghubAdvancedSettings")}
-                      title={t("csghubAdvancedSettings")}
-                      aria-expanded={showAuthEnvironmentAdvanced}
-                      onClick={() => setAdvancedOpen((value) => !value)}
-                    >
-                      <SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden="true" />
-                      <ChevronDown size={13} strokeWidth={2.3} aria-hidden="true" />
-                    </button>
+                    <Tooltip content={t("csghubAdvancedSettings")}>
+                      <button
+                        type="button"
+                        className={classNames(
+                          styles.advancedToggle,
+                          showAuthEnvironmentAdvanced && styles.advancedToggleOpen,
+                        )}
+                        aria-label={t("csghubAdvancedSettings")}
+                        aria-expanded={showAuthEnvironmentAdvanced}
+                        onClick={() => setAdvancedOpen((value) => !value)}
+                      >
+                        <SlidersHorizontal size={14} strokeWidth={2.2} aria-hidden="true" />
+                        <ChevronDown size={13} strokeWidth={2.3} aria-hidden="true" />
+                      </button>
+                    </Tooltip>
                   </span>
                 </label>
                 {showAuthEnvironmentAdvanced ? (
@@ -462,17 +464,12 @@ export function SidebarUserButton({
               </strong>
             )}
             {upgradeView?.issue ? <div className={styles.versionError}>{upgradeView.issue}</div> : null}
-            <a
-              className={styles.feedbackLink}
-              href={feedbackURL}
-              target="_blank"
-              rel="noreferrer"
-              role="menuitem"
-              title={t("configSettingsGithubIssueAction")}
-            >
-              <span>{t("configSettingsFeedbackSection")}</span>
-              <ExternalLink size={14} strokeWidth={2.1} aria-hidden="true" />
-            </a>
+            <Tooltip content={t("configSettingsGithubIssueAction")}>
+              <a className={styles.feedbackLink} href={feedbackURL} target="_blank" rel="noreferrer" role="menuitem">
+                <span>{t("configSettingsFeedbackSection")}</span>
+                <ExternalLink size={14} strokeWidth={2.1} aria-hidden="true" />
+              </a>
+            </Tooltip>
           </div>
         </div>
       ) : null}

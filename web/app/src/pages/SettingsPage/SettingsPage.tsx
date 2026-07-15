@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, Monitor, Moon, SlidersHorizontal, Sun } from "lucide-react";
-import { Button, Select } from "@/components/ui";
+import { Button, Select, Tooltip } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
@@ -177,17 +177,18 @@ export function SettingsPage() {
                   value={authEnvironmentDraft.preset}
                   onValueChange={(value) => handleAuthEnvironmentPresetChange(value as AuthEnvironmentPresetID)}
                 />
-                <button
-                  type="button"
-                  className={classNames(styles.advancedToggle, showAuthEnvironmentAdvanced && styles.open)}
-                  aria-label={sidebar.t("csghubAdvancedSettings")}
-                  title={sidebar.t("csghubAdvancedSettings")}
-                  aria-expanded={showAuthEnvironmentAdvanced}
-                  onClick={() => setAdvancedOpen((value) => !value)}
-                >
-                  <SlidersHorizontal size={16} strokeWidth={2} aria-hidden="true" />
-                  <ChevronDown size={14} strokeWidth={2.2} aria-hidden="true" />
-                </button>
+                <Tooltip content={sidebar.t("csghubAdvancedSettings")}>
+                  <button
+                    type="button"
+                    className={classNames(styles.advancedToggle, showAuthEnvironmentAdvanced && styles.open)}
+                    aria-label={sidebar.t("csghubAdvancedSettings")}
+                    aria-expanded={showAuthEnvironmentAdvanced}
+                    onClick={() => setAdvancedOpen((value) => !value)}
+                  >
+                    <SlidersHorizontal size={16} strokeWidth={2} aria-hidden="true" />
+                    <ChevronDown size={14} strokeWidth={2.2} aria-hidden="true" />
+                  </button>
+                </Tooltip>
               </span>
             )}
           </div>
@@ -331,15 +332,16 @@ function ThemeSegmentButton({
   theme: ThemeMode;
 }) {
   return (
-    <button
-      type="button"
-      className={classNames(styles.segmentButton, active && styles.active)}
-      aria-label={label}
-      aria-pressed={active}
-      title={label}
-      onClick={() => onThemeChange(theme)}
-    >
-      {children}
-    </button>
+    <Tooltip content={label}>
+      <button
+        type="button"
+        className={classNames(styles.segmentButton, active && styles.active)}
+        aria-label={label}
+        aria-pressed={active}
+        onClick={() => onThemeChange(theme)}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }

@@ -3,6 +3,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { Bot, CalendarClock, ChevronDown, Pencil, Play, Trash2, Users } from "lucide-react";
 import {
   Button,
+  Tooltip,
   type ButtonVariant,
   DialogBody,
   DialogContent,
@@ -828,13 +829,15 @@ export function TasksView({
                           <dl className={styles.scheduledTaskMeta}>
                             <div>
                               <dt>{t("scheduledTaskAgentLabel")}</dt>
-                              <dd title={selectedScheduledTask.agent_id}>
-                                {displayAgentByID(
-                                  selectedScheduledTask.agent_id,
-                                  agentNames,
-                                  selectedScheduledTask.agent_name,
-                                )}
-                              </dd>
+                              <Tooltip content={selectedScheduledTask.agent_id}>
+                                <dd>
+                                  {displayAgentByID(
+                                    selectedScheduledTask.agent_id,
+                                    agentNames,
+                                    selectedScheduledTask.agent_name,
+                                  )}
+                                </dd>
+                              </Tooltip>
                             </div>
                             <div>
                               <dt>{t("scheduledTaskNextRunLabel")}</dt>
@@ -872,7 +875,9 @@ export function TasksView({
                                       </button>
                                     ) : null}
                                     {run.error ? (
-                                      <small title={run.error}>{scheduledTaskRunErrorLabel(run.error, t)}</small>
+                                      <Tooltip content={run.error}>
+                                        <small>{scheduledTaskRunErrorLabel(run.error, t)}</small>
+                                      </Tooltip>
                                     ) : null}
                                   </div>
                                 ))}
@@ -1204,42 +1209,43 @@ function ParentTaskBoardCard({ task, children, agentNames, phase, t, onSelect }:
   const assignmentTarget = displayTaskAssignmentTargetName(task, agentNames);
 
   return (
-    <button
-      type="button"
-      className={classNames(styles.taskBoardCard, styles.parentTaskBoardCard)}
-      onClick={onSelect}
-      title={`${task.id} ${task.title}`}
-    >
-      <span className={styles.taskBoardCardTopline}>
-        <span className={styles.taskBoardCardId}>{task.id}</span>
-        <span className={styles.taskBoardCardActions}>
-          {activeWorker ? (
-            <span className={styles.taskBoardCardWorkerBadge} title={`${activeWorker.name} ${activeWorker.label}`}>
-              <Bot size={12} strokeWidth={1.9} aria-hidden="true" />
-              <span>{activeWorker.label}</span>
-            </span>
-          ) : null}
-          <TaskSubtaskIndicator subtasks={children} phase={phase} t={t} compact />
-        </span>
-      </span>
-      <strong className={classNames(styles.lineClampText, styles.taskBoardCardTitle)}>{task.title}</strong>
-      <span className={classNames(styles.lineClampText, styles.taskBoardCardDescription)}>{description}</span>
-      <span className={styles.taskBoardCardFooter}>
-        {assignmentTarget ? (
-          <span className={styles.taskBoardCardTeam} title={assignmentTarget}>
-            <span className={styles.taskBoardCardTeamIcon} aria-hidden="true">
-              {task.assignment_type === "agent" ? (
-                <Bot size={13} strokeWidth={1.8} />
-              ) : (
-                <Users size={13} strokeWidth={1.8} />
-              )}
-            </span>
-            <span>{assignmentTarget}</span>
+    <Tooltip content={`${task.id} ${task.title}`}>
+      <button type="button" className={classNames(styles.taskBoardCard, styles.parentTaskBoardCard)} onClick={onSelect}>
+        <span className={styles.taskBoardCardTopline}>
+          <span className={styles.taskBoardCardId}>{task.id}</span>
+          <span className={styles.taskBoardCardActions}>
+            {activeWorker ? (
+              <Tooltip content={`${activeWorker.name} ${activeWorker.label}`}>
+                <span className={styles.taskBoardCardWorkerBadge}>
+                  <Bot size={12} strokeWidth={1.9} aria-hidden="true" />
+                  <span>{activeWorker.label}</span>
+                </span>
+              </Tooltip>
+            ) : null}
+            <TaskSubtaskIndicator subtasks={children} phase={phase} t={t} compact />
           </span>
-        ) : null}
-        {updatedLabel ? <span className={styles.taskBoardCardUpdated}>{updatedLabel}</span> : null}
-      </span>
-    </button>
+        </span>
+        <strong className={classNames(styles.lineClampText, styles.taskBoardCardTitle)}>{task.title}</strong>
+        <span className={classNames(styles.lineClampText, styles.taskBoardCardDescription)}>{description}</span>
+        <span className={styles.taskBoardCardFooter}>
+          {assignmentTarget ? (
+            <Tooltip content={assignmentTarget}>
+              <span className={styles.taskBoardCardTeam}>
+                <span className={styles.taskBoardCardTeamIcon} aria-hidden="true">
+                  {task.assignment_type === "agent" ? (
+                    <Bot size={13} strokeWidth={1.8} />
+                  ) : (
+                    <Users size={13} strokeWidth={1.8} />
+                  )}
+                </span>
+                <span>{assignmentTarget}</span>
+              </span>
+            </Tooltip>
+          ) : null}
+          {updatedLabel ? <span className={styles.taskBoardCardUpdated}>{updatedLabel}</span> : null}
+        </span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -1473,16 +1479,15 @@ type TaskActiveWorker = {
 
 function TaskActiveWorkerBadge({ worker }: { worker: TaskActiveWorker }) {
   return (
-    <div
-      className={classNames(styles.taskActiveWorker, moduleSuffixStyle("taskActiveWorker", worker.tone))}
-      title={`${worker.name} ${worker.label}`}
-    >
-      <span className={styles.taskActiveAvatar} aria-hidden="true">
-        <Bot size={14} strokeWidth={1.9} />
-      </span>
-      <span className={styles.taskActiveWorkerName}>{worker.name}</span>
-      <span>{worker.label}</span>
-    </div>
+    <Tooltip content={`${worker.name} ${worker.label}`}>
+      <div className={classNames(styles.taskActiveWorker, moduleSuffixStyle("taskActiveWorker", worker.tone))}>
+        <span className={styles.taskActiveAvatar} aria-hidden="true">
+          <Bot size={14} strokeWidth={1.9} />
+        </span>
+        <span className={styles.taskActiveWorkerName}>{worker.name}</span>
+        <span>{worker.label}</span>
+      </div>
+    </Tooltip>
   );
 }
 
@@ -1694,10 +1699,12 @@ function TaskDependencyGraph({ tasks, t }: { tasks: readonly WorkspaceTask[]; t:
               {levelIndex > 0 ? <span className={styles.taskDependencyArrow} aria-hidden="true" /> : null}
               <div className={styles.taskDependencyRow}>
                 {level.map((task) => (
-                  <article key={task.id} className={styles.taskDependencyCard} title={`${task.id} ${task.title}`}>
-                    <strong>{task.id}</strong>
-                    <span>{task.title}</span>
-                  </article>
+                  <Tooltip key={task.id} content={`${task.id} ${task.title}`}>
+                    <article className={styles.taskDependencyCard}>
+                      <strong>{task.id}</strong>
+                      <span>{task.title}</span>
+                    </article>
+                  </Tooltip>
                 ))}
               </div>
             </div>

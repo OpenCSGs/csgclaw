@@ -1,7 +1,7 @@
 import { memo } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { AddUserIcon, IconImage, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
@@ -77,7 +77,9 @@ export const ConversationHeader = memo(function ConversationHeader({
             <div className="chat-title-group">
               <div className="chat-kicker">
                 <span>{isDirectConversation(conversation) ? t("directMessagesSection") : t("conversationLabel")}</span>
-                <strong title={messageCountLabel}>{messageCountLabel}</strong>
+                <Tooltip content={messageCountLabel}>
+                  <strong>{messageCountLabel}</strong>
+                </Tooltip>
               </div>
               <div className="chat-title truncate">{conversation.title}</div>
               {showMemberListAction ? (

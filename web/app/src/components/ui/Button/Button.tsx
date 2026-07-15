@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { classNames } from "@/shared/lib/classNames";
+import { Tooltip } from "../Tooltip";
 
 export type ButtonVariant =
   | "primary"
@@ -61,6 +62,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     loading = false,
     loadingLabel,
     size = "md",
+    title,
     type = "button",
     variant = "secondaryGray",
     "aria-busy": ariaBusy,
@@ -73,7 +75,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const childAccessibleLabel =
     typeof children === "string" || typeof children === "number" ? String(children) : undefined;
 
-  return (
+  const button = (
     <button
       ref={ref}
       type={type}
@@ -99,6 +101,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ) : null}
     </button>
   );
+
+  return title ? <Tooltip content={title}>{button}</Tooltip> : button;
 });
 
 export type IconButtonProps = Omit<ButtonProps, "aria-label" | "children" | "iconOnly"> & {

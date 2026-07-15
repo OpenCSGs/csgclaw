@@ -2,6 +2,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import type { AuthNotice } from "@/hooks/workspace/useAuthController";
 import { X } from "lucide-react";
 import { Toast } from "radix-ui";
+import { Tooltip } from "@/components/ui";
 import styles from "./AuthLoginNotice.module.css";
 
 type AuthLoginNoticeProps = {
@@ -37,11 +38,13 @@ export function AuthLoginNotice({ closeLabel, notice, onDismiss }: AuthLoginNoti
             <Toast.Description className={styles.toastMessage}>{notice.message}</Toast.Description>
           </span>
         </div>
-        <Toast.Close asChild>
-          <button type="button" className={styles.toastClose} aria-label={closeLabel} title={closeLabel}>
-            <X size={16} strokeWidth={2.3} aria-hidden="true" />
-          </button>
-        </Toast.Close>
+        <Tooltip content={closeLabel}>
+          <Toast.Close asChild>
+            <button type="button" className={styles.toastClose} aria-label={closeLabel}>
+              <X size={16} strokeWidth={2.3} aria-hidden="true" />
+            </button>
+          </Toast.Close>
+        </Tooltip>
       </Toast.Root>
       <Toast.Viewport className={styles.toastViewport} />
     </Toast.Provider>

@@ -22,7 +22,7 @@ import {
 } from "@/models/conversations";
 import { MessagePreviewText } from "@/components/business/MessageContent";
 import { ChevronIcon, ComputerIcon, RoomPlusIcon, RoomsIcon } from "@/components/ui/Icons";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
@@ -219,13 +219,14 @@ export function WorkspaceHumanRow({ user, active, t, onPreview, onSelect }: Work
       </span>
       <span className={styles.badges}>
         {feishuConnected ? (
-          <span
-            className={classNames(styles.channelBadge, styles.feishuChannelBadge)}
-            aria-label={t("feishuConnected")}
-            title={t("feishuConnected")}
-          >
-            <img src="icons/feishu.png" alt="" />
-          </span>
+          <Tooltip content={t("feishuConnected")}>
+            <span
+              className={classNames(styles.channelBadge, styles.feishuChannelBadge)}
+              aria-label={t("feishuConnected")}
+            >
+              <img src="icons/feishu.png" alt="" />
+            </span>
+          </Tooltip>
         ) : null}
       </span>
     </button>
@@ -292,13 +293,14 @@ export function WorkspaceAgentRow({
       </span>
       <span className={styles.badges}>
         {feishuConnected ? (
-          <span
-            className={classNames(styles.channelBadge, styles.feishuChannelBadge)}
-            aria-label={t("feishuConnected")}
-            title={t("feishuConnected")}
-          >
-            <img src="icons/feishu.png" alt="" />
-          </span>
+          <Tooltip content={t("feishuConnected")}>
+            <span
+              className={classNames(styles.channelBadge, styles.feishuChannelBadge)}
+              aria-label={t("feishuConnected")}
+            >
+              <img src="icons/feishu.png" alt="" />
+            </span>
+          </Tooltip>
         ) : null}
         {incomplete ? (
           <span className={classNames(styles.miniBadge, styles.miniBadgeWarn)}>{t("profileIncompleteBadge")}</span>
@@ -433,30 +435,33 @@ export function WorkspaceThreadRow({ conversation, thread, active, locale, t, on
   const updatedAt = latestReply?.created_at || root.created_at;
 
   return (
-    <button
-      className={classNames(styles.row, styles.threadRow, active && styles.active)}
-      title={title}
-      onClick={() => onSelect(conversation.id, root)}
-    >
-      <span className={styles.icon}>
-        <RoomsIcon />
-      </span>
-      <span className={styles.main}>
-        <span className={classNames(styles.title, "truncate")} title={title}>
-          <MessagePreviewText content={title} />
+    <Tooltip content={title}>
+      <button
+        className={classNames(styles.row, styles.threadRow, active && styles.active)}
+        onClick={() => onSelect(conversation.id, root)}
+      >
+        <span className={styles.icon}>
+          <RoomsIcon />
         </span>
-        <span className={classNames(styles.meta, "truncate")}>
-          {latestReply ? (
-            <>
-              <span>{`${t("latestThreadReply")}: `}</span>
-              <MessagePreviewText content={latestReplyText} />
-            </>
-          ) : (
-            meta
-          )}
+        <span className={styles.main}>
+          <Tooltip content={title}>
+            <span className={classNames(styles.title, "truncate")}>
+              <MessagePreviewText content={title} />
+            </span>
+          </Tooltip>
+          <span className={classNames(styles.meta, "truncate")}>
+            {latestReply ? (
+              <>
+                <span>{`${t("latestThreadReply")}: `}</span>
+                <MessagePreviewText content={latestReplyText} />
+              </>
+            ) : (
+              meta
+            )}
+          </span>
         </span>
-      </span>
-      <span className={styles.time}>{formatTime(updatedAt, locale)}</span>
-    </button>
+        <span className={styles.time}>{formatTime(updatedAt, locale)}</span>
+      </button>
+    </Tooltip>
   );
 }

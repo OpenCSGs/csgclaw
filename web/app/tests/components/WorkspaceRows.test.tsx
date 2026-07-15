@@ -146,6 +146,6 @@ describe("WorkspaceRows", () => {
     const row = screen.getByRole("button");
     expect(row).toHaveTextContent("thread title should be plain");
     expect(row).not.toHaveTextContent("```text");
-    expect(row).toHaveAttribute("title", "thread title should be plain");
+    expect(row).not.toHaveAttribute("title");
   });
 });

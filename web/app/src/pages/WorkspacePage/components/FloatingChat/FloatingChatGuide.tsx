@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui";
 import styles from "./FloatingChatGuide.module.css";
 
 export type FloatingChatGuideProps = {
@@ -14,15 +15,11 @@ export function FloatingChatGuide({ dismissLabel, title, onDismiss, onOpen }: Fl
         <span className={styles.title}>{title}</span>
         <span className={styles.trail} aria-hidden="true" />
       </button>
-      <button
-        type="button"
-        className={styles.dismiss}
-        aria-label={dismissLabel}
-        title={dismissLabel}
-        onClick={onDismiss}
-      >
-        <span aria-hidden="true" />
-      </button>
+      <Tooltip content={dismissLabel}>
+        <button type="button" className={styles.dismiss} aria-label={dismissLabel} onClick={onDismiss}>
+          <span aria-hidden="true" />
+        </button>
+      </Tooltip>
     </div>
   );
 }

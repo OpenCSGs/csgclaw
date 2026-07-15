@@ -20,6 +20,7 @@ import { LogoMark, LogoWordmark } from "./WorkspaceSidebarBrand";
 import { WorkspacePrimaryNavigation } from "./WorkspacePrimaryNavigation";
 import { WorkspaceTabPanels } from "./WorkspaceTabPanels";
 import { WorkspaceContextSectionIds } from "./types";
+import { Tooltip } from "@/components/ui";
 import { WorkspacePaneTypes, WorkspaceTabs, workspaceHasContextSidebar } from "@/models/routing";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./WorkspaceSidebar.module.css";
@@ -409,17 +410,18 @@ export function WorkspaceSidebar({
           <div className={classNames(styles.primaryHeader, isSidebarCollapsed && styles.primaryHeaderCollapsed)}>
             {isSidebarCollapsed ? (
               <span className={styles.logoMarkSlot}>
-                <button
-                  type="button"
-                  className={styles.logoMarkButton}
-                  aria-label={t("expandSidebar")}
-                  title={t("expandSidebar")}
-                  onClick={onExpandSidebar}
-                >
-                  <span className={styles.logoMarkExpandIcon} aria-hidden="true">
-                    <PanelLeftOpen size={20} strokeWidth={1.75} />
-                  </span>
-                </button>
+                <Tooltip content={t("expandSidebar")}>
+                  <button
+                    type="button"
+                    className={styles.logoMarkButton}
+                    aria-label={t("expandSidebar")}
+                    onClick={onExpandSidebar}
+                  >
+                    <span className={styles.logoMarkExpandIcon} aria-hidden="true">
+                      <PanelLeftOpen size={20} strokeWidth={1.75} />
+                    </span>
+                  </button>
+                </Tooltip>
                 <span className={styles.logoMarkVisual} aria-hidden="true">
                   <LogoMark />
                 </span>

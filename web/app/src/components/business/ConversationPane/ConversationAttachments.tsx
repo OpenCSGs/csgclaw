@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileText, X } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
-import { Button } from "@/components/ui";
+import { Button, Tooltip } from "@/components/ui";
 import {
   formatAttachmentSize,
   isImageAttachment,
@@ -89,22 +89,17 @@ export function MessageAttachments({
             const downloadURL = resolveRequestPath(attachment.download_url);
             const previewURL = resolveRequestPath(attachment.preview_url || attachment.download_url);
             return (
-              <a
-                key={attachment.id}
-                className="message-image-attachment"
-                href={downloadURL}
-                target="_blank"
-                rel="noreferrer"
-                title={attachment.name}
-              >
-                <img
-                  src={previewURL}
-                  alt={attachment.name}
-                  decoding="async"
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                />
-              </a>
+              <Tooltip key={attachment.id} content={attachment.name}>
+                <a className="message-image-attachment" href={downloadURL} target="_blank" rel="noreferrer">
+                  <img
+                    src={previewURL}
+                    alt={attachment.name}
+                    decoding="async"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                </a>
+              </Tooltip>
             );
           })}
         </div>
@@ -112,22 +107,22 @@ export function MessageAttachments({
       {files.length > 0 ? (
         <div className="message-file-list">
           {files.map((attachment) => (
-            <a
-              key={attachment.id}
-              className="message-file-attachment"
-              href={resolveRequestPath(attachment.download_url)}
-              download
-              referrerPolicy="no-referrer"
-              title={attachment.name}
-            >
-              <span className="attachment-file-icon" aria-hidden="true">
-                <FileText size={18} />
-              </span>
-              <span className="attachment-draft-meta">
-                <span className="attachment-name truncate">{attachment.name || t("attachment")}</span>
-                <span className="attachment-size">{formatAttachmentSize(attachment.size_bytes)}</span>
-              </span>
-            </a>
+            <Tooltip key={attachment.id} content={attachment.name}>
+              <a
+                className="message-file-attachment"
+                href={resolveRequestPath(attachment.download_url)}
+                download
+                referrerPolicy="no-referrer"
+              >
+                <span className="attachment-file-icon" aria-hidden="true">
+                  <FileText size={18} />
+                </span>
+                <span className="attachment-draft-meta">
+                  <span className="attachment-name truncate">{attachment.name || t("attachment")}</span>
+                  <span className="attachment-size">{formatAttachmentSize(attachment.size_bytes)}</span>
+                </span>
+              </a>
+            </Tooltip>
           ))}
         </div>
       ) : null}

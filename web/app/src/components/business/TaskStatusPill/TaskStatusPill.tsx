@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui";
 import { normalizeTaskStatus, taskStatusLabel, taskStatusShortLabel } from "@/models/tasks";
 import { classNames } from "@/shared/lib/classNames";
 import styles from "./TaskStatusPill.module.css";
@@ -44,12 +45,13 @@ export function TaskStatusPill({ status, t, compact = false, showFullLabel = fal
   const fullLabel = taskStatusLabel(normalized, t);
 
   return (
-    <span
-      className={classNames(styles.pill, statusClassName(normalized), compact && styles.compact, className)}
-      title={fullLabel}
-      aria-label={fullLabel}
-    >
-      {showFullLabel ? fullLabel : shortLabel}
-    </span>
+    <Tooltip content={fullLabel}>
+      <span
+        className={classNames(styles.pill, statusClassName(normalized), compact && styles.compact, className)}
+        aria-label={fullLabel}
+      >
+        {showFullLabel ? fullLabel : shortLabel}
+      </span>
+    </Tooltip>
   );
 }

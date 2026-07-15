@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui";
 import { AgentIcon } from "@/components/ui/Icons";
 import { AGENT_AVATAR_GROUPS, AGENT_AVATAR_OPTIONS, normalizeAgentAvatarPath } from "@/shared/avatarOptions";
 import { Edit3, ImagePlus, UploadCloud, X, ZoomIn, ZoomOut } from "lucide-react";
@@ -253,19 +254,19 @@ export function AgentAvatarPicker({
     const checked = option.value === selection;
     const label = `${t(option.labelKey)} ${option.index}`;
     return (
-      <button
-        aria-checked={checked}
-        aria-label={label}
-        className={`agent-avatar-option ${checked ? "selected" : ""}`}
-        key={option.value}
-        role="radio"
-        title={label}
-        type="button"
-        disabled={optionDisabled}
-        onClick={onSelect}
-      >
-        <img src={option.value} alt="" draggable={false} />
-      </button>
+      <Tooltip key={option.value} content={label}>
+        <button
+          aria-checked={checked}
+          aria-label={label}
+          className={`agent-avatar-option ${checked ? "selected" : ""}`}
+          role="radio"
+          type="button"
+          disabled={optionDisabled}
+          onClick={onSelect}
+        >
+          <img src={option.value} alt="" draggable={false} />
+        </button>
+      </Tooltip>
     );
   }
 
@@ -275,36 +276,37 @@ export function AgentAvatarPicker({
       aria-disabled={disabled}
       ref={pickerRef}
     >
-      <button
-        ref={triggerRef}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        aria-label={triggerLabel}
-        className="agent-avatar-trigger"
-        title={mode === "edit" ? undefined : selected ? selectedLabel : t("agentAvatar")}
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-        onPointerLeave={mode === "edit" ? handleTriggerPointerLeave : undefined}
-      >
-        {selected ? (
-          <img className="agent-avatar-trigger-image" src={selected} alt="" draggable={false} />
-        ) : (
-          <ImagePlus aria-hidden="true" size={16} strokeWidth={1.8} />
-        )}
-        {mode === "edit" ? (
-          <>
-            {selected ? (
-              <span className="agent-avatar-edit-overlay" aria-hidden="true">
-                <Edit3 size={20} strokeWidth={1.8} />
+      <Tooltip content={mode === "edit" ? null : selected ? selectedLabel : t("agentAvatar")}>
+        <button
+          ref={triggerRef}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          aria-label={triggerLabel}
+          className="agent-avatar-trigger"
+          type="button"
+          disabled={disabled}
+          onClick={() => setOpen((current) => !current)}
+          onPointerLeave={mode === "edit" ? handleTriggerPointerLeave : undefined}
+        >
+          {selected ? (
+            <img className="agent-avatar-trigger-image" src={selected} alt="" draggable={false} />
+          ) : (
+            <ImagePlus aria-hidden="true" size={16} strokeWidth={1.8} />
+          )}
+          {mode === "edit" ? (
+            <>
+              {selected ? (
+                <span className="agent-avatar-edit-overlay" aria-hidden="true">
+                  <Edit3 size={20} strokeWidth={1.8} />
+                </span>
+              ) : null}
+              <span className="agent-avatar-edit-tooltip" role="tooltip">
+                {t("editAvatar")}
               </span>
-            ) : null}
-            <span className="agent-avatar-edit-tooltip" role="tooltip">
-              {t("editAvatar")}
-            </span>
-          </>
-        ) : null}
-      </button>
+            </>
+          ) : null}
+        </button>
+      </Tooltip>
       {open && mode === "edit" && !disabled
         ? createPortal(
             <div className="agent-avatar-editor-backdrop" role="presentation" onPointerDown={closeEditor}>
