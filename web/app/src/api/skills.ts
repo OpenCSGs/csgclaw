@@ -141,8 +141,15 @@ function normalizeAgenticHubSkill(record: unknown, source: string, baseURL = "")
     return null;
   }
   const values = record as Record<string, unknown>;
-  const name = stringFromUnknown(values.name) || stringFromUnknown(values.nickname) || skillNameFromPath(values.path);
   const remotePath = stringFromUnknown(values.path);
+  const name =
+    usefulSkillTitle(
+      stringFromUnknown(values.name),
+      stringFromUnknown(values.nickname),
+      stringFromUnknown(values.displayName),
+      stringFromUnknown(values.display_name),
+      stringFromUnknown(values.title),
+    ) || skillNameFromPath(remotePath);
   if (!name) {
     return null;
   }
@@ -150,7 +157,7 @@ function normalizeAgenticHubSkill(record: unknown, source: string, baseURL = "")
     return null;
   }
   return {
-    description: stringFromUnknown(values.description),
+    description: stringFromUnknown(values.description) || stringFromUnknown(values.summary),
     name,
     readonly: true,
     remoteRef: stringFromUnknown(values.default_branch) || stringFromUnknown(values.defaultBranch) || undefined,
@@ -158,6 +165,18 @@ function normalizeAgenticHubSkill(record: unknown, source: string, baseURL = "")
     remoteURL: remotePath ? agenticHubSkillWebURL(baseURL, remotePath) || undefined : undefined,
     source,
   };
+}
+
+function stringFromUnknown(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function usefulSkillTitle(...values: string[]): string {
+  return values.find((value) => value && !isGenericSkillTitle(value)) || "";
+}
+
+function isGenericSkillTitle(value: string): boolean {
+  return value.trim().toLowerCase() === "skill";
 }
 
 function agenticHubSkillWebURL(baseURL: string, remotePath: string): string {
@@ -188,15 +207,13 @@ function skillNameFromPath(value: unknown): string {
   if (!path) {
     return "";
   }
-  const parts = path
-    .split("/")
-    .map((part) => part.trim())
-    .filter(Boolean);
-  return parts.at(-1) || "";
-}
-
-function stringFromUnknown(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  return (
+    path
+      .split("/")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .at(-1) || ""
+  );
 }
 
 function nullableNumberFromUnknown(value: unknown): number | null {

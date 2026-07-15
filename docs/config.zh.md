@@ -221,7 +221,7 @@ docker_cli_path = "/usr/local/bin/docker"
 
 CSGClaw 可以从一个或多个 hub registry 读取 agent 模板。registry 配置是可叠加的：内置、本地和远端 registry 可以同时存在于同一个 `config.toml` 中。
 
-即使省略 `[hub]`，CSGClaw 也会默认启用三个 registry：`builtin`（内置只读）、`local`（本地发布）和 `official`（官方远端 `https://hub.opencsg.com`）。你在 `config.toml` 里只写了部分 registry 时，缺失的默认项会自动合并进来，因此删掉 `builtin` 也不会导致启动失败。
+即使省略 `[hub]`，CSGClaw 也会默认启用三个 registry：`builtin`（内置只读）、`local`（本地发布）和 `official`（官方远端 `https://hub.opencsg.com`）。你在 `config.toml` 里只写了部分 registry 时，缺失的默认项会自动合并进来，因此删掉 `builtin` 也不会导致启动失败。Web UI 会在请求时根据当前 OpenCSG 登录环境解析官方远端：生产环境使用 `https://hub.opencsg.com`，stg 环境使用 `https://opencsg-stg.com`。
 
 ```toml
 [hub]
@@ -269,16 +269,20 @@ enabled = true
 
 内置 `builtin` registry 是只读的。发布模板时应选择可写的 `local` 或 `remote` registry。
 
+旧模板 Hub 地址 `https://csgclaw.opencsg.com` 不再自动重写；请显式配置需要的远端，或使用由登录环境自动推导的 official registry。
+
 ## Skill 注册表配置
 
 `csgclaw skill` 默认同时搜索两个 skill 注册表：
 
-- **opencsg**（主）：`https://claw.opencsg.com`，优先
+- **opencsg**（主）：`https://csgclaw.opencsg.com`，优先
 - **clawhub**（官方）：`https://clawhub.ai`
 
 `skill search` 先查 opencsg，有结果即返回；仅当 opencsg 无结果时才查 clawhub.ai。
 
 `get` / `install` 可用 `--registry opencsg` 或 `--registry clawhub` 指定；省略时先查 opencsg，再查 clawhub。
+
+Web UI 使用与 CLI 相同的 registry 服务和安装路径。如果没有配置 `[skill]` registry，Web UI 会根据当前 OpenCSG 登录环境推导默认 registry；stg 环境使用 `https://csgclaw.opencsg-stg.com`，并关闭次注册表。
 
 当前 registry 支持的 API：
 
@@ -292,7 +296,7 @@ enabled = true
 
 ```toml
 [skill]
-base_url = "https://claw.opencsg.com"
+base_url = "https://csgclaw.opencsg.com"
 official_base_url = "https://clawhub.ai"
 token = "${SKILL_TOKEN}"
 non_suspicious_only = true

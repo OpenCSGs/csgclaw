@@ -71,7 +71,7 @@ func TestCompleteCallbackStoresCredentials(t *testing.T) {
 	redirectURL, err := service.CompleteCallback(context.Background(), url.Values{
 		"jwt_token":           []string{testJWT("alice", "user-1")},
 		"return_url":          []string{returnURL},
-		"opencsg_base_url":    []string{"https://opencsg-stg.com/"},
+		"opencsg_base_url":    []string{"https://opencsg-stg.com"},
 		"csghub_base_url":     []string{api.URL + "/"},
 		"ai_gateway_base_url": []string{"https://aigateway.opencsg-stg.com"},
 	})
@@ -218,7 +218,7 @@ func TestLoginUsesOpenCSGSSOCallbackURL(t *testing.T) {
 	login, err := service.Login(context.Background(), LoginOptions{
 		ReturnURL:        returnURL,
 		CallbackURL:      callbackURL,
-		OpenCSGBaseURL:   "https://opencsg-stg.com/",
+		OpenCSGBaseURL:   "https://opencsg-stg.com",
 		CSGHubBaseURL:    "https://opencsg-stg.com/",
 		AIGatewayBaseURL: "https://aigateway.opencsg-stg.com",
 	})

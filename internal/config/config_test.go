@@ -511,7 +511,7 @@ models = ["minimax-m2.7"]
 	}
 }
 
-func TestLoadLegacyOfficialHubRegistryURLAndSaveMigratesIt(t *testing.T) {
+func TestLoadLegacyOfficialHubRegistryURLAndSavePreservesIt(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	path := filepath.Join(dir, "config.toml")
@@ -537,11 +537,11 @@ enabled = true
 		t.Fatalf("Load() error = %v", err)
 	}
 	officialRegistry := cfg.Hub.Registries[2]
-	if got, want := officialRegistry.URL, DefaultOfficialHubRegistryURL; got != want {
+	if got, want := officialRegistry.URL, "https://csgclaw.opencsg.com"; got != want {
 		t.Fatalf("official registry URL = %q, want %q", got, want)
 	}
-	if !cfg.NeedsMigrationRewrite() {
-		t.Fatal("NeedsMigrationRewrite() = false, want true")
+	if cfg.NeedsMigrationRewrite() {
+		t.Fatal("NeedsMigrationRewrite() = true, want false")
 	}
 
 	if err := cfg.Save(path); err != nil {
@@ -552,11 +552,8 @@ enabled = true
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	saved := string(data)
-	if strings.Contains(saved, LegacyOfficialHubRegistryURL) {
-		t.Fatalf("saved config still contains legacy official URL:\n%s", saved)
-	}
-	if !strings.Contains(saved, `url = "https://hub.opencsg.com"`) {
-		t.Fatalf("saved config missing migrated official URL:\n%s", saved)
+	if !strings.Contains(saved, `url = "https://csgclaw.opencsg.com"`) {
+		t.Fatalf("saved config missing preserved official URL:\n%s", saved)
 	}
 }
 

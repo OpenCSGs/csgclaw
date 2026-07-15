@@ -74,6 +74,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Get("/skills", h.listSkills)
 		r.Post("/skills:upload", h.handleSkillUpload)
 		r.Post("/skills:install", h.handleSkillInstall)
+		r.Get("/skills/registry/search", h.handleSkillRegistrySearch)
+		r.Post("/skills/registry:install", h.handleSkillRegistryInstall)
 		r.Delete("/skills/{name}", h.deleteSkill)
 		r.Get("/skills/tree", h.getSkillTree)
 		r.Get("/skills/file", h.getSkillFile)

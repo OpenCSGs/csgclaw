@@ -47,6 +47,32 @@ type authEnvironment struct {
 	AIGatewayBaseURL string
 }
 
+type Environment struct {
+	OpenCSGBaseURL   string
+	CSGHubBaseURL    string
+	AIGatewayBaseURL string
+}
+
+func DefaultEnvironment() Environment {
+	return Environment{
+		OpenCSGBaseURL:   DefaultOpenCSGBaseURL,
+		CSGHubBaseURL:    DefaultCSGHubBaseURL,
+		AIGatewayBaseURL: DefaultAIGatewayBaseURL,
+	}
+}
+
+func EnvironmentForOpenCSGBaseURL(openCSGBaseURL string) Environment {
+	openCSGBaseURL = strings.TrimRight(strings.TrimSpace(openCSGBaseURL), "/")
+	if openCSGBaseURL == "" {
+		return DefaultEnvironment()
+	}
+	return Environment{
+		OpenCSGBaseURL:   openCSGBaseURL,
+		CSGHubBaseURL:    authCSGHubBaseURLForOpenCSGBaseURL(openCSGBaseURL),
+		AIGatewayBaseURL: authAIGatewayBaseURLForOpenCSGBaseURL(openCSGBaseURL),
+	}
+}
+
 var defaultService = &Service{}
 
 func Default() *Service {
@@ -399,7 +425,7 @@ func (s *Service) callbackEnvironment(values url.Values) (authEnvironment, error
 		env.AIGatewayBaseURL = baseURL
 		if derivedBaseURL := authBaseURLFromAIGatewayBaseURL(baseURL); derivedBaseURL != "" {
 			if !hasCSGHubBaseURL {
-				env.CSGHubBaseURL = derivedBaseURL
+				env.CSGHubBaseURL = authCSGHubBaseURLForOpenCSGBaseURL(derivedBaseURL)
 			}
 			if !hasOpenCSGBaseURL {
 				env.OpenCSGBaseURL = derivedBaseURL
@@ -630,6 +656,9 @@ func authBaseURLFromAIGatewayBaseURL(raw string) string {
 	}
 	if path == "" && strings.HasPrefix(strings.ToLower(u.Host), "aigateway.") {
 		u.Host = u.Host[len("aigateway."):]
+		if normalizeKnownAuthBaseURL(u.Scheme+"://"+u.Host) == "https://opencsg-stg.com" {
+			return StageOpenCSGBaseURL
+		}
 		u.Path = ""
 		u.RawPath = ""
 		u.RawQuery = ""

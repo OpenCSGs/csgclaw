@@ -66,6 +66,9 @@ export function normalizeAuthEnvironmentDraft(source: unknown): AuthEnvironmentD
   }
   const value = source as Record<string, unknown>;
   const preset = normalizePresetID(value.preset);
+  if (preset !== "custom") {
+    return authEnvironmentDraftFromPreset(preset);
+  }
   const opencsgBaseURL = normalizeBaseURL(value.opencsgBaseURL);
   const csgHubBaseURL = normalizeBaseURL(value.csgHubBaseURL);
   const aiGatewayBaseURL = normalizeAIGatewayBaseURL(value.aiGatewayBaseURL);
@@ -153,6 +156,10 @@ function presetIDForEnvironment(
   const opencsgBaseURL = normalizeBaseURL(draft.opencsgBaseURL);
   const csgHubBaseURL = normalizeBaseURL(draft.csgHubBaseURL);
   const aiGatewayBaseURL = normalizeAIGatewayBaseURL(draft.aiGatewayBaseURL);
+  const sitePreset = AUTH_ENVIRONMENT_PRESETS.find((preset) => preset.opencsgBaseURL === opencsgBaseURL);
+  if (sitePreset) {
+    return sitePreset.id;
+  }
   return AUTH_ENVIRONMENT_PRESETS.find(
     (preset) =>
       preset.opencsgBaseURL === opencsgBaseURL &&

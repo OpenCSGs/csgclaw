@@ -10,10 +10,12 @@ export type SkillSummary = {
   description?: string;
   name: string;
   readonly?: boolean;
+  registry?: string;
   remoteRef?: string;
   remotePath?: string;
   remoteURL?: string;
   source?: string;
+  version?: string;
 };
 
 export type SkillTree = WorkspaceListing;

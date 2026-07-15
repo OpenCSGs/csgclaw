@@ -132,16 +132,12 @@ func normalizeHubRegistry(registry HubRegistryConfig) HubRegistryConfig {
 	registry.Kind = strings.TrimSpace(registry.Kind)
 	registry.Path = strings.TrimSpace(registry.Path)
 	registry.URL = strings.TrimSpace(strings.TrimRight(registry.URL, "/"))
-	if registry.Kind == HubRegistryKindRemote && registry.URL == LegacyOfficialHubRegistryURL {
-		registry.URL = DefaultOfficialHubRegistryURL
-	}
 	registry.Token = strings.TrimSpace(registry.Token)
 	return registry
 }
 
 func needsRemoteHubRegistryURLRewrite(registry HubRegistryConfig) bool {
-	return strings.TrimSpace(registry.Kind) == HubRegistryKindRemote &&
-		strings.TrimSpace(strings.TrimRight(registry.URL, "/")) == LegacyOfficialHubRegistryURL
+	return false
 }
 
 func mergeHubRegistries(defaults, configured []HubRegistryConfig) []HubRegistryConfig {
@@ -313,7 +309,6 @@ const (
 	DefaultHubRegistry              = "builtin"
 	DefaultHubPublishRegistry       = "local"
 	DefaultOfficialHubRegistryName  = "official"
-	LegacyOfficialHubRegistryURL    = "https://csgclaw.opencsg.com"
 	DefaultOfficialHubRegistryURL   = "https://hub.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin.manager-codex"
 	DefaultBootstrapWorkerTemplate  = "builtin.picoclaw-worker"

@@ -15,6 +15,17 @@ describe("auth environment model", () => {
     });
   });
 
+  it("migrates stored stage drafts to the current preset URLs", () => {
+    expect(
+      normalizeAuthEnvironmentDraft({
+        preset: "stage",
+        opencsgBaseURL: "https://csgclaw.opencsg-stg.com",
+        csgHubBaseURL: "https://csgclaw.opencsg-stg.com",
+        aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
+      }),
+    ).toEqual(authEnvironmentDraftFromPreset("stage"));
+  });
+
   it("derives custom service URLs from the OpenCSG site URL", () => {
     const draft = normalizeAuthEnvironmentDraft({
       preset: "custom",
@@ -52,7 +63,7 @@ describe("auth environment model", () => {
       user_uuid: "user-1",
       avatar: "",
       opencsg_base_url: "https://opencsg-stg.com",
-      base_url: "https://opencsg-stg.com",
+      base_url: "https://csgclaw.opencsg-stg.com",
       ai_gateway_base_url: "https://aigateway.opencsg-stg.com/v1",
       portal_url: "",
       logged_in_at: "",

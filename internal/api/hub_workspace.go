@@ -24,7 +24,12 @@ func (h *Handler) handleHubTemplateWorkspace(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.hub == nil {
+	hubSvc, err := h.hubServiceForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if hubSvc == nil {
 		http.Error(w, "hub service is not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -33,7 +38,7 @@ func (h *Handler) handleHubTemplateWorkspace(w http.ResponseWriter, r *http.Requ
 		http.NotFound(w, r)
 		return
 	}
-	listing, err := h.hub.ListWorkspace(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("path")))
+	listing, err := hubSvc.ListWorkspace(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("path")))
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -50,7 +55,12 @@ func (h *Handler) handleHubTemplateWorkspaceFile(w http.ResponseWriter, r *http.
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.hub == nil {
+	hubSvc, err := h.hubServiceForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if hubSvc == nil {
 		http.Error(w, "hub service is not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -60,7 +70,7 @@ func (h *Handler) handleHubTemplateWorkspaceFile(w http.ResponseWriter, r *http.
 		return
 	}
 	path := strings.TrimSpace(r.URL.Query().Get("path"))
-	file, err := h.hub.ReadWorkspaceFile(r.Context(), id, path)
+	file, err := hubSvc.ReadWorkspaceFile(r.Context(), id, path)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, os.ErrNotExist) {

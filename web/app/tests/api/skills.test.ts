@@ -123,6 +123,44 @@ describe("skills API", () => {
     );
   });
 
+  it("uses the path-derived title when the API title is generic", async () => {
+    mockFetch(async (input) => {
+      if (String(input) === "api/v1/server/config") {
+        return new Response(SERVER_CONFIG_RESPONSE, { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              name: "Skill",
+              path: "AgentVibes/agent-vibes-tts",
+              description: "Switch voices for Claude Code.",
+            },
+            {
+              display_name: "skill",
+              path: "integrations/whatsapp-business-api",
+              description: "WhatsApp Business API integration.",
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+
+    await expect(fetchAgenticHubOfficialSkillsPage()).resolves.toMatchObject({
+      items: [
+        {
+          name: "agent-vibes-tts",
+          remotePath: "AgentVibes/agent-vibes-tts",
+        },
+        {
+          name: "whatsapp-business-api",
+          remotePath: "integrations/whatsapp-business-api",
+        },
+      ],
+    });
+  });
+
   it("passes the AgenticHub official skills search parameter", async () => {
     const fetchMock = mockFetch(async (input) => {
       if (String(input) === "api/v1/server/config") {

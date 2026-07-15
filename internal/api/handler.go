@@ -1374,18 +1374,28 @@ func agentCreateRequestFromAPI(req apitypes.CreateAgentRequest) agent.CreateRequ
 func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		if h.hub == nil {
+		hubSvc, err := h.hubServiceForRequest(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if hubSvc == nil {
 			http.Error(w, "hub service is not configured", http.StatusServiceUnavailable)
 			return
 		}
-		items, err := h.hub.List(r.Context())
+		items, err := hubSvc.List(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
 		writeJSON(w, http.StatusOK, presentHubTemplates(items))
 	case http.MethodPost:
-		if h.hub == nil || h.svc == nil {
+		hubSvc, err := h.hubServiceForRequest(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if hubSvc == nil || h.svc == nil {
 			http.Error(w, "hub service is not configured", http.StatusServiceUnavailable)
 			return
 		}
@@ -1404,7 +1414,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		spec.Registry = req.Registry
-		item, err := h.hub.Publish(r.Context(), spec)
+		item, err := hubSvc.Publish(r.Context(), spec)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -1420,7 +1430,12 @@ func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.Request, id string) {
-	if h.hub == nil {
+	hubSvc, err := h.hubServiceForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if hubSvc == nil {
 		http.Error(w, "hub service is not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -1430,7 +1445,7 @@ func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.R
 	}
 	switch r.Method {
 	case http.MethodGet:
-		item, err := h.hub.Get(r.Context(), id)
+		item, err := hubSvc.Get(r.Context(), id)
 		if err != nil {
 			if strings.Contains(strings.ToLower(err.Error()), "not found") {
 				http.Error(w, err.Error(), http.StatusNotFound)
@@ -1450,7 +1465,7 @@ func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.R
 		}
 		writeJSON(w, http.StatusOK, presented)
 	case http.MethodDelete:
-		if err := h.hub.Delete(r.Context(), id); err != nil {
+		if err := hubSvc.Delete(r.Context(), id); err != nil {
 			status := http.StatusBadRequest
 			switch {
 			case errors.Is(err, hub.ErrTemplateNotFound), strings.Contains(strings.ToLower(err.Error()), "not found"):

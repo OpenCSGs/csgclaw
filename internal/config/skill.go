@@ -7,7 +7,7 @@ import (
 
 // DefaultSkillBaseURL is the primary OpenCSG skill registry.
 // Override via [skill].base_url or SKILL_BASE_URL (CLAWHUB_BASE_URL is legacy).
-const DefaultSkillBaseURL = "https://claw.opencsg.com"
+const DefaultSkillBaseURL = "https://csgclaw.opencsg.com"
 
 // DefaultSkillOfficialBaseURL is the public clawhub.ai registry.
 // Override via [skill].official_base_url or SKILL_OFFICIAL_BASE_URL (CLAWHUB_OFFICIAL_BASE_URL is legacy).
