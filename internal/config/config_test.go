@@ -557,6 +557,59 @@ enabled = true
 	}
 }
 
+func TestLoadMissingOfficialHubRegistryAndSaveDoesNotPersistDefault(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[bootstrap]
+default_manager_template = "builtin.manager-codex"
+default_worker_template = "builtin.picoclaw-worker"
+
+[hub]
+default_registry = "builtin"
+default_publish_registry = "local"
+
+[[hub.registries]]
+name = "builtin"
+kind = "builtin"
+enabled = true
+
+[[hub.registries]]
+name = "local"
+kind = "local"
+path = "/tmp/hub"
+enabled = true
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := len(cfg.Hub.Registries), 3; got != want {
+		t.Fatalf("len(cfg.Hub.Registries) = %d, want %d", got, want)
+	}
+	if cfg.HasExplicitOfficialHubRegistry() {
+		t.Fatal("HasExplicitOfficialHubRegistry() = true, want false")
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	saved := string(data)
+	if strings.Contains(saved, `name = "official"`) {
+		t.Fatalf("saved config should not persist default official registry:\n%s", saved)
+	}
+}
+
 func TestLoadCustomRemoteHubRegistryURLAndSavePreservesIt(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -1266,12 +1319,6 @@ enabled = true
 name = "local"
 kind = "local"
 path = "` + filepath.Join(dir, AppDirName, HubDirName) + `"
-enabled = true
-
-[[hub.registries]]
-name = "official"
-kind = "remote"
-url = "https://hub.opencsg.com"
 enabled = true
 `
 	if got := string(data); got != want {

@@ -821,15 +821,15 @@ models = ["gpt-test"]
 		`[[hub.registries]]`,
 		`name = "builtin"`,
 		`name = "local"`,
-		`name = "official"`,
 		`kind = "local"`,
-		`kind = "remote"`,
-		`url = "https://hub.opencsg.com"`,
 		`enabled = true`,
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("completed config missing %q:\n%s", want, content)
 		}
+	}
+	if strings.Contains(content, `name = "official"`) {
+		t.Fatalf("completed config should not persist default official registry:\n%s", content)
 	}
 }
 

@@ -219,6 +219,20 @@ func hasRemoteHubRegistryURLRewrite(registries []rawHubRegistryConfig) bool {
 	return false
 }
 
+func shouldWriteHubRegistry(registry HubRegistryConfig, rawRegistry, loadedRegistry rawHubRegistryConfig) bool {
+	if strings.TrimSpace(registry.Name) != DefaultOfficialHubRegistryName ||
+		strings.TrimSpace(registry.Kind) != HubRegistryKindRemote {
+		return true
+	}
+	if rawRegistry.Name != "" || loadedRegistry.Name != "" {
+		return true
+	}
+	defaultRegistry := defaultOfficialRemoteHubRegistry()
+	return strings.TrimRight(strings.TrimSpace(registry.URL), "/") != defaultRegistry.URL ||
+		strings.TrimSpace(registry.Token) != "" ||
+		registry.Enabled != defaultRegistry.Enabled
+}
+
 func (c Config) HasExplicitOfficialHubRegistry() bool {
 	for _, registry := range c.raw.hub.Registries {
 		if parseRawStringValue(registry.Name) == DefaultOfficialHubRegistryName &&
@@ -796,6 +810,9 @@ default_publish_registry = %q
 	for _, registry := range resolvedHub.Registries {
 		rawRegistry := findRawHubRegistry(cfg.raw.hub.Registries, registry.Name)
 		loadedRegistry := findRawHubRegistry(loadedRaw.hub.Registries, registry.Name)
+		if !shouldWriteHubRegistry(registry, rawRegistry, loadedRegistry) {
+			continue
+		}
 		fmt.Fprintf(&b, `
 [[hub.registries]]
 name = %q
