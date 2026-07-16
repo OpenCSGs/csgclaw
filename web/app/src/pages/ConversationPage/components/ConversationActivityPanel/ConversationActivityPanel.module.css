@@ -1,0 +1,575 @@
+.panel {
+  position: relative;
+  width: min(var(--conversation-activity-panel-width, 640px), calc(100vw - 360px));
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 97%, var(--panel-strong) 3%);
+  box-shadow: -12px 0 28px color-mix(in srgb, var(--gray-900) 16%, transparent);
+  z-index: 3;
+}
+
+.resizing,
+.resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.resizeHandle {
+  position: absolute;
+  z-index: 5;
+  inset: 0 auto 0 -5px;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.resizeHandle::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 4px;
+  width: 2px;
+  background: transparent;
+  transition: background 140ms ease;
+}
+
+.resizeHandle:hover::after,
+.resizeHandle:focus-visible::after,
+.resizing .resizeHandle::after {
+  background: var(--primary);
+}
+
+.header {
+  min-width: 0;
+  min-height: 76px;
+  padding: 15px 18px 13px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.titleGroup {
+  min-width: 0;
+}
+
+.titleGroup h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 24px;
+}
+
+.titleGroup p {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeButton {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+}
+
+.toolbar {
+  min-width: 0;
+  padding: 12px 18px 11px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+}
+
+.toolbarTop {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.summary,
+.controls,
+.actorFilters {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.summary,
+.actorFilters {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.summary::-webkit-scrollbar,
+.actorFilters::-webkit-scrollbar {
+  display: none;
+}
+
+.metaChip,
+.actorChip {
+  flex: 0 0 auto;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--field) 82%, transparent);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.metaChip {
+  padding: 0 11px;
+}
+
+.metaChip svg {
+  flex: 0 0 auto;
+}
+
+.sortControl {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-flex;
+  background: var(--field);
+}
+
+.sortButton {
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.sortButton.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--gray-900) 12%, transparent);
+}
+
+.filterButton {
+  min-height: 32px;
+  gap: 5px;
+  padding-inline: 9px;
+  white-space: nowrap;
+}
+
+.filterButton strong {
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--surface);
+  background: var(--primary);
+  font-size: 10px;
+}
+
+.filterButton.active {
+  border-color: var(--primary);
+  color: var(--primary-strong);
+  background: var(--primary-soft);
+}
+
+.refreshButton {
+  flex: 0 0 auto;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+}
+
+.filterMenu {
+  min-width: 210px;
+}
+
+.filterDot,
+.agentDot,
+.allActorsDot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.filterDot.message,
+.densitySegment.message,
+.typeBadge.message {
+  --activity-color: oklch(0.71 0.17 155);
+}
+
+.filterDot.tool,
+.densitySegment.tool,
+.typeBadge.tool {
+  --activity-color: oklch(0.67 0.18 252);
+}
+
+.filterDot.error,
+.densitySegment.error,
+.typeBadge.error {
+  --activity-color: oklch(0.66 0.22 24);
+}
+
+.filterDot.other,
+.densitySegment.other,
+.typeBadge.other {
+  --activity-color: oklch(0.67 0.19 306);
+}
+
+.filterDot {
+  background: var(--activity-color);
+}
+
+.filterLabel {
+  flex: 1;
+}
+
+.filterCount {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.density {
+  width: 100%;
+  height: 28px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--field) 84%, transparent);
+}
+
+.densityTrack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.densitySegment {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background: var(--activity-color);
+  opacity: 0.9;
+  cursor: pointer;
+}
+
+.densitySegment:hover,
+.selectedSegment {
+  opacity: 1;
+  box-shadow:
+    0 0 0 1px var(--surface),
+    0 0 0 2px var(--activity-color);
+}
+
+.actorFilters {
+  padding-top: 1px;
+}
+
+.actorChip {
+  min-height: 28px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.actorChip:hover,
+.selectedActor {
+  border-color: color-mix(in srgb, var(--primary) 70%, var(--line));
+  color: var(--text);
+  background: var(--primary-soft);
+}
+
+.agentDot {
+  background: oklch(0.72 0.17 calc(var(--agent-hue) * 1deg));
+}
+
+.humanActorIcon {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.allActorsDot {
+  background: conic-gradient(
+    oklch(0.67 0.18 252) 0 25%,
+    oklch(0.71 0.17 155) 25% 50%,
+    oklch(0.67 0.19 306) 50% 75%,
+    oklch(0.73 0.17 55) 75%
+  );
+}
+
+.body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.list {
+  min-width: 0;
+  display: grid;
+}
+
+.row {
+  min-width: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.row:hover,
+.selectedRow {
+  background: color-mix(in srgb, var(--primary-soft) 42%, transparent);
+}
+
+.rowMain {
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 18px;
+  display: grid;
+  grid-template-columns: minmax(82px, auto) minmax(120px, 1fr) minmax(64px, auto) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.directRow {
+  grid-template-columns: minmax(82px, auto) minmax(120px, 1fr) auto auto;
+}
+
+.typeBadge {
+  max-width: 132px;
+  min-height: 22px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  overflow: hidden;
+  color: var(--activity-color);
+  background: color-mix(in srgb, var(--activity-color) 14%, transparent);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSummary,
+.rowSummaryText {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSummary {
+  padding: 0;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rowSummary svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 140ms ease;
+}
+
+.rowSummary svg.expanded {
+  transform: rotate(90deg);
+}
+
+.rowSummary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agentName,
+.sequence,
+.time {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.agentName {
+  max-width: 108px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sequence {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  margin: 0 18px 10px 110px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: auto;
+  color: var(--text);
+  background: color-mix(in srgb, var(--field) 72%, transparent);
+  font-size: 12px;
+}
+
+.detailSection + .detailSection {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.detailSection strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detailSection pre {
+  margin: 0;
+  overflow: visible;
+  color: var(--text);
+  font: 11px/1.55 var(--font-mono, ui-monospace, monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.empty,
+.loadError {
+  margin: 18px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.loadError {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
+.spinning {
+  animation: activity-spin 800ms linear infinite;
+}
+
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1180px) {
+  .toolbarTop {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .controls {
+    justify-content: flex-end;
+  }
+
+  .rowMain {
+    grid-template-columns: minmax(76px, auto) minmax(100px, 1fr) auto auto;
+  }
+
+  .agentName {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .panel {
+    width: min(var(--conversation-activity-panel-width, 640px), 100%);
+  }
+}
+
+@media (max-width: 620px) {
+  .panel {
+    width: 100%;
+  }
+
+  .resizeHandle {
+    display: none;
+  }
+
+  .header,
+  .toolbar {
+    padding-inline: 14px;
+  }
+
+  .sortButton span {
+    display: none;
+  }
+
+  .rowMain {
+    padding-inline: 14px;
+    grid-template-columns: minmax(70px, auto) minmax(80px, 1fr) auto;
+    gap: 8px;
+  }
+
+  .sequence {
+    display: none;
+  }
+
+  .detail {
+    margin-inline: 88px 14px;
+  }
+}

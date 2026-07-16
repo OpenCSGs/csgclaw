@@ -10,6 +10,10 @@
   grid-template-columns: minmax(0, 1fr) minmax(320px, 29vw);
 }
 
+.chat-panel:has(> .conversation-activity-panel) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .chat-panel.has-thread-panel > .chat-header,
 .chat-panel.has-thread-panel > .messages,
 .chat-panel.has-thread-panel > .composer {
@@ -17,7 +21,19 @@
   min-width: 0;
 }
 
+.chat-panel:has(> .conversation-activity-panel) > .chat-header,
+.chat-panel:has(> .conversation-activity-panel) > .messages,
+.chat-panel:has(> .conversation-activity-panel) > .composer {
+  grid-column: 1;
+  min-width: 0;
+}
+
 .chat-panel.has-thread-panel > .thread-panel {
+  grid-column: 2;
+  grid-row: 1 / 4;
+}
+
+.chat-panel > .conversation-activity-panel {
   grid-column: 2;
   grid-row: 1 / 4;
 }
@@ -522,6 +538,10 @@ button.thread-message-avatar:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .chat-panel:has(> .conversation-activity-panel) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .chat-panel.has-thread-panel > .thread-panel {
     position: absolute;
     inset: 0 0 0 auto;
@@ -529,10 +549,21 @@ button.thread-message-avatar:focus-visible {
     grid-column: auto;
     grid-row: auto;
   }
+
+  .chat-panel > .conversation-activity-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    grid-column: auto;
+    grid-row: auto;
+  }
 }
 
 @media (max-width: 720px) {
   .chat-panel.has-thread-panel > .thread-panel {
+    width: 100%;
+  }
+
+  .chat-panel > .conversation-activity-panel {
     width: 100%;
   }
 

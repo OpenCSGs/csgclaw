@@ -403,14 +403,74 @@
 
 .composer-working {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 14px;
+  gap: 12px;
   min-height: 24px;
   margin: 0 0 8px;
   color: var(--muted);
   font-size: 13px;
   line-height: 18px;
+}
+
+.composer-working-status {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
+}
+
+.composer-working-action.btn {
+  --btn-height: 26px;
+  --btn-min-width: 0;
+  --btn-padding-x: 10px;
+
+  flex: 0 0 auto;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.composer-working-action.btn.needs-attention::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--composer-working-action-beam-angle),
+    transparent 0deg,
+    transparent 220deg,
+    #ffbe7b 245deg,
+    #ff777f 270deg,
+    #ff8ab4 295deg,
+    #a07cfe 320deg,
+    #5b9dff 345deg,
+    transparent 360deg
+  );
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: composer-working-action-beam 3.2s linear infinite;
+}
+
+@property --composer-working-action-beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes composer-working-action-beam {
+  to {
+    --composer-working-action-beam-angle: 360deg;
+  }
 }
 
 .composer-working-item {
@@ -455,6 +515,13 @@
   40% {
     opacity: 1;
     transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-working-action.btn.needs-attention::before {
+    animation: none;
+    background: linear-gradient(90deg, #ffbe7b, #ff777f, #ff8ab4, #a07cfe, #5b9dff);
   }
 }
 

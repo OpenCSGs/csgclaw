@@ -3,6 +3,10 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
+import {
+  CONVERSATION_ACTIVITY_ACTION_SEEN_STORAGE_KEY,
+  CONVERSATION_ACTIVITY_PANEL_WIDTH_STORAGE_KEY,
+} from "@/shared/storage/keys";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import {
@@ -11,6 +15,15 @@ import {
   segmentsToPlainText,
   type ComposerSegment,
 } from "@/models/composer";
+
+vi.mock("@/api/im", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/im")>();
+  return { ...actual, fetchMessagesRequest: vi.fn(async () => []) };
+});
+
+vi.mock("@/shared/realtime/imEvents", () => ({
+  subscribeIMEvents: vi.fn(() => () => undefined),
+}));
 
 const users: IMUser[] = [
   {
@@ -87,7 +100,26 @@ const t: TranslateFn = (key, params = {}) => {
     composerTip: "Enter to send",
     directMessagesSection: "Direct Messages",
     inputPlaceholder: "Message",
+    localIdentityFallback: "Local user",
     agentWorking: "{name} is working",
+    agentActivityEmpty: "No activity yet",
+    agentActivityChronological: "Chronological",
+    agentActivityEventsCount: "{count} events",
+    agentActivityLoadFailed: "Failed to load activity",
+    agentActivityLoading: "Loading activity",
+    agentActivityNoFilteredResults: "No matching activity",
+    agentActivitySummaryLabel: "Activity summary",
+    agentActivitySortLabel: "Activity order",
+    agentActivityTimelineLabel: "Activity timeline",
+    agentActivityTitle: "Activity",
+    agentActivityToolCallsCount: "{count} tool calls",
+    agentActivityNewestFirst: "Newest first",
+    conversationActivityOpen: "Activity records",
+    conversationActivityView: "View activity",
+    conversationActivityActorFilter: "Filter activity by participant",
+    conversationActivityAllActors: "All",
+    conversationActivityRoomTimeline: "Current conversation · {name} · Room activity",
+    conversationActivityResize: "Resize activity side panel",
     latestThreadReply: "Latest reply",
     replyInThread: "Reply in thread",
     send: "Send",
@@ -110,6 +142,7 @@ function renderThreadPane({
   isDirect = true,
   messages,
   onClearRoomMessages = vi.fn(),
+  onCloseThread = vi.fn(),
   onDeleteRoom = vi.fn(),
   onCancelProfilePreviewClose = vi.fn(),
   onCloseProfilePreview = vi.fn(),
@@ -137,6 +170,7 @@ function renderThreadPane({
   mentionCandidates?: IMUser[];
   mentionIndex?: number;
   onClearRoomMessages?: (id: string) => void;
+  onCloseThread?: () => void;
   onDeleteRoom?: (id: string) => void;
   onApplyMention?: (user: IMUser) => void;
   onCancelProfilePreviewClose?: () => void;
@@ -212,7 +246,7 @@ function renderThreadPane({
         onApplyMention={onApplyMention}
         onClearRoomMessages={onClearRoomMessages}
         onClearMemberActionError={onClearMemberActionError}
-        onCloseThread={() => {}}
+        onCloseThread={onCloseThread}
         onComposerCompositionEnd={() => {}}
         onComposerCompositionStart={() => {}}
         onComposerKeyDown={() => {}}
@@ -253,6 +287,95 @@ function renderThreadPane({
 }
 
 describe("ConversationPane", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("opens the room activity side panel and closes the active thread", async () => {
+    const user = userEvent.setup();
+    const onCloseThread = vi.fn();
+
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      isDirect: false,
+      onCloseThread,
+    });
+
+    expect(document.querySelector(".thread-panel")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+
+    expect(onCloseThread).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(document.querySelector(".conversation-activity-panel")).toBeInTheDocument();
+    expect(document.querySelector(".thread-panel")).not.toBeInTheDocument();
+  });
+
+  it("shows newest activity first by default", async () => {
+    const user = userEvent.setup();
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      isDirect: false,
+      messages: [
+        { id: "older", sender_id: "u-manager", created_at: "2026-07-16T10:00:00Z", content: "older event" },
+        { id: "newer", sender_id: "u-manager", created_at: "2026-07-16T10:01:00Z", content: "newer event" },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+
+    expect(screen.getByRole("button", { name: "Newest first" })).toHaveAttribute("aria-pressed", "true");
+    const rows = within(document.querySelector(".conversation-activity-panel") as HTMLElement).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("newer event");
+    expect(rows[1]).toHaveTextContent("older event");
+  });
+
+  it("includes user prompts in the conversation activity timeline", async () => {
+    const user = userEvent.setup();
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      conversationMembers: [users[1]],
+      isDirect: false,
+      messages: [
+        { id: "prompt", sender_id: "u-admin", created_at: "2026-07-16T10:00:00Z", content: "check Chengdu weather" },
+        { id: "reply", sender_id: "u-manager", created_at: "2026-07-16T10:01:00Z", content: "checking now" },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+
+    const panel = document.querySelector(".conversation-activity-panel") as HTMLElement;
+    expect(within(panel).getAllByText("message")).toHaveLength(2);
+    expect(within(panel).getByText("check Chengdu weather")).toBeInTheDocument();
+    expect(within(panel).getAllByText("本地用户")).toHaveLength(2);
+    expect(within(panel).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(within(panel).getByRole("button", { name: "本地用户" }));
+
+    expect(within(panel).getByText("check Chengdu weather")).toBeInTheDocument();
+    expect(within(panel).queryByText("checking now")).not.toBeInTheDocument();
+  });
+
+  it("restores and persists the activity panel width", async () => {
+    window.localStorage.setItem(CONVERSATION_ACTIVITY_PANEL_WIDTH_STORAGE_KEY, "512");
+    const user = userEvent.setup();
+    renderThreadPane({
+      agents: [{ id: "u-manager", name: "manager", role: "worker" }],
+      isDirect: false,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Activity records" }));
+    const separator = screen.getByRole("separator", { name: "Resize activity side panel" });
+    expect(separator).toHaveAttribute("aria-valuenow", "512");
+
+    separator.focus();
+    await user.keyboard("{ArrowLeft}");
+
+    expect(separator).toHaveAttribute("aria-valuenow", "536");
+    await waitFor(() => {
+      expect(window.localStorage.getItem(CONVERSATION_ACTIVITY_PANEL_WIDTH_STORAGE_KEY)).toBe("536");
+    });
+  });
+
   it("hides legacy zero-reply thread summaries from the timeline", () => {
     const { container } = renderThreadPane({
       messages: [
@@ -553,7 +676,8 @@ describe("ConversationPane", () => {
     expect(getCollapsedSelectionTextOffset(editor)).toBe(4);
   });
 
-  it("shows working participants above the composer", () => {
+  it("opens conversation activity from the working indicator", async () => {
+    const user = userEvent.setup();
     const conversation: IMConversation = {
       id: "dm-1",
       is_direct: true,
@@ -631,10 +755,25 @@ describe("ConversationPane", () => {
       );
     }
 
-    render(<Harness />);
+    const view = render(<Harness />);
 
     expect(screen.getByRole("status")).toHaveTextContent("Atlas is working");
     expect(screen.getByRole("status")).toHaveTextContent("Bram is working");
+    const activityAction = screen.getByRole("button", { name: "View activity" });
+    expect(activityAction).toHaveClass("needs-attention");
+    expect(activityAction).toHaveClass("btn-tertiary-gray");
+    expect(window.localStorage.getItem(CONVERSATION_ACTIVITY_ACTION_SEEN_STORAGE_KEY)).toBeNull();
+
+    await user.click(activityAction);
+
+    expect(activityAction).not.toHaveClass("needs-attention");
+    expect(window.localStorage.getItem(CONVERSATION_ACTIVITY_ACTION_SEEN_STORAGE_KEY)).toBe("seen");
+    expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(document.querySelector(".conversation-activity-panel")).toBeInTheDocument();
+
+    view.unmount();
+    render(<Harness />);
+    expect(screen.getByRole("button", { name: "View activity" })).not.toHaveClass("needs-attention");
   });
 
   it("shows one date divider per day without times", () => {

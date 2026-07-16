@@ -7,10 +7,34 @@ import {
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
 import { AgentView } from "@/pages/AgentPage/components";
-import { DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
+import { Button, DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
 import { getConversationDescription, isDirectConversation } from "@/models/conversations";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
+import { CONVERSATION_ACTIVITY_ACTION_SEEN_STORAGE_KEY } from "@/shared/storage/keys";
+import { ConversationActivityPanel } from "../ConversationActivityPanel";
+
+function readConversationActivityActionSeen(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return window.localStorage.getItem(CONVERSATION_ACTIVITY_ACTION_SEEN_STORAGE_KEY) === "seen";
+  } catch {
+    return false;
+  }
+}
+
+function writeConversationActivityActionSeen() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(CONVERSATION_ACTIVITY_ACTION_SEEN_STORAGE_KEY, "seen");
+  } catch {
+    // Browsers can deny localStorage access; the action still works for this session.
+  }
+}
 
 function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePanelProps) {
   const handleOpenDM = useCallback(
@@ -139,6 +163,8 @@ export function ConversationPane({
   const [logContent, setLogContent] = useState("");
   const [logError, setLogError] = useState("");
   const [logLoading, setLogLoading] = useState(false);
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+  const [activityActionSeen, setActivityActionSeen] = useState(readConversationActivityActionSeen);
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
   const logAgentID = logAgent?.id || "";
@@ -176,6 +202,33 @@ export function ConversationPane({
     setLogModalOpen(true);
     void refreshAgentLogs();
   }, [refreshAgentLogs]);
+
+  const markActivityActionSeen = useCallback(() => {
+    setActivityActionSeen(true);
+    writeConversationActivityActionSeen();
+  }, []);
+
+  const handleToggleActivityPanel = useCallback(() => {
+    if (!activityPanelOpen) {
+      markActivityActionSeen();
+      onCloseThread();
+      onToggleChannelTools(false);
+    }
+    setActivityPanelOpen((open) => !open);
+  }, [activityPanelOpen, markActivityActionSeen, onCloseThread, onToggleChannelTools]);
+
+  const handleOpenActivityPanel = useCallback(() => {
+    markActivityActionSeen();
+    onCloseThread();
+    onToggleChannelTools(false);
+    setActivityPanelOpen(true);
+  }, [markActivityActionSeen, onCloseThread, onToggleChannelTools]);
+
+  useEffect(() => {
+    if (activeThreadRootID) {
+      setActivityPanelOpen(false);
+    }
+  }, [activeThreadRootID]);
 
   const handleOpenClearMessagesDialog = useCallback(() => {
     onToggleChannelTools(false);
@@ -221,7 +274,18 @@ export function ConversationPane({
     />
   ) : null;
   const agentDetailPanel = agentDetailPanelProps ? <AgentDetailSidePanel {...agentDetailPanelProps} /> : null;
-  const sidePanel = agentDetailPanel ?? threadPanel;
+  const activityPanel = activityPanelOpen ? (
+    <ConversationActivityPanel
+      key={conversation.id}
+      agents={agents}
+      conversation={conversation}
+      locale={locale}
+      t={t}
+      usersById={usersById}
+      onClose={() => setActivityPanelOpen(false)}
+    />
+  ) : null;
+  const sidePanel = agentDetailPanel ?? activityPanel ?? threadPanel;
 
   return (
     <>
@@ -230,6 +294,24 @@ export function ConversationPane({
         conversation={conversation}
         conversationMembers={conversationMembers}
         description={description}
+        headerAccessory={
+          <Button
+            className="icon-button activity-record-button"
+            active={activityPanelOpen}
+            iconOnly
+            size="lg"
+            variant="secondaryGray"
+            aria-label={t("conversationActivityOpen")}
+            aria-pressed={activityPanelOpen}
+            data-tooltip={t("conversationActivityOpen")}
+            data-tooltip-side="bottom"
+            onClick={handleToggleActivityPanel}
+          >
+            <span className="icon-button-mark" aria-hidden="true">
+              <ActivityWaveIcon />
+            </span>
+          </Button>
+        }
         inviteActionLabel={inviteActionLabel}
         logAgent={logAgent}
         logModalOpen={logModalOpen}
@@ -294,6 +376,8 @@ export function ConversationPane({
         slashPickerLoading={slashPickerLoading}
         slashPickerOpen={slashPickerOpen}
         t={t}
+        workingActionAttention={!activityActionSeen}
+        workingActionLabel={t("conversationActivityView")}
         workingParticipants={workingParticipants}
         onApplyMention={onApplyMention}
         onApplySlashCandidate={onApplySlashCandidate}
@@ -309,6 +393,7 @@ export function ConversationPane({
         onSendMessage={onSendMessage}
         onRemoveAttachment={onRemoveAttachment}
         onSyncComposer={onSyncComposer}
+        onWorkingAction={handleOpenActivityPanel}
       />
       {sidePanel}
       <Conversation.RoomDangerConfirmDialog
@@ -351,5 +436,19 @@ export function ConversationPane({
         />
       ) : null}
     </>
+  );
+}
+
+function ActivityWaveIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" focusable="false" viewBox="0 0 24 24">
+      <path
+        d="M4 12h3.4l2-4 3.4 8 2.1-4H20"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+    </svg>
   );
 }

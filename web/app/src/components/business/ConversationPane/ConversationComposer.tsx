@@ -58,11 +58,14 @@ export type ConversationComposerProps = {
   onSendMessage: () => VoidOrPromise;
   onRemoveAttachment?: (id: string) => void;
   onSyncComposer: () => void;
+  onWorkingAction?: () => void;
   slashCandidates: SlashPickerCandidate[];
   slashIndex: number;
   slashPickerLoading: boolean;
   slashPickerOpen: boolean;
   t: TranslateFn;
+  workingActionAttention?: boolean;
+  workingActionLabel?: string;
   workingParticipants?: ConversationWorkingParticipant[];
 };
 
@@ -90,6 +93,8 @@ export const ConversationComposer = memo(function ConversationComposer({
   slashPickerLoading,
   slashPickerOpen,
   t,
+  workingActionAttention = false,
+  workingActionLabel = "",
   workingParticipants = [],
   onApplyMention,
   onApplySlashCandidate,
@@ -104,6 +109,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   onRemoveAttachment = () => {},
   onSendMessage,
   onSyncComposer,
+  onWorkingAction,
 }: ConversationComposerProps) {
   const defaultConnectorStatus = useMemo(() => emptyGitHubConnectorStatus(), []);
   const githubStatus = connectorStatus ?? defaultConnectorStatus;
@@ -142,7 +148,15 @@ export const ConversationComposer = memo(function ConversationComposer({
           onLogin={onProviderLogin}
         />
       ) : null}
-      {workingParticipants.length > 0 ? <ComposerWorkingIndicator participants={workingParticipants} t={t} /> : null}
+      {workingParticipants.length > 0 ? (
+        <ComposerWorkingIndicator
+          actionAttention={workingActionAttention}
+          actionLabel={workingActionLabel}
+          participants={workingParticipants}
+          t={t}
+          onAction={onWorkingAction}
+        />
+      ) : null}
       <div
         className="composer-box"
         onDragOver={(event) => {
@@ -245,24 +259,42 @@ export const ConversationComposer = memo(function ConversationComposer({
 });
 
 function ComposerWorkingIndicator({
+  actionAttention,
+  actionLabel,
   participants,
   t,
+  onAction,
 }: {
+  actionAttention: boolean;
+  actionLabel: string;
   participants: readonly ConversationWorkingParticipant[];
   t: TranslateFn;
+  onAction?: () => void;
 }) {
   return (
-    <div className="composer-working" role="status" aria-live="polite">
-      {participants.map((participant) => (
-        <span key={participant.id || participant.name} className="composer-working-item">
-          <span className="composer-working-dots" aria-hidden="true">
-            <span />
-            <span />
-            <span />
+    <div className="composer-working">
+      <div className="composer-working-status" role="status" aria-live="polite">
+        {participants.map((participant) => (
+          <span key={participant.id || participant.name} className="composer-working-item">
+            <span className="composer-working-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            <span>{t("agentWorking", { name: participant.name })}</span>
           </span>
-          <span>{t("agentWorking", { name: participant.name })}</span>
-        </span>
-      ))}
+        ))}
+      </div>
+      {actionLabel && onAction ? (
+        <Button
+          className={`composer-working-action${actionAttention ? " needs-attention" : ""}`}
+          size="sm"
+          variant="tertiaryGray"
+          onClick={onAction}
+        >
+          {actionLabel}
+        </Button>
+      ) : null}
     </div>
   );
 }
