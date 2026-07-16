@@ -380,6 +380,7 @@ describe("ConversationPane", () => {
   it("renders agent details as a modal drawer with keyboard dismissal", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
+    const onOpenDM = vi.fn();
     const { container } = renderThreadPane({
       agentDetailPanelProps: {
         item: {
@@ -391,7 +392,7 @@ describe("ConversationPane", () => {
         onClose,
         onDelete: vi.fn(),
         onInvite: vi.fn(),
-        onOpenDM: vi.fn(),
+        onOpenDM,
         onRecreate: vi.fn(),
         onStart: vi.fn(),
         onStop: vi.fn(),
@@ -414,6 +415,41 @@ describe("ConversationPane", () => {
     onClose.mockClear();
     await user.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledTimes(1);
+
+    onClose.mockClear();
+    await user.click(within(dialog).getByRole("button", { name: "openDM" }));
+    expect(onClose).toHaveBeenCalledWith(false);
+    expect(onOpenDM).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }));
+  });
+
+  it("keeps agent details open when unsaved changes block direct-message navigation", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn(() => false);
+    const onOpenDM = vi.fn();
+    renderThreadPane({
+      agentDetailPanelProps: {
+        item: {
+          id: "u-manager",
+          name: "manager",
+          role: "worker",
+        },
+        t,
+        onClose,
+        onDelete: vi.fn(),
+        onInvite: vi.fn(),
+        onOpenDM,
+        onRecreate: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+    });
+
+    await user.click(
+      within(screen.getByRole("dialog", { name: "agentDetailPanel" })).getByRole("button", { name: "openDM" }),
+    );
+
+    expect(onClose).toHaveBeenCalledWith(false);
+    expect(onOpenDM).not.toHaveBeenCalled();
   });
 
   it("keeps the caret at the end after slash text is tokenized in the main composer", async () => {

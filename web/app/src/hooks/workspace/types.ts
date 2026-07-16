@@ -271,5 +271,5 @@ export type UseAgentControllerArgs = {
 };
 
 export type AgentDetailSidePanelProps = AgentDetailPaneProps & {
-  onClose: () => void;
+  onClose: (restoreFocus?: boolean) => boolean | void;
 };

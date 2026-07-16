@@ -21,6 +21,7 @@ type authLoginRequest struct {
 	CSGHubBaseURL    string `json:"csghub_base_url,omitempty"`
 	AIGatewayBaseURL string `json:"ai_gateway_base_url,omitempty"`
 	CallbackURL      string `json:"-"`
+	AdvertiseBaseURL string `json:"-"`
 }
 
 var appAuthStatus = func(r *http.Request) (auth.Status, error) {
@@ -31,6 +32,7 @@ var appAuthLogin = func(r *http.Request, req authLoginRequest) (auth.LoginRespon
 	return auth.Default().Login(r.Context(), auth.LoginOptions{
 		ReturnURL:        req.ReturnURL,
 		CallbackURL:      req.CallbackURL,
+		AdvertiseBaseURL: req.AdvertiseBaseURL,
 		OpenCSGBaseURL:   req.OpenCSGBaseURL,
 		CSGHubBaseURL:    req.CSGHubBaseURL,
 		AIGatewayBaseURL: req.AIGatewayBaseURL,
@@ -41,7 +43,7 @@ var appAuthLogout = func(r *http.Request) (auth.Status, error) {
 	return auth.Default().Logout(r.Context())
 }
 
-var appAuthCallback = func(r *http.Request) (string, error) {
+var appAuthCallback = func(r *http.Request, advertiseBaseURL string) (string, error) {
 	values := r.URL.Query()
 	if values.Get("jwt_token") == "" {
 		if token := bearerToken(r.Header.Get("Authorization")); token != "" {
@@ -49,7 +51,9 @@ var appAuthCallback = func(r *http.Request) (string, error) {
 			values.Set("jwt_token", token)
 		}
 	}
-	return auth.Default().CompleteCallback(r.Context(), values)
+	return auth.Default().CompleteCallback(r.Context(), values, auth.CallbackOptions{
+		AdvertiseBaseURL: advertiseBaseURL,
+	})
 }
 
 func (h *Handler) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +74,7 @@ func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	redirectURL, err := appAuthCallback(r)
+	redirectURL, err := appAuthCallback(r, h.authAdvertiseBaseURL())
 	if err != nil {
 		status := http.StatusBadRequest
 		if !auth.IsCallbackValidationError(err) {
@@ -99,8 +103,12 @@ func (h *Handler) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	if req.ReturnURL == "" {
 		req.ReturnURL = r.Referer()
 	}
+	req.AdvertiseBaseURL = h.authAdvertiseBaseURL()
 	if req.CallbackURL == "" {
-		req.CallbackURL = authLocalCallbackURL(r)
+		req.CallbackURL = authAdvertisedCallbackURL(req.AdvertiseBaseURL)
+		if req.CallbackURL == "" {
+			req.CallbackURL = authLocalCallbackURL(r)
+		}
 	}
 	resp, err := appAuthLogin(r, req)
 	if err != nil {
@@ -108,6 +116,34 @@ func (h *Handler) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) authAdvertiseBaseURL() string {
+	if h == nil || strings.TrimSpace(h.configPath) == "" {
+		return ""
+	}
+	cfg, _, err := h.loadBootstrapConfig()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(cfg.Server.AdvertiseBaseURL), "/")
+}
+
+func authAdvertisedCallbackURL(advertiseBaseURL string) string {
+	u, err := url.Parse(strings.TrimRight(strings.TrimSpace(advertiseBaseURL), "/"))
+	if err != nil || u.Scheme == "" || u.Host == "" || u.User != nil {
+		return ""
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+	default:
+		return ""
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + authCallbackPath
+	u.RawPath = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
 }
 
 func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {

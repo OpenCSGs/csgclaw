@@ -28,9 +28,14 @@ type LoginResponse struct {
 type LoginOptions struct {
 	ReturnURL        string
 	CallbackURL      string
+	AdvertiseBaseURL string
 	OpenCSGBaseURL   string
 	CSGHubBaseURL    string
 	AIGatewayBaseURL string
+}
+
+type CallbackOptions struct {
+	AdvertiseBaseURL string
 }
 
 type Service struct {
@@ -95,8 +100,8 @@ func (s *Service) Login(_ context.Context, opts ...LoginOptions) (LoginResponse,
 		CSGHubBaseURL:  s.csghubBaseURL(),
 	}
 	if len(opts) > 0 {
-		returnURL = sanitizeReturnURL(opts[0].ReturnURL)
-		callbackURL = sanitizeCallbackURL(opts[0].CallbackURL)
+		returnURL = sanitizeReturnURL(opts[0].ReturnURL, opts[0].AdvertiseBaseURL)
+		callbackURL = sanitizeCallbackURL(opts[0].CallbackURL, opts[0].AdvertiseBaseURL)
 		var err error
 		env, err = s.loginEnvironment(opts[0])
 		if err != nil {
@@ -121,11 +126,19 @@ func (s *Service) Logout(context.Context) (Status, error) {
 	return Status{}, nil
 }
 
-func (s *Service) CompleteCallback(ctx context.Context, values url.Values) (string, error) {
-	return s.completeCallback(ctx, values)
+func (s *Service) CompleteCallback(ctx context.Context, values url.Values, opts ...CallbackOptions) (string, error) {
+	advertiseBaseURL := ""
+	if len(opts) > 0 {
+		advertiseBaseURL = opts[0].AdvertiseBaseURL
+	}
+	return s.completeCallbackWithAdvertiseBaseURL(ctx, values, advertiseBaseURL)
 }
 
 func (s *Service) completeCallback(ctx context.Context, values url.Values) (string, error) {
+	return s.completeCallbackWithAdvertiseBaseURL(ctx, values, "")
+}
+
+func (s *Service) completeCallbackWithAdvertiseBaseURL(ctx context.Context, values url.Values, advertiseBaseURL string) (string, error) {
 	values = callbackValuesWithAuthState(values)
 	jwtToken := strings.TrimSpace(values.Get("jwt_token"))
 	if jwtToken == "" {
@@ -198,7 +211,7 @@ func (s *Service) completeCallback(ctx context.Context, values url.Values) (stri
 		}
 	}
 
-	if returnURL := callbackReturnURL(values); returnURL != "" {
+	if returnURL := callbackReturnURL(values, advertiseBaseURL); returnURL != "" {
 		return returnURL, nil
 	}
 	if portalURL == "" {
@@ -526,7 +539,7 @@ func joinAPIPath(baseURL, apiPath string) (*url.URL, error) {
 	return base.ResolveReference(ref), nil
 }
 
-func sanitizeReturnURL(raw string) string {
+func sanitizeReturnURL(raw, advertiseBaseURL string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return ""
@@ -538,10 +551,13 @@ func sanitizeReturnURL(raw string) string {
 	if isLocalHostname(u.Hostname()) {
 		return u.String()
 	}
+	if urlWithinBase(u, advertiseBaseURL) {
+		return u.String()
+	}
 	return ""
 }
 
-func sanitizeCallbackURL(raw string) string {
+func sanitizeCallbackURL(raw, advertiseBaseURL string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return ""
@@ -550,10 +566,33 @@ func sanitizeCallbackURL(raw string) string {
 	if scheme != "http" && scheme != "https" {
 		return ""
 	}
-	if !isLocalHostname(u.Hostname()) {
-		return ""
+	if isLocalHostname(u.Hostname()) {
+		return u.String()
 	}
-	return u.String()
+	if urlWithinBase(u, advertiseBaseURL) {
+		return u.String()
+	}
+	return ""
+}
+
+func urlWithinBase(candidate *url.URL, rawBaseURL string) bool {
+	if candidate == nil || candidate.User != nil {
+		return false
+	}
+	base, err := url.Parse(strings.TrimRight(strings.TrimSpace(rawBaseURL), "/"))
+	if err != nil || base.Scheme == "" || base.Host == "" || base.User != nil {
+		return false
+	}
+	baseScheme := strings.ToLower(base.Scheme)
+	if baseScheme != "http" && baseScheme != "https" {
+		return false
+	}
+	if !strings.EqualFold(candidate.Scheme, base.Scheme) || !strings.EqualFold(candidate.Host, base.Host) {
+		return false
+	}
+	basePath := strings.TrimRight(base.Path, "/")
+	candidatePath := strings.TrimRight(candidate.Path, "/")
+	return basePath == "" || candidatePath == basePath || strings.HasPrefix(candidatePath, basePath+"/")
 }
 
 func callbackURLWithAuthState(callbackURL string, env authEnvironment, returnURL string) string {
@@ -610,9 +649,9 @@ func cloneURLValues(values url.Values) url.Values {
 	return cloned
 }
 
-func callbackReturnURL(values url.Values) string {
+func callbackReturnURL(values url.Values, advertiseBaseURL string) string {
 	for _, key := range []string{"return_url", "url"} {
-		if returnURL := sanitizeReturnURL(values.Get(key)); returnURL != "" {
+		if returnURL := sanitizeReturnURL(values.Get(key), advertiseBaseURL); returnURL != "" {
 			return returnURL
 		}
 	}

@@ -12,6 +12,8 @@ English | [中文](config.zh.md)
 
 Use `advertise_base_url` when the automatically inferred address is not reachable from BoxLite boxes, such as when you need a LAN address, a tunnel URL, or a host alias.
 
+When it is set, the Web UI login flow also uses it as the trusted public base for the auth callback and post-login return URL. Reverse proxies and sandbox gateways must route `<advertise_base_url>/api/v1/auth/callback` back to the CSGClaw server.
+
 When the sandbox provider is `docker` on Docker Desktop, an empty `advertise_base_url` resolves to `http://host.docker.internal:<port>` for generated manager and worker runtime config. Set `advertise_base_url` explicitly when you need a different Docker callback URL.
 
 `access_token` protects authenticated API routes, including the PicoClaw participant bridge routes. When authentication is enabled, clients must send `Authorization: Bearer <access_token>`.

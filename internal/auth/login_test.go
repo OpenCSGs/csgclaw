@@ -262,6 +262,37 @@ func TestLoginUsesOpenCSGSSOCallbackURL(t *testing.T) {
 	}
 }
 
+func TestLoginUsesAdvertisedCallbackAndReturnURLs(t *testing.T) {
+	service := &Service{}
+	advertiseBaseURL := "https://aigateway.opencsg-stg.com/v1/sandboxes/jared-1784118727"
+	returnURL := advertiseBaseURL + "/#/workspace"
+	callbackURL := advertiseBaseURL + "/api/v1/auth/callback"
+
+	login, err := service.Login(context.Background(), LoginOptions{
+		ReturnURL:        returnURL,
+		CallbackURL:      callbackURL,
+		AdvertiseBaseURL: advertiseBaseURL,
+		OpenCSGBaseURL:   "https://opencsg-stg.com",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	parsedLogin, err := url.Parse(login.LoginURL)
+	if err != nil {
+		t.Fatalf("parse LoginURL: %v", err)
+	}
+	parsedCallback, err := url.Parse(parsedLogin.Query().Get("redirect_url"))
+	if err != nil {
+		t.Fatalf("parse redirect_url: %v", err)
+	}
+	if got := parsedCallback.Scheme + "://" + parsedCallback.Host + parsedCallback.Path; got != callbackURL {
+		t.Fatalf("redirect callback = %q, want %q", got, callbackURL)
+	}
+	if got := loginCallbackStateQuery(t, parsedCallback).Get("return_url"); got != returnURL {
+		t.Fatalf("return_url = %q, want %q", got, returnURL)
+	}
+}
+
 func TestCallbackReadsPackedAuthState(t *testing.T) {
 	returnURL := "http://127.0.0.1:18080/#/dms/room-1783408363036922000"
 	callbackURL := callbackURLWithAuthState("http://127.0.0.1:18080/api/v1/auth/callback", authEnvironment{
@@ -277,7 +308,7 @@ func TestCallbackReadsPackedAuthState(t *testing.T) {
 	values.Set("jwt_token", testJWT("alice", "user-1"))
 	values = callbackValuesWithAuthState(values)
 
-	if got := callbackReturnURL(values); got != returnURL {
+	if got := callbackReturnURL(values, ""); got != returnURL {
 		t.Fatalf("callbackReturnURL() = %q, want %q", got, returnURL)
 	}
 	env, err := (&Service{}).callbackEnvironment(values)
@@ -436,7 +467,7 @@ func TestCallbackReturnURLAcceptsLangflowURLParam(t *testing.T) {
 	returnURL := "http://127.0.0.1:18080/#/workspace"
 	got := callbackReturnURL(url.Values{
 		"url": []string{returnURL},
-	})
+	}, "")
 	if got != returnURL {
 		t.Fatalf("callbackReturnURL() = %q, want %q", got, returnURL)
 	}
@@ -446,9 +477,21 @@ func TestCallbackReturnURLRejectsExternalURLs(t *testing.T) {
 	got := callbackReturnURL(url.Values{
 		"return_url": []string{"https://evil.example.test/callback"},
 		"url":        []string{"https://also-evil.example.test/callback"},
-	})
+	}, "")
 	if got != "" {
 		t.Fatalf("callbackReturnURL() = %q, want empty for external URLs", got)
+	}
+}
+
+func TestCallbackReturnURLAcceptsAdvertisedPathOnly(t *testing.T) {
+	advertiseBaseURL := "https://aigateway.opencsg-stg.com/v1/sandboxes/jared-1784118727"
+	want := advertiseBaseURL + "/#/workspace"
+	if got := callbackReturnURL(url.Values{"return_url": []string{want}}, advertiseBaseURL); got != want {
+		t.Fatalf("callbackReturnURL() = %q, want %q", got, want)
+	}
+	otherSandbox := "https://aigateway.opencsg-stg.com/v1/sandboxes/other/#/workspace"
+	if got := callbackReturnURL(url.Values{"return_url": []string{otherSandbox}}, advertiseBaseURL); got != "" {
+		t.Fatalf("callbackReturnURL() = %q, want empty for another sandbox", got)
 	}
 }
 

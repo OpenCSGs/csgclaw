@@ -12,7 +12,17 @@ import { normalizeAuthProviderName } from "@/models/agents";
 import { getConversationDescription, isDirectConversation } from "@/models/conversations";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 
-function AgentDetailSidePanel({ onClose, ...props }: AgentDetailSidePanelProps) {
+function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePanelProps) {
+  const handleOpenDM = useCallback(
+    async (...args: Parameters<typeof onOpenDM>) => {
+      if (onClose(false) === false) {
+        return;
+      }
+      await onOpenDM(...args);
+    },
+    [onClose, onOpenDM],
+  );
+
   return (
     <DialogRoot open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent
@@ -30,7 +40,7 @@ function AgentDetailSidePanel({ onClose, ...props }: AgentDetailSidePanelProps) 
           <DialogTitle className="agent-detail-side-panel-title">{props.t("agentDetailPanel")}</DialogTitle>
         </div>
         <div className="agent-detail-side-panel-body">
-          <AgentView {...props} />
+          <AgentView {...props} onOpenDM={handleOpenDM} />
         </div>
       </DialogContent>
     </DialogRoot>

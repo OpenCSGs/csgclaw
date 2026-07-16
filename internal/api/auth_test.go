@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -89,9 +91,47 @@ func TestHandleAuthLogin(t *testing.T) {
 	}
 }
 
+func TestHandleAuthLoginUsesAdvertiseBaseURL(t *testing.T) {
+	const advertiseBaseURL = "https://aigateway.opencsg-stg.com/v1/sandboxes/jared-1784118727"
+	t.Setenv("CSGCLAW_ADVERTISE_BASE_URL", advertiseBaseURL)
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	content := `[server]
+listen_addr = "0.0.0.0:18080"
+advertise_base_url = "${CSGCLAW_ADVERTISE_BASE_URL}"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+
+	var got authLoginRequest
+	restore := stubAuthLogin(func(_ *http.Request, req authLoginRequest) (auth.LoginResponse, error) {
+		got = req
+		return auth.LoginResponse{LoginURL: "https://opencsg-stg.com/sso/login"}, nil
+	})
+	defer restore()
+
+	handler := &Handler{}
+	handler.SetConfigPath(configPath)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{
+		"return_url":"https://aigateway.opencsg-stg.com/v1/sandboxes/jared-1784118727/#/workspace"
+	}`))
+	req.Host = "csgclaw.internal:18080"
+	handler.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if got.AdvertiseBaseURL != advertiseBaseURL {
+		t.Fatalf("advertise_base_url = %q, want %q", got.AdvertiseBaseURL, advertiseBaseURL)
+	}
+	if want := advertiseBaseURL + authCallbackPath; got.CallbackURL != want {
+		t.Fatalf("callback_url = %q, want %q", got.CallbackURL, want)
+	}
+}
+
 func TestHandleAuthCallback(t *testing.T) {
 	var gotToken string
-	restore := stubAuthCallback(func(r *http.Request) (string, error) {
+	restore := stubAuthCallback(func(r *http.Request, _ string) (string, error) {
 		gotToken = r.URL.Query().Get("jwt_token")
 		return "http://127.0.0.1:18080/#/workspace", nil
 	})
@@ -143,7 +183,7 @@ func stubAuthLogin(fn func(*http.Request, authLoginRequest) (auth.LoginResponse,
 	return func() { appAuthLogin = previous }
 }
 
-func stubAuthCallback(fn func(*http.Request) (string, error)) func() {
+func stubAuthCallback(fn func(*http.Request, string) (string, error)) func() {
 	previous := appAuthCallback
 	appAuthCallback = fn
 	return func() { appAuthCallback = previous }
