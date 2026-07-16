@@ -53,6 +53,7 @@ export type WorkspaceSidebarProps = {
   currentUserID: string;
   currentWorkspaceLabel: string;
   authBusy: boolean;
+  authEnvironment: AuthEnvironmentDraft;
   authError: string;
   authPending: boolean;
   authStatus: AuthStatus;
@@ -65,6 +66,7 @@ export type WorkspaceSidebarProps = {
   modelProvidersLoaded?: boolean;
   notificationAgentItems: AgentLike[];
   onCollapseSidebar: () => void;
+  onAuthEnvironmentChange: (environment: AuthEnvironmentDraft) => void;
   onCreateAgent: () => void | Promise<void>;
   onCreateModelProvider?: () => void | Promise<void>;
   onCreateTeam: (payload: CreateTeamPayload) => Promise<void>;

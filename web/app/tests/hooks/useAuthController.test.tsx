@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beginAuthLogin, fetchAuthStatus, logoutAuth } from "@/api/auth";
 import { useAuthController } from "@/hooks/workspace/useAuthController";
 import type { TranslateFn } from "@/models/conversations";
+import { authEnvironmentDraftFromPreset } from "@/models/authEnvironment";
 
 vi.mock("@/api/auth", async () => {
   const actual = await vi.importActual<typeof import("@/api/auth")>("@/api/auth");
@@ -42,6 +43,7 @@ function createWrapper() {
 
 describe("useAuthController", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     window.sessionStorage.clear();
     vi.mocked(beginAuthLogin).mockReset();
     vi.mocked(fetchAuthStatus).mockReset();
@@ -111,9 +113,31 @@ describe("useAuthController", () => {
     });
 
     expect(openSpy).not.toHaveBeenCalled();
-    expect(beginAuthLogin).toHaveBeenCalledWith(returnURL);
+    expect(beginAuthLogin).toHaveBeenCalledWith(returnURL, {
+      opencsg_base_url: "https://opencsg.com",
+      csghub_base_url: "https://hub.opencsg.com",
+      ai_gateway_base_url: "https://ai.space.opencsg.com/v1",
+    });
     expect(window.location.hash).toBe("#/opencsg-login?redirect_url=callback");
     expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBe("1");
+  });
+
+  it("uses the shared selected environment when login is triggered without an override", async () => {
+    vi.mocked(fetchAuthStatus).mockResolvedValue({ authenticated: false });
+    vi.mocked(beginAuthLogin).mockResolvedValue({ login_url: "#/opencsg-login?redirect_url=callback" });
+    const returnURL = window.location.href;
+    const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
+
+    act(() => result.current.setEnvironment(authEnvironmentDraftFromPreset("stage")));
+    await act(async () => {
+      await result.current.login();
+    });
+
+    expect(beginAuthLogin).toHaveBeenCalledWith(returnURL, {
+      opencsg_base_url: "https://opencsg-stg.com",
+      csghub_base_url: "https://opencsg-stg.com",
+      ai_gateway_base_url: "https://aigateway.opencsg-stg.com/v1",
+    });
   });
 
   it("sends derived custom service URLs without requiring the optional fields in the draft", async () => {

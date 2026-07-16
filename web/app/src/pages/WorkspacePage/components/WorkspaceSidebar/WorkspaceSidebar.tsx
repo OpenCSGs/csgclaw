@@ -68,6 +68,7 @@ export function WorkspaceSidebar({
   activeThreadRootID,
   currentUserID,
   authBusy,
+  authEnvironment,
   authError,
   authPending,
   authStatus,
@@ -113,6 +114,7 @@ export function WorkspaceSidebar({
   onOpenConfigSettings,
   onOpenSettings,
   onCollapseSidebar,
+  onAuthEnvironmentChange,
   onExpandSidebar,
   onLogin,
   onLogout,
@@ -464,11 +466,13 @@ export function WorkspaceSidebar({
             onOpenConfigSettings={onOpenConfigSettings}
             onOpenSettings={onOpenSettings}
             authStatus={authStatus}
+            authEnvironment={authEnvironment}
             authBusy={authBusy}
             authPending={authPending}
             authError={authError}
             onLogin={onLogin}
             onLogout={onLogout}
+            onAuthEnvironmentChange={onAuthEnvironmentChange}
             t={t}
           />
         </div>

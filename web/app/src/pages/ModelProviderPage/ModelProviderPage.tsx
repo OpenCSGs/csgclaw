@@ -68,6 +68,7 @@ export function ModelProviderPage() {
   const isOpenCSG = provider?.id === "opencsg";
   const canEditEndpoint = Boolean(provider && !isBuiltinCLI && !isOpenCSG);
   const opencsgAuthenticatedForCheck = controller.ready && isAuthenticated(controller.sidebarProps?.authStatus);
+  const opencsgModelsLoaded = isOpenCSG && providerStatus === "connected" && Boolean(provider?.models.length);
 
   const runCheckForDraft = useCallback(
     async (baseURL: string, apiKey: string, options: { showError?: boolean } = {}) => {
@@ -117,6 +118,13 @@ export function ModelProviderPage() {
   }, [draftSourceKey, provider]);
 
   useEffect(() => {
+    if (!isOpenCSG) {
+      return;
+    }
+    setDraft(providerToDraft(provider));
+  }, [isOpenCSG, provider]);
+
+  useEffect(() => {
     setCheckState({
       lastCheckedAt: providerLastCheckedAt,
       message: providerMessage,
@@ -128,11 +136,11 @@ export function ModelProviderPage() {
     if (!providerID) {
       return;
     }
-    if (isOpenCSG && !opencsgAuthenticatedForCheck) {
+    if (isOpenCSG && (!opencsgAuthenticatedForCheck || opencsgModelsLoaded)) {
       return;
     }
     void runCheckForDraft(providerBaseURL, "", { showError: true });
-  }, [isOpenCSG, opencsgAuthenticatedForCheck, providerBaseURL, providerID, runCheckForDraft]);
+  }, [isOpenCSG, opencsgAuthenticatedForCheck, opencsgModelsLoaded, providerBaseURL, providerID, runCheckForDraft]);
 
   useEffect(() => {
     if (!providerID || !canEditEndpoint) {

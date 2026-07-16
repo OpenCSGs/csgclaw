@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
 import { patchCsgclawUserRequest } from "@/api/participants";
+import { isAuthenticated } from "@/models/auth";
 import { createTranslator } from "@/shared/i18n";
 import {
   agentMatchesUser,
@@ -13,6 +14,7 @@ import {
 import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
 import { MANAGER_AGENT_ID, MANAGER_AGENT_NAME, MANAGER_PARTICIPANT_ID } from "@/shared/constants/agents";
 import { WorkspacePaneTypes, WorkspaceTabs, paneFromLocation } from "@/models/routing";
+import { modelProviderCatalogForOpenCSGState } from "@/models/modelProviders";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
@@ -159,7 +161,7 @@ export function useWorkspaceController() {
     managerProfile,
     agents,
     agentsLoaded,
-    modelProviders,
+    modelProviders: rawModelProviders,
     modelProvidersLoaded,
     hubTemplates,
     hubLoaded,
@@ -226,6 +228,14 @@ export function useWorkspaceController() {
     workspaceTab,
   });
   const auth = useAuthController(t);
+  const modelProviders = useMemo(
+    () =>
+      modelProviderCatalogForOpenCSGState(rawModelProviders, {
+        aiGatewayBaseURL: auth.environment.aiGatewayBaseURL,
+        authenticated: isAuthenticated(auth.status),
+      }),
+    [auth.environment.aiGatewayBaseURL, auth.status, rawModelProviders],
+  );
   const connectors = useConnectorController(t);
   const { hub, refreshHubTemplates } = useWorkspaceHubController({
     hubLoaded,
@@ -839,11 +849,13 @@ export function useWorkspaceController() {
       onOpenConfigSettings: configSettings.openConfigModal,
       onOpenSettings: selectSettings,
       authStatus: auth.status,
+      authEnvironment: auth.environment,
       authBusy: auth.busy,
       authPending: auth.pending,
       authError: auth.error,
       onLogin: auth.login,
       onLogout: auth.logout,
+      onAuthEnvironmentChange: auth.setEnvironment,
     },
     authNotice: auth.notice,
     onDismissAuthNotice: auth.dismissNotice,

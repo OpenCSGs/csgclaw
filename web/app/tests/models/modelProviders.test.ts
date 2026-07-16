@@ -1,6 +1,7 @@
 import {
   modelProviderDisplayNameExists,
   modelProviderCatalogForAgentAvailability,
+  modelProviderCatalogForOpenCSGState,
   modelProviderOptionsFromCatalog,
   modelProviderSelectOptionsFromCatalog,
   normalizeModelProviderCatalog,
@@ -122,6 +123,38 @@ describe("model provider catalog helpers", () => {
     expect(filtered?.providers.map((provider) => provider.id)).toEqual(["opencsg"]);
     expect(modelProviderOptionsFromCatalog(filtered).map((option) => option.providerID)).toEqual(["opencsg"]);
     expect(modelProviderSelectOptionsFromCatalog(filtered).map((option) => option.id)).toEqual(["opencsg"]);
+  });
+
+  it("uses the selected OpenCSG environment and hides cached models while signed out", () => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "opencsg",
+          kind: "opencsg",
+          builtin: true,
+          display_name: "OpenCSG",
+          base_url: "https://ai.space.opencsg.com/v1",
+          models: ["prod-model"],
+          status: "connected",
+          message: "connected",
+          last_checked_at: "2026-07-16T09:00:00Z",
+        },
+      ],
+    });
+
+    const signedOut = modelProviderCatalogForOpenCSGState(catalog, {
+      aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1/",
+      authenticated: false,
+    });
+
+    expect(signedOut?.providers[0]).toMatchObject({
+      base_url: "https://aigateway.opencsg-stg.com/v1",
+      models: [],
+      status: "failed",
+      message: "OpenCSG sign-in is required",
+    });
+    expect(signedOut?.providers[0]?.last_checked_at).toBeUndefined();
+    expect(signedOut?.builtinProviders[0]).toBe(signedOut?.providers[0]);
   });
 
   it("maps OpenCSG aliases and avatar as a built-in provider", () => {

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { emptyAuthStatus } from "@/models/auth";
+import { defaultAuthEnvironmentDraft } from "@/models/authEnvironment";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { WorkspaceSidebar } from "@/pages/WorkspacePage/components/WorkspaceSidebar";
 import type { WorkspaceSidebarProps } from "@/pages/WorkspacePage/components/WorkspaceSidebar/types";
@@ -62,6 +63,7 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
     agentsError: "",
     appVersion: "0.0.0",
     authBusy: false,
+    authEnvironment: defaultAuthEnvironmentDraft(),
     authError: "",
     authPending: false,
     authStatus: emptyAuthStatus(),
@@ -102,6 +104,7 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
     modelProvidersLoaded: true,
     notificationAgentItems: [],
     onCollapseSidebar: vi.fn(),
+    onAuthEnvironmentChange: vi.fn(),
     onCreateAgent: vi.fn(),
     onCreateModelProvider: vi.fn(),
     onCreateNotificationParticipant: vi.fn(),

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, Monitor, Moon, SlidersHorizontal, Sun } from "lucide-react";
 import { Button, Select, Tooltip } from "@/components/ui";
@@ -22,27 +22,16 @@ import styles from "./SettingsPage.module.css";
 
 export function SettingsPage() {
   const controller = useWorkspaceControllerContext();
-  const [authEnvironmentDraft, setAuthEnvironmentDraft] =
+  const [uncontrolledAuthEnvironmentDraft, setUncontrolledAuthEnvironmentDraft] =
     useState<AuthEnvironmentDraft>(readStoredAuthEnvironmentDraft);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const sidebar = controller.sidebarProps;
-
-  useEffect(() => {
-    writeStoredAuthEnvironmentDraft(authEnvironmentDraft);
-  }, [authEnvironmentDraft]);
-
-  useEffect(() => {
-    const authStatus = sidebar?.authStatus;
-    if (!authStatus || !isAuthenticated(authStatus)) {
-      return;
-    }
-    setAuthEnvironmentDraft((current) => authEnvironmentDraftFromStatus(authStatus, current));
-  }, [sidebar?.authStatus]);
 
   if (!controller.ready || !sidebar) {
     return null;
   }
 
+  const authEnvironmentDraft = sidebar.authEnvironment ?? uncontrolledAuthEnvironmentDraft;
   const signedIn = isAuthenticated(sidebar.authStatus);
   const accountName =
     sidebar.authStatus.name ||
@@ -80,13 +69,20 @@ export function SettingsPage() {
     },
   ];
   const onLogin = sidebar.onLogin;
+  const onAuthEnvironmentChange = sidebar.onAuthEnvironmentChange;
+
+  function updateAuthEnvironment(next: AuthEnvironmentDraft) {
+    setUncontrolledAuthEnvironmentDraft(next);
+    writeStoredAuthEnvironmentDraft(next);
+    onAuthEnvironmentChange?.(next);
+  }
 
   function handleAuthEnvironmentPresetChange(preset: AuthEnvironmentPresetID) {
     if (preset === "custom") {
       setAdvancedOpen(true);
-      setAuthEnvironmentDraft((current) =>
-        current.preset === "custom"
-          ? current
+      updateAuthEnvironment(
+        authEnvironmentDraft.preset === "custom"
+          ? authEnvironmentDraft
           : {
               preset: "custom",
               opencsgBaseURL: "",
@@ -97,23 +93,22 @@ export function SettingsPage() {
       return;
     }
     setAdvancedOpen(false);
-    setAuthEnvironmentDraft(authEnvironmentDraftFromPreset(preset));
+    updateAuthEnvironment(authEnvironmentDraftFromPreset(preset));
   }
 
   function handleAuthEnvironmentInputChange(value: string) {
-    setAuthEnvironmentDraft((current) => ({
-      ...current,
+    updateAuthEnvironment({
+      ...authEnvironmentDraft,
       preset: "custom",
       opencsgBaseURL: value,
       csgHubBaseURL: "",
       aiGatewayBaseURL: "",
-    }));
+    });
   }
 
   function handleLogin() {
     const next = resolveAuthEnvironmentDraft(authEnvironmentDraft);
-    setAuthEnvironmentDraft(next);
-    writeStoredAuthEnvironmentDraft(next);
+    updateAuthEnvironment(next);
     void onLogin(next);
   }
 

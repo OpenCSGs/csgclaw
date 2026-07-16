@@ -45,12 +45,14 @@ type SidebarUserButtonProps = {
   onOpenUpgrade?: () => void;
   onOpenConfigSettings?: () => void;
   onOpenSettings?: () => void;
+  authEnvironment?: AuthEnvironmentDraft;
   authStatus?: AuthStatus | null;
   authBusy?: boolean;
   authPending?: boolean;
   authError?: string;
   onLogin?: (environment?: AuthEnvironmentDraft) => void | Promise<void>;
   onLogout?: () => void | Promise<void>;
+  onAuthEnvironmentChange?: (environment: AuthEnvironmentDraft) => void;
   t: TranslateFn;
 };
 
@@ -71,16 +73,18 @@ export function SidebarUserButton({
   onOpenUpgrade,
   onOpenConfigSettings,
   onOpenSettings,
+  authEnvironment,
   authStatus = null,
   authBusy = false,
   authPending = false,
   authError = "",
   onLogin,
   onLogout,
+  onAuthEnvironmentChange,
   t,
 }: SidebarUserButtonProps) {
   const [open, setOpen] = useState(false);
-  const [authEnvironmentDraft, setAuthEnvironmentDraft] =
+  const [uncontrolledAuthEnvironmentDraft, setUncontrolledAuthEnvironmentDraft] =
     useState<AuthEnvironmentDraft>(readStoredAuthEnvironmentDraft);
   const [accountPanelOpen, setAccountPanelOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -112,6 +116,7 @@ export function SidebarUserButton({
       }
     : null;
   const accountAuthenticated = isAuthenticated(authStatus);
+  const authEnvironmentDraft = authEnvironment ?? uncontrolledAuthEnvironmentDraft;
   const accountUserID = authStatus?.user_id || "";
   const accountUserName = authStatus?.name || "";
   const accountDisplayName = accountUserName || accountUserID || authStatus?.user_uuid || t("csghubSignedIn");
@@ -148,12 +153,20 @@ export function SidebarUserButton({
     setOpen((value) => !value);
   }
 
+  function updateAuthEnvironment(next: AuthEnvironmentDraft) {
+    if (authEnvironment === undefined) {
+      setUncontrolledAuthEnvironmentDraft(next);
+    }
+    writeStoredAuthEnvironmentDraft(next);
+    onAuthEnvironmentChange?.(next);
+  }
+
   function handleAuthEnvironmentPresetChange(preset: AuthEnvironmentPresetID) {
     if (preset === "custom") {
       setAdvancedOpen(true);
-      setAuthEnvironmentDraft((current) =>
-        current.preset === "custom"
-          ? current
+      updateAuthEnvironment(
+        authEnvironmentDraft.preset === "custom"
+          ? authEnvironmentDraft
           : {
               preset: "custom",
               opencsgBaseURL: "",
@@ -164,25 +177,22 @@ export function SidebarUserButton({
       return;
     }
     setAdvancedOpen(false);
-    setAuthEnvironmentDraft(authEnvironmentDraftFromPreset(preset));
+    updateAuthEnvironment(authEnvironmentDraftFromPreset(preset));
   }
 
   function handleAuthEnvironmentInputChange(value: string) {
-    setAuthEnvironmentDraft((current) => {
-      return {
-        ...current,
-        preset: "custom",
-        opencsgBaseURL: value,
-        csgHubBaseURL: "",
-        aiGatewayBaseURL: "",
-      };
+    updateAuthEnvironment({
+      ...authEnvironmentDraft,
+      preset: "custom",
+      opencsgBaseURL: value,
+      csgHubBaseURL: "",
+      aiGatewayBaseURL: "",
     });
   }
 
   function handleLogin() {
     const next = resolveAuthEnvironmentDraft(authEnvironmentDraft);
-    setAuthEnvironmentDraft(next);
-    writeStoredAuthEnvironmentDraft(next);
+    updateAuthEnvironment(next);
     onLogin?.(next);
   }
 
@@ -210,17 +220,6 @@ export function SidebarUserButton({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
-
-  useEffect(() => {
-    writeStoredAuthEnvironmentDraft(authEnvironmentDraft);
-  }, [authEnvironmentDraft]);
-
-  useEffect(() => {
-    if (!accountAuthenticated) {
-      return;
-    }
-    setAuthEnvironmentDraft((current) => authEnvironmentDraftFromStatus(authStatus, current));
-  }, [accountAuthenticated, authStatus]);
 
   return (
     <div ref={rootRef} className={classNames(styles.root, presentation === "row" ? styles.rootRow : styles.rootIcon)}>

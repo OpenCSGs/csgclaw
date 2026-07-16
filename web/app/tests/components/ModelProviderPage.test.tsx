@@ -243,6 +243,126 @@ describe("ModelProviderPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(onLogin).toHaveBeenCalledTimes(1);
+    expect(onLogin).toHaveBeenCalledWith();
+  });
+
+  it("keeps the selected stage gateway visible and delegates login to the shared environment state", async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+    renderModelProviderPage(
+      normalizeModelProviderCatalog({
+        providers: [
+          {
+            id: "opencsg",
+            kind: "csghub",
+            preset: "opencsg",
+            display_name: "OpenCSG",
+            builtin: true,
+            base_url: "https://aigateway.opencsg-stg.com/v1",
+            models: [],
+            status: "unknown",
+          },
+        ],
+      }),
+      "opencsg",
+      {
+        sidebarProps: {
+          authBusy: false,
+          authPending: false,
+          authStatus: { authenticated: false },
+          onLogin,
+        },
+      },
+    );
+
+    expect(screen.getAllByText("https://aigateway.opencsg-stg.com/v1")).toHaveLength(2);
+    await user.click(await screen.findByRole("button", { name: "Sign in" }));
+
+    expect(onLogin).toHaveBeenCalledWith();
+  });
+
+  it("loads OpenCSG models automatically after authentication", async () => {
+    vi.mocked(checkModelProvider).mockResolvedValueOnce({
+      id: "opencsg",
+      last_checked_at: "2026-07-16T09:00:00Z",
+      models: ["stage-model"],
+      status: "connected",
+    });
+    renderModelProviderPage(
+      normalizeModelProviderCatalog({
+        providers: [
+          {
+            id: "opencsg",
+            kind: "csghub",
+            preset: "opencsg",
+            display_name: "OpenCSG",
+            builtin: true,
+            base_url: "https://aigateway.opencsg-stg.com/v1",
+            models: [],
+            status: "unknown",
+          },
+        ],
+      }),
+      "opencsg",
+      {
+        sidebarProps: {
+          authBusy: false,
+          authPending: false,
+          authStatus: { authenticated: true },
+          onLogin: vi.fn(),
+        },
+      },
+    );
+
+    await waitFor(() =>
+      expect(checkModelProvider).toHaveBeenCalledWith("opencsg", {
+        api_key: "",
+        base_url: "https://aigateway.opencsg-stg.com/v1",
+      }),
+    );
+    expect(await screen.findByText("stage-model")).toBeInTheDocument();
+  });
+
+  it("clears rendered OpenCSG models when the provider catalog is cleared", async () => {
+    vi.mocked(checkModelProvider).mockResolvedValueOnce({
+      id: "opencsg",
+      last_checked_at: "2026-07-16T09:00:00Z",
+      models: [],
+      status: "failed",
+    });
+    const openCSGProvider = {
+      id: "opencsg",
+      kind: "csghub",
+      preset: "opencsg",
+      display_name: "OpenCSG",
+      builtin: true,
+      base_url: "https://aigateway.opencsg-stg.com/v1",
+      status: "connected",
+    };
+    const { rerenderWithCatalog } = renderModelProviderPage(
+      normalizeModelProviderCatalog({
+        providers: [{ ...openCSGProvider, models: ["stale-model"] }],
+      }),
+      "opencsg",
+      {
+        sidebarProps: {
+          authBusy: false,
+          authPending: false,
+          authStatus: { authenticated: true },
+          onLogin: vi.fn(),
+        },
+      },
+    );
+
+    expect(await screen.findByText("stale-model")).toBeInTheDocument();
+
+    rerenderWithCatalog(
+      normalizeModelProviderCatalog({
+        providers: [{ ...openCSGProvider, models: [], status: "failed" }],
+      }),
+    );
+
+    await waitFor(() => expect(screen.queryByText("stale-model")).not.toBeInTheDocument());
+    expect(screen.getAllByText("No models")).toHaveLength(2);
   });
 });

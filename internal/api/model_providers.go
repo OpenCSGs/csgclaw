@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/config"
 )
+
+var appCheckModelProvider = agent.CheckModelProvider
 
 type modelProviderRequest struct {
 	ID              string            `json:"id,omitempty"`
@@ -188,7 +191,7 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 	cfg.Models = cfg.Models.Normalized()
 	existing := cfg.Models.Providers[id]
 	merged := providerConfigFromRequest(existing, req, true).Resolved()
-	result := agent.CheckModelProvider(r.Context(), agent.ModelProviderCheckInput{
+	result := appCheckModelProvider(r.Context(), agent.ModelProviderCheckInput{
 		ID:      id,
 		BaseURL: merged.BaseURL,
 		APIKey:  merged.APIKey,
@@ -203,6 +206,31 @@ func (h *Handler) checkModelProvider(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
+	if h == nil || strings.TrimSpace(h.configPath) == "" {
+		return nil
+	}
+	cfg, path, err := h.loadBootstrapConfig()
+	if err != nil {
+		return err
+	}
+	cfg.Models = cfg.Models.Normalized()
+	existing := cfg.Models.Providers[agent.ModelProviderIDOpenCSG].Resolved()
+	result := appCheckModelProvider(ctx, agent.ModelProviderCheckInput{
+		ID:      agent.ModelProviderIDOpenCSG,
+		BaseURL: existing.BaseURL,
+		APIKey:  existing.APIKey,
+		Headers: existing.Headers,
+		Models:  existing.Models,
+	})
+	models, changed := agent.ApplyModelProviderCheckResult(cfg.Models, agent.ModelProviderIDOpenCSG, result)
+	if !changed {
+		return nil
+	}
+	cfg.Models = models
+	return h.saveModelProvidersConfig(path, cfg)
 }
 
 func providerConfigFromRequest(existing config.ProviderConfig, req modelProviderRequest, preserveSecret bool) config.ProviderConfig {

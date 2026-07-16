@@ -67,6 +67,11 @@ export type AgentModelProviderAvailability = {
   codexAvailable?: boolean;
 };
 
+export type OpenCSGModelProviderViewState = {
+  aiGatewayBaseURL: string;
+  authenticated: boolean;
+};
+
 type RawCatalog = {
   providers?: unknown;
 };
@@ -76,6 +81,38 @@ export function normalizeModelProviderCatalog(raw: RawCatalog | null | undefined
     .map(normalizeModelProvider)
     .filter((provider): provider is ModelProvider => Boolean(provider.id));
   providers.sort(compareModelProviders);
+  return {
+    providers,
+    builtinProviders: providers.filter((provider) => provider.builtin),
+    customProviders: providers.filter((provider) => !provider.builtin),
+  };
+}
+
+export function modelProviderCatalogForOpenCSGState(
+  catalog: ModelProviderCatalog | null | undefined,
+  state: OpenCSGModelProviderViewState,
+): ModelProviderCatalog | null {
+  if (!catalog) {
+    return null;
+  }
+  const aiGatewayBaseURL = state.aiGatewayBaseURL.trim().replace(/\/+$/, "");
+  const providers = catalog.providers.map((provider) => {
+    if (provider.id !== "opencsg") {
+      return provider;
+    }
+    return {
+      ...provider,
+      ...(aiGatewayBaseURL ? { base_url: aiGatewayBaseURL } : {}),
+      ...(!state.authenticated
+        ? {
+            last_checked_at: undefined,
+            message: "OpenCSG sign-in is required",
+            models: [],
+            status: "failed",
+          }
+        : {}),
+    };
+  });
   return {
     providers,
     builtinProviders: providers.filter((provider) => provider.builtin),

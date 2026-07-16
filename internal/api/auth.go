@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"csgclaw/internal/agent"
 	"csgclaw/internal/auth"
 )
 
@@ -82,6 +84,9 @@ func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, err.Error(), status)
 		return
+	}
+	if err := h.refreshOpenCSGModelProvider(r.Context()); err != nil {
+		slog.Warn("refresh OpenCSG models after login failed", "error", err)
 	}
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
@@ -156,7 +161,27 @@ func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if err := h.clearOpenCSGModelProviderCache(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) clearOpenCSGModelProviderCache() error {
+	if h == nil || strings.TrimSpace(h.configPath) == "" {
+		return nil
+	}
+	cfg, path, err := h.loadBootstrapConfig()
+	if err != nil {
+		return err
+	}
+	models, changed := agent.ClearModelProviderCachedState(cfg.Models, agent.ModelProviderIDOpenCSG)
+	if !changed {
+		return nil
+	}
+	cfg.Models = models
+	return h.saveModelProvidersConfig(path, cfg)
 }
 
 func authLocalCallbackURL(r *http.Request) string {

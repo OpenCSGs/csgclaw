@@ -9,10 +9,12 @@ import {
   authEnvironmentDraftFromStatus,
   authEnvironmentLoginPayload,
   defaultAuthEnvironmentDraft,
+  resolveAuthEnvironmentDraft,
 } from "@/models/authEnvironment";
 import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import type { TranslateFn } from "@/models/conversations";
 import { avatarFallbackText } from "@/shared/avatar";
+import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from "@/shared/storage/authEnvironment";
 import { workspaceQueryKeys } from "./workspaceQueries";
 
 const AUTH_LOGIN_PENDING_STORAGE_KEY = "csgclaw.auth.loginPending";
@@ -30,6 +32,7 @@ export type AuthNotice = {
 };
 
 export type AuthController = {
+  environment: AuthEnvironmentDraft;
   busy: boolean;
   dismissNotice: () => void;
   error: string;
@@ -37,6 +40,7 @@ export type AuthController = {
   logout: () => Promise<void>;
   notice: AuthNotice | null;
   pending: boolean;
+  setEnvironment: (environment: AuthEnvironmentDraft) => void;
   status: AuthStatus;
 };
 
@@ -46,6 +50,7 @@ export function useAuthController(t: TranslateFn): AuthController {
   const [authError, setAuthError] = useState("");
   const [authNotice, setAuthNotice] = useState<AuthNotice | null>(null);
   const [loginPending, setLoginPending] = useState(false);
+  const [selectedEnvironment, setSelectedEnvironment] = useState<AuthEnvironmentDraft>(readStoredAuthEnvironmentDraft);
 
   const statusQuery = useQuery({
     queryKey: workspaceQueryKeys.authStatus(),
@@ -54,6 +59,14 @@ export function useAuthController(t: TranslateFn): AuthController {
   });
 
   const status = useMemo(() => statusQuery.data ?? emptyAuthStatus(), [statusQuery.data]);
+  const environment = useMemo(
+    () => authEnvironmentDraftFromStatus(status, selectedEnvironment),
+    [selectedEnvironment, status],
+  );
+
+  const setEnvironment = useCallback((next: AuthEnvironmentDraft) => {
+    setSelectedEnvironment(resolveAuthEnvironmentDraft(next));
+  }, []);
 
   const setStatus = useCallback(
     (next: AuthStatus) => {
@@ -71,17 +84,18 @@ export function useAuthController(t: TranslateFn): AuthController {
   }, [queryClient]);
 
   const login = useCallback(
-    async (environment?: AuthEnvironmentDraft) => {
+    async (requestedEnvironment?: AuthEnvironmentDraft) => {
       if (busyAction) {
         return;
       }
       setBusyAction("login");
       setAuthError("");
       try {
-        const payload = environment ? authEnvironmentLoginPayload(environment) : undefined;
-        const loginResp = normalizeLoginResponse(
-          payload ? await beginAuthLogin(window.location.href, payload) : await beginAuthLogin(window.location.href),
-        );
+        const nextEnvironment = resolveAuthEnvironmentDraft(requestedEnvironment ?? environment);
+        setSelectedEnvironment(nextEnvironment);
+        writeStoredAuthEnvironmentDraft(nextEnvironment);
+        const payload = authEnvironmentLoginPayload(nextEnvironment);
+        const loginResp = normalizeLoginResponse(await beginAuthLogin(window.location.href, payload));
         if (!loginResp.login_url) {
           throw new Error(t("csghubLoginURLMissing"));
         }
@@ -96,7 +110,7 @@ export function useAuthController(t: TranslateFn): AuthController {
         setBusyAction("");
       }
     },
-    [busyAction, t],
+    [busyAction, environment, t],
   );
 
   const logout = useCallback(async () => {
@@ -129,6 +143,10 @@ export function useAuthController(t: TranslateFn): AuthController {
       setBusyAction("");
     }
   }, [busyAction, queryClient, setStatus, status.user_id, status.user_uuid, status.avatar, t]);
+
+  useEffect(() => {
+    writeStoredAuthEnvironmentDraft(environment);
+  }, [environment]);
 
   useEffect(() => {
     if (!loginPending) {
@@ -190,6 +208,7 @@ export function useAuthController(t: TranslateFn): AuthController {
   }, [queryClient, status, t]);
 
   return {
+    environment,
     busy: Boolean(busyAction),
     dismissNotice: () => setAuthNotice(null),
     error: authError || (statusQuery.isError ? errorMessage(statusQuery.error, t("csghubStatusFailed")) : ""),
@@ -197,6 +216,7 @@ export function useAuthController(t: TranslateFn): AuthController {
     logout,
     notice: authNotice,
     pending: loginPending,
+    setEnvironment,
     status,
   };
 }

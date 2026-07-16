@@ -415,6 +415,29 @@ func ApplyModelProviderCheckResult(llm config.LLMConfig, id string, result Model
 	return cfg, changed
 }
 
+func ClearModelProviderCachedState(llm config.LLMConfig, id string) (config.LLMConfig, bool) {
+	id = NormalizeModelProviderID(id)
+	if id == "" {
+		return llm, false
+	}
+	cfg := llm.Normalized()
+	existing, exists := cfg.Providers[id]
+	if !exists {
+		return llm, false
+	}
+	_, profileExists := cfg.Profiles[id]
+	if len(existing.Models) == 0 && existing.Status == "" && existing.Message == "" && existing.LastCheckedAt == "" && !profileExists {
+		return llm, false
+	}
+	existing.Models = nil
+	existing.Status = ""
+	existing.Message = ""
+	existing.LastCheckedAt = ""
+	cfg.Providers[id] = existing.Resolved()
+	delete(cfg.Profiles, id)
+	return cfg, true
+}
+
 func providerConfigWithCheckResult(id string, existing config.ProviderConfig, result ModelProviderCheckResult) config.ProviderConfig {
 	out := existing.Resolved()
 	out.Status = providerStatusOrUnknown(result.Status)

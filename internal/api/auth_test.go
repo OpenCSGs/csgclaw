@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/agent"
 	"csgclaw/internal/auth"
 )
 
@@ -151,6 +153,52 @@ func TestHandleAuthCallback(t *testing.T) {
 	}
 }
 
+func TestHandleAuthCallbackRefreshesOpenCSGModels(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	writeMinimalAPIConfig(t, configPath)
+	restoreCallback := stubAuthCallback(func(*http.Request, string) (string, error) {
+		return "http://127.0.0.1:18080/#/settings", nil
+	})
+	defer restoreCallback()
+	restoreCheck := stubModelProviderCheck(func(_ context.Context, input agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+		if input.ID != agent.ModelProviderIDOpenCSG {
+			t.Fatalf("provider ID = %q, want OpenCSG", input.ID)
+		}
+		return agent.ModelProviderCheckResult{
+			ID:            agent.ModelProviderIDOpenCSG,
+			Status:        agent.ModelProviderStatusConnected,
+			Message:       "connected",
+			Models:        []string{"stage-model", "stage-model-mini"},
+			LastCheckedAt: "2026-07-16T10:00:00Z",
+		}
+	})
+	defer restoreCheck()
+	handler := &Handler{}
+	handler.SetConfigPath(configPath)
+
+	callbackRec := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(callbackRec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback?jwt_token=jwt-value", nil))
+	if callbackRec.Code != http.StatusFound {
+		t.Fatalf("callback status = %d, want %d; body=%s", callbackRec.Code, http.StatusFound, callbackRec.Body.String())
+	}
+
+	providersRec := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(providersRec, httptest.NewRequest(http.MethodGet, "/api/v1/model-providers", nil))
+	if providersRec.Code != http.StatusOK {
+		t.Fatalf("providers status = %d, want %d; body=%s", providersRec.Code, http.StatusOK, providersRec.Body.String())
+	}
+	var got modelProviderTestResponse
+	if err := json.NewDecoder(providersRec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(got.Providers) == 0 || got.Providers[0].ID != agent.ModelProviderIDOpenCSG {
+		t.Fatalf("providers = %+v, want OpenCSG first", got.Providers)
+	}
+	if got.Providers[0].Status != agent.ModelProviderStatusConnected || len(got.Providers[0].Models) != 2 {
+		t.Fatalf("OpenCSG provider after callback = %+v, want refreshed models", got.Providers[0])
+	}
+}
+
 func TestHandleAuthLogout(t *testing.T) {
 	restore := stubAuthLogout(func(*http.Request) (auth.Status, error) {
 		return auth.Status{}, nil
@@ -168,6 +216,54 @@ func TestHandleAuthLogout(t *testing.T) {
 	}
 	if got.Authenticated {
 		t.Fatalf("response = %+v, want unauthenticated", got)
+	}
+}
+
+func TestHandleAuthLogoutClearsCachedOpenCSGModels(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+
+[models]
+default = "opencsg.prod-model"
+
+[models.providers.opencsg]
+models = ["prod-model"]
+status = "connected"
+message = "connected"
+last_checked_at = "2026-07-16T09:00:00Z"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+	restore := stubAuthLogout(func(*http.Request) (auth.Status, error) {
+		return auth.Status{}, nil
+	})
+	defer restore()
+	handler := &Handler{}
+	handler.SetConfigPath(configPath)
+
+	logoutRec := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(logoutRec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil))
+	if logoutRec.Code != http.StatusOK {
+		t.Fatalf("logout status = %d, want %d; body=%s", logoutRec.Code, http.StatusOK, logoutRec.Body.String())
+	}
+
+	providersRec := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(providersRec, httptest.NewRequest(http.MethodGet, "/api/v1/model-providers", nil))
+	if providersRec.Code != http.StatusOK {
+		t.Fatalf("providers status = %d, want %d; body=%s", providersRec.Code, http.StatusOK, providersRec.Body.String())
+	}
+	var got modelProviderTestResponse
+	if err := json.NewDecoder(providersRec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	if len(got.Providers) == 0 || got.Providers[0].ID != agent.ModelProviderIDOpenCSG {
+		t.Fatalf("providers = %+v, want OpenCSG first", got.Providers)
+	}
+	if len(got.Providers[0].Models) != 0 || got.Providers[0].Status != agent.ModelProviderStatusUnknown {
+		t.Fatalf("OpenCSG provider after logout = %+v, want cleared models and unknown status", got.Providers[0])
 	}
 }
 
@@ -193,4 +289,10 @@ func stubAuthLogout(fn func(*http.Request) (auth.Status, error)) func() {
 	previous := appAuthLogout
 	appAuthLogout = fn
 	return func() { appAuthLogout = previous }
+}
+
+func stubModelProviderCheck(fn agent.ModelProviderCheckFunc) func() {
+	previous := appCheckModelProvider
+	appCheckModelProvider = fn
+	return func() { appCheckModelProvider = previous }
 }

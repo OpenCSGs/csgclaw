@@ -227,3 +227,32 @@ func TestApplyModelProviderCheckResultDoesNotCreateDraftCustomProvider(t *testin
 		t.Fatal("draft custom provider was created during check")
 	}
 }
+
+func TestClearModelProviderCachedStateRemovesModelsAndCheckMetadata(t *testing.T) {
+	llm := config.LLMConfig{
+		Providers: map[string]config.ProviderConfig{
+			ModelProviderIDOpenCSG: {
+				Models:        []string{"prod-model"},
+				Status:        ModelProviderStatusConnected,
+				Message:       "connected",
+				LastCheckedAt: "2026-07-16T09:00:00Z",
+			},
+		},
+		Profiles: map[string]config.ModelConfig{
+			ModelProviderIDOpenCSG: {ModelID: "prod-model"},
+		},
+	}
+
+	got, changed := ClearModelProviderCachedState(llm, ModelProviderIDOpenCSG)
+
+	if !changed {
+		t.Fatal("ClearModelProviderCachedState() changed = false, want true")
+	}
+	provider := got.Providers[ModelProviderIDOpenCSG]
+	if len(provider.Models) != 0 || provider.Status != "" || provider.Message != "" || provider.LastCheckedAt != "" {
+		t.Fatalf("cleared provider = %+v, want no cached models or check metadata", provider)
+	}
+	if _, exists := got.Profiles[ModelProviderIDOpenCSG]; exists {
+		t.Fatal("stale generated OpenCSG profile was not removed")
+	}
+}
