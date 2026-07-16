@@ -25,13 +25,15 @@ export function handleSlashPickerNavigation({
   if (!pickerOpen) {
     return false;
   }
-  if (event.key === "ArrowDown" && candidates.length > 0) {
+  const controlNavigation = event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+  const navigationKey = event.key.toLowerCase();
+  if ((event.key === "ArrowDown" || (controlNavigation && navigationKey === "n")) && candidates.length > 0) {
     event.preventDefault();
     onPrepareNavigation?.();
     onIndexChange((activeIndex + 1) % candidates.length);
     return true;
   }
-  if (event.key === "ArrowUp" && candidates.length > 0) {
+  if ((event.key === "ArrowUp" || (controlNavigation && navigationKey === "p")) && candidates.length > 0) {
     event.preventDefault();
     onPrepareNavigation?.();
     onIndexChange((activeIndex - 1 + candidates.length) % candidates.length);

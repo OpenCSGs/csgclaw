@@ -16,6 +16,26 @@ type activityDecisionRequest struct {
 
 type ActivityDecider = activity.ActivityDecider
 
+func (h *Handler) handleChannelActivityAction(w http.ResponseWriter, r *http.Request) {
+	action := strings.TrimSpace(pathValue(r, "activity_action"))
+	switch {
+	case strings.HasSuffix(action, ":decide"):
+		h.handleChannelActivityDecision(w, r)
+	case strings.HasSuffix(action, ":respond"):
+		h.handleChannelUserInputResponse(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func channelActivityID(r *http.Request, actionSuffix string) string {
+	if activityID := strings.TrimSpace(pathValue(r, "activity_id")); activityID != "" {
+		return activityID
+	}
+	action := strings.TrimSpace(pathValue(r, "activity_action"))
+	return strings.TrimSpace(strings.TrimSuffix(action, actionSuffix))
+}
+
 func (h *Handler) handleChannelActivityDecision(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -31,7 +51,7 @@ func (h *Handler) handleChannelActivityDecision(w http.ResponseWriter, r *http.R
 		http.Error(w, "channel is required", http.StatusBadRequest)
 		return
 	}
-	activityID := strings.TrimSpace(pathValue(r, "activity_id"))
+	activityID := channelActivityID(r, ":decide")
 	if activityID == "" {
 		http.Error(w, "activity id is required", http.StatusBadRequest)
 		return

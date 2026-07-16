@@ -119,6 +119,18 @@
   transform: translateY(0);
 }
 
+.pending-question-badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: var(--warning-100);
+  color: var(--warning-800);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
 .conversation-delete-button:hover {
   background: rgba(254, 226, 226, 0.96);
   color: #b91c1c;

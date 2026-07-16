@@ -22,6 +22,7 @@ export function MessageContent({
   longMessageExpanded,
   onAction,
   onLongMessageExpandedChange,
+  onQuestionSelect,
   t,
 }: MessageContentProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -75,7 +76,7 @@ export function MessageContent({
   }
 
   if (activity) {
-    return <AgentActivityCard activity={activity} />;
+    return <AgentActivityCard activity={activity} onQuestionSelect={onQuestionSelect} t={t} />;
   }
 
   if (slashCommandText) {

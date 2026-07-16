@@ -101,6 +101,11 @@ export function renderSlashCommandPreviewText(content: unknown): string {
   return String(content ?? "");
 }
 
+export function isNewConversationSlashCommand(content: unknown): boolean {
+  const command = parseSlashCommand(content);
+  return Boolean(command?.name === "new" && (command.arg === "" || command.arg === "conversation"));
+}
+
 export function skillOptionsFromWorkspace(
   entries: readonly { name?: string; path?: string; type?: string }[],
 ): SlashSkillOption[] {

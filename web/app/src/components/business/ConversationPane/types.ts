@@ -94,6 +94,7 @@ export type ConversationPaneProps = {
   onSetThreadSlashIndex?: (index: number) => void;
   onSyncComposer: () => void;
   onThreadDraftChange: (segments: ComposerSegment[]) => void;
+  onThreadSlashQueryChange?: (query: string | null) => void;
   onToggleChannelTools: BooleanStateSetter;
   onToggleMemberList: BooleanStateSetter;
   onToggleToolCalls: BooleanStateSetter;

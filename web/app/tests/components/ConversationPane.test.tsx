@@ -8,6 +8,7 @@ import {
   CONVERSATION_ACTIVITY_PANEL_WIDTH_STORAGE_KEY,
 } from "@/shared/storage/keys";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
+import { agentToDraft } from "@/models/agents";
 import type { IMConversation, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import {
   getCollapsedSelectionTextOffset,
@@ -91,6 +92,40 @@ function toolActivityContent(summary: string) {
         title: "Run shell command",
       },
     },
+  });
+}
+
+function questionActivityContent(id = "request-1") {
+  return JSON.stringify({
+    type: CSGCLAW_AGENT_ACTIVITY_TYPE,
+    content: {
+      msgtype: AgentActivityMsgTypes.question,
+      body: "Question pending",
+      question: {
+        id,
+        status: "pending",
+        questions: [
+          {
+            id: "color",
+            header: "Color",
+            question: "Choose a color",
+            options: [{ label: "Blue", description: "Cool" }],
+          },
+          {
+            id: "detail",
+            header: "Detail",
+            question: "Add more detail",
+            options: [],
+          },
+        ],
+      },
+    },
+    channel: "csgclaw",
+    event_id: `question-${id}`,
+    origin_server_ts: 1,
+    room_id: "room-1",
+    sender: "manager",
+    version: 1,
   });
 }
 
@@ -376,6 +411,73 @@ describe("ConversationPane", () => {
     });
   });
 
+  it("advances after an option answer and lets the selected option be cleared", async () => {
+    const user = userEvent.setup();
+    const question = {
+      content: questionActivityContent(),
+      created_at: "2026-05-25T08:14:00Z",
+      id: "question-request-1",
+      sender_id: "u-manager",
+    };
+    renderThreadPane({
+      messages: [
+        {
+          content: "Hi! How can I help you today?",
+          created_at: "2026-05-25T08:13:00Z",
+          id: "msg-root",
+          sender_id: "u-manager",
+        },
+        question,
+      ],
+    });
+
+    expect(screen.getAllByText("Choose a color").length).toBeGreaterThan(0);
+    expect(screen.getByText("Choose a color", { selector: ".question-composer-prompt" })).toBeInTheDocument();
+    expect(screen.getByText("Choose a color", { selector: ".agent-question-prompt" })).toBeInTheDocument();
+    expect(document.querySelector(".message-bubble:has(> .agent-activity-card)")).toBeInTheDocument();
+    expect(screen.getByLabelText("questionFreeformAnswer")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+    expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Blue/ }));
+    await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Choose a color" })).not.toBeInTheDocument());
+    expect(screen.getByText("Add more detail", { selector: ".question-composer-prompt" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "questionPrevious" }));
+    const selectedOption = screen.getByRole("radio", { name: /Blue/ });
+    expect(selectedOption).toHaveAttribute("aria-checked", "true");
+    await user.click(selectedOption);
+    expect(screen.getByRole("radio", { name: /Blue/ })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("Choose a color", { selector: ".question-composer-prompt" })).toBeInTheDocument();
+  });
+
+  it("supports clearing a selected option in thread answer mode", async () => {
+    const user = userEvent.setup();
+    renderThreadPane({
+      replies: [
+        {
+          content: questionActivityContent("thread-request"),
+          created_at: "2026-05-25T08:14:00Z",
+          id: "question-thread-request",
+          sender_id: "u-manager",
+          relates_to: { rel_type: "m.thread", event_id: "msg-root" },
+        },
+      ],
+    });
+
+    expect(screen.getByLabelText("questionFreeformAnswer")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+    expect(screen.queryByRole("textbox", { name: "Reply in thread" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Blue/ }));
+    await user.click(screen.getByRole("button", { name: "questionPrevious" }));
+    const selectedOption = screen.getByRole("radio", { name: /Blue/ });
+    expect(selectedOption).toHaveAttribute("aria-checked", "true");
+    await user.click(selectedOption);
+    expect(screen.getByRole("radio", { name: /Blue/ })).toHaveAttribute("aria-checked", "false");
+  });
+
   it("hides legacy zero-reply thread summaries from the timeline", () => {
     const { container } = renderThreadPane({
       messages: [
@@ -532,6 +634,11 @@ describe("ConversationPane", () => {
     expect(dialog.querySelector(".agent-detail-side-panel-bar")?.firstElementChild).toBe(closeButton);
     await waitFor(() => expect(closeButton).toHaveFocus());
 
+    await user.hover(closeButton);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.queryByRole("tooltip", { name: "Close" })).not.toBeInTheDocument();
+    expect(closeButton).toHaveAttribute("aria-label", "Close");
+
     await user.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
 
@@ -543,6 +650,46 @@ describe("ConversationPane", () => {
     await user.click(within(dialog).getByRole("button", { name: "openDM" }));
     expect(onClose).toHaveBeenCalledWith(false);
     expect(onOpenDM).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }));
+  });
+
+  it("keeps avatar editing interactive inside the agent detail drawer", async () => {
+    const user = userEvent.setup();
+    const onDraftChange = vi.fn();
+    const item = {
+      id: "u-manager",
+      name: "manager",
+      role: "worker",
+      avatar: "avatar/3D-1.png",
+    };
+    const draft = agentToDraft(item);
+
+    renderThreadPane({
+      agentDetailPanelProps: {
+        item,
+        draft,
+        savedDraft: draft,
+        t,
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onDraftChange,
+        onInvite: vi.fn(),
+        onOpenDM: vi.fn(),
+        onRecreate: vi.fn(),
+        onSave: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+    });
+
+    const drawer = screen.getByRole("dialog", { name: "agentDetailPanel" });
+    await user.click(within(drawer).getByRole("button", { name: /editAvatar/ }));
+
+    const avatarEditor = within(drawer).getByRole("dialog", { name: "editAvatar" });
+    await user.click(within(avatarEditor).getByRole("radio", { name: "agentAvatarStyle3D 2" }));
+    await user.click(within(avatarEditor).getByRole("button", { name: "confirm" }));
+
+    expect(onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ avatar: "avatar/3D-2.png" }));
+    expect(screen.getByRole("dialog", { name: "agentDetailPanel" })).toBeInTheDocument();
   });
 
   it("keeps agent details open when unsaved changes block direct-message navigation", async () => {
@@ -575,7 +722,42 @@ describe("ConversationPane", () => {
     expect(onOpenDM).not.toHaveBeenCalled();
   });
 
-  it("keeps the caret at the end after slash text is tokenized in the main composer", async () => {
+  it("keeps nested agent skill dialogs inside the active drawer layer", async () => {
+    const user = userEvent.setup();
+    const item = {
+      id: "u-manager",
+      name: "manager",
+      role: "worker",
+    };
+    const draft = agentToDraft(item);
+    renderThreadPane({
+      agentDetailPanelProps: {
+        draft,
+        item,
+        savedDraft: draft,
+        skills: [{ name: "alpha", description: "Alpha skill" }],
+        t,
+        workspaceSupported: true,
+        onClose: vi.fn(),
+        onDelete: vi.fn(),
+        onDeleteSkill: vi.fn(),
+        onInvite: vi.fn(),
+        onOpenDM: vi.fn(),
+        onRecreate: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+    });
+
+    const drawer = screen.getByRole("dialog", { name: "agentDetailPanel" });
+    await user.click(within(drawer).getByRole("button", { name: /agentProfileSkillsTab/ }));
+    await user.click(within(drawer).getByRole("button", { name: "agentDeleteSkill" }));
+
+    const confirmation = screen.getByRole("dialog", { name: "agentDeleteSkill" });
+    expect(drawer).toContainElement(confirmation);
+  });
+
+  it("keeps the caret after a slash query typed before existing composer text", async () => {
     const user = userEvent.setup();
     const conversation: IMConversation = {
       id: "dm-1",
@@ -588,7 +770,9 @@ describe("ConversationPane", () => {
     function Harness() {
       const [showChannelTools, setShowChannelTools] = useState(false);
       const [showMemberList, setShowMemberList] = useState(false);
-      const [draftSegments, setDraftSegments] = useState<ComposerSegment[]>([]);
+      const [draftSegments, setDraftSegments] = useState<ComposerSegment[]>([
+        { type: "text", text: " existing prompt" },
+      ]);
       const editorRef = useRef<HTMLDivElement | null>(null);
 
       return (
@@ -668,11 +852,18 @@ describe("ConversationPane", () => {
 
     render(<Harness />);
     const editor = screen.getByLabelText("Message");
+    const existingText = editor.firstChild;
+    expect(existingText?.nodeType).toBe(Node.TEXT_NODE);
+    (editor as HTMLElement).focus();
+    const range = document.createRange();
+    range.setStart(existingText || editor, 0);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    await user.keyboard("/abc");
 
-    await user.click(editor);
-    await user.type(editor, "/abc");
-
-    expect(editor).toHaveTextContent("/abc");
+    expect(editor).toHaveTextContent("/abc existing prompt");
     expect(getCollapsedSelectionTextOffset(editor)).toBe(4);
   });
 

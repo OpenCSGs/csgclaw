@@ -76,28 +76,6 @@ export function createSlashTokenElement(value: unknown): HTMLSpanElement {
   return token;
 }
 
-const slashTokenPattern = /(^|[\s])\/[A-Za-z0-9._-]+(?!\/)/g;
-
-function splitTextSegmentBySlash(value: unknown): ComposerSegment[] {
-  const text = String(value ?? "");
-  const segments: ComposerSegment[] = [];
-  let last = 0;
-  for (const match of text.matchAll(slashTokenPattern)) {
-    const fullMatch = match[0] || "";
-    const matchText = fullMatch.trimStart();
-    const start = (match.index || 0) + (fullMatch.length - matchText.length);
-    if (start > last) {
-      segments.push({ type: "text", text: text.slice(last, start) });
-    }
-    segments.push({ type: "slash", text: matchText });
-    last = start + matchText.length;
-  }
-  if (last < text.length) {
-    segments.push({ type: "text", text: text.slice(last) });
-  }
-  return segments;
-}
-
 export function normalizeComposerSegmentsForDisplay(
   segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
 ): ComposerSegment[] {
@@ -114,7 +92,7 @@ export function normalizeComposerSegmentsForDisplay(
     if (!text) {
       continue;
     }
-    normalized.push(...splitTextSegmentBySlash(text));
+    normalized.push(segment.type === "slash" ? { type: "slash", text } : { type: "text", text });
   }
   return normalized;
 }
@@ -514,6 +492,25 @@ export function getComposerSlashState(root: HTMLElement | null | undefined): Com
     endOffset: context.offset,
     textNode: context.textNode,
   };
+}
+
+export function getComposerSlashQueryAtSelection(root: HTMLElement | null | undefined): string | null {
+  const selection = window.getSelection();
+  if (!root || !selection?.isCollapsed) {
+    return null;
+  }
+  const state = getComposerSlashState(root);
+  if (!state) {
+    return null;
+  }
+
+  const prefixRange = document.createRange();
+  prefixRange.selectNodeContents(root);
+  prefixRange.setEnd(state.textNode, state.startOffset);
+  if (prefixRange.toString().trim()) {
+    return null;
+  }
+  return state.query.toLowerCase();
 }
 
 export function replaceMentionQueryWithToken(

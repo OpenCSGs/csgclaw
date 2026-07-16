@@ -47,6 +47,7 @@ type BotThreadContextSummary struct {
 type SendMessageRequest struct {
 	RoomID       string                    `json:"room_id"`
 	Text         string                    `json:"text"`
+	MessageID    string                    `json:"message_id,omitempty"`
 	ThreadRootID string                    `json:"thread_root_id,omitempty"`
 	Metadata     map[string]any            `json:"metadata,omitempty"`
 	Attachments  []MessageAttachmentUpload `json:"attachments,omitempty"`

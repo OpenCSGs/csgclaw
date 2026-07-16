@@ -196,6 +196,21 @@ func (m *multiManager) PermissionDecider() runtimecodex.PermissionDecider {
 	return nil
 }
 
+func (m *multiManager) UserInputResponder() runtimecodex.UserInputBroker {
+	if m == nil {
+		return nil
+	}
+	for _, manager := range m.managers {
+		responder, ok := manager.(interface {
+			UserInputResponder() runtimecodex.UserInputBroker
+		})
+		if ok && responder.UserInputResponder() != nil {
+			return responder.UserInputResponder()
+		}
+	}
+	return nil
+}
+
 type csgclawManager struct {
 	agents    AgentLister
 	restarter AgentRestarter
@@ -209,7 +224,7 @@ func newCSGClawManager(deps managerDeps) *csgclawManager {
 		agents:    deps.agents,
 		restarter: deps.restarter,
 		runtime:   deps.runtime,
-		bridge:    codexbridge.NewService(deps.client, deps.runtime.SessionManager(), deps.events),
+		bridge:    codexbridge.NewService(deps.client, deps.runtime.SessionManager(), deps.events, deps.runtime.UserInputBroker()),
 		ensuring:  newEnsureGate(),
 	}
 }
@@ -287,6 +302,13 @@ func (m *csgclawManager) PermissionDecider() runtimecodex.PermissionDecider {
 	return m.runtime.PermissionBroker()
 }
 
+func (m *csgclawManager) UserInputResponder() runtimecodex.UserInputBroker {
+	if m == nil || m.runtime == nil {
+		return nil
+	}
+	return m.runtime.UserInputBroker()
+}
+
 type feishuManager struct {
 	agents              AgentLister
 	restarter           AgentRestarter
@@ -303,7 +325,7 @@ func newFeishuManager(deps managerDeps) *feishuManager {
 		agents:             deps.agents,
 		restarter:          deps.restarter,
 		runtime:            deps.runtime,
-		bridge:             codexbridge.NewService(deps.client, deps.runtime.SessionManager(), deps.events),
+		bridge:             codexbridge.NewService(deps.client, deps.runtime.SessionManager(), deps.events, deps.runtime.UserInputBroker()),
 		provider:           deps.provider,
 		ensuring:           newEnsureGate(),
 		activeParticipants: make(map[string]string),
@@ -416,6 +438,13 @@ func (m *feishuManager) PermissionDecider() runtimecodex.PermissionDecider {
 		return nil
 	}
 	return m.runtime.PermissionBroker()
+}
+
+func (m *feishuManager) UserInputResponder() runtimecodex.UserInputBroker {
+	if m == nil || m.runtime == nil {
+		return nil
+	}
+	return m.runtime.UserInputBroker()
 }
 
 func (m *feishuManager) participantIDForAgent(a agent.Agent) string {

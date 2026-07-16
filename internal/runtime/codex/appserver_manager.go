@@ -14,7 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/codexcli"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 const (
@@ -102,7 +104,6 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		appClient:             appClient,
 		conversationSessions:  make(map[string]string),
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
-		fallbackCompleted:     make(map[string]struct{}),
 		replayedExecCommands:  make(map[string]struct{}),
 		replayedAgentMessages: make(map[string]struct{}),
 	}
@@ -169,6 +170,9 @@ func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error
 	}
 	if m.deps.Permission != nil {
 		m.deps.Permission.CancelSession(runtimeID, "")
+	}
+	if m.deps.UserInput != nil {
+		m.deps.UserInput.CancelSession(runtimeID, "")
 	}
 	if live.appClient != nil {
 		live.appClient.closeAllPending(fmt.Errorf("codex app-server stopping"))
@@ -257,7 +261,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	live.appClient.logDebug("codex app-server turn start accepted",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
-		"turn_id", strings.TrimSpace(waiter.turnID),
+		"turn_id", waiter.currentTurnID(),
 		"duration", time.Since(turnStartAt),
 	)
 
@@ -267,9 +271,9 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		live.appClient.logDebug("codex app-server turn wait failed",
 			"runtime_id", runtimeID,
 			"thread_id", sessionID,
-			"turn_id", strings.TrimSpace(waiter.turnID),
+			"turn_id", waiter.currentTurnID(),
 			"duration", time.Since(waitStartAt),
-			"last_activity", strings.TrimSpace(waiter.lastActivity),
+			"last_activity", waiter.currentLastActivity(),
 			"error", err,
 		)
 		if m.deps.EventSink != nil {
@@ -280,7 +284,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	live.appClient.logDebug("codex app-server turn wait completed",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
-		"turn_id", strings.TrimSpace(waiter.turnID),
+		"turn_id", waiter.currentTurnID(),
 		"duration", time.Since(waitStartAt),
 		"stop_reason", strings.TrimSpace(resp.StopReason),
 	)
@@ -344,6 +348,9 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 
 	if m.deps.Permission != nil && sessionID != "" {
 		m.deps.Permission.CancelSession(runtimeID, sessionID)
+	}
+	if m.deps.UserInput != nil && sessionID != "" {
+		m.deps.UserInput.CancelSession(runtimeID, sessionID)
 	}
 	return nil
 }
@@ -500,7 +507,7 @@ func appServerTurnStartParams(spec SessionSpec, threadID string, prompt string) 
 	return params
 }
 
-func (m *appServerManager) handleAppServerServerRequest(_ string, _ *liveSession, req appServerServerRequest) (any, error) {
+func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *liveSession, req appServerServerRequest) (any, error) {
 	switch strings.TrimSpace(req.Method) {
 	case "item/commandExecution/requestApproval", "execCommandApproval":
 		return map[string]any{"decision": "accept"}, nil
@@ -512,9 +519,119 @@ func (m *appServerManager) handleAppServerServerRequest(_ string, _ *liveSession
 			"content": nil,
 			"_meta":   nil,
 		}, nil
+	case "item/tool/requestUserInput":
+		return m.handleAppServerUserInputRequest(runtimeID, live, req)
 	default:
 		return nil, fmt.Errorf("unhandled server request: %s", strings.TrimSpace(req.Method))
 	}
+}
+
+type appServerUserInputParams struct {
+	ThreadID         string                       `json:"threadId"`
+	TurnID           string                       `json:"turnId"`
+	ItemID           string                       `json:"itemId"`
+	Questions        []appServerUserInputQuestion `json:"questions"`
+	AutoResolutionMS *uint64                      `json:"autoResolutionMs"`
+}
+
+type appServerUserInputQuestion struct {
+	ID       string                     `json:"id"`
+	Header   string                     `json:"header"`
+	Question string                     `json:"question"`
+	Options  []appServerUserInputOption `json:"options"`
+	IsOther  bool                       `json:"isOther"`
+	IsSecret bool                       `json:"isSecret"`
+}
+
+type appServerUserInputOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+func (m *appServerManager) handleAppServerUserInputRequest(runtimeID string, live *liveSession, req appServerServerRequest) (any, error) {
+	if m.deps.UserInput == nil {
+		return nil, fmt.Errorf("user input broker is not configured")
+	}
+	var params appServerUserInputParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, fmt.Errorf("decode request_user_input params: %w", err)
+	}
+	params.ThreadID = strings.TrimSpace(params.ThreadID)
+	params.TurnID = strings.TrimSpace(params.TurnID)
+	params.ItemID = strings.TrimSpace(params.ItemID)
+	if params.ThreadID == "" || params.TurnID == "" || params.ItemID == "" {
+		return nil, fmt.Errorf("request_user_input requires threadId, turnId, and itemId")
+	}
+	if live == nil || !live.appServerTracksThread(params.ThreadID) {
+		return nil, fmt.Errorf("request_user_input references unknown thread %q", params.ThreadID)
+	}
+	questions := make([]activity.UserInputQuestionSnapshot, 0, len(params.Questions))
+	for _, question := range params.Questions {
+		options := make([]activity.UserInputOptionSnapshot, 0, len(question.Options))
+		for _, option := range question.Options {
+			options = append(options, activity.UserInputOptionSnapshot{
+				Label:       option.Label,
+				Description: option.Description,
+			})
+		}
+		questions = append(questions, activity.UserInputQuestionSnapshot{
+			ID:       question.ID,
+			Header:   question.Header,
+			Question: question.Question,
+			Options:  options,
+			IsOther:  question.IsOther,
+			IsSecret: question.IsSecret,
+		})
+	}
+	var autoResolve time.Duration
+	if params.AutoResolutionMS != nil {
+		if *params.AutoResolutionMS < 60_000 || *params.AutoResolutionMS > 240_000 {
+			return nil, fmt.Errorf("autoResolutionMs must be between 60000 and 240000")
+		}
+		autoResolve = time.Duration(*params.AutoResolutionMS) * time.Millisecond
+	}
+	live.notifyAppServerTurn(params.ThreadID, appServerTurnResult{
+		activity:       "request_user_input:pending",
+		progress:       true,
+		userInputDelta: 1,
+	})
+	defer live.notifyAppServerTurn(params.ThreadID, appServerTurnResult{
+		activity:       "request_user_input:resolved",
+		userInputDelta: -1,
+	})
+	decision, err := m.deps.UserInput.Request(context.Background(), PendingUserInputRequest{
+		Execution: activity.ExecutionRef{
+			RuntimeKind: agentruntime.KindCodex,
+			RuntimeID:   runtimeID,
+			SessionID:   params.ThreadID,
+			TurnID:      params.TurnID,
+			ToolCallID:  params.ItemID,
+			ToolKind:    "request_user_input",
+		},
+		ServerRequestID: appServerRequestID(req.ID),
+		Questions:       questions,
+		RequestedAt:     time.Now().UTC(),
+		AutoResolve:     autoResolve,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return decision.Response, nil
+}
+
+func appServerRequestID(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return strings.TrimSpace(text)
+	}
+	var number int64
+	if json.Unmarshal(raw, &number) == nil {
+		return fmt.Sprintf("%d", number)
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 func appServerReasoningConfig(effort string) map[string]any {
@@ -609,24 +726,26 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
+	mu            sync.RWMutex
 	threadID      string
 	turnID        string
 	ch            chan appServerTurnResult
-	started       bool
-	progress      bool
 	lastActivity  string
-	lastUpdatedAt time.Time
+	pendingInputs int
 }
 
 type appServerTurnResult struct {
-	success           bool
-	stopReason        string
-	err               error
-	turnID            string
-	activity          string
-	started           bool
-	progress          bool
-	assistantActivity bool
+	success               bool
+	stopReason            string
+	err                   error
+	turnID                string
+	activity              string
+	started               bool
+	progress              bool
+	assistantActivity     bool
+	userInputStateChanged bool
+	waitingForUser        bool
+	userInputDelta        int
 }
 
 func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTurnWaiter, error) {
@@ -643,10 +762,9 @@ func (s *liveSession) registerAppServerTurnWaiter(threadID string) (*appServerTu
 		return nil, fmt.Errorf("codex turn already in progress for thread %s", threadID)
 	}
 	waiter := &appServerTurnWaiter{
-		threadID:      threadID,
-		ch:            make(chan appServerTurnResult, 8),
-		lastActivity:  "turn/start",
-		lastUpdatedAt: time.Now().UTC(),
+		threadID:     threadID,
+		ch:           make(chan appServerTurnResult, 8),
+		lastActivity: "turn/start",
 	}
 	s.turnWaiters[threadID] = waiter
 	return waiter, nil
@@ -667,24 +785,17 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	}
 	s.mu.Lock()
 	waiter := s.turnWaiters[threadID]
-	if waiter != nil {
-		if result.turnID != "" {
-			waiter.turnID = result.turnID
-		}
-		if result.activity != "" {
-			waiter.lastActivity = result.activity
-			waiter.lastUpdatedAt = time.Now().UTC()
-		}
-		if result.started {
-			waiter.started = true
-		}
-		if result.progress {
-			waiter.progress = true
-		}
-	}
 	s.mu.Unlock()
 	if waiter == nil {
 		return false
+	}
+	waiter.apply(&result)
+	if result.userInputStateChanged {
+		select {
+		case waiter.ch <- result:
+		case <-s.done:
+		}
+		return true
 	}
 	select {
 	case waiter.ch <- result:
@@ -693,39 +804,54 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	return true
 }
 
-func (s *liveSession) markFallbackCompleted(threadID string) {
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.fallbackCompleted == nil {
-		s.fallbackCompleted = make(map[string]struct{})
-	}
-	s.fallbackCompleted[threadID] = struct{}{}
-}
-
-func (s *liveSession) consumeFallbackCompleted(threadID string) bool {
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.fallbackCompleted[threadID]; !ok {
-		return false
-	}
-	delete(s.fallbackCompleted, threadID)
-	return true
-}
-
 func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	turnID = strings.TrimSpace(turnID)
 	if turnID == "" {
 		return
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.turnID = turnID
+}
+
+func (w *appServerTurnWaiter) apply(result *appServerTurnResult) {
+	if w == nil || result == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if result.turnID != "" {
+		w.turnID = strings.TrimSpace(result.turnID)
+	}
+	if result.activity != "" {
+		w.lastActivity = strings.TrimSpace(result.activity)
+	}
+	if result.userInputDelta != 0 {
+		w.pendingInputs += result.userInputDelta
+		if w.pendingInputs < 0 {
+			w.pendingInputs = 0
+		}
+		result.userInputStateChanged = true
+		result.waitingForUser = w.pendingInputs > 0
+	}
+}
+
+func (w *appServerTurnWaiter) currentTurnID() string {
+	if w == nil {
+		return ""
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return strings.TrimSpace(w.turnID)
+}
+
+func (w *appServerTurnWaiter) currentLastActivity() string {
+	if w == nil {
+		return ""
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return strings.TrimSpace(w.lastActivity)
 }
 
 func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSession, waiter *appServerTurnWaiter) (PromptResponse, error) {
@@ -738,13 +864,18 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 		noProgressTimeout = semanticTimeout
 	}
 	semanticTimer := time.NewTimer(semanticTimeout)
+	semanticC := semanticTimer.C
 	defer semanticTimer.Stop()
 	maximumDuration := appServerMaximumTurnDuration
 	var maximumTimer *time.Timer
 	var maximumC <-chan time.Time
+	var maximumRemaining time.Duration
+	var maximumStartedAt time.Time
 	if maximumDuration > 0 {
 		maximumTimer = time.NewTimer(maximumDuration)
 		maximumC = maximumTimer.C
+		maximumRemaining = maximumDuration
+		maximumStartedAt = time.Now()
 		defer maximumTimer.Stop()
 	}
 
@@ -752,6 +883,7 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 	var noProgressC <-chan time.Time
 	waitStartedAt := time.Now()
 	lastActivityAt := waitStartedAt
+	waitingForUser := false
 	stopNoProgress := func() {
 		if noProgressTimer == nil {
 			return
@@ -774,18 +906,67 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 			}
 		}
 		semanticTimer.Reset(semanticTimeout)
+		semanticC = semanticTimer.C
+	}
+	pauseSemantic := func() {
+		if !semanticTimer.Stop() {
+			select {
+			case <-semanticTimer.C:
+			default:
+			}
+		}
+		semanticC = nil
+	}
+	pauseMaximum := func(now time.Time) {
+		if maximumTimer == nil || maximumC == nil {
+			return
+		}
+		maximumRemaining -= now.Sub(maximumStartedAt)
+		if maximumRemaining < 0 {
+			maximumRemaining = 0
+		}
+		if !maximumTimer.Stop() {
+			select {
+			case <-maximumTimer.C:
+			default:
+			}
+		}
+		maximumC = nil
+	}
+	resumeMaximum := func(now time.Time) {
+		if maximumTimer == nil || maximumC != nil {
+			return
+		}
+		remaining := maximumRemaining
+		if remaining <= 0 {
+			remaining = time.Nanosecond
+		}
+		maximumStartedAt = now
+		maximumTimer.Reset(remaining)
+		maximumC = maximumTimer.C
 	}
 
 	for {
 		select {
 		case result := <-waiter.ch:
+			if result.userInputStateChanged && result.waitingForUser != waitingForUser {
+				now := time.Now()
+				waitingForUser = result.waitingForUser
+				if waitingForUser {
+					pauseSemantic()
+					pauseMaximum(now)
+				} else {
+					resetSemantic()
+					resumeMaximum(now)
+				}
+			}
 			if result.activity != "" {
 				now := time.Now()
 				if live.appClient != nil {
 					live.appClient.logDebug("codex app-server turn activity",
 						"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
 						"thread_id", strings.TrimSpace(waiter.threadID),
-						"turn_id", strings.TrimSpace(waiter.turnID),
+						"turn_id", waiter.currentTurnID(),
 						"activity", strings.TrimSpace(result.activity),
 						"elapsed", now.Sub(waitStartedAt),
 						"since_previous_activity", now.Sub(lastActivityAt),
@@ -795,13 +976,18 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 					)
 				}
 				lastActivityAt = now
-				resetSemantic()
+				if !waitingForUser {
+					resetSemantic()
+				}
 			}
 			if result.started && noProgressTimeout > 0 && noProgressTimer == nil {
 				noProgressTimer = time.NewTimer(noProgressTimeout)
 				noProgressC = noProgressTimer.C
 			}
 			if result.progress || result.assistantActivity {
+				stopNoProgress()
+			}
+			if result.userInputStateChanged {
 				stopNoProgress()
 			}
 			if result.err != nil {
@@ -819,20 +1005,20 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 				live.appClient.logDebug("codex app-server turn no progress timeout",
 					"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
 					"thread_id", strings.TrimSpace(waiter.threadID),
-					"turn_id", strings.TrimSpace(waiter.turnID),
+					"turn_id", waiter.currentTurnID(),
 					"timeout", noProgressTimeout,
-					"last_activity", strings.TrimSpace(waiter.lastActivity),
+					"last_activity", waiter.currentLastActivity(),
 				)
 			}
 			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "initial assistant activity", noProgressTimeout)
-		case <-semanticTimer.C:
+		case <-semanticC:
 			if live.appClient != nil {
 				live.appClient.logDebug("codex app-server turn semantic inactivity timeout",
 					"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
 					"thread_id", strings.TrimSpace(waiter.threadID),
-					"turn_id", strings.TrimSpace(waiter.turnID),
+					"turn_id", waiter.currentTurnID(),
 					"timeout", semanticTimeout,
-					"last_activity", strings.TrimSpace(waiter.lastActivity),
+					"last_activity", waiter.currentLastActivity(),
 				)
 			}
 			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "app-server inactivity", semanticTimeout)
@@ -851,15 +1037,18 @@ func (m *appServerManager) failTimedOutAppServerTurn(live *liveSession, waiter *
 }
 
 func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string) {
+	if m.deps.UserInput != nil {
+		m.deps.UserInput.CancelSession(live.spec.RuntimeID, waiter.threadID)
+	}
 	interruptErr := m.interruptAppServerTurn(live, waiter)
 	stderrTail := m.stderrTail(live.spec, 2048)
 	if live.appClient != nil {
 		live.appClient.logError("codex app-server turn stopped",
 			"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
 			"thread_id", strings.TrimSpace(waiter.threadID),
-			"turn_id", strings.TrimSpace(waiter.turnID),
+			"turn_id", waiter.currentTurnID(),
 			"reason", strings.TrimSpace(reason),
-			"last_activity", strings.TrimSpace(waiter.lastActivity),
+			"last_activity", waiter.currentLastActivity(),
 			"interrupt_error", interruptErr,
 			"stderr_tail", stderrTail,
 		)
@@ -882,7 +1071,7 @@ func (m *appServerManager) interruptAppServerTurn(live *liveSession, waiter *app
 		return fmt.Errorf("codex app-server client is unavailable")
 	}
 	threadID := strings.TrimSpace(waiter.threadID)
-	turnID := strings.TrimSpace(waiter.turnID)
+	turnID := waiter.currentTurnID()
 	if threadID == "" || turnID == "" {
 		return fmt.Errorf("codex app-server turn identity is incomplete")
 	}
@@ -950,6 +1139,9 @@ func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSess
 	}
 	if m.deps.Permission != nil {
 		m.deps.Permission.CancelSession(runtimeID, "")
+	}
+	if m.deps.UserInput != nil {
+		m.deps.UserInput.CancelSession(runtimeID, "")
 	}
 	if live.stderr != nil {
 		_ = live.stderr.Close()

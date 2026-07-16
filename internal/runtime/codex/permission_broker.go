@@ -353,6 +353,7 @@ func normalizedExecutionRef(ref activity.ExecutionRef) activity.ExecutionRef {
 		RuntimeKind: strings.TrimSpace(ref.RuntimeKind),
 		RuntimeID:   strings.TrimSpace(ref.RuntimeID),
 		SessionID:   strings.TrimSpace(ref.SessionID),
+		TurnID:      strings.TrimSpace(ref.TurnID),
 		ToolCallID:  strings.TrimSpace(ref.ToolCallID),
 		ToolKind:    strings.TrimSpace(ref.ToolKind),
 	}

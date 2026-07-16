@@ -178,6 +178,67 @@ describe("useConversationController", () => {
     expect(result.current.conversationViewProps.activeThreadView).toBeNull();
   });
 
+  it("keeps the thread root anchored while the thread panel opens and closes", async () => {
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 0),
+    );
+    vi.stubGlobal("cancelAnimationFrame", (handle: number) => window.clearTimeout(handle));
+    try {
+      const root: IMMessage = {
+        id: "msg-root",
+        content: "Start here",
+        created_at: "2026-07-14T09:29:00Z",
+        sender_id: "u-admin",
+      };
+      const data = dataWithMessages([root]);
+      const { result, rerender } = renderConversationController({ data, messageListActive: false });
+      const messageList = createScrollableMessageList(3000, 400);
+      let rootDocumentTop = 860;
+      const rootRow = document.createElement("div");
+      rootRow.className = "message-row";
+      rootRow.dataset.messageId = root.id;
+      rootRow.getBoundingClientRect = () => new DOMRect(0, rootDocumentTop - messageList.scrollTop, 100, 40);
+      messageList.appendChild(rootRow);
+      result.current.conversationViewProps.messageListRef.current = messageList;
+      rerender({ data, messageListActive: true });
+      await act(async () => {
+        await nextAnimationFrame();
+        await nextAnimationFrame();
+      });
+
+      act(() => {
+        messageList.scrollTop = 600;
+        messageList.dispatchEvent(new Event("scroll"));
+      });
+      await act(async () => {
+        await nextAnimationFrame();
+      });
+
+      await act(async () => {
+        const opening = result.current.conversationViewProps.onOpenThread(root);
+        rootDocumentTop += 1000;
+        await opening;
+      });
+      await act(async () => {
+        await nextAnimationFrame();
+        await nextAnimationFrame();
+      });
+      expect(messageList.scrollTop).toBe(1600);
+
+      act(() => {
+        result.current.conversationViewProps.onCloseThread();
+        rootDocumentTop -= 1000;
+      });
+      await act(async () => {
+        await nextAnimationFrame();
+        await nextAnimationFrame();
+      });
+      expect(messageList.scrollTop).toBe(600);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("loads a persisted thread when the root already has replies", async () => {
     const root: IMMessage = {
       id: "msg-root",
@@ -275,6 +336,47 @@ describe("useConversationController", () => {
     expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
   });
 
+  it("clears the working participant after sending /new", async () => {
+    apiMocks.sendMessageRequest
+      .mockResolvedValueOnce({
+        id: "msg-user",
+        content: "hi",
+        created_at: "2026-06-16T10:00:00Z",
+        sender_id: "u-admin",
+      })
+      .mockResolvedValueOnce({
+        id: "msg-new",
+        content: '<slash-command name="new" arg="conversation"></slash-command>',
+        created_at: "2026-06-16T10:00:10Z",
+        sender_id: "u-admin",
+      });
+    const { result } = renderConversationController();
+    const editor = document.createElement("div");
+    editor.textContent = "hi";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+    expect(result.current.conversationViewProps.workingParticipants).toEqual([{ id: "u-demo", name: "demo" }]);
+
+    act(() => {
+      editor.textContent = "/new";
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(apiMocks.sendMessageRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({ content: '<slash-command name="new" arg="conversation"></slash-command>' }),
+    );
+    expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
+  });
+
   it("keeps a sent direct message working participant past the local timeout until the agent replies", async () => {
     vi.useFakeTimers();
     try {
@@ -359,6 +461,34 @@ describe("useConversationController", () => {
 
     rerender({ messageListActive: true });
 
+    expect(messageList.scrollTop).toBe(900);
+  });
+
+  it("scrolls to the bottom when an already-active message list mounts after reload data arrives", async () => {
+    const { result, rerender } = renderConversationController({
+      data: dataWithMessages([]),
+      messageListActive: true,
+    });
+    const messageList = createScrollableMessageList(900, 240);
+
+    expect(messageList.scrollTop).toBe(0);
+    result.current.conversationViewProps.messageListRef.current = messageList;
+
+    rerender({
+      data: dataWithMessages([
+        {
+          id: "msg-after-reload",
+          content: "latest message",
+          created_at: "2026-07-15T08:00:00Z",
+          sender_id: "u-demo",
+        },
+      ]),
+      messageListActive: true,
+    });
+
+    await act(async () => {
+      await nextAnimationFrame();
+    });
     expect(messageList.scrollTop).toBe(900);
   });
 

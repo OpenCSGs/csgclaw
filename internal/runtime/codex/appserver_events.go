@@ -28,6 +28,16 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 	if params == nil {
 		params = map[string]any{}
 	}
+	if note.Method == "serverRequest/resolved" {
+		if m.deps.UserInput != nil {
+			m.deps.UserInput.CancelServerRequest(
+				runtimeID,
+				appServerString(params, "threadId"),
+				appServerRequestIDValue(params["requestId"]),
+			)
+		}
+		return
+	}
 
 	if note.Method == "codex/response_item" {
 		m.handleLegacyResponseItemEvent(runtimeID, live, params)
@@ -42,6 +52,18 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 	if protocol == appServerProtocolRaw {
 		m.handleRawAppServerNotification(runtimeID, live, note.Method, params)
 	}
+}
+
+func appServerRequestIDValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case float64:
+		if typed == float64(int64(typed)) {
+			return fmt.Sprintf("%d", int64(typed))
+		}
+	}
+	return ""
 }
 
 func (s *liveSession) appServerProtocol(method string) string {
@@ -100,19 +122,12 @@ func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSe
 	switch status {
 	case "", "completed", "success", "succeeded":
 		if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, turnID: turnID, activity: "turn:completed"}) {
-			if live.consumeFallbackCompleted(threadID) {
-				if live.appClient != nil {
-					live.appClient.logDebug("codex app-server ignored duplicate turn completion after agent message",
-						"runtime_id", runtimeID,
-						"thread_id", threadID,
-						"turn_id", turnID,
-					)
-				}
-				return
-			}
 			m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
 		}
 	case "cancelled", "canceled", "aborted", "interrupted":
+		if m.deps.UserInput != nil {
+			m.deps.UserInput.CancelSession(runtimeID, threadID)
+		}
 		err := fmt.Errorf("codex turn %s", status)
 		if !live.notifyAppServerTurn(threadID, appServerTurnResult{err: err, turnID: turnID, activity: "turn:" + status}) {
 			m.publishAppServerEvent(SessionEvent{
@@ -324,16 +339,6 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 				Text:      text,
 				Payload:   item,
 			})
-		}
-		if live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, activity: "item:agentMessage:completed", progress: true}) {
-			live.markFallbackCompleted(threadID)
-			if live.appClient != nil {
-				live.appClient.logDebug("codex app-server completed turn from agent message",
-					"runtime_id", runtimeID,
-					"thread_id", threadID,
-					"item_id", itemID,
-				)
-			}
 		}
 	}
 }

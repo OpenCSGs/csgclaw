@@ -218,7 +218,7 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Post("/messages", h.createParticipantMessage)
 			r.Post("/notifications", h.createParticipantNotification)
 		})
-		r.Post("/{channel}/activities/{activity_id}:decide", h.handleChannelActivityDecision)
+		r.Post("/{channel}/activities/{activity_action}", h.handleChannelActivityAction)
 
 		// CSGClaw channel IM routes.
 		r.Route("/csgclaw/users", func(r chi.Router) {

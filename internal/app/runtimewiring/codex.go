@@ -19,6 +19,7 @@ func WithCodexRuntime() agent.ServiceOption {
 		host := s.PicoClawRuntimeHost()
 		events := runtimecodex.NewEventSink()
 		permissions := runtimecodex.NewPermissionBroker(events)
+		userInputs := runtimecodex.NewUserInputBroker(events)
 		rt := runtimecodex.New(runtimecodex.Dependencies{
 			BinaryProvider: codexcli.Provider{},
 			ResolveAgent: func(h agentruntime.Handle) (runtimecodex.AgentRef, error) {
@@ -44,6 +45,7 @@ func WithCodexRuntime() agent.ServiceOption {
 			AgentHome:  host.AgentHome,
 			EventSink:  events,
 			Permission: permissions,
+			UserInput:  userInputs,
 		})
 		return agent.WithRuntime(rt)(s)
 	}

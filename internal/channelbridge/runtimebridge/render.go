@@ -15,6 +15,7 @@ const (
 	AgentActivityType    = "com.opencsg.csgclaw.agent.activity"
 	AgentToolMsgType     = "com.opencsg.csgclaw.agent.tool"
 	AgentActionMsgType   = "com.opencsg.csgclaw.agent.action"
+	AgentQuestionMsgType = "com.opencsg.csgclaw.agent.question"
 )
 
 type TurnRenderer struct {
@@ -92,6 +93,15 @@ func (r *TurnRenderer) RenderActivity(event activity.RuntimeEvent, channel, room
 			event.ActionID = snapshot.ID
 		}
 		return renderActivityPayload(event, channel, roomID, senderID, actionActivityContent(event, snapshot))
+	case activity.RuntimeEventUserInputRequest, activity.RuntimeEventUserInputResolved:
+		snapshot, ok := event.Payload.(activity.UserInputSnapshot)
+		if !ok {
+			return RenderedActivity{}, false
+		}
+		if event.UserInputID == "" {
+			event.UserInputID = snapshot.ID
+		}
+		return renderActivityPayload(event, channel, roomID, senderID, questionActivityContent(snapshot))
 	default:
 		return RenderedActivity{}, false
 	}
@@ -205,6 +215,12 @@ type actionActivity struct {
 	Action  activityAction `json:"action"`
 }
 
+type questionActivity struct {
+	MsgType  string                     `json:"msgtype"`
+	Body     string                     `json:"body"`
+	Question activity.UserInputSnapshot `json:"question"`
+}
+
 type activityAction struct {
 	ID          string                           `json:"id"`
 	Kind        string                           `json:"kind"`
@@ -259,6 +275,27 @@ func actionActivityContent(event activity.RuntimeEvent, snapshot activity.Activi
 	}
 }
 
+func questionActivityContent(snapshot activity.UserInputSnapshot) questionActivity {
+	body := "Question pending"
+	switch snapshot.Status {
+	case activity.UserInputStatusAnswered:
+		body = "Question answered"
+	case activity.UserInputStatusSkipped:
+		body = "Question skipped"
+	case activity.UserInputStatusExpired:
+		body = "Question expired"
+	case activity.UserInputStatusCanceled:
+		body = "Question canceled"
+	case activity.UserInputStatusInterrupted:
+		body = "Question interrupted"
+	}
+	return questionActivity{
+		MsgType:  AgentQuestionMsgType,
+		Body:     body,
+		Question: snapshot,
+	}
+}
+
 func mergeString(target *string, value string) {
 	value = strings.TrimSpace(value)
 	if value != "" {
@@ -278,6 +315,9 @@ func toolSignature(tool activityTool) string {
 }
 
 func activityEventID(event activity.RuntimeEvent) string {
+	if event.UserInputID != "" {
+		return joinActivityIDParts([]string{"question", strings.TrimSpace(event.UserInputID)})
+	}
 	if event.ActionID != "" {
 		return joinActivityIDParts([]string{"act", strings.TrimSpace(event.ActionID)})
 	}
@@ -292,6 +332,35 @@ func activityEventID(event activity.RuntimeEvent) string {
 		parts = append(parts, fmt.Sprintf("%d", event.ReceivedAt.UnixNano()))
 	}
 	return joinActivityIDParts(parts)
+}
+
+// InterruptPendingQuestionActivity converts a persisted question that can no
+// longer have a live app-server request into a terminal interrupted snapshot.
+func InterruptPendingQuestionActivity(content string, now time.Time) (string, bool) {
+	var payload map[string]any
+	if json.Unmarshal([]byte(strings.TrimSpace(content)), &payload) != nil || payload["type"] != AgentActivityType {
+		return content, false
+	}
+	activityContent, ok := payload["content"].(map[string]any)
+	if !ok || activityContent["msgtype"] != AgentQuestionMsgType {
+		return content, false
+	}
+	question, ok := activityContent["question"].(map[string]any)
+	if !ok || strings.TrimSpace(fmt.Sprint(question["status"])) != string(activity.UserInputStatusPending) {
+		return content, false
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	question["status"] = string(activity.UserInputStatusInterrupted)
+	question["resolved_at"] = now.UTC().Format(time.RFC3339Nano)
+	delete(question, "answers")
+	activityContent["body"] = "Question interrupted"
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return content, false
+	}
+	return string(data), true
 }
 
 func joinActivityIDParts(parts []string) string {

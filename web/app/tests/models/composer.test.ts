@@ -1,6 +1,7 @@
 import {
   type ComposerSegment,
   getComposerMentionState,
+  getComposerSlashQueryAtSelection,
   getComposerSlashState,
   getCollapsedSelectionTextOffset,
   getMentionCandidates,
@@ -9,6 +10,7 @@ import {
   insertPlainTextAtSelection,
   isComposerKeyboardEventComposing,
   normalizeComposerSegments,
+  normalizeComposerSegmentsForDisplay,
   normalizeTextMentions,
   parseComposerSegments,
   renderComposerSegments,
@@ -112,6 +114,21 @@ describe("composer model helpers", () => {
     ).toEqual([{ type: "text", text: "Hello world" }]);
   });
 
+  it("keeps typed slash queries editable until a picker candidate is applied", () => {
+    expect(normalizeComposerSegmentsForDisplay([{ type: "text", text: "/review existing prompt" }])).toEqual([
+      { type: "text", text: "/review existing prompt" },
+    ]);
+    expect(
+      normalizeComposerSegmentsForDisplay([
+        { type: "slash", text: "/review" },
+        { type: "text", text: " existing prompt" },
+      ]),
+    ).toEqual([
+      { type: "slash", text: "/review" },
+      { type: "text", text: " existing prompt" },
+    ]);
+  });
+
   it("serializes mention segments into server markup", () => {
     expect(
       serializeComposerSegments([
@@ -205,6 +222,19 @@ describe("composer model helpers", () => {
     const selection = window.getSelection();
     expect(selection?.rangeCount).toBe(1);
     expect(selection?.getRangeAt(0).startContainer.nodeType).toBe(Node.TEXT_NODE);
+  });
+
+  it("reads a slash query at the caret before trailing draft text", () => {
+    const root = createComposerRoot();
+    const text = document.createTextNode("/revexisting prompt");
+    root.append(text);
+    placeCaret(text, 4);
+
+    expect(getComposerSlashQueryAtSelection(root)).toBe("rev");
+
+    text.textContent = "prefix /rev";
+    placeCaret(text);
+    expect(getComposerSlashQueryAtSelection(root)).toBeNull();
   });
 
   it("replaces the current slash query when the caret is placed next to a slash token", () => {

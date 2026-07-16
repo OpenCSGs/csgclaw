@@ -35,6 +35,7 @@ import (
 	"csgclaw/internal/channelbridge"
 	"csgclaw/internal/channelbridge/codexbridge"
 	"csgclaw/internal/channelbridge/codexmanager"
+	"csgclaw/internal/channelbridge/runtimebridge"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/connectors"
@@ -557,6 +558,9 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		cfg = refreshed
 		logStartupModelProviderRefresh(results)
 	}
+	if err := reconcileInterruptedUserInputMessages(imSvc); err != nil {
+		return err
+	}
 	codexBridgeMgr, err := NewCodexBridgeManager(cfg, svc, feishuSvc)
 	if err != nil {
 		return err
@@ -636,27 +640,28 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	}
 	agentRuntimeSvc := NewAgentRuntimeService()
 	return RunServer(server.Options{
-		ListenAddr:        cfg.Server.ListenAddr,
-		Service:           svc,
-		Hub:               hubSvc,
-		MCP:               mcpSvc,
-		Participant:       participantSvc,
-		IM:                imSvc,
-		IMBus:             imBus,
-		ParticipantBridge: im.NewParticipantBridge(cfg.Server.AccessToken),
-		Feishu:            feishuSvc,
-		LLM:               llmSvc,
-		Team:              teamSvc,
-		AgentTask:         agentTaskSvc,
-		ScheduledTask:     scheduledTaskSvc,
-		AgentRuntimes:     agentRuntimeSvc,
-		TeamAdapters:      teamAdapters,
-		Upgrade:           upgradeManager,
-		ActivityDecider:   channelActivityDecider(codexBridgeMgr),
-		ConfigPath:        configPath,
-		AccessToken:       cfg.Server.AccessToken,
-		NoAuth:            cfg.Server.NoAuth,
-		Context:           ctx,
+		ListenAddr:         cfg.Server.ListenAddr,
+		Service:            svc,
+		Hub:                hubSvc,
+		MCP:                mcpSvc,
+		Participant:        participantSvc,
+		IM:                 imSvc,
+		IMBus:              imBus,
+		ParticipantBridge:  im.NewParticipantBridge(cfg.Server.AccessToken),
+		Feishu:             feishuSvc,
+		LLM:                llmSvc,
+		Team:               teamSvc,
+		AgentTask:          agentTaskSvc,
+		ScheduledTask:      scheduledTaskSvc,
+		AgentRuntimes:      agentRuntimeSvc,
+		TeamAdapters:       teamAdapters,
+		Upgrade:            upgradeManager,
+		ActivityDecider:    channelActivityDecider(codexBridgeMgr),
+		UserInputResponder: channelUserInputResponder(codexBridgeMgr),
+		ConfigPath:         configPath,
+		AccessToken:        cfg.Server.AccessToken,
+		NoAuth:             cfg.Server.NoAuth,
+		Context:            ctx,
 		OnReady: func(handler *api.Handler, router chi.Router) {
 			deliver := channelwiring.WireNotificationParticipantPull(ctx, participantSvc, imSvc, apiURL, cfg.Server.AccessToken)
 			handler.SetNotificationDeliver(deliver)
@@ -697,6 +702,36 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 			}()
 		},
 	})
+}
+
+func reconcileInterruptedUserInputMessages(imSvc *im.Service) error {
+	if imSvc == nil {
+		return nil
+	}
+	now := time.Now().UTC()
+	for _, room := range imSvc.ListRoomsWithOptions(im.ListMessagesOptions{IncludeThreadReplies: true}) {
+		for _, message := range room.Messages {
+			content, changed := runtimebridge.InterruptPendingQuestionActivity(message.Content, now)
+			if !changed {
+				continue
+			}
+			threadRootID := ""
+			if message.RelatesTo != nil && message.RelatesTo.RelType == im.RelationTypeThread {
+				threadRootID = message.RelatesTo.EventID
+			}
+			if _, err := imSvc.DeliverMessage(im.DeliverMessageRequest{
+				RoomID:       room.ID,
+				SenderID:     message.SenderID,
+				Content:      content,
+				MessageID:    message.ID,
+				ThreadRootID: threadRootID,
+				Metadata:     message.Metadata,
+			}); err != nil {
+				return fmt.Errorf("reconcile interrupted user input message %s: %w", message.ID, err)
+			}
+		}
+	}
+	return nil
 }
 
 func refreshStartupModelProviders(ctx context.Context, cfg config.Config, configPath string, svc *agent.Service) (config.Config, []agent.ModelProviderCheckResult, error) {
@@ -1107,6 +1142,16 @@ func channelActivityDecider(m codexBridgeManager) api.ActivityDecider {
 		return nil
 	}
 	return runtimecodex.NewPermissionActivityDecider(csgclawchannel.ChannelID, decider)
+}
+
+func channelUserInputResponder(m codexBridgeManager) api.UserInputResponder {
+	withUserInput, ok := m.(interface {
+		UserInputResponder() runtimecodex.UserInputBroker
+	})
+	if !ok {
+		return nil
+	}
+	return withUserInput.UserInputResponder()
 }
 
 func newCodexBridgeManager(cfg config.Config, svc *agent.Service, feishuSvc *feishu.Service) (codexBridgeManager, error) {

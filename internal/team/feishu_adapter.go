@@ -194,7 +194,7 @@ func (d *FeishuTeamDirectory) AgentProfile(id string) (MemberProfile, bool) {
 	if d == nil || d.agents == nil {
 		return MemberProfile{}, false
 	}
-	got, ok := d.agents.Agent(id)
+	got, ok := d.agents.AgentMetadata(id)
 	if !ok {
 		return MemberProfile{}, false
 	}

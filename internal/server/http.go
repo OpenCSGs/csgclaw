@@ -25,28 +25,29 @@ import (
 )
 
 type Options struct {
-	ListenAddr        string
-	Service           *agent.Service
-	Hub               *hub.Service
-	MCP               *mcp.Service
-	Participant       *participant.Service
-	IM                *im.Service
-	IMBus             *im.Bus
-	ParticipantBridge *im.ParticipantBridge
-	Feishu            *feishu.Service
-	LLM               *llm.Service
-	Team              *team.Service
-	AgentTask         *agenttask.Service
-	ScheduledTask     *scheduledtask.Service
-	AgentRuntimes     *runtimecatalog.Service
-	TeamAdapters      *team.AdapterRegistry
-	Upgrade           *upgrade.Manager
-	ActivityDecider   api.ActivityDecider
-	ConfigPath        string
-	AccessToken       string
-	NoAuth            bool
-	Context           context.Context
-	OnReady           func(h *api.Handler, router chi.Router)
+	ListenAddr         string
+	Service            *agent.Service
+	Hub                *hub.Service
+	MCP                *mcp.Service
+	Participant        *participant.Service
+	IM                 *im.Service
+	IMBus              *im.Bus
+	ParticipantBridge  *im.ParticipantBridge
+	Feishu             *feishu.Service
+	LLM                *llm.Service
+	Team               *team.Service
+	AgentTask          *agenttask.Service
+	ScheduledTask      *scheduledtask.Service
+	AgentRuntimes      *runtimecatalog.Service
+	TeamAdapters       *team.AdapterRegistry
+	Upgrade            *upgrade.Manager
+	ActivityDecider    api.ActivityDecider
+	UserInputResponder api.UserInputResponder
+	ConfigPath         string
+	AccessToken        string
+	NoAuth             bool
+	Context            context.Context
+	OnReady            func(h *api.Handler, router chi.Router)
 }
 
 func newHandler(opts Options) *api.Handler {
@@ -63,6 +64,7 @@ func newHandler(opts Options) *api.Handler {
 	}
 	handler.SetUpgradeManager(opts.Upgrade)
 	handler.SetActivityDecider(opts.ActivityDecider)
+	handler.SetUserInputResponder(opts.UserInputResponder)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)
 	handler.SetConfigPath(opts.ConfigPath)
 	return handler

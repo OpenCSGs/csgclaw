@@ -42,6 +42,15 @@ type Agent struct {
 	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
+// AgentMetadata is the persisted identity and capability metadata for an agent.
+// It intentionally excludes live runtime state and credentials.
+type AgentMetadata struct {
+	ID          string
+	Name        string
+	Description string
+	Role        string
+}
+
 func (a Agent) RuntimeConfig() agentruntime.RuntimeConfig {
 	if cfg, err := agentruntime.RuntimeConfigFromSelection(a.RuntimeKind, a.RuntimeName, a.SandboxEnabled); err == nil {
 		return cfg

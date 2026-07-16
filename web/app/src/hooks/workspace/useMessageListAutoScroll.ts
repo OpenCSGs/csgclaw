@@ -13,6 +13,7 @@ export type UseMessageListAutoScrollArgs = {
 
 export type MessageListAutoScrollController = {
   follow: (behavior?: MessageListScrollBehavior) => void;
+  preserveAnchor: (anchor?: HTMLElement | null) => void;
 };
 
 function scrollMessageListToBottom(el: HTMLElement, behavior: MessageListScrollBehavior = "auto"): void {
@@ -64,11 +65,15 @@ export function useMessageListAutoScroll({
   visibleMessagesKey,
 }: UseMessageListAutoScrollArgs): MessageListAutoScrollController {
   const shouldAutoScrollRef = useRef(true);
+  const pendingInitialFollowRef = useRef(active && Boolean(conversationId));
   const autoScrollConversationRef = useRef(conversationId);
   const autoScrollStateFrameRef = useRef<number | null>(null);
   const messageListResizeObserverRef = useRef<ResizeObserver | null>(null);
   const messageListMutationObserverRef = useRef<MutationObserver | null>(null);
   const messageListScrollFrameRef = useRef<number | null>(null);
+  const messageListAnchorFrameRef = useRef<number | null>(null);
+  const messageListAnchorVersionRef = useRef(0);
+  const preservingAnchorRef = useRef(false);
   const observedMessageListRef = useRef<HTMLElement | null>(null);
 
   const updateAutoScrollState = useCallback(() => {
@@ -92,6 +97,9 @@ export function useMessageListAutoScroll({
 
   const scrollToBottomAfterLayout = useCallback(
     (behavior: MessageListScrollBehavior = "auto") => {
+      if (!messageListRef.current) {
+        return false;
+      }
       const scroll = () => {
         const el = messageListRef.current;
         if (!el) {
@@ -106,8 +114,59 @@ export function useMessageListAutoScroll({
         messageListScrollFrameRef.current = null;
         scroll();
       });
+      return true;
     },
     [messageListRef],
+  );
+
+  const preserveAnchor = useCallback(
+    (anchor?: HTMLElement | null) => {
+      const el = messageListRef.current;
+      if (!el) {
+        return;
+      }
+
+      const initialScrollTop = el.scrollTop;
+      const initialAnchorTop = anchor && el.contains(anchor) ? anchor.getBoundingClientRect().top : null;
+      const version = messageListAnchorVersionRef.current + 1;
+      messageListAnchorVersionRef.current = version;
+      preservingAnchorRef.current = true;
+      shouldAutoScrollRef.current = false;
+      cancelBrowserAnimationFrame(messageListScrollFrameRef.current);
+      cancelBrowserAnimationFrame(messageListAnchorFrameRef.current);
+      messageListScrollFrameRef.current = null;
+      messageListAnchorFrameRef.current = null;
+
+      const restore = () => {
+        const current = messageListRef.current;
+        if (!current) {
+          return;
+        }
+        if (initialAnchorTop !== null && anchor && current.contains(anchor)) {
+          current.scrollTop += anchor.getBoundingClientRect().top - initialAnchorTop;
+          return;
+        }
+        current.scrollTop = initialScrollTop;
+      };
+
+      messageListAnchorFrameRef.current = requestBrowserAnimationFrame(() => {
+        if (messageListAnchorVersionRef.current !== version) {
+          return;
+        }
+        messageListAnchorFrameRef.current = null;
+        restore();
+        messageListAnchorFrameRef.current = requestBrowserAnimationFrame(() => {
+          if (messageListAnchorVersionRef.current !== version) {
+            return;
+          }
+          messageListAnchorFrameRef.current = null;
+          restore();
+          preservingAnchorRef.current = false;
+          updateAutoScrollState();
+        });
+      });
+    },
+    [messageListRef, updateAutoScrollState],
   );
 
   const disconnectMessageListElement = useCallback(() => {
@@ -119,11 +178,15 @@ export function useMessageListAutoScroll({
     messageListMutationObserverRef.current?.disconnect();
     cancelBrowserAnimationFrame(autoScrollStateFrameRef.current);
     cancelBrowserAnimationFrame(messageListScrollFrameRef.current);
+    cancelBrowserAnimationFrame(messageListAnchorFrameRef.current);
+    messageListAnchorVersionRef.current += 1;
+    preservingAnchorRef.current = false;
     observedMessageListRef.current = null;
     messageListResizeObserverRef.current = null;
     messageListMutationObserverRef.current = null;
     autoScrollStateFrameRef.current = null;
     messageListScrollFrameRef.current = null;
+    messageListAnchorFrameRef.current = null;
   }, [scheduleAutoScrollStateUpdate]);
 
   useLayoutEffect(() => {
@@ -137,12 +200,18 @@ export function useMessageListAutoScroll({
     }
 
     observedMessageListRef.current = nextElement;
-    updateAutoScrollState();
+    if (pendingInitialFollowRef.current) {
+      pendingInitialFollowRef.current = false;
+      shouldAutoScrollRef.current = true;
+      scrollToBottomAfterLayout();
+    } else {
+      updateAutoScrollState();
+    }
     nextElement.addEventListener("scroll", scheduleAutoScrollStateUpdate, { passive: true });
 
     if (typeof ResizeObserver === "function") {
       const resizeObserver = new ResizeObserver(() => {
-        if (shouldAutoScrollRef.current) {
+        if (shouldAutoScrollRef.current && !preservingAnchorRef.current) {
           scrollToBottomAfterLayout();
         }
       });
@@ -166,8 +235,12 @@ export function useMessageListAutoScroll({
 
   const follow = useCallback(
     (behavior: MessageListScrollBehavior = "auto") => {
+      messageListAnchorVersionRef.current += 1;
+      preservingAnchorRef.current = false;
+      cancelBrowserAnimationFrame(messageListAnchorFrameRef.current);
+      messageListAnchorFrameRef.current = null;
       shouldAutoScrollRef.current = true;
-      scrollToBottomAfterLayout(behavior);
+      pendingInitialFollowRef.current = !scrollToBottomAfterLayout(behavior);
     },
     [scrollToBottomAfterLayout],
   );
@@ -195,5 +268,5 @@ export function useMessageListAutoScroll({
     scrollToBottomAfterLayout("smooth");
   }, [active, conversationId, messageListRef, scrollToBottomAfterLayout, visibleMessagesKey]);
 
-  return { follow };
+  return { follow, preserveAnchor };
 }

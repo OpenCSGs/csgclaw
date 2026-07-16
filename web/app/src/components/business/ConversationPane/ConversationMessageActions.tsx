@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy, MessageSquareReply } from "lucide-react";
 import { flattenMentionText } from "@/components/business/MessageContent";
 import type { TranslateFn } from "@/models/conversations";
+import { renderSlashCommandPreviewText } from "@/models/slashCommands";
 import type { VoidOrPromise } from "./types";
 
 export type ConversationMessageActionsProps = {
@@ -19,7 +20,7 @@ export function ConversationMessageActions({
 }: ConversationMessageActionsProps) {
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<number | null>(null);
-  const copyText = flattenMentionText(content);
+  const copyText = flattenMentionText(renderSlashCommandPreviewText(content));
   const canCopy = Boolean(copyText.replace(/\u200b/g, ""));
   const copyLabel = copied ? t("copiedToClipboard") : t("copyToClipboard");
 

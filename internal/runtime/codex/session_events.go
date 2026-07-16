@@ -50,6 +50,42 @@ func permissionDecisionEvent(state permissionState) SessionEvent {
 	return event
 }
 
+func userInputRequestEvent(state userInputState) SessionEvent {
+	snapshot := publicUserInputSnapshot(state.snapshot)
+	return SessionEvent{
+		RuntimeKind:     agentruntime.KindCodex,
+		RuntimeID:       strings.TrimSpace(state.execution.RuntimeID),
+		SessionID:       strings.TrimSpace(state.execution.SessionID),
+		TurnID:          strings.TrimSpace(state.execution.TurnID),
+		Kind:            SessionEventUserInputRequest,
+		ReceivedAt:      time.Now().UTC(),
+		ToolCallID:      strings.TrimSpace(state.execution.ToolCallID),
+		ToolKind:        "request_user_input",
+		ToolTitle:       "Question",
+		UserInputID:     strings.TrimSpace(snapshot.ID),
+		UserInputStatus: string(snapshot.Status),
+		Payload:         snapshot,
+	}
+}
+
+func userInputResolvedEvent(state userInputState) SessionEvent {
+	snapshot := publicUserInputSnapshot(state.snapshot)
+	return SessionEvent{
+		RuntimeKind:     agentruntime.KindCodex,
+		RuntimeID:       strings.TrimSpace(state.execution.RuntimeID),
+		SessionID:       strings.TrimSpace(state.execution.SessionID),
+		TurnID:          strings.TrimSpace(state.execution.TurnID),
+		Kind:            SessionEventUserInputResolved,
+		ReceivedAt:      time.Now().UTC(),
+		ToolCallID:      strings.TrimSpace(state.execution.ToolCallID),
+		ToolKind:        "request_user_input",
+		ToolTitle:       "Question",
+		UserInputID:     strings.TrimSpace(snapshot.ID),
+		UserInputStatus: string(snapshot.Status),
+		Payload:         snapshot,
+	}
+}
+
 func promptCompletedEvent(runtimeID string, sessionID string, resp PromptResponse) SessionEvent {
 	return SessionEvent{
 		RuntimeKind: agentruntime.KindCodex,

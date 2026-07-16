@@ -114,6 +114,43 @@ func TestAppServerClientDispatchesServerRequest(t *testing.T) {
 	}
 }
 
+func TestAppServerClientServerRequestDoesNotBlockNotifications(t *testing.T) {
+	writer := &lockedStringWriter{}
+	client := newAppServerClient(writer, nil)
+	release := make(chan struct{})
+	started := make(chan struct{})
+	notifications := make(chan appServerNotification, 1)
+	client.onServerRequest = func(appServerServerRequest) (any, error) {
+		close(started)
+		<-release
+		return map[string]any{"answers": map[string]any{}}, nil
+	}
+	client.onNotification = func(notification appServerNotification) {
+		notifications <- notification
+	}
+
+	client.handleLine(`{"jsonrpc":"2.0","id":17,"method":"item/tool/requestUserInput","params":{"questions":[]}}`)
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("server request handler did not start")
+	}
+	client.handleLine(`{"jsonrpc":"2.0","method":"turn/interrupted","params":{"threadId":"thread-1"}}`)
+	select {
+	case notification := <-notifications:
+		if notification.Method != "turn/interrupted" {
+			t.Fatalf("notification method = %q, want turn/interrupted", notification.Method)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("notification was blocked by pending user-input request")
+	}
+	close(release)
+	response := waitForJSONRPCLine(t, writer)
+	if response["id"] != float64(17) {
+		t.Fatalf("response id = %#v, want 17", response["id"])
+	}
+}
+
 func TestAppServerClientRespondsErrorForUnhandledServerRequest(t *testing.T) {
 	writer := &lockedStringWriter{}
 	client := newAppServerClient(writer, nil)

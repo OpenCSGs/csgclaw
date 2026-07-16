@@ -10,6 +10,7 @@ import {
 import { renderSlashCommandPreviewText } from "@/models/slashCommands";
 import type { WorkspaceTeam } from "@/models/tasks";
 import type { MessageAttachment } from "@/models/attachments";
+import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 
 export type LocaleCode = "zh" | "en" | string;
 export type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
@@ -291,8 +292,9 @@ function uniqueStrings(values: string[]): string[] {
 
 export function isToolCallMessage(messageOrContent: IMMessage | unknown): boolean {
   if (isMessageLike(messageOrContent)) {
-    if (parseAgentActivity(messageOrContent.content)) {
-      return true;
+    const activity = parseAgentActivity(messageOrContent.content);
+    if (activity) {
+      return activity.content.msgtype !== AgentActivityMsgTypes.question;
     }
     if (isOpenClawToolDeliveryMessage(messageOrContent)) {
       return true;
@@ -306,7 +308,10 @@ export function isToolCallMessage(messageOrContent: IMMessage | unknown): boolea
 }
 
 function isNonMessageActivityContent(content: unknown): boolean {
-  return Boolean(parseAgentActivity(content) || isLegacyToolCallContent(content));
+  const activity = parseAgentActivity(content);
+  return Boolean(
+    (activity && activity.content.msgtype !== AgentActivityMsgTypes.question) || isLegacyToolCallContent(content),
+  );
 }
 
 function isLegacyToolCallContent(content: unknown): boolean {
@@ -922,7 +927,18 @@ export function appendReplyToThreadView(
     return current;
   }
   if (current.replies?.some((item) => item.id === message.id)) {
-    return current;
+    const replies = current.replies.map((item) => (item.id === message.id ? message : item));
+    const summary = {
+      ...(current.summary ?? {}),
+      reply_count: replies.length,
+      latest_reply: replies[replies.length - 1],
+    };
+    return {
+      ...current,
+      root: current.root ? { ...current.root, thread: summary } : current.root,
+      replies,
+      summary,
+    };
   }
   const replies = [...(current.replies ?? []), message];
   const summary = {

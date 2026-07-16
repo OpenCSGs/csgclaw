@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -943,6 +944,7 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		`sandbox_mode = "workspace-write"`,
 		`sandbox_workspace_write.network_access = true`,
 		`features.multi_agent = false`,
+		`features.default_mode_request_user_input = true`,
 		`features.memories = false`,
 		`memories.generate_memories = false`,
 		`memories.use_memories = false`,
@@ -1373,6 +1375,16 @@ func TestRuntimeCreateRefreshesCodexSkillsFromHost(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(runtimeSkillsRoot, "stale", "SKILL.md"), []byte("# Stale\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(runtimeSkillsRoot, "custom"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeSkillsRoot, "custom", "SKILL.md"), []byte("# Custom\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(filepath.Dir(runtimeSkillsRoot), ".csgclaw-host-skills.json")
+	if err := os.WriteFile(manifestPath, []byte("{\"names\":[\"stale\"]}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	rt := New(Dependencies{
 		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
@@ -1417,6 +1429,44 @@ func TestRuntimeCreateRefreshesCodexSkillsFromHost(t *testing.T) {
 	assertRuntimeSkillFile(t, filepath.Join(runtimeSkillsRoot, "fresh", "SKILL.md"), "# Fresh\n", 0o644)
 	if _, err := os.Stat(filepath.Join(runtimeSkillsRoot, "stale", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("stale runtime skill should be removed, stat err = %v", err)
+	}
+	assertRuntimeSkillFile(t, filepath.Join(runtimeSkillsRoot, "custom", "SKILL.md"), "# Custom\n", 0o644)
+}
+
+func TestSeedCodexHomeSkillsPreservesUnmanagedSkillsWithoutManifest(t *testing.T) {
+	hostCodexHome := filepath.Join(t.TempDir(), "shared-codex-home")
+	t.Setenv("CODEX_HOME", hostCodexHome)
+	hostSkillsRoot := filepath.Join(hostCodexHome, "skills")
+	if err := os.MkdirAll(filepath.Join(hostSkillsRoot, "host-skill"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostSkillsRoot, "host-skill", "SKILL.md"), []byte("# Host\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeCodexHome := filepath.Join(t.TempDir(), "runtime-codex-home")
+	runtimeSkillsRoot := filepath.Join(runtimeCodexHome, "skills")
+	if err := os.MkdirAll(filepath.Join(runtimeSkillsRoot, "user-added"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimeSkillsRoot, "user-added", "SKILL.md"), []byte("# User Added\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := New(Dependencies{})
+	if err := rt.seedCodexHomeSkills(runtimeCodexHome); err != nil {
+		t.Fatalf("seedCodexHomeSkills() error = %v", err)
+	}
+
+	assertRuntimeSkillFile(t, filepath.Join(runtimeSkillsRoot, "host-skill", "SKILL.md"), "# Host\n", 0o644)
+	assertRuntimeSkillFile(t, filepath.Join(runtimeSkillsRoot, "user-added", "SKILL.md"), "# User Added\n", 0o644)
+
+	var manifest hostSkillsManifest
+	if err := readJSONFile(os.ReadFile, filepath.Join(runtimeCodexHome, hostSkillsManifestName), &manifest); err != nil {
+		t.Fatalf("read host skills manifest: %v", err)
+	}
+	if !slices.Equal(manifest.Names, []string{"host-skill"}) {
+		t.Fatalf("host skills manifest = %#v, want host skill only", manifest.Names)
 	}
 }
 
@@ -1699,6 +1749,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		``,
 		`[features]`,
 		`multi_agent = true`,
+		`default_mode_request_user_input = false`,
 		`memories = true`,
 		``,
 		`[memories]`,
@@ -1773,6 +1824,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		csgclawProviderBeginMarker,
 		csgclawSandboxBeginMarker,
 		csgclawMultiAgentBeginMarker,
+		csgclawUserInputBeginMarker,
 		csgclawMemoryFeatureBeginMarker,
 		csgclawMemoryConfigBeginMarker,
 	} {
@@ -1782,6 +1834,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 	}
 	for _, unwanted := range []string{
 		`multi_agent = true`,
+		`default_mode_request_user_input = false`,
 		`memories = true`,
 		`generate_memories = true`,
 		`use_memories = true`,
@@ -1806,6 +1859,9 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		csgclawMultiAgentBeginMarker,
 		`multi_agent = true`,
 		csgclawMultiAgentEndMarker,
+		csgclawUserInputBeginMarker,
+		`default_mode_request_user_input = false`,
+		csgclawUserInputEndMarker,
 		`memories = true`,
 		``,
 		`[memories]`,
@@ -1830,6 +1886,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		csgclawProviderBeginMarker,
 		csgclawSandboxBeginMarker,
 		csgclawMultiAgentBeginMarker,
+		csgclawUserInputBeginMarker,
 		csgclawMemoryFeatureBeginMarker,
 		csgclawMemoryConfigBeginMarker,
 	} {
@@ -1840,6 +1897,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 	for _, unwanted := range []string{
 		`model = "old-model"`,
 		`multi_agent = true`,
+		`default_mode_request_user_input = false`,
 		`generate_memories = true`,
 		`use_memories = true`,
 	} {
@@ -1850,6 +1908,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 	for _, expected := range []string{
 		`sandbox_mode = "workspace-write"`,
 		`sandbox_workspace_write.network_access = true`,
+		`default_mode_request_user_input = true`,
 	} {
 		if !strings.Contains(first, expected) {
 			t.Fatalf("managed config should contain sandbox directive %q:\n%s", expected, first)

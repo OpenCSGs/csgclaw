@@ -1391,8 +1391,21 @@ func (s *Service) Agent(id string) (Agent, bool) {
 	return s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, a)), true
 }
 
-func (s *Service) AgentDisplayName(id string) (string, bool) {
+func (s *Service) AgentMetadata(id string) (AgentMetadata, bool) {
 	a, ok := s.agentSnapshot(id)
+	if !ok {
+		return AgentMetadata{}, false
+	}
+	return AgentMetadata{
+		ID:          strings.TrimSpace(a.ID),
+		Name:        strings.TrimSpace(a.Name),
+		Description: strings.TrimSpace(a.Description),
+		Role:        strings.TrimSpace(a.Role),
+	}, true
+}
+
+func (s *Service) AgentDisplayName(id string) (string, bool) {
+	a, ok := s.AgentMetadata(id)
 	if !ok {
 		return "", false
 	}

@@ -11,6 +11,7 @@ import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/Room
 import { Tooltip } from "@/components/ui";
 import { TrashIcon } from "@/components/ui/Icons";
 import type { IMConversation, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
+import { conversationPendingQuestionCount } from "@/models/agentActivity";
 
 export function ConversationSection({
   title,
@@ -45,6 +46,7 @@ export function ConversationSection({
           ? resolveConversationUser(conversation, currentUserID, usersById)
           : null;
         const roomAvatarMembers = resolveRoomAvatarMembers(conversation, usersById, currentUserID);
+        const questionCount = conversationPendingQuestionCount(conversation);
         return (
           <div
             key={conversation.id}
@@ -64,6 +66,14 @@ export function ConversationSection({
               <div className="conversation-main">
                 <div className="conversation-head">
                   <div className="conversation-name truncate">{conversation.title}</div>
+                  {questionCount > 0 ? (
+                    <span
+                      className="pending-question-badge"
+                      aria-label={t("questionPendingCount", { count: questionCount })}
+                    >
+                      ? {questionCount}
+                    </span>
+                  ) : null}
                   <div className="section-label">{formatTime(lastMessage?.created_at, locale)}</div>
                 </div>
                 <div className="conversation-preview truncate">

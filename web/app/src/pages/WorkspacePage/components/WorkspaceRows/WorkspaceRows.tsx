@@ -28,6 +28,7 @@ import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import { RoomAvatar, resolveRoomAvatarMembers } from "@/components/business/RoomAvatar";
 import { classNames } from "@/shared/lib/classNames";
+import { conversationPendingQuestionCount, threadPendingQuestionCount } from "@/models/agentActivity";
 import styles from "./WorkspaceRows.module.css";
 import type { DragEvent, ReactNode } from "react";
 import type { AgentLike } from "@/models/agents";
@@ -348,6 +349,7 @@ export function WorkspaceConversationRow({
     : avatarFallbackText(displayUser?.avatar, displayUser?.name, displayUser?.id);
   const title = isDirect && displayUser ? displayUser.name : conversation.title;
   const roomAvatarMembers = resolveRoomAvatarMembers(conversation, usersById, currentUserID);
+  const questionCount = conversationPendingQuestionCount(conversation);
   const preview = isDirect
     ? ""
     : formatConversationPreview(lastMessage, conversation, currentUserID, usersById, locale, t);
@@ -395,6 +397,14 @@ export function WorkspaceConversationRow({
       <span className={styles.main}>
         <span className={styles.titleLine}>
           <span className={classNames(styles.title, "truncate")}>{title}</span>
+          {questionCount > 0 ? (
+            <span
+              className={styles.pendingQuestionBadge}
+              aria-label={t("questionPendingCount", { count: questionCount })}
+            >
+              ? {questionCount}
+            </span>
+          ) : null}
           {directAgent ? (
             <span
               className={classNames(styles.statusDot, directAgentRunning && styles.online)}
@@ -433,6 +443,7 @@ export function WorkspaceThreadRow({ conversation, thread, active, locale, t, on
   const latestReplyText = latestReply ? formatMessagePreviewText(latestReply.content) : "";
   const meta = latestReply ? null : formatThreadReplyCount(thread?.summary?.reply_count, t);
   const updatedAt = latestReply?.created_at || root.created_at;
+  const questionCount = threadPendingQuestionCount(thread);
 
   return (
     <Tooltip content={title}>
@@ -449,6 +460,14 @@ export function WorkspaceThreadRow({ conversation, thread, active, locale, t, on
               <MessagePreviewText content={title} />
             </span>
           </Tooltip>
+          {questionCount > 0 ? (
+            <span
+              className={styles.pendingQuestionBadge}
+              aria-label={t("questionPendingCount", { count: questionCount })}
+            >
+              ? {questionCount}
+            </span>
+          ) : null}
           <span className={classNames(styles.meta, "truncate")}>
             {latestReply ? (
               <>

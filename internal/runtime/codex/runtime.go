@@ -26,6 +26,7 @@ const (
 	hostStateDirName       = ".codex"
 	configFileName         = "config.toml"
 	modelCatalogFileName   = "model_catalog.json"
+	hostSkillsManifestName = ".csgclaw-host-skills.json"
 	runtimeFileName        = "runtime.json"
 	sessionFileName        = "session.json"
 	stderrLogFileName      = "stderr.log"
@@ -105,6 +106,8 @@ const (
 	SessionEventPlanUpdate         = activity.RuntimeEventPlanUpdate
 	SessionEventPermissionRequest  = activity.RuntimeEventActionRequest
 	SessionEventPermissionDecision = activity.RuntimeEventActionDecision
+	SessionEventUserInputRequest   = activity.RuntimeEventUserInputRequest
+	SessionEventUserInputResolved  = activity.RuntimeEventUserInputResolved
 	SessionEventPromptCompleted    = activity.RuntimeEventPromptCompleted
 	SessionEventPromptFailed       = activity.RuntimeEventPromptFailed
 )
@@ -126,6 +129,7 @@ type Dependencies struct {
 	Manager        Manager
 	EventSink      SessionEventSink
 	Permission     PermissionBroker
+	UserInput      UserInputBroker
 
 	MkdirAll  func(string, os.FileMode) error
 	ReadFile  func(string) ([]byte, error)
@@ -201,6 +205,10 @@ func (r *Runtime) EventSink() SessionEventSink {
 
 func (r *Runtime) PermissionBroker() PermissionBroker {
 	return r.permissionBroker()
+}
+
+func (r *Runtime) UserInputBroker() UserInputBroker {
+	return r.userInputBroker()
 }
 
 func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
@@ -387,6 +395,7 @@ func (r *Runtime) sessionManager() Manager {
 	manager := newAppServerManager(managerDeps{
 		EventSink:  r.deps.EventSink,
 		Permission: r.permissionBroker(),
+		UserInput:  r.userInputBroker(),
 		OpenFile:   r.openFile,
 		WriteFile:  r.writeFile,
 		ReadFile:   r.readFile,
@@ -419,6 +428,14 @@ func (r *Runtime) permissionBroker() PermissionBroker {
 	}
 	r.deps.Permission = NewPermissionBroker(r.deps.EventSink)
 	return r.deps.Permission
+}
+
+func (r *Runtime) userInputBroker() UserInputBroker {
+	if r.deps.UserInput != nil {
+		return r.deps.UserInput
+	}
+	r.deps.UserInput = NewUserInputBroker(r.deps.EventSink)
+	return r.deps.UserInput
 }
 
 func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session, error) {
@@ -671,29 +688,95 @@ func (r *Runtime) seedCodexHomeSkills(runtimeCodexHome string) error {
 	}
 
 	targetRoot := filepath.Join(runtimeCodexHome, "skills")
-	if err := r.removeAll(targetRoot); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove runtime codex skills %s: %w", targetRoot, err)
+	previousHostSkills, err := r.readHostSkillsManifest(runtimeCodexHome)
+	if err != nil {
+		return err
 	}
 
 	sourceRoot, err := hostCodexSkillsPath()
 	if err != nil {
 		return nil
 	}
-	info, err := os.Stat(sourceRoot)
+	entries, err := os.ReadDir(sourceRoot)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("read host codex skills %s: %w", sourceRoot, err)
 		}
-		return fmt.Errorf("stat host codex skills %s: %w", sourceRoot, err)
-	}
-	if !info.IsDir() {
-		return nil
+		entries = nil
 	}
 
-	if err := r.copyDir(sourceRoot, targetRoot); err != nil {
-		return fmt.Errorf("seed runtime codex skills %s: %w", targetRoot, err)
+	currentHostSkills := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if name := safeSkillEntryName(entry.Name()); name != "" {
+			currentHostSkills = append(currentHostSkills, name)
+		}
+	}
+
+	if err := r.mkdirAll(targetRoot, 0o755); err != nil {
+		return fmt.Errorf("create runtime codex skills %s: %w", targetRoot, err)
+	}
+	for _, name := range previousHostSkills {
+		if err := r.removeAll(filepath.Join(targetRoot, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove previously managed host codex skill %q: %w", name, err)
+		}
+	}
+	for _, name := range currentHostSkills {
+		if err := r.removeAll(filepath.Join(targetRoot, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("refresh host codex skill %q: %w", name, err)
+		}
+	}
+
+	if len(entries) > 0 {
+		if err := r.copyDir(sourceRoot, targetRoot); err != nil {
+			return fmt.Errorf("seed runtime codex skills %s: %w", targetRoot, err)
+		}
+	}
+	manifest := hostSkillsManifest{Names: currentHostSkills}
+	if err := writeJSONFile(r.writeFile, filepath.Join(runtimeCodexHome, hostSkillsManifestName), manifest); err != nil {
+		return fmt.Errorf("write host codex skills manifest: %w", err)
 	}
 	return nil
+}
+
+type hostSkillsManifest struct {
+	Names []string `json:"names"`
+}
+
+func (r *Runtime) readHostSkillsManifest(runtimeCodexHome string) ([]string, error) {
+	var manifest hostSkillsManifest
+	err := readJSONFile(r.readFile, filepath.Join(runtimeCodexHome, hostSkillsManifestName), &manifest)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		var syntaxErr *json.SyntaxError
+		if errors.As(err, &syntaxErr) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read host codex skills manifest: %w", err)
+	}
+	names := make([]string, 0, len(manifest.Names))
+	seen := make(map[string]struct{}, len(manifest.Names))
+	for _, rawName := range manifest.Names {
+		name := safeSkillEntryName(rawName)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func safeSkillEntryName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return ""
+	}
+	return name
 }
 
 func (r *Runtime) seedCodexHomeWorkspaceSkills(workspaceDir, runtimeCodexHome string) error {
@@ -1416,6 +1499,7 @@ func writeJSONFile(writeFile func(string, []byte, os.FileMode) error, path strin
 type managerDeps struct {
 	EventSink      SessionEventSink
 	Permission     PermissionBroker
+	UserInput      UserInputBroker
 	OpenFile       func(string, int, os.FileMode) (*os.File, error)
 	WriteFile      func(string, []byte, os.FileMode) error
 	ReadFile       func(string) ([]byte, error)

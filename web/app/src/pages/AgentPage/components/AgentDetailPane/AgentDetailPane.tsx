@@ -106,6 +106,7 @@ export type AgentDetailPaneProps = {
   authBusyProvider?: string;
   authStatuses?: unknown;
   busyKey?: string;
+  dialogPortalContainer?: HTMLElement | null;
   draft?: AgentDraft | null;
   error?: string;
   feishuConnectBusy?: string;
@@ -172,6 +173,7 @@ export function AgentDetailPane({
   t,
   activeRoom = null,
   busyKey = "",
+  dialogPortalContainer = null,
   error = "",
   feishuConnectBusy = "",
   feishuPendingRegistration = null,
@@ -431,6 +433,7 @@ export function AgentDetailPane({
                 value={draft.avatar || item.avatar}
                 t={t}
                 mode="edit"
+                portalContainer={dialogPortalContainer}
                 onChange={(avatar) => updateDraft({ avatar })}
               />
             </div>
@@ -749,7 +752,7 @@ export function AgentDetailPane({
         ) : null}
       </div>
       <DialogRoot open={addSkillsDialogOpen} onOpenChange={setAddSkillsDialogOpen}>
-        <DialogContent className="agent-skills-dialog">
+        <DialogContent className="agent-skills-dialog" portalContainer={dialogPortalContainer}>
           <DialogHeader className="agent-skills-dialog-header">
             <div className="agent-skills-dialog-copy">
               <DialogTitle>{t("agentSkillAdd")}</DialogTitle>
@@ -828,6 +831,7 @@ export function AgentDetailPane({
         <DialogContent
           className="agent-skills-dialog agent-skill-delete-dialog"
           overlayClassName="agent-skill-delete-backdrop"
+          portalContainer={dialogPortalContainer}
         >
           <DialogHeader className="agent-skills-dialog-header">
             <div className="agent-skills-dialog-copy">
@@ -862,7 +866,7 @@ export function AgentDetailPane({
         </DialogContent>
       </DialogRoot>
       <DialogRoot open={addMCPDialogOpen} onOpenChange={setAddMCPDialogOpen}>
-        <DialogContent className="agent-skills-dialog agent-mcp-dialog">
+        <DialogContent className="agent-skills-dialog agent-mcp-dialog" portalContainer={dialogPortalContainer}>
           <DialogHeader className="agent-skills-dialog-header">
             <div className="agent-skills-dialog-copy">
               <DialogTitle>{t("agentMCPAdd")}</DialogTitle>
@@ -952,6 +956,7 @@ export function AgentDetailPane({
         <DialogContent
           className="agent-skills-dialog agent-skill-delete-dialog"
           overlayClassName="agent-skill-delete-backdrop"
+          portalContainer={dialogPortalContainer}
         >
           <DialogHeader className="agent-skills-dialog-header">
             <div className="agent-skills-dialog-copy">

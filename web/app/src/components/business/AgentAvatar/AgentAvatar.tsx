@@ -49,12 +49,14 @@ export function AgentAvatarPicker({
   t,
   onChange,
   mode = "default",
+  portalContainer = null,
 }: {
   disabled?: boolean;
   value?: string | null;
   t: TranslateFn;
   onChange: (value: string) => void;
   mode?: "default" | "edit";
+  portalContainer?: HTMLElement | null;
 }) {
   const selected = normalizeAgentAvatarPath(value);
   const [open, setOpen] = useState(false);
@@ -443,7 +445,7 @@ export function AgentAvatarPicker({
                 </div>
               </div>
             </div>,
-            document.body,
+            portalContainer ?? document.body,
           )
         : null}
       {open && mode !== "edit" && !disabled ? (

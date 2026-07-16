@@ -55,7 +55,11 @@ export function AgentView(props: AgentDetailPaneProps) {
           }
         }}
       >
-        <DialogContent className="agent-delete-dialog" overlayClassName="agent-delete-backdrop">
+        <DialogContent
+          className="agent-delete-dialog"
+          overlayClassName="agent-delete-backdrop"
+          portalContainer={props.dialogPortalContainer}
+        >
           <DialogHeader className="agent-delete-header">
             <div className="agent-delete-copy">
               <DialogTitle>{props.t("agentDelete")}</DialogTitle>

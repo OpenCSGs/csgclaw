@@ -99,8 +99,13 @@ describe("legacy UI contract", () => {
   });
 
   it("keeps thread context hidden and shows the thread affordance as a message hover toolbar", () => {
+    const messageActionControlsRule = styleRule(".message-action-controls");
+    const messageHoverActionsRule = styleRule(".message-hover-actions");
+    const threadMessageActionsRule = styleRule(".thread-message-actions");
+
     expect(source).toContain("message-hover-actions");
     expect(source).toContain("thread-hover-button");
+    expect(source).toContain("data-message-id={message.id || undefined}");
     expect(source).toContain('data-tooltip={t("replyInThread")}');
     expect(source).toContain('threads: "threads"');
     expect(source).toContain("WorkspaceThreadRow");
@@ -110,8 +115,20 @@ describe("legacy UI contract", () => {
     expect(source).not.toContain('className="thread-context"');
     expect(source).not.toContain('t("threadContext")');
     expect(styles).toContain(".message-row:hover .message-hover-actions");
-    expect(styles).toMatch(/\.message-hover-actions\s*\{[\s\S]*top:\s*calc\(100% \+ 2px\);/);
-    expect(styles).toMatch(/\.thread-message-actions\s*\{[\s\S]*top:\s*calc\(100% \+ 2px\);/);
+    expect(messageActionControlsRule).toContain("gap: 12px;");
+    expect(messageHoverActionsRule).toContain("top: 100%;");
+    expect(messageHoverActionsRule).toContain("left: 0;");
+    expect(messageHoverActionsRule).toContain("padding-top: 2px;");
+    expect(messageHoverActionsRule).toContain("pointer-events: auto;");
+    expect(threadMessageActionsRule).toContain("top: 100%;");
+    expect(threadMessageActionsRule).toContain("left: 0;");
+    expect(threadMessageActionsRule).toContain("padding-top: 2px;");
+    expect(threadMessageActionsRule).toContain("pointer-events: auto;");
+    expect(styles).toContain(".message-hover-actions:hover");
+    expect(styles).toContain(".thread-message-actions:hover");
+    expect(styles).not.toMatch(
+      /\.message-hover-actions > \.message-action-button,\s*\.thread-message-actions > \.message-action-button\s*\{[^}]*pointer-events:\s*none;/,
+    );
     expect(styles).not.toContain("bottom: -15px");
     expect(styles).toContain("[data-tooltip]:hover::after");
     expect(source).toContain("message-thread-actions has-thread-summary");

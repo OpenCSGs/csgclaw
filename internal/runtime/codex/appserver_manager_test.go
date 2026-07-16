@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/activity"
 	agentruntime "csgclaw/internal/runtime"
 )
 
@@ -191,37 +192,220 @@ func TestAppServerManagerPromptCompletesTurn(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerPromptCompletesOnAgentMessageWithoutTurnCompleted(t *testing.T) {
-	withAppServerHelperCommand(t, "prompt-agent-message-complete")
-	dir := t.TempDir()
-	spec := testAppServerSessionSpec(dir)
+func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		runtimeID string
+		agentID   string
+		agentName string
+	}{
+		{name: "manager", runtimeID: "runtime-manager", agentID: "manager", agentName: "manager"},
+		{name: "worker", runtimeID: "runtime-worker", agentID: "worker-1", agentName: "alice"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withAppServerHelperCommand(t, "prompt-user-input-complete")
+			dir := t.TempDir()
+			spec := testAppServerSessionSpec(dir)
+			spec.RuntimeID = tc.runtimeID
+			spec.AgentID = tc.agentID
+			spec.AgentName = tc.agentName
+			sink := &recordingSink{}
+			broker := NewUserInputBroker(sink)
+			deps := testAppServerManagerDepsWithSink(sink)
+			deps.UserInput = broker
+			manager := newAppServerManager(deps)
+			session, err := manager.Start(context.Background(), spec)
+			if err != nil {
+				t.Fatalf("Start() error = %v", err)
+			}
+			t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+			promptResult := make(chan error, 1)
+			go func() {
+				_, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+					SessionID: session.SessionID,
+					Prompt:    []PromptContentBlock{TextBlock("ask me")},
+				})
+				promptResult <- err
+			}()
+
+			requestID := waitForUserInputRequest(t, sink)
+			var requestEvent activity.RuntimeEvent
+			for _, event := range sink.snapshot() {
+				if event.Kind == activity.RuntimeEventUserInputRequest && event.UserInputID == requestID {
+					requestEvent = event
+					break
+				}
+			}
+			if requestEvent.RuntimeID != tc.runtimeID || requestEvent.SessionID != "main-thread" || requestEvent.TurnID != "turn-question" || requestEvent.ToolCallID != "item-question" {
+				t.Fatalf("question execution linkage = %+v", requestEvent)
+			}
+			request, ok := broker.Get(requestID)
+			if !ok || len(request.Questions) != 1 || request.Questions[0].ID != "color" {
+				t.Fatalf("request snapshot = %+v", request)
+			}
+			if _, err := broker.Bind(requestID, "csgclaw", "room-1"); err != nil {
+				t.Fatalf("Bind() error = %v", err)
+			}
+			if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+				Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
+				Answers: map[string]activity.UserInputAnswer{"color": {OptionIndex: 2, Text: "deep shade"}},
+			}); err != nil {
+				t.Fatalf("Respond() error = %v", err)
+			}
+			select {
+			case err := <-promptResult:
+				if err != nil {
+					t.Fatalf("Prompt() error = %v", err)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("prompt did not continue after answer")
+			}
+			waitForRuntime(t, func() bool {
+				var continued, completed bool
+				for _, event := range sink.snapshot() {
+					continued = continued || event.Kind == SessionEventTextDelta && event.Text == "continued with Green"
+					completed = completed || event.Kind == SessionEventPromptCompleted
+				}
+				return continued && completed
+			})
+		})
+	}
+}
+
+func TestAppServerManagerPausesTurnWatchdogsWhileWaitingForUser(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-user-input-complete")
+	originalSemantic := appServerSemanticInactivityTimeout
+	originalNoProgress := appServerFirstTurnNoProgressTimeout
+	originalMaximum := appServerMaximumTurnDuration
+	appServerSemanticInactivityTimeout = 20 * time.Millisecond
+	appServerFirstTurnNoProgressTimeout = 20 * time.Millisecond
+	appServerMaximumTurnDuration = 20 * time.Millisecond
+	t.Cleanup(func() {
+		appServerSemanticInactivityTimeout = originalSemantic
+		appServerFirstTurnNoProgressTimeout = originalNoProgress
+		appServerMaximumTurnDuration = originalMaximum
+	})
+
+	spec := testAppServerSessionSpec(t.TempDir())
 	sink := &recordingSink{}
-	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+	broker := NewUserInputBroker(sink)
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = broker
+	manager := newAppServerManager(deps)
 	session, err := manager.Start(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
 
-	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
-		SessionID: session.SessionID,
-		Prompt:    []PromptContentBlock{TextBlock("hello codex")},
+	promptResult := make(chan error, 1)
+	go func() {
+		_, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+			SessionID: session.SessionID,
+			Prompt:    []PromptContentBlock{TextBlock("ask me")},
+		})
+		promptResult <- err
+	}()
+	requestID := waitForUserInputRequest(t, sink)
+	_, _ = broker.Bind(requestID, "csgclaw", "room-1")
+	time.Sleep(75 * time.Millisecond)
+	select {
+	case err := <-promptResult:
+		t.Fatalf("prompt ended while waiting for user input: %v", err)
+	default:
+	}
+	_, err = broker.Respond(context.Background(), activity.UserInputResponseRequest{
+		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
+		Answers: map[string]activity.UserInputAnswer{"color": {OptionIndex: 2, Text: "deep shade"}},
 	})
 	if err != nil {
-		t.Fatalf("Prompt() error = %v", err)
+		t.Fatalf("Respond() error = %v", err)
 	}
-	if resp.StopReason != StopReasonEndTurn {
-		t.Fatalf("StopReason = %q, want %q", resp.StopReason, StopReasonEndTurn)
+	select {
+	case err := <-promptResult:
+		if err != nil {
+			t.Fatalf("Prompt() error after answer = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("prompt did not finish after answer")
 	}
+}
 
-	waitForRuntime(t, func() bool { return len(sink.snapshot()) >= 2 })
-	events := sink.snapshot()
-	if len(events) != 2 ||
-		events[0].Kind != SessionEventTextDelta ||
-		events[0].Text != "done" ||
-		events[1].Kind != SessionEventPromptCompleted ||
-		events[1].SessionID != session.SessionID {
-		t.Fatalf("events = %#v, want text delta then prompt completed event", events)
+func TestAppServerTurnWaiterTracksConcurrentUserInputRequests(t *testing.T) {
+	t.Parallel()
+
+	live := &liveSession{}
+	waiter, err := live.registerAppServerTurnWaiter("thread-1")
+	if err != nil {
+		t.Fatalf("register waiter: %v", err)
+	}
+	defer live.removeAppServerTurnWaiter("thread-1", waiter)
+
+	for _, delta := range []int{1, 1, -1, -1} {
+		if !live.notifyAppServerTurn("thread-1", appServerTurnResult{userInputDelta: delta}) {
+			t.Fatal("user-input state change was not delivered")
+		}
+	}
+	wantWaiting := []bool{true, true, true, false}
+	for index, want := range wantWaiting {
+		select {
+		case result := <-waiter.ch:
+			if !result.userInputStateChanged || result.waitingForUser != want {
+				t.Fatalf("state change %d = %+v, want waiting=%v", index, result, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for state change %d", index)
+		}
+	}
+}
+
+func TestAppServerManagerKeepsTurnOpenWhenAgentMessagePrecedesQuestion(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-agent-message-before-user-input")
+	dir := t.TempDir()
+	spec := testAppServerSessionSpec(dir)
+	sink := &recordingSink{}
+	broker := NewUserInputBroker(sink)
+	deps := testAppServerManagerDepsWithSink(sink)
+	deps.UserInput = broker
+	manager := newAppServerManager(deps)
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	promptResult := make(chan error, 1)
+	go func() {
+		_, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+			SessionID: session.SessionID,
+			Prompt:    []PromptContentBlock{TextBlock("report then ask me")},
+		})
+		promptResult <- err
+	}()
+
+	requestID := waitForUserInputRequest(t, sink)
+	select {
+	case err := <-promptResult:
+		t.Fatalf("prompt ended before the user-input request was answered: %v", err)
+	default:
+	}
+	if _, err := broker.Bind(requestID, "csgclaw", "room-1"); err != nil {
+		t.Fatalf("Bind() error = %v", err)
+	}
+	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
+		Answers: map[string]activity.UserInputAnswer{"next": {OptionIndex: 1}},
+	}); err != nil {
+		t.Fatalf("Respond() error = %v", err)
+	}
+	select {
+	case err := <-promptResult:
+		if err != nil {
+			t.Fatalf("Prompt() error after answer = %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("prompt did not continue after answer")
 	}
 }
 
@@ -1110,16 +1294,80 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
-	case "prompt-agent-message-complete":
+	case "prompt-user-input-complete":
+		awaitingAnswer := false
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			if awaitingAnswer {
+				assertServerRequestResponse(t, msg, 9002, func(result map[string]any) {
+					answers, _ := result["answers"].(map[string]any)
+					color, _ := answers["color"].(map[string]any)
+					values, _ := color["answers"].([]any)
+					if len(values) != 2 || values[0] != "Green" || values[1] != "user_note: deep shade" {
+						t.Fatalf("user-input response = %#v, want selected label and user note", result)
+					}
+				})
+				awaitingAnswer = false
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-final", "type": "agentMessage", "text": "continued with Green"}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-question", "status": "completed"}})
+				return nil, false
+			}
 			switch msg["method"] {
 			case "thread/start":
 				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 			case "turn/start":
-				assertTurnStartParams(t, msg, "main-thread", "medium", "hello codex")
-				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-1"}})
-				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-1", "type": "agentMessage", "text": "done"}})
-				return rpcResult(msg["id"], map[string]any{"turnId": "turn-1"}), true
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-question"}})
+				awaitingAnswer = true
+				writeRPCServerRequest(t, 9002, "item/tool/requestUserInput", map[string]any{
+					"threadId": "main-thread",
+					"turnId":   "turn-question",
+					"itemId":   "item-question",
+					"questions": []map[string]any{{
+						"id": "color", "header": "Color", "question": "Choose a color",
+						"options": []map[string]any{{"label": "Blue", "description": "cool"}, {"label": "Green", "description": "natural"}},
+						"isOther": false, "isSecret": false,
+					}},
+				})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-question"}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-agent-message-before-user-input":
+		awaitingAnswer := false
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			if awaitingAnswer {
+				assertServerRequestResponse(t, msg, 9003, func(result map[string]any) {
+					answers, _ := result["answers"].(map[string]any)
+					next, _ := answers["next"].(map[string]any)
+					values, _ := next["answers"].([]any)
+					if len(values) != 1 || values[0] != "Continue" {
+						t.Fatalf("user-input response = %#v, want selected label", result)
+					}
+				})
+				awaitingAnswer = false
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-final", "type": "agentMessage", "text": "continued"}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-question", "status": "completed"}})
+				return nil, false
+			}
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				assertTurnStartParams(t, msg, "main-thread", "medium", "report then ask me")
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-question"}})
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-progress", "type": "agentMessage", "text": "report ready"}})
+				awaitingAnswer = true
+				writeRPCServerRequest(t, 9003, "item/tool/requestUserInput", map[string]any{
+					"threadId": "main-thread",
+					"turnId":   "turn-question",
+					"itemId":   "item-question",
+					"questions": []map[string]any{{
+						"id": "next", "header": "Next", "question": "What next?",
+						"options": []map[string]any{{"label": "Continue", "description": "keep going"}},
+						"isOther": false, "isSecret": false,
+					}},
+				})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-question"}), true
 			default:
 				return nil, false
 			}

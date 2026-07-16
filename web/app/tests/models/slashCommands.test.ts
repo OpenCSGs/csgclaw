@@ -1,4 +1,8 @@
-import { parseSlashCommand, renderSlashCommandPreviewText } from "@/models/slashCommands";
+import {
+  isNewConversationSlashCommand,
+  parseSlashCommand,
+  renderSlashCommandPreviewText,
+} from "@/models/slashCommands";
 
 describe("slash command parser", () => {
   it("rejects duplicate slash command attributes", () => {
@@ -16,5 +20,11 @@ describe("slash command parser", () => {
     expect(
       renderSlashCommandPreviewText('<slash-command name="new" arg="conversation"></slash-command> reset first'),
     ).toBe("/new reset first");
+  });
+
+  it("identifies only the supported new-conversation command", () => {
+    expect(isNewConversationSlashCommand('<slash-command name="new" arg="conversation"></slash-command>')).toBe(true);
+    expect(isNewConversationSlashCommand('<slash-command name="use-skill" arg="new"></slash-command>')).toBe(false);
+    expect(isNewConversationSlashCommand("/new")).toBe(false);
   });
 });

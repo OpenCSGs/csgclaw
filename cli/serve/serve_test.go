@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"csgclaw/cli/command"
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agent"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/channelbridge/runtimebridge"
 	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
@@ -34,6 +36,54 @@ import (
 	"csgclaw/internal/upgrade"
 	appversion "csgclaw/internal/version"
 )
+
+func TestReconcileInterruptedUserInputMessagesIncludesThreadReplies(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	renderer := runtimebridge.NewTurnRenderer()
+	pending, ok := renderer.RenderActivity(activity.RuntimeEvent{
+		Kind: activity.RuntimeEventUserInputRequest,
+		Payload: activity.UserInputSnapshot{
+			ID: "request-1", Status: activity.UserInputStatusPending, RequestedAt: now,
+			Questions: []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Answer?"}},
+		},
+		UserInputID: "request-1",
+		ReceivedAt:  now,
+	}, "csgclaw", "room-1", "manager")
+	if !ok {
+		t.Fatal("pending question was not rendered")
+	}
+	svc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "manager",
+		Users:         []im.User{{ID: "manager", Name: "Manager", Role: "manager"}},
+		Rooms: []im.Room{{
+			ID: "room-1", Title: "Room", Members: []string{"manager"},
+			Messages: []im.Message{
+				{ID: "root-1", SenderID: "manager", Content: "root", CreatedAt: now.Add(-time.Minute)},
+				{ID: pending.MessageID, SenderID: "manager", Content: pending.Text, CreatedAt: now, RelatesTo: &im.MessageRelation{RelType: im.RelationTypeThread, EventID: "root-1"}},
+			},
+		}},
+	})
+	if err := reconcileInterruptedUserInputMessages(svc); err != nil {
+		t.Fatalf("reconcileInterruptedUserInputMessages() error = %v", err)
+	}
+	rooms := svc.ListRoomsWithOptions(im.ListMessagesOptions{IncludeThreadReplies: true})
+	if len(rooms) != 1 {
+		t.Fatal("room not found")
+	}
+	room := rooms[0]
+	var found im.Message
+	for _, message := range room.Messages {
+		if message.ID == pending.MessageID {
+			found = message
+			break
+		}
+	}
+	if found.ID == "" || !strings.Contains(found.Content, `"status":"interrupted"`) || found.RelatesTo == nil || found.RelatesTo.EventID != "root-1" {
+		t.Fatalf("reconciled thread question = %+v", found)
+	}
+}
 
 func init() {
 	codexPath := filepath.Join(os.TempDir(), "csgclaw-serve-test-codex.exe")

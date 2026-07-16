@@ -47,6 +47,7 @@ export type MessageContentProps = {
   longMessageExpanded?: boolean;
   message?: MessageLike | null;
   onLongMessageExpandedChange?: (expanded: boolean) => void;
+  onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   onAction?: (action: MessageAction, message?: MessageLike | null) => void;
   t?: TranslateFn;
 };

@@ -8,13 +8,68 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	sdkhandlers "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
+	sdkopenai "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers/openai"
 	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 )
+
+type transientThenSuccessStreamExecutor struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (e *transientThenSuccessStreamExecutor) Identifier() string { return ProviderCodex }
+
+func (e *transientThenSuccessStreamExecutor) Execute(context.Context, *coreauth.Auth, coreexecutor.Request, coreexecutor.Options) (coreexecutor.Response, error) {
+	return coreexecutor.Response{}, &coreauth.Error{Code: "not_implemented", Message: "Execute not implemented"}
+}
+
+func (e *transientThenSuccessStreamExecutor) ExecuteStream(context.Context, *coreauth.Auth, coreexecutor.Request, coreexecutor.Options) (*coreexecutor.StreamResult, error) {
+	e.mu.Lock()
+	e.calls++
+	call := e.calls
+	e.mu.Unlock()
+
+	chunks := make(chan coreexecutor.StreamChunk, 1)
+	if call == 1 {
+		chunks <- coreexecutor.StreamChunk{Err: &coreauth.Error{
+			Code:       "upstream_error",
+			Message:    "temporary upstream gateway failure",
+			HTTPStatus: http.StatusBadGateway,
+			Retryable:  true,
+		}}
+	} else {
+		chunks <- coreexecutor.StreamChunk{Payload: []byte("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-recovered\",\"output\":[]}}\n\n")}
+	}
+	close(chunks)
+	return &coreexecutor.StreamResult{Chunks: chunks}, nil
+}
+
+func (e *transientThenSuccessStreamExecutor) Refresh(_ context.Context, auth *coreauth.Auth) (*coreauth.Auth, error) {
+	return auth, nil
+}
+
+func (e *transientThenSuccessStreamExecutor) CountTokens(context.Context, *coreauth.Auth, coreexecutor.Request, coreexecutor.Options) (coreexecutor.Response, error) {
+	return coreexecutor.Response{}, &coreauth.Error{Code: "not_implemented", Message: "CountTokens not implemented"}
+}
+
+func (e *transientThenSuccessStreamExecutor) HttpRequest(context.Context, *coreauth.Auth, *http.Request) (*http.Response, error) {
+	return nil, &coreauth.Error{Code: "not_implemented", Message: "HttpRequest not implemented"}
+}
+
+func (e *transientThenSuccessStreamExecutor) Calls() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.calls
+}
 
 func TestRegistryProvider(t *testing.T) {
 	if got := registryProvider("claude_code"); got != "claude" {
@@ -175,6 +230,18 @@ func TestBuildConfigUsesPrivateNonReservedPortAndWritesConfig(t *testing.T) {
 	if !strings.HasPrefix(baseURL, "http://127.0.0.1:") {
 		t.Fatalf("baseURL = %q, want private localhost URL", baseURL)
 	}
+	if cfg.RequestRetry != embeddedCLIProxyRequestRetry {
+		t.Fatalf("RequestRetry = %d, want %d", cfg.RequestRetry, embeddedCLIProxyRequestRetry)
+	}
+	if cfg.MaxRetryInterval != embeddedCLIProxyMaxRetryIntervalSeconds {
+		t.Fatalf("MaxRetryInterval = %d, want %d", cfg.MaxRetryInterval, embeddedCLIProxyMaxRetryIntervalSeconds)
+	}
+	if cfg.TransientErrorCooldownSeconds != embeddedCLIProxyTransientErrorCooldownSeconds {
+		t.Fatalf("TransientErrorCooldownSeconds = %d, want %d", cfg.TransientErrorCooldownSeconds, embeddedCLIProxyTransientErrorCooldownSeconds)
+	}
+	if cfg.Streaming.BootstrapRetries != embeddedCLIProxyStreamingBootstrapRetries {
+		t.Fatalf("Streaming.BootstrapRetries = %d, want %d", cfg.Streaming.BootstrapRetries, embeddedCLIProxyStreamingBootstrapRetries)
+	}
 	if err := writeConfigFile(cfgPath, cfg); err != nil {
 		t.Fatalf("writeConfigFile returned error: %v", err)
 	}
@@ -189,6 +256,11 @@ func TestBuildConfigUsesPrivateNonReservedPortAndWritesConfig(t *testing.T) {
 		`  - "local"`,
 		`allow-remote: false`,
 		`disable-control-panel: true`,
+		`request-retry: 1`,
+		`max-retry-interval: 30`,
+		`transient-error-cooldown-seconds: 10`,
+		`streaming:`,
+		`  bootstrap-retries: 1`,
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("generated config missing %q:\n%s", want, text)
@@ -199,6 +271,62 @@ func TestBuildConfigUsesPrivateNonReservedPortAndWritesConfig(t *testing.T) {
 	}
 	if strings.Contains(text, "proxy-url:") {
 		t.Fatalf("generated config unexpectedly contains proxy-url:\n%s", text)
+	}
+}
+
+func TestManagedRetryRecoversStreamingTransientBeforeFirstByte(t *testing.T) {
+	mode := gin.Mode()
+	gin.SetMode(gin.TestMode)
+	t.Cleanup(func() { gin.SetMode(mode) })
+
+	clearStandardProxyEnv(t)
+	t.Setenv(configDirEnv, t.TempDir())
+	t.Setenv(authDirEnv, filepath.Join(t.TempDir(), "auth"))
+
+	cfg, _, _, err := buildConfig()
+	if err != nil {
+		t.Fatalf("buildConfig returned error: %v", err)
+	}
+
+	// Keep this process-level regression fast while preserving the managed
+	// relationship between retry count, cooldown, and maximum retry wait.
+	coreauth.SetTransientErrorCooldownSeconds(1)
+	t.Cleanup(func() { coreauth.SetTransientErrorCooldownSeconds(0) })
+
+	executor := &transientThenSuccessStreamExecutor{}
+	manager := coreauth.NewManager(nil, nil, nil)
+	manager.SetRetryConfig(cfg.RequestRetry, time.Duration(cfg.MaxRetryInterval)*time.Second, cfg.MaxRetryCredentials)
+	manager.RegisterExecutor(executor)
+	auth := &coreauth.Auth{ID: "csgclaw-retry-auth", Provider: ProviderCodex, Status: coreauth.StatusActive}
+	if _, err = manager.Register(context.Background(), auth); err != nil {
+		t.Fatalf("register auth: %v", err)
+	}
+	registry := cliproxysdk.GlobalModelRegistry()
+	registry.RegisterClient(auth.ID, auth.Provider, []*cliproxysdk.ModelInfo{{ID: "retry-test-model"}})
+	t.Cleanup(func() { registry.UnregisterClient(auth.ID) })
+
+	base := sdkhandlers.NewBaseAPIHandlers(&cfg.SDKConfig, manager)
+	handler := sdkopenai.NewOpenAIResponsesAPIHandler(base)
+	router := gin.New()
+	router.POST("/v1/responses", handler.Responses)
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"retry-test-model","input":"hello","stream":true}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	startedAt := time.Now()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("response status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"id":"resp-recovered"`) {
+		t.Fatalf("response body = %q, want recovered response", response.Body.String())
+	}
+	if calls := executor.Calls(); calls != 2 {
+		t.Fatalf("executor calls = %d, want 2", calls)
+	}
+	if elapsed := time.Since(startedAt); elapsed < 900*time.Millisecond {
+		t.Fatalf("retry elapsed = %s, want cooldown-aware wait", elapsed)
 	}
 }
 

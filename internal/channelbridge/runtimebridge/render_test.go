@@ -202,3 +202,77 @@ func TestTurnRendererRendersGenericActionActivity(t *testing.T) {
 		t.Fatalf("action payload = %+v", payload.Content.Action)
 	}
 }
+
+func TestTurnRendererUsesStableMessageIDForQuestionResolution(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewTurnRenderer()
+	now := time.Now().UTC()
+	pending := activity.UserInputSnapshot{
+		ID: "question-1", Status: activity.UserInputStatusPending, RequestedAt: now,
+		Questions: []activity.UserInputQuestionSnapshot{{ID: "color", Header: "Color", Question: "Choose a color"}},
+	}
+	request, ok := renderer.RenderActivity(activity.RuntimeEvent{
+		RuntimeKind: "codex", RuntimeID: "runtime-1", SessionID: "thread-1", TurnID: "turn-1",
+		Kind: activity.RuntimeEventUserInputRequest, UserInputID: pending.ID, ToolCallID: "item-1", Payload: pending, ReceivedAt: now,
+	}, "csgclaw", "room-1", "u-agent")
+	if !ok {
+		t.Fatal("question request was not rendered")
+	}
+	resolved := pending
+	resolved.Status = activity.UserInputStatusAnswered
+	resolvedAt := now.Add(time.Second)
+	resolved.ResolvedAt = &resolvedAt
+	resolved.Answers = map[string]activity.UserInputAnswerSnapshot{"color": {Answered: true, Text: "Blue"}}
+	answer, ok := renderer.RenderActivity(activity.RuntimeEvent{
+		RuntimeKind: "codex", RuntimeID: "runtime-1", SessionID: "thread-1", TurnID: "turn-1",
+		Kind: activity.RuntimeEventUserInputResolved, UserInputID: pending.ID, ToolCallID: "item-1", Payload: resolved, ReceivedAt: resolvedAt,
+	}, "csgclaw", "room-1", "u-agent")
+	if !ok {
+		t.Fatal("question resolution was not rendered")
+	}
+	if request.MessageID != answer.MessageID || request.MessageID != "question-question-1" {
+		t.Fatalf("question message IDs = %q and %q, want stable ID", request.MessageID, answer.MessageID)
+	}
+	var payload struct {
+		Content struct {
+			MsgType  string                     `json:"msgtype"`
+			Question activity.UserInputSnapshot `json:"question"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(answer.Text), &payload); err != nil {
+		t.Fatalf("decode question activity: %v", err)
+	}
+	if payload.Content.MsgType != AgentQuestionMsgType || payload.Content.Question.Status != activity.UserInputStatusAnswered {
+		t.Fatalf("question activity = %+v", payload.Content)
+	}
+}
+
+func TestInterruptPendingQuestionActivity(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewTurnRenderer()
+	now := time.Now().UTC()
+	rendered, ok := renderer.RenderActivity(activity.RuntimeEvent{
+		Kind: activity.RuntimeEventUserInputRequest,
+		Payload: activity.UserInputSnapshot{
+			ID: "question-1", Status: activity.UserInputStatusPending, RequestedAt: now,
+			Questions: []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Answer?"}},
+		},
+		UserInputID: "question-1",
+		ReceivedAt:  now,
+	}, "csgclaw", "room-1", "u-agent")
+	if !ok {
+		t.Fatal("question request was not rendered")
+	}
+	reconciled, changed := InterruptPendingQuestionActivity(rendered.Text, now.Add(time.Minute))
+	if !changed {
+		t.Fatal("pending question was not reconciled")
+	}
+	if !strings.Contains(reconciled, `"status":"interrupted"`) || strings.Contains(reconciled, `"status":"pending"`) {
+		t.Fatalf("reconciled question = %s", reconciled)
+	}
+	if _, changed := InterruptPendingQuestionActivity(reconciled, now.Add(2*time.Minute)); changed {
+		t.Fatal("terminal question was reconciled twice")
+	}
+}

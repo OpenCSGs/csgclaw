@@ -55,10 +55,47 @@ export type AgentActivityAction = {
   title: string;
 };
 
+export type AgentActivityQuestionOption = {
+  description?: string;
+  label: string;
+};
+
+export type AgentActivityQuestionItem = {
+  header: string;
+  id: string;
+  is_other?: boolean;
+  is_secret?: boolean;
+  options: AgentActivityQuestionOption[];
+  question: string;
+};
+
+export type AgentActivityQuestionAnswer = {
+  answered?: boolean;
+  option_index?: number;
+  option_label?: string;
+  secret?: boolean;
+  skipped?: boolean;
+  text?: string;
+};
+
+export type AgentActivityQuestion = {
+  answers?: Record<string, AgentActivityQuestionAnswer>;
+  auto_resolve_at?: string;
+  channel?: string;
+  id: string;
+  questions: AgentActivityQuestionItem[];
+  requested_at?: string;
+  resolved_at?: string;
+  responder_id?: string;
+  room_id?: string;
+  status: string;
+};
+
 export type AgentActivityContent = {
   action?: AgentActivityAction;
   body: string;
   msgtype: string;
+  question?: AgentActivityQuestion;
   tool?: AgentActivityTool;
 };
 
@@ -94,6 +131,7 @@ export function parseAgentActivity(content: unknown): AgentActivityPayload | nul
       action: parseAction(activityContent.action),
       body: stringValue(activityContent.body, "Agent activity"),
       msgtype,
+      question: parseQuestion(activityContent.question),
       tool: parseTool(activityContent.tool),
     },
     channel: stringValue(parsed.channel),
@@ -109,6 +147,68 @@ export function parseAgentActivity(content: unknown): AgentActivityPayload | nul
 export function isToolActivityMessage(message: IMMessage | null | undefined): boolean {
   const activity = parseAgentActivity(message?.content);
   return activity?.content.msgtype === AgentActivityMsgTypes.tool;
+}
+
+export function isQuestionActivityMessage(message: IMMessage | null | undefined): boolean {
+  const activity = parseAgentActivity(message?.content);
+  return activity?.content.msgtype === AgentActivityMsgTypes.question;
+}
+
+export function questionActivityKeepsAgentWorking(message: IMMessage | null | undefined): boolean {
+  const activity = parseAgentActivity(message?.content);
+  if (activity?.content.msgtype !== AgentActivityMsgTypes.question) {
+    return false;
+  }
+  switch (activity.content.question?.status) {
+    case "pending":
+    case "answered":
+    case "skipped":
+    case "expired":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function pendingQuestionActivities(messages: readonly IMMessage[]): AgentActivityPayload[] {
+  return messages
+    .map((message) => parseAgentActivity(message.content))
+    .filter(
+      (activity): activity is AgentActivityPayload =>
+        activity?.content.msgtype === AgentActivityMsgTypes.question && activity.content.question?.status === "pending",
+    );
+}
+
+export function pendingQuestionCount(messages: readonly IMMessage[]): number {
+  return pendingQuestionActivities(messages).length;
+}
+
+export function conversationPendingQuestionCount(conversation: { messages: readonly IMMessage[] }): number {
+  const latestThreadReplies = conversation.messages.flatMap((message) =>
+    message.thread?.latest_reply ? [message.thread.latest_reply] : [],
+  );
+  return pendingQuestionCount([...conversation.messages, ...latestThreadReplies]);
+}
+
+export function threadPendingQuestionCount(thread: {
+  replies?: readonly IMMessage[] | null;
+  root?: IMMessage | null;
+  summary?: { latest_reply?: IMMessage | null } | null;
+}): number {
+  const replies = thread.replies?.length
+    ? thread.replies
+    : thread.summary?.latest_reply
+      ? [thread.summary.latest_reply]
+      : [];
+  return pendingQuestionCount([...(thread.root ? [thread.root] : []), ...replies]);
+}
+
+export function questionOptions(question: AgentActivityQuestionItem): AgentActivityQuestionOption[] {
+  const options = [...question.options];
+  if (question.is_other) {
+    options.push({ label: "None of the above" });
+  }
+  return options;
 }
 
 export function openClawDeliveryKind(message: IMMessage | null | undefined): string {
@@ -359,6 +459,75 @@ function parseAction(value: unknown): AgentActivityAction | undefined {
     requested_at: stringValue(value.requested_at),
     status: stringValue(value.status, "pending"),
     title: stringValue(value.title, "Run tool"),
+  };
+}
+
+function parseQuestion(value: unknown): AgentActivityQuestion | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const questions = Array.isArray(value.questions)
+    ? value.questions.map(parseQuestionItem).filter((item): item is AgentActivityQuestionItem => Boolean(item))
+    : [];
+  const answers: Record<string, AgentActivityQuestionAnswer> = {};
+  if (isRecord(value.answers)) {
+    Object.entries(value.answers).forEach(([id, answer]) => {
+      if (!isRecord(answer)) {
+        return;
+      }
+      answers[id] = {
+        answered: Boolean(answer.answered),
+        option_index: numberOrUndefined(answer.option_index),
+        option_label: stringValue(answer.option_label),
+        secret: Boolean(answer.secret),
+        skipped: Boolean(answer.skipped),
+        text: stringValue(answer.text),
+      };
+    });
+  }
+  return {
+    answers: Object.keys(answers).length > 0 ? answers : undefined,
+    auto_resolve_at: stringValue(value.auto_resolve_at),
+    channel: stringValue(value.channel),
+    id: stringValue(value.id),
+    questions,
+    requested_at: stringValue(value.requested_at),
+    resolved_at: stringValue(value.resolved_at),
+    responder_id: stringValue(value.responder_id),
+    room_id: stringValue(value.room_id),
+    status: stringValue(value.status, "pending"),
+  };
+}
+
+function parseQuestionItem(value: unknown): AgentActivityQuestionItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = stringValue(value.id);
+  const header = stringValue(value.header);
+  const question = stringValue(value.question);
+  if (!id || !header || !question) {
+    return null;
+  }
+  const options: AgentActivityQuestionOption[] = [];
+  if (Array.isArray(value.options)) {
+    value.options.forEach((option) => {
+      if (!isRecord(option)) {
+        return;
+      }
+      const label = stringValue(option.label);
+      if (label) {
+        options.push({ label, description: stringValue(option.description) || undefined });
+      }
+    });
+  }
+  return {
+    header,
+    id,
+    is_other: Boolean(value.is_other),
+    is_secret: Boolean(value.is_secret),
+    options,
+    question,
   };
 }
 

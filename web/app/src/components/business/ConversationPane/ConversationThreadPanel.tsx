@@ -10,6 +10,7 @@ import {
   areComposerSegmentsEqual,
   getCollapsedSelectionTextOffset,
   getComposerMentionState,
+  getComposerSlashQueryAtSelection,
   getMentionCandidates,
   insertComposerLineBreak,
   insertComposerSegmentsAtSelection,
@@ -47,6 +48,8 @@ import { MessageTimestamp } from "./MessageTime";
 import { SlashPicker } from "./SlashPicker";
 import { handleSlashPickerNavigation } from "./slashPickerNavigation";
 import type { MentionPickerUser, VoidOrPromise } from "./types";
+import { AgentQuestionComposer } from "./AgentQuestionComposer";
+import type { QuestionAnswerMode } from "./useQuestionAnswerMode";
 
 type ThreadMentionState = {
   endOffset: number;
@@ -72,9 +75,12 @@ export type ConversationThreadPanelProps = {
   onCloseProfilePreview?: () => void;
   onDismissThreadSlashPicker?: () => void;
   onDraftChange: (segments: ComposerSegment[]) => void;
+  onSlashQueryChange?: (query: string | null) => void;
   onAddAttachments?: (files: File[]) => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
+  questionMode?: QuestionAnswerMode;
   onRemoveAttachment?: (id: string) => void;
   onSend: () => VoidOrPromise;
   onSetThreadSlashIndex?: (index: number) => void;
@@ -104,6 +110,7 @@ export function ConversationThreadPanel({
   t,
   onClose,
   onDraftChange,
+  onSlashQueryChange = (_query) => {},
   onAddAttachments = () => {},
   threadSlashCandidates = [],
   threadSlashIndex = 0,
@@ -116,6 +123,8 @@ export function ConversationThreadPanel({
   onCloseProfilePreview,
   onOpenAgentDetail,
   onPreviewUser,
+  onQuestionSelect,
+  questionMode,
   onRemoveAttachment = () => {},
   mentionableUsers = [],
   onSend,
@@ -194,6 +203,16 @@ export function ConversationThreadPanel({
     const segments = normalizeComposerSegmentsForDisplay(parseComposerSegments(target) as ComposerSegment[]);
     onDraftChange(segments);
     syncThreadMentionState(target);
+    syncThreadSlashQuery(target);
+  }
+
+  function syncThreadSlashQuery(target = threadEditorRef.current) {
+    onSlashQueryChange(getComposerSlashQueryAtSelection(target));
+  }
+
+  function syncThreadQueryState(target = threadEditorRef.current) {
+    syncThreadMentionState(target);
+    syncThreadSlashQuery(target);
   }
 
   function syncThreadMentionState(target = threadEditorRef.current) {
@@ -296,6 +315,7 @@ export function ConversationThreadPanel({
               onCloseProfilePreview={onCloseProfilePreview}
               onOpenAgentDetail={onOpenAgentDetail}
               onPreviewUser={onPreviewUser}
+              onQuestionSelect={onQuestionSelect}
             />
           </div>
         ) : null}
@@ -315,6 +335,7 @@ export function ConversationThreadPanel({
                 onCloseProfilePreview={onCloseProfilePreview}
                 onOpenAgentDetail={onOpenAgentDetail}
                 onPreviewUser={onPreviewUser}
+                onQuestionSelect={onQuestionSelect}
               />
             ))
           ) : (
@@ -322,186 +343,190 @@ export function ConversationThreadPanel({
           )}
         </div>
       </div>
-      <div
-        className="thread-composer"
-        onDragOver={(event) => {
-          if (disabled || filesFromDataTransfer(event.dataTransfer).length === 0) {
-            return;
-          }
-          event.preventDefault();
-        }}
-        onDrop={(event) => {
-          const files = filesFromDataTransfer(event.dataTransfer);
-          if (files.length === 0) {
-            return;
-          }
-          event.preventDefault();
-          handleFiles(files);
-        }}
-      >
-        {threadSlashPickerOpen ? (
-          <SlashPicker
-            candidates={threadSlashCandidates}
-            activeIndex={threadSlashIndex}
-            loading={threadSlashPickerLoading}
-            className="thread-slash-picker"
-            t={t}
-            onSelect={(name) => onApplyThreadSlashCandidate(name)}
-          />
-        ) : null}
-        {threadMentionCandidates.length > 0 ? (
-          <MentionPicker
-            users={threadMentionCandidates}
-            activeIndex={mentionIndex}
-            className="thread-mention-picker"
-            showRole={false}
-            t={t}
-            onSelect={insertThreadMention}
-          />
-        ) : null}
-        <AttachmentDraftStrip drafts={attachmentDrafts} t={t} onRemove={onRemoveAttachment} />
+      {questionMode?.pending.length ? (
+        <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} />
+      ) : (
         <div
-          ref={threadEditorRef}
-          contentEditable={!disabled}
-          suppressContentEditableWarning={true}
-          role="textbox"
-          aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-          aria-label={t("threadComposerPlaceholder")}
-          className={`thread-composer-editor ${disabled ? "disabled" : ""}`}
-          data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
-          onInput={(event) => syncThreadDraft(event.currentTarget)}
-          onClick={(event) => syncThreadMentionState(event.currentTarget)}
-          onKeyDown={(event) => {
-            if (disabled) {
+          className="thread-composer"
+          onDragOver={(event) => {
+            if (disabled || filesFromDataTransfer(event.dataTransfer).length === 0) {
               return;
             }
-            if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
-              event.preventDefault();
-              syncThreadDraft(event.currentTarget);
+            event.preventDefault();
+          }}
+          onDrop={(event) => {
+            const files = filesFromDataTransfer(event.dataTransfer);
+            if (files.length === 0) {
               return;
             }
-            if (event.key === "Delete" && removeAdjacentMentionToken(threadEditorRef.current, "forward")) {
-              event.preventDefault();
-              syncThreadDraft(event.currentTarget);
-              return;
-            }
-            if (
-              handleSlashPickerNavigation({
-                event,
-                candidates: threadSlashCandidates,
-                activeIndex: threadSlashIndex,
-                pickerOpen: threadSlashPickerOpen,
-                onIndexChange: (value) => onSetThreadSlashIndex(value),
-                onApply: (value) => onApplyThreadSlashCandidate(value),
-                onDismiss: () => {
-                  onDismissThreadSlashPicker();
-                  setMentionState(null);
-                  setMentionIndex(0);
-                },
-                onPrepareNavigation: () => {
-                  setMentionState(null);
-                  setMentionIndex(0);
-                },
-              })
-            ) {
-              return;
-            }
-            if (threadMentionCandidates.length > 0) {
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setMentionIndex((value) => (value + 1) % threadMentionCandidates.length);
+            event.preventDefault();
+            handleFiles(files);
+          }}
+        >
+          {threadSlashPickerOpen ? (
+            <SlashPicker
+              candidates={threadSlashCandidates}
+              activeIndex={threadSlashIndex}
+              loading={threadSlashPickerLoading}
+              className="thread-slash-picker"
+              t={t}
+              onSelect={(name) => onApplyThreadSlashCandidate(name)}
+            />
+          ) : null}
+          {threadMentionCandidates.length > 0 ? (
+            <MentionPicker
+              users={threadMentionCandidates}
+              activeIndex={mentionIndex}
+              className="thread-mention-picker"
+              showRole={false}
+              t={t}
+              onSelect={insertThreadMention}
+            />
+          ) : null}
+          <AttachmentDraftStrip drafts={attachmentDrafts} t={t} onRemove={onRemoveAttachment} />
+          <div
+            ref={threadEditorRef}
+            contentEditable={!disabled}
+            suppressContentEditableWarning={true}
+            role="textbox"
+            aria-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
+            aria-label={t("threadComposerPlaceholder")}
+            className={`thread-composer-editor ${disabled ? "disabled" : ""}`}
+            data-placeholder={disabled ? t("profileIncomplete") : t("threadComposerPlaceholder")}
+            onInput={(event) => syncThreadDraft(event.currentTarget)}
+            onClick={(event) => syncThreadQueryState(event.currentTarget)}
+            onKeyDown={(event) => {
+              if (disabled) {
                 return;
               }
-              if (event.key === "ArrowUp") {
+              if (event.key === "Backspace" && removeAdjacentMentionToken(threadEditorRef.current, "backward")) {
                 event.preventDefault();
-                setMentionIndex(
-                  (value) => (value - 1 + threadMentionCandidates.length) % threadMentionCandidates.length,
-                );
+                syncThreadDraft(event.currentTarget);
+                return;
+              }
+              if (event.key === "Delete" && removeAdjacentMentionToken(threadEditorRef.current, "forward")) {
+                event.preventDefault();
+                syncThreadDraft(event.currentTarget);
+                return;
+              }
+              if (
+                handleSlashPickerNavigation({
+                  event,
+                  candidates: threadSlashCandidates,
+                  activeIndex: threadSlashIndex,
+                  pickerOpen: threadSlashPickerOpen,
+                  onIndexChange: (value) => onSetThreadSlashIndex(value),
+                  onApply: (value) => onApplyThreadSlashCandidate(value),
+                  onDismiss: () => {
+                    onDismissThreadSlashPicker();
+                    setMentionState(null);
+                    setMentionIndex(0);
+                  },
+                  onPrepareNavigation: () => {
+                    setMentionState(null);
+                    setMentionIndex(0);
+                  },
+                })
+              ) {
+                return;
+              }
+              if (threadMentionCandidates.length > 0) {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setMentionIndex((value) => (value + 1) % threadMentionCandidates.length);
+                  return;
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setMentionIndex(
+                    (value) => (value - 1 + threadMentionCandidates.length) % threadMentionCandidates.length,
+                  );
+                  return;
+                }
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  insertThreadMention(threadMentionCandidates[mentionIndex]);
+                  return;
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setMentionState(null);
+                  setMentionIndex(0);
+                  return;
+                }
+              }
+              if (event.key === "Enter" && event.shiftKey) {
+                event.preventDefault();
+                insertComposerLineBreak(threadEditorRef.current);
+                syncThreadDraft(threadEditorRef.current);
                 return;
               }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                insertThreadMention(threadMentionCandidates[mentionIndex]);
-                return;
+                onSend();
               }
-              if (event.key === "Escape") {
+            }}
+            onKeyUp={(event) => syncThreadQueryState(event.currentTarget)}
+            onPaste={(event) => {
+              const files = filesFromDataTransfer(event.clipboardData);
+              const pasted = event.clipboardData?.getData("text/plain") ?? "";
+              if (files.length > 0) {
                 event.preventDefault();
-                setMentionState(null);
-                setMentionIndex(0);
-                return;
+                handleFiles(files);
+                if (!pasted) {
+                  return;
+                }
+              } else {
+                event.preventDefault();
               }
-            }
-            if (event.key === "Enter" && event.shiftKey) {
-              event.preventDefault();
-              insertComposerLineBreak(threadEditorRef.current);
+              const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
+              if (segments.some((segment) => segment.type === "mention")) {
+                insertComposerSegmentsAtSelection(segments);
+              } else {
+                insertPlainTextAtSelection(pasted);
+              }
               syncThreadDraft(threadEditorRef.current);
-              return;
-            }
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              onSend();
-            }
-          }}
-          onKeyUp={(event) => syncThreadMentionState(event.currentTarget)}
-          onPaste={(event) => {
-            const files = filesFromDataTransfer(event.clipboardData);
-            const pasted = event.clipboardData?.getData("text/plain") ?? "";
-            if (files.length > 0) {
-              event.preventDefault();
-              handleFiles(files);
-              if (!pasted) {
-                return;
-              }
-            } else {
-              event.preventDefault();
-            }
-            const segments = normalizeTextMentions([{ type: "text", text: pasted }], mentionableUsersByName);
-            if (segments.some((segment) => segment.type === "mention")) {
-              insertComposerSegmentsAtSelection(segments);
-            } else {
-              insertPlainTextAtSelection(pasted);
-            }
-            syncThreadDraft(threadEditorRef.current);
-          }}
-          onCompositionEnd={() => {
-            syncThreadDraft(threadEditorRef.current);
-          }}
-        />
-        <input
-          ref={fileInputRef}
-          className="sr-only"
-          type="file"
-          multiple
-          aria-label={t("addAttachment")}
-          onChange={(event) => {
-            handleFiles(Array.from(event.currentTarget.files || []));
-            event.currentTarget.value = "";
-          }}
-        />
-        <Tooltip content={t("addAttachment")}>
-          <span>
-            <Button
-              className="thread-attach-button"
-              aria-label={t("addAttachment")}
-              disabled={disabled}
-              iconOnly
-              variant="tertiaryGray"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Paperclip aria-hidden="true" size={18} />
-            </Button>
-          </span>
-        </Tooltip>
-        <Button
-          variant="primary"
-          className="thread-send-button"
-          disabled={disabled || (!segmentsToPlainText(draftSegments || []).trim() && attachmentDrafts.length === 0)}
-          onClick={onSend}
-        >
-          <span aria-hidden="true">{IconImage("send")}</span>
-          <span>{t("send")}</span>
-        </Button>
-      </div>
+            }}
+            onCompositionEnd={() => {
+              syncThreadDraft(threadEditorRef.current);
+            }}
+          />
+          <input
+            ref={fileInputRef}
+            className="sr-only"
+            type="file"
+            multiple
+            aria-label={t("addAttachment")}
+            onChange={(event) => {
+              handleFiles(Array.from(event.currentTarget.files || []));
+              event.currentTarget.value = "";
+            }}
+          />
+          <Tooltip content={t("addAttachment")}>
+            <span>
+              <Button
+                className="thread-attach-button"
+                aria-label={t("addAttachment")}
+                disabled={disabled}
+                iconOnly
+                variant="tertiaryGray"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip aria-hidden="true" size={18} />
+              </Button>
+            </span>
+          </Tooltip>
+          <Button
+            variant="primary"
+            className="thread-send-button"
+            disabled={disabled || (!segmentsToPlainText(draftSegments || []).trim() && attachmentDrafts.length === 0)}
+            onClick={onSend}
+          >
+            <span aria-hidden="true">{IconImage("send")}</span>
+            <span>{t("send")}</span>
+          </Button>
+        </div>
+      )}
     </aside>
   );
 }
@@ -515,6 +540,7 @@ type ThreadMessageProps = {
   onCloseProfilePreview?: () => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   t: TranslateFn;
   theme: ThemeMode;
   usersById: UsersById;
@@ -531,6 +557,7 @@ function ThreadMessage({
   onCloseProfilePreview,
   onOpenAgentDetail,
   onPreviewUser,
+  onQuestionSelect,
   compact = false,
 }: ThreadMessageProps) {
   const user = resolveUserByLocalIdentity(message.sender_id, usersById);
@@ -576,7 +603,13 @@ function ThreadMessage({
         </div>
         {message.content ? (
           <div className="thread-message-bubble">
-            <MessageContent key={`${message.id}:${theme}`} content={message.content} message={message} t={t} />
+            <MessageContent
+              key={`${message.id}:${theme}`}
+              content={message.content}
+              message={message}
+              onQuestionSelect={onQuestionSelect}
+              t={t}
+            />
           </div>
         ) : null}
         <MessageAttachments attachments={message.attachments} t={t} />

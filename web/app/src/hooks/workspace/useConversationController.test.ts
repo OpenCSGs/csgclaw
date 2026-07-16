@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildUsersById, type IMConversation, type IMMessage } from "@/models/conversations";
 import type { AgentLike } from "@/models/agents";
-import { activityWorkingParticipantsForConversation } from "./useConversationController";
+import {
+  activityWorkingParticipantsForConversation,
+  derivedMessageWorkingParticipants,
+} from "./useConversationController";
 
 function toolActivityMessage(status: string): IMMessage {
   return {
@@ -47,6 +50,48 @@ function agentPlaceholderMessage(): IMMessage {
     id: "agent-placeholder",
     sender_id: "pt-dev",
     content: "\u200b",
+  };
+}
+
+function userMessage(createdAt = new Date().toISOString()): IMMessage {
+  return {
+    id: "user-message",
+    sender_id: "user-admin",
+    content: "Ask me a question",
+    created_at: createdAt,
+  };
+}
+
+function newConversationMessage(): IMMessage {
+  return {
+    id: "new-conversation",
+    sender_id: "user-admin",
+    content: '<slash-command name="new" arg="conversation"></slash-command>',
+    created_at: new Date().toISOString(),
+  };
+}
+
+function questionActivityMessage(status: string, resolvedAt?: string): IMMessage {
+  return {
+    id: "question-1",
+    sender_id: "pt-dev",
+    content: JSON.stringify({
+      type: "com.opencsg.csgclaw.agent.activity",
+      version: 1,
+      event_id: "question-1",
+      sender: "pt-dev",
+      content: {
+        msgtype: "com.opencsg.csgclaw.agent.question",
+        body: `Question ${status}`,
+        question: {
+          id: "question-1",
+          status,
+          questions: [{ id: "choice", header: "Choice", question: "Choose", options: [] }],
+          requested_at: new Date(Date.now() - 180_000).toISOString(),
+          resolved_at: resolvedAt,
+        },
+      },
+    }),
   };
 }
 
@@ -147,6 +192,70 @@ describe("activityWorkingParticipantsForConversation", () => {
         legacyToolMessage({ command: "run node inline script" }),
         agentTextMessage("The command finished."),
       ]),
+      "user-admin",
+      agents,
+      usersById,
+    );
+
+    expect(participants).toEqual([]);
+  });
+
+  it("clears earlier tool activity when a new conversation starts", () => {
+    const participants = activityWorkingParticipantsForConversation(
+      conversationWithMessages([toolActivityMessage("running"), newConversationMessage()]),
+      "user-admin",
+      agents,
+      usersById,
+    );
+
+    expect(participants).toEqual([]);
+  });
+});
+
+describe("derivedMessageWorkingParticipants", () => {
+  it("keeps the agent working after a question is answered until the follow-up arrives", () => {
+    const participants = derivedMessageWorkingParticipants(
+      conversationWithMessages([
+        userMessage(new Date(Date.now() - 180_000).toISOString()),
+        questionActivityMessage("answered", new Date().toISOString()),
+      ]),
+      "user-admin",
+      agents,
+      usersById,
+    );
+
+    expect(participants).toEqual([{ id: "pt-dev", name: "dev" }]);
+  });
+
+  it("clears the working state when an answered question receives its assistant follow-up", () => {
+    const participants = derivedMessageWorkingParticipants(
+      conversationWithMessages([
+        userMessage(),
+        questionActivityMessage("answered", new Date().toISOString()),
+        agentTextMessage("Thanks for your answer."),
+      ]),
+      "user-admin",
+      agents,
+      usersById,
+    );
+
+    expect(participants).toEqual([]);
+  });
+
+  it("does not keep the agent working after the question is interrupted", () => {
+    const participants = derivedMessageWorkingParticipants(
+      conversationWithMessages([userMessage(), questionActivityMessage("interrupted", new Date().toISOString())]),
+      "user-admin",
+      agents,
+      usersById,
+    );
+
+    expect(participants).toEqual([]);
+  });
+
+  it("does not derive pending work from messages before a new conversation", () => {
+    const participants = derivedMessageWorkingParticipants(
+      conversationWithMessages([userMessage(), newConversationMessage()]),
       "user-admin",
       agents,
       usersById,

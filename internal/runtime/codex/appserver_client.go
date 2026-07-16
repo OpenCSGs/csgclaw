@@ -197,6 +197,10 @@ func (c *appServerClient) handleServerRequest(msg appServerWireMessage) {
 		Method: strings.TrimSpace(msg.Method),
 		Params: cloneRawMessage(msg.Params),
 	}
+	go c.dispatchServerRequest(req)
+}
+
+func (c *appServerClient) dispatchServerRequest(req appServerServerRequest) {
 	handler := c.onServerRequest
 	if handler == nil {
 		_ = c.respondError(req.ID, -32601, fmt.Sprintf("unhandled server request: %s", req.Method))

@@ -48,19 +48,21 @@
 
 .message-hover-actions {
   position: absolute;
-  top: calc(100% + 2px);
+  top: 100%;
+  left: 0;
   right: 0;
   bottom: auto;
   z-index: 2;
+  padding-top: 2px;
   opacity: 0;
-  pointer-events: none;
+  pointer-events: auto;
   transition: opacity 140ms ease;
 }
 
 .message-row:hover .message-hover-actions,
-.message-row:focus-within .message-hover-actions {
+.message-row:focus-within .message-hover-actions,
+.message-hover-actions:hover {
   opacity: 1;
-  pointer-events: auto;
 }
 
 .thread-action-button,
@@ -88,7 +90,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
+  gap: 12px;
 }
 
 .message-action-button {
@@ -185,7 +187,7 @@
   z-index: 3;
 }
 
-.agent-detail-drawer-backdrop {
+.csg-dialog-overlay.agent-detail-drawer-backdrop {
   z-index: var(--z-page-overlay);
   background: color-mix(in srgb, var(--gray-900) 24%, transparent);
   backdrop-filter: blur(2px);
@@ -369,19 +371,21 @@ button.thread-message-avatar:focus-visible {
 
 .thread-message-actions {
   position: absolute;
-  top: calc(100% + 2px);
+  top: 100%;
+  left: 0;
   right: 0;
   bottom: auto;
   z-index: 2;
+  padding-top: 2px;
   opacity: 0;
-  pointer-events: none;
+  pointer-events: auto;
   transition: opacity 140ms ease;
 }
 
 .thread-message:hover .thread-message-actions,
-.thread-message:focus-within .thread-message-actions {
+.thread-message:focus-within .thread-message-actions,
+.thread-message-actions:hover {
   opacity: 1;
-  pointer-events: auto;
 }
 
 .thread-message-bubble {

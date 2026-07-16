@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/activity"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channelbridge/runtimebridge"
 	runtimecodex "csgclaw/internal/runtime/codex"
@@ -1707,6 +1708,209 @@ func TestServiceUsesStableMessageIDForPermissionDecisionActivity(t *testing.T) {
 	if !foundDecision {
 		t.Fatalf("records = %+v, want allowed decision activity", sent)
 	}
+}
+
+func TestServiceUsesStableMessageIDForQuestionResolution(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{Channel: csgclawchannel.ChannelID, MessageID: "m-1", RoomID: "room-1", Text: "ask me"}
+
+	sink := runtimecodex.NewEventSink()
+	broker := runtimecodex.NewUserInputBroker(sink)
+	client := &fakeBotClient{streams: map[string][]streamResult{"u-codex": {{events: stream, errs: errs}}}}
+	prompter := &fakePrompter{prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+		decision, err := broker.Request(context.Background(), runtimecodex.PendingUserInputRequest{
+			Execution: activity.ExecutionRef{RuntimeID: handle.RuntimeID, SessionID: req.SessionID},
+			Questions: []activity.UserInputQuestionSnapshot{{ID: "color", Header: "Color", Question: "Choose", Options: []activity.UserInputOptionSnapshot{{Label: "Blue"}}}},
+		})
+		if err == nil {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "Continuing with " + decision.Snapshot.Answers["color"].OptionLabel,
+			})
+		}
+		sink.Publish(runtimecodex.SessionEvent{RuntimeID: handle.RuntimeID, SessionID: req.SessionID, Kind: runtimecodex.SessionEventPromptCompleted})
+		return err
+	}}
+	svc := NewService(client, prompter, sink, broker)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "u-codex", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	var requestID string
+	waitFor(t, func() bool {
+		for _, record := range client.sentRecords() {
+			var payload struct {
+				Content struct {
+					Question activity.UserInputSnapshot `json:"question"`
+				} `json:"content"`
+			}
+			if json.Unmarshal([]byte(record.Text), &payload) == nil && payload.Content.Question.ID != "" {
+				requestID = payload.Content.Question.ID
+				return payload.Content.Question.Status == activity.UserInputStatusPending
+			}
+		}
+		return false
+	})
+	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+		Channel: csgclawchannel.ChannelID, ActivityID: requestID, RoomID: "room-1", ResponderID: "user-admin",
+		Answers: map[string]activity.UserInputAnswer{"color": {OptionIndex: 1}},
+	}); err != nil {
+		t.Fatalf("Respond() error = %v", err)
+	}
+	waitFor(t, func() bool {
+		for _, record := range client.sentRecords() {
+			if record.MessageID == "question-"+requestID && strings.Contains(record.Text, `"status":"answered"`) {
+				return true
+			}
+		}
+		return false
+	})
+	waitFor(t, func() bool {
+		return slices.Contains(client.sentTexts(), "Continuing with Blue")
+	})
+	var questionRecords []SendMessageRequest
+	for _, record := range client.sentRecords() {
+		if record.MessageID == "question-"+requestID {
+			questionRecords = append(questionRecords, record)
+		}
+	}
+	if len(questionRecords) != 2 || questionRecords[0].ThreadRootID != "" || questionRecords[1].ThreadRootID != "" {
+		t.Fatalf("question records = %+v, want pending and resolved top-level replacements", questionRecords)
+	}
+}
+
+func TestServiceFlushesCommentaryBeforeUserInputQuestion(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{Channel: csgclawchannel.ChannelID, MessageID: "m-1", RoomID: "room-1", Text: "show statistics"}
+
+	sink := runtimecodex.NewEventSink()
+	broker := runtimecodex.NewUserInputBroker(sink)
+	client := &fakeBotClient{streams: map[string][]streamResult{"u-codex": {{events: stream, errs: errs}}}}
+	prompter := &fakePrompter{prompt: func(ctx context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+		sink.Publish(runtimecodex.SessionEvent{
+			RuntimeID: handle.RuntimeID,
+			SessionID: req.SessionID,
+			Kind:      runtimecodex.SessionEventTextDelta,
+			Text:      "Statistics: 829 converted rows.",
+			Payload:   map[string]any{"phase": "commentary"},
+		})
+		_, err := broker.Request(ctx, runtimecodex.PendingUserInputRequest{
+			Execution: activity.ExecutionRef{RuntimeID: handle.RuntimeID, SessionID: req.SessionID},
+			Questions: []activity.UserInputQuestionSnapshot{{
+				ID: "next", Header: "Next", Question: "What should happen next?",
+				Options: []activity.UserInputOptionSnapshot{{Label: "Continue"}},
+			}},
+		})
+		if err == nil {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "Continuing.",
+				Payload:   map[string]any{"phase": "final_answer"},
+			})
+		}
+		sink.Publish(runtimecodex.SessionEvent{RuntimeID: handle.RuntimeID, SessionID: req.SessionID, Kind: runtimecodex.SessionEventPromptCompleted})
+		return err
+	}}
+	svc := NewService(client, prompter, sink, broker)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer svc.Close()
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "u-codex", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+
+	var requestID string
+	waitFor(t, func() bool {
+		for _, record := range client.sentRecords() {
+			var payload struct {
+				Content struct {
+					Question activity.UserInputSnapshot `json:"question"`
+				} `json:"content"`
+			}
+			if json.Unmarshal([]byte(record.Text), &payload) == nil && payload.Content.Question.Status == activity.UserInputStatusPending {
+				requestID = payload.Content.Question.ID
+				return requestID != ""
+			}
+		}
+		return false
+	})
+	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+		Channel: csgclawchannel.ChannelID, ActivityID: requestID, RoomID: "room-1", ResponderID: "user-admin",
+		Answers: map[string]activity.UserInputAnswer{"next": {OptionIndex: 1}},
+	}); err != nil {
+		t.Fatalf("Respond() error = %v", err)
+	}
+	waitFor(t, func() bool { return slices.Contains(client.sentTexts(), "Continuing.") })
+
+	records := client.sentRecords()
+	if len(records) < 2 || records[0].Text != "Statistics: 829 converted rows." {
+		t.Fatalf("records = %+v, want commentary before pending question", records)
+	}
+	pendingIndex := -1
+	for index, record := range records {
+		if record.MessageID == "question-"+requestID && strings.Contains(record.Text, `"status":"pending"`) {
+			pendingIndex = index
+			break
+		}
+	}
+	if pendingIndex <= 0 {
+		t.Fatalf("pending question index = %d, want after commentary", pendingIndex)
+	}
+}
+
+func TestServiceSkipsFeishuQuestionWithUnsupportedNotice(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{Channel: "feishu", MessageID: "m-1", RoomID: "chat-1", Text: "ask me"}
+	sink := runtimecodex.NewEventSink()
+	broker := runtimecodex.NewUserInputBroker(sink)
+	client := &fakeBotClient{streams: map[string][]streamResult{"u-codex": {{events: stream, errs: errs}}}}
+	decisionCh := make(chan runtimecodex.UserInputDecision, 1)
+	prompter := &fakePrompter{prompt: func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+		decision, err := broker.Request(context.Background(), runtimecodex.PendingUserInputRequest{
+			Execution: activity.ExecutionRef{RuntimeID: handle.RuntimeID, SessionID: req.SessionID},
+			Questions: []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Answer?"}},
+		})
+		decisionCh <- decision
+		return err
+	}}
+	svc := NewService(client, prompter, sink, broker)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "u-codex", RuntimeID: "rt-1", SessionID: "sess-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	select {
+	case decision := <-decisionCh:
+		if decision.Snapshot.Status != activity.UserInputStatusSkipped || len(decision.Response.Answers) != 0 {
+			t.Fatalf("Feishu decision = %+v, want empty skipped answer", decision)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Feishu question did not resolve")
+	}
+	waitFor(t, func() bool {
+		return slices.Contains(client.sentTexts(), "Interactive questions are currently supported in the CSGClaw Web UI only. Continuing without an answer.")
+	})
 }
 
 func TestServiceIgnoresEventsFromOtherBindings(t *testing.T) {

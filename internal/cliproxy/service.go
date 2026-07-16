@@ -38,6 +38,14 @@ const (
 	authDirEnv   = "CSGCLAW_CLIPROXY_AUTH_DIR"
 
 	embeddedCLIProxySkipGinLogKey = "__gin_skip_request_logging__"
+
+	// A single managed OAuth credential is the common CSGClaw setup. Absorb one
+	// transient upstream failure inside CLIProxyAPI so its short model cooldown
+	// does not escape to Codex as an immediate synthetic 429.
+	embeddedCLIProxyRequestRetry                  = 1
+	embeddedCLIProxyMaxRetryIntervalSeconds       = 30
+	embeddedCLIProxyTransientErrorCooldownSeconds = 10
+	embeddedCLIProxyStreamingBootstrapRetries     = 1
 )
 
 type Service struct {
@@ -352,13 +360,19 @@ func buildConfig() (*sdkconfig.Config, string, string, error) {
 		return nil, "", "", err
 	}
 	cfg := &sdkconfig.Config{
-		Host:           "127.0.0.1",
-		Port:           port,
-		AuthDir:        authDir,
-		CommercialMode: true,
-		LoggingToFile:  false,
+		Host:                          "127.0.0.1",
+		Port:                          port,
+		AuthDir:                       authDir,
+		CommercialMode:                true,
+		LoggingToFile:                 false,
+		RequestRetry:                  embeddedCLIProxyRequestRetry,
+		MaxRetryInterval:              embeddedCLIProxyMaxRetryIntervalSeconds,
+		TransientErrorCooldownSeconds: embeddedCLIProxyTransientErrorCooldownSeconds,
 		SDKConfig: sdkconfig.SDKConfig{
 			APIKeys: []string{LocalAPIKey},
+			Streaming: sdkconfig.StreamingConfig{
+				BootstrapRetries: embeddedCLIProxyStreamingBootstrapRetries,
+			},
 		},
 	}
 	cfg.ProxyURL = configuredProxyURL()
@@ -435,6 +449,11 @@ func writeConfigFile(path string, cfg *sdkconfig.Config) error {
 		"auth-dir: " + yamlString(cfg.AuthDir),
 		"api-keys:",
 		"  - " + yamlString(LocalAPIKey),
+		"request-retry: " + strconv.Itoa(cfg.RequestRetry),
+		"max-retry-interval: " + strconv.Itoa(cfg.MaxRetryInterval),
+		"transient-error-cooldown-seconds: " + strconv.Itoa(cfg.TransientErrorCooldownSeconds),
+		"streaming:",
+		"  bootstrap-retries: " + strconv.Itoa(cfg.Streaming.BootstrapRetries),
 	}
 	if proxyURL := strings.TrimSpace(cfg.ProxyURL); proxyURL != "" {
 		lines = append(lines, "proxy-url: "+yamlString(proxyURL))

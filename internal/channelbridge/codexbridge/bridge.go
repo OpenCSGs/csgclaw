@@ -2,12 +2,14 @@ package codexbridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"csgclaw/internal/activity"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channelbridge/runtimebridge"
 	runtimecodex "csgclaw/internal/runtime/codex"
@@ -48,6 +50,7 @@ type Service struct {
 	client         BotClient
 	prompter       SessionPrompter
 	events         runtimecodex.SessionEventSubscriber
+	userInput      runtimecodex.UserInputBroker
 	reconnectDelay time.Duration
 	queueSize      int
 	seenWindow     int
@@ -57,8 +60,8 @@ type Service struct {
 	workers map[string]*worker
 }
 
-func NewService(client BotClient, prompter SessionPrompter, events runtimecodex.SessionEventSubscriber) *Service {
-	return &Service{
+func NewService(client BotClient, prompter SessionPrompter, events runtimecodex.SessionEventSubscriber, userInputs ...runtimecodex.UserInputBroker) *Service {
+	service := &Service{
 		client:         client,
 		prompter:       prompter,
 		events:         events,
@@ -68,6 +71,10 @@ func NewService(client BotClient, prompter SessionPrompter, events runtimecodex.
 		promptSettle:   defaultPromptSettle,
 		workers:        make(map[string]*worker),
 	}
+	if len(userInputs) > 0 {
+		service.userInput = userInputs[0]
+	}
+	return service
 }
 
 func (s *Service) StartBot(ctx context.Context, binding Binding) error {
@@ -302,8 +309,20 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		"has_thread_context", evt.ThreadContext != nil,
 	)
 	renderer := runtimebridge.NewTurnRenderer()
+	var pendingCommentary strings.Builder
 	turnRootID := strings.TrimSpace(evt.ThreadRootID)
 	var generatedRootID string
+	flushPendingCommentary := func() error {
+		text := strings.TrimSpace(pendingCommentary.String())
+		if text == "" {
+			return nil
+		}
+		if _, err := w.sendMessage(ctx, evt.RoomID, evt.ThreadRootID, text); err != nil {
+			return err
+		}
+		pendingCommentary.Reset()
+		return nil
+	}
 
 	ensureActivityThreadRoot := func() (string, error) {
 		if turnRootID != "" {
@@ -384,15 +403,59 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 				"session_id", sessionID,
 				"text_bytes", len(commentaryText),
 			)
+			if pendingCommentary.Len() > 0 {
+				_, _ = pendingCommentary.WriteString("\n\n")
+			}
+			_, _ = pendingCommentary.WriteString(commentaryText)
 			return false, nil
 		}
 		if isCodexFinalTextEvent(event) {
 			renderer.ApplyText(event)
 		}
+		if event.Kind == runtimecodex.SessionEventUserInputRequest || event.Kind == runtimecodex.SessionEventUserInputResolved {
+			snapshot, ok := event.Payload.(activity.UserInputSnapshot)
+			if !ok {
+				return false, nil
+			}
+			if event.Kind == runtimecodex.SessionEventUserInputRequest && w.service.userInput != nil {
+				bound, err := w.service.userInput.Bind(snapshot.ID, evt.Channel, evt.RoomID)
+				if err != nil {
+					return false, err
+				}
+				snapshot = bound
+				event.Payload = bound
+			}
+			if !strings.EqualFold(strings.TrimSpace(evt.Channel), localChannel) {
+				if event.Kind == runtimecodex.SessionEventUserInputRequest && w.service.userInput != nil {
+					_, err := w.service.userInput.Respond(ctx, activity.UserInputResponseRequest{
+						Channel:     strings.TrimSpace(evt.Channel),
+						ActivityID:  snapshot.ID,
+						RoomID:      evt.RoomID,
+						ResponderID: "system",
+						SkipAll:     true,
+					})
+					if err != nil &&
+						!errors.Is(err, activity.ErrUserInputAlreadyResolved) &&
+						!errors.Is(err, activity.ErrUserInputGone) {
+						return false, err
+					}
+					_, err = w.sendMessage(ctx, evt.RoomID, evt.ThreadRootID, "Interactive questions are currently supported in the CSGClaw Web UI only. Continuing without an answer.")
+					return false, err
+				}
+				return false, nil
+			}
+			if event.Kind == runtimecodex.SessionEventUserInputRequest {
+				if err := flushPendingCommentary(); err != nil {
+					return false, err
+				}
+			}
+		}
 		if renderedActivity, ok := renderer.RenderActivity(event, localChannel, evt.RoomID, w.binding.BotID); ok {
 			threadRootID := ""
 			metadata := codexActivityDeliveryMetadata(event, evt.MessageID)
-			if !isCodexToolDeliveryEvent(event) {
+			if event.Kind == runtimecodex.SessionEventUserInputRequest || event.Kind == runtimecodex.SessionEventUserInputResolved {
+				threadRootID = strings.TrimSpace(evt.ThreadRootID)
+			} else if !isCodexToolDeliveryEvent(event) {
 				var err error
 				threadRootID, err = ensureActivityThreadRoot()
 				if err != nil {
@@ -683,6 +746,7 @@ func (w *worker) sendActivity(ctx context.Context, roomID, threadRootID string, 
 	_, err := w.sendMessageRequest(ctx, SendMessageRequest{
 		RoomID:       roomID,
 		Text:         activity.Text,
+		MessageID:    activity.MessageID,
 		ThreadRootID: strings.TrimSpace(threadRootID),
 		Metadata:     metadata,
 	})

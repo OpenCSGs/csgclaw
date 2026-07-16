@@ -3,7 +3,9 @@ import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
+  AgentQuestionComposer,
   type ConversationPaneProps,
+  useQuestionAnswerMode,
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
 import { AgentView } from "@/pages/AgentPage/components";
@@ -37,6 +39,7 @@ function writeConversationActivityActionSeen() {
 }
 
 function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePanelProps) {
+  const [dialogPortalContainer, setDialogPortalContainer] = useState<HTMLDivElement | null>(null);
   const handleOpenDM = useCallback(
     async (...args: Parameters<typeof onOpenDM>) => {
       if (onClose(false) === false) {
@@ -50,6 +53,7 @@ function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePa
   return (
     <DialogRoot open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent
+        ref={setDialogPortalContainer}
         aria-describedby={undefined}
         aria-modal="true"
         className="agent-detail-side-panel"
@@ -59,12 +63,13 @@ function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePa
           <DialogCloseButton
             className="agent-detail-side-panel-close"
             label={props.t("close")}
+            title=""
             variant="tertiaryGray"
           />
           <DialogTitle className="agent-detail-side-panel-title">{props.t("agentDetailPanel")}</DialogTitle>
         </div>
         <div className="agent-detail-side-panel-body">
-          <AgentView {...props} onOpenDM={handleOpenDM} />
+          <AgentView {...props} dialogPortalContainer={dialogPortalContainer} onOpenDM={handleOpenDM} />
         </div>
       </DialogContent>
     </DialogRoot>
@@ -152,6 +157,7 @@ export function ConversationPane({
   onOpenThread,
   onCloseThread,
   onThreadDraftChange,
+  onThreadSlashQueryChange,
   onSendThreadReply,
   onAddThreadAttachments,
   onRemoveThreadAttachment,
@@ -171,6 +177,18 @@ export function ConversationPane({
   const logAgentName = logAgent?.name || conversation.title || "";
   const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
   const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
+  const questionMode = useQuestionAnswerMode({
+    messages: conversation.messages.filter((message) => !message.relates_to),
+    responderID: currentUserID,
+    roomID: conversation.id,
+    t,
+  });
+  const threadQuestionMode = useQuestionAnswerMode({
+    messages: activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [],
+    responderID: currentUserID,
+    roomID: conversation.id,
+    t,
+  });
 
   useConversationDraftEditorSync(editorRef, draftSegments);
 
@@ -256,6 +274,7 @@ export function ConversationPane({
       t={t}
       onClose={onCloseThread}
       onDraftChange={onThreadDraftChange}
+      onSlashQueryChange={onThreadSlashQueryChange}
       onAddAttachments={onAddThreadAttachments}
       onRemoveAttachment={onRemoveThreadAttachment}
       onCancelProfilePreviewClose={onCancelProfilePreviewClose}
@@ -270,6 +289,8 @@ export function ConversationPane({
       onSetThreadSlashIndex={onSetThreadSlashIndex}
       mentionableUsers={conversationMembers}
       onPreviewUser={onPreviewUser}
+      onQuestionSelect={threadQuestionMode.select}
+      questionMode={threadQuestionMode}
       onSend={onSendThreadReply}
     />
   ) : null;
@@ -350,51 +371,56 @@ export function ConversationPane({
         onOpenAgentDetail={onOpenAgentDetail}
         onOpenThread={onOpenThread}
         onPreviewUser={onPreviewUser}
+        onQuestionSelect={questionMode.select}
       />
 
-      <Conversation.Composer
-        authBusyProvider={authBusyProvider}
-        authStatuses={authStatuses}
-        connectorStatus={connectorStatus}
-        connectorBusyAction={connectorBusyAction}
-        connectorError={connectorError}
-        connectorPending={connectorPending}
-        composerDisabled={composerDisabled}
-        composerDisabledReason={composerDisabledReason}
-        composerError={composerError}
-        draftSegments={draftSegments}
-        draftText={draftText}
-        attachmentDrafts={attachmentDrafts}
-        editorRef={editorRef}
-        managerProfile={managerProfile}
-        managerProvider={managerProvider}
-        mentionCandidates={mentionCandidates}
-        mentionIndex={mentionIndex}
-        mentionableUsersByName={mentionableUsersByName}
-        slashCandidates={slashCandidates}
-        slashIndex={slashIndex}
-        slashPickerLoading={slashPickerLoading}
-        slashPickerOpen={slashPickerOpen}
-        t={t}
-        workingActionAttention={!activityActionSeen}
-        workingActionLabel={t("conversationActivityView")}
-        workingParticipants={workingParticipants}
-        onApplyMention={onApplyMention}
-        onApplySlashCandidate={onApplySlashCandidate}
-        onAddAttachments={onAddAttachments}
-        onComposerCompositionEnd={onComposerCompositionEnd}
-        onComposerCompositionStart={onComposerCompositionStart}
-        onComposerKeyDown={onComposerKeyDown}
-        onConnectConnector={onConnectConnector}
-        onDisconnectConnector={onDisconnectConnector}
-        onManageConnector={onManageConnector}
-        onProviderLogin={onProviderLogin}
-        onSaveConnectorConfig={onSaveConnectorConfig}
-        onSendMessage={onSendMessage}
-        onRemoveAttachment={onRemoveAttachment}
-        onSyncComposer={onSyncComposer}
-        onWorkingAction={handleOpenActivityPanel}
-      />
+      {questionMode.pending.length > 0 ? (
+        <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} />
+      ) : (
+        <Conversation.Composer
+          authBusyProvider={authBusyProvider}
+          authStatuses={authStatuses}
+          connectorStatus={connectorStatus}
+          connectorBusyAction={connectorBusyAction}
+          connectorError={connectorError}
+          connectorPending={connectorPending}
+          composerDisabled={composerDisabled}
+          composerDisabledReason={composerDisabledReason}
+          composerError={composerError}
+          draftSegments={draftSegments}
+          draftText={draftText}
+          attachmentDrafts={attachmentDrafts}
+          editorRef={editorRef}
+          managerProfile={managerProfile}
+          managerProvider={managerProvider}
+          mentionCandidates={mentionCandidates}
+          mentionIndex={mentionIndex}
+          mentionableUsersByName={mentionableUsersByName}
+          slashCandidates={slashCandidates}
+          slashIndex={slashIndex}
+          slashPickerLoading={slashPickerLoading}
+          slashPickerOpen={slashPickerOpen}
+          t={t}
+          workingActionAttention={!activityActionSeen}
+          workingActionLabel={t("conversationActivityView")}
+          workingParticipants={workingParticipants}
+          onApplyMention={onApplyMention}
+          onApplySlashCandidate={onApplySlashCandidate}
+          onAddAttachments={onAddAttachments}
+          onComposerCompositionEnd={onComposerCompositionEnd}
+          onComposerCompositionStart={onComposerCompositionStart}
+          onComposerKeyDown={onComposerKeyDown}
+          onConnectConnector={onConnectConnector}
+          onDisconnectConnector={onDisconnectConnector}
+          onManageConnector={onManageConnector}
+          onProviderLogin={onProviderLogin}
+          onSaveConnectorConfig={onSaveConnectorConfig}
+          onSendMessage={onSendMessage}
+          onRemoveAttachment={onRemoveAttachment}
+          onSyncComposer={onSyncComposer}
+          onWorkingAction={handleOpenActivityPanel}
+        />
+      )}
       {sidePanel}
       <Conversation.RoomDangerConfirmDialog
         cancelLabel={t("cancel")}

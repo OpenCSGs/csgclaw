@@ -44,6 +44,7 @@ export type ConversationMessageListProps = {
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   t: TranslateFn;
   theme: ThemeMode;
   usersById: UsersById;
@@ -69,6 +70,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   onMessageAction,
   onOpenThread,
   onPreviewUser,
+  onQuestionSelect,
 }: ConversationMessageListProps) {
   const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
 
@@ -124,7 +126,10 @@ export const ConversationMessageList = memo(function ConversationMessageList({
         return (
           <Fragment key={message.id || `message-${index}`}>
             {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
-            <div className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}>
+            <div
+              className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}
+              data-message-id={message.id || undefined}
+            >
               <button
                 type="button"
                 className="avatar avatar-button"
@@ -172,6 +177,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                               }))
                           : undefined
                       }
+                      onQuestionSelect={onQuestionSelect}
                       t={t}
                     />
                   </div>

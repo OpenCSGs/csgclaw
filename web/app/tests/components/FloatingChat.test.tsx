@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
 import { FloatingChat } from "@/pages/WorkspacePage/components/FloatingChat";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
+import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 
 const GUIDE_STORAGE_KEY = "csgclaw:floating-chat:manager-guide:v1";
 
@@ -202,6 +203,67 @@ describe("FloatingChat manager guide", () => {
 });
 
 describe("FloatingChat manager prompts", () => {
+  it("uses answer mode and supports clearing a selected option", async () => {
+    const user = userEvent.setup();
+    renderOpenManagerFloatingChat({
+      id: "room-manager",
+      is_direct: true,
+      members: users.map((user) => user.id),
+      messages: [
+        {
+          content: JSON.stringify({
+            type: CSGCLAW_AGENT_ACTIVITY_TYPE,
+            content: {
+              msgtype: AgentActivityMsgTypes.question,
+              body: "Question pending",
+              question: {
+                id: "request-1",
+                status: "pending",
+                questions: [
+                  {
+                    id: "scope",
+                    header: "Scope",
+                    question: "Choose a scope",
+                    options: [{ label: "Workspace" }],
+                  },
+                  {
+                    id: "detail",
+                    header: "Detail",
+                    question: "Add more detail",
+                    options: [],
+                  },
+                ],
+              },
+            },
+            channel: "csgclaw",
+            event_id: "question-request-1",
+            origin_server_ts: 1,
+            room_id: "room-manager",
+            sender: "manager",
+            version: 1,
+          }),
+          created_at: "2026-07-15T08:00:00Z",
+          id: "question-request-1",
+          sender_id: "manager",
+        },
+      ],
+      title: "manager",
+    });
+
+    expect(screen.getAllByText("Choose a scope").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("questionFreeformAnswer")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+    expect(screen.queryByLabelText("Type a message. Use / for commands or skills")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /Workspace/ }));
+    await user.click(screen.getByRole("button", { name: "questionPrevious" }));
+    const selectedOption = screen.getByRole("radio", { name: /Workspace/ });
+    expect(selectedOption).toHaveAttribute("aria-checked", "true");
+    await user.click(selectedOption);
+    expect(screen.getByRole("radio", { name: /Workspace/ })).toHaveAttribute("aria-checked", "false");
+  });
+
   it("shows prompt suggestions when the manager chat only has the bootstrap notice", () => {
     renderOpenManagerFloatingChat({
       id: "room-manager",

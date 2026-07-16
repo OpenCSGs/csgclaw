@@ -38,6 +38,7 @@ import {
   type ComposerSegment,
   getMentionCandidates,
   getComposerMentionState,
+  getComposerSlashQueryAtSelection,
   insertComposerLineBreak,
   isComposerKeyboardEventComposing,
   parseComposerSegments,
@@ -68,8 +69,14 @@ import {
   isTerminalAgentActivityTool,
   parseAgentActivity,
   parseMessageActivityCommand,
+  questionActivityKeepsAgentWorking,
 } from "@/models/agentActivity";
-import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkillOption } from "@/models/slashCommands";
+import {
+  isNewConversationSlashCommand,
+  skillDescriptionFromMarkdown,
+  skillOptionsFromWorkspace,
+  type SlashSkillOption,
+} from "@/models/slashCommands";
 import { localizeError } from "@/shared/i18n";
 import { AgentActivityKinds, AgentActivityMsgTypes } from "@/shared/constants/messages";
 import type { AgentLike } from "@/models/agents";
@@ -85,7 +92,10 @@ import type {
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { UseConversationControllerArgs } from "./types";
 import { messageListScrollKey, useMessageListAutoScroll } from "./useMessageListAutoScroll";
-import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
+import {
+  handleSlashPickerNavigation,
+  type ConversationWorkingParticipant,
+} from "@/components/business/ConversationPane";
 
 const slashSkillOptionsCache = new Map<string, SlashSkillOption[]>();
 const slashSkillOptionsRequests = new Map<string, Promise<SlashSkillOption[]>>();
@@ -113,6 +123,7 @@ type OpenCreateRoomOptions = {
 type WorkingParticipantsByConversationId = Record<string, ConversationWorkingParticipant[]>;
 
 const MESSAGE_WORKING_TIMEOUT_MS = 120_000;
+const QUESTION_CONTINUATION_WORKING_TIMEOUT_MS = 10 * 60_000;
 const PARTICIPANT_ACTIVITY_TURN_PLACEHOLDER = "\u200b";
 
 function clearThreadDraftsForConversation(current: DraftsByThreadKey, conversationID: string): DraftsByThreadKey {
@@ -251,7 +262,7 @@ function messageWorkingTargets(
   return targets.filter((target) => mentionedIDs.some((mentionedID) => localIdentitiesMatch(mentionedID, target.id)));
 }
 
-function derivedMessageWorkingParticipants(
+export function derivedMessageWorkingParticipants(
   conversation: IMConversation | null | undefined,
   currentUserID: string | null | undefined,
   agents: readonly AgentLike[],
@@ -268,9 +279,23 @@ function derivedMessageWorkingParticipants(
   }
 
   const repliedTargetIDs = new Set<string>();
+  let questionContinuationAt: number | null = null;
   for (let index = conversation.messages.length - 1; index >= 0; index -= 1) {
     const message = conversation.messages[index];
     if (isThreadReply(message) || isToolCallMessage(message) || isParticipantActivityTurnPlaceholder(message)) {
+      continue;
+    }
+    if (localIdentitiesMatch(message.sender_id, currentID) && isNewConversationSlashCommand(message.content)) {
+      return [];
+    }
+    if (questionActivityKeepsAgentWorking(message)) {
+      const question = parseAgentActivity(message.content)?.content.question;
+      const continuationAt = Date.parse(
+        String(question?.resolved_at || question?.requested_at || message.created_at || ""),
+      );
+      if (Number.isFinite(continuationAt)) {
+        questionContinuationAt = Math.max(questionContinuationAt ?? continuationAt, continuationAt);
+      }
       continue;
     }
 
@@ -292,7 +317,7 @@ function derivedMessageWorkingParticipants(
     if (!pendingTargets.length) {
       continue;
     }
-    return messageWorkingExpired(message) ? [] : pendingTargets;
+    return messageWorkingExpired(message, questionContinuationAt) ? [] : pendingTargets;
   }
 
   return [];
@@ -315,6 +340,15 @@ export function activityWorkingParticipantsForConversation(
   const activeToolKeysByParticipantID = new Map<string, Set<string>>();
   const activeLegacyCommandCountsByParticipantID = new Map<string, Map<string, number>>();
   conversation.messages.forEach((message) => {
+    if (
+      !isThreadReply(message) &&
+      localIdentitiesMatch(message.sender_id, currentUserID) &&
+      isNewConversationSlashCommand(message.content)
+    ) {
+      activeToolKeysByParticipantID.clear();
+      activeLegacyCommandCountsByParticipantID.clear();
+      return;
+    }
     const activity = parseAgentActivity(message.content);
     const tool = activity?.content.tool;
     const target = activityWorkingTargetForMessage(message, activity?.sender, targets);
@@ -420,12 +454,14 @@ function mentionedIDsFromMessage(message: IMMessage): string[] {
   return Array.from(ids);
 }
 
-function messageWorkingExpired(message: IMMessage): boolean {
-  const createdAt = Date.parse(String(message.created_at || ""));
+function messageWorkingExpired(message: IMMessage, questionContinuationAt: number | null = null): boolean {
+  const createdAt = questionContinuationAt ?? Date.parse(String(message.created_at || ""));
   if (!Number.isFinite(createdAt)) {
     return false;
   }
-  return Date.now() - createdAt > MESSAGE_WORKING_TIMEOUT_MS;
+  const timeout =
+    questionContinuationAt === null ? MESSAGE_WORKING_TIMEOUT_MS : QUESTION_CONTINUATION_WORKING_TIMEOUT_MS;
+  return Date.now() - createdAt > timeout;
 }
 
 function mergeWorkingParticipants(
@@ -490,6 +526,7 @@ export function useConversationController({
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState("");
   const [composerMentionState, setComposerMentionState] = useState<ComposerMentionState | null>(null);
+  const [composerSlashQuery, setComposerSlashQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [skillOptions, setSkillOptions] = useState<SlashSkillOption[]>([]);
   const [slashIndex, setSlashIndex] = useState(0);
@@ -497,6 +534,7 @@ export function useConversationController({
   const [slashPickerDismissed, setSlashPickerDismissed] = useState(false);
   const [threadSlashPickerDismissed, setThreadSlashPickerDismissed] = useState(false);
   const [threadSlashIndex, setThreadSlashIndex] = useState(0);
+  const [threadSlashQuery, setThreadSlashQuery] = useState<string | null>(null);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
@@ -666,9 +704,10 @@ export function useConversationController({
       buildSlashPickerState({
         draftText,
         enabled: slashPickerEnabled,
+        query: composerSlashQuery,
         skillOptions,
       }),
-    [draftText, slashPickerEnabled, skillOptions],
+    [composerSlashQuery, draftText, slashPickerEnabled, skillOptions],
   );
   const slashPickerQuery = slashPickerState.query;
   const slashPickerActive = slashPickerState.active;
@@ -693,10 +732,11 @@ export function useConversationController({
       buildSlashPickerState({
         draftText: activeThreadDraft,
         enabled: threadSlashPickerEnabled,
+        query: threadSlashQuery,
         skillOptions,
         disabled: threadSlashPickerDismissed,
       }),
-    [activeThreadDraft, threadSlashPickerEnabled, threadSlashPickerDismissed, skillOptions],
+    [activeThreadDraft, threadSlashPickerEnabled, threadSlashPickerDismissed, threadSlashQuery, skillOptions],
   );
   const threadSlashPickerQuery = threadSlashPickerState.query;
   const threadSlashPickerActive = threadSlashPickerState.active;
@@ -783,7 +823,11 @@ export function useConversationController({
         if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
           setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
         }
-        if (!isToolCallMessage(payload.message) && !isParticipantActivityTurnPlaceholder(payload.message)) {
+        if (
+          !isToolCallMessage(payload.message) &&
+          !isParticipantActivityTurnPlaceholder(payload.message) &&
+          !questionActivityKeepsAgentWorking(payload.message)
+        ) {
           clearMessageWorkingParticipants(payload.room_id, payload.message.sender_id);
         }
       }
@@ -803,11 +847,13 @@ export function useConversationController({
     setSkillOptions([]);
     setSlashIndex(0);
     setSlashPickerDismissed(false);
+    setComposerSlashQuery(null);
   }, [activeConversationId]);
 
   useEffect(() => {
     setThreadSlashIndex(0);
     setThreadSlashPickerDismissed(false);
+    setThreadSlashQuery(null);
   }, [activeThreadDraftKey]);
 
   useEffect(() => {
@@ -870,6 +916,40 @@ export function useConversationController({
     }
     setSlashPickerLoading(slashSkillOptionsRequests.has(activeConversationAgentId));
   }, [activeConversationAgentId, isAnySlashPickerNeeded, skillOptions.length]);
+
+  useEffect(() => {
+    if (!isAnySlashPickerNeeded || !activeConversationAgentId) {
+      return;
+    }
+
+    let cancelled = false;
+    setSlashPickerLoading(true);
+    loadSlashSkillOptions(
+      activeConversationAgentId,
+      (skills) => {
+        if (!cancelled) {
+          setSkillOptions(skills);
+        }
+      },
+      { refresh: true },
+    )
+      .then((skills) => {
+        if (!cancelled) {
+          setSkillOptions(skills);
+        }
+      })
+      .catch(() => {
+        // Keep cached candidates usable when background revalidation fails.
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSlashPickerLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversationAgentId, isAnySlashPickerNeeded]);
 
   useEffect(() => {
     if (!managerProfileIncomplete) {
@@ -1046,13 +1126,10 @@ export function useConversationController({
     setComposerError("");
     const serializedDraft = serializeComposerSegments(draftSegments);
     const content = normalizeSlashShorthandForPayload(serializedDraft);
-    const workingTargets = messageWorkingTargets(
-      activeConversation,
-      data.current_user_id,
-      agents,
-      usersById,
-      draftSegments,
-    );
+    const startsNewConversation = isNewConversationSlashCommand(content);
+    const workingTargets = startsNewConversation
+      ? []
+      : messageWorkingTargets(activeConversation, data.current_user_id, agents, usersById, draftSegments);
     try {
       const created = await sendMessageRequest({
         room_id: activeConversation.id,
@@ -1062,11 +1139,26 @@ export function useConversationController({
       });
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       messageListAutoScroll.follow("smooth");
-      markMessageWorkingParticipants(activeConversation.id, workingTargets);
+      if (startsNewConversation) {
+        clearMessageWorkingParticipants(activeConversation.id);
+      } else {
+        markMessageWorkingParticipants(activeConversation.id, workingTargets);
+      }
       clearComposer();
     } catch (err) {
       setComposerError(errorMessage(err, t("sendFailed")));
     }
+  }
+
+  function preserveMessagePosition(messageID: string) {
+    const messageList = messageListRef.current;
+    if (!messageList || !messageID) {
+      return;
+    }
+    const anchor = Array.from(messageList.querySelectorAll<HTMLElement>(".message-row[data-message-id]")).find(
+      (element) => element.dataset.messageId === messageID,
+    );
+    messageListAutoScroll.preserveAnchor(anchor ?? null);
   }
 
   async function openThreadInConversation(conversationID: string, message: IMMessage | null | undefined) {
@@ -1088,6 +1180,9 @@ export function useConversationController({
       return;
     }
 
+    if (conversationID === activeConversationId) {
+      preserveMessagePosition(rootID);
+    }
     const shouldLoadPersistedThread = isThreadReply(message) || threadHasReplies(root.thread);
     setThreadError("");
     setActiveThreadRootID(rootID);
@@ -1177,15 +1272,22 @@ export function useConversationController({
     }
   }
 
-  function closeThread() {
+  function resetThread() {
     setActiveThreadRootID("");
     setActiveThreadView(null);
     setThreadLoading(false);
     setThreadError("");
   }
 
+  function closeThread() {
+    if (activeThreadRootID) {
+      preserveMessagePosition(activeThreadRootID);
+    }
+    resetThread();
+  }
+
   function selectConversationAndCloseThread(id: string) {
-    closeThread();
+    resetThread();
     selectConversation(id);
   }
 
@@ -1350,7 +1452,7 @@ export function useConversationController({
     setComposerError("");
     setSubmitError("");
     if (activeConversationId === roomID) {
-      closeThread();
+      resetThread();
     }
   }
 
@@ -1371,11 +1473,11 @@ export function useConversationController({
     if (!skillName || !activeConversationId) {
       return;
     }
-    const nextText = slashCommandInputText(skillName);
-    const nextSegments = normalizeComposerSegmentsForDisplay([{ type: "text", text: nextText }]);
-    applySlashSuggestionToComposer(editor ?? editorRef.current, nextSegments, () =>
-      setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, nextSegments)),
+    const nextSegments = slashCommandInputSegments(skillName);
+    applySlashSuggestionToComposer(editor ?? editorRef.current, nextSegments, (committedSegments) =>
+      setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, committedSegments)),
     );
+    setComposerSlashQuery(null);
     setSlashIndex(0);
   }
 
@@ -1384,21 +1486,21 @@ export function useConversationController({
     if (!skillName || !activeThreadDraftKey) {
       return;
     }
-    const nextText = slashCommandInputText(skillName);
-    const nextSegments = normalizeComposerSegmentsForDisplay([{ type: "text", text: nextText }]);
-    applySlashSuggestionToComposer(editor, nextSegments, () => {
-      setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, nextSegments));
+    const nextSegments = slashCommandInputSegments(skillName);
+    applySlashSuggestionToComposer(editor, nextSegments, (committedSegments) => {
+      setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, committedSegments));
     });
+    setThreadSlashQuery(null);
     setThreadSlashIndex(0);
   }
 
   function applySlashSuggestionToComposer(
     editor: HTMLElement | null | undefined,
     segments: ComposerSegment[],
-    onCommit: () => void,
+    onCommit: (segments: ComposerSegment[]) => void,
   ) {
     if (!editor) {
-      onCommit();
+      onCommit(segments);
       return;
     }
     if (!replaceComposerSlashWithSegments(editor, segments)) {
@@ -1406,7 +1508,7 @@ export function useConversationController({
       placeCaretAtEnd(editor);
     }
     editor.focus();
-    onCommit();
+    onCommit(parseComposerSegments(editor));
   }
 
   function onComposerKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
@@ -1419,25 +1521,20 @@ export function useConversationController({
     }
 
     if (slashPickerActive) {
-      if (event.key === "ArrowDown" && slashCandidates.length > 0) {
-        event.preventDefault();
-        setSlashIndex((value) => (value + 1) % slashCandidates.length);
-        return;
-      }
-      if (event.key === "ArrowUp" && slashCandidates.length > 0) {
-        event.preventDefault();
-        setSlashIndex((value) => (value - 1 + slashCandidates.length) % slashCandidates.length);
-        return;
-      }
-      if (event.key === "Enter" && !event.shiftKey && slashCandidates.length > 0) {
-        event.preventDefault();
-        applySlashCandidate((slashCandidates[slashIndex] ?? slashCandidates[0])?.name, editorRef.current);
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setSlashPickerDismissed(true);
-        setSlashIndex(0);
+      if (
+        handleSlashPickerNavigation({
+          event,
+          candidates: slashCandidates,
+          activeIndex: slashIndex,
+          pickerOpen: slashPickerActive,
+          onIndexChange: setSlashIndex,
+          onApply: (name) => applySlashCandidate(name, editorRef.current),
+          onDismiss: () => {
+            setSlashPickerDismissed(true);
+            setSlashIndex(0);
+          },
+        })
+      ) {
         return;
       }
     }
@@ -1507,6 +1604,7 @@ export function useConversationController({
     const segments = parseComposerSegments(editor) as ComposerSegment[];
     setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, segments));
     setComposerMentionState(getComposerMentionState(editor) as ComposerMentionState | null);
+    setComposerSlashQuery(getComposerSlashQueryAtSelection(editor));
   }
 
   function clearComposer() {
@@ -1520,6 +1618,7 @@ export function useConversationController({
       setAttachmentDraftsByConversationId((current) => updateAttachmentDrafts(current, activeConversationId, []));
     }
     setComposerMentionState(null);
+    setComposerSlashQuery(null);
   }
 
   function addComposerAttachments(files: File[]): void {
@@ -1694,6 +1793,7 @@ export function useConversationController({
           setThreadSlashIndex(0);
         }
       },
+      onThreadSlashQueryChange: setThreadSlashQuery,
       onSendThreadReply: sendThreadReply,
       onAddThreadAttachments: addThreadAttachments,
       onRemoveThreadAttachment: removeThreadAttachment,
@@ -1754,9 +1854,10 @@ export function useConversationController({
 function loadSlashSkillOptions(
   agentID: string,
   onInitial: (skills: SlashSkillOption[]) => void,
+  options: { refresh?: boolean } = {},
 ): Promise<SlashSkillOption[]> {
   const cached = slashSkillOptionsCache.get(agentID);
-  if (cached) {
+  if (cached && !options.refresh) {
     return Promise.resolve(cached);
   }
   const pending = slashSkillOptionsRequests.get(agentID);
@@ -1800,6 +1901,7 @@ type SlashPickerStateInput = {
   draftText: string;
   disabled?: boolean;
   enabled: boolean;
+  query?: string | null;
   skillOptions: SlashSkillOption[];
 };
 
@@ -1810,7 +1912,7 @@ type SlashPickerState = {
 };
 
 export function buildSlashPickerState(input: SlashPickerStateInput): SlashPickerState {
-  const query = slashPickerQueryForDraft(input.draftText);
+  const query = input.query === undefined ? slashPickerQueryForDraft(input.draftText) : input.query;
   const active = Boolean(input.enabled && query !== null && !input.disabled);
   if (!active) {
     return {
@@ -1866,6 +1968,15 @@ function slashSkillCommandTextWithBody(skillName: string, body = ""): string {
 
 export function slashCommandInputText(skillName: string): string {
   return `/${String(skillName || "").trim()} `;
+}
+
+function slashCommandInputSegments(skillName: string): ComposerSegment[] {
+  const text = slashCommandInputText(skillName);
+  const command = text.trimEnd();
+  return [
+    { type: "slash", text: command },
+    { type: "text", text: text.slice(command.length) },
+  ];
 }
 
 export function normalizeSlashShorthandForPayload(text: string): string {

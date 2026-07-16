@@ -170,6 +170,17 @@ describe("useConversationController slash skill helpers", () => {
         skillOptions: [{ name: "skill-creator" }],
       }).candidates,
     ).toEqual([{ description: "Start a new conversation", name: "new", type: "command" }]);
+    expect(
+      buildSlashPickerState({
+        draftText: "/existing prompt",
+        enabled: true,
+        query: "",
+        skillOptions: [{ name: "skill-creator" }],
+      }).candidates,
+    ).toEqual([
+      { description: "Start a new conversation", name: "new", type: "command" },
+      { description: undefined, name: "skill-creator", type: "skill" },
+    ]);
   });
 
   it("extracts optional skill descriptions from SKILL.md frontmatter", () => {

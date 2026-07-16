@@ -4,8 +4,10 @@ import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
+  AgentQuestionComposer,
   type ConversationMessageListProps,
   type ConversationPaneProps,
+  useQuestionAnswerMode,
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
 import { DialogContent, DialogRoot } from "@/components/ui";
@@ -80,6 +82,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onSetThreadSlashIndex = (_index) => {},
     onSyncComposer,
     onThreadDraftChange,
+    onThreadSlashQueryChange,
     onToggleChannelTools,
     onToggleMemberList,
     onToggleToolCalls,
@@ -117,6 +120,18 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   const logAgentName = logAgent?.name || conversation.title || "";
   const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
   const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
+  const questionMode = useQuestionAnswerMode({
+    messages: conversation.messages.filter((message) => !message.relates_to),
+    responderID: currentUserID,
+    roomID: conversation.id,
+    t,
+  });
+  const threadQuestionMode = useQuestionAnswerMode({
+    messages: activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [],
+    responderID: currentUserID,
+    roomID: conversation.id,
+    t,
+  });
   const floatingConversationMessages = conversation.messages.filter((message) => !isManagerBootstrapNotice(message));
   const floatingVisibleMessages = visibleMessages.filter((message) => !isManagerBootstrapNotice(message));
   const floatingConversation =
@@ -184,6 +199,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       t={t}
       onClose={onCloseThread}
       onDraftChange={onThreadDraftChange}
+      onSlashQueryChange={onThreadSlashQueryChange}
       onAddAttachments={onAddThreadAttachments}
       onRemoveAttachment={onRemoveThreadAttachment}
       threadSlashCandidates={threadSlashCandidates}
@@ -195,6 +211,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       onSetThreadSlashIndex={onSetThreadSlashIndex}
       mentionableUsers={conversationMembers}
       onPreviewUser={onPreviewUser}
+      onQuestionSelect={threadQuestionMode.select}
+      questionMode={threadQuestionMode}
       onSend={onSendThreadReply}
     />
   ) : null;
@@ -244,39 +262,44 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         onOpenThread={onOpenThread}
         onPickPrompt={onPickPrompt}
         onPreviewUser={onPreviewUser}
+        onQuestionSelect={questionMode.select}
       />
-      <Conversation.Composer
-        authBusyProvider={authBusyProvider}
-        authStatuses={authStatuses}
-        composerDisabled={composerDisabled}
-        composerDisabledReason={composerDisabledReason}
-        composerError={composerError}
-        draftSegments={draftSegments}
-        draftText={draftText}
-        attachmentDrafts={attachmentDrafts}
-        editorRef={editorRef}
-        managerProfile={managerProfile}
-        managerProvider={managerProvider}
-        mentionCandidates={mentionCandidates}
-        mentionIndex={mentionIndex}
-        mentionableUsersByName={mentionableUsersByName}
-        slashCandidates={slashCandidates}
-        slashIndex={slashIndex}
-        slashPickerLoading={slashPickerLoading}
-        slashPickerOpen={slashPickerOpen}
-        t={floatingComposerT}
-        workingParticipants={workingParticipants}
-        onApplyMention={onApplyMention}
-        onApplySlashCandidate={onApplySlashCandidate}
-        onAddAttachments={onAddAttachments}
-        onComposerCompositionEnd={onComposerCompositionEnd}
-        onComposerCompositionStart={onComposerCompositionStart}
-        onComposerKeyDown={onComposerKeyDown}
-        onProviderLogin={onProviderLogin}
-        onSendMessage={onSendMessage}
-        onRemoveAttachment={onRemoveAttachment}
-        onSyncComposer={onSyncComposer}
-      />
+      {questionMode.pending.length > 0 ? (
+        <AgentQuestionComposer mode={questionMode} t={floatingComposerT} usersById={usersById} />
+      ) : (
+        <Conversation.Composer
+          authBusyProvider={authBusyProvider}
+          authStatuses={authStatuses}
+          composerDisabled={composerDisabled}
+          composerDisabledReason={composerDisabledReason}
+          composerError={composerError}
+          draftSegments={draftSegments}
+          draftText={draftText}
+          attachmentDrafts={attachmentDrafts}
+          editorRef={editorRef}
+          managerProfile={managerProfile}
+          managerProvider={managerProvider}
+          mentionCandidates={mentionCandidates}
+          mentionIndex={mentionIndex}
+          mentionableUsersByName={mentionableUsersByName}
+          slashCandidates={slashCandidates}
+          slashIndex={slashIndex}
+          slashPickerLoading={slashPickerLoading}
+          slashPickerOpen={slashPickerOpen}
+          t={floatingComposerT}
+          workingParticipants={workingParticipants}
+          onApplyMention={onApplyMention}
+          onApplySlashCandidate={onApplySlashCandidate}
+          onAddAttachments={onAddAttachments}
+          onComposerCompositionEnd={onComposerCompositionEnd}
+          onComposerCompositionStart={onComposerCompositionStart}
+          onComposerKeyDown={onComposerKeyDown}
+          onProviderLogin={onProviderLogin}
+          onSendMessage={onSendMessage}
+          onRemoveAttachment={onRemoveAttachment}
+          onSyncComposer={onSyncComposer}
+        />
+      )}
       <DialogRoot
         open={Boolean(activeThreadRootID)}
         onOpenChange={(open) => {
