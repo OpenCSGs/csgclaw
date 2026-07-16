@@ -363,8 +363,8 @@
 
 .rowMain {
   min-width: 0;
-  min-height: 48px;
-  padding: 8px 18px;
+  min-height: 40px;
+  padding: 5px 18px;
   display: grid;
   grid-template-columns: minmax(82px, auto) minmax(120px, 1fr) minmax(64px, auto) auto auto;
   gap: 10px;
@@ -377,8 +377,8 @@
 
 .typeBadge {
   max-width: 132px;
-  min-height: 22px;
-  padding: 2px 7px;
+  min-height: 20px;
+  padding: 1px 7px;
   border-radius: 4px;
   overflow: hidden;
   color: var(--activity-color);
