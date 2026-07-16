@@ -3,8 +3,9 @@ package apitypes
 import "time"
 
 type CreateHubTemplateRequest struct {
-	AgentID  string `json:"agent_id"`
-	Registry string `json:"registry,omitempty"`
+	AgentID  string   `json:"agent_id"`
+	Registry string   `json:"registry,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
 }
 
 type ImageEnvContract struct {
@@ -20,17 +21,19 @@ type ImageEnvContract struct {
 }
 
 type HubTemplate struct {
-	ID          string               `json:"id"`
-	Name        string               `json:"name"`
-	Description string               `json:"description,omitempty"`
-	Role        string               `json:"role,omitempty"`
-	RuntimeKind string               `json:"runtime_kind,omitempty"`
-	Version     string               `json:"version,omitempty"`
-	Image       string               `json:"image,omitempty"`
-	ImageEnv    []ImageEnvContract   `json:"image_env,omitempty"`
-	Source      HubTemplateSource    `json:"source"`
-	UpdatedAt   time.Time            `json:"updated_at,omitempty"`
-	Workspace   HubTemplateWorkspace `json:"workspace,omitempty"`
+	ID            string               `json:"id"`
+	SchemaVersion string               `json:"schema_version,omitempty"`
+	Name          string               `json:"name"`
+	Description   string               `json:"description,omitempty"`
+	Role          string               `json:"role,omitempty"`
+	RuntimeKind   string               `json:"runtime_kind,omitempty"`
+	Version       string               `json:"version,omitempty"`
+	Tags          []string             `json:"tags,omitempty"`
+	Image         string               `json:"image,omitempty"`
+	ImageEnv      []ImageEnvContract   `json:"image_env,omitempty"`
+	Source        HubTemplateSource    `json:"source"`
+	UpdatedAt     time.Time            `json:"updated_at,omitempty"`
+	Workspace     HubTemplateWorkspace `json:"workspace,omitempty"`
 }
 
 type HubTemplateSource struct {

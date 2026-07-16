@@ -11,13 +11,15 @@ import (
 )
 
 type templateManifest struct {
-	Name        string               `toml:"name"`
-	Description string               `toml:"description,omitempty"`
-	Role        string               `toml:"role"`
-	RuntimeKind string               `toml:"runtime_kind"`
-	Version     string               `toml:"version,omitempty"`
-	Image       templateImageSection `toml:"image"`
-	UpdatedAt   string               `toml:"updated_at,omitempty"`
+	SchemaVersion string               `toml:"schema_version,omitempty"`
+	Name          string               `toml:"name"`
+	Description   string               `toml:"description,omitempty"`
+	Role          string               `toml:"role"`
+	RuntimeKind   string               `toml:"runtime_kind"`
+	Version       string               `toml:"version,omitempty"`
+	Tags          []string             `toml:"tags,omitempty"`
+	Image         templateImageSection `toml:"image"`
+	UpdatedAt     string               `toml:"updated_at,omitempty"`
 }
 
 type templateImageSection struct {
@@ -41,6 +43,26 @@ type templateImageEnvItem struct {
 
 func manifestImageRef(image templateImageSection) string {
 	return strings.TrimSpace(image.Ref)
+}
+
+func normalizeTemplateTags(tags []string) []string {
+	seen := make(map[string]struct{}, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		out = append(out, tag)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func manifestImageEnv(image templateImageSection) []apitypes.ImageEnvContract {
@@ -126,6 +148,9 @@ func validateImageEnvContracts(items []templateImageEnvItem) error {
 }
 
 func validateManifest(manifest templateManifest) error {
+	if schemaVersion := strings.TrimSpace(manifest.SchemaVersion); schemaVersion != "" && schemaVersion != AgentFileSchemaVersion {
+		return fmt.Errorf("unsupported schema_version %q", schemaVersion)
+	}
 	manifest.Name = strings.TrimSpace(manifest.Name)
 	if manifest.Name == "" {
 		return ErrTemplateNameRequired

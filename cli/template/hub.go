@@ -96,6 +96,7 @@ func (c cmd) runPublish(ctx context.Context, run *command.Context, args []string
 	fs := run.NewFlagSet("template publish", run.Program+" template publish --agent <id> [flags]", "Publish an agent as a template.")
 	agentID := fs.String("agent", "", "existing agent id to publish")
 	registry := fs.String("registry", "", "template registry to publish into")
+	tags := fs.String("tags", "", "comma-separated template compatibility tags")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -109,11 +110,23 @@ func (c cmd) runPublish(ctx context.Context, run *command.Context, args []string
 	item, err := publishTemplate(ctx, run.APIClient(globals), apitypes.CreateHubTemplateRequest{
 		AgentID:  *agentID,
 		Registry: *registry,
+		Tags:     splitTemplateTags(*tags),
 	})
 	if err != nil {
 		return err
 	}
 	return renderTemplate(globals.Output, run.Stdout, item)
+}
+
+func splitTemplateTags(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if tag := strings.TrimSpace(part); tag != "" {
+			out = append(out, tag)
+		}
+	}
+	return out
 }
 
 func listTemplates(ctx context.Context, client *apiclient.Client) ([]apitypes.HubTemplate, error) {

@@ -170,16 +170,18 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		name = strings.TrimSpace(repository.Name)
 	}
 	return Template{
-		ID:           remoteTemplateName(id),
-		Name:         name,
-		Description:  description,
-		Role:         normalizeTemplateRole(manifest.Role),
-		RuntimeKind:  normalizeTemplateRuntimeKind(manifest.RuntimeKind),
-		Version:      strings.TrimSpace(manifest.Version),
-		Image:        manifestImageRef(manifest.Image),
-		ImageEnv:     manifestImageEnv(manifest.Image),
-		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir},
-		UpdatedAt:    updatedAt,
+		ID:            remoteTemplateName(id),
+		SchemaVersion: strings.TrimSpace(manifest.SchemaVersion),
+		Name:          name,
+		Description:   description,
+		Role:          normalizeTemplateRole(manifest.Role),
+		RuntimeKind:   normalizeTemplateRuntimeKind(manifest.RuntimeKind),
+		Version:       strings.TrimSpace(manifest.Version),
+		Tags:          normalizeTemplateTags(manifest.Tags),
+		Image:         manifestImageRef(manifest.Image),
+		ImageEnv:      manifestImageEnv(manifest.Image),
+		WorkspaceRef:  WorkspaceRef{Kind: WorkspaceKindDir},
+		UpdatedAt:     updatedAt,
 	}, nil
 }
 

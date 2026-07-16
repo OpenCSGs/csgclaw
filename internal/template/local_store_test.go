@@ -31,6 +31,7 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 		Description:  "Frontend worker with UI and styling skills",
 		Role:         TemplateRoleWorker,
 		RuntimeKind:  runtime.KindCodex,
+		Tags:         []string{"self-hosted", "saas"},
 		Image:        "worker:latest",
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 		UpdatedAt:    publishedAt,
@@ -46,6 +47,12 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 	if got, want := published.Role, TemplateRoleWorker; got != want {
 		t.Fatalf("Publish().Role = %q, want %q", got, want)
+	}
+	if published.SchemaVersion != AgentFileSchemaVersion {
+		t.Fatalf("Publish().SchemaVersion = %q, want %q", published.SchemaVersion, AgentFileSchemaVersion)
+	}
+	if len(published.Tags) != 2 || published.Tags[0] != "self-hosted" || published.Tags[1] != "saas" {
+		t.Fatalf("Publish().Tags = %#v, want self-hosted and saas", published.Tags)
 	}
 	if got, want := published.UpdatedAt, publishedAt; !got.Equal(want) {
 		t.Fatalf("Publish().UpdatedAt = %v, want %v", got, want)

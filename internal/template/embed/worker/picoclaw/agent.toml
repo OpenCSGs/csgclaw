@@ -1,9 +1,11 @@
+schema_version = "agentfile/v1"
 name = "generic-assistant-lite"
 description = "通用型助手（轻量版）"
 role = "worker"
 runtime_kind = "picoclaw"
 updated_at = "2026-05-27T00:00:00Z"
 version = "0.1.5"
+tags = ["self-hosted", "saas"]
 
 [image]
 ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.23"

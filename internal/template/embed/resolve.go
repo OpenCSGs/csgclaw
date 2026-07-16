@@ -41,13 +41,14 @@ var builtinTemplates = []BuiltinTemplate{
 		Role:        roleWorker,
 		Root:        OpenClawWorkerRoot,
 	},
-	{
-		ID:          "picoclaw-worker",
-		RuntimeKind: runtimepkg.KindPicoClawSandbox,
-		Role:        roleWorker,
-		Root:        PicoClawWorkerRoot,
-	},
 }
+
+var runtimeTemplates = append(slices.Clone(builtinTemplates), BuiltinTemplate{
+	ID:          "picoclaw-worker",
+	RuntimeKind: runtimepkg.KindPicoClawSandbox,
+	Role:        roleWorker,
+	Root:        PicoClawWorkerRoot,
+})
 
 func FS() fs.FS {
 	return runtimeTemplateFS
@@ -70,7 +71,7 @@ func LookupBuiltin(id string) (BuiltinTemplate, bool) {
 func Resolve(runtimeKind, role string) (string, error) {
 	runtimeKind = strings.TrimSpace(runtimeKind)
 	role = normalizeRole(role)
-	for _, item := range builtinTemplates {
+	for _, item := range runtimeTemplates {
 		if item.RuntimeKind == runtimeKind && item.Role == role {
 			return item.Root, nil
 		}

@@ -1300,7 +1300,7 @@ show_upgrade = true
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [sandbox]
 provider = "boxlite"
@@ -1309,6 +1309,7 @@ debian_registries_override = []
 [hub]
 default_registry = "builtin"
 default_publish_registry = "local"
+allowed_template_tags = []
 
 [[hub.registries]]
 name = "builtin"
@@ -1340,6 +1341,25 @@ enabled = true
 	}
 	if got, want := savedModels.Providers["default"].BaseURL, "http://127.0.0.1:4000"; got != want {
 		t.Fatalf("saved model BaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestLoadHubAllowedTemplateTags(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ConfigFileName)
+	content := `[hub]
+allowed_template_tags = ["self-hosted", "saas"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := cfg.Hub.AllowedTemplateTags; len(got) != 2 || got[0] != "self-hosted" || got[1] != "saas" {
+		t.Fatalf("Hub.AllowedTemplateTags = %#v, want self-hosted and saas", got)
 	}
 }
 

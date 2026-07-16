@@ -19,6 +19,37 @@ func NewBuiltinStore() *BuiltinStore {
 	return &BuiltinStore{}
 }
 
+// BuiltinRuntimeTemplate returns embedded runtime metadata, including runtime-only
+// definitions that are intentionally not exposed by the builtin Hub registry.
+func BuiltinRuntimeTemplate(runtimeKind, role string) (Template, error) {
+	root, err := hubtemplates.Resolve(runtimeKind, role)
+	if err != nil {
+		return Template{}, err
+	}
+	data, err := fs.ReadFile(hubtemplates.FS(), hubtemplates.ManifestPath(root))
+	if err != nil {
+		return Template{}, fmt.Errorf("read embedded runtime template manifest %q: %w", root, err)
+	}
+	var manifest templateManifest
+	if err := toml.Unmarshal(data, &manifest); err != nil {
+		return Template{}, fmt.Errorf("decode embedded runtime template manifest %q: %w", root, err)
+	}
+	if err := validateManifest(manifest); err != nil {
+		return Template{}, fmt.Errorf("validate embedded runtime template manifest %q: %w", root, err)
+	}
+	return Template{
+		SchemaVersion: strings.TrimSpace(manifest.SchemaVersion),
+		Name:          manifest.Name,
+		Description:   manifest.Description,
+		Role:          normalizeTemplateRole(manifest.Role),
+		RuntimeKind:   normalizeTemplateRuntimeKind(manifest.RuntimeKind),
+		Version:       strings.TrimSpace(manifest.Version),
+		Tags:          normalizeTemplateTags(manifest.Tags),
+		Image:         manifestImageRef(manifest.Image),
+		ImageEnv:      manifestImageEnv(manifest.Image),
+	}, nil
+}
+
 func (s *BuiltinStore) List(context.Context) ([]Template, error) {
 	builtins := hubtemplates.Builtins()
 	ids := make([]string, 0, len(builtins))
@@ -53,16 +84,18 @@ func (s *BuiltinStore) Get(_ context.Context, id string) (Template, error) {
 		return Template{}, fmt.Errorf("validate builtin hub manifest %q: %w", id, err)
 	}
 	return Template{
-		ID:           id,
-		Name:         manifest.Name,
-		Description:  manifest.Description,
-		Role:         normalizeTemplateRole(manifest.Role),
-		RuntimeKind:  normalizeTemplateRuntimeKind(manifest.RuntimeKind),
-		Version:      strings.TrimSpace(manifest.Version),
-		Image:        manifestImageRef(manifest.Image),
-		ImageEnv:     manifestImageEnv(manifest.Image),
-		WorkspaceRef: s.workspaceRef(id),
-		UpdatedAt:    updatedAt,
+		ID:            id,
+		SchemaVersion: strings.TrimSpace(manifest.SchemaVersion),
+		Name:          manifest.Name,
+		Description:   manifest.Description,
+		Role:          normalizeTemplateRole(manifest.Role),
+		RuntimeKind:   normalizeTemplateRuntimeKind(manifest.RuntimeKind),
+		Version:       strings.TrimSpace(manifest.Version),
+		Tags:          normalizeTemplateTags(manifest.Tags),
+		Image:         manifestImageRef(manifest.Image),
+		ImageEnv:      manifestImageEnv(manifest.Image),
+		WorkspaceRef:  s.workspaceRef(id),
+		UpdatedAt:     updatedAt,
 	}, nil
 }
 

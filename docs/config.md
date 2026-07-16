@@ -230,8 +230,9 @@ When `[hub]` is omitted, CSGClaw enables three registries by default: `builtin` 
 [hub]
 default_registry = "builtin"
 default_publish_registry = "local"
+allowed_template_tags = ["self-hosted"]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.codex-worker"
 
 [[hub.registries]]
 name = "builtin"
@@ -256,6 +257,7 @@ Field behavior:
 
 - `default_registry` selects the default source registry when a command needs one registry context.
 - `default_publish_registry` selects the default publish target when a command does not pass a registry explicitly.
+- `allowed_template_tags` selects templates usable by this instance. A template matching any configured tag is allowed; omitting it or using an empty array disables filtering. Use `self-hosted` for self-hosted deployments and `saas` for SaaS deployments.
 - `default_manager_template` selects the default manager template when a flow needs a manager template implicitly.
 - `default_worker_template` selects the default worker template when a flow needs a worker template implicitly.
 - `name` is the registry identifier used by CLI and API flows.
@@ -265,6 +267,8 @@ Field behavior:
 - `enabled` controls whether the registry participates in hub operations. If omitted, it defaults to `true`.
 
 The built-in registry is read-only. Use a writable `local` or `remote` registry as the publish target.
+
+Template `agent.toml` files use `schema_version = "agentfile/v1"` and may declare deployment compatibility with `tags = ["self-hosted", "saas"]`. Newly published templates use the current schema; legacy manifests without a schema remain readable, while unknown schemas are rejected.
 
 The old template Hub URL `https://csgclaw.opencsg.com` is no longer rewritten automatically; configure the desired remote explicitly or rely on the login-environment-derived official registry.
 

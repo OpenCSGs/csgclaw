@@ -619,6 +619,9 @@ func (h *Handler) defaultWorkerCreateSpec(agentID, name string) agent.CreateAgen
 	case agent.RuntimeKindPicoClawSandbox:
 		spec.RuntimeName = agent.RuntimeNamePicoClaw
 	}
+	if item, err := hub.BuiltinRuntimeTemplate(runtimeKind, agent.RoleWorker); err == nil {
+		spec.Image = strings.TrimSpace(item.Image)
+	}
 	return spec
 }
 
@@ -630,7 +633,6 @@ func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapC
 		resp.RuntimeDefaultImages = map[string]string{}
 	}
 	builtinWorkerTemplates := map[string]string{
-		agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(): "builtin.picoclaw-worker",
 		agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(): "builtin.openclaw-worker",
 	}
 	for runtimeKind, templateID := range builtinWorkerTemplates {
@@ -646,6 +648,11 @@ func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapC
 		}
 		if image := strings.TrimSpace(item.Image); image != "" {
 			resp.RuntimeDefaultImages[runtimeKind] = image
+		}
+	}
+	if item, err := hub.BuiltinRuntimeTemplate(agent.RuntimeKindPicoClawSandbox, agent.RoleWorker); err == nil {
+		if image := strings.TrimSpace(item.Image); image != "" {
+			resp.RuntimeDefaultImages[agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind()] = image
 		}
 	}
 }
@@ -1414,6 +1421,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		spec.Registry = req.Registry
+		spec.Tags = append([]string(nil), req.Tags...)
 		item, err := hubSvc.Publish(r.Context(), spec)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
@@ -1496,15 +1504,17 @@ func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
 
 func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 	return apitypes.HubTemplate{
-		ID:          item.ID,
-		Name:        item.Name,
-		Description: item.Description,
-		Role:        item.Role,
-		RuntimeKind: bootstrapRuntimeKind(item.RuntimeKind),
-		Version:     item.Version,
-		Image:       item.Image,
-		ImageEnv:    append([]apitypes.ImageEnvContract(nil), item.ImageEnv...),
-		UpdatedAt:   item.UpdatedAt,
+		ID:            item.ID,
+		SchemaVersion: item.SchemaVersion,
+		Name:          item.Name,
+		Description:   item.Description,
+		Role:          item.Role,
+		RuntimeKind:   bootstrapRuntimeKind(item.RuntimeKind),
+		Version:       item.Version,
+		Tags:          append([]string(nil), item.Tags...),
+		Image:         item.Image,
+		ImageEnv:      append([]apitypes.ImageEnvContract(nil), item.ImageEnv...),
+		UpdatedAt:     item.UpdatedAt,
 		Source: apitypes.HubTemplateSource{
 			Name: item.Source.Name,
 			Kind: item.Source.Kind,

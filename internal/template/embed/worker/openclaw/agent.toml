@@ -1,9 +1,11 @@
+schema_version = "agentfile/v1"
 name = "generic-assistant-openclaw"
 description = "通用型助手（OpenClaw版）"
 role = "worker"
 runtime_kind = "openclaw"
 updated_at = "2026-07-02T10:07:25Z"
 version = "0.1.5"
+tags = ["self-hosted"]
 
 [image]
 ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260702.25-csgclaw"

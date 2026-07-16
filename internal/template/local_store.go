@@ -81,16 +81,18 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 		return Template{}, fmt.Errorf("validate local hub manifest %q: %w", id, err)
 	}
 	return Template{
-		ID:           id,
-		Name:         manifest.Name,
-		Description:  manifest.Description,
-		Role:         normalizeTemplateRole(manifest.Role),
-		RuntimeKind:  normalizeTemplateRuntimeKind(manifest.RuntimeKind),
-		Version:      strings.TrimSpace(manifest.Version),
-		Image:        manifestImageRef(manifest.Image),
-		ImageEnv:     manifestImageEnv(manifest.Image),
-		WorkspaceRef: s.workspaceRef(id),
-		UpdatedAt:    updatedAt,
+		ID:            id,
+		SchemaVersion: strings.TrimSpace(manifest.SchemaVersion),
+		Name:          manifest.Name,
+		Description:   manifest.Description,
+		Role:          normalizeTemplateRole(manifest.Role),
+		RuntimeKind:   normalizeTemplateRuntimeKind(manifest.RuntimeKind),
+		Version:       strings.TrimSpace(manifest.Version),
+		Tags:          normalizeTemplateTags(manifest.Tags),
+		Image:         manifestImageRef(manifest.Image),
+		ImageEnv:      manifestImageEnv(manifest.Image),
+		WorkspaceRef:  s.workspaceRef(id),
+		UpdatedAt:     updatedAt,
 	}, nil
 }
 
@@ -215,11 +217,13 @@ func (s *LocalStore) loadTemplate(id string) (string, templateManifest, error) {
 
 func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 	manifest := templateManifest{
-		Name:        spec.Name,
-		Description: spec.Description,
-		Role:        spec.Role,
-		RuntimeKind: normalizeTemplateRuntimeKind(spec.RuntimeKind),
-		Version:     spec.Version,
+		SchemaVersion: AgentFileSchemaVersion,
+		Name:          spec.Name,
+		Description:   spec.Description,
+		Role:          spec.Role,
+		RuntimeKind:   normalizeTemplateRuntimeKind(spec.RuntimeKind),
+		Version:       spec.Version,
+		Tags:          normalizeTemplateTags(spec.Tags),
 		Image: templateImageSection{
 			Ref: spec.Image,
 		},
@@ -254,6 +258,7 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 	}
 	spec.RuntimeKind = normalizeTemplateRuntimeKind(spec.RuntimeKind)
 	spec.Version = strings.TrimSpace(spec.Version)
+	spec.Tags = normalizeTemplateTags(spec.Tags)
 	spec.Image = strings.TrimSpace(spec.Image)
 	spec.Description = strings.TrimSpace(spec.Description)
 	if spec.RuntimeKind == "" {
