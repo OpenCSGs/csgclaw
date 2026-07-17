@@ -2040,6 +2040,84 @@ func TestAddMCPServersSerializesWithDirectMCPServersUpdate(t *testing.T) {
 	}
 }
 
+func TestAddMCPServersFromHubRecreatesRunningCodexManager(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	origLocateCodexCLI := locateCodexCLI
+	locateCodexCLI = func() (string, error) { return "/usr/local/bin/codex", nil }
+	t.Cleanup(func() {
+		locateCodexCLI = origLocateCodexCLI
+	})
+
+	deleteCalls := 0
+	newCalls := 0
+	var provisionedMCPServers map[string]any
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "server-token"},
+		"",
+		filepath.Join(t.TempDir(), "agents.json"),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			del: func(context.Context, agentruntime.Handle) error {
+				deleteCalls++
+				return nil
+			},
+			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
+				provisionedMCPServers = cloneMCPServers(req.MCPServers)
+				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newCalls++
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-manager-session-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	profile := AgentProfile{
+		Name:            ManagerName,
+		Provider:        ProviderCodex,
+		ModelID:         "gpt-5.5",
+		ProfileComplete: true,
+	}
+	svc.agents[ManagerUserID] = Agent{
+		ID:              ManagerUserID,
+		Name:            ManagerName,
+		RuntimeID:       runtimeIDForAgentID(ManagerUserID),
+		RuntimeKind:     RuntimeKindCodex,
+		RuntimeName:     RuntimeNameCodex,
+		BoxID:           "codex-manager-session-old",
+		Role:            RoleManager,
+		Status:          string(agentruntime.StateRunning),
+		Profile:         profileSelector(profile),
+		AgentProfile:    profile,
+		ProfileComplete: true,
+		CreatedAt:       time.Date(2026, 7, 17, 9, 0, 0, 0, time.UTC),
+	}
+
+	updated, err := svc.AddMCPServersFromHub(context.Background(), ManagerUserID, []string{"context7"}, map[string]any{
+		"context7": map[string]any{"command": "uvx", "args": []any{"context7-mcp"}},
+	})
+	if err != nil {
+		t.Fatalf("AddMCPServersFromHub() error = %v", err)
+	}
+	if deleteCalls != 1 || newCalls != 1 {
+		t.Fatalf("manager recreate calls = delete %d/new %d, want 1/1", deleteCalls, newCalls)
+	}
+	assertMCPServersHasServer(t, provisionedMCPServers, "context7")
+	assertMCPServersHasServer(t, updated.MCPServers, "context7")
+	if updated.AgentProfile.EnvRestartRequired {
+		t.Fatal("AddMCPServersFromHub().AgentProfile.EnvRestartRequired = true, want false after successful manager recreate")
+	}
+	if got, want := updated.BoxID, "codex-manager-session-new"; got != want {
+		t.Fatalf("AddMCPServersFromHub().BoxID = %q, want %q", got, want)
+	}
+}
+
 func TestUpdateMCPServersRecreatesOpenClawAndProvisionsLatestConfig(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

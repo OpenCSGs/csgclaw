@@ -723,7 +723,7 @@ func (s *Service) newCodexManagerAgent(name, description, instructions, avatar s
 	}
 }
 
-func (s *Service) persistManagerAgent(ctx context.Context, manager Agent, syncLifecycle bool) (Agent, error) {
+func (s *Service) persistManagerAgent(ctx context.Context, manager Agent, runtimeApplied bool) (Agent, error) {
 	if s == nil {
 		return Agent{}, fmt.Errorf("agent service is required")
 	}
@@ -750,11 +750,19 @@ func (s *Service) persistManagerAgent(ctx context.Context, manager Agent, syncLi
 
 	s.mu.Lock()
 	if existing, ok := s.agents[ManagerUserID]; ok {
+		// A successful runtime start clears requirements already applied to that
+		// runtime, but a concurrent config change must keep its recreate signal.
+		runtimeInputsChangedAfterApply := runtimeApplied && (!reflect.DeepEqual(manager.MCPServers, existing.MCPServers) ||
+			!reflect.DeepEqual(
+				runtimeConfigSnapshotForAgent(manager.AgentProfile, manager.RuntimeOptions),
+				runtimeConfigSnapshotForAgent(existing.AgentProfile, existing.RuntimeOptions),
+			) ||
+			!profilesEqualEnv(manager.AgentProfile, existing.AgentProfile))
 		manager.MCPServers = cloneMCPServers(existing.MCPServers)
-		if existing.AgentProfile.EnvRestartRequired {
+		if existing.AgentProfile.EnvRestartRequired && (!runtimeApplied || runtimeInputsChangedAfterApply) {
 			manager.AgentProfile.EnvRestartRequired = true
 		}
-		if existing.AgentProfile.ImageUpgradeRequired {
+		if existing.AgentProfile.ImageUpgradeRequired && !runtimeApplied {
 			manager.AgentProfile.ImageUpgradeRequired = true
 		}
 	}
@@ -778,7 +786,7 @@ func (s *Service) persistManagerAgent(ctx context.Context, manager Agent, syncLi
 	if !ok {
 		return Agent{}, fmt.Errorf("manager agent not found after save")
 	}
-	if syncLifecycle {
+	if runtimeApplied {
 		if err := s.syncLifecycleForAgent(ctx, created); err != nil {
 			return Agent{}, err
 		}
