@@ -162,8 +162,7 @@ func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.clearOpenCSGModelProviderCache(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		slog.Warn("clear OpenCSG models after logout failed", "error", err)
 	}
 	writeJSON(w, http.StatusOK, status)
 }

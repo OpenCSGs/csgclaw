@@ -225,8 +225,9 @@ func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
 		Headers: existing.Headers,
 		Models:  existing.Models,
 	})
-	models, changed := agent.ApplyModelProviderCheckResult(cfg.Models, agent.ModelProviderIDOpenCSG, result)
-	if !changed {
+	models, cleared := agent.ClearModelProviderCachedState(cfg.Models, agent.ModelProviderIDOpenCSG)
+	models, applied := agent.ApplyModelProviderCheckResult(models, agent.ModelProviderIDOpenCSG, result)
+	if !cleared && !applied {
 		return nil
 	}
 	cfg.Models = models

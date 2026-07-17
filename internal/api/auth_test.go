@@ -199,6 +199,67 @@ func TestHandleAuthCallbackRefreshesOpenCSGModels(t *testing.T) {
 	}
 }
 
+func TestHandleAuthCallbackClearsStaleOpenCSGModels(t *testing.T) {
+	tests := []struct {
+		name       string
+		result     agent.ModelProviderCheckResult
+		wantStatus string
+	}{
+		{
+			name: "connected with empty model list",
+			result: agent.ModelProviderCheckResult{
+				ID:            agent.ModelProviderIDOpenCSG,
+				Status:        agent.ModelProviderStatusConnected,
+				Message:       "connected",
+				Models:        []string{},
+				LastCheckedAt: "2026-07-16T10:00:00Z",
+			},
+			wantStatus: agent.ModelProviderStatusConnected,
+		},
+		{
+			name: "check failed",
+			result: agent.ModelProviderCheckResult{
+				ID:            agent.ModelProviderIDOpenCSG,
+				Status:        agent.ModelProviderStatusFailed,
+				Message:       "stage gateway unavailable",
+				LastCheckedAt: "2026-07-16T10:00:00Z",
+			},
+			wantStatus: agent.ModelProviderStatusFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.toml")
+			writeCachedOpenCSGModelsConfig(t, configPath)
+			restoreCallback := stubAuthCallback(func(*http.Request, string) (string, error) {
+				return "http://127.0.0.1:18080/#/settings", nil
+			})
+			defer restoreCallback()
+			restoreCheck := stubModelProviderCheck(func(context.Context, agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+				return tt.result
+			})
+			defer restoreCheck()
+			handler := &Handler{}
+			handler.SetConfigPath(configPath)
+
+			callbackRec := httptest.NewRecorder()
+			handler.Routes().ServeHTTP(callbackRec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback?jwt_token=jwt-value", nil))
+			if callbackRec.Code != http.StatusFound {
+				t.Fatalf("callback status = %d, want %d; body=%s", callbackRec.Code, http.StatusFound, callbackRec.Body.String())
+			}
+
+			provider := readOpenCSGProvider(t, handler)
+			if len(provider.Models) != 0 {
+				t.Fatalf("OpenCSG models after callback = %+v, want stale models cleared", provider.Models)
+			}
+			if provider.Status != tt.wantStatus {
+				t.Fatalf("OpenCSG status after callback = %q, want %q", provider.Status, tt.wantStatus)
+			}
+		})
+	}
+}
+
 func TestHandleAuthLogout(t *testing.T) {
 	restore := stubAuthLogout(func(*http.Request) (auth.Status, error) {
 		return auth.Status{}, nil
@@ -221,22 +282,7 @@ func TestHandleAuthLogout(t *testing.T) {
 
 func TestHandleAuthLogoutClearsCachedOpenCSGModels(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
-	content := `[server]
-listen_addr = "127.0.0.1:18080"
-access_token = "secret"
-
-[models]
-default = "opencsg.prod-model"
-
-[models.providers.opencsg]
-models = ["prod-model"]
-status = "connected"
-message = "connected"
-last_checked_at = "2026-07-16T09:00:00Z"
-`
-	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
-		t.Fatalf("WriteFile(config) error = %v", err)
-	}
+	writeCachedOpenCSGModelsConfig(t, configPath)
 	restore := stubAuthLogout(func(*http.Request) (auth.Status, error) {
 		return auth.Status{}, nil
 	})
@@ -265,6 +311,70 @@ last_checked_at = "2026-07-16T09:00:00Z"
 	if len(got.Providers[0].Models) != 0 || got.Providers[0].Status != agent.ModelProviderStatusUnknown {
 		t.Fatalf("OpenCSG provider after logout = %+v, want cleared models and unknown status", got.Providers[0])
 	}
+}
+
+func TestHandleAuthLogoutSucceedsWhenCacheCleanupFails(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(configPath, []byte("invalid = ["), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+	restore := stubAuthLogout(func(*http.Request) (auth.Status, error) {
+		return auth.Status{}, nil
+	})
+	defer restore()
+	handler := &Handler{}
+	handler.SetConfigPath(configPath)
+
+	rec := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logout status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got auth.Status
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Authenticated {
+		t.Fatalf("response = %+v, want unauthenticated", got)
+	}
+}
+
+func writeCachedOpenCSGModelsConfig(t *testing.T, path string) {
+	t.Helper()
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+
+[models]
+default = "opencsg.prod-model"
+
+[models.providers.opencsg]
+models = ["prod-model"]
+status = "connected"
+message = "connected"
+last_checked_at = "2026-07-16T09:00:00Z"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+}
+
+func readOpenCSGProvider(t *testing.T, handler *Handler) agent.ModelProviderSummary {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/model-providers", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("providers status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got agent.ModelProviderCatalog
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode providers: %v", err)
+	}
+	provider := findProviderSummary(got, agent.ModelProviderIDOpenCSG)
+	if provider.ID != agent.ModelProviderIDOpenCSG {
+		t.Fatalf("providers = %+v, want OpenCSG", got.Providers)
+	}
+	return provider
 }
 
 func stubAuthStatus(fn func(*http.Request) (auth.Status, error)) func() {
