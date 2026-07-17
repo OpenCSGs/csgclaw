@@ -1,9 +1,11 @@
 package codex
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -845,7 +847,7 @@ func TestRemoveRuntimeDirRetriesLockedPluginCloneFetchHead(t *testing.T) {
 		},
 	})
 
-	if err := rt.removeRuntimeDir(context.Background(), runtimeDir); err != nil {
+	if err := rt.removeRuntimeDir(context.Background(), "rt-u-alice", runtimeDir); err != nil {
 		t.Fatalf("removeRuntimeDir() error = %v", err)
 	}
 	if removeCalls != 4 {
@@ -853,6 +855,118 @@ func TestRemoveRuntimeDirRetriesLockedPluginCloneFetchHead(t *testing.T) {
 	}
 	if _, err := os.Stat(runtimeDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("runtime dir stat error = %v, want not exist", err)
+	}
+}
+
+func TestRemoveRuntimeDirRetriesNonEmptyDirectory(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "agent-manager", ".codex")
+	blockedDir := filepath.Join(runtimeDir, "home", "tmp", "arg0", "codex-arg0zMf3j5")
+	if err := os.MkdirAll(blockedDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(blocked runtime dir) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blockedDir, "pending"), []byte("pending"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(pending) error = %v", err)
+	}
+
+	origInitialDelay := runtimeDirRemoveInitialDelay
+	origMaxDelay := runtimeDirRemoveMaxDelay
+	origTries := runtimeDirRemoveTries
+	runtimeDirRemoveInitialDelay = time.Millisecond
+	runtimeDirRemoveMaxDelay = time.Millisecond
+	runtimeDirRemoveTries = 4
+	t.Cleanup(func() {
+		runtimeDirRemoveInitialDelay = origInitialDelay
+		runtimeDirRemoveMaxDelay = origMaxDelay
+		runtimeDirRemoveTries = origTries
+	})
+
+	var removeCalls int
+	rt := New(Dependencies{
+		RemoveAll: func(path string) error {
+			removeCalls++
+			if path == runtimeDir && removeCalls < 3 {
+				return &os.PathError{Op: "unlinkat", Path: blockedDir, Err: syscall.ENOTEMPTY}
+			}
+			return os.RemoveAll(path)
+		},
+	})
+
+	if err := rt.removeRuntimeDir(context.Background(), "rt-agent-manager", runtimeDir); err != nil {
+		t.Fatalf("removeRuntimeDir() error = %v", err)
+	}
+	if removeCalls != 3 {
+		t.Fatalf("RemoveAll() calls = %d, want 3", removeCalls)
+	}
+}
+
+func TestRemoveRuntimeDirFailureReportsDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "agent-manager", ".codex")
+	blockedDir := filepath.Join(runtimeDir, "home", "tmp", "arg0", "codex-arg0zMf3j5")
+	if err := os.MkdirAll(blockedDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(blocked runtime dir) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(blockedDir, ".nfs0000000000000001"), []byte("pending"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(.nfs file) error = %v", err)
+	}
+
+	origInitialDelay := runtimeDirRemoveInitialDelay
+	origMaxDelay := runtimeDirRemoveMaxDelay
+	origTries := runtimeDirRemoveTries
+	runtimeDirRemoveInitialDelay = time.Millisecond
+	runtimeDirRemoveMaxDelay = time.Millisecond
+	runtimeDirRemoveTries = 2
+	t.Cleanup(func() {
+		runtimeDirRemoveInitialDelay = origInitialDelay
+		runtimeDirRemoveMaxDelay = origMaxDelay
+		runtimeDirRemoveTries = origTries
+	})
+
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() {
+		slog.SetDefault(previousLogger)
+	})
+
+	var removeCalls int
+	rt := New(Dependencies{
+		RemoveAll: func(string) error {
+			removeCalls++
+			return &os.PathError{Op: "unlinkat", Path: blockedDir, Err: syscall.ENOTEMPTY}
+		},
+	})
+
+	err := rt.removeRuntimeDir(context.Background(), "rt-agent-manager", runtimeDir)
+	if err == nil {
+		t.Fatal("removeRuntimeDir() error = nil, want diagnostics")
+	}
+	for _, want := range []string{
+		"after 2 attempts",
+		`errno="ENOTEMPTY"`,
+		`error_path="` + blockedDir + `"`,
+		"home/tmp/arg0/codex-arg0zMf3j5/.nfs0000000000000001",
+		"filesystem_type=",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("removeRuntimeDir() error = %q, want %q", err, want)
+		}
+	}
+	if removeCalls != 2 {
+		t.Fatalf("RemoveAll() calls = %d, want 2", removeCalls)
+	}
+	for _, want := range []string{
+		"codex runtime directory removal blocked; retrying",
+		"codex runtime directory removal failed",
+		"runtime_id=rt-agent-manager",
+		"errno=ENOTEMPTY",
+		"remaining_entries=",
+		".nfs0000000000000001",
+	} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("runtime removal logs = %q, want %q", logs.String(), want)
+		}
 	}
 }
 

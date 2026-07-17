@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -42,6 +43,8 @@ var (
 	runtimeDirRemoveMaxDelay     = 1 * time.Second
 	runtimeDirRemoveTries        = 15
 )
+
+const runtimeDirRemovalEntryLimit = 32
 
 type AgentRef struct {
 	ID             string
@@ -322,7 +325,7 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 	if err != nil {
 		return err
 	}
-	if err := r.removeRuntimeDir(ctx, dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := r.removeRuntimeDir(ctx, runtimeID, dir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return nil
@@ -1182,39 +1185,181 @@ func (r *Runtime) removeAll(path string) error {
 	return os.RemoveAll(path)
 }
 
-func (r *Runtime) removeRuntimeDir(ctx context.Context, path string) error {
-	var err error
-	for attempt := 0; attempt < runtimeDirRemoveTries; attempt++ {
-		err = r.removeAll(path)
-		if err == nil || errors.Is(err, os.ErrNotExist) || !isTransientRuntimeDirRemoveError(err) {
-			return err
+func (r *Runtime) removeRuntimeDir(ctx context.Context, runtimeID, path string) error {
+	startedAt := time.Now()
+	for attempt := 1; attempt <= runtimeDirRemoveTries; attempt++ {
+		err := r.removeAll(path)
+		if err == nil || errors.Is(err, os.ErrNotExist) {
+			if attempt > 1 {
+				slog.InfoContext(ctx, "codex runtime directory removal recovered after retry",
+					"runtime_id", runtimeID,
+					"runtime_dir", path,
+					"attempts", attempt,
+					"elapsed", time.Since(startedAt).Round(time.Millisecond),
+				)
+			}
+			return nil
 		}
-		if attempt == runtimeDirRemoveTries-1 {
-			break
+		if !isTransientRuntimeDirRemoveError(err) || attempt == runtimeDirRemoveTries {
+			return runtimeDirRemovalFailure(ctx, runtimeID, path, attempt, startedAt, err)
 		}
-		delay := runtimeDirRemoveInitialDelay << attempt
+
+		delay := runtimeDirRemoveInitialDelay << (attempt - 1)
 		if delay > runtimeDirRemoveMaxDelay {
 			delay = runtimeDirRemoveMaxDelay
+		}
+		if attempt == 1 {
+			logRuntimeDirRemovalBlocked(ctx, runtimeID, path, attempt, delay, err)
 		}
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return ctx.Err()
+			return runtimeDirRemovalFailure(ctx, runtimeID, path, attempt, startedAt, errors.Join(ctx.Err(), err))
 		case <-timer.C:
 		}
 	}
-	return err
+	return nil
 }
 
 func isTransientRuntimeDirRemoveError(err error) bool {
-	if errors.Is(err, syscall.EBUSY) {
+	if errors.Is(err, syscall.EBUSY) || errors.Is(err, syscall.ENOTEMPTY) {
 		return true
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "being used by another process") ||
 		strings.Contains(msg, "the process cannot access the file") ||
 		strings.Contains(msg, "access is denied")
+}
+
+type runtimeDirRemovalDiagnostics struct {
+	FilesystemType            string
+	FilesystemInspectionError string
+	RemainingEntries          []string
+	RemainingEntriesTruncated bool
+	DirectoryInspectionError  string
+}
+
+type runtimeDirRemovalErrorDetails struct {
+	Operation string
+	Path      string
+	Errno     string
+	ErrnoCode int64
+}
+
+func logRuntimeDirRemovalBlocked(ctx context.Context, runtimeID, path string, attempt int, retryDelay time.Duration, err error) {
+	diagnostics := inspectRuntimeDirRemoval(path)
+	details := inspectRuntimeDirRemovalError(err)
+	slog.LogAttrs(ctx, slog.LevelWarn, "codex runtime directory removal blocked; retrying",
+		slog.String("runtime_id", runtimeID),
+		slog.String("runtime_dir", path),
+		slog.Int("attempt", attempt),
+		slog.Int("max_attempts", runtimeDirRemoveTries),
+		slog.Duration("retry_delay", retryDelay),
+		slog.Any("error", err),
+		slog.String("error_operation", details.Operation),
+		slog.String("error_path", details.Path),
+		slog.String("errno", details.Errno),
+		slog.Int64("errno_code", details.ErrnoCode),
+		slog.String("filesystem_type", diagnostics.FilesystemType),
+		slog.String("filesystem_inspection_error", diagnostics.FilesystemInspectionError),
+		slog.Any("remaining_entries", diagnostics.RemainingEntries),
+		slog.Bool("remaining_entries_truncated", diagnostics.RemainingEntriesTruncated),
+		slog.String("directory_inspection_error", diagnostics.DirectoryInspectionError),
+	)
+}
+
+func runtimeDirRemovalFailure(ctx context.Context, runtimeID, path string, attempts int, startedAt time.Time, err error) error {
+	diagnostics := inspectRuntimeDirRemoval(path)
+	details := inspectRuntimeDirRemovalError(err)
+	elapsed := time.Since(startedAt).Round(time.Millisecond)
+	slog.LogAttrs(ctx, slog.LevelError, "codex runtime directory removal failed",
+		slog.String("runtime_id", runtimeID),
+		slog.String("runtime_dir", path),
+		slog.Int("attempts", attempts),
+		slog.Duration("elapsed", elapsed),
+		slog.Any("error", err),
+		slog.String("error_operation", details.Operation),
+		slog.String("error_path", details.Path),
+		slog.String("errno", details.Errno),
+		slog.Int64("errno_code", details.ErrnoCode),
+		slog.String("filesystem_type", diagnostics.FilesystemType),
+		slog.String("filesystem_inspection_error", diagnostics.FilesystemInspectionError),
+		slog.Any("remaining_entries", diagnostics.RemainingEntries),
+		slog.Bool("remaining_entries_truncated", diagnostics.RemainingEntriesTruncated),
+		slog.String("directory_inspection_error", diagnostics.DirectoryInspectionError),
+	)
+	return fmt.Errorf(
+		"remove codex runtime directory %q after %d attempts over %s: %w; diagnostics: filesystem_type=%q errno=%q error_path=%q remaining_entries=%q remaining_entries_truncated=%t filesystem_inspection_error=%q directory_inspection_error=%q",
+		path,
+		attempts,
+		elapsed,
+		err,
+		diagnostics.FilesystemType,
+		details.Errno,
+		details.Path,
+		diagnostics.RemainingEntries,
+		diagnostics.RemainingEntriesTruncated,
+		diagnostics.FilesystemInspectionError,
+		diagnostics.DirectoryInspectionError,
+	)
+}
+
+func inspectRuntimeDirRemoval(path string) runtimeDirRemovalDiagnostics {
+	diagnostics := runtimeDirRemovalDiagnostics{}
+	diagnostics.FilesystemType, diagnostics.FilesystemInspectionError = runtimeDirFilesystemType(path)
+	walkErr := filepath.WalkDir(path, func(entryPath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entryPath == path {
+			return nil
+		}
+		relative, err := filepath.Rel(path, entryPath)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if entry.IsDir() {
+			relative += "/"
+		}
+		diagnostics.RemainingEntries = append(diagnostics.RemainingEntries, relative)
+		if len(diagnostics.RemainingEntries) >= runtimeDirRemovalEntryLimit {
+			diagnostics.RemainingEntriesTruncated = true
+			return fs.SkipAll
+		}
+		return nil
+	})
+	if walkErr != nil && !errors.Is(walkErr, os.ErrNotExist) {
+		diagnostics.DirectoryInspectionError = walkErr.Error()
+	}
+	return diagnostics
+}
+
+func inspectRuntimeDirRemovalError(err error) runtimeDirRemovalErrorDetails {
+	details := runtimeDirRemovalErrorDetails{}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		details.Operation = pathErr.Op
+		details.Path = pathErr.Path
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		details.ErrnoCode = int64(errno)
+		switch errno {
+		case syscall.ENOTEMPTY:
+			details.Errno = "ENOTEMPTY"
+		case syscall.EBUSY:
+			details.Errno = "EBUSY"
+		case syscall.EACCES:
+			details.Errno = "EACCES"
+		case syscall.EPERM:
+			details.Errno = "EPERM"
+		default:
+			details.Errno = errno.Error()
+		}
+	}
+	return details
 }
 
 func (r *Runtime) openFile(path string, flag int, mode os.FileMode) (*os.File, error) {
