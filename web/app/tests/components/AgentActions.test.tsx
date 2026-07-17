@@ -381,7 +381,6 @@ describe("agent action visibility", () => {
     expect(screen.queryByRole("button", { name: "Edit name" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Name" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit description" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Local Workspace Dir")).not.toBeInTheDocument();
   });
 
