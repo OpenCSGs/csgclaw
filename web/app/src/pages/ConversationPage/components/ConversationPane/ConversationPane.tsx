@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import {
@@ -8,7 +8,7 @@ import {
   useQuestionAnswerMode,
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
-import { AgentView } from "@/pages/AgentPage/components";
+import { AgentView, type AgentDetailPaneHandle } from "@/pages/AgentPage/components";
 import { Button, DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
 import { getConversationDescription, isDirectConversation } from "@/models/conversations";
@@ -38,25 +38,57 @@ function writeConversationActivityActionSeen() {
   }
 }
 
+function hasBlockingAgentDetailChangesAfterMetadataCommit(
+  props: Pick<AgentDetailSidePanelProps, "draft" | "hasUnsavedChanges" | "savedDraft">,
+  committedFields: Array<"description" | "name">,
+): boolean {
+  if (!props.hasUnsavedChanges) {
+    return false;
+  }
+  if (!committedFields.length || !props.draft || !props.savedDraft) {
+    return true;
+  }
+  const normalizedDraft = { ...props.draft };
+  committedFields.forEach((field) => {
+    normalizedDraft[field] = props.savedDraft?.[field] ?? "";
+  });
+  return JSON.stringify(normalizedDraft) !== JSON.stringify(props.savedDraft);
+}
+
 function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePanelProps) {
   const [dialogPortalContainer, setDialogPortalContainer] = useState<HTMLDivElement | null>(null);
+  const detailPaneRef = useRef<AgentDetailPaneHandle | null>(null);
+  const requestClose = useCallback(
+    (restoreFocus = true) => {
+      const committedFields = detailPaneRef.current?.commitActiveMetadataEdit() ?? [];
+      const skipUnsavedCheck = !hasBlockingAgentDetailChangesAfterMetadataCommit(props, committedFields);
+      return onClose(restoreFocus, { skipUnsavedCheck });
+    },
+    [onClose, props],
+  );
   const handleOpenDM = useCallback(
     async (...args: Parameters<typeof onOpenDM>) => {
-      if (onClose(false) === false) {
+      if (requestClose(false) === false) {
         return;
       }
       await onOpenDM(...args);
     },
-    [onClose, onOpenDM],
+    [onOpenDM, requestClose],
   );
 
   return (
-    <DialogRoot open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+    <DialogRoot open onOpenChange={(open) => (!open ? requestClose() : undefined)}>
       <DialogContent
         ref={setDialogPortalContainer}
         aria-describedby={undefined}
         aria-modal="true"
         className="agent-detail-side-panel"
+        onEscapeKeyDown={(event) => {
+          const canceledFields = detailPaneRef.current?.cancelActiveMetadataEdit() ?? [];
+          if (canceledFields.length) {
+            event.preventDefault();
+          }
+        }}
         overlayClassName="agent-detail-drawer-backdrop"
       >
         <div className="agent-detail-side-panel-bar">
@@ -69,7 +101,12 @@ function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePa
           <DialogTitle className="agent-detail-side-panel-title">{props.t("agentDetailPanel")}</DialogTitle>
         </div>
         <div className="agent-detail-side-panel-body">
-          <AgentView {...props} dialogPortalContainer={dialogPortalContainer} onOpenDM={handleOpenDM} />
+          <AgentView
+            ref={detailPaneRef}
+            {...props}
+            dialogPortalContainer={dialogPortalContainer}
+            onOpenDM={handleOpenDM}
+          />
         </div>
       </DialogContent>
     </DialogRoot>

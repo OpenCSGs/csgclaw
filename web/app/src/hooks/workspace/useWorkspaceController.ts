@@ -296,11 +296,15 @@ export function useWorkspaceController() {
     t,
   });
   const closeConversationAgentDetail = useCallback(
-    (restoreFocus = true) => {
+    (restoreFocus = true, options: { skipUnsavedCheck?: boolean } = {}) => {
       if (!conversationProfileDetailAgentID) {
         return true;
       }
-      if (agent.agentViewProps.hasUnsavedChanges && !window.confirm(t("agentUnsavedChangesWarning"))) {
+      if (
+        !options.skipUnsavedCheck &&
+        agent.agentViewProps.hasUnsavedChanges &&
+        !window.confirm(t("agentUnsavedChangesWarning"))
+      ) {
         return false;
       }
       const trigger = conversationProfileDetailTriggerRef.current;

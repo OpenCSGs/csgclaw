@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import {
   Button,
   DialogCloseButton,
@@ -11,10 +11,10 @@ import {
 import { isNotificationBotAgent, agentDeleteConfirmationMessage } from "@/models/agents";
 import type { AgentLike } from "@/models/agents";
 import { AgentDetailPane } from "../AgentDetailPane";
-import type { AgentDetailPaneProps } from "../AgentDetailPane";
+import type { AgentDetailPaneHandle, AgentDetailPaneProps } from "../AgentDetailPane";
 import { NotificationParticipantDetailPane } from "../NotificationParticipantDetailPane";
 
-export function AgentView(props: AgentDetailPaneProps) {
+export const AgentView = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>(function AgentView(props, ref) {
   const [deletePendingAgent, setDeletePendingAgent] = useState<AgentLike | null>(null);
   const deleteConfirmMessage = deletePendingAgent ? agentDeleteConfirmationMessage(deletePendingAgent, props.t) : "";
 
@@ -45,7 +45,7 @@ export function AgentView(props: AgentDetailPaneProps) {
       {isNotificationBotAgent(props.item) ? (
         <NotificationParticipantDetailPane {...sharedProps} />
       ) : (
-        <AgentDetailPane {...sharedProps} />
+        <AgentDetailPane ref={ref} {...sharedProps} />
       )}
       <DialogRoot
         open={Boolean(deletePendingAgent)}
@@ -84,4 +84,4 @@ export function AgentView(props: AgentDetailPaneProps) {
       </DialogRoot>
     </>
   );
-}
+});

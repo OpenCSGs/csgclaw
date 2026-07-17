@@ -271,5 +271,5 @@ export type UseAgentControllerArgs = {
 };
 
 export type AgentDetailSidePanelProps = AgentDetailPaneProps & {
-  onClose: (restoreFocus?: boolean) => boolean | void;
+  onClose: (restoreFocus?: boolean, options?: { skipUnsavedCheck?: boolean }) => boolean | void;
 };
