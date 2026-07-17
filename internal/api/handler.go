@@ -118,6 +118,7 @@ type imEventResponse struct {
 type bootstrapConfigResponse struct {
 	DefaultManagerTemplate string                                        `json:"default_manager_template"`
 	DefaultWorkerTemplate  string                                        `json:"default_worker_template"`
+	SandboxProvider        string                                        `json:"sandbox_provider"`
 	RuntimeKind            string                                        `json:"runtime_kind"`
 	ManagerRuntime         managerRuntimeResponse                        `json:"manager_runtime"`
 	ShowUpgrade            bool                                          `json:"show_upgrade"`
@@ -497,6 +498,7 @@ func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Ser
 	resp := bootstrapConfigResponse{
 		DefaultManagerTemplate: cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
 		DefaultWorkerTemplate:  cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
+		SandboxProvider:        strings.TrimSpace(cfg.Sandbox.Provider),
 		ShowUpgrade:            cfg.Server.ShowUpgrade,
 		AdvertiseBaseURL:       config.ResolveAdvertiseBaseURL(cfg.Server),
 		ManagerRuntime:         managerRuntimeReadiness(),
@@ -590,6 +592,9 @@ func workerRuntimeChoices(cfg config.Config) []workerRuntimeChoiceResponse {
 	if _, err := locateCodexCLI(); err != nil {
 		choices[0].Installed = false
 		choices[0].Message = "Codex CLI not installed"
+	}
+	if strings.EqualFold(strings.TrimSpace(cfg.Sandbox.Provider), config.CSGHubProvider) {
+		return choices[:1]
 	}
 	return choices
 }
@@ -1388,6 +1393,11 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
+		items, err = h.filterHubTemplatesForConfiguredProvider(items)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		writeJSON(w, http.StatusOK, presentHubTemplates(items))
 	case http.MethodPost:
 		hubSvc, err := h.hubServiceForRequest(r)
@@ -1423,6 +1433,28 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (h *Handler) filterHubTemplatesForConfiguredProvider(items []hub.Template) ([]hub.Template, error) {
+	if strings.TrimSpace(h.configPath) == "" {
+		return items, nil
+	}
+	cfg, _, err := h.loadBootstrapConfig()
+	if err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(cfg.Sandbox.Provider), config.CSGHubProvider) {
+		return items, nil
+	}
+
+	filtered := make([]hub.Template, 0, len(items))
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item.Role), hub.TemplateRoleWorker) &&
+			bootstrapRuntimeKind(item.RuntimeKind) == agent.RuntimeKindCodex {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered, nil
 }
 
 func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) {

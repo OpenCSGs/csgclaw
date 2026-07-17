@@ -154,7 +154,11 @@ export function AgentProfileModal({
     [hubTemplates],
   );
   const selectedWorkerTemplate = workerTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
-  const sandboxEnabled = Boolean(agentDraft.sandbox_enabled);
+  const isCSGHubSandboxProvider =
+    String(bootstrapConfig?.sandbox_provider || "")
+      .trim()
+      .toLowerCase() === "csghub";
+  const sandboxEnabled = !isCSGHubSandboxProvider && Boolean(agentDraft.sandbox_enabled);
   const runtimeChoices = Array.isArray(bootstrapConfig?.worker_runtime_choices)
     ? bootstrapConfig.worker_runtime_choices
     : [];
@@ -186,7 +190,7 @@ export function AgentProfileModal({
     : "";
 
   function defaultCustomWorkerDraft(baseDraft: AgentDraft): AgentDraft {
-    const codexAvailable = codexChoice?.installed !== false;
+    const codexAvailable = isCSGHubSandboxProvider || codexChoice?.installed !== false;
     const runtimeName = codexAvailable ? "codex" : defaultSandboxRuntimeName;
     const nextSandboxEnabled = !codexAvailable;
     const runtimeKind = composeLegacyRuntimeKind(runtimeName, nextSandboxEnabled) || DEFAULT_RUNTIME_KIND;
@@ -467,7 +471,7 @@ export function AgentProfileModal({
               </div>
               <div className="agent-section-form">
                 <div className="profile-grid profile-grid-compact agent-basics-grid">
-                  {isWorkerCreate ? (
+                  {isWorkerCreate && !isCSGHubSandboxProvider ? (
                     <div className="field span-2 agent-fast-mode-field agent-sandbox-field">
                       <div className="field-label-with-help">
                         <span>{t("profileSandboxEnabled")}</span>

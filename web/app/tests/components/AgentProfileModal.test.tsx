@@ -990,6 +990,48 @@ describe("AgentProfileModal", () => {
     expect(screen.queryByRole("option", { name: "Codex CLI" })).not.toBeInTheDocument();
   });
 
+  it("hides sandbox controls and only exposes Codex for CSGHub custom creation", async () => {
+    render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="create"
+        editingAgent={null}
+        agentDraft={{
+          ...agentToDraft(worker),
+          sandbox_enabled: true,
+          runtime_name: "openclaw",
+          runtime_kind: "openclaw_sandbox",
+        }}
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{
+          sandbox_provider: "csghub",
+          worker_runtime_choices: [{ name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" }],
+        }}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        locale="en"
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        agentCreateMode="custom"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("checkbox", { name: "Sandbox" })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Runtime" })).toHaveTextContent("Codex CLI");
+  });
+
   it("uses the matching worker template image when switching blank drafts to OpenClaw", async () => {
     const user = userEvent.setup();
     const onAgentDraftChange = vi.fn();

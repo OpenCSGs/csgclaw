@@ -3103,6 +3103,63 @@ func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 	}
 }
 
+func TestFilterHubTemplatesForConfiguredProvider(t *testing.T) {
+	items := []hub.Template{
+		{ID: "codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex},
+		{ID: "codex-manager", Role: hub.TemplateRoleManager, RuntimeKind: agent.RuntimeKindCodex},
+		{ID: "openclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "openclaw"},
+	}
+	tests := []struct {
+		name     string
+		provider string
+		wantIDs  []string
+	}{
+		{name: "csghub only returns codex workers", provider: config.CSGHubProvider, wantIDs: []string{"codex-worker"}},
+		{name: "other providers are unchanged", provider: config.DockerProvider, wantIDs: []string{"codex-worker", "codex-manager", "openclaw-worker"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.toml")
+			content := "[sandbox]\nprovider = \"" + tt.provider + "\"\n"
+			if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+				t.Fatalf("WriteFile(config) error = %v", err)
+			}
+			srv := &Handler{}
+			srv.SetConfigPath(configPath)
+
+			got, err := srv.filterHubTemplatesForConfiguredProvider(items)
+			if err != nil {
+				t.Fatalf("filterHubTemplatesForConfiguredProvider() error = %v", err)
+			}
+			gotIDs := make([]string, 0, len(got))
+			for _, item := range got {
+				gotIDs = append(gotIDs, item.ID)
+			}
+			if !slices.Equal(gotIDs, tt.wantIDs) {
+				t.Fatalf("template ids = %#v, want %#v", gotIDs, tt.wantIDs)
+			}
+		})
+	}
+}
+
+func TestBootstrapConfigViewRestrictsCSGHubToCodexRuntime(t *testing.T) {
+	got := bootstrapConfigView(context.Background(), config.Config{
+		Sandbox: config.SandboxConfig{Provider: config.CSGHubProvider},
+	}, nil, nil)
+
+	if got.SandboxProvider != config.CSGHubProvider {
+		t.Fatalf("sandbox provider = %q, want %q", got.SandboxProvider, config.CSGHubProvider)
+	}
+	if len(got.WorkerRuntimeChoices) != 1 {
+		t.Fatalf("worker runtime choices = %#v, want only Codex", got.WorkerRuntimeChoices)
+	}
+	choice := got.WorkerRuntimeChoices[0]
+	if choice.Name != agent.RuntimeNameCodex || choice.SandboxEnabled {
+		t.Fatalf("worker runtime choice = %#v, want non-sandbox Codex", choice)
+	}
+}
+
 func TestHandleHubTemplateByIDReturnsTemplate(t *testing.T) {
 	hubSvc := mustNewLocalTemplateHubService(t, "review-bot", hub.Template{
 		ID:          "review-bot",

@@ -410,6 +410,7 @@ export type RuntimeBootstrapConfig = {
   default_worker_template?: string | null;
   effective_manager_image?: string | null;
   manager_runtime?: ManagerRuntimeLike | null;
+  sandbox_provider?: string | null;
   runtime_default_images?: unknown;
   runtime_kind?: string | null;
   worker_runtime_choices?: RuntimeChoiceLike[] | null;

@@ -1135,6 +1135,10 @@ export function useAgentController({
     const codexAvailable = runtimeChoices.some(
       (item) => !item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "codex" && item?.installed !== false,
     );
+    const isCSGHubSandboxProvider =
+      String(bootstrapConfig?.sandbox_provider || "")
+        .trim()
+        .toLowerCase() === "csghub";
     const createWorkerTemplates = workerSelectableTemplates(hubTemplates).filter(
       (item) => normalizeRuntimeKind(item.runtime_kind) !== "picoclaw_sandbox",
     );
@@ -1144,7 +1148,9 @@ export function useAgentController({
       ) || normalizeRuntimeName(runtimeChoices.find((item) => item?.sandbox_enabled)?.name || "openclaw");
     let preferredRuntimeKind =
       normalizeRuntimeKind(composeLegacyRuntimeKind(preferredSandboxRuntimeName, true)) || "openclaw_sandbox";
-    if (!runtimeChoices.length && !codexAvailable) {
+    if (isCSGHubSandboxProvider) {
+      preferredRuntimeKind = "codex";
+    } else if (!runtimeChoices.length && !codexAvailable) {
       preferredRuntimeKind = "openclaw_sandbox";
     }
     const selectedTemplate =
