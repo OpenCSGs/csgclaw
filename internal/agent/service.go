@@ -520,9 +520,15 @@ func (s *Service) ensureCodexManager(ctx context.Context, forceRecreate bool) (A
 		return Agent{}, err
 	}
 	legacyCleanupKeys := s.legacyManagerSandboxCleanupKeys()
-	if forceRecreate && strings.TrimSpace(existing.RuntimeID) != "" {
-		if err := runtimeImpl.Delete(ctx, runtimeHandleForAgent(existing)); err != nil && !sandbox.IsNotFound(err) {
-			return Agent{}, fmt.Errorf("remove existing manager runtime: %w", err)
+	if forceRecreate {
+		// Stop every channel bridge before deleting the Codex runtime. Bridge
+		// workers can otherwise access or restore the session while its runtime
+		// directory is being removed, leaving open .nfs files on NFS-backed homes.
+		s.stopLifecycleAgent(ManagerUserID)
+		if strings.TrimSpace(existing.RuntimeID) != "" {
+			if err := runtimeImpl.Delete(ctx, runtimeHandleForAgent(existing)); err != nil && !sandbox.IsNotFound(err) {
+				return Agent{}, fmt.Errorf("remove existing manager runtime: %w", err)
+			}
 		}
 	}
 

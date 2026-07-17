@@ -3417,6 +3417,64 @@ func TestEnsureBootstrapManagerUsesCodexRuntimeWithoutConnectorTokenEnv(t *testi
 	}
 }
 
+func TestEnsureBootstrapManagerStopsLifecycleBeforeRecreate(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	var observer *fakeLifecycleObserver
+	deleteCalls := 0
+	newCalls := 0
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "server-token"},
+		"",
+		filepath.Join(homeDir, "agents.json"),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			del: func(context.Context, agentruntime.Handle) error {
+				deleteCalls++
+				var stopCalls []string
+				if observer != nil {
+					stopCalls = observer.stopCalls
+				}
+				if !slices.Equal(stopCalls, []string{ManagerUserID}) {
+					t.Fatalf("manager lifecycle stop calls before runtime delete = %v, want [%s]", stopCalls, ManagerUserID)
+				}
+				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				newCalls++
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: fmt.Sprintf("codex-manager-session-%d", newCalls)}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	if err := svc.EnsureBootstrapManager(context.Background(), false); err != nil {
+		t.Fatalf("EnsureBootstrapManager(initial) error = %v", err)
+	}
+	observer = &fakeLifecycleObserver{}
+	svc.SetLifecycleObserver(observer)
+
+	if err := svc.EnsureBootstrapManager(context.Background(), true); err != nil {
+		t.Fatalf("EnsureBootstrapManager(recreate) error = %v", err)
+	}
+	if deleteCalls != 1 {
+		t.Fatalf("runtime Delete() calls = %d, want 1", deleteCalls)
+	}
+	if !slices.Equal(observer.stopCalls, []string{ManagerUserID}) {
+		t.Fatalf("StopAgent() calls = %v, want [%s]", observer.stopCalls, ManagerUserID)
+	}
+	if len(observer.ensureCalls) != 1 || observer.ensureCalls[0].ID != ManagerUserID {
+		t.Fatalf("EnsureAgent() calls = %+v, want recreated manager", observer.ensureCalls)
+	}
+}
+
 func TestEnsureBootstrapManagerPreservesStoredManagerMCPServers(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)

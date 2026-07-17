@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/assets"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	agentruntime "csgclaw/internal/runtime"
@@ -468,8 +469,8 @@ func TestEnsureBootstrapManagerUsesDefaultParticipantIDSeparateFromAgentID(t *te
 	if user, ok := imSvc.User(im.ManagerUserID); !ok || user.ID != im.ManagerUserID || user.Avatar == "" {
 		t.Fatalf("manager channel user = %+v, ok=%v; want local user %q", user, ok, im.ManagerUserID)
 	}
-	if manager, ok := agentSvc.Agent(agent.ManagerUserID); !ok || manager.Avatar != "" {
-		t.Fatalf("manager agent = %+v, ok=%v; want empty avatar", manager, ok)
+	if manager, ok := agentSvc.Agent(agent.ManagerUserID); !ok || manager.Avatar != assets.DefaultManagerAvatar {
+		t.Fatalf("manager agent = %+v, ok=%v; want default avatar %q", manager, ok, assets.DefaultManagerAvatar)
 	}
 	if _, ok := store.Get(ChannelCSGClaw, agent.ManagerParticipantID); !ok {
 		t.Fatalf("store missing manager participant %q", agent.ManagerParticipantID)

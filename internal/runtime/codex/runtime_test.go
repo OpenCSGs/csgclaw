@@ -809,6 +809,48 @@ func TestDeleteRetriesTransientRuntimeDirRemovalError(t *testing.T) {
 	}
 }
 
+func TestDeleteStopsLiveSessionWhenRuntimeMetadataIsMissing(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "agent-manager", ".codex")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(runtime dir) error = %v", err)
+	}
+
+	stopCalls := 0
+	rt := New(Dependencies{
+		AgentHome: func(string) (string, error) {
+			return filepath.Join(root, "agent-manager"), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        agent.ManagerUserID,
+				Name:      agent.ManagerName,
+				RuntimeID: h.RuntimeID,
+			}, nil
+		},
+		Manager: fakeManager{
+			stop: func(_ context.Context, handle SessionHandle) error {
+				stopCalls++
+				if handle.RuntimeID != "rt-agent-manager" {
+					t.Fatalf("Stop() runtime id = %q, want rt-agent-manager", handle.RuntimeID)
+				}
+				return nil
+			},
+		},
+	})
+
+	err := rt.Delete(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-manager"})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if stopCalls != 1 {
+		t.Fatalf("session manager Stop() calls = %d, want 1", stopCalls)
+	}
+	if _, err := os.Stat(runtimeDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime dir stat error = %v, want not exist", err)
+	}
+}
+
 func TestRemoveRuntimeDirRetriesLockedPluginCloneFetchHead(t *testing.T) {
 	root := t.TempDir()
 	runtimeDir := filepath.Join(root, "agent-alice", ".codex")

@@ -239,7 +239,7 @@ func (m *csgclawManager) Start(ctx context.Context) error {
 		if !shouldRestoreCodexBridgeOnStartup(a) {
 			continue
 		}
-		session, err := ensureSession(ctx, m.restarter, m.runtime, "csgclaw", a)
+		session, err := currentSession(m.runtime, a)
 		if err != nil {
 			startErr = errors.Join(startErr, fmt.Errorf("%s: %w", a.Name, err))
 			continue
@@ -342,7 +342,7 @@ func (m *feishuManager) Start(ctx context.Context) error {
 		if !m.shouldStartForAgent(a) {
 			continue
 		}
-		session, err := ensureSession(ctx, m.restarter, m.runtime, "feishu", a)
+		session, err := currentSession(m.runtime, a)
 		if err != nil {
 			startErr = errors.Join(startErr, fmt.Errorf("%s: %w", a.Name, err))
 			continue
@@ -502,11 +502,7 @@ func (m *feishuManager) clearStaleParticipant(agentID, participantID string) str
 }
 
 func ensureSession(ctx context.Context, restarter AgentRestarter, runtime *runtimecodex.Runtime, channel string, a agent.Agent) (*runtimecodex.Session, error) {
-	if runtime == nil {
-		return nil, fmt.Errorf("codex runtime is required")
-	}
-	handle := runtimecodex.SessionHandle{RuntimeID: strings.TrimSpace(a.RuntimeID)}
-	session, err := runtime.SessionManager().Session(handle)
+	session, err := currentSession(runtime, a)
 	if err == nil {
 		slog.Debug(channel+" codex bridge session found",
 			"agent_id", strings.TrimSpace(a.ID),
@@ -546,6 +542,13 @@ func ensureSession(ctx context.Context, restarter AgentRestarter, runtime *runti
 		"session_id", strings.TrimSpace(session.SessionID),
 	)
 	return session, nil
+}
+
+func currentSession(runtime *runtimecodex.Runtime, a agent.Agent) (*runtimecodex.Session, error) {
+	if runtime == nil {
+		return nil, fmt.Errorf("codex runtime is required")
+	}
+	return runtime.SessionManager().Session(runtimecodex.SessionHandle{RuntimeID: strings.TrimSpace(a.RuntimeID)})
 }
 
 func bindingForAgent(a agent.Agent, sessionID string) codexbridge.Binding {

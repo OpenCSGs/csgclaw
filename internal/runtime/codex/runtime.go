@@ -289,15 +289,28 @@ func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntim
 }
 
 func (r *Runtime) Stop(ctx context.Context, h agentruntime.Handle) (agentruntime.State, error) {
-	meta, err := r.readRuntimeMetadata(h.RuntimeID)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return agentruntime.StateUnknown, sandbox.ErrNotFound
-		}
-		return agentruntime.StateUnknown, err
+	runtimeID := strings.TrimSpace(h.RuntimeID)
+	if runtimeID == "" {
+		return agentruntime.StateUnknown, fmt.Errorf("runtime id is required")
 	}
-	if err := r.sessionManager().Stop(ctx, SessionHandle{RuntimeID: strings.TrimSpace(h.RuntimeID)}); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return agentruntime.StateUnknown, err
+
+	// Stop the in-memory session before relying on metadata. A failed NFS
+	// cleanup can remove runtime.json while leaving the tracked app-server and
+	// its file descriptors alive. Returning early on missing metadata makes that
+	// state impossible to recover through a later recreate.
+	meta, metaErr := r.readRuntimeMetadata(runtimeID)
+	managerErr := r.sessionManager().Stop(ctx, SessionHandle{RuntimeID: runtimeID})
+	if managerErr != nil && !errors.Is(managerErr, os.ErrNotExist) {
+		return agentruntime.StateUnknown, managerErr
+	}
+	if metaErr != nil {
+		if !errors.Is(metaErr, os.ErrNotExist) {
+			return agentruntime.StateUnknown, metaErr
+		}
+		if managerErr == nil {
+			return agentruntime.StateStopped, nil
+		}
+		return agentruntime.StateUnknown, sandbox.ErrNotFound
 	}
 	if meta.ProcessID > 0 {
 		if err := stopProcess(meta.ProcessID); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.ESRCH) {
@@ -1621,7 +1634,7 @@ func stopProcess(pid int) error {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return nil
+	return fmt.Errorf("process %d is still running after interrupt and kill attempts", pid)
 }
 
 func readJSONFile(readFile func(string) ([]byte, error), path string, dst any) error {

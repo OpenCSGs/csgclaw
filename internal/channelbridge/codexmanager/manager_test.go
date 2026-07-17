@@ -2,6 +2,7 @@ package codexmanager
 
 import (
 	"context"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -171,6 +172,33 @@ func TestBindingForAgentUsesParticipantIDForWorker(t *testing.T) {
 	}
 }
 
+func TestCSGClawManagerStartupDoesNotRestartMissingSession(t *testing.T) {
+	restarter := &recordingAgentRestarter{}
+	runtime := runtimecodex.New(runtimecodex.Dependencies{Manager: missingSessionManager{}})
+	manager := newCSGClawManager(managerDeps{
+		agents: staticAgentLister{agents: []agent.Agent{{
+			ID:              agent.ManagerUserID,
+			Name:            agent.ManagerName,
+			Role:            agent.RoleManager,
+			RuntimeKind:     agent.RuntimeKindCodex,
+			RuntimeID:       "rt-agent-manager",
+			Status:          string(agentruntime.StateRunning),
+			ProfileComplete: true,
+		}}},
+		restarter: restarter,
+		runtime:   runtime,
+		client:    newRecordingBotClient(),
+	})
+
+	err := manager.Start(context.Background())
+	if err == nil {
+		t.Fatal("Start() error = nil, want missing session error")
+	}
+	if restarter.stopCalls != 0 || restarter.startCalls != 0 {
+		t.Fatalf("startup restarter calls = stop %d/start %d, want no runtime restart", restarter.stopCalls, restarter.startCalls)
+	}
+}
+
 func TestFeishuManagerStopAgentStopsRememberedParticipant(t *testing.T) {
 	client := newRecordingBotClient()
 	bridge := codexbridge.NewService(client, noopPrompter{}, runtimecodex.NewEventSink())
@@ -253,6 +281,47 @@ type noopPrompter struct{}
 
 func (noopPrompter) Prompt(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error) {
 	return runtimecodex.PromptResponse{}, nil
+}
+
+type staticAgentLister struct {
+	agents []agent.Agent
+}
+
+func (l staticAgentLister) List() []agent.Agent {
+	return append([]agent.Agent(nil), l.agents...)
+}
+
+type recordingAgentRestarter struct {
+	stopCalls  int
+	startCalls int
+}
+
+func (r *recordingAgentRestarter) Stop(context.Context, string) (agent.Agent, error) {
+	r.stopCalls++
+	return agent.Agent{}, nil
+}
+
+func (r *recordingAgentRestarter) Start(context.Context, string) (agent.Agent, error) {
+	r.startCalls++
+	return agent.Agent{RuntimeID: "rt-agent-manager"}, nil
+}
+
+type missingSessionManager struct{}
+
+func (missingSessionManager) Start(context.Context, runtimecodex.SessionSpec) (*runtimecodex.Session, error) {
+	return nil, os.ErrNotExist
+}
+
+func (missingSessionManager) Stop(context.Context, runtimecodex.SessionHandle) error {
+	return os.ErrNotExist
+}
+
+func (missingSessionManager) Session(runtimecodex.SessionHandle) (*runtimecodex.Session, error) {
+	return nil, os.ErrNotExist
+}
+
+func (missingSessionManager) Prompt(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error) {
+	return runtimecodex.PromptResponse{}, os.ErrNotExist
 }
 
 type testCredentialProvider map[string]string
