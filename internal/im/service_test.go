@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"csgclaw/internal/assets"
 )
 
 func TestEnsureWorkerUserCreatesUserAndBootstrapRoom(t *testing.T) {
@@ -1279,6 +1281,112 @@ func TestEnsureBootstrapStateCreatesAdminManagerDMWhenOnlyGroupExists(t *testing
 	if dm.Title != "admin & manager" {
 		t.Fatalf("dm.Title = %q, want admin & manager", dm.Title)
 	}
+}
+
+func TestEnsureBootstrapStateSetsDefaultManagerAvatar(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+
+	state := Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []User{
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager", Role: "manager"},
+		},
+	}
+	if err := SaveBootstrap(statePath, state); err != nil {
+		t.Fatalf("SaveBootstrap() error = %v", err)
+	}
+
+	if err := EnsureBootstrapState(statePath); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+
+	loaded, err := LoadBootstrap(statePath)
+	if err != nil {
+		t.Fatalf("LoadBootstrap() error = %v", err)
+	}
+	manager := findUserByID(loaded.Users, ManagerUserID)
+	if manager == nil {
+		t.Fatalf("manager user %q not found in %+v", ManagerUserID, loaded.Users)
+	}
+	if manager.Avatar != assets.DefaultManagerAvatar {
+		t.Fatalf("manager avatar = %q, want %q", manager.Avatar, assets.DefaultManagerAvatar)
+	}
+}
+
+func TestEnsureBootstrapStateReplacesLegacyManagerAvatar(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+
+	state := Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []User{
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager", Role: "manager", Avatar: assets.LegacyManagerAvatarSymbol},
+		},
+	}
+	if err := SaveBootstrap(statePath, state); err != nil {
+		t.Fatalf("SaveBootstrap() error = %v", err)
+	}
+
+	if err := EnsureBootstrapState(statePath); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+
+	loaded, err := LoadBootstrap(statePath)
+	if err != nil {
+		t.Fatalf("LoadBootstrap() error = %v", err)
+	}
+	manager := findUserByID(loaded.Users, ManagerUserID)
+	if manager == nil {
+		t.Fatalf("manager user %q not found in %+v", ManagerUserID, loaded.Users)
+	}
+	if manager.Avatar != assets.DefaultManagerAvatar {
+		t.Fatalf("manager avatar = %q, want %q", manager.Avatar, assets.DefaultManagerAvatar)
+	}
+}
+
+func TestEnsureBootstrapStatePreservesCustomManagerAvatar(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	customAvatar := "data:image/png;base64,custom"
+
+	state := Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []User{
+			{ID: "u-admin", Name: "admin"},
+			{ID: "manager", Name: "manager", Role: "manager", Avatar: customAvatar},
+		},
+	}
+	if err := SaveBootstrap(statePath, state); err != nil {
+		t.Fatalf("SaveBootstrap() error = %v", err)
+	}
+
+	if err := EnsureBootstrapState(statePath); err != nil {
+		t.Fatalf("EnsureBootstrapState() error = %v", err)
+	}
+
+	loaded, err := LoadBootstrap(statePath)
+	if err != nil {
+		t.Fatalf("LoadBootstrap() error = %v", err)
+	}
+	manager := findUserByID(loaded.Users, ManagerUserID)
+	if manager == nil {
+		t.Fatalf("manager user %q not found in %+v", ManagerUserID, loaded.Users)
+	}
+	if manager.Avatar != customAvatar {
+		t.Fatalf("manager avatar = %q, want custom avatar %q", manager.Avatar, customAvatar)
+	}
+}
+
+func findUserByID(users []User, id string) *User {
+	for i := range users {
+		if users[i].ID == id {
+			return &users[i]
+		}
+	}
+	return nil
 }
 
 func TestEnsureBootstrapStateMigratesMisspelledManagerReferences(t *testing.T) {

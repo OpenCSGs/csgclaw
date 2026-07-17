@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"csgclaw/internal/assets"
 	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	"csgclaw/internal/identity"
@@ -640,8 +641,9 @@ func (s *Service) legacyManagerSandboxCleanupKeys() []string {
 
 func (s *Service) managerMetadata() (name, description, instructions, avatar string, createdAt time.Time) {
 	name = ManagerName
+	avatar = assets.DefaultManagerAvatar
 	if s == nil {
-		return name, "", "", "", time.Time{}
+		return name, "", "", avatar, time.Time{}
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -653,7 +655,7 @@ func (s *Service) managerMetadata() (name, description, instructions, avatar str
 			return managerMetadataFromAgent(existing)
 		}
 	}
-	return name, "", "", "", time.Time{}
+	return name, "", "", avatar, time.Time{}
 }
 
 func managerMetadataFromAgent(existing Agent) (name, description, instructions, avatar string, createdAt time.Time) {
@@ -661,7 +663,9 @@ func managerMetadataFromAgent(existing Agent) (name, description, instructions, 
 	if name == "" {
 		name = ManagerName
 	}
-	return name, strings.TrimSpace(existing.Description), strings.TrimSpace(existing.Instructions), strings.TrimSpace(existing.Avatar), existing.CreatedAt.UTC()
+	avatar = strings.TrimSpace(existing.Avatar)
+	avatar = assets.NormalizeManagerAvatar(avatar)
+	return name, strings.TrimSpace(existing.Description), strings.TrimSpace(existing.Instructions), avatar, existing.CreatedAt.UTC()
 }
 
 func (s *Service) managerMCPServers() map[string]any {

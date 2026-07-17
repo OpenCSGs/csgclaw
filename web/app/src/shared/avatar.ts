@@ -1,9 +1,15 @@
 const AVATAR_BASE = "avatar";
+const MANAGER_AVATAR = `${AVATAR_BASE}/manager.png`;
 
 const AVATAR_GROUPS = ["3D", "cartoon", "pic"] as const;
 
 const AVATAR_VALUE_SET = new Set(
-  AVATAR_GROUPS.flatMap((group) => Array.from({ length: 8 }, (_, index) => `${AVATAR_BASE}/${group}-${index + 1}.png`)),
+  [
+    MANAGER_AVATAR,
+    ...AVATAR_GROUPS.flatMap((group) =>
+      Array.from({ length: 8 }, (_, index) => `${AVATAR_BASE}/${group}-${index + 1}.png`),
+    ),
+  ],
 );
 
 export function normalizeAvatarPath(value: unknown): string {

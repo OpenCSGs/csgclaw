@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/assets"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
@@ -3308,6 +3309,51 @@ func TestBoxLiteProviderGatewayLifecycle(t *testing.T) {
 		if len(req.Args) > 2 && req.Args[2] == "run" && !containsAny(req.Args, "/bin/sh", "/usr/local/bin/picoclaw") {
 			t.Fatalf("boxlite-cli run args missing gateway command: %q", req.Args)
 		}
+	}
+}
+
+func TestManagerMetadataDefaultsEmptyAvatar(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, _, _, avatar, _ := svc.managerMetadata()
+	if avatar != assets.DefaultManagerAvatar {
+		t.Fatalf("managerMetadata avatar = %q, want %q", avatar, assets.DefaultManagerAvatar)
+	}
+
+	svc.agents[ManagerUserID] = Agent{ID: ManagerUserID, Name: ManagerName, Role: RoleManager}
+	_, _, _, avatar, _ = svc.managerMetadata()
+	if avatar != assets.DefaultManagerAvatar {
+		t.Fatalf("managerMetadata existing empty avatar = %q, want %q", avatar, assets.DefaultManagerAvatar)
+	}
+
+	svc.agents[ManagerUserID] = Agent{
+		ID:     ManagerUserID,
+		Name:   ManagerName,
+		Role:   RoleManager,
+		Avatar: assets.LegacyManagerAvatarSymbol,
+	}
+	_, _, _, avatar, _ = svc.managerMetadata()
+	if avatar != assets.DefaultManagerAvatar {
+		t.Fatalf("managerMetadata legacy avatar = %q, want %q", avatar, assets.DefaultManagerAvatar)
+	}
+}
+
+func TestManagerMetadataPreservesCustomAvatar(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", statePath)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	customAvatar := "data:image/png;base64,custom"
+	svc.agents[ManagerUserID] = Agent{ID: ManagerUserID, Name: ManagerName, Role: RoleManager, Avatar: customAvatar}
+
+	_, _, _, avatar, _ := svc.managerMetadata()
+	if avatar != customAvatar {
+		t.Fatalf("managerMetadata avatar = %q, want custom avatar %q", avatar, customAvatar)
 	}
 }
 

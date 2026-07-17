@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/assets"
 	"csgclaw/internal/identity"
 	"csgclaw/internal/slashcommand"
 	"csgclaw/internal/utils"
@@ -812,7 +813,7 @@ func ensureUsers(users []User) []User {
 			ID:        managerParticipantUserID,
 			Name:      "manager",
 			Role:      "manager",
-			Avatar:    "MG",
+			Avatar:    assets.DefaultManagerAvatar,
 			IsOnline:  true,
 			AccentHex: "#0f766e",
 		})
@@ -822,6 +823,7 @@ func ensureUsers(users []User) []User {
 				result[i].ID = managerParticipantUserID
 				result[i].Name = "manager"
 				result[i].Role = "manager"
+				result[i].Avatar = assets.NormalizeManagerAvatar(strings.TrimSpace(result[i].Avatar))
 			}
 		}
 	}
