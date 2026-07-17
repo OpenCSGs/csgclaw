@@ -81,6 +81,12 @@
   line-height: 22px;
 }
 
+.versionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .rowIntro p {
   margin: 0;
   color: var(--gray-600);
@@ -129,6 +135,12 @@
 
 .designButton :global(.btn-content) {
   padding: 0 2px;
+}
+
+.designButton:global(.btn-primary),
+.designButton:global(.btn-primary:hover:not(:disabled)),
+.designButton:global(.btn-primary:focus-visible) {
+  color: var(--white);
 }
 
 .accountIdentity {
@@ -186,13 +198,40 @@
 }
 
 .controlLabel,
-.versionValue span {
+.versionLabel {
   min-width: 0;
   color: var(--gray-700);
   font-size: 14px;
   font-weight: 400;
   line-height: 22px;
   text-align: right;
+}
+
+.versionLabel {
+  display: block;
+}
+
+.versionBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--brand-50);
+  color: #4d62b2;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.versionBadge span {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--brand-500);
 }
 
 .environmentValue,
@@ -404,7 +443,7 @@
 :root[data-theme="dark"] .rowIntro h2,
 :root[data-theme="dark"] .accountIdentity,
 :root[data-theme="dark"] .controlLabel,
-:root[data-theme="dark"] .versionValue span,
+:root[data-theme="dark"] .versionLabel,
 :root[data-theme="dark"] .environmentAdvanced {
   color: var(--gray-100);
 }
@@ -490,6 +529,10 @@
     grid-template-columns: minmax(0, 1fr);
     justify-items: start;
     gap: 8px;
+  }
+
+  .versionLabel {
+    text-align: left;
   }
 
   .accountActionLine,

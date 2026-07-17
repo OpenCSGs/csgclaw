@@ -94,7 +94,12 @@ export function SidebarUserButton({
   const localBuild = isLocalBuildUpgradeStatus(upgradeStatus, currentVersion);
   const upgradeControlsAvailable =
     showUpgradeControls && !localBuild && upgradeStatus?.auto_upgrade_supported !== false;
-  const upgradeAttention = upgradeControlsAvailable && hasUpgradeAttention(upgradeStatus, upgradePhase, upgradeBusy);
+  const upgradeAttention = shouldShowUpgradeAlertDot({
+    controlsAvailable: upgradeControlsAvailable,
+    phase: upgradePhase,
+    busy: upgradeBusy,
+    status: upgradeStatus,
+  });
   const upgradeRunning = upgradeControlsAvailable ? upgradeBusy || Boolean(upgradeStatus?.upgrading) : false;
   const statusIssue = upgradeErrorMessage(upgradeStatus, t);
   const upgradeIssue = upgradeControlsAvailable && !suppressUpgradeIssue ? upgradeError || statusIssue : "";
@@ -474,6 +479,23 @@ export function SidebarUserButton({
       ) : null}
     </div>
   );
+}
+
+export function shouldShowUpgradeAlertDot({
+  busy = false,
+  controlsAvailable,
+  phase,
+  status,
+}: {
+  busy?: boolean;
+  controlsAvailable: boolean;
+  phase: UpgradePhase;
+  status: UpgradeStatus | null | undefined;
+}): boolean {
+  if (!controlsAvailable || phase === "done") {
+    return false;
+  }
+  return hasUpgradeAttention(status, phase, busy);
 }
 
 function initialsForAccount(name: string): string {

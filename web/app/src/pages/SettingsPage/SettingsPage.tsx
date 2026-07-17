@@ -45,11 +45,19 @@ export function SettingsPage() {
       : sidebar.t("settingsAccountLogin");
   const currentVersion = sidebar.upgradeStatus?.current_version || sidebar.appVersion;
   const version = formatSidebarVersionLabel(currentVersion);
+  const mockUpgradeAvailable = import.meta.env.DEV && isMockUpgradePreviewEnabled();
   const showUpgradeAction =
     sidebar.showUpgradeControls &&
-    !isLocalBuildUpgradeStatus(sidebar.upgradeStatus, currentVersion) &&
-    sidebar.upgradeStatus?.auto_upgrade_supported !== false &&
-    hasUpgradeAttention(sidebar.upgradeStatus, sidebar.upgradePhase, sidebar.upgradeBusy);
+    (mockUpgradeAvailable ||
+      (!isLocalBuildUpgradeStatus(sidebar.upgradeStatus, currentVersion) &&
+        sidebar.upgradeStatus?.auto_upgrade_supported !== false &&
+        hasUpgradeAttention(sidebar.upgradeStatus, sidebar.upgradePhase, sidebar.upgradeBusy)));
+  const showNewVersionBadge = Boolean(
+    sidebar.showUpgradeControls &&
+      (mockUpgradeAvailable ||
+        (!isLocalBuildUpgradeStatus(sidebar.upgradeStatus, currentVersion) && sidebar.upgradeStatus?.update_available)) &&
+      sidebar.upgradePhase !== "done",
+  );
   const feedbackURL = githubFeedbackIssueURL(sidebar.appVersion, sidebar.upgradeStatus);
   const activeAuthEnvironmentDraft = signedIn
     ? authEnvironmentDraftFromStatus(sidebar.authStatus, authEnvironmentDraft)
@@ -260,12 +268,25 @@ export function SettingsPage() {
           </div>
         </SettingsRow>
 
-        <SettingsRow title={sidebar.t("versionInfo")} description={sidebar.t("settingsVersionDescription")}>
+        <SettingsRow
+          title={
+            <span className={styles.versionTitle}>
+              <span>{sidebar.t("versionInfo")}</span>
+              {showNewVersionBadge ? (
+                <span className={styles.versionBadge} aria-label={sidebar.t("upgradeNewVersionBadge")}>
+                  <span aria-hidden="true"></span>
+                  {sidebar.t("upgradeNewVersionBadge")}
+                </span>
+              ) : null}
+            </span>
+          }
+          description={sidebar.t("settingsVersionDescription")}
+        >
           <div className={classNames(styles.versionValue, showUpgradeAction && styles.versionValueWithAction)}>
-            <span>{sidebar.t("settingsCurrentVersion")}</span>
+            <span className={styles.versionLabel}>{sidebar.t("settingsCurrentVersion")}</span>
             <strong>{version}</strong>
             {showUpgradeAction ? (
-              <Button className={styles.designButton} variant="secondaryGray" size="md" onClick={sidebar.onOpenUpgrade}>
+              <Button className={styles.designButton} variant="primary" size="md" onClick={sidebar.onOpenUpgrade}>
                 {sidebar.t("upgradeAction")}
               </Button>
             ) : null}
@@ -300,6 +321,17 @@ export function SettingsPage() {
   );
 }
 
+function isMockUpgradePreviewEnabled(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  if (new URLSearchParams(window.location.search).get("mockUpgrade") === "1") {
+    return true;
+  }
+  const hashQuery = window.location.hash.split("?")[1] || "";
+  return new URLSearchParams(hashQuery).get("mockUpgrade") === "1";
+}
+
 function SettingsRow({
   children,
   className,
@@ -311,7 +343,7 @@ function SettingsRow({
   className?: string;
   contentClassName?: string;
   description: string;
-  title: string;
+  title: ReactNode;
 }) {
   return (
     <section className={classNames(styles.row, className)}>

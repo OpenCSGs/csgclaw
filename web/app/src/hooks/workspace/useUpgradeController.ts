@@ -4,6 +4,8 @@ import { normalizeUpgradeStatus, upgradeErrorMessage } from "@/models/upgradeSta
 import type { UpgradePhase } from "@/models/upgradeStatus";
 import type { UpgradeController, UseUpgradeControllerArgs } from "./types";
 
+export const UPGRADE_PAGE_RELOAD_DELAY_MS = 600;
+
 export function useUpgradeController({
   appVersion,
   refreshWorkspaceAppVersion,
@@ -87,6 +89,7 @@ export function useUpgradeController({
               last_error_kind: "",
               last_error_log_path: "",
             }));
+            scheduleUpgradePageReload();
             return;
           }
           const latest = await refreshUpgradeStatus();
@@ -230,4 +233,16 @@ export function useUpgradeController({
 function upgradeErrorDetail(err: unknown): string {
   const message = err instanceof Error ? err.message : "";
   return message && message !== "upgrade apply failed" ? ` ${message}` : "";
+}
+
+export function scheduleUpgradePageReload(reloadPage?: () => void): ReturnType<typeof setTimeout> {
+  return setTimeout(() => {
+    if (reloadPage) {
+      reloadPage();
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
+  }, UPGRADE_PAGE_RELOAD_DELAY_MS);
 }
