@@ -254,6 +254,10 @@ export function workspaceHasContextSidebar(pane: WorkspacePane | null | undefine
   return pane?.type !== WorkspacePaneTypes.task && pane?.type !== WorkspacePaneTypes.settings;
 }
 
+export function workspaceShowsFloatingChat(pane: WorkspacePane | null | undefined): boolean {
+  return pane?.type !== WorkspacePaneTypes.conversation || !pane.id;
+}
+
 export function readCollapsedWorkspaceGroups(): CollapsedWorkspaceGroups {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(WORKSPACE_GROUPS_COLLAPSED_STORAGE_KEY) || "{}");

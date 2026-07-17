@@ -1,4 +1,5 @@
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
+import { workspaceShowsFloatingChat } from "@/models/routing";
 import { AuthLoginNotice } from "../AuthLoginNotice";
 import { FloatingChat } from "../FloatingChat";
 import { ProfilePreviewPopover } from "../ProfilePreviewPopover";
@@ -15,6 +16,7 @@ import {
 export function WorkspaceOverlays() {
   const controller = useWorkspaceControllerContext();
   const closeLabel = controller.sidebarProps?.t?.("close") || "Close";
+  const showFloatingChat = workspaceShowsFloatingChat(controller.activePane);
 
   return (
     <>
@@ -23,7 +25,7 @@ export function WorkspaceOverlays() {
         closeLabel={closeLabel}
         onDismiss={controller.onDismissAuthNotice}
       />
-      {controller.floatingChatProps ? <FloatingChat {...controller.floatingChatProps} /> : null}
+      {showFloatingChat && controller.floatingChatProps ? <FloatingChat {...controller.floatingChatProps} /> : null}
       {controller.profilePreviewProps ? <ProfilePreviewPopover {...controller.profilePreviewProps} /> : null}
       {controller.createRoomModalProps ? <CreateRoomModal {...controller.createRoomModalProps} /> : null}
       {controller.createModelProviderModalProps ? (

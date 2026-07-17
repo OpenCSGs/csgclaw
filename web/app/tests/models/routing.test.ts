@@ -5,6 +5,7 @@ import {
   paneFromLocation,
   pathForPane,
   workspaceHasContextSidebar,
+  workspaceShowsFloatingChat,
   workspaceTabForPane,
 } from "@/models/routing";
 
@@ -97,5 +98,11 @@ describe("task routing", () => {
     expect(workspaceHasContextSidebar({ type: WorkspacePaneTypes.conversation, id: "" })).toBe(true);
     expect(workspaceHasContextSidebar({ type: WorkspacePaneTypes.task, id: "" })).toBe(false);
     expect(workspaceHasContextSidebar({ type: WorkspacePaneTypes.settings, id: "" })).toBe(false);
+  });
+
+  it("hides floating chat while a conversation is open", () => {
+    expect(workspaceShowsFloatingChat({ type: WorkspacePaneTypes.conversation, id: "room-1" })).toBe(false);
+    expect(workspaceShowsFloatingChat({ type: WorkspacePaneTypes.conversation, id: "" })).toBe(true);
+    expect(workspaceShowsFloatingChat({ type: WorkspacePaneTypes.agent, id: "agent-1" })).toBe(true);
   });
 });
