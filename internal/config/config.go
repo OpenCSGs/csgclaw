@@ -62,7 +62,7 @@ func (c BootstrapConfig) ResolvedDefaultManagerTemplate() string {
 }
 
 func (c BootstrapConfig) ResolvedDefaultWorkerTemplate() string {
-	if template := normalizeWorkerBootstrapTemplateRef(c.DefaultWorkerTemplate); template != "" {
+	if template := normalizeBootstrapTemplateRef(c.DefaultWorkerTemplate); template != "" {
 		return template
 	}
 	return DefaultBootstrapWorkerTemplate
@@ -93,7 +93,6 @@ type SandboxConfig struct {
 type HubConfig struct {
 	DefaultRegistry        string
 	DefaultPublishRegistry string
-	AllowedTemplateTags    []string
 	Registries             []HubRegistryConfig
 }
 
@@ -107,7 +106,6 @@ type HubRegistryConfig struct {
 }
 
 func (c HubConfig) Resolved() HubConfig {
-	c.AllowedTemplateTags = normalizeStringList(c.AllowedTemplateTags)
 	c.DefaultRegistry = strings.TrimSpace(c.DefaultRegistry)
 	if c.DefaultRegistry == "" {
 		c.DefaultRegistry = DefaultHubRegistry
@@ -304,7 +302,6 @@ type rawProviderConfig struct {
 type rawHubConfig struct {
 	DefaultRegistry        string
 	DefaultPublishRegistry string
-	AllowedTemplateTags    []string
 	Registries             []rawHubRegistryConfig
 }
 
@@ -338,7 +335,7 @@ const (
 	DefaultOfficialHubRegistryName  = "official"
 	DefaultOfficialHubRegistryURL   = "https://hub.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin.manager-codex"
-	DefaultBootstrapWorkerTemplate  = "builtin.codex-worker"
+	DefaultBootstrapWorkerTemplate  = "builtin.picoclaw-worker"
 	HubRegistryKindBuiltin          = "builtin"
 	HubRegistryKindLocal            = "local"
 	HubRegistryKindRemote           = "remote"
@@ -571,9 +568,9 @@ func Load(path string) (Config, error) {
 				cfg.Bootstrap.DefaultManagerTemplate = normalizeManagerBootstrapTemplateRef(value)
 			case "default_worker_template":
 				raw := parseRawStringValue(rawValue)
-				cfg.raw.bootstrap.DefaultWorkerTemplate = normalizeWorkerBootstrapTemplateRef(raw)
+				cfg.raw.bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(raw)
 				cfg.raw.bootstrapMeta.LegacyWorkerTemplateSlash = bootstrapTemplateRefUsesLegacySlash(raw)
-				cfg.Bootstrap.DefaultWorkerTemplate = normalizeWorkerBootstrapTemplateRef(value)
+				cfg.Bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(value)
 			case "manager_image_override", "manager_image", "runtime_kind":
 				// Keep loading legacy bootstrap keys for compatibility, but do not
 				// surface them in the public config model anymore.
@@ -607,13 +604,6 @@ func Load(path string) (Config, error) {
 			case "default_publish_registry":
 				cfg.raw.hub.DefaultPublishRegistry = parseRawStringValue(rawValue)
 				cfg.Hub.DefaultPublishRegistry = value
-			case "allowed_template_tags":
-				tags, parseErr := parseStringArray(rawValue)
-				if parseErr != nil {
-					return Config{}, fmt.Errorf("parse hub.allowed_template_tags: %w", parseErr)
-				}
-				cfg.raw.hub.AllowedTemplateTags = tags
-				cfg.Hub.AllowedTemplateTags = tags
 			case "default_manager_template", "default_worker_template":
 				// Bootstrap template defaults now live only under [bootstrap].
 			}
@@ -816,8 +806,7 @@ provider = %q
 [hub]
 default_registry = %q
 default_publish_registry = %q
-allowed_template_tags = %s
-`, cfg.rawOrResolvedString(cfg.raw.hub.DefaultRegistry, loadedRaw.hub.DefaultRegistry, resolvedHub.DefaultRegistry), cfg.rawOrResolvedString(cfg.raw.hub.DefaultPublishRegistry, loadedRaw.hub.DefaultPublishRegistry, resolvedHub.DefaultPublishRegistry), formatStringArray(cfg.rawOrResolvedStringArray(cfg.raw.hub.AllowedTemplateTags, loadedRaw.hub.AllowedTemplateTags, resolvedHub.AllowedTemplateTags)))
+`, cfg.rawOrResolvedString(cfg.raw.hub.DefaultRegistry, loadedRaw.hub.DefaultRegistry, resolvedHub.DefaultRegistry), cfg.rawOrResolvedString(cfg.raw.hub.DefaultPublishRegistry, loadedRaw.hub.DefaultPublishRegistry, resolvedHub.DefaultPublishRegistry))
 	for _, registry := range resolvedHub.Registries {
 		rawRegistry := findRawHubRegistry(cfg.raw.hub.Registries, registry.Name)
 		loadedRegistry := findRawHubRegistry(loadedRaw.hub.Registries, registry.Name)
@@ -1247,7 +1236,7 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 		out.bootstrap.DefaultManagerTemplate = normalizeManagerBootstrapTemplateRef(c.Bootstrap.DefaultManagerTemplate)
 	}
 	if c.raw.bootstrap.DefaultWorkerTemplate != "" {
-		out.bootstrap.DefaultWorkerTemplate = normalizeWorkerBootstrapTemplateRef(c.Bootstrap.DefaultWorkerTemplate)
+		out.bootstrap.DefaultWorkerTemplate = normalizeBootstrapTemplateRef(c.Bootstrap.DefaultWorkerTemplate)
 	}
 	out.bootstrapMeta = c.raw.bootstrapMeta
 	if c.raw.sandbox.Provider != "" {
@@ -1267,9 +1256,6 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	}
 	if c.raw.hub.DefaultPublishRegistry != "" {
 		out.hub.DefaultPublishRegistry = c.Hub.DefaultPublishRegistry
-	}
-	if len(c.raw.hub.AllowedTemplateTags) > 0 {
-		out.hub.AllowedTemplateTags = append([]string(nil), c.Hub.AllowedTemplateTags...)
 	}
 	resolvedHub := c.Hub.Resolved()
 	for _, rawRegistry := range c.raw.hub.Registries {
@@ -1362,14 +1348,6 @@ func normalizeManagerBootstrapTemplateRef(value string) string {
 	default:
 		return value
 	}
-}
-
-func normalizeWorkerBootstrapTemplateRef(value string) string {
-	value = normalizeBootstrapTemplateRef(value)
-	if value == "builtin.picoclaw-worker" {
-		return DefaultBootstrapWorkerTemplate
-	}
-	return value
 }
 
 func bootstrapTemplateRefUsesLegacySlash(value string) bool {

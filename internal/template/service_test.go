@@ -108,36 +108,6 @@ func TestGetUsesDefaultRegistryForUnqualifiedID(t *testing.T) {
 	}
 }
 
-func TestServiceFiltersTemplatesByAllowedTags(t *testing.T) {
-	svc := mustService(t, config.HubConfig{
-		DefaultRegistry:     "builtin",
-		AllowedTemplateTags: []string{"saas"},
-		Registries: []config.HubRegistryConfig{
-			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
-		},
-	}, map[string]Store{
-		"builtin": stubStore{
-			listResult: []Template{
-				{ID: "shared", Tags: []string{"self-hosted", "saas"}},
-				{ID: "local-only", Tags: []string{"self-hosted"}},
-				{ID: "legacy"},
-			},
-			getResult: Template{ID: "local-only", Tags: []string{"self-hosted"}},
-		},
-	})
-
-	items, err := svc.List(context.Background())
-	if err != nil {
-		t.Fatalf("List() error = %v", err)
-	}
-	if len(items) != 1 || items[0].ID != "builtin.shared" {
-		t.Fatalf("List() = %#v, want only SaaS-compatible template", items)
-	}
-	if _, err := svc.Get(context.Background(), "builtin.local-only"); !errors.Is(err, ErrTemplateNotAllowed) {
-		t.Fatalf("Get() error = %v, want ErrTemplateNotAllowed", err)
-	}
-}
-
 func TestGetUsesQualifiedRegistryWhenPresent(t *testing.T) {
 	localStore := &recordingStore{
 		getResult: Template{ID: "frontend-alice", Name: "frontend-alice"},
@@ -201,7 +171,6 @@ func TestPublishUsesDefaultPublishRegistry(t *testing.T) {
 	svc := mustService(t, config.HubConfig{
 		DefaultRegistry:        "builtin",
 		DefaultPublishRegistry: "local",
-		AllowedTemplateTags:    []string{"self-hosted"},
 		Registries: []config.HubRegistryConfig{
 			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
 			{Name: "local", Kind: RegistryKindLocal, Enabled: true},
@@ -217,9 +186,6 @@ func TestPublishUsesDefaultPublishRegistry(t *testing.T) {
 	}
 	if got, want := localStore.lastPublishSpec.Registry, "local"; got != want {
 		t.Fatalf("publish registry = %q, want %q", got, want)
-	}
-	if len(localStore.lastPublishSpec.Tags) != 1 || localStore.lastPublishSpec.Tags[0] != "self-hosted" {
-		t.Fatalf("publish tags = %#v, want inherited self-hosted tag", localStore.lastPublishSpec.Tags)
 	}
 	if got, want := item.ID, "local.frontend-alice"; got != want {
 		t.Fatalf("Publish().ID = %q, want %q", got, want)

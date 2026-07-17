@@ -1,8 +1,6 @@
-schema_version = "agentfile/v1"
 name = "manager-codex"
 description = "Built-in Codex manager template"
 role = "manager"
 runtime_kind = "codex"
 version = "0.1.0"
-tags = ["self-hosted", "saas"]
 updated_at = "2026-07-08T00:00:00Z"

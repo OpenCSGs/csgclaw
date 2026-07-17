@@ -1,8 +1,6 @@
-schema_version = "agentfile/v1"
 name = "generic-assistant-codex"
 description = "通用型助手（Codex版）"
 role = "worker"
 runtime_kind = "codex"
 updated_at = "2026-07-09T00:00:00Z"
 version = "0.1.0"
-tags = ["self-hosted", "saas"]

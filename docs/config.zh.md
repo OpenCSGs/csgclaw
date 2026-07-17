@@ -229,9 +229,8 @@ CSGClaw 可以从一个或多个 hub registry 读取 agent 模板。registry 配
 [hub]
 default_registry = "builtin"
 default_publish_registry = "local"
-allowed_template_tags = ["self-hosted"]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.codex-worker"
+default_worker_template = "builtin.picoclaw-worker"
 
 [[hub.registries]]
 name = "builtin"
@@ -256,7 +255,6 @@ enabled = true
 
 - `default_registry`：当某个命令需要一个默认读取源 registry 时，使用这个值。
 - `default_publish_registry`：当发布命令没有显式传入 registry 时，使用这个值作为默认发布目标。
-- `allowed_template_tags`：当前实例允许使用的模板标签。模板匹配任意一个标签即可使用；省略或设为空数组时不启用过滤。自托管版使用 `self-hosted`，SaaS 版使用 `saas`。
 - `default_manager_template`：当某个流程需要隐式选择 manager 模板时，使用这个值。
 - `default_worker_template`：当某个流程需要隐式选择 worker 模板时，使用这个值。
 - `name`：registry 标识符，供 CLI 和 API 使用。
@@ -266,8 +264,6 @@ enabled = true
 - `enabled`：控制该 registry 是否参与 hub 相关操作；如果省略，默认值为 `true`。
 
 内置 `builtin` registry 是只读的。发布模板时应选择可写的 `local` 或 `remote` registry。
-
-模板 `agent.toml` 使用 `schema_version = "agentfile/v1"` 标识格式版本，并可通过 `tags = ["self-hosted", "saas"]` 声明兼容的部署形态。新发布的模板会写入当前 schema；缺少 schema 的历史模板仍可读取，未知 schema 会被拒绝。
 
 旧模板 Hub 地址 `https://csgclaw.opencsg.com` 不再自动重写；请显式配置需要的远端，或使用由登录环境自动推导的 official registry。
 

@@ -3008,8 +3008,8 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 	if got.ID != "agent-alice" || got.Name != "alice-v2" || got.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want replaced worker", got)
 	}
-	if got.RuntimeKind != agent.RuntimeKindCodex {
-		t.Fatalf("agent runtime kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindCodex)
+	if got.RuntimeKind != agent.RuntimeKindPicoClawSandbox {
+		t.Fatalf("agent runtime kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindPicoClawSandbox)
 	}
 }
 
@@ -3025,7 +3025,6 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 			Description: "worker",
 			Image:       "agent-image:v1",
 			Role:        agent.RoleWorker,
-			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
 		},
 	}); err != nil {
 		t.Fatalf("seed Create() error = %v", err)
@@ -5126,7 +5125,7 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 		t.Fatalf("agent runtime kind = %q, want %q", created.RuntimeKind, agent.RuntimeKindPicoClawSandbox)
 	}
 	if strings.TrimSpace(created.Image) == "" {
-		t.Fatal("agent Image = empty, want embedded PicoClaw runtime image")
+		t.Fatal("agent Image = empty, want default sandbox image")
 	}
 
 	participants := participantSvc.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent})

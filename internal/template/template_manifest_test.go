@@ -66,15 +66,3 @@ func TestValidateImageEnvRejectsSecretDefault(t *testing.T) {
 		t.Fatal("validateImageEnvContracts() error = nil, want secret default rejection")
 	}
 }
-
-func TestValidateManifestRejectsUnknownSchemaVersion(t *testing.T) {
-	err := validateManifest(templateManifest{
-		SchemaVersion: "agentfile/v2",
-		Name:          "future-template",
-		Role:          TemplateRoleWorker,
-		RuntimeKind:   runtime.KindCodex,
-	})
-	if err == nil {
-		t.Fatal("validateManifest() error = nil, want unsupported schema rejection")
-	}
-}

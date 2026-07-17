@@ -154,7 +154,7 @@ Example request body:
       "name": "QA",
       "role": "worker",
       "runtime_kind": "picoclaw_sandbox",
-      "from_template": "builtin.codex-worker"
+      "from_template": "builtin.picoclaw-worker"
     }
   }
 }
@@ -258,11 +258,9 @@ Creates an agent.
 Request fields:
 
 - `id`
-- `schema_version`
 - `name`
 - `description`
 - `image`
-- `tags`
 - `runtime_kind`
 - `from_template`
 - `replace`
@@ -565,8 +563,7 @@ Request body:
 ```json
 {
   "agent_id": "u-alice",
-  "registry": "local",
-  "tags": ["self-hosted"]
+  "registry": "local"
 }
 ```
 
@@ -574,7 +571,6 @@ Notes:
 
 - `agent_id` is required
 - `registry` uses the default publish registry when omitted
-- `tags` declares template compatibility. When omitted and `[hub].allowed_template_tags` is configured, the configured tags are inherited.
 - Successful publish returns `201 Created`
 
 ### `GET /api/v1/hub/templates/{id}`

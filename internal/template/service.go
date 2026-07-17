@@ -19,7 +19,6 @@ var (
 	ErrRegistryNotReadable  = errors.New("hub registry is not readable")
 	ErrRegistryNotWritable  = errors.New("hub registry is not writable")
 	ErrRegistryNotDeletable = errors.New("hub registry is not deletable")
-	ErrTemplateNotAllowed   = errors.New("hub template is not allowed by configured tags")
 )
 
 const templateIDNamespaceSeparator = "."
@@ -42,7 +41,6 @@ type StoreFactory func(cfg config.HubRegistryConfig) (Store, error)
 type Service struct {
 	defaultRegistry        string
 	defaultPublishRegistry string
-	allowedTemplateTags    []string
 	stores                 map[string]configuredStore
 	order                  []string
 }
@@ -63,7 +61,6 @@ func NewService(cfg config.HubConfig, factory StoreFactory, options ...ServiceOp
 	svc := &Service{
 		defaultRegistry:        resolved.DefaultRegistry,
 		defaultPublishRegistry: resolved.DefaultPublishRegistry,
-		allowedTemplateTags:    normalizeTemplateTags(resolved.AllowedTemplateTags),
 		stores:                 make(map[string]configuredStore, len(resolved.Registries)),
 		order:                  make([]string, 0, len(resolved.Registries)),
 	}
@@ -110,10 +107,7 @@ func (s *Service) List(ctx context.Context) ([]Template, error) {
 			continue
 		}
 		for _, item := range items {
-			item = decorateTemplate(cfgStore.ref, item)
-			if s.templateAllowed(item) {
-				out = append(out, item)
-			}
+			out = append(out, decorateTemplate(cfgStore.ref, item))
 		}
 	}
 	if len(listErrs) > 0 {
@@ -135,31 +129,10 @@ func (s *Service) Get(ctx context.Context, id string) (Template, error) {
 	if err != nil {
 		return Template{}, fmt.Errorf("get hub template %q from %q: %w", templateID, cfgStore.ref.Name, err)
 	}
-	item = decorateTemplate(cfgStore.ref, item)
-	if !s.templateAllowed(item) {
-		return Template{}, fmt.Errorf("%w: %s", ErrTemplateNotAllowed, id)
-	}
-	return item, nil
-}
-
-func (s *Service) templateAllowed(item Template) bool {
-	if len(s.allowedTemplateTags) == 0 {
-		return true
-	}
-	for _, allowed := range s.allowedTemplateTags {
-		for _, tag := range normalizeTemplateTags(item.Tags) {
-			if tag == allowed {
-				return true
-			}
-		}
-	}
-	return false
+	return decorateTemplate(cfgStore.ref, item), nil
 }
 
 func (s *Service) FetchWorkspace(ctx context.Context, id string) (WorkspaceRef, error) {
-	if _, err := s.Get(ctx, id); err != nil {
-		return WorkspaceRef{}, err
-	}
 	cfgStore, templateID, err := s.resolveRead(id)
 	if err != nil {
 		return WorkspaceRef{}, err
@@ -172,9 +145,6 @@ func (s *Service) FetchWorkspace(ctx context.Context, id string) (WorkspaceRef, 
 }
 
 func (s *Service) ListWorkspace(ctx context.Context, id, workspacePath string) (apitypes.WorkspaceListing, error) {
-	if _, err := s.Get(ctx, id); err != nil {
-		return apitypes.WorkspaceListing{}, err
-	}
 	cfgStore, templateID, err := s.resolveRead(id)
 	if err != nil {
 		return apitypes.WorkspaceListing{}, err
@@ -199,9 +169,6 @@ func (s *Service) ListWorkspace(ctx context.Context, id, workspacePath string) (
 }
 
 func (s *Service) ReadWorkspaceFile(ctx context.Context, id, workspacePath string) (apitypes.WorkspaceFile, error) {
-	if _, err := s.Get(ctx, id); err != nil {
-		return apitypes.WorkspaceFile{}, err
-	}
 	cfgStore, templateID, err := s.resolveRead(id)
 	if err != nil {
 		return apitypes.WorkspaceFile{}, err
@@ -236,9 +203,6 @@ func (s *Service) Publish(ctx context.Context, spec PublishSpec) (Template, erro
 	}
 
 	spec.Registry = cfgStore.ref.Name
-	if len(spec.Tags) == 0 && len(s.allowedTemplateTags) > 0 {
-		spec.Tags = append([]string(nil), s.allowedTemplateTags...)
-	}
 	item, err := cfgStore.store.Publish(ctx, spec)
 	if err != nil {
 		return Template{}, fmt.Errorf("publish hub template to %q: %w", cfgStore.ref.Name, err)

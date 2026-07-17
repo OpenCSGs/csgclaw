@@ -27,9 +27,6 @@ func ResolveBootstrapDefaults(ctx context.Context, bootstrap config.BootstrapCon
 	if svc == nil {
 		return BootstrapDefaults{}, fmt.Errorf("hub service is required to resolve bootstrap templates")
 	}
-	if _, err := svc.Get(ctx, defaults.ManagerTemplateRef); err != nil {
-		return BootstrapDefaults{}, fmt.Errorf("resolve bootstrap manager template %q: %w", defaults.ManagerTemplateRef, err)
-	}
 
 	worker, err := svc.Get(ctx, defaults.WorkerTemplateRef)
 	if err != nil {

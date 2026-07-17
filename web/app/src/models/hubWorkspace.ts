@@ -42,8 +42,6 @@ export function isVisibleInHubTemplateList(template: HubTemplate | null | undefi
 }
 
 export type HubTemplate = AgentTemplateLike & {
-  schema_version?: string | null;
-  tags?: string[] | null;
   source?: HubTemplateSource | null;
   updated_at?: string | null;
   workspace?: {

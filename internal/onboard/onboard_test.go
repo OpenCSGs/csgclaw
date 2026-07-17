@@ -677,7 +677,7 @@ access_token = "your_access_token"
 		`show_upgrade = true`,
 		`[bootstrap]`,
 		`default_manager_template = "builtin.manager-codex"`,
-		`default_worker_template = "builtin.codex-worker"`,
+		`default_worker_template = "builtin.picoclaw-worker"`,
 		`[sandbox]`,
 		`provider = ""`,
 		`debian_registries_override = []`,

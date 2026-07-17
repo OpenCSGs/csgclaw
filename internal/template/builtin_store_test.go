@@ -24,7 +24,7 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if got, want := len(items), 3; got != want {
+	if got, want := len(items), 4; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
 	if got, want := items[0].ID, "codex-worker"; got != want {
@@ -36,21 +36,19 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if got, want := items[2].ID, "openclaw-worker"; got != want {
 		t.Fatalf("List()[2].ID = %q, want %q", got, want)
 	}
-	item, err := store.Get(context.Background(), "openclaw-worker")
+	if got, want := items[3].ID, "picoclaw-worker"; got != want {
+		t.Fatalf("List()[3].ID = %q, want %q", got, want)
+	}
+
+	item, err := store.Get(context.Background(), "picoclaw-worker")
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if got, want := item.RuntimeKind, runtime.NameOpenClaw; got != want {
+	if got, want := item.RuntimeKind, runtime.NamePicoClaw; got != want {
 		t.Fatalf("Get().RuntimeKind = %q, want %q", got, want)
 	}
 	if got, want := item.Role, TemplateRoleWorker; got != want {
 		t.Fatalf("Get().Role = %q, want %q", got, want)
-	}
-	if item.SchemaVersion != AgentFileSchemaVersion {
-		t.Fatalf("Get().SchemaVersion = %q, want %q", item.SchemaVersion, AgentFileSchemaVersion)
-	}
-	if len(item.Tags) != 1 || item.Tags[0] != "self-hosted" {
-		t.Fatalf("Get().Tags = %#v, want self-hosted", item.Tags)
 	}
 	if item.Image == "" {
 		t.Fatal("Get().Image is empty")
@@ -78,14 +76,14 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 		t.Fatalf("Get(codex-worker).Image = %q, want empty", got)
 	}
 
-	workspace, err := store.FetchWorkspace(context.Background(), "openclaw-worker")
+	workspace, err := store.FetchWorkspace(context.Background(), "picoclaw-worker")
 	if err != nil {
 		t.Fatalf("FetchWorkspace() error = %v", err)
 	}
 	if got, want := workspace.Kind, WorkspaceKindDir; got != want {
 		t.Fatalf("FetchWorkspace().Kind = %q, want %q", got, want)
 	}
-	data, err := os.ReadFile(filepath.Join(workspace.Path, "AGENTS.md"))
+	data, err := os.ReadFile(filepath.Join(workspace.Path, "AGENT.md"))
 	if err != nil {
 		t.Fatalf("ReadFile(AGENT.md) error = %v", err)
 	}
@@ -124,33 +122,6 @@ func TestBuiltinStoreGetMissingTemplate(t *testing.T) {
 	}
 }
 
-func TestBuiltinHubFiltersOpenClawFromSaaSAndOmitsPicoClaw(t *testing.T) {
-	svc, err := NewService(config.HubConfig{
-		DefaultRegistry:     "builtin",
-		AllowedTemplateTags: []string{"saas"},
-		Registries: []config.HubRegistryConfig{
-			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
-		},
-	}, DefaultStoreFactory)
-	if err != nil {
-		t.Fatalf("NewService() error = %v", err)
-	}
-
-	items, err := svc.List(context.Background())
-	if err != nil {
-		t.Fatalf("List() error = %v", err)
-	}
-	if len(items) != 2 || items[0].ID != "builtin.codex-worker" || items[1].ID != "builtin.manager-codex" {
-		t.Fatalf("List() = %#v, want only SaaS-compatible Codex templates", items)
-	}
-	if _, err := svc.Get(context.Background(), "builtin.openclaw-worker"); !errors.Is(err, ErrTemplateNotAllowed) {
-		t.Fatalf("Get(openclaw-worker) error = %v, want ErrTemplateNotAllowed", err)
-	}
-	if _, err := svc.Get(context.Background(), "builtin.picoclaw-worker"); !errors.Is(err, ErrTemplateNotFound) {
-		t.Fatalf("Get(picoclaw-worker) error = %v, want ErrTemplateNotFound", err)
-	}
-}
-
 func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.T) {
 	registryRoot := t.TempDir()
 	workspaceRoot := writeWorkspaceFile(t, "workspace", "AGENTS.md", "local agent")
@@ -181,7 +152,7 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if got, want := len(items), 4; got != want {
+	if got, want := len(items), 5; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
 	if got, want := items[0].ID, "builtin.codex-worker"; got != want {
@@ -193,7 +164,10 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 	if got, want := items[2].ID, "builtin.openclaw-worker"; got != want {
 		t.Fatalf("List()[2].ID = %q, want %q", got, want)
 	}
-	if got, want := items[3].ID, "local.team-helper"; got != want {
+	if got, want := items[3].ID, "builtin.picoclaw-worker"; got != want {
 		t.Fatalf("List()[3].ID = %q, want %q", got, want)
+	}
+	if got, want := items[4].ID, "local.team-helper"; got != want {
+		t.Fatalf("List()[4].ID = %q, want %q", got, want)
 	}
 }

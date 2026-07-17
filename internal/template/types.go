@@ -7,8 +7,6 @@ import (
 )
 
 const (
-	AgentFileSchemaVersion = "agentfile/v1"
-
 	RegistryKindBuiltin = "builtin"
 	RegistryKindLocal   = "local"
 	RegistryKindRemote  = "remote"
@@ -18,19 +16,17 @@ const (
 )
 
 type Template struct {
-	ID            string
-	SchemaVersion string
-	Name          string
-	Description   string
-	Role          string
-	RuntimeKind   string
-	Version       string
-	Tags          []string
-	Image         string
-	ImageEnv      []apitypes.ImageEnvContract
-	WorkspaceRef  WorkspaceRef
-	Source        RegistryRef
-	UpdatedAt     time.Time
+	ID           string
+	Name         string
+	Description  string
+	Role         string
+	RuntimeKind  string
+	Version      string
+	Image        string
+	ImageEnv     []apitypes.ImageEnvContract
+	WorkspaceRef WorkspaceRef
+	Source       RegistryRef
+	UpdatedAt    time.Time
 }
 
 type RegistryRef struct {
@@ -51,7 +47,6 @@ type PublishSpec struct {
 	Role         string
 	RuntimeKind  string
 	Version      string
-	Tags         []string
 	Image        string
 	WorkspaceRef WorkspaceRef
 	UpdatedAt    time.Time
