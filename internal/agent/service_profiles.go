@@ -1019,12 +1019,22 @@ func (s *Service) ResolvedAgentProfile(agentID string) (AgentProfile, error) {
 }
 
 func (s *Service) Recreate(ctx context.Context, id string) (Agent, error) {
+	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer release()
 	return s.recreate(ctx, id, func(ctx context.Context, got Agent) (string, error) {
 		return s.imageForRecreate(ctx, got), nil
 	})
 }
 
 func (s *Service) Upgrade(ctx context.Context, id string) (Agent, error) {
+	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer release()
 	return s.recreate(ctx, id, func(ctx context.Context, got Agent) (string, error) {
 		latest, ok := s.imageForUpgrade(ctx, got)
 		if !ok || strings.TrimSpace(latest) == "" {

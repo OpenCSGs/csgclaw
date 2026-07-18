@@ -218,6 +218,10 @@ func (apiFakeCodexManager) Stop(context.Context, codexruntime.SessionHandle) err
 	return nil
 }
 
+func (apiFakeCodexManager) LiveSession(codexruntime.SessionHandle) (*codexruntime.Session, error) {
+	return nil, os.ErrNotExist
+}
+
 func (apiFakeCodexManager) Session(codexruntime.SessionHandle) (*codexruntime.Session, error) {
 	return nil, os.ErrNotExist
 }

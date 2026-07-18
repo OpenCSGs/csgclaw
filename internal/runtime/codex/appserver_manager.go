@@ -207,6 +207,19 @@ func (m *appServerManager) Session(handle SessionHandle) (*Session, error) {
 	return &cloned, nil
 }
 
+func (m *appServerManager) LiveSession(handle SessionHandle) (*Session, error) {
+	runtimeID := strings.TrimSpace(handle.RuntimeID)
+	if runtimeID == "" {
+		return nil, fmt.Errorf("runtime id is required")
+	}
+	live := m.liveSession(runtimeID)
+	if live == nil {
+		return nil, os.ErrNotExist
+	}
+	cloned := *live.session
+	return &cloned, nil
+}
+
 func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req PromptRequest) (PromptResponse, error) {
 	runtimeID := strings.TrimSpace(handle.RuntimeID)
 	live, err := m.ensureLiveSession(ctx, handle)

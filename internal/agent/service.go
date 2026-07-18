@@ -187,6 +187,8 @@ type Service struct {
 	runtimeRecords          map[string]RuntimeRecord
 	runtimeRegistry         map[string]agentruntime.Runtime
 	lifecycle               LifecycleObserver
+	agentLifecycleMu        sync.Mutex
+	agentLifecycleGates     map[string]*agentLifecycleGate
 	profileDefaults         AgentProfile
 	detectionResults        []ProfileDetectionResult
 	startupProfileDetectOff bool
@@ -471,6 +473,11 @@ func (s *Service) ensureManager(ctx context.Context, forceRecreate bool, runtime
 	if s == nil {
 		return Agent{}, fmt.Errorf("agent service is required")
 	}
+	ctx, release, err := s.acquireAgentLifecycle(ctx, ManagerUserID)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer release()
 	if err := validateCodexManagerRuntimeOverride(runtimeOverride); err != nil {
 		return Agent{}, err
 	}
@@ -1541,6 +1548,11 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
 	}
+	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer release()
 
 	got, ok := s.Agent(id)
 	if !ok {
@@ -1594,6 +1606,11 @@ func (s *Service) Stop(ctx context.Context, id string) (Agent, error) {
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
 	}
+	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer release()
 
 	got, ok := s.Agent(id)
 	if !ok {
@@ -1633,6 +1650,11 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("agent id is required")
 	}
+	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	if err != nil {
+		return err
+	}
+	defer release()
 
 	s.mu.RLock()
 	existing, _, ok := s.agentByIDLocked(id)
@@ -1898,7 +1920,11 @@ func (s *Service) StartConfiguredAgents(ctx context.Context) error {
 		if reconciled {
 			continue
 		}
-		if isRuntimeRunning(live) {
+		if strings.EqualFold(strings.TrimSpace(live.RuntimeKind), RuntimeKindCodex) {
+			if strings.EqualFold(strings.TrimSpace(live.Status), string(agentruntime.StateStopped)) {
+				continue
+			}
+		} else if isRuntimeRunning(live) {
 			continue
 		}
 		if _, err := s.Start(ctx, live.ID); err != nil {
@@ -1919,7 +1945,7 @@ func (s *Service) startupAgentCandidates() []Agent {
 			continue
 		}
 		rk := a.RuntimeKind
-		if strings.EqualFold(normalizeRole(a.Role), RoleWorker) && rk != "" && !isGatewayRuntimeKind(rk) {
+		if strings.EqualFold(normalizeRole(a.Role), RoleWorker) && rk != "" && !isGatewayRuntimeKind(rk) && !strings.EqualFold(rk, RuntimeKindCodex) {
 			continue
 		}
 		candidates = append(candidates, a)

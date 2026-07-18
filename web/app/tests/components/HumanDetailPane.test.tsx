@@ -9,7 +9,6 @@ const labels: Record<string, string> = {
   humanDescriptionLabel: "Description",
   humanStatusOffline: "Offline",
   humanStatusOnline: "Online",
-  agentSaveChanges: "Save changes",
   agentSavingChanges: "Saving...",
   agentSaved: "Saved",
   agentAvatar: "Avatar",
@@ -108,17 +107,18 @@ describe("HumanDetailPane", () => {
     expect(panel?.firstElementChild).toHaveClass("human-channels-section");
   });
 
-  it("allows saving the human description", () => {
+  it("autosaves the human description on blur", () => {
     const onDescriptionSave = vi.fn();
     render(<HumanDetailPane locale="en" onDescriptionSave={onDescriptionSave} t={t} user={admin} />);
 
     expect(screen.getByText("Saved")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Description" }));
-    fireEvent.change(screen.getByLabelText("Description"), {
+    const description = screen.getByLabelText("Description");
+    fireEvent.change(description, {
       target: { value: "Ask me to confirm product decisions." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.blur(description);
 
     expect(onDescriptionSave).toHaveBeenCalledWith("Ask me to confirm product decisions.");
   });

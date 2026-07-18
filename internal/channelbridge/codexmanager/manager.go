@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
-	"os"
 	"strings"
 	"sync"
 
@@ -31,15 +29,9 @@ type RuntimeProvider interface {
 	Runtime(kind string) (agentruntime.Runtime, error)
 }
 
-type AgentRestarter interface {
-	Stop(context.Context, string) (agent.Agent, error)
-	Start(context.Context, string) (agent.Agent, error)
-}
-
 type Options struct {
 	Agents         AgentLister
 	Runtimes       RuntimeProvider
-	Restarter      AgentRestarter
 	CSGClawClient  codexbridge.BotClient
 	FeishuClient   codexbridge.BotClient
 	FeishuProvider feishu.AgentCredentialProvider
@@ -54,9 +46,6 @@ func New(opts Options) (Manager, error) {
 	if !hasCSGClawManager && !hasFeishuManager {
 		return nil, nil
 	}
-	if opts.Restarter == nil {
-		return nil, fmt.Errorf("codex bridge agent restarter is required")
-	}
 	codexRuntime, events, err := resolveCodexRuntime(opts.Runtimes)
 	if err != nil || codexRuntime == nil {
 		return nil, err
@@ -65,21 +54,19 @@ func New(opts Options) (Manager, error) {
 	managers := make([]Manager, 0, 2)
 	if hasCSGClawManager {
 		managers = append(managers, newCSGClawManager(managerDeps{
-			agents:    opts.Agents,
-			restarter: opts.Restarter,
-			runtime:   codexRuntime,
-			events:    events,
-			client:    opts.CSGClawClient,
+			agents:  opts.Agents,
+			runtime: codexRuntime,
+			events:  events,
+			client:  opts.CSGClawClient,
 		}))
 	}
 	if hasFeishuManager {
 		managers = append(managers, newFeishuManager(managerDeps{
-			agents:    opts.Agents,
-			restarter: opts.Restarter,
-			runtime:   codexRuntime,
-			events:    events,
-			client:    opts.FeishuClient,
-			provider:  opts.FeishuProvider,
+			agents:   opts.Agents,
+			runtime:  codexRuntime,
+			events:   events,
+			client:   opts.FeishuClient,
+			provider: opts.FeishuProvider,
 		}))
 	}
 
@@ -112,12 +99,11 @@ func resolveCodexRuntime(provider RuntimeProvider) (*runtimecodex.Runtime, *runt
 }
 
 type managerDeps struct {
-	agents    AgentLister
-	restarter AgentRestarter
-	runtime   *runtimecodex.Runtime
-	events    *runtimecodex.EventSink
-	client    codexbridge.BotClient
-	provider  feishu.AgentCredentialProvider
+	agents   AgentLister
+	runtime  *runtimecodex.Runtime
+	events   *runtimecodex.EventSink
+	client   codexbridge.BotClient
+	provider feishu.AgentCredentialProvider
 }
 
 type multiManager struct {
@@ -212,20 +198,18 @@ func (m *multiManager) UserInputResponder() runtimecodex.UserInputBroker {
 }
 
 type csgclawManager struct {
-	agents    AgentLister
-	restarter AgentRestarter
-	runtime   *runtimecodex.Runtime
-	bridge    *codexbridge.Service
-	ensuring  ensureGate
+	agents   AgentLister
+	runtime  *runtimecodex.Runtime
+	bridge   *codexbridge.Service
+	ensuring ensureGate
 }
 
 func newCSGClawManager(deps managerDeps) *csgclawManager {
 	return &csgclawManager{
-		agents:    deps.agents,
-		restarter: deps.restarter,
-		runtime:   deps.runtime,
-		bridge:    codexbridge.NewService(deps.client, deps.runtime.SessionManager(), deps.events, deps.runtime.UserInputBroker()),
-		ensuring:  newEnsureGate(),
+		agents:   deps.agents,
+		runtime:  deps.runtime,
+		bridge:   codexbridge.NewService(deps.client, deps.runtime.SessionManager(), deps.events, deps.runtime.UserInputBroker()),
+		ensuring: newEnsureGate(),
 	}
 }
 
@@ -263,7 +247,7 @@ func (m *csgclawManager) EnsureAgent(ctx context.Context, a agent.Agent) error {
 		return nil
 	}
 	defer m.ensuring.finish(a.ID)
-	session, err := ensureSession(ctx, m.restarter, m.runtime, "csgclaw", a)
+	session, err := currentSession(m.runtime, a)
 	if err != nil {
 		return err
 	}
@@ -311,7 +295,6 @@ func (m *csgclawManager) UserInputResponder() runtimecodex.UserInputBroker {
 
 type feishuManager struct {
 	agents              AgentLister
-	restarter           AgentRestarter
 	runtime             *runtimecodex.Runtime
 	bridge              *codexbridge.Service
 	provider            feishu.AgentCredentialProvider
@@ -323,7 +306,6 @@ type feishuManager struct {
 func newFeishuManager(deps managerDeps) *feishuManager {
 	return &feishuManager{
 		agents:             deps.agents,
-		restarter:          deps.restarter,
 		runtime:            deps.runtime,
 		bridge:             codexbridge.NewService(deps.client, deps.runtime.SessionManager(), deps.events, deps.runtime.UserInputBroker()),
 		provider:           deps.provider,
@@ -378,7 +360,7 @@ func (m *feishuManager) EnsureAgent(ctx context.Context, a agent.Agent) error {
 	defer m.ensuring.finish(a.ID)
 
 	m.stopStaleBridgeForAgent(a.ID, participantID)
-	session, err := ensureSession(ctx, m.restarter, m.runtime, "feishu", a)
+	session, err := currentSession(m.runtime, a)
 	if err != nil {
 		return err
 	}
@@ -501,54 +483,11 @@ func (m *feishuManager) clearStaleParticipant(agentID, participantID string) str
 	return activeParticipant
 }
 
-func ensureSession(ctx context.Context, restarter AgentRestarter, runtime *runtimecodex.Runtime, channel string, a agent.Agent) (*runtimecodex.Session, error) {
-	session, err := currentSession(runtime, a)
-	if err == nil {
-		slog.Debug(channel+" codex bridge session found",
-			"agent_id", strings.TrimSpace(a.ID),
-			"agent_name", strings.TrimSpace(a.Name),
-			"runtime_id", strings.TrimSpace(a.RuntimeID),
-			"session_id", strings.TrimSpace(session.SessionID),
-		)
-		return session, nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	if restarter == nil {
-		return nil, fmt.Errorf("%s codex bridge session missing and agent restarter is not configured", channel)
-	}
-
-	slog.Warn(channel+" codex bridge session missing; restarting agent runtime",
-		"agent_id", strings.TrimSpace(a.ID),
-		"agent_name", strings.TrimSpace(a.Name),
-		"runtime_id", strings.TrimSpace(a.RuntimeID),
-	)
-	if _, stopErr := restarter.Stop(ctx, a.ID); stopErr != nil && !strings.Contains(stopErr.Error(), "not found") {
-		return nil, stopErr
-	}
-	updated, startErr := restarter.Start(ctx, a.ID)
-	if startErr != nil {
-		return nil, startErr
-	}
-	session, err = runtime.SessionManager().Session(runtimecodex.SessionHandle{RuntimeID: strings.TrimSpace(updated.RuntimeID)})
-	if err != nil {
-		return nil, err
-	}
-	slog.Debug(channel+" codex bridge session restored",
-		"agent_id", strings.TrimSpace(updated.ID),
-		"agent_name", strings.TrimSpace(updated.Name),
-		"runtime_id", strings.TrimSpace(updated.RuntimeID),
-		"session_id", strings.TrimSpace(session.SessionID),
-	)
-	return session, nil
-}
-
 func currentSession(runtime *runtimecodex.Runtime, a agent.Agent) (*runtimecodex.Session, error) {
 	if runtime == nil {
 		return nil, fmt.Errorf("codex runtime is required")
 	}
-	return runtime.SessionManager().Session(runtimecodex.SessionHandle{RuntimeID: strings.TrimSpace(a.RuntimeID)})
+	return runtime.SessionManager().LiveSession(runtimecodex.SessionHandle{RuntimeID: strings.TrimSpace(a.RuntimeID)})
 }
 
 func bindingForAgent(a agent.Agent, sessionID string) codexbridge.Binding {

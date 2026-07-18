@@ -1159,9 +1159,8 @@ func newCodexBridgeManager(cfg config.Config, svc *agent.Service, feishuSvc *fei
 		return nil, nil
 	}
 	opts := codexmanager.Options{
-		Agents:    svc,
-		Runtimes:  svc,
-		Restarter: svc,
+		Agents:   svc,
+		Runtimes: svc,
 		CSGClawClient: &codexbridge.HTTPClient{
 			BaseURL:     apiBaseURL(cfg.Server),
 			Token:       cfg.Server.AccessToken,

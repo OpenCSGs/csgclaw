@@ -508,6 +508,220 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.noticeTone).toBe("success");
   });
 
+  it("keeps manager recreation notices out of another agent profile", async () => {
+    const recreatedManager: AgentLike = {
+      ...oldAgent,
+      id: "agent-manager",
+      image: "",
+      runtime_kind: "codex",
+      status: "running",
+    };
+    const worker: AgentLike = {
+      ...recreatedManager,
+      id: "agent-dev",
+      name: "dev",
+      role: "worker",
+    };
+    let resolveRecreate!: (value: AgentLike) => void;
+    const pendingRecreate = new Promise<AgentLike>((resolve) => {
+      resolveRecreate = resolve;
+    });
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(recreatedManager);
+    vi.mocked(createManagerAgentRequest).mockReturnValue(pendingRecreate);
+
+    const { result, rerender } = renderHook(
+      ({ activePane }: { activePane: WorkspacePane }) =>
+        useAgentControllerHarness({
+          activePane,
+          agents: [recreatedManager, worker],
+        }).controller,
+      {
+        initialProps: { activePane: { type: WorkspacePaneTypes.agent, id: "agent-manager" } },
+        wrapper: createWrapper(),
+      },
+    );
+
+    let recreatePromise!: Promise<void>;
+    act(() => {
+      recreatePromise = result.current.agentViewProps.onRecreate(recreatedManager) as Promise<void>;
+    });
+    await waitFor(() => expect(result.current.agentViewProps.notice).toBe("managerRecreateInProgress"));
+
+    rerender({ activePane: { type: WorkspacePaneTypes.agent, id: "agent-dev" } });
+
+    await waitFor(() => expect(result.current.agentViewProps.item?.id).toBe("agent-dev"));
+    expect(result.current.agentViewProps.notice).toBe("");
+
+    await act(async () => {
+      resolveRecreate(recreatedManager);
+      await recreatePromise;
+    });
+
+    expect(result.current.agentViewProps.item?.id).toBe("agent-dev");
+    expect(result.current.agentViewProps.notice).toBe("");
+
+    rerender({ activePane: { type: WorkspacePaneTypes.agent, id: "agent-manager" } });
+
+    await waitFor(() => expect(result.current.agentViewProps.item?.id).toBe("agent-manager"));
+    expect(result.current.agentViewProps.notice).toBe("managerRecreateSucceeded");
+    expect(result.current.agentViewProps.noticeTone).toBe("success");
+  });
+
+  it("recreates the manager and a worker concurrently with independent status", async () => {
+    const recreatedManager: AgentLike = {
+      ...oldAgent,
+      id: "agent-manager",
+      image: "",
+      runtime_kind: "codex",
+      status: "running",
+    };
+    const worker: AgentLike = {
+      ...recreatedManager,
+      id: "agent-dev",
+      name: "dev",
+      role: "worker",
+    };
+    let resolveManagerRecreate!: (value: AgentLike) => void;
+    let resolveWorkerRecreate!: (value: AgentLike) => void;
+    const pendingManagerRecreate = new Promise<AgentLike>((resolve) => {
+      resolveManagerRecreate = resolve;
+    });
+    const pendingWorkerRecreate = new Promise<AgentLike>((resolve) => {
+      resolveWorkerRecreate = resolve;
+    });
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockImplementation(async (agentID) =>
+      String(agentID).includes("manager") ? recreatedManager : worker,
+    );
+    vi.mocked(createManagerAgentRequest).mockReturnValue(pendingManagerRecreate);
+    vi.mocked(runAgentActionRequest).mockReturnValue(pendingWorkerRecreate);
+
+    const { result, rerender } = renderHook(
+      ({ activePane }: { activePane: WorkspacePane }) =>
+        useAgentControllerHarness({
+          activePane,
+          agents: [recreatedManager, worker],
+        }).controller,
+      {
+        initialProps: { activePane: { type: WorkspacePaneTypes.agent, id: "agent-manager" } },
+        wrapper: createWrapper(),
+      },
+    );
+
+    let managerRecreatePromise!: Promise<void>;
+    act(() => {
+      managerRecreatePromise = result.current.agentViewProps.onRecreate(recreatedManager) as Promise<void>;
+    });
+
+    await waitFor(() => expect(result.current.agentViewProps.notice).toBe("managerRecreateInProgress"));
+    expect(result.current.agentViewProps.busyKey).toBe("agent-manager:recreate");
+
+    rerender({ activePane: { type: WorkspacePaneTypes.agent, id: "agent-dev" } });
+    await waitFor(() => expect(result.current.agentViewProps.item?.id).toBe("agent-dev"));
+
+    let workerRecreatePromise!: Promise<void>;
+    act(() => {
+      workerRecreatePromise = result.current.agentViewProps.onRecreate(worker) as Promise<void>;
+    });
+
+    await waitFor(() => expect(runAgentActionRequest).toHaveBeenCalledWith("agent-dev", "recreate"));
+    expect(result.current.agentViewProps.notice).toBe("agentRecreateInProgress");
+    expect(result.current.agentViewProps.busyKey).toBe("agent-dev:recreate");
+
+    act(() => {
+      void result.current.agentViewProps.onRecreate(worker);
+    });
+    expect(runAgentActionRequest).toHaveBeenCalledTimes(1);
+
+    rerender({ activePane: { type: WorkspacePaneTypes.agent, id: "agent-manager" } });
+    await waitFor(() => expect(result.current.agentViewProps.item?.id).toBe("agent-manager"));
+    expect(result.current.agentViewProps.notice).toBe("managerRecreateInProgress");
+    expect(result.current.agentViewProps.busyKey).toBe("agent-manager:recreate");
+
+    await act(async () => {
+      resolveWorkerRecreate(worker);
+      await workerRecreatePromise;
+    });
+
+    rerender({ activePane: { type: WorkspacePaneTypes.agent, id: "agent-dev" } });
+    await waitFor(() => expect(result.current.agentViewProps.item?.id).toBe("agent-dev"));
+    expect(result.current.agentViewProps.notice).toBe("agentRecreateSucceeded");
+    expect(result.current.agentViewProps.busyKey).toBe("");
+
+    rerender({ activePane: { type: WorkspacePaneTypes.agent, id: "agent-manager" } });
+    await waitFor(() => expect(result.current.agentViewProps.item?.id).toBe("agent-manager"));
+    expect(result.current.agentViewProps.notice).toBe("managerRecreateInProgress");
+    expect(result.current.agentViewProps.busyKey).toBe("agent-manager:recreate");
+
+    await act(async () => {
+      resolveManagerRecreate(recreatedManager);
+      await managerRecreatePromise;
+    });
+
+    expect(result.current.agentViewProps.notice).toBe("managerRecreateSucceeded");
+    expect(result.current.agentViewProps.busyKey).toBe("");
+  });
+
+  it("shows recreation progress and success for the selected worker", async () => {
+    const worker: AgentLike = {
+      ...oldAgent,
+      agent_profile: {
+        ...oldAgent.agent_profile,
+        image_upgrade_required: false,
+      },
+      id: "agent-dev",
+      image: "",
+      name: "dev",
+      role: "worker",
+      runtime_kind: "codex",
+    };
+    let resolveRecreate!: (value: AgentLike) => void;
+    const pendingRecreate = new Promise<AgentLike>((resolve) => {
+      resolveRecreate = resolve;
+    });
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(worker);
+    vi.mocked(runAgentActionRequest).mockReturnValue(pendingRecreate);
+    const namedAgentT: TranslateFn = (key, params = {}) => {
+      if (key === "agentRecreateInProgress") {
+        return `Recreating ${params.name}...`;
+      }
+      if (key === "agentRecreateSucceeded") {
+        return `${params.name} recreated.`;
+      }
+      return key;
+    };
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "agent-dev" },
+          agents: [worker],
+          t: namedAgentT,
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    let recreatePromise!: Promise<void>;
+    act(() => {
+      recreatePromise = result.current.agentViewProps.onRecreate(worker) as Promise<void>;
+    });
+
+    await waitFor(() => expect(result.current.agentViewProps.notice).toBe("Recreating dev..."));
+    expect(result.current.agentViewProps.noticeTone).toBe("info");
+    expect(result.current.agentViewProps.busyKey).toBe("agent-dev:recreate");
+
+    await act(async () => {
+      resolveRecreate(worker);
+      await recreatePromise;
+    });
+
+    expect(runAgentActionRequest).toHaveBeenCalledWith("agent-dev", "recreate");
+    expect(result.current.agentViewProps.notice).toBe("dev recreated.");
+    expect(result.current.agentViewProps.noticeTone).toBe("success");
+  });
+
   it("recreates the manager directly from a chat action card and keeps card busy feedback", async () => {
     const recreatedManager: AgentLike = {
       ...oldAgent,

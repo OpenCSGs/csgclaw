@@ -21,6 +21,7 @@ type VoidOrPromise = void | Promise<void>;
 export type ComputerDetailPaneProps = {
   agents?: AgentLike[];
   busyKey?: string;
+  busyKeys?: readonly string[];
   channels?: IMConversation[];
   directMessages?: IMConversation[];
   onCreateAgent?: () => VoidOrPromise;
@@ -35,6 +36,7 @@ export function ComputerDetailPane({
   channels = [],
   directMessages = [],
   busyKey = "",
+  busyKeys = [],
   onSelectAgent = () => {},
   onCreateAgent = () => {},
   onStartAgent = () => {},
@@ -42,6 +44,7 @@ export function ComputerDetailPane({
   t = (key) => key,
 }: ComputerDetailPaneProps) {
   const runningAgents = agents.filter(isAgentRunning);
+  const actionBusyKeys = busyKeys.length ? busyKeys : busyKey ? [busyKey] : [];
   return (
     <section className="entity-pane computer-detail-pane">
       <section className="computer-overview-card">
@@ -114,7 +117,10 @@ export function ComputerDetailPane({
                 {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
                   <Button
                     className="agent-icon-button"
-                    disabled={busyKey.startsWith(`${item.id}:`) || isAgentIncomplete(item)}
+                    disabled={
+                      actionBusyKeys.some((actionBusyKey) => actionBusyKey.startsWith(`${item.id}:`)) ||
+                      isAgentIncomplete(item)
+                    }
                     onClick={() => onStartAgent(item)}
                   >
                     <span aria-hidden="true">

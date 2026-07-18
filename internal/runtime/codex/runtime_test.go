@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -36,8 +37,16 @@ func (f fakeBinaryProvider) Ensure(context.Context) (string, error) {
 type fakeManager struct {
 	start  func(context.Context, SessionSpec) (*Session, error)
 	stop   func(context.Context, SessionHandle) error
+	live   func(SessionHandle) (*Session, error)
 	get    func(SessionHandle) (*Session, error)
 	prompt func(context.Context, SessionHandle, PromptRequest) (PromptResponse, error)
+}
+
+func (f fakeManager) LiveSession(handle SessionHandle) (*Session, error) {
+	if f.live != nil {
+		return f.live(handle)
+	}
+	return f.Session(handle)
 }
 
 func (f fakeManager) Start(ctx context.Context, spec SessionSpec) (*Session, error) {
@@ -2516,6 +2525,8 @@ func TestRuntimeStartKeepsExistingRunningSession(t *testing.T) {
 
 	root := t.TempDir()
 	startCalls := 0
+	sessionCalls := 0
+	var liveSession *Session
 	rt := New(Dependencies{
 		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
 		AgentHome: func(agentName string) (string, error) {
@@ -2531,7 +2542,7 @@ func TestRuntimeStartKeepsExistingRunningSession(t *testing.T) {
 		Manager: fakeManager{
 			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
 				startCalls++
-				return &Session{
+				liveSession = &Session{
 					RuntimeID:    spec.RuntimeID,
 					AgentID:      spec.AgentID,
 					AgentName:    spec.AgentName,
@@ -2544,7 +2555,16 @@ func TestRuntimeStartKeepsExistingRunningSession(t *testing.T) {
 					ProcessID:    os.Getpid(),
 					CreatedAt:    time.Now().UTC(),
 					StartedAt:    time.Now().UTC(),
-				}, nil
+				}
+				return liveSession, nil
+			},
+			get: func(SessionHandle) (*Session, error) {
+				sessionCalls++
+				if liveSession == nil {
+					return nil, os.ErrNotExist
+				}
+				cloned := *liveSession
+				return &cloned, nil
 			},
 		},
 	})
@@ -2570,6 +2590,118 @@ func TestRuntimeStartKeepsExistingRunningSession(t *testing.T) {
 	}
 	if startCalls != 1 {
 		t.Fatalf("Start() manager start calls = %d, want still 1", startCalls)
+	}
+	if sessionCalls != 1 {
+		t.Fatalf("Start() manager session restore calls = %d, want 1", sessionCalls)
+	}
+}
+
+func TestRuntimeStartRepairsFailedPersistedSession(t *testing.T) {
+	root := t.TempDir()
+	oldProcess := exec.Command("sleep", "30")
+	if err := oldProcess.Start(); err != nil {
+		t.Fatalf("start old process: %v", err)
+	}
+	processDone := make(chan error, 1)
+	go func() { processDone <- oldProcess.Wait() }()
+	processExited := false
+	t.Cleanup(func() {
+		if processExited {
+			return
+		}
+		_ = oldProcess.Process.Kill()
+		<-processDone
+	})
+
+	restoreErr := errors.New("persisted session cannot be hydrated")
+	sessionCalls := 0
+	stopCalls := 0
+	startCalls := 0
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentName string) (string, error) {
+			return filepath.Join(root, agentName), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        "u-alice",
+				Name:      "alice",
+				RuntimeID: h.RuntimeID,
+				Profile: agentruntime.Profile{
+					BaseURL: "https://api.example/v1",
+					APIKey:  "test-key",
+					ModelID: "gpt-5.5",
+				},
+			}, nil
+		},
+		Manager: fakeManager{
+			get: func(SessionHandle) (*Session, error) {
+				sessionCalls++
+				return nil, restoreErr
+			},
+			stop: func(context.Context, SessionHandle) error {
+				stopCalls++
+				return nil
+			},
+			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+				startCalls++
+				now := time.Now().UTC()
+				return &Session{
+					RuntimeID:    spec.RuntimeID,
+					AgentID:      spec.AgentID,
+					AgentName:    spec.AgentName,
+					SessionID:    "sess-repaired",
+					BinaryPath:   spec.BinaryPath,
+					RuntimeDir:   spec.RuntimeDir,
+					WorkspaceDir: spec.WorkspaceDir,
+					HomeDir:      spec.HomeDir,
+					CodexHomeDir: spec.CodexHomeDir,
+					StderrPath:   spec.StderrPath,
+					CreatedAt:    now,
+					StartedAt:    now,
+				}, nil
+			},
+		},
+	})
+	dirs, err := rt.ensureRuntimeDirs("u-alice")
+	if err != nil {
+		t.Fatalf("ensureRuntimeDirs() error = %v", err)
+	}
+	markerPath := filepath.Join(dirs.Root, "preserve-me.txt")
+	if err := os.WriteFile(markerPath, []byte("runtime data"), 0o600); err != nil {
+		t.Fatalf("write runtime marker: %v", err)
+	}
+	if err := rt.writeMetadata(runtimeMetadata{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+		SessionID: "sess-old",
+		ProcessID: oldProcess.Process.Pid,
+		State:     agentruntime.StateRunning,
+		CreatedAt: time.Now().Add(-time.Hour).UTC(),
+		StartedAt: time.Now().Add(-time.Hour).UTC(),
+	}); err != nil {
+		t.Fatalf("writeMetadata() error = %v", err)
+	}
+
+	state, err := rt.Start(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-alice"})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if state != agentruntime.StateRunning {
+		t.Fatalf("Start() state = %q, want %q", state, agentruntime.StateRunning)
+	}
+	if sessionCalls != 1 || stopCalls != 1 || startCalls != 1 {
+		t.Fatalf("lifecycle calls = session %d/stop %d/start %d, want 1/1/1", sessionCalls, stopCalls, startCalls)
+	}
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatalf("runtime marker was not preserved during repair: %v", err)
+	}
+	select {
+	case <-processDone:
+		processExited = true
+	case <-time.After(3 * time.Second):
+		t.Fatal("old persisted process was not stopped during repair")
 	}
 }
 

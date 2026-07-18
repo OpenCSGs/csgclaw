@@ -94,6 +94,7 @@ type Session struct {
 type Manager interface {
 	Start(ctx context.Context, spec SessionSpec) (*Session, error)
 	Stop(ctx context.Context, handle SessionHandle) error
+	LiveSession(handle SessionHandle) (*Session, error)
 	Session(handle SessionHandle) (*Session, error)
 	Prompt(ctx context.Context, handle SessionHandle, req PromptRequest) (PromptResponse, error)
 }
@@ -264,8 +265,20 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 }
 
 func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntime.State, error) {
+	var sessionRestoreErr error
 	if current, err := r.Info(ctx, h); err == nil && current.State == agentruntime.StateRunning {
-		return current.State, nil
+		if _, restoreErr := r.sessionManager().Session(SessionHandle{RuntimeID: strings.TrimSpace(h.RuntimeID)}); restoreErr == nil {
+			return current.State, nil
+		} else {
+			sessionRestoreErr = restoreErr
+			slog.Warn("restore running codex session failed; repairing with a fresh session",
+				"runtime_id", strings.TrimSpace(h.RuntimeID),
+				"error", restoreErr,
+			)
+			if _, stopErr := r.Stop(ctx, h); stopErr != nil && !errors.Is(stopErr, sandbox.ErrNotFound) && !errors.Is(stopErr, os.ErrNotExist) {
+				return agentruntime.StateUnknown, fmt.Errorf("prepare codex session repair after restore failed (%v): %w", restoreErr, stopErr)
+			}
+		}
 	}
 
 	agentRef, err := r.resolveAgent(h)
@@ -280,6 +293,9 @@ func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntim
 		Profile:   agentRef.Profile,
 	})
 	if err != nil {
+		if sessionRestoreErr != nil {
+			return agentruntime.StateUnknown, fmt.Errorf("repair codex session after restore failed (%v): %w", sessionRestoreErr, err)
+		}
 		return agentruntime.StateUnknown, err
 	}
 	if err := r.writeMetadata(sessionToRuntimeMetadata(session)); err != nil {

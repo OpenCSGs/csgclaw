@@ -54,9 +54,9 @@ export function SettingsPage() {
         hasUpgradeAttention(sidebar.upgradeStatus, sidebar.upgradePhase, sidebar.upgradeBusy)));
   const showNewVersionBadge = Boolean(
     sidebar.showUpgradeControls &&
-      (mockUpgradeAvailable ||
-        (!isLocalBuildUpgradeStatus(sidebar.upgradeStatus, currentVersion) && sidebar.upgradeStatus?.update_available)) &&
-      sidebar.upgradePhase !== "done",
+    (mockUpgradeAvailable ||
+      (!isLocalBuildUpgradeStatus(sidebar.upgradeStatus, currentVersion) && sidebar.upgradeStatus?.update_available)) &&
+    sidebar.upgradePhase !== "done",
   );
   const feedbackURL = githubFeedbackIssueURL(sidebar.appVersion, sidebar.upgradeStatus);
   const activeAuthEnvironmentDraft = signedIn

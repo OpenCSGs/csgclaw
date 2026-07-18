@@ -136,10 +136,20 @@ type AgentWithProfile = {
 };
 
 type AgentPageNoticeTone = "info" | "warning" | "success";
+type AgentPageNoticeState = {
+  message: string;
+  tone: AgentPageNoticeTone;
+};
+type AgentActionBusyEntry = {
+  busyKey: string;
+  visible: boolean;
+};
+type AgentActionBusyState = Record<string, AgentActionBusyEntry>;
 type FeishuActionKind = "connect" | "disconnect" | "finalize";
 
 const AGENT_RUNTIME_SYNC_INTERVAL_MS = 2_000;
 const AGENT_RUNTIME_SYNC_TIMEOUT_MS = 120_000;
+const GLOBAL_AGENT_PAGE_NOTICE_KEY = "__global__";
 
 function cloneMCPServersForDraft(servers: AgentDraft["mcpServers"]): AgentDraft["mcpServers"] {
   return servers && typeof servers === "object" ? { ...servers } : servers;
@@ -446,7 +456,8 @@ export function useAgentController({
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentError, setAgentError] = useState("");
   const [agentProgress, setAgentProgress] = useState<AgentCreateProgressState | null>(null);
-  const [agentActionBusy, setAgentActionBusy] = useState("");
+  const [agentActionBusyByAgent, setAgentActionBusyByAgent] = useState<AgentActionBusyState>({});
+  const agentActionBusyByAgentRef = useRef<AgentActionBusyState>({});
   const [messageActionBusy, setMessageActionBusy] = useState("");
   const [messageActionFeedback, setMessageActionFeedback] = useState<MessageActionFeedback>({
     key: "",
@@ -465,9 +476,8 @@ export function useAgentController({
   const [agentMCPAddError, setAgentMCPAddError] = useState("");
   const [agentMCPDeleteBusy, setAgentMCPDeleteBusy] = useState(false);
   const [agentMCPDeleteError, setAgentMCPDeleteError] = useState("");
-  const [agentPageNotice, setAgentPageNotice] = useState("");
-  const [agentPageNoticeTone, setAgentPageNoticeTone] = useState<AgentPageNoticeTone>("warning");
-  const agentPageNoticeTimerRef = useRef<number | null>(null);
+  const [agentPageNotices, setAgentPageNotices] = useState<Record<string, AgentPageNoticeState>>({});
+  const agentPageNoticeTimersRef = useRef<Record<string, number>>({});
   const agentPageDraftLoadSeqRef = useRef(0);
   const agentPageDraftRequestRef = useRef(0);
   const [feishuPendingRegistrations, setFeishuPendingRegistrations] = useState<
@@ -481,6 +491,42 @@ export function useAgentController({
   const [editingTeam, setEditingTeam] = useState<WorkspaceTeam | null>(null);
   const [createTeamTitle, setCreateTeamTitle] = useState("");
   const [createTeamMemberIDs, setCreateTeamMemberIDs] = useState<string[]>([]);
+  const claimAgentAction = useCallback((agentID: string, busyKey: string, visible = true): boolean => {
+    const normalizedAgentID = String(agentID || "").trim();
+    const normalizedBusyKey = String(busyKey || "").trim();
+    if (!normalizedAgentID || !normalizedBusyKey || agentActionBusyByAgentRef.current[normalizedAgentID]) {
+      return false;
+    }
+    const next = {
+      ...agentActionBusyByAgentRef.current,
+      [normalizedAgentID]: { busyKey: normalizedBusyKey, visible },
+    };
+    agentActionBusyByAgentRef.current = next;
+    setAgentActionBusyByAgent(next);
+    return true;
+  }, []);
+  const releaseAgentAction = useCallback((agentID: string, busyKey: string): void => {
+    const normalizedAgentID = String(agentID || "").trim();
+    if (!normalizedAgentID || agentActionBusyByAgentRef.current[normalizedAgentID]?.busyKey !== busyKey) {
+      return;
+    }
+    const next = { ...agentActionBusyByAgentRef.current };
+    delete next[normalizedAgentID];
+    agentActionBusyByAgentRef.current = next;
+    setAgentActionBusyByAgent(next);
+  }, []);
+  const isAgentActionBusy = useCallback(
+    (agentID: string | null | undefined): boolean =>
+      Boolean(agentActionBusyByAgentRef.current[String(agentID || "").trim()]),
+    [],
+  );
+  const agentActionBusyKeys = useMemo(
+    () =>
+      Object.values(agentActionBusyByAgent)
+        .filter((entry) => entry.visible)
+        .map((entry) => entry.busyKey),
+    [agentActionBusyByAgent],
+  );
   const agentPageHasUnsavedChanges = Boolean(
     agentPageDraft && agentPageSavedDraft && JSON.stringify(agentPageDraft) !== JSON.stringify(agentPageSavedDraft),
   );
@@ -756,30 +802,51 @@ export function useAgentController({
 
   const progressBusy = agentBusy;
 
-  const clearAgentPageNotice = useCallback(() => {
-    if (agentPageNoticeTimerRef.current !== null) {
-      window.clearTimeout(agentPageNoticeTimerRef.current);
-      agentPageNoticeTimerRef.current = null;
+  const clearAgentPageNotice = useCallback((ownerAgentID?: string | null) => {
+    const noticeKey =
+      ownerAgentID === null
+        ? GLOBAL_AGENT_PAGE_NOTICE_KEY
+        : String(ownerAgentID || selectedAgentForPageRef.current?.id || GLOBAL_AGENT_PAGE_NOTICE_KEY).trim();
+    const timer = agentPageNoticeTimersRef.current[noticeKey];
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      delete agentPageNoticeTimersRef.current[noticeKey];
     }
-    setAgentPageNotice("");
-    setAgentPageNoticeTone("warning");
+    setAgentPageNotices((current) => {
+      if (!(noticeKey in current)) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[noticeKey];
+      return next;
+    });
   }, []);
 
   const showAgentPageNotice = useCallback(
-    (message: string, tone: AgentPageNoticeTone = "warning", durationMs = 5000) => {
-      if (agentPageNoticeTimerRef.current !== null) {
-        window.clearTimeout(agentPageNoticeTimerRef.current);
-        agentPageNoticeTimerRef.current = null;
+    (message: string, tone: AgentPageNoticeTone = "warning", durationMs = 5000, ownerAgentID?: string | null) => {
+      const noticeKey =
+        ownerAgentID === null
+          ? GLOBAL_AGENT_PAGE_NOTICE_KEY
+          : String(ownerAgentID || selectedAgentForPageRef.current?.id || GLOBAL_AGENT_PAGE_NOTICE_KEY).trim();
+      const timer = agentPageNoticeTimersRef.current[noticeKey];
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        delete agentPageNoticeTimersRef.current[noticeKey];
       }
-      setAgentPageNotice(message);
-      setAgentPageNoticeTone(tone);
+      setAgentPageNotices((current) => ({ ...current, [noticeKey]: { message, tone } }));
       if (durationMs <= 0) {
         return;
       }
-      agentPageNoticeTimerRef.current = window.setTimeout(() => {
-        setAgentPageNotice("");
-        setAgentPageNoticeTone("warning");
-        agentPageNoticeTimerRef.current = null;
+      agentPageNoticeTimersRef.current[noticeKey] = window.setTimeout(() => {
+        setAgentPageNotices((current) => {
+          if (!(noticeKey in current)) {
+            return current;
+          }
+          const next = { ...current };
+          delete next[noticeKey];
+          return next;
+        });
+        delete agentPageNoticeTimersRef.current[noticeKey];
       }, durationMs);
     },
     [],
@@ -787,15 +854,14 @@ export function useAgentController({
 
   useEffect(
     () => () => {
-      if (agentPageNoticeTimerRef.current !== null) {
-        window.clearTimeout(agentPageNoticeTimerRef.current);
-      }
+      Object.values(agentPageNoticeTimersRef.current).forEach((timer) => window.clearTimeout(timer));
+      agentPageNoticeTimersRef.current = {};
     },
     [],
   );
 
   function agentOperationUsesPageError(item: AgentLike | null | undefined): boolean {
-    return Boolean(item?.id && selectedAgentForPage?.id === item.id);
+    return Boolean(item?.id && selectedAgentForPageRef.current?.id === item.id);
   }
 
   function clearAgentOperationError(item: AgentLike | null | undefined): void {
@@ -826,7 +892,7 @@ export function useAgentController({
 
   useEffect(() => {
     if (!managerProfileIncomplete) {
-      clearAgentPageNotice();
+      clearAgentPageNotice(null);
       return;
     }
   }, [clearAgentPageNotice, managerProfileIncomplete]);
@@ -838,7 +904,7 @@ export function useAgentController({
     if (activePane.type === WorkspacePaneTypes.agent && activePane.id === MANAGER_AGENT_ID) {
       return;
     }
-    showAgentPageNotice(t("profileIncompleteRedirectNotice"));
+    showAgentPageNotice(t("profileIncompleteRedirectNotice"), "warning", 5000, null);
     selectAgent({ id: MANAGER_AGENT_ID }, { replace: true });
   }, [activePane.id, activePane.type, managerProfileIncomplete, selectAgent, showAgentPageNotice, t]);
 
@@ -948,14 +1014,11 @@ export function useAgentController({
   }
 
   async function rebuildManagerFromBrowser(): Promise<string> {
-    setAgentActionBusy(`${MANAGER_AGENT_ID}:recreate`);
     try {
       await requestManagerRebuild();
       return "";
     } catch (err) {
       return errorMessage(err, t("agentActionFailed"));
-    } finally {
-      setAgentActionBusy("");
     }
   }
 
@@ -963,19 +1026,28 @@ export function useAgentController({
     if (!action || action.id !== ACTION_REBUILD_MANAGER) {
       return;
     }
-    if (messageActionBusy || agentActionBusy) {
+    const managerActionAgentID = String(managerAgent?.id || MANAGER_AGENT_ID).trim();
+    const busyKey = `${managerActionAgentID}:recreate`;
+    if (messageActionBusy || isAgentActionBusy(managerActionAgentID)) {
+      return;
+    }
+    if (!claimAgentAction(managerActionAgentID, busyKey)) {
       return;
     }
     const key = `${message?.id || "message"}:${action.id}`;
     setMessageActionBusy(key);
     setMessageActionFeedback({ key, message: t("managerRecreateInProgress"), tone: "info" });
-    const rebuildError = await rebuildManagerFromBrowser();
-    if (rebuildError) {
-      setMessageActionFeedback({ key, message: rebuildError, tone: "error" });
-    } else {
-      setMessageActionFeedback({ key, message: t("managerRecreateSucceeded"), tone: "success" });
+    try {
+      const rebuildError = await rebuildManagerFromBrowser();
+      if (rebuildError) {
+        setMessageActionFeedback({ key, message: rebuildError, tone: "error" });
+      } else {
+        setMessageActionFeedback({ key, message: t("managerRecreateSucceeded"), tone: "success" });
+      }
+    } finally {
+      releaseAgentAction(managerActionAgentID, busyKey);
+      setMessageActionBusy("");
     }
-    setMessageActionBusy("");
   }
 
   async function refreshAgents(options: FetchAgentsOptions = {}) {
@@ -1506,7 +1578,7 @@ export function useAgentController({
         !isAgentProfileMarkedComplete(savedDraft)
       ) {
         setAgentPageError(t("profileSaveIncompleteError"));
-        showAgentPageNotice(t("profileSetupIncompleteAfterSave"));
+        showAgentPageNotice(t("profileSetupIncompleteAfterSave"), "warning", 5000, saved.id);
       }
     } catch (err) {
       setAgentPageError(errorMessage(err, t("agentActionFailed")));
@@ -1704,7 +1776,7 @@ export function useAgentController({
   }
 
   async function runAgentAction(item: AgentLike | null | undefined, action: AgentAction): Promise<void> {
-    if (!item?.id || agentActionBusy) {
+    if (!item?.id || isAgentActionBusy(item.id)) {
       return;
     }
     if (
@@ -1714,19 +1786,35 @@ export function useAgentController({
       return;
     }
     if (action === "recreate" && isManagerAgent(item)) {
+      const busyKey = `${item.id}:${action}`;
+      if (!claimAgentAction(item.id, busyKey)) {
+        return;
+      }
       clearAgentOperationError(item);
-      showAgentPageNotice(t("managerRecreateInProgress"), "info", 0);
-      const rebuildError = await rebuildManagerFromBrowser();
-      if (rebuildError) {
-        clearAgentPageNotice();
-        setAgentOperationError(item, rebuildError);
-      } else {
-        showAgentPageNotice(t("managerRecreateSucceeded"), "success");
+      showAgentPageNotice(t("managerRecreateInProgress"), "info", 0, item.id);
+      try {
+        const rebuildError = await rebuildManagerFromBrowser();
+        if (rebuildError) {
+          clearAgentPageNotice(item.id);
+          setAgentOperationError(item, rebuildError);
+        } else {
+          showAgentPageNotice(t("managerRecreateSucceeded"), "success", 5000, item.id);
+        }
+      } finally {
+        releaseAgentAction(item.id, busyKey);
       }
       return;
     }
-    setAgentActionBusy(`${item.id}:${action}`);
+    const busyKey = `${item.id}:${action}`;
+    if (!claimAgentAction(item.id, busyKey)) {
+      return;
+    }
     clearAgentOperationError(item);
+    const showRecreateNotice = action === "recreate" && agentOperationUsesPageError(item);
+    const recreationNoticeName = String(item.name || item.id).trim();
+    if (showRecreateNotice) {
+      showAgentPageNotice(t("agentRecreateInProgress", { name: recreationNoticeName }), "info", 0, item.id);
+    }
     try {
       let updatedAgent: AgentLike | null = null;
       if (action === "delete") {
@@ -1744,10 +1832,16 @@ export function useAgentController({
           await syncAgentStateUntilRunning(MANAGER_AGENT_ID);
         }
       }
+      if (showRecreateNotice) {
+        showAgentPageNotice(t("agentRecreateSucceeded", { name: recreationNoticeName }), "success", 5000, item.id);
+      }
     } catch (err) {
+      if (showRecreateNotice) {
+        clearAgentPageNotice(item.id);
+      }
       setAgentOperationError(item, errorMessage(err, t("agentActionFailed")));
     } finally {
-      setAgentActionBusy("");
+      releaseAgentAction(item.id, busyKey);
     }
   }
 
@@ -1769,14 +1863,21 @@ export function useAgentController({
     ): Promise<void> => {
       const agentID = String(pending.agent_id || "").trim();
       const registrationID = String(pending.registration_id || "").trim();
-      if (!agentID || !registrationID || feishuAutoFinalizeActiveRef.current.has(registrationID)) {
+      if (
+        !agentID ||
+        !registrationID ||
+        isAgentActionBusy(agentID) ||
+        feishuAutoFinalizeActiveRef.current.has(registrationID)
+      ) {
         return;
       }
       const background = Boolean(options.background);
       const busyKey = feishuActionKey(agentID, "finalize");
+      if (!claimAgentAction(agentID, busyKey, !background)) {
+        return;
+      }
       feishuAutoFinalizeActiveRef.current.add(registrationID);
       if (!background) {
-        setAgentActionBusy(busyKey);
         setAgentPageError("");
       }
       try {
@@ -1788,7 +1889,7 @@ export function useAgentController({
             [agentID]: nextPending,
           }));
           if (options.showPendingNotice) {
-            showAgentPageNotice(t("feishuConnectPending"));
+            showAgentPageNotice(t("feishuConnectPending"), "warning", 5000, agentID);
           }
           return;
         }
@@ -1798,7 +1899,7 @@ export function useAgentController({
           return next;
         });
         await refreshAgentStateRef.current(agentID);
-        showAgentPageNotice(t("feishuConnectConfigured"), "success");
+        showAgentPageNotice(t("feishuConnectConfigured"), "success", 5000, agentID);
       } catch (err) {
         if (feishuRegistrationFinalizeClearsPending(err)) {
           updateFeishuPendingRegistrations((current) => {
@@ -1812,19 +1913,17 @@ export function useAgentController({
         }
       } finally {
         feishuAutoFinalizeActiveRef.current.delete(registrationID);
-        if (!background) {
-          setAgentActionBusy((current) => (current === busyKey ? "" : current));
-        }
+        releaseAgentAction(agentID, busyKey);
       }
     },
-    [showAgentPageNotice, t, updateFeishuPendingRegistrations],
+    [claimAgentAction, isAgentActionBusy, releaseAgentAction, showAgentPageNotice, t, updateFeishuPendingRegistrations],
   );
 
   useEffect(() => {
     const timers: number[] = [];
     Object.entries(feishuPendingRegistrations).forEach(([agentID, registration]) => {
       const pending = normalizeFeishuPendingRegistration(registration, agentID);
-      if (!pending || agentActionBusy || feishuAutoFinalizeActiveRef.current.has(pending.registration_id)) {
+      if (!pending || isAgentActionBusy(agentID) || feishuAutoFinalizeActiveRef.current.has(pending.registration_id)) {
         return;
       }
       const timer = window.setTimeout(() => {
@@ -1835,20 +1934,17 @@ export function useAgentController({
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [agentActionBusy, completeFeishuPendingRegistration, feishuPendingRegistrations]);
+  }, [agentActionBusyByAgent, completeFeishuPendingRegistration, feishuPendingRegistrations, isAgentActionBusy]);
 
   const finalizeVisibleFeishuPendingRegistrations = useCallback(() => {
-    if (agentActionBusy) {
-      return;
-    }
     Object.entries(feishuPendingRegistrations).forEach(([agentID, registration]) => {
       const pending = normalizeFeishuPendingRegistration(registration, agentID);
-      if (!pending || feishuAutoFinalizeActiveRef.current.has(pending.registration_id)) {
+      if (!pending || isAgentActionBusy(agentID) || feishuAutoFinalizeActiveRef.current.has(pending.registration_id)) {
         return;
       }
       void completeFeishuPendingRegistration(pending, { background: true });
     });
-  }, [agentActionBusy, completeFeishuPendingRegistration, feishuPendingRegistrations]);
+  }, [completeFeishuPendingRegistration, feishuPendingRegistrations, isAgentActionBusy]);
 
   useEffect(() => {
     window.addEventListener("focus", finalizeVisibleFeishuPendingRegistrations);
@@ -1859,10 +1955,13 @@ export function useAgentController({
 
   async function startFeishuConnect(item: AgentLike | null | undefined): Promise<void> {
     const agentID = String(item?.id || "").trim();
-    if (!agentID || agentActionBusy) {
+    if (!agentID || isAgentActionBusy(agentID)) {
       return;
     }
-    setAgentActionBusy(feishuActionKey(agentID, "connect"));
+    const busyKey = feishuActionKey(agentID, "connect");
+    if (!claimAgentAction(agentID, busyKey)) {
+      return;
+    }
     setAgentPageError("");
     try {
       const registration = await startFeishuRegistrationRequest(agentID);
@@ -1878,18 +1977,18 @@ export function useAgentController({
       if (connectURL) {
         window.open(connectURL, "_blank", "noopener,noreferrer");
       }
-      showAgentPageNotice(t("feishuConnectStarted"), "info");
+      showAgentPageNotice(t("feishuConnectStarted"), "info", 5000, agentID);
     } catch (err) {
       setAgentPageError(errorMessage(err, t("feishuConnectFailed")));
     } finally {
-      setAgentActionBusy("");
+      releaseAgentAction(agentID, busyKey);
     }
   }
 
   async function finalizeFeishuConnect(item: AgentLike | null | undefined): Promise<void> {
     const agentID = String(item?.id || "").trim();
     const pending = normalizeFeishuPendingRegistration(feishuPendingRegistrations[agentID], agentID);
-    if (!agentID || !pending || agentActionBusy) {
+    if (!agentID || !pending || isAgentActionBusy(agentID)) {
       return;
     }
     await completeFeishuPendingRegistration(pending, { showPendingNotice: true });
@@ -1898,11 +1997,13 @@ export function useAgentController({
   async function disconnectFeishu(item: AgentLike | null | undefined): Promise<void> {
     const agentID = String(item?.id || "").trim();
     const participantID = String(feishuAgentParticipant(item)?.id || "").trim();
-    if (!agentID || !participantID || agentActionBusy) {
+    if (!agentID || !participantID || isAgentActionBusy(agentID)) {
       return;
     }
     const busyKey = feishuActionKey(agentID, "disconnect");
-    setAgentActionBusy(busyKey);
+    if (!claimAgentAction(agentID, busyKey)) {
+      return;
+    }
     setAgentPageError("");
     try {
       await deleteFeishuParticipantRequest(participantID);
@@ -1912,22 +2013,25 @@ export function useAgentController({
         return next;
       });
       await refreshAgentStateRef.current(agentID);
-      showAgentPageNotice(t("feishuDisconnectConfigured"), "success");
+      showAgentPageNotice(t("feishuDisconnectConfigured"), "success", 5000, agentID);
     } catch (err) {
       setAgentPageError(errorMessage(err, t("feishuDisconnectFailed")));
     } finally {
-      setAgentActionBusy((current) => (current === busyKey ? "" : current));
+      releaseAgentAction(agentID, busyKey);
     }
   }
 
   async function deletePreviewBot(item: AgentLike | null | undefined) {
-    if (!item?.id || agentActionBusy) {
+    if (!item?.id || isAgentActionBusy(item.id)) {
       return false;
     }
     if (!window.confirm(`${t("agentDelete")} ${item.name}?`)) {
       return false;
     }
-    setAgentActionBusy(`${item.id}:delete-bot`);
+    const busyKey = `${item.id}:delete-bot`;
+    if (!claimAgentAction(item.id, busyKey)) {
+      return false;
+    }
     clearAgentOperationError(item);
     try {
       await deleteBotRequest(csgclawParticipantIDForAgent(item));
@@ -1941,7 +2045,7 @@ export function useAgentController({
       setAgentOperationError(item, errorMessage(err, t("agentActionFailed")));
       return false;
     } finally {
-      setAgentActionBusy("");
+      releaseAgentAction(item.id, busyKey);
     }
   }
 
@@ -2211,8 +2315,15 @@ export function useAgentController({
     }
   }
 
+  const selectedAgentAction = selectedAgentForPage?.id ? agentActionBusyByAgent[selectedAgentForPage.id] : undefined;
+  const selectedAgentActionBusy = selectedAgentAction?.visible ? selectedAgentAction.busyKey : "";
+  const selectedAgentPageNotice = selectedAgentForPage?.id
+    ? agentPageNotices[selectedAgentForPage.id] || agentPageNotices[GLOBAL_AGENT_PAGE_NOTICE_KEY]
+    : agentPageNotices[GLOBAL_AGENT_PAGE_NOTICE_KEY];
+
   return {
-    agentActionBusy,
+    agentActionBusy: selectedAgentActionBusy,
+    agentActionBusyKeys,
     agentItems,
     agentsDisplayError,
     cliproxyAuthBusy,
@@ -2246,7 +2357,7 @@ export function useAgentController({
       item: selectedAgentForPage,
       t,
       locale,
-      busyKey: agentActionBusy,
+      busyKey: selectedAgentActionBusy,
       error: "",
       draft: agentPageDraft,
       savedDraft: agentPageSavedDraft,
@@ -2259,10 +2370,10 @@ export function useAgentController({
       saving: agentPageBusy,
       publishBusy: agentPagePublishBusy,
       saveError: agentPageError,
-      notice: agentPageNotice,
-      noticeTone: agentPageNoticeTone,
+      notice: selectedAgentPageNotice?.message || "",
+      noticeTone: selectedAgentPageNotice?.tone || "warning",
       rooms,
-      feishuConnectBusy: agentActionBusy.includes(`:${FEISHU_CHANNEL_ACTION}:`) ? agentActionBusy : "",
+      feishuConnectBusy: selectedAgentActionBusy.includes(`:${FEISHU_CHANNEL_ACTION}:`) ? selectedAgentActionBusy : "",
       feishuPendingRegistration: selectedFeishuPendingRegistration,
       authStatuses: cliproxyAuthStatuses,
       authBusyProvider: cliproxyAuthBusy,
@@ -2314,7 +2425,7 @@ export function useAgentController({
       t,
       agents: agentItems,
       activeAgentID: activePane.type === WorkspacePaneTypes.agent ? activePane.id : "",
-      busyKey: agentActionBusy,
+      busyKeys: agentActionBusyKeys,
       onCreateAgent: openCreateAgentModal,
       onStartAgent: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),
     },

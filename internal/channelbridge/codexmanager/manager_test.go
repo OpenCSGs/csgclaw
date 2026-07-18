@@ -173,7 +173,6 @@ func TestBindingForAgentUsesParticipantIDForWorker(t *testing.T) {
 }
 
 func TestCSGClawManagerStartupDoesNotRestartMissingSession(t *testing.T) {
-	restarter := &recordingAgentRestarter{}
 	runtime := runtimecodex.New(runtimecodex.Dependencies{Manager: missingSessionManager{}})
 	manager := newCSGClawManager(managerDeps{
 		agents: staticAgentLister{agents: []agent.Agent{{
@@ -185,17 +184,46 @@ func TestCSGClawManagerStartupDoesNotRestartMissingSession(t *testing.T) {
 			Status:          string(agentruntime.StateRunning),
 			ProfileComplete: true,
 		}}},
-		restarter: restarter,
-		runtime:   runtime,
-		client:    newRecordingBotClient(),
+		runtime: runtime,
+		client:  newRecordingBotClient(),
 	})
 
 	err := manager.Start(context.Background())
 	if err == nil {
 		t.Fatal("Start() error = nil, want missing session error")
 	}
-	if restarter.stopCalls != 0 || restarter.startCalls != 0 {
-		t.Fatalf("startup restarter calls = stop %d/start %d, want no runtime restart", restarter.stopCalls, restarter.startCalls)
+}
+
+func TestCSGClawManagerStartupOnlyAttachesToLiveSession(t *testing.T) {
+	sessions := &trackingSessionManager{
+		live: &runtimecodex.Session{
+			RuntimeID: "rt-agent-manager",
+			SessionID: "sess-manager",
+		},
+	}
+	runtime := runtimecodex.New(runtimecodex.Dependencies{Manager: sessions})
+	manager := newCSGClawManager(managerDeps{
+		agents: staticAgentLister{agents: []agent.Agent{{
+			ID:              agent.ManagerUserID,
+			Name:            agent.ManagerName,
+			Role:            agent.RoleManager,
+			RuntimeKind:     agent.RuntimeKindCodex,
+			RuntimeID:       "rt-agent-manager",
+			Status:          string(agentruntime.StateRunning),
+			ProfileComplete: true,
+		}}},
+		runtime: runtime,
+		client:  newRecordingBotClient(),
+	})
+
+	if err := manager.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if sessions.liveCalls != 1 {
+		t.Fatalf("LiveSession() calls = %d, want 1", sessions.liveCalls)
+	}
+	if sessions.sessionCalls != 0 {
+		t.Fatalf("Session() calls = %d, want 0 because bridge startup must not hydrate", sessions.sessionCalls)
 	}
 }
 
@@ -291,21 +319,6 @@ func (l staticAgentLister) List() []agent.Agent {
 	return append([]agent.Agent(nil), l.agents...)
 }
 
-type recordingAgentRestarter struct {
-	stopCalls  int
-	startCalls int
-}
-
-func (r *recordingAgentRestarter) Stop(context.Context, string) (agent.Agent, error) {
-	r.stopCalls++
-	return agent.Agent{}, nil
-}
-
-func (r *recordingAgentRestarter) Start(context.Context, string) (agent.Agent, error) {
-	r.startCalls++
-	return agent.Agent{RuntimeID: "rt-agent-manager"}, nil
-}
-
 type missingSessionManager struct{}
 
 func (missingSessionManager) Start(context.Context, runtimecodex.SessionSpec) (*runtimecodex.Session, error) {
@@ -316,11 +329,47 @@ func (missingSessionManager) Stop(context.Context, runtimecodex.SessionHandle) e
 	return os.ErrNotExist
 }
 
+func (missingSessionManager) LiveSession(runtimecodex.SessionHandle) (*runtimecodex.Session, error) {
+	return nil, os.ErrNotExist
+}
+
 func (missingSessionManager) Session(runtimecodex.SessionHandle) (*runtimecodex.Session, error) {
 	return nil, os.ErrNotExist
 }
 
 func (missingSessionManager) Prompt(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error) {
+	return runtimecodex.PromptResponse{}, os.ErrNotExist
+}
+
+type trackingSessionManager struct {
+	live         *runtimecodex.Session
+	liveCalls    int
+	sessionCalls int
+}
+
+func (m *trackingSessionManager) Start(context.Context, runtimecodex.SessionSpec) (*runtimecodex.Session, error) {
+	return nil, os.ErrNotExist
+}
+
+func (m *trackingSessionManager) Stop(context.Context, runtimecodex.SessionHandle) error {
+	return nil
+}
+
+func (m *trackingSessionManager) LiveSession(runtimecodex.SessionHandle) (*runtimecodex.Session, error) {
+	m.liveCalls++
+	if m.live == nil {
+		return nil, os.ErrNotExist
+	}
+	cloned := *m.live
+	return &cloned, nil
+}
+
+func (m *trackingSessionManager) Session(runtimecodex.SessionHandle) (*runtimecodex.Session, error) {
+	m.sessionCalls++
+	return nil, os.ErrNotExist
+}
+
+func (m *trackingSessionManager) Prompt(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error) {
 	return runtimecodex.PromptResponse{}, os.ErrNotExist
 }
 
