@@ -2,9 +2,7 @@ package worklease
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -116,7 +114,7 @@ func NewRegistry(participants ParticipantDirectory, imDirectory IMDirectory, bus
 		participants:    participants,
 		im:              imDirectory,
 		bus:             bus,
-		epoch:           newUUID(),
+		epoch:           NewID(),
 		now:             time.Now,
 		activeByKey:     make(map[leaseKey]activeLease),
 		activeBySubject: make(map[string]map[string]map[string]struct{}),
@@ -387,19 +385,4 @@ func maxTime(left, right time.Time) time.Time {
 		return left
 	}
 	return right
-}
-
-func NewID() string {
-	var value [16]byte
-	if _, err := rand.Read(value[:]); err != nil {
-		panic(fmt.Sprintf("generate work lease registry epoch: %v", err))
-	}
-	value[6] = (value[6] & 0x0f) | 0x40
-	value[8] = (value[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x",
-		value[0:4], value[4:6], value[6:8], value[8:10], value[10:16])
-}
-
-func newUUID() string {
-	return NewID()
 }

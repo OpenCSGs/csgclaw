@@ -25,7 +25,7 @@ func (h *Handler) putParticipantWorkLease(w http.ResponseWriter, r *http.Request
 	}
 	participantID := strings.TrimSpace(chi.URLParam(r, "id"))
 	leaseID := strings.TrimSpace(chi.URLParam(r, "lease_id"))
-	if participantID == "" || !validUUID(leaseID) {
+	if participantID == "" || !worklease.ValidID(leaseID) {
 		http.Error(w, "invalid participant or lease id", http.StatusBadRequest)
 		return
 	}
@@ -87,7 +87,7 @@ func (h *Handler) deleteParticipantWorkLease(w http.ResponseWriter, r *http.Requ
 	}
 	participantID := strings.TrimSpace(chi.URLParam(r, "id"))
 	leaseID := strings.TrimSpace(chi.URLParam(r, "lease_id"))
-	if participantID == "" || !validUUID(leaseID) {
+	if participantID == "" || !worklease.ValidID(leaseID) {
 		http.Error(w, "invalid participant or lease id", http.StatusBadRequest)
 		return
 	}
@@ -137,19 +137,4 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 		return fmt.Errorf("decode request: %w", err)
 	}
 	return fmt.Errorf("decode request: multiple JSON values")
-}
-
-func validUUID(value string) bool {
-	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
-		return false
-	}
-	for index, char := range value {
-		if index == 8 || index == 13 || index == 18 || index == 23 {
-			continue
-		}
-		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
-			return false
-		}
-	}
-	return true
 }
