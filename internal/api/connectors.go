@@ -25,6 +25,11 @@ type connectorOAuthStartRequest struct {
 	ReturnURL string `json:"return_url,omitempty"`
 }
 
+type gitLabConnectorConfigRequest struct {
+	BaseURL     string  `json:"base_url"`
+	AccessToken *string `json:"access_token,omitempty"`
+}
+
 func (h *Handler) handleConnectors(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -222,6 +227,68 @@ func (h *Handler) handleGitHubConnectorCredential(w http.ResponseWriter, r *http
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, credential)
+}
+
+func (h *Handler) handleGitLabConnector(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	svc, ok := h.requireConnectorService(w)
+	if !ok {
+		return
+	}
+	status, err := svc.Status(r.Context(), connectors.ProviderGitLab, "")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) handleGitLabConnectorConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	svc, ok := h.requireConnectorService(w)
+	if !ok {
+		return
+	}
+	var req gitLabConnectorConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	config := connectors.Config{BaseURL: req.BaseURL}
+	if req.AccessToken != nil {
+		config.AccessToken = *req.AccessToken
+	}
+	status, err := svc.SaveGitLabConfig(r.Context(), config)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) handleGitLabConnectorDisconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	svc, ok := h.requireConnectorService(w)
+	if !ok {
+		return
+	}
+	status, err := svc.Disconnect(r.Context(), connectors.ProviderGitLab)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, status)
 }
 
 func (h *Handler) handleAgentConnectorCredential(w http.ResponseWriter, r *http.Request) {

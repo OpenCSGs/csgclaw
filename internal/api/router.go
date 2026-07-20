@@ -109,6 +109,11 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Post("/disconnect", h.handleGitHubConnectorDisconnect)
 				r.Post("/credential", h.handleGitHubConnectorCredential)
 			})
+			r.Route("/gitlab", func(r chi.Router) {
+				r.Get("/", h.handleGitLabConnector)
+				r.Put("/config", h.handleGitLabConnectorConfig)
+				r.Post("/disconnect", h.handleGitLabConnectorDisconnect)
+			})
 		})
 		r.Post("/agent-profiles/models", h.handleAgentProfileModels)
 		r.Get("/agent-profile-defaults", h.handleAgentProfileDefaults)

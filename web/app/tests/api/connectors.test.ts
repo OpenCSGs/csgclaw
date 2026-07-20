@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import {
   disconnectGitHubConnectorRequest,
+  disconnectGitLabConnectorRequest,
   fetchConnectors,
   fetchGitHubConnectorStatus,
   gitHubConnectorOAuthStartURL,
   saveGitHubConnectorConfigRequest,
+  saveGitLabConnectorConfigRequest,
   startGitHubConnectorAppInstallRequest,
   startGitHubConnectorOAuthRequest,
 } from "@/api/connectors";
@@ -92,6 +94,26 @@ describe("connector API", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "api/v1/connectors/github/disconnect",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("saves and disconnects GitLab without sending an empty token", async () => {
+    const fetchMock = mockFetch();
+    await saveGitLabConnectorConfigRequest({ base_url: "https://gitlab.example.com/", access_token: "" });
+    await disconnectGitLabConnectorRequest();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "api/v1/connectors/gitlab/config",
+      expect.objectContaining({ method: "PUT" }),
+    );
+    await expect(requestJSON(fetchMock.mock.calls[0]?.[1])).resolves.toEqual({
+      base_url: "https://gitlab.example.com",
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "api/v1/connectors/gitlab/disconnect",
       expect.objectContaining({ method: "POST" }),
     );
   });

@@ -66,12 +66,23 @@ func (s *Service) List(ctx context.Context, callbackURL string) ([]Status, error
 	if err != nil {
 		return nil, err
 	}
-	return []Status{status}, nil
+	gitlab, err := s.Status(ctx, ProviderGitLab, "")
+	if err != nil {
+		return nil, err
+	}
+	return []Status{status, gitlab}, nil
 }
 
 func (s *Service) Status(_ context.Context, provider, callbackURL string) (Status, error) {
 	if err := validateProvider(provider); err != nil {
 		return Status{}, err
+	}
+	if strings.EqualFold(strings.TrimSpace(provider), ProviderGitLab) {
+		state, _, err := s.store().LoadGitLab()
+		if err != nil {
+			return Status{}, err
+		}
+		return state.GitLabStatus(), nil
 	}
 	state, _, err := s.store().LoadGitHub()
 	if err != nil {
@@ -88,6 +99,83 @@ func (s *Service) Status(_ context.Context, provider, callbackURL string) (Statu
 	}
 	status.AppManageable = s.githubAppSlug() != ""
 	return status, nil
+}
+
+func (s *Service) SaveGitLabConfig(ctx context.Context, config Config) (Status, error) {
+	store := s.store()
+	state, _, err := store.LoadGitLab()
+	if err != nil {
+		return Status{}, err
+	}
+	next := NormalizeGitLabConfig(config)
+	existing := NormalizeGitLabConfig(state.Config)
+	if next.AccessToken == "" {
+		next.AccessToken = existing.AccessToken
+	}
+	if err := validateGitLabBaseURL(next.BaseURL); err != nil {
+		return Status{}, err
+	}
+	if next.AccessToken == "" {
+		return Status{}, fmt.Errorf("gitlab access_token is required")
+	}
+	account, err := s.fetchGitLabAccount(ctx, next)
+	if err != nil {
+		return Status{}, fmt.Errorf("validate gitlab connector: %w", err)
+	}
+	now := s.now()
+	state.Config = next
+	state.Account = &account
+	state.ConnectedAt = now
+	state.UpdatedAt = now
+	if err := store.SaveGitLab(state); err != nil {
+		return Status{}, err
+	}
+	return state.GitLabStatus(), nil
+}
+
+func (s *Service) fetchGitLabAccount(ctx context.Context, config Config) (Account, error) {
+	endpoint := strings.TrimRight(config.BaseURL, "/") + "/api/v4/user"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return Account{}, err
+	}
+	req.Header.Set("PRIVATE-TOKEN", config.AccessToken)
+	req.Header.Set("Accept", "application/json")
+	resp, err := s.httpClient().Do(req)
+	if err != nil {
+		return Account{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return Account{}, fmt.Errorf("gitlab user api returned status %d", resp.StatusCode)
+	}
+	var value struct {
+		Username  string `json:"username"`
+		ID        int64  `json:"id"`
+		Name      string `json:"name"`
+		Email     string `json:"email"`
+		AvatarURL string `json:"avatar_url"`
+		WebURL    string `json:"web_url"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&value); err != nil {
+		return Account{}, fmt.Errorf("decode gitlab user: %w", err)
+	}
+	if strings.TrimSpace(value.Username) == "" {
+		return Account{}, fmt.Errorf("gitlab user api returned empty username")
+	}
+	return Account{Login: value.Username, ID: value.ID, Name: value.Name, Email: value.Email, AvatarURL: value.AvatarURL, HTMLURL: value.WebURL}, nil
+}
+
+func validateGitLabBaseURL(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("gitlab base_url is required")
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("gitlab base_url must be an absolute http(s) URL without credentials, query, or fragment")
+	}
+	return nil
 }
 
 func (s *Service) SaveConfig(ctx context.Context, provider string, config Config) (Status, error) {
@@ -216,6 +304,20 @@ func (s *Service) Disconnect(ctx context.Context, provider string) (Status, erro
 		return Status{}, err
 	}
 	store := s.store()
+	if strings.EqualFold(strings.TrimSpace(provider), ProviderGitLab) {
+		state, _, err := store.LoadGitLab()
+		if err != nil {
+			return Status{}, err
+		}
+		state.Config.AccessToken = ""
+		state.Account = nil
+		state.ConnectedAt = time.Time{}
+		state.UpdatedAt = s.now()
+		if err := store.SaveGitLab(state); err != nil {
+			return Status{}, err
+		}
+		return state.GitLabStatus(), nil
+	}
 	state, _, err := store.LoadGitHub()
 	if err != nil {
 		return Status{}, err
@@ -236,6 +338,26 @@ func (s *Service) Credential(ctx context.Context, provider string) (Credential, 
 		return Credential{}, err
 	}
 	store := s.store()
+	if strings.EqualFold(strings.TrimSpace(provider), ProviderGitLab) {
+		state, ok, err := store.LoadGitLab()
+		if err != nil {
+			return Credential{}, err
+		}
+		config := NormalizeGitLabConfig(state.Config)
+		if !ok || config.AccessToken == "" {
+			return Credential{}, fmt.Errorf("gitlab connector is not connected")
+		}
+		account, err := s.fetchGitLabAccount(ctx, config)
+		if err != nil {
+			return Credential{}, fmt.Errorf("gitlab connector credential is invalid; reconnect GitLab: %w", err)
+		}
+		state.Account = &account
+		state.UpdatedAt = s.now()
+		if err := store.SaveGitLab(state); err != nil {
+			return Credential{}, err
+		}
+		return Credential{Provider: ProviderGitLab, AccessToken: config.AccessToken, TokenType: "private-token", BaseURL: config.BaseURL}, nil
+	}
 	state, ok, err := store.LoadGitHub()
 	if err != nil {
 		return Credential{}, err
@@ -582,7 +704,7 @@ func (s *Service) oauthState() (OAuthState, error) {
 }
 
 func validateProvider(provider string) error {
-	if strings.EqualFold(strings.TrimSpace(provider), ProviderGitHub) {
+	if strings.EqualFold(strings.TrimSpace(provider), ProviderGitHub) || strings.EqualFold(strings.TrimSpace(provider), ProviderGitLab) {
 		return nil
 	}
 	return fmt.Errorf("unsupported connector provider %q", strings.TrimSpace(provider))

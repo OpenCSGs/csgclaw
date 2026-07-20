@@ -21,6 +21,9 @@ func TestDefaultConnectorGrantPolicyGrantsGitHubOnlyToManager(t *testing.T) {
 	if !policy.AllowsConnectorCredential(context.Background(), manager, connectors.ProviderGitHub) {
 		t.Fatal("manager github credential access denied, want allowed")
 	}
+	if !policy.AllowsConnectorCredential(context.Background(), manager, connectors.ProviderGitLab) {
+		t.Fatal("manager gitlab credential access denied, want allowed")
+	}
 	if policy.AllowsConnectorCredential(context.Background(), worker, connectors.ProviderGitHub) {
 		t.Fatal("worker github credential access allowed, want denied in v1")
 	}

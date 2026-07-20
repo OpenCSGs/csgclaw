@@ -1,6 +1,6 @@
 import { get, post, put } from "@/api/client";
-import type { ConnectorConfigDraft } from "@/models/connectors";
-import { normalizeConnectorConfigDraft } from "@/models/connectors";
+import type { ConnectorConfigDraft, GitLabConnectorConfigDraft } from "@/models/connectors";
+import { normalizeConnectorConfigDraft, normalizeGitLabConnectorConfigDraft } from "@/models/connectors";
 import { ApiEndpoints } from "@/shared/constants/api";
 
 export function fetchConnectors(): Promise<unknown> {
@@ -46,4 +46,17 @@ export function gitHubConnectorOAuthStartURL(returnURL = ""): string {
 
 export function disconnectGitHubConnectorRequest(): Promise<unknown> {
   return post(ApiEndpoints.githubConnectorDisconnect);
+}
+
+export function saveGitLabConnectorConfigRequest(draft: GitLabConnectorConfigDraft): Promise<unknown> {
+  const normalized = normalizeGitLabConnectorConfigDraft(draft);
+  const payload: { base_url: string; access_token?: string } = { base_url: normalized.base_url };
+  if (normalized.access_token) {
+    payload.access_token = normalized.access_token;
+  }
+  return put(ApiEndpoints.gitlabConnectorConfig, payload);
+}
+
+export function disconnectGitLabConnectorRequest(): Promise<unknown> {
+  return post(ApiEndpoints.gitlabConnectorDisconnect);
 }

@@ -1108,6 +1108,41 @@
   font-size: 10px;
 }
 
+.connector-gitlab-form {
+  display: grid;
+  gap: 8px;
+  margin: 3px 6px 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-soft);
+}
+
+.connector-gitlab-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.connector-gitlab-form input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.connector-gitlab-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .mention-picker {
   position: absolute;
   z-index: var(--z-portal-popover);

@@ -166,6 +166,53 @@ func TestServiceConfigStartCallbackCredentialAndDisconnect(t *testing.T) {
 	}
 }
 
+func TestServiceGitLabPATFlow(t *testing.T) {
+	gitlab := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/user" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("PRIVATE-TOKEN"); got != "glpat-secret" {
+			t.Fatalf("PRIVATE-TOKEN = %q", got)
+		}
+		writeJSONResponse(t, w, map[string]any{
+			"username": "gitlab-user",
+			"id":       42,
+			"name":     "GitLab User",
+			"web_url":  gitlabURL(r) + "/gitlab-user",
+		})
+	}))
+	t.Cleanup(gitlab.Close)
+
+	service := NewService(NewStore(filepath.Join(t.TempDir(), "state.json")))
+	service.HTTPClient = gitlab.Client()
+	status, err := service.SaveGitLabConfig(context.Background(), Config{BaseURL: gitlab.URL + "/", AccessToken: "glpat-secret"})
+	if err != nil {
+		t.Fatalf("SaveGitLabConfig() error = %v", err)
+	}
+	if !status.Configured || !status.Connected || status.BaseURL != gitlab.URL || !status.AccessTokenSet {
+		t.Fatalf("status = %+v", status)
+	}
+	credential, err := service.Credential(context.Background(), ProviderGitLab)
+	if err != nil {
+		t.Fatalf("Credential() error = %v", err)
+	}
+	if credential.BaseURL != gitlab.URL || credential.AccessToken != "glpat-secret" || credential.TokenType != "private-token" {
+		t.Fatalf("credential = %+v", credential)
+	}
+	disconnected, err := service.Disconnect(context.Background(), ProviderGitLab)
+	if err != nil {
+		t.Fatalf("Disconnect() error = %v", err)
+	}
+	if disconnected.Connected || disconnected.AccessTokenSet || disconnected.BaseURL != gitlab.URL {
+		t.Fatalf("disconnected status = %+v", disconnected)
+	}
+}
+
+func gitlabURL(r *http.Request) string {
+	return "http://" + r.Host
+}
+
 func TestServiceCredentialRejectsInvalidGitHubTokenWithoutLeakingIt(t *testing.T) {
 	const invalidToken = "gho_invalid_secret"
 	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitLab"
+  short_description: "Work with GitLab projects, merge requests, issues, and pipelines"
+  default_prompt: "Use $gitlab to inspect or update the requested GitLab project resource."

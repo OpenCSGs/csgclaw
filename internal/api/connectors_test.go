@@ -163,6 +163,36 @@ func TestConnectorGitHubOAuthAPIFlowAndCredentialAuth(t *testing.T) {
 	}
 }
 
+func TestConnectorGitLabPATAPIFlowAndManagerLease(t *testing.T) {
+	gitlab := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v4/user" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.Header.Get("PRIVATE-TOKEN"); got != "glpat-manager-secret" {
+			t.Fatalf("PRIVATE-TOKEN = %q", got)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"username": "manager", "id": 7, "web_url": "http://" + r.Host + "/manager"})
+	}))
+	t.Cleanup(gitlab.Close)
+
+	svc := connectors.NewService(connectors.NewStore(filepath.Join(t.TempDir(), "state.json")))
+	svc.HTTPClient = gitlab.Client()
+	handler := &Handler{serverAccessToken: "server-token"}
+	handler.SetConnectorService(svc)
+	routes := handler.Routes()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/connectors/gitlab/config", strings.NewReader(`{"base_url":"`+gitlab.URL+`","access_token":"glpat-manager-secret"}`))
+	routes.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("config status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "glpat-manager-secret") {
+		t.Fatalf("config response leaked token: %s", rec.Body.String())
+	}
+}
+
 func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
 	var sawTokenExchange bool
 	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -78,6 +78,67 @@ func TestManagerAgentTeamsUsesUTF8SafeTaskCreation(t *testing.T) {
 	}
 }
 
+func TestManagerGitLabSkillEmbedsFullCSGClawWorkflow(t *testing.T) {
+	root := path.Join(CodexManagerRoot, WorkspaceDirName, "skills/gitlab")
+	for _, name := range []string{
+		"SKILL.md",
+		"scripts/gitlab_utils.py",
+		"scripts/run_with_gitlab_auth.py",
+		"fullstack-dev/skill.md",
+		"fullstack-test/skill.md",
+		"fullstack-breakdown/skill.md",
+		"fullstack-api-test/skill.md",
+		"issue-tracker/skill.md",
+		"pre-sale/skill.md",
+	} {
+		if _, err := fs.ReadFile(FS(), path.Join(root, name)); err != nil {
+			t.Fatalf("read embedded manager gitlab file %q: %v", name, err)
+		}
+	}
+
+	data, err := fs.ReadFile(FS(), path.Join(root, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read embedded manager gitlab skill: %v", err)
+	}
+	skill := string(data)
+	for _, want := range []string{"name: gitlab", "fullstack-dev/skill.md", "issue-tracker/skill.md", "CSGClaw Manager GitLab connector lease"} {
+		if !strings.Contains(skill, want) {
+			t.Fatalf("manager gitlab skill missing %q", want)
+		}
+	}
+	if strings.Contains(skill, "$HOME/.picoclaw") {
+		t.Fatalf("manager gitlab skill contains PicoClaw skills path:\n%s", skill)
+	}
+
+	utilsData, err := fs.ReadFile(FS(), path.Join(root, "scripts/gitlab_utils.py"))
+	if err != nil {
+		t.Fatalf("read embedded manager gitlab credential utility: %v", err)
+	}
+	utils := string(utilsData)
+	for _, want := range []string{
+		"MANAGER_GITLAB_CREDENTIAL_PATH",
+		"_load_csgclaw_connector_credentials()",
+		"Authorization\": f\"Bearer {access_token}",
+	} {
+		if !strings.Contains(utils, want) {
+			t.Fatalf("manager gitlab credential utility missing lease-only behavior %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"glab auth login",
+		"config.yml",
+		"DEFAULT_GLAB_CONFIG",
+		"_load_env_credentials",
+		"_load_glab_config_credentials",
+		"_read_proc_environ",
+		"apply_gitlab_credentials",
+	} {
+		if strings.Contains(utils, forbidden) {
+			t.Fatalf("manager gitlab credential utility contains forbidden fallback %q", forbidden)
+		}
+	}
+}
+
 func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
 	tests := []struct {
 		name string

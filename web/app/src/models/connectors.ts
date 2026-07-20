@@ -1,4 +1,5 @@
 export const GITHUB_CONNECTOR_PROVIDER = "github";
+export const GITLAB_CONNECTOR_PROVIDER = "gitlab";
 export const DEFAULT_GITHUB_CONNECTOR_SCOPES = ["repo", "read:user", "user:email"] as const;
 
 export type ConnectorAccount = {
@@ -16,6 +17,8 @@ export type ConnectorStatus = {
   callback_url: string;
   client_id: string;
   client_secret_set: boolean;
+  base_url: string;
+  access_token_set: boolean;
   configured: boolean;
   connected: boolean;
   connected_at: string;
@@ -24,6 +27,11 @@ export type ConnectorStatus = {
   provider: string;
   scopes: string[];
   updated_at: string;
+};
+
+export type GitLabConnectorConfigDraft = {
+  base_url: string;
+  access_token: string;
 };
 
 export type ConnectorConfigDraft = {
@@ -49,6 +57,8 @@ export function emptyGitHubConnectorStatus(): ConnectorStatus {
     callback_url: "",
     client_id: "",
     client_secret_set: false,
+    base_url: "",
+    access_token_set: false,
     configured: false,
     connected: false,
     connected_at: "",
@@ -60,9 +70,19 @@ export function emptyGitHubConnectorStatus(): ConnectorStatus {
   };
 }
 
+export function emptyGitLabConnectorStatus(): ConnectorStatus {
+  return {
+    ...emptyGitHubConnectorStatus(),
+    name: "GitLab",
+    provider: GITLAB_CONNECTOR_PROVIDER,
+    scopes: [],
+  };
+}
+
 export function normalizeConnectorStatus(source: unknown): ConnectorStatus {
   const item = asRecord(source);
-  const base = emptyGitHubConnectorStatus();
+  const provider = cleanString(item?.provider);
+  const base = provider === GITLAB_CONNECTOR_PROVIDER ? emptyGitLabConnectorStatus() : emptyGitHubConnectorStatus();
   if (!item) {
     return base;
   }
@@ -76,6 +96,8 @@ export function normalizeConnectorStatus(source: unknown): ConnectorStatus {
     callback_url: cleanString(item.callback_url),
     client_id: cleanString(item.client_id),
     client_secret_set: Boolean(item.client_secret_set),
+    base_url: cleanString(item.base_url),
+    access_token_set: Boolean(item.access_token_set),
     configured: Boolean(item.configured),
     connected,
     connected_at: cleanString(item.connected_at),
@@ -93,8 +115,19 @@ export function normalizeConnectorList(source: unknown): ConnectorStatus[] {
     return [];
   }
   return rawItems
-    .filter((item) => asRecord(item) && cleanString(asRecord(item)?.provider) === GITHUB_CONNECTOR_PROVIDER)
+    .filter((item) => {
+      const provider = cleanString(asRecord(item)?.provider);
+      return provider === GITHUB_CONNECTOR_PROVIDER || provider === GITLAB_CONNECTOR_PROVIDER;
+    })
     .map((item) => normalizeConnectorStatus(item));
+}
+
+export function gitLabConnectorDraftFromStatus(status: ConnectorStatus | null | undefined): GitLabConnectorConfigDraft {
+  return { base_url: cleanString(status?.base_url), access_token: "" };
+}
+
+export function normalizeGitLabConnectorConfigDraft(source: GitLabConnectorConfigDraft): GitLabConnectorConfigDraft {
+  return { base_url: cleanString(source.base_url).replace(/\/+$/, ""), access_token: cleanString(source.access_token) };
 }
 
 export function normalizeOAuthStartResponse(source: unknown): OAuthStartResponse {

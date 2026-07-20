@@ -45,6 +45,12 @@ const managerRuntimeConnectorInstructions = `### GitHub Connector Access
 - Do not treat an empty result from an external Codex GitHub app connector as proof that the CSGClaw GitHub connector has no repository access.
 - If the credential API returns ` + "`400`" + `, ` + "`401`" + `, or ` + "`403`" + `, tell the user to reconnect the CSGClaw GitHub OAuth connector or check connector access policy.
 
+### GitLab Connector Access
+
+- For GitLab project, merge request, issue, or pipeline workflows, read ` + "`skills/gitlab/SKILL.md`" + ` and request a fresh lease from ` + "`POST $CSGCLAW_BASE_URL/api/v1/agents/agent-manager/connectors/gitlab/credential`" + `.
+- Use the lease's ` + "`base_url`" + ` and ` + "`access_token`" + ` only in process memory. Never copy the GitLab token into environment setup, Git credential storage, prompts, messages, files, or logs.
+- If the GitLab credential API returns ` + "`400`" + `, ` + "`401`" + `, or ` + "`403`" + `, tell the user to reconnect GitLab or check connector access policy.
+
 ### Historical Attachment Recovery
 
 - Treat files under ` + "`.csgclaw/attachments/`" + ` as runtime-local cache copies, not as the durable attachment index.

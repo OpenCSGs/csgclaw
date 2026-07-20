@@ -18,6 +18,8 @@ export const ApiEndpoints = {
   githubConnectorConfig: `${API_BASE_PATH}/connectors/github/config`,
   githubConnectorOAuthStart: `${API_BASE_PATH}/connectors/github/oauth/start`,
   githubConnectorDisconnect: `${API_BASE_PATH}/connectors/github/disconnect`,
+  gitlabConnectorConfig: `${API_BASE_PATH}/connectors/gitlab/config`,
+  gitlabConnectorDisconnect: `${API_BASE_PATH}/connectors/gitlab/disconnect`,
   notifierRelayWebhookIngress: `${API_BASE_PATH}/webhooks/ingress`,
 } as const;
 

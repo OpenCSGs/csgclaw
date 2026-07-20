@@ -30,6 +30,7 @@ type ConnectorCredentialProvider interface {
 
 type ManagedCredentialLease struct {
 	Provider    string              `json:"provider"`
+	BaseURL     string              `json:"base_url,omitempty"`
 	Account     *connectors.Account `json:"account,omitempty"`
 	AccessToken string              `json:"access_token,omitempty"`
 	TokenType   string              `json:"token_type,omitempty"`
@@ -52,7 +53,8 @@ type DefaultConnectorGrantPolicy struct{}
 func (DefaultConnectorGrantPolicy) AllowsConnectorCredential(_ context.Context, ref AgentConnectorRef, provider string) bool {
 	return strings.TrimSpace(ref.AgentID) == agent.ManagerUserID &&
 		strings.EqualFold(strings.TrimSpace(ref.AgentRole), agent.RoleManager) &&
-		strings.EqualFold(strings.TrimSpace(provider), connectors.ProviderGitHub)
+		(strings.EqualFold(strings.TrimSpace(provider), connectors.ProviderGitHub) ||
+			strings.EqualFold(strings.TrimSpace(provider), connectors.ProviderGitLab))
 }
 
 type ConnectorServiceCredentialProvider struct {
@@ -95,6 +97,7 @@ func (p *ConnectorServiceCredentialProvider) ManagedCredentialLease(ctx context.
 	}
 	lease := ManagedCredentialLease{
 		Provider:    strings.TrimSpace(credential.Provider),
+		BaseURL:     strings.TrimRight(strings.TrimSpace(credential.BaseURL), "/"),
 		AccessToken: strings.TrimSpace(credential.AccessToken),
 		TokenType:   strings.TrimSpace(credential.TokenType),
 		Scopes:      append([]string(nil), credential.Scopes...),
@@ -108,6 +111,13 @@ func (p *ConnectorServiceCredentialProvider) ManagedCredentialLease(ctx context.
 	case connectors.ProviderGitHub:
 		if lease.TokenType == "" {
 			lease.TokenType = "bearer"
+		}
+	case connectors.ProviderGitLab:
+		if lease.BaseURL == "" {
+			return ManagedCredentialLease{}, fmt.Errorf("gitlab connector base URL is empty")
+		}
+		if lease.TokenType == "" {
+			lease.TokenType = "private-token"
 		}
 	default:
 		return ManagedCredentialLease{}, fmt.Errorf("connector provider %q is not supported for managed credentials", credential.Provider)

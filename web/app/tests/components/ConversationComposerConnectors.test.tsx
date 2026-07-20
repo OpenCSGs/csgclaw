@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ConversationComposer } from "@/components/business/ConversationPane/ConversationComposer";
 import type { ConversationComposerProps } from "@/components/business/ConversationPane/ConversationComposer";
 import { createAttachmentDrafts } from "@/models/attachments";
-import { emptyGitHubConnectorStatus } from "@/models/connectors";
+import { emptyGitHubConnectorStatus, emptyGitLabConnectorStatus } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 
 const t: TranslateFn = (key) => {
@@ -16,6 +16,10 @@ const t: TranslateFn = (key) => {
     connectorConnected: "Connected",
     connectorDisconnect: "Disconnect",
     connectorGitHub: "GitHub",
+    connectorGitLab: "GitLab",
+    connectorGitLabBaseURL: "GitLab Base URL",
+    connectorGitLabToken: "Personal Access Token",
+    connectorGitLabTokenKeep: "Leave blank to keep the current token",
     connectorManage: "Manage",
     connectorManagerTitle: "Manage connectors",
     connectorNotConnected: "Not connected",
@@ -107,11 +111,34 @@ describe("ConversationComposer connectors", () => {
     expect(within(dialog).getByText("Files")).toBeInTheDocument();
     expect(within(dialog).getByText("Connectors")).toBeInTheDocument();
     expect(screen.getByText("GitHub")).toBeInTheDocument();
-    expect(screen.getByText("Not connected")).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(screen.getByText("GitLab")).toBeInTheDocument();
+    expect(screen.getAllByText("Not connected")).toHaveLength(2);
+    expect(within(dialog).getAllByRole("button", { name: "Connect" })).toHaveLength(2);
     expect(screen.queryByLabelText("Client ID")).not.toBeInTheDocument();
     expect(screen.queryByText("Save")).not.toBeInTheDocument();
     expect(screen.queryByText("Set up")).not.toBeInTheDocument();
+  });
+
+  it("configures GitLab from the connector menu", async () => {
+    const user = userEvent.setup();
+    const onSaveGitLabConnectorConfig = vi.fn().mockResolvedValue(undefined);
+    renderComposer({
+      gitlabConnectorStatus: emptyGitLabConnectorStatus(),
+      onSaveGitLabConnectorConfig,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    const gitlabRow = screen.getByText("GitLab").closest(".connector-provider-row") as HTMLElement;
+    await user.click(within(gitlabRow).getByRole("button", { name: "Connect" }));
+    await user.type(screen.getByLabelText("GitLab Base URL"), "https://gitlab.example.com/");
+    await user.type(screen.getByLabelText("Personal Access Token"), "glpat-secret");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSaveGitLabConnectorConfig).toHaveBeenCalledWith({
+      base_url: "https://gitlab.example.com/",
+      access_token: "glpat-secret",
+    });
+    expect(screen.queryByDisplayValue("glpat-secret")).not.toBeInTheDocument();
   });
 
   it("places the add and send controls in one composer toolbar", () => {
@@ -210,7 +237,8 @@ describe("ConversationComposer connectors", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "Add" }));
-    await user.click(screen.getByRole("button", { name: "Connect" }));
+    const githubRow = screen.getByText("GitHub").closest(".connector-provider-row") as HTMLElement;
+    await user.click(within(githubRow).getByRole("button", { name: "Connect" }));
 
     expect(onConnectConnector).toHaveBeenCalledTimes(1);
   });
@@ -262,7 +290,8 @@ describe("ConversationComposer connectors", () => {
     expect(onManageConnector).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Disconnect" }));
     expect(onDisconnectConnector).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+    const githubRow = screen.getByText("GitHub").closest(".connector-provider-row") as HTMLElement;
+    expect(within(githubRow).queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
     expect(screen.queryByText("secret")).not.toBeInTheDocument();
     expect(screen.queryByText("access_token")).not.toBeInTheDocument();
   });

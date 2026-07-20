@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-const ProviderGitHub = "github"
+const (
+	ProviderGitHub = "github"
+	ProviderGitLab = "gitlab"
+)
 
 var DefaultGitHubScopes = []string{"repo", "read:user", "user:email"}
 
@@ -13,6 +16,8 @@ type Config struct {
 	ClientID     string   `json:"client_id,omitempty"`
 	ClientSecret string   `json:"client_secret,omitempty"`
 	Scopes       []string `json:"scopes,omitempty"`
+	BaseURL      string   `json:"base_url,omitempty"`
+	AccessToken  string   `json:"access_token,omitempty"`
 }
 
 type PendingAuth struct {
@@ -59,11 +64,38 @@ type Status struct {
 	OAuthPending    bool       `json:"oauth_pending"`
 	ClientID        string     `json:"client_id,omitempty"`
 	ClientSecretSet bool       `json:"client_secret_set"`
+	BaseURL         string     `json:"base_url,omitempty"`
+	AccessTokenSet  bool       `json:"access_token_set,omitempty"`
 	Scopes          []string   `json:"scopes,omitempty"`
 	Account         *Account   `json:"account,omitempty"`
 	CallbackURL     string     `json:"callback_url,omitempty"`
 	ConnectedAt     *time.Time `json:"connected_at,omitempty"`
 	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
+}
+
+func (s State) GitLabStatus() Status {
+	config := NormalizeGitLabConfig(s.Config)
+	status := Status{
+		Provider:       ProviderGitLab,
+		Name:           "GitLab",
+		Configured:     config.BaseURL != "" && config.AccessToken != "",
+		Connected:      config.BaseURL != "" && config.AccessToken != "" && s.Account != nil,
+		BaseURL:        config.BaseURL,
+		AccessTokenSet: config.AccessToken != "",
+	}
+	if status.Connected {
+		account := normalizeAccount(*s.Account)
+		status.Account = &account
+	}
+	if !s.ConnectedAt.IsZero() {
+		connectedAt := s.ConnectedAt.UTC()
+		status.ConnectedAt = &connectedAt
+	}
+	if !s.UpdatedAt.IsZero() {
+		updatedAt := s.UpdatedAt.UTC()
+		status.UpdatedAt = &updatedAt
+	}
+	return status
 }
 
 type OAuthStartOptions struct {
@@ -88,6 +120,7 @@ type OAuthState struct {
 
 type Credential struct {
 	Provider    string   `json:"provider"`
+	BaseURL     string   `json:"base_url,omitempty"`
 	AccessToken string   `json:"access_token"`
 	TokenType   string   `json:"token_type,omitempty"`
 	Scopes      []string `json:"scopes,omitempty"`
@@ -134,6 +167,12 @@ func NormalizeConfig(config Config) Config {
 	if len(config.Scopes) == 0 {
 		config.Scopes = cloneStrings(DefaultGitHubScopes)
 	}
+	return config
+}
+
+func NormalizeGitLabConfig(config Config) Config {
+	config.BaseURL = strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
+	config.AccessToken = strings.TrimSpace(config.AccessToken)
 	return config
 }
 
