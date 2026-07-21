@@ -192,6 +192,7 @@ type Service struct {
 	profileDefaults         AgentProfile
 	detectionResults        []ProfileDetectionResult
 	startupProfileDetectOff bool
+	connectorCapabilityKey  []byte
 
 	// gatewayWorkPhase is set by createGatewayBox for bootstrap progress logs (best-effort if concurrent).
 	gatewayWorkPhase atomic.Uint32
@@ -367,19 +368,24 @@ func NewServiceWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, mana
 		}
 		model = config.ModelConfig{}.Resolved()
 	}
+	connectorCapabilityKey, err := newConnectorCapabilityKey()
+	if err != nil {
+		return nil, fmt.Errorf("generate connector capability key: %w", err)
+	}
 	svc := &Service{
-		model:           model,
-		llm:             llmCfg.Normalized(),
-		server:          server,
-		managerImage:    managerImage,
-		state:           statePath,
-		agentsRoot:      serviceAgentsRoot(statePath),
-		sandbox:         defaultSandboxProvider,
-		runtimes:        make(map[string]sandbox.Runtime),
-		agents:          make(map[string]Agent),
-		runtimeRecords:  make(map[string]RuntimeRecord),
-		runtimeRegistry: make(map[string]agentruntime.Runtime),
-		profileDefaults: profileFromConfigModel("", "", model),
+		model:                  model,
+		llm:                    llmCfg.Normalized(),
+		server:                 server,
+		managerImage:           managerImage,
+		state:                  statePath,
+		agentsRoot:             serviceAgentsRoot(statePath),
+		sandbox:                defaultSandboxProvider,
+		runtimes:               make(map[string]sandbox.Runtime),
+		agents:                 make(map[string]Agent),
+		runtimeRecords:         make(map[string]RuntimeRecord),
+		runtimeRegistry:        make(map[string]agentruntime.Runtime),
+		profileDefaults:        profileFromConfigModel("", "", model),
+		connectorCapabilityKey: connectorCapabilityKey,
 	}
 	if testDefaultServiceOption != nil {
 		if err := testDefaultServiceOption(svc); err != nil {

@@ -156,6 +156,14 @@ func (s *Service) runtimeProfileForKind(runtimeKind, agentID, fallbackName, fall
 			}
 			env["CSGCLAW_ACCESS_TOKEN"] = token
 		}
+		if canonicalAgentID(agentID) == ManagerUserID {
+			if capability := s.connectorCapability(agentID); capability != "" {
+				if env == nil {
+					env = make(map[string]string)
+				}
+				env[ConnectorCapabilityEnv] = capability
+			}
+		}
 	}
 
 	return (agentruntime.Profile{

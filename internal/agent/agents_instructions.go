@@ -38,7 +38,7 @@ func RenderRuntimeAgentsInstructionsBlock(agentID, instructions string) string {
 const managerRuntimeConnectorInstructions = `### GitHub Connector Access
 
 - The Manager can request CSGClaw-managed connector credentials dynamically through the local CSGClaw API.
-- For GitHub repository, pull request, issue, or review workflows, request a fresh lease with ` + "`POST $CSGCLAW_BASE_URL/api/v1/agents/agent-manager/connectors/github/credential`" + ` using ` + "`Authorization: Bearer $CSGCLAW_ACCESS_TOKEN`" + `.
+- For GitHub repository, pull request, issue, or review workflows, request a fresh lease with ` + "`POST $CSGCLAW_BASE_URL/api/v1/agents/agent-manager/connectors/github/credential`" + ` using ` + "`Authorization: Bearer $CSGCLAW_ACCESS_TOKEN`" + ` and ` + "`X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY`" + `.
 - Use the returned ` + "`access_token`" + ` only in process memory for GitHub API or GitHub CLI calls.
 - Never print, echo, log, write, persist, or include the token value in prompts, messages, UI text, state files, snapshots, or ` + "`AGENTS.md`" + ` edits.
 - Do not rely on connector tokens from environment variables such as ` + "`GITHUB_TOKEN`" + `; connector credentials are intentionally fetched on demand so reconnects and refreshes work without restarting the Manager.
@@ -47,7 +47,7 @@ const managerRuntimeConnectorInstructions = `### GitHub Connector Access
 
 ### GitLab Connector Access
 
-- The Manager can request CSGClaw-managed GitLab credentials on demand with ` + "`POST $CSGCLAW_BASE_URL/api/v1/agents/agent-manager/connectors/gitlab/credential`" + ` using ` + "`Authorization: Bearer $CSGCLAW_ACCESS_TOKEN`" + `.
+- The Manager can request CSGClaw-managed GitLab credentials on demand with ` + "`POST $CSGCLAW_BASE_URL/api/v1/agents/agent-manager/connectors/gitlab/credential`" + ` using ` + "`Authorization: Bearer $CSGCLAW_ACCESS_TOKEN`" + ` and ` + "`X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY`" + `.
 - Use the lease's ` + "`base_url`" + ` and ` + "`access_token`" + ` only in process memory. Never copy the GitLab token into environment setup, Git credential storage, prompts, messages, files, or logs.
 - If the GitLab credential API returns ` + "`400`" + `, ` + "`401`" + `, or ` + "`403`" + `, tell the user to reconnect GitLab or check connector access policy.
 

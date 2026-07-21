@@ -371,6 +371,7 @@ func TestRefreshCodexHomeAgentsFileAddsManagerConnectorRules(t *testing.T) {
 	for _, want := range []string{
 		"GitHub Connector Access",
 		"/api/v1/agents/agent-manager/connectors/github/credential",
+		"X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY",
 		"`access_token`",
 		"Do not rely on connector tokens from environment variables",
 		"external Codex GitHub app connector",
@@ -1657,7 +1658,7 @@ func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
 	}
 
 	skillsRoot := filepath.Join(root, agent.ManagerUserID, ".codex", "home", "skills")
-	for _, name := range []string{"agent-creator", "agent-teams", "feishu", "gitlab"} {
+	for _, name := range []string{"agent-creator", "agent-teams", "feishu"} {
 		if _, err := os.Stat(filepath.Join(skillsRoot, name, "SKILL.md")); err != nil {
 			t.Fatalf("manager template skill %q missing: %v", name, err)
 		}
@@ -1713,7 +1714,7 @@ func TestRuntimeCreateDoesNotInstallManagerTemplateForWorker(t *testing.T) {
 	}
 
 	skillsRoot := filepath.Join(root, "agent-alice", ".codex", "home", "skills")
-	for _, name := range []string{"agent-creator", "agent-teams", "feishu", "gitlab"} {
+	for _, name := range []string{"agent-creator", "agent-teams", "feishu"} {
 		if _, err := os.Stat(filepath.Join(skillsRoot, name, "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("worker manager-only skill %q stat error = %v, want not installed", name, err)
 		}

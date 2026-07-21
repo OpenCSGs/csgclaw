@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"csgclaw/internal/agent"
 	"csgclaw/internal/agentmanager"
 	"csgclaw/internal/connectors"
 )
@@ -306,6 +307,10 @@ func (h *Handler) handleAgentConnectorCredential(w http.ResponseWriter, r *http.
 	}
 	agentID := pathValue(r, "id")
 	provider := pathValue(r, "provider")
+	if !h.svc.AuthorizesConnectorCapability(agentID, r.Header.Get(agent.ConnectorCapabilityHeader)) {
+		http.Error(w, "connector credential capability denied", http.StatusForbidden)
+		return
+	}
 	got, ok := h.svc.Agent(agentID)
 	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", agentID), http.StatusNotFound)

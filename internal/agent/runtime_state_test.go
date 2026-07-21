@@ -76,6 +76,24 @@ func TestRuntimeProfileForAgentUsesBridgeForCodex(t *testing.T) {
 	if got, want := profile.Env["CSGCLAW_ACCESS_TOKEN"], "shared-token"; got != want {
 		t.Fatalf("runtimeProfileForAgent().Env[CSGCLAW_ACCESS_TOKEN] = %q, want %q", got, want)
 	}
+	if got := profile.Env[ConnectorCapabilityEnv]; got != "" {
+		t.Fatalf("worker runtime connector capability = %q, want empty", got)
+	}
+}
+
+func TestRuntimeProfileInjectsConnectorCapabilityOnlyForManager(t *testing.T) {
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{AdvertiseBaseURL: "http://127.0.0.1:18080", AccessToken: "shared-token"}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	manager := svc.runtimeProfileForKind(RuntimeKindCodex, ManagerUserID, ManagerName, "", AgentProfile{})
+	if got := manager.Env[ConnectorCapabilityEnv]; got == "" {
+		t.Fatal("manager runtime connector capability is empty")
+	}
+	worker := svc.runtimeProfileForKind(RuntimeKindCodex, "agent-worker", "worker", "", AgentProfile{})
+	if got := worker.Env[ConnectorCapabilityEnv]; got != "" {
+		t.Fatalf("worker runtime connector capability = %q, want empty", got)
+	}
 }
 
 func TestRuntimeProfileForKindUsesBridgeForCodexRuntime(t *testing.T) {

@@ -328,10 +328,20 @@ func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
 			t.Fatalf("runtime spec %d GITHUB_TOKEN = %q, want empty", i, got)
 		}
 	}
+	managerCapability := ""
+	for _, spec := range specs {
+		if spec.AgentID == agent.ManagerUserID {
+			managerCapability = spec.Profile.Env[agent.ConnectorCapabilityEnv]
+		}
+	}
+	if managerCapability == "" {
+		t.Fatal("manager runtime connector capability is empty")
+	}
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/connectors/github/credential", nil)
 	req.Header.Set("Authorization", "Bearer server-token")
+	req.Header.Set(agent.ConnectorCapabilityHeader, managerCapability)
 	routes.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("manager credential status = %d, want 200: %s", rec.Code, rec.Body.String())
@@ -358,9 +368,18 @@ func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-worker/connectors/github/credential", nil)
 	req.Header.Set("Authorization", "Bearer server-token")
+	req.Header.Set(agent.ConnectorCapabilityHeader, managerCapability)
 	routes.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("worker credential status = %d, want 403: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/connectors/github/credential", nil)
+	req.Header.Set("Authorization", "Bearer server-token")
+	routes.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("manager credential without capability status = %d, want 403: %s", rec.Code, rec.Body.String())
 	}
 }
 

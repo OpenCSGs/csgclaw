@@ -110,6 +110,7 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForMan
 		"/api/v1/agents/agent-manager/connectors/github/credential",
 		"GitLab Connector Access",
 		"/api/v1/agents/agent-manager/connectors/gitlab/credential",
+		"X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY",
 		"`access_token`",
 		"Do not rely on connector tokens from environment variables",
 		"Do not treat an empty result from an external Codex GitHub app connector as proof",

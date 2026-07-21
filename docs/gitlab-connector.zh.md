@@ -32,4 +32,6 @@ curl -X POST "$CSGCLAW_BASE_URL/api/v1/connectors/gitlab/disconnect"
 POST /api/v1/agents/agent-manager/connectors/gitlab/credential
 ```
 
+请求必须同时携带共享服务认证 `Authorization: Bearer $CSGCLAW_ACCESS_TOKEN` 和仅注入 Manager runtime 的 `X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY`。仅有共享服务 Token、伪造 `agent-manager` 路径或从 Worker 发起请求都无法取得凭据。
+
 lease 包含 `base_url`、`access_token`、`token_type=private-token`、账号信息和过期时间。分配给 Manager 的 GitLab skill 可在 GitLab 任务开始前动态请求 lease，通过 GitLab API v4 工作，并禁止将 Token 写入文件、日志、Prompt、消息或 Git credential store。GitLab skill 可从 SkillHub 独立安装，不属于 Manager 内置模板；Worker 默认无权获取该凭据。
