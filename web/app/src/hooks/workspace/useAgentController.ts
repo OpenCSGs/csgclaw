@@ -946,6 +946,8 @@ export function useAgentController({
   useEffect(() => {
     setAgentSkillAddError("");
     setAgentSkillDeleteError("");
+    setAgentMCPAddError("");
+    setAgentMCPDeleteError("");
   }, [agentDetailAgentID]);
 
   useEffect(() => {
@@ -959,6 +961,7 @@ export function useAgentController({
       return;
     }
     if (agentPageHasUnsavedChanges) {
+      setAgentPageError('');
       return;
     }
     const loadSeq = agentPageDraftLoadSeqRef.current + 1;
