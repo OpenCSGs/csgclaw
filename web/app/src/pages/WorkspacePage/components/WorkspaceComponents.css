@@ -21,7 +21,6 @@
   overflow: hidden;
 }
 
-.sidebar-header-row,
 .modal-header,
 .modal-actions {
   display: flex;
@@ -34,7 +33,6 @@
   min-width: 0;
 }
 
-.eyebrow,
 .section-label {
   display: block;
   font-size: 11px;
@@ -47,13 +45,6 @@
 .message-meta,
 .conversation-preview {
   color: var(--muted);
-}
-
-.conversation-list {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 12px 14px 18px;
 }
 
 .conversation-item {
@@ -369,9 +360,7 @@
 }
 
 .avatar-button:hover,
-.avatar-button:focus-visible,
-.workspace-row-icon-clickable:hover,
-.workspace-row-icon-clickable:focus-visible {
+.avatar-button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
@@ -441,7 +430,6 @@
   height: 100%;
 }
 
-.ghost-button,
 .secondary-button,
 .modal-close {
   height: 34px;
@@ -461,10 +449,8 @@
     border-color 160ms ease;
 }
 
-.ghost-button:hover,
 .secondary-button:hover,
-.modal-close:hover,
-.send-button:hover {
+.modal-close:hover {
   transform: translateY(-1px);
 }
 
@@ -486,19 +472,6 @@
   box-shadow: 0 0 0 4px rgba(43, 109, 246, 0.12);
 }
 
-.send-button {
-  height: 52px;
-  padding: 0 22px;
-  border: 0;
-  border-radius: 8px;
-  font: inherit;
-  font-weight: 650;
-  color: var(--on-primary);
-  background: var(--primary);
-  cursor: pointer;
-  box-shadow: 0 14px 28px rgba(43, 109, 246, 0.24);
-}
-
 .secondary-button {
   background: var(--field);
 }
@@ -507,11 +480,6 @@
   min-height: 32px;
   padding: 0 12px;
   white-space: nowrap;
-}
-
-.send-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .modal-subtitle,
@@ -573,7 +541,6 @@
   padding-bottom: 12px;
 }
 
-.workspace-add-button,
 .env-remove-button {
   display: inline-flex;
   align-items: center;
@@ -1481,15 +1448,13 @@
   background: var(--primary-soft);
 }
 
-.entity-grid,
-.metric-row {
+.entity-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
-.entity-field,
-.metric {
+.entity-field {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1498,16 +1463,14 @@
   gap: 5px;
 }
 
-.entity-field span,
-.metric span {
+.entity-field span {
   color: var(--muted);
   font-size: 11px;
   font-weight: 720;
   text-transform: uppercase;
 }
 
-.entity-field strong,
-.metric strong {
+.entity-field strong {
   min-width: 0;
   color: var(--text);
   font-size: 15px;
@@ -1598,76 +1561,6 @@
   flex-wrap: wrap;
 }
 
-.preview-action-button {
-  min-height: 38px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--field);
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
-}
-
-.preview-action-button-primary {
-  border-color: transparent;
-  background: var(--primary);
-  color: var(--on-primary);
-  box-shadow: 0 14px 28px rgba(43, 109, 246, 0.24);
-}
-
-.preview-action-button:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--field) 82%, var(--panel-strong));
-  border-color: color-mix(in oklab, var(--line) 74%, var(--text));
-  transform: translateY(-1px);
-}
-
-.preview-action-button-primary:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--primary) 86%, white);
-  border-color: transparent;
-}
-
-.preview-action-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.54;
-  transform: none;
-}
-
-.preview-action-button-danger {
-  border-color: color-mix(in oklab, var(--danger) 56%, var(--line));
-  background: color-mix(in oklab, var(--panel) 90%, var(--danger) 10%);
-  color: color-mix(in oklab, var(--danger) 86%, white);
-}
-
-.preview-action-button-danger:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--panel) 84%, var(--danger) 16%);
-  border-color: color-mix(in oklab, var(--danger) 74%, white);
-  color: color-mix(in oklab, var(--danger) 92%, white);
-}
-
-:root[data-theme="light"] .preview-action-button-danger {
-  background: color-mix(in oklab, white 92%, var(--danger) 8%);
-  color: color-mix(in oklab, var(--danger) 90%, black);
-}
-
-:root[data-theme="light"] .preview-action-button-danger:hover:not(:disabled) {
-  background: color-mix(in oklab, white 86%, var(--danger) 14%);
-  border-color: color-mix(in oklab, var(--danger) 78%, black);
-  color: color-mix(in oklab, var(--danger) 96%, black);
-}
-
-.preview-actions-delete {
-  margin-left: auto;
-}
-
 @media (max-width: 640px) {
   .profile-preview-popover {
     max-height: calc(100vh - 16px);
@@ -1682,24 +1575,11 @@
   }
 }
 
-@media (max-width: 640px) {
-  .preview-actions-delete {
-    margin-left: 0;
-  }
-}
-
 .section-header-inline {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-}
-
-.send-button.compact {
-  height: 38px;
-  min-height: 38px;
-  padding: 0 14px;
-  box-shadow: none;
 }
 
 .entity-list {
@@ -1748,8 +1628,7 @@
   height: 18px;
 }
 
-.entity-list-icon .agent-avatar-image,
-.workspace-row-icon .agent-avatar-image {
+.entity-list-icon .agent-avatar-image {
   width: 100%;
   height: 100%;
   border-radius: inherit;
@@ -1775,23 +1654,6 @@
   font-size: 12px;
 }
 
-.danger-button {
-  min-height: 38px;
-  border: 1px solid oklch(0.62 0.18 28 / 0.5);
-  border-radius: 8px;
-  padding: 9px 12px;
-  background: oklch(0.62 0.18 28 / 0.12);
-  color: oklch(0.78 0.16 28);
-  font: inherit;
-  font-weight: 720;
-  cursor: pointer;
-}
-
-.danger-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.54;
-}
-
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1800,7 +1662,6 @@
 
 @media (max-width: 960px) {
   .chat-header,
-  .sidebar-header-row,
   .modal-header,
   .modal-actions {
     align-items: stretch;
@@ -1810,14 +1671,10 @@
 
 @media (max-width: 960px) {
   .profile-grid,
-  .profile-model-row,
   .profile-grid-compact,
   .profile-runtime-grid,
-  .profile-api-grid,
   .profile-advanced-grid,
-  .detection-row,
   .entity-grid,
-  .metric-row,
   .env-row {
     grid-template-columns: 1fr;
   }
@@ -1829,7 +1686,6 @@
 }
 
 .sidebar,
-.sidebar-rail,
 .chat-panel {
   border-color: var(--line);
   border-radius: 8px;
@@ -1838,7 +1694,6 @@
 }
 
 :root[data-theme="light"] .sidebar,
-:root[data-theme="light"] .sidebar-rail,
 :root[data-theme="light"] .chat-panel {
   background: var(--panel);
 }
@@ -1849,20 +1704,13 @@
   padding: 18px;
 }
 
-.sidebar-toggle-button,
-.sidebar-expand-button,
-.theme-switch-track,
-.language-switch-track,
 .icon-button,
 .member-badge-button,
-.ghost-button,
 .secondary-button,
 .modal-close,
 .agent-add-button,
 .agent-icon-button,
 .agent-action-text,
-.preview-action-button,
-.workspace-add-button,
 .env-remove-button,
 .tool-menu-row {
   transition:
@@ -1874,32 +1722,19 @@
     box-shadow 180ms ease;
 }
 
-.sidebar-toggle-button:active,
-.sidebar-expand-button:active,
 .icon-button:active,
 .member-badge-button:active,
-.send-button:active,
 .composer-send-button:active,
-.preview-action-button:active,
-.secondary-button:active,
-.workspace-row:active {
+.secondary-button:active {
   transform: translateY(1px) scale(0.99);
 }
 
-.sidebar-toggle-button:focus-visible,
-.sidebar-expand-button:focus-visible,
 .workspace-tab:focus-visible,
-.workspace-group-toggle:focus-visible,
-.sidebar-rail-button:focus-visible,
 .composer-send-button:focus-visible,
-.language-toggle:focus-visible,
-.theme-toggle:focus-visible,
 .field input:focus,
 .field textarea:focus,
 .field select:focus,
 .composer-editor:focus,
-.preview-action-button:focus-visible,
-.send-button:focus-visible,
 .secondary-button:focus-visible,
 .modal-close:focus-visible {
   outline: none;
@@ -1913,7 +1748,6 @@
   box-shadow: var(--input-shadow-focus);
 }
 
-.workspace-add-button,
 .env-remove-button {
   position: relative;
   z-index: 3;
@@ -1922,14 +1756,12 @@
   background: var(--surface);
 }
 
-.workspace-add-button:hover,
 .env-remove-button:hover {
   border-color: oklch(0.77 0.16 164 / 0.42);
   background: var(--primary-soft);
   color: var(--primary-strong);
 }
 
-.workspace-row-title,
 .agent-name,
 .conversation-name,
 .message-author {
@@ -1946,15 +1778,12 @@
 
 .icon-button,
 .member-badge-button,
-.ghost-button,
 .secondary-button,
 .modal-close,
 .tool-menu-row,
 .agent-add-button,
 .agent-icon-button,
-.agent-action-text,
-.preview-action-button,
-.danger-button {
+.agent-action-text {
   border-color: var(--line);
   background: var(--field);
   color: var(--text);
@@ -1968,8 +1797,7 @@
 .tool-menu-row:hover,
 .agent-add-button:hover,
 .agent-icon-button:hover,
-.agent-action-text:hover,
-.preview-action-button:hover:not(:disabled) {
+.agent-action-text:hover {
   border-color: oklch(0.77 0.16 164 / 0.42);
   background: color-mix(in oklab, var(--field) 82%, var(--primary-soft));
   color: var(--text);
@@ -1995,15 +1823,11 @@
   background: color-mix(in oklab, var(--panel) 96%, oklch(1 0 0));
 }
 
-.composer-send-button,
-.send-button,
-.preview-action-button-primary {
+.composer-send-button {
   border: 1px solid oklch(0.77 0.16 164 / 0.48);
 }
 
-.send-button,
 .secondary-button,
-.preview-action-button,
 .modal-close {
   font-weight: 650;
 }
@@ -2058,11 +1882,9 @@
 .selection-list,
 .profile-section,
 .entity-field,
-.metric,
 .entity-list-row,
 .agent-row,
-.auth-status-row,
-.detection-row {
+.auth-status-row {
   border-color: var(--line);
   border-radius: 8px;
   background: linear-gradient(180deg, oklch(1 0 0 / 0.025), transparent), var(--surface);
@@ -2114,23 +1936,12 @@
   color: var(--primary-strong);
 }
 
-.metric-row {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.entity-field,
-.metric {
+.entity-field {
   padding: 14px;
 }
 
-.entity-field span,
-.metric span {
+.entity-field span {
   letter-spacing: 0.09em;
-}
-
-.metric strong {
-  font-size: 26px;
-  font-weight: 640;
 }
 
 .profile-section-title,
@@ -2165,8 +1976,6 @@
   color: var(--primary-strong);
 }
 
-.danger-button,
-.preview-action-button-danger,
 .agent-icon-button.danger {
   border-color: color-mix(in oklab, var(--danger) 46%, var(--line));
   background: color-mix(in oklab, var(--danger) 10%, var(--field));
@@ -2220,8 +2029,7 @@
 }
 
 @media (max-width: 960px) {
-  .entity-grid,
-  .metric-row {
+  .entity-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2234,18 +2042,15 @@
 }
 
 @media (max-width: 720px) {
-  .hub-page-header,
   .hub-inspector-brand,
   .hub-inspector-grid,
   .hub-workbench,
   .hub-workspace-panels,
-  .entity-grid,
-  .metric-row {
+  .entity-grid {
     grid-template-columns: 1fr;
   }
 }
 
-.csg-button,
 .btn {
   --btn-height: 40px;
   --btn-min-width: 80px;
@@ -2282,9 +2087,7 @@
     opacity 180ms ease;
 }
 
-.csg-button:disabled,
 .btn:disabled,
-.csg-button[disabled],
 .btn[disabled] {
   cursor: not-allowed;
   pointer-events: none;
@@ -2294,8 +2097,7 @@
   box-shadow: var(--shadow-xs);
 }
 
-.btn-sm,
-.csg-button-sm {
+.btn-sm {
   --btn-height: 32px;
   --btn-min-width: 64px;
   --btn-padding-x: 12px;
@@ -2303,8 +2105,7 @@
   --btn-line-height: 18px;
 }
 
-.btn-md,
-.csg-button-md {
+.btn-md {
   --btn-height: 40px;
   --btn-min-width: 80px;
   --btn-padding-x: 16px;
@@ -2312,8 +2113,7 @@
   --btn-line-height: 20px;
 }
 
-.btn-lg,
-.csg-button-lg {
+.btn-lg {
   --btn-height: 44px;
   --btn-min-width: 88px;
   --btn-padding-x: 18px;
@@ -2322,10 +2122,7 @@
 }
 
 .btn-primary,
-.csg-button-primary,
-.send-button,
-.composer-send-button,
-.preview-action-button-primary {
+.composer-send-button {
   border-color: color-mix(in oklab, var(--brand-600) 24%, var(--line));
   background: color-mix(in oklab, var(--brand-600) 8%, var(--surface));
   color: var(--brand-700);
@@ -2333,10 +2130,7 @@
 }
 
 .btn-primary:hover:not(:disabled),
-.csg-button-primary:hover:not(:disabled),
-.send-button:hover:not(:disabled),
-.composer-send-button:hover:not(:disabled),
-.preview-action-button-primary:hover:not(:disabled) {
+.composer-send-button:hover:not(:disabled) {
   border-color: color-mix(in oklab, var(--brand-600) 34%, var(--line));
   background: color-mix(in oklab, var(--brand-600) 12%, var(--surface));
   color: var(--brand-800);
@@ -2344,10 +2138,7 @@
 }
 
 .btn-primary:focus-visible,
-.csg-button-primary:focus-visible,
-.send-button:focus-visible,
-.composer-send-button:focus-visible,
-.preview-action-button-primary:focus-visible {
+.composer-send-button:focus-visible {
   border-color: color-mix(in oklab, var(--brand-600) 42%, var(--line));
   background: color-mix(in oklab, var(--brand-600) 10%, var(--surface));
   color: var(--brand-800);
@@ -2357,10 +2148,8 @@
 }
 
 .btn-secondary-gray,
-.csg-button-secondary-gray,
 .secondary-button,
 .modal-close,
-.preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger),
 .agent-action-text,
 .tool-menu-row,
 .member-badge-button {
@@ -2371,10 +2160,8 @@
 }
 
 .btn-secondary-gray:hover:not(:disabled),
-.csg-button-secondary-gray:hover:not(:disabled),
 .secondary-button:hover:not(:disabled),
 .modal-close:hover:not(:disabled),
-.preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger):hover:not(:disabled),
 .agent-action-text:hover:not(:disabled),
 .tool-menu-row:hover:not(:disabled),
 .member-badge-button:hover:not(:disabled) {
@@ -2385,10 +2172,8 @@
 }
 
 .btn-secondary-gray:focus-visible,
-.csg-button-secondary-gray:focus-visible,
 .secondary-button:focus-visible,
 .modal-close:focus-visible,
-.preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger):focus-visible,
 .agent-action-text:focus-visible,
 .tool-menu-row:focus-visible,
 .member-badge-button:focus-visible {
@@ -2401,7 +2186,6 @@
 }
 
 .btn-secondary-color,
-.csg-button-secondary-color,
 .icon-button.active,
 .member-badge-button.active,
 .workspace-tab.active {
@@ -2412,7 +2196,6 @@
 }
 
 .btn-secondary-color:hover:not(:disabled),
-.csg-button-secondary-color:hover:not(:disabled),
 .icon-button.active:hover:not(:disabled),
 .member-badge-button.active:hover:not(:disabled) {
   border-color: color-mix(in oklab, var(--brand-600) 28%, var(--line));
@@ -2421,26 +2204,20 @@
   box-shadow: var(--shadow-xs);
 }
 
-.btn-danger,
-.csg-button-danger,
-.danger-button {
+.btn-danger {
   border-color: color-mix(in oklab, var(--error-600) 24%, var(--line));
   background: color-mix(in oklab, var(--error-600) 7%, var(--surface));
   color: var(--error-700);
   box-shadow: var(--shadow-xs);
 }
 
-.btn-danger:hover:not(:disabled),
-.csg-button-danger:hover:not(:disabled),
-.danger-button:hover:not(:disabled) {
+.btn-danger:hover:not(:disabled) {
   border-color: color-mix(in oklab, var(--error-600) 34%, var(--line));
   background: color-mix(in oklab, var(--error-600) 10%, var(--surface));
   color: var(--error-800);
 }
 
 .btn-outline-danger,
-.csg-button-outline-danger,
-.preview-action-button-danger,
 .agent-icon-button.danger,
 .tool-menu-row.danger,
 .conversation-delete-button {
@@ -2451,8 +2228,6 @@
 }
 
 .btn-outline-danger:hover:not(:disabled),
-.csg-button-outline-danger:hover:not(:disabled),
-.preview-action-button-danger:hover:not(:disabled),
 .agent-icon-button.danger:hover:not(:disabled),
 .tool-menu-row.danger:hover:not(:disabled),
 .conversation-delete-button:hover:not(:disabled) {
@@ -2461,11 +2236,6 @@
   color: var(--error-800);
 }
 
-.btn-ghost,
-.csg-button-ghost,
-.sidebar-toggle-button,
-.sidebar-expand-button,
-.workspace-add-button,
 .env-remove-button {
   border-color: transparent;
   background: transparent;
@@ -2473,11 +2243,6 @@
   box-shadow: none;
 }
 
-.btn-ghost:hover:not(:disabled),
-.csg-button-ghost:hover:not(:disabled),
-.sidebar-toggle-button:hover:not(:disabled),
-.sidebar-expand-button:hover:not(:disabled),
-.workspace-add-button:hover:not(:disabled),
 .env-remove-button:hover:not(:disabled) {
   border-color: transparent;
   background: var(--gray-50);
@@ -2488,10 +2253,7 @@
 .csg-icon-button,
 .icon-button,
 .agent-icon-button,
-.workspace-add-button,
 .env-remove-button,
-.sidebar-toggle-button,
-.sidebar-expand-button,
 .conversation-delete-button {
   width: 36px;
   height: 36px;
@@ -2504,7 +2266,6 @@
   justify-content: center;
 }
 
-.workspace-add-button,
 .env-remove-button {
   width: 28px;
   height: 28px;
@@ -2514,11 +2275,7 @@
 
 .agent-action-text,
 .secondary-button.compact,
-.send-button.compact,
-.entity-toolbar .secondary-button,
-.entity-toolbar .danger-button,
-.entity-toolbar .send-button.compact,
-.modal-actions .send-button {
+.entity-toolbar .secondary-button {
   min-width: 64px;
   min-height: 32px;
   height: 32px;
@@ -2527,10 +2284,8 @@
   line-height: 18px;
 }
 
-.send-button:not(.compact),
 .secondary-button:not(.compact),
-.modal-close,
-.preview-action-button {
+.modal-close {
   min-width: 80px;
   min-height: 40px;
   height: 40px;
@@ -2541,14 +2296,11 @@
 
 button:disabled,
 button[disabled],
-.preview-action-button:disabled,
 .agent-icon-button:disabled,
 .agent-action-text:disabled,
-.send-button:disabled,
 .composer-send-button:disabled,
 .secondary-button:disabled,
-.modal-close:disabled,
-.danger-button:disabled {
+.modal-close:disabled {
   cursor: not-allowed;
   pointer-events: none;
   background: var(--gray-100);
@@ -2571,10 +2323,8 @@ button[disabled],
 }
 
 :root[data-theme="dark"] .btn-secondary-gray,
-:root[data-theme="dark"] .csg-button-secondary-gray,
 :root[data-theme="dark"] .secondary-button,
 :root[data-theme="dark"] .modal-close,
-:root[data-theme="dark"] .preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger),
 :root[data-theme="dark"] .agent-action-text,
 :root[data-theme="dark"] .tool-menu-row,
 :root[data-theme="dark"] .member-badge-button,
@@ -2587,11 +2337,8 @@ button[disabled],
 }
 
 :root[data-theme="dark"] .btn-secondary-gray:hover:not(:disabled),
-:root[data-theme="dark"] .csg-button-secondary-gray:hover:not(:disabled),
 :root[data-theme="dark"] .secondary-button:hover:not(:disabled),
 :root[data-theme="dark"] .modal-close:hover:not(:disabled),
-:root[data-theme="dark"]
-  .preview-action-button:not(.preview-action-button-primary):not(.preview-action-button-danger):hover:not(:disabled),
 :root[data-theme="dark"] .agent-action-text:hover:not(:disabled),
 :root[data-theme="dark"] .tool-menu-row:hover:not(:disabled),
 :root[data-theme="dark"] .member-badge-button:hover:not(:disabled),
@@ -2603,28 +2350,20 @@ button[disabled],
 }
 
 :root[data-theme="dark"] .btn-primary,
-:root[data-theme="dark"] .csg-button-primary,
-:root[data-theme="dark"] .send-button,
-:root[data-theme="dark"] .composer-send-button,
-:root[data-theme="dark"] .preview-action-button-primary {
+:root[data-theme="dark"] .composer-send-button {
   border-color: var(--brand-300);
   background: var(--brand-300);
   color: var(--gray-950);
 }
 
 :root[data-theme="dark"] .btn-primary:hover:not(:disabled),
-:root[data-theme="dark"] .csg-button-primary:hover:not(:disabled),
-:root[data-theme="dark"] .send-button:hover:not(:disabled),
-:root[data-theme="dark"] .composer-send-button:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-primary:hover:not(:disabled) {
+:root[data-theme="dark"] .composer-send-button:hover:not(:disabled) {
   border-color: var(--brand-100);
   background: var(--brand-100);
   color: var(--gray-950);
 }
 
 :root[data-theme="dark"] .btn-outline-danger,
-:root[data-theme="dark"] .csg-button-outline-danger,
-:root[data-theme="dark"] .preview-action-button-danger,
 :root[data-theme="dark"] .agent-icon-button.danger,
 :root[data-theme="dark"] .tool-menu-row.danger,
 :root[data-theme="dark"] .conversation-delete-button {
@@ -2635,14 +2374,11 @@ button[disabled],
 
 :root[data-theme="dark"] button:disabled,
 :root[data-theme="dark"] button[disabled],
-:root[data-theme="dark"] .preview-action-button:disabled,
 :root[data-theme="dark"] .agent-icon-button:disabled,
 :root[data-theme="dark"] .agent-action-text:disabled,
-:root[data-theme="dark"] .send-button:disabled,
 :root[data-theme="dark"] .composer-send-button:disabled,
 :root[data-theme="dark"] .secondary-button:disabled,
-:root[data-theme="dark"] .modal-close:disabled,
-:root[data-theme="dark"] .danger-button:disabled {
+:root[data-theme="dark"] .modal-close:disabled {
   border-color: rgba(208, 213, 221, 0.12);
   background: rgba(208, 213, 221, 0.08);
   color: var(--gray-500);
@@ -2669,10 +2405,8 @@ button[disabled],
 }
 
 .sidebar,
-.sidebar-rail,
 .chat-panel,
 :root[data-theme="light"] .sidebar,
-:root[data-theme="light"] .sidebar-rail,
 :root[data-theme="light"] .chat-panel {
   border-radius: 0;
   background: var(--panel);
@@ -2690,9 +2424,7 @@ button[disabled],
   border-bottom: 1px solid var(--line);
 }
 
-.workspace-signal-copy strong,
 .workspace-tab-icon,
-.workspace-row-icon,
 .entity-avatar,
 .entity-list-icon,
 .rich-empty-mark {
@@ -2700,34 +2432,28 @@ button[disabled],
 }
 
 .workspace-tab,
-.workspace-row,
 .conversation-item-main,
 .agent-row,
 .entity-list-row,
 .entity-field,
-.metric,
 .profile-section,
 .selection-item,
-.auth-status-row,
-.detection-row {
+.auth-status-row {
   border-radius: var(--radius-md);
 }
 
 .workspace-tab:hover,
-.workspace-row:hover,
 .conversation-item:hover .conversation-item-main,
 .entity-list-main-button:hover {
   background: var(--gray-50);
 }
 
 :root[data-theme="dark"] .workspace-tab:hover,
-:root[data-theme="dark"] .workspace-row:hover,
 :root[data-theme="dark"] .conversation-item:hover .conversation-item-main {
   background: var(--panel-strong);
 }
 
 .workspace-tab.active,
-.workspace-row.active,
 .conversation-item.active .conversation-item-main {
   border-color: var(--brand-100);
   background: var(--brand-25);
@@ -2736,13 +2462,11 @@ button[disabled],
 }
 
 :root[data-theme="dark"] .workspace-tab.active,
-:root[data-theme="dark"] .workspace-row.active,
 :root[data-theme="dark"] .conversation-item.active .conversation-item-main {
   border-color: rgba(101, 132, 248, 0.38);
   background: rgba(101, 132, 248, 0.12);
 }
 
-.workspace-row-icon,
 .entity-list-icon,
 .entity-avatar,
 .rich-empty-mark {
@@ -2753,17 +2477,13 @@ button[disabled],
 
 .icon-button,
 .member-badge-button,
-.ghost-button,
 .secondary-button,
 .modal-close,
 .tool-menu-row,
 .agent-add-button,
 .agent-icon-button,
 .agent-action-text,
-.preview-action-button,
-.workspace-add-button,
-.env-remove-button,
-.danger-button {
+.env-remove-button {
   border-color: var(--line);
   border-radius: var(--radius-md);
   background: var(--field);
@@ -2773,32 +2493,25 @@ button[disabled],
 
 :root[data-theme="dark"] .icon-button,
 :root[data-theme="dark"] .member-badge-button,
-:root[data-theme="dark"] .ghost-button,
 :root[data-theme="dark"] .secondary-button,
 :root[data-theme="dark"] .modal-close,
 :root[data-theme="dark"] .tool-menu-row,
 :root[data-theme="dark"] .agent-add-button,
 :root[data-theme="dark"] .agent-icon-button,
 :root[data-theme="dark"] .agent-action-text,
-:root[data-theme="dark"] .preview-action-button,
-:root[data-theme="dark"] .workspace-add-button,
-:root[data-theme="dark"] .env-remove-button,
-:root[data-theme="dark"] .danger-button {
+:root[data-theme="dark"] .env-remove-button {
   color: var(--text);
   box-shadow: none;
 }
 
 .icon-button:hover,
 .member-badge-button:hover,
-.ghost-button:hover,
 .secondary-button:hover,
 .modal-close:hover,
 .tool-menu-row:hover,
 .agent-add-button:hover,
 .agent-icon-button:hover,
 .agent-action-text:hover,
-.preview-action-button:hover:not(:disabled),
-.workspace-add-button:hover,
 .env-remove-button:hover {
   border-color: var(--gray-300);
   background: var(--gray-50);
@@ -2808,15 +2521,12 @@ button[disabled],
 
 :root[data-theme="dark"] .icon-button:hover,
 :root[data-theme="dark"] .member-badge-button:hover,
-:root[data-theme="dark"] .ghost-button:hover,
 :root[data-theme="dark"] .secondary-button:hover,
 :root[data-theme="dark"] .modal-close:hover,
 :root[data-theme="dark"] .tool-menu-row:hover,
 :root[data-theme="dark"] .agent-add-button:hover,
 :root[data-theme="dark"] .agent-icon-button:hover,
 :root[data-theme="dark"] .agent-action-text:hover,
-:root[data-theme="dark"] .preview-action-button:hover:not(:disabled),
-:root[data-theme="dark"] .workspace-add-button:hover,
 :root[data-theme="dark"] .env-remove-button:hover {
   border-color: rgba(208, 213, 221, 0.28);
   background: var(--panel-strong);
@@ -2834,17 +2544,13 @@ button[disabled],
 .field input:focus,
 .field textarea:focus,
 .field select:focus,
-.preview-action-button:focus-visible,
-.send-button:focus-visible,
 .secondary-button:focus-visible,
 .modal-close:focus-visible {
   border-color: var(--brand-500);
   box-shadow: var(--focus-ring);
 }
 
-.composer-send-button,
-.send-button,
-.preview-action-button-primary {
+.composer-send-button {
   border-color: var(--brand-600);
   border-radius: 6px;
   background: var(--brand-600);
@@ -2852,9 +2558,7 @@ button[disabled],
   box-shadow: var(--shadow-xs);
 }
 
-.composer-send-button:hover:not(:disabled),
-.send-button:hover:not(:disabled),
-.preview-action-button-primary:hover:not(:disabled) {
+.composer-send-button:hover:not(:disabled) {
   border-color: var(--brand-700);
   background: var(--brand-700);
   box-shadow: var(--shadow-xs);
@@ -2877,12 +2581,10 @@ button[disabled],
 }
 
 .entity-field span,
-.metric span,
 .profile-section-title,
 .preview-title,
 .header-popover-title,
-.section-label,
-.workspace-group-title {
+.section-label {
   color: var(--muted);
   letter-spacing: 0;
 }
@@ -2926,11 +2628,9 @@ button[disabled],
 
 .profile-section,
 .entity-field,
-.metric,
 .entity-list-row,
 .agent-row,
 .auth-status-row,
-.detection-row,
 .selection-item {
   border-color: var(--line);
   background: var(--surface);
@@ -2939,11 +2639,9 @@ button[disabled],
 
 :root[data-theme="dark"] .profile-section,
 :root[data-theme="dark"] .entity-field,
-:root[data-theme="dark"] .metric,
 :root[data-theme="dark"] .entity-list-row,
 :root[data-theme="dark"] .agent-row,
 :root[data-theme="dark"] .auth-status-row,
-:root[data-theme="dark"] .detection-row,
 :root[data-theme="dark"] .selection-item {
   box-shadow: none;
 }
@@ -2988,8 +2686,6 @@ button[disabled],
 }
 
 .form-error,
-.danger-button,
-.preview-action-button-danger,
 .agent-icon-button.danger {
   border-color: rgba(217, 45, 32, 0.28);
   background: var(--error-50);
@@ -3008,11 +2704,6 @@ button[disabled],
   color: var(--text);
   font-size: 28px;
   font-weight: 700;
-}
-
-.metric strong {
-  color: var(--text);
-  font-family: var(--font-sans);
 }
 
 .messages-empty,
@@ -3051,7 +2742,6 @@ select,
   font-family: var(--font-sans);
 }
 
-.sidebar-brand,
 .chat-title,
 .entity-title-row h1,
 .modal-title,
@@ -3074,19 +2764,13 @@ select,
   user-select: none;
 }
 
-.theme-toggle .svg-icon,
-.language-switch-icon .svg-icon,
-.sidebar-toggle-mark .svg-icon,
 .workspace-tab-icon .svg-icon,
-.workspace-group-arrow .svg-icon,
-.workspace-row-icon .svg-icon,
 .icon-button-mark .svg-icon,
 .tool-menu-icon .svg-icon,
 .conversation-delete-icon .svg-icon,
 .agent-icon-button .svg-icon,
 .entity-list-icon .svg-icon,
-.entity-avatar .svg-icon,
-.composer-send-main .svg-icon {
+.entity-avatar .svg-icon {
   width: 100%;
   height: 100%;
 }
@@ -3098,7 +2782,6 @@ select,
 }
 
 :root[data-theme="dark"] .sidebar,
-:root[data-theme="dark"] .sidebar-rail,
 :root[data-theme="dark"] .chat-panel {
   border-color: var(--line);
   background: var(--sidebar);
@@ -3124,14 +2807,10 @@ select,
   border-color: var(--line);
 }
 
-:root[data-theme="dark"] .sidebar-brand,
-:root[data-theme="dark"] .sidebar-header.workspace-header .sidebar-brand-wordmark,
 :root[data-theme="dark"] .chat-title-bar .chat-title-row .chat-title-group .chat-title,
 :root[data-theme="dark"] .chat-title,
 :root[data-theme="dark"] .modal-title,
 :root[data-theme="dark"] .preview-name,
-:root[data-theme="dark"] .workspace-row-title,
-:root[data-theme="dark"] .conversation-nav-row .workspace-row-title,
 :root[data-theme="dark"] .entity-title-row h1 {
   color: var(--text);
 }
@@ -3143,7 +2822,6 @@ select,
 :root[data-theme="dark"] .message-row .message-card .message-meta .message-author,
 :root[data-theme="dark"] .message-row.own .message-card .message-meta .message-author,
 :root[data-theme="dark"] .entity-field span,
-:root[data-theme="dark"] .metric span,
 :root[data-theme="dark"] .preview-title,
 :root[data-theme="dark"] .header-popover-title,
 :root[data-theme="dark"] .section-label {
@@ -3154,37 +2832,28 @@ select,
   color: var(--gray-300);
 }
 
-:root[data-theme="dark"] .theme-switch-track,
-:root[data-theme="dark"] .language-switch-track,
 :root[data-theme="dark"] .composer-box,
 :root[data-theme="dark"] .profile-section,
 :root[data-theme="dark"] .entity-field,
-:root[data-theme="dark"] .metric,
 :root[data-theme="dark"] .entity-list-row,
 :root[data-theme="dark"] .agent-row,
 :root[data-theme="dark"] .auth-status-row,
-:root[data-theme="dark"] .detection-row,
 :root[data-theme="dark"] .selection-item {
   border-color: var(--line);
   background: var(--panel-strong);
   box-shadow: none;
 }
 
-:root[data-theme="dark"] .workspace-signal-panel,
 :root[data-theme="dark"] .workspace-tab,
 :root[data-theme="dark"] .icon-button,
 :root[data-theme="dark"] .member-badge-button,
-:root[data-theme="dark"] .ghost-button,
 :root[data-theme="dark"] .secondary-button,
 :root[data-theme="dark"] .modal-close,
 :root[data-theme="dark"] .tool-menu-row,
 :root[data-theme="dark"] .agent-add-button,
 :root[data-theme="dark"] .agent-icon-button,
 :root[data-theme="dark"] .agent-action-text,
-:root[data-theme="dark"] .preview-action-button,
-:root[data-theme="dark"] .workspace-add-button,
-:root[data-theme="dark"] .env-remove-button,
-:root[data-theme="dark"] .danger-button {
+:root[data-theme="dark"] .env-remove-button {
   border-color: var(--line);
   background: var(--panel);
   color: #d0d5dd;
@@ -3192,20 +2861,16 @@ select,
 }
 
 :root[data-theme="dark"] .workspace-tab:hover,
-:root[data-theme="dark"] .workspace-row:hover,
 :root[data-theme="dark"] .conversation-item:hover .conversation-item-main,
 :root[data-theme="dark"] .entity-list-main-button:hover,
 :root[data-theme="dark"] .icon-button:hover,
 :root[data-theme="dark"] .member-badge-button:hover,
-:root[data-theme="dark"] .ghost-button:hover,
 :root[data-theme="dark"] .secondary-button:hover,
 :root[data-theme="dark"] .modal-close:hover,
 :root[data-theme="dark"] .tool-menu-row:hover,
 :root[data-theme="dark"] .agent-add-button:hover,
 :root[data-theme="dark"] .agent-icon-button:hover,
 :root[data-theme="dark"] .agent-action-text:hover,
-:root[data-theme="dark"] .preview-action-button:hover:not(:disabled),
-:root[data-theme="dark"] .workspace-add-button:hover,
 :root[data-theme="dark"] .env-remove-button:hover,
 :root[data-theme="dark"] .modal-card .selection-item.compact-toggle-row:hover,
 :root[data-theme="dark"] .profile-section .selection-item.compact-toggle-row:hover,
@@ -3217,9 +2882,6 @@ select,
 }
 
 :root[data-theme="dark"] .workspace-tab.active,
-:root[data-theme="dark"] .workspace-row.active,
-:root[data-theme="dark"] .workspace-row.conversation-nav-row.active,
-:root[data-theme="dark"] .workspace-row.active.conversation-nav-row,
 :root[data-theme="dark"] .conversation-item.active .conversation-item-main,
 :root[data-theme="dark"] .icon-button.active,
 :root[data-theme="dark"] .member-badge-button.active,
@@ -3245,16 +2907,13 @@ select,
 
 :root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon,
 :root[data-theme="dark"] .workspace-tab.active .workspace-tab-icon .svg-icon,
-:root[data-theme="dark"] .workspace-signal-copy strong,
 :root[data-theme="dark"] .workspace-tab-icon,
-:root[data-theme="dark"] .workspace-row-icon,
 :root[data-theme="dark"] .entity-avatar,
 :root[data-theme="dark"] .entity-list-icon,
 :root[data-theme="dark"] .rich-empty-mark {
   color: var(--primary-strong);
 }
 
-:root[data-theme="dark"] .workspace-row-icon,
 :root[data-theme="dark"] .entity-list-icon,
 :root[data-theme="dark"] .entity-avatar,
 :root[data-theme="dark"] .rich-empty-mark {
@@ -3264,10 +2923,7 @@ select,
 
 :root[data-theme="dark"] .message-row.own .message-bubble,
 :root[data-theme="dark"] .composer-send-button,
-:root[data-theme="dark"] .send-button,
-:root[data-theme="dark"] .preview-action-button-primary,
-:root[data-theme="dark"] .btn-primary,
-:root[data-theme="dark"] .csg-button-primary {
+:root[data-theme="dark"] .btn-primary {
   border-color: #3250bd;
   background: #3250bd;
   color: #ffffff;
@@ -3297,11 +2953,7 @@ select,
 }
 
 .btn-primary,
-.csg-button-primary,
-.send-button,
-.composer-send-button,
-.preview-action-button-primary,
-.preview-action-button.preview-action-button-primary {
+.composer-send-button {
   border-color: var(--brand-600);
   background: var(--brand-600);
   color: var(--white);
@@ -3309,11 +2961,7 @@ select,
 }
 
 .btn-primary:hover:not(:disabled),
-.csg-button-primary:hover:not(:disabled),
-.send-button:hover:not(:disabled),
-.composer-send-button:hover:not(:disabled),
-.preview-action-button-primary:hover:not(:disabled),
-.preview-action-button.preview-action-button-primary:hover:not(:disabled) {
+.composer-send-button:hover:not(:disabled) {
   border-color: var(--brand-700);
   background: var(--brand-700);
   color: var(--white);
@@ -3322,11 +2970,7 @@ select,
 }
 
 .btn-primary:active:not(:disabled),
-.csg-button-primary:active:not(:disabled),
-.send-button:active:not(:disabled),
-.composer-send-button:active:not(:disabled),
-.preview-action-button-primary:active:not(:disabled),
-.preview-action-button.preview-action-button-primary:active:not(:disabled) {
+.composer-send-button:active:not(:disabled) {
   border-color: var(--brand-700);
   background: var(--brand-700);
   color: var(--white);
@@ -3335,11 +2979,7 @@ select,
 }
 
 .btn-primary:focus-visible,
-.csg-button-primary:focus-visible,
-.send-button:focus-visible,
-.composer-send-button:focus-visible,
-.preview-action-button-primary:focus-visible,
-.preview-action-button.preview-action-button-primary:focus-visible {
+.composer-send-button:focus-visible {
   border-color: var(--brand-600);
   background: var(--brand-600);
   color: var(--white);
@@ -3350,16 +2990,8 @@ select,
 
 .btn-primary:disabled,
 .btn-primary[disabled],
-.csg-button-primary:disabled,
-.csg-button-primary[disabled],
-.send-button:disabled,
-.send-button[disabled],
 .composer-send-button:disabled,
-.composer-send-button[disabled],
-.preview-action-button-primary:disabled,
-.preview-action-button-primary[disabled],
-.preview-action-button.preview-action-button-primary:disabled,
-.preview-action-button.preview-action-button-primary[disabled] {
+.composer-send-button[disabled] {
   border-color: var(--gray-200);
   background: var(--gray-100);
   color: var(--gray-400);
@@ -3369,182 +3001,14 @@ select,
 }
 
 :root[data-theme="dark"] .btn-primary,
-:root[data-theme="dark"] .csg-button-primary,
-:root[data-theme="dark"] .send-button,
 :root[data-theme="dark"] .composer-send-button,
-:root[data-theme="dark"] .preview-action-button-primary,
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary,
 :root[data-theme="dark"] .btn-primary:hover:not(:disabled),
-:root[data-theme="dark"] .csg-button-primary:hover:not(:disabled),
-:root[data-theme="dark"] .send-button:hover:not(:disabled),
 :root[data-theme="dark"] .composer-send-button:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-primary:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:hover:not(:disabled),
 :root[data-theme="dark"] .btn-primary:active:not(:disabled),
-:root[data-theme="dark"] .csg-button-primary:active:not(:disabled),
-:root[data-theme="dark"] .send-button:active:not(:disabled),
 :root[data-theme="dark"] .composer-send-button:active:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-primary:active:not(:disabled),
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:active:not(:disabled),
 :root[data-theme="dark"] .btn-primary:focus-visible,
-:root[data-theme="dark"] .csg-button-primary:focus-visible,
-:root[data-theme="dark"] .send-button:focus-visible,
-:root[data-theme="dark"] .composer-send-button:focus-visible,
-:root[data-theme="dark"] .preview-action-button-primary:focus-visible,
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:focus-visible {
+:root[data-theme="dark"] .composer-send-button:focus-visible {
   color: var(--white);
-}
-
-.btn-outline-danger.preview-action-button-danger,
-.preview-action-button-danger,
-.preview-action-button.preview-action-button-danger,
-.csg-button-outline-danger,
-.danger-button {
-  min-height: 42px;
-  padding: 10px 14px;
-  gap: 4px;
-  border: 1px solid var(--error-600);
-  border-radius: 6px;
-  background: var(--error-600);
-  color: var(--white);
-  box-shadow: var(--shadow-xs);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
-  opacity: 1;
-  transform: none;
-}
-
-.btn-outline-danger.preview-action-button-danger:hover:not(:disabled),
-.preview-action-button-danger:hover:not(:disabled),
-.preview-action-button.preview-action-button-danger:hover:not(:disabled),
-.csg-button-outline-danger:hover:not(:disabled),
-.danger-button:hover:not(:disabled) {
-  border-color: #b42318;
-  background: #b42318;
-  color: var(--white);
-  box-shadow: var(--shadow-xs);
-  transform: none;
-}
-
-.btn-outline-danger.preview-action-button-danger:active:not(:disabled),
-.preview-action-button-danger:active:not(:disabled),
-.preview-action-button.preview-action-button-danger:active:not(:disabled),
-.csg-button-outline-danger:active:not(:disabled),
-.danger-button:active:not(:disabled) {
-  border-color: #b42318;
-  background: #b42318;
-  color: var(--white);
-  box-shadow: var(--shadow-xs);
-  transform: none;
-}
-
-.btn-outline-danger.preview-action-button-danger:focus-visible,
-.preview-action-button-danger:focus-visible,
-.preview-action-button.preview-action-button-danger:focus-visible,
-.csg-button-outline-danger:focus-visible,
-.danger-button:focus-visible {
-  border-color: var(--error-600);
-  background: var(--error-600);
-  color: var(--white);
-  box-shadow:
-    var(--shadow-xs),
-    0 0 0 4px rgba(240, 68, 56, 0.24);
-}
-
-.btn-outline-danger.preview-action-button-danger:disabled,
-.btn-outline-danger.preview-action-button-danger[disabled],
-.preview-action-button-danger:disabled,
-.preview-action-button-danger[disabled],
-.preview-action-button.preview-action-button-danger:disabled,
-.preview-action-button.preview-action-button-danger[disabled],
-.csg-button-outline-danger:disabled,
-.csg-button-outline-danger[disabled],
-.danger-button:disabled,
-.danger-button[disabled] {
-  border-color: var(--gray-200);
-  background: var(--gray-100);
-  color: var(--gray-400);
-  box-shadow: var(--shadow-xs);
-  opacity: 1;
-  transform: none;
-}
-
-:root[data-theme="dark"] .btn-outline-danger.preview-action-button-danger,
-:root[data-theme="dark"] .preview-action-button-danger,
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger,
-:root[data-theme="dark"] .csg-button-outline-danger,
-:root[data-theme="dark"] .danger-button,
-:root[data-theme="dark"] .btn-outline-danger.preview-action-button-danger:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-danger:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:hover:not(:disabled),
-:root[data-theme="dark"] .csg-button-outline-danger:hover:not(:disabled),
-:root[data-theme="dark"] .danger-button:hover:not(:disabled),
-:root[data-theme="dark"] .btn-outline-danger.preview-action-button-danger:active:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-danger:active:not(:disabled),
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:active:not(:disabled),
-:root[data-theme="dark"] .csg-button-outline-danger:active:not(:disabled),
-:root[data-theme="dark"] .danger-button:active:not(:disabled),
-:root[data-theme="dark"] .btn-outline-danger.preview-action-button-danger:focus-visible,
-:root[data-theme="dark"] .preview-action-button-danger:focus-visible,
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:focus-visible,
-:root[data-theme="dark"] .csg-button-outline-danger:focus-visible,
-:root[data-theme="dark"] .danger-button:focus-visible {
-  color: var(--white);
-}
-
-:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger,
-:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger {
-  min-height: 42px;
-  padding: 10px 14px;
-  gap: 4px;
-  border: 1px solid var(--error-600);
-  border-radius: 6px;
-  background: var(--error-600);
-  color: var(--white);
-  box-shadow: var(--shadow-xs);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
-  opacity: 1;
-  transform: none;
-}
-
-:root[data-theme="light"]
-  .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:hover:not(:disabled),
-:root[data-theme="dark"]
-  .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:hover:not(:disabled),
-:root[data-theme="light"]
-  .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:active:not(:disabled),
-:root[data-theme="dark"]
-  .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:active:not(:disabled) {
-  border-color: #b42318;
-  background: #b42318;
-  color: var(--white);
-  box-shadow: var(--shadow-xs);
-  transform: none;
-}
-
-:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:focus-visible,
-:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:focus-visible {
-  border-color: var(--error-600);
-  background: var(--error-600);
-  color: var(--white);
-  box-shadow:
-    var(--shadow-xs),
-    0 0 0 4px rgba(240, 68, 56, 0.24);
-}
-
-:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:disabled,
-:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled],
-:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:disabled,
-:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled] {
-  border-color: var(--gray-200);
-  background: var(--gray-100);
-  color: var(--gray-400);
-  box-shadow: var(--shadow-xs);
-  opacity: 1;
-  transform: none;
 }
 
 .entity-header {
@@ -4001,8 +3465,7 @@ select,
   border-bottom: 0;
 }
 
-.human-avatar-feedback,
-.human-avatar-settings {
+.human-avatar-feedback {
   display: grid;
   gap: 10px;
   min-width: 0;
@@ -4270,11 +3733,7 @@ select,
 }
 
 .btn-primary,
-.csg-button-primary,
-.send-button,
-.composer-send-button,
-.preview-action-button-primary,
-.preview-action-button.preview-action-button-primary {
+.composer-send-button {
   border-radius: 6px;
   border-color: var(--brand-600);
   background: var(--brand-600);
@@ -4283,17 +3742,9 @@ select,
 }
 
 .btn-primary:hover:not(:disabled),
-.csg-button-primary:hover:not(:disabled),
-.send-button:hover:not(:disabled),
 .composer-send-button:hover:not(:disabled),
-.preview-action-button-primary:hover:not(:disabled),
-.preview-action-button.preview-action-button-primary:hover:not(:disabled),
 .btn-primary:active:not(:disabled),
-.csg-button-primary:active:not(:disabled),
-.send-button:active:not(:disabled),
-.composer-send-button:active:not(:disabled),
-.preview-action-button-primary:active:not(:disabled),
-.preview-action-button.preview-action-button-primary:active:not(:disabled) {
+.composer-send-button:active:not(:disabled) {
   border-color: var(--brand-700);
   background: var(--brand-700);
   color: var(--white);
@@ -4302,11 +3753,7 @@ select,
 }
 
 .btn-primary:focus-visible,
-.csg-button-primary:focus-visible,
-.send-button:focus-visible,
-.composer-send-button:focus-visible,
-.preview-action-button-primary:focus-visible,
-.preview-action-button.preview-action-button-primary:focus-visible {
+.composer-send-button:focus-visible {
   border-color: var(--brand-600);
   background: var(--brand-600);
   color: var(--white);
@@ -4316,8 +3763,6 @@ select,
 }
 
 .btn-danger,
-.csg-button-danger,
-.danger-button,
 .agent-icon-button.danger,
 .conversation-delete-button {
   border-radius: 6px;
@@ -4328,11 +3773,7 @@ select,
 }
 
 .btn-outline-danger,
-.csg-button-outline-danger,
-.preview-action-button-danger,
-.preview-action-button.preview-action-button-danger,
-.tool-menu-row.danger,
-:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger {
+.tool-menu-row.danger {
   border-radius: 6px;
   border-color: color-mix(in oklab, var(--error-600) 32%, var(--line));
   background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
@@ -4341,13 +3782,9 @@ select,
 }
 
 .btn-danger:hover:not(:disabled),
-.csg-button-danger:hover:not(:disabled),
-.danger-button:hover:not(:disabled),
 .agent-icon-button.danger:hover:not(:disabled),
 .conversation-delete-button:hover:not(:disabled),
 .btn-danger:active:not(:disabled),
-.csg-button-danger:active:not(:disabled),
-.danger-button:active:not(:disabled),
 .agent-icon-button.danger:active:not(:disabled),
 .conversation-delete-button:active:not(:disabled) {
   border-color: var(--error-700);
@@ -4358,19 +3795,9 @@ select,
 }
 
 .btn-outline-danger:hover:not(:disabled),
-.csg-button-outline-danger:hover:not(:disabled),
-.preview-action-button-danger:hover:not(:disabled),
-.preview-action-button.preview-action-button-danger:hover:not(:disabled),
 .tool-menu-row.danger:hover:not(:disabled),
 .btn-outline-danger:active:not(:disabled),
-.csg-button-outline-danger:active:not(:disabled),
-.preview-action-button-danger:active:not(:disabled),
-.preview-action-button.preview-action-button-danger:active:not(:disabled),
-.tool-menu-row.danger:active:not(:disabled),
-:root[data-theme="light"]
-  .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:hover:not(:disabled),
-:root[data-theme="light"]
-  .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:active:not(:disabled) {
+.tool-menu-row.danger:active:not(:disabled) {
   border-color: color-mix(in oklab, var(--error-600) 46%, var(--line));
   background: color-mix(in oklab, var(--error-600) 14%, var(--surface));
   color: var(--error-800);
@@ -4379,8 +3806,6 @@ select,
 }
 
 .btn-danger:focus-visible,
-.csg-button-danger:focus-visible,
-.danger-button:focus-visible,
 .agent-icon-button.danger:focus-visible,
 .conversation-delete-button:focus-visible {
   border-color: var(--error-600);
@@ -4392,11 +3817,7 @@ select,
 }
 
 .btn-outline-danger:focus-visible,
-.csg-button-outline-danger:focus-visible,
-.preview-action-button-danger:focus-visible,
-.preview-action-button.preview-action-button-danger:focus-visible,
-.tool-menu-row.danger:focus-visible,
-:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:focus-visible {
+.tool-menu-row.danger:focus-visible {
   border-color: color-mix(in oklab, var(--error-600) 38%, var(--line));
   background: color-mix(in oklab, var(--error-600) 8%, var(--surface));
   color: var(--error-800);
@@ -4406,36 +3827,22 @@ select,
 }
 
 :root[data-theme="dark"] .btn-primary,
-:root[data-theme="dark"] .csg-button-primary,
-:root[data-theme="dark"] .send-button,
-:root[data-theme="dark"] .composer-send-button,
-:root[data-theme="dark"] .preview-action-button-primary,
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary {
+:root[data-theme="dark"] .composer-send-button {
   border-color: rgba(172, 189, 255, 0.34);
   background: var(--brand-600);
   color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-primary:hover:not(:disabled),
-:root[data-theme="dark"] .csg-button-primary:hover:not(:disabled),
-:root[data-theme="dark"] .send-button:hover:not(:disabled),
 :root[data-theme="dark"] .composer-send-button:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-primary:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:hover:not(:disabled),
 :root[data-theme="dark"] .btn-primary:active:not(:disabled),
-:root[data-theme="dark"] .csg-button-primary:active:not(:disabled),
-:root[data-theme="dark"] .send-button:active:not(:disabled),
-:root[data-theme="dark"] .composer-send-button:active:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-primary:active:not(:disabled),
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:active:not(:disabled) {
+:root[data-theme="dark"] .composer-send-button:active:not(:disabled) {
   border-color: rgba(172, 189, 255, 0.44);
   background: var(--brand-700);
   color: var(--white);
 }
 
 :root[data-theme="dark"] .btn-danger,
-:root[data-theme="dark"] .csg-button-danger,
-:root[data-theme="dark"] .danger-button,
 :root[data-theme="dark"] .agent-icon-button.danger,
 :root[data-theme="dark"] .conversation-delete-button {
   border-color: rgba(253, 162, 155, 0.32);
@@ -4444,24 +3851,16 @@ select,
 }
 
 :root[data-theme="dark"] .btn-outline-danger,
-:root[data-theme="dark"] .csg-button-outline-danger,
-:root[data-theme="dark"] .preview-action-button-danger,
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger,
-:root[data-theme="dark"] .tool-menu-row.danger,
-:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger {
+:root[data-theme="dark"] .tool-menu-row.danger {
   border-color: rgba(253, 162, 155, 0.22);
   background: rgba(217, 45, 32, 0.16);
   color: #fda29b;
 }
 
 :root[data-theme="dark"] .btn-danger:hover:not(:disabled),
-:root[data-theme="dark"] .csg-button-danger:hover:not(:disabled),
-:root[data-theme="dark"] .danger-button:hover:not(:disabled),
 :root[data-theme="dark"] .agent-icon-button.danger:hover:not(:disabled),
 :root[data-theme="dark"] .conversation-delete-button:hover:not(:disabled),
 :root[data-theme="dark"] .btn-danger:active:not(:disabled),
-:root[data-theme="dark"] .csg-button-danger:active:not(:disabled),
-:root[data-theme="dark"] .danger-button:active:not(:disabled),
 :root[data-theme="dark"] .agent-icon-button.danger:active:not(:disabled),
 :root[data-theme="dark"] .conversation-delete-button:active:not(:disabled) {
   border-color: rgba(253, 162, 155, 0.42);
@@ -4470,19 +3869,9 @@ select,
 }
 
 :root[data-theme="dark"] .btn-outline-danger:hover:not(:disabled),
-:root[data-theme="dark"] .csg-button-outline-danger:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-danger:hover:not(:disabled),
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:hover:not(:disabled),
 :root[data-theme="dark"] .tool-menu-row.danger:hover:not(:disabled),
 :root[data-theme="dark"] .btn-outline-danger:active:not(:disabled),
-:root[data-theme="dark"] .csg-button-outline-danger:active:not(:disabled),
-:root[data-theme="dark"] .preview-action-button-danger:active:not(:disabled),
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:active:not(:disabled),
-:root[data-theme="dark"] .tool-menu-row.danger:active:not(:disabled),
-:root[data-theme="dark"]
-  .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:hover:not(:disabled),
-:root[data-theme="dark"]
-  .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:active:not(:disabled) {
+:root[data-theme="dark"] .tool-menu-row.danger:active:not(:disabled) {
   border-color: rgba(253, 162, 155, 0.32);
   background: rgba(217, 45, 32, 0.2);
   color: #fecdca;
@@ -4490,38 +3879,18 @@ select,
 
 .btn-primary:disabled:not(.btn-loading),
 .btn-primary[disabled]:not(.btn-loading),
-.csg-button-primary:disabled,
-.csg-button-primary[disabled],
-.send-button:disabled,
-.send-button[disabled],
 .composer-send-button:disabled,
 .composer-send-button[disabled],
-.preview-action-button-primary:disabled,
-.preview-action-button-primary[disabled],
-.preview-action-button.preview-action-button-primary:disabled,
-.preview-action-button.preview-action-button-primary[disabled],
 .btn-danger:disabled,
 .btn-danger[disabled],
-.csg-button-danger:disabled,
-.csg-button-danger[disabled],
-.danger-button:disabled,
-.danger-button[disabled],
 .btn-outline-danger:disabled,
 .btn-outline-danger[disabled],
-.csg-button-outline-danger:disabled,
-.csg-button-outline-danger[disabled],
-.preview-action-button-danger:disabled,
-.preview-action-button-danger[disabled],
-.preview-action-button.preview-action-button-danger:disabled,
-.preview-action-button.preview-action-button-danger[disabled],
 .agent-icon-button.danger:disabled,
 .agent-icon-button.danger[disabled],
 .tool-menu-row.danger:disabled,
 .tool-menu-row.danger[disabled],
 .conversation-delete-button:disabled,
-.conversation-delete-button[disabled],
-:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:disabled,
-:root[data-theme="light"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled] {
+.conversation-delete-button[disabled] {
   border-color: var(--gray-200);
   background: var(--gray-100);
   color: var(--gray-400);
@@ -4532,38 +3901,18 @@ select,
 
 :root[data-theme="dark"] .btn-primary:disabled:not(.btn-loading),
 :root[data-theme="dark"] .btn-primary[disabled]:not(.btn-loading),
-:root[data-theme="dark"] .csg-button-primary:disabled,
-:root[data-theme="dark"] .csg-button-primary[disabled],
-:root[data-theme="dark"] .send-button:disabled,
-:root[data-theme="dark"] .send-button[disabled],
 :root[data-theme="dark"] .composer-send-button:disabled,
 :root[data-theme="dark"] .composer-send-button[disabled],
-:root[data-theme="dark"] .preview-action-button-primary:disabled,
-:root[data-theme="dark"] .preview-action-button-primary[disabled],
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary:disabled,
-:root[data-theme="dark"] .preview-action-button.preview-action-button-primary[disabled],
 :root[data-theme="dark"] .btn-danger:disabled,
 :root[data-theme="dark"] .btn-danger[disabled],
-:root[data-theme="dark"] .csg-button-danger:disabled,
-:root[data-theme="dark"] .csg-button-danger[disabled],
-:root[data-theme="dark"] .danger-button:disabled,
-:root[data-theme="dark"] .danger-button[disabled],
 :root[data-theme="dark"] .btn-outline-danger:disabled,
 :root[data-theme="dark"] .btn-outline-danger[disabled],
-:root[data-theme="dark"] .csg-button-outline-danger:disabled,
-:root[data-theme="dark"] .csg-button-outline-danger[disabled],
-:root[data-theme="dark"] .preview-action-button-danger:disabled,
-:root[data-theme="dark"] .preview-action-button-danger[disabled],
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger:disabled,
-:root[data-theme="dark"] .preview-action-button.preview-action-button-danger[disabled],
 :root[data-theme="dark"] .agent-icon-button.danger:disabled,
 :root[data-theme="dark"] .agent-icon-button.danger[disabled],
 :root[data-theme="dark"] .tool-menu-row.danger:disabled,
 :root[data-theme="dark"] .tool-menu-row.danger[disabled],
 :root[data-theme="dark"] .conversation-delete-button:disabled,
-:root[data-theme="dark"] .conversation-delete-button[disabled],
-:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger:disabled,
-:root[data-theme="dark"] .btn.btn-outline-danger.preview-action-button.preview-action-button-danger[disabled] {
+:root[data-theme="dark"] .conversation-delete-button[disabled] {
   border-color: rgba(208, 213, 221, 0.12);
   background: rgba(208, 213, 221, 0.08);
   color: var(--gray-500);
