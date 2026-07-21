@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
-import { Button, Tooltip } from "@/components/ui";
+import { Button, DialogCloseButton, DialogContent, DialogHeader, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
@@ -64,6 +64,7 @@ export function ModelProviderPage() {
   const [busy, setBusy] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [error, setError] = useState("");
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
   const isOpenCSG = provider?.id === "opencsg";
   const canEditEndpoint = Boolean(provider && !isBuiltinCLI && !isOpenCSG);
@@ -237,6 +238,7 @@ export function ModelProviderPage() {
     try {
       await deleteModelProvider(provider.id);
       await refreshWorkspaceModelProviders();
+      setDeleteSuccess(true);
     } catch (err) {
       setError(errorMessage(err, "Delete failed"));
     } finally {
@@ -244,7 +246,13 @@ export function ModelProviderPage() {
     }
   }
 
+  function dismissDeleteSuccess() {
+    setDeleteSuccess(false);
+    controller.sidebarProps?.onSelectComputer?.();
+  }
+
   return (
+    <Fragment>
     <section className="model-provider-page">
       <header className="model-provider-header">
         <img
@@ -400,5 +408,29 @@ export function ModelProviderPage() {
         </section>
       </div>
     </section>
+
+    <DialogRoot
+      open={deleteSuccess}
+      onOpenChange={(open) => {
+        if (!open) {
+          dismissDeleteSuccess();
+        }
+      }}
+    >
+      <DialogContent className="model-provider-delete-success-dialog" overlayClassName="model-provider-delete-success-backdrop">
+        <DialogHeader className="model-provider-delete-success-header">
+          <div className="model-provider-delete-success-copy">
+            <DialogTitle>{t("modelProviderDeleteSuccess")}</DialogTitle>
+          </div>
+          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+        </DialogHeader>
+        <div className="model-provider-delete-success-actions">
+          <Button className="model-provider-delete-success-button" variant="primary" size="sm" onClick={dismissDeleteSuccess}>
+            {t("modelProviderDeleteSuccessDismiss")}
+          </Button>
+        </div>
+      </DialogContent>
+    </DialogRoot>
+    </Fragment>
   );
 }

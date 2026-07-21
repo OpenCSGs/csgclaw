@@ -379,3 +379,119 @@
   background: color-mix(in oklab, var(--warning-700) 14%, transparent);
   color: color-mix(in oklab, var(--warning-700) 78%, var(--text));
 }
+
+
+/* ── Delete success dialog ── */
+
+.csg-dialog-overlay.model-provider-delete-success-backdrop {
+  background: rgba(16, 24, 40, 0.72);
+}
+
+.csg-dialog-content.model-provider-delete-success-dialog {
+  width: min(400px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--white);
+  color: var(--gray-900);
+  box-shadow:
+    0 20px 24px -4px rgba(16, 24, 40, 0.08),
+    0 8px 8px -4px rgba(16, 24, 40, 0.03);
+}
+
+.model-provider-delete-success-header {
+  position: relative;
+  display: block;
+  padding: 24px 72px 0 24px;
+  border: 0;
+  background: transparent;
+}
+
+.model-provider-delete-success-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.model-provider-delete-success-dialog .csg-dialog-title {
+  color: var(--gray-900);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.model-provider-delete-success-dialog .csg-dialog-close {
+  --btn-height: 44px;
+  --btn-min-width: 44px;
+
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  color: var(--gray-400);
+  box-shadow: none;
+}
+
+.model-provider-delete-success-dialog .csg-dialog-close .icon-button-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  line-height: 0;
+}
+
+.model-provider-delete-success-dialog .csg-dialog-close svg {
+  display: block;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+
+.model-provider-delete-success-actions {
+  display: grid;
+  gap: 12px;
+  padding: 32px 24px 24px;
+}
+
+.model-provider-delete-success-actions .model-provider-delete-success-button {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+/* ── Dark theme: delete success dialog ── */
+
+:root[data-theme="dark"] .csg-dialog-overlay.model-provider-delete-success-backdrop {
+  background: rgba(2, 6, 23, 0.72);
+}
+
+:root[data-theme="dark"] .csg-dialog-content.model-provider-delete-success-dialog {
+  border-color: color-mix(in oklab, var(--line) 75%, transparent);
+  background: color-mix(in oklab, var(--panel) 94%, #020617 6%);
+  color: var(--text);
+  box-shadow:
+    0 24px 36px -12px rgba(2, 6, 23, 0.6),
+    0 10px 18px -10px rgba(2, 6, 23, 0.38);
+}
+
+:root[data-theme="dark"] .model-provider-delete-success-dialog .csg-dialog-title {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .model-provider-delete-success-dialog .csg-dialog-close {
+  color: var(--muted);
+}
+
+:root[data-theme="dark"] .model-provider-delete-success-dialog .csg-dialog-close:hover:not(:disabled),
+:root[data-theme="dark"] .model-provider-delete-success-dialog .csg-dialog-close:focus-visible {
+  color: var(--text);
+}
