@@ -251,7 +251,8 @@ def main() -> None:
                 },
             ],
             # Optional timeout from 60000 through 240000 ms.
-            "autoResolutionMs": 240000,
+            # Keep it commented out so this manual demo does not expire.
+            # "autoResolutionMs": 240000,
         },
     )
 

@@ -168,8 +168,8 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		t.Fatalf("minimal resource link = %+v", minimal)
 	}
 	request := artifact.RequestUserInput
-	if request == nil || len(request.Questions) != 5 || request.AutoResolutionMS == nil || *request.AutoResolutionMS != 240_000 {
-		t.Fatalf("request = %+v", request)
+	if request == nil || len(request.Questions) != 5 || request.AutoResolutionMS != nil {
+		t.Fatalf("request = %+v, want five questions without demo expiration", request)
 	}
 	if !strings.HasSuffix(request.Questions[0].Options[0].Label, " (Recommended)") {
 		t.Fatalf("recommended option = %+v", request.Questions[0].Options[0])
@@ -206,6 +206,7 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		"Required ResourceLink discriminator",
 		"Required list containing 1 through 32 questions",
 		"Optional timeout from 60000 through 240000 ms",
+		`# "autoResolutionMs": 240000`,
 	} {
 		if !strings.Contains(string(emitter), developerReference) {
 			t.Fatalf("emit_demo.py is missing developer reference %q", developerReference)
