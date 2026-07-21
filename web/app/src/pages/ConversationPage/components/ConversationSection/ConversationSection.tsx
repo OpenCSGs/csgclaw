@@ -1,6 +1,6 @@
 import {
   formatConversationPreview,
-  formatTime,
+  formatSidebarTime,
   isDirectConversation,
   resolveConversationUser,
 } from "@/models/conversations";
@@ -74,7 +74,7 @@ export function ConversationSection({
                       ? {questionCount}
                     </span>
                   ) : null}
-                  <div className="section-label">{formatTime(lastMessage?.created_at, locale)}</div>
+                  <div className="section-label">{formatSidebarTime(lastMessage?.created_at, locale, t)}</div>
                 </div>
                 <div className="conversation-preview truncate">
                   <MessagePreviewText

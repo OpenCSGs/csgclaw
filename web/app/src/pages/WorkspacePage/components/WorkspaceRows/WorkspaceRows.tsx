@@ -15,7 +15,7 @@ import {
   formatConversationPreview,
   formatMessagePreviewText,
   formatThreadReplyCount,
-  formatTime,
+  formatSidebarTime,
   hasConnectedHumanChannel,
   isDirectConversation,
   resolveConversationUser,
@@ -418,7 +418,7 @@ export function WorkspaceConversationRow({
           </span>
         )}
       </span>
-      <span className={styles.time}>{formatTime(lastMessage?.created_at, locale)}</span>
+      <span className={styles.time}>{formatSidebarTime(lastMessage?.created_at, locale, t)}</span>
     </button>
   );
 }
@@ -479,7 +479,7 @@ export function WorkspaceThreadRow({ conversation, thread, active, locale, t, on
             )}
           </span>
         </span>
-        <span className={styles.time}>{formatTime(updatedAt, locale)}</span>
+        <span className={styles.time}>{formatSidebarTime(updatedAt, locale, t)}</span>
       </button>
     </Tooltip>
   );
