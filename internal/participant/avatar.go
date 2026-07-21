@@ -38,13 +38,22 @@ func (s *Service) defaultParticipantAvatar(current string) string {
 	if avatar := strings.TrimSpace(current); avatar != "" {
 		return avatar
 	}
-	if s == nil || s.store == nil {
+	if s == nil {
 		return randomBuiltInAvatar(builtInAvatarOptions)
 	}
 	used := make(map[string]struct{})
-	for _, item := range s.store.List(ListOptions{}) {
-		if avatar := strings.TrimSpace(item.Avatar); avatar != "" {
-			used[avatar] = struct{}{}
+	if s.store != nil {
+		for _, item := range s.store.List(ListOptions{}) {
+			if avatar := strings.TrimSpace(item.Avatar); avatar != "" {
+				used[avatar] = struct{}{}
+			}
+		}
+	}
+	if s.im != nil {
+		for _, user := range s.im.ListUsers() {
+			if avatar := strings.TrimSpace(user.Avatar); avatar != "" {
+				used[avatar] = struct{}{}
+			}
 		}
 	}
 	available := make([]string, 0, len(builtInAvatarOptions))

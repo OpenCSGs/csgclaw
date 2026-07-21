@@ -616,6 +616,7 @@ type normalizedCreateRequest struct {
 	Channel          string
 	Type             string
 	Name             string
+	Avatar           string
 	ChannelAppRef    string
 	ChannelAppConfig map[string]any
 	ChannelUser      ChannelUserSpec
@@ -707,6 +708,7 @@ func (s *Service) normalizeCreateRequest(req CreateRequest) (normalizedCreateReq
 		Channel:          channel,
 		Type:             typ,
 		Name:             name,
+		Avatar:           strings.TrimSpace(req.Avatar),
 		ChannelAppRef:    strings.TrimSpace(req.ChannelAppRef),
 		ChannelAppConfig: cloneMap(req.ChannelAppConfig),
 		ChannelUser:      channelUser,
@@ -894,20 +896,24 @@ func (s *Service) ensureChannelIdentity(_ context.Context, req normalizedCreateR
 		return nil
 	}
 	role := "member"
+	avatar := strings.TrimSpace(req.Avatar)
 	if req.Type == TypeAgent {
 		role = agent.RoleWorker
+		avatar = s.defaultParticipantAvatar(avatar)
 	}
 	if _, _, err := s.im.EnsureAgentUser(im.EnsureAgentUserRequest{
-		ID:   req.ChannelUser.Ref,
-		Name: req.Name,
-		Role: role,
+		ID:     req.ChannelUser.Ref,
+		Name:   req.Name,
+		Role:   role,
+		Avatar: avatar,
 	}); err != nil {
 		return err
 	}
 	_, _, err := s.im.UpdateAgentUser(im.UpdateAgentUserRequest{
-		ID:   req.ChannelUser.Ref,
-		Name: req.Name,
-		Role: role,
+		ID:     req.ChannelUser.Ref,
+		Name:   req.Name,
+		Role:   role,
+		Avatar: avatar,
 	})
 	return err
 }

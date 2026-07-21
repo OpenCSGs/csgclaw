@@ -16,7 +16,6 @@ import {
   WORKER_AGENT_ROLE,
 } from "@/shared/constants/agents";
 import { avatarFallbackText, normalizeAvatarPath } from "@/shared/avatar";
-import { deterministicAvatarForSeed } from "@/shared/avatarOptions";
 import type { LocaleCode } from "@/models/conversations";
 import { providerIDForProvider, providerNameForProviderID, selectorForProviderModel } from "@/models/modelProviders";
 
@@ -778,7 +777,7 @@ export function resolveAgentAvatarSource(
     }
   }
 
-  return deterministicAvatarForSeed(agent?.id || "");
+  return "";
 }
 
 export function resolveAgentAvatarFallback(

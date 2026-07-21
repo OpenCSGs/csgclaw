@@ -94,12 +94,56 @@ func TestCreateParticipantKeepsAvatarOnIMUserOnly(t *testing.T) {
 	if created.Avatar != "" {
 		t.Fatalf("participant avatar = %q, want empty", created.Avatar)
 	}
-	if user, ok := imSvc.User("user-qa"); !ok || user.Avatar == "" {
-		t.Fatalf("channel user = %+v, ok=%v; want user-owned avatar", user, ok)
+	if user, ok := imSvc.User("user-qa"); !ok || !containsBuiltInAvatar(user.Avatar) {
+		t.Fatalf("channel user = %+v, ok=%v; want a built-in user-owned avatar", user, ok)
 	}
 	if runtimeAgent, ok := agentSvc.Agent("u-qa"); !ok || runtimeAgent.Avatar != "" {
 		t.Fatalf("agent = %+v, ok=%v; want empty avatar", runtimeAgent, ok)
 	}
+}
+
+func TestCreateAgentParticipantReplacesInitialsWithBuiltInAvatar(t *testing.T) {
+	agentSvc := mustNewAgentService(t)
+	imSvc := im.NewService()
+	if _, _, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{
+		ID: "user-qa", Name: "QA", Role: agent.RoleWorker,
+	}); err != nil {
+		t.Fatalf("seed channel user: %v", err)
+	}
+	store := NewMemoryStore(nil)
+	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+
+	if _, err := svc.Create(context.Background(), CreateRequest{
+		ID:      "qa",
+		Channel: ChannelCSGClaw,
+		Type:    TypeAgent,
+		Name:    "QA",
+		ChannelUser: ChannelUserSpec{
+			Ref: "user-qa", Kind: ChannelUserKindLocalUserID,
+		},
+		AgentBinding: AgentBindingSpec{
+			Mode: BindingModeCreate,
+			Agent: &agent.CreateAgentSpec{
+				Name: "QA", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox, Image: "agent-image:test",
+			},
+		},
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	user, ok := imSvc.User("user-qa")
+	if !ok || !containsBuiltInAvatar(user.Avatar) {
+		t.Fatalf("channel user = %+v, ok=%v; want initials replaced by a built-in avatar", user, ok)
+	}
+}
+
+func containsBuiltInAvatar(avatar string) bool {
+	for _, candidate := range builtInAvatarOptions {
+		if avatar == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCreateAgentParticipantCanReuseExistingAgentWithDifferentParticipantID(t *testing.T) {

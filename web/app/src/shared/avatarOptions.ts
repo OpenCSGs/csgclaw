@@ -49,18 +49,3 @@ function randomIndex(length: number): number {
   }
   return Math.floor(Math.random() * length);
 }
-
-/** Deterministic avatar selection based on a seed string (e.g. agent ID).
- *  Produces a stable per-seed choice so the same agent always renders the same avatar,
- *  while distributing different agents across the full option set. */
-export function deterministicAvatarForSeed(seed: string): string {
-  if (!seed) {
-    return defaultAgentAvatar();
-  }
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
-  }
-  const index = ((hash >>> 0) % AGENT_AVATAR_OPTIONS.length) || 0;
-  return AGENT_AVATAR_OPTIONS[index]?.value || defaultAgentAvatar();
-}

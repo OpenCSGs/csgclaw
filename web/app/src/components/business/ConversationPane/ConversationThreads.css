@@ -226,13 +226,6 @@
   background: color-mix(in srgb, var(--surface) 94%, var(--panel-strong) 6%);
 }
 
-.agent-detail-side-panel-close {
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
-  min-height: 40px;
-}
-
 .agent-detail-side-panel-title {
   min-width: 0;
   overflow: hidden;

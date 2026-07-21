@@ -1808,7 +1808,8 @@ button.composer-working-item:active {
   gap: 8px;
 }
 
-.csg-dialog-content.agent-logs-modal .agent-logs-header-actions .icon-button {
+.csg-dialog-content.agent-logs-modal .agent-logs-header-actions .icon-button,
+.agent-detail-side-panel-close {
   width: 36px;
   min-width: 36px;
   height: 36px;

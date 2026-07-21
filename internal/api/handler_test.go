@@ -5234,6 +5234,9 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 	if got.ID != "user-qa" || got.Name != "qa" || got.Role != "worker" {
 		t.Fatalf("user = %+v, want qa worker user", got)
 	}
+	if !strings.HasPrefix(got.Avatar, "avatar/") || !strings.HasSuffix(got.Avatar, ".png") {
+		t.Fatalf("user avatar = %q, want a built-in agent avatar", got.Avatar)
+	}
 
 	created, ok := agentSvc.Agent("agent-qa")
 	if !ok {
