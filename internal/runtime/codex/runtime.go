@@ -873,15 +873,17 @@ func (r *Runtime) seedManagerTemplate(agentID, runtimeCodexHome string) error {
 		}
 	}
 
-	srcRoot := templateembed.WorkspacePath(templateembed.CodexManagerRoot)
-	if err := r.copyEmbeddedDir(templateembed.FS(), srcRoot, runtimeCodexHome); err != nil {
+	if err := r.copyEmbeddedDir(templateembed.FS(), pathpkg.Join(templateembed.CodexManagerRoot, templateembed.InstructionsDirName), runtimeCodexHome); err != nil {
 		return fmt.Errorf("seed manager codex template %s: %w", runtimeCodexHome, err)
+	}
+	if err := r.copyEmbeddedDir(templateembed.FS(), pathpkg.Join(templateembed.CodexManagerRoot, templateembed.SkillsDirName), filepath.Join(runtimeCodexHome, "skills")); err != nil {
+		return fmt.Errorf("seed manager codex template skills %s: %w", runtimeCodexHome, err)
 	}
 	return nil
 }
 
 func managerTemplateSkillNames() ([]string, error) {
-	skillsRoot := pathpkg.Join(templateembed.WorkspacePath(templateembed.CodexManagerRoot), "skills")
+	skillsRoot := pathpkg.Join(templateembed.CodexManagerRoot, templateembed.SkillsDirName)
 	entries, err := fs.ReadDir(templateembed.FS(), skillsRoot)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

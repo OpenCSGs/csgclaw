@@ -3,14 +3,17 @@ package templateembed
 import "embed"
 
 const (
-	Root               = ""
-	ManifestFileName   = "agent.toml"
-	WorkspaceDirName   = "workspace"
-	CodexManagerRoot   = "manager/codex"
-	CodexWorkerRoot    = "worker/codex"
-	PicoClawWorkerRoot = "worker/picoclaw"
-	OpenClawWorkerRoot = "worker/openclaw"
+	Root                = ""
+	ManifestFileName    = "agent.toml"
+	InstructionsDirName = "instructions"
+	SkillsDirName       = "skills"
+	MCPsDirName         = "mcps"
+	MemoriesDirName     = "memories"
+	MCPFileName         = "mcp.json"
+	CodexManagerRoot    = "manager/codex"
+	CodexWorkerRoot     = "worker/codex"
+	OpenClawWorkerRoot  = "worker/openclaw"
 )
 
-//go:embed manager/codex worker/codex worker/picoclaw worker/openclaw
+//go:embed manager/codex worker/codex worker/openclaw
 var runtimeTemplateFS embed.FS

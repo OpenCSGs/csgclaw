@@ -13,7 +13,6 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/runtime/picoclawsandbox"
-	templateembed "csgclaw/internal/template/embed"
 )
 
 func TestRenderManagerSecurityConfig(t *testing.T) {
@@ -313,32 +312,9 @@ func TestEnsureAgentPicoClawConfigUsesRuntimeRoot(t *testing.T) {
 	}
 }
 
-func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
+func TestEnsureManagerWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
-
-	root, err := testBuiltinWorkspaceRoot("alice", RuntimeKindPicoClawSandbox)
-	if err != nil {
-		t.Fatalf("testBuiltinWorkspaceRoot(worker) error = %v", err)
-	}
-	root, err = ensureWorkspaceAtRoot(root, templateembed.PicoClawWorkerRoot)
-	if err != nil {
-		t.Fatalf("ensureAgentWorkspace(worker) error = %v", err)
-	}
-
-	for _, path := range []string{
-		filepath.Join(root, "USER.md"),
-		filepath.Join(root, "AGENT.md"),
-		filepath.Join(root, "SOUL.md"),
-		filepath.Join(root, "memory", "MEMORY.md"),
-		filepath.Join(root, "skills", "agent-teams", "SKILL.md"),
-	} {
-		if info, err := os.Stat(path); err != nil {
-			t.Fatalf("os.Stat(%q) error = %v", path, err)
-		} else if info.IsDir() {
-			t.Fatalf("workspace file %q is unexpectedly a directory", path)
-		}
-	}
 
 	managerTemplate, err := resolveRuntimeTemplateRoot(RuntimeKindCodex, RoleManager)
 	if err != nil {

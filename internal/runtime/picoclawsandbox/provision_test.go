@@ -12,7 +12,6 @@ import (
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox/hostuser"
-	templateembed "csgclaw/internal/template/embed"
 )
 
 func TestProvisionPreparesGatewayAssets(t *testing.T) {
@@ -37,7 +36,7 @@ func TestProvisionPreparesGatewayAssets(t *testing.T) {
 			ManagerBaseURL:    "http://127.0.0.1:18080",
 			AgentHome:         agentHome,
 			ProjectsRoot:      projectsRoot,
-			WorkspaceTemplate: templateembed.PicoClawWorkerRoot,
+			WorkspaceTemplate: "",
 		},
 	}); err != nil {
 		t.Fatalf("Provision() error = %v", err)
@@ -89,7 +88,7 @@ func TestReconcileMCPServersWritesProvisionedGatewayConfig(t *testing.T) {
 			ManagerBaseURL:    "http://127.0.0.1:18080",
 			AgentHome:         agentHome,
 			ProjectsRoot:      projectsRoot,
-			WorkspaceTemplate: templateembed.PicoClawWorkerRoot,
+			WorkspaceTemplate: "",
 		},
 	}); err != nil {
 		t.Fatalf("Provision() error = %v", err)
@@ -149,7 +148,7 @@ func TestGatewayCreateSpecMountsPicoClawRuntimeRoot(t *testing.T) {
 			ManagerBaseURL:    "http://127.0.0.1:18080",
 			AgentHome:         agentHome,
 			ProjectsRoot:      projectsRoot,
-			WorkspaceTemplate: templateembed.PicoClawWorkerRoot,
+			WorkspaceTemplate: "",
 		},
 	}); err != nil {
 		t.Fatalf("Provision() error = %v", err)

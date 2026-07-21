@@ -29,6 +29,7 @@ import (
 	"csgclaw/internal/mcp"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandboxproviders"
@@ -633,14 +634,17 @@ func (h *Handler) defaultWorkerCreateSpec(agentID, name string) agent.CreateAgen
 }
 
 func fillBuiltinWorkerRuntimeDefaultImages(ctx context.Context, resp *bootstrapConfigResponse, hubSvc *hub.Service) {
-	if resp == nil || hubSvc == nil {
+	if resp == nil {
 		return
 	}
 	if resp.RuntimeDefaultImages == nil {
 		resp.RuntimeDefaultImages = map[string]string{}
 	}
+	resp.RuntimeDefaultImages[agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind()] = picoclawsandbox.DefaultImage
+	if hubSvc == nil {
+		return
+	}
 	builtinWorkerTemplates := map[string]string{
-		agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(): "builtin.picoclaw-worker",
 		agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(): "builtin.openclaw-worker",
 	}
 	for runtimeKind, templateID := range builtinWorkerTemplates {

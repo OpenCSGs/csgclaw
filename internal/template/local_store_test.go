@@ -155,12 +155,12 @@ func TestLocalStorePublishAllowsEmptyWorkspace(t *testing.T) {
 	if got, want := published.WorkspaceRef.Kind, WorkspaceKindDir; got != want {
 		t.Fatalf("Publish().WorkspaceRef.Kind = %q, want %q", got, want)
 	}
-	entries, err := os.ReadDir(filepath.Join(store.templatesRoot(), "frontend-alice", "workspace"))
+	entries, err := os.ReadDir(filepath.Join(store.templatesRoot(), "frontend-alice", "instructions"))
 	if err != nil {
 		t.Fatalf("ReadDir(workspace) error = %v", err)
 	}
-	if len(entries) != 0 {
-		t.Fatalf("workspace entries = %d, want 0", len(entries))
+	if len(entries) != 1 || entries[0].Name() != "AGENTS.md" {
+		t.Fatalf("instructions entries = %#v, want generated AGENTS.md", entries)
 	}
 }
 

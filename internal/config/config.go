@@ -335,7 +335,7 @@ const (
 	DefaultOfficialHubRegistryName  = "official"
 	DefaultOfficialHubRegistryURL   = "https://hub.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin.manager-codex"
-	DefaultBootstrapWorkerTemplate  = "builtin.picoclaw-worker"
+	DefaultBootstrapWorkerTemplate  = "builtin.openclaw-worker"
 	HubRegistryKindBuiltin          = "builtin"
 	HubRegistryKindLocal            = "local"
 	HubRegistryKindRemote           = "remote"
@@ -1333,11 +1333,14 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 
 func normalizeBootstrapTemplateRef(value string) string {
 	value = strings.TrimSpace(value)
-	if !bootstrapTemplateRefUsesLegacySlash(value) {
-		return value
+	if bootstrapTemplateRefUsesLegacySlash(value) {
+		left, right, _ := strings.Cut(value, "/")
+		value = strings.TrimSpace(left) + "." + strings.TrimSpace(right)
 	}
-	left, right, _ := strings.Cut(value, "/")
-	return strings.TrimSpace(left) + "." + strings.TrimSpace(right)
+	if value == "builtin.picoclaw-worker" {
+		return DefaultBootstrapWorkerTemplate
+	}
+	return value
 }
 
 func normalizeManagerBootstrapTemplateRef(value string) string {

@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"csgclaw/internal/agentworkspace"
+	"csgclaw/internal/apitypes"
 	hubtemplates "csgclaw/internal/template/embed"
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -77,16 +79,40 @@ func (s *BuiltinStore) FetchWorkspace(_ context.Context, id string) (WorkspaceRe
 	if ref := s.workspaceRef(id); strings.TrimSpace(ref.Path) == "" {
 		return WorkspaceRef{}, nil
 	}
-	root := s.workspacePath(id)
-	tmpDir, err := mkdirHubWorkspaceTemp("csgclaw-hub-builtin-*")
+	return materializeTemplateFS(hubtemplates.FS(), s.workspacePath(id))
+}
+
+func (s *BuiltinStore) ListWorkspace(_ context.Context, id, workspacePath string) (apitypes.WorkspaceListing, error) {
+	root, cleanup, err := s.copyTemplateRoot(id)
 	if err != nil {
-		return WorkspaceRef{}, fmt.Errorf("create builtin hub workspace temp dir: %w", err)
+		return apitypes.WorkspaceListing{}, err
 	}
-	if err := copyWorkspaceTreeFS(hubtemplates.FS(), root, tmpDir, "builtin hub workspace"); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return WorkspaceRef{}, err
+	defer cleanup()
+	return agentworkspace.ListDirectory(root, workspacePath)
+}
+
+func (s *BuiltinStore) ReadWorkspaceFile(_ context.Context, id, workspacePath string) (apitypes.WorkspaceFile, error) {
+	root, cleanup, err := s.copyTemplateRoot(id)
+	if err != nil {
+		return apitypes.WorkspaceFile{}, err
 	}
-	return WorkspaceRef{Kind: WorkspaceKindDir, Path: tmpDir}, nil
+	defer cleanup()
+	return agentworkspace.ReadFile(root, workspacePath)
+}
+
+func (s *BuiltinStore) copyTemplateRoot(id string) (string, func(), error) {
+	if _, err := s.loadManifest(id); err != nil {
+		return "", func() {}, err
+	}
+	root, err := mkdirHubWorkspaceTemp("csgclaw-hub-builtin-browser-*")
+	if err != nil {
+		return "", func() {}, err
+	}
+	if err := copyWorkspaceTreeFS(hubtemplates.FS(), s.workspacePath(id), root, "builtin template"); err != nil {
+		_ = os.RemoveAll(root)
+		return "", func() {}, err
+	}
+	return root, func() { _ = os.RemoveAll(root) }, nil
 }
 
 func (s *BuiltinStore) Publish(context.Context, PublishSpec) (Template, error) {
@@ -130,14 +156,14 @@ func (s *BuiltinStore) manifestPath(id string) string {
 func (s *BuiltinStore) workspacePath(id string) string {
 	item, ok := hubtemplates.LookupBuiltin(id)
 	if !ok {
-		return filepath.ToSlash(filepath.Join("builtin", id, localWorkspaceDirName))
+		return filepath.ToSlash(filepath.Join("builtin", id))
 	}
 	return hubtemplates.WorkspacePath(item.Root)
 }
 
 func (s *BuiltinStore) workspaceRef(id string) WorkspaceRef {
 	path := s.workspacePath(id)
-	info, err := fs.Stat(hubtemplates.FS(), path)
+	info, err := fs.Stat(hubtemplates.FS(), path+"/"+hubtemplates.InstructionsDirName)
 	if err != nil || !info.IsDir() {
 		return WorkspaceRef{}
 	}

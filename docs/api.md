@@ -181,7 +181,7 @@ Example request body:
       "name": "QA",
       "role": "worker",
       "runtime_kind": "picoclaw_sandbox",
-      "from_template": "builtin.picoclaw-worker"
+      "from_template": "builtin.openclaw-worker"
     }
   }
 }
@@ -565,6 +565,19 @@ This is commonly used by the frontend to initialize default provider/model state
 
 ## Hub Template API
 
+Templates use the following layout:
+
+```text
+<template>/
+  agent.toml
+  instructions/AGENTS.md
+  skills/<skill>/...
+  mcps/mcp.json
+  memories/MEMORY.md
+```
+
+`AGENTS.md` and `mcp.json` are always emitted when publishing. Other instruction and memory files are optional. During agent creation, instruction files and memories are overlaid onto the runtime workspace, skills are installed under `skills/`, and MCP servers from `mcp.json` are applied unless the create request explicitly supplies `mcpServers`.
+
 ### `GET /api/v1/hub/templates`
 
 Lists all templates from readable registries.
@@ -615,8 +628,8 @@ Example `workspace.entries` payload:
   "workspace": {
     "kind": "dir",
     "entries": [
-      {"path":"SKILL.md","name":"SKILL.md","type":"file","depth":0,"size":128},
-      {"path":"assets","name":"assets","type":"dir","depth":0,"size":0}
+      {"path":"agent.toml","name":"agent.toml","type":"file","depth":0,"size":128},
+      {"path":"instructions","name":"instructions","type":"dir","depth":0,"size":0}
     ]
   }
 }

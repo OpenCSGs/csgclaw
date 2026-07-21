@@ -56,14 +56,14 @@ The default `build` target mirrors `make build`:
 
 ## Runtime images
 
-Manager and worker templates have different embedded workspaces but share one image per runtime:
+Sandbox runtimes use these fixed default images:
 
 | Runtime | Fixed image |
 |---|---|
 | OpenClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260717.27-csgclaw` |
 | PicoClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.10` |
 
-These refs are stored directly in the builtin `agent.toml` files. CSGClaw does not generate their image tags or build these runtime images in CI.
+The OpenClaw ref is stored in its builtin `agent.toml`. PicoClaw no longer has a builtin template, so its ref is maintained as a runtime default. CSGClaw does not generate these image tags or build the runtime images in CI.
 
 ## Web UI
 

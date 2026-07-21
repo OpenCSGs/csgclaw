@@ -10,14 +10,20 @@ import (
 	"strings"
 	"time"
 
+	"csgclaw/internal/agentworkspace"
+	"csgclaw/internal/apitypes"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
 const (
-	localTemplatesDirName  = "templates"
-	localManifestFileName  = "agent.toml"
-	localWorkspaceDirName  = "workspace"
-	localPublishTempPrefix = ".hub-template-"
+	localTemplatesDirName    = "templates"
+	localManifestFileName    = "agent.toml"
+	localInstructionsDirName = "instructions"
+	localSkillsDirName       = "skills"
+	localMCPsDirName         = "mcps"
+	localMemoriesDirName     = "memories"
+	localMCPFileName         = "mcp.json"
+	localPublishTempPrefix   = ".hub-template-"
 )
 
 var (
@@ -99,18 +105,24 @@ func (s *LocalStore) FetchWorkspace(_ context.Context, id string) (WorkspaceRef,
 	if err := validateLocalTemplateID(id); err != nil {
 		return WorkspaceRef{}, err
 	}
-	workspace := s.workspaceRoot(id)
-	info, err := os.Stat(workspace)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return WorkspaceRef{}, nil
-		}
-		return WorkspaceRef{}, fmt.Errorf("stat local hub workspace %q: %w", workspace, err)
+	if _, err := os.Stat(filepath.Join(s.templateRoot(id), localInstructionsDirName)); errors.Is(err, os.ErrNotExist) {
+		return WorkspaceRef{}, nil
 	}
-	if !info.IsDir() {
-		return WorkspaceRef{}, fmt.Errorf("local hub workspace %q is not a directory", workspace)
+	return materializeTemplateDir(s.templateRoot(id))
+}
+
+func (s *LocalStore) ListWorkspace(_ context.Context, id, workspacePath string) (apitypes.WorkspaceListing, error) {
+	if _, _, err := s.loadTemplate(id); err != nil {
+		return apitypes.WorkspaceListing{}, err
 	}
-	return WorkspaceRef{Kind: WorkspaceKindDir, Path: workspace}, nil
+	return agentworkspace.ListDirectory(s.templateRoot(strings.TrimSpace(id)), workspacePath)
+}
+
+func (s *LocalStore) ReadWorkspaceFile(_ context.Context, id, workspacePath string) (apitypes.WorkspaceFile, error) {
+	if _, _, err := s.loadTemplate(id); err != nil {
+		return apitypes.WorkspaceFile{}, err
+	}
+	return agentworkspace.ReadFile(s.templateRoot(strings.TrimSpace(id)), workspacePath)
 }
 
 func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, error) {
@@ -138,10 +150,7 @@ func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, err
 		return Template{}, err
 	}
 	if normalized.WorkspaceRef.Kind == WorkspaceKindDir {
-		if err := os.MkdirAll(filepath.Join(tmpDir, localWorkspaceDirName), 0o755); err != nil {
-			return Template{}, fmt.Errorf("create local hub temp workspace dir: %w", err)
-		}
-		if err := copyWorkspaceTree(normalized.WorkspaceRef.Path, filepath.Join(tmpDir, localWorkspaceDirName)); err != nil {
+		if err := writeTemplateLayout(normalized.WorkspaceRef.Path, tmpDir, normalized.MCPServers); err != nil {
 			return Template{}, err
 		}
 	}
@@ -193,16 +202,15 @@ func (s *LocalStore) manifestPath(id string) string {
 }
 
 func (s *LocalStore) workspaceRoot(id string) string {
-	return filepath.Join(s.templateRoot(id), localWorkspaceDirName)
+	return s.templateRoot(id)
 }
 
 func (s *LocalStore) workspaceRef(id string) WorkspaceRef {
-	workspace := s.workspaceRoot(id)
-	info, err := os.Stat(workspace)
+	info, err := os.Stat(filepath.Join(s.templateRoot(id), localInstructionsDirName))
 	if err != nil || !info.IsDir() {
 		return WorkspaceRef{}
 	}
-	return WorkspaceRef{Kind: WorkspaceKindDir, Path: workspace}
+	return WorkspaceRef{Kind: WorkspaceKindDir, Path: s.templateRoot(id)}
 }
 
 func (s *LocalStore) loadTemplate(id string) (string, templateManifest, error) {

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtime/picoclawsandbox"
 	hub "csgclaw/internal/template"
 	hubtemplates "csgclaw/internal/template/embed"
 )
@@ -121,6 +122,9 @@ func (s *Service) currentDefaultImageForAgent(ctx context.Context, a Agent) (def
 		if candidate, ok := workerTemplateImageFromList(ctx, hubSvc, a.RuntimeKind, false); ok {
 			return candidate, true
 		}
+	}
+	if hubSvc != nil && agentruntime.RuntimeConfigForKind(a.RuntimeKind).LegacyKind() == RuntimeKindPicoClawSandbox {
+		return defaultAgentImage{image: picoclawsandbox.DefaultImage}, true
 	}
 
 	return defaultAgentImage{}, false

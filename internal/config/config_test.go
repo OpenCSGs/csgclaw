@@ -1273,7 +1273,7 @@ func TestSaveFormatsTopLevelSectionsWithoutExtraWhitespace(t *testing.T) {
 		LLM:    models,
 		Bootstrap: BootstrapConfig{
 			DefaultManagerTemplate: "builtin.manager-codex",
-			DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+			DefaultWorkerTemplate:  "builtin.openclaw-worker",
 		},
 		Sandbox: SandboxConfig{
 			Provider: BoxLiteProvider,
@@ -1300,7 +1300,7 @@ show_upgrade = true
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.openclaw-worker"
 
 [sandbox]
 provider = "boxlite"

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
-import { fetchHubWorkspace } from "@/api/hub";
+import { fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
 import { hasSkillName, isOfficialSkill, isPersonalSkill } from "@/models/skillhub";
+import type { HubWorkspaceFile } from "@/models/hubWorkspace";
 import { flattenWorkspaceDirectoryListings } from "@/models/workspace";
 import type { WorkspaceDirectoryListings } from "@/models/workspace";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
@@ -81,6 +82,10 @@ export function useWorkspaceHubSelection({
   }>({ templateID: "", listings: {} });
   const [loadingWorkspaceDirs, setLoadingWorkspaceDirs] = useState<ReadonlySet<string>>(new Set());
   const [workspaceDirectoryError, setWorkspaceDirectoryError] = useState("");
+  const [templateWorkspaceFilesState, setTemplateWorkspaceFilesState] = useState<{
+    files: Record<string, HubWorkspaceFile>;
+    templateID: string;
+  }>({ files: {}, templateID: "" });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -102,6 +107,7 @@ export function useWorkspaceHubSelection({
 
   useEffect(() => {
     setSelectedHubWorkspacePath("");
+    setTemplateWorkspaceFilesState({ files: {}, templateID: selectedHubTemplateId });
   }, [selectedHubTemplateId, setSelectedHubWorkspacePath]);
 
   useEffect(() => {
@@ -145,6 +151,56 @@ export function useWorkspaceHubSelection({
     [selectedHubTemplateId, workspaceListingsState],
   );
   const workspaceEntries = useMemo(() => flattenWorkspaceDirectoryListings(workspaceListings), [workspaceListings]);
+
+  useEffect(() => {
+    if (!selectedHubTemplateId) {
+      setTemplateWorkspaceFilesState({ files: {}, templateID: "" });
+      return;
+    }
+    const desiredPaths = workspaceEntries
+      .filter(
+        (entry) =>
+          entry.type === "file" &&
+          (entry.path === "mcps/mcp.json" || (entry.path.startsWith("skills/") && entry.path.endsWith("/SKILL.md"))),
+      )
+      .map((entry) => entry.path);
+    if (!desiredPaths.length) {
+      return;
+    }
+    const state = templateWorkspaceFilesState.templateID === selectedHubTemplateId ? templateWorkspaceFilesState : null;
+    const missingPaths = desiredPaths.filter((path) => !state?.files[path]);
+    if (!missingPaths.length) {
+      return;
+    }
+    let canceled = false;
+    void Promise.all(
+      missingPaths.map(async (path) => {
+        try {
+          const file = await fetchHubWorkspaceFile(selectedHubTemplateId, path);
+          return [path, file] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((items) => {
+      if (canceled) {
+        return;
+      }
+      setTemplateWorkspaceFilesState((current) => {
+        const files = current.templateID === selectedHubTemplateId ? current.files : {};
+        const nextFiles = { ...files };
+        items.forEach((item) => {
+          if (item) {
+            nextFiles[item[0]] = item[1];
+          }
+        });
+        return { files: nextFiles, templateID: selectedHubTemplateId };
+      });
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [selectedHubTemplateId, templateWorkspaceFilesState, workspaceEntries]);
 
   useEffect(() => {
     setWorkspaceListingsState({ templateID: selectedHubTemplateId, listings: {} });
@@ -388,6 +444,8 @@ export function useWorkspaceHubSelection({
       loadingWorkspaceDirs,
       selectedWorkspacePath: selectedHubWorkspacePath,
       workspaceFile: hubWorkspaceFileQuery.data ?? null,
+      workspaceFiles:
+        templateWorkspaceFilesState.templateID === selectedHubTemplateId ? templateWorkspaceFilesState.files : {},
       workspaceFileLoading: hubWorkspaceFileQuery.isFetching,
       workspaceFileError,
       skillTree: skillTreeQuery.data ?? null,

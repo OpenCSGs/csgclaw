@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { HubDetailPane } from "@/pages/HubPage/components";
 
 function t(key: string, params: Record<string, string | number> = {}) {
@@ -13,6 +14,14 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesAllTab: "All",
     resourcesEmpty: "No templates",
     resourcesImageLabel: "Image",
+    resourcesTemplateEnvLabel: "Environment variables",
+    resourcesTemplateEnvNotRequired: "Not required",
+    resourcesTemplateEnvOptional: "Optional",
+    resourcesTemplateEnvRequired: "Required",
+    resourcesTemplateEnvRequiredBadge: "Required",
+    resourcesTemplateSkillsDescription: "Template skills.",
+    resourcesTemplateMCPServersTitle: "MCP Servers",
+    resourcesTemplateMCPServersDescription: "Template MCP configs.",
     resourcesLoading: "Loading resources",
     resourcesMCPServerDocumentInvalid: "MCP server definition must be valid JSON.",
     resourcesMCPServerDocumentJSONLabel: "MCP server JSON",
@@ -30,6 +39,18 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesSkillsEmpty: "No skills",
     resourcesSkillsLabel: "Skills",
     resourcesRuntimeLabel: "Runtime",
+    agentProfileTab: "Profile",
+    agentInstructions: "Instructions",
+    agentInstructionsPlaceholder: "Describe how this agent should work.",
+    agentProfileSkillsTab: "Skills",
+    agentProfileMCPTab: "MCP",
+    agentProfileSectionNavLabel: "Template sections",
+    agentSkillsTitle: "Skills",
+    agentSkillsDescription: "Manage skills.",
+    profileMCPServers: "MCP Servers",
+    profileMCPServersHubHint: "Manage MCP servers.",
+    profileRuntimeSection: "Runtime environment",
+    profileRuntimeSectionDescription: "Select runtime.",
     resourcesSourceLabel: "Source",
     resourcesSubtitle: "Browse templates.",
     resourcesTemplateCountSuffix: "Agent templates",
@@ -56,6 +77,14 @@ const template = {
   name: "demo-template",
   description: "Demo template",
   image: "demo:latest",
+  image_env: [
+    {
+      name: "GITLAB_TOKEN",
+      required: true,
+      secret: true,
+      description: "GitLab API token",
+    },
+  ],
   role: "manager",
   runtime_kind: "openclaw_sandbox",
   source: { name: "builtin" },
@@ -67,52 +96,91 @@ const template = {
 };
 
 function renderHubDetailPane(selectedResourceType: "mcp" | "skill" | "template" = "template") {
-  return render(
-    <HubDetailPane
-      locale="en"
-      t={t}
-      onCreateFromTemplate={vi.fn()}
-      hub={{
-        detailPaneProps: {
-          detailLoading: false,
-          error: "",
-          loaded: true,
-          onRetry: vi.fn(),
-          onSelectSkill: vi.fn(),
-          onSelectSkillFile: vi.fn(),
-          onSelectTemplate: vi.fn(),
-          onSelectWorkspaceFile: vi.fn(),
-          mcpServers: [],
-          selectedMCPServer: null,
-          selectedMCPServerName: "",
-          selectedResourceType,
-          selectedSkill: null,
-          selectedSkillPath: "",
-          selectedTemplate: template,
-          selectedTemplateId: template.id,
-          selectedWorkspacePath: "README.md",
-          skillFile: null,
-          skillFileError: "",
-          skillFileLoading: false,
-          skills: [],
-          skillTree: null,
-          skillTreeError: "",
-          skillTreeLoading: false,
-          templates: [template],
-          workspaceFile: {
-            binary: false,
-            content: "# Summary\n\nDescribe the problem.",
-            path: "README.md",
-            size: 33,
+  const workspaceFiles = {
+    "instructions/AGENTS.md": {
+      binary: false,
+      content: "# Instructions\n\nFollow the template rules.",
+      path: "instructions/AGENTS.md",
+      size: 33,
+    },
+    "skills/demo/SKILL.md": {
+      binary: false,
+      content: "---\nname: demo\ndescription: Demo template skill\n---\n\nUse it carefully.",
+      path: "skills/demo/SKILL.md",
+      size: 70,
+    },
+    "mcps/mcp.json": {
+      binary: false,
+      content: JSON.stringify({
+        mcpServers: {
+          context7: {
+            command: "npx",
+            args: ["-y", "context7-mcp"],
+            description: "Context lookup",
           },
-          workspaceFileError: "",
-          workspaceFileLoading: false,
-          deleteBusy: false,
-          onDeleteTemplate: vi.fn(),
         },
-      }}
-    />,
-  );
+      }),
+      path: "mcps/mcp.json",
+      size: 120,
+    },
+  };
+  function Harness() {
+    const [selectedWorkspacePath, setSelectedWorkspacePath] = useState("instructions/AGENTS.md");
+    const workspaceFile = workspaceFiles[selectedWorkspacePath as keyof typeof workspaceFiles] || null;
+    return (
+      <HubDetailPane
+        locale="en"
+        t={t}
+        onCreateFromTemplate={vi.fn()}
+        hub={{
+          detailPaneProps: {
+            detailLoading: false,
+            error: "",
+            loaded: true,
+            onRetry: vi.fn(),
+            onSelectSkill: vi.fn(),
+            onSelectSkillFile: vi.fn(),
+            onSelectTemplate: vi.fn(),
+            onSelectWorkspaceFile: setSelectedWorkspacePath,
+            onToggleWorkspaceDir: vi.fn(),
+            mcpServers: [],
+            selectedMCPServer: null,
+            selectedMCPServerName: "",
+            selectedResourceType,
+            selectedSkill: null,
+            selectedSkillPath: "",
+            selectedTemplate: template,
+            selectedTemplateId: template.id,
+            selectedWorkspacePath,
+            skillFile: null,
+            skillFileError: "",
+            skillFileLoading: false,
+            skills: [],
+            skillTree: null,
+            skillTreeError: "",
+            skillTreeLoading: false,
+            templates: [template],
+            workspaceFile,
+            workspaceFiles,
+            workspaceFileError: "",
+            workspaceFileLoading: false,
+            workspaceEntries: [
+              { name: "instructions", path: "instructions", type: "dir", depth: 0 },
+              { name: "AGENTS.md", path: "instructions/AGENTS.md", type: "file", depth: 1 },
+              { name: "skills", path: "skills", type: "dir", depth: 0 },
+              { name: "demo", path: "skills/demo", type: "dir", depth: 1 },
+              { name: "SKILL.md", path: "skills/demo/SKILL.md", type: "file", depth: 2 },
+              { name: "mcps", path: "mcps", type: "dir", depth: 0 },
+              { name: "mcp.json", path: "mcps/mcp.json", type: "file", depth: 1 },
+            ],
+            deleteBusy: false,
+            onDeleteTemplate: vi.fn(),
+          },
+        }}
+      />
+    );
+  }
+  return render(<Harness />);
 }
 
 function renderHubSkillDetailPane() {
@@ -234,6 +302,29 @@ function renderMCPDetailPane() {
 }
 
 describe("HubDetailPane", () => {
+  it("groups template details into runtime, instructions, skills, and MCP tabs", async () => {
+    const user = userEvent.setup();
+    renderHubDetailPane();
+
+    expect(screen.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
+    expect(screen.getByDisplayValue("demo:latest")).toBeInTheDocument();
+    expect(screen.getAllByText("Environment variables").length).toBeGreaterThan(0);
+    expect(screen.getByText("GITLAB_TOKEN")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Instructions" }));
+    expect(screen.getByRole("button", { name: "Profile" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toBeInTheDocument();
+    expect(screen.queryByText("# Instructions", { exact: false })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Skills/ }));
+    expect(screen.getByText("demo")).toBeInTheDocument();
+    expect(screen.getByText("Demo template skill")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "MCP" }));
+    expect(screen.getByText("context7")).toBeInTheDocument();
+    expect(screen.getByText("Context lookup")).toBeInTheDocument();
+  });
+
   it("keeps the MCP empty state visible when templates are available", () => {
     renderHubDetailPane("mcp");
 
@@ -241,22 +332,15 @@ describe("HubDetailPane", () => {
     expect(screen.queryByText("demo-template")).not.toBeInTheDocument();
   });
 
-  it("opens markdown files in a dialog with preview and code modes", async () => {
+  it("shows template profile instructions as a readonly profile textarea", async () => {
     const user = userEvent.setup();
     renderHubDetailPane();
 
-    expect(screen.getByText("# Summary", { exact: false })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Instructions" }));
 
-    await user.click(screen.getByRole("button", { name: "Preview" }));
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("heading", { name: "Summary" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: "Code" }));
-
-    expect(screen.getByRole("tab", { name: "Code" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getAllByText("# Summary", { exact: false }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /^Skills/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toBeDisabled();
+    expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
   });
 
   it("renders the selected skill with file tree but without template details", () => {

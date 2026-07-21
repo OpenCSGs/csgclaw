@@ -39,12 +39,33 @@ func OverlayWorkspaceTree(srcRoot, dstRoot string) error {
 func EnsureEmbeddedWorkspace(templateRoot, dstRoot string) error {
 	templateRoot = strings.Trim(strings.TrimSpace(templateRoot), "/")
 	if templateRoot == "" {
-		return fmt.Errorf("runtime template root is required")
+		return os.MkdirAll(dstRoot, 0o755)
 	}
 	if _, err := fs.Stat(templateembed.FS(), templateembed.ManifestPath(templateRoot)); err != nil {
 		return fmt.Errorf("stat embedded runtime template manifest %q: %w", templateRoot, err)
 	}
-	return copyWorkspaceFS(templateembed.FS(), templateembed.WorkspacePath(templateRoot), dstRoot, "embedded workspace", false)
+	if err := copyWorkspaceFS(templateembed.FS(), pathpkg.Join(templateRoot, templateembed.InstructionsDirName), dstRoot, "embedded instructions", false); err != nil {
+		return err
+	}
+	for _, part := range []struct{ source, target string }{
+		{templateembed.SkillsDirName, "skills"},
+		{templateembed.MemoriesDirName, ""},
+	} {
+		source := pathpkg.Join(templateRoot, part.source)
+		if _, err := fs.Stat(templateembed.FS(), source); errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		target := dstRoot
+		if part.target != "" {
+			target = filepath.Join(dstRoot, part.target)
+		}
+		if err := copyWorkspaceFS(templateembed.FS(), source, target, "embedded "+part.source, false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func EnsureWorkspaceProjectsMountpoint(workspaceRoot string) error {

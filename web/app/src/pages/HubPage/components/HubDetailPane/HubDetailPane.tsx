@@ -10,8 +10,14 @@ import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lin
 import { tags } from "@lezer/highlight";
 import { FileCode2, Server, Trash2 } from "lucide-react";
 import { formatRuntimeKindLabel } from "@/models/agents";
+import type { ImageEnvContract, JSONRecord } from "@/models/agents";
 import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
-import { formatMCPServerDocument, mcpServerDescription, mcpServerPayloadFromDocument } from "@/models/mcp";
+import {
+  formatMCPServerDocument,
+  mcpServerDescription,
+  mcpServerPayloadFromDocument,
+  mcpServersFromMap,
+} from "@/models/mcp";
 import type { MCPServerPayload } from "@/models/mcp";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
@@ -35,6 +41,137 @@ import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 
 const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
+type TemplateDetailTabID = "profile" | "instructions" | "skills" | "mcp";
+
+type TemplateSkillSummary = {
+  description: string;
+  name: string;
+};
+
+function templateSectionEntries(
+  entries: readonly WorkspaceEntry[],
+  section: "instructions" | "skills" | "mcps",
+): WorkspaceEntry[] {
+  const prefix = `${section}/`;
+  return entries
+    .filter((entry) => entry.path.startsWith(prefix))
+    .map((entry) => ({
+      ...entry,
+      path: entry.path.slice(prefix.length),
+      depth: Math.max(0, (entry.depth ?? 1) - 1),
+    }));
+}
+
+function templateSectionPath(path: string, section: "instructions" | "skills" | "mcps"): string {
+  const prefix = `${section}/`;
+  return path.startsWith(prefix) ? path.slice(prefix.length) : "";
+}
+
+function firstTemplateSectionFile(
+  entries: readonly WorkspaceEntry[],
+  section: "instructions" | "skills" | "mcps",
+  preferredName?: string,
+): string {
+  const prefix = `${section}/`;
+  const files = entries
+    .filter((entry) => entry.type === "file" && entry.path.startsWith(prefix))
+    .map((entry) => entry.path);
+  if (!files.length) {
+    return "";
+  }
+  if (preferredName) {
+    const preferred = files.find(
+      (path) => path.endsWith(`/${preferredName}`) || path === `${section}/${preferredName}`,
+    );
+    if (preferred) {
+      return preferred;
+    }
+  }
+  return files[0] || "";
+}
+
+function parseSkillMarkdownSummary(content: string): Pick<TemplateSkillSummary, "description"> {
+  const frontmatter = /^---\s*\n([\s\S]*?)\n---/.exec(content);
+  if (frontmatter) {
+    const description = parseYamlScalar(frontmatter[1] || "", "description");
+    if (description) {
+      return { description };
+    }
+  }
+  const firstParagraph =
+    content
+      .replace(/^---\s*\n[\s\S]*?\n---/, "")
+      .split(/\n{2,}/)
+      .map((block) =>
+        block
+          .split("\n")
+          .map((line) => line.replace(/^#+\s*/, "").trim())
+          .filter(Boolean)
+          .join(" "),
+      )
+      .find(Boolean) || "";
+  return { description: firstParagraph };
+}
+
+function parseYamlScalar(source: string, key: string): string {
+  const pattern = new RegExp(`^${key}:\\s*(.*)$`, "im");
+  const match = pattern.exec(source);
+  if (!match) {
+    return "";
+  }
+  return String(match[1] || "")
+    .trim()
+    .replace(/^["']|["']$/g, "");
+}
+
+function templateSkillSummaries(
+  entries: readonly WorkspaceEntry[],
+  workspaceFile: WorkspaceFile | null,
+  workspaceFiles: Readonly<Record<string, WorkspaceFile>>,
+): TemplateSkillSummary[] {
+  const skillNames = Array.from(
+    new Set(
+      entries
+        .filter((entry) => entry.path.startsWith("skills/"))
+        .map((entry) => entry.path.split("/")[1] || "")
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right));
+
+  return skillNames.map((name) => {
+    const skillPath = `skills/${name}/SKILL.md`;
+    const summaryFile = workspaceFiles[skillPath] || (workspaceFile?.path === skillPath ? workspaceFile : null);
+    const loadedDescription =
+      summaryFile && !summaryFile.binary ? parseSkillMarkdownSummary(summaryFile.content || "").description : "";
+    return {
+      name,
+      description: loadedDescription,
+    };
+  });
+}
+
+function templateMCPServerSummaries(
+  workspaceFile: WorkspaceFile | null,
+  workspaceFiles: Readonly<Record<string, WorkspaceFile>>,
+) {
+  const mcpFile = workspaceFiles["mcps/mcp.json"] || (workspaceFile?.path === "mcps/mcp.json" ? workspaceFile : null);
+  if (!mcpFile || mcpFile.binary) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(mcpFile.content || "") as { mcpServers?: JSONRecord };
+    return mcpServersFromMap(parsed.mcpServers);
+  } catch {
+    return [];
+  }
+}
+
+function templateEnvRequirementLabel(env: readonly ImageEnvContract[], t: TranslateFn): string {
+  if (!env.length) {
+    return t("resourcesTemplateEnvNotRequired");
+  }
+  return env.some((item) => item.required) ? t("resourcesTemplateEnvRequired") : t("resourcesTemplateEnvOptional");
+}
 
 type HubDetailPaneHub = {
   detailPaneProps: {
@@ -81,6 +218,7 @@ type HubDetailPaneHub = {
     workspaceFile: WorkspaceFile | null;
     workspaceFileError: string;
     workspaceFileLoading: boolean;
+    workspaceFiles?: Readonly<Record<string, WorkspaceFile>>;
     workspaceEntries?: readonly WorkspaceEntry[];
     workspaceTreeLoading?: boolean;
     loadingWorkspaceDirs?: ReadonlySet<string>;
@@ -124,6 +262,7 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   workspaceFile: null,
   workspaceFileError: "",
   workspaceFileLoading: false,
+  workspaceFiles: {},
   workspaceEntries: [],
   workspaceTreeLoading: false,
   loadingWorkspaceDirs: new Set(),
@@ -410,6 +549,7 @@ export function HubDetailPane({
     workspaceFile,
     workspaceFileLoading,
     workspaceFileError,
+    workspaceFiles = {},
     skillTree,
     skillTreeLoading,
     skillTreeError,
@@ -425,7 +565,6 @@ export function HubDetailPane({
     onToggleWorkspaceDir,
     workspaceEntries = EMPTY_WORKSPACE_ENTRIES,
     workspaceTreeLoading = false,
-    loadingWorkspaceDirs,
     onSelectSkillFile,
     onDeleteSkill,
     onCreateMCP,
@@ -463,6 +602,67 @@ export function HubDetailPane({
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
   const [mcpDetailError, setMCPDetailError] = useState("");
   const [mcpFormError, setMCPFormError] = useState("");
+  const [activeTemplateTab, setActiveTemplateTab] = useState<TemplateDetailTabID>("profile");
+  const templateSection = activeTemplateTab === "mcp" ? "mcps" : activeTemplateTab;
+  const templateImageEnv = selectedTemplate?.image_env || [];
+  const templateSectionWorkspaceEntries = useMemo(
+    () =>
+      templateSection === "instructions" || templateSection === "skills" || templateSection === "mcps"
+        ? templateSectionEntries(workspaceEntries, templateSection)
+        : [],
+    [templateSection, workspaceEntries],
+  );
+  const templateSkillCount = useMemo(
+    () =>
+      new Set(
+        templateSectionEntries(workspaceEntries, "skills")
+          .map((entry) => entry.path.split("/")[0])
+          .filter(Boolean),
+      ).size,
+    [workspaceEntries],
+  );
+  const templateSkills = useMemo(
+    () => templateSkillSummaries(workspaceEntries, workspaceFile, workspaceFiles),
+    [workspaceEntries, workspaceFile, workspaceFiles],
+  );
+  const templateMCPServers = useMemo(
+    () => templateMCPServerSummaries(workspaceFile, workspaceFiles),
+    [workspaceFile, workspaceFiles],
+  );
+  const templateInstructions =
+    typeof selectedTemplate === "object" && selectedTemplate
+      ? String((selectedTemplate as { instructions?: string | null }).instructions || "")
+      : "";
+  const templateTabs = useMemo(
+    () => [
+      { id: "profile" as const, label: t("agentProfileTab") },
+      { id: "instructions" as const, label: t("agentInstructions") },
+      {
+        id: "skills" as const,
+        label: t("agentProfileSkillsTab"),
+        count: templateSkillCount > 0 ? templateSkillCount : undefined,
+      },
+      { id: "mcp" as const, label: t("agentProfileMCPTab") },
+    ],
+    [t, templateSkillCount],
+  );
+  useEffect(() => {
+    setActiveTemplateTab("profile");
+  }, [selectedTemplateId]);
+  useEffect(() => {
+    const directories = new Set<string>(["skills"]);
+    if (activeTemplateTab !== "profile") {
+      directories.add(activeTemplateTab === "mcp" ? "mcps" : activeTemplateTab);
+    }
+    if (activeTemplateTab === "skills") {
+      templateSkills.forEach((skill) => directories.add(`skills/${skill.name}`));
+    }
+    for (const directory of directories) {
+      if (workspaceEntries.some((entry) => entry.path === directory && entry.type === "dir")) {
+        void onToggleWorkspaceDir?.(directory);
+      }
+    }
+  }, [activeTemplateTab, onToggleWorkspaceDir, templateSkills, workspaceEntries]);
   useEffect(() => {
     if (mcpCreateDialogOpen) {
       setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
@@ -536,6 +736,19 @@ export function HubDetailPane({
     onMCPCreateDialogOpenChange?.(false);
   }
 
+  function selectTemplateTab(tab: TemplateDetailTabID) {
+    setActiveTemplateTab(tab);
+    if (tab !== "profile") {
+      const selectedFile =
+        tab === "skills"
+          ? firstTemplateSectionFile(workspaceEntries, "skills", "SKILL.md")
+          : tab === "mcp"
+            ? firstTemplateSectionFile(workspaceEntries, "mcps", "mcp.json")
+            : firstTemplateSectionFile(workspaceEntries, "instructions", "AGENTS.md");
+      onSelectWorkspaceFile(selectedFile);
+    }
+  }
+
   return (
     <section className="entity-pane hub-detail-pane">
       {error ? <div className="form-error">{error}</div> : null}
@@ -598,61 +811,200 @@ export function HubDetailPane({
                 </div>
               </div>
 
-              <div className="hub-inspector-grid">
-                <div className="hub-inspector-field">
-                  <span>{t("resourcesSourceLabel")}</span>
-                  <strong>{localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}</strong>
-                </div>
-                <div className="hub-inspector-field">
-                  <span>{t("resourcesRuntimeLabel")}</span>
-                  <strong>
-                    {selectedTemplate.runtime_kind ? formatRuntimeKindLabel(selectedTemplate.runtime_kind, t) : "-"}
-                  </strong>
-                </div>
-                <div className="hub-inspector-field">
-                  <span>{t("resourcesImageLabel")}</span>
-                  <strong className="hub-field-value-multiline">{selectedTemplate.image || "-"}</strong>
-                </div>
-                <div className="hub-inspector-field">
-                  <span>{t("resourcesUpdatedAtLabel")}</span>
-                  <strong>{formatHubDateTime(selectedTemplate.updated_at, locale)}</strong>
-                </div>
-              </div>
+              <nav className="hub-template-section-nav" aria-label={t("agentProfileSectionNavLabel")}>
+                {templateTabs.map((tab) => {
+                  const active = tab.id === activeTemplateTab;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={`hub-template-section-tab ${active ? "active" : ""}`.trim()}
+                      aria-current={active ? "location" : undefined}
+                      onClick={() => selectTemplateTab(tab.id)}
+                    >
+                      <span>{tab.label}</span>
+                      {typeof tab.count === "number" ? (
+                        <span className="hub-template-section-tab-count" aria-label={String(tab.count)}>
+                          {tab.count}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </nav>
 
-              <div className="hub-workspace-block">
-                <span className="hub-section-label">{t("resourcesWorkspaceTemplateLabel")}</span>
-                <div className="hub-workspace-panels">
-                  <WorkspaceFileTree
-                    key={selectedTemplateId}
-                    className="hub-workspace-tree"
-                    entries={workspaceEntries}
-                    loading={workspaceTreeLoading}
-                    loadingText={t("resourcesWorkspaceLoading")}
-                    emptyText={t("resourcesWorkspacePreviewHint")}
-                    selectedPath={selectedWorkspacePath}
-                    loadingPaths={loadingWorkspaceDirs}
-                    onSelectFile={onSelectWorkspaceFile}
-                    onToggleDir={onToggleWorkspaceDir}
-                  />
-                  <WorkspaceFilePreview
-                    className="hub-workspace-preview"
-                    file={workspaceFile}
-                    loading={workspaceFileLoading}
-                    error={workspaceFileError}
-                    loadingText={t("resourcesWorkspaceFileLoading")}
-                    emptyTitle={t("resourcesWorkspacePreviewTitle")}
-                    emptyHint={t("resourcesWorkspacePreviewHint")}
-                    emptyIcon={<HubPreviewEmptyIcon />}
-                    binaryText={t("resourcesWorkspaceBinary")}
-                    emptyFileText={t("resourcesWorkspaceEmptyFile")}
-                    previewText={t("workspacePreviewPreviewTab")}
-                    codeText={t("workspacePreviewCodeTab")}
-                    viewToggleLabel={t("workspacePreviewViewMode")}
-                    closeText={t("close")}
-                    truncatedText={t("workspacePreviewTruncated")}
-                  />
+              {activeTemplateTab === "profile" ? (
+                <div className="profile-editor-shell hub-template-profile-shell">
+                  <section className="profile-section">
+                    <div className="profile-section-heading">
+                      <div className="profile-section-title">{t("profileRuntimeSection")}</div>
+                      <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
+                    </div>
+                    <div className="profile-grid-compact hub-template-profile-grid">
+                      <label className="field">
+                        <span>{t("resourcesRuntimeLabel")}</span>
+                        <input
+                          value={
+                            selectedTemplate.runtime_kind
+                              ? formatRuntimeKindLabel(selectedTemplate.runtime_kind, t)
+                              : "-"
+                          }
+                          readOnly
+                          disabled
+                        />
+                      </label>
+                      <label className="field">
+                        <span>{t("resourcesSourceLabel")}</span>
+                        <input
+                          value={localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
+                          readOnly
+                          disabled
+                        />
+                      </label>
+                      <label className="field span-2">
+                        <span>{t("resourcesImageLabel")}</span>
+                        <input value={selectedTemplate.image || "-"} readOnly disabled />
+                      </label>
+                      <label className="field">
+                        <span>{t("resourcesUpdatedAtLabel")}</span>
+                        <input value={formatHubDateTime(selectedTemplate.updated_at, locale)} readOnly disabled />
+                      </label>
+                      <label className="field">
+                        <span>{t("resourcesTemplateEnvLabel")}</span>
+                        <input value={templateEnvRequirementLabel(templateImageEnv, t)} readOnly disabled />
+                      </label>
+                      {templateImageEnv.length ? (
+                        <div className="field span-2 hub-template-env-field">
+                          <span>{t("resourcesTemplateEnvLabel")}</span>
+                          <div className="hub-template-env-list">
+                            {templateImageEnv.map((item) => (
+                              <span className="hub-template-env-chip" key={item.name}>
+                                {item.name}
+                                {item.required ? <small>{t("resourcesTemplateEnvRequiredBadge")}</small> : null}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  </section>
                 </div>
-              </div>
+              ) : activeTemplateTab === "instructions" ? (
+                <section className="profile-section hub-template-instructions-section">
+                  <div className="profile-grid-compact">
+                    <label className="field span-2">
+                      <span>{t("agentInstructions")}</span>
+                      <textarea
+                        className="compact-textarea"
+                        value={templateInstructions}
+                        placeholder={t("agentInstructionsPlaceholder")}
+                        readOnly
+                        disabled
+                      />
+                    </label>
+                  </div>
+                </section>
+              ) : activeTemplateTab === "skills" ? (
+                <section className="profile-section agent-skills-section hub-template-summary-panel">
+                  <div className="profile-section-heading">
+                    <div className="profile-section-title">{t("agentSkillsTitle")}</div>
+                    <p className="profile-section-description">{t("resourcesTemplateSkillsDescription")}</p>
+                  </div>
+                  <div className="agent-page-form-content agent-skills-form-content">
+                    <div className="agent-skills-title">
+                      <div className="agent-skills-title-copy">
+                        <span>{t("agentSkillsTitle")}</span>
+                        <small className="agent-section-count-badge">{templateSkills.length}</small>
+                      </div>
+                    </div>
+                    {templateSkills.length ? (
+                      <div className="agent-skills-list">
+                        {templateSkills.map((skill) => (
+                          <article className="agent-skill-card" key={skill.name}>
+                            <div className="agent-skill-card-header">
+                              <div className="agent-skill-name">{skill.name}</div>
+                            </div>
+                            <p className="agent-skill-description">{skill.description || "-"}</p>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="agent-skills-empty">{t("resourcesSkillsEmpty")}</div>
+                    )}
+                  </div>
+                </section>
+              ) : activeTemplateTab === "mcp" ? (
+                <section className="profile-section agent-skills-section agent-mcp-section hub-template-summary-panel">
+                  <div className="profile-section-heading">
+                    <div className="profile-section-title">{t("resourcesTemplateMCPServersTitle")}</div>
+                    <p className="profile-section-description">{t("resourcesTemplateMCPServersDescription")}</p>
+                  </div>
+                  <div className="agent-page-form-content agent-skills-form-content">
+                    <div className="agent-skills-title">
+                      <div className="agent-skills-title-copy">
+                        <span>{t("resourcesTemplateMCPServersTitle")}</span>
+                        <small className="agent-section-count-badge">{templateMCPServers.length}</small>
+                      </div>
+                    </div>
+                    {templateMCPServers.length ? (
+                      <div className="agent-skills-list">
+                        {templateMCPServers.map((server) => (
+                          <article className="agent-skill-card agent-mcp-card" key={server.name}>
+                            <div className="agent-skill-card-header">
+                              <div className="agent-skill-name">
+                                <Server aria-hidden="true" size={14} strokeWidth={2} />
+                                <span>{server.name}</span>
+                              </div>
+                            </div>
+                            <p className="agent-skill-description">
+                              {server.description || mcpServerDescription(server.config) || "-"}
+                            </p>
+                          </article>
+                        ))}
+                      </div>
+                    ) : workspaceFileLoading ? (
+                      <div className="agent-skills-empty">{t("resourcesWorkspaceFileLoading")}</div>
+                    ) : (
+                      <div className="agent-skills-empty">{t("resourcesMCPEmpty")}</div>
+                    )}
+                  </div>
+                </section>
+              ) : (
+                <div className="hub-workspace-block hub-template-tab-panel">
+                  <div className="hub-workspace-panels">
+                    <WorkspaceFileTree
+                      key={`${selectedTemplateId}-${activeTemplateTab}`}
+                      className="hub-workspace-tree"
+                      entries={templateSectionWorkspaceEntries}
+                      loading={workspaceTreeLoading}
+                      loadingText={t("resourcesWorkspaceLoading")}
+                      emptyText={t("resourcesWorkspacePreviewHint")}
+                      selectedPath={templateSectionPath(
+                        selectedWorkspacePath,
+                        templateSection as "instructions" | "skills" | "mcps",
+                      )}
+                      onSelectFile={(path) => onSelectWorkspaceFile(`${templateSection}/${path}`)}
+                    />
+                    <WorkspaceFilePreview
+                      className="hub-workspace-preview"
+                      file={workspaceFile}
+                      loading={workspaceFileLoading}
+                      error={workspaceFileError}
+                      loadingText={t("resourcesWorkspaceFileLoading")}
+                      emptyTitle={t("resourcesWorkspacePreviewTitle")}
+                      emptyHint={t("resourcesWorkspacePreviewHint")}
+                      emptyIcon={<HubPreviewEmptyIcon />}
+                      binaryText={t("resourcesWorkspaceBinary")}
+                      emptyFileText={t("resourcesWorkspaceEmptyFile")}
+                      previewText={t("workspacePreviewPreviewTab")}
+                      codeText={t("workspacePreviewCodeTab")}
+                      viewToggleLabel={t("workspacePreviewViewMode")}
+                      closeText={t("close")}
+                      truncatedText={t("workspacePreviewTruncated")}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           ) : activeResourceType === "skill" && selectedSkill ? (
             <>

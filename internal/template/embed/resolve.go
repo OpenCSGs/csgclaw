@@ -41,12 +41,6 @@ var builtinTemplates = []BuiltinTemplate{
 		Role:        roleWorker,
 		Root:        OpenClawWorkerRoot,
 	},
-	{
-		ID:          "picoclaw-worker",
-		RuntimeKind: runtimepkg.KindPicoClawSandbox,
-		Role:        roleWorker,
-		Root:        PicoClawWorkerRoot,
-	},
 }
 
 func FS() fs.FS {
@@ -83,7 +77,7 @@ func ManifestPath(templateRoot string) string {
 }
 
 func WorkspacePath(templateRoot string) string {
-	return strings.TrimRight(strings.TrimSpace(templateRoot), "/") + "/" + WorkspaceDirName
+	return strings.TrimRight(strings.TrimSpace(templateRoot), "/")
 }
 
 func TemplateIDFromManifestPath(path string) string {

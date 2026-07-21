@@ -33,6 +33,9 @@ func workspaceTemplateForAgent(name, botID string) (string, error) {
 }
 
 func resolveRuntimeTemplateRoot(runtimeKind, role string) (string, error) {
+	if strings.TrimSpace(runtimeKind) == RuntimeKindPicoClawSandbox && normalizeRole(role) == RoleWorker {
+		return "", nil
+	}
 	return templateembed.Resolve(runtimeKind, role)
 }
 
@@ -100,7 +103,29 @@ func copyEmbeddedTree(templateRoot, dstRoot string) error {
 	if _, err := fs.Stat(templateembed.FS(), runtimeTemplateManifestPath(templateRoot)); err != nil {
 		return fmt.Errorf("stat embedded runtime template manifest %q: %w", templateRoot, err)
 	}
-	return copyWorkspaceFS(templateembed.FS(), runtimeTemplateWorkspacePath(templateRoot), dstRoot, "embedded workspace", false)
+	root := runtimeTemplateWorkspacePath(templateRoot)
+	if err := copyWorkspaceFS(templateembed.FS(), pathpkg.Join(root, templateembed.InstructionsDirName), dstRoot, "embedded instructions", false); err != nil {
+		return err
+	}
+	for _, part := range []struct{ source, target string }{
+		{templateembed.SkillsDirName, "skills"},
+		{templateembed.MemoriesDirName, ""},
+	} {
+		source := pathpkg.Join(root, part.source)
+		if _, err := fs.Stat(templateembed.FS(), source); errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		target := dstRoot
+		if part.target != "" {
+			target = filepath.Join(dstRoot, part.target)
+		}
+		if err := copyWorkspaceFS(templateembed.FS(), source, target, "embedded "+part.source, false); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func overlayWorkspaceTree(srcRoot, dstRoot string) error {
@@ -227,7 +252,10 @@ func templateWorkspaceSkillNames(runtimeKind, role string) (map[string]struct{},
 	if err != nil {
 		return names, err
 	}
-	skillsRoot := pathpkg.Join(runtimeTemplateWorkspacePath(templateRoot), "skills")
+	if templateRoot == "" {
+		return names, nil
+	}
+	skillsRoot := pathpkg.Join(runtimeTemplateWorkspacePath(templateRoot), templateembed.SkillsDirName)
 	entries, err := fs.ReadDir(templateembed.FS(), skillsRoot)
 	if errors.Is(err, fs.ErrNotExist) {
 		return names, nil

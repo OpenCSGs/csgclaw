@@ -7238,6 +7238,9 @@ func TestCreateWorkerFromTemplateAppliesDefaultsAndOverlaysWorkspace(t *testing.
 	if got.RuntimeKind != RuntimeKindPicoClawSandbox {
 		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, RuntimeKindPicoClawSandbox)
 	}
+	if server, ok := got.MCPServers["template-docs"].(map[string]any); !ok || server["command"] != "npx" {
+		t.Fatalf("MCPServers = %#v, want template-docs from mcps/mcp.json", got.MCPServers)
+	}
 
 	workspaceRoot, err := testBuiltinWorkspaceRoot(got.ID, RuntimeKindPicoClawSandbox)
 	if err != nil {
@@ -8072,7 +8075,7 @@ func TestRecreateRefreshesBuiltInSkillsAndPreservesUserSkills(t *testing.T) {
 		t.Fatal("Recreate().AgentProfile.EnvRestartRequired = true, want false")
 	}
 
-	wantBuiltIn, err := templateembed.FS().Open(templateembed.WorkspacePath(templateembed.CodexManagerRoot) + "/skills/agent-teams/SKILL.md")
+	wantBuiltIn, err := templateembed.FS().Open(templateembed.CodexManagerRoot + "/skills/agent-teams/SKILL.md")
 	if err != nil {
 		t.Fatalf("open embedded agent-teams skill: %v", err)
 	}
@@ -10032,8 +10035,8 @@ func TestGatewayCreateSpecBuildsSandboxSpec(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(wantConfigRoot, picoclawsandbox.HostConfig)); err != nil {
 		t.Fatalf("worker PicoClaw config was not written: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(wantWorkspaceRoot, "AGENT.md")); err != nil {
-		t.Fatalf("worker workspace was not written: %v", err)
+	if info, err := os.Stat(filepath.Join(wantWorkspaceRoot, "projects")); err != nil || !info.IsDir() {
+		t.Fatalf("worker workspace projects mountpoint was not written: info=%v err=%v", info, err)
 	}
 	if _, err := os.Stat(filepath.Join(wantAgentHome, hostWorkspaceDir)); !os.IsNotExist(err) {
 		t.Fatalf("legacy workspace stat error = %v, want not exist", err)
@@ -10182,7 +10185,10 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 		Version:      item.Version,
 		Image:        item.Image,
 		WorkspaceRef: hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot},
-		UpdatedAt:    time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
+		MCPServers: map[string]any{
+			"template-docs": map[string]any{"command": "npx", "args": []any{"-y", "template-docs"}},
+		},
+		UpdatedAt: time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}

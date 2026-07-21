@@ -3072,8 +3072,8 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 	if got.ID != "agent-alice" || got.Name != "alice-v2" || got.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want replaced worker", got)
 	}
-	if got.RuntimeKind != agent.RuntimeKindPicoClawSandbox {
-		t.Fatalf("agent runtime kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindPicoClawSandbox)
+	if got.RuntimeKind != agent.RuntimeKindOpenClawSandbox {
+		t.Fatalf("agent runtime kind = %q, want %q", got.RuntimeKind, agent.RuntimeKindOpenClawSandbox)
 	}
 }
 
@@ -3270,8 +3270,8 @@ func TestHandleHubTemplateByIDReturnsTemplate(t *testing.T) {
 	for _, entry := range listing.Entries {
 		paths = append(paths, entry.Path)
 	}
-	if !slices.Contains(paths, "USER.md") || !slices.Contains(paths, "skills") {
-		t.Fatalf("workspace paths = %#v, want USER.md and skills", paths)
+	if !slices.Contains(paths, "instructions") || !slices.Contains(paths, "skills") || !slices.Contains(paths, "mcps") {
+		t.Fatalf("template paths = %#v, want instructions, skills, and mcps", paths)
 	}
 	if slices.Contains(paths, "skills/custom") || slices.Contains(paths, "skills/custom/SKILL.md") {
 		t.Fatalf("workspace paths = %#v, want top-level entries only", paths)
@@ -4491,15 +4491,15 @@ func TestHandleHubTemplateWithoutWorkspaceOmitsEntriesAndFilePreview(t *testing.
 	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
 		t.Fatalf("decode workspace response: %v", err)
 	}
-	if len(listing.Entries) != 0 {
-		t.Fatalf("workspace entries = %#v, want empty", listing.Entries)
+	if len(listing.Entries) != 1 || listing.Entries[0].Path != "agent.toml" {
+		t.Fatalf("template entries = %#v, want agent.toml", listing.Entries)
 	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates/local.review-bot/workspace/file?path=USER.md", nil)
 	rec = httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("file status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("file status = %d, want %d; body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "workspace") {
 		t.Fatalf("file response body = %q, want workspace error", rec.Body.String())
@@ -4601,7 +4601,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if got.Source.Name != "local" || got.Source.Kind != "local" {
 		t.Fatalf("template source = %+v, want local/local", got.Source)
 	}
-	publishedWorkspace := filepath.Join(registryRoot, "templates", "alice", "workspace", "PLAYBOOK.md")
+	publishedWorkspace := filepath.Join(registryRoot, "templates", "alice", "instructions", "PLAYBOOK.md")
 	if data, err := os.ReadFile(publishedWorkspace); err != nil {
 		t.Fatalf("ReadFile(PLAYBOOK.md) error = %v", err)
 	} else if strings.TrimSpace(string(data)) != "published workspace" {

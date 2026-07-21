@@ -61,30 +61,38 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/agent.toml":
 			assertQueryValue(t, r.URL, "ref", "main")
 			writeRemoteBlob(t, w, "agent.toml", []byte(remoteTestManifest))
-		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/refs/main/tree/workspace":
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/refs/main/tree/":
 			assertQueryValue(t, r.URL, "limit", "500")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": map[string]any{
 					"Files": []map[string]any{
-						{"name": "AGENTS.md", "type": "file", "path": "workspace/AGENTS.md"},
-						{"name": "skills", "type": "dir", "path": "workspace/skills"},
+						{"name": "instructions", "type": "dir", "path": "instructions"},
+						{"name": "skills", "type": "dir", "path": "skills"},
 					},
 					"Cursor": "",
 				},
 			})
-		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/refs/main/tree/workspace/skills":
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/refs/main/tree/instructions":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"Files": []map[string]any{{"name": "AGENTS.md", "type": "file", "path": "instructions/AGENTS.md"}}, "Cursor": ""}})
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/refs/main/tree/skills":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": map[string]any{
 					"Files": []map[string]any{
-						{"name": "review.md", "type": "file", "path": "workspace/skills/review.md"},
+						{"name": "review.md", "type": "file", "path": "skills/review.md"},
 					},
 					"Cursor": "",
 				},
 			})
-		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/workspace/AGENTS.md":
-			writeRemoteBlob(t, w, "workspace/AGENTS.md", []byte("hello"))
-		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/workspace/skills/review.md":
-			writeRemoteBlob(t, w, "workspace/skills/review.md", []byte("review"))
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/refs/main/tree/mcps":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"Files": []map[string]any{{"name": "mcp.json", "type": "file", "path": "mcps/mcp.json"}}, "Cursor": ""}})
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/refs/main/tree/memories":
+			http.NotFound(w, r)
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/instructions/AGENTS.md":
+			writeRemoteBlob(t, w, "instructions/AGENTS.md", []byte("hello"))
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/skills/review.md":
+			writeRemoteBlob(t, w, "skills/review.md", []byte("review"))
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/mcps/mcp.json":
+			writeRemoteBlob(t, w, "mcps/mcp.json", []byte("{}"))
 		default:
 			http.NotFound(w, r)
 		}
@@ -127,11 +135,11 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 	if got, want := len(listing.Entries), 2; got != want {
 		t.Fatalf("len(ListWorkspace().Entries) = %d, want %d", got, want)
 	}
-	if got, want := listing.Entries[0].Path, "AGENTS.md"; got != want {
+	if got, want := listing.Entries[0].Path, "instructions"; got != want {
 		t.Fatalf("ListWorkspace().Entries[0].Path = %q, want %q", got, want)
 	}
 
-	file, err := store.ReadWorkspaceFile(context.Background(), "gitlab-assistant", "AGENTS.md")
+	file, err := store.ReadWorkspaceFile(context.Background(), "gitlab-assistant", "instructions/AGENTS.md")
 	if err != nil {
 		t.Fatalf("ReadWorkspaceFile() error = %v", err)
 	}

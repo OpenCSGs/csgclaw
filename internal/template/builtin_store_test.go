@@ -24,7 +24,7 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if got, want := len(items), 4; got != want {
+	if got, want := len(items), 3; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
 	if got, want := items[0].ID, "codex-worker"; got != want {
@@ -35,26 +35,6 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	}
 	if got, want := items[2].ID, "openclaw-worker"; got != want {
 		t.Fatalf("List()[2].ID = %q, want %q", got, want)
-	}
-	if got, want := items[3].ID, "picoclaw-worker"; got != want {
-		t.Fatalf("List()[3].ID = %q, want %q", got, want)
-	}
-
-	item, err := store.Get(context.Background(), "picoclaw-worker")
-	if err != nil {
-		t.Fatalf("Get() error = %v", err)
-	}
-	if got, want := item.RuntimeKind, runtime.NamePicoClaw; got != want {
-		t.Fatalf("Get().RuntimeKind = %q, want %q", got, want)
-	}
-	if got, want := item.Role, TemplateRoleWorker; got != want {
-		t.Fatalf("Get().Role = %q, want %q", got, want)
-	}
-	if item.Image == "" {
-		t.Fatal("Get().Image is empty")
-	}
-	if got, want := item.WorkspaceRef.Kind, WorkspaceKindDir; got != want {
-		t.Fatalf("Get().WorkspaceRef.Kind = %q, want %q", got, want)
 	}
 
 	openclawItem, err := store.Get(context.Background(), "openclaw-worker")
@@ -76,16 +56,16 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 		t.Fatalf("Get(codex-worker).Image = %q, want empty", got)
 	}
 
-	workspace, err := store.FetchWorkspace(context.Background(), "picoclaw-worker")
+	workspace, err := store.FetchWorkspace(context.Background(), "openclaw-worker")
 	if err != nil {
 		t.Fatalf("FetchWorkspace() error = %v", err)
 	}
 	if got, want := workspace.Kind, WorkspaceKindDir; got != want {
 		t.Fatalf("FetchWorkspace().Kind = %q, want %q", got, want)
 	}
-	data, err := os.ReadFile(filepath.Join(workspace.Path, "AGENT.md"))
+	data, err := os.ReadFile(filepath.Join(workspace.Path, "AGENTS.md"))
 	if err != nil {
-		t.Fatalf("ReadFile(AGENT.md) error = %v", err)
+		t.Fatalf("ReadFile(AGENTS.md) error = %v", err)
 	}
 	if len(data) == 0 {
 		t.Fatal("FetchWorkspace() copied empty AGENT.md")
@@ -152,7 +132,7 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if got, want := len(items), 5; got != want {
+	if got, want := len(items), 4; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
 	if got, want := items[0].ID, "builtin.codex-worker"; got != want {
@@ -164,10 +144,7 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 	if got, want := items[2].ID, "builtin.openclaw-worker"; got != want {
 		t.Fatalf("List()[2].ID = %q, want %q", got, want)
 	}
-	if got, want := items[3].ID, "builtin.picoclaw-worker"; got != want {
+	if got, want := items[3].ID, "local.team-helper"; got != want {
 		t.Fatalf("List()[3].ID = %q, want %q", got, want)
-	}
-	if got, want := items[4].ID, "local.team-helper"; got != want {
-		t.Fatalf("List()[4].ID = %q, want %q", got, want)
 	}
 }

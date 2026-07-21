@@ -8,7 +8,7 @@ import (
 )
 
 func TestManagerBasicsRoomCreationKeepsRequesterAsCreator(t *testing.T) {
-	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, WorkspaceDirName, "AGENTS.md"))
+	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, InstructionsDirName, "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read codex manager instructions: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestManagerBasicsRoomCreationKeepsRequesterAsCreator(t *testing.T) {
 }
 
 func TestManagerInstructionsPreferAgentTasksForSingleWorkerDispatch(t *testing.T) {
-	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, WorkspaceDirName, "AGENTS.md"))
+	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, InstructionsDirName, "AGENTS.md"))
 	if err != nil {
 		t.Fatalf("read codex manager instructions: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestManagerInstructionsPreferAgentTasksForSingleWorkerDispatch(t *testing.T
 }
 
 func TestManagerAgentTeamsUsesUTF8SafeTaskCreation(t *testing.T) {
-	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, WorkspaceDirName, "skills/agent-teams/SKILL.md"))
+	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, SkillsDirName, "agent-teams/SKILL.md"))
 	if err != nil {
 		t.Fatalf("read codex manager agent-teams skill: %v", err)
 	}
@@ -85,13 +85,12 @@ func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
 		file string
 	}{
 		{name: "codex", root: CodexWorkerRoot, file: "AGENTS.md"},
-		{name: "picoclaw", root: PicoClawWorkerRoot, file: "AGENT.md"},
 		{name: "openclaw", root: OpenClawWorkerRoot, file: "AGENTS.md"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := fs.ReadFile(FS(), path.Join(tt.root, WorkspaceDirName, tt.file))
+			data, err := fs.ReadFile(FS(), path.Join(tt.root, InstructionsDirName, tt.file))
 			if err != nil {
 				t.Fatalf("read worker instructions: %v", err)
 			}
@@ -110,7 +109,7 @@ func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
 }
 
 func TestManagerFeishuSkillRoomCreationKeepsRequesterAsCreator(t *testing.T) {
-	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, WorkspaceDirName, "skills/feishu/SKILL.md"))
+	data, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, SkillsDirName, "feishu/SKILL.md"))
 	if err != nil {
 		t.Fatalf("read codex manager feishu skill: %v", err)
 	}

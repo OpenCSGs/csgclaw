@@ -27,7 +27,6 @@ const (
 	defaultRemoteMaxFileBytes = 50 * 1024 * 1024
 	officialTemplateNamespace = "Agentic"
 	remoteManifestFileName    = "agent.toml"
-	remoteWorkspaceDirName    = "workspace"
 	remoteFilePreviewMaxBytes = 256 * 1024
 )
 
@@ -209,19 +208,24 @@ func (s *RemoteStore) FetchWorkspace(ctx context.Context, id string) (WorkspaceR
 		return WorkspaceRef{}, err
 	}
 
-	tmpDir, err := mkdirHubWorkspaceTemp("csgclaw-hub-remote-*")
+	templateDir, err := mkdirHubWorkspaceTemp("csgclaw-hub-remote-*")
 	if err != nil {
 		return WorkspaceRef{}, fmt.Errorf("create remote hub workspace temp dir: %w", err)
 	}
 	var totalBytes int64
-	if err := s.fetchWorkspaceTree(ctx, id, branch, remoteWorkspaceDirName, tmpDir, &totalBytes); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		if errors.Is(err, ErrTemplateNotFound) {
-			return WorkspaceRef{}, nil
+	for _, dir := range []string{localInstructionsDirName, localSkillsDirName, localMCPsDirName, localMemoriesDirName} {
+		err := s.fetchWorkspaceTree(ctx, id, branch, dir, templateDir, &totalBytes)
+		if errors.Is(err, ErrTemplateNotFound) && (dir == localSkillsDirName || dir == localMemoriesDirName) {
+			continue
 		}
-		return WorkspaceRef{}, err
+		if err != nil {
+			_ = os.RemoveAll(templateDir)
+			return WorkspaceRef{}, err
+		}
 	}
-	return WorkspaceRef{Kind: WorkspaceKindDir, Path: tmpDir}, nil
+	workspace, err := materializeTemplateDir(templateDir)
+	_ = os.RemoveAll(templateDir)
+	return workspace, err
 }
 
 func (s *RemoteStore) ListWorkspace(
@@ -242,10 +246,7 @@ func (s *RemoteStore) ListWorkspace(
 		return apitypes.WorkspaceListing{}, err
 	}
 
-	treePath := remoteWorkspaceDirName
-	if cleanPath != "" {
-		treePath += "/" + cleanPath
-	}
+	treePath := cleanPath
 	entries := make([]apitypes.WorkspaceEntry, 0)
 	cursor := ""
 	for {
@@ -258,10 +259,7 @@ func (s *RemoteStore) ListWorkspace(
 		}
 		for _, entry := range payload.Data.Files {
 			entryPath := strings.Trim(strings.TrimSpace(entry.Path), "/")
-			if !strings.HasPrefix(entryPath, remoteWorkspaceDirName+"/") {
-				return apitypes.WorkspaceListing{}, fmt.Errorf("%w: %s", ErrWorkspacePathUnsafe, entryPath)
-			}
-			relativePath := strings.TrimPrefix(entryPath, remoteWorkspaceDirName+"/")
+			relativePath := entryPath
 			if path.Dir(relativePath) != path.Clean(cleanPath) && !(cleanPath == "" && !strings.Contains(relativePath, "/")) {
 				continue
 			}
@@ -306,7 +304,7 @@ func (s *RemoteStore) ReadWorkspaceFile(
 	if err != nil {
 		return apitypes.WorkspaceFile{}, err
 	}
-	data, err := s.fetchBlob(ctx, id, remoteWorkspaceDirName+"/"+cleanPath, branch)
+	data, err := s.fetchBlob(ctx, id, cleanPath, branch)
 	if err != nil {
 		return apitypes.WorkspaceFile{}, err
 	}
@@ -365,12 +363,12 @@ func (s *RemoteStore) fetchWorkspaceTree(
 		}
 		for _, entry := range payload.Data.Files {
 			entryPath := strings.Trim(strings.TrimSpace(entry.Path), "/")
-			if entryPath != remoteWorkspaceDirName &&
-				!strings.HasPrefix(entryPath, remoteWorkspaceDirName+"/") {
+			rootName := strings.Split(strings.Trim(treePath, "/"), "/")[0]
+			if entryPath != rootName && !strings.HasPrefix(entryPath, rootName+"/") {
 				return fmt.Errorf("%w: %s", ErrWorkspacePathUnsafe, entryPath)
 			}
-			rel := strings.TrimPrefix(entryPath, remoteWorkspaceDirName+"/")
-			if entryPath == remoteWorkspaceDirName {
+			rel := entryPath
+			if entryPath == rootName {
 				rel = ""
 			}
 			if rel != "" {

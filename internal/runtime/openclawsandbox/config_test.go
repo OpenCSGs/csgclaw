@@ -211,7 +211,7 @@ func TestRenderAgentOpenClawConfigRendersMCPServers(t *testing.T) {
 		"remote-search": map[string]any{
 			"command":   nil,
 			"url":       "https://mcp.example.com/mcp",
-			"transport": "streamable-http",
+			"transport": "streamable_http",
 			"headers": map[string]any{
 				"Authorization": "Bearer secret",
 			},
@@ -363,6 +363,11 @@ func TestRenderAgentOpenClawConfigRejectsInvalidMCPServer(t *testing.T) {
 			name: "env values must be strings",
 			mcp:  map[string]any{"broken": map[string]any{"command": "uvx", "env": map[string]any{"TOKEN": 1}}},
 			want: "env must be an object with string values",
+		},
+		{
+			name: "unsupported transport is rejected before gateway startup",
+			mcp:  map[string]any{"broken": map[string]any{"url": "https://mcp.example.com/mcp", "transport": "http"}},
+			want: `transport: must be "sse" or "streamable-http"`,
 		},
 		{
 			name: "trimmed server names must be unique",
