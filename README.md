@@ -57,7 +57,7 @@ CSGClaw will open the IM workspace in your browser automatically when possible. 
 
 `csgclaw serve` uses a local config with server, bootstrap, sandbox, and channel settings, and auto-creates any missing bootstrap state on first run. Agent model/provider profiles are stored in agent state and managed from the Web UI. See [docs/config.md](docs/config.md) for sandbox provider options, Worker override examples, and agent profile details.
 
-Maintainer-facing architecture, API, and IM thread design notes live in [docs/architecture.md](docs/architecture.md), [docs/api.md](docs/api.md), and [docs/im-threads.md](docs/im-threads.md).
+Maintainer-facing architecture, API, structured skill output, and IM thread design notes live in [docs/architecture.md](docs/architecture.md), [docs/api.md](docs/api.md), [docs/structured-output.md](docs/structured-output.md), and [docs/im-threads.md](docs/im-threads.md).
 
 ## Features
 

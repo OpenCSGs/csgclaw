@@ -12,7 +12,7 @@ import {
   Trash2,
   Unlink2,
 } from "lucide-react";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
@@ -175,69 +175,72 @@ export type AgentDetailPaneHandle = {
   commitActiveMetadataEdit: () => (keyof AgentMetadataSavePatch)[];
 };
 
-export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>(function AgentDetailPane({
-  item,
-  t,
-  activeRoom = null,
-  busyKey = "",
-  dialogPortalContainer = null,
-  error = "",
-  feishuConnectBusy = "",
-  feishuPendingRegistration = null,
-  draft,
-  savedDraft = null,
-  hasUnsavedChanges: hasUnsavedChangesProp = undefined,
-  modelOptions = [],
-  models = [],
-  notice = "",
-  noticeTone = "warning",
-  modelBusy = false,
-  modelError = null,
-  saving = false,
-  publishBusy = false,
-  modelProviders = null,
-  saveError = "",
-  locale = "en",
-  rooms = [],
-  notifierWebhookPublicOrigin = "",
-  skills = [],
-  skillsLoading = false,
-  skillsError = "",
-  skillCandidates = [],
-  skillCandidatesLoading = false,
-  skillCandidatesError = "",
-  skillAddBusy = false,
-  skillAddError = "",
-  skillDeleteBusy = false,
-  skillDeleteError = "",
-  mcpCandidates = [],
-  mcpCandidatesError = "",
-  mcpCandidatesLoading = false,
-  mcpServers = [],
-  mcpAddBusy = false,
-  mcpAddError = "",
-  mcpDeleteBusy = false,
-  mcpDeleteError = "",
-  workspaceSupported = false,
-  onDraftChange,
-  onSave,
-  onPublish,
-  onStart,
-  onStop,
-  onRecreate,
-  onMetadataSave,
-  onStartFeishuConnect,
-  onDisconnectFeishu,
-  onUpgrade,
-  onDelete,
-  onInvite,
-  onOpenDM,
-  onAddSkills,
-  onDeleteSkill,
-  onInstallMCPServers,
-  onDeleteMCPServer,
-  onRetryMCPServers,
-}, ref) {
+export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPaneProps>(function AgentDetailPane(
+  {
+    item,
+    t,
+    activeRoom = null,
+    busyKey = "",
+    dialogPortalContainer = null,
+    error = "",
+    feishuConnectBusy = "",
+    feishuPendingRegistration = null,
+    draft,
+    savedDraft = null,
+    hasUnsavedChanges: hasUnsavedChangesProp = undefined,
+    modelOptions = [],
+    models = [],
+    notice = "",
+    noticeTone = "warning",
+    modelBusy = false,
+    modelError = null,
+    saving = false,
+    publishBusy = false,
+    modelProviders = null,
+    saveError = "",
+    locale = "en",
+    rooms = [],
+    notifierWebhookPublicOrigin = "",
+    skills = [],
+    skillsLoading = false,
+    skillsError = "",
+    skillCandidates = [],
+    skillCandidatesLoading = false,
+    skillCandidatesError = "",
+    skillAddBusy = false,
+    skillAddError = "",
+    skillDeleteBusy = false,
+    skillDeleteError = "",
+    mcpCandidates = [],
+    mcpCandidatesError = "",
+    mcpCandidatesLoading = false,
+    mcpServers = [],
+    mcpAddBusy = false,
+    mcpAddError = "",
+    mcpDeleteBusy = false,
+    mcpDeleteError = "",
+    workspaceSupported = false,
+    onDraftChange,
+    onSave,
+    onPublish,
+    onStart,
+    onStop,
+    onRecreate,
+    onMetadataSave,
+    onStartFeishuConnect,
+    onDisconnectFeishu,
+    onUpgrade,
+    onDelete,
+    onInvite,
+    onOpenDM,
+    onAddSkills,
+    onDeleteSkill,
+    onInstallMCPServers,
+    onDeleteMCPServer,
+    onRetryMCPServers,
+  },
+  ref,
+) {
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>(() => readAgentProfileActiveTab());
@@ -269,31 +272,34 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
   const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
-  const updateDraft = (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch });
-  const saveMetadataField = <K extends keyof AgentMetadataSavePatch>(
-    field: K,
-    value: AgentMetadataSavePatch[K],
-  ): boolean => {
-    if (skipMetadataAutosaveRef.current[field]) {
-      skipMetadataAutosaveRef.current = { ...skipMetadataAutosaveRef.current, [field]: false };
-      return false;
-    }
-    if (!onMetadataSave || saving) {
-      return false;
-    }
-    void onMetadataSave({ [field]: value } as Pick<AgentMetadataSavePatch, K>);
-    return true;
-  };
-  const cancelNameEdit = () => {
+  const updateDraft = useCallback(
+    (patch: Partial<AgentDraft>) => onDraftChange?.({ ...(draft || agentToDraft(item)), ...patch }),
+    [draft, item, onDraftChange],
+  );
+  const saveMetadataField = useCallback(
+    <K extends keyof AgentMetadataSavePatch>(field: K, value: AgentMetadataSavePatch[K]): boolean => {
+      if (skipMetadataAutosaveRef.current[field]) {
+        skipMetadataAutosaveRef.current = { ...skipMetadataAutosaveRef.current, [field]: false };
+        return false;
+      }
+      if (!onMetadataSave || saving) {
+        return false;
+      }
+      void onMetadataSave({ [field]: value } as Pick<AgentMetadataSavePatch, K>);
+      return true;
+    },
+    [onMetadataSave, saving],
+  );
+  const cancelNameEdit = useCallback(() => {
     skipMetadataAutosaveRef.current = { ...skipMetadataAutosaveRef.current, name: true };
     updateDraft({ name: savedDraft?.name ?? item.name ?? "" });
     setIsEditingName(false);
-  };
-  const cancelDescriptionEdit = () => {
+  }, [item.name, savedDraft?.name, updateDraft]);
+  const cancelDescriptionEdit = useCallback(() => {
     skipMetadataAutosaveRef.current = { ...skipMetadataAutosaveRef.current, description: true };
     updateDraft({ description: savedDraft?.description ?? item.description ?? "" });
     setIsEditingDescription(false);
-  };
+  }, [item.description, savedDraft?.description, updateDraft]);
   useImperativeHandle(
     ref,
     () => ({
@@ -326,7 +332,15 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         return committedFields;
       },
     }),
-    [draft?.description, draft?.name, isEditingDescription, isEditingName, saveMetadataField],
+    [
+      cancelDescriptionEdit,
+      cancelNameEdit,
+      draft?.description,
+      draft?.name,
+      isEditingDescription,
+      isEditingName,
+      saveMetadataField,
+    ],
   );
   const runtimeOptionSchemas = runtimeOptionSchemasForAgent(draft?.runtime_kind || runtimeKind, item);
   const fallbackProviderID = String(draft?.model_provider_id || "").trim();

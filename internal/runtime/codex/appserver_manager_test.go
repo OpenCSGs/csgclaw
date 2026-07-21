@@ -249,7 +249,9 @@ func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
 			}
 			if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
 				Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
-				Answers: map[string]activity.UserInputAnswer{"color": {OptionIndex: 2, Text: "deep shade"}},
+				Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
+					"color": {Answers: []string{"Green", "user_note: deep shade"}},
+				}},
 			}); err != nil {
 				t.Fatalf("Respond() error = %v", err)
 			}
@@ -317,7 +319,9 @@ func TestAppServerManagerPausesTurnWatchdogsWhileWaitingForUser(t *testing.T) {
 	}
 	_, err = broker.Respond(context.Background(), activity.UserInputResponseRequest{
 		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
-		Answers: map[string]activity.UserInputAnswer{"color": {OptionIndex: 2, Text: "deep shade"}},
+		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
+			"color": {Answers: []string{"Green", "user_note: deep shade"}},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("Respond() error = %v", err)
@@ -395,7 +399,9 @@ func TestAppServerManagerKeepsTurnOpenWhenAgentMessagePrecedesQuestion(t *testin
 	}
 	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
 		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
-		Answers: map[string]activity.UserInputAnswer{"next": {OptionIndex: 1}},
+		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
+			"next": {Answers: []string{"Continue"}},
+		}},
 	}); err != nil {
 		t.Fatalf("Respond() error = %v", err)
 	}
@@ -791,6 +797,71 @@ func TestAppServerEventAdapterRawTextAndToolEvents(t *testing.T) {
 	}
 	if events[2].Kind != SessionEventTextDelta || events[2].Text != "hello" || events[2].MessageID != "msg-1" {
 		t.Fatalf("text event = %#v, want agent message", events[2])
+	}
+}
+
+func TestAppServerEventAdapterStructuredOutputRawAndLegacyRoutes(t *testing.T) {
+	t.Parallel()
+
+	record := `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	tests := []struct {
+		name string
+		run  func(*appServerManager, *liveSession)
+	}{
+		{
+			name: "raw commandExecution",
+			run: func(manager *appServerManager, live *liveSession) {
+				manager.handleRawItemNotification("runtime-1", live, "main-thread", "item/completed", map[string]any{
+					"item": map[string]any{"id": "raw-tool", "type": "commandExecution", "status": "completed", "aggregatedOutput": "ordinary\n" + record},
+				})
+			},
+		},
+		{
+			name: "legacy exec_command_end",
+			run: func(manager *appServerManager, live *liveSession) {
+				manager.handleLegacyAppServerEvent("runtime-1", live, map[string]any{
+					"type": "exec_command_end", "call_id": "legacy-tool", "output": "ordinary\n" + record,
+				})
+			},
+		},
+		{
+			name: "legacy function_call_output",
+			run: func(manager *appServerManager, live *liveSession) {
+				manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+					"type": "function_call_output", "call_id": "response-tool", "output": "ordinary\n" + record,
+				})
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manager, live, sink := testAppServerEventAdapter(t)
+			test.run(manager, live)
+			events := sink.snapshot()
+			if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput || events[1].Kind != SessionEventToolCallUpdate {
+				t.Fatalf("events = %#v, want structured output then cleaned tool update", events)
+			}
+			if !strings.Contains(events[1].ToolOutputSummary, "ordinary") || strings.Contains(events[1].ToolOutputSummary, structuredOutputPrefix) {
+				t.Fatalf("tool output summary = %q, want ordinary stdout only", events[1].ToolOutputSummary)
+			}
+		})
+	}
+}
+
+func TestAppServerEventAdapterIgnoresStructuredOutputFromFailedLegacyCommand(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	record := `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+		"type": "function_call_output", "call_id": "failed-tool", "output": record + "\nProcess exited with code 1",
+	})
+	events := sink.snapshot()
+	if len(events) != 1 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != "failed" {
+		t.Fatalf("events = %#v, want failed tool update only", events)
+	}
+	if !strings.Contains(events[0].ToolOutputSummary, structuredOutputPrefix) {
+		t.Fatalf("failed output summary = %q, want untouched control line", events[0].ToolOutputSummary)
 	}
 }
 

@@ -218,6 +218,8 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 		if output == "" {
 			output = appServerString(item, "output")
 		}
+		status := appServerToolStatus(item, "completed")
+		output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, itemID, status, output, item, live)
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
 			SessionID:         threadID,
@@ -225,7 +227,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			ToolCallID:        itemID,
 			ToolKind:          "exec_command",
 			ToolTitle:         "Run shell command",
-			ToolStatus:        appServerToolStatus(item, "completed"),
+			ToolStatus:        status,
 			ToolOutputSummary: summarizeToolValue(map[string]any{"output": output}),
 			Payload:           item,
 		})
@@ -387,6 +389,8 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 	case "exec_command_end":
 		callID := appServerString(params, "call_id")
 		output := appServerString(params, "output")
+		status := legacyFunctionCallOutputStatus(output)
+		output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, callID, status, output, params, live)
 		live.markReplayedExecCommand(callID + ":output")
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
@@ -395,7 +399,7 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 			ToolCallID:        callID,
 			ToolKind:          "exec_command",
 			ToolTitle:         "Run shell command",
-			ToolStatus:        "completed",
+			ToolStatus:        status,
 			ToolOutputSummary: summarizeToolValue(map[string]any{"output": output}),
 			Payload:           params,
 		})
@@ -497,6 +501,8 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 			return
 		}
 		output := appServerString(params, "output")
+		status := legacyFunctionCallOutputStatus(output)
+		output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, callID, status, output, params, live)
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
 			SessionID:         threadID,
@@ -504,12 +510,53 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 			ToolCallID:        callID,
 			ToolKind:          "exec_command",
 			ToolTitle:         "Run shell command",
-			ToolStatus:        legacyFunctionCallOutputStatus(output),
+			ToolStatus:        status,
 			ToolOutputSummary: summarizeToolValue(map[string]any{"output": output}),
 			Payload:           params,
 		})
 		live.markReplayedExecCommand(outputKey)
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "legacy:response_item:function_call_output", progress: true})
+	}
+}
+
+func (m *appServerManager) decodeAndPublishStructuredCommandOutput(
+	runtimeID string,
+	threadID string,
+	toolCallID string,
+	status string,
+	output string,
+	payload any,
+	live *liveSession,
+) string {
+	if !structuredOutputToolStatusSuccessful(status) || !strings.Contains(output, structuredOutputPrefix) {
+		return output
+	}
+	cleaned, artifact, decodeErrors := decodeStructuredCommandOutput(output)
+	for _, err := range decodeErrors {
+		if live != nil && live.appClient != nil {
+			live.appClient.logDebug("ignore invalid structured command output", "tool_call_id", toolCallID, "error", err)
+		}
+	}
+	if structuredOutputArtifactEmpty(artifact) {
+		return cleaned
+	}
+	m.publishAppServerEvent(SessionEvent{
+		RuntimeID:  runtimeID,
+		SessionID:  threadID,
+		Kind:       SessionEventStructuredOutput,
+		ToolCallID: toolCallID,
+		ToolKind:   "exec_command",
+		Payload:    artifact,
+	})
+	return cleaned
+}
+
+func structuredOutputToolStatusSuccessful(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "success", "succeeded":
+		return true
+	default:
+		return false
 	}
 }
 

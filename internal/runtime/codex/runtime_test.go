@@ -1658,9 +1658,14 @@ func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
 	}
 
 	skillsRoot := filepath.Join(root, agent.ManagerUserID, ".codex", "home", "skills")
-	for _, name := range []string{"agent-creator", "agent-teams", "feishu"} {
+	for _, name := range []string{"agent-creator", "agent-teams", "csgclaw-interactive-output-demo", "feishu"} {
 		if _, err := os.Stat(filepath.Join(skillsRoot, name, "SKILL.md")); err != nil {
 			t.Fatalf("manager template skill %q missing: %v", name, err)
+		}
+	}
+	for _, name := range []string{"agents/openai.yaml", "scripts/emit_demo.py"} {
+		if _, err := os.Stat(filepath.Join(skillsRoot, "csgclaw-interactive-output-demo", filepath.FromSlash(name))); err != nil {
+			t.Fatalf("manager interactive output demo file %q missing: %v", name, err)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(skillsRoot, "basics", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {

@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -90,6 +91,61 @@ type UserInputOptionSnapshot struct {
 	Description string `json:"description,omitempty"`
 }
 
+// RequestUserInputOption matches Codex's request_user_input wire type.
+type RequestUserInputOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// RequestUserInputQuestion matches Codex's request_user_input wire type.
+type RequestUserInputQuestion struct {
+	ID       string                   `json:"id"`
+	Header   string                   `json:"header"`
+	Question string                   `json:"question"`
+	IsOther  bool                     `json:"isOther"`
+	IsSecret bool                     `json:"isSecret"`
+	Options  []RequestUserInputOption `json:"options"`
+}
+
+// RequestUserInputArgs matches Codex's request_user_input arguments.
+type RequestUserInputArgs struct {
+	Questions        []RequestUserInputQuestion `json:"questions"`
+	AutoResolutionMS *uint64                    `json:"autoResolutionMs,omitempty"`
+}
+
+// RequestUserInputAnswer matches one Codex request_user_input answer.
+type RequestUserInputAnswer struct {
+	Answers []string `json:"answers"`
+}
+
+// RequestUserInputResponse matches Codex's request_user_input response.
+type RequestUserInputResponse struct {
+	Answers map[string]RequestUserInputAnswer `json:"answers"`
+}
+
+// ResourceLink matches the resource_link content block exposed by Codex.
+// Rendering uses Name, Title, URI, Description, and the first safe icon while
+// retaining the remaining source-compatible fields for future renderers.
+type ResourceLink struct {
+	Type        string           `json:"type"`
+	Name        string           `json:"name"`
+	Title       string           `json:"title,omitempty"`
+	URI         string           `json:"uri"`
+	Description string           `json:"description,omitempty"`
+	MIMEType    string           `json:"mimeType,omitempty"`
+	Size        *uint64          `json:"size,omitempty"`
+	Annotations json.RawMessage  `json:"annotations,omitempty"`
+	Meta        json.RawMessage  `json:"_meta,omitempty"`
+	Icons       []map[string]any `json:"icons,omitempty"`
+}
+
+// StructuredOutputArtifact is the normalized result of decoding CSGClaw
+// control records from one completed command output.
+type StructuredOutputArtifact struct {
+	RequestUserInput *RequestUserInputArgs `json:"requestUserInput,omitempty"`
+	ResourceLinks    []ResourceLink        `json:"resourceLinks,omitempty"`
+}
+
 type UserInputQuestionSnapshot struct {
 	ID       string                    `json:"id"`
 	Header   string                    `json:"header"`
@@ -121,23 +177,17 @@ type UserInputSnapshot struct {
 	ResponderID   string                             `json:"responder_id,omitempty"`
 }
 
-type UserInputAnswer struct {
-	OptionIndex int    `json:"option_index,omitempty"`
-	Text        string `json:"text,omitempty"`
-	Skip        bool   `json:"skip,omitempty"`
-}
-
 type UserInputResponseRequest struct {
-	Channel     string                     `json:"channel,omitempty"`
-	ActivityID  string                     `json:"activity_id,omitempty"`
-	RoomID      string                     `json:"room_id"`
-	ResponderID string                     `json:"responder_id"`
-	Answers     map[string]UserInputAnswer `json:"answers,omitempty"`
-	SkipAll     bool                       `json:"skip_all,omitempty"`
+	Channel     string                   `json:"channel,omitempty"`
+	ActivityID  string                   `json:"activity_id,omitempty"`
+	RoomID      string                   `json:"room_id,omitempty"`
+	ResponderID string                   `json:"responder_id,omitempty"`
+	Response    RequestUserInputResponse `json:"response"`
 }
 
 type UserInputResponder interface {
 	Respond(ctx context.Context, req UserInputResponseRequest) (UserInputSnapshot, error)
+	Get(requestID string) (UserInputSnapshot, bool)
 }
 
 type RuntimeEventKind string
@@ -153,6 +203,7 @@ const (
 	RuntimeEventActionDecision    RuntimeEventKind = "action_decision"
 	RuntimeEventUserInputRequest  RuntimeEventKind = "user_input_request"
 	RuntimeEventUserInputResolved RuntimeEventKind = "user_input_resolved"
+	RuntimeEventStructuredOutput  RuntimeEventKind = "structured_output"
 	RuntimeEventPromptCompleted   RuntimeEventKind = "prompt_completed"
 	RuntimeEventPromptFailed      RuntimeEventKind = "prompt_failed"
 )
@@ -195,7 +246,8 @@ func RuntimeEventRequiresReliableDelivery(event RuntimeEvent) bool {
 	switch event.Kind {
 	case RuntimeEventTextDelta,
 		RuntimeEventActionRequest, RuntimeEventActionDecision,
-		RuntimeEventUserInputRequest, RuntimeEventUserInputResolved:
+		RuntimeEventUserInputRequest, RuntimeEventUserInputResolved,
+		RuntimeEventStructuredOutput:
 		return true
 	case RuntimeEventPromptCompleted, RuntimeEventPromptFailed:
 		return true

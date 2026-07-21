@@ -57,7 +57,7 @@ csgclaw serve
 
 `csgclaw serve` 会使用本地配置中的 server、bootstrap、sandbox 和 channel 设置，并在首次运行时自动补齐缺失的 bootstrap 状态。Agent 模型/provider profile 存储在 agent 状态中，并通过 Web UI 管理。Sandbox provider 选项、Worker 覆盖示例和 agent profile 详情见 [docs/config.zh.md](docs/config.zh.md)。
 
-面向维护者的架构、API 和 IM thread 设计说明见 [docs/architecture.md](docs/architecture.md)、[docs/api.zh.md](docs/api.zh.md) 和 [docs/im-threads.zh.md](docs/im-threads.zh.md)。
+面向维护者的架构、API、结构化 skill 输出和 IM thread 设计说明见 [docs/architecture.md](docs/architecture.md)、[docs/api.zh.md](docs/api.zh.md)、[docs/structured-output.zh.md](docs/structured-output.zh.md) 和 [docs/im-threads.zh.md](docs/im-threads.zh.md)。
 
 ## 功能特性
 

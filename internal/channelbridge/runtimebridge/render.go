@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"html"
+	"net/url"
 	"strings"
 	"time"
 
@@ -23,12 +25,16 @@ type TurnRenderer struct {
 	toolSnapshots  map[string]activityTool
 	toolSignatures map[string]string
 	promptError    string
+	userInput      *activity.RequestUserInputArgs
+	resourceLinks  []activity.ResourceLink
+	resourceURIs   map[string]struct{}
 }
 
 func NewTurnRenderer() *TurnRenderer {
 	return &TurnRenderer{
 		toolSnapshots:  make(map[string]activityTool),
 		toolSignatures: make(map[string]string),
+		resourceURIs:   make(map[string]struct{}),
 	}
 }
 
@@ -53,12 +59,122 @@ func (r *TurnRenderer) FinalMessages() []string {
 	}
 	var messages []string
 	if text := strings.TrimSpace(r.text.String()); text != "" {
-		messages = append(messages, text)
+		messages = append(messages, appendResourceLinks(text, r.resourceLinks))
+	} else if links := resourceLinksMarkdown(r.resourceLinks); links != "" {
+		messages = append(messages, links)
 	}
 	if r.promptError != "" {
 		messages = append(messages, fmt.Sprintf("Runtime error: %s", r.promptError))
 	}
 	return messages
+}
+
+func (r *TurnRenderer) ApplyStructuredOutput(event activity.RuntimeEvent) {
+	if r == nil || event.Kind != activity.RuntimeEventStructuredOutput {
+		return
+	}
+	artifact, ok := event.Payload.(activity.StructuredOutputArtifact)
+	if !ok {
+		return
+	}
+	if r.userInput == nil && artifact.RequestUserInput != nil {
+		copy := *artifact.RequestUserInput
+		copy.Questions = append([]activity.RequestUserInputQuestion(nil), artifact.RequestUserInput.Questions...)
+		for index := range copy.Questions {
+			copy.Questions[index].Options = append([]activity.RequestUserInputOption(nil), artifact.RequestUserInput.Questions[index].Options...)
+		}
+		r.userInput = &copy
+	}
+	for _, link := range artifact.ResourceLinks {
+		if len(r.resourceLinks) >= 16 {
+			break
+		}
+		if _, exists := r.resourceURIs[link.URI]; exists {
+			continue
+		}
+		r.resourceURIs[link.URI] = struct{}{}
+		r.resourceLinks = append(r.resourceLinks, link)
+	}
+}
+
+func (r *TurnRenderer) RequestUserInput() *activity.RequestUserInputArgs {
+	if r == nil || r.userInput == nil {
+		return nil
+	}
+	copy := *r.userInput
+	copy.Questions = append([]activity.RequestUserInputQuestion(nil), r.userInput.Questions...)
+	for index := range copy.Questions {
+		copy.Questions[index].Options = append([]activity.RequestUserInputOption(nil), r.userInput.Questions[index].Options...)
+	}
+	return &copy
+}
+
+func (r *TurnRenderer) DiscardStructuredOutput() {
+	if r == nil {
+		return
+	}
+	r.userInput = nil
+	r.resourceLinks = nil
+	clear(r.resourceURIs)
+}
+
+func appendResourceLinks(text string, links []activity.ResourceLink) string {
+	markdown := resourceLinksMarkdown(links)
+	if markdown == "" {
+		return text
+	}
+	return strings.TrimSpace(text) + "\n\n" + markdown
+}
+
+func resourceLinksMarkdown(links []activity.ResourceLink) string {
+	if len(links) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Links\n")
+	for _, link := range links {
+		label := strings.TrimSpace(link.Title)
+		if label == "" {
+			label = strings.TrimSpace(link.Name)
+		}
+		label = strings.NewReplacer("[", "\\[", "]", "\\]").Replace(label)
+		b.WriteString("- ")
+		if iconURI := resourceLinkIconURI(link); iconURI != "" {
+			b.WriteString(`<img class="resource-link-icon" src="`)
+			b.WriteString(html.EscapeString(iconURI))
+			b.WriteString(`" alt="" aria-hidden="true"> `)
+		}
+		b.WriteString("[")
+		b.WriteString(label)
+		b.WriteString("](<")
+		b.WriteString(link.URI)
+		b.WriteString(">)")
+		if description := strings.TrimSpace(link.Description); description != "" {
+			b.WriteString(" - ")
+			b.WriteString(strings.ReplaceAll(description, "\n", " "))
+		}
+		b.WriteByte('\n')
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func resourceLinkIconURI(link activity.ResourceLink) string {
+	for _, icon := range link.Icons {
+		raw, ok := icon["src"].(string)
+		if !ok {
+			continue
+		}
+		iconURI := strings.TrimSpace(raw)
+		parsed, err := url.Parse(iconURI)
+		if err != nil || parsed.Host == "" {
+			continue
+		}
+		if !strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https") {
+			continue
+		}
+		return iconURI
+	}
+	return ""
 }
 
 func (r *TurnRenderer) SetPromptError(err string) {

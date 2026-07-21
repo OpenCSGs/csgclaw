@@ -92,7 +92,7 @@ function toolActivityContent(summary: string) {
   });
 }
 
-function questionActivityContent(id = "request-1") {
+function questionActivityContent(id = "request-1", autoResolveAt = "") {
   return JSON.stringify({
     type: CSGCLAW_AGENT_ACTIVITY_TYPE,
     content: {
@@ -101,6 +101,7 @@ function questionActivityContent(id = "request-1") {
       question: {
         id,
         status: "pending",
+        ...(autoResolveAt ? { auto_resolve_at: autoResolveAt } : {}),
         questions: [
           {
             id: "color",
@@ -469,10 +470,10 @@ describe("ConversationPane", () => {
     });
   });
 
-  it("advances after an option answer and lets the selected option be cleared", async () => {
+  it("advances after an option answer and keeps it while navigating", async () => {
     const user = userEvent.setup();
     const question = {
-      content: questionActivityContent(),
+      content: questionActivityContent("request-1", new Date(Date.now() + 120_000).toISOString()),
       created_at: "2026-05-25T08:14:00Z",
       id: "question-request-1",
       sender_id: "u-manager",
@@ -490,32 +491,32 @@ describe("ConversationPane", () => {
     });
 
     expect(screen.getAllByText("Choose a color").length).toBeGreaterThan(0);
-    expect(screen.getByText("Choose a color", { selector: ".question-composer-prompt" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Choose a color" })).toBeInTheDocument();
+    expect(screen.getByRole("timer")).toBeInTheDocument();
     expect(screen.getByText("Choose a color", { selector: ".agent-question-prompt" })).toBeInTheDocument();
     expect(document.querySelector(".message-bubble:has(> .agent-activity-card)")).toBeInTheDocument();
-    expect(screen.getByLabelText("questionFreeformAnswer")).toBeInTheDocument();
+    expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
     expect(screen.queryByLabelText("Message")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Blue/ }));
     await waitFor(() => expect(screen.queryByRole("radiogroup", { name: "Choose a color" })).not.toBeInTheDocument());
-    expect(screen.getByText("Add more detail", { selector: ".question-composer-prompt" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "questionPrevious" }));
     const selectedOption = screen.getByRole("radio", { name: /Blue/ });
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);
-    expect(screen.getByRole("radio", { name: /Blue/ })).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByText("Choose a color", { selector: ".question-composer-prompt" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
   });
 
-  it("supports clearing a selected option in thread answer mode", async () => {
+  it("supports the same option navigation in thread answer mode", async () => {
     const user = userEvent.setup();
     renderThreadPane({
       replies: [
         {
-          content: questionActivityContent("thread-request"),
+          content: questionActivityContent("thread-request", new Date(Date.now() + 120_000).toISOString()),
           created_at: "2026-05-25T08:14:00Z",
           id: "question-thread-request",
           sender_id: "u-manager",
@@ -524,7 +525,8 @@ describe("ConversationPane", () => {
       ],
     });
 
-    expect(screen.getByLabelText("questionFreeformAnswer")).toBeInTheDocument();
+    expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
+    expect(screen.getByRole("timer")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
     expect(screen.queryByRole("textbox", { name: "Reply in thread" })).not.toBeInTheDocument();
 
@@ -533,7 +535,7 @@ describe("ConversationPane", () => {
     const selectedOption = screen.getByRole("radio", { name: /Blue/ });
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);
-    expect(screen.getByRole("radio", { name: /Blue/ })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
   });
 
   it("hides legacy zero-reply thread summaries from the timeline", () => {

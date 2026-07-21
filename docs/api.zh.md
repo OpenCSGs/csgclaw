@@ -13,6 +13,33 @@
   - Channel 与 participant API：`/api/v1/channels/*`
   - 健康检查：`/healthz`
 
+CSGClaw skill 脚本可以通过 Runtime 中立的 [CSGClaw 结构化 Skill 输出协议](structured-output.zh.md) 输出资源链接和交互式问题。
+该协议最终通过下方的 channel activity 接口提交问题响应。
+
+## Activity API
+
+### `POST /api/v1/channels/{channel}/activities/{activity_id}:respond`
+
+回答一个待处理的结构化问题 activity。
+请求正文是精确的 `RequestUserInputResponse` 对象：
+
+```json
+{
+  "answers": {
+    "verification": {
+      "answers": ["Standard (Recommended)"]
+    },
+    "note": {
+      "answers": []
+    }
+  }
+}
+```
+
+空的外层 `answers` 对象会跳过整个请求。
+空的内层 `answers` 数组会跳过单个问题。
+服务端从已存储的 activity 中推导 room 和 responder，并拒绝未知字段。
+
 ## 认证
 
 - 默认大多数 `/api/v1/*` 接口不要求认证

@@ -4,7 +4,12 @@ import { errorMessage } from "@/api/client";
 import { pendingQuestionActivities, questionOptions, type AgentActivityPayload } from "@/models/agentActivity";
 import type { IMMessage, TranslateFn } from "@/models/conversations";
 
-type DraftAnswers = Record<string, UserInputAnswer>;
+type DraftAnswer = {
+  optionIndex?: number;
+  skipped?: boolean;
+};
+
+type DraftAnswers = Record<string, DraftAnswer>;
 type DraftTexts = Record<string, string>;
 
 export type QuestionAnswerMode = {
@@ -14,14 +19,12 @@ export type QuestionAnswerMode = {
   pending: AgentActivityPayload[];
   questionIndex: number;
   selected: AgentActivityPayload | null;
-  skipConfirmation: boolean;
   text: string;
   chooseOption: (optionIndex: number) => void;
-  continueWithoutAnswering: () => void;
+  closeRequest: () => void;
   nextQuestion: () => void;
   previousQuestion: () => void;
   select: (activityID: string, questionID?: string, optionIndex?: number) => void;
-  setSkipConfirmation: (value: boolean) => void;
   setText: (value: string) => void;
   skipQuestion: () => void;
   submitAnswers: () => void;
@@ -29,8 +32,6 @@ export type QuestionAnswerMode = {
 
 export function useQuestionAnswerMode({
   messages,
-  responderID,
-  roomID,
   t,
 }: {
   messages: readonly IMMessage[];
@@ -51,7 +52,6 @@ export function useQuestionAnswerMode({
   const [texts, setTexts] = useState<DraftTexts>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [skipConfirmation, setSkipConfirmation] = useState(false);
   const selected = pending.find((activity) => activity.content.question?.id === selectedID) ?? null;
   const currentQuestion = selected?.content.question?.questions[questionIndex];
   const text = currentQuestion ? (texts[currentQuestion.id] ?? "") : "";
@@ -77,56 +77,19 @@ export function useQuestionAnswerMode({
     setAnswers({});
     setTexts({});
     setError("");
-    setSkipConfirmation(false);
   }, [pending, pendingKey, selectedID]);
 
-  const select = useCallback(
-    (activityID: string, questionID?: string, optionIndex?: number) => {
-      const activity = pending.find((item) => item.content.question?.id === activityID);
-      if (!activity || busy) {
-        return;
-      }
-      const questions = activity.content.question?.questions ?? [];
-      const nextIndex = questionID
-        ? Math.max(
-            0,
-            questions.findIndex((question) => question.id === questionID),
-          )
-        : 0;
-      const selectedQuestion = questions[nextIndex];
-      const selectedOther =
-        Boolean(optionIndex) &&
-        selectedQuestion?.is_other === true &&
-        optionIndex === questionOptions(selectedQuestion).length;
-      const shouldAdvance = Boolean(optionIndex) && !selectedOther && nextIndex < questions.length - 1;
-      setSelectedID(activityID);
-      setQuestionIndex(shouldAdvance ? nextIndex + 1 : nextIndex);
-      setAnswers(
-        questionID && optionIndex && questions[nextIndex]
-          ? { [questions[nextIndex].id]: { option_index: optionIndex } }
-          : {},
-      );
-      setTexts({});
-      setError("");
-      setSkipConfirmation(false);
-    },
-    [busy, pending],
-  );
-
   const resolve = useCallback(
-    async (activity: AgentActivityPayload, responseAnswers: DraftAnswers, skipAll = false) => {
+    async (activity: AgentActivityPayload, responseAnswers: Record<string, UserInputAnswer>) => {
       const snapshot = activity.content.question;
-      if (!snapshot?.id || !roomID || !responderID || busy) {
+      if (!snapshot?.id || busy) {
         return;
       }
       setBusy(true);
       setError("");
       try {
         const result = await respondToUserInput(activity.channel || snapshot.channel || "csgclaw", snapshot.id, {
-          answers: skipAll ? undefined : responseAnswers,
-          responder_id: responderID,
-          room_id: roomID,
-          skip_all: skipAll || undefined,
+          answers: responseAnswers,
         });
         if (result.status !== "pending") {
           setSettledIDs((current) => new Set(current).add(snapshot.id));
@@ -134,7 +97,6 @@ export function useQuestionAnswerMode({
           setQuestionIndex(0);
           setAnswers({});
           setTexts({});
-          setSkipConfirmation(false);
         }
       } catch (err) {
         setError(errorMessage(err, t("questionResponseFailed")));
@@ -142,7 +104,7 @@ export function useQuestionAnswerMode({
         setBusy(false);
       }
     },
-    [busy, responderID, roomID, t],
+    [busy, t],
   );
 
   const previousQuestion = useCallback(() => {
@@ -166,60 +128,56 @@ export function useQuestionAnswerMode({
         return;
       }
       setTexts((current) => ({ ...current, [currentQuestion.id]: value }));
-      setAnswers((current) => {
-        if (!current[currentQuestion.id]?.skip) {
-          return current;
-        }
-        return { ...current, [currentQuestion.id]: {} };
-      });
+      setAnswers((current) => ({ ...current, [currentQuestion.id]: {} }));
       setError("");
     },
     [busy, currentQuestion],
   );
 
-  const submitAnswers = useCallback(() => {
+  const serializedAnswers = useCallback((): Record<string, UserInputAnswer> | null => {
     const snapshot = selected?.content.question;
-    if (!selected || !snapshot || busy) {
-      return;
+    if (!snapshot) {
+      return null;
     }
-    const nextAnswers: DraftAnswers = {};
+    const result: Record<string, UserInputAnswer> = {};
     for (let index = 0; index < snapshot.questions.length; index += 1) {
       const question = snapshot.questions[index];
-      const current = answers[question.id] ?? {};
-      if (current.skip) {
-        nextAnswers[question.id] = { skip: true };
+      const draft = answers[question.id] ?? {};
+      const note = (texts[question.id] ?? "").trim();
+      if (draft.skipped) {
+        result[question.id] = { answers: [] };
         continue;
       }
-      const trimmed = (texts[question.id] ?? "").trim();
-      const availableOptions = questionOptions(question);
-      let optionIndex = current.option_index;
-      let note = trimmed;
-      if (!optionIndex && /^\d+$/.test(trimmed)) {
-        const numeric = Number(trimmed);
-        if (numeric >= 1 && numeric <= availableOptions.length) {
-          optionIndex = numeric;
-          note = "";
+      if (draft.optionIndex) {
+        const option = questionOptions(question)[draft.optionIndex - 1];
+        if (!option) {
+          setQuestionIndex(index);
+          setError(t("questionAnswerRequired"));
+          return null;
         }
+        result[question.id] = { answers: [option.label] };
+        continue;
       }
-      if (!optionIndex && !note) {
-        setQuestionIndex(index);
-        setError(t("questionAnswerRequired"));
-        return;
+      if (note) {
+        result[question.id] = { answers: [`user_note: ${note}`] };
+        continue;
       }
-      if (optionIndex === availableOptions.length && question.is_other && !note) {
-        setQuestionIndex(index);
-        setError(t("questionOtherDetailRequired"));
-        return;
-      }
-      nextAnswers[question.id] = {
-        option_index: optionIndex,
-        text: note || undefined,
-      };
+      setQuestionIndex(index);
+      setError(t("questionAnswerRequired"));
+      return null;
     }
-    setAnswers(nextAnswers);
-    setError("");
-    void resolve(selected, nextAnswers);
-  }, [answers, busy, resolve, selected, t, texts]);
+    return result;
+  }, [answers, selected, t, texts]);
+
+  const submitAnswers = useCallback(() => {
+    if (!selected || busy) {
+      return;
+    }
+    const response = serializedAnswers();
+    if (response) {
+      void resolve(selected, response);
+    }
+  }, [busy, resolve, selected, serializedAnswers]);
 
   const skipQuestion = useCallback(() => {
     const snapshot = selected?.content.question;
@@ -227,56 +185,114 @@ export function useQuestionAnswerMode({
     if (!selected || !snapshot || !question || busy) {
       return;
     }
-    const nextAnswers = { ...answers, [question.id]: { skip: true } };
+    const nextAnswers: DraftAnswers = { ...answers, [question.id]: { skipped: true } };
+    const nextTexts = { ...texts, [question.id]: "" };
     setAnswers(nextAnswers);
-    setTexts((current) => ({ ...current, [question.id]: "" }));
+    setTexts(nextTexts);
     setError("");
     if (questionIndex < snapshot.questions.length - 1) {
       setQuestionIndex((value) => value + 1);
+      return;
     }
-  }, [answers, busy, questionIndex, selected]);
+    const response: Record<string, UserInputAnswer> = {};
+    for (const item of snapshot.questions) {
+      const draft = nextAnswers[item.id] ?? {};
+      const note = (nextTexts[item.id] ?? "").trim();
+      if (draft.skipped) {
+        response[item.id] = { answers: [] };
+      } else if (draft.optionIndex) {
+        const option = questionOptions(item)[draft.optionIndex - 1];
+        if (!option) {
+          return;
+        }
+        response[item.id] = { answers: [option.label] };
+      } else if (note) {
+        response[item.id] = { answers: [`user_note: ${note}`] };
+      } else {
+        response[item.id] = { answers: [] };
+      }
+    }
+    void resolve(selected, response);
+  }, [answers, busy, questionIndex, resolve, selected, texts]);
 
   const chooseOption = useCallback(
     (optionIndex: number) => {
-      const question = selected?.content.question?.questions[questionIndex];
-      if (!question || busy) {
+      const snapshot = selected?.content.question;
+      const question = snapshot?.questions[questionIndex];
+      if (!selected || !snapshot || !question || busy) {
         return;
       }
-      const deselect = answers[question.id]?.option_index === optionIndex;
-      setAnswers((current) => {
-        if (deselect) {
-          const next = { ...current };
-          delete next[question.id];
-          return next;
-        }
-        return {
-          ...current,
-          [question.id]: { ...current[question.id], option_index: optionIndex, skip: undefined },
-        };
-      });
+      const option = questionOptions(question)[optionIndex - 1];
+      if (!option) {
+        return;
+      }
+      const nextAnswers: DraftAnswers = { ...answers, [question.id]: { optionIndex } };
+      const nextTexts = { ...texts, [question.id]: "" };
+      setAnswers(nextAnswers);
+      setTexts(nextTexts);
       setError("");
-      if (deselect) {
+      if (questionIndex < snapshot.questions.length - 1) {
+        setQuestionIndex((value) => value + 1);
         return;
       }
-      const selectedOther = question.is_other && optionIndex === questionOptions(question).length;
-      if (!selectedOther && questionIndex < (selected?.content.question?.questions.length ?? 0) - 1) {
-        setQuestionIndex(questionIndex + 1);
+      const response: Record<string, UserInputAnswer> = {};
+      for (const item of snapshot.questions) {
+        const draft = nextAnswers[item.id] ?? {};
+        const note = (nextTexts[item.id] ?? "").trim();
+        if (draft.skipped) {
+          response[item.id] = { answers: [] };
+        } else if (draft.optionIndex) {
+          const selectedOption = questionOptions(item)[draft.optionIndex - 1];
+          if (!selectedOption) {
+            return;
+          }
+          response[item.id] = { answers: [selectedOption.label] };
+        } else if (note) {
+          response[item.id] = { answers: [`user_note: ${note}`] };
+        } else {
+          setQuestionIndex(snapshot.questions.indexOf(item));
+          setError(t("questionAnswerRequired"));
+          return;
+        }
       }
+      void resolve(selected, response);
     },
-    [answers, busy, questionIndex, selected],
+    [answers, busy, questionIndex, resolve, selected, t, texts],
   );
 
-  const continueWithoutAnswering = useCallback(() => {
-    if (selected) {
-      void resolve(selected, {}, true);
+  const select = useCallback(
+    (activityID: string, questionID?: string, optionIndex?: number) => {
+      const activity = pending.find((item) => item.content.question?.id === activityID);
+      if (!activity || busy) {
+        return;
+      }
+      const questions = activity.content.question?.questions ?? [];
+      const nextIndex = questionID
+        ? Math.max(
+            0,
+            questions.findIndex((question) => question.id === questionID),
+          )
+        : 0;
+      setSelectedID(activityID);
+      setQuestionIndex(nextIndex);
+      setAnswers(questionID && optionIndex ? { [questionID]: { optionIndex } } : {});
+      setTexts({});
+      setError("");
+    },
+    [busy, pending],
+  );
+
+  const closeRequest = useCallback(() => {
+    if (selected && !busy) {
+      void resolve(selected, {});
     }
-  }, [resolve, selected]);
+  }, [busy, resolve, selected]);
 
   return {
     answers,
     busy,
     chooseOption,
-    continueWithoutAnswering,
+    closeRequest,
     error,
     nextQuestion,
     pending,
@@ -284,9 +300,7 @@ export function useQuestionAnswerMode({
     questionIndex,
     select,
     selected,
-    setSkipConfirmation,
     setText,
-    skipConfirmation,
     skipQuestion,
     submitAnswers,
     text,

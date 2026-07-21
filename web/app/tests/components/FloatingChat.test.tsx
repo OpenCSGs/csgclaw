@@ -259,7 +259,7 @@ describe("FloatingChat manager prompts", () => {
     expect(screen.getByText("Connected")).toBeInTheDocument();
   });
 
-  it("uses answer mode and supports clearing a selected option", async () => {
+  it("uses answer mode and preserves selected options while navigating", async () => {
     const user = userEvent.setup();
     renderOpenManagerFloatingChat({
       id: "room-manager",
@@ -275,6 +275,7 @@ describe("FloatingChat manager prompts", () => {
               question: {
                 id: "request-1",
                 status: "pending",
+                auto_resolve_at: new Date(Date.now() + 120_000).toISOString(),
                 questions: [
                   {
                     id: "scope",
@@ -307,7 +308,8 @@ describe("FloatingChat manager prompts", () => {
     });
 
     expect(screen.getAllByText("Choose a scope").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("questionFreeformAnswer")).toBeInTheDocument();
+    expect(screen.getByRole("timer")).toBeInTheDocument();
+    expect(screen.queryByLabelText("questionFreeformAnswer")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "questionPrevious" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
     expect(screen.queryByLabelText("Type a message. Use / for commands or skills")).not.toBeInTheDocument();
@@ -317,7 +319,7 @@ describe("FloatingChat manager prompts", () => {
     const selectedOption = screen.getByRole("radio", { name: /Workspace/ });
     expect(selectedOption).toHaveAttribute("aria-checked", "true");
     await user.click(selectedOption);
-    expect(screen.getByRole("radio", { name: /Workspace/ })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("heading", { name: "Add more detail" })).toBeInTheDocument();
   });
 
   it("shows prompt suggestions when the manager chat only has the bootstrap notice", () => {

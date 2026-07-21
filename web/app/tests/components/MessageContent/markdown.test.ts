@@ -35,6 +35,28 @@ describe("message markdown helpers", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
+  it("preserves structured resource link icons", () => {
+    render(
+      createElement("div", {
+        dangerouslySetInnerHTML: {
+          __html: renderMarkdown(
+            '- <img class="resource-link-icon" src="https://example.com/icon.svg" alt="" aria-hidden="true" onerror="alert(1)"> [docs](<https://example.com/docs>)',
+          ),
+        },
+      }),
+    );
+
+    const icon = document.querySelector("img.resource-link-icon");
+    expect(icon).toHaveAttribute("src", "https://example.com/icon.svg");
+    expect(icon).toHaveAttribute("alt", "");
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+    expect(icon).not.toHaveAttribute("onerror");
+
+    const link = screen.getByRole("link", { name: "docs" });
+    expect(link).toHaveAttribute("href", "https://example.com/docs");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("renders decorated mentions through the markdown pipeline", () => {
     const html = renderMarkdown('Ping <at user_id="u-1">Alice</at>');
 

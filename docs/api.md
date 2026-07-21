@@ -13,6 +13,33 @@ This document is generated from the HTTP routes and behaviors currently implemen
   - Channel and participant API: `/api/v1/channels/*`
   - Health check: `/healthz`
 
+CSGClaw skill scripts can emit resource links and interactive questions through the runtime-neutral [CSGClaw Structured Skill Output Protocol](structured-output.md).
+That protocol ultimately submits question responses to the channel activity endpoint documented below.
+
+## Activity API
+
+### `POST /api/v1/channels/{channel}/activities/{activity_id}:respond`
+
+Answers a pending structured question activity.
+The body is the exact `RequestUserInputResponse` object:
+
+```json
+{
+  "answers": {
+    "verification": {
+      "answers": ["Standard (Recommended)"]
+    },
+    "note": {
+      "answers": []
+    }
+  }
+}
+```
+
+An empty outer `answers` object skips the entire request.
+An empty inner `answers` array skips one question.
+The server derives the room and responder from the stored activity and rejects unknown fields.
+
 ## Authentication
 
 - Most `/api/v1/*` endpoints do not require authentication by default

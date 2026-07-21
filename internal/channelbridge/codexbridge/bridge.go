@@ -2,6 +2,7 @@ package codexbridge
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -96,6 +97,9 @@ func NewService(client BotClient, prompter SessionPrompter, events runtimecodex.
 		if opt != nil {
 			opt(service)
 		}
+	}
+	if service.userInput != nil {
+		service.userInput.AddDetachedHandler(service.handleDetachedUserInput)
 	}
 	return service
 }
@@ -201,6 +205,81 @@ func (s *Service) Close() {
 	for _, w := range workers {
 		<-w.done
 	}
+}
+
+func (s *Service) handleDetachedUserInput(resolution runtimecodex.DetachedUserInputResolution) {
+	if s == nil {
+		return
+	}
+	w := s.detachedWorker(resolution)
+	if w == nil {
+		return
+	}
+	snapshot := resolution.Snapshot
+	if snapshot.Status == activity.UserInputStatusAnswered && !w.detachedSourceIsCurrent(resolution.Context) {
+		snapshot.Status = activity.UserInputStatusInterrupted
+		now := time.Now().UTC()
+		snapshot.ResolvedAt = &now
+	}
+	event := runtimecodex.SessionEvent{
+		RuntimeID:   resolution.Execution.RuntimeID,
+		SessionID:   resolution.Execution.SessionID,
+		TurnID:      resolution.Execution.TurnID,
+		Kind:        runtimecodex.SessionEventUserInputResolved,
+		ReceivedAt:  time.Now().UTC(),
+		ToolCallID:  resolution.Execution.ToolCallID,
+		ToolKind:    resolution.Execution.ToolKind,
+		UserInputID: snapshot.ID,
+		Payload:     snapshot,
+	}
+	renderer := runtimebridge.NewTurnRenderer()
+	rendered, ok := renderer.RenderActivity(event, resolution.Context.Channel, resolution.Context.RoomID, w.binding.BotID)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := w.sendActivity(ctx, resolution.Context.RoomID, resolution.Context.ThreadRootID, rendered, nil); err != nil {
+		slog.Debug("codex bridge failed to persist detached user input resolution",
+			"runtime_id", resolution.Execution.RuntimeID,
+			"request_id", snapshot.ID,
+			"error", err,
+		)
+		return
+	}
+	if snapshot.Status != activity.UserInputStatusAnswered {
+		return
+	}
+	body, err := json.Marshal(resolution.Response)
+	if err != nil {
+		return
+	}
+	prompt := "The user answered the request_user_input emitted by the previous successful command. Continue the same workflow using this exact response JSON:\n" + string(body)
+	w.enqueue(context.Background(), BotEvent{
+		Channel:      resolution.Context.Channel,
+		MessageID:    "structured-user-input-" + snapshot.ID,
+		RoomID:       resolution.Context.RoomID,
+		Text:         prompt,
+		ThreadRootID: resolution.Context.ThreadRootID,
+	})
+}
+
+func (s *Service) detachedWorker(resolution runtimecodex.DetachedUserInputResolution) *worker {
+	s.mu.Lock()
+	workers := make([]*worker, 0, len(s.workers))
+	for _, w := range s.workers {
+		workers = append(workers, w)
+	}
+	s.mu.Unlock()
+	for _, w := range workers {
+		if strings.TrimSpace(w.binding.RuntimeID) != strings.TrimSpace(resolution.Execution.RuntimeID) {
+			continue
+		}
+		if w.detachedSourceIsKnown(resolution.Context) {
+			return w
+		}
+	}
+	return nil
 }
 
 type worker struct {
@@ -366,6 +445,8 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		}
 		return generatedRootID, nil
 	}
+	structuredActivated := false
+	turnSucceeded := false
 	flushTurn := func() (string, error) {
 		cleanupProcessingReaction(ctx)
 		if w.isSuperseded(evt) {
@@ -380,10 +461,24 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 			)
 			return "", nil
 		}
-		if generatedRootID != "" && len(renderer.FinalMessages()) == 0 {
-			return w.flushTurnWithEmptyCompletion(ctx, evt.RoomID, generatedRootID, renderer, nil)
+		if !turnSucceeded {
+			renderer.DiscardStructuredOutput()
 		}
-		return w.flushTurn(ctx, evt.RoomID, "", renderer, codexFinalDeliveryMetadata(evt.MessageID))
+		var messageID string
+		var err error
+		if generatedRootID != "" && len(renderer.FinalMessages()) == 0 {
+			messageID, err = w.flushTurnWithEmptyCompletion(ctx, evt.RoomID, generatedRootID, renderer, nil)
+		} else {
+			messageID, err = w.flushTurn(ctx, evt.RoomID, "", renderer, codexFinalDeliveryMetadata(evt.MessageID))
+		}
+		if err != nil || structuredActivated || renderer.RequestUserInput() == nil {
+			return messageID, err
+		}
+		structuredActivated = true
+		if err := w.activateStructuredUserInput(ctx, evt, sessionID, renderer.RequestUserInput()); err != nil {
+			return messageID, err
+		}
+		return messageID, nil
 	}
 
 	type promptResult struct {
@@ -421,6 +516,12 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		if w.isSuperseded(evt) {
 			return isTerminalEvent(event.Kind), nil
 		}
+		if event.Kind == runtimecodex.SessionEventPromptCompleted {
+			turnSucceeded = true
+		} else if event.Kind == runtimecodex.SessionEventPromptFailed {
+			turnSucceeded = false
+			renderer.DiscardStructuredOutput()
+		}
 		if commentaryText, ok := codexCommentaryText(event); ok {
 			slog.Debug("codex bridge captured commentary payload",
 				"bot_id", w.binding.BotID,
@@ -436,6 +537,10 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		}
 		if isCodexFinalTextEvent(event) {
 			renderer.ApplyText(event)
+		}
+		if event.Kind == runtimecodex.SessionEventStructuredOutput {
+			renderer.ApplyStructuredOutput(event)
+			return false, nil
 		}
 		if event.Kind == runtimecodex.SessionEventUserInputRequest || event.Kind == runtimecodex.SessionEventUserInputResolved {
 			snapshot, ok := event.Payload.(activity.UserInputSnapshot)
@@ -457,7 +562,9 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 						ActivityID:  snapshot.ID,
 						RoomID:      evt.RoomID,
 						ResponderID: "system",
-						SkipAll:     true,
+						Response: activity.RequestUserInputResponse{
+							Answers: map[string]activity.RequestUserInputAnswer{},
+						},
 					})
 					if err != nil &&
 						!errors.Is(err, activity.ErrUserInputAlreadyResolved) &&
@@ -530,6 +637,8 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 				continue
 			}
 			if result.err != nil {
+				turnSucceeded = false
+				renderer.DiscardStructuredOutput()
 				renderer.SetPromptError(result.err.Error())
 				_, err := flushTurn()
 				return err
@@ -665,6 +774,79 @@ func (w *worker) startParticipantWork(ctx context.Context, evt BotEvent) func() 
 			}
 		})
 	}
+}
+
+func (w *worker) activateStructuredUserInput(
+	ctx context.Context,
+	evt BotEvent,
+	sessionID string,
+	args *activity.RequestUserInputArgs,
+) error {
+	if w.service.userInput == nil || args == nil || !strings.EqualFold(strings.TrimSpace(evt.Channel), localChannel) {
+		return nil
+	}
+	questions := make([]activity.UserInputQuestionSnapshot, 0, len(args.Questions))
+	for _, question := range args.Questions {
+		options := make([]activity.UserInputOptionSnapshot, 0, len(question.Options))
+		for _, option := range question.Options {
+			options = append(options, activity.UserInputOptionSnapshot{
+				Label:       option.Label,
+				Description: option.Description,
+			})
+		}
+		questions = append(questions, activity.UserInputQuestionSnapshot{
+			ID:       question.ID,
+			Header:   question.Header,
+			Question: question.Question,
+			Options:  options,
+			IsOther:  question.IsOther,
+			IsSecret: question.IsSecret,
+		})
+	}
+	var autoResolve time.Duration
+	if args.AutoResolutionMS != nil {
+		autoResolve = time.Duration(*args.AutoResolutionMS) * time.Millisecond
+	}
+	snapshot, err := w.service.userInput.CreateDetached(runtimecodex.PendingUserInputRequest{
+		Execution: activity.ExecutionRef{
+			RuntimeKind: "codex",
+			RuntimeID:   w.binding.RuntimeID,
+			SessionID:   sessionID,
+			ToolCallID:  "structured-output-" + strings.TrimSpace(evt.MessageID),
+			ToolKind:    "request_user_input",
+		},
+		Questions:   questions,
+		RequestedAt: time.Now().UTC(),
+		AutoResolve: autoResolve,
+	}, runtimecodex.DetachedUserInputContext{
+		Channel:         localChannel,
+		RoomID:          evt.RoomID,
+		ThreadRootID:    evt.ThreadRootID,
+		SourceMessageID: evt.MessageID,
+	})
+	if err != nil {
+		return err
+	}
+	event := runtimecodex.SessionEvent{
+		RuntimeID:   w.binding.RuntimeID,
+		SessionID:   sessionID,
+		Kind:        runtimecodex.SessionEventUserInputRequest,
+		ReceivedAt:  time.Now().UTC(),
+		ToolCallID:  "structured-output-" + strings.TrimSpace(evt.MessageID),
+		ToolKind:    "request_user_input",
+		UserInputID: snapshot.ID,
+		Payload:     snapshot,
+	}
+	renderer := runtimebridge.NewTurnRenderer()
+	rendered, ok := renderer.RenderActivity(event, localChannel, evt.RoomID, w.binding.BotID)
+	if !ok {
+		return fmt.Errorf("render structured user input request")
+	}
+	if err := w.sendActivity(ctx, evt.RoomID, evt.ThreadRootID, rendered, nil); err != nil {
+		w.service.userInput.CancelSession(w.binding.RuntimeID, sessionID)
+		return err
+	}
+	return nil
 }
 
 func (w *worker) handleConversationReset(ctx context.Context, evt BotEvent) error {
@@ -1040,6 +1222,45 @@ func (w *worker) accept(evt BotEvent) bool {
 		w.latest[scope] = key
 	}
 	return true
+}
+
+func (w *worker) detachedSourceIsKnown(detached runtimecodex.DetachedUserInputContext) bool {
+	expected := eventDedupKey(BotEvent{
+		MessageID:    detached.SourceMessageID,
+		RoomID:       detached.RoomID,
+		ThreadRootID: detached.ThreadRootID,
+	})
+	if expected == "" {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.processing == expected {
+		return true
+	}
+	if _, ok := w.queued[expected]; ok {
+		return true
+	}
+	if w.seen.Has(expected) {
+		return true
+	}
+	return strings.TrimSpace(w.latest[conversationKey(BotEvent{RoomID: detached.RoomID, ThreadRootID: detached.ThreadRootID})]) == expected
+}
+
+func (w *worker) detachedSourceIsCurrent(detached runtimecodex.DetachedUserInputContext) bool {
+	evt := BotEvent{
+		MessageID:    detached.SourceMessageID,
+		RoomID:       detached.RoomID,
+		ThreadRootID: detached.ThreadRootID,
+	}
+	expected := eventDedupKey(evt)
+	scope := conversationKey(evt)
+	if expected == "" || scope == "" {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return strings.TrimSpace(w.latest[scope]) == expected
 }
 
 func (w *worker) isSuperseded(evt BotEvent) bool {

@@ -13,9 +13,14 @@ import (
 )
 
 type fakeUserInputResponder struct {
+	pending  activity.UserInputSnapshot
 	snapshot activity.UserInputSnapshot
 	err      error
 	got      activity.UserInputResponseRequest
+}
+
+func (r *fakeUserInputResponder) Get(requestID string) (activity.UserInputSnapshot, bool) {
+	return r.pending, r.pending.ID == requestID
 }
 
 func (r *fakeUserInputResponder) Respond(_ context.Context, req activity.UserInputResponseRequest) (activity.UserInputSnapshot, error) {
@@ -26,15 +31,13 @@ func (r *fakeUserInputResponder) Respond(_ context.Context, req activity.UserInp
 func TestChannelUserInputResponseEndpoint(t *testing.T) {
 	t.Parallel()
 
-	responder := &fakeUserInputResponder{snapshot: activity.UserInputSnapshot{ID: "question-1", Status: activity.UserInputStatusAnswered}}
+	responder := &fakeUserInputResponder{
+		pending:  activity.UserInputSnapshot{ID: "question-1", Channel: "csgclaw", RoomID: "room-1", Status: activity.UserInputStatusPending},
+		snapshot: activity.UserInputSnapshot{ID: "question-1", Status: activity.UserInputStatusAnswered},
+	}
 	h := newUserInputTestHandler(responder)
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/activities/question-1:respond", strings.NewReader(`{
-		"room_id":"room-1",
-		"responder_id":"user-admin",
-		"answers":{"color":{"option_index":2,"text":"darker","skip":false}},
-		"skip_all":false
-	}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/activities/question-1:respond", strings.NewReader(`{"answers":{"color":{"answers":["Green","user_note: darker"]}}}`))
 	h.Routes().ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -43,37 +46,63 @@ func TestChannelUserInputResponseEndpoint(t *testing.T) {
 	if responder.got.Channel != "csgclaw" || responder.got.ActivityID != "question-1" || responder.got.RoomID != "room-1" || responder.got.ResponderID != "user-admin" {
 		t.Fatalf("response request = %+v, want route and responder binding", responder.got)
 	}
-	answer := responder.got.Answers["color"]
-	if answer.OptionIndex != 2 || answer.Text != "darker" || answer.Skip {
-		t.Fatalf("answer = %+v, want option 2 with note", answer)
+	answer := responder.got.Response.Answers["color"].Answers
+	if len(answer) != 2 || answer[0] != "Green" || answer[1] != "user_note: darker" {
+		t.Fatalf("answer = %+v, want exact Codex response", answer)
 	}
 }
 
 func TestChannelUserInputResponseEndpointSkipAll(t *testing.T) {
 	t.Parallel()
 
-	responder := &fakeUserInputResponder{snapshot: activity.UserInputSnapshot{ID: "question-1", Status: activity.UserInputStatusSkipped}}
+	responder := &fakeUserInputResponder{
+		pending:  activity.UserInputSnapshot{ID: "question-1", Channel: "csgclaw", RoomID: "room-1", Status: activity.UserInputStatusPending},
+		snapshot: activity.UserInputSnapshot{ID: "question-1", Status: activity.UserInputStatusSkipped},
+	}
 	h := newUserInputTestHandler(responder)
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/activities/question-1:respond", strings.NewReader(`{"room_id":"room-1","responder_id":"user-admin","skip_all":true}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/activities/question-1:respond", strings.NewReader(`{"answers":{}}`))
 	h.Routes().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || !responder.got.SkipAll {
-		t.Fatalf("status=%d skip_all=%v body=%s", rec.Code, responder.got.SkipAll, rec.Body.String())
+	if rec.Code != http.StatusOK || len(responder.got.Response.Answers) != 0 {
+		t.Fatalf("status=%d answers=%v body=%s", rec.Code, responder.got.Response.Answers, rec.Body.String())
 	}
 }
 
-func TestChannelUserInputResponseEndpointRejectsWrongRoomOrResponder(t *testing.T) {
+func TestChannelUserInputResponseEndpointRejectsLegacySubmissionFields(t *testing.T) {
 	t.Parallel()
 
+	responder := &fakeUserInputResponder{pending: activity.UserInputSnapshot{
+		ID: "question-1", Channel: "csgclaw", RoomID: "room-1", Status: activity.UserInputStatusPending,
+	}}
 	for name, body := range map[string]string{
-		"unknown room":      `{"room_id":"room-2","responder_id":"user-admin","skip_all":true}`,
-		"unknown responder": `{"room_id":"room-1","responder_id":"user-missing","skip_all":true}`,
-		"non-member":        `{"room_id":"room-1","responder_id":"user-outsider","skip_all":true}`,
+		"missing answers": `{}`,
+		"legacy room":     `{"answers":{},"room_id":"room-1"}`,
+		"legacy skip":     `{"answers":{},"skip_all":true}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			h := newUserInputTestHandler(&fakeUserInputResponder{})
+			h := newUserInputTestHandler(responder)
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/activities/question-1:respond", strings.NewReader(body))
+			h.Routes().ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestChannelUserInputResponseEndpointDerivesRoomAndResponder(t *testing.T) {
+	t.Parallel()
+
+	for name, responder := range map[string]*fakeUserInputResponder{
+		"missing activity": {},
+		"wrong channel":    {pending: activity.UserInputSnapshot{ID: "question-1", Channel: "matrix", RoomID: "room-1"}},
+		"unknown room":     {pending: activity.UserInputSnapshot{ID: "question-1", Channel: "csgclaw", RoomID: "room-2"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newUserInputTestHandler(responder)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/activities/question-1:respond", strings.NewReader(`{"answers":{}}`))
 			h.Routes().ServeHTTP(rec, req)
 			if rec.Code != http.StatusNotFound {
 				t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
@@ -100,12 +129,13 @@ func TestChannelUserInputResponseEndpointErrorMapping(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			responder := &fakeUserInputResponder{
+				pending:  activity.UserInputSnapshot{ID: "question-1", Channel: "csgclaw", RoomID: "room-1", Status: activity.UserInputStatusPending},
 				snapshot: activity.UserInputSnapshot{ID: "question-1", Status: tc.status},
 				err:      tc.err,
 			}
 			h := newUserInputTestHandler(responder)
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/activities/question-1:respond", strings.NewReader(`{"room_id":"room-1","responder_id":"user-admin","skip_all":true}`))
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/activities/question-1:respond", strings.NewReader(`{"answers":{}}`))
 			h.Routes().ServeHTTP(rec, req)
 			if rec.Code != tc.wantCode {
 				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.wantCode, rec.Body.String())

@@ -112,6 +112,7 @@ const (
 	SessionEventPermissionDecision = activity.RuntimeEventActionDecision
 	SessionEventUserInputRequest   = activity.RuntimeEventUserInputRequest
 	SessionEventUserInputResolved  = activity.RuntimeEventUserInputResolved
+	SessionEventStructuredOutput   = activity.RuntimeEventStructuredOutput
 	SessionEventPromptCompleted    = activity.RuntimeEventPromptCompleted
 	SessionEventPromptFailed       = activity.RuntimeEventPromptFailed
 )

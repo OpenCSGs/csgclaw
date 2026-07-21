@@ -19,16 +19,11 @@ export type ActivitySnapshot = {
 };
 
 export type UserInputAnswer = {
-  option_index?: number;
-  skip?: boolean;
-  text?: string;
+  answers: string[];
 };
 
 export type UserInputResponse = {
-  answers?: Record<string, UserInputAnswer>;
-  responder_id: string;
-  room_id: string;
-  skip_all?: boolean;
+  answers: Record<string, UserInputAnswer>;
 };
 
 export type UserInputSnapshot = {

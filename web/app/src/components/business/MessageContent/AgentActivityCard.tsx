@@ -97,11 +97,7 @@ function QuestionActivityCard({
                     >
                       <span>{optionIndex + 1}</span>
                       <span>
-                        <strong>
-                          {item.is_other && optionIndex === questionOptions(item).length - 1
-                            ? t("questionOther")
-                            : option.label}
-                        </strong>
+                        <strong>{option.label}</strong>
                         {option.description ? <small>{option.description}</small> : null}
                       </span>
                     </button>

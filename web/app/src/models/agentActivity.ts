@@ -204,11 +204,7 @@ export function threadPendingQuestionCount(thread: {
 }
 
 export function questionOptions(question: AgentActivityQuestionItem): AgentActivityQuestionOption[] {
-  const options = [...question.options];
-  if (question.is_other) {
-    options.push({ label: "None of the above" });
-  }
-  return options;
+  return [...question.options];
 }
 
 export function openClawDeliveryKind(message: IMMessage | null | undefined): string {

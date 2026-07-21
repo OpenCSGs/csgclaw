@@ -133,3 +133,20 @@ func TestManagerFeishuSkillRoomCreationKeepsRequesterAsCreator(t *testing.T) {
 		t.Fatalf("feishu skill still teaches sample dev as a literal participant ID:\n%s", skill)
 	}
 }
+
+func TestManagerEmbedsInteractiveOutputDemo(t *testing.T) {
+	skillRoot := path.Join(CodexManagerRoot, WorkspaceDirName, "skills/csgclaw-interactive-output-demo")
+	for _, file := range []string{"SKILL.md", "agents/openai.yaml", "scripts/emit_demo.py"} {
+		if _, err := fs.ReadFile(FS(), path.Join(skillRoot, file)); err != nil {
+			t.Fatalf("read embedded interactive output demo %s: %v", file, err)
+		}
+	}
+
+	metadata, err := fs.ReadFile(FS(), path.Join(skillRoot, "agents/openai.yaml"))
+	if err != nil {
+		t.Fatalf("read embedded interactive output demo metadata: %v", err)
+	}
+	if !strings.Contains(string(metadata), "allow_implicit_invocation: false") {
+		t.Fatalf("interactive output demo must remain explicit-only:\n%s", metadata)
+	}
+}

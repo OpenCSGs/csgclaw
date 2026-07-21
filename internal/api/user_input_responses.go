@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"strings"
@@ -12,13 +13,6 @@ import (
 )
 
 type UserInputResponder = activity.UserInputResponder
-
-type userInputResponseRequest struct {
-	RoomID      string                              `json:"room_id"`
-	ResponderID string                              `json:"responder_id"`
-	Answers     map[string]activity.UserInputAnswer `json:"answers,omitempty"`
-	SkipAll     bool                                `json:"skip_all,omitempty"`
-}
 
 func (h *Handler) handleChannelUserInputResponse(w http.ResponseWriter, r *http.Request) {
 	if h.userInputResponder == nil {
@@ -31,27 +25,42 @@ func (h *Handler) handleChannelUserInputResponse(w http.ResponseWriter, r *http.
 		http.Error(w, "channel and activity id are required", http.StatusBadRequest)
 		return
 	}
-	var req userInputResponseRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var req activity.RequestUserInputResponse
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	req.RoomID = strings.TrimSpace(req.RoomID)
-	req.ResponderID = strings.TrimSpace(req.ResponderID)
-	if req.RoomID == "" || req.ResponderID == "" {
-		http.Error(w, "room_id and responder_id are required", http.StatusBadRequest)
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		http.Error(w, "decode request: expected one JSON object", http.StatusBadRequest)
+		return
+	}
+	if req.Answers == nil {
+		http.Error(w, "answers is required", http.StatusBadRequest)
 		return
 	}
 	if h.im == nil {
 		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	room, ok := h.im.Room(req.RoomID)
+	pending, ok := h.userInputResponder.Get(activityID)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	if _, ok := h.im.User(req.ResponderID); !ok || !slices.Contains(room.Members, req.ResponderID) {
+	if pending.Channel != "" && pending.Channel != channel {
+		http.NotFound(w, r)
+		return
+	}
+	roomID := strings.TrimSpace(pending.RoomID)
+	room, ok := h.im.Room(roomID)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	responderID := strings.TrimSpace(h.im.Bootstrap().CurrentUserID)
+	if _, ok := h.im.User(responderID); !ok || !slices.Contains(room.Members, responderID) {
 		http.NotFound(w, r)
 		return
 	}
@@ -59,10 +68,9 @@ func (h *Handler) handleChannelUserInputResponse(w http.ResponseWriter, r *http.
 	snapshot, err := h.userInputResponder.Respond(r.Context(), activity.UserInputResponseRequest{
 		Channel:     channel,
 		ActivityID:  activityID,
-		RoomID:      req.RoomID,
-		ResponderID: req.ResponderID,
-		Answers:     req.Answers,
-		SkipAll:     req.SkipAll,
+		RoomID:      roomID,
+		ResponderID: responderID,
+		Response:    req,
 	})
 	switch {
 	case err == nil:

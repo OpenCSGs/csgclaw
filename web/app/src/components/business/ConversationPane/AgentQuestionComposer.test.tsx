@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentActivityPayload } from "@/models/agentActivity";
 import type { TranslateFn } from "@/models/conversations";
 import { AgentQuestionComposer } from "./AgentQuestionComposer";
@@ -10,8 +10,15 @@ const t: TranslateFn = (key, params) => {
   if (key === "questionProgress") {
     return `Question ${params?.current} of ${params?.total}`;
   }
+  if (key === "questionExpiresIn") {
+    return `Expires in ${params?.time}`;
+  }
   return key;
 };
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function activity(secret = false): AgentActivityPayload {
   return {
@@ -71,7 +78,7 @@ function mode(overrides: Partial<QuestionAnswerMode> = {}): QuestionAnswerMode {
     answers: {},
     busy: false,
     chooseOption: vi.fn(),
-    continueWithoutAnswering: vi.fn(),
+    closeRequest: vi.fn(),
     error: "",
     nextQuestion: vi.fn(),
     pending: [selected],
@@ -79,9 +86,7 @@ function mode(overrides: Partial<QuestionAnswerMode> = {}): QuestionAnswerMode {
     questionIndex: 0,
     select: vi.fn(),
     selected,
-    setSkipConfirmation: vi.fn(),
     setText: vi.fn(),
-    skipConfirmation: false,
     skipQuestion: vi.fn(),
     submitAnswers: vi.fn(),
     text: "",
@@ -90,16 +95,46 @@ function mode(overrides: Partial<QuestionAnswerMode> = {}): QuestionAnswerMode {
 }
 
 describe("AgentQuestionComposer", () => {
-  it("supports click selection and Enter submission", async () => {
+  it("selects a final option immediately and never renders None of the above", async () => {
     const user = userEvent.setup();
     const answerMode = mode();
     render(<AgentQuestionComposer mode={answerMode} t={t} />);
 
     await user.click(screen.getByRole("radio", { name: /First/ }));
     expect(answerMode.chooseOption).toHaveBeenCalledWith(1);
-    await user.type(screen.getByRole("textbox"), "2{Enter}");
-    expect(answerMode.setText).toHaveBeenLastCalledWith("2");
-    expect(answerMode.submitAnswers).toHaveBeenCalled();
+    expect(screen.queryByText("None of the above")).not.toBeInTheDocument();
+  });
+
+  it("renders a Recommended badge while keeping the full source label selectable", () => {
+    const selected = activity();
+    selected.content.question!.questions[0].options = [
+      { label: "Best choice (Recommended)", description: "Use this first." },
+    ];
+    render(<AgentQuestionComposer mode={mode({ pending: [selected], selected })} t={t} />);
+
+    expect(screen.getByText("Best choice")).toBeInTheDocument();
+    expect(screen.getByText("questionRecommended")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Best choice.*Use this first/ })).toBeInTheDocument();
+  });
+
+  it("shows Skip for empty freeform text and Next after text is entered", async () => {
+    const user = userEvent.setup();
+    const answerMode = mode();
+    const { rerender } = render(<AgentQuestionComposer mode={answerMode} t={t} />);
+
+    expect(screen.getByRole("button", { name: "questionSkip" })).toBeInTheDocument();
+    await user.type(screen.getByRole("textbox"), "custom");
+    expect(answerMode.setText).toHaveBeenLastCalledWith("m");
+
+    const textMode = mode({ text: "custom" });
+    rerender(<AgentQuestionComposer mode={textMode} t={t} />);
+    const nextButton = screen
+      .getAllByRole("button", { name: "questionNext" })
+      .find((button) => !button.hasAttribute("disabled"));
+    expect(nextButton).toBeDefined();
+    await user.click(nextButton!);
+    expect(textMode.submitAnswers).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "questionSkip" })).not.toBeInTheDocument();
   });
 
   it("provides previous and next arrow navigation for one multi-question request", async () => {
@@ -120,6 +155,52 @@ describe("AgentQuestionComposer", () => {
     expect(screen.getByLabelText("questionSecretAnswer")).toHaveAttribute("type", "password");
   });
 
+  it("preserves navigation controls for a five-question request", () => {
+    const selected = activity();
+    selected.content.question!.questions = Array.from({ length: 5 }, (_, index) => ({
+      header: `Question ${index + 1}`,
+      id: `q-${index + 1}`,
+      options: index === 4 ? [] : [{ label: `Choice ${index + 1}` }],
+      question: `Concrete question ${index + 1}?`,
+    }));
+    render(
+      <AgentQuestionComposer
+        mode={mode({ pending: [selected], questionIndex: 3, selected })}
+        t={(key, params) => (key === "questionProgressCompact" ? `${params?.current} of ${params?.total}` : key)}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Concrete question 4?" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("4 of 5");
+    expect(screen.getByRole("button", { name: "questionPrevious" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "questionNext" })).toBeEnabled();
+  });
+
+  it("counts down from the server-provided expiration deadline", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-21T08:00:00.000Z"));
+    const selected = activity();
+    selected.content.question!.auto_resolve_at = "2026-07-21T08:02:05.000Z";
+
+    render(<AgentQuestionComposer mode={mode({ pending: [selected], selected })} t={t} />);
+
+    expect(screen.getByRole("timer", { name: "Expires in 2:05" })).toHaveTextContent("2:05");
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(screen.getByRole("timer", { name: "Expires in 2:04" })).toHaveTextContent("2:04");
+    act(() => vi.advanceTimersByTime(124_000));
+    expect(screen.getByRole("timer", { name: "Expires in 0:00" })).toHaveTextContent("0:00");
+  });
+
+  it("omits the countdown when the request has no valid deadline", () => {
+    const selected = activity();
+    const { rerender } = render(<AgentQuestionComposer mode={mode({ pending: [selected], selected })} t={t} />);
+
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+    selected.content.question!.auto_resolve_at = "not-a-date";
+    rerender(<AgentQuestionComposer mode={mode({ pending: [selected], selected })} t={t} />);
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+  });
+
   it("requires explicit selection when several agents are waiting", async () => {
     const user = userEvent.setup();
     const first = activity();
@@ -135,11 +216,11 @@ describe("AgentQuestionComposer", () => {
     expect(answerMode.select).toHaveBeenCalledWith("request-2");
   });
 
-  it("confirms before continuing without answers", async () => {
+  it("closes the entire request directly", async () => {
     const user = userEvent.setup();
-    const answerMode = mode({ skipConfirmation: true });
+    const answerMode = mode();
     render(<AgentQuestionComposer mode={answerMode} t={t} />);
-    await user.click(screen.getByRole("button", { name: "questionConfirmContinue" }));
-    expect(answerMode.continueWithoutAnswering).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "questionClose" }));
+    expect(answerMode.closeRequest).toHaveBeenCalledOnce();
   });
 });

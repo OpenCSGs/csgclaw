@@ -1764,7 +1764,9 @@ func TestServiceUsesStableMessageIDForQuestionResolution(t *testing.T) {
 	})
 	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
 		Channel: csgclawchannel.ChannelID, ActivityID: requestID, RoomID: "room-1", ResponderID: "user-admin",
-		Answers: map[string]activity.UserInputAnswer{"color": {OptionIndex: 1}},
+		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
+			"color": {Answers: []string{"Blue"}},
+		}},
 	}); err != nil {
 		t.Fatalf("Respond() error = %v", err)
 	}
@@ -1853,7 +1855,9 @@ func TestServiceFlushesCommentaryBeforeUserInputQuestion(t *testing.T) {
 	})
 	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
 		Channel: csgclawchannel.ChannelID, ActivityID: requestID, RoomID: "room-1", ResponderID: "user-admin",
-		Answers: map[string]activity.UserInputAnswer{"next": {OptionIndex: 1}},
+		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
+			"next": {Answers: []string{"Continue"}},
+		}},
 	}); err != nil {
 		t.Fatalf("Respond() error = %v", err)
 	}
@@ -1872,6 +1876,159 @@ func TestServiceFlushesCommentaryBeforeUserInputQuestion(t *testing.T) {
 	}
 	if pendingIndex <= 0 {
 		t.Fatalf("pending question index = %d, want after commentary", pendingIndex)
+	}
+}
+
+func TestServiceStructuredOutputPersistsFinalThenQuestionAndContinuesSameSession(t *testing.T) {
+	t.Parallel()
+
+	stream := make(chan BotEvent, 1)
+	errs := make(chan error)
+	close(errs)
+	stream <- BotEvent{
+		Channel:   csgclawchannel.ChannelID,
+		MessageID: "message-demo",
+		RoomID:    "room-1",
+		Text:      "Run the interactive demo",
+	}
+
+	sink := runtimecodex.NewEventSink()
+	broker := runtimecodex.NewUserInputBroker(sink)
+	client := &fakeBotClient{streams: map[string][]streamResult{"u-codex": {{events: stream, errs: errs}}}}
+	autoResolutionMS := uint64(240_000)
+	prompter := &fakePrompter{}
+	prompter.prompt = func(_ context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) error {
+		callNumber := len(prompter.texts())
+		if callNumber == 1 {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventStructuredOutput,
+				Payload: activity.StructuredOutputArtifact{
+					RequestUserInput: &activity.RequestUserInputArgs{
+						AutoResolutionMS: &autoResolutionMS,
+						Questions: []activity.RequestUserInputQuestion{
+							{ID: "kind", Header: "Kind", Question: "Choose a demo kind", Options: []activity.RequestUserInputOption{{Label: "Standard (Recommended)", Description: "Normal verification."}}},
+							{ID: "unicode", Header: "Unicode", Question: "Choose 中文 punctuation?", Options: []activity.RequestUserInputOption{{Label: "Alpha, β", Description: "Spaces and punctuation."}}},
+							{ID: "other", Header: "Other", Question: "Choose or type", IsOther: true, Options: []activity.RequestUserInputOption{{Label: "Known", Description: "Known value."}}},
+							{ID: "freeform", Header: "Freeform", Question: "Add a note", IsOther: true},
+							{ID: "secret", Header: "Secret", Question: "Enter a disposable test value", IsOther: true, IsSecret: true},
+						},
+					},
+					ResourceLinks: []activity.ResourceLink{
+						{
+							Type: "resource_link", Name: "full", Title: "Full resource", URI: "https://example.com/full", Description: "Complete link.",
+							Icons: []map[string]any{{"src": "https://example.com/full-icon.svg"}},
+						},
+						{Type: "resource_link", Name: "minimal", URI: "https://example.com/minimal"},
+					},
+				},
+			})
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "The interactive demo is ready.",
+				Payload:   map[string]any{"phase": "final_answer"},
+			})
+		} else {
+			sink.Publish(runtimecodex.SessionEvent{
+				RuntimeID: handle.RuntimeID,
+				SessionID: req.SessionID,
+				Kind:      runtimecodex.SessionEventTextDelta,
+				Text:      "Automatic continuation completed.",
+				Payload:   map[string]any{"phase": "final_answer"},
+			})
+		}
+		sink.Publish(runtimecodex.SessionEvent{RuntimeID: handle.RuntimeID, SessionID: req.SessionID, Kind: runtimecodex.SessionEventPromptCompleted})
+		return nil
+	}
+
+	svc := NewService(client, prompter, sink, WithUserInputBroker(broker))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := svc.StartBot(ctx, Binding{BotID: "u-codex", RuntimeID: "rt-1", SessionID: "session-1"}); err != nil {
+		t.Fatalf("StartBot() error = %v", err)
+	}
+	defer svc.Close()
+
+	var requestID string
+	waitFor(t, func() bool {
+		records := client.sentRecords()
+		if len(records) < 2 || !strings.HasPrefix(records[0].Text, "The interactive demo is ready.\n\nLinks\n") {
+			return false
+		}
+		if !strings.Contains(records[0].Text, "https://example.com/full") || !strings.HasSuffix(records[0].Text, "[minimal](<https://example.com/minimal>)") {
+			return false
+		}
+		if !strings.Contains(records[0].Text, `<img class="resource-link-icon" src="https://example.com/full-icon.svg" alt="" aria-hidden="true"> [Full resource]`) {
+			return false
+		}
+		var payload struct {
+			Content struct {
+				Question activity.UserInputSnapshot `json:"question"`
+			} `json:"content"`
+		}
+		if json.Unmarshal([]byte(records[1].Text), &payload) != nil || payload.Content.Question.Status != activity.UserInputStatusPending {
+			return false
+		}
+		requestID = payload.Content.Question.ID
+		return requestID != "" && len(payload.Content.Question.Questions) == 5
+	})
+
+	response := activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
+		"kind":     {Answers: []string{"Standard (Recommended)"}},
+		"unicode":  {Answers: []string{"Alpha, β"}},
+		"other":    {Answers: []string{"user_note: custom value"}},
+		"freeform": {Answers: []string{"user_note: freeform note"}},
+		"secret":   {Answers: []string{"user_note: disposable-secret-123"}},
+	}}
+	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+		Channel: csgclawchannel.ChannelID, ActivityID: requestID, RoomID: "room-1", ResponderID: "user-admin", Response: response,
+	}); err != nil {
+		t.Fatalf("Respond() error = %v", err)
+	}
+
+	waitFor(t, func() bool {
+		return len(prompter.texts()) == 2 && slices.Contains(client.sentTexts(), "Automatic continuation completed.")
+	})
+	if got := prompter.sessionIDs(); len(got) != 2 || got[0] == "" || got[0] != got[1] {
+		t.Fatalf("session IDs = %#v, want same session", got)
+	}
+	continuation := prompter.texts()[1]
+	exactJSON, _ := json.Marshal(response)
+	if !strings.HasSuffix(continuation, string(exactJSON)) {
+		t.Fatalf("continuation prompt = %q, want exact response JSON %s", continuation, exactJSON)
+	}
+	for _, record := range client.sentRecords() {
+		if strings.Contains(record.Text, "disposable-secret-123") {
+			t.Fatalf("persisted record leaked secret: %s", record.Text)
+		}
+	}
+	var resolved activity.UserInputSnapshot
+	questionRecordCount := 0
+	for _, record := range client.sentRecords() {
+		if record.MessageID != "question-"+requestID {
+			continue
+		}
+		questionRecordCount++
+		if !strings.Contains(record.Text, `"status":"answered"`) {
+			continue
+		}
+		var payload struct {
+			Content struct {
+				Question activity.UserInputSnapshot `json:"question"`
+			} `json:"content"`
+		}
+		if json.Unmarshal([]byte(record.Text), &payload) == nil {
+			resolved = payload.Content.Question
+		}
+	}
+	if resolved.ID == "" || resolved.Answers["other"].Text != "custom value" || resolved.Answers["secret"].Text != "******" {
+		t.Fatalf("resolved answer summary = %+v", resolved)
+	}
+	if questionRecordCount != 2 {
+		t.Fatalf("question records = %d, want one pending and one resolved update", questionRecordCount)
 	}
 }
 

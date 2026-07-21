@@ -1,0 +1,6 @@
+interface:
+  display_name: "CSGClaw Interactive Output Demo"
+  short_description: "Exercise structured links and interactive questions"
+  default_prompt: "Use $csgclaw-interactive-output-demo to run the complete interactive output demo."
+policy:
+  allow_implicit_invocation: false

@@ -67,14 +67,9 @@ describe("useQuestionAnswerMode", () => {
     );
     await waitFor(() => expect(result.current.selected?.content.question?.id).toBe("request-1"));
 
-    act(() => {
-      result.current.setText(" 2 ");
-    });
-    act(() => {
-      result.current.nextQuestion();
-    });
+    act(() => result.current.chooseOption(2));
     expect(result.current.questionIndex).toBe(1);
-    expect(mockedRespond).not.toHaveBeenCalled();
+    expect(result.current.answers.color).toEqual({ optionIndex: 2 });
 
     act(() => {
       result.current.setText("matte finish");
@@ -82,34 +77,25 @@ describe("useQuestionAnswerMode", () => {
     act(() => {
       result.current.nextQuestion();
     });
-    act(() => result.current.chooseOption(1));
-    expect(result.current.questionIndex).toBe(2);
-    expect(result.current.answers.finish).toEqual({ option_index: 1, skip: undefined });
-
     act(() => result.current.previousQuestion());
     expect(result.current.questionIndex).toBe(1);
     expect(result.current.text).toBe("matte finish");
     act(() => result.current.previousQuestion());
     expect(result.current.questionIndex).toBe(0);
-    expect(result.current.text).toBe(" 2 ");
-    act(() => result.current.setText("1"));
+    expect(result.current.answers.color).toEqual({ optionIndex: 2 });
     act(() => result.current.nextQuestion());
     expect(result.current.text).toBe("matte finish");
     act(() => result.current.nextQuestion());
-    expect(result.current.answers.finish).toEqual({ option_index: 1, skip: undefined });
     expect(mockedRespond).not.toHaveBeenCalled();
 
-    act(() => result.current.submitAnswers());
+    act(() => result.current.chooseOption(1));
     await waitFor(() => expect(mockedRespond).toHaveBeenCalledTimes(1));
     expect(mockedRespond).toHaveBeenCalledWith("csgclaw", "request-1", {
       answers: {
-        color: { option_index: 1, text: undefined },
-        detail: { option_index: undefined, text: "matte finish" },
-        finish: { option_index: 1, text: undefined },
+        color: { answers: ["Green"] },
+        detail: { answers: ["user_note: matte finish"] },
+        finish: { answers: ["Glossy"] },
       },
-      responder_id: "user-admin",
-      room_id: "room-1",
-      skip_all: undefined,
     });
   });
 
@@ -130,36 +116,32 @@ describe("useQuestionAnswerMode", () => {
     expect(result.current.error).toBe("questionAnswerRequired");
   });
 
-  it("advances after an option answer but stays for Other detail", async () => {
+  it("keeps options and freeform text mutually exclusive", async () => {
     const { result } = renderHook(() =>
       useQuestionAnswerMode({ messages: [questionMessage()], responderID: "user-admin", roomID: "room-1", t }),
     );
     await waitFor(() => expect(result.current.selected).not.toBeNull());
 
     act(() => result.current.chooseOption(2));
-    expect(result.current.answers.color).toEqual({ option_index: 2, skip: undefined });
+    expect(result.current.answers.color).toEqual({ optionIndex: 2 });
     expect(result.current.questionIndex).toBe(1);
 
     act(() => result.current.previousQuestion());
-    act(() => result.current.chooseOption(3));
-    expect(result.current.answers.color).toEqual({ option_index: 3, skip: undefined });
+    act(() => result.current.setText("custom blue"));
+    expect(result.current.answers.color).toEqual({});
+    expect(result.current.text).toBe("custom blue");
     expect(result.current.questionIndex).toBe(0);
   });
 
-  it("clears an option when the selected choice is clicked again", async () => {
+  it("skips individual questions with empty answer arrays", async () => {
     const { result } = renderHook(() =>
       useQuestionAnswerMode({ messages: [questionMessage()], responderID: "user-admin", roomID: "room-1", t }),
     );
     await waitFor(() => expect(result.current.selected).not.toBeNull());
 
-    act(() => result.current.nextQuestion());
-    act(() => result.current.nextQuestion());
-    act(() => result.current.chooseOption(2));
-    expect(result.current.answers.finish).toEqual({ option_index: 2, skip: undefined });
-
-    act(() => result.current.chooseOption(2));
-    expect(result.current.answers.finish).toBeUndefined();
-    expect(result.current.questionIndex).toBe(2);
+    act(() => result.current.skipQuestion());
+    expect(result.current.answers.color).toEqual({ skipped: true });
+    expect(result.current.questionIndex).toBe(1);
   });
 
   it("does not guess when several agents are waiting", async () => {
@@ -175,22 +157,17 @@ describe("useQuestionAnswerMode", () => {
     expect(result.current.selected).toBeNull();
     act(() => result.current.select("request-2", "color", 2));
     expect(result.current.selected?.content.question?.id).toBe("request-2");
-    expect(result.current.questionIndex).toBe(1);
-    expect(result.current.answers.color).toEqual({ option_index: 2 });
+    expect(result.current.questionIndex).toBe(0);
+    expect(result.current.answers.color).toEqual({ optionIndex: 2 });
   });
 
-  it("submits an empty map only after confirmed skip-all", async () => {
+  it("submits an empty map when the request is closed", async () => {
     const { result } = renderHook(() =>
       useQuestionAnswerMode({ messages: [questionMessage()], responderID: "user-admin", roomID: "room-1", t }),
     );
     await waitFor(() => expect(result.current.selected).not.toBeNull());
-    act(() => result.current.continueWithoutAnswering());
+    act(() => result.current.closeRequest());
     await waitFor(() => expect(mockedRespond).toHaveBeenCalledTimes(1));
-    expect(mockedRespond.mock.calls[0]?.[2]).toEqual({
-      answers: undefined,
-      responder_id: "user-admin",
-      room_id: "room-1",
-      skip_all: true,
-    });
+    expect(mockedRespond.mock.calls[0]?.[2]).toEqual({ answers: {} });
   });
 });

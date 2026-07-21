@@ -165,9 +165,9 @@ describe("agent question activity", () => {
     expect(pendingQuestionCount([questionMessage])).toBe(1);
   });
 
-  it("synthesizes the one-based Other choice", () => {
+  it("keeps only source options when Other freeform input is enabled", () => {
     const question = parseAgentActivity(questionMessage.content)?.content.question?.questions[0];
-    expect(question && questionOptions(question).map((option) => option.label)).toEqual(["Blue", "None of the above"]);
+    expect(question && questionOptions(question).map((option) => option.label)).toEqual(["Blue"]);
   });
 
   it("surfaces pending thread questions in room and thread summaries", () => {
