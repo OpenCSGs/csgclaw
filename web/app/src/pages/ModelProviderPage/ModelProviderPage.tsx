@@ -237,7 +237,6 @@ export function ModelProviderPage() {
     setSaveStatus("");
     try {
       await deleteModelProvider(provider.id);
-      await refreshWorkspaceModelProviders();
       setDeleteSuccess(true);
     } catch (err) {
       setError(errorMessage(err, "Delete failed"));
@@ -248,6 +247,7 @@ export function ModelProviderPage() {
 
   function dismissDeleteSuccess() {
     setDeleteSuccess(false);
+    void refreshWorkspaceModelProviders();
     controller.sidebarProps?.onSelectComputer?.();
   }
 
