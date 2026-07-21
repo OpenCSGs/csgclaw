@@ -137,6 +137,19 @@ export function useConnectorController(t: TranslateFn): ConnectorController {
     });
   }, [queryClient]);
 
+  useEffect(() => {
+    const refreshOnFocus = () => {
+      void refresh().catch(() => {
+        // The query exposes refresh failures through the existing connector error state.
+      });
+    };
+
+    window.addEventListener("focus", refreshOnFocus);
+    return () => {
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [refresh]);
+
   const saveGitHubConfig = useCallback(
     async (draft: ConnectorConfigDraft) => {
       if (busyAction) {

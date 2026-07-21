@@ -38,6 +38,11 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     authStatuses,
     channelToolsRef,
     composerError,
+    connectorBusyAction,
+    connectorBusyProvider,
+    connectorError,
+    connectorPending,
+    connectorStatus,
     conversation,
     conversationMembers,
     currentUserID = "",
@@ -48,6 +53,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     inviteActionLabel,
     locale,
     logAgent,
+    gitlabConnectorStatus,
     managerProfile,
     managerProfileIncomplete,
     managerRuntimeUnavailable,
@@ -68,10 +74,14 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onComposerCompositionEnd,
     onComposerCompositionStart,
     onComposerKeyDown,
+    onConnectConnector,
     onDeleteRoom,
+    onDisconnectConnector,
+    onDisconnectGitLabConnector,
     onDismissThreadSlashPicker = () => {},
     onInviteAction,
     onMessageAction,
+    onManageConnector,
     onOpenThread,
     onPreviewUser,
     onProviderLogin,
@@ -79,6 +89,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onRemoveThreadAttachment,
     onSendMessage,
     onSendThreadReply,
+    onSaveConnectorConfig,
+    onSaveGitLabConnectorConfig,
     onSetThreadSlashIndex = (_index) => {},
     onSyncComposer,
     onThreadDraftChange,
@@ -270,6 +282,12 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         <Conversation.Composer
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
+          connectorStatus={connectorStatus}
+          gitlabConnectorStatus={gitlabConnectorStatus}
+          connectorBusyAction={connectorBusyAction}
+          connectorBusyProvider={connectorBusyProvider}
+          connectorError={connectorError}
+          connectorPending={connectorPending}
           composerDisabled={composerDisabled}
           composerDisabledReason={composerDisabledReason}
           composerError={composerError}
@@ -294,7 +312,13 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           onComposerCompositionEnd={onComposerCompositionEnd}
           onComposerCompositionStart={onComposerCompositionStart}
           onComposerKeyDown={onComposerKeyDown}
+          onConnectConnector={onConnectConnector}
+          onDisconnectConnector={onDisconnectConnector}
+          onDisconnectGitLabConnector={onDisconnectGitLabConnector}
+          onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
+          onSaveConnectorConfig={onSaveConnectorConfig}
+          onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}
           onSendMessage={onSendMessage}
           onRemoveAttachment={onRemoveAttachment}
           onSyncComposer={onSyncComposer}

@@ -2,6 +2,7 @@ import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
+import { emptyGitLabConnectorStatus } from "@/models/connectors";
 import { FloatingChat } from "@/pages/WorkspacePage/components/FloatingChat";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
@@ -15,6 +16,16 @@ const labels: Record<string, string> = {
   clearRoomMessagesAgentScopeHint: "Clear visible chat messages.",
   clearRoomMessagesConfirm: "Confirm clear",
   close: "Close",
+  composerAdd: "Add",
+  composerConnectors: "Connectors",
+  composerFiles: "Files",
+  connectorConnect: "Connect",
+  connectorConnected: "Connected",
+  connectorDisconnect: "Disconnect",
+  connectorGitHub: "GitHub",
+  connectorGitLab: "GitLab",
+  connectorManage: "Manage",
+  connectorNotConnected: "Not connected",
   deleteRoom: "Delete room",
   deleteRoomConfirm: "Confirm delete",
   deleteRoomConfirmBody: "Delete this room.",
@@ -79,7 +90,10 @@ function renderFloatingChat(props: { open?: boolean; onOpenChange?: (open: boole
   return { onOpenChange };
 }
 
-function managerChatProps(conversation: IMConversation): ConversationPaneProps {
+function managerChatProps(
+  conversation: IMConversation,
+  overrides: Partial<ConversationPaneProps> = {},
+): ConversationPaneProps {
   return {
     activeThreadRootID: "",
     activeThreadView: null,
@@ -148,6 +162,7 @@ function managerChatProps(conversation: IMConversation): ConversationPaneProps {
     threadSlashPickerOpen: false,
     usersById,
     visibleMessages: conversation.messages,
+    ...overrides,
   };
 }
 
@@ -203,6 +218,47 @@ describe("FloatingChat manager guide", () => {
 });
 
 describe("FloatingChat manager prompts", () => {
+  it("shows the connected GitLab account from the shared conversation state", async () => {
+    const user = userEvent.setup();
+    const conversation: IMConversation = {
+      id: "room-manager",
+      is_direct: true,
+      members: users.map((item) => item.id),
+      messages: [],
+      title: "Manager",
+    };
+    render(
+      <FloatingChat
+        avatarFallback="M"
+        chatProps={managerChatProps(conversation, {
+          gitlabConnectorStatus: {
+            ...emptyGitLabConnectorStatus(),
+            account: {
+              avatar_url: "",
+              email: "",
+              html_url: "",
+              id: 1,
+              login: "hjwang",
+              name: "",
+            },
+            configured: true,
+            connected: true,
+          },
+        })}
+        locale="en"
+        open={true}
+        t={t}
+        title="Manager"
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(screen.getByText("hjwang")).toBeInTheDocument();
+    expect(screen.getByText("Connected")).toBeInTheDocument();
+  });
+
   it("uses answer mode and supports clearing a selected option", async () => {
     const user = userEvent.setup();
     renderOpenManagerFloatingChat({
