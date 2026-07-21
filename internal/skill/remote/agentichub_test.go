@@ -60,6 +60,12 @@ func TestFetchAgenticHubSkillArchiveReadsTreeCursorPages(t *testing.T) {
 	}
 }
 
+func TestAgenticHubSkillArchiveNameUsesRemotePathBasename(t *testing.T) {
+	if got, want := AgenticHubSkillArchiveName("team/gitlab"), "gitlab.zip"; got != want {
+		t.Fatalf("AgenticHubSkillArchiveName() = %q, want %q", got, want)
+	}
+}
+
 func TestAgenticHubSkillTreeURLEscapesSlashRef(t *testing.T) {
 	got, err := agenticHubSkillTreeURL(
 		"https://example.test/hub",

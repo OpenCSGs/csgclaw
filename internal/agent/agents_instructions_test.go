@@ -108,6 +108,8 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForMan
 	for _, want := range []string{
 		"GitHub Connector Access",
 		"/api/v1/agents/agent-manager/connectors/github/credential",
+		"GitLab Connector Access",
+		"/api/v1/agents/agent-manager/connectors/gitlab/credential",
 		"`access_token`",
 		"Do not rely on connector tokens from environment variables",
 		"Do not treat an empty result from an external Codex GitHub app connector as proof",
@@ -125,9 +127,13 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForMan
 			t.Fatalf("manager runtime instructions missing %q in %q", want, manager)
 		}
 	}
+	if strings.Contains(manager, "skills/gitlab/SKILL.md") {
+		t.Fatalf("manager runtime instructions hard-code optional GitLab skill path: %q", manager)
+	}
 
 	worker := RenderRuntimeAgentsInstructionsBlock("agent-worker", "Stay concise.")
 	if strings.Contains(worker, "GitHub Connector Access") ||
+		strings.Contains(worker, "GitLab Connector Access") ||
 		strings.Contains(worker, "Historical Attachment Recovery") ||
 		strings.Contains(worker, "`GITHUB_TOKEN`") {
 		t.Fatalf("worker runtime instructions include manager connector guidance: %q", worker)

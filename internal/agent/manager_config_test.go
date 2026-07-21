@@ -355,9 +355,6 @@ func TestEnsureAgentWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(managerRoot, "skills", "agent-teams", "SKILL.md")); err != nil {
 		t.Fatalf("os.Stat(manager skill) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(managerRoot, "skills", "gitlab", "issue-tracker", "skill.md")); err != nil {
-		t.Fatalf("os.Stat(manager gitlab subskill) error = %v", err)
-	}
 }
 
 func TestIPv4FromAddr(t *testing.T) {

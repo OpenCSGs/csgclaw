@@ -32,4 +32,4 @@ curl -X POST "$CSGCLAW_BASE_URL/api/v1/connectors/gitlab/disconnect"
 POST /api/v1/agents/agent-manager/connectors/gitlab/credential
 ```
 
-lease 包含 `base_url`、`access_token`、`token_type=private-token`、账号信息和过期时间。Manager 的内置 `gitlab` skill 会在 GitLab 任务开始前动态请求 lease，通过 GitLab API v4 工作，并禁止将 Token 写入文件、日志、Prompt、消息或 Git credential store。Worker 默认无权获取该凭据。
+lease 包含 `base_url`、`access_token`、`token_type=private-token`、账号信息和过期时间。分配给 Manager 的 GitLab skill 可在 GitLab 任务开始前动态请求 lease，通过 GitLab API v4 工作，并禁止将 Token 写入文件、日志、Prompt、消息或 Git credential store。GitLab skill 可从 SkillHub 独立安装，不属于 Manager 内置模板；Worker 默认无权获取该凭据。
