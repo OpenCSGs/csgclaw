@@ -44,21 +44,12 @@ A minimal Python emitter is:
 
 ```python
 import json
-import os
-
-
-if os.environ.get("CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL") != "1":
-    raise RuntimeError("CSGClaw structured output protocol version 1 is unavailable")
 
 
 def emit(kind: str, payload: dict[str, object]) -> None:
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     print(f"::csgclaw-output::{kind} {encoded}")
 ```
-
-Runtime adapters that implement this protocol inject `CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL=1` into skill command environments.
-Portable emitters should check this capability before writing control records and return an ordinary diagnostic instead when it is absent.
-This handshake prevents a script from claiming that interactive output is ready when an older runtime would treat every control record as plain stdout.
 
 ## Turn lifecycle
 

@@ -14,8 +14,6 @@ python3 "$CODEX_HOME/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py
 ```
 
 Do not quote, summarize, or restate the emitted control records.
-If the command prints `Structured output unavailable:`, the running CSGClaw runtime did not advertise structured-output protocol version 1.
-Report that runtime incompatibility clearly and do not claim that the interactive demo is ready.
 After the command succeeds, return this exact Markdown, which is also stored as `INITIAL_RESPONSE_MARKDOWN` in `emit_demo.py`:
 
 ```markdown

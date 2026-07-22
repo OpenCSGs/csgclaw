@@ -44,21 +44,12 @@ CSGClaw 会从可见工具输出中移除有效控制行，同时保留普通 st
 
 ```python
 import json
-import os
-
-
-if os.environ.get("CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL") != "1":
-    raise RuntimeError("CSGClaw structured output protocol version 1 is unavailable")
 
 
 def emit(kind: str, payload: dict[str, object]) -> None:
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     print(f"::csgclaw-output::{kind} {encoded}")
 ```
-
-实现该协议的 Runtime Adapter 会向 skill 命令环境注入 `CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL=1`。
-可移植 emitter 应在输出控制记录前检查这个能力，并在能力不存在时只返回普通诊断信息。
-这个握手可以避免旧 runtime 把所有控制记录当作普通 stdout 时，脚本仍错误地宣称交互输出已经就绪。
 
 ## Turn 生命周期
 

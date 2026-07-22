@@ -756,11 +756,10 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 			BaseURL: "https://runtime.example/v1/",
 			APIKey:  " runtime-key ",
 			Env: map[string]string{
-				"OPENAI_BASE_URL":                    "https://env.example/v1",
-				"OPENAI_API_KEY":                     "env-key",
-				"OPENAI_MODEL":                       "env-model",
-				"CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL": "0",
-				" EXTRA_FLAG ":                       " 1 ",
+				"OPENAI_BASE_URL": "https://env.example/v1",
+				"OPENAI_API_KEY":  "env-key",
+				"OPENAI_MODEL":    "env-model",
+				" EXTRA_FLAG ":    " 1 ",
 			},
 		},
 	})
@@ -791,9 +790,6 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 	}
 	if got, want := envMap["EXTRA_FLAG"], "1"; got != want {
 		t.Fatalf("EXTRA_FLAG = %q, want %q", got, want)
-	}
-	if got, want := envMap["CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL"], "1"; got != want {
-		t.Fatalf("CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL = %q, want runtime capability %q", got, want)
 	}
 	for _, key := range []string{"ZDOTDIR", "BASH_ENV", "ENV"} {
 		if got, ok := envMap[key]; ok {
