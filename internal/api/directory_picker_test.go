@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"os/exec"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -38,4 +41,40 @@ func TestDirectoryPickerCanceled(t *testing.T) {
 			t.Fatal("directoryPickerCanceled() = true, want false")
 		}
 	})
+}
+
+func TestPickDirectoryWindowsUsesSeparatedSTACommands(t *testing.T) {
+	originalRunner := runDirectoryPickerCommand
+	t.Cleanup(func() {
+		runDirectoryPickerCommand = originalRunner
+	})
+
+	var commandName string
+	var commandArgs []string
+	runDirectoryPickerCommand = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		commandName = name
+		commandArgs = slices.Clone(args)
+		return []byte(`C:\workspace`), nil
+	}
+
+	path, err := pickDirectoryWindows(context.Background())
+	if err != nil {
+		t.Fatalf("pickDirectoryWindows() error = %v", err)
+	}
+	if path != `C:\workspace` {
+		t.Fatalf("pickDirectoryWindows() = %q, want %q", path, `C:\workspace`)
+	}
+	if commandName != "powershell" {
+		t.Fatalf("command name = %q, want powershell", commandName)
+	}
+	if !slices.Contains(commandArgs, "-STA") {
+		t.Fatalf("command args = %q, want -STA", commandArgs)
+	}
+	if len(commandArgs) < 2 || commandArgs[len(commandArgs)-2] != "-Command" {
+		t.Fatalf("command args = %q, want -Command followed by script", commandArgs)
+	}
+	script := commandArgs[len(commandArgs)-1]
+	if !strings.Contains(script, "System.Windows.Forms\n$dialog =") {
+		t.Fatalf("PowerShell statements are not separated by a newline: %q", script)
+	}
 }

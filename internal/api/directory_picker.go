@@ -89,8 +89,8 @@ func pickDirectoryWindows(ctx context.Context) (string, error) {
 		`} else {`,
 		`  exit 1`,
 		`}`,
-	}, " ")
-	out, err := runDirectoryPickerCommand(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	}, "\n")
+	out, err := runDirectoryPickerCommand(ctx, "powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", script)
 	if err != nil {
 		if directoryPickerCanceled(err) {
 			return "", errDirectorySelectionCanceled
