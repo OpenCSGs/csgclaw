@@ -160,7 +160,7 @@ func (s *Service) installDefaultSystemSkills(agentID, runtimeKind string) error 
 }
 
 func defaultSystemSkillNames() ([]string, error) {
-	names, err := skillsystem.Names()
+	names, err := skillsystem.DefaultNames()
 	if err != nil {
 		return nil, err
 	}

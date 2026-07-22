@@ -18,6 +18,24 @@ func TestNamesReadsEmbeddedDirectory(t *testing.T) {
 	if !slicesContains(got, "skill-creator") {
 		t.Fatalf("Names() = %#v, want embedded skill-creator", got)
 	}
+	if !slicesContains(got, "csgclaw-interactive-output-demo") {
+		t.Fatalf("Names() = %#v, want embedded interactive output demo", got)
+	}
+}
+
+func TestDefaultNamesExcludeManagerOnlyDemo(t *testing.T) {
+	got, err := DefaultNames()
+	if err != nil {
+		t.Fatalf("DefaultNames() error = %v", err)
+	}
+	if slicesContains(got, "csgclaw-interactive-output-demo") {
+		t.Fatalf("DefaultNames() = %#v, want Manager-only demo excluded", got)
+	}
+	for _, name := range []string{"skill-creator", "skill-installer"} {
+		if !slicesContains(got, name) {
+			t.Fatalf("DefaultNames() = %#v, want %s", got, name)
+		}
+	}
 }
 
 func TestResolveSource(t *testing.T) {
@@ -56,6 +74,25 @@ func TestSkillCreatorUsesRuntimeNeutralDefaultPath(t *testing.T) {
 	content := buf.String()
 	if !strings.Contains(content, "~/.openclaw/workspace/skills") || !strings.Contains(content, "~/.picoclaw/workspace/skills") {
 		t.Fatalf("skill-creator content = %q, want runtime-neutral workspace skills paths", content)
+	}
+}
+
+func TestResolveInteractiveOutputDemoUsesManagerTemplate(t *testing.T) {
+	source, err := ResolveSource("csgclaw-interactive-output-demo")
+	if err != nil {
+		t.Fatalf("ResolveSource(csgclaw-interactive-output-demo) error = %v", err)
+	}
+	data, err := source.FS.Open(source.RootPath + "/scripts/emit_demo.py")
+	if err != nil {
+		t.Fatalf("Open(emit_demo.py) error = %v", err)
+	}
+	defer data.Close()
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(data); err != nil {
+		t.Fatalf("ReadFrom(emit_demo.py) error = %v", err)
+	}
+	if !strings.Contains(buf.String(), "::csgclaw-output::") {
+		t.Fatalf("emit_demo.py content = %q, want structured output emitter", buf.String())
 	}
 }
 

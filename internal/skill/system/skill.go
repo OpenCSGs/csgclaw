@@ -84,6 +84,19 @@ func Names() ([]string, error) {
 	return names, nil
 }
 
+// DefaultNames returns the system skills installed automatically into agent runtimes.
+func DefaultNames() ([]string, error) {
+	items, err := listFS(defaultSkillsFS, skillsRoot)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(items))
+	for _, item := range items {
+		names = append(names, item.Name)
+	}
+	return names, nil
+}
+
 func RootSource() SkillSource {
 	return SkillSource{
 		Source:   SkillSourceSystem,

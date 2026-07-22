@@ -3924,8 +3924,8 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&skills); err != nil {
 		t.Fatalf("decode skills response: %v", err)
 	}
-	if len(skills) != 4 {
-		t.Fatalf("len(skills) = %d, want 4", len(skills))
+	if len(skills) != 5 {
+		t.Fatalf("len(skills) = %d, want 5", len(skills))
 	}
 	skillsByName := map[string]skillsystem.SkillSummary{}
 	for _, item := range skills {
@@ -3943,6 +3943,9 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if got := skillsByName["skill-creator"]; got.Name != "skill-creator" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
 		t.Fatalf("skill-creator = %+v, want read-only system skill", got)
 	}
+	if got := skillsByName["csgclaw-interactive-output-demo"]; got.Name != "csgclaw-interactive-output-demo" || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
+		t.Fatalf("interactive output demo = %+v, want read-only system skill", got)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree", nil)
 	rec = httptest.NewRecorder()
@@ -3959,7 +3962,7 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	for _, entry := range listing.Entries {
 		paths = append(paths, entry.Path)
 	}
-	if !slices.Contains(paths, "alpha/SKILL.md") || !slices.Contains(paths, "skill-installer/SKILL.md") {
+	if !slices.Contains(paths, "alpha/SKILL.md") || !slices.Contains(paths, "skill-installer/SKILL.md") || !slices.Contains(paths, "csgclaw-interactive-output-demo/SKILL.md") {
 		t.Fatalf("root tree paths = %#v, want local and system skill files", paths)
 	}
 
@@ -3976,7 +3979,7 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	for _, entry := range listing.Entries {
 		paths = append(paths, entry.Path)
 	}
-	if !slices.Contains(paths, "alpha/SKILL.md") || !slices.Contains(paths, "skill-installer/SKILL.md") {
+	if !slices.Contains(paths, "alpha/SKILL.md") || !slices.Contains(paths, "skill-installer/SKILL.md") || !slices.Contains(paths, "csgclaw-interactive-output-demo/SKILL.md") {
 		t.Fatalf("dot root tree paths = %#v, want local and system skill files", paths)
 	}
 
@@ -4045,6 +4048,36 @@ func TestHandleSkillsListsGlobalSkillsAndBrowsesFiles(t *testing.T) {
 	if !strings.Contains(file.Content, "registry skill search") {
 		t.Fatalf("system skill content = %q, want skill-installer instructions", file.Content)
 	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/tree?path=csgclaw-interactive-output-demo", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("demo tree status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&listing); err != nil {
+		t.Fatalf("decode demo tree response: %v", err)
+	}
+	paths = paths[:0]
+	for _, entry := range listing.Entries {
+		paths = append(paths, entry.Path)
+	}
+	if !slices.Contains(paths, "csgclaw-interactive-output-demo/SKILL.md") || !slices.Contains(paths, "csgclaw-interactive-output-demo/scripts/emit_demo.py") {
+		t.Fatalf("demo tree paths = %#v, want skill and emitter files", paths)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/skills/file?path=csgclaw-interactive-output-demo/scripts/emit_demo.py", nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("demo file status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&file); err != nil {
+		t.Fatalf("decode demo file response: %v", err)
+	}
+	if !strings.Contains(file.Content, "::csgclaw-output::") {
+		t.Fatalf("demo emitter content = %q, want structured output record", file.Content)
+	}
 }
 
 func TestHandleSkillsMissingRootUsesEmptyOrNotFound(t *testing.T) {
@@ -4067,7 +4100,7 @@ func TestHandleSkillsMissingRootUsesEmptyOrNotFound(t *testing.T) {
 	for _, item := range skills {
 		skillsByName[item.Name] = item
 	}
-	for _, name := range []string{"skill-installer", "skill-creator"} {
+	for _, name := range []string{"skill-installer", "skill-creator", "csgclaw-interactive-output-demo"} {
 		if got := skillsByName[name]; got.Name != name || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
 			t.Fatalf("skills = %+v, want read-only system skill %s", skills, name)
 		}
@@ -4087,7 +4120,7 @@ func TestHandleSkillsMissingRootUsesEmptyOrNotFound(t *testing.T) {
 	for _, entry := range listing.Entries {
 		paths = append(paths, entry.Path)
 	}
-	if !slices.Contains(paths, "skill-installer/SKILL.md") {
+	if !slices.Contains(paths, "skill-installer/SKILL.md") || !slices.Contains(paths, "csgclaw-interactive-output-demo/SKILL.md") {
 		t.Fatalf("root tree paths = %#v, want system skill file", paths)
 	}
 
@@ -4129,7 +4162,7 @@ func TestHandleSkillsBrowsesSystemSkillWhenLocalSystemSkillIsMalformed(t *testin
 	for _, item := range skills {
 		skillsByName[item.Name] = item
 	}
-	for _, name := range []string{"skill-installer", "skill-creator"} {
+	for _, name := range []string{"skill-installer", "skill-creator", "csgclaw-interactive-output-demo"} {
 		if got := skillsByName[name]; got.Name != name || got.Source != skillsystem.SkillSourceSystem || !got.Readonly {
 			t.Fatalf("skills = %+v, want read-only system skill %s", skills, name)
 		}
