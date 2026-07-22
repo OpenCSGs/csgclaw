@@ -213,14 +213,25 @@ func (s *RemoteStore) FetchWorkspace(ctx context.Context, id string) (WorkspaceR
 		return WorkspaceRef{}, fmt.Errorf("create remote hub workspace temp dir: %w", err)
 	}
 	var totalBytes int64
-	for _, dir := range []string{localInstructionsDirName, localSkillsDirName, localMCPsDirName, localMemoriesDirName} {
+	legacyLayout := false
+	for index, dir := range []string{localInstructionsDirName, localSkillsDirName, localMCPsDirName, localMemoriesDirName} {
 		err := s.fetchWorkspaceTree(ctx, id, branch, dir, templateDir, &totalBytes)
+		if index == 0 && errors.Is(err, ErrTemplateNotFound) {
+			legacyLayout = true
+			break
+		}
 		if errors.Is(err, ErrTemplateNotFound) && (dir == localSkillsDirName || dir == localMemoriesDirName) {
 			continue
 		}
 		if err != nil {
 			_ = os.RemoveAll(templateDir)
 			return WorkspaceRef{}, err
+		}
+	}
+	if legacyLayout {
+		if err := s.fetchWorkspaceTree(ctx, id, branch, "workspace", templateDir, &totalBytes); err != nil {
+			_ = os.RemoveAll(templateDir)
+			return WorkspaceRef{}, fmt.Errorf("fetch legacy remote hub workspace: %w", err)
 		}
 	}
 	workspace, err := materializeTemplateDir(templateDir)
@@ -305,6 +316,11 @@ func (s *RemoteStore) ReadWorkspaceFile(
 		return apitypes.WorkspaceFile{}, err
 	}
 	data, err := s.fetchBlob(ctx, id, cleanPath, branch)
+	if errors.Is(err, ErrTemplateNotFound) {
+		if legacyPath := legacyRemoteWorkspacePath(cleanPath); legacyPath != "" {
+			data, err = s.fetchBlob(ctx, id, legacyPath, branch)
+		}
+	}
 	if err != nil {
 		return apitypes.WorkspaceFile{}, err
 	}
@@ -333,6 +349,17 @@ func (s *RemoteStore) ReadWorkspaceFile(
 	}
 	file.Content = string(preview)
 	return file, nil
+}
+
+func legacyRemoteWorkspacePath(workspacePath string) string {
+	switch workspacePath {
+	case localInstructionsDirName + "/" + requiredInstructionsFile:
+		return "workspace/" + requiredInstructionsFile
+	}
+	if strings.HasPrefix(workspacePath, localSkillsDirName+"/") {
+		return "workspace/" + workspacePath
+	}
+	return ""
 }
 
 func (s *RemoteStore) defaultBranch(ctx context.Context, id string) (string, error) {
@@ -475,6 +502,9 @@ func (s *RemoteStore) getJSON(ctx context.Context, endpoint string, out any) err
 	}
 	if status < 200 || status >= 300 {
 		return fmt.Errorf("remote hub request failed with status %d: %s", status, truncateRemoteBody(body))
+	}
+	if len(strings.TrimSpace(string(body))) == 0 {
+		return fmt.Errorf("%w", ErrTemplateNotFound)
 	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("decode remote hub response: %w", err)

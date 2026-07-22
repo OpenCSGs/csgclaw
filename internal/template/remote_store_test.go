@@ -170,6 +170,77 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 	}
 }
 
+func TestRemoteStoreFetchWorkspaceSupportsLegacyLayoutAndEmptyMissingTree(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/codes/Agentic/feishu-assistant":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"default_branch": "main"}})
+		case "/api/v1/codes/Agentic/feishu-assistant/refs/main/tree/instructions":
+			w.WriteHeader(http.StatusOK)
+		case "/api/v1/codes/Agentic/feishu-assistant/refs/main/tree/workspace":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
+				"Files": []map[string]any{
+					{"name": "skills", "type": "dir", "path": "workspace/skills"},
+					{"name": "AGENTS.md", "type": "file", "path": "workspace/AGENTS.md"},
+					{"name": "USER.md", "type": "file", "path": "workspace/USER.md"},
+				},
+				"Cursor": "",
+			}})
+		case "/api/v1/codes/Agentic/feishu-assistant/refs/main/tree/workspace/skills":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
+				"Files":  []map[string]any{{"name": "feishu", "type": "dir", "path": "workspace/skills/feishu"}},
+				"Cursor": "",
+			}})
+		case "/api/v1/codes/Agentic/feishu-assistant/refs/main/tree/workspace/skills/feishu":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
+				"Files":  []map[string]any{{"name": "SKILL.md", "type": "file", "path": "workspace/skills/feishu/SKILL.md"}},
+				"Cursor": "",
+			}})
+		case "/api/v1/codes/Agentic/feishu-assistant/blob/workspace/AGENTS.md":
+			writeRemoteBlob(t, w, "workspace/AGENTS.md", []byte("legacy instructions\n"))
+		case "/api/v1/codes/Agentic/feishu-assistant/blob/workspace/USER.md":
+			writeRemoteBlob(t, w, "workspace/USER.md", []byte("legacy user\n"))
+		case "/api/v1/codes/Agentic/feishu-assistant/blob/workspace/skills/feishu/SKILL.md":
+			writeRemoteBlob(t, w, "workspace/skills/feishu/SKILL.md", []byte("legacy skill\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	store := NewRemoteStore(srv.URL, "")
+	file, err := store.ReadWorkspaceFile(context.Background(), "feishu-assistant", "instructions/AGENTS.md")
+	if err != nil {
+		t.Fatalf("ReadWorkspaceFile() error = %v", err)
+	}
+	if got, want := file.Content, "legacy instructions\n"; got != want {
+		t.Fatalf("ReadWorkspaceFile().Content = %q, want %q", got, want)
+	}
+	workspace, err := store.FetchWorkspace(context.Background(), "feishu-assistant")
+	if err != nil {
+		t.Fatalf("FetchWorkspace() error = %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(workspace.Path) })
+	if !workspace.Temporary {
+		t.Fatal("FetchWorkspace().Temporary = false, want true")
+	}
+	for name, want := range map[string]string{
+		"AGENTS.md":              "legacy instructions\n",
+		"USER.md":                "legacy user\n",
+		"skills/feishu/SKILL.md": "legacy skill\n",
+	} {
+		data, err := os.ReadFile(filepath.Join(workspace.Path, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatalf("ReadFile(%s) error = %v", name, err)
+		}
+		if got := string(data); got != want {
+			t.Fatalf("%s = %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestRemoteStoreListSkipsInvalidRepositories(t *testing.T) {
 	t.Parallel()
 
