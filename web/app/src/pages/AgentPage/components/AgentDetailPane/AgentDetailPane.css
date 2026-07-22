@@ -1530,6 +1530,59 @@
   border-radius: 8px;
 }
 
+:root[data-theme="dark"] .csg-dialog-overlay.agent-skill-delete-backdrop {
+  background: color-mix(in srgb, var(--gray-950) 78%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+:root[data-theme="dark"] .csg-dialog-content.agent-skill-delete-dialog {
+  border: 1px solid color-mix(in oklab, var(--line) 78%, var(--gray-700) 22%);
+  background: color-mix(in oklab, var(--panel) 92%, var(--gray-800) 8%);
+  color: var(--text);
+  box-shadow:
+    0 24px 48px color-mix(in srgb, var(--gray-950) 42%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--gray-25) 6%, transparent);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .csg-dialog-title {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .csg-dialog-description {
+  color: color-mix(in oklab, var(--muted) 86%, var(--text) 14%);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .csg-dialog-close {
+  color: var(--gray-400);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .csg-dialog-close:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--gray-700) 30%, transparent);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .agent-skills-dialog-actions .btn-secondary-gray {
+  border-color: color-mix(in oklab, var(--line) 80%, var(--gray-700) 20%);
+  background: color-mix(in oklab, var(--field) 78%, var(--gray-950) 22%);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .agent-skills-dialog-actions .btn-secondary-gray:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--brand-300) 24%, var(--line));
+  background: color-mix(in oklab, var(--field) 84%, var(--brand-300) 8%);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .agent-skills-dialog-actions .btn-danger {
+  border-color: color-mix(in oklab, var(--error-500) 92%, var(--error-300) 8%);
+  background: color-mix(in oklab, var(--error-600) 84%, var(--error-400) 16%);
+}
+
+:root[data-theme="dark"] .agent-skill-delete-dialog .agent-skills-dialog-actions .btn-danger:hover:not(:disabled) {
+  border-color: var(--error-400);
+  background: color-mix(in oklab, var(--error-600) 76%, var(--error-300) 24%);
+}
+
 .agent-detail-pane .agent-status-dot {
   width: 8px;
   height: 8px;
