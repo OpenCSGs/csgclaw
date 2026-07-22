@@ -42,6 +42,18 @@ type fakeManager struct {
 	prompt func(context.Context, SessionHandle, PromptRequest) (PromptResponse, error)
 }
 
+type fakeClosableManager struct {
+	fakeManager
+	close func() error
+}
+
+func (f *fakeClosableManager) Close() error {
+	if f.close != nil {
+		return f.close()
+	}
+	return nil
+}
+
 func (f fakeManager) LiveSession(handle SessionHandle) (*Session, error) {
 	if f.live != nil {
 		return f.live(handle)
@@ -222,6 +234,82 @@ func TestRuntimeCreateStartAndInfo(t *testing.T) {
 	}
 	if !strings.Contains(agentsText, "Use concise Go comments.") {
 		t.Fatalf("codex home AGENTS.md missing agent instructions:\n%s", agentsText)
+	}
+}
+
+func TestRuntimeCloseClosesSessionManager(t *testing.T) {
+	closeCalls := 0
+	manager := &fakeClosableManager{
+		fakeManager: fakeManager{
+			start: func(context.Context, SessionSpec) (*Session, error) {
+				return nil, nil
+			},
+		},
+		close: func() error {
+			closeCalls++
+			return nil
+		},
+	}
+	rt := New(Dependencies{Manager: manager})
+
+	if err := rt.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if closeCalls != 1 {
+		t.Fatalf("session manager Close() calls = %d, want 1", closeCalls)
+	}
+}
+
+func TestRuntimeNewStopsUntrackedProcessesBeforeStartingSession(t *testing.T) {
+	root := t.TempDir()
+	var steps []string
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(string) (string, error) {
+			return filepath.Join(root, "agent-manager"), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        agent.ManagerUserID,
+				Name:      agent.ManagerName,
+				RuntimeID: h.RuntimeID,
+			}, nil
+		},
+		Manager: fakeManager{
+			start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+				steps = append(steps, "start")
+				return &Session{
+					RuntimeID:    spec.RuntimeID,
+					AgentID:      spec.AgentID,
+					AgentName:    spec.AgentName,
+					SessionID:    "manager-thread",
+					RuntimeDir:   spec.RuntimeDir,
+					WorkspaceDir: spec.WorkspaceDir,
+					HomeDir:      spec.HomeDir,
+					CodexHomeDir: spec.CodexHomeDir,
+					StderrPath:   spec.StderrPath,
+				}, nil
+			},
+		},
+		StopRuntimeProcesses: func(path string) ([]int, error) {
+			steps = append(steps, "stop-untracked")
+			want := filepath.Join(root, "agent-manager", ".codex")
+			if path != want {
+				t.Fatalf("StopRuntimeProcesses() path = %q, want %q", path, want)
+			}
+			return []int{123}, nil
+		},
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-agent-manager",
+		AgentID:   agent.ManagerUserID,
+		AgentName: agent.ManagerName,
+	}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got, want := steps, []string{"stop-untracked", "start"}; !slices.Equal(got, want) {
+		t.Fatalf("New() steps = %q, want %q", got, want)
 	}
 }
 
@@ -908,6 +996,52 @@ func TestDeleteStopsLiveSessionWhenRuntimeMetadataIsMissing(t *testing.T) {
 	}
 	if _, err := os.Stat(runtimeDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("runtime dir stat error = %v, want not exist", err)
+	}
+}
+
+func TestDeleteStopsUntrackedRuntimeProcessesBeforeRemoval(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "agent-manager", ".codex")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(runtime dir) error = %v", err)
+	}
+
+	var steps []string
+	rt := New(Dependencies{
+		AgentHome: func(string) (string, error) {
+			return filepath.Join(root, "agent-manager"), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        agent.ManagerUserID,
+				Name:      agent.ManagerName,
+				RuntimeID: h.RuntimeID,
+			}, nil
+		},
+		Manager: fakeManager{
+			stop: func(context.Context, SessionHandle) error {
+				steps = append(steps, "stop-session")
+				return os.ErrNotExist
+			},
+		},
+		StopRuntimeProcesses: func(path string) ([]int, error) {
+			steps = append(steps, "stop-untracked")
+			if path != runtimeDir {
+				t.Fatalf("StopRuntimeProcesses() path = %q, want %q", path, runtimeDir)
+			}
+			return []int{123}, nil
+		},
+		RemoveAll: func(path string) error {
+			steps = append(steps, "remove")
+			return os.RemoveAll(path)
+		},
+	})
+
+	if err := rt.Delete(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-manager"}); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if got, want := steps, []string{"stop-session", "stop-untracked", "remove"}; !slices.Equal(got, want) {
+		t.Fatalf("Delete() steps = %q, want %q", got, want)
 	}
 }
 

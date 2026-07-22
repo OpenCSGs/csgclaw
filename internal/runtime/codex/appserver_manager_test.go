@@ -159,6 +159,56 @@ func TestAppServerManagerStopClosesPendingRequests(t *testing.T) {
 	}
 }
 
+func TestAppServerManagerStaleExitDoesNotDetachReplacement(t *testing.T) {
+	manager := newAppServerManager(testAppServerManagerDeps())
+	stale := &liveSession{}
+	replacement := &liveSession{}
+	manager.sessions["runtime-1"] = replacement
+
+	if manager.detachSession("runtime-1", stale) {
+		t.Fatal("detachSession() = true for stale session, want false")
+	}
+	if got := manager.sessions["runtime-1"]; got != replacement {
+		t.Fatalf("sessions[runtime-1] = %p, want replacement %p", got, replacement)
+	}
+	if !manager.detachSession("runtime-1", replacement) {
+		t.Fatal("detachSession() = false for current session, want true")
+	}
+	if _, ok := manager.sessions["runtime-1"]; ok {
+		t.Fatal("current session still registered after detach")
+	}
+}
+
+func TestAppServerManagerCloseStopsAllSessions(t *testing.T) {
+	withAppServerHelperCommand(t, "pending")
+	manager := newAppServerManager(testAppServerManagerDeps())
+	var pids []int
+	for _, runtimeID := range []string{"runtime-1", "runtime-2"} {
+		spec := testAppServerSessionSpec(filepath.Join(t.TempDir(), runtimeID))
+		spec.RuntimeID = runtimeID
+		session, err := manager.Start(context.Background(), spec)
+		if err != nil {
+			t.Fatalf("Start(%s) error = %v", runtimeID, err)
+		}
+		pids = append(pids, session.ProcessID)
+	}
+
+	if err := manager.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	manager.mu.RLock()
+	remaining := len(manager.sessions)
+	manager.mu.RUnlock()
+	if remaining != 0 {
+		t.Fatalf("live sessions after Close() = %d, want 0", remaining)
+	}
+	for _, pid := range pids {
+		if processAlive(pid) {
+			t.Fatalf("codex app-server process %d is still alive after Close()", pid)
+		}
+	}
+}
+
 func TestAppServerManagerPromptCompletesTurn(t *testing.T) {
 	withAppServerHelperCommand(t, "prompt-complete")
 	dir := t.TempDir()

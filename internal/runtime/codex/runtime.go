@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -142,6 +143,8 @@ type Dependencies struct {
 	Stat      func(string) (os.FileInfo, error)
 	RemoveAll func(string) error
 	OpenFile  func(string, int, os.FileMode) (*os.File, error)
+
+	StopRuntimeProcesses func(string) ([]int, error)
 }
 
 type Runtime struct {
@@ -158,6 +161,7 @@ var (
 	_ agentruntime.MCPServersController        = (*Runtime)(nil)
 	_ agentruntime.MCPServersReconciler        = (*Runtime)(nil)
 	_ agentruntime.MCPServersListController    = (*Runtime)(nil)
+	_ io.Closer                                = (*Runtime)(nil)
 )
 
 func New(deps Dependencies) *Runtime {
@@ -166,6 +170,17 @@ func New(deps Dependencies) *Runtime {
 
 func (r *Runtime) Kind() string {
 	return agentruntime.KindCodex
+}
+
+func (r *Runtime) Close() error {
+	if r == nil || r.deps.Manager == nil {
+		return nil
+	}
+	closer, ok := r.deps.Manager.(io.Closer)
+	if !ok {
+		return nil
+	}
+	return closer.Close()
 }
 
 func workspaceRoot(agentHome string) string {
@@ -371,6 +386,9 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 	if err != nil {
 		return err
 	}
+	if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, dir); err != nil {
+		return err
+	}
 	if err := r.removeRuntimeDir(ctx, runtimeID, dir); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -513,6 +531,13 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	spec.HomeDir = r.hostSessionHomeDir(dirs.Home)
 	spec.CodexHomeDir = dirs.CodexHome
 	spec.StderrPath = dirs.StderrLog
+	manager := r.sessionManager()
+	tracker, tracksSessions := manager.(interface{ hasSession(string) bool })
+	if !tracksSessions || !tracker.hasSession(runtimeID) {
+		if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, spec.RuntimeDir); err != nil {
+			return nil, err
+		}
+	}
 	if err := r.mkdirAll(spec.WorkspaceDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create codex workspace dir %s: %w", spec.WorkspaceDir, err)
 	}
@@ -544,7 +569,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	session, err := r.sessionManager().Start(context.WithoutCancel(ctx), spec)
+	session, err := manager.Start(context.WithoutCancel(ctx), spec)
 	if err != nil {
 		return nil, err
 	}
@@ -1315,6 +1340,28 @@ func (r *Runtime) removeAll(path string) error {
 		return r.deps.RemoveAll(path)
 	}
 	return os.RemoveAll(path)
+}
+
+func (r *Runtime) stopUntrackedRuntimeProcesses(ctx context.Context, runtimeID, runtimeDir string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stop := stopRuntimeProcessesUsingDir
+	if r != nil && r.deps.StopRuntimeProcesses != nil {
+		stop = r.deps.StopRuntimeProcesses
+	}
+	pids, err := stop(runtimeDir)
+	if err != nil {
+		return fmt.Errorf("stop untracked codex processes for runtime %q: %w", runtimeID, err)
+	}
+	if len(pids) > 0 {
+		slog.InfoContext(ctx, "stopped untracked codex runtime processes",
+			"runtime_id", runtimeID,
+			"runtime_dir", runtimeDir,
+			"process_ids", pids,
+		)
+	}
+	return nil
 }
 
 func (r *Runtime) removeRuntimeDir(ctx context.Context, runtimeID, path string) error {

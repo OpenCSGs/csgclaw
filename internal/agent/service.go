@@ -2725,14 +2725,30 @@ func logHydrateUnknownStatus(a Agent, stage string, err error) {
 
 func (s *Service) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	sandboxRuntimes := make(map[string]sandbox.Runtime, len(s.runtimes))
+	for name, rt := range s.runtimes {
+		sandboxRuntimes[name] = rt
+		delete(s.runtimes, name)
+	}
+	registeredRuntimes := make(map[string]io.Closer, len(s.runtimeRegistry))
+	for kind, rt := range s.runtimeRegistry {
+		if closer, ok := rt.(io.Closer); ok {
+			registeredRuntimes[kind] = closer
+		}
+		delete(s.runtimeRegistry, kind)
+	}
+	s.mu.Unlock()
 
 	var closeErr error
-	for name, rt := range s.runtimes {
-		if err := rt.Close(); err != nil && closeErr == nil {
-			closeErr = err
+	for name, rt := range sandboxRuntimes {
+		if err := rt.Close(); err != nil {
+			closeErr = errors.Join(closeErr, fmt.Errorf("close sandbox runtime %q: %w", name, err))
 		}
-		delete(s.runtimes, name)
+	}
+	for kind, rt := range registeredRuntimes {
+		if err := rt.Close(); err != nil {
+			closeErr = errors.Join(closeErr, fmt.Errorf("close agent runtime %q: %w", kind, err))
+		}
 	}
 	return closeErr
 }
