@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
-import { fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
+import { fetchHubWorkspace, fetchHubWorkspaceFile, updateHubWorkspaceFile } from "@/api/hub";
 import { hasSkillName, isOfficialSkill, isPersonalSkill } from "@/models/skillhub";
 import type { HubWorkspaceFile } from "@/models/hubWorkspace";
 import { flattenWorkspaceDirectoryListings } from "@/models/workspace";
@@ -157,13 +157,16 @@ export function useWorkspaceHubSelection({
       setTemplateWorkspaceFilesState({ files: {}, templateID: "" });
       return;
     }
-    const desiredPaths = workspaceEntries
-      .filter(
-        (entry) =>
-          entry.type === "file" &&
-          (entry.path === "mcps/mcp.json" || (entry.path.startsWith("skills/") && entry.path.endsWith("/SKILL.md"))),
-      )
-      .map((entry) => entry.path);
+    const desiredPaths = [
+      "instructions/AGENTS.md",
+      ...workspaceEntries
+        .filter(
+          (entry) =>
+            entry.type === "file" &&
+            (entry.path === "mcps/mcp.json" || (entry.path.startsWith("skills/") && entry.path.endsWith("/SKILL.md"))),
+        )
+        .map((entry) => entry.path),
+    ];
     if (!desiredPaths.length) {
       return;
     }
@@ -260,6 +263,24 @@ export function useWorkspaceHubSelection({
       setSelectedHubWorkspacePath(workspacePath);
     },
     [setSelectedHubWorkspacePath],
+  );
+
+  const saveTemplateInstructions = useCallback(
+    async (content: string) => {
+      if (!selectedHubTemplateId) return false;
+      try {
+        const file = await updateHubWorkspaceFile(selectedHubTemplateId, "instructions/AGENTS.md", content);
+        setTemplateWorkspaceFilesState((current) => ({
+          files: { ...(current.templateID === selectedHubTemplateId ? current.files : {}), [file.path]: file },
+          templateID: selectedHubTemplateId,
+        }));
+        queryClient.setQueryData(workspaceQueryKeys.hubWorkspaceFile(selectedHubTemplateId, file.path), file);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [queryClient, selectedHubTemplateId],
   );
   const selectSkillFile = useCallback(
     (skillPath: string) => {
@@ -479,6 +500,7 @@ export function useWorkspaceHubSelection({
       onUpdateMCP: updateMCPServer,
       onDeleteMCP: deleteMCPServer,
       onSelectWorkspaceFile: selectWorkspaceFile,
+      onUpdateTemplateInstructions: saveTemplateInstructions,
       onToggleWorkspaceDir: loadWorkspaceDirectory,
       onSelectSkillFile: selectSkillFile,
     },

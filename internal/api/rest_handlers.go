@@ -81,6 +81,9 @@ func (h *Handler) deleteHubTemplateByID(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) getHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {
 	h.handleHubTemplateWorkspaceFileByID(w, r)
 }
+func (h *Handler) putHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {
+	h.handleHubTemplateWorkspaceFileWrite(w, r, pathValue(r, "id"))
+}
 func (h *Handler) getHubTemplateWorkspaceByID(w http.ResponseWriter, r *http.Request) {
 	h.handleHubTemplateWorkspaceByID(w, r)
 }

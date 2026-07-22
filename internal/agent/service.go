@@ -217,7 +217,7 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 	if !ok {
 		return hub.PublishSpec{}, fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
-	workspaceRoot, err := s.agentWorkspaceRoot(got.ID, got.RuntimeKind)
+	layout, err := s.agentLayout(got.ID, got.RuntimeKind)
 	if err != nil {
 		return hub.PublishSpec{}, err
 	}
@@ -229,10 +229,12 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 		RuntimeKind: got.RuntimeConfig().Kind(),
 		Image:       got.Image,
 		WorkspaceRef: hub.WorkspaceRef{
-			Kind: hub.WorkspaceKindDir,
-			Path: workspaceRoot,
+			Kind:             hub.WorkspaceKindDir,
+			Path:             layout.WorkspaceRoot,
+			InstructionsPath: layout.InstructionsPath,
+			SkillsPath:       layout.SkillsRoot,
 		},
-		MCPServers: cloneMCPServers(got.MCPServers),
+		MCPServers: templateSafeMCPServers(got.MCPServers),
 	}, nil
 }
 
@@ -1091,6 +1093,20 @@ func (s *Service) resolveTemplateCreateSpec(ctx context.Context, spec CreateAgen
 	spec = applyTemplateDefaults(spec, item)
 	spec = applyTemplateEnvDefaults(spec, item)
 	if strings.TrimSpace(workspace.Kind) == hub.WorkspaceKindDir {
+		if agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind() == RuntimeKindCodex {
+			// Template creation seeds only the template/base document. Profile
+			// instructions are introduced later through the managed block.
+			spec.Instructions = ""
+			instructionsPath := filepath.Join(workspace.Path, "AGENTS.md")
+			if data, readErr := os.ReadFile(instructionsPath); readErr == nil {
+				spec.TemplateInstructions = string(data)
+				if removeErr := os.Remove(instructionsPath); removeErr != nil {
+					return CreateAgentSpec{}, cleanup, fmt.Errorf("separate codex template instructions: %w", removeErr)
+				}
+			} else if !errors.Is(readErr, os.ErrNotExist) {
+				return CreateAgentSpec{}, cleanup, fmt.Errorf("read codex template instructions: %w", readErr)
+			}
+		}
 		spec.FromTemplate = strings.TrimSpace(workspace.Path)
 		if !createSpecSetsMCPServers(spec) && strings.TrimSpace(workspace.MCPServersJSON) != "" {
 			var templateMCPServers map[string]any
@@ -1205,13 +1221,11 @@ func applyTemplateEnvDefaults(spec CreateAgentSpec, item hub.Template) CreateAge
 	return spec
 }
 
-func templateWorkspaceCleanup(kind string, workspace hub.WorkspaceRef) func() {
+func templateWorkspaceCleanup(_ string, workspace hub.WorkspaceRef) func() {
 	if strings.TrimSpace(workspace.Kind) != hub.WorkspaceKindDir {
 		return nil
 	}
-	switch strings.TrimSpace(kind) {
-	case hub.RegistryKindBuiltin, hub.RegistryKindRemote:
-	default:
+	if !workspace.Temporary {
 		return nil
 	}
 	path := strings.TrimSpace(workspace.Path)
@@ -2126,15 +2140,16 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 	}
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, id, name, description, runtimeResolvedProfile)
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
-		RuntimeID:        runtimeIDForAgentID(id),
-		AgentID:          id,
-		ParticipantID:    participantIDForAgent(name, id),
-		AgentName:        name,
-		Instructions:     instructions,
-		Profile:          runtimeProfile,
-		RuntimeOptions:   utils.CloneAnyMap(spec.RuntimeOptions),
-		MCPServers:       cloneMCPServers(spec.MCPServers),
-		WorkspaceOverlay: strings.TrimSpace(spec.FromTemplate),
+		RuntimeID:            runtimeIDForAgentID(id),
+		AgentID:              id,
+		ParticipantID:        participantIDForAgent(name, id),
+		AgentName:            name,
+		Instructions:         instructions,
+		TemplateInstructions: spec.TemplateInstructions,
+		Profile:              runtimeProfile,
+		RuntimeOptions:       utils.CloneAnyMap(spec.RuntimeOptions),
+		MCPServers:           cloneMCPServers(spec.MCPServers),
+		WorkspaceOverlay:     strings.TrimSpace(spec.FromTemplate),
 	}); err != nil {
 		return Agent{}, fmt.Errorf("provision worker runtime: %w", err)
 	}

@@ -2061,3 +2061,36 @@
     flex-direction: column;
   }
 }
+.agent-instructions-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.agent-instructions-mode-switch button {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.agent-instructions-mode-switch button[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.agent-instructions-mode-switch button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}

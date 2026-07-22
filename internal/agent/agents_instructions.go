@@ -23,6 +23,32 @@ func AgentsInstructionsBlockMarkers() (start string, end string) {
 	return agentsInstructionsBlockStart, agentsInstructionsBlockEnd
 }
 
+func ExtractUserInstructionsFromAgentsDocument(document string) string {
+	document = strings.ReplaceAll(document, "\r\n", "\n")
+	start := strings.Index(document, agentsInstructionsBlockStart)
+	if start < 0 {
+		return ""
+	}
+	endOffset := strings.Index(document[start:], agentsInstructionsBlockEnd)
+	if endOffset < 0 {
+		return ""
+	}
+	block := document[start : start+endOffset]
+	heading := "# Agent Instructions\n\n"
+	bodyStart := strings.Index(block, heading)
+	if bodyStart < 0 {
+		return ""
+	}
+	body := block[bodyStart+len(heading):]
+	for _, nextHeading := range []string{"\n# Managed Runtime Instructions", "\n# CSGClaw Rules"} {
+		if idx := strings.Index(body, nextHeading); idx >= 0 {
+			body = body[:idx]
+			break
+		}
+	}
+	return strings.TrimSpace(body)
+}
+
 func RenderAgentsInstructionsBlock(instructions string) string {
 	return renderAgentsInstructionsBlock(instructions, "")
 }

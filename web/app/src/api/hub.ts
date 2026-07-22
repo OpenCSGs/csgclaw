@@ -1,4 +1,4 @@
-import { del, get, post } from "@/api/client";
+import { del, get, post, put } from "@/api/client";
 import type { HubTemplate, HubWorkspaceFile, HubWorkspaceListing } from "@/models/hubWorkspace";
 
 const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";
@@ -24,6 +24,14 @@ export function fetchHubWorkspaceFile(templateID: string, workspacePath: string)
   return get<HubWorkspaceFile>(
     `${hubTemplatePath(templateID)}/workspace/file?path=${encodeURIComponent(workspacePath)}`,
   );
+}
+
+export function updateHubWorkspaceFile(
+  templateID: string,
+  workspacePath: string,
+  content: string,
+): Promise<HubWorkspaceFile> {
+  return put(`${hubTemplatePath(templateID)}/workspace/file?path=${encodeURIComponent(workspacePath)}`, { content });
 }
 
 export function publishAgentTemplateRequest(agentID: string): Promise<HubTemplate> {

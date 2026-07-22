@@ -143,7 +143,8 @@ type LogOptions struct {
 }
 
 type Layout struct {
-	WorkspaceRoot string
-	SkillsRoot    string
-	HostLogPaths  []string
+	WorkspaceRoot    string
+	SkillsRoot       string
+	InstructionsPath string
+	HostLogPaths     []string
 }

@@ -24,16 +24,17 @@ type Provisioner interface {
 // and runtime-facing profile data for host-side setup, but not the final
 // execution handle creation.
 type ProvisionRequest struct {
-	RuntimeID        string
-	AgentID          string
-	ParticipantID    string
-	AgentName        string
-	Instructions     string
-	Profile          Profile
-	RuntimeOptions   map[string]any
-	MCPServers       map[string]any
-	WorkspaceOverlay string
-	Gateway          *GatewayProvision
+	RuntimeID            string
+	AgentID              string
+	ParticipantID        string
+	AgentName            string
+	Instructions         string
+	TemplateInstructions string
+	Profile              Profile
+	RuntimeOptions       map[string]any
+	MCPServers           map[string]any
+	WorkspaceOverlay     string
+	Gateway              *GatewayProvision
 }
 
 // GatewayProvision carries the host-side data needed by sandbox gateway

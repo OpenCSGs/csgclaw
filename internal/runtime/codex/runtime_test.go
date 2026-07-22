@@ -461,6 +461,56 @@ func TestRefreshCodexHomeAgentsFileAppendsManagedBlockToExistingUserFile(t *test
 	}
 }
 
+func TestProvisionTemplateInstructionsDefersManagedProfileBlockUntilUpdate(t *testing.T) {
+	root := t.TempDir()
+	instructions := ""
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{ID: "agent-alice", Name: "alice", RuntimeID: h.RuntimeID, Instructions: instructions}, nil
+	})
+
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID:            "rt-agent-alice",
+		AgentID:              "agent-alice",
+		AgentName:            "alice",
+		Instructions:         "request instructions must be ignored",
+		TemplateInstructions: "# Template Base\n\nKeep this content.\n",
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+	agentsPath := filepath.Join(root, "agent-alice", ".codex", "home", "AGENTS.md")
+	raw, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read provisioned AGENTS.md: %v", err)
+	}
+	if got, want := string(raw), "# Template Base\n\nKeep this content.\n"; got != want {
+		t.Fatalf("provisioned AGENTS.md = %q, want %q", got, want)
+	}
+	if strings.Contains(string(raw), "CSGCLAW-INSTRUCTIONS") || strings.Contains(string(raw), "request instructions") {
+		t.Fatalf("provisioned AGENTS.md unexpectedly contains managed profile instructions: %q", string(raw))
+	}
+	workspaceAgentsPath := filepath.Join(root, "agent-alice", ".codex", "workspace", "AGENTS.md")
+	if workspaceRaw, err := os.ReadFile(workspaceAgentsPath); err == nil {
+		if strings.Contains(string(workspaceRaw), "# Template Base") {
+			t.Fatalf("workspace AGENTS.md contains agent-global template instructions: %q", string(workspaceRaw))
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("read workspace AGENTS.md: %v", err)
+	}
+
+	instructions = "Prefer targeted tests."
+	if err := rt.RefreshCodexHomeAgentsFile(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-alice"}); err != nil {
+		t.Fatalf("RefreshCodexHomeAgentsFile() error = %v", err)
+	}
+	raw, err = os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read updated AGENTS.md: %v", err)
+	}
+	text := string(raw)
+	if !strings.Contains(text, "# Template Base\n\nKeep this content.") || !strings.Contains(text, "Prefer targeted tests.") {
+		t.Fatalf("updated AGENTS.md did not preserve base and add managed instructions: %q", text)
+	}
+}
+
 func TestRefreshCodexHomeAgentsFileReplacesExistingInstructionsBlock(t *testing.T) {
 	root := t.TempDir()
 	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {

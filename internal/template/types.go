@@ -35,9 +35,12 @@ type RegistryRef struct {
 }
 
 type WorkspaceRef struct {
-	Kind           string
-	Path           string
-	MCPServersJSON string
+	Kind             string
+	Path             string
+	InstructionsPath string
+	SkillsPath       string
+	MCPServersJSON   string
+	Temporary        bool
 }
 
 type PublishSpec struct {

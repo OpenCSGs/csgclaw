@@ -41,7 +41,11 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesRuntimeLabel: "Runtime",
     agentProfileTab: "Profile",
     agentInstructions: "Instructions",
+    agentInstructionsDefaultMode: "Default",
+    agentInstructionsAdvancedMode: "Advanced",
+    agentInstructionsViewMode: "Instructions view",
     agentInstructionsPlaceholder: "Describe how this agent should work.",
+    resourcesTemplateInstructionsDefaultHint: "Default mode shows only user-defined instructions.",
     agentProfileSkillsTab: "Skills",
     agentProfileMCPTab: "MCP",
     agentProfileSectionNavLabel: "Template sections",
@@ -313,9 +317,12 @@ describe("HubDetailPane", () => {
 
     await user.click(screen.getByRole("button", { name: "Instructions" }));
     expect(screen.getByRole("button", { name: "Profile" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toBeInTheDocument();
-    expect(screen.queryByText("# Instructions", { exact: false })).not.toBeInTheDocument();
-
+    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue("");
+    expect(screen.getByText("Default mode shows only user-defined instructions.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue(
+      "# Instructions\n\nFollow the template rules.",
+    );
     await user.click(screen.getByRole("button", { name: /^Skills/ }));
     expect(screen.getByText("demo")).toBeInTheDocument();
     expect(screen.getByText("Demo template skill")).toBeInTheDocument();
@@ -337,9 +344,13 @@ describe("HubDetailPane", () => {
     renderHubDetailPane();
 
     await user.click(screen.getByRole("button", { name: "Instructions" }));
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
 
     expect(screen.getByRole("button", { name: /^Skills/ })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Describe how this agent should work.")).toBeDisabled();
+    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue(
+      "# Instructions\n\nFollow the template rules.",
+    );
     expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
   });
 

@@ -105,10 +105,11 @@ func (s *LocalStore) FetchWorkspace(_ context.Context, id string) (WorkspaceRef,
 	if err := validateLocalTemplateID(id); err != nil {
 		return WorkspaceRef{}, err
 	}
-	if _, err := os.Stat(filepath.Join(s.templateRoot(id), localInstructionsDirName)); errors.Is(err, os.ErrNotExist) {
+	root := s.templateRoot(id)
+	if !templateLayoutExists(root) && !legacyTemplateWorkspaceExists(root) {
 		return WorkspaceRef{}, nil
 	}
-	return materializeTemplateDir(s.templateRoot(id))
+	return materializeTemplateDir(root)
 }
 
 func (s *LocalStore) ListWorkspace(_ context.Context, id, workspacePath string) (apitypes.WorkspaceListing, error) {
@@ -123,6 +124,20 @@ func (s *LocalStore) ReadWorkspaceFile(_ context.Context, id, workspacePath stri
 		return apitypes.WorkspaceFile{}, err
 	}
 	return agentworkspace.ReadFile(s.templateRoot(strings.TrimSpace(id)), workspacePath)
+}
+
+func (s *LocalStore) WriteWorkspaceFile(_ context.Context, id, workspacePath, content string) error {
+	if _, _, err := s.loadTemplate(id); err != nil {
+		return err
+	}
+	if filepath.ToSlash(strings.TrimSpace(workspacePath)) != localInstructionsDirName+"/"+requiredInstructionsFile {
+		return ErrWorkspacePathUnsafe
+	}
+	path := filepath.Join(s.templateRoot(strings.TrimSpace(id)), localInstructionsDirName, requiredInstructionsFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(strings.TrimRight(content, "\n")+"\n"), 0o644)
 }
 
 func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, error) {
@@ -150,7 +165,7 @@ func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, err
 		return Template{}, err
 	}
 	if normalized.WorkspaceRef.Kind == WorkspaceKindDir {
-		if err := writeTemplateLayout(normalized.WorkspaceRef.Path, tmpDir, normalized.MCPServers); err != nil {
+		if err := writeTemplateLayout(normalized.WorkspaceRef, tmpDir, normalized.MCPServers); err != nil {
 			return Template{}, err
 		}
 	}
@@ -206,11 +221,21 @@ func (s *LocalStore) workspaceRoot(id string) string {
 }
 
 func (s *LocalStore) workspaceRef(id string) WorkspaceRef {
-	info, err := os.Stat(filepath.Join(s.templateRoot(id), localInstructionsDirName))
-	if err != nil || !info.IsDir() {
+	root := s.templateRoot(id)
+	if !templateLayoutExists(root) && !legacyTemplateWorkspaceExists(root) {
 		return WorkspaceRef{}
 	}
-	return WorkspaceRef{Kind: WorkspaceKindDir, Path: s.templateRoot(id)}
+	return WorkspaceRef{Kind: WorkspaceKindDir, Path: root}
+}
+
+func templateLayoutExists(root string) bool {
+	info, err := os.Stat(filepath.Join(root, localInstructionsDirName))
+	return err == nil && info.IsDir()
+}
+
+func legacyTemplateWorkspaceExists(root string) bool {
+	info, err := os.Stat(filepath.Join(root, "workspace"))
+	return err == nil && info.IsDir()
 }
 
 func (s *LocalStore) loadTemplate(id string) (string, templateManifest, error) {

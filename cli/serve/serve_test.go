@@ -1516,7 +1516,7 @@ models = ["${MODEL_ID}"]
 		`access_token = "pc*********et"`,
 		`no_auth = true`,
 		`default_manager_template = "builtin.manager-codex"`,
-		`default_worker_template = "builtin.picoclaw-worker"`,
+		`default_worker_template = "builtin.openclaw-worker"`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("effective config missing %q:\n%s", want, got)
@@ -1564,7 +1564,7 @@ models = ["gpt-test"]
 	if got, want := cfg.Bootstrap.DefaultManagerTemplate, "builtin.manager-codex"; got != want {
 		t.Fatalf("cfg.Bootstrap.DefaultManagerTemplate = %q, want %q", got, want)
 	}
-	if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "builtin.picoclaw-worker"; got != want {
+	if got, want := cfg.Bootstrap.DefaultWorkerTemplate, "builtin.openclaw-worker"; got != want {
 		t.Fatalf("cfg.Bootstrap.DefaultWorkerTemplate = %q, want %q", got, want)
 	}
 
@@ -1575,7 +1575,7 @@ models = ["gpt-test"]
 	saved := string(data)
 	for _, want := range []string{
 		`default_manager_template = "builtin.manager-codex"`,
-		`default_worker_template = "builtin.picoclaw-worker"`,
+		`default_worker_template = "builtin.openclaw-worker"`,
 	} {
 		if !strings.Contains(saved, want) {
 			t.Fatalf("saved config missing %q:\n%s", want, saved)
@@ -1642,7 +1642,7 @@ func TestFormatEffectiveConfigFormatsSectionsWithoutExtraWhitespace(t *testing.T
 		}),
 		Bootstrap: config.BootstrapConfig{
 			DefaultManagerTemplate: "builtin.manager-codex",
-			DefaultWorkerTemplate:  "builtin.picoclaw-worker",
+			DefaultWorkerTemplate:  "builtin.openclaw-worker",
 		},
 		Sandbox: config.SandboxConfig{
 			Provider: config.BoxLiteProvider,
@@ -1677,7 +1677,7 @@ show_upgrade = true
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.picoclaw-worker"
+default_worker_template = "builtin.openclaw-worker"
 
 [sandbox]
 provider = "boxlite"

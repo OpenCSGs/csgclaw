@@ -50,9 +50,10 @@ func (r *Runtime) WorkspaceRoot(agentHome string) string {
 func (r *Runtime) Layout(agentHome string) agentruntime.Layout {
 	workspace := workspaceRoot(agentHome)
 	return agentruntime.Layout{
-		WorkspaceRoot: workspace,
-		SkillsRoot:    filepath.Join(workspace, "skills"),
-		HostLogPaths:  []string{HostGatewayLogPath(agentHome)},
+		WorkspaceRoot:    workspace,
+		SkillsRoot:       filepath.Join(workspace, "skills"),
+		InstructionsPath: filepath.Join(workspace, "AGENTS.md"),
+		HostLogPaths:     []string{HostGatewayLogPath(agentHome)},
 	}
 }
 

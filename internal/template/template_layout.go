@@ -7,12 +7,28 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const requiredInstructionsFile = "AGENTS.md"
 
 func materializeTemplateDir(templateRoot string) (WorkspaceRef, error) {
+	if !templateLayoutExists(templateRoot) && legacyTemplateWorkspaceExists(templateRoot) {
+		return materializeLegacyTemplateWorkspace(templateRoot)
+	}
 	return materializeTemplateFS(os.DirFS(templateRoot), ".")
+}
+
+func materializeLegacyTemplateWorkspace(templateRoot string) (WorkspaceRef, error) {
+	dstRoot, err := mkdirHubWorkspaceTemp("csgclaw-template-workspace-*")
+	if err != nil {
+		return WorkspaceRef{}, err
+	}
+	if err := copyWorkspaceTree(filepath.Join(templateRoot, "workspace"), dstRoot); err != nil {
+		_ = os.RemoveAll(dstRoot)
+		return WorkspaceRef{}, fmt.Errorf("materialize legacy template workspace: %w", err)
+	}
+	return WorkspaceRef{Kind: WorkspaceKindDir, Path: dstRoot, Temporary: true}, nil
 }
 
 func materializeTemplateFS(srcFS fs.FS, templateRoot string) (WorkspaceRef, error) {
@@ -57,7 +73,7 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot string) (WorkspaceRef, erro
 	if err != nil {
 		return cleanup(fmt.Errorf("encode materialized template mcp servers: %w", err))
 	}
-	return WorkspaceRef{Kind: WorkspaceKindDir, Path: dstRoot, MCPServersJSON: string(encodedServers)}, nil
+	return WorkspaceRef{Kind: WorkspaceKindDir, Path: dstRoot, MCPServersJSON: string(encodedServers), Temporary: true}, nil
 }
 
 func readTemplateMCPServers(srcFS fs.FS, filePath string) (map[string]any, error) {
@@ -82,7 +98,8 @@ func readTemplateMCPServers(srcFS fs.FS, filePath string) (map[string]any, error
 	return raw, nil
 }
 
-func writeTemplateLayout(workspaceRoot, templateRoot string, mcpServers map[string]any) error {
+func writeTemplateLayout(workspace WorkspaceRef, templateRoot string, mcpServers map[string]any) error {
+	workspaceRoot := workspace.Path
 	instructionsRoot := filepath.Join(templateRoot, localInstructionsDirName)
 	if err := os.MkdirAll(instructionsRoot, 0o755); err != nil {
 		return err
@@ -95,7 +112,17 @@ func writeTemplateLayout(workspaceRoot, templateRoot string, mcpServers map[stri
 		name := entry.Name()
 		source := filepath.Join(workspaceRoot, name)
 		switch name {
+		case requiredInstructionsFile:
+			if strings.TrimSpace(workspace.InstructionsPath) != "" {
+				continue
+			}
+			if err := copySingleTemplateFile(source, filepath.Join(instructionsRoot, name)); err != nil {
+				return err
+			}
 		case localSkillsDirName:
+			if strings.TrimSpace(workspace.SkillsPath) != "" {
+				continue
+			}
 			if err := copyWorkspaceTree(source, filepath.Join(templateRoot, localSkillsDirName)); err != nil {
 				return err
 			}
@@ -115,6 +142,20 @@ func writeTemplateLayout(workspaceRoot, templateRoot string, mcpServers map[stri
 			} else if err := copySingleTemplateFile(source, filepath.Join(instructionsRoot, name)); err != nil {
 				return err
 			}
+		}
+	}
+	if source := strings.TrimSpace(workspace.InstructionsPath); source != "" {
+		if err := copySingleTemplateFile(source, filepath.Join(instructionsRoot, requiredInstructionsFile)); err != nil {
+			return err
+		}
+	}
+	if source := strings.TrimSpace(workspace.SkillsPath); source != "" {
+		if info, err := os.Stat(source); err == nil && info.IsDir() {
+			if err := copyWorkspaceTree(source, filepath.Join(templateRoot, localSkillsDirName)); err != nil {
+				return err
+			}
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
 	}
 	if _, err := os.Stat(filepath.Join(instructionsRoot, requiredInstructionsFile)); err != nil {

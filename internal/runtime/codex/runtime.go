@@ -194,9 +194,10 @@ func (r *Runtime) resolveWorkspaceDir(agentID string, runtimeOptions map[string]
 func (r *Runtime) Layout(agentHome string) agentruntime.Layout {
 	root := filepath.Join(agentHome, filepath.FromSlash(hostStateDirName))
 	return agentruntime.Layout{
-		WorkspaceRoot: filepath.Join(root, workspaceDirName),
-		SkillsRoot:    filepath.Join(root, homeDirName, "skills"),
-		HostLogPaths:  []string{filepath.Join(root, homeDirName, stderrLogFileName)},
+		WorkspaceRoot:    filepath.Join(root, workspaceDirName),
+		SkillsRoot:       filepath.Join(root, homeDirName, "skills"),
+		InstructionsPath: filepath.Join(root, homeDirName, "AGENTS.md"),
+		HostLogPaths:     []string{filepath.Join(root, homeDirName, stderrLogFileName)},
 	}
 }
 
@@ -253,6 +254,14 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 		return err
 	}
 	layout := r.Layout(agentHome)
+	if base := strings.TrimSpace(req.TemplateInstructions); base != "" {
+		if err := r.mkdirAll(filepath.Dir(layout.InstructionsPath), 0o755); err != nil {
+			return fmt.Errorf("create codex home for template instructions: %w", err)
+		}
+		if err := r.writeFile(layout.InstructionsPath, []byte(strings.TrimRight(base, "\n")+"\n"), 0o644); err != nil {
+			return fmt.Errorf("seed codex template instructions: %w", err)
+		}
+	}
 	templateRoot := codexWorkspaceTemplateRoot(agentID)
 	if err := sandboxgateway.EnsureEmbeddedWorkspace(templateRoot, layout.WorkspaceRoot); err != nil {
 		return fmt.Errorf("seed codex workspace template for agent %q: %w", req.AgentName, err)

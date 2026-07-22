@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -1084,6 +1086,23 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 			image = s.managerImage
 		}
 	}
+	var preservedInstructions string
+	if layout, layoutErr := s.agentLayout(got.ID, runtimeKind); layoutErr != nil {
+		return Agent{}, layoutErr
+	} else if path := strings.TrimSpace(layout.InstructionsPath); path != "" {
+		if data, readErr := os.ReadFile(path); readErr == nil {
+			preservedInstructions = string(data)
+		} else if !errors.Is(readErr, os.ErrNotExist) {
+			return Agent{}, fmt.Errorf("preserve runtime instructions: %w", readErr)
+		}
+	}
+	restoreSkills, cleanupSkills, err := s.prepareWorkspaceSkillsPreservation(got.ID, runtimeKind, runtimeKind, recreateTemplateRole(got))
+	if err != nil {
+		return Agent{}, fmt.Errorf("preserve runtime skills: %w", err)
+	}
+	if cleanupSkills != nil {
+		defer cleanupSkills()
+	}
 
 	s.stopLifecycleAgent(got.ID)
 
@@ -1142,20 +1161,26 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 		return Agent{}, fmt.Errorf("refresh gateway template skills: %w", err)
 	}
 	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
-		RuntimeID:      createSpec.RuntimeID,
-		AgentID:        createSpec.AgentID,
-		ParticipantID:  participantIDForAgent(createSpec.AgentName, createSpec.AgentID),
-		AgentName:      createSpec.AgentName,
-		Instructions:   strings.TrimSpace(got.Instructions),
-		Profile:        runtimeProfile,
-		RuntimeOptions: utils.CloneAnyMap(got.RuntimeOptions),
-		MCPServers:     cloneMCPServers(got.MCPServers),
+		RuntimeID:            createSpec.RuntimeID,
+		AgentID:              createSpec.AgentID,
+		ParticipantID:        participantIDForAgent(createSpec.AgentName, createSpec.AgentID),
+		AgentName:            createSpec.AgentName,
+		Instructions:         strings.TrimSpace(got.Instructions),
+		TemplateInstructions: preservedInstructions,
+		Profile:              runtimeProfile,
+		RuntimeOptions:       utils.CloneAnyMap(got.RuntimeOptions),
+		MCPServers:           cloneMCPServers(got.MCPServers),
 	}); err != nil {
 		return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
 	}
 	handle, err := runtimeImpl.New(ctx, createSpec)
 	if err != nil {
 		return Agent{}, fmt.Errorf("create agent box: %w", err)
+	}
+	if restoreSkills != nil {
+		if err := restoreSkills(); err != nil {
+			return Agent{}, fmt.Errorf("restore runtime skills: %w", err)
+		}
 	}
 
 	info, err := s.runtimeInfo(ctx, runtimeImpl, handle)

@@ -23,6 +23,22 @@ export type FetchAgentsOptions = {
   silent?: boolean;
 };
 
+export type AgentInstructionsDocument = {
+  instructions: string;
+  effective: string;
+};
+
+export function fetchAgentInstructionsDocument(agentID: string): Promise<AgentInstructionsDocument> {
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}/instructions`);
+}
+
+export function updateAgentEffectiveInstructions(
+  agentID: string,
+  effective: string,
+): Promise<AgentInstructionsDocument> {
+  return put(`api/v1/agents/${encodeURIComponent(agentID)}/instructions`, { effective });
+}
+
 export type FetchAgentOptions = {
   cacheBust?: boolean;
 };

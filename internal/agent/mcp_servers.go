@@ -8,6 +8,25 @@ import (
 	"csgclaw/internal/utils"
 )
 
+func templateSafeMCPServers(servers map[string]any) map[string]any {
+	cloned := cloneMCPServers(servers)
+	for _, raw := range cloned {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		for key := range entry {
+			normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(key), "-", "_"))
+			if normalized == "env" || normalized == "headers" || normalized == "http_headers" ||
+				strings.Contains(normalized, "token") || strings.Contains(normalized, "secret") ||
+				strings.Contains(normalized, "password") || strings.Contains(normalized, "api_key") {
+				delete(entry, key)
+			}
+		}
+	}
+	return cloned
+}
+
 type MCPServersView struct {
 	AgentID     string         `json:"agent_id"`
 	RuntimeKind string         `json:"runtime_kind"`

@@ -36,6 +36,10 @@ type WorkspaceBrowser interface {
 	ReadWorkspaceFile(ctx context.Context, id, workspacePath string) (apitypes.WorkspaceFile, error)
 }
 
+type WorkspaceWriter interface {
+	WriteWorkspaceFile(ctx context.Context, id, workspacePath, content string) error
+}
+
 type StoreFactory func(cfg config.HubRegistryConfig) (Store, error)
 
 type Service struct {
@@ -187,6 +191,21 @@ func (s *Service) ReadWorkspaceFile(ctx context.Context, id, workspacePath strin
 		return apitypes.WorkspaceFile{}, ErrWorkspaceDirRequired
 	}
 	return agentworkspace.ReadFile(workspace.Path, workspacePath)
+}
+
+func (s *Service) WriteWorkspaceFile(ctx context.Context, id, workspacePath, content string) error {
+	cfgStore, templateID, err := s.resolveRead(id)
+	if err != nil {
+		return err
+	}
+	if normalizeRegistryKind(cfgStore.ref.Kind) != RegistryKindLocal {
+		return ErrRegistryNotWritable
+	}
+	writer, ok := cfgStore.store.(WorkspaceWriter)
+	if !ok {
+		return ErrRegistryNotWritable
+	}
+	return writer.WriteWorkspaceFile(ctx, templateID, workspacePath, content)
 }
 
 func (s *Service) Publish(ctx context.Context, spec PublishSpec) (Template, error) {

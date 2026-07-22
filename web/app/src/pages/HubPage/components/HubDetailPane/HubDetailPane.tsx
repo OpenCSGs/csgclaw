@@ -173,6 +173,32 @@ function templateEnvRequirementLabel(env: readonly ImageEnvContract[], t: Transl
   return env.some((item) => item.required) ? t("resourcesTemplateEnvRequired") : t("resourcesTemplateEnvOptional");
 }
 
+const managedInstructionsStart = "<!-- BEGIN CSGCLAW-INSTRUCTIONS (auto-generated; do not edit) -->";
+const managedInstructionsEnd = "<!-- END CSGCLAW-INSTRUCTIONS -->";
+
+function extractManagedAgentInstructions(document: string): string {
+  const blockStart = document.indexOf(managedInstructionsStart);
+  const blockEnd = blockStart < 0 ? -1 : document.indexOf(managedInstructionsEnd, blockStart);
+  if (blockStart < 0 || blockEnd < 0) return "";
+  const block = document.slice(blockStart, blockEnd);
+  const heading = "# Agent Instructions\n\n";
+  const bodyStart = block.indexOf(heading);
+  if (bodyStart < 0) return "";
+  const body = block.slice(bodyStart + heading.length);
+  const nextHeading = body.search(/\n# (?:Managed Runtime Instructions|CSGClaw Rules)/);
+  return (nextHeading >= 0 ? body.slice(0, nextHeading) : body).trim();
+}
+
+function replaceManagedAgentInstructions(document: string, instructions: string): string {
+  const block = `${managedInstructionsStart}\n\n${instructions.trim() ? `# Agent Instructions\n\n${instructions.trim()}\n\n` : ""}${managedInstructionsEnd}`;
+  const blockStart = document.indexOf(managedInstructionsStart);
+  const blockEnd = blockStart < 0 ? -1 : document.indexOf(managedInstructionsEnd, blockStart);
+  if (blockStart >= 0 && blockEnd >= 0) {
+    return `${document.slice(0, blockStart)}${block}${document.slice(blockEnd + managedInstructionsEnd.length)}`;
+  }
+  return `${document.trimEnd()}${document.trim() ? "\n\n" : ""}${block}\n`;
+}
+
 type HubDetailPaneHub = {
   detailPaneProps: {
     deleteBusy?: boolean;
@@ -190,6 +216,7 @@ type HubDetailPaneHub = {
     onSelectSkillFile?: (path: string) => void;
     onSelectTemplate?: (item: HubTemplate | null | undefined) => void;
     onSelectWorkspaceFile: (workspacePath: string) => void;
+    onUpdateTemplateInstructions?: (content: string) => boolean | Promise<boolean>;
     onToggleWorkspaceDir?: (workspacePath: string) => void | Promise<void>;
     mcpServers?: readonly MCPServer[];
     mcpStateError?: string;
@@ -572,6 +599,7 @@ export function HubDetailPane({
     onDeleteTemplate,
     onMCPCreateDialogOpenChange,
     onUpdateMCP,
+    onUpdateTemplateInstructions,
     deleteBusy = false,
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
@@ -603,6 +631,9 @@ export function HubDetailPane({
   const [mcpDetailError, setMCPDetailError] = useState("");
   const [mcpFormError, setMCPFormError] = useState("");
   const [activeTemplateTab, setActiveTemplateTab] = useState<TemplateDetailTabID>("profile");
+  const [templateInstructionsMode, setTemplateInstructionsMode] = useState<"default" | "advanced">("default");
+  const [templateInstructionsDraft, setTemplateInstructionsDraft] = useState("");
+  const [templateInstructionsSaving, setTemplateInstructionsSaving] = useState(false);
   const templateSection = activeTemplateTab === "mcp" ? "mcps" : activeTemplateTab;
   const templateImageEnv = selectedTemplate?.image_env || [];
   const templateSectionWorkspaceEntries = useMemo(
@@ -629,10 +660,14 @@ export function HubDetailPane({
     () => templateMCPServerSummaries(workspaceFile, workspaceFiles),
     [workspaceFile, workspaceFiles],
   );
-  const templateInstructions =
-    typeof selectedTemplate === "object" && selectedTemplate
-      ? String((selectedTemplate as { instructions?: string | null }).instructions || "")
-      : "";
+  const templateInstructionsFile =
+    workspaceFiles["instructions/AGENTS.md"] ||
+    (workspaceFile?.path === "instructions/AGENTS.md" ? workspaceFile : null);
+  const templateInstructions = templateInstructionsFile?.content || "";
+  useEffect(() => {
+    setTemplateInstructionsDraft(templateInstructions);
+  }, [selectedTemplateId, templateInstructions]);
+  const templateCustomInstructions = extractManagedAgentInstructions(templateInstructionsDraft);
   const templateTabs = useMemo(
     () => [
       { id: "profile" as const, label: t("agentProfileTab") },
@@ -746,6 +781,19 @@ export function HubDetailPane({
             ? firstTemplateSectionFile(workspaceEntries, "mcps", "mcp.json")
             : firstTemplateSectionFile(workspaceEntries, "instructions", "AGENTS.md");
       onSelectWorkspaceFile(selectedFile);
+    }
+  }
+
+  async function saveTemplateInstructions() {
+    const content =
+      templateInstructionsMode === "advanced"
+        ? templateInstructionsDraft
+        : replaceManagedAgentInstructions(templateInstructionsDraft, templateCustomInstructions);
+    setTemplateInstructionsSaving(true);
+    try {
+      await onUpdateTemplateInstructions?.(content);
+    } finally {
+      setTemplateInstructionsSaving(false);
     }
   }
 
@@ -891,18 +939,63 @@ export function HubDetailPane({
                 </div>
               ) : activeTemplateTab === "instructions" ? (
                 <section className="profile-section hub-template-instructions-section">
+                  <div
+                    className="agent-instructions-mode-switch"
+                    role="group"
+                    aria-label={t("agentInstructionsViewMode")}
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={templateInstructionsMode === "default"}
+                      onClick={() => setTemplateInstructionsMode("default")}
+                    >
+                      {t("agentInstructionsDefaultMode")}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={templateInstructionsMode === "advanced"}
+                      onClick={() => setTemplateInstructionsMode("advanced")}
+                    >
+                      {t("agentInstructionsAdvancedMode")}
+                    </button>
+                  </div>
+                  {templateInstructionsMode === "default" ? (
+                    <p className="profile-section-description">{t("resourcesTemplateInstructionsDefaultHint")}</p>
+                  ) : null}
                   <div className="profile-grid-compact">
                     <label className="field span-2">
                       <span>{t("agentInstructions")}</span>
                       <textarea
-                        className="compact-textarea"
-                        value={templateInstructions}
+                        className={`compact-textarea hub-template-instructions-editor ${templateInstructionsMode === "advanced" ? "is-advanced" : "is-default"}`}
+                        value={
+                          templateInstructionsMode === "advanced"
+                            ? templateInstructionsDraft
+                            : templateCustomInstructions
+                        }
+                        onInput={(event) => {
+                          const value = event.currentTarget.value;
+                          setTemplateInstructionsDraft((current) => {
+                            if (templateInstructionsMode === "advanced") return value;
+                            return replaceManagedAgentInstructions(current, value);
+                          });
+                        }}
                         placeholder={t("agentInstructionsPlaceholder")}
-                        readOnly
-                        disabled
+                        readOnly={selectedTemplate.source?.kind !== "local"}
+                        disabled={selectedTemplate.source?.kind !== "local"}
                       />
                     </label>
                   </div>
+                  {selectedTemplate.source?.kind === "local" ? (
+                    <div className="form-actions">
+                      <Button
+                        variant="secondaryGray"
+                        loading={templateInstructionsSaving}
+                        onClick={saveTemplateInstructions}
+                      >
+                        {t("save")}
+                      </Button>
+                    </div>
+                  ) : null}
                 </section>
               ) : activeTemplateTab === "skills" ? (
                 <section className="profile-section agent-skills-section hub-template-summary-panel">

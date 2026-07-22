@@ -44,6 +44,16 @@ func TestRenderAgentsInstructionsBlockIncludesEmbeddedRules(t *testing.T) {
 	}
 }
 
+func TestExtractUserInstructionsFromAgentsDocument(t *testing.T) {
+	document := "# Template Base\n\nKeep this base.\n\n" + RenderAgentsInstructionsBlock("answer concisely")
+	if got, want := ExtractUserInstructionsFromAgentsDocument(document), "answer concisely"; got != want {
+		t.Fatalf("ExtractUserInstructionsFromAgentsDocument() = %q, want %q", got, want)
+	}
+	if got := ExtractUserInstructionsFromAgentsDocument("# Template Base\n"); got != "" {
+		t.Fatalf("ExtractUserInstructionsFromAgentsDocument(without block) = %q, want empty", got)
+	}
+}
+
 func TestAgentsInstructionsTemplateUsesMarkers(t *testing.T) {
 	got := RenderAgentsInstructionsBlock("")
 	if !strings.Contains(got, agentsInstructionsBlockStart) {

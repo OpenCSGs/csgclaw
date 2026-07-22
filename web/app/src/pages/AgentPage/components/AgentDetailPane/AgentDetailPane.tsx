@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
+import { fetchAgentInstructionsDocument, updateAgentEffectiveInstructions } from "@/api/agents";
 import { REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import {
@@ -1451,22 +1452,84 @@ type AgentInstructionsPanelProps = {
 };
 
 function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPanelProps) {
+  const [mode, setMode] = useState<"default" | "advanced">("default");
+  const [effective, setEffective] = useState("");
+  const [advancedError, setAdvancedError] = useState("");
+  const [advancedSaving, setAdvancedSaving] = useState(false);
+  useEffect(() => {
+    const agentID = String(draft.agent_id || "").trim();
+    if (!agentID || mode !== "advanced") {
+      return;
+    }
+    let canceled = false;
+    setAdvancedError("");
+    void fetchAgentInstructionsDocument(agentID)
+      .then((document) => {
+        if (!canceled) {
+          setEffective(document.effective || "");
+        }
+      })
+      .catch((error) => {
+        if (!canceled) {
+          setAdvancedError(errorMessage(error, t("agentInstructionsLoadFailed")));
+        }
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [draft.agent_id, mode, t]);
+
+  async function saveEffectiveInstructions() {
+    const agentID = String(draft.agent_id || "").trim();
+    if (!agentID) return;
+    setAdvancedSaving(true);
+    setAdvancedError("");
+    try {
+      const document = await updateAgentEffectiveInstructions(agentID, effective);
+      setEffective(document.effective || "");
+      updateDraft({ instructions: document.instructions || "" });
+    } catch (error) {
+      setAdvancedError(errorMessage(error, t("agentInstructionsSaveFailed")));
+    } finally {
+      setAdvancedSaving(false);
+    }
+  }
   return (
     <section
       id="agent-profile-instructions"
       className="profile-section agent-instructions-section agent-profile-scroll-target"
     >
+      <div className="agent-instructions-mode-switch" role="group" aria-label={t("agentInstructionsViewMode")}>
+        <button type="button" aria-pressed={mode === "default"} onClick={() => setMode("default")}>
+          {t("agentInstructionsDefaultMode")}
+        </button>
+        <button type="button" aria-pressed={mode === "advanced"} onClick={() => setMode("advanced")}>
+          {t("agentInstructionsAdvancedMode")}
+        </button>
+      </div>
       <div className="profile-grid-compact">
         <label className="field span-2">
-          <span>{t("agentInstructions")}</span>
+          <span>{mode === "advanced" ? t("agentInstructionsEffective") : t("agentInstructions")}</span>
           <textarea
             className="compact-textarea"
-            value={draft.instructions || ""}
-            onInput={(event) => updateDraft({ instructions: event.currentTarget.value })}
+            value={mode === "advanced" ? effective : draft.instructions || ""}
+            onInput={(event) =>
+              mode === "advanced"
+                ? setEffective(event.currentTarget.value)
+                : updateDraft({ instructions: event.currentTarget.value })
+            }
             placeholder={t("agentInstructionsPlaceholder")}
           />
         </label>
       </div>
+      {advancedError ? <div className="form-error">{advancedError}</div> : null}
+      {mode === "advanced" ? (
+        <div className="form-actions">
+          <Button type="button" variant="secondaryGray" loading={advancedSaving} onClick={saveEffectiveInstructions}>
+            {t("save")}
+          </Button>
+        </div>
+      ) : null}
     </section>
   );
 }

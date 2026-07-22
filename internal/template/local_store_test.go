@@ -83,6 +83,10 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	if workspace.Kind != WorkspaceKindDir {
 		t.Fatalf("FetchWorkspace().Kind = %q, want %q", workspace.Kind, WorkspaceKindDir)
 	}
+	if !workspace.Temporary {
+		t.Fatal("FetchWorkspace().Temporary = false, want materialized local workspace to be caller-owned")
+	}
+	defer os.RemoveAll(workspace.Path)
 
 	agentsData, err := os.ReadFile(filepath.Join(workspace.Path, "AGENTS.md"))
 	if err != nil {
@@ -97,6 +101,125 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 	if skillInfo.Mode().Perm()&0o111 == 0 {
 		t.Fatalf("skill mode = %o, want executable bit preserved", skillInfo.Mode().Perm())
+	}
+}
+
+func TestLocalStorePublishUsesRuntimeAwareInstructionAndSkillPaths(t *testing.T) {
+	registryRoot := t.TempDir()
+	runtimeRoot := t.TempDir()
+	workspaceRoot := filepath.Join(runtimeRoot, "workspace")
+	instructionsPath := filepath.Join(runtimeRoot, "home", "AGENTS.md")
+	skillsRoot := filepath.Join(runtimeRoot, "home", "skills")
+	if err := os.MkdirAll(filepath.Join(skillsRoot, "custom"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(instructionsPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(home) error = %v", err)
+	}
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(workspace) error = %v", err)
+	}
+	if err := os.WriteFile(instructionsPath, []byte("effective instructions\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(AGENTS.md) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillsRoot, "custom", "SKILL.md"), []byte("custom skill\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(SKILL.md) error = %v", err)
+	}
+
+	store := NewLocalStore(registryRoot)
+	if _, err := store.Publish(context.Background(), PublishSpec{
+		Name:        "codex-worker",
+		Role:        TemplateRoleWorker,
+		RuntimeKind: runtime.KindCodex,
+		WorkspaceRef: WorkspaceRef{
+			Kind:             WorkspaceKindDir,
+			Path:             workspaceRoot,
+			InstructionsPath: instructionsPath,
+			SkillsPath:       skillsRoot,
+		},
+	}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	templateRoot := filepath.Join(registryRoot, localTemplatesDirName, "codex-worker")
+	if data, err := os.ReadFile(filepath.Join(templateRoot, localInstructionsDirName, requiredInstructionsFile)); err != nil {
+		t.Fatalf("ReadFile(template AGENTS.md) error = %v", err)
+	} else if got, want := string(data), "effective instructions\n"; got != want {
+		t.Fatalf("template AGENTS.md = %q, want %q", got, want)
+	}
+	if data, err := os.ReadFile(filepath.Join(templateRoot, localSkillsDirName, "custom", "SKILL.md")); err != nil {
+		t.Fatalf("ReadFile(template SKILL.md) error = %v", err)
+	} else if got, want := string(data), "custom skill\n"; got != want {
+		t.Fatalf("template SKILL.md = %q, want %q", got, want)
+	}
+}
+
+func TestLocalStoreFetchWorkspaceSupportsLegacyLayout(t *testing.T) {
+	registryRoot := t.TempDir()
+	templateRoot := filepath.Join(registryRoot, localTemplatesDirName, "legacy-worker")
+	legacyRoot := filepath.Join(templateRoot, "workspace")
+	if err := os.MkdirAll(filepath.Join(legacyRoot, "skills", "legacy"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(templateRoot, localManifestFileName), []byte("name = \"legacy-worker\"\nrole = \"worker\"\nruntime_kind = \"codex\"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(agent.toml) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyRoot, "AGENTS.md"), []byte("legacy instructions\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(AGENTS.md) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyRoot, "skills", "legacy", "SKILL.md"), []byte("legacy skill\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(SKILL.md) error = %v", err)
+	}
+
+	store := NewLocalStore(registryRoot)
+	item, err := store.Get(context.Background(), "legacy-worker")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if item.WorkspaceRef.Kind != WorkspaceKindDir {
+		t.Fatalf("Get().WorkspaceRef = %#v, want legacy workspace available", item.WorkspaceRef)
+	}
+	workspace, err := store.FetchWorkspace(context.Background(), "legacy-worker")
+	if err != nil {
+		t.Fatalf("FetchWorkspace() error = %v", err)
+	}
+	defer os.RemoveAll(workspace.Path)
+	if !workspace.Temporary {
+		t.Fatal("FetchWorkspace().Temporary = false, want true")
+	}
+	data, err := os.ReadFile(filepath.Join(workspace.Path, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("ReadFile(AGENTS.md) error = %v", err)
+	}
+	if got, want := string(data), "legacy instructions\n"; got != want {
+		t.Fatalf("AGENTS.md = %q, want %q", got, want)
+	}
+}
+
+func TestLocalStoreWriteWorkspaceFileUpdatesCanonicalInstructions(t *testing.T) {
+	registryRoot := t.TempDir()
+	store := NewLocalStore(registryRoot)
+	workspaceRoot := writeWorkspaceFile(t, "workspace", "AGENTS.md", "old instructions")
+	if _, err := store.Publish(context.Background(), PublishSpec{
+		Name:         "editable-worker",
+		Role:         TemplateRoleWorker,
+		RuntimeKind:  runtime.KindCodex,
+		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
+	}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	if err := store.WriteWorkspaceFile(context.Background(), "editable-worker", "instructions/AGENTS.md", "new instructions"); err != nil {
+		t.Fatalf("WriteWorkspaceFile() error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(registryRoot, localTemplatesDirName, "editable-worker", localInstructionsDirName, requiredInstructionsFile))
+	if err != nil {
+		t.Fatalf("ReadFile(AGENTS.md) error = %v", err)
+	}
+	if got, want := string(data), "new instructions\n"; got != want {
+		t.Fatalf("AGENTS.md = %q, want %q", got, want)
+	}
+	if err := store.WriteWorkspaceFile(context.Background(), "editable-worker", "skills/demo/SKILL.md", "unsafe"); !errors.Is(err, ErrWorkspacePathUnsafe) {
+		t.Fatalf("WriteWorkspaceFile(unsafe) error = %v, want ErrWorkspacePathUnsafe", err)
 	}
 }
 
