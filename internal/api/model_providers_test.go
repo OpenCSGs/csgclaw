@@ -358,6 +358,71 @@ models = ["gpt-test"]
 	}
 }
 
+func TestModelProviderUpdateRejectsUnreachableTransportWhileProviderIsInUse(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+
+[models]
+default = "openai.gpt-test"
+
+[models.providers.openai]
+base_url = "https://working.example/v1"
+api_key = "sk-team"
+models = ["gpt-test"]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+	agentState := []agent.Agent{{
+		ID:          "u-alice",
+		Name:        "alice",
+		Role:        agent.RoleWorker,
+		RuntimeKind: agent.RuntimeKindCodex,
+		CreatedAt:   time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC),
+		Profile:     "openai.gpt-test",
+		AgentProfile: agent.AgentProfile{
+			Name:            "alice",
+			Provider:        agent.ProviderAPI,
+			ModelProviderID: "openai",
+			ModelID:         "gpt-test",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}}
+	srv := newModelProviderTestHandler(t, configPath, agentState)
+
+	previousCheck := appCheckModelProvider
+	appCheckModelProvider = func(context.Context, agent.ModelProviderCheckInput) agent.ModelProviderCheckResult {
+		return agent.ModelProviderCheckResult{
+			ID:            "openai",
+			Status:        agent.ModelProviderStatusFailed,
+			Message:       "request models: status 404 Not Found",
+			LastCheckedAt: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+	defer func() { appCheckModelProvider = previousCheck }()
+
+	rec := httptest.NewRecorder()
+	body := strings.NewReader(`{"base_url":"https://wrong.example/v1"}`)
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/v1/model-providers/openai", body))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("PUT status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "status 404") {
+		t.Fatalf("PUT body = %q, want provider check failure", rec.Body.String())
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatalf("Load(config) error = %v", err)
+	}
+	if got := cfg.Models.Providers["openai"].BaseURL; got != "https://working.example/v1" {
+		t.Fatalf("provider base_url = %q, want previous working URL preserved", got)
+	}
+}
+
 func TestAgentUpdateStoresCatalogModelSelector(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	content := `[server]

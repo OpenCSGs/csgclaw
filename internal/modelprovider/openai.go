@@ -30,6 +30,15 @@ type openAIResponsesProbeResponse struct {
 	Status string `json:"status"`
 }
 
+type openAIChatCompletionsProbeResponse struct {
+	Choices []struct {
+		Message struct {
+			Role    string `json:"role"`
+			Content any    `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
 var ErrResponsesAPIUnsupported = errors.New("responses API unsupported")
 
 type ResponsesAPIStatusError struct {
@@ -119,6 +128,24 @@ func CheckResponsesAPI(ctx context.Context, baseURL, apiKey, modelID string, hea
 	return CheckResponsesAPIWithClient(ctx, &http.Client{Timeout: 10 * time.Second}, baseURL, apiKey, modelID, headers)
 }
 
+func CheckResponsesOrChatCompletionsAPI(ctx context.Context, baseURL, apiKey, modelID string, headers map[string]string) error {
+	return CheckResponsesOrChatCompletionsAPIWithClient(ctx, &http.Client{Timeout: 10 * time.Second}, baseURL, apiKey, modelID, headers)
+}
+
+func CheckResponsesOrChatCompletionsAPIWithClient(ctx context.Context, client *http.Client, baseURL, apiKey, modelID string, headers map[string]string) error {
+	err := CheckResponsesAPIWithClient(ctx, client, baseURL, apiKey, modelID, headers)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, ErrResponsesAPIUnsupported) {
+		return err
+	}
+	if chatErr := CheckChatCompletionsAPIWithClient(ctx, client, baseURL, apiKey, modelID, headers); chatErr != nil {
+		return fmt.Errorf("responses API is unsupported and chat completions fallback is unavailable: %w", chatErr)
+	}
+	return nil
+}
+
 func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseURL, apiKey, modelID string, headers map[string]string) error {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	modelID = strings.TrimSpace(modelID)
@@ -180,6 +207,71 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 	}
 	if strings.TrimSpace(probe.Object) != "response" {
 		return fmt.Errorf("responses probe from %s returned object %q, want response", baseURL, probe.Object)
+	}
+	return nil
+}
+
+func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client, baseURL, apiKey, modelID string, headers map[string]string) error {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	modelID = strings.TrimSpace(modelID)
+	if baseURL == "" {
+		return fmt.Errorf("base URL is required")
+	}
+	if modelID == "" {
+		return fmt.Errorf("model ID is required")
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+
+	payload := map[string]any{
+		"model": modelID,
+		"messages": []map[string]string{
+			{"role": "user", "content": "ping"},
+		},
+		"stream":     false,
+		"max_tokens": 16,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode chat completions probe request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("build chat completions probe request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey = strings.TrimSpace(apiKey); apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	for key, value := range headers {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.EqualFold(key, "authorization") || strings.EqualFold(key, "content-type") {
+			continue
+		}
+		req.Header.Set(key, value)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request chat completions from %s: %w", baseURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		msg := fmt.Sprintf("request chat completions from %s: status %s", baseURL, resp.Status)
+		if text := strings.TrimSpace(string(errBody)); text != "" {
+			msg += ": " + text
+		}
+		return errors.New(msg)
+	}
+
+	var probe openAIChatCompletionsProbeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&probe); err != nil {
+		return fmt.Errorf("decode chat completions probe from %s: %w", baseURL, err)
+	}
+	if len(probe.Choices) == 0 {
+		return fmt.Errorf("chat completions probe from %s returned no choices", baseURL)
 	}
 	return nil
 }

@@ -8,8 +8,9 @@ It is not MCP and does not rely on arbitrary JSON detection.
 
 ## Canonical executable example
 
-The built-in Manager skill [`csgclaw-interactive-output-demo`](../internal/template/embed/manager/codex/workspace/skills/csgclaw-interactive-output-demo/) is the complete reference implementation.
-Its [`emit_demo.py`](../internal/template/embed/manager/codex/workspace/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) documents every supported request and resource-link field at its first use, emits full and minimal link variants, asks five questions, and demonstrates the automatic continuation response.
+The built-in Manager skill [`csgclaw-interactive-output-demo`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/) is the complete reference implementation.
+Its [`emit_demo.py`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) documents every supported request and resource-link field at its first use, emits full and minimal link variants, asks five questions, and demonstrates the automatic continuation response.
+Manager provisioning installs a bundled skill when its skill directory is missing and preserves an existing installed or customized copy.
 
 Invoke it in a Manager conversation with:
 
@@ -43,12 +44,21 @@ A minimal Python emitter is:
 
 ```python
 import json
+import os
+
+
+if os.environ.get("CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL") != "1":
+    raise RuntimeError("CSGClaw structured output protocol version 1 is unavailable")
 
 
 def emit(kind: str, payload: dict[str, object]) -> None:
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     print(f"::csgclaw-output::{kind} {encoded}")
 ```
+
+Runtime adapters that implement this protocol inject `CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL=1` into skill command environments.
+Portable emitters should check this capability before writing control records and return an ordinary diagnostic instead when it is absent.
+This handshake prevents a script from claiming that interactive output is ready when an older runtime would treat every control record as plain stdout.
 
 ## Turn lifecycle
 

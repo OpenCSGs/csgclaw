@@ -271,6 +271,13 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 			return fmt.Errorf("overlay codex workspace for agent %q: %w", req.AgentName, err)
 		}
 	}
+	codexHomeDir, err := r.resolveCodexHomeDir(agentID)
+	if err != nil {
+		return fmt.Errorf("resolve codex home for agent %q: %w", req.AgentName, err)
+	}
+	if err := r.seedMissingManagerSkills(agentID, codexHomeDir); err != nil {
+		return fmt.Errorf("seed missing manager codex skills for agent %q: %w", req.AgentName, err)
+	}
 	return nil
 }
 
@@ -518,7 +525,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeWorkspaceSkills(spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
+	if err := r.seedCodexHomeWorkspaceSkills(spec.AgentID, spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
 	if err := r.seedManagerTemplate(spec.AgentID, spec.CodexHomeDir); err != nil {
@@ -612,7 +619,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeWorkspaceSkills(spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
+	if err := r.seedCodexHomeWorkspaceSkills(spec.AgentID, spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
 	if err := r.seedManagerTemplate(spec.AgentID, spec.CodexHomeDir); err != nil {
@@ -821,7 +828,7 @@ func safeSkillEntryName(name string) string {
 	return name
 }
 
-func (r *Runtime) seedCodexHomeWorkspaceSkills(workspaceDir, runtimeCodexHome string) error {
+func (r *Runtime) seedCodexHomeWorkspaceSkills(agentID, workspaceDir, runtimeCodexHome string) error {
 	workspaceDir = strings.TrimSpace(workspaceDir)
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
 	if workspaceDir == "" || runtimeCodexHome == "" {
@@ -835,6 +842,17 @@ func (r *Runtime) seedCodexHomeWorkspaceSkills(workspaceDir, runtimeCodexHome st
 		}
 		return fmt.Errorf("read codex workspace skills %s: %w", sourceRoot, err)
 	}
+	managerSkills := map[string]struct{}{}
+	if canonicalRuntimeAgentID(agentID) == agent.ManagerUserID {
+		names, err := managerTemplateSkillNames()
+		if err != nil {
+			return err
+		}
+		managerSkills = make(map[string]struct{}, len(names))
+		for _, name := range names {
+			managerSkills[name] = struct{}{}
+		}
+	}
 	targetRoot := filepath.Join(runtimeCodexHome, "skills")
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -846,6 +864,13 @@ func (r *Runtime) seedCodexHomeWorkspaceSkills(workspaceDir, runtimeCodexHome st
 		}
 		source := filepath.Join(sourceRoot, name)
 		target := filepath.Join(targetRoot, name)
+		if _, isManagerSkill := managerSkills[name]; isManagerSkill {
+			if _, err := r.stat(target); err == nil {
+				continue
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("inspect manager codex workspace skill %q: %w", name, err)
+			}
+		}
 		if err := r.removeAll(target); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove codex workspace skill %q: %w", name, err)
 		}
@@ -876,17 +901,67 @@ func (r *Runtime) seedManagerTemplate(agentID, runtimeCodexHome string) error {
 	if err != nil {
 		return err
 	}
-	for _, name := range append(skillNames, "basics") {
-		if err := r.removeAll(filepath.Join(runtimeCodexHome, "skills", name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("remove manager codex template skill %q: %w", name, err)
-		}
+	hostSkillNames, err := r.readHostSkillsManifest(runtimeCodexHome)
+	if err != nil {
+		return err
+	}
+	hostSkills := make(map[string]struct{}, len(hostSkillNames))
+	for _, name := range hostSkillNames {
+		hostSkills[name] = struct{}{}
+	}
+	if err := r.removeAll(filepath.Join(runtimeCodexHome, "skills", "basics")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove legacy manager codex skill %q: %w", "basics", err)
 	}
 
-	if err := r.copyEmbeddedDir(templateembed.FS(), pathpkg.Join(templateembed.CodexManagerRoot, templateembed.InstructionsDirName), runtimeCodexHome); err != nil {
+	source := templateembed.FS()
+	if err := r.copyEmbeddedDir(source, pathpkg.Join(templateembed.CodexManagerRoot, templateembed.InstructionsDirName), runtimeCodexHome); err != nil {
 		return fmt.Errorf("seed manager codex template %s: %w", runtimeCodexHome, err)
 	}
-	if err := r.copyEmbeddedDir(templateembed.FS(), pathpkg.Join(templateembed.CodexManagerRoot, templateembed.SkillsDirName), filepath.Join(runtimeCodexHome, "skills")); err != nil {
-		return fmt.Errorf("seed manager codex template skills %s: %w", runtimeCodexHome, err)
+
+	sourceSkillsRoot := pathpkg.Join(templateembed.CodexManagerRoot, templateembed.SkillsDirName)
+	targetSkillsRoot := filepath.Join(runtimeCodexHome, "skills")
+	for _, name := range skillNames {
+		target := filepath.Join(targetSkillsRoot, name)
+		_, statErr := r.stat(target)
+		_, hostManaged := hostSkills[name]
+		if statErr == nil && !hostManaged {
+			continue
+		}
+		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
+			return fmt.Errorf("inspect manager codex template skill %q: %w", name, statErr)
+		}
+		if hostManaged {
+			if err := r.removeAll(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("remove host-managed manager codex skill %q: %w", name, err)
+			}
+		}
+		if err := r.copyEmbeddedDir(source, pathpkg.Join(sourceSkillsRoot, name), target); err != nil {
+			return fmt.Errorf("seed manager codex template skill %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (r *Runtime) seedMissingManagerSkills(agentID, runtimeCodexHome string) error {
+	if canonicalRuntimeAgentID(agentID) != agent.ManagerUserID {
+		return nil
+	}
+	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
+	if runtimeCodexHome == "" {
+		return fmt.Errorf("codex home dir is required")
+	}
+
+	skillNames, err := managerTemplateSkillNames()
+	if err != nil {
+		return err
+	}
+	source := templateembed.FS()
+	sourceRoot := pathpkg.Join(templateembed.CodexManagerRoot, templateembed.SkillsDirName)
+	targetRoot := filepath.Join(runtimeCodexHome, "skills")
+	for _, name := range skillNames {
+		if err := r.copyEmbeddedPathIfMissing(source, pathpkg.Join(sourceRoot, name), filepath.Join(targetRoot, name)); err != nil {
+			return fmt.Errorf("seed missing manager codex template skill %q: %w", name, err)
+		}
 	}
 	return nil
 }
@@ -912,6 +987,15 @@ func managerTemplateSkillNames() ([]string, error) {
 		names = append(names, name)
 	}
 	return names, nil
+}
+
+func (r *Runtime) copyEmbeddedPathIfMissing(source fs.FS, sourcePath, targetPath string) error {
+	if _, err := r.stat(targetPath); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return r.copyEmbeddedDir(source, sourcePath, targetPath)
 }
 
 func (r *Runtime) writeModelCatalog(runtimeCodexHome string, profile agentruntime.Profile) error {
@@ -1210,6 +1294,13 @@ func (r *Runtime) readFile(path string) ([]byte, error) {
 		return r.deps.ReadFile(path)
 	}
 	return os.ReadFile(path)
+}
+
+func (r *Runtime) stat(path string) (os.FileInfo, error) {
+	if r.deps.Stat != nil {
+		return r.deps.Stat(path)
+	}
+	return os.Stat(path)
 }
 
 func (r *Runtime) writeFile(path string, data []byte, mode os.FileMode) error {

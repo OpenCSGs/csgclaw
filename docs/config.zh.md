@@ -125,7 +125,12 @@ bootstrap manager 当前固定使用 `picoclaw_sandbox`；`openclaw_sandbox` 支
 
 当 worker 使用 Codex runtime 时，它的本地状态会统一放在 `~/.csgclaw/agents/<agent-name>/.codex/` 下。workspace 路径是 `~/.csgclaw/agents/<agent-name>/.codex/workspace`，shell home 路径是 `~/.csgclaw/agents/<agent-name>/.codex/home`，而 `auth.json`、`config.toml`、`stderr.log` 以及 runtime metadata 等由 Codex 管理的文件会放在 `~/.csgclaw/agents/<agent-name>/.codex/home` 下。这个路径会和 sandbox provider 的 home（例如 `~/.csgclaw/agents/<agent-name>/boxlite`）分开。
 
-对于完整的 Codex worker profile，CSGClaw 会写入 `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml`，其中 OpenAI 兼容代理 provider 始终使用 `wire_api = "responses"`，因为 Codex CLI 的 app-server 路径走的是 Responses API。生成的 provider 使用 HTTP Responses，而不是 Responses WebSocket。如果上游明确表示不支持 Responses 端点，或内置 CLIProxy 的 Codex/ClaudeCode Responses 后端在纯文本请求上返回 5xx，CSGClaw 会保持 Codex 侧的 Responses 配置不变，并在代理后面回退到上游 chat completions。原始上游 API key 不会写入这个文件，而是通过 `env_key = "OPENAI_API_KEY"` 注入到 runtime 环境变量。
+对于完整的 Codex worker profile，CSGClaw 会写入 `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml`，其中 OpenAI 兼容代理 provider 始终使用 `wire_api = "responses"`，因为 Codex CLI 的 app-server 路径走的是 Responses API。
+生成的 provider 使用 HTTP Responses，而不是 Responses WebSocket。
+如果上游明确表示不支持 Responses 端点，或内置 CLIProxy 的 Codex/ClaudeCode Responses 后端在纯文本请求上返回 5xx，CSGClaw 会保持 Codex 侧的 Responses 配置不变，并在代理后面回退到上游 chat completions。
+当 Responses 不受支持时，runtime 校验会继续探测 chat completions 回退，因此错误的 base URL 不会仅因为 `/responses` 返回 `404` 就通过启动校验。
+当正在使用的模型 provider 修改 base URL、API key 或 headers 时，CSGClaw 会在保存前检查新连接，并在检查失败时保留之前可用的配置。
+原始上游 API key 不会写入这个文件，而是通过 `env_key = "OPENAI_API_KEY"` 注入到 runtime 环境变量。
 
 当 worker 使用 Codex runtime 时，CSGClaw 会通过 `codex app-server --listen stdio://` 启动本地 `codex` CLI。你可以通过下面的环境变量覆盖二进制查找行为：
 

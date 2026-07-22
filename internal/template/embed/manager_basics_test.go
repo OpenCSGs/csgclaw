@@ -134,7 +134,7 @@ func TestManagerFeishuSkillRoomCreationKeepsRequesterAsCreator(t *testing.T) {
 }
 
 func TestManagerEmbedsInteractiveOutputDemo(t *testing.T) {
-	skillRoot := path.Join(CodexManagerRoot, WorkspaceDirName, "skills/csgclaw-interactive-output-demo")
+	skillRoot := path.Join(CodexManagerRoot, SkillsDirName, "csgclaw-interactive-output-demo")
 	for _, file := range []string{"SKILL.md", "agents/openai.yaml", "scripts/emit_demo.py"} {
 		if _, err := fs.ReadFile(FS(), path.Join(skillRoot, file)); err != nil {
 			t.Fatalf("read embedded interactive output demo %s: %v", file, err)

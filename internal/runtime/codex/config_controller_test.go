@@ -2,8 +2,10 @@ package codex
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
 )
 
@@ -42,5 +44,25 @@ func TestValidateConfigResolvesOpenCSGCredentialsForResponsesProbe(t *testing.T)
 	})
 	if err != nil {
 		t.Fatalf("ValidateConfig() error = %v", err)
+	}
+}
+
+func TestValidateConfigRejectsProviderWithoutUsableResponsesOrChatEndpoint(t *testing.T) {
+	restoreProbe := TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
+		return modelprovider.ErrResponsesAPIUnsupported
+	})
+	defer restoreProbe()
+
+	rt := &Runtime{}
+	err := rt.ValidateConfig(context.Background(), agentruntime.RuntimeConfigSnapshot{
+		Profile: agentruntime.RuntimeProfileConfig{
+			Provider: "api",
+			BaseURL:  "https://wrong.example/v1",
+			APIKey:   "test-key",
+			ModelID:  "qwen-test",
+		},
+	})
+	if !errors.Is(err, modelprovider.ErrResponsesAPIUnsupported) {
+		t.Fatalf("ValidateConfig() error = %v, want unsupported provider rejection", err)
 	}
 }

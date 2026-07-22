@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 
@@ -127,7 +128,31 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	cfg.Models.Providers[id] = providerConfigFromRequest(existing, req, true).Resolved()
+	updatedProvider := providerConfigFromRequest(existing, req, true).Resolved()
+	providerInUse := h.modelProviderInUse(cfg.Models, id)
+	if providerInUse && modelProviderTransportChanged(existing, updatedProvider) {
+		result := appCheckModelProvider(r.Context(), agent.ModelProviderCheckInput{
+			ID:      id,
+			BaseURL: updatedProvider.BaseURL,
+			APIKey:  updatedProvider.APIKey,
+			Headers: updatedProvider.Headers,
+			Models:  updatedProvider.Models,
+		})
+		if result.Status != agent.ModelProviderStatusConnected {
+			message := strings.TrimSpace(result.Message)
+			if message == "" {
+				message = "connection check failed"
+			}
+			http.Error(w, "model provider is in use and the updated connection is unavailable: "+message, http.StatusBadRequest)
+			return
+		}
+		cfg.Models.Providers[id] = updatedProvider
+		if checked, changed := agent.ApplyModelProviderCheckResult(cfg.Models, id, result); changed {
+			cfg.Models = checked
+		}
+	} else {
+		cfg.Models.Providers[id] = updatedProvider
+	}
 	delete(cfg.Models.Profiles, id)
 	if err := h.saveModelProvidersConfig(path, cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -135,6 +160,14 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 	}
 	summary := agent.ModelProviderCatalogFromLLM(cfg.Models)
 	writeJSON(w, http.StatusOK, findProviderSummary(summary, id))
+}
+
+func modelProviderTransportChanged(existing, updated config.ProviderConfig) bool {
+	existing = existing.Resolved()
+	updated = updated.Resolved()
+	return existing.BaseURL != updated.BaseURL ||
+		existing.APIKey != updated.APIKey ||
+		!maps.Equal(existing.Headers, updated.Headers)
 }
 
 func (h *Handler) deleteModelProvider(w http.ResponseWriter, r *http.Request) {

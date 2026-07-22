@@ -6,6 +6,7 @@ Each supported protocol field is documented at its first use below.
 """
 
 import json
+import os
 
 
 # A skill returns ordinary Markdown after the emitter command finishes. CSGClaw
@@ -104,6 +105,16 @@ def emit(kind: str, payload: dict[str, object]) -> None:
 
 def main() -> None:
     """Emit ordinary stdout followed by links and one question request."""
+
+    # CSGClaw runtimes that decode this protocol inject capability version 1.
+    # Refuse to emit control records into an older runtime that would expose
+    # them as ordinary output and never create the interactive UI.
+    if os.environ.get("CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL") != "1":
+        print(
+            "Structured output unavailable: "
+            "CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL=1 is not set."
+        )
+        return
 
     print("Interactive output demo controls emitted successfully.")
 

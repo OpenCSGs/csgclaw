@@ -15,7 +15,7 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
-var checkResponsesAPIForProvider = modelprovider.CheckResponsesAPI
+var checkResponsesAPIForProvider = modelprovider.CheckResponsesOrChatCompletionsAPI
 var openCSGCredentialsForResponsesProbe = func(ctx context.Context) (string, string, bool, error) {
 	store, err := auth.DefaultStore()
 	if err != nil {
@@ -168,9 +168,6 @@ func (c *responsesProbeCache) validate(ctx context.Context, target responsesProb
 	c.mu.Unlock()
 
 	err := checkResponsesAPIForProvider(ctx, target.baseURL, target.apiKey, target.modelID, target.headers)
-	if errors.Is(err, modelprovider.ErrResponsesAPIUnsupported) {
-		err = nil
-	}
 
 	if err == nil {
 		c.mu.Lock()

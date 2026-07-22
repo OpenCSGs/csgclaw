@@ -67,6 +67,7 @@ func buildSessionEnv(spec SessionSpec) []string {
 		envMap["HOME"] = homeDir
 	}
 	envMap["CODEX_HOME"] = spec.CodexHomeDir
+	envMap["CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL"] = "1"
 	if apiKey := spec.Profile.APIKey; apiKey != "" {
 		envMap["OPENAI_API_KEY"] = apiKey
 	}
@@ -102,7 +103,7 @@ func shouldOmitInheritedSessionEnvKey(key string) bool {
 
 func isReservedSessionEnvKey(key string) bool {
 	switch strings.ToUpper(strings.TrimSpace(key)) {
-	case "HOME", "CODEX_HOME", "OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_MODEL":
+	case "HOME", "CODEX_HOME", "OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_MODEL", "CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL":
 		return true
 	default:
 		return false

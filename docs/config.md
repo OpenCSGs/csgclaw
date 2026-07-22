@@ -125,7 +125,12 @@ Auth is also managed locally:
 
 When a worker uses the Codex runtime, its local state is stored under `~/.csgclaw/agents/<agent-name>/.codex/`. The workspace lives at `~/.csgclaw/agents/<agent-name>/.codex/workspace`, shell home lives at `~/.csgclaw/agents/<agent-name>/.codex/home`, and Codex-managed files such as `auth.json`, `config.toml`, `stderr.log`, and runtime metadata are stored under `~/.csgclaw/agents/<agent-name>/.codex/home`. This path is intentionally separate from the sandbox provider home such as `~/.csgclaw/agents/<agent-name>/boxlite`.
 
-For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml` with an OpenAI-compatible proxy provider and always sets `wire_api = "responses"` because the Codex CLI app-server path uses the Responses API. The generated provider uses HTTP Responses rather than Responses WebSocket. If the upstream provider reports the Responses endpoint as unsupported, or the embedded CLIProxy Codex/ClaudeCode Responses backend returns a 5xx for a text-only request, CSGClaw keeps the Codex-side Responses configuration and falls back to upstream chat completions behind the proxy. The raw upstream API key is not written to this file; it is injected into the runtime environment through `env_key = "OPENAI_API_KEY"`.
+For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml` with an OpenAI-compatible proxy provider and always sets `wire_api = "responses"` because the Codex CLI app-server path uses the Responses API.
+The generated provider uses HTTP Responses rather than Responses WebSocket.
+If the upstream provider reports the Responses endpoint as unsupported, or the embedded CLIProxy Codex/ClaudeCode Responses backend returns a 5xx for a text-only request, CSGClaw keeps the Codex-side Responses configuration and falls back to upstream chat completions behind the proxy.
+Runtime validation probes the chat completions fallback when Responses is unsupported, so an invalid base URL cannot pass startup merely because `/responses` returned `404`.
+When an in-use model provider's base URL, API key, or headers change, CSGClaw checks the new transport before saving it and preserves the previous working configuration if the check fails.
+The raw upstream API key is not written to this file; it is injected into the runtime environment through `env_key = "OPENAI_API_KEY"`.
 
 When a worker uses the Codex runtime, CSGClaw launches the local `codex` CLI with `codex app-server --listen stdio://`. You can override the binary lookup with:
 

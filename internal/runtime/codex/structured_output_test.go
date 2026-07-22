@@ -143,8 +143,9 @@ func TestStructuredOutputOnlyPublishesForSuccessfulToolStatus(t *testing.T) {
 func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T) {
 	t.Parallel()
 
-	dir := filepath.Join("..", "..", "template", "embed", "manager", "codex", "workspace", "skills", "csgclaw-interactive-output-demo")
+	dir := filepath.Join("..", "..", "template", "embed", "manager", "codex", "skills", "csgclaw-interactive-output-demo")
 	command := exec.Command("python3", filepath.Join(dir, "scripts", "emit_demo.py"))
+	command.Env = append(os.Environ(), "CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL=1")
 	output, err := command.Output()
 	if err != nil {
 		t.Fatalf("run demo emitter: %v", err)
@@ -199,6 +200,10 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 	if !strings.Contains(string(skill), "execute this command exactly once") || !strings.Contains(string(skill), "do not run the emitter again") {
 		t.Fatalf("SKILL.md does not guard one-shot continuation:\n%s", skill)
 	}
+	if !strings.Contains(string(skill), "If the command prints `Structured output unavailable:`") ||
+		!strings.Contains(string(skill), "do not claim that the interactive demo is ready") {
+		t.Fatalf("SKILL.md does not detect an unsupported structured-output runtime:\n%s", skill)
+	}
 	for _, developerReference := range []string{
 		"Each supported protocol field is documented at its first use",
 		"EXAMPLE_REQUEST_USER_INPUT_RESPONSE",
@@ -206,6 +211,7 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		"Required ResourceLink discriminator",
 		"Required list containing 1 through 32 questions",
 		"Optional timeout from 60000 through 240000 ms",
+		"CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL",
 		`# "autoResolutionMs": 240000`,
 	} {
 		if !strings.Contains(string(emitter), developerReference) {
@@ -241,5 +247,28 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 	}
 	if !strings.Contains(string(metadata), "allow_implicit_invocation: false") {
 		t.Fatalf("openai.yaml allows implicit invocation:\n%s", metadata)
+	}
+}
+
+func TestEmbeddedInteractiveOutputDemoRejectsRuntimeWithoutProtocolCapability(t *testing.T) {
+	t.Parallel()
+
+	dir := filepath.Join("..", "..", "template", "embed", "manager", "codex", "skills", "csgclaw-interactive-output-demo")
+	command := exec.Command("python3", filepath.Join(dir, "scripts", "emit_demo.py"))
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL=") {
+			command.Env = append(command.Env, entry)
+		}
+	}
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("run unsupported demo emitter: %v", err)
+	}
+	if got, want := strings.TrimSpace(string(output)), "Structured output unavailable: CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL=1 is not set."; got != want {
+		t.Fatalf("unsupported emitter output = %q, want %q", got, want)
+	}
+	_, artifact, decodeErrors := decodeStructuredCommandOutput(string(output))
+	if len(decodeErrors) != 0 || !structuredOutputArtifactEmpty(artifact) {
+		t.Fatalf("unsupported emitter artifact = %+v, errors = %v", artifact, decodeErrors)
 	}
 }

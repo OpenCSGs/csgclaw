@@ -756,10 +756,11 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 			BaseURL: "https://runtime.example/v1/",
 			APIKey:  " runtime-key ",
 			Env: map[string]string{
-				"OPENAI_BASE_URL": "https://env.example/v1",
-				"OPENAI_API_KEY":  "env-key",
-				"OPENAI_MODEL":    "env-model",
-				" EXTRA_FLAG ":    " 1 ",
+				"OPENAI_BASE_URL":                    "https://env.example/v1",
+				"OPENAI_API_KEY":                     "env-key",
+				"OPENAI_MODEL":                       "env-model",
+				"CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL": "0",
+				" EXTRA_FLAG ":                       " 1 ",
 			},
 		},
 	})
@@ -790,6 +791,9 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 	}
 	if got, want := envMap["EXTRA_FLAG"], "1"; got != want {
 		t.Fatalf("EXTRA_FLAG = %q, want %q", got, want)
+	}
+	if got, want := envMap["CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL"], "1"; got != want {
+		t.Fatalf("CSGCLAW_STRUCTURED_OUTPUT_PROTOCOL = %q, want runtime capability %q", got, want)
 	}
 	for _, key := range []string{"ZDOTDIR", "BASH_ENV", "ENV"} {
 		if got, ok := envMap[key]; ok {
@@ -1141,6 +1145,13 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		},
 	})
 
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID: "rt-" + agent.ManagerUserID,
+		AgentID:   agent.ManagerUserID,
+		AgentName: agent.ManagerName,
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
 	if _, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-u-alice",
 		AgentID:   "u-alice",
@@ -1747,6 +1758,76 @@ func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
 	}
 }
 
+func TestRuntimeProvisionInstallsMissingEmbeddedManagerSkillBeforeSessionStart(t *testing.T) {
+	root := t.TempDir()
+	agentHome := filepath.Join(root, agent.ManagerUserID)
+	skillRoot := filepath.Join(agentHome, hostStateDirName, homeDirName, "skills", "csgclaw-interactive-output-demo")
+
+	rt := New(Dependencies{
+		AgentHome: func(id string) (string, error) {
+			if id != agent.ManagerUserID {
+				t.Fatalf("AgentHome() id = %q, want manager", id)
+			}
+			return agentHome, nil
+		},
+	})
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID: "rt-" + agent.ManagerUserID,
+		AgentID:   agent.ManagerUserID,
+		AgentName: agent.ManagerName,
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(skillRoot, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read installed demo skill: %v", err)
+	}
+	if !strings.Contains(string(raw), "structured-output acceptance demo") {
+		t.Fatalf("installed SKILL.md does not contain the embedded Manager skill:\n%s", raw)
+	}
+}
+
+func TestRuntimeProvisionPreservesExistingManagerSkill(t *testing.T) {
+	root := t.TempDir()
+	agentHome := filepath.Join(root, agent.ManagerUserID)
+	skillRoot := filepath.Join(agentHome, hostStateDirName, homeDirName, "skills", "csgclaw-interactive-output-demo")
+	if err := os.MkdirAll(filepath.Join(skillRoot, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const existingSkill = "# Existing customized demo\n"
+	if err := os.WriteFile(filepath.Join(skillRoot, "SKILL.md"), []byte(existingSkill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := New(Dependencies{
+		AgentHome: func(id string) (string, error) {
+			if id != agent.ManagerUserID {
+				t.Fatalf("AgentHome() id = %q, want manager", id)
+			}
+			return agentHome, nil
+		},
+	})
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID: "rt-" + agent.ManagerUserID,
+		AgentID:   agent.ManagerUserID,
+		AgentName: agent.ManagerName,
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(skillRoot, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read existing demo skill: %v", err)
+	}
+	if string(raw) != existingSkill {
+		t.Fatalf("existing SKILL.md = %q, want preserved %q", raw, existingSkill)
+	}
+	if _, err := os.Stat(filepath.Join(skillRoot, ".git")); err != nil {
+		t.Fatalf("existing .git metadata was not preserved: %v", err)
+	}
+}
+
 func TestRuntimeCreateDoesNotInstallManagerTemplateForWorker(t *testing.T) {
 	root := t.TempDir()
 	hostHome := t.TempDir()
@@ -1953,6 +2034,53 @@ func TestRuntimeCreateOverlaysManagerTemplateAfterHostSkills(t *testing.T) {
 	}
 	if !strings.Contains(text, "Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker") {
 		t.Fatalf("agent-creator manager skill missing template content:\n%s", text)
+	}
+}
+
+func TestRuntimeCreatePreservesExistingManagerSkillNotSyncedFromHost(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CODEX_HOME", filepath.Join(t.TempDir(), "shared-codex-home"))
+	skillRoot := filepath.Join(root, agent.ManagerUserID, hostStateDirName, homeDirName, "skills", "csgclaw-interactive-output-demo")
+	if err := os.MkdirAll(filepath.Join(skillRoot, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const existingSkill = "# Existing customized demo\n"
+	if err := os.WriteFile(filepath.Join(skillRoot, "SKILL.md"), []byte(existingSkill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{
+			ID:        agent.ManagerUserID,
+			Name:      agent.ManagerName,
+			RuntimeID: h.RuntimeID,
+		}, nil
+	})
+
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID: "rt-" + agent.ManagerUserID,
+		AgentID:   agent.ManagerUserID,
+		AgentName: agent.ManagerName,
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-" + agent.ManagerUserID,
+		AgentID:   agent.ManagerUserID,
+		AgentName: agent.ManagerName,
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(skillRoot, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read existing demo skill: %v", err)
+	}
+	if string(raw) != existingSkill {
+		t.Fatalf("existing SKILL.md = %q, want preserved %q", raw, existingSkill)
+	}
+	if _, err := os.Stat(filepath.Join(skillRoot, ".git")); err != nil {
+		t.Fatalf("existing .git metadata was not preserved: %v", err)
 	}
 }
 

@@ -124,3 +124,47 @@ func TestCheckResponsesAPIWithClientClassifiesUnsupportedEndpoint(t *testing.T) 
 		t.Fatalf("CheckResponsesAPIWithClient() error = %v, want ErrResponsesAPIUnsupported", err)
 	}
 }
+
+func TestCheckResponsesOrChatCompletionsAPIWithClientFallsBackToChat(t *testing.T) {
+	var chatPayload map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/responses":
+			http.Error(w, "no responses here", http.StatusNotFound)
+		case "/v1/chat/completions":
+			if err := json.NewDecoder(r.Body).Decode(&chatPayload); err != nil {
+				t.Fatalf("Decode() error = %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"pong"}}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	err := CheckResponsesOrChatCompletionsAPIWithClient(context.Background(), srv.Client(), srv.URL+"/v1", "sk-test", "gpt-test", nil)
+	if err != nil {
+		t.Fatalf("CheckResponsesOrChatCompletionsAPIWithClient() error = %v", err)
+	}
+	if chatPayload["model"] != "gpt-test" {
+		t.Fatalf("chat model = %#v, want gpt-test", chatPayload["model"])
+	}
+	messages, ok := chatPayload["messages"].([]any)
+	if !ok || len(messages) != 1 {
+		t.Fatalf("chat messages = %#v, want one probe message", chatPayload["messages"])
+	}
+}
+
+func TestCheckResponsesOrChatCompletionsAPIWithClientRejectsBadBaseURL(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+
+	err := CheckResponsesOrChatCompletionsAPIWithClient(context.Background(), srv.Client(), srv.URL+"/wrong/v1", "sk-test", "gpt-test", nil)
+	if err == nil {
+		t.Fatal("CheckResponsesOrChatCompletionsAPIWithClient() error = nil, want invalid fallback rejection")
+	}
+	if !strings.Contains(err.Error(), "chat completions fallback") || !strings.Contains(err.Error(), "404") {
+		t.Fatalf("CheckResponsesOrChatCompletionsAPIWithClient() error = %v, want chat fallback 404", err)
+	}
+}
