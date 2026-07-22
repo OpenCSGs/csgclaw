@@ -53,6 +53,9 @@ func (c Client) InstallPrepared(prepared PreparedBundle) (InstalledBundle, error
 	if err := installBundle(prepared.BundleDir, installRoot); err != nil {
 		return InstalledBundle{}, err
 	}
+	if err := refreshCompanionLauncher(installRoot); err != nil {
+		return InstalledBundle{}, fmt.Errorf("expose companion CLI: %w", err)
+	}
 	if _, err := runtimeassets.RefreshFromBundle(installRoot); err != nil {
 		return InstalledBundle{}, fmt.Errorf("refresh runtime assets: %w", err)
 	}
@@ -160,6 +163,51 @@ func isOfficialInstallerManagedPath(root string) bool {
 		return false
 	}
 	return filepath.Base(versionDir) != "." && filepath.Base(versionDir) != string(filepath.Separator)
+}
+
+func refreshCompanionLauncher(installRoot string) error {
+	if !isOfficialInstallerManagedPath(installRoot) {
+		return nil
+	}
+	versionDir := filepath.Dir(installRoot)
+	libAppDir := filepath.Dir(versionDir)
+	libDir := filepath.Dir(libAppDir)
+	launcherDir := filepath.Join(filepath.Dir(libDir), "bin")
+	if !hasLauncher(launcherDir, "csgclaw") {
+		return nil
+	}
+
+	source, err := optionalBundleExecutable(installRoot, "csgclaw-cli")
+	if err != nil || source == "" {
+		return err
+	}
+	target := filepath.Join(launcherDir, filepath.Base(source))
+	if info, err := os.Lstat(target); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("companion launcher %s is not a regular file", target)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat companion launcher: %w", err)
+	} else if hasLauncher(launcherDir, "csgclaw-cli") {
+		return nil
+	}
+	info, err := os.Stat(source)
+	if err != nil {
+		return fmt.Errorf("stat companion CLI: %w", err)
+	}
+	return copyFile(source, target, info.Mode())
+}
+
+func hasLauncher(dir, baseName string) bool {
+	for _, name := range []string{baseName, baseName + ".exe", baseName + ".cmd"} {
+		if _, err := os.Lstat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func installedBundleRootFromLauncher(root string) (string, bool) {

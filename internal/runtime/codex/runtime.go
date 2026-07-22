@@ -19,7 +19,6 @@ import (
 	"csgclaw/internal/codexmodel"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/sandboxgateway"
-	"csgclaw/internal/runtimeassets"
 	"csgclaw/internal/sandbox"
 	templateembed "csgclaw/internal/template/embed"
 )
@@ -67,7 +66,6 @@ type SessionSpec struct {
 	WorkspaceDir string
 	HomeDir      string
 	CodexHomeDir string
-	HostToolsDir string
 	StderrPath   string
 	Profile      agentruntime.Profile
 }
@@ -176,17 +174,6 @@ func workspaceRoot(agentHome string) string {
 
 func (r *Runtime) WorkspaceRoot(agentHome string) string {
 	return r.Layout(agentHome).WorkspaceRoot
-}
-
-func (r *Runtime) prepareHostToolsDir() (string, error) {
-	dir, err := runtimeassets.DefaultHostToolsDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve host tools dir: %w", err)
-	}
-	if _, err := runtimeassets.RefreshFromCurrentExecutable(); err != nil {
-		return "", fmt.Errorf("refresh runtime assets: %w", err)
-	}
-	return dir, nil
 }
 
 func canonicalRuntimeAgentID(agentID string) string {
@@ -518,11 +505,6 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	spec.WorkspaceDir = workspaceDir
 	spec.HomeDir = r.hostSessionHomeDir(dirs.Home)
 	spec.CodexHomeDir = dirs.CodexHome
-	hostToolsDir, err := r.prepareHostToolsDir()
-	if err != nil {
-		return nil, err
-	}
-	spec.HostToolsDir = hostToolsDir
 	spec.StderrPath = dirs.StderrLog
 	if err := r.mkdirAll(spec.WorkspaceDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create codex workspace dir %s: %w", spec.WorkspaceDir, err)
@@ -605,11 +587,6 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	if err != nil {
 		return nil, fmt.Errorf("resolve codex binary: %w", err)
 	}
-	hostToolsDir, err := r.prepareHostToolsDir()
-	if err != nil {
-		return nil, err
-	}
-
 	spec := SessionSpec{
 		RuntimeID:    runtimeID,
 		AgentID:      agentID,
@@ -619,7 +596,6 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		WorkspaceDir: workspaceDir,
 		HomeDir:      r.hostSessionHomeDir(dirs.Home),
 		CodexHomeDir: dirs.CodexHome,
-		HostToolsDir: hostToolsDir,
 		StderrPath:   dirs.StderrLog,
 		Profile:      agentRef.Profile.Normalized(),
 	}

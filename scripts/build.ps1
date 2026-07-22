@@ -268,7 +268,7 @@ function Ensure-WebDeps {
 function Invoke-TargetHelp {
     @(
         "scripts\build.cmd build                         - Windows wrapper; same as build with execution-policy bypass"
-        "powershell -File scripts/build.ps1 build        - build Web UI and binaries, install host and Linux sandbox CLIs under ~/.csgclaw"
+        "powershell -File scripts/build.ps1 build        - build Web UI, companion host binaries, and the Linux sandbox CLI"
         "powershell -File scripts/build.ps1 build-all    - same as build"
         "powershell -File scripts/build.ps1 fmt          - format Go files"
         "powershell -File scripts/build.ps1 test         - run go test ./..."
@@ -276,8 +276,7 @@ function Invoke-TargetHelp {
         "powershell -File scripts/build.ps1 web-dev      - run Vite Web UI dev server"
         "powershell -File scripts/build.ps1 build-web    - build Web UI app into web/static-dist"
         "powershell -File scripts/build.ps1 build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli"
-        "powershell -File scripts/build.ps1 install-host-cli - build host-platform csgclaw-cli into ~/.csgclaw/bin"
-        "powershell -File scripts/build.ps1 install-sandbox-cli - build Linux csgclaw-cli into ~/.csgclaw/sandbox-tools"
+        "powershell -File scripts/build.ps1 build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools"
         "powershell -File scripts/build.ps1 run          - build, then run the server"
         "powershell -File scripts/build.ps1 package      - package the current platform"
         "powershell -File scripts/build.ps1 package-all  - build and package current platform artifacts"
@@ -382,20 +381,11 @@ function Invoke-TargetBuildServerBin {
     }
 }
 
-function Invoke-TargetInstallSandboxCli {
-    Ensure-Directory -Path $script:SandboxToolsDir
+function Invoke-TargetBuildSandboxCli {
+    Ensure-Directory -Path $script:SandboxBundleToolsDir
     Invoke-GoBuild -OutputPath $script:SandboxCliBin -PackagePath "./cmd/csgclaw-cli" -Ldflags $script:CliLdflags -Env @{
         CGO_ENABLED = "0"
         GOOS        = "linux"
-        GOARCH      = $script:TargetArch
-    }
-}
-
-function Invoke-TargetInstallHostCli {
-    Ensure-Directory -Path $script:HostToolsDir
-    Invoke-GoBuild -OutputPath $script:HostCliBin -PackagePath "./cmd/csgclaw-cli" -Ldflags $script:CliLdflags -Env @{
-        CGO_ENABLED = $script:CgoEnabled
-        GOOS        = $script:TargetOs
         GOARCH      = $script:TargetArch
     }
 }
@@ -562,16 +552,15 @@ function Invoke-PackageRelease {
         Invoke-GoBuild -OutputPath $binaryOutput -PackagePath $packagePath -Ldflags $ldflags -Env $env -Tags $script:GoBuildTags
 
         if ($AppName -eq "csgclaw") {
-            $sandboxCliDir = Join-Path (Split-Path -Parent $binaryOutput) "csgclaw_dir"
-            $hostCliDir = Join-Path $sandboxCliDir "host"
+            $stageDir = Split-Path -Parent $binaryOutput
+            $sandboxCliDir = Join-Path $stageDir "sandbox-tools"
             Ensure-Directory -Path $sandboxCliDir
-            Ensure-Directory -Path $hostCliDir
             Invoke-GoBuild -OutputPath (Join-Path $sandboxCliDir "csgclaw-cli") -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
                 CGO_ENABLED = "0"
                 GOOS        = "linux"
                 GOARCH      = $Goarch
             }
-            Invoke-GoBuild -OutputPath (Join-Path $hostCliDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $Goos)) -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
+            Invoke-GoBuild -OutputPath (Join-Path $stageDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $Goos)) -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
                 CGO_ENABLED = "0"
                 GOOS        = $Goos
                 GOARCH      = $Goarch
@@ -621,18 +610,17 @@ function Invoke-PackageRelease {
 }
 
 function Invoke-TargetBuild {
-    Write-Host "Starting full build: Web UI, host binaries, managed host CLI, and Linux sandbox CLI."
+    Write-Host "Starting full build: Web UI, companion host binaries, and Linux sandbox CLI."
     Invoke-TargetBuildWeb
     Invoke-TargetBuildServerBin
-    Invoke-TargetInstallHostCli
-    Invoke-TargetInstallSandboxCli
+    Invoke-TargetBuildSandboxCli
     Write-Host "Build complete."
 }
 
 function Invoke-TargetRun {
     Invoke-TargetBuild
     $serverBinary = Join-Path $script:BinDir (Get-BinaryName -BaseName "csgclaw" -Goos $script:TargetOs)
-    Invoke-Checked -FilePath $serverBinary -Arguments @("serve")
+    Invoke-Checked -FilePath $serverBinary -Arguments @("serve") -Env @{ Path = "$script:BinDir;$env:Path" }
 }
 
 function Invoke-TargetClean {
@@ -685,14 +673,12 @@ $script:CliLdflags = Get-EnvOrDefault -Name "CLI_LDFLAGS" -Default "-s -w $($scr
 $script:CgoEnabled = Get-EnvOrDefault -Name "CGO_ENABLED" -Default "0"
 $script:WebAppDir = Get-EnvOrDefault -Name "WEB_APP_DIR" -Default (Join-Path $RootDir "web/app")
 $script:WebStaticDistDir = Get-EnvOrDefault -Name "WEB_STATIC_DIST_DIR" -Default (Join-Path $RootDir "web/static-dist")
-$script:SandboxToolsDir = Get-EnvOrDefault -Name "SANDBOX_TOOLS_DIR" -Default (Join-Path $HOME ".csgclaw/sandbox-tools")
-$script:SandboxCliBin = Get-EnvOrDefault -Name "SANDBOX_CLI_BIN" -Default (Join-Path $script:SandboxToolsDir "csgclaw-cli")
+$script:SandboxBundleToolsDir = Get-EnvOrDefault -Name "SANDBOX_BUNDLE_TOOLS_DIR" -Default (Join-Path $script:BinDir "sandbox-tools")
+$script:SandboxCliBin = Get-EnvOrDefault -Name "SANDBOX_CLI_BIN" -Default (Join-Path $script:SandboxBundleToolsDir "csgclaw-cli")
 $script:HostGoos = Resolve-GoEnv -Name "GOOS"
 $script:HostGoarch = Resolve-GoEnv -Name "GOARCH"
 $script:TargetOs = Get-EnvOrDefault -Name "TARGET_OS" -Default $script:HostGoos
 $script:TargetArch = Get-EnvOrDefault -Name "TARGET_ARCH" -Default $script:HostGoarch
-$script:HostToolsDir = Get-EnvOrDefault -Name "HOST_TOOLS_DIR" -Default (Join-Path $HOME ".csgclaw/bin")
-$script:HostCliBin = Get-EnvOrDefault -Name "HOST_CLI_BIN" -Default (Join-Path $script:HostToolsDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $script:TargetOs))
 $script:GoBuildTags = Get-EnvOrDefault -Name "GO_BUILD_TAGS" -Default ""
 $script:PackageMode = Get-EnvOrDefault -Name "PACKAGE_MODE" -Default ""
 $script:IncludeBoxlite = Get-EnvOrDefault -Name "INCLUDE_BOXLITE" -Default ""
@@ -712,8 +698,8 @@ try {
         "web-dev" { Invoke-TargetWebDev }
         "build-web" { Invoke-TargetBuildWeb }
         "build-server-bin" { Invoke-TargetBuildServerBin }
-        "install-host-cli" { Invoke-TargetInstallHostCli }
-        "install-sandbox-cli" { Invoke-TargetInstallSandboxCli }
+        "build-sandbox-cli" { Invoke-TargetBuildSandboxCli }
+        "install-sandbox-cli" { Invoke-TargetBuildSandboxCli }
         "build" { Invoke-TargetBuild }
         "build-all" { Invoke-TargetBuild }
         "run" { Invoke-TargetRun }

@@ -13,8 +13,7 @@ make
 
 1. 将 Web UI 构建到 `web/static-dist/`。
 2. 构建 `bin/csgclaw` 和宿主平台的 `bin/csgclaw-cli`。
-3. 构建宿主平台的 `csgclaw-cli`，安装到 `~/.csgclaw/bin`，供 Codex 等宿主 runtime 使用。
-4. 按当前 CPU 架构构建静态 Linux `csgclaw-cli`，安装到 `~/.csgclaw/sandbox-tools/csgclaw-cli`。
+3. 按当前 CPU 架构构建静态 Linux `csgclaw-cli` 到 `bin/sandbox-tools/csgclaw-cli`。
 
 `make build-all` 保留为 `make build` 的别名。CSGClaw 不再在本地构建派生的 PicoClaw/OpenClaw 镜像。
 
@@ -23,13 +22,13 @@ make
 | Target | 说明 |
 |---|---|
 | `make build-server-bin` | 构建 `bin/csgclaw` 和宿主平台的 `bin/csgclaw-cli` |
-| `make install-host-cli` | 将宿主平台 `csgclaw-cli` 构建到 `~/.csgclaw/bin` |
-| `make install-sandbox-cli` | 将 Linux `csgclaw-cli` 构建到 `~/.csgclaw/sandbox-tools` |
+| `make build-sandbox-cli` | 将 Linux `csgclaw-cli` 构建到 `bin/sandbox-tools` |
+| `make install-sandbox-cli` | `make build-sandbox-cli` 的兼容别名 |
 | `make run` | 构建并运行 `csgclaw serve` |
 | `make fmt` | 格式化 Go 源码 |
 | `make test` | 运行 `go test ./...` |
 
-可以通过 `HOST_TOOLS_DIR=/path make install-host-cli` 或 `SANDBOX_TOOLS_DIR=/path make install-sandbox-cli` 覆盖对应 CLI 的安装目录。
+可以通过 `SANDBOX_BUNDLE_TOOLS_DIR=/path make build-sandbox-cli` 覆盖本地 bundle 输出目录。
 
 ## Windows 无 make 时
 
@@ -38,8 +37,7 @@ make
 ```powershell
 .\scripts\build.cmd build
 .\scripts\build.cmd build-server-bin
-.\scripts\build.cmd install-host-cli
-.\scripts\build.cmd install-sandbox-cli
+.\scripts\build.cmd build-sandbox-cli
 .\scripts\build.cmd test
 ```
 
@@ -55,8 +53,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 build
 
 1. 构建 Web UI 到 `web/static-dist/`。
 2. 构建 `bin/csgclaw.exe` 和宿主平台的 `bin/csgclaw-cli.exe`。
-3. 构建 Windows 版 `csgclaw-cli.exe` 到 `~/.csgclaw/bin/csgclaw-cli.exe`。
-4. 构建 Linux 版 `csgclaw-cli` 到 `~/.csgclaw/sandbox-tools/csgclaw-cli`。
+3. 构建 Linux 版 `csgclaw-cli` 到 `bin/sandbox-tools/csgclaw-cli`。
+
+本地编译的 `bin/csgclaw[.exe]` 启动沙盒时，会把相邻的 `bin/sandbox-tools/csgclaw-cli` 同步到 `~/.csgclaw/sandbox-tools/csgclaw-cli`，然后将这个托管目录只读挂载到沙盒内的 `/opt/csgclaw/bin`。正式安装器也会从已安装 bundle 完成同样的首次同步。
 
 ## 运行时镜像
 
@@ -87,14 +86,13 @@ OpenClaw 的固定引用保存在内置 `agent.toml` 中。PicoClaw 不再提供
 csgclaw/
   bin/
     csgclaw[.exe]
+    csgclaw-cli[.exe]            # release 宿主平台的伴生 CLI
     boxlite[.exe]                 # 仅支持的平台
-    csgclaw_dir/
+    sandbox-tools/
       csgclaw-cli                # Linux，CPU 架构与 release 一致
-      host/
-        csgclaw-cli[.exe]        # release 的宿主平台
 ```
 
-安装脚本会把宿主 CLI 复制到 `~/.csgclaw/bin/csgclaw-cli[.exe]`，并把沙盒 CLI 复制到 `~/.csgclaw/sandbox-tools/csgclaw-cli`。为兼容自动升级，运行时启动时也会从已安装 bundle 同步这两个文件。Codex session 会把 `~/.csgclaw/bin` 放到宿主 `PATH` 最前面。
+安装脚本会从同一个 `INSTALL_DIR` 暴露两个宿主程序，并把沙盒 CLI 复制到 `~/.csgclaw/sandbox-tools/csgclaw-cli`。升级替换 bundle 时会同时更新两个伴生宿主程序，内置升级也会为旧安装布局创建或刷新缺失的伴生程序入口；runtime asset 刷新只同步沙盒 CLI。升级时仍兼容旧 bundle 的 `bin/csgclaw_dir/csgclaw-cli` 路径。
 
 | Target | 说明 |
 |---|---|

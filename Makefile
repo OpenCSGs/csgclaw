@@ -21,19 +21,16 @@ WEB_STATIC_DIST_DIR ?= web/static-dist
 WEB_PNPM ?= $(CURDIR)/scripts/web-pnpm.sh
 TARGET_OS ?= $(shell $(GO) env GOOS)
 TARGET_ARCH ?= $(shell $(GO) env GOARCH)
-SANDBOX_TOOLS_DIR ?= $(HOME)/.csgclaw/sandbox-tools
-SANDBOX_CLI_BIN ?= $(SANDBOX_TOOLS_DIR)/csgclaw-cli
-HOST_TOOLS_DIR ?= $(HOME)/.csgclaw/bin
-HOST_CLI_NAME ?= csgclaw-cli$(if $(filter windows,$(TARGET_OS)),.exe,)
-HOST_CLI_BIN ?= $(HOST_TOOLS_DIR)/$(HOST_CLI_NAME)
+SANDBOX_BUNDLE_TOOLS_DIR ?= $(BIN_DIR)/sandbox-tools
+SANDBOX_CLI_BIN ?= $(SANDBOX_BUNDLE_TOOLS_DIR)/csgclaw-cli
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-all build-server build-server-bin install-host-cli install-sandbox-cli run clean package package-all release
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-all build-server build-server-bin build-sandbox-cli install-sandbox-cli run clean package package-all release
 
 help:
 	@printf '%s\n' \
-		'make            - build Web UI and binaries, install host and Linux sandbox CLIs under ~/.csgclaw' \
+		'make            - build Web UI, companion host binaries, and the Linux sandbox CLI' \
 		'make build      - same as default goal' \
 		'make build-all  - same as build (runtime images are remote fixed refs)' \
 		'make fmt        - format Go files' \
@@ -42,8 +39,7 @@ help:
 		'make web-dev    - run Vite Web UI dev server' \
 		'make build-web  - build Web UI app into web/static-dist' \
 		'make build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli' \
-		'make install-host-cli - build host-platform csgclaw-cli into ~/.csgclaw/bin' \
-		'make install-sandbox-cli - build Linux csgclaw-cli into ~/.csgclaw/sandbox-tools' \
+		'make build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools' \
 		'make run        - build (no docker images), then run the server' \
 		'make clean      - remove local build outputs'
 
@@ -104,7 +100,7 @@ build-web: ensure-web-deps
 		exit 1; \
 	}
 
-build: build-web build-server-bin install-host-cli install-sandbox-cli
+build: build-web build-server-bin build-sandbox-cli
 
 build-all: build
 
@@ -114,20 +110,17 @@ build-server-bin:
 	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
 		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(BIN_DIR)/csgclaw-cli ./cmd/csgclaw-cli
 
-build-server: build-server-bin install-host-cli install-sandbox-cli
+build-server: build-server-bin build-sandbox-cli
 
-install-host-cli:
-	mkdir -p "$(HOST_TOOLS_DIR)"
-	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
-		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o "$(HOST_CLI_BIN)" ./cmd/csgclaw-cli
-
-install-sandbox-cli:
-	mkdir -p "$(SANDBOX_TOOLS_DIR)"
+build-sandbox-cli:
+	mkdir -p "$(SANDBOX_BUNDLE_TOOLS_DIR)"
 	env GOCACHE=$(GOCACHE) CGO_ENABLED=0 GOOS=linux GOARCH=$(TARGET_ARCH) \
 		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o "$(SANDBOX_CLI_BIN)" ./cmd/csgclaw-cli
 
+install-sandbox-cli: build-sandbox-cli
+
 run: build
-	$(BIN) serve
+	env PATH="$(abspath $(BIN_DIR)):$$PATH" $(BIN) serve
 
 package: build-web
 	mkdir -p $(DIST_DIR)

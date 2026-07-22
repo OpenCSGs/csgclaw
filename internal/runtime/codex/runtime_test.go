@@ -741,7 +741,6 @@ func TestRuntimeStopAndDelete(t *testing.T) {
 
 func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 	t.Setenv("HOME", "/host-home")
-	t.Setenv("PATH", "/usr/local/bin:/usr/bin")
 	t.Setenv("OPENAI_BASE_URL", "https://host.example/v1")
 	t.Setenv("OPENAI_API_KEY", "host-key")
 	t.Setenv("OPENAI_MODEL", "host-model")
@@ -752,7 +751,6 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 	env := buildSessionEnv(SessionSpec{
 		HomeDir:      "/host-home",
 		CodexHomeDir: "/tmp/runtime-codex-home",
-		HostToolsDir: "/host-home/.csgclaw/bin",
 		Profile: agentruntime.Profile{
 			ModelID: " gpt-5.5 ",
 			BaseURL: "https://runtime.example/v1/",
@@ -762,7 +760,6 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 				"OPENAI_API_KEY":  "env-key",
 				"OPENAI_MODEL":    "env-model",
 				" EXTRA_FLAG ":    " 1 ",
-				"PATH":            "/profile/bin",
 			},
 		},
 	})
@@ -781,9 +778,6 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 	}
 	if got, want := envMap["CODEX_HOME"], "/tmp/runtime-codex-home"; got != want {
 		t.Fatalf("CODEX_HOME = %q, want %q", got, want)
-	}
-	if got, want := envMap["PATH"], "/host-home/.csgclaw/bin"+string(filepath.ListSeparator)+"/profile/bin"; got != want {
-		t.Fatalf("PATH = %q, want %q", got, want)
 	}
 	if got, want := envMap["OPENAI_API_KEY"], "runtime-key"; got != want {
 		t.Fatalf("OPENAI_API_KEY = %q, want %q", got, want)

@@ -16,12 +16,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
-
-	"csgclaw/internal/runtimeassets"
 )
 
 func TestClientCheckUpdateAvailable(t *testing.T) {
@@ -654,11 +651,11 @@ func TestClientInstallPreparedRefreshesRuntimeCLIs(t *testing.T) {
 	installParent := t.TempDir()
 	installRoot := writeBundleDir(t, installParent, "old")
 	preparedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
-		filepath.Join("csgclaw", "bin", "csgclaw"):                    "#!/bin/sh\n# new\n",
-		filepath.Join("csgclaw", "bin", "boxlite"):                    "#!/bin/sh\n# new boxlite\n",
-		filepath.Join("csgclaw", "bin", "csgclaw_dir", "csgclaw-cli"): "#!/bin/sh\n# new sandbox cli\n",
-		filepath.Join("csgclaw", "bin", "csgclaw_dir", runtimeassets.HostCLIBundleDir, runtimeassets.HostCLIName(runtime.GOOS)): "#!/bin/sh\n# new host cli\n",
-		filepath.Join("csgclaw", "README.md"): "new",
+		filepath.Join("csgclaw", "bin", "csgclaw"):                      "#!/bin/sh\n# new\n",
+		filepath.Join("csgclaw", "bin", "csgclaw-cli"):                  "#!/bin/sh\n# new host cli\n",
+		filepath.Join("csgclaw", "bin", "boxlite"):                      "#!/bin/sh\n# new boxlite\n",
+		filepath.Join("csgclaw", "bin", "sandbox-tools", "csgclaw-cli"): "#!/bin/sh\n# new sandbox cli\n",
+		filepath.Join("csgclaw", "README.md"):                           "new",
 	})
 	client := Client{
 		ExecutablePath: func() (string, error) {
@@ -670,7 +667,7 @@ func TestClientInstallPreparedRefreshesRuntimeCLIs(t *testing.T) {
 		t.Fatalf("InstallPrepared() error = %v", err)
 	}
 	assertFileContent(t, filepath.Join(home, ".csgclaw", "sandbox-tools", "csgclaw-cli"), "#!/bin/sh\n# new sandbox cli\n")
-	assertFileContent(t, filepath.Join(home, ".csgclaw", "bin", runtimeassets.HostCLIName(runtime.GOOS)), "#!/bin/sh\n# new host cli\n")
+	assertFileContent(t, filepath.Join(installRoot, "bin", "csgclaw-cli"), "#!/bin/sh\n# new host cli\n")
 }
 
 func TestClientInstallPreparedReplacesWindowsBundle(t *testing.T) {
@@ -680,8 +677,9 @@ func TestClientInstallPreparedReplacesWindowsBundle(t *testing.T) {
 		filepath.Join("csgclaw", "README.md"):          "old",
 	})
 	preparedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
-		filepath.Join("csgclaw", "bin", "csgclaw.exe"): "@echo off\r\nREM new\r\n",
-		filepath.Join("csgclaw", "README.md"):          "new",
+		filepath.Join("csgclaw", "bin", "csgclaw.exe"):     "@echo off\r\nREM new\r\n",
+		filepath.Join("csgclaw", "bin", "csgclaw-cli.exe"): "new companion",
+		filepath.Join("csgclaw", "README.md"):              "new",
 	})
 
 	client := Client{
@@ -742,8 +740,9 @@ func TestClientInstallPreparedResolvesWindowsLauncherLayout(t *testing.T) {
 		t.Fatalf("WriteFile(%q) error = %v", bundleMarkerPath(appHome), err)
 	}
 	preparedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
-		filepath.Join("csgclaw", "bin", "csgclaw.exe"): "@echo off\r\nREM new\r\n",
-		filepath.Join("csgclaw", "README.md"):          "new",
+		filepath.Join("csgclaw", "bin", "csgclaw.exe"):     "@echo off\r\nREM new\r\n",
+		filepath.Join("csgclaw", "bin", "csgclaw-cli.exe"): "new companion",
+		filepath.Join("csgclaw", "README.md"):              "new",
 	})
 
 	client := Client{
@@ -760,6 +759,17 @@ func TestClientInstallPreparedResolvesWindowsLauncherLayout(t *testing.T) {
 		t.Fatalf("InstallRoot = %q, want %q", got, want)
 	}
 	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
+	assertFileContent(t, filepath.Join(launcherDir, "csgclaw-cli.exe"), "new companion")
+
+	updatedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw.exe"):     "@echo off\r\nREM newer\r\n",
+		filepath.Join("csgclaw", "bin", "csgclaw-cli.exe"): "newer companion",
+		filepath.Join("csgclaw", "README.md"):              "newer",
+	})
+	if _, err := client.InstallPrepared(PreparedBundle{BundleDir: updatedRoot}); err != nil {
+		t.Fatalf("InstallPrepared(update) error = %v", err)
+	}
+	assertFileContent(t, filepath.Join(launcherDir, "csgclaw-cli.exe"), "newer companion")
 }
 
 func TestClientInstallPreparedDoesNotReplaceLauncherRootWhenInnerBundleMissing(t *testing.T) {
