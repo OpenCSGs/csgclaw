@@ -19,7 +19,7 @@ export type TooltipTriggerProps = ComponentPropsWithoutRef<typeof RadixTooltip.T
 
 export const TooltipTrigger = forwardRef<ComponentRef<typeof RadixTooltip.Trigger>, TooltipTriggerProps>(
   function TooltipTrigger(props, ref) {
-    return <RadixTooltip.Trigger ref={ref} {...props} />;
+    return <RadixTooltip.Trigger ref={ref} data-csg-tooltip-trigger="" {...props} />;
   },
 );
 

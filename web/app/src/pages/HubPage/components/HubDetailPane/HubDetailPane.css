@@ -255,18 +255,58 @@
 }
 
 .hub-json-editor-shell {
+  --hub-json-editor-bg: color-mix(in oklab, var(--gray-50) 76%, var(--surface));
+  --hub-json-editor-border: var(--line);
+  --hub-json-editor-text: var(--text);
+  --hub-json-editor-caret: var(--text);
+  --hub-json-editor-gutter-bg: transparent;
+  --hub-json-editor-gutter-border: color-mix(in oklab, var(--line) 70%, transparent);
+  --hub-json-editor-gutter-text: var(--gray-500);
+  --hub-json-editor-gutter-active-bg: color-mix(in oklab, var(--brand-600) 7%, transparent);
+  --hub-json-editor-gutter-active-text: var(--gray-700);
+  --hub-json-editor-active-line: color-mix(in oklab, var(--brand-600) 7%, transparent);
+  --hub-json-editor-selection: color-mix(in oklab, var(--brand-600) 24%, transparent);
+  --hub-json-editor-tooltip-bg: var(--surface);
+  --hub-json-editor-tooltip-border: var(--line);
+  --hub-json-editor-property: var(--brand-700);
+  --hub-json-editor-string: var(--success-700);
+  --hub-json-editor-number: var(--warning-700);
+  --hub-json-editor-literal: var(--error-600);
+  --hub-json-editor-punctuation: var(--gray-500);
+
   width: 100%;
   min-height: 220px;
   overflow: auto;
   resize: vertical;
-  border: 1px solid var(--line);
+  border: 1px solid var(--hub-json-editor-border);
   border-radius: var(--radius-lg);
-  background: color-mix(in oklab, var(--gray-50) 76%, var(--surface));
+  background: var(--hub-json-editor-bg);
+}
+
+:root[data-theme="dark"] .hub-json-editor-shell {
+  --hub-json-editor-bg: color-mix(in oklab, var(--gray-950) 82%, var(--gray-900) 18%);
+  --hub-json-editor-border: color-mix(in oklab, var(--brand-300) 18%, var(--line));
+  --hub-json-editor-text: color-mix(in oklab, var(--gray-25) 90%, var(--muted) 10%);
+  --hub-json-editor-caret: color-mix(in oklab, var(--gray-25) 92%, var(--brand-300) 8%);
+  --hub-json-editor-gutter-bg: color-mix(in oklab, var(--gray-950) 70%, var(--gray-900) 30%);
+  --hub-json-editor-gutter-border: color-mix(in oklab, var(--brand-300) 12%, var(--line));
+  --hub-json-editor-gutter-text: color-mix(in oklab, var(--muted) 80%, var(--gray-400) 20%);
+  --hub-json-editor-gutter-active-bg: color-mix(in oklab, var(--brand-300) 10%, transparent);
+  --hub-json-editor-gutter-active-text: color-mix(in oklab, var(--brand-300) 78%, var(--text) 22%);
+  --hub-json-editor-active-line: color-mix(in oklab, var(--brand-300) 8%, transparent);
+  --hub-json-editor-selection: color-mix(in oklab, var(--brand-300) 28%, transparent);
+  --hub-json-editor-tooltip-bg: var(--panel);
+  --hub-json-editor-tooltip-border: color-mix(in oklab, var(--brand-300) 18%, var(--line));
+  --hub-json-editor-property: var(--brand-300);
+  --hub-json-editor-string: var(--success-300);
+  --hub-json-editor-number: var(--warning-300);
+  --hub-json-editor-literal: var(--error-300);
+  --hub-json-editor-punctuation: var(--gray-400);
 }
 
 .hub-json-editor-shell:focus-within {
-  border-color: color-mix(in oklab, var(--success-600) 55%, var(--line));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--success-600) 16%, transparent);
+  border-color: color-mix(in oklab, var(--success-500) 54%, var(--hub-json-editor-border));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--success-500) 16%, transparent);
 }
 
 .hub-json-editor.is-invalid .hub-json-editor-shell {

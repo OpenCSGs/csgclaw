@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { classNames } from "@/shared/lib/classNames";
 
+const dialogFocusableSelector = [
+  "button:not([disabled])",
+  "[href]",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(",");
+
 export type DialogRootProps = ComponentPropsWithoutRef<typeof RadixDialog.Root>;
 
 export function DialogRoot(props: DialogRootProps) {
@@ -40,11 +50,32 @@ export type DialogContentProps = ComponentPropsWithoutRef<typeof RadixDialog.Con
 };
 
 export const DialogContent = forwardRef<ComponentRef<typeof RadixDialog.Content>, DialogContentProps>(
-  function DialogContent({ children, className, overlayClassName, portalContainer, ...props }, ref) {
+  function DialogContent(
+    { children, className, onOpenAutoFocus, overlayClassName, portalContainer, tabIndex = -1, ...props },
+    ref,
+  ) {
     return (
       <DialogPortal container={portalContainer}>
         <DialogOverlay className={overlayClassName} />
-        <RadixDialog.Content ref={ref} className={classNames("csg-dialog-content", className)} {...props}>
+        <RadixDialog.Content
+          ref={ref}
+          className={classNames("csg-dialog-content", className)}
+          tabIndex={tabIndex}
+          onOpenAutoFocus={(event) => {
+            onOpenAutoFocus?.(event);
+            if (event.defaultPrevented) {
+              return;
+            }
+            const content = event.currentTarget as HTMLElement | null;
+            const firstFocusable = content?.querySelector<HTMLElement>(dialogFocusableSelector);
+            if (!firstFocusable?.hasAttribute("data-csg-tooltip-trigger")) {
+              return;
+            }
+            event.preventDefault();
+            content?.focus();
+          }}
+          {...props}
+        >
           {children}
         </RadixDialog.Content>
       </DialogPortal>

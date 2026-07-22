@@ -1854,8 +1854,8 @@
 }
 
 .rich-empty-mark {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: inline-grid;
   place-items: center;
   border: 1px solid oklch(0.77 0.16 164 / 0.42);
@@ -1868,7 +1868,9 @@
 }
 
 .shell-empty-state {
-  gap: 12px;
+  gap: 8px;
+  align-content: center;
+  justify-items: center;
   background:
     linear-gradient(90deg, oklch(1 0 0 / 0.02) 1px, transparent 1px),
     linear-gradient(0deg, oklch(1 0 0 / 0.018) 1px, transparent 1px);

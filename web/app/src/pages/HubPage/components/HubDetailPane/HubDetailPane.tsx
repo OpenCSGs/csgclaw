@@ -135,7 +135,7 @@ const DEFAULT_MCP_SERVER_DOCUMENT =
 const jsonEditorTheme = EditorView.theme({
   "&": {
     backgroundColor: "transparent",
-    color: "var(--text)",
+    color: "var(--hub-json-editor-text, var(--text))",
     fontFamily: "var(--font-mono)",
     fontSize: "12px",
   },
@@ -148,36 +148,36 @@ const jsonEditorTheme = EditorView.theme({
     minHeight: "var(--hub-json-editor-min-height, 220px)",
   },
   ".cm-content": {
-    caretColor: "var(--text)",
+    caretColor: "var(--hub-json-editor-caret)",
     padding: "14px 0",
   },
   ".cm-line": {
     padding: "0 14px",
   },
   ".cm-gutters": {
-    backgroundColor: "transparent",
-    borderRight: "1px solid color-mix(in oklab, var(--line) 70%, transparent)",
-    color: "var(--gray-500)",
+    backgroundColor: "var(--hub-json-editor-gutter-bg)",
+    borderRight: "1px solid var(--hub-json-editor-gutter-border)",
+    color: "var(--hub-json-editor-gutter-text)",
     paddingLeft: "4px",
   },
   ".cm-activeLine": {
-    backgroundColor: "color-mix(in oklab, var(--brand-600) 7%, transparent)",
+    backgroundColor: "var(--hub-json-editor-active-line)",
   },
   ".cm-activeLineGutter": {
-    backgroundColor: "color-mix(in oklab, var(--brand-600) 7%, transparent)",
-    color: "var(--gray-700)",
+    backgroundColor: "var(--hub-json-editor-gutter-active-bg)",
+    color: "var(--hub-json-editor-gutter-active-text)",
   },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-    backgroundColor: "color-mix(in oklab, var(--brand-600) 24%, transparent)",
+    backgroundColor: "var(--hub-json-editor-selection)",
   },
   ".cm-lintRange-error": {
     textDecoration: "underline wavy var(--error-600)",
     textDecorationSkipInk: "none",
   },
   ".cm-tooltip": {
-    border: "1px solid var(--line)",
+    border: "1px solid var(--hub-json-editor-tooltip-border)",
     borderRadius: "var(--radius-md)",
-    backgroundColor: "var(--surface)",
+    backgroundColor: "var(--hub-json-editor-tooltip-bg)",
     color: "var(--text)",
     boxShadow: "var(--shadow-lg)",
     fontFamily: "var(--font-sans)",
@@ -186,12 +186,12 @@ const jsonEditorTheme = EditorView.theme({
 });
 
 const jsonHighlightStyle = HighlightStyle.define([
-  { tag: tags.propertyName, color: "var(--brand-700)" },
-  { tag: tags.string, color: "var(--success-700)" },
-  { tag: tags.number, color: "var(--warning-700)" },
-  { tag: tags.bool, color: "var(--error-600)" },
-  { tag: tags.null, color: "var(--error-600)" },
-  { tag: tags.punctuation, color: "var(--gray-500)" },
+  { tag: tags.propertyName, color: "var(--hub-json-editor-property)" },
+  { tag: tags.string, color: "var(--hub-json-editor-string)" },
+  { tag: tags.number, color: "var(--hub-json-editor-number)" },
+  { tag: tags.bool, color: "var(--hub-json-editor-literal)" },
+  { tag: tags.null, color: "var(--hub-json-editor-literal)" },
+  { tag: tags.punctuation, color: "var(--hub-json-editor-punctuation)" },
 ]);
 
 function jsonSyntaxLinter(view: EditorView): Diagnostic[] {
