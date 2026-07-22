@@ -7,7 +7,7 @@ import { createAttachmentDrafts } from "@/models/attachments";
 import { emptyGitHubConnectorStatus, emptyGitLabConnectorStatus } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 
-const t: TranslateFn = (key) => {
+const t: TranslateFn = (key, params) => {
   const labels: Record<string, string> = {
     connectorCallbackURL: "Callback URL",
     connectorClientID: "Client ID",
@@ -27,12 +27,15 @@ const t: TranslateFn = (key) => {
     connectorScopes: "Scopes",
     connectorSetUp: "Set up",
     composerAdd: "Add",
+    composerAddContent: "Add content",
     composerFiles: "Files",
     composerConnectors: "Connectors",
     inputPlaceholder: "Message",
     addAttachment: "Add attachment",
     attachments: "Attachments",
     removeAttachment: "Remove attachment",
+    removeAttachmentNamed: `Remove attachment: ${params?.name ?? ""}`,
+    composerTip: "Enter to send · Shift + Enter for a new line",
     send: "Send",
   };
   return labels[key] ?? key;
@@ -82,7 +85,7 @@ describe("ConversationComposer connectors", () => {
     });
 
     expect(screen.getByText("Install Codex CLI first.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Message")).toHaveAttribute("contenteditable", "false");
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveAttribute("contenteditable", "false");
     const sendButton = screen.getByRole("button", { name: "Send" });
     expect(sendButton).toBeDisabled();
 
@@ -101,12 +104,12 @@ describe("ConversationComposer connectors", () => {
       },
     });
 
-    const button = screen.getByRole("button", { name: "Add" });
+    const button = screen.getByRole("button", { name: "Add content" });
     expect(button).toHaveClass("composer-add-button");
 
     await user.click(button);
 
-    const dialog = screen.getByRole("dialog", { name: "Add" });
+    const dialog = screen.getByRole("dialog", { name: "Add content" });
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByText("Files")).toBeInTheDocument();
     expect(within(dialog).getByText("Connectors")).toBeInTheDocument();
@@ -127,7 +130,7 @@ describe("ConversationComposer connectors", () => {
       onSaveGitLabConnectorConfig,
     });
 
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Add content" }));
     const gitlabRow = screen.getByText("GitLab").closest(".connector-provider-row") as HTMLElement;
     await user.click(within(gitlabRow).getByRole("button", { name: "Connect" }));
     await user.type(screen.getByLabelText("GitLab Base URL"), "https://gitlab.example.com/");
@@ -141,13 +144,14 @@ describe("ConversationComposer connectors", () => {
     expect(screen.queryByDisplayValue("glpat-secret")).not.toBeInTheDocument();
   });
 
-  it("places the add and send controls in one composer toolbar", () => {
+  it("places the add and send controls in one composer toolbar without visible shortcut copy", () => {
     const { container } = renderComposer();
 
     const row = container.querySelector(".composer-toolbar");
     expect(row).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByRole("button", { name: "Add" })).toHaveClass("composer-add-button");
+    expect(within(row as HTMLElement).getByRole("button", { name: "Add content" })).toHaveClass("composer-add-button");
     expect(within(row as HTMLElement).getByRole("button", { name: "Send" })).toHaveClass("composer-send-button");
+    expect(within(row as HTMLElement).getByText("Enter to send · Shift + Enter for a new line")).toHaveClass("sr-only");
     expect(container.querySelector(".composer-tip")).not.toBeInTheDocument();
   });
 
@@ -156,11 +160,11 @@ describe("ConversationComposer connectors", () => {
     const inputClick = vi.spyOn(HTMLInputElement.prototype, "click");
     renderComposer();
 
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Add content" }));
     await user.click(screen.getByRole("button", { name: "Files" }));
 
     expect(inputClick).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("dialog", { name: "Add" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Add content" })).not.toBeInTheDocument();
     inputClick.mockRestore();
   });
 
@@ -180,7 +184,8 @@ describe("ConversationComposer connectors", () => {
     const sendButton = screen.getByRole("button", { name: "Send" });
     expect(sendButton).not.toBeDisabled();
 
-    await user.click(screen.getByRole("button", { name: "Remove attachment" }));
+    expect(screen.getByText("note.txt")).toHaveAttribute("title", "note.txt");
+    await user.click(screen.getByRole("button", { name: "Remove attachment: note.txt" }));
     expect(onRemoveAttachment).toHaveBeenCalledWith(attachmentDrafts[0].id);
     await user.click(sendButton);
     expect(onSendMessage).toHaveBeenCalledTimes(1);
@@ -198,7 +203,8 @@ describe("ConversationComposer connectors", () => {
     expect(input).not.toBeNull();
     await user.upload(input!, pickerFile);
 
-    const editor = screen.getByLabelText("Message");
+    const editor = screen.getByRole("textbox", { name: "Message" });
+    expect(editor).toHaveAttribute("aria-multiline", "true");
     fireEvent.paste(editor, {
       clipboardData: {
         files: [pastedFile],
@@ -236,7 +242,7 @@ describe("ConversationComposer connectors", () => {
       onConnectConnector,
     });
 
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Add content" }));
     const githubRow = screen.getByText("GitHub").closest(".connector-provider-row") as HTMLElement;
     await user.click(within(githubRow).getByRole("button", { name: "Connect" }));
 
@@ -269,7 +275,7 @@ describe("ConversationComposer connectors", () => {
       onManageConnector,
     });
 
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Add content" }));
 
     expect(screen.getByText("octocat")).toBeInTheDocument();
     const connectedState = screen.getByText("Connected");

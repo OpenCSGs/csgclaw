@@ -17,8 +17,10 @@ const labels: Record<string, string> = {
   clearRoomMessagesConfirm: "Confirm clear",
   close: "Close",
   composerAdd: "Add",
+  composerAddContent: "Add content",
   composerConnectors: "Connectors",
   composerFiles: "Files",
+  composerTip: "Enter to send · Shift + Enter for a new line",
   connectorConnect: "Connect",
   connectorConnected: "Connected",
   connectorDisconnect: "Disconnect",
@@ -253,7 +255,7 @@ describe("FloatingChat manager prompts", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("button", { name: "Add content" }));
 
     expect(screen.getByText("hjwang")).toBeInTheDocument();
     expect(screen.getByText("Connected")).toBeInTheDocument();

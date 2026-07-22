@@ -23,7 +23,7 @@ export function AttachmentDraftStrip({
     return null;
   }
   return (
-    <div className="attachment-draft-strip" aria-label={t("attachments")}>
+    <div className="attachment-draft-strip" role="list" aria-label={t("attachments")}>
       {drafts.map((draft) => (
         <AttachmentDraftItem key={draft.id} draft={draft} t={t} onRemove={onRemove} />
       ))}
@@ -41,8 +41,9 @@ function AttachmentDraftItem({
   onRemove: (id: string) => void;
 }) {
   const previewURL = useObjectURL(isImageAttachment(draft) ? draft.file : null);
+  const removeLabel = t("removeAttachmentNamed", { name: draft.name });
   return (
-    <div className={`attachment-draft ${isImageAttachment(draft) ? "is-image" : ""}`.trim()}>
+    <div className={`attachment-draft ${isImageAttachment(draft) ? "is-image" : ""}`.trim()} role="listitem">
       {previewURL ? (
         <img className="attachment-draft-preview" src={previewURL} alt="" />
       ) : (
@@ -51,12 +52,14 @@ function AttachmentDraftItem({
         </span>
       )}
       <span className="attachment-draft-meta">
-        <span className="attachment-name truncate">{draft.name}</span>
+        <span className="attachment-name truncate" title={draft.name}>
+          {draft.name}
+        </span>
         <span className="attachment-size">{formatAttachmentSize(draft.sizeBytes)}</span>
       </span>
-      <Tooltip content={t("removeAttachment")}>
+      <Tooltip content={removeLabel}>
         <Button
-          aria-label={t("removeAttachment")}
+          aria-label={removeLabel}
           className="attachment-remove-button"
           iconOnly
           size="sm"

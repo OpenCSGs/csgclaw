@@ -648,6 +648,11 @@
   box-shadow: var(--focus-ring);
 }
 
+:root[data-theme="dark"] .composer .composer-box:focus-within {
+  border-color: color-mix(in srgb, var(--brand-500) 68%, var(--line));
+  box-shadow: var(--focus-ring);
+}
+
 .composer-working {
   min-width: 0;
   margin: 0 0 8px;
@@ -839,6 +844,11 @@ button.composer-working-item:active {
   outline: none;
 }
 
+.composer .composer-editor:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .composer-toolbar {
   display: flex;
   min-height: calc(var(--composer-send-control-size) + 8px);
@@ -882,10 +892,23 @@ button.composer-working-item:active {
 
 .attachment-draft-strip {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
   padding: 10px 12px 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.attachment-draft-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.attachment-draft-strip .attachment-draft {
+  flex: 0 0 min(220px, calc(100% - 8px));
+  max-width: min(220px, 100%);
 }
 
 .attachment-draft,

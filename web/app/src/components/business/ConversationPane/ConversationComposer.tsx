@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { ArrowUp, GitBranch, Paperclip, Plus } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
@@ -130,6 +130,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   const defaultGitLabStatus = useMemo(() => emptyGitLabConnectorStatus(), []);
   const gitlabStatus = gitlabConnectorStatus ?? defaultGitLabStatus;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerHelpId = useId();
   const sendDisabled = composerDisabled || (!draftText.trim() && attachmentDrafts.length === 0);
 
   function handleFiles(files: File[]) {
@@ -196,7 +197,11 @@ export const ConversationComposer = memo(function ConversationComposer({
             className={`composer-editor ${composerDisabled ? "disabled" : ""}`}
             contentEditable={composerDisabled ? "false" : "true"}
             suppressContentEditableWarning={true}
+            role="textbox"
+            aria-multiline="true"
             aria-label={t("inputPlaceholder")}
+            aria-describedby={composerHelpId}
+            aria-disabled={composerDisabled}
             onInput={onSyncComposer}
             onClick={onSyncComposer}
             onKeyDown={onComposerKeyDown}
@@ -253,6 +258,9 @@ export const ConversationComposer = memo(function ConversationComposer({
               event.currentTarget.value = "";
             }}
           />
+          <span id={composerHelpId} className="sr-only">
+            {t("composerTip")}
+          </span>
           <Tooltip content={t("send")}>
             <span>
               <Button
@@ -429,12 +437,12 @@ function ComposerAddMenu({
 
   return (
     <PopoverRoot>
-      <Tooltip content={t("composerAdd")}>
+      <Tooltip content={t("composerAddContent")}>
         <PopoverTrigger asChild>
           <span>
             <Button
               aria-haspopup="dialog"
-              aria-label={t("composerAdd")}
+              aria-label={t("composerAddContent")}
               className="composer-add-button"
               disabled={disabled}
               iconOnly
@@ -446,7 +454,7 @@ function ComposerAddMenu({
           </span>
         </PopoverTrigger>
       </Tooltip>
-      <PopoverContent aria-label={t("composerAdd")} className="composer-add-popover" role="dialog" side="top">
+      <PopoverContent aria-label={t("composerAddContent")} className="composer-add-popover" role="dialog" side="top">
         <section className="composer-add-section" aria-label={t("composerAdd")}>
           <div className="composer-add-section-label">{t("composerAdd")}</div>
           <PopoverClose asChild>
