@@ -268,7 +268,7 @@ function Ensure-WebDeps {
 function Invoke-TargetHelp {
     @(
         "scripts\build.cmd build                         - Windows wrapper; same as build with execution-policy bypass"
-        "powershell -File scripts/build.ps1 build        - build Web UI and binaries, install the Linux sandbox CLI under ~/.csgclaw/sandbox-tools"
+        "powershell -File scripts/build.ps1 build        - build Web UI and binaries, install host and Linux sandbox CLIs under ~/.csgclaw"
         "powershell -File scripts/build.ps1 build-all    - same as build"
         "powershell -File scripts/build.ps1 fmt          - format Go files"
         "powershell -File scripts/build.ps1 test         - run go test ./..."
@@ -276,6 +276,7 @@ function Invoke-TargetHelp {
         "powershell -File scripts/build.ps1 web-dev      - run Vite Web UI dev server"
         "powershell -File scripts/build.ps1 build-web    - build Web UI app into web/static-dist"
         "powershell -File scripts/build.ps1 build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli"
+        "powershell -File scripts/build.ps1 install-host-cli - build host-platform csgclaw-cli into ~/.csgclaw/bin"
         "powershell -File scripts/build.ps1 install-sandbox-cli - build Linux csgclaw-cli into ~/.csgclaw/sandbox-tools"
         "powershell -File scripts/build.ps1 run          - build, then run the server"
         "powershell -File scripts/build.ps1 package      - package the current platform"
@@ -386,6 +387,15 @@ function Invoke-TargetInstallSandboxCli {
     Invoke-GoBuild -OutputPath $script:SandboxCliBin -PackagePath "./cmd/csgclaw-cli" -Ldflags $script:CliLdflags -Env @{
         CGO_ENABLED = "0"
         GOOS        = "linux"
+        GOARCH      = $script:TargetArch
+    }
+}
+
+function Invoke-TargetInstallHostCli {
+    Ensure-Directory -Path $script:HostToolsDir
+    Invoke-GoBuild -OutputPath $script:HostCliBin -PackagePath "./cmd/csgclaw-cli" -Ldflags $script:CliLdflags -Env @{
+        CGO_ENABLED = $script:CgoEnabled
+        GOOS        = $script:TargetOs
         GOARCH      = $script:TargetArch
     }
 }
@@ -553,10 +563,17 @@ function Invoke-PackageRelease {
 
         if ($AppName -eq "csgclaw") {
             $sandboxCliDir = Join-Path (Split-Path -Parent $binaryOutput) "csgclaw_dir"
+            $hostCliDir = Join-Path $sandboxCliDir "host"
             Ensure-Directory -Path $sandboxCliDir
+            Ensure-Directory -Path $hostCliDir
             Invoke-GoBuild -OutputPath (Join-Path $sandboxCliDir "csgclaw-cli") -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
                 CGO_ENABLED = "0"
                 GOOS        = "linux"
+                GOARCH      = $Goarch
+            }
+            Invoke-GoBuild -OutputPath (Join-Path $hostCliDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $Goos)) -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
+                CGO_ENABLED = "0"
+                GOOS        = $Goos
                 GOARCH      = $Goarch
             }
         }
@@ -604,9 +621,10 @@ function Invoke-PackageRelease {
 }
 
 function Invoke-TargetBuild {
-    Write-Host "Starting full build: Web UI, host binaries, and Linux sandbox CLI."
+    Write-Host "Starting full build: Web UI, host binaries, managed host CLI, and Linux sandbox CLI."
     Invoke-TargetBuildWeb
     Invoke-TargetBuildServerBin
+    Invoke-TargetInstallHostCli
     Invoke-TargetInstallSandboxCli
     Write-Host "Build complete."
 }
@@ -641,10 +659,14 @@ function Invoke-TargetRelease {
     foreach ($spec in @(
             @{ App = "csgclaw"; Goos = "darwin"; Goarch = "arm64" }
             @{ App = "csgclaw-cli"; Goos = "darwin"; Goarch = "arm64" }
+            @{ App = "csgclaw"; Goos = "darwin"; Goarch = "amd64" }
+            @{ App = "csgclaw-cli"; Goos = "darwin"; Goarch = "amd64" }
             @{ App = "csgclaw"; Goos = "linux"; Goarch = "amd64" }
             @{ App = "csgclaw-cli"; Goos = "linux"; Goarch = "amd64" }
             @{ App = "csgclaw"; Goos = "linux"; Goarch = "arm64" }
             @{ App = "csgclaw-cli"; Goos = "linux"; Goarch = "arm64" }
+            @{ App = "csgclaw"; Goos = "windows"; Goarch = "amd64" }
+            @{ App = "csgclaw-cli"; Goos = "windows"; Goarch = "amd64" }
         )) {
         Invoke-PackageRelease -AppName $spec.App -Goos $spec.Goos -Goarch $spec.Goarch
     }
@@ -669,6 +691,8 @@ $script:HostGoos = Resolve-GoEnv -Name "GOOS"
 $script:HostGoarch = Resolve-GoEnv -Name "GOARCH"
 $script:TargetOs = Get-EnvOrDefault -Name "TARGET_OS" -Default $script:HostGoos
 $script:TargetArch = Get-EnvOrDefault -Name "TARGET_ARCH" -Default $script:HostGoarch
+$script:HostToolsDir = Get-EnvOrDefault -Name "HOST_TOOLS_DIR" -Default (Join-Path $HOME ".csgclaw/bin")
+$script:HostCliBin = Get-EnvOrDefault -Name "HOST_CLI_BIN" -Default (Join-Path $script:HostToolsDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $script:TargetOs))
 $script:GoBuildTags = Get-EnvOrDefault -Name "GO_BUILD_TAGS" -Default ""
 $script:PackageMode = Get-EnvOrDefault -Name "PACKAGE_MODE" -Default ""
 $script:IncludeBoxlite = Get-EnvOrDefault -Name "INCLUDE_BOXLITE" -Default ""
@@ -688,6 +712,7 @@ try {
         "web-dev" { Invoke-TargetWebDev }
         "build-web" { Invoke-TargetBuildWeb }
         "build-server-bin" { Invoke-TargetBuildServerBin }
+        "install-host-cli" { Invoke-TargetInstallHostCli }
         "install-sandbox-cli" { Invoke-TargetInstallSandboxCli }
         "build" { Invoke-TargetBuild }
         "build-all" { Invoke-TargetBuild }

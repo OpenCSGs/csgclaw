@@ -7,6 +7,7 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 LIB_DIR="${LIB_DIR:-$HOME/.local/lib/${APP}}"
 CSGCLAW_HOME="${CSGCLAW_HOME:-$HOME/.csgclaw}"
 SANDBOX_TOOLS_DIR="${SANDBOX_TOOLS_DIR:-${CSGCLAW_HOME}/sandbox-tools}"
+HOST_TOOLS_DIR="${HOST_TOOLS_DIR:-${CSGCLAW_HOME}/bin}"
 # All release metadata and downloads use this host (override per env if needed).
 MIRROR_HOST="${MIRROR_HOST:-https://csgclaw.opencsg.com}"
 BASE_URL="${BASE_URL:-${MIRROR_HOST}/releases}"
@@ -101,7 +102,7 @@ main() {
   need_cmd mktemp
   need_cmd install
 
-  local os arch version archive_name download_url archive_path extracted_path bundle_path bundle_bin_path bundle_cli_path install_root
+  local os arch version archive_name download_url archive_path extracted_path bundle_path bundle_bin_path bundle_cli_path bundle_host_cli_path install_root
   os="$(detect_os)"
   arch="$(detect_arch)"
   ensure_supported_platform "$os" "$arch"
@@ -124,6 +125,7 @@ main() {
   bundle_path="${TMPDIR_INSTALL}/${APP}"
   bundle_bin_path="${bundle_path}/bin/${APP}"
   bundle_cli_path="${bundle_path}/bin/csgclaw_dir/csgclaw-cli"
+  bundle_host_cli_path="${bundle_path}/bin/csgclaw_dir/host/csgclaw-cli"
 
   ensure_install_dir
   ensure_lib_dir
@@ -131,6 +133,10 @@ main() {
   if [ -f "$bundle_bin_path" ]; then
     if [ ! -f "$bundle_cli_path" ]; then
       echo "archive did not contain ${APP}/bin/csgclaw_dir/csgclaw-cli" >&2
+      exit 1
+    fi
+    if [ ! -f "$bundle_host_cli_path" ]; then
+      echo "archive did not contain ${APP}/bin/csgclaw_dir/host/csgclaw-cli" >&2
       exit 1
     fi
     install_root="${LIB_DIR}/${version}"
@@ -151,9 +157,12 @@ main() {
 
   mkdir -p "$SANDBOX_TOOLS_DIR"
   install -m 0755 "$bundle_cli_path" "${SANDBOX_TOOLS_DIR}/csgclaw-cli"
+  mkdir -p "$HOST_TOOLS_DIR"
+  install -m 0755 "$bundle_host_cli_path" "${HOST_TOOLS_DIR}/csgclaw-cli"
 
   cat <<EOF
 Installed ${APP} ${version} to ${extracted_path}
+Installed host CLI to ${HOST_TOOLS_DIR}/csgclaw-cli
 Installed sandbox CLI to ${SANDBOX_TOOLS_DIR}/csgclaw-cli
 
 Next steps:

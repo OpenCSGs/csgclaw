@@ -13,7 +13,8 @@ The default build:
 
 1. Builds the Web UI into `web/static-dist/`.
 2. Builds `bin/csgclaw` and the host-platform `bin/csgclaw-cli`.
-3. Builds a static Linux `csgclaw-cli` for the current CPU architecture into `~/.csgclaw/sandbox-tools/csgclaw-cli`.
+3. Builds the host-platform `csgclaw-cli` into `~/.csgclaw/bin` for host runtimes such as Codex.
+4. Builds a static Linux `csgclaw-cli` for the current CPU architecture into `~/.csgclaw/sandbox-tools/csgclaw-cli`.
 
 `make build-all` is retained as an alias of `make build`. CSGClaw no longer builds derived PicoClaw/OpenClaw images locally.
 
@@ -22,12 +23,13 @@ Useful targets:
 | Target | Description |
 |---|---|
 | `make build-server-bin` | Build `bin/csgclaw` and host-platform `bin/csgclaw-cli` |
+| `make install-host-cli` | Build host-platform `csgclaw-cli` into `~/.csgclaw/bin` |
 | `make install-sandbox-cli` | Build Linux `csgclaw-cli` into `~/.csgclaw/sandbox-tools` |
 | `make run` | Build and run `csgclaw serve` |
 | `make fmt` | Format Go sources |
 | `make test` | Run `go test ./...` |
 
-Override the sandbox CLI destination with `SANDBOX_TOOLS_DIR=/path make install-sandbox-cli`.
+Override the managed destinations with `HOST_TOOLS_DIR=/path make install-host-cli` or `SANDBOX_TOOLS_DIR=/path make install-sandbox-cli`.
 
 ## Windows without make
 
@@ -36,6 +38,7 @@ On Windows hosts that do not have `make`, use the PowerShell build script:
 ```powershell
 .\scripts\build.cmd build
 .\scripts\build.cmd build-server-bin
+.\scripts\build.cmd install-host-cli
 .\scripts\build.cmd install-sandbox-cli
 .\scripts\build.cmd test
 ```
@@ -52,7 +55,8 @@ The default `build` target mirrors `make build`:
 
 1. Builds the Web UI into `web/static-dist/`.
 2. Builds `bin/csgclaw.exe` and the host-platform `bin/csgclaw-cli.exe`.
-3. Builds a Linux `csgclaw-cli` into `~/.csgclaw/sandbox-tools/csgclaw-cli`.
+3. Builds the Windows `csgclaw-cli.exe` into `~/.csgclaw/bin/csgclaw-cli.exe`.
+4. Builds a Linux `csgclaw-cli` into `~/.csgclaw/sandbox-tools/csgclaw-cli`.
 
 ## Runtime images
 
@@ -86,9 +90,11 @@ csgclaw/
     boxlite[.exe]                 # supported platforms only
     csgclaw_dir/
       csgclaw-cli                # Linux, same CPU architecture as the release
+      host/
+        csgclaw-cli[.exe]        # release host platform
 ```
 
-The installer copies the sandbox CLI to `~/.csgclaw/sandbox-tools/csgclaw-cli`. Runtime startup also synchronizes it from the installed bundle for upgrade compatibility.
+The installer copies the host CLI to `~/.csgclaw/bin/csgclaw-cli[.exe]` and the sandbox CLI to `~/.csgclaw/sandbox-tools/csgclaw-cli`. Runtime startup also synchronizes both files from the installed bundle for upgrade compatibility. Codex sessions prepend `~/.csgclaw/bin` to their host `PATH`.
 
 | Target | Description |
 |---|---|

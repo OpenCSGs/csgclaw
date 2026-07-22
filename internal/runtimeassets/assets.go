@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"csgclaw/internal/config"
@@ -13,17 +14,33 @@ import (
 
 const (
 	SandboxToolsDirName = "sandbox-tools"
+	HostToolsDirName    = "bin"
 	SandboxCLIName      = "csgclaw-cli"
+	HostCLIBundleDir    = "host"
 )
 
 type RefreshResult struct {
 	SandboxToolsDir string
 	SandboxCLIPath  string
 	SandboxCLISync  bool
+	HostToolsDir    string
+	HostCLIPath     string
+	HostCLISync     bool
 }
 
 func DefaultSandboxToolsDir() (string, error) {
 	return config.DefaultDomainDir(SandboxToolsDirName)
+}
+
+func DefaultHostToolsDir() (string, error) {
+	return config.DefaultDomainDir(HostToolsDirName)
+}
+
+func HostCLIName(goos string) string {
+	if strings.EqualFold(strings.TrimSpace(goos), "windows") {
+		return SandboxCLIName + ".exe"
+	}
+	return SandboxCLIName
 }
 
 func RefreshFromCurrentExecutable() (RefreshResult, error) {
@@ -38,10 +55,10 @@ func RefreshFromCurrentExecutable() (RefreshResult, error) {
 		if err != nil {
 			return RefreshResult{}, err
 		}
-		if result.SandboxCLISync {
+		if result.SandboxCLISync || result.HostCLISync {
 			return result, nil
 		}
-		if result.SandboxToolsDir != "" {
+		if result.SandboxToolsDir != "" || result.HostToolsDir != "" {
 			last = result
 		}
 	}
@@ -57,17 +74,31 @@ func RefreshFromBundle(bundleRoot string) (RefreshResult, error) {
 	if err != nil {
 		return RefreshResult{}, err
 	}
-	result := RefreshResult{SandboxToolsDir: toolsDir}
-	source := filepath.Join(bundleRoot, "bin", "csgclaw_dir", SandboxCLIName)
-	if info, err := os.Stat(source); err != nil || !info.Mode().IsRegular() {
-		return result, nil
-	}
-	target := filepath.Join(toolsDir, SandboxCLIName)
-	if err := SyncFile(source, target, 0o755); err != nil {
+	hostToolsDir, err := DefaultHostToolsDir()
+	if err != nil {
 		return RefreshResult{}, err
 	}
-	result.SandboxCLIPath = target
-	result.SandboxCLISync = true
+	result := RefreshResult{SandboxToolsDir: toolsDir, HostToolsDir: hostToolsDir}
+	source := filepath.Join(bundleRoot, "bin", "csgclaw_dir", SandboxCLIName)
+	if info, err := os.Stat(source); err == nil && info.Mode().IsRegular() {
+		target := filepath.Join(toolsDir, SandboxCLIName)
+		if err := SyncFile(source, target, 0o755); err != nil {
+			return RefreshResult{}, err
+		}
+		result.SandboxCLIPath = target
+		result.SandboxCLISync = true
+	}
+
+	hostCLIName := HostCLIName(runtime.GOOS)
+	hostSource := filepath.Join(bundleRoot, "bin", "csgclaw_dir", HostCLIBundleDir, hostCLIName)
+	if info, err := os.Stat(hostSource); err == nil && info.Mode().IsRegular() {
+		hostTarget := filepath.Join(hostToolsDir, hostCLIName)
+		if err := SyncFile(hostSource, hostTarget, 0o755); err != nil {
+			return RefreshResult{}, err
+		}
+		result.HostCLIPath = hostTarget
+		result.HostCLISync = true
+	}
 	return result, nil
 }
 

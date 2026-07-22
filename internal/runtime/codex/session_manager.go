@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -80,6 +81,7 @@ func buildSessionEnv(spec SessionSpec) []string {
 		}
 		envMap[key] = value
 	}
+	prependSessionPath(envMap, spec.HostToolsDir)
 	keys := make([]string, 0, len(envMap))
 	for key := range envMap {
 		keys = append(keys, key)
@@ -89,6 +91,30 @@ func buildSessionEnv(spec SessionSpec) []string {
 		out = append(out, key+"="+envMap[key])
 	}
 	return out
+}
+
+func prependSessionPath(envMap map[string]string, dir string) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return
+	}
+	current, found := envMap["PATH"]
+	for key, value := range envMap {
+		if key == "PATH" || !strings.EqualFold(key, "PATH") {
+			continue
+		}
+		if !found {
+			current = value
+			found = true
+		}
+		delete(envMap, key)
+	}
+	current = strings.TrimSpace(current)
+	if current == "" {
+		envMap["PATH"] = dir
+		return
+	}
+	envMap["PATH"] = dir + string(filepath.ListSeparator) + current
 }
 
 func shouldOmitInheritedSessionEnvKey(key string) bool {

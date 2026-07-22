@@ -156,9 +156,16 @@ fi
 
 if [ "$APP" = "csgclaw" ]; then
   sandbox_cli_dir="${stage_dir}/csgclaw_dir"
-  mkdir -p "$sandbox_cli_dir"
+  host_cli_dir="${sandbox_cli_dir}/host"
+  host_cli_name="csgclaw-cli"
+  if [ "$GOOS_TARGET" = "windows" ]; then
+    host_cli_name="csgclaw-cli.exe"
+  fi
+  mkdir -p "$sandbox_cli_dir" "$host_cli_dir"
   env CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
     go build -ldflags "-s -w ${LDFLAGS}" -o "${sandbox_cli_dir}/csgclaw-cli" "${SANDBOX_CLI_CMD_PATH}"
+  env CGO_ENABLED=0 GOOS="$GOOS_TARGET" GOARCH="$GOARCH_TARGET" GOCACHE="$GOCACHE" \
+    go build -ldflags "-s -w ${LDFLAGS}" -o "${host_cli_dir}/${host_cli_name}" "${SANDBOX_CLI_CMD_PATH}"
 fi
 
 if [ "$APP" = "csgclaw" ] && [ "$INCLUDE_BOXLITE" = "1" ]; then

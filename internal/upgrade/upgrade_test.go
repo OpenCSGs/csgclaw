@@ -16,9 +16,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+
+	"csgclaw/internal/runtimeassets"
 )
 
 func TestClientCheckUpdateAvailable(t *testing.T) {
@@ -644,16 +647,18 @@ func TestClientInstallPreparedReplacesBundleFromSymlinkedExecutable(t *testing.T
 	assertFileContent(t, filepath.Join(installRoot, "bin", "boxlite"), "#!/bin/sh\n# new boxlite\n")
 }
 
-func TestClientInstallPreparedRefreshesSandboxCLI(t *testing.T) {
+func TestClientInstallPreparedRefreshesRuntimeCLIs(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	installParent := t.TempDir()
 	installRoot := writeBundleDir(t, installParent, "old")
 	preparedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
 		filepath.Join("csgclaw", "bin", "csgclaw"):                    "#!/bin/sh\n# new\n",
 		filepath.Join("csgclaw", "bin", "boxlite"):                    "#!/bin/sh\n# new boxlite\n",
 		filepath.Join("csgclaw", "bin", "csgclaw_dir", "csgclaw-cli"): "#!/bin/sh\n# new sandbox cli\n",
-		filepath.Join("csgclaw", "README.md"):                         "new",
+		filepath.Join("csgclaw", "bin", "csgclaw_dir", runtimeassets.HostCLIBundleDir, runtimeassets.HostCLIName(runtime.GOOS)): "#!/bin/sh\n# new host cli\n",
+		filepath.Join("csgclaw", "README.md"): "new",
 	})
 	client := Client{
 		ExecutablePath: func() (string, error) {
@@ -665,6 +670,7 @@ func TestClientInstallPreparedRefreshesSandboxCLI(t *testing.T) {
 		t.Fatalf("InstallPrepared() error = %v", err)
 	}
 	assertFileContent(t, filepath.Join(home, ".csgclaw", "sandbox-tools", "csgclaw-cli"), "#!/bin/sh\n# new sandbox cli\n")
+	assertFileContent(t, filepath.Join(home, ".csgclaw", "bin", runtimeassets.HostCLIName(runtime.GOOS)), "#!/bin/sh\n# new host cli\n")
 }
 
 func TestClientInstallPreparedReplacesWindowsBundle(t *testing.T) {
