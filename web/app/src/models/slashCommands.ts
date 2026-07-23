@@ -17,6 +17,19 @@ export type SlashPickerCandidate = {
   type: SlashPickerCandidateType;
 };
 
+const suggestedActionCommands: readonly SlashPickerCandidate[] = [
+  {
+    description: "建议创建智能体，不会自动执行",
+    name: "创建智能体",
+    type: "command",
+  },
+  {
+    description: "建议创建房间，不会自动执行",
+    name: "创建房间",
+    type: "command",
+  },
+];
+
 const slashCommandNamePattern = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const slashCommandOpenPattern = /^<slash-command(?:\s|>|\/)/;
 const slashCommandCloseTag = "</slash-command>";
@@ -99,6 +112,21 @@ export function renderSlashCommandPreviewText(content: unknown): string {
     return slashCommandText;
   }
   return String(content ?? "");
+}
+
+export function composerActionSuggestions(content: string): SlashPickerCandidate[] {
+  const normalized = String(content || "").trim();
+  if (!normalized || normalized.startsWith("/")) {
+    return [];
+  }
+  const result: SlashPickerCandidate[] = [];
+  if (/(创建|新建).{0,12}(智能体|agent)/iu.test(normalized)) {
+    result.push(suggestedActionCommands[0]);
+  }
+  if (/(创建|新建).{0,12}(房间|room)/iu.test(normalized)) {
+    result.push(suggestedActionCommands[1]);
+  }
+  return result;
 }
 
 export function isNewConversationSlashCommand(content: unknown): boolean {

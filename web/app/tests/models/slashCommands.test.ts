@@ -1,4 +1,5 @@
 import {
+  composerActionSuggestions,
   isNewConversationSlashCommand,
   parseSlashCommand,
   renderSlashCommandPreviewText,
@@ -26,5 +27,15 @@ describe("slash command parser", () => {
     expect(isNewConversationSlashCommand('<slash-command name="new" arg="conversation"></slash-command>')).toBe(true);
     expect(isNewConversationSlashCommand('<slash-command name="use-skill" arg="new"></slash-command>')).toBe(false);
     expect(isNewConversationSlashCommand("/new")).toBe(false);
+  });
+
+  it("suggests creation commands without executing natural-language actions", () => {
+    expect(composerActionSuggestions("帮我创建一个 dev 智能体")).toEqual([
+      expect.objectContaining({ name: "创建智能体", type: "command" }),
+    ]);
+    expect(composerActionSuggestions("新建一个项目房间")).toEqual([
+      expect.objectContaining({ name: "创建房间", type: "command" }),
+    ]);
+    expect(composerActionSuggestions("/创建房间")).toEqual([]);
   });
 });

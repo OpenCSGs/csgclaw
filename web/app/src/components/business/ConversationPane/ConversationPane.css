@@ -913,6 +913,7 @@ button.composer-working-item:active {
 
 .attachment-draft,
 .message-file-attachment {
+  position: relative;
   min-width: 0;
   max-width: min(280px, 100%);
   min-height: 44px;
@@ -926,6 +927,36 @@ button.composer-working-item:active {
   gap: 8px;
   align-items: center;
   text-decoration: none;
+}
+
+.attachment-draft {
+  grid-template-columns: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.attachment-draft-preview-link {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.attachment-draft-preview-link:hover .attachment-name,
+.attachment-draft-preview-link:focus-visible .attachment-name {
+  color: var(--primary);
+}
+
+.attachment-draft-preview-link:focus-visible {
+  border-radius: 6px;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.attachment-draft.is-failed {
+  border-color: color-mix(in srgb, var(--danger) 58%, var(--line));
 }
 
 .attachment-draft-preview,
@@ -954,9 +985,21 @@ button.composer-working-item:active {
 }
 
 .attachment-name {
+  display: flex;
   min-width: 0;
   font-size: 13px;
   font-weight: 650;
+  white-space: nowrap;
+}
+
+.attachment-name-stem {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.attachment-name-extension {
+  flex: 0 0 auto;
 }
 
 .attachment-size {
@@ -969,6 +1012,110 @@ button.composer-working-item:active {
   width: 28px;
   height: 28px;
   padding: 0;
+}
+
+.attachment-upload-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.attachment-upload-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 120ms linear;
+}
+
+.composer-toolbar-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.composer-send-state {
+  overflow: hidden;
+  max-width: 160px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-send-button.is-stopping {
+  background: var(--danger);
+}
+
+.composer-feedback-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 4px 6px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+.composer-action-suggestions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 6px;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+}
+
+.composer-action-suggestion {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  background: var(--field);
+  color: var(--primary-strong);
+  font: inherit;
+  cursor: pointer;
+}
+
+.composer-action-suggestion:hover,
+.composer-action-suggestion:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.composer-action-suggestions small {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .attachment-draft-strip .attachment-draft {
+    flex-basis: min(188px, calc(100% - 8px));
+    max-width: min(188px, 100%);
+  }
+
+  .composer-action-suggestions {
+    overflow-x: auto;
+  }
+
+  .composer-action-suggestions > span,
+  .composer-action-suggestions small {
+    display: none;
+  }
+
+  .composer-send-state {
+    max-width: 96px;
+  }
 }
 
 .message-attachments {

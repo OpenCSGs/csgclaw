@@ -69,4 +69,70 @@ describe("IM API", () => {
     expect(form.getAll("files")).toHaveLength(1);
     expect(new Headers(init?.headers).has("Content-Type")).toBe(false);
   });
+
+  it("reports multipart upload progress through XMLHttpRequest", async () => {
+    const progress: number[] = [];
+    const FakeXMLHttpRequest = createFakeXMLHttpRequest();
+    vi.stubGlobal("XMLHttpRequest", FakeXMLHttpRequest);
+
+    const request = sendMessageRequest(
+      {
+        room_id: "room-1",
+        sender_id: "user-admin",
+        content: "",
+        attachments: [new File(["hello"], "note.txt", { type: "text/plain" })],
+      },
+      { onUploadProgress: (value) => progress.push(value) },
+    );
+
+    const xhr = FakeXMLHttpRequest.latest;
+    xhr.upload.emit("progress", { lengthComputable: true, loaded: 5, total: 10 });
+    xhr.status = 201;
+    xhr.responseText = JSON.stringify({ id: "msg-1", content: "", attachments: [] });
+    xhr.emit("load", {});
+
+    await expect(request).resolves.toMatchObject({ id: "msg-1" });
+    expect(progress).toEqual([0, 50]);
+    expect(xhr.body).toBeInstanceOf(FormData);
+  });
 });
+
+function createFakeXMLHttpRequest() {
+  class FakeEventTarget {
+    private listeners = new Map<string, Array<(event: unknown) => void>>();
+
+    addEventListener(type: string, listener: (event: unknown) => void): void {
+      this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+    }
+
+    emit(type: string, event: unknown): void {
+      this.listeners.get(type)?.forEach((listener) => listener(event));
+    }
+  }
+
+  return class FakeXMLHttpRequest extends FakeEventTarget {
+    static latest: InstanceType<typeof FakeXMLHttpRequest>;
+    body: Document | XMLHttpRequestBodyInit | null = null;
+    responseText = "";
+    status = 0;
+    statusText = "";
+    upload = new FakeEventTarget();
+
+    constructor() {
+      super();
+      FakeXMLHttpRequest.latest = this;
+    }
+
+    abort(): void {
+      this.emit("abort", {});
+    }
+
+    open(): void {}
+
+    send(body: Document | XMLHttpRequestBodyInit | null): void {
+      this.body = body;
+    }
+
+    setRequestHeader(): void {}
+  };
+}

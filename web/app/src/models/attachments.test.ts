@@ -7,6 +7,7 @@ import {
   MAX_ATTACHMENT_MESSAGE_BYTES,
   MAX_ATTACHMENTS_PER_MESSAGE,
   selectAttachmentFiles,
+  splitAttachmentFilename,
 } from "@/models/attachments";
 
 describe("attachment drafts", () => {
@@ -44,6 +45,22 @@ describe("attachment drafts", () => {
       [{ sizeBytes: MAX_ATTACHMENT_MESSAGE_BYTES - 1 }],
     );
     expect(totalLimited).toMatchObject({ files: [], totalTooLarge: true });
+  });
+
+  it("rejects duplicate files by normalized name and size", () => {
+    const existing = createAttachmentDrafts([new File(["same"], "Report.PDF", { type: "application/pdf" })]);
+    const result = selectAttachmentFiles([new File(["same"], "report.pdf", { type: "application/pdf" })], existing);
+
+    expect(result.files).toEqual([]);
+    expect(result.duplicateNames).toEqual(["report.pdf"]);
+  });
+
+  it("splits the final extension so it can remain visible when the stem truncates", () => {
+    expect(splitAttachmentFilename("very-long-report.final.pdf")).toEqual({
+      extension: ".pdf",
+      stem: "very-long-report.final",
+    });
+    expect(splitAttachmentFilename(".env")).toEqual({ extension: "", stem: ".env" });
   });
 });
 

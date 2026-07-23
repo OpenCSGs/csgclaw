@@ -162,12 +162,19 @@ export function ConversationPane({
   draftSegments,
   draftText,
   attachmentDrafts,
+  removedAttachmentName,
+  sendError,
+  sendProgress,
+  sendStatus,
   mentionableUsersByName,
   onSyncComposer,
   onComposerKeyDown,
   onComposerCompositionStart,
   onComposerCompositionEnd,
   onSendMessage,
+  onRetrySend,
+  onStopSend,
+  onUndoRemoveAttachment,
   onAddAttachments,
   onRemoveAttachment,
   composerError,
@@ -428,6 +435,10 @@ export function ConversationPane({
           draftSegments={draftSegments}
           draftText={draftText}
           attachmentDrafts={attachmentDrafts}
+          removedAttachmentName={removedAttachmentName}
+          sendError={sendError}
+          sendProgress={sendProgress}
+          sendStatus={sendStatus}
           editorRef={editorRef}
           managerProfile={managerProfile}
           managerProvider={managerProvider}
@@ -451,9 +462,12 @@ export function ConversationPane({
           onDisconnectGitLabConnector={onDisconnectGitLabConnector}
           onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
+          onRetrySend={onRetrySend}
           onSaveConnectorConfig={onSaveConnectorConfig}
           onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}
           onSendMessage={onSendMessage}
+          onStopSend={onStopSend}
+          onUndoRemoveAttachment={onUndoRemoveAttachment}
           onRemoveAttachment={onRemoveAttachment}
           onSyncComposer={onSyncComposer}
           onWorkingAction={handleOpenActivityPanel}

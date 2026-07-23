@@ -88,6 +88,24 @@ type ComposerMentionState = {
 type DraftsByConversationId = Record<string, ComposerSegment[]>;
 type DraftsByThreadKey = Record<string, ComposerSegment[]>;
 type AttachmentDraftsByKey = Record<string, AttachmentDraft[]>;
+type ComposerSendState = {
+  error: string;
+  progress: number;
+  status: "failed" | "idle" | "sending";
+};
+type ComposerSendStatesByKey = Record<string, ComposerSendState>;
+type RemovedAttachment = {
+  draft: AttachmentDraft;
+  index: number;
+  removedAt: number;
+};
+type RemovedAttachmentsByKey = Record<string, RemovedAttachment>;
+
+const idleComposerSendState: ComposerSendState = {
+  error: "",
+  progress: 0,
+  status: "idle",
+};
 
 type OpenCreateRoomOptions = {
   description?: string;
@@ -146,6 +164,9 @@ function updateAttachmentDrafts(
 }
 
 function attachmentSelectionError(selection: AttachmentSelectionResult, t: TranslateFn): string {
+  if (selection.duplicateNames.length > 0) {
+    return t("attachmentDuplicate", { name: selection.duplicateNames.join("、") });
+  }
   if (selection.fileTooLarge) {
     return t("attachmentTooLarge", { size: formatAttachmentSize(MAX_ATTACHMENT_FILE_BYTES) });
   }
@@ -216,6 +237,12 @@ export function useConversationController({
   const [threadDraftsByKey, setThreadDraftsByKey] = useState<DraftsByThreadKey>({});
   const [attachmentDraftsByConversationId, setAttachmentDraftsByConversationId] = useState<AttachmentDraftsByKey>({});
   const [threadAttachmentDraftsByKey, setThreadAttachmentDraftsByKey] = useState<AttachmentDraftsByKey>({});
+  const [composerSendStatesByConversationId, setComposerSendStatesByConversationId] = useState<ComposerSendStatesByKey>(
+    {},
+  );
+  const [removedAttachmentsByConversationId, setRemovedAttachmentsByConversationId] = useState<RemovedAttachmentsByKey>(
+    {},
+  );
   const [activeThreadRootID, setActiveThreadRootID] = useState("");
   const [activeThreadView, setActiveThreadView] = useState<ThreadView | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
@@ -244,6 +271,7 @@ export function useConversationController({
   const [memberActionError, setMemberActionError] = useState("");
   const [composerError, setComposerError] = useState("");
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const sendAbortControllersRef = useRef<Record<string, AbortController>>({});
   const composerIsComposingRef = useRef(false);
   const composerJustEndedCompositionRef = useRef(false);
   const messageListRef = useRef<HTMLElement | null>(null);
@@ -394,6 +422,8 @@ export function useConversationController({
     () => attachmentDraftsByConversationId[activeConversationId] ?? [],
     [attachmentDraftsByConversationId, activeConversationId],
   );
+  const composerSendState = composerSendStatesByConversationId[activeConversationId] ?? idleComposerSendState;
+  const removedAttachment = removedAttachmentsByConversationId[activeConversationId];
   const slashPickerEnabled = Boolean((hasActiveConversationAgent || logAgent?.id) && !slashPickerDismissed);
   const slashPickerState = useMemo(
     () =>
@@ -438,6 +468,23 @@ export function useConversationController({
   const threadSlashPickerActive = threadSlashPickerState.active;
   const threadSlashCandidates = threadSlashPickerState.candidates;
   const isAnySlashPickerNeeded = slashPickerActive || threadSlashPickerActive;
+
+  useEffect(() => {
+    if (!activeConversationId || !removedAttachment) {
+      return;
+    }
+    const remaining = Math.max(0, 5000 - (Date.now() - removedAttachment.removedAt));
+    const timeout = window.setTimeout(() => {
+      setRemovedAttachmentsByConversationId((current) => {
+        if (current[activeConversationId] !== removedAttachment) {
+          return current;
+        }
+        const { [activeConversationId]: _removed, ...rest } = current;
+        return rest;
+      });
+    }, remaining);
+    return () => window.clearTimeout(timeout);
+  }, [activeConversationId, removedAttachment]);
 
   useEffect(() => {
     activeThreadKeyRef.current = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
@@ -743,23 +790,70 @@ export function useConversationController({
     if (!data?.current_user_id || !activeConversation || (!draftText.trim() && attachmentDrafts.length === 0)) {
       return;
     }
+    if (composerSendState.status === "sending") {
+      return;
+    }
 
+    const roomID = activeConversation.id;
+    const senderID = data.current_user_id;
+    const attachments = attachmentDrafts.map((draft) => draft.file);
     setComposerError("");
     const serializedDraft = serializeComposerSegments(draftSegments);
     const content = normalizeSlashShorthandForPayload(serializedDraft);
+    const abortController = new AbortController();
+    sendAbortControllersRef.current[roomID]?.abort();
+    sendAbortControllersRef.current[roomID] = abortController;
+    setComposerSendStatesByConversationId((current) => ({
+      ...current,
+      [roomID]: { error: "", progress: attachments.length > 0 ? 0 : 100, status: "sending" },
+    }));
     try {
-      const created = await sendMessageRequest({
-        room_id: activeConversation.id,
-        sender_id: data.current_user_id,
-        content,
-        attachments: attachmentDrafts.map((draft) => draft.file),
-      });
-      setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
+      const created = await sendMessageRequest(
+        {
+          room_id: roomID,
+          sender_id: senderID,
+          content,
+          attachments,
+        },
+        {
+          signal: abortController.signal,
+          onUploadProgress:
+            attachments.length > 0
+              ? (progress) => {
+                  setComposerSendStatesByConversationId((current) => ({
+                    ...current,
+                    [roomID]: { error: "", progress, status: "sending" },
+                  }));
+                }
+              : undefined,
+        },
+      );
+      setBootstrapData((current) => appendMessageToData(current, roomID, created));
       messageListAutoScroll.follow("smooth");
-      clearComposer();
+      clearComposer(roomID);
+      setComposerSendStatesByConversationId((current) => ({
+        ...current,
+        [roomID]: idleComposerSendState,
+      }));
     } catch (err) {
-      setComposerError(errorMessage(err, t("sendFailed")));
+      const message = isAbortError(err) ? t("sendStopped") : errorMessage(err, t("sendFailed"));
+      setComposerError(message);
+      setComposerSendStatesByConversationId((current) => ({
+        ...current,
+        [roomID]: { error: message, progress: current[roomID]?.progress ?? 0, status: "failed" },
+      }));
+    } finally {
+      if (sendAbortControllersRef.current[roomID] === abortController) {
+        delete sendAbortControllersRef.current[roomID];
+      }
     }
+  }
+
+  function stopSending(): void {
+    if (!activeConversationId) {
+      return;
+    }
+    sendAbortControllersRef.current[activeConversationId]?.abort();
   }
 
   function preserveMessagePosition(messageID: string) {
@@ -1219,18 +1313,27 @@ export function useConversationController({
     setComposerSlashQuery(getComposerSlashQueryAtSelection(editor));
   }
 
-  function clearComposer() {
+  function clearComposer(conversationID = activeConversationId) {
     const editor = editorRef.current;
-    if (editor) {
+    if (editor && conversationID === activeConversationId) {
       editor.innerHTML = "";
       editor.focus();
     }
-    if (activeConversationId) {
-      setDraftsByConversationId((current) => updateDrafts(current, activeConversationId, []));
-      setAttachmentDraftsByConversationId((current) => updateAttachmentDrafts(current, activeConversationId, []));
+    if (conversationID) {
+      setDraftsByConversationId((current) => updateDrafts(current, conversationID, []));
+      setAttachmentDraftsByConversationId((current) => updateAttachmentDrafts(current, conversationID, []));
+      setRemovedAttachmentsByConversationId((current) => {
+        if (!current[conversationID]) {
+          return current;
+        }
+        const { [conversationID]: _removed, ...rest } = current;
+        return rest;
+      });
     }
-    setComposerMentionState(null);
-    setComposerSlashQuery(null);
+    if (conversationID === activeConversationId) {
+      setComposerMentionState(null);
+      setComposerSlashQuery(null);
+    }
   }
 
   function addComposerAttachments(files: File[]): void {
@@ -1247,12 +1350,24 @@ export function useConversationController({
       const existing = current[activeConversationId] ?? [];
       return updateAttachmentDrafts(current, activeConversationId, [...existing, ...nextDrafts]);
     });
+    setComposerSendStatesByConversationId((current) => ({
+      ...current,
+      [activeConversationId]: idleComposerSendState,
+    }));
   }
 
   function removeComposerAttachment(id: string): void {
     if (!activeConversationId) {
       return;
     }
+    const index = attachmentDrafts.findIndex((draft) => draft.id === id);
+    if (index < 0) {
+      return;
+    }
+    setRemovedAttachmentsByConversationId((current) => ({
+      ...current,
+      [activeConversationId]: { draft: attachmentDrafts[index], index, removedAt: Date.now() },
+    }));
     setAttachmentDraftsByConversationId((current) =>
       updateAttachmentDrafts(
         current,
@@ -1260,6 +1375,33 @@ export function useConversationController({
         (current[activeConversationId] ?? []).filter((draft) => draft.id !== id),
       ),
     );
+    setComposerSendStatesByConversationId((current) => ({
+      ...current,
+      [activeConversationId]: idleComposerSendState,
+    }));
+  }
+
+  function undoRemoveComposerAttachment(): void {
+    if (!activeConversationId) {
+      return;
+    }
+    const removed = removedAttachmentsByConversationId[activeConversationId];
+    if (!removed) {
+      return;
+    }
+    setAttachmentDraftsByConversationId((current) => {
+      const existing = current[activeConversationId] ?? [];
+      const insertAt = Math.max(0, Math.min(removed.index, existing.length));
+      return updateAttachmentDrafts(current, activeConversationId, [
+        ...existing.slice(0, insertAt),
+        removed.draft,
+        ...existing.slice(insertAt),
+      ]);
+    });
+    setRemovedAttachmentsByConversationId((current) => {
+      const { [activeConversationId]: _removed, ...rest } = current;
+      return rest;
+    });
   }
 
   function addThreadAttachments(files: File[]): void {
@@ -1379,14 +1521,21 @@ export function useConversationController({
       draftSegments,
       draftText,
       attachmentDrafts,
+      removedAttachmentName: removedAttachment?.draft.name ?? "",
+      sendError: composerSendState.error,
+      sendProgress: composerSendState.progress,
+      sendStatus: composerSendState.status,
       onAddAttachments: addComposerAttachments,
       onRemoveAttachment: removeComposerAttachment,
+      onUndoRemoveAttachment: undoRemoveComposerAttachment,
       mentionableUsersByName,
       onSyncComposer: syncComposerFromEditor,
       onComposerKeyDown,
       onComposerCompositionStart,
       onComposerCompositionEnd,
       onSendMessage: sendMessage,
+      onRetrySend: sendMessage,
+      onStopSend: stopSending,
       composerError,
       messageActionBusy,
       messageActionFeedback,
@@ -1512,6 +1661,7 @@ function loadSlashSkillOptions(
 }
 
 const builtinSlashCommandNames = ["new"];
+const suggestedSlashCommandNames = ["创建智能体", "创建房间"];
 
 type SlashPickerStateInput = {
   draftText: string;
@@ -1546,8 +1696,16 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
         .filter((name) => fuzzySkillMatch(name, query ?? ""))
         .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
       ...input.skillOptions
-        .filter((skill) => !builtinSlashCommandNames.includes(skill.name) && fuzzySkillMatch(skill.name, query ?? ""))
+        .filter(
+          (skill) =>
+            !builtinSlashCommandNames.includes(skill.name) &&
+            !suggestedSlashCommandNames.includes(skill.name) &&
+            fuzzySkillMatch(skill.name, query ?? ""),
+        )
         .map((skill) => ({ description: skill.description, name: skill.name, type: "skill" as const })),
+      ...suggestedSlashCommandNames
+        .filter((name) => fuzzySkillMatch(name, query ?? ""))
+        .map((name) => ({ description: slashCommandDescription(name), name, type: "command" as const })),
     ],
   };
 }
@@ -1555,6 +1713,12 @@ export function buildSlashPickerState(input: SlashPickerStateInput): SlashPicker
 function slashCommandDescription(name: string): string {
   if (name === "new") {
     return "Start a new conversation";
+  }
+  if (name === "创建智能体") {
+    return "建议创建智能体，不会自动执行";
+  }
+  if (name === "创建房间") {
+    return "建议创建房间，不会自动执行";
   }
   return "";
 }
@@ -1652,6 +1816,18 @@ function parseSlashShorthandToPayload(text: string): { arg: string; body: string
     body: body.trim(),
     name: "use-skill",
   };
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError") ||
+    (error !== null &&
+      error !== undefined &&
+      typeof error === "object" &&
+      "name" in error &&
+      String((error as { name?: unknown }).name) === "AbortError")
+  );
 }
 
 function isValidSkillSlug(value: string): boolean {

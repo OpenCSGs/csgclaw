@@ -1,6 +1,6 @@
 import { memo, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
-import { ArrowUp, GitBranch, Paperclip, Plus } from "lucide-react";
+import { ArrowUp, GitBranch, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, TextInput, Tooltip } from "@/components/ui";
 import { IconImage } from "@/components/ui/Icons";
@@ -22,13 +22,14 @@ import {
 } from "@/models/connectors";
 import type { ConnectorConfigDraft, ConnectorStatus, GitLabConnectorConfigDraft } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
-import type { SlashPickerCandidate } from "@/models/slashCommands";
+import { composerActionSuggestions, type SlashPickerCandidate } from "@/models/slashCommands";
 import { MentionPicker } from "./MentionPicker";
 import { SlashPicker } from "./SlashPicker";
 import { AttachmentDraftStrip } from "./ConversationAttachments";
 import { filesFromDataTransfer } from "./attachmentFiles";
 import {
   ConversationWorkingActions,
+  type ComposerSendStatus,
   type ConversationWorkingAction,
   type ConversationWorkingParticipant,
   type MentionPickerUser,
@@ -50,6 +51,10 @@ export type ConversationComposerProps = {
   draftSegments: ComposerSegment[];
   draftText: string;
   attachmentDrafts?: AttachmentDraft[];
+  removedAttachmentName?: string;
+  sendError?: string;
+  sendProgress?: number;
+  sendStatus?: ComposerSendStatus;
   editorRef: RefObject<HTMLDivElement | null>;
   managerProfile?: AgentProfileLike | null;
   managerProvider: string;
@@ -67,9 +72,12 @@ export type ConversationComposerProps = {
   onDisconnectGitLabConnector?: () => VoidOrPromise;
   onManageConnector?: () => VoidOrPromise;
   onProviderLogin: (provider: string) => VoidOrPromise;
+  onRetrySend?: () => VoidOrPromise;
   onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => VoidOrPromise;
   onSaveGitLabConnectorConfig?: (draft: GitLabConnectorConfigDraft) => VoidOrPromise;
   onSendMessage: () => VoidOrPromise;
+  onStopSend?: () => void;
+  onUndoRemoveAttachment?: () => void;
   onRemoveAttachment?: (id: string) => void;
   onSyncComposer: () => void;
   onWorkingAction?: (participant?: ConversationWorkingParticipant) => void;
@@ -96,6 +104,10 @@ export const ConversationComposer = memo(function ConversationComposer({
   draftSegments,
   draftText,
   attachmentDrafts = [],
+  removedAttachmentName = "",
+  sendError = "",
+  sendProgress = 0,
+  sendStatus = "idle",
   editorRef,
   managerProfile,
   managerProvider,
@@ -119,10 +131,13 @@ export const ConversationComposer = memo(function ConversationComposer({
   onDisconnectGitLabConnector,
   onManageConnector,
   onProviderLogin,
+  onRetrySend,
   onSaveGitLabConnectorConfig,
   onRemoveAttachment = () => {},
   onSendMessage,
+  onStopSend,
   onSyncComposer,
+  onUndoRemoveAttachment,
   onWorkingAction,
 }: ConversationComposerProps) {
   const defaultConnectorStatus = useMemo(() => emptyGitHubConnectorStatus(), []);
@@ -131,10 +146,13 @@ export const ConversationComposer = memo(function ConversationComposer({
   const gitlabStatus = gitlabConnectorStatus ?? defaultGitLabStatus;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerHelpId = useId();
-  const sendDisabled = composerDisabled || (!draftText.trim() && attachmentDrafts.length === 0);
+  const isSending = sendStatus === "sending";
+  const interactionDisabled = composerDisabled || isSending;
+  const sendDisabled = interactionDisabled || (!draftText.trim() && attachmentDrafts.length === 0);
+  const actionSuggestions = useMemo(() => composerActionSuggestions(draftText), [draftText]);
 
   function handleFiles(files: File[]) {
-    if (composerDisabled || files.length === 0) {
+    if (interactionDisabled || files.length === 0) {
       return;
     }
     onAddAttachments(files);
@@ -171,7 +189,7 @@ export const ConversationComposer = memo(function ConversationComposer({
       <div
         className="composer-box"
         onDragOver={(event) => {
-          if (composerDisabled || filesFromDataTransfer(event.dataTransfer).length === 0) {
+          if (interactionDisabled || filesFromDataTransfer(event.dataTransfer).length === 0) {
             return;
           }
           event.preventDefault();
@@ -185,7 +203,13 @@ export const ConversationComposer = memo(function ConversationComposer({
           handleFiles(files);
         }}
       >
-        <AttachmentDraftStrip drafts={attachmentDrafts} t={t} onRemove={onRemoveAttachment} />
+        <AttachmentDraftStrip
+          drafts={attachmentDrafts}
+          progress={sendProgress}
+          status={sendStatus === "sending" ? "uploading" : sendStatus === "failed" ? "failed" : "idle"}
+          t={t}
+          onRemove={onRemoveAttachment}
+        />
         <div className="composer-editor-wrap">
           {draftSegments.length === 0 ? (
             <div className="composer-placeholder" aria-hidden="true">
@@ -194,14 +218,14 @@ export const ConversationComposer = memo(function ConversationComposer({
           ) : null}
           <div
             ref={editorRef}
-            className={`composer-editor ${composerDisabled ? "disabled" : ""}`}
-            contentEditable={composerDisabled ? "false" : "true"}
+            className={`composer-editor ${interactionDisabled ? "disabled" : ""}`}
+            contentEditable={interactionDisabled ? "false" : "true"}
             suppressContentEditableWarning={true}
             role="textbox"
             aria-multiline="true"
             aria-label={t("inputPlaceholder")}
             aria-describedby={composerHelpId}
-            aria-disabled={composerDisabled}
+            aria-disabled={interactionDisabled}
             onInput={onSyncComposer}
             onClick={onSyncComposer}
             onKeyDown={onComposerKeyDown}
@@ -230,11 +254,28 @@ export const ConversationComposer = memo(function ConversationComposer({
             }}
           />
         </div>
+        {actionSuggestions.length > 0 ? (
+          <div className="composer-action-suggestions" aria-label={t("suggestedActions")}>
+            <span>{t("suggestedActions")}</span>
+            {actionSuggestions.map((suggestion) => (
+              <button
+                key={suggestion.name}
+                type="button"
+                className="composer-action-suggestion"
+                title={suggestion.description}
+                onClick={() => onApplySlashCandidate(suggestion.name)}
+              >
+                /{suggestion.name}
+              </button>
+            ))}
+            <small>{t("suggestedActionsOnly")}</small>
+          </div>
+        ) : null}
         <div className="composer-toolbar">
           <ComposerAddMenu
             busyAction={connectorBusyAction}
             busyProvider={connectorBusyProvider}
-            disabled={composerDisabled}
+            disabled={composerDisabled || isSending}
             error={connectorError}
             pending={connectorPending}
             status={githubStatus}
@@ -261,24 +302,64 @@ export const ConversationComposer = memo(function ConversationComposer({
           <span id={composerHelpId} className="sr-only">
             {t("composerTip")}
           </span>
-          <Tooltip content={t("send")}>
-            <span>
-              <Button
-                variant="primary"
-                className="composer-send-button"
-                aria-label={t("send")}
-                disabled={sendDisabled}
-                iconOnly
-                size="lg"
-                onClick={onSendMessage}
-              >
-                <ArrowUp aria-hidden="true" size={22} strokeWidth={2.25} />
-              </Button>
-            </span>
-          </Tooltip>
+          <div className="composer-toolbar-actions">
+            {isSending ? (
+              <span className="composer-send-state" role="status" aria-live="polite">
+                {attachmentDrafts.length > 0
+                  ? t("sendingWithProgress", { progress: Math.round(sendProgress) })
+                  : t("sending")}
+              </span>
+            ) : null}
+            {sendStatus === "failed" && onRetrySend ? (
+              <Tooltip content={t("retrySend")}>
+                <Button
+                  aria-label={t("retrySend")}
+                  className="composer-retry-button"
+                  iconOnly
+                  size="sm"
+                  variant="tertiaryGray"
+                  onClick={onRetrySend}
+                >
+                  <RotateCcw aria-hidden="true" size={16} />
+                </Button>
+              </Tooltip>
+            ) : null}
+            <Tooltip content={isSending ? t("stopSending") : t("send")}>
+              <span>
+                <Button
+                  variant="primary"
+                  className={`composer-send-button${isSending ? " is-stopping" : ""}`}
+                  aria-label={isSending ? t("stopSending") : t("send")}
+                  disabled={isSending ? !onStopSend : sendDisabled}
+                  iconOnly
+                  size="lg"
+                  onClick={isSending ? onStopSend : onSendMessage}
+                >
+                  {isSending ? (
+                    <Square aria-hidden="true" size={16} fill="currentColor" />
+                  ) : (
+                    <ArrowUp aria-hidden="true" size={22} strokeWidth={2.25} />
+                  )}
+                </Button>
+              </span>
+            </Tooltip>
+          </div>
         </div>
       </div>
-      {composerError ? <div className="form-error composer-error">{composerError}</div> : null}
+      {removedAttachmentName && onUndoRemoveAttachment ? (
+        <div className="composer-feedback-row" role="status">
+          <span>{t("attachmentRemoved", { name: removedAttachmentName })}</span>
+          <Button size="sm" variant="tertiaryGray" onClick={onUndoRemoveAttachment}>
+            <Undo2 aria-hidden="true" size={14} />
+            {t("undo")}
+          </Button>
+        </div>
+      ) : null}
+      {composerError || sendError ? (
+        <div className="form-error composer-error" role="alert">
+          {sendError || composerError}
+        </div>
+      ) : null}
     </footer>
   );
 });
@@ -458,9 +539,15 @@ function ComposerAddMenu({
         <section className="composer-add-section" aria-label={t("composerAdd")}>
           <div className="composer-add-section-label">{t("composerAdd")}</div>
           <PopoverClose asChild>
-            <button type="button" className="composer-add-menu-item" onClick={onAddFiles}>
+            <button
+              type="button"
+              className="composer-add-menu-item"
+              aria-label={t("addAttachment")}
+              title={t("addAttachment")}
+              onClick={onAddFiles}
+            >
               <Paperclip aria-hidden="true" size={19} />
-              <span>{t("composerFiles")}</span>
+              <span>{t("addAttachment")}</span>
             </button>
           </PopoverClose>
         </section>

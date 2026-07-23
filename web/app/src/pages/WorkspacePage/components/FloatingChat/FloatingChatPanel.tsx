@@ -49,6 +49,10 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     draftSegments,
     draftText,
     attachmentDrafts,
+    removedAttachmentName,
+    sendError,
+    sendProgress,
+    sendStatus,
     editorRef,
     inviteActionLabel,
     locale,
@@ -85,9 +89,12 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onOpenThread,
     onPreviewUser,
     onProviderLogin,
+    onRetrySend,
     onRemoveAttachment,
     onRemoveThreadAttachment,
     onSendMessage,
+    onStopSend,
+    onUndoRemoveAttachment,
     onSendThreadReply,
     onSaveConnectorConfig,
     onSaveGitLabConnectorConfig,
@@ -294,6 +301,10 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           draftSegments={draftSegments}
           draftText={draftText}
           attachmentDrafts={attachmentDrafts}
+          removedAttachmentName={removedAttachmentName}
+          sendError={sendError}
+          sendProgress={sendProgress}
+          sendStatus={sendStatus}
           editorRef={editorRef}
           managerProfile={managerProfile}
           managerProvider={managerProvider}
@@ -317,9 +328,12 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           onDisconnectGitLabConnector={onDisconnectGitLabConnector}
           onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
+          onRetrySend={onRetrySend}
           onSaveConnectorConfig={onSaveConnectorConfig}
           onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}
           onSendMessage={onSendMessage}
+          onStopSend={onStopSend}
+          onUndoRemoveAttachment={onUndoRemoveAttachment}
           onRemoveAttachment={onRemoveAttachment}
           onSyncComposer={onSyncComposer}
         />

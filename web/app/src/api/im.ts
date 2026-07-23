@@ -1,4 +1,4 @@
-import { del, get, post } from "@/api/client";
+import { del, get, post, resolveRequestPath, type ApiError } from "@/api/client";
 import type { IMConversation, IMMessage, IMUser, MessageRelation, ThreadView } from "@/models/conversations";
 
 export type SendMessagePayload = {
@@ -7,6 +7,11 @@ export type SendMessagePayload = {
   relates_to?: MessageRelation | null;
   room_id: string;
   sender_id: string;
+};
+
+export type SendMessageRequestOptions = {
+  onUploadProgress?: (progress: number) => void;
+  signal?: AbortSignal;
 };
 
 export type FetchMessagesOptions = {
@@ -51,7 +56,10 @@ export type CreateUserPayload = Partial<IMUser> & {
   name: string;
 };
 
-export function sendMessageRequest(payload: SendMessagePayload): Promise<IMMessage> {
+export function sendMessageRequest(
+  payload: SendMessagePayload,
+  options: SendMessageRequestOptions = {},
+): Promise<IMMessage> {
   if (payload.attachments?.length) {
     const formData = new FormData();
     const { attachments, ...messagePayload } = payload;
@@ -59,9 +67,58 @@ export function sendMessageRequest(payload: SendMessagePayload): Promise<IMMessa
     attachments.forEach((file) => {
       formData.append("files", file, file.name);
     });
-    return post("api/v1/messages", undefined, { body: formData });
+    if (options.onUploadProgress) {
+      return postMessageFormDataWithProgress(formData, options);
+    }
+    return post("api/v1/messages", undefined, { body: formData, signal: options.signal });
   }
-  return post("api/v1/messages", payload);
+  return post("api/v1/messages", payload, { signal: options.signal });
+}
+
+function postMessageFormDataWithProgress(formData: FormData, options: SendMessageRequestOptions): Promise<IMMessage> {
+  return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(new DOMException("The request was aborted.", "AbortError"));
+      return;
+    }
+
+    const request = new XMLHttpRequest();
+    const abortRequest = () => request.abort();
+    request.open("POST", resolveRequestPath("api/v1/messages"));
+    request.setRequestHeader("Accept", "application/json");
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable || event.total <= 0) {
+        return;
+      }
+      options.onUploadProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    });
+    request.addEventListener("load", () => {
+      options.signal?.removeEventListener("abort", abortRequest);
+      if (request.status < 200 || request.status >= 300) {
+        reject({
+          status: request.status,
+          message: request.responseText.trim() || request.statusText,
+        } satisfies ApiError);
+        return;
+      }
+      try {
+        resolve(JSON.parse(request.responseText) as IMMessage);
+      } catch {
+        reject({ status: request.status, message: "Invalid message response." } satisfies ApiError);
+      }
+    });
+    request.addEventListener("error", () => {
+      options.signal?.removeEventListener("abort", abortRequest);
+      reject({ status: request.status, message: request.statusText || "Network request failed." } satisfies ApiError);
+    });
+    request.addEventListener("abort", () => {
+      options.signal?.removeEventListener("abort", abortRequest);
+      reject(new DOMException("The request was aborted.", "AbortError"));
+    });
+    options.signal?.addEventListener("abort", abortRequest, { once: true });
+    options.onUploadProgress?.(0);
+    request.send(formData);
+  });
 }
 
 export function fetchMessagesRequest(roomID: string, options: FetchMessagesOptions = {}): Promise<IMMessage[]> {
