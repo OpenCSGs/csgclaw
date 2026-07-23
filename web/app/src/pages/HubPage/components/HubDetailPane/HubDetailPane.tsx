@@ -223,6 +223,7 @@ type HubDetailPaneHub = {
     mcpStateLoading?: boolean;
     mcpMutationBusy?: boolean;
     mcpMutationError?: string;
+    mcpCreateError?: string;
     mcpCreateDialogOpen?: boolean;
     onMCPCreateDialogOpenChange?: (open: boolean) => void;
     selectedMCPServer?: MCPServer | null;
@@ -262,6 +263,7 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   mcpStateLoading: false,
   mcpMutationBusy: false,
   mcpMutationError: "",
+  mcpCreateError: "",
   mcpCreateDialogOpen: false,
   selectedMCPServer: null,
   selectedMCPServerName: "",
@@ -587,6 +589,7 @@ export function HubDetailPane({
     mcpStateLoading = false,
     mcpMutationBusy = false,
     mcpMutationError = "",
+    mcpCreateError = "",
     mcpCreateDialogOpen = false,
     onSelectWorkspaceFile,
     onToggleWorkspaceDir,
@@ -1286,8 +1289,8 @@ export function HubDetailPane({
               invalid={Boolean(mcpFormError)}
               minRows={12}
             />
-            {mcpFormError || mcpMutationError ? (
-              <div className="form-error hub-json-editor-error">{mcpFormError || mcpMutationError}</div>
+            {mcpFormError || mcpCreateError ? (
+              <div className="form-error hub-json-editor-error">{mcpFormError || mcpCreateError}</div>
             ) : null}
           </DialogBody>
           <DialogFooter className="hub-skill-delete-dialog-actions">

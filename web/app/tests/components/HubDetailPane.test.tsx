@@ -246,7 +246,13 @@ function renderHubSkillDetailPane() {
   );
 }
 
-function renderMCPDetailPane() {
+function renderMCPDetailPane({
+  mcpCreateDialogOpen = false,
+  mcpCreateError = "",
+}: {
+  mcpCreateDialogOpen?: boolean;
+  mcpCreateError?: string;
+} = {}) {
   const onUpdateMCP = vi.fn().mockResolvedValue(true);
   const mcp = {
     name: "grafana",
@@ -289,6 +295,8 @@ function renderMCPDetailPane() {
           skillTreeLoading: false,
           templates: [],
           mcpServers: [mcp],
+          mcpCreateDialogOpen,
+          mcpCreateError,
           mcpMutationBusy: false,
           mcpMutationError: "",
           mcpStateError: "",
@@ -400,5 +408,15 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onUpdateMCP).not.toHaveBeenCalled();
+  });
+
+  it("shows MCP creation errors only inside the creation dialog", () => {
+    renderMCPDetailPane({
+      mcpCreateDialogOpen: true,
+      mcpCreateError: "mcp server already exists: filesystem",
+    });
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("mcp server already exists: filesystem");
+    expect(screen.getAllByText("mcp server already exists: filesystem")).toHaveLength(1);
   });
 });
