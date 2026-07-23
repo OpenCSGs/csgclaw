@@ -6,12 +6,12 @@ import type { MessageAction, MessageActionFeedback, MessageLike } from "@/compon
 import { IconImage } from "@/components/ui/Icons";
 import { isAgentRunning, resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import {
-  agentMatchesUser,
   formatEventMessage,
   formatMessageTimestampParts,
   formatThreadReplyCount,
   isEventMessage,
   localIdentitiesMatch,
+  resolveAgentForUser,
   resolveUserByLocalIdentity,
   threadHasReplies,
   type IMConversation,
@@ -236,15 +236,7 @@ function resolveMessageAgent(
   senderID: string | null | undefined,
 ): AgentLike | null {
   const senderIdentity = String(senderID || "").trim();
-  return (
-    agents.find((item) => {
-      if (agentMatchesUser(item, user)) {
-        return true;
-      }
-      if (!senderIdentity || senderIdentity === user.id) {
-        return false;
-      }
-      return agentMatchesUser(item, { ...user, id: senderIdentity, user_id: user.id });
-    }) ?? null
-  );
+  const alternateUser =
+    senderIdentity && senderIdentity !== user.id ? { ...user, id: senderIdentity, user_id: user.id } : null;
+  return resolveAgentForUser(agents, user, alternateUser ? [alternateUser] : []);
 }

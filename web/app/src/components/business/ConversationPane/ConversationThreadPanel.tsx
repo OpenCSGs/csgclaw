@@ -26,10 +26,10 @@ import {
   type ComposerSegment,
 } from "@/models/composer";
 import {
-  agentMatchesUser,
   formatMessageTimestampParts,
   formatThreadReplyCount,
   isToolCallMessage,
+  resolveAgentForUser,
   resolveUserByLocalIdentity,
   type IMMessage,
   type IMUser,
@@ -626,15 +626,7 @@ function resolveThreadMessageAgent(
   senderID: string | null | undefined,
 ): AgentLike | null {
   const senderIdentity = String(senderID || "").trim();
-  return (
-    agents.find((item) => {
-      if (agentMatchesUser(item, user)) {
-        return true;
-      }
-      if (!senderIdentity || senderIdentity === user.id) {
-        return false;
-      }
-      return agentMatchesUser(item, { ...user, id: senderIdentity, user_id: user.id });
-    }) ?? null
-  );
+  const alternateUser =
+    senderIdentity && senderIdentity !== user.id ? { ...user, id: senderIdentity, user_id: user.id } : null;
+  return resolveAgentForUser(agents, user, alternateUser ? [alternateUser] : []);
 }
