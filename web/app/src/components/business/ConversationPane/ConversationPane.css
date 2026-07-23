@@ -890,6 +890,11 @@ button.composer-working-item:active {
   white-space: nowrap;
 }
 
+.attachment-draft-strip-shell {
+  position: relative;
+  min-width: 0;
+}
+
 .attachment-draft-strip {
   display: flex;
   flex-wrap: nowrap;
@@ -897,13 +902,85 @@ button.composer-working-item:active {
   min-width: 0;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  padding: 10px 12px 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  padding: 10px 12px 6px;
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
 }
 
 .attachment-draft-strip::-webkit-scrollbar {
-  display: none;
+  height: 6px;
+}
+
+.attachment-draft-strip::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .attachment-draft-strip:hover,
+  .attachment-draft-strip:focus-within {
+    scrollbar-color: color-mix(in srgb, var(--muted) 58%, transparent) transparent;
+  }
+
+  .attachment-draft-strip:hover::-webkit-scrollbar-thumb,
+  .attachment-draft-strip:focus-within::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted) 44%, transparent);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .attachment-draft-strip {
+    padding-bottom: 0;
+    scrollbar-width: none;
+  }
+
+  .attachment-draft-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .attachment-scroll-fade,
+  .attachment-scroll-button,
+  .btn.attachment-scroll-button {
+    display: none;
+  }
+}
+
+.attachment-scroll-fade {
+  position: absolute;
+  top: 0;
+  bottom: 6px;
+  width: 52px;
+  pointer-events: none;
+}
+
+.attachment-scroll-fade.is-previous {
+  left: 0;
+  background: linear-gradient(90deg, var(--surface) 18%, transparent);
+}
+
+.attachment-scroll-fade.is-next {
+  right: 0;
+  background: linear-gradient(270deg, var(--surface) 18%, transparent);
+}
+
+.attachment-scroll-button,
+.btn.attachment-scroll-button {
+  position: absolute;
+  top: calc(50% + 3px);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  transform: translateY(-50%);
+  box-shadow: var(--shadow-sm);
+  z-index: var(--z-page-popover);
+}
+
+.attachment-scroll-button.is-previous {
+  left: 4px;
+}
+
+.attachment-scroll-button.is-next {
+  right: 4px;
 }
 
 .attachment-draft-strip .attachment-draft {

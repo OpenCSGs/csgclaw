@@ -26,7 +26,7 @@ import type { SlashPickerCandidate } from "@/models/slashCommands";
 import { MentionPicker } from "./MentionPicker";
 import { SlashPicker } from "./SlashPicker";
 import { AttachmentDraftStrip } from "./ConversationAttachments";
-import { filesFromDataTransfer } from "./attachmentFiles";
+import { dataTransferHasFiles, filesFromDataTransfer } from "./attachmentFiles";
 import {
   ConversationWorkingActions,
   type ConversationWorkingAction,
@@ -171,10 +171,11 @@ export const ConversationComposer = memo(function ConversationComposer({
       <div
         className="composer-box"
         onDragOver={(event) => {
-          if (composerDisabled || filesFromDataTransfer(event.dataTransfer).length === 0) {
+          if (composerDisabled || !dataTransferHasFiles(event.dataTransfer)) {
             return;
           }
           event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
         }}
         onDrop={(event) => {
           const files = filesFromDataTransfer(event.dataTransfer);

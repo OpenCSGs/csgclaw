@@ -487,7 +487,7 @@ button.thread-message-avatar:focus-visible {
   grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
-.thread-composer .attachment-draft-strip {
+.thread-composer .attachment-draft-strip-shell {
   grid-column: 1 / -1;
 }
 

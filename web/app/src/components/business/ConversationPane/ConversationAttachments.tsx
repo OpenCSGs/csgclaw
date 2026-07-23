@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { FileText, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type WheelEvent } from "react";
+import { ChevronLeft, ChevronRight, FileText, X } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
 import { Button, Tooltip } from "@/components/ui";
 import {
@@ -19,14 +19,131 @@ export function AttachmentDraftStrip({
   t: TranslateFn;
   onRemove: (id: string) => void;
 }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [scrollState, setScrollState] = useState({
+    canScrollLeft: false,
+    canScrollRight: false,
+    overflowing: false,
+  });
+
+  const updateScrollState = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+    const nextState = {
+      canScrollLeft: element.scrollLeft > 1,
+      canScrollRight: element.scrollLeft < maxScrollLeft - 1,
+      overflowing: maxScrollLeft > 1,
+    };
+    setScrollState((current) =>
+      current.canScrollLeft === nextState.canScrollLeft &&
+      current.canScrollRight === nextState.canScrollRight &&
+      current.overflowing === nextState.overflowing
+        ? current
+        : nextState,
+    );
+  }, []);
+
+  useEffect(() => {
+    updateScrollState();
+    const element = scrollRef.current;
+    if (!element) {
+      return undefined;
+    }
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => updateScrollState());
+    observer?.observe(element);
+    window.addEventListener("resize", updateScrollState);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, [drafts.length, updateScrollState]);
+
   if (drafts.length === 0) {
     return null;
   }
+
+  function scrollByAttachment(direction: -1 | 1) {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    const firstAttachment = element.querySelector<HTMLElement>(".attachment-draft");
+    const gap = Number.parseFloat(window.getComputedStyle(element).columnGap || "0") || 0;
+    const attachmentWidth = firstAttachment?.getBoundingClientRect().width || Math.max(element.clientWidth * 0.75, 160);
+    element.scrollLeft += direction * (attachmentWidth + gap);
+    updateScrollState();
+  }
+
+  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+    const element = scrollRef.current;
+    if (!element || !scrollState.overflowing || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+      return;
+    }
+    const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+    const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, element.scrollLeft + event.deltaY));
+    if (nextScrollLeft === element.scrollLeft) {
+      return;
+    }
+    event.preventDefault();
+    element.scrollLeft = nextScrollLeft;
+    updateScrollState();
+  }
+
+  const shellClassName = [
+    "attachment-draft-strip-shell",
+    scrollState.canScrollLeft ? "can-scroll-left" : "",
+    scrollState.canScrollRight ? "can-scroll-right" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className="attachment-draft-strip" role="list" aria-label={t("attachments")}>
-      {drafts.map((draft) => (
-        <AttachmentDraftItem key={draft.id} draft={draft} t={t} onRemove={onRemove} />
-      ))}
+    <div className={shellClassName}>
+      <div
+        ref={scrollRef}
+        className="attachment-draft-strip"
+        role="list"
+        aria-label={t("attachments")}
+        onScroll={updateScrollState}
+        onWheel={handleWheel}
+      >
+        {drafts.map((draft) => (
+          <AttachmentDraftItem key={draft.id} draft={draft} t={t} onRemove={onRemove} />
+        ))}
+      </div>
+      {scrollState.canScrollLeft ? <span className="attachment-scroll-fade is-previous" aria-hidden="true" /> : null}
+      {scrollState.canScrollRight ? <span className="attachment-scroll-fade is-next" aria-hidden="true" /> : null}
+      {scrollState.canScrollLeft ? (
+        <Tooltip content={t("attachmentsScrollPrevious")}>
+          <Button
+            aria-label={t("attachmentsScrollPrevious")}
+            className="attachment-scroll-button is-previous"
+            iconOnly
+            size="sm"
+            variant="secondaryGray"
+            onClick={() => scrollByAttachment(-1)}
+          >
+            <ChevronLeft aria-hidden="true" size={16} />
+          </Button>
+        </Tooltip>
+      ) : null}
+      {scrollState.canScrollRight ? (
+        <Tooltip content={t("attachmentsScrollNext")}>
+          <Button
+            aria-label={t("attachmentsScrollNext")}
+            className="attachment-scroll-button is-next"
+            iconOnly
+            size="sm"
+            variant="secondaryGray"
+            onClick={() => scrollByAttachment(1)}
+          >
+            <ChevronRight aria-hidden="true" size={16} />
+          </Button>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }

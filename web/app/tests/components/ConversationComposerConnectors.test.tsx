@@ -1,5 +1,5 @@
 import { createRef } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationComposer } from "@/components/business/ConversationPane/ConversationComposer";
 import type { ConversationComposerProps } from "@/components/business/ConversationPane/ConversationComposer";
@@ -33,6 +33,8 @@ const t: TranslateFn = (key, params) => {
     inputPlaceholder: "Message",
     addAttachment: "Add attachment",
     attachments: "Attachments",
+    attachmentsScrollPrevious: "View previous attachments",
+    attachmentsScrollNext: "View more attachments",
     removeAttachment: "Remove attachment",
     removeAttachmentNamed: `Remove attachment: ${params?.name ?? ""}`,
     composerTip: "Enter to send · Shift + Enter for a new line",
@@ -191,6 +193,39 @@ describe("ConversationComposer connectors", () => {
     expect(onSendMessage).toHaveBeenCalledTimes(1);
   });
 
+  it("offers mouse, keyboard, and wheel navigation when attachments overflow", async () => {
+    const user = userEvent.setup();
+    const attachmentDrafts = createAttachmentDrafts([
+      new File(["one"], "one.txt", { type: "text/plain" }),
+      new File(["two"], "two.txt", { type: "text/plain" }),
+      new File(["three"], "three.txt", { type: "text/plain" }),
+    ]);
+    const { container } = renderComposer({ attachmentDrafts });
+    const strip = container.querySelector<HTMLElement>(".attachment-draft-strip");
+    expect(strip).not.toBeNull();
+    Object.defineProperties(strip!, {
+      clientWidth: { configurable: true, value: 240 },
+      scrollLeft: { configurable: true, value: 0, writable: true },
+      scrollWidth: { configurable: true, value: 700 },
+    });
+
+    fireEvent.scroll(strip!);
+    expect(screen.getByRole("button", { name: "View more attachments" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View previous attachments" })).not.toBeInTheDocument();
+    expect(container.querySelector(".attachment-scroll-fade.is-next")).toBeInTheDocument();
+    expect(container.querySelector(".attachment-scroll-fade.is-previous")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "View more attachments" }));
+    expect(strip!.scrollLeft).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "View previous attachments" })).toBeInTheDocument();
+    expect(container.querySelector(".attachment-scroll-fade.is-previous")).toBeInTheDocument();
+
+    const scrollLeftBeforeWheel = strip!.scrollLeft;
+    const wheelEvent = createEvent.wheel(strip!, { cancelable: true, deltaX: 0, deltaY: 40 });
+    fireEvent(strip!, wheelEvent);
+    expect(strip!.scrollLeft).toBeGreaterThan(scrollLeftBeforeWheel);
+  });
+
   it("accepts files from the picker, paste, and drag and drop", async () => {
     const user = userEvent.setup();
     const onAddAttachments = vi.fn();
@@ -215,6 +250,17 @@ describe("ConversationComposer connectors", () => {
 
     const composerBox = container.querySelector<HTMLElement>(".composer-box");
     expect(composerBox).not.toBeNull();
+    const dragData = {
+      dropEffect: "none",
+      files: [],
+      items: [],
+      types: ["Files"],
+    };
+    const dragOverEvent = createEvent.dragOver(composerBox!, { dataTransfer: dragData });
+    fireEvent(composerBox!, dragOverEvent);
+    expect(dragOverEvent.defaultPrevented).toBe(true);
+    expect(dragData.dropEffect).toBe("copy");
+
     fireEvent.drop(composerBox!, {
       dataTransfer: {
         files: [droppedFile],
