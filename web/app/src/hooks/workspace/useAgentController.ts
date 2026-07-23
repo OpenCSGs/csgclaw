@@ -65,6 +65,7 @@ import {
   draftToProfile,
   ensureNotifierPullSubscriptionDraft,
   feishuAgentParticipant,
+  isAgentRuntimeUnavailable,
   isAgentRunning,
   isManagerAgent,
   isNotificationBotAgent,
@@ -534,7 +535,8 @@ export function useAgentController({
     ({ currentLocation, nextLocation }) =>
       agentPageHasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname,
   );
-  const managerRuntimeUnavailable = bootstrapConfig?.manager_runtime?.installed === false;
+  const managerRuntimeUnavailable =
+    bootstrapConfig?.manager_runtime?.installed === false || isAgentRuntimeUnavailable(managerProfile);
   const managerRuntimeWarning = managerRuntimeUnavailable
     ? String(
         bootstrapConfig?.manager_runtime?.message ||

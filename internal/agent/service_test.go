@@ -5554,6 +5554,41 @@ func TestListContextStopsBlockedRuntimeStatusHydration(t *testing.T) {
 	}
 }
 
+func TestListContextMarksDockerDaemonUnavailable(t *testing.T) {
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			info: func(context.Context, agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{}, fmt.Errorf("inspect sandbox: docker exited with code 1: error during connect: open //./pipe/docker_engine: The system cannot find the file specified")
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["agent-alice"] = Agent{
+		ID:          "agent-alice",
+		Name:        "alice",
+		Role:        RoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Status:      string(sandbox.StateRunning),
+		CreatedAt:   time.Date(2026, 4, 1, 11, 0, 0, 0, time.UTC),
+	}
+
+	got := svc.ListContext(context.Background())
+
+	if len(got) != 1 {
+		t.Fatalf("ListContext() len = %d, want 1", len(got))
+	}
+	if got[0].Status != StatusRuntimeUnavailable {
+		t.Fatalf("ListContext()[0].Status = %q, want %q", got[0].Status, StatusRuntimeUnavailable)
+	}
+}
+
 func TestIsSandboxRuntimeContentionRecognizesBoxLiteLockErrors(t *testing.T) {
 	cases := []struct {
 		name string

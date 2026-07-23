@@ -904,6 +904,9 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
   if (normalized === "profile_incomplete") {
     return t("offline");
   }
+  if (normalized === "runtime_unavailable") {
+    return t("agentStatusUnknown");
+  }
   if (normalized === "failed" || normalized === "error") {
     return t("agentStatusFailed");
   }
@@ -911,6 +914,25 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
     return t("agentStatusDone");
   }
   return t("agentStatusUnknown");
+}
+
+export function agentOfflineReasonLabel(status: unknown, t: TranslateFn): string {
+  const normalized = String(status || "unknown")
+    .trim()
+    .toLowerCase();
+  if (normalized === "runtime_unavailable") {
+    return t("agentOfflineReasonRuntimeUnavailable");
+  }
+  if (normalized === "profile_incomplete") {
+    return t("agentOfflineReasonProfileIncomplete");
+  }
+  if (normalized === "failed" || normalized === "error") {
+    return t("agentOfflineReasonFailed");
+  }
+  if (normalized === "offline" || normalized === "stopped" || normalized === "exited") {
+    return t("agentOfflineReasonStopped");
+  }
+  return t("agentOfflineReasonUnknown");
 }
 
 export function notificationBotMetaLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
@@ -1750,6 +1772,11 @@ export function isAgentRunning(item: AgentLike | null | undefined): boolean {
   }
   const status = agentRuntimeState(item).toLowerCase();
   return status === "running" || status === "online";
+}
+
+export function isAgentRuntimeUnavailable(item: AgentLike | null | undefined): boolean {
+  const status = agentRuntimeState(item).toLowerCase();
+  return status === "runtime_unavailable";
 }
 
 export function isAgentProfileMarkedComplete(item: AgentLike | null | undefined): boolean {
