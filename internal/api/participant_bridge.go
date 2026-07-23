@@ -42,6 +42,9 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	if evt.Type != im.EventTypeMessageCreated || evt.Message == nil || evt.Sender == nil {
 		return
 	}
+	if isUserInputAnswerTranscript(evt.Message) {
+		return
+	}
 
 	room, ok := h.im.Room(evt.RoomID)
 	if !ok {

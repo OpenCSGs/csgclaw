@@ -18,16 +18,20 @@ const (
 	AgentToolMsgType     = "com.opencsg.csgclaw.agent.tool"
 	AgentActionMsgType   = "com.opencsg.csgclaw.agent.action"
 	AgentQuestionMsgType = "com.opencsg.csgclaw.agent.question"
+	CSGClawMetadataKey   = "csgclaw"
+	AgentActivityMetaKey = "agent_activity"
 )
 
 type TurnRenderer struct {
-	text           strings.Builder
-	toolSnapshots  map[string]activityTool
-	toolSignatures map[string]string
-	promptError    string
-	userInput      *activity.RequestUserInputArgs
-	resourceLinks  []activity.ResourceLink
-	resourceURIs   map[string]struct{}
+	text                      strings.Builder
+	toolSnapshots             map[string]activityTool
+	toolSignatures            map[string]string
+	promptError               string
+	userInput                 *activity.RequestUserInputArgs
+	userInputFallback         string
+	userInputFallbackExplicit bool
+	resourceLinks             []activity.ResourceLink
+	resourceURIs              map[string]struct{}
 }
 
 func NewTurnRenderer() *TurnRenderer {
@@ -58,8 +62,12 @@ func (r *TurnRenderer) FinalMessages() []string {
 		return nil
 	}
 	var messages []string
-	if text := strings.TrimSpace(r.text.String()); text != "" {
+	if r.userInputFallbackExplicit && strings.TrimSpace(r.userInputFallback) != "" {
+		messages = append(messages, appendResourceLinks(strings.TrimSpace(r.userInputFallback), r.resourceLinks))
+	} else if text := strings.TrimSpace(r.text.String()); text != "" {
 		messages = append(messages, appendResourceLinks(text, r.resourceLinks))
+	} else if fallback := strings.TrimSpace(r.userInputFallback); fallback != "" {
+		messages = append(messages, appendResourceLinks(fallback, r.resourceLinks))
 	} else if links := resourceLinksMarkdown(r.resourceLinks); links != "" {
 		messages = append(messages, links)
 	}
@@ -84,6 +92,11 @@ func (r *TurnRenderer) ApplyStructuredOutput(event activity.RuntimeEvent) {
 			copy.Questions[index].Options = append([]activity.RequestUserInputOption(nil), artifact.RequestUserInput.Questions[index].Options...)
 		}
 		r.userInput = &copy
+		r.userInputFallback = strings.TrimSpace(event.Text)
+		r.userInputFallbackExplicit = r.userInputFallback != ""
+		if r.userInputFallback == "" {
+			r.userInputFallback = "Please answer the questions below."
+		}
 	}
 	for _, link := range artifact.ResourceLinks {
 		if len(r.resourceLinks) >= 16 {
@@ -114,6 +127,8 @@ func (r *TurnRenderer) DiscardStructuredOutput() {
 		return
 	}
 	r.userInput = nil
+	r.userInputFallback = ""
+	r.userInputFallbackExplicit = false
 	r.resourceLinks = nil
 	clear(r.resourceURIs)
 }
@@ -217,7 +232,7 @@ func (r *TurnRenderer) RenderActivity(event activity.RuntimeEvent, channel, room
 		if event.UserInputID == "" {
 			event.UserInputID = snapshot.ID
 		}
-		return renderActivityPayload(event, channel, roomID, senderID, questionActivityContent(snapshot))
+		return renderQuestionActivity(event, channel, roomID, senderID, snapshot)
 	default:
 		return RenderedActivity{}, false
 	}
@@ -274,29 +289,48 @@ func normalizedToolStatus(status string) string {
 type RenderedActivity struct {
 	MessageID string
 	Text      string
+	Metadata  map[string]any
 }
 
 func renderActivityPayload(event activity.RuntimeEvent, channel, roomID, senderID string, content any) (RenderedActivity, bool) {
-	eventID := activityEventID(event)
+	payload := newAgentActivityPayload(event, channel, roomID, senderID, content)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return RenderedActivity{}, false
+	}
+	return RenderedActivity{MessageID: payload.EventID, Text: string(data)}, true
+}
+
+func renderQuestionActivity(event activity.RuntimeEvent, channel, roomID, senderID string, snapshot activity.UserInputSnapshot) (RenderedActivity, bool) {
+	payload := newAgentActivityPayload(event, channel, roomID, senderID, questionActivityContent(snapshot))
+	text := activity.UserInputQuestionMarkdown(snapshot)
+	if text == "" {
+		return RenderedActivity{}, false
+	}
+	return RenderedActivity{
+		MessageID: payload.EventID,
+		Text:      text,
+		Metadata: map[string]any{
+			CSGClawMetadataKey: map[string]any{AgentActivityMetaKey: payload},
+		},
+	}, true
+}
+
+func newAgentActivityPayload(event activity.RuntimeEvent, channel, roomID, senderID string, content any) agentActivityPayload {
 	originServerTS := time.Now().UTC().UnixMilli()
 	if !event.ReceivedAt.IsZero() {
 		originServerTS = event.ReceivedAt.UnixMilli()
 	}
-	payload := agentActivityPayload{
+	return agentActivityPayload{
 		Type:           AgentActivityType,
 		Version:        AgentActivityVersion,
 		Channel:        strings.TrimSpace(channel),
-		EventID:        eventID,
+		EventID:        activityEventID(event),
 		RoomID:         strings.TrimSpace(roomID),
 		Sender:         strings.TrimSpace(senderID),
 		OriginServerTS: originServerTS,
 		Content:        content,
 	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return RenderedActivity{}, false
-	}
-	return RenderedActivity{MessageID: eventID, Text: string(data)}, true
 }
 
 type agentActivityPayload struct {
@@ -452,31 +486,80 @@ func activityEventID(event activity.RuntimeEvent) string {
 
 // InterruptPendingQuestionActivity converts a persisted question that can no
 // longer have a live app-server request into a terminal interrupted snapshot.
-func InterruptPendingQuestionActivity(content string, now time.Time) (string, bool) {
-	var payload map[string]any
-	if json.Unmarshal([]byte(strings.TrimSpace(content)), &payload) != nil || payload["type"] != AgentActivityType {
-		return content, false
+func InterruptPendingQuestionActivity(content string, metadata map[string]any, now time.Time) (string, map[string]any, bool) {
+	value, ok := agentActivityMetadata(metadata)
+	if !ok {
+		var legacy any
+		if json.Unmarshal([]byte(strings.TrimSpace(content)), &legacy) != nil {
+			return content, metadata, false
+		}
+		value = legacy
 	}
-	activityContent, ok := payload["content"].(map[string]any)
-	if !ok || activityContent["msgtype"] != AgentQuestionMsgType {
-		return content, false
+	data, err := json.Marshal(value)
+	if err != nil {
+		return content, metadata, false
 	}
-	question, ok := activityContent["question"].(map[string]any)
-	if !ok || strings.TrimSpace(fmt.Sprint(question["status"])) != string(activity.UserInputStatusPending) {
-		return content, false
+	var payload struct {
+		Type           string           `json:"type"`
+		Version        int              `json:"version"`
+		Channel        string           `json:"channel,omitempty"`
+		EventID        string           `json:"event_id"`
+		RoomID         string           `json:"room_id"`
+		Sender         string           `json:"sender"`
+		OriginServerTS int64            `json:"origin_server_ts"`
+		Content        questionActivity `json:"content"`
+	}
+	if json.Unmarshal(data, &payload) != nil || payload.Type != AgentActivityType || payload.Content.MsgType != AgentQuestionMsgType || payload.Content.Question.Status != activity.UserInputStatusPending {
+		return content, metadata, false
 	}
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	question["status"] = string(activity.UserInputStatusInterrupted)
-	question["resolved_at"] = now.UTC().Format(time.RFC3339Nano)
-	delete(question, "answers")
-	activityContent["body"] = "Question interrupted"
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return content, false
+	payload.Content.Question.Status = activity.UserInputStatusInterrupted
+	resolvedAt := now.UTC()
+	payload.Content.Question.ResolvedAt = &resolvedAt
+	payload.Content.Question.Answers = nil
+	payload.Content = questionActivityContent(payload.Content.Question)
+	updated := cloneMetadata(metadata)
+	namespace := metadataNamespace(updated)
+	namespace[AgentActivityMetaKey] = payload
+	return activity.UserInputQuestionMarkdown(payload.Content.Question), updated, true
+}
+
+func agentActivityMetadata(metadata map[string]any) (any, bool) {
+	if metadata == nil {
+		return nil, false
 	}
-	return string(data), true
+	namespace, ok := metadata[CSGClawMetadataKey].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	value, ok := namespace[AgentActivityMetaKey]
+	return value, ok && value != nil
+}
+
+func cloneMetadata(metadata map[string]any) map[string]any {
+	out := make(map[string]any, len(metadata)+1)
+	for key, value := range metadata {
+		out[key] = value
+	}
+	if namespace, ok := metadata[CSGClawMetadataKey].(map[string]any); ok {
+		cloned := make(map[string]any, len(namespace)+1)
+		for key, value := range namespace {
+			cloned[key] = value
+		}
+		out[CSGClawMetadataKey] = cloned
+	}
+	return out
+}
+
+func metadataNamespace(metadata map[string]any) map[string]any {
+	if namespace, ok := metadata[CSGClawMetadataKey].(map[string]any); ok {
+		return namespace
+	}
+	namespace := make(map[string]any)
+	metadata[CSGClawMetadataKey] = namespace
+	return namespace
 }
 
 func joinActivityIDParts(parts []string) string {

@@ -450,7 +450,7 @@ export function activityEntriesFromRooms(
       if (!identityMatches(message.sender_id, agentIdentity)) {
         return;
       }
-      const activity = parseAgentActivity(message.content);
+      const activity = parseAgentActivity(message);
       const plainCommand = activity ? null : parseActivityCommand(message);
       const body = String(message.content || "")
         .replace(/\u200b/g, "")

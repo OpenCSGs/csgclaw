@@ -161,7 +161,7 @@ function pendingMessageParticipants(
       return { nextDeadline: null, participants: [] };
     }
     if (questionActivityKeepsAgentWorking(message)) {
-      const question = parseAgentActivity(message.content)?.content.question;
+      const question = parseAgentActivity(message)?.content.question;
       const continuationAt = Date.parse(
         String(question?.resolved_at || question?.requested_at || message.created_at || ""),
       );
@@ -226,7 +226,7 @@ function activeToolParticipants(
       latestRequestID.clear();
       return;
     }
-    const activity = parseAgentActivity(message.content);
+    const activity = parseAgentActivity(message);
     const tool = activity?.content.tool;
     const target = activityTargetForMessage(message, activity?.sender, targets);
 

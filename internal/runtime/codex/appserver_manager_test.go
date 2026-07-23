@@ -294,7 +294,7 @@ func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
 			if !ok || len(request.Questions) != 1 || request.Questions[0].ID != "color" {
 				t.Fatalf("request snapshot = %+v", request)
 			}
-			if _, err := broker.Bind(requestID, "csgclaw", "room-1"); err != nil {
+			if _, err := broker.Bind(requestID, "csgclaw", "room-1", ""); err != nil {
 				t.Fatalf("Bind() error = %v", err)
 			}
 			if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
@@ -360,7 +360,7 @@ func TestAppServerManagerPausesTurnWatchdogsWhileWaitingForUser(t *testing.T) {
 		promptResult <- err
 	}()
 	requestID := waitForUserInputRequest(t, sink)
-	_, _ = broker.Bind(requestID, "csgclaw", "room-1")
+	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "")
 	time.Sleep(75 * time.Millisecond)
 	select {
 	case err := <-promptResult:
@@ -444,7 +444,7 @@ func TestAppServerManagerKeepsTurnOpenWhenAgentMessagePrecedesQuestion(t *testin
 		t.Fatalf("prompt ended before the user-input request was answered: %v", err)
 	default:
 	}
-	if _, err := broker.Bind(requestID, "csgclaw", "room-1"); err != nil {
+	if _, err := broker.Bind(requestID, "csgclaw", "room-1", ""); err != nil {
 		t.Fatalf("Bind() error = %v", err)
 	}
 	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
@@ -551,6 +551,55 @@ func TestAppServerManagerPromptHandlesLargeCommandOutput(t *testing.T) {
 	}
 	if events[len(events)-1].Kind != SessionEventPromptCompleted {
 		t.Fatalf("last event = %#v, want prompt completed", events[len(events)-1])
+	}
+}
+
+func TestAppServerManagerPromptPublishesStructuredDeltaBeforeCompletion(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-command-output-delta")
+	spec := testAppServerSessionSpec(t.TempDir())
+	sink := &recordingSink{}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: session.SessionID,
+		Prompt:    []PromptContentBlock{TextBlock("run structured delta")},
+	})
+	if err != nil {
+		t.Fatalf("Prompt() error = %v", err)
+	}
+	if resp.StopReason != StopReasonEndTurn {
+		t.Fatalf("StopReason = %q, want %q", resp.StopReason, StopReasonEndTurn)
+	}
+
+	events := sink.snapshot()
+	want := []SessionEventKind{
+		SessionEventToolCallStart,
+		SessionEventStructuredOutput,
+		SessionEventToolCallUpdate,
+		SessionEventPromptCompleted,
+	}
+	if len(events) != len(want) {
+		t.Fatalf("events = %#v, want kinds %#v", events, want)
+	}
+	for index, kind := range want {
+		if events[index].Kind != kind {
+			t.Fatalf("events[%d] = %#v, want kind %s", index, events[index], kind)
+		}
+	}
+	artifact := events[1].Payload.(activity.StructuredOutputArtifact)
+	if artifact.RequestUserInput == nil || artifact.RequestUserInput.Questions[0].ID != "step_two" {
+		t.Fatalf("artifact = %#v, want step_two question", artifact)
+	}
+	if events[1].Text != "ordinary" {
+		t.Fatalf("structured fallback = %q, want cleaned ordinary stdout", events[1].Text)
+	}
+	if strings.Contains(events[2].ToolOutputSummary, structuredOutputPrefix) || !strings.Contains(events[2].ToolOutputSummary, "ordinary") {
+		t.Fatalf("tool output summary = %q, want cleaned ordinary output", events[2].ToolOutputSummary)
 	}
 }
 
@@ -898,6 +947,216 @@ func TestAppServerEventAdapterStructuredOutputRawAndLegacyRoutes(t *testing.T) {
 	}
 }
 
+func TestAppServerEventAdapterAccumulatesCanonicalCommandOutputDeltas(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	record := `::csgclaw-output::request_user_input {"questions":[{"id":"verification","header":"Checks","question":"How cautious should verification be?","options":[{"label":"Standard","description":"Use targeted checks."}]}]}`
+	output := "ordinary stdout\n" + record + "\n"
+	split := strings.Index(output, `"question"`)
+	for _, delta := range []string{output[:split], output[split:]} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/commandExecution/outputDelta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-delta",
+				"itemId":   "call-delta",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-delta",
+			"item": map[string]any{
+				"id":               "call-delta",
+				"type":             "commandExecution",
+				"status":           "completed",
+				"aggregatedOutput": "",
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput || events[1].Kind != SessionEventToolCallUpdate {
+		t.Fatalf("events = %#v, want structured output before completed tool update", events)
+	}
+	artifact, ok := events[0].Payload.(activity.StructuredOutputArtifact)
+	if !ok || artifact.RequestUserInput == nil || len(artifact.RequestUserInput.Questions) != 1 || artifact.RequestUserInput.Questions[0].ID != "verification" {
+		t.Fatalf("structured artifact = %#v, want verification question", events[0].Payload)
+	}
+	if !strings.Contains(events[1].ToolOutputSummary, "ordinary stdout") || strings.Contains(events[1].ToolOutputSummary, structuredOutputPrefix) {
+		t.Fatalf("tool output summary = %q, want ordinary stdout without control record", events[1].ToolOutputSummary)
+	}
+	if len(live.commandOutputs) != 0 {
+		t.Fatalf("command outputs = %#v, want completed item removed", live.commandOutputs)
+	}
+}
+
+func TestAppServerEventAdapterDeltaDecoderSurvivesLargeOrdinaryOutput(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	record := `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/commandExecution/outputDelta",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-large-delta", "itemId": "call-large-delta",
+			"delta": strings.Repeat("x", maxStructuredOutputRecordBytes+1024) + "\n" + record,
+		}),
+	})
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-large-delta",
+			"item": map[string]any{"id": "call-large-delta", "type": "commandExecution", "status": "completed", "aggregatedOutput": ""},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput {
+		t.Fatalf("events = %#v, want structured link after oversized ordinary stdout", events)
+	}
+	artifact := events[0].Payload.(activity.StructuredOutputArtifact)
+	if len(artifact.ResourceLinks) != 1 || artifact.ResourceLinks[0].URI != "https://example.com/docs" {
+		t.Fatalf("artifact = %#v, want decoded resource link", artifact)
+	}
+}
+
+func TestAppServerEventAdapterFailedDeltaOutputDoesNotActivateStructuredRecords(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	record := `::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}`
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/commandExecution/outputDelta",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-failed-delta", "itemId": "call-failed-delta", "delta": record,
+		}),
+	})
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-failed-delta",
+			"item": map[string]any{"id": "call-failed-delta", "type": "commandExecution", "status": "failed", "aggregatedOutput": ""},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 1 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != "failed" {
+		t.Fatalf("events = %#v, want failed tool update only", events)
+	}
+	if !strings.Contains(events[0].ToolOutputSummary, structuredOutputPrefix) {
+		t.Fatalf("failed output summary = %q, want untouched control record", events[0].ToolOutputSummary)
+	}
+}
+
+func TestAppServerEventAdapterAggregatedOutputWinsOverDeltaFallback(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	deltaRecord := `::csgclaw-output::resource_link {"type":"resource_link","name":"stale","uri":"https://example.com/stale"}`
+	aggregatedRecord := `::csgclaw-output::resource_link {"type":"resource_link","name":"current","uri":"https://example.com/current"}`
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/commandExecution/outputDelta",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-aggregate", "itemId": "call-aggregate", "delta": deltaRecord,
+		}),
+	})
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-aggregate",
+			"item": map[string]any{"id": "call-aggregate", "type": "commandExecution", "status": "completed", "aggregatedOutput": aggregatedRecord},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput {
+		t.Fatalf("events = %#v, want one structured output and tool update", events)
+	}
+	links := events[0].Payload.(activity.StructuredOutputArtifact).ResourceLinks
+	if len(links) != 1 || links[0].URI != "https://example.com/current" {
+		t.Fatalf("links = %#v, want authoritative aggregated output only", links)
+	}
+	if len(live.commandOutputs) != 0 {
+		t.Fatalf("command outputs = %#v, want fallback discarded", live.commandOutputs)
+	}
+}
+
+func TestAppServerEventAdapterTurnCompletionClearsAbandonedDeltaOutput(t *testing.T) {
+	t.Parallel()
+
+	manager, live, _ := testAppServerEventAdapter(t)
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/commandExecution/outputDelta",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-abandoned", "itemId": "call-abandoned", "delta": "partial",
+		}),
+	})
+	if len(live.commandOutputs) != 1 {
+		t.Fatalf("command outputs = %#v, want one pending output", live.commandOutputs)
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "turn/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turn":     map[string]any{"id": "turn-abandoned", "status": "cancelled"},
+		}),
+	})
+	if len(live.commandOutputs) != 0 {
+		t.Fatalf("command outputs = %#v, want canceled turn cleanup", live.commandOutputs)
+	}
+}
+
+func TestAppServerEventAdapterRoutesLegacyStructuredOutputToActiveConversationTurn(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	live.conversationSessions["room-1"] = "conversation-thread"
+	live.trackAppServerTurn("conversation-thread", "turn-3")
+	// The compatibility rollout record can arrive after turn/completed and
+	// after Prompt has removed its waiter. The turn correlation must survive
+	// that ordering so the full output is not assigned to the primary thread.
+	if len(live.turnWaiters) != 0 {
+		t.Fatalf("turn waiters = %#v, want compatibility output after waiter removal", live.turnWaiters)
+	}
+
+	record := `::csgclaw-output::request_user_input {"questions":[{"id":"final_action","header":"Final action","question":"What should happen next?","options":[{"label":"Continue","description":"Run step three."}]}]}`
+	manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
+		"type":    "function_call_output",
+		"call_id": "step-3-tool",
+		"output":  "STAGE_3_QUESTIONS_EMITTED\n" + record,
+		"internal_chat_message_metadata_passthrough": map[string]any{"turn_id": "turn-3"},
+	})
+	// The raw duplicate can contain no aggregated output. It must not be the
+	// only correctly routed event or the question disappears nondeterministically.
+	manager.handleRawItemNotification("runtime-1", live, "conversation-thread", "item/completed", map[string]any{
+		"item": map[string]any{"id": "step-3-item", "type": "commandExecution", "status": "completed", "aggregatedOutput": ""},
+	})
+
+	events := sink.snapshot()
+	if len(events) != 3 {
+		t.Fatalf("events = %#v, want structured legacy output plus legacy and raw tool updates", events)
+	}
+	for index, event := range events {
+		if event.SessionID != "conversation-thread" {
+			t.Fatalf("events[%d].SessionID = %q, want active conversation thread", index, event.SessionID)
+		}
+	}
+	if events[0].Kind != SessionEventStructuredOutput || events[0].Payload.(activity.StructuredOutputArtifact).RequestUserInput == nil {
+		t.Fatalf("events[0] = %#v, want structured request_user_input", events[0])
+	}
+	if events[1].Kind != SessionEventToolCallUpdate || !strings.Contains(events[1].ToolOutputSummary, "STAGE_3_QUESTIONS_EMITTED") {
+		t.Fatalf("events[1] = %#v, want cleaned ordinary legacy stdout", events[1])
+	}
+	if events[2].Kind != SessionEventToolCallUpdate {
+		t.Fatalf("events[2] = %#v, want raw duplicate tool update", events[2])
+	}
+}
+
 func TestAppServerEventAdapterIgnoresStructuredOutputFromFailedLegacyCommand(t *testing.T) {
 	t.Parallel()
 
@@ -1017,6 +1276,42 @@ func TestAppServerEventAdapterLegacyEvents(t *testing.T) {
 	}
 	if live.appProtocol != appServerProtocolLegacy {
 		t.Fatalf("protocol = %q, want legacy", live.appProtocol)
+	}
+}
+
+func TestAppServerEventAdapterLegacyTurnAbortedAcceptsStructuredOutputBoundary(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	waiter, err := live.registerAppServerTurnWaiter("main-thread")
+	if err != nil {
+		t.Fatalf("register waiter: %v", err)
+	}
+	defer live.removeAppServerTurnWaiter("main-thread", waiter)
+	if !waiter.markStructuredOutputBoundary() {
+		t.Fatal("mark structured-output boundary = false, want true")
+	}
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "codex/event",
+		Params: mustJSONRaw(t, map[string]any{
+			"type": "turn_aborted",
+		}),
+	})
+
+	select {
+	case result := <-waiter.ch:
+		if !result.success || result.err != nil || result.stopReason != StopReasonEndTurn {
+			t.Fatalf("turn result = %+v, want successful structured-output boundary", result)
+		}
+		if result.activity != "legacy:turn_structured-output" {
+			t.Fatalf("turn activity = %q, want legacy:turn_structured-output", result.activity)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for legacy structured-output boundary")
+	}
+	if events := sink.snapshot(); len(events) != 0 {
+		t.Fatalf("events = %#v, want no fallback prompt event while waiter is active", events)
 	}
 }
 
@@ -1540,6 +1835,32 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-large", "type": "agentMessage", "text": "done"}})
 				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-large-output", "status": "completed"}})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-large-output"}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-command-output-delta":
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				record := `::csgclaw-output::request_user_input {"questions":[{"id":"step_two","header":"Step two","question":"Choose step two.","options":[{"label":"Continue","description":"Continue the demo."}]}]}`
+				output := "ordinary\n" + record + "\n"
+				split := strings.Index(output, `"question"`)
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-delta"}})
+				writeRPCNotification(t, "item/started", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "call-delta", "type": "commandExecution", "command": "emit demo"}})
+				writeRPCNotification(t, "item/commandExecution/outputDelta", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "itemId": "call-delta", "delta": output[:split]})
+				writeRPCNotification(t, "item/commandExecution/outputDelta", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "itemId": "call-delta", "delta": output[split:]})
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "turnId": "turn-delta", "item": map[string]any{"id": "call-delta", "type": "commandExecution", "status": "completed", "aggregatedOutput": ""}})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-delta"}), true
+			case "turn/interrupt":
+				assertTurnInterruptParams(t, msg, "main-thread", "turn-delta")
+				writeRPCNotification(t, "turn/completed", map[string]any{
+					"threadId": "main-thread",
+					"turn":     map[string]any{"id": "turn-delta", "status": "interrupted"},
+				})
+				return rpcResult(msg["id"], map[string]any{}), true
 			default:
 				return nil, false
 			}

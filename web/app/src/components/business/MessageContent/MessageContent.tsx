@@ -9,7 +9,8 @@ import { StructuredMessageCard } from "./StructuredMessageCard";
 import { parseStructuredMessage } from "./structuredMessages";
 import type { ActionCardPayload, MessageContentProps } from "./types";
 import { mentionMarkupPattern, escapeHTML } from "./mentions";
-import { parseAgentActivity } from "@/models/agentActivity";
+import { hasAgentActivityMetadata, parseAgentActivity } from "@/models/agentActivity";
+import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
 import "./MessageContent.css";
 
@@ -28,9 +29,13 @@ export function MessageContent({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const blankTurnPlaceholder = isBlankTurnPlaceholder(content);
   const activity = useMemo(
-    () => (blankTurnPlaceholder ? null : parseAgentActivity(content)),
-    [blankTurnPlaceholder, content],
+    () => (blankTurnPlaceholder ? null : parseAgentActivity(message ?? content)),
+    [blankTurnPlaceholder, content, message],
   );
+  const resolvedQuestion =
+    hasAgentActivityMetadata(message) &&
+    activity?.content.msgtype === AgentActivityMsgTypes.question &&
+    activity.content.question?.status !== "pending";
   const slashCommand = useMemo(() => (activity ? null : parseSlashCommand(content)), [activity, content]);
   const slashCommandText = useMemo(() => renderSlashCommandText(slashCommand), [slashCommand]);
   const structured = useMemo(
@@ -38,8 +43,8 @@ export function MessageContent({
     [activity, content, slashCommandText],
   );
   const markup = useMemo(
-    () => (activity || slashCommandText || structured ? "" : renderMarkdown(content)),
-    [activity, content, slashCommandText, structured],
+    () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : renderMarkdown(content)),
+    [activity, content, resolvedQuestion, slashCommandText, structured],
   );
 
   useEffect(() => {
@@ -75,7 +80,7 @@ export function MessageContent({
     );
   }
 
-  if (activity) {
+  if (activity && !resolvedQuestion) {
     return <AgentActivityCard activity={activity} onQuestionSelect={onQuestionSelect} t={t} />;
   }
 

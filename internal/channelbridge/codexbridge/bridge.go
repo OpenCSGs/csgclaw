@@ -250,11 +250,11 @@ func (s *Service) handleDetachedUserInput(resolution runtimecodex.DetachedUserIn
 	if snapshot.Status != activity.UserInputStatusAnswered {
 		return
 	}
-	body, err := json.Marshal(resolution.Response)
+	body, err := json.Marshal(activity.RedactSecretUserInputResponse(snapshot, resolution.Response))
 	if err != nil {
 		return
 	}
-	prompt := "The user answered the request_user_input emitted by the previous successful command. Continue the same workflow using this exact response JSON:\n" + string(body)
+	prompt := "The user answered the request_user_input emitted by the previous successful command. Continue the same workflow using this wire-compatible response JSON. Secret values are replaced with <redacted> before entering the model session:\n" + string(body)
 	w.enqueue(context.Background(), BotEvent{
 		Channel:      resolution.Context.Channel,
 		MessageID:    "structured-user-input-" + snapshot.ID,
@@ -548,7 +548,7 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 				return false, nil
 			}
 			if event.Kind == runtimecodex.SessionEventUserInputRequest && w.service.userInput != nil {
-				bound, err := w.service.userInput.Bind(snapshot.ID, evt.Channel, evt.RoomID)
+				bound, err := w.service.userInput.Bind(snapshot.ID, evt.Channel, evt.RoomID, evt.ThreadRootID)
 				if err != nil {
 					return false, err
 				}
@@ -1036,9 +1036,22 @@ func (w *worker) sendActivity(ctx context.Context, roomID, threadRootID string, 
 		Text:         activity.Text,
 		MessageID:    activity.MessageID,
 		ThreadRootID: strings.TrimSpace(threadRootID),
-		Metadata:     metadata,
+		Metadata:     mergeMessageMetadata(metadata, activity.Metadata),
 	})
 	return err
+}
+
+func mergeMessageMetadata(values ...map[string]any) map[string]any {
+	var out map[string]any
+	for _, value := range values {
+		for key, item := range value {
+			if out == nil {
+				out = make(map[string]any)
+			}
+			out[key] = item
+		}
+	}
+	return out
 }
 
 func (w *worker) sendMessageRequest(ctx context.Context, req SendMessageRequest) (string, error) {

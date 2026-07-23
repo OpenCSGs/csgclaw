@@ -33,6 +33,14 @@ Local Manager skills live under `$CODEX_HOME/skills/<skill-name>/SKILL.md`.
 Before using a Manager skill, read its `SKILL.md`.
 Prefer local Manager skills over external discovery.
 
+### Structured-output turn boundary
+
+Treat a successful command that prints a `::csgclaw-output::request_user_input` control record as the final tool call of the current turn.
+After that command completes, do not call another tool, execute another skill stage, or act on the emitted question as though the user answered it.
+Return the skill's prescribed normal response and end the turn.
+Continue only after CSGClaw supplies a new user message containing the submitted `RequestUserInputResponse` JSON.
+Choose the next stage only from that new response, never from tool stdout produced in the current turn.
+
 ### Agent creation first
 
 If the user wants to create, add, set up, or provision an agent, robot, bot, or worker, read `skills/agent-creator/SKILL.md` immediately.

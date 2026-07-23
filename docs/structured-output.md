@@ -9,7 +9,13 @@ It is not MCP and does not rely on arbitrary JSON detection.
 ## Canonical executable example
 
 The built-in Manager skill [`csgclaw-interactive-output-demo`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/) is the complete reference implementation.
-Its [`emit_demo.py`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) documents every supported request and resource-link field at its first use, emits full and minimal link variants, asks five questions, and demonstrates the automatic continuation response.
+Its [`emit_demo.py`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) documents every supported request and resource-link field at its first use and emits three successive question stages.
+The first two stages each emit the same full and minimal `ResourceLink` examples, while the third stage focuses only on final action and secret input.
+The stages cover ordinary options, Recommended and Unicode labels, a four-question navigation page, an option-or-freeform question, a freeform-only question, and a secret question.
+The Manager reads each automatic continuation response and selects the next allowlisted script stage itself, while the Python emitter never receives or parses response JSON.
+Each continuation executes exactly one stage command, and CSGClaw ends that turn as soon as the successful command emits the next question request.
+It never treats emitter stdout as an answer or enters a later stage until a new continuation prompt contains that stage's required question IDs.
+The root `SKILL.md` uses progressive disclosure and routes each response to one stage-specific file under `references/`, so a model does not receive later-stage commands as current instructions.
 Manager provisioning installs a bundled skill when its skill directory is missing and preserves an existing installed or customized copy.
 
 Invoke it in a Manager conversation with:
@@ -55,13 +61,19 @@ def emit(kind: str, payload: dict[str, object]) -> None:
 
 1. A skill script prints ordinary output and zero or more control records.
 2. A CSGClaw runtime adapter decodes records only from a successfully completed command execution.
-3. Valid records are buffered until the entire agent turn succeeds.
-4. CSGClaw persists the normal final response first.
-5. Resource links are appended to the end of that response as Markdown, including the first safe HTTP(S) icon when one is provided.
-6. A detached question request is activated after the final response and links are visible.
-7. A submitted answer updates the existing question activity, adds a readable redacted summary to history, and automatically continues the same originating agent session with the exact response JSON.
+3. A valid `request_user_input` record becomes a runtime-enforced turn boundary, so the model cannot execute another stage before the user answers.
+4. CSGClaw intentionally interrupts that turn and treats the boundary as successful.
+5. Ordinary stdout from the emitting command becomes the readable response when the model has not already produced one.
+6. CSGClaw persists that normal response first.
+7. Resource links are appended to the end of that response as Markdown, including the first safe HTTP(S) icon when one is provided.
+8. A detached question request is activated after the final response and links are visible.
+9. A submitted answer first updates the existing agent-owned question message and persists a separate readable local-user answer message.
+10. CSGClaw then automatically continues the same originating agent session with a wire-compatible response JSON copy whose submitted secret values are replaced with `<redacted>`.
 
-Failed, canceled, superseded, interrupted, expired, or stale turns do not activate buffered output or automatic continuations.
+Skill authors should print concise readable Markdown before the control record, as shown by the demo emitter.
+If a command emits no ordinary stdout, CSGClaw uses `Please answer the questions below.` as the response fallback.
+A normal failure, cancellation, supersession, interruption, expiration, or stale turn does not activate buffered output or automatic continuations.
+Only the runtime-requested structured-output boundary is treated as successful.
 A newer user turn, session reset, room closure, duplicate response, or server restart also prevents a stale continuation.
 
 ## `request_user_input`
@@ -156,9 +168,14 @@ In a non-empty response, include every question ID.
 Use an empty inner array to skip one question.
 Freeform values use the `user_note: ` prefix.
 
-The exact response JSON is supplied to the same originating agent session in an automatic continuation prompt.
-Persisted question activity and human-readable summaries redact secret values, but the continuing skill must also avoid echoing a secret into its final response, logs, or later tool calls.
-The demo skill shows the recommended two-tier result: machine-readable redacted JSON followed by concise human-readable Markdown.
+The automatic continuation prompt receives a wire-compatible response JSON copy.
+Non-secret answers remain exact, submitted secret values become `<redacted>`, and skipped secret arrays remain empty.
+Persisted question activity and the local-user answer transcript redact secret values, but the continuing skill must also avoid echoing a secret into its final response, logs, or later tool calls.
+The response JSON is runtime input for the agent brain, not input for the script that emitted the request.
+The demo skill shows the recommended multi-stage pattern: the Manager interprets stable question IDs and values, chooses an allowlisted next-stage command, and passes only safe branch selectors to the emitter.
+The skill enforces a one-command-per-turn boundary so each emitted request becomes visible and receives a real user answer before the next stage executes.
+Keep later commands in separate stage references for reliable behavior across local and remote models.
+The readable answer Markdown is already persisted by CSGClaw as a separate local-user message, so the skill neither reconstructs nor echoes it.
 
 Clients can submit this object directly to:
 
@@ -168,6 +185,61 @@ POST /api/v1/channels/{channel}/activities/{activity_id}:respond
 
 The request body is the response object itself, with no extra room, responder, submission, or behavior wrapper.
 CSGClaw derives the room and current responder from the stored activity.
+
+## Persisted dialogue and JSONL
+
+Each request is stored as a separate message owned by the requesting agent.
+Its `content` is readable Markdown from the moment the request becomes pending, while `metadata.csgclaw.agent_activity` retains the structured activity used by the interactive UI.
+Resolving, skipping, expiring, canceling, or interrupting the request updates the same message ID.
+
+```markdown
+## Questions
+
+- demo_kind：What kind of CSGClaw demo should this be?
+  - Bug fix (Recommended) (Plans a focused repair workflow.)
+  - New feature (Plans a user-facing feature.)
+- freeform_note：Add a freeform note.
+- test_secret：Enter a disposable test value only.
+```
+
+A non-empty submission creates one separate message owned by the authenticated current local user.
+The answer message stays in the same room and thread as the question and is marked by `metadata.csgclaw.request_user_input`.
+It updates the UI through normal IM events but is never dispatched as a second participant prompt.
+The automatic continuation remains the only new agent turn.
+
+```markdown
+## Answers
+
+- demo_kind：Bug fix (Recommended) (Plans a focused repair workflow.)
+- destination：QA / 验收 (Custom answer)
+- freeform_note：Skipped (No answer provided)
+- test_secret：Secret recorded (Secret value redacted)
+```
+
+Answer lines use the exact full-width separator `：`.
+Selected options preserve their original labels and descriptions.
+A missing option description becomes `No description provided`.
+A freeform value removes one leading `user_note: ` prefix and uses `Custom answer` as its description.
+If an option and note are both present, the label becomes `<option>; <note>` and retains the option description.
+An individually skipped question becomes `Skipped (No answer provided)`.
+A submitted secret becomes `Secret recorded (Secret value redacted)`, while a skipped secret remains `Skipped (No answer provided)`.
+An empty outer `answers` object skips the whole request and creates no local-user answer message or continuation.
+
+The following two physical lines illustrate the durable JSONL representation after a non-secret answer.
+Fields unrelated to the example, such as attachments, are omitted by normal `omitempty` behavior.
+
+```jsonl
+{"id":"question-request-1","sender_id":"u-manager","content":"## Questions\n\n- demo_kind：What kind of CSGClaw demo should this be?\n  - Bug fix (Recommended) (Plans a focused repair workflow.)","metadata":{"csgclaw":{"agent_activity":{"type":"com.opencsg.csgclaw.agent.activity","version":1,"event_id":"question-request-1","sender":"u-manager","channel":"csgclaw","room_id":"room-1","origin_server_ts":1784736000000,"content":{"msgtype":"com.opencsg.csgclaw.agent.question","body":"Question answered","question":{"id":"request-1","status":"answered","questions":[{"id":"demo_kind","header":"Demo kind","question":"What kind of CSGClaw demo should this be?","options":[{"label":"Bug fix (Recommended)","description":"Plans a focused repair workflow."}]}],"answers":{"demo_kind":{"answered":true,"option_index":1,"option_label":"Bug fix (Recommended)"}}}}}}},"created_at":"2026-07-22T12:00:00Z","mentions":[]}
+{"id":"answer-request-1","sender_id":"user-admin","content":"## Answers\n\n- demo_kind：Bug fix (Recommended) (Plans a focused repair workflow.)","metadata":{"csgclaw":{"request_user_input":{"kind":"answer","request_id":"request-1"}}},"created_at":"2026-07-22T12:01:00Z","mentions":[]}
+```
+
+For a threaded request, the answer row additionally contains `"relates_to":{"rel_type":"m.thread","event_id":"<thread-root-id>"}`.
+The exact received `RequestUserInputResponse` remains transient broker input and is not persisted because it may contain a secret.
+Only its secret-redacted, wire-compatible copy enters the automatic model continuation.
+The later workflow result is a separate agent message only when the continuation advances the workflow.
+CSGClaw does not synthesize an agent-owned echo of the user answer.
+
+The built-in demo skill remains the full executable reference for the wire protocol, readable transcript ownership, and agent-directed multi-stage continuation.
 
 ## `resource_link`
 

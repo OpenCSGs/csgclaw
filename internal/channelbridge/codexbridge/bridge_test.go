@@ -187,6 +187,30 @@ func assertCodexToolMetadata(t *testing.T, req SendMessageRequest, sourceMessage
 	}
 }
 
+func questionSnapshotFromRecord(record SendMessageRequest) (activity.UserInputSnapshot, bool) {
+	namespace, ok := record.Metadata[runtimebridge.CSGClawMetadataKey].(map[string]any)
+	if !ok {
+		return activity.UserInputSnapshot{}, false
+	}
+	payload, ok := namespace[runtimebridge.AgentActivityMetaKey]
+	if !ok {
+		return activity.UserInputSnapshot{}, false
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return activity.UserInputSnapshot{}, false
+	}
+	var decoded struct {
+		Content struct {
+			Question activity.UserInputSnapshot `json:"question"`
+		} `json:"content"`
+	}
+	if json.Unmarshal(data, &decoded) != nil || decoded.Content.Question.ID == "" {
+		return activity.UserInputSnapshot{}, false
+	}
+	return decoded.Content.Question, true
+}
+
 func (c *fakeBotClient) updates() []updateRecord {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1750,14 +1774,9 @@ func TestServiceUsesStableMessageIDForQuestionResolution(t *testing.T) {
 	var requestID string
 	waitFor(t, func() bool {
 		for _, record := range client.sentRecords() {
-			var payload struct {
-				Content struct {
-					Question activity.UserInputSnapshot `json:"question"`
-				} `json:"content"`
-			}
-			if json.Unmarshal([]byte(record.Text), &payload) == nil && payload.Content.Question.ID != "" {
-				requestID = payload.Content.Question.ID
-				return payload.Content.Question.Status == activity.UserInputStatusPending
+			if snapshot, ok := questionSnapshotFromRecord(record); ok {
+				requestID = snapshot.ID
+				return snapshot.Status == activity.UserInputStatusPending && strings.HasPrefix(record.Text, "## Questions\n\n")
 			}
 		}
 		return false
@@ -1772,7 +1791,8 @@ func TestServiceUsesStableMessageIDForQuestionResolution(t *testing.T) {
 	}
 	waitFor(t, func() bool {
 		for _, record := range client.sentRecords() {
-			if record.MessageID == "question-"+requestID && strings.Contains(record.Text, `"status":"answered"`) {
+			snapshot, ok := questionSnapshotFromRecord(record)
+			if record.MessageID == "question-"+requestID && ok && snapshot.Status == activity.UserInputStatusAnswered {
 				return true
 			}
 		}
@@ -1841,13 +1861,8 @@ func TestServiceFlushesCommentaryBeforeUserInputQuestion(t *testing.T) {
 	var requestID string
 	waitFor(t, func() bool {
 		for _, record := range client.sentRecords() {
-			var payload struct {
-				Content struct {
-					Question activity.UserInputSnapshot `json:"question"`
-				} `json:"content"`
-			}
-			if json.Unmarshal([]byte(record.Text), &payload) == nil && payload.Content.Question.Status == activity.UserInputStatusPending {
-				requestID = payload.Content.Question.ID
+			if snapshot, ok := questionSnapshotFromRecord(record); ok && snapshot.Status == activity.UserInputStatusPending {
+				requestID = snapshot.ID
 				return requestID != ""
 			}
 		}
@@ -1869,7 +1884,8 @@ func TestServiceFlushesCommentaryBeforeUserInputQuestion(t *testing.T) {
 	}
 	pendingIndex := -1
 	for index, record := range records {
-		if record.MessageID == "question-"+requestID && strings.Contains(record.Text, `"status":"pending"`) {
+		snapshot, ok := questionSnapshotFromRecord(record)
+		if record.MessageID == "question-"+requestID && ok && snapshot.Status == activity.UserInputStatusPending {
 			pendingIndex = index
 			break
 		}
@@ -1964,16 +1980,12 @@ func TestServiceStructuredOutputPersistsFinalThenQuestionAndContinuesSameSession
 		if !strings.Contains(records[0].Text, `<img class="resource-link-icon" src="https://example.com/full-icon.svg" alt="" aria-hidden="true"> [Full resource]`) {
 			return false
 		}
-		var payload struct {
-			Content struct {
-				Question activity.UserInputSnapshot `json:"question"`
-			} `json:"content"`
-		}
-		if json.Unmarshal([]byte(records[1].Text), &payload) != nil || payload.Content.Question.Status != activity.UserInputStatusPending {
+		snapshot, ok := questionSnapshotFromRecord(records[1])
+		if !ok || snapshot.Status != activity.UserInputStatusPending || !strings.HasPrefix(records[1].Text, "## Questions\n\n") {
 			return false
 		}
-		requestID = payload.Content.Question.ID
-		return requestID != "" && len(payload.Content.Question.Questions) == 5
+		requestID = snapshot.ID
+		return requestID != "" && len(snapshot.Questions) == 5
 	})
 
 	response := activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
@@ -1996,13 +2008,24 @@ func TestServiceStructuredOutputPersistsFinalThenQuestionAndContinuesSameSession
 		t.Fatalf("session IDs = %#v, want same session", got)
 	}
 	continuation := prompter.texts()[1]
-	exactJSON, _ := json.Marshal(response)
-	if !strings.HasSuffix(continuation, string(exactJSON)) {
-		t.Fatalf("continuation prompt = %q, want exact response JSON %s", continuation, exactJSON)
+	runtimeSnapshot, ok := broker.Get(requestID)
+	if !ok {
+		t.Fatalf("Get(%q) failed", requestID)
+	}
+	redactedJSON, _ := json.Marshal(activity.RedactSecretUserInputResponse(runtimeSnapshot, response))
+	if !strings.Contains(continuation, "Secret values are replaced with <redacted> before entering the model session:\n"+string(redactedJSON)) {
+		t.Fatalf("continuation prompt = %q, want redacted wire-compatible response JSON %s", continuation, redactedJSON)
+	}
+	if strings.Contains(continuation, "disposable-secret-123") {
+		t.Fatalf("continuation prompt leaked secret: %q", continuation)
+	}
+	if strings.Contains(continuation, "## Answers") {
+		t.Fatalf("continuation prompt = %q, must keep durable Markdown separate from the runtime response", continuation)
 	}
 	for _, record := range client.sentRecords() {
-		if strings.Contains(record.Text, "disposable-secret-123") {
-			t.Fatalf("persisted record leaked secret: %s", record.Text)
+		data, _ := json.Marshal(record)
+		if strings.Contains(string(data), "disposable-secret-123") {
+			t.Fatalf("persisted record leaked secret: %s", data)
 		}
 	}
 	var resolved activity.UserInputSnapshot
@@ -2012,16 +2035,8 @@ func TestServiceStructuredOutputPersistsFinalThenQuestionAndContinuesSameSession
 			continue
 		}
 		questionRecordCount++
-		if !strings.Contains(record.Text, `"status":"answered"`) {
-			continue
-		}
-		var payload struct {
-			Content struct {
-				Question activity.UserInputSnapshot `json:"question"`
-			} `json:"content"`
-		}
-		if json.Unmarshal([]byte(record.Text), &payload) == nil {
-			resolved = payload.Content.Question
+		if snapshot, ok := questionSnapshotFromRecord(record); ok && snapshot.Status == activity.UserInputStatusAnswered {
+			resolved = snapshot
 		}
 	}
 	if resolved.ID == "" || resolved.Answers["other"].Text != "custom value" || resolved.Answers["secret"].Text != "******" {

@@ -128,45 +128,50 @@ describe("parseMessageActivityCommand", () => {
 describe("agent question activity", () => {
   const questionMessage: IMMessage = {
     id: "question-1",
-    content: JSON.stringify({
-      type: "com.opencsg.csgclaw.agent.activity",
-      version: 1,
-      event_id: "question-activity-1",
-      sender: "agent-1",
-      channel: "csgclaw",
-      room_id: "room-1",
-      origin_server_ts: 1,
-      content: {
-        msgtype: "com.opencsg.csgclaw.agent.question",
-        body: "Question pending",
-        question: {
-          id: "request-1",
-          status: "pending",
-          requested_at: "2026-07-15T00:00:00Z",
-          questions: [
-            {
-              id: "color",
-              header: "Color",
-              question: "Choose a color",
-              options: [{ label: "Blue", description: "Cool" }],
-              is_other: true,
-              is_secret: false,
+    content: "## Questions\n\n- color：Choose a color",
+    metadata: {
+      csgclaw: {
+        agent_activity: {
+          type: "com.opencsg.csgclaw.agent.activity",
+          version: 1,
+          event_id: "question-activity-1",
+          sender: "agent-1",
+          channel: "csgclaw",
+          room_id: "room-1",
+          origin_server_ts: 1,
+          content: {
+            msgtype: "com.opencsg.csgclaw.agent.question",
+            body: "Question pending",
+            question: {
+              id: "request-1",
+              status: "pending",
+              requested_at: "2026-07-15T00:00:00Z",
+              questions: [
+                {
+                  id: "color",
+                  header: "Color",
+                  question: "Choose a color",
+                  options: [{ label: "Blue", description: "Cool" }],
+                  is_other: true,
+                  is_secret: false,
+                },
+              ],
             },
-          ],
+          },
         },
       },
-    }),
+    },
   };
 
   it("keeps question cards visible when tool activity is hidden", () => {
-    const activity = parseAgentActivity(questionMessage.content);
+    const activity = parseAgentActivity(questionMessage);
     expect(activity?.content.question?.questions[0]?.header).toBe("Color");
     expect(isToolCallMessage(questionMessage)).toBe(false);
     expect(pendingQuestionCount([questionMessage])).toBe(1);
   });
 
   it("keeps only source options when Other freeform input is enabled", () => {
-    const question = parseAgentActivity(questionMessage.content)?.content.question?.questions[0];
+    const question = parseAgentActivity(questionMessage)?.content.question?.questions[0];
     expect(question && questionOptions(question).map((option) => option.label)).toEqual(["Blue"]);
   });
 

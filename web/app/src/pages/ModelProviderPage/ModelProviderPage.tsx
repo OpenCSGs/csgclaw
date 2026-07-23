@@ -3,7 +3,15 @@ import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2 } from "lucid
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
-import { Button, DialogCloseButton, DialogContent, DialogHeader, DialogRoot, DialogTitle, Tooltip } from "@/components/ui";
+import {
+  Button,
+  DialogCloseButton,
+  DialogContent,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+  Tooltip,
+} from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
@@ -253,184 +261,192 @@ export function ModelProviderPage() {
 
   return (
     <Fragment>
-    <section className="model-provider-page">
-      <header className="model-provider-header">
-        <img
-          className="model-provider-header-avatar"
-          src={modelProviderAvatarPath(provider)}
-          alt=""
-          aria-hidden="true"
-        />
-        <div className="model-provider-header-main">
-          <div className="model-provider-title-row">
-            <h1>{provider.display_name || provider.id}</h1>
-          </div>
-          <p>{providerSubtitle}</p>
-        </div>
-        <div className={`model-provider-status-pill ${effectiveTone}`}>
-          <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
-          <span>{statusLabel}</span>
-        </div>
-        <div className="model-provider-actions">
-          <Button variant="secondaryGray" onClick={runCheck} disabled={Boolean(busy)}>
-            <RefreshCw size={16} aria-hidden="true" />
-            {busy === "check" ? t("profileLoadingModels") : t("modelProviderCheck")}
-          </Button>
-          {!isOpenCSG ? (
-            <Button variant="primary" onClick={saveProvider} disabled={Boolean(busy)}>
-              <Save size={16} aria-hidden="true" />
-              {busy === "save" ? t("profileLoadingModels") : t("agentUpdateSave")}
-            </Button>
-          ) : null}
-          {showOpenCSGSignIn ? (
-            <Button
-              variant="primary"
-              onClick={() => void controller.sidebarProps?.onLogin?.()}
-              disabled={authBusy || authPending}
-            >
-              <LogIn size={16} aria-hidden="true" />
-              {authPending ? t("csghubLoginPending") : t("csghubSignIn")}
-            </Button>
-          ) : null}
-          {!provider.builtin ? (
-            <Tooltip content={t("agentDelete")}>
-              <span>
-                <Button
-                  variant="outlineDanger"
-                  aria-label={t("agentDelete")}
-                  onClick={removeProvider}
-                  disabled={Boolean(busy)}
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                </Button>
-              </span>
-            </Tooltip>
-          ) : null}
-        </div>
-      </header>
-
-      {error ? <div className="form-error">{error}</div> : null}
-      {saveStatus ? <div className="model-provider-save-status">{saveStatus}</div> : null}
-      {showOpenCSGSignIn ? (
-        <div className="model-provider-notice warning opencsg-signin-warning">
-          <AlertCircle size={16} aria-hidden="true" />
-          <span>{t("modelProviderOpenCSGSignInRequired")}</span>
-        </div>
-      ) : null}
-      {checkMessage ? (
-        <div className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`}>
-          {effectiveTone === "warning" ? (
-            <AlertCircle size={16} aria-hidden="true" />
-          ) : (
-            <CheckCircle2 size={16} aria-hidden="true" />
-          )}
-          <span>{checkMessage}</span>
-        </div>
-      ) : null}
-
-      <div className="model-provider-grid">
-        <section className="model-provider-card">
-          <div className="model-provider-card-heading">
-            <h2>{t("modelProviderConfiguration")}</h2>
-            <p>
-              {isOpenCSG
-                ? t("modelProviderOpenCSGSettings")
-                : provider.builtin
-                  ? t("modelProviderBuiltinSettings")
-                  : t("modelProviderCustomSettings")}
-            </p>
-          </div>
-          {isOpenCSG ? (
-            <div className="opencsg-gateway-panel">
-              <div className="opencsg-gateway-address">
-                <span>{t("modelProviderAIGatewayAddress")}</span>
-                <code>{provider.base_url || draft.baseURL}</code>
-              </div>
+      <section className="model-provider-page">
+        <header className="model-provider-header">
+          <img
+            className="model-provider-header-avatar"
+            src={modelProviderAvatarPath(provider)}
+            alt=""
+            aria-hidden="true"
+          />
+          <div className="model-provider-header-main">
+            <div className="model-provider-title-row">
+              <h1>{provider.display_name || provider.id}</h1>
             </div>
-          ) : (
-            <div className="model-provider-form-grid">
-              {!provider.builtin ? (
-                <label className="field">
-                  <span>{t("agentName")}</span>
-                  <input
-                    value={draft.displayName}
-                    onInput={(event) => {
-                      const value = event.currentTarget.value;
-                      setDraft((current) => ({ ...current, displayName: value }));
-                    }}
-                  />
-                </label>
-              ) : null}
-              {canEditEndpoint ? (
-                <>
+            <p>{providerSubtitle}</p>
+          </div>
+          <div className={`model-provider-status-pill ${effectiveTone}`}>
+            <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
+            <span>{statusLabel}</span>
+          </div>
+          <div className="model-provider-actions">
+            <Button variant="secondaryGray" onClick={runCheck} disabled={Boolean(busy)}>
+              <RefreshCw size={16} aria-hidden="true" />
+              {busy === "check" ? t("profileLoadingModels") : t("modelProviderCheck")}
+            </Button>
+            {!isOpenCSG ? (
+              <Button variant="primary" onClick={saveProvider} disabled={Boolean(busy)}>
+                <Save size={16} aria-hidden="true" />
+                {busy === "save" ? t("profileLoadingModels") : t("agentUpdateSave")}
+              </Button>
+            ) : null}
+            {showOpenCSGSignIn ? (
+              <Button
+                variant="primary"
+                onClick={() => void controller.sidebarProps?.onLogin?.()}
+                disabled={authBusy || authPending}
+              >
+                <LogIn size={16} aria-hidden="true" />
+                {authPending ? t("csghubLoginPending") : t("csghubSignIn")}
+              </Button>
+            ) : null}
+            {!provider.builtin ? (
+              <Tooltip content={t("agentDelete")}>
+                <span>
+                  <Button
+                    variant="outlineDanger"
+                    aria-label={t("agentDelete")}
+                    onClick={removeProvider}
+                    disabled={Boolean(busy)}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : null}
+          </div>
+        </header>
+
+        {error ? <div className="form-error">{error}</div> : null}
+        {saveStatus ? <div className="model-provider-save-status">{saveStatus}</div> : null}
+        {showOpenCSGSignIn ? (
+          <div className="model-provider-notice warning opencsg-signin-warning">
+            <AlertCircle size={16} aria-hidden="true" />
+            <span>{t("modelProviderOpenCSGSignInRequired")}</span>
+          </div>
+        ) : null}
+        {checkMessage ? (
+          <div className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`}>
+            {effectiveTone === "warning" ? (
+              <AlertCircle size={16} aria-hidden="true" />
+            ) : (
+              <CheckCircle2 size={16} aria-hidden="true" />
+            )}
+            <span>{checkMessage}</span>
+          </div>
+        ) : null}
+
+        <div className="model-provider-grid">
+          <section className="model-provider-card">
+            <div className="model-provider-card-heading">
+              <h2>{t("modelProviderConfiguration")}</h2>
+              <p>
+                {isOpenCSG
+                  ? t("modelProviderOpenCSGSettings")
+                  : provider.builtin
+                    ? t("modelProviderBuiltinSettings")
+                    : t("modelProviderCustomSettings")}
+              </p>
+            </div>
+            {isOpenCSG ? (
+              <div className="opencsg-gateway-panel">
+                <div className="opencsg-gateway-address">
+                  <span>{t("modelProviderAIGatewayAddress")}</span>
+                  <code>{provider.base_url || draft.baseURL}</code>
+                </div>
+              </div>
+            ) : (
+              <div className="model-provider-form-grid">
+                {!provider.builtin ? (
                   <label className="field">
-                    {t("profileBaseURL")}
+                    <span>{t("agentName")}</span>
                     <input
-                      value={draft.baseURL}
+                      value={draft.displayName}
                       onInput={(event) => {
                         const value = event.currentTarget.value;
-                        setDraft((current) => ({ ...current, baseURL: value }));
+                        setDraft((current) => ({ ...current, displayName: value }));
                       }}
-                      placeholder="https://api.openai.com/v1"
                     />
                   </label>
-                  <APIKeyField
-                    t={t}
-                    value={draft.apiKey}
-                    profile={provider}
-                    unchangedHint={t("modelProviderStoredAPIKeyHint")}
-                    onInput={(event) => {
-                      const value = event.currentTarget.value;
-                      setDraft((current) => ({ ...current, apiKey: value }));
-                    }}
-                  />
-                </>
-              ) : null}
+                ) : null}
+                {canEditEndpoint ? (
+                  <>
+                    <label className="field">
+                      {t("profileBaseURL")}
+                      <input
+                        value={draft.baseURL}
+                        onInput={(event) => {
+                          const value = event.currentTarget.value;
+                          setDraft((current) => ({ ...current, baseURL: value }));
+                        }}
+                        placeholder="https://api.openai.com/v1"
+                      />
+                    </label>
+                    <APIKeyField
+                      t={t}
+                      value={draft.apiKey}
+                      profile={provider}
+                      unchangedHint={t("modelProviderStoredAPIKeyHint")}
+                      onInput={(event) => {
+                        const value = event.currentTarget.value;
+                        setDraft((current) => ({ ...current, apiKey: value }));
+                      }}
+                    />
+                  </>
+                ) : null}
+              </div>
+            )}
+          </section>
+
+          <section className="model-provider-card model-provider-models-card">
+            <div className="model-provider-card-heading">
+              <h2>{t("profileModel")}</h2>
+              <p>
+                {modelList.length
+                  ? t("modelProviderModelCount", { count: modelList.length })
+                  : t("modelProviderNoModels")}
+              </p>
             </div>
-          )}
-        </section>
-
-        <section className="model-provider-card model-provider-models-card">
-          <div className="model-provider-card-heading">
-            <h2>{t("profileModel")}</h2>
-            <p>
-              {modelList.length
-                ? t("modelProviderModelCount", { count: modelList.length })
-                : t("modelProviderNoModels")}
-            </p>
-          </div>
-          <ModelProviderModelList
-            emptyLabel={t("modelProviderNoModels")}
-            modelListLabel={t("modelProviderModels")}
-            models={modelList}
-            searchLabel={t("modelProviderModelSearch")}
-          />
-        </section>
-      </div>
-    </section>
-
-    <DialogRoot
-      open={deleteSuccess}
-      onOpenChange={(open) => {
-        if (!open) {
-          dismissDeleteSuccess();
-        }
-      }}
-    >
-      <DialogContent className="model-provider-delete-success-dialog" overlayClassName="model-provider-delete-success-backdrop">
-        <DialogHeader className="model-provider-delete-success-header">
-          <div className="model-provider-delete-success-copy">
-            <DialogTitle>{t("modelProviderDeleteSuccess")}</DialogTitle>
-          </div>
-          <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
-        </DialogHeader>
-        <div className="model-provider-delete-success-actions">
-          <Button className="model-provider-delete-success-button" variant="primary" size="sm" onClick={dismissDeleteSuccess}>
-            {t("modelProviderDeleteSuccessDismiss")}
-          </Button>
+            <ModelProviderModelList
+              emptyLabel={t("modelProviderNoModels")}
+              modelListLabel={t("modelProviderModels")}
+              models={modelList}
+              searchLabel={t("modelProviderModelSearch")}
+            />
+          </section>
         </div>
-      </DialogContent>
-    </DialogRoot>
+      </section>
+
+      <DialogRoot
+        open={deleteSuccess}
+        onOpenChange={(open) => {
+          if (!open) {
+            dismissDeleteSuccess();
+          }
+        }}
+      >
+        <DialogContent
+          className="model-provider-delete-success-dialog"
+          overlayClassName="model-provider-delete-success-backdrop"
+        >
+          <DialogHeader className="model-provider-delete-success-header">
+            <div className="model-provider-delete-success-copy">
+              <DialogTitle>{t("modelProviderDeleteSuccess")}</DialogTitle>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <div className="model-provider-delete-success-actions">
+            <Button
+              className="model-provider-delete-success-button"
+              variant="primary"
+              size="sm"
+              onClick={dismissDeleteSuccess}
+            >
+              {t("modelProviderDeleteSuccessDismiss")}
+            </Button>
+          </div>
+        </DialogContent>
+      </DialogRoot>
     </Fragment>
   );
 }

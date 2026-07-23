@@ -97,7 +97,7 @@ export function conversationActivityEntries(
   const mergedEntries = new Map<string, MutableConversationActivityEntry>();
 
   sortMessages(messages).forEach((message) => {
-    const activity = parseAgentActivity(message.content);
+    const activity = parseAgentActivity(message);
     const agent = resolveMessageAgent(message, activity, agents);
     const userPrompt = isConversationUserPrompt(message, activity, agent, conversationMemberIDs, usersById);
     if (!agent && !userPrompt) {

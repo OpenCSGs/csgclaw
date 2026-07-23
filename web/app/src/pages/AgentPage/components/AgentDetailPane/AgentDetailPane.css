@@ -1567,7 +1567,10 @@
   color: var(--text);
 }
 
-:root[data-theme="dark"] .agent-skill-delete-dialog .agent-skills-dialog-actions .btn-secondary-gray:hover:not(:disabled) {
+:root[data-theme="dark"]
+  .agent-skill-delete-dialog
+  .agent-skills-dialog-actions
+  .btn-secondary-gray:hover:not(:disabled) {
   border-color: color-mix(in oklab, var(--brand-300) 24%, var(--line));
   background: color-mix(in oklab, var(--field) 84%, var(--brand-300) 8%);
   color: var(--text);

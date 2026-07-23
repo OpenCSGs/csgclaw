@@ -135,7 +135,14 @@ func TestManagerFeishuSkillRoomCreationKeepsRequesterAsCreator(t *testing.T) {
 
 func TestManagerEmbedsInteractiveOutputDemo(t *testing.T) {
 	skillRoot := path.Join(CodexManagerRoot, SkillsDirName, "csgclaw-interactive-output-demo")
-	for _, file := range []string{"SKILL.md", "agents/openai.yaml", "scripts/emit_demo.py"} {
+	for _, file := range []string{
+		"SKILL.md",
+		"agents/openai.yaml",
+		"scripts/emit_demo.py",
+		"references/stage-2.md",
+		"references/stage-3.md",
+		"references/complete.md",
+	} {
 		if _, err := fs.ReadFile(FS(), path.Join(skillRoot, file)); err != nil {
 			t.Fatalf("read embedded interactive output demo %s: %v", file, err)
 		}
@@ -147,5 +154,24 @@ func TestManagerEmbedsInteractiveOutputDemo(t *testing.T) {
 	}
 	if !strings.Contains(string(metadata), "allow_implicit_invocation: false") {
 		t.Fatalf("interactive output demo must remain explicit-only:\n%s", metadata)
+	}
+}
+
+func TestManagerInstructionsEnforceStructuredOutputTurnBoundary(t *testing.T) {
+	instructions, err := fs.ReadFile(FS(), path.Join(CodexManagerRoot, InstructionsDirName, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read embedded manager instructions: %v", err)
+	}
+
+	for _, want := range []string{
+		"::csgclaw-output::request_user_input",
+		"final tool call of the current turn",
+		"do not call another tool",
+		"RequestUserInputResponse",
+		"never from tool stdout produced in the current turn",
+	} {
+		if !strings.Contains(string(instructions), want) {
+			t.Fatalf("manager instructions missing structured-output boundary %q", want)
+		}
 	}
 }

@@ -1079,6 +1079,71 @@ func TestPublishParticipantEventDeliversToParticipantIDWhenRoomUsesChannelUserRe
 	}
 }
 
+func TestPublishParticipantEventDoesNotDispatchUserInputAnswerTranscript(t *testing.T) {
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-agent-hhtz4b", Name: "qa"},
+		},
+		Rooms: []im.Room{{
+			ID:       "room-1",
+			IsDirect: true,
+			Members:  []string{"u-admin", "u-agent-hhtz4b"},
+		}},
+	})
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:              "agent-hhtz4b",
+		Channel:         participant.ChannelCSGClaw,
+		Type:            participant.TypeAgent,
+		Name:            "qa",
+		ChannelUserRef:  "u-agent-hhtz4b",
+		ChannelUserKind: participant.ChannelUserKindLocalUserID,
+		AgentID:         "u-agent-hhtz4b",
+		LifecycleStatus: participant.LifecycleStatusActive,
+		Mentionable:     true,
+	}}))
+	bridge := im.NewParticipantBridge("secret")
+	events, cancel := bridge.Subscribe("agent-hhtz4b")
+	defer cancel()
+	srv := &Handler{
+		im:                imSvc,
+		participant:       participantSvc,
+		participantBridge: bridge,
+	}
+	sender, ok := imSvc.User("u-admin")
+	if !ok {
+		t.Fatal("missing admin sender")
+	}
+	message := im.Message{
+		ID:        "answer-request-1",
+		SenderID:  sender.ID,
+		Content:   "## Answers\n\n- kind：Standard (Normal checks.)",
+		CreatedAt: time.Now().UTC(),
+		Metadata: map[string]any{
+			userInputTranscriptMetadataKey: map[string]any{
+				userInputTranscriptRequestKey: map[string]any{
+					"kind":       userInputTranscriptAnswerKind,
+					"request_id": "request-1",
+				},
+			},
+		},
+	}
+
+	srv.PublishParticipantEvent(im.Event{
+		Type:    im.EventTypeMessageCreated,
+		RoomID:  "room-1",
+		Sender:  &sender,
+		Message: &message,
+	})
+
+	select {
+	case evt := <-events:
+		t.Fatalf("unexpected participant event for transcript: %+v", evt)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
 func TestCSGClawMessageRouteDeliversToCanonicalParticipantWhenRoomUsesAgentID(t *testing.T) {
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",

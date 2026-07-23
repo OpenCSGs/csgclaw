@@ -22,6 +22,7 @@ import (
 const (
 	appServerStopTimeout          = 3 * time.Second
 	appServerTurnInterruptTimeout = 5 * time.Second
+	appServerTrackedTurnLimit     = 256
 )
 
 var (
@@ -133,6 +134,8 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		appClient:             appClient,
 		conversationSessions:  make(map[string]string),
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
+		turnThreads:           make(map[string]string),
+		commandOutputs:        make(map[string]*appServerCommandOutputState),
 		replayedExecCommands:  make(map[string]struct{}),
 		replayedAgentMessages: make(map[string]struct{}),
 	}
@@ -300,6 +303,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
+	live.trackAppServerTurn(sessionID, waiter.currentTurnID())
 	live.appClient.logDebug("codex app-server turn start accepted",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
@@ -768,12 +772,13 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
-	mu            sync.RWMutex
-	threadID      string
-	turnID        string
-	ch            chan appServerTurnResult
-	lastActivity  string
-	pendingInputs int
+	mu                       sync.RWMutex
+	threadID                 string
+	turnID                   string
+	ch                       chan appServerTurnResult
+	lastActivity             string
+	pendingInputs            int
+	structuredOutputBoundary bool
 }
 
 type appServerTurnResult struct {
@@ -820,6 +825,38 @@ func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServ
 	}
 }
 
+func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
+	threadID = strings.TrimSpace(threadID)
+	turnID = strings.TrimSpace(turnID)
+	if s == nil || threadID == "" || turnID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.turnThreads == nil {
+		s.turnThreads = make(map[string]string)
+	}
+	if _, exists := s.turnThreads[turnID]; !exists {
+		s.turnThreadOrder = append(s.turnThreadOrder, turnID)
+	}
+	s.turnThreads[turnID] = threadID
+	for len(s.turnThreadOrder) > appServerTrackedTurnLimit {
+		oldest := s.turnThreadOrder[0]
+		s.turnThreadOrder = s.turnThreadOrder[1:]
+		delete(s.turnThreads, oldest)
+	}
+}
+
+func (s *liveSession) appServerThreadForTurn(turnID string) string {
+	turnID = strings.TrimSpace(turnID)
+	if s == nil || turnID == "" {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return strings.TrimSpace(s.turnThreads[turnID])
+}
+
 func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnResult) bool {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
@@ -844,6 +881,15 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	default:
 	}
 	return true
+}
+
+func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.turnWaiters[strings.TrimSpace(threadID)]
 }
 
 func (w *appServerTurnWaiter) setTurnID(turnID string) {
@@ -894,6 +940,28 @@ func (w *appServerTurnWaiter) currentLastActivity() string {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return strings.TrimSpace(w.lastActivity)
+}
+
+func (w *appServerTurnWaiter) markStructuredOutputBoundary() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.structuredOutputBoundary {
+		return false
+	}
+	w.structuredOutputBoundary = true
+	return true
+}
+
+func (w *appServerTurnWaiter) hasStructuredOutputBoundary() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.structuredOutputBoundary
 }
 
 func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSession, waiter *appServerTurnWaiter) (PromptResponse, error) {
@@ -1139,6 +1207,44 @@ func (m *appServerManager) interruptAppServerTurn(live *liveSession, waiter *app
 			return fmt.Errorf("wait for interrupted codex app-server turn: %w", ctx.Err())
 		}
 	}
+}
+
+// interruptAppServerStructuredOutputTurn makes a script-emitted question a
+// runtime-enforced turn boundary. The request runs asynchronously because this
+// method is called while the app-server stdout reader is dispatching the
+// command-completion notification that revealed the control record.
+func (m *appServerManager) interruptAppServerStructuredOutputTurn(live *liveSession, threadID string) {
+	if live == nil || live.appClient == nil {
+		return
+	}
+	waiter := live.appServerTurnWaiter(threadID)
+	if waiter == nil || !waiter.markStructuredOutputBoundary() {
+		return
+	}
+	turnID := waiter.currentTurnID()
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" || turnID == "" {
+		live.appClient.logDebug("cannot interrupt structured-output turn with incomplete identity",
+			"thread_id", threadID,
+			"turn_id", turnID,
+		)
+		return
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), appServerTurnInterruptTimeout)
+		defer cancel()
+		if _, err := live.appClient.request(ctx, "turn/interrupt", map[string]any{
+			"threadId": threadID,
+			"turnId":   turnID,
+		}); err != nil {
+			live.appClient.logDebug("structured-output turn interrupt failed",
+				"thread_id", threadID,
+				"turn_id", turnID,
+				"error", err,
+			)
+		}
+	}()
 }
 
 func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSession, stdout io.Reader) {

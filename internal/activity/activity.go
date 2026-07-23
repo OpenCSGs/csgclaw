@@ -168,6 +168,7 @@ type UserInputSnapshot struct {
 	ID            string                             `json:"id"`
 	Channel       string                             `json:"channel,omitempty"`
 	RoomID        string                             `json:"room_id,omitempty"`
+	ThreadRootID  string                             `json:"thread_root_id,omitempty"`
 	Status        UserInputStatus                    `json:"status"`
 	Questions     []UserInputQuestionSnapshot        `json:"questions"`
 	Answers       map[string]UserInputAnswerSnapshot `json:"answers,omitempty"`
@@ -178,11 +179,12 @@ type UserInputSnapshot struct {
 }
 
 type UserInputResponseRequest struct {
-	Channel     string                   `json:"channel,omitempty"`
-	ActivityID  string                   `json:"activity_id,omitempty"`
-	RoomID      string                   `json:"room_id,omitempty"`
-	ResponderID string                   `json:"responder_id,omitempty"`
-	Response    RequestUserInputResponse `json:"response"`
+	Channel          string                                         `json:"channel,omitempty"`
+	ActivityID       string                                         `json:"activity_id,omitempty"`
+	RoomID           string                                         `json:"room_id,omitempty"`
+	ResponderID      string                                         `json:"responder_id,omitempty"`
+	Response         RequestUserInputResponse                       `json:"response"`
+	RecordTranscript func(context.Context, UserInputSnapshot) error `json:"-"`
 }
 
 type UserInputResponder interface {

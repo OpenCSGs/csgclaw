@@ -720,7 +720,7 @@ func reconcileInterruptedUserInputMessages(imSvc *im.Service) error {
 	now := time.Now().UTC()
 	for _, room := range imSvc.ListRoomsWithOptions(im.ListMessagesOptions{IncludeThreadReplies: true}) {
 		for _, message := range room.Messages {
-			content, changed := runtimebridge.InterruptPendingQuestionActivity(message.Content, now)
+			content, metadata, changed := runtimebridge.InterruptPendingQuestionActivity(message.Content, message.Metadata, now)
 			if !changed {
 				continue
 			}
@@ -734,7 +734,7 @@ func reconcileInterruptedUserInputMessages(imSvc *im.Service) error {
 				Content:      content,
 				MessageID:    message.ID,
 				ThreadRootID: threadRootID,
-				Metadata:     message.Metadata,
+				Metadata:     metadata,
 			}); err != nil {
 				return fmt.Errorf("reconcile interrupted user input message %s: %w", message.ID, err)
 			}

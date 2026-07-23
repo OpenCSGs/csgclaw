@@ -290,8 +290,8 @@ func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest
 	if err != nil {
 		return fmt.Errorf("resolve codex home for agent %q: %w", req.AgentName, err)
 	}
-	if err := r.seedMissingManagerSkills(agentID, codexHomeDir); err != nil {
-		return fmt.Errorf("seed missing manager codex skills for agent %q: %w", req.AgentName, err)
+	if err := r.syncManagerTemplateSkills(agentID, codexHomeDir); err != nil {
+		return fmt.Errorf("sync manager codex skills for agent %q: %w", req.AgentName, err)
 	}
 	return nil
 }
@@ -921,52 +921,18 @@ func (r *Runtime) seedManagerTemplate(agentID, runtimeCodexHome string) error {
 		return fmt.Errorf("codex home dir is required")
 	}
 
-	skillNames, err := managerTemplateSkillNames()
-	if err != nil {
-		return err
-	}
-	hostSkillNames, err := r.readHostSkillsManifest(runtimeCodexHome)
-	if err != nil {
-		return err
-	}
-	hostSkills := make(map[string]struct{}, len(hostSkillNames))
-	for _, name := range hostSkillNames {
-		hostSkills[name] = struct{}{}
-	}
-	if err := r.removeAll(filepath.Join(runtimeCodexHome, "skills", "basics")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove legacy manager codex skill %q: %w", "basics", err)
-	}
-
 	source := templateembed.FS()
 	if err := r.copyEmbeddedDir(source, pathpkg.Join(templateembed.CodexManagerRoot, templateembed.InstructionsDirName), runtimeCodexHome); err != nil {
 		return fmt.Errorf("seed manager codex template %s: %w", runtimeCodexHome, err)
 	}
-
-	sourceSkillsRoot := pathpkg.Join(templateembed.CodexManagerRoot, templateembed.SkillsDirName)
-	targetSkillsRoot := filepath.Join(runtimeCodexHome, "skills")
-	for _, name := range skillNames {
-		target := filepath.Join(targetSkillsRoot, name)
-		_, statErr := r.stat(target)
-		_, hostManaged := hostSkills[name]
-		if statErr == nil && !hostManaged {
-			continue
-		}
-		if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
-			return fmt.Errorf("inspect manager codex template skill %q: %w", name, statErr)
-		}
-		if hostManaged {
-			if err := r.removeAll(target); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("remove host-managed manager codex skill %q: %w", name, err)
-			}
-		}
-		if err := r.copyEmbeddedDir(source, pathpkg.Join(sourceSkillsRoot, name), target); err != nil {
-			return fmt.Errorf("seed manager codex template skill %q: %w", name, err)
-		}
-	}
-	return nil
+	return r.syncManagerTemplateSkills(agentID, runtimeCodexHome)
 }
 
-func (r *Runtime) seedMissingManagerSkills(agentID, runtimeCodexHome string) error {
+// syncManagerTemplateSkills replaces every CSGClaw-owned Manager skill with
+// the version embedded in the running binary. Removing each directory first
+// also drops files that disappeared from newer skill versions while leaving
+// custom skills with other names untouched.
+func (r *Runtime) syncManagerTemplateSkills(agentID, runtimeCodexHome string) error {
 	if canonicalRuntimeAgentID(agentID) != agent.ManagerUserID {
 		return nil
 	}
@@ -982,9 +948,16 @@ func (r *Runtime) seedMissingManagerSkills(agentID, runtimeCodexHome string) err
 	source := templateembed.FS()
 	sourceRoot := pathpkg.Join(templateembed.CodexManagerRoot, templateembed.SkillsDirName)
 	targetRoot := filepath.Join(runtimeCodexHome, "skills")
+	if err := r.removeAll(filepath.Join(targetRoot, "basics")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove legacy manager codex skill %q: %w", "basics", err)
+	}
 	for _, name := range skillNames {
-		if err := r.copyEmbeddedPathIfMissing(source, pathpkg.Join(sourceRoot, name), filepath.Join(targetRoot, name)); err != nil {
-			return fmt.Errorf("seed missing manager codex template skill %q: %w", name, err)
+		target := filepath.Join(targetRoot, name)
+		if err := r.removeAll(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove manager codex template skill %q: %w", name, err)
+		}
+		if err := r.copyEmbeddedDir(source, pathpkg.Join(sourceRoot, name), target); err != nil {
+			return fmt.Errorf("sync manager codex template skill %q: %w", name, err)
 		}
 	}
 	return nil
@@ -1011,15 +984,6 @@ func managerTemplateSkillNames() ([]string, error) {
 		names = append(names, name)
 	}
 	return names, nil
-}
-
-func (r *Runtime) copyEmbeddedPathIfMissing(source fs.FS, sourcePath, targetPath string) error {
-	if _, err := r.stat(targetPath); err == nil {
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return r.copyEmbeddedDir(source, sourcePath, targetPath)
 }
 
 func (r *Runtime) writeModelCatalog(runtimeCodexHome string, profile agentruntime.Profile) error {

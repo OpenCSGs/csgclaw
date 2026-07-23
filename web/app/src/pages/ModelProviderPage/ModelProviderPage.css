@@ -380,7 +380,6 @@
   color: color-mix(in oklab, var(--warning-700) 78%, var(--text));
 }
 
-
 /* ── Delete success dialog ── */
 
 .csg-dialog-overlay.model-provider-delete-success-backdrop {

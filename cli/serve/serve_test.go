@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -62,7 +63,7 @@ func TestReconcileInterruptedUserInputMessagesIncludesThreadReplies(t *testing.T
 			ID: "room-1", Title: "Room", Members: []string{"manager"},
 			Messages: []im.Message{
 				{ID: "root-1", SenderID: "manager", Content: "root", CreatedAt: now.Add(-time.Minute)},
-				{ID: pending.MessageID, SenderID: "manager", Content: pending.Text, CreatedAt: now, RelatesTo: &im.MessageRelation{RelType: im.RelationTypeThread, EventID: "root-1"}},
+				{ID: pending.MessageID, SenderID: "manager", Content: pending.Text, Metadata: pending.Metadata, CreatedAt: now, RelatesTo: &im.MessageRelation{RelType: im.RelationTypeThread, EventID: "root-1"}},
 			},
 		}},
 	})
@@ -81,7 +82,8 @@ func TestReconcileInterruptedUserInputMessagesIncludesThreadReplies(t *testing.T
 			break
 		}
 	}
-	if found.ID == "" || !strings.Contains(found.Content, `"status":"interrupted"`) || found.RelatesTo == nil || found.RelatesTo.EventID != "root-1" {
+	metadata, _ := json.Marshal(found.Metadata)
+	if found.ID == "" || !strings.Contains(found.Content, "Status: Request interrupted.") || !strings.Contains(string(metadata), `"status":"interrupted"`) || found.RelatesTo == nil || found.RelatesTo.EventID != "root-1" {
 		t.Fatalf("reconciled thread question = %+v", found)
 	}
 }

@@ -308,7 +308,7 @@ function uniqueStrings(values: string[]): string[] {
 
 export function isToolCallMessage(messageOrContent: IMMessage | unknown): boolean {
   if (isMessageLike(messageOrContent)) {
-    const activity = parseAgentActivity(messageOrContent.content);
+    const activity = parseAgentActivity(messageOrContent);
     if (activity) {
       return activity.content.msgtype !== AgentActivityMsgTypes.question;
     }

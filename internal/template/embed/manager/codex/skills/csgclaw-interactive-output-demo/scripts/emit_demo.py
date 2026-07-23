@@ -1,96 +1,21 @@
 #!/usr/bin/env python3
-"""Emit the complete CSGClaw structured-output protocol and acceptance demo.
+"""Emit the three-stage CSGClaw structured-output acceptance demo.
 
 This executable is also a reference implementation for skill authors.
 Each supported protocol field is documented at its first use below.
+The script deliberately has no response JSON input: the agent reads each
+RequestUserInputResponse and selects the next allowlisted stage arguments.
 """
 
+import argparse
 import json
 
 
-# A skill returns ordinary Markdown after the emitter command finishes. CSGClaw
-# persists this response first, appends resource links, and then opens questions.
-INITIAL_RESPONSE_MARKDOWN = """## Interactive output demo
-
-The complete interactive output demo is ready."""
-
-
-# This is the exact Codex RequestUserInputResponse shape delivered to the skill's
-# automatic continuation. Values here are disposable examples, not credentials.
-EXAMPLE_REQUEST_USER_INPUT_RESPONSE = {
-    "answers": {  # Map keyed by the stable question id from each question below.
-        "demo_kind": {
-            # Codex uses an array: [] skips; CSGClaw currently sends zero or one
-            # value, while retaining wire compatibility for future multi-values.
-            # Use an option label, or "user_note: " followed by freeform text.
-            "answers": ["Bug fix (Recommended)"],
-        },
-        "verification": {"answers": ["Strict + Unicode 中文"]},
-        "destination": {"answers": ["user_note: Documentation example / 示例"]},
-        "freeform_note": {
-            "answers": ["user_note: Show the exact JSON response shape."]
-        },
-        "test_secret": {"answers": ["user_note: disposable-example-only"]},
-    }
-}
-
-
-# Human-facing labels for the suggested Markdown presentation.
-QUESTION_LABELS = {
-    "demo_kind": "Demo kind",
-    "verification": "Verification",
-    "destination": "Destination",
-    "freeform_note": "Note",
-    "test_secret": "Test secret",
-}
-
-
-def render_answer_markdown(response: dict[str, object]) -> str:
-    """Return structured JSON followed by a suggested Markdown presentation.
-
-    A real continuation receives the exact response JSON. It must redact secret
-    values before placing the response in Markdown or any other persisted text.
-    """
-
-    safe_response = json.loads(json.dumps(response, ensure_ascii=False))
-    answers = safe_response.get("answers")
-    secret_answer = answers.get("test_secret") if isinstance(answers, dict) else None
-    if isinstance(secret_answer, dict) and secret_answer.get("answers"):
-        secret_answer["answers"] = ["<redacted>"]
-    encoded = json.dumps(safe_response, ensure_ascii=False, indent=2)
-    lines = [
-        "## Submitted `RequestUserInputResponse`",
-        "",
-        "```json",
-        encoded,
-        "```",
-        "",
-        "## Suggested Markdown presentation",
-        "",
-    ]
-    if isinstance(answers, dict):
-        for question_id, answer in answers.items():
-            label = QUESTION_LABELS.get(question_id, question_id)
-            values = answer.get("answers") if isinstance(answer, dict) else None
-            if question_id == "test_secret" and values:
-                display = "Secret recorded"
-            elif not isinstance(values, list) or not values:
-                display = "Skipped"
-            else:
-                display_values = [
-                    value.removeprefix("user_note: ")
-                    for value in values
-                    if isinstance(value, str)
-                ]
-                display = ", ".join(display_values) or "Skipped"
-            lines.append(f"- **{label}:** {display}")
-    return "\n".join(lines)
-
-
-# Concrete Markdown example for developers to copy or adapt in another skill.
-ANSWER_RESPONSE_MARKDOWN_EXAMPLE = render_answer_markdown(
-    EXAMPLE_REQUEST_USER_INPUT_RESPONSE
-)
+WORKFLOWS = ("bug-fix", "new-feature", "code-review", "custom")
+DESTINATIONS = ("current-room", "qa-thread", "custom", "unspecified")
+VERIFICATIONS = ("standard", "strict", "fast", "unspecified")
+PRESENTATIONS = ("concise", "detailed", "bilingual", "unspecified")
+ACTIONS = ("execute", "revise", "stop", "skip")
 
 
 def emit(kind: str, payload: dict[str, object]) -> None:
@@ -102,10 +27,8 @@ def emit(kind: str, payload: dict[str, object]) -> None:
     print(f"::csgclaw-output::{kind} {encoded}")
 
 
-def main() -> None:
-    """Emit ordinary stdout followed by links and one question request."""
-
-    print("Interactive output demo controls emitted successfully.")
+def emit_resource_links() -> None:
+    """Emit the full and minimal ResourceLink examples used by stages 1 and 2."""
 
     emit(
         "resource_link",
@@ -150,7 +73,6 @@ def main() -> None:
             ],
         },
     )
-
     # Minimal ResourceLink: only type, name, and uri are required by CSGClaw.
     emit(
         "resource_link",
@@ -161,6 +83,16 @@ def main() -> None:
         },
     )
 
+
+def emit_start() -> None:
+    """Emit resource links and option-based questions for stage 1."""
+
+    # Ordinary stdout becomes the readable response when CSGClaw closes the
+    # turn at the structured question boundary. Control records stay hidden.
+    print("## Interactive output demo - step 1 of 3")
+    print()
+    print("Choose the workflow branch.")
+    emit_resource_links()
     emit(
         "request_user_input",
         {
@@ -172,7 +104,7 @@ def main() -> None:
                     # Required short activity/history label.
                     "header": "Demo kind",
                     # Required concrete UI title.
-                    "question": "What kind of CSGClaw demo should this be?",
+                    "question": "What workflow should the demo execute?",
                     # Show a freeform alternative when true or options are absent.
                     "isOther": False,
                     # Use password input and redact persisted values when true.
@@ -183,18 +115,40 @@ def main() -> None:
                             # Exact submitted value; the suffix adds the badge.
                             "label": "Bug fix (Recommended)",
                             # Optional supporting text.
-                            "description": "Plans a focused repair workflow with reproduction and verification.",
+                            "description": "Follow a focused repair workflow with reproduction and verification.",
                         },
                         {
                             "label": "New feature",
-                            "description": "Plans a user-facing feature from goal to test coverage.",
+                            "description": "Plan a user-facing capability from goal to test coverage.",
                         },
                         {
                             "label": "Code review",
-                            "description": "Shows review findings, concrete risks, and priorities.",
+                            "description": "Inspect changes, concrete risks, and priorities.",
                         },
                     ],
                 },
+            ],
+            # Optional timeout from 60000 through 240000 ms.
+            # Omit it so this manual demo does not expire.
+            # "autoResolutionMs": 240000,
+        },
+    )
+
+
+def emit_context(workflow: str) -> None:
+    """Emit option-or-freeform and freeform-only questions for stage 2."""
+
+    print("## Interactive output demo - step 2 of 3")
+    print()
+    print(
+        "Configure verification, destination, an optional freeform note, "
+        "and presentation."
+    )
+    emit_resource_links()
+    emit(
+        "request_user_input",
+        {
+            "questions": [
                 {
                     "id": "verification",
                     "header": "Checks",
@@ -204,22 +158,22 @@ def main() -> None:
                     "options": [
                         {
                             "label": "Standard",
-                            "description": "Uses targeted checks, normal punctuation, and practical coverage.",
+                            "description": "Use targeted checks, normal punctuation, and practical coverage.",
                         },
                         {
                             "label": "Strict + Unicode 中文",
-                            "description": "Adds broader verification, edge cases, and explicit acceptance criteria.",
+                            "description": "Add broader verification, edge cases, and explicit acceptance criteria.",
                         },
                         {
                             "label": "Fast, focused",
-                            "description": "Keeps validation lightweight and emphasizes speed.",
+                            "description": "Keep validation lightweight and emphasize speed.",
                         },
                     ],
                 },
                 {
                     "id": "destination",
                     "header": "Destination",
-                    "question": "Where should the demo result go?",
+                    "question": f"Where should the {workflow} demo result go?",
                     "isOther": True,
                     "isSecret": False,
                     "options": [
@@ -236,25 +190,153 @@ def main() -> None:
                 {
                     "id": "freeform_note",
                     "header": "Freeform",
-                    "question": "Add a freeform-only note with spaces, punctuation, or Unicode.",
+                    "question": "Add an optional note with spaces, punctuation, or Unicode.",
                     "isOther": True,
                     "isSecret": False,
                     "options": None,
                 },
                 {
+                    "id": "presentation",
+                    "header": "Presentation",
+                    "question": "How should the final execution receipt be presented?",
+                    "isOther": False,
+                    "isSecret": False,
+                    "options": [
+                        {
+                            "label": "Concise (Recommended)",
+                            "description": "Show a short branch and action receipt.",
+                        },
+                        {
+                            "label": "Detailed",
+                            "description": "Show every allowlisted selection in the receipt.",
+                        },
+                        {
+                            "label": "Bilingual 中文 + English",
+                            "description": "Exercise spaces, punctuation, and Unicode in an ordinary option.",
+                        },
+                    ],
+                },
+            ]
+        },
+    )
+
+
+def emit_confirmation(
+    workflow: str, destination: str, verification: str, presentation: str
+) -> None:
+    """Emit final action options and optional secret input for stage 3."""
+
+    print("## Interactive output demo - step 3 of 3")
+    print()
+    print(
+        "Choose the final action and optionally enter a disposable secret test value."
+    )
+    emit(
+        "request_user_input",
+        {
+            "questions": [
+                {
+                    "id": "final_action",
+                    "header": "Final action",
+                    "question": "What should the demo execute next?",
+                    "isOther": False,
+                    "isSecret": False,
+                    "options": [
+                        {
+                            "label": "Execute demo (Recommended)",
+                            "description": "Complete the selected branch and show its execution receipt.",
+                        },
+                        {
+                            "label": "Revise context",
+                            "description": "Finish with a receipt requesting revised context.",
+                        },
+                        {
+                            "label": "Stop here",
+                            "description": "Finish without executing the selected demo branch.",
+                        },
+                    ],
+                },
+                {
                     "id": "test_secret",
                     "header": "Test secret",
-                    "question": "Enter a disposable test value only - never a real credential.",
+                    "question": "Optionally enter a disposable test value only - never a real credential.",
                     "isOther": True,
                     "isSecret": True,
                     "options": None,
                 },
-            ],
-            # Optional timeout from 60000 through 240000 ms.
-            # Keep it commented out so this manual demo does not expire.
-            # "autoResolutionMs": 240000,
+            ]
         },
     )
+
+
+def complete(
+    workflow: str,
+    destination: str,
+    verification: str,
+    presentation: str,
+    action: str,
+) -> None:
+    """Print a safe final receipt selected by the agent, never by parsed JSON."""
+
+    print(
+        "FINAL_RECEIPT_EMITTED. STOP CURRENT TURN. Return only the Markdown below "
+        "and do not execute another command."
+    )
+    print("## Interactive output demo complete")
+    print()
+    print(f"- Workflow branch: `{workflow}`")
+    print(f"- Destination branch: `{destination}`")
+    print(f"- Verification branch: `{verification}`")
+    print(f"- Presentation branch: `{presentation}`")
+    print(f"- Executed action: `{action}`")
+    print("- Secret handling: no secret value was passed to this script")
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse only allowlisted stage selectors chosen by the agent."""
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="stage", required=True)
+    subparsers.add_parser("start")
+
+    context = subparsers.add_parser("context")
+    context.add_argument("--workflow", required=True, choices=WORKFLOWS)
+
+    confirm = subparsers.add_parser("confirm")
+    confirm.add_argument("--workflow", required=True, choices=WORKFLOWS)
+    confirm.add_argument("--destination", required=True, choices=DESTINATIONS)
+    confirm.add_argument("--verification", required=True, choices=VERIFICATIONS)
+    confirm.add_argument("--presentation", required=True, choices=PRESENTATIONS)
+
+    finish = subparsers.add_parser("complete")
+    finish.add_argument("--workflow", required=True, choices=WORKFLOWS)
+    finish.add_argument("--destination", required=True, choices=DESTINATIONS)
+    finish.add_argument("--verification", required=True, choices=VERIFICATIONS)
+    finish.add_argument("--presentation", required=True, choices=PRESENTATIONS)
+    finish.add_argument("--action", required=True, choices=ACTIONS)
+    return parser.parse_args()
+
+
+def main() -> None:
+    """Emit one requested stage without reading any prior response."""
+
+    args = parse_args()
+    if args.stage == "start":
+        emit_start()
+    elif args.stage == "context":
+        emit_context(args.workflow)
+    elif args.stage == "confirm":
+        emit_confirmation(
+            args.workflow, args.destination, args.verification, args.presentation
+        )
+    else:
+        complete(
+            args.workflow,
+            args.destination,
+            args.verification,
+            args.presentation,
+            args.action,
+        )
 
 
 if __name__ == "__main__":

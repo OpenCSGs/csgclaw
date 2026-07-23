@@ -234,13 +234,24 @@ func TestTurnRendererUsesStableMessageIDForQuestionResolution(t *testing.T) {
 	if request.MessageID != answer.MessageID || request.MessageID != "question-question-1" {
 		t.Fatalf("question message IDs = %q and %q, want stable ID", request.MessageID, answer.MessageID)
 	}
+	if request.Text != "## Questions\n\n- color：Choose a color" || answer.Text != request.Text {
+		t.Fatalf("question markdown = %q then %q", request.Text, answer.Text)
+	}
 	var payload struct {
 		Content struct {
 			MsgType  string                     `json:"msgtype"`
 			Question activity.UserInputSnapshot `json:"question"`
 		} `json:"content"`
 	}
-	if err := json.Unmarshal([]byte(answer.Text), &payload); err != nil {
+	activityPayload, ok := agentActivityMetadata(answer.Metadata)
+	if !ok {
+		t.Fatalf("question metadata = %#v, want agent activity", answer.Metadata)
+	}
+	data, err := json.Marshal(activityPayload)
+	if err != nil {
+		t.Fatalf("marshal question activity: %v", err)
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
 		t.Fatalf("decode question activity: %v", err)
 	}
 	if payload.Content.MsgType != AgentQuestionMsgType || payload.Content.Question.Status != activity.UserInputStatusAnswered {
@@ -265,14 +276,22 @@ func TestInterruptPendingQuestionActivity(t *testing.T) {
 	if !ok {
 		t.Fatal("question request was not rendered")
 	}
-	reconciled, changed := InterruptPendingQuestionActivity(rendered.Text, now.Add(time.Minute))
+	reconciled, metadata, changed := InterruptPendingQuestionActivity(rendered.Text, rendered.Metadata, now.Add(time.Minute))
 	if !changed {
 		t.Fatal("pending question was not reconciled")
 	}
-	if !strings.Contains(reconciled, `"status":"interrupted"`) || strings.Contains(reconciled, `"status":"pending"`) {
-		t.Fatalf("reconciled question = %s", reconciled)
+	if !strings.HasSuffix(reconciled, "\n\nStatus: Request interrupted.") {
+		t.Fatalf("reconciled question = %q", reconciled)
 	}
-	if _, changed := InterruptPendingQuestionActivity(reconciled, now.Add(2*time.Minute)); changed {
+	payload, ok := agentActivityMetadata(metadata)
+	if !ok {
+		t.Fatalf("reconciled metadata = %#v", metadata)
+	}
+	data, _ := json.Marshal(payload)
+	if !strings.Contains(string(data), `"status":"interrupted"`) || strings.Contains(string(data), `"status":"pending"`) {
+		t.Fatalf("reconciled activity = %s", data)
+	}
+	if _, _, changed := InterruptPendingQuestionActivity(reconciled, metadata, now.Add(2*time.Minute)); changed {
 		t.Fatal("terminal question was reconciled twice")
 	}
 }

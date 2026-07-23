@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +11,16 @@ import (
 	"strings"
 
 	"csgclaw/internal/activity"
+	"csgclaw/internal/im"
 )
 
 type UserInputResponder = activity.UserInputResponder
+
+const (
+	userInputTranscriptMetadataKey = "csgclaw"
+	userInputTranscriptRequestKey  = "request_user_input"
+	userInputTranscriptAnswerKind  = "answer"
+)
 
 func (h *Handler) handleChannelUserInputResponse(w http.ResponseWriter, r *http.Request) {
 	if h.userInputResponder == nil {
@@ -66,11 +74,12 @@ func (h *Handler) handleChannelUserInputResponse(w http.ResponseWriter, r *http.
 	}
 
 	snapshot, err := h.userInputResponder.Respond(r.Context(), activity.UserInputResponseRequest{
-		Channel:     channel,
-		ActivityID:  activityID,
-		RoomID:      roomID,
-		ResponderID: responderID,
-		Response:    req,
+		Channel:          channel,
+		ActivityID:       activityID,
+		RoomID:           roomID,
+		ResponderID:      responderID,
+		Response:         req,
+		RecordTranscript: h.recordUserInputTranscript,
 	})
 	switch {
 	case err == nil:
@@ -86,4 +95,49 @@ func (h *Handler) handleChannelUserInputResponse(w http.ResponseWriter, r *http.
 	default:
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func (h *Handler) recordUserInputTranscript(ctx context.Context, snapshot activity.UserInputSnapshot) error {
+	if h == nil || h.im == nil {
+		return fmt.Errorf("IM service is not configured")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	content := activity.UserInputAnswerMarkdown(snapshot)
+	if content == "" {
+		return nil
+	}
+	_, err := h.im.DeliverMessage(im.DeliverMessageRequest{
+		RoomID:       snapshot.RoomID,
+		SenderID:     snapshot.ResponderID,
+		Content:      content,
+		MessageID:    "answer-" + snapshot.ID,
+		ThreadRootID: snapshot.ThreadRootID,
+		Metadata: map[string]any{
+			userInputTranscriptMetadataKey: map[string]any{
+				userInputTranscriptRequestKey: map[string]any{
+					"kind":       userInputTranscriptAnswerKind,
+					"request_id": snapshot.ID,
+				},
+			},
+		},
+	})
+	return err
+}
+
+func isUserInputAnswerTranscript(message *im.Message) bool {
+	if message == nil {
+		return false
+	}
+	namespace, ok := message.Metadata[userInputTranscriptMetadataKey].(map[string]any)
+	if !ok {
+		return false
+	}
+	request, ok := namespace[userInputTranscriptRequestKey].(map[string]any)
+	if !ok {
+		return false
+	}
+	kind, _ := request["kind"].(string)
+	return strings.TrimSpace(kind) == userInputTranscriptAnswerKind
 }

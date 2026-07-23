@@ -1913,20 +1913,31 @@ func TestRuntimeProvisionInstallsMissingEmbeddedManagerSkillBeforeSessionStart(t
 	if err != nil {
 		t.Fatalf("read installed demo skill: %v", err)
 	}
-	if !strings.Contains(string(raw), "structured-output acceptance demo") {
+	if !strings.Contains(string(raw), "three-stage CSGClaw structured-output demo") {
 		t.Fatalf("installed SKILL.md does not contain the embedded Manager skill:\n%s", raw)
 	}
 }
 
-func TestRuntimeProvisionPreservesExistingManagerSkill(t *testing.T) {
+func TestRuntimeProvisionUpgradesExistingManagerSkill(t *testing.T) {
 	root := t.TempDir()
 	agentHome := filepath.Join(root, agent.ManagerUserID)
 	skillRoot := filepath.Join(agentHome, hostStateDirName, homeDirName, "skills", "csgclaw-interactive-output-demo")
+	customSkillRoot := filepath.Join(filepath.Dir(skillRoot), "custom")
 	if err := os.MkdirAll(filepath.Join(skillRoot, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(customSkillRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	const existingSkill = "# Existing customized demo\n"
 	if err := os.WriteFile(filepath.Join(skillRoot, "SKILL.md"), []byte(existingSkill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillRoot, "obsolete.txt"), []byte("stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const customSkill = "# Custom skill\n"
+	if err := os.WriteFile(filepath.Join(customSkillRoot, "SKILL.md"), []byte(customSkill), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1950,12 +1961,15 @@ func TestRuntimeProvisionPreservesExistingManagerSkill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read existing demo skill: %v", err)
 	}
-	if string(raw) != existingSkill {
-		t.Fatalf("existing SKILL.md = %q, want preserved %q", raw, existingSkill)
+	if strings.Contains(string(raw), existingSkill) || !strings.Contains(string(raw), "three-stage CSGClaw structured-output demo") {
+		t.Fatalf("upgraded SKILL.md does not contain the embedded Manager skill:\n%s", raw)
 	}
-	if _, err := os.Stat(filepath.Join(skillRoot, ".git")); err != nil {
-		t.Fatalf("existing .git metadata was not preserved: %v", err)
+	for _, stalePath := range []string{".git", "obsolete.txt"} {
+		if _, err := os.Stat(filepath.Join(skillRoot, stalePath)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stale manager skill path %q still exists, err=%v", stalePath, err)
+		}
 	}
+	assertRuntimeSkillFile(t, filepath.Join(customSkillRoot, "SKILL.md"), customSkill, 0o644)
 }
 
 func TestRuntimeCreateDoesNotInstallManagerTemplateForWorker(t *testing.T) {
@@ -2167,7 +2181,7 @@ func TestRuntimeCreateOverlaysManagerTemplateAfterHostSkills(t *testing.T) {
 	}
 }
 
-func TestRuntimeCreatePreservesExistingManagerSkillNotSyncedFromHost(t *testing.T) {
+func TestRuntimeCreateUpgradesExistingManagerSkillNotSyncedFromHost(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CODEX_HOME", filepath.Join(t.TempDir(), "shared-codex-home"))
 	skillRoot := filepath.Join(root, agent.ManagerUserID, hostStateDirName, homeDirName, "skills", "csgclaw-interactive-output-demo")
@@ -2176,6 +2190,9 @@ func TestRuntimeCreatePreservesExistingManagerSkillNotSyncedFromHost(t *testing.
 	}
 	const existingSkill = "# Existing customized demo\n"
 	if err := os.WriteFile(filepath.Join(skillRoot, "SKILL.md"), []byte(existingSkill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillRoot, "obsolete.txt"), []byte("stale\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2187,13 +2204,6 @@ func TestRuntimeCreatePreservesExistingManagerSkillNotSyncedFromHost(t *testing.
 		}, nil
 	})
 
-	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
-		RuntimeID: "rt-" + agent.ManagerUserID,
-		AgentID:   agent.ManagerUserID,
-		AgentName: agent.ManagerName,
-	}); err != nil {
-		t.Fatalf("Provision() error = %v", err)
-	}
 	if _, err := rt.New(context.Background(), agentruntime.Spec{
 		RuntimeID: "rt-" + agent.ManagerUserID,
 		AgentID:   agent.ManagerUserID,
@@ -2206,11 +2216,13 @@ func TestRuntimeCreatePreservesExistingManagerSkillNotSyncedFromHost(t *testing.
 	if err != nil {
 		t.Fatalf("read existing demo skill: %v", err)
 	}
-	if string(raw) != existingSkill {
-		t.Fatalf("existing SKILL.md = %q, want preserved %q", raw, existingSkill)
+	if strings.Contains(string(raw), existingSkill) || !strings.Contains(string(raw), "three-stage CSGClaw structured-output demo") {
+		t.Fatalf("upgraded SKILL.md does not contain the embedded Manager skill:\n%s", raw)
 	}
-	if _, err := os.Stat(filepath.Join(skillRoot, ".git")); err != nil {
-		t.Fatalf("existing .git metadata was not preserved: %v", err)
+	for _, stalePath := range []string{".git", "obsolete.txt"} {
+		if _, err := os.Stat(filepath.Join(skillRoot, stalePath)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stale manager skill path %q still exists, err=%v", stalePath, err)
+		}
 	}
 }
 

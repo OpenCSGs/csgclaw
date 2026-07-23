@@ -144,7 +144,8 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 	t.Parallel()
 
 	dir := filepath.Join("..", "..", "template", "embed", "manager", "codex", "skills", "csgclaw-interactive-output-demo")
-	command := exec.Command("python3", filepath.Join(dir, "scripts", "emit_demo.py"))
+	emitterPath := filepath.Join(dir, "scripts", "emit_demo.py")
+	command := exec.Command("python3", emitterPath, "start")
 	output, err := command.Output()
 	if err != nil {
 		t.Fatalf("run demo emitter: %v", err)
@@ -153,7 +154,8 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 	if len(decodeErrors) != 0 {
 		t.Fatalf("decode demo emitter: %v", decodeErrors)
 	}
-	if strings.TrimSpace(cleaned) != "Interactive output demo controls emitted successfully." {
+	if strings.TrimSpace(cleaned) != "## Interactive output demo - step 1 of 3\n\nChoose the workflow branch." ||
+		strings.Contains(cleaned, "demo_kind") {
 		t.Fatalf("ordinary stdout = %q", cleaned)
 	}
 	if len(artifact.ResourceLinks) != 2 {
@@ -168,20 +170,88 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		t.Fatalf("minimal resource link = %+v", minimal)
 	}
 	request := artifact.RequestUserInput
-	if request == nil || len(request.Questions) != 5 || request.AutoResolutionMS != nil {
-		t.Fatalf("request = %+v, want five questions without demo expiration", request)
+	if request == nil || len(request.Questions) != 1 || request.AutoResolutionMS != nil {
+		t.Fatalf("stage 1 request = %+v, want one workflow question without demo expiration", request)
 	}
 	if !strings.HasSuffix(request.Questions[0].Options[0].Label, " (Recommended)") {
 		t.Fatalf("recommended option = %+v", request.Questions[0].Options[0])
 	}
-	if !strings.Contains(request.Questions[1].Options[1].Label, "中文") || !request.Questions[2].IsOther {
-		t.Fatalf("unicode/options/other questions = %+v", request.Questions)
+	contextOutput, err := exec.Command("python3", emitterPath, "context", "--workflow", "bug-fix").Output()
+	if err != nil {
+		t.Fatalf("run demo context stage: %v", err)
 	}
-	if !request.Questions[3].IsOther || request.Questions[3].Options != nil {
-		t.Fatalf("freeform-only question = %+v", request.Questions[3])
+	contextCleaned, contextArtifact, contextErrors := decodeStructuredCommandOutput(string(contextOutput))
+	if len(contextErrors) != 0 || strings.TrimSpace(contextCleaned) != "## Interactive output demo - step 2 of 3\n\nConfigure verification, destination, an optional freeform note, and presentation." ||
+		strings.Contains(contextCleaned, `"verification"`) || strings.Contains(contextCleaned, `"destination"`) ||
+		strings.Contains(contextCleaned, `"freeform_note"`) || strings.Contains(contextCleaned, `"presentation"`) {
+		t.Fatalf("decode context stage: stdout=%q artifact=%+v errors=%v", contextCleaned, contextArtifact, contextErrors)
 	}
-	if !request.Questions[4].IsSecret || !strings.Contains(request.Questions[4].Question, "never a real credential") {
-		t.Fatalf("secret question = %+v", request.Questions[4])
+	if len(contextArtifact.ResourceLinks) != 2 ||
+		contextArtifact.ResourceLinks[0].Name != full.Name || contextArtifact.ResourceLinks[0].URI != full.URI ||
+		contextArtifact.ResourceLinks[1].Name != minimal.Name || contextArtifact.ResourceLinks[1].URI != minimal.URI {
+		t.Fatalf("stage 2 resource links = %+v, want the same full and minimal variants as stage 1", contextArtifact.ResourceLinks)
+	}
+	contextRequest := contextArtifact.RequestUserInput
+	if contextRequest == nil || len(contextRequest.Questions) != 4 ||
+		!strings.Contains(contextRequest.Questions[0].Options[1].Label, "中文") ||
+		!contextRequest.Questions[1].IsOther || contextRequest.Questions[1].Options == nil ||
+		!contextRequest.Questions[2].IsOther || contextRequest.Questions[2].Options != nil ||
+		!strings.HasSuffix(contextRequest.Questions[3].Options[0].Label, " (Recommended)") ||
+		!strings.Contains(contextRequest.Questions[3].Options[2].Label, "中文") {
+		t.Fatalf("stage 2 request = %+v, want four mixed questions including Unicode, other, freeform-only, and Recommended", contextRequest)
+	}
+
+	confirmOutput, err := exec.Command(
+		"python3", emitterPath, "confirm",
+		"--workflow", "bug-fix",
+		"--destination", "qa-thread",
+		"--verification", "strict",
+		"--presentation", "bilingual",
+	).Output()
+	if err != nil {
+		t.Fatalf("run demo confirmation stage: %v", err)
+	}
+	confirmCleaned, confirmArtifact, confirmErrors := decodeStructuredCommandOutput(string(confirmOutput))
+	if len(confirmErrors) != 0 || strings.TrimSpace(confirmCleaned) != "## Interactive output demo - step 3 of 3\n\nChoose the final action and optionally enter a disposable secret test value." ||
+		strings.Contains(confirmCleaned, "final_action") || strings.Contains(confirmCleaned, "test_secret") {
+		t.Fatalf("decode confirmation stage: stdout=%q artifact=%+v errors=%v", confirmCleaned, confirmArtifact, confirmErrors)
+	}
+	if len(confirmArtifact.ResourceLinks) != 0 {
+		t.Fatalf("stage 3 resource links = %+v, want links only in stages 1 and 2", confirmArtifact.ResourceLinks)
+	}
+	confirmRequest := confirmArtifact.RequestUserInput
+	if confirmRequest == nil || len(confirmRequest.Questions) != 2 ||
+		!strings.HasSuffix(confirmRequest.Questions[0].Options[0].Label, " (Recommended)") ||
+		!confirmRequest.Questions[1].IsSecret || confirmRequest.Questions[1].Options != nil ||
+		!strings.Contains(confirmRequest.Questions[1].Question, "never a real credential") {
+		t.Fatalf("stage 3 request = %+v, want final options and freeform secret", confirmRequest)
+	}
+
+	completeOutput, err := exec.Command(
+		"python3", emitterPath, "complete",
+		"--workflow", "bug-fix",
+		"--destination", "qa-thread",
+		"--verification", "strict",
+		"--presentation", "bilingual",
+		"--action", "execute",
+	).Output()
+	if err != nil {
+		t.Fatalf("run demo completion stage: %v", err)
+	}
+	completion := string(completeOutput)
+	for _, want := range []string{
+		"FINAL_RECEIPT_EMITTED. STOP CURRENT TURN.",
+		"## Interactive output demo complete",
+		"- Workflow branch: `bug-fix`",
+		"- Destination branch: `qa-thread`",
+		"- Verification branch: `strict`",
+		"- Presentation branch: `bilingual`",
+		"- Executed action: `execute`",
+		"- Secret handling: no secret value was passed to this script",
+	} {
+		if !strings.Contains(completion, want) {
+			t.Fatalf("completion output = %q, want %q", completion, want)
+		}
 	}
 
 	emitter, err := os.ReadFile(filepath.Join(dir, "scripts", "emit_demo.py"))
@@ -192,17 +262,29 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 	if err != nil {
 		t.Fatalf("read fixture SKILL.md: %v", err)
 	}
+	workflowInstructions := append([]byte(nil), skill...)
+	for _, reference := range []string{"stage-2.md", "stage-3.md", "complete.md"} {
+		data, readErr := os.ReadFile(filepath.Join(dir, "references", reference))
+		if readErr != nil {
+			t.Fatalf("read fixture reference %s: %v", reference, readErr)
+		}
+		workflowInstructions = append(workflowInstructions, data...)
+	}
 	metadata, err := os.ReadFile(filepath.Join(dir, "agents", "openai.yaml"))
 	if err != nil {
 		t.Fatalf("read fixture openai.yaml: %v", err)
 	}
-	if !strings.Contains(string(skill), "execute this command exactly once") || !strings.Contains(string(skill), "do not run the emitter again") {
-		t.Fatalf("SKILL.md does not guard one-shot continuation:\n%s", skill)
+	if !strings.Contains(string(skill), "execute this command exactly once") || !strings.Contains(string(skill), "Read exactly one matching reference completely") {
+		t.Fatalf("SKILL.md does not guard stage transitions:\n%s", skill)
 	}
 	for _, developerReference := range []string{
 		"Each supported protocol field is documented at its first use",
-		"EXAMPLE_REQUEST_USER_INPUT_RESPONSE",
-		"ANSWER_RESPONSE_MARKDOWN_EXAMPLE",
+		"The script deliberately has no response JSON input",
+		"def emit_resource_links()",
+		"def emit_start()",
+		"def emit_context(workflow: str)",
+		"def emit_confirmation(",
+		"def complete(",
 		"Required ResourceLink discriminator",
 		"Required list containing 1 through 32 questions",
 		"Optional timeout from 60000 through 240000 ms",
@@ -212,32 +294,24 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 			t.Fatalf("emit_demo.py is missing developer reference %q", developerReference)
 		}
 	}
-	markdownCommand := exec.Command(
-		"python3",
-		"-c",
-		`import runpy, sys; values = runpy.run_path(sys.argv[1]); print(values["ANSWER_RESPONSE_MARKDOWN_EXAMPLE"])`,
-		filepath.Join(dir, "scripts", "emit_demo.py"),
-	)
-	markdown, err := markdownCommand.Output()
-	if err != nil {
-		t.Fatalf("render answer Markdown example: %v", err)
-	}
-	if !strings.HasPrefix(string(markdown), "## Submitted `RequestUserInputResponse`\n\n```json\n") ||
-		!strings.Contains(string(markdown), `"test_secret": {`) ||
-		!strings.Contains(string(markdown), `"<redacted>"`) ||
-		!strings.Contains(string(markdown), "## Suggested Markdown presentation") ||
-		!strings.Contains(string(markdown), "- **Destination:** Documentation example / 示例") ||
-		!strings.Contains(string(markdown), "- **Test secret:** Secret recorded") ||
-		strings.Contains(string(markdown), "disposable-example-only") {
-		t.Fatalf("answer Markdown example is malformed or leaks its secret:\n%s", markdown)
-	}
-	if !strings.Contains(string(skill), "Preserve every question ID and every non-secret answer exactly") ||
-		!strings.Contains(string(skill), "<redacted>") ||
-		!strings.Contains(string(skill), "fenced `json` block") ||
-		!strings.Contains(string(skill), "Suggested Markdown presentation") ||
-		!strings.Contains(string(skill), "remove one leading `user_note: ` prefix from every answer string") ||
-		!strings.Contains(string(skill), "Secret recorded") {
-		t.Fatalf("SKILL.md does not define the answer Markdown contract:\n%s", skill)
+	for _, workflowContract := range []string{
+		"It never receives or parses `RequestUserInputResponse`.",
+		"The readable `## Answers` message is persisted separately by CSGClaw",
+		"## Mandatory one-stage boundary",
+		"Execute exactly one `emit_demo.py` command",
+		"Never read or execute a later stage reference during the same turn.",
+		"Tool stdout produced during this turn is never a new user response",
+		"If it contains `final_action` and `test_secret`, read `references/complete.md`.",
+		"context --workflow <bug-fix|new-feature|code-review|custom>",
+		"confirm --workflow <bug-fix|new-feature|code-review|custom> --destination",
+		"--verification <standard|strict|fast|unspecified> --presentation <concise|detailed|bilingual|unspecified>",
+		"complete --workflow <bug-fix|new-feature|code-review|custom> --destination",
+		"Never include received response JSON in a user-visible response.",
+		"Never repeat a secret answer value",
+	} {
+		if !strings.Contains(string(workflowInstructions), workflowContract) {
+			t.Fatalf("skill instructions are missing multi-stage contract %q:\n%s", workflowContract, workflowInstructions)
+		}
 	}
 	if !strings.Contains(string(metadata), "allow_implicit_invocation: false") {
 		t.Fatalf("openai.yaml allows implicit invocation:\n%s", metadata)

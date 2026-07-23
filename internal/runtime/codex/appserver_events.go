@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	activitypkg "csgclaw/internal/activity"
 	agentruntime "csgclaw/internal/runtime"
 )
 
@@ -90,6 +91,7 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 	if threadID == "" || !live.appServerTracksThread(threadID) {
 		return
 	}
+	live.trackAppServerTurn(threadID, appServerNotificationTurnID(params))
 
 	switch method {
 	case "turn/started":
@@ -119,12 +121,19 @@ func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSe
 		status = strings.ToLower(appServerString(params, "status"))
 	}
 	turnID := appServerNotificationTurnID(params)
+	defer live.clearAppServerCommandOutputs(threadID, turnID)
 	switch status {
 	case "", "completed", "success", "succeeded":
 		if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, turnID: turnID, activity: "turn:completed"}) {
 			m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
 		}
 	case "cancelled", "canceled", "aborted", "interrupted":
+		if waiter := live.appServerTurnWaiter(threadID); waiter != nil && waiter.hasStructuredOutputBoundary() {
+			if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, turnID: turnID, activity: "turn:structured-output"}) {
+				m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
+			}
+			return
+		}
 		if m.deps.UserInput != nil {
 			m.deps.UserInput.CancelSession(runtimeID, threadID)
 		}
@@ -185,6 +194,15 @@ func (m *appServerManager) handleRawErrorNotification(runtimeID string, live *li
 }
 
 func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liveSession, threadID string, method string, params map[string]any) {
+	if method == "item/commandExecution/outputDelta" {
+		itemID := appServerString(params, "itemId")
+		live.appendAppServerCommandOutput(threadID, appServerNotificationTurnID(params), itemID, appServerString(params, "delta"))
+		live.notifyAppServerTurn(threadID, appServerTurnResult{
+			activity: "commandExecution:outputDelta:" + itemID,
+			progress: true,
+		})
+		return
+	}
 	item, _ := params["item"].(map[string]any)
 	if item == nil {
 		return
@@ -214,12 +232,20 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			Payload:           item,
 		})
 	case method == "item/completed" && itemType == "commandExecution":
+		status := appServerToolStatus(item, "completed")
 		output := appServerString(item, "aggregatedOutput")
 		if output == "" {
 			output = appServerString(item, "output")
 		}
-		status := appServerToolStatus(item, "completed")
-		output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, itemID, status, output, item, live)
+		accumulated := live.takeAppServerCommandOutput(threadID, itemID)
+		if output == "" && accumulated != nil {
+			var artifact activitypkg.StructuredOutputArtifact
+			var decodeErrors []error
+			output, artifact, decodeErrors = accumulated.finish(structuredOutputToolStatusSuccessful(status))
+			m.publishStructuredCommandArtifact(runtimeID, threadID, itemID, artifact, decodeErrors, output, live)
+		} else {
+			output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, itemID, status, output, item, live)
+		}
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
 			SessionID:         threadID,
@@ -346,7 +372,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 }
 
 func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *liveSession, params map[string]any) {
-	threadID := m.appServerPrimaryThreadID(live)
+	threadID := m.appServerLegacyThreadID(live, params)
 	if threadID == "" {
 		return
 	}
@@ -435,6 +461,12 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 			m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
 		}
 	case "turn_aborted":
+		if waiter := live.appServerTurnWaiter(threadID); waiter != nil && waiter.hasStructuredOutputBoundary() {
+			if !live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, activity: "legacy:turn_structured-output"}) {
+				m.publishAppServerEvent(promptCompletedEvent(runtimeID, threadID, PromptResponse{StopReason: StopReasonEndTurn}))
+			}
+			return
+		}
 		err := fmt.Errorf("codex turn aborted")
 		if !live.notifyAppServerTurn(threadID, appServerTurnResult{err: err, activity: "legacy:turn_aborted"}) {
 			m.publishAppServerEvent(SessionEvent{
@@ -449,7 +481,7 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 }
 
 func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live *liveSession, params map[string]any) {
-	threadID := m.appServerPrimaryThreadID(live)
+	threadID := m.appServerLegacyThreadID(live, params)
 	if threadID == "" {
 		return
 	}
@@ -532,13 +564,26 @@ func (m *appServerManager) decodeAndPublishStructuredCommandOutput(
 		return output
 	}
 	cleaned, artifact, decodeErrors := decodeStructuredCommandOutput(output)
+	m.publishStructuredCommandArtifact(runtimeID, threadID, toolCallID, artifact, decodeErrors, cleaned, live)
+	return cleaned
+}
+
+func (m *appServerManager) publishStructuredCommandArtifact(
+	runtimeID string,
+	threadID string,
+	toolCallID string,
+	artifact activitypkg.StructuredOutputArtifact,
+	decodeErrors []error,
+	fallbackText string,
+	live *liveSession,
+) {
 	for _, err := range decodeErrors {
 		if live != nil && live.appClient != nil {
 			live.appClient.logDebug("ignore invalid structured command output", "tool_call_id", toolCallID, "error", err)
 		}
 	}
 	if structuredOutputArtifactEmpty(artifact) {
-		return cleaned
+		return
 	}
 	m.publishAppServerEvent(SessionEvent{
 		RuntimeID:  runtimeID,
@@ -546,9 +591,12 @@ func (m *appServerManager) decodeAndPublishStructuredCommandOutput(
 		Kind:       SessionEventStructuredOutput,
 		ToolCallID: toolCallID,
 		ToolKind:   "exec_command",
+		Text:       strings.TrimSpace(fallbackText),
 		Payload:    artifact,
 	})
-	return cleaned
+	if artifact.RequestUserInput != nil {
+		m.interruptAppServerStructuredOutputTurn(live, threadID)
+	}
 }
 
 func structuredOutputToolStatusSuccessful(status string) bool {
@@ -595,6 +643,45 @@ func (m *appServerManager) appServerPrimaryThreadID(live *liveSession) string {
 		return ""
 	}
 	return strings.TrimSpace(live.session.SessionID)
+}
+
+// appServerLegacyThreadID assigns legacy notifications, which omit threadId,
+// to the active turn that produced them. Codex can publish the same item over
+// both the raw and legacy notification surfaces. Falling back to the runtime's
+// original thread makes delivery depend on which duplicate arrives first and
+// loses events from conversation-specific threads.
+func (m *appServerManager) appServerLegacyThreadID(live *liveSession, params map[string]any) string {
+	if live == nil {
+		return ""
+	}
+	turnID := appServerNotificationTurnID(params)
+	if turnID == "" {
+		turnID = appServerNestedString(params, "internal_chat_message_metadata_passthrough", "turn_id")
+	}
+
+	live.mu.Lock()
+	waiters := make(map[string]*appServerTurnWaiter, len(live.turnWaiters))
+	for threadID, waiter := range live.turnWaiters {
+		waiters[threadID] = waiter
+	}
+	live.mu.Unlock()
+
+	if threadID := live.appServerThreadForTurn(turnID); threadID != "" {
+		return threadID
+	}
+	if turnID != "" {
+		for threadID, waiter := range waiters {
+			if waiter != nil && waiter.currentTurnID() == turnID {
+				return strings.TrimSpace(threadID)
+			}
+		}
+	}
+	if len(waiters) == 1 {
+		for threadID := range waiters {
+			return strings.TrimSpace(threadID)
+		}
+	}
+	return m.appServerPrimaryThreadID(live)
 }
 
 func decodeLegacyFunctionCallArguments(raw string) map[string]any {

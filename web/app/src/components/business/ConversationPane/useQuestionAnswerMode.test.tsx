@@ -14,44 +14,49 @@ const mockedRespond = vi.mocked(respondToUserInput);
 function questionMessage(id = "request-1"): IMMessage {
   return {
     id: `message-${id}`,
-    content: JSON.stringify({
-      type: "com.opencsg.csgclaw.agent.activity",
-      version: 1,
-      event_id: `question-${id}`,
-      sender: "Agent One",
-      channel: "csgclaw",
-      room_id: "room-1",
-      origin_server_ts: 1,
-      content: {
-        msgtype: "com.opencsg.csgclaw.agent.question",
-        body: "Question pending",
-        question: {
-          id,
-          status: "pending",
-          questions: [
-            {
-              id: "color",
-              header: "Color",
-              is_other: true,
-              question: "Choose a color",
-              options: [{ label: "Blue" }, { label: "Green" }],
+    content: "## Questions\n\n- color：Choose a color",
+    metadata: {
+      csgclaw: {
+        agent_activity: {
+          type: "com.opencsg.csgclaw.agent.activity",
+          version: 1,
+          event_id: `question-${id}`,
+          sender: "Agent One",
+          channel: "csgclaw",
+          room_id: "room-1",
+          origin_server_ts: 1,
+          content: {
+            msgtype: "com.opencsg.csgclaw.agent.question",
+            body: "Question pending",
+            question: {
+              id,
+              status: "pending",
+              questions: [
+                {
+                  id: "color",
+                  header: "Color",
+                  is_other: true,
+                  question: "Choose a color",
+                  options: [{ label: "Blue" }, { label: "Green" }],
+                },
+                {
+                  id: "detail",
+                  header: "Detail",
+                  question: "Add detail",
+                  options: [],
+                },
+                {
+                  id: "finish",
+                  header: "Finish",
+                  question: "Choose a finish",
+                  options: [{ label: "Glossy" }, { label: "Matte" }],
+                },
+              ],
             },
-            {
-              id: "detail",
-              header: "Detail",
-              question: "Add detail",
-              options: [],
-            },
-            {
-              id: "finish",
-              header: "Finish",
-              question: "Choose a finish",
-              options: [{ label: "Glossy" }, { label: "Matte" }],
-            },
-          ],
+          },
         },
       },
-    }),
+    },
   };
 }
 

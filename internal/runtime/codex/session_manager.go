@@ -19,6 +19,9 @@ type liveSession struct {
 	spec                  SessionSpec
 	conversationSessions  map[string]string
 	turnWaiters           map[string]*appServerTurnWaiter
+	turnThreads           map[string]string
+	turnThreadOrder       []string
+	commandOutputs        map[string]*appServerCommandOutputState
 	replayedExecCommands  map[string]struct{}
 	replayedAgentMessages map[string]struct{}
 	appProtocol           string

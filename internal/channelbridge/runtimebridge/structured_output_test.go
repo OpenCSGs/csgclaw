@@ -85,3 +85,41 @@ func TestTurnRendererDiscardsStructuredOutputAfterFailedTurn(t *testing.T) {
 		t.Fatalf("messages = %#v, want ordinary text without links", got)
 	}
 }
+
+func TestTurnRendererUsesStructuredCommandStdoutAsQuestionBoundaryFallback(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewTurnRenderer()
+	renderer.ApplyStructuredOutput(activity.RuntimeEvent{
+		Kind: activity.RuntimeEventStructuredOutput,
+		Text: "## Step 2\n\nChoose the next branch.",
+		Payload: activity.StructuredOutputArtifact{
+			RequestUserInput: &activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "next", Header: "Next", Question: "What next?"}}},
+		},
+	})
+
+	if got := renderer.FinalMessages(); len(got) != 1 || got[0] != "## Step 2\n\nChoose the next branch." {
+		t.Fatalf("messages = %#v, want structured command stdout fallback", got)
+	}
+
+	renderer.ApplyText(activity.RuntimeEvent{Kind: activity.RuntimeEventTextDelta, Text: "Model-authored final response."})
+	if got := renderer.FinalMessages(); len(got) != 1 || got[0] != "## Step 2\n\nChoose the next branch." {
+		t.Fatalf("messages = %#v, want explicit command fallback to remain authoritative", got)
+	}
+}
+
+func TestTurnRendererUsesReadableDefaultForControlOnlyQuestion(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewTurnRenderer()
+	renderer.ApplyStructuredOutput(activity.RuntimeEvent{
+		Kind: activity.RuntimeEventStructuredOutput,
+		Payload: activity.StructuredOutputArtifact{
+			RequestUserInput: &activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "next", Header: "Next", Question: "What next?"}}},
+		},
+	})
+
+	if got := renderer.FinalMessages(); len(got) != 1 || got[0] != "Please answer the questions below." {
+		t.Fatalf("messages = %#v, want default structured question fallback", got)
+	}
+}

@@ -110,8 +110,8 @@ export type AgentActivityPayload = {
   version: number;
 };
 
-export function parseAgentActivity(content: unknown): AgentActivityPayload | null {
-  const parsed = typeof content === "string" ? parseJSON(content.trim()) : content;
+export function parseAgentActivity(value: unknown): AgentActivityPayload | null {
+  const parsed = agentActivityValue(value);
   if (!isRecord(parsed) || parsed.type !== CSGCLAW_AGENT_ACTIVITY_TYPE || !isRecord(parsed.content)) {
     return null;
   }
@@ -144,18 +144,27 @@ export function parseAgentActivity(content: unknown): AgentActivityPayload | nul
   };
 }
 
+export function hasAgentActivityMetadata(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const metadata = recordValue(value.metadata);
+  const csgclaw = recordValue(metadata?.csgclaw);
+  return csgclaw?.agent_activity !== undefined;
+}
+
 export function isToolActivityMessage(message: IMMessage | null | undefined): boolean {
-  const activity = parseAgentActivity(message?.content);
+  const activity = parseAgentActivity(message);
   return activity?.content.msgtype === AgentActivityMsgTypes.tool;
 }
 
 export function isQuestionActivityMessage(message: IMMessage | null | undefined): boolean {
-  const activity = parseAgentActivity(message?.content);
+  const activity = parseAgentActivity(message);
   return activity?.content.msgtype === AgentActivityMsgTypes.question;
 }
 
 export function questionActivityKeepsAgentWorking(message: IMMessage | null | undefined): boolean {
-  const activity = parseAgentActivity(message?.content);
+  const activity = parseAgentActivity(message);
   if (activity?.content.msgtype !== AgentActivityMsgTypes.question) {
     return false;
   }
@@ -172,11 +181,23 @@ export function questionActivityKeepsAgentWorking(message: IMMessage | null | un
 
 export function pendingQuestionActivities(messages: readonly IMMessage[]): AgentActivityPayload[] {
   return messages
-    .map((message) => parseAgentActivity(message.content))
+    .map((message) => parseAgentActivity(message))
     .filter(
       (activity): activity is AgentActivityPayload =>
         activity?.content.msgtype === AgentActivityMsgTypes.question && activity.content.question?.status === "pending",
     );
+}
+
+function agentActivityValue(value: unknown): unknown {
+  if (isRecord(value) && ("metadata" in value || typeof value.content === "string")) {
+    const metadata = recordValue(value.metadata);
+    const csgclaw = recordValue(metadata?.csgclaw);
+    if (csgclaw?.agent_activity !== undefined) {
+      return csgclaw.agent_activity;
+    }
+    return typeof value.content === "string" ? parseJSON(value.content.trim()) : value.content;
+  }
+  return typeof value === "string" ? parseJSON(value.trim()) : value;
 }
 
 export function pendingQuestionCount(messages: readonly IMMessage[]): number {
