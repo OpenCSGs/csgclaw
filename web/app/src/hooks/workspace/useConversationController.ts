@@ -211,6 +211,7 @@ export function useConversationController({
   managerProfile,
   managerProfileIncomplete,
   managerRuntimeUnavailable = false,
+  managerRuntimeWarning = "",
   navigatePane,
   onMessageAction,
   onConnectConnector,
@@ -368,6 +369,16 @@ export function useConversationController({
         return true;
       });
   }, [agents, data?.current_user_id, selectedConversation, usersById]);
+  const managerRuntimeErrorMessage = managerRuntimeWarning || t("managerCodexMissingWarning");
+  function activeConversationAgentOfflineMessage(): string {
+    if (activeConversationAgents.length === 0 || activeConversationAgents.some(isAgentRunning)) {
+      return "";
+    }
+    const agent = activeConversationAgents[0];
+    const name = String(agent.name || agent.id || "").trim();
+    const reason = agentOfflineReasonLabel(agentRuntimeState(agent), t);
+    return t("conversationAgentOffline", { name, reason });
+  }
   const hasActiveConversationAgent = useMemo(() => {
     return activeConversationAgentMembers.length > 0;
   }, [activeConversationAgentMembers]);
@@ -769,7 +780,7 @@ export function useConversationController({
 
   async function sendMessage(): Promise<void> {
     if (managerRuntimeUnavailable) {
-      setComposerError(t("managerCodexMissingWarning"));
+      setComposerError(managerRuntimeErrorMessage);
       return;
     }
     if (managerProfileIncomplete) {
@@ -784,11 +795,9 @@ export function useConversationController({
     if (!data?.current_user_id || !activeConversation || (!draftText.trim() && attachmentDrafts.length === 0)) {
       return;
     }
-    if (activeConversationAgents.length > 0 && !activeConversationAgents.some(isAgentRunning)) {
-      const agent = activeConversationAgents[0];
-      const name = String(agent.name || agent.id || "").trim();
-      const reason = agentOfflineReasonLabel(agentRuntimeState(agent), t);
-      setComposerError(t("conversationAgentOffline", { name, reason }));
+    const agentOfflineMessage = activeConversationAgentOfflineMessage();
+    if (agentOfflineMessage) {
+      setComposerError(agentOfflineMessage);
       return;
     }
 
@@ -884,7 +893,7 @@ export function useConversationController({
 
   async function sendThreadReply(): Promise<void> {
     if (managerRuntimeUnavailable) {
-      setThreadError(t("managerCodexMissingWarning"));
+      setThreadError(managerRuntimeErrorMessage);
       return;
     }
     if (managerProfileIncomplete) {
@@ -907,6 +916,11 @@ export function useConversationController({
       !activeThreadRootID ||
       (!text.trim() && activeThreadAttachmentDrafts.length === 0)
     ) {
+      return;
+    }
+    const agentOfflineMessage = activeConversationAgentOfflineMessage();
+    if (agentOfflineMessage) {
+      setThreadError(agentOfflineMessage);
       return;
     }
 

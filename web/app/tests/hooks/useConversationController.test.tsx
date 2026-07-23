@@ -94,6 +94,8 @@ function renderConversationController(
   options: {
     agents?: AgentLike[];
     data?: IMData;
+    managerRuntimeUnavailable?: boolean;
+    managerRuntimeWarning?: string;
     messageListActive?: boolean;
     workingParticipantsForRoom?: (roomID: string | null | undefined) => ConversationWorkingParticipant[];
   } = {},
@@ -122,6 +124,8 @@ function renderConversationController(
         locale: "en",
         managerProfile: null,
         managerProfileIncomplete: false,
+        managerRuntimeUnavailable: options.managerRuntimeUnavailable,
+        managerRuntimeWarning: options.managerRuntimeWarning,
         hasObservedWorkLease: () => false,
         messageActionBusy: "",
         messageActionFeedback: { key: "", message: "" },
@@ -268,6 +272,60 @@ describe("useConversationController", () => {
 
     expect(apiMocks.fetchThreadRequest).toHaveBeenCalledWith("room-1", "msg-root");
     expect(result.current.conversationViewProps.activeThreadView?.replies).toHaveLength(1);
+  });
+
+  it("blocks thread replies when every conversation agent is offline", async () => {
+    const root: IMMessage = {
+      id: "msg-root",
+      content: "Start here",
+      created_at: "2026-07-14T09:29:00Z",
+      sender_id: "u-admin",
+    };
+    const { result } = renderConversationController({
+      agents: [
+        {
+          id: "u-demo",
+          name: "demo",
+          role: "worker",
+          runtime_kind: "picoclaw_sandbox",
+          status: "runtime_unavailable",
+        },
+      ],
+      data: dataWithMessages([root]),
+    });
+
+    await act(async () => {
+      await result.current.conversationViewProps.onOpenThread(root);
+    });
+    act(() => {
+      result.current.conversationViewProps.onThreadDraftChange([{ type: "text", text: "reply" }]);
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendThreadReply();
+    });
+
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    expect(result.current.conversationViewProps.threadError).toBe("conversationAgentOffline");
+  });
+
+  it("shows the specific manager runtime warning when sending is blocked", async () => {
+    const { result } = renderConversationController({
+      managerRuntimeUnavailable: true,
+      managerRuntimeWarning: "Docker is not running",
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "hi";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    expect(result.current.conversationViewProps.composerError).toBe("Docker is not running");
   });
 
   it("opens create-room modal from a direct message", () => {

@@ -50,6 +50,8 @@ import { LAST_CREATED_AGENT_MODEL_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   applyTemplateToDraft,
   advanceAgentProgress,
+  agentOfflineReasonLabel,
+  agentRuntimeState,
   agentDraftMissingRequiredEnv,
   agentDraftWithRuntimeFieldsFromAgent,
   agentPageLLMProfileChanged,
@@ -535,14 +537,19 @@ export function useAgentController({
     ({ currentLocation, nextLocation }) =>
       agentPageHasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname,
   );
-  const managerRuntimeUnavailable =
-    bootstrapConfig?.manager_runtime?.installed === false || isAgentRuntimeUnavailable(managerProfile);
+  const managerCodexRuntimeUnavailable = bootstrapConfig?.manager_runtime?.installed === false;
+  const managerAgentRuntimeUnavailable = isAgentRuntimeUnavailable(managerProfile);
+  const managerRuntimeUnavailable = managerCodexRuntimeUnavailable || managerAgentRuntimeUnavailable;
   const managerRuntimeWarning = managerRuntimeUnavailable
-    ? String(
-        bootstrapConfig?.manager_runtime?.message ||
-          bootstrapConfig?.manager_runtime?.install_guidance ||
-          t("managerCodexMissingWarning"),
-      )
+    ? managerCodexRuntimeUnavailable
+      ? String(
+          bootstrapConfig?.manager_runtime?.message ||
+            bootstrapConfig?.manager_runtime?.install_guidance ||
+            t("managerCodexMissingWarning"),
+        )
+      : t("runtimeSandboxUnavailable", {
+          reason: agentOfflineReasonLabel(agentRuntimeState(managerProfile), t),
+        })
     : "";
   const managerProfileIncomplete = managerProfile && managerProfile.profile_complete === false;
   const usersById = useMemo(() => {
@@ -2339,6 +2346,7 @@ export function useAgentController({
     managerAgent,
     managerProfileIncomplete,
     managerRuntimeUnavailable,
+    managerRuntimeWarning,
     messageActionBusy,
     messageActionFeedback,
     openAgentDirectMessage,

@@ -212,6 +212,7 @@ export type UseConversationControllerArgs = {
   managerProfile: AgentProfileLike | null;
   managerProfileIncomplete: boolean | null;
   managerRuntimeUnavailable?: boolean | null;
+  managerRuntimeWarning?: string;
   messageActionBusy: string;
   messageActionFeedback: MessageActionFeedback;
   messageListActive?: boolean;
