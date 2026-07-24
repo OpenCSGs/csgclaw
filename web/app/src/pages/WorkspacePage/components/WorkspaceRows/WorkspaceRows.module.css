@@ -215,7 +215,7 @@
 .row {
   width: 100%;
   min-height: 50px;
-  padding: 3px 8px;
+  padding: 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -438,20 +438,20 @@
 }
 
 .agentRow {
-  padding: 12px;
+  padding: 8px;
   grid-template-columns: 32px minmax(0, 1fr) max-content;
 }
 
 .humanRow {
-  padding: 12px;
+  padding: 8px;
 }
 
 .computerRow {
-  padding: 12px;
+  padding: 8px;
 }
 
 .conversationRow {
-  padding: 12px;
+  padding: 8px;
   grid-template-columns: 32px minmax(0, 1fr) auto;
 }
 

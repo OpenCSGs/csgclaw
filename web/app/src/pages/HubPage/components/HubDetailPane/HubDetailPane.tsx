@@ -10,7 +10,7 @@ import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lin
 import { tags } from "@lezer/highlight";
 import { FileCode2, Server, Trash2 } from "lucide-react";
 import { formatRuntimeKindLabel } from "@/models/agents";
-import type { ImageEnvContract, JSONRecord } from "@/models/agents";
+import type { JSONRecord } from "@/models/agents";
 import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
 import {
   formatMCPServerDocument,
@@ -164,13 +164,6 @@ function templateMCPServerSummaries(
   } catch {
     return [];
   }
-}
-
-function templateEnvRequirementLabel(env: readonly ImageEnvContract[], t: TranslateFn): string {
-  if (!env.length) {
-    return t("resourcesTemplateEnvNotRequired");
-  }
-  return env.some((item) => item.required) ? t("resourcesTemplateEnvRequired") : t("resourcesTemplateEnvOptional");
 }
 
 const managedInstructionsStart = "<!-- BEGIN CSGCLAW-INSTRUCTIONS (auto-generated; do not edit) -->";
@@ -668,6 +661,9 @@ export function HubDetailPane({
     setTemplateInstructionsDraft(templateInstructions);
   }, [selectedTemplateId, templateInstructions]);
   const templateCustomInstructions = extractManagedAgentInstructions(templateInstructionsDraft);
+  const templateInstructionsValue =
+    templateInstructionsMode === "advanced" ? templateInstructionsDraft : templateCustomInstructions;
+  const templateInstructionsReadonly = selectedTemplate?.source?.kind !== "local";
   const templateTabs = useMemo(
     () => [
       { id: "profile" as const, label: t("agentProfileTab") },
@@ -917,73 +913,115 @@ export function HubDetailPane({
                         <span>{t("resourcesUpdatedAtLabel")}</span>
                         <input value={formatHubDateTime(selectedTemplate.updated_at, locale)} readOnly disabled />
                       </label>
-                      <label className="field">
-                        <span>{t("resourcesTemplateEnvLabel")}</span>
-                        <input value={templateEnvRequirementLabel(templateImageEnv, t)} readOnly disabled />
-                      </label>
-                      {templateImageEnv.length ? (
-                        <div className="field span-2 hub-template-env-field">
+                      <div className="field span-2 hub-template-env-field">
+                        <div className="hub-template-env-heading">
                           <span>{t("resourcesTemplateEnvLabel")}</span>
-                          <div className="hub-template-env-list">
+                          <span className="hub-template-env-count">
+                            {t("resourcesTemplateEnvCount", { count: templateImageEnv.length })}
+                          </span>
+                        </div>
+                        {templateImageEnv.length ? (
+                          <div className="hub-template-env-list" role="list">
                             {templateImageEnv.map((item) => (
-                              <span className="hub-template-env-chip" key={item.name}>
-                                {item.name}
-                                {item.required ? <small>{t("resourcesTemplateEnvRequiredBadge")}</small> : null}
-                              </span>
+                              <div className="hub-template-env-chip" role="listitem" key={item.name}>
+                                <code className="hub-template-env-name">{item.name}</code>
+                                <span className={`hub-template-env-status ${item.required ? "required" : "optional"}`}>
+                                  <span className="hub-template-env-status-dot" aria-hidden="true"></span>
+                                  {item.required
+                                    ? t("resourcesTemplateEnvRequiredBadge")
+                                    : t("resourcesTemplateEnvOptional")}
+                                </span>
+                              </div>
                             ))}
                           </div>
-                        </div>
-                      ) : null}
+                        ) : (
+                          <div className="hub-template-env-empty">{t("resourcesTemplateEnvNotRequired")}</div>
+                        )}
+                      </div>
                     </div>
                   </section>
                 </div>
               ) : activeTemplateTab === "instructions" ? (
                 <section className="profile-section hub-template-instructions-section">
-                  <div
-                    className="agent-instructions-mode-switch"
-                    role="group"
-                    aria-label={t("agentInstructionsViewMode")}
-                  >
-                    <button
-                      type="button"
-                      aria-pressed={templateInstructionsMode === "default"}
-                      onClick={() => setTemplateInstructionsMode("default")}
+                  <div className="hub-template-instructions-header">
+                    <div className="profile-section-heading">
+                      <div className="profile-section-title">{t("agentInstructions")}</div>
+                      <p className="profile-section-description">
+                        {templateInstructionsMode === "default"
+                          ? t("resourcesTemplateInstructionsDefaultHint")
+                          : t("resourcesTemplateInstructionsAdvancedHint")}
+                      </p>
+                    </div>
+                    <div
+                      className="agent-instructions-mode-switch"
+                      role="group"
+                      aria-label={t("agentInstructionsViewMode")}
                     >
-                      {t("agentInstructionsDefaultMode")}
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={templateInstructionsMode === "advanced"}
-                      onClick={() => setTemplateInstructionsMode("advanced")}
-                    >
-                      {t("agentInstructionsAdvancedMode")}
-                    </button>
+                      <button
+                        type="button"
+                        aria-pressed={templateInstructionsMode === "default"}
+                        onClick={() => setTemplateInstructionsMode("default")}
+                      >
+                        {t("agentInstructionsDefaultMode")}
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={templateInstructionsMode === "advanced"}
+                        onClick={() => setTemplateInstructionsMode("advanced")}
+                      >
+                        {t("agentInstructionsAdvancedMode")}
+                      </button>
+                    </div>
                   </div>
-                  {templateInstructionsMode === "default" ? (
-                    <p className="profile-section-description">{t("resourcesTemplateInstructionsDefaultHint")}</p>
-                  ) : null}
-                  <div className="profile-grid-compact">
-                    <label className="field span-2">
-                      <span>{t("agentInstructions")}</span>
-                      <textarea
-                        className={`compact-textarea hub-template-instructions-editor ${templateInstructionsMode === "advanced" ? "is-advanced" : "is-default"}`}
-                        value={
-                          templateInstructionsMode === "advanced"
-                            ? templateInstructionsDraft
-                            : templateCustomInstructions
-                        }
-                        onInput={(event) => {
-                          const value = event.currentTarget.value;
-                          setTemplateInstructionsDraft((current) => {
-                            if (templateInstructionsMode === "advanced") return value;
-                            return replaceManagedAgentInstructions(current, value);
-                          });
-                        }}
-                        placeholder={t("agentInstructionsPlaceholder")}
-                        readOnly={selectedTemplate.source?.kind !== "local"}
-                        disabled={selectedTemplate.source?.kind !== "local"}
-                      />
-                    </label>
+                  <div className="hub-template-instructions-content">
+                    {templateInstructionsReadonly ? (
+                      templateInstructionsValue.trim() ? (
+                        <div className="hub-template-instructions-preview">
+                          <div className="hub-template-instructions-preview-bar">
+                            <FileCode2 size={16} strokeWidth={2} aria-hidden="true" />
+                            <span>
+                              {templateInstructionsMode === "advanced"
+                                ? t("agentInstructionsEffective")
+                                : t("agentInstructionsDefaultMode")}
+                            </span>
+                          </div>
+                          <pre aria-label={t("agentInstructions")}>{templateInstructionsValue}</pre>
+                        </div>
+                      ) : (
+                        <div className="hub-template-instructions-empty">
+                          <span className="hub-template-instructions-empty-icon" aria-hidden="true">
+                            <FileCode2 size={20} strokeWidth={1.8} />
+                          </span>
+                          <strong>{t("resourcesTemplateInstructionsEmptyTitle")}</strong>
+                          <p>{t("resourcesTemplateInstructionsEmptyDescription")}</p>
+                          <Button
+                            variant="secondaryGray"
+                            size="sm"
+                            onClick={() => setTemplateInstructionsMode("advanced")}
+                          >
+                            {t("resourcesTemplateInstructionsViewAdvancedAction")}
+                          </Button>
+                        </div>
+                      )
+                    ) : (
+                      <div className="profile-grid-compact">
+                        <label className="field span-2">
+                          <span className="sr-only">{t("agentInstructions")}</span>
+                          <textarea
+                            className={`compact-textarea hub-template-instructions-editor ${templateInstructionsMode === "advanced" ? "is-advanced" : "is-default"}`}
+                            value={templateInstructionsValue}
+                            onInput={(event) => {
+                              const value = event.currentTarget.value;
+                              setTemplateInstructionsDraft((current) => {
+                                if (templateInstructionsMode === "advanced") return value;
+                                return replaceManagedAgentInstructions(current, value);
+                              });
+                            }}
+                            placeholder={t("agentInstructionsPlaceholder")}
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
                   {selectedTemplate.source?.kind === "local" ? (
                     <div className="form-actions">
@@ -998,69 +1036,87 @@ export function HubDetailPane({
                   ) : null}
                 </section>
               ) : activeTemplateTab === "skills" ? (
-                <section className="profile-section agent-skills-section hub-template-summary-panel">
-                  <div className="profile-section-heading">
-                    <div className="profile-section-title">{t("agentSkillsTitle")}</div>
-                    <p className="profile-section-description">{t("resourcesTemplateSkillsDescription")}</p>
+                <section className="profile-section hub-template-summary-panel hub-template-skills-panel">
+                  <div className="hub-template-summary-heading">
+                    <div className="profile-section-heading">
+                      <div className="profile-section-title">{t("agentSkillsTitle")}</div>
+                      <p className="profile-section-description">{t("resourcesTemplateSkillsDescription")}</p>
+                    </div>
+                    <span className="hub-template-summary-count">
+                      {t("resourcesTemplateSkillsCount", { count: templateSkills.length })}
+                    </span>
                   </div>
-                  <div className="agent-page-form-content agent-skills-form-content">
-                    <div className="agent-skills-title">
-                      <div className="agent-skills-title-copy">
-                        <span>{t("agentSkillsTitle")}</span>
-                        <small className="agent-section-count-badge">{templateSkills.length}</small>
+                  {templateSkills.length ? (
+                    <div className="hub-template-skills-list">
+                      {templateSkills.map((skill) => (
+                        <article className="hub-template-skill-row" key={skill.name}>
+                          <span className="hub-template-skill-icon" aria-hidden="true">
+                            <FileCode2 size={18} strokeWidth={1.8} />
+                          </span>
+                          <div className="hub-template-skill-copy">
+                            <div className="hub-template-skill-name">{skill.name}</div>
+                            <p>{skill.description || "-"}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="hub-template-skills-empty">
+                      <span className="hub-template-skill-icon" aria-hidden="true">
+                        <FileCode2 size={18} strokeWidth={1.8} />
+                      </span>
+                      <div>
+                        <strong>{t("resourcesSkillsEmpty")}</strong>
+                        <p>{t("resourcesTemplateSkillsEmptyHint")}</p>
                       </div>
                     </div>
-                    {templateSkills.length ? (
-                      <div className="agent-skills-list">
-                        {templateSkills.map((skill) => (
-                          <article className="agent-skill-card" key={skill.name}>
-                            <div className="agent-skill-card-header">
-                              <div className="agent-skill-name">{skill.name}</div>
-                            </div>
-                            <p className="agent-skill-description">{skill.description || "-"}</p>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="agent-skills-empty">{t("resourcesSkillsEmpty")}</div>
-                    )}
-                  </div>
+                  )}
                 </section>
               ) : activeTemplateTab === "mcp" ? (
-                <section className="profile-section agent-skills-section agent-mcp-section hub-template-summary-panel">
-                  <div className="profile-section-heading">
-                    <div className="profile-section-title">{t("resourcesTemplateMCPServersTitle")}</div>
-                    <p className="profile-section-description">{t("resourcesTemplateMCPServersDescription")}</p>
+                <section className="profile-section hub-template-summary-panel hub-template-mcp-panel">
+                  <div className="hub-template-summary-heading">
+                    <div className="profile-section-heading">
+                      <div className="profile-section-title">{t("resourcesTemplateMCPServersTitle")}</div>
+                      <p className="profile-section-description">{t("resourcesTemplateMCPServersDescription")}</p>
+                    </div>
+                    <span className="hub-template-summary-count">
+                      {t("resourcesTemplateMCPServersCount", { count: templateMCPServers.length })}
+                    </span>
                   </div>
-                  <div className="agent-page-form-content agent-skills-form-content">
-                    <div className="agent-skills-title">
-                      <div className="agent-skills-title-copy">
-                        <span>{t("resourcesTemplateMCPServersTitle")}</span>
-                        <small className="agent-section-count-badge">{templateMCPServers.length}</small>
+                  {templateMCPServers.length ? (
+                    <div className="hub-template-mcp-list">
+                      {templateMCPServers.map((server) => (
+                        <article className="hub-template-mcp-row" key={server.name}>
+                          <span className="hub-template-mcp-icon" aria-hidden="true">
+                            <Server size={18} strokeWidth={1.8} />
+                          </span>
+                          <div className="hub-template-mcp-copy">
+                            <div className="hub-template-mcp-name">{server.name}</div>
+                            <p>{server.description || mcpServerDescription(server.config) || "-"}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : workspaceFileLoading ? (
+                    <div className="hub-template-mcp-empty">
+                      <span className="hub-template-mcp-icon" aria-hidden="true">
+                        <Server size={18} strokeWidth={1.8} />
+                      </span>
+                      <div>
+                        <strong>{t("resourcesWorkspaceFileLoading")}</strong>
                       </div>
                     </div>
-                    {templateMCPServers.length ? (
-                      <div className="agent-skills-list">
-                        {templateMCPServers.map((server) => (
-                          <article className="agent-skill-card agent-mcp-card" key={server.name}>
-                            <div className="agent-skill-card-header">
-                              <div className="agent-skill-name">
-                                <Server aria-hidden="true" size={14} strokeWidth={2} />
-                                <span>{server.name}</span>
-                              </div>
-                            </div>
-                            <p className="agent-skill-description">
-                              {server.description || mcpServerDescription(server.config) || "-"}
-                            </p>
-                          </article>
-                        ))}
+                  ) : (
+                    <div className="hub-template-mcp-empty">
+                      <span className="hub-template-mcp-icon" aria-hidden="true">
+                        <Server size={18} strokeWidth={1.8} />
+                      </span>
+                      <div>
+                        <strong>{t("resourcesMCPEmpty")}</strong>
+                        <p>{t("resourcesTemplateMCPServersEmptyHint")}</p>
                       </div>
-                    ) : workspaceFileLoading ? (
-                      <div className="agent-skills-empty">{t("resourcesWorkspaceFileLoading")}</div>
-                    ) : (
-                      <div className="agent-skills-empty">{t("resourcesMCPEmpty")}</div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </section>
               ) : (
                 <div className="hub-workspace-block hub-template-tab-panel">
