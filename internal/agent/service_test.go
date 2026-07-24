@@ -72,7 +72,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-type fakeRuntime struct{}
+type fakeRuntime struct {
+	close func() error
+}
 
 type fakeProvider struct {
 	open func(context.Context, string) (sandbox.Runtime, error)
@@ -106,6 +108,9 @@ func (f *fakeRuntime) Remove(context.Context, string, sandbox.RemoveOptions) err
 }
 
 func (f *fakeRuntime) Close() error {
+	if f != nil && f.close != nil {
+		return f.close()
+	}
 	return nil
 }
 
@@ -7399,6 +7404,48 @@ func TestApplyTemplateEnvDefaults(t *testing.T) {
 	}
 }
 
+func TestCreateFromTemplateUsesRequestHubService(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	requestHub := mustNewLocalTemplateHubService(t, "request-worker", hub.Template{
+		ID:          "request-worker",
+		Name:        "request-worker",
+		Description: "request-scoped template",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: RuntimeNamePicoClaw,
+		Image:       "worker-image:request",
+	})
+	startupHub, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(startupHub),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			Name:         "alice",
+			FromTemplate: "local.request-worker",
+		},
+		HubService: requestHub,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if got.Description != "request-scoped template" || got.Image != "worker-image:request" {
+		t.Fatalf("created agent = %+v, want request-scoped template defaults", got)
+	}
+}
+
 func TestCreateWorkerFromTemplateAppliesImageEnvToSandbox(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -10567,6 +10614,28 @@ func TestServiceCloseClosesRegisteredAgentRuntimes(t *testing.T) {
 	}
 	if closeCalls != 1 {
 		t.Fatalf("registered runtime Close() calls = %d, want 1", closeCalls)
+	}
+}
+
+func TestResetSandboxRuntimesClosesAndDropsCachedClients(t *testing.T) {
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	closeCalls := 0
+	svc.runtimes["agent-home"] = &fakeRuntime{close: func() error {
+		closeCalls++
+		return nil
+	}}
+
+	if err := svc.ResetSandboxRuntimes(); err != nil {
+		t.Fatalf("ResetSandboxRuntimes() error = %v", err)
+	}
+	if closeCalls != 1 {
+		t.Fatalf("sandbox runtime Close() calls = %d, want 1", closeCalls)
+	}
+	if len(svc.runtimes) != 0 {
+		t.Fatalf("cached runtimes = %d, want 0", len(svc.runtimes))
 	}
 }
 

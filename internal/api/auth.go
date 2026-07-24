@@ -68,6 +68,7 @@ func (h *Handler) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.syncAgentHubService(r)
 	writeJSON(w, http.StatusOK, status)
 }
 
@@ -88,6 +89,8 @@ func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if err := h.refreshOpenCSGModelProvider(r.Context()); err != nil {
 		slog.Warn("refresh OpenCSG models after login failed", "error", err)
 	}
+	h.syncAgentHubService(r)
+	h.resetEnvironmentSensitiveRuntimes()
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
@@ -156,6 +159,7 @@ func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	h.resetEnvironmentSensitiveRuntimes()
 	status, err := appAuthLogout(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -164,7 +168,29 @@ func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 	if err := h.clearOpenCSGModelProviderCache(); err != nil {
 		slog.Warn("clear OpenCSG models after logout failed", "error", err)
 	}
+	h.syncAgentHubService(r)
 	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) syncAgentHubService(r *http.Request) {
+	if h == nil || h.svc == nil {
+		return
+	}
+	hubSvc, err := h.hubServiceForRequest(r)
+	if err != nil {
+		slog.Warn("sync agent Hub service after OpenCSG environment change failed", "error", err)
+		return
+	}
+	h.svc.SetHubService(hubSvc)
+}
+
+func (h *Handler) resetEnvironmentSensitiveRuntimes() {
+	if h == nil || h.svc == nil {
+		return
+	}
+	if err := h.svc.ResetSandboxRuntimes(); err != nil {
+		slog.Warn("reset sandbox runtimes after OpenCSG environment change failed", "error", err)
+	}
 }
 
 func (h *Handler) clearOpenCSGModelProviderCache() error {

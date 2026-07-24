@@ -50,6 +50,12 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.Channel = channelName
+		hubSvc, err := h.hubServiceForRequest(r)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("resolve hub service: %v", err), http.StatusInternalServerError)
+			return
+		}
+		req.AgentHubService = hubSvc
 		created, err := h.participant.Create(r.Context(), req)
 		if err != nil {
 			http.Error(w, err.Error(), participantCreateStatus(err))

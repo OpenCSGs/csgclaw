@@ -197,6 +197,10 @@ func (r *Runtime) Remove(ctx context.Context, idOrName string, _ sandbox.RemoveO
 }
 
 func (r *Runtime) Close() error {
+	if r != nil {
+		r.client = nil
+		r.cfg = runtimeConfig{}
+	}
 	return nil
 }
 

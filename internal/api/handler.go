@@ -1417,7 +1417,14 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	created, err := h.svc.Create(r.Context(), agentCreateRequestFromAPI(req))
+	hubSvc, err := h.hubServiceForRequest(r)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("resolve hub service: %v", err), http.StatusInternalServerError)
+		return
+	}
+	createReq := agentCreateRequestFromAPI(req)
+	createReq.HubService = hubSvc
+	created, err := h.svc.Create(r.Context(), createReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -2099,6 +2106,11 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.participant != nil && h.svc != nil && shouldCreateWorkerForUser(id, role) {
+		hubSvc, err := h.hubServiceForRequest(r)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("resolve hub service: %v", err), http.StatusInternalServerError)
+			return
+		}
 		participantID := workerParticipantIDFromUserID(id)
 		workerAgentID := workerAgentIDFromUserID(id)
 		if existing, ok := h.participant.Get(participant.ChannelCSGClaw, participantID); ok && strings.TrimSpace(existing.Type) == participant.TypeAgent {
@@ -2126,10 +2138,11 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		created, err := h.participant.Create(r.Context(), participant.CreateRequest{
-			ID:      participantID,
-			Channel: participant.ChannelCSGClaw,
-			Type:    participant.TypeAgent,
-			Name:    name,
+			ID:              participantID,
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			Name:            name,
+			AgentHubService: hubSvc,
 			ChannelUser: participant.ChannelUserSpec{
 				Ref:  id,
 				Kind: participant.ChannelUserKindLocalUserID,

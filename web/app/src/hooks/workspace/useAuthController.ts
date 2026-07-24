@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { beginAuthLogin, fetchAuthStatus, logoutAuth } from "@/api/auth";
 import { errorMessage } from "@/api/client";
@@ -20,6 +20,16 @@ import { workspaceQueryKeys } from "./workspaceQueries";
 const AUTH_LOGIN_PENDING_STORAGE_KEY = "csgclaw.auth.loginPending";
 const LOGIN_POLL_INTERVAL_MS = 2000;
 const LOGIN_POLL_TIMEOUT_MS = 120000;
+const ENVIRONMENT_QUERY_NAMES = new Set([
+  "bootstrap-config",
+  "hub-templates",
+  "hub-template",
+  "hub-workspace",
+  "hub-workspace-file",
+  "official-skills",
+  "model-providers",
+  "agent-profile-models",
+]);
 
 export type AuthNotice = {
   id: string;
@@ -51,6 +61,7 @@ export function useAuthController(t: TranslateFn): AuthController {
   const [authNotice, setAuthNotice] = useState<AuthNotice | null>(null);
   const [loginPending, setLoginPending] = useState(false);
   const [selectedEnvironment, setSelectedEnvironment] = useState<AuthEnvironmentDraft>(readStoredAuthEnvironmentDraft);
+  const environmentFingerprintRef = useRef("");
 
   const statusQuery = useQuery({
     queryKey: workspaceQueryKeys.authStatus(),
@@ -74,6 +85,15 @@ export function useAuthController(t: TranslateFn): AuthController {
     },
     [queryClient],
   );
+
+  const resetEnvironmentQueries = useCallback(async () => {
+    await queryClient.resetQueries({
+      predicate: (query) => {
+        const [scope, name] = query.queryKey;
+        return scope === "workspace" && typeof name === "string" && ENVIRONMENT_QUERY_NAMES.has(name);
+      },
+    });
+  }, [queryClient]);
 
   const refreshStatus = useCallback(async () => {
     return queryClient.fetchQuery({
@@ -125,7 +145,7 @@ export function useAuthController(t: TranslateFn): AuthController {
     try {
       const next = normalizeAuthStatus(await logoutAuth());
       setStatus(next);
-      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.modelProviders() });
+      await resetEnvironmentQueries();
       clearPendingAuthLogin();
       setAuthNotice({
         id: `auth-logout-complete-${Date.now()}`,
@@ -142,11 +162,29 @@ export function useAuthController(t: TranslateFn): AuthController {
     } finally {
       setBusyAction("");
     }
-  }, [busyAction, queryClient, setStatus, status.user_id, status.user_uuid, status.avatar, t]);
+  }, [busyAction, resetEnvironmentQueries, setStatus, status.user_id, status.user_uuid, status.avatar, t]);
 
   useEffect(() => {
     writeStoredAuthEnvironmentDraft(environment);
   }, [environment]);
+
+  useEffect(() => {
+    if (!statusQuery.isFetched) {
+      return;
+    }
+    const fingerprint = [
+      status.authenticated ? "authenticated" : "anonymous",
+      status.user_uuid || status.user_id || "",
+      status.opencsg_base_url || "",
+      status.base_url || "",
+      status.ai_gateway_base_url || "",
+    ].join("|");
+    if (environmentFingerprintRef.current === fingerprint) {
+      return;
+    }
+    environmentFingerprintRef.current = fingerprint;
+    void resetEnvironmentQueries();
+  }, [resetEnvironmentQueries, status, statusQuery.isFetched]);
 
   useEffect(() => {
     if (!loginPending) {
@@ -191,7 +229,7 @@ export function useAuthController(t: TranslateFn): AuthController {
     }
     const user = status.user_id || status.user_uuid || t("csghubSignedIn");
     const environment = authNoticeEnvironmentLabel(status, t);
-    void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.modelProviders() });
+    void resetEnvironmentQueries();
     setLoginPending(false);
     setAuthError("");
     setAuthNotice({
@@ -205,7 +243,7 @@ export function useAuthController(t: TranslateFn): AuthController {
       type: "login",
       tone: "success",
     });
-  }, [queryClient, status, t]);
+  }, [resetEnvironmentQueries, status, t]);
 
   return {
     environment,
