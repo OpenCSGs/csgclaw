@@ -131,12 +131,16 @@ function Install-Launcher {
 
     $launcherExePath = Join-Path $InstallDir "${Name}.exe"
     $launcherCmdPath = Join-Path $InstallDir "${Name}.cmd"
+    $extensionlessLauncherPath = Join-Path $InstallDir $Name
 
     if (Test-Path -LiteralPath $launcherExePath) {
         Remove-Item -LiteralPath $launcherExePath -Force
     }
     if (Test-Path -LiteralPath $launcherCmdPath) {
         Remove-Item -LiteralPath $launcherCmdPath -Force
+    }
+    if (Test-Path -LiteralPath $extensionlessLauncherPath -PathType Leaf) {
+        Remove-Item -LiteralPath $extensionlessLauncherPath -Force
     }
 
     try {

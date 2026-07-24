@@ -736,6 +736,10 @@ func TestClientInstallPreparedResolvesWindowsLauncherLayout(t *testing.T) {
 	if err := os.WriteFile(launcherPath, []byte("launcher"), 0o755); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", launcherPath, err)
 	}
+	staleCLIPath := filepath.Join(launcherDir, "csgclaw-cli")
+	if err := os.WriteFile(staleCLIPath, []byte("stale linux companion"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", staleCLIPath, err)
+	}
 	if err := os.WriteFile(bundleMarkerPath(appHome), []byte(`{"app":"csgclaw","layout":"official-bundle"}`), 0o755); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", bundleMarkerPath(appHome), err)
 	}
@@ -760,6 +764,9 @@ func TestClientInstallPreparedResolvesWindowsLauncherLayout(t *testing.T) {
 	}
 	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
 	assertFileContent(t, filepath.Join(launcherDir, "csgclaw-cli.exe"), "new companion")
+	if _, err := os.Lstat(staleCLIPath); !os.IsNotExist(err) {
+		t.Fatalf("stale extensionless companion still exists, stat error = %v", err)
+	}
 
 	updatedRoot := writeBundleFiles(t, t.TempDir(), map[string]string{
 		filepath.Join("csgclaw", "bin", "csgclaw.exe"):     "@echo off\r\nREM newer\r\n",

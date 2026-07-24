@@ -1,6 +1,5 @@
 APP ?= csgclaw
 BIN_DIR ?= bin
-BIN ?= $(BIN_DIR)/$(APP)
 DIST_DIR ?= dist
 GOCACHE ?= $(CURDIR)/.gocache
 VERSION ?= $(shell sh $(CURDIR)/scripts/version.sh)
@@ -21,6 +20,10 @@ WEB_STATIC_DIST_DIR ?= web/static-dist
 WEB_PNPM ?= $(CURDIR)/scripts/web-pnpm.sh
 TARGET_OS ?= $(shell $(GO) env GOOS)
 TARGET_ARCH ?= $(shell $(GO) env GOARCH)
+HOST_BINARY_SUFFIX := $(if $(filter windows,$(TARGET_OS)),.exe,)
+SERVER_BIN ?= $(BIN_DIR)/$(APP)$(HOST_BINARY_SUFFIX)
+HOST_CLI_BIN ?= $(BIN_DIR)/csgclaw-cli$(HOST_BINARY_SUFFIX)
+BIN ?= $(SERVER_BIN)
 SANDBOX_BUNDLE_TOOLS_DIR ?= $(BIN_DIR)/sandbox-tools
 SANDBOX_CLI_BIN ?= $(SANDBOX_BUNDLE_TOOLS_DIR)/csgclaw-cli
 
@@ -106,9 +109,15 @@ build-all: build
 
 build-server-bin:
 	mkdir -p $(BIN_DIR)
-	env GOCACHE=$(GOCACHE) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/csgclaw ./cmd/csgclaw
+	@if [ "$(TARGET_OS)" = "windows" ]; then \
+		rm -f "$(BIN_DIR)/csgclaw" "$(BIN_DIR)/csgclaw-cli"; \
+	else \
+		rm -f "$(BIN_DIR)/csgclaw.exe" "$(BIN_DIR)/csgclaw-cli.exe"; \
+	fi
 	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
-		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o $(BIN_DIR)/csgclaw-cli ./cmd/csgclaw-cli
+		$(GO) build -ldflags "$(LDFLAGS)" -o "$(SERVER_BIN)" ./cmd/csgclaw
+	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
+		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o "$(HOST_CLI_BIN)" ./cmd/csgclaw-cli
 
 build-server: build-server-bin build-sandbox-cli
 
