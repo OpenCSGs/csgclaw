@@ -271,11 +271,20 @@ func (r *Runtime) State(ctx context.Context, h agentruntime.Handle) (agentruntim
 }
 
 func (r *Runtime) Info(ctx context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
-	info, release, err := r.infoForHandle(ctx, h)
+	box, release, err := r.openBoxForHandle(ctx, h)
 	if err != nil {
 		return agentruntime.Info{}, err
 	}
 	defer release()
+	info, err := r.infoForBox(ctx, h, box)
+	if err != nil {
+		return agentruntime.Info{}, err
+	}
+	if info.State == agentruntime.StateRunning {
+		if err := r.checkGatewayReady(ctx, box); err != nil {
+			return agentruntime.Info{}, err
+		}
+	}
 	return info, nil
 }
 
@@ -796,6 +805,33 @@ func (r *Runtime) waitForGatewayReady(ctx context.Context, box sandbox.Instance)
 		case <-ticker.C:
 		}
 	}
+}
+
+func (r *Runtime) checkGatewayReady(ctx context.Context, box sandbox.Instance) error {
+	if r == nil || box == nil || r.deps.RunBoxCommand == nil {
+		return nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.sandboxProviderName()), "docker") {
+		return nil
+	}
+	probe := r.deps.ReadinessProbe
+	probe.Name = strings.TrimSpace(probe.Name)
+	if probe.Name == "" {
+		return nil
+	}
+
+	var out bytes.Buffer
+	exitCode, err := r.deps.RunBoxCommand(ctx, box, probe.Name, probe.Args, &out)
+	if err == nil && exitCode == 0 {
+		return nil
+	}
+	if err == nil {
+		err = fmt.Errorf("%s exited with code %d: %s", probe.Name, exitCode, strings.TrimSpace(out.String()))
+	}
+	if stoppedErr := r.gatewayStoppedError(ctx, box, err); stoppedErr != nil {
+		return stoppedErr
+	}
+	return fmt.Errorf("check %s gateway ready: %w", r.Kind(), err)
 }
 
 func (r *Runtime) gatewayStoppedError(ctx context.Context, box sandbox.Instance, lastErr error) error {
