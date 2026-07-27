@@ -18,8 +18,12 @@ CGO_ENABLED ?= 0
 WEB_APP_DIR ?= web/app
 WEB_STATIC_DIST_DIR ?= web/static-dist
 WEB_PNPM ?= $(CURDIR)/scripts/web-pnpm.sh
+DESKTOP_DIR ?= desktop
+DESKTOP_PNPM ?= $(CURDIR)/scripts/desktop-pnpm.sh
 TARGET_OS ?= $(shell $(GO) env GOOS)
 TARGET_ARCH ?= $(shell $(GO) env GOARCH)
+DESKTOP_PLATFORM ?= $(if $(filter windows,$(TARGET_OS)),win32,$(TARGET_OS))
+DESKTOP_ARCH ?= $(if $(filter amd64,$(TARGET_ARCH)),x64,$(TARGET_ARCH))
 HOST_BINARY_SUFFIX := $(if $(filter windows,$(TARGET_OS)),.exe,)
 SERVER_BIN ?= $(BIN_DIR)/$(APP)$(HOST_BINARY_SUFFIX)
 HOST_CLI_BIN ?= $(BIN_DIR)/csgclaw-cli$(HOST_BINARY_SUFFIX)
@@ -29,7 +33,7 @@ SANDBOX_CLI_BIN ?= $(SANDBOX_BUNDLE_TOOLS_DIR)/csgclaw-cli
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web build build-all build-server build-server-bin build-sandbox-cli install-sandbox-cli run clean package package-all release
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package build build-all build-server build-server-bin build-sandbox-cli install-sandbox-cli run clean package package-all release
 
 help:
 	@printf '%s\n' \
@@ -41,6 +45,8 @@ help:
 		'make web-install - install Web UI dependencies' \
 		'make web-dev    - run Vite Web UI dev server' \
 		'make build-web  - build Web UI app into web/static-dist' \
+		'make desktop-dev - install dependencies when needed, build the local backend, and start Electron Forge' \
+		'make desktop-package - create platform Electron installers/archives' \
 		'make build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli' \
 		'make build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools' \
 		'make run        - build (no docker images), then run the server' \
@@ -102,6 +108,40 @@ build-web: ensure-web-deps
 		printf '%s\n' "Web UI build did not produce $(WEB_STATIC_DIST_DIR)/index.html."; \
 		exit 1; \
 	}
+
+check-desktop-layout:
+	@if [ ! -d "$(DESKTOP_DIR)" ]; then \
+		printf '%s\n' "Electron Desktop source directory is missing: $(DESKTOP_DIR)."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(DESKTOP_DIR)/package.json" ]; then \
+		printf '%s\n' "Electron Desktop package.json is missing: $(DESKTOP_DIR)/package.json."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(DESKTOP_DIR)/pnpm-lock.yaml" ]; then \
+		printf '%s\n' "Electron Desktop pnpm lockfile is missing: $(DESKTOP_DIR)/pnpm-lock.yaml."; \
+		exit 1; \
+	fi
+
+ensure-desktop-deps: check-desktop-layout
+	@if [ ! -d "$(DESKTOP_DIR)/node_modules" ] || [ ! -x "$(DESKTOP_DIR)/node_modules/.bin/electron-forge" ]; then \
+		printf '%s\n' "Electron Desktop dependencies are missing; installing them before continuing."; \
+		$(DESKTOP_PNPM) install --frozen-lockfile || { \
+			status=$$?; \
+			printf '%s\n' "Failed to install Electron Desktop dependencies."; \
+			printf '%s\n' "Check npm registry network/proxy access, then rerun the make command."; \
+			exit $$status; \
+		}; \
+	fi
+
+desktop-dev: ensure-desktop-deps build-web build-server-bin build-sandbox-cli
+	$(DESKTOP_PNPM) start
+
+desktop-backend-bundle: build-web
+	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 $(CURDIR)/scripts/package-desktop-backend.sh $(TARGET_OS) $(TARGET_ARCH)
+
+desktop-package: ensure-desktop-deps desktop-backend-bundle
+	CSGCLAW_DESKTOP_GOOS=$(TARGET_OS) CSGCLAW_DESKTOP_GOARCH=$(TARGET_ARCH) CSGCLAW_DESKTOP_ARCH=$(DESKTOP_ARCH) CSGCLAW_DESKTOP_VERSION=$(VERSION) $(DESKTOP_PNPM) make -- --platform=$(DESKTOP_PLATFORM) --arch=$(DESKTOP_ARCH)
 
 build: build-web build-server-bin build-sandbox-cli
 

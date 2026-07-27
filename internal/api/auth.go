@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net"
@@ -91,6 +92,10 @@ func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
+	if h.runtimeDistribution == "electron" {
+		writeOAuthCompletePage(w, "Login complete", "Authentication completed. You can close this tab and return to CSGClaw.")
+		return
+	}
 	w.Header().Set("Location", redirectURL)
 	w.WriteHeader(http.StatusFound)
 }
@@ -124,6 +129,9 @@ func (h *Handler) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) authAdvertiseBaseURL() string {
+	if h != nil && h.advertiseBaseURL != "" {
+		return h.advertiseBaseURL
+	}
 	if h == nil || strings.TrimSpace(h.configPath) == "" {
 		return ""
 	}
@@ -132,6 +140,18 @@ func (h *Handler) authAdvertiseBaseURL() string {
 		return ""
 	}
 	return strings.TrimRight(strings.TrimSpace(cfg.Server.AdvertiseBaseURL), "/")
+}
+
+func writeOAuthCompletePage(w http.ResponseWriter, title, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(
+		w,
+		"<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>%s</title></head><body><main><h1>%s</h1><p>%s</p></main></body></html>",
+		html.EscapeString(title),
+		html.EscapeString(title),
+		html.EscapeString(message),
+	)
 }
 
 func authAdvertisedCallbackURL(advertiseBaseURL string) string {

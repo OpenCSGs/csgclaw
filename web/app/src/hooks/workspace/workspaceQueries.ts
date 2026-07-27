@@ -10,7 +10,6 @@ import { fetchModelProviders } from "@/api/modelProviders";
 import { fetchRemoteSkillsPage, fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
 import type { RemoteSkillsPage } from "@/api/skills";
 import { fetchManagerProfile } from "@/api/agents";
-import { fetchUpgradeStatus } from "@/api/upgrade";
 import {
   modelRequestKey,
   normalizeRuntimeImageMap,
@@ -31,8 +30,8 @@ import type { HubTemplate, HubWorkspaceFile, HubWorkspaceListing } from "@/model
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
-import { normalizeUpgradeStatus } from "@/models/upgradeStatus";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
+import { fetchPlatformUpgradeStatus } from "@/shared/platform/updatePort";
 
 const WORKSPACE_QUERY_SCOPE = "workspace";
 
@@ -132,7 +131,7 @@ export async function fetchWorkspaceAppVersion(options: FetchVersionOptions = {}
 }
 
 export async function fetchWorkspaceUpgradeStatus(): Promise<UpgradeStatus | null> {
-  return normalizeUpgradeStatus(await fetchUpgradeStatus());
+  return fetchPlatformUpgradeStatus();
 }
 
 export async function fetchWorkspaceAgentProfileModels(

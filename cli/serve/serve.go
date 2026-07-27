@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/api"
 	"csgclaw/internal/apitypes"
+	appbootstrap "csgclaw/internal/app"
 	"csgclaw/internal/app/channelwiring"
 	"csgclaw/internal/app/runtimewiring"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
@@ -99,6 +101,7 @@ var (
 type serveCmd struct{}
 type stopCmd struct{}
 type internalServeCmd struct{}
+type desktopServeCmd struct{}
 
 const cliproxyAutoLoginEnv = "CSGCLAW_CLIPROXY_AUTO_LOGIN"
 
@@ -112,6 +115,10 @@ func NewStopCmd() command.Command {
 
 func NewInternalServeCmd() command.Command {
 	return internalServeCmd{}
+}
+
+func NewDesktopServeCmd() command.Command {
+	return desktopServeCmd{}
 }
 
 func (serveCmd) Name() string {
@@ -147,6 +154,15 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}
+	instanceLock, err := appbootstrap.AcquireInstanceLock()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if instanceLock != nil {
+			_ = instanceLock.Release()
+		}
+	}()
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
 	defer restoreAuthDetect()
 
@@ -184,6 +200,10 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 		NoCodexAutoInstall: *noCodexAutoInstall,
 	}
 	if *daemon {
+		if err := instanceLock.Release(); err != nil {
+			return err
+		}
+		instanceLock = nil
 		serveGlobals := globals
 		serveGlobals.Config = configPath
 		return serveBackground(run, cfg, serveGlobals, *logPath, *pidPath, *logLevel, serveOpts)
@@ -268,6 +288,11 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}
+	instanceLock, err := appbootstrap.AcquireInstanceLock()
+	if err != nil {
+		return err
+	}
+	defer instanceLock.Release()
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
 	defer restoreAuthDetect()
 
@@ -282,7 +307,6 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	}
 
 	configPath := strings.TrimSpace(*configPathFlag)
-	var err error
 	if configPath == "" {
 		configPath, err = config.DefaultPath()
 		if err != nil {
@@ -352,6 +376,11 @@ type serveOptions struct {
 	NoBrowser          bool
 	NoAuthDetect       bool
 	NoCodexAutoInstall bool
+	Quiet              bool
+	Distribution       string
+	Listener           net.Listener
+	Desktop            *server.DesktopOptions
+	OnReady            func()
 }
 
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
@@ -378,7 +407,13 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 	apiURL := apiBaseURL(cfg.Server)
 	imURL := imOpenURL(apiURL)
 
-	if output == "json" {
+	serveOpts := serveOptions{}
+	if len(opts) > 0 {
+		serveOpts = opts[0]
+	}
+	if serveOpts.Quiet {
+		// Machine entrypoints own stdout and emit their versioned protocol messages.
+	} else if output == "json" {
 		if err := command.RenderAction(output, run.Stdout, command.ActionResult{
 			Command:         "serve",
 			Action:          "start",
@@ -553,7 +588,11 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if serveOpts.NoAuthDetect && svc != nil {
 		svc.SetStartupProfileDetectionDisabled(true)
 	}
-	if refreshed, results, err := refreshStartupModelProviders(ctx, cfg, configPath, svc); err != nil {
+	refreshConfigPath := configPath
+	if serveOpts.Distribution == "electron" {
+		refreshConfigPath = ""
+	}
+	if refreshed, results, err := refreshStartupModelProviders(ctx, cfg, refreshConfigPath, svc); err != nil {
 		slog.Warn("refresh model provider catalog at startup failed", "error", err)
 	} else {
 		cfg = refreshed
@@ -603,6 +642,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		GOARCH:     runtime.GOARCH,
 	}
 	upgradeSupport := upgradeClient.AutoUpgradeSupport(currentVersion)
+	if serveOpts.Distribution == "electron" {
+		upgradeSupport.Supported = false
+		upgradeSupport.Reason = "desktop_managed"
+	}
 	upgradeManager := upgrade.NewManager(upgradeClient, currentVersion, upgrade.ManagerOptions{
 		AutoUpgradeSupported:         upgradeSupport.Supported,
 		AutoUpgradeUnsupportedReason: upgradeSupport.Reason,
@@ -622,10 +665,12 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		},
 	})
 	configureFeishuService(feishuSvc, svc)
-	if outcome, err := upgrade.ConsumeApplyStatus(configPath); err != nil {
-		slog.Warn("load upgrade helper failure", "error", err)
-	} else if outcome.Status == upgrade.ApplyStatusFailed && outcome.Message != "" {
-		upgradeManager.MarkUpgradeFailedWithDetails(errors.New(outcome.Message), outcome.ErrorKind, outcome.LogPath)
+	if serveOpts.Distribution != "electron" {
+		if outcome, err := upgrade.ConsumeApplyStatus(configPath); err != nil {
+			slog.Warn("load upgrade helper failure", "error", err)
+		} else if outcome.Status == upgrade.ApplyStatusFailed && outcome.Message != "" {
+			upgradeManager.MarkUpgradeFailedWithDetails(errors.New(outcome.Message), outcome.ErrorKind, outcome.LogPath)
+		}
 	}
 	hubSvc, err := newAgentTemplateHubService(cfg.Hub)
 	if err != nil {
@@ -656,6 +701,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	agentRuntimeSvc := NewAgentRuntimeService()
 	return RunServer(server.Options{
 		ListenAddr:         cfg.Server.ListenAddr,
+		Listener:           serveOpts.Listener,
 		Service:            svc,
 		Hub:                hubSvc,
 		MCP:                mcpSvc,
@@ -679,10 +725,15 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		ConfigPath:         configPath,
 		AccessToken:        cfg.Server.AccessToken,
 		NoAuth:             cfg.Server.NoAuth,
+		AdvertiseBaseURL:   apiURL,
+		Desktop:            serveOpts.Desktop,
 		Context:            ctx,
 		OnReady: func(handler *api.Handler, router chi.Router) {
 			deliver := channelwiring.WireNotificationParticipantPull(ctx, participantSvc, imSvc, apiURL, cfg.Server.AccessToken)
 			handler.SetNotificationDeliver(deliver)
+			if serveOpts.OnReady != nil {
+				serveOpts.OnReady()
+			}
 			if !serveOpts.NoBrowser && output != "json" && run != nil {
 				go func() {
 					if err := WaitForHealthy(apiURL, 5*time.Second); err != nil {

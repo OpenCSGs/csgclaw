@@ -66,7 +66,10 @@ type Handler struct {
 	teamPlanJobsMu             sync.Mutex
 	teamPlanJobs               map[string]struct{}
 	configPath                 string
+	advertiseBaseURL           string
+	runtimeDistribution        string
 	serverAccessToken          string
+	desktopSessionToken        string
 	serverNoAuth               bool
 	upgradeManager             *upgrade.Manager
 	upgradeConfigPath          string
@@ -865,8 +868,29 @@ func (h *Handler) SetConfigPath(path string) {
 	}
 }
 
+func (h *Handler) SetAdvertiseBaseURL(baseURL string) {
+	if h != nil {
+		h.advertiseBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	}
+}
+
+func (h *Handler) SetRuntimeDistribution(distribution string) {
+	if h != nil {
+		h.runtimeDistribution = strings.TrimSpace(distribution)
+	}
+}
+
+func (h *Handler) SetDesktopSessionToken(token string) {
+	if h != nil {
+		h.desktopSessionToken = strings.TrimSpace(token)
+	}
+}
+
 func (h *Handler) validateServerAccessToken(authHeader string) bool {
 	if h.serverNoAuth {
+		return true
+	}
+	if token := strings.TrimSpace(h.desktopSessionToken); token != "" && authHeader == "Bearer "+token {
 		return true
 	}
 	token := strings.TrimSpace(h.serverAccessToken)
@@ -897,17 +921,19 @@ func (h *Handler) handleUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upgrade manager is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	if outcome, err := upgrade.ConsumeApplyStatus(h.upgradeConfigPath); err != nil {
-		http.Error(w, fmt.Sprintf("read upgrade helper status: %v", err), http.StatusInternalServerError)
-		return
-	} else {
-		switch outcome.Status {
-		case upgrade.ApplyStatusFailed:
-			if outcome.Message != "" {
-				h.upgradeManager.MarkUpgradeFailedWithDetails(errors.New(outcome.Message), outcome.ErrorKind, outcome.LogPath)
+	if h.runtimeDistribution != "electron" {
+		if outcome, err := upgrade.ConsumeApplyStatus(h.upgradeConfigPath); err != nil {
+			http.Error(w, fmt.Sprintf("read upgrade helper status: %v", err), http.StatusInternalServerError)
+			return
+		} else {
+			switch outcome.Status {
+			case upgrade.ApplyStatusFailed:
+				if outcome.Message != "" {
+					h.upgradeManager.MarkUpgradeFailedWithDetails(errors.New(outcome.Message), outcome.ErrorKind, outcome.LogPath)
+				}
+			case upgrade.ApplyStatusManualRestartRequired:
+				h.upgradeManager.MarkManualRestartRequired()
 			}
-		case upgrade.ApplyStatusManualRestartRequired:
-			h.upgradeManager.MarkManualRestartRequired()
 		}
 	}
 	writeJSON(w, http.StatusOK, h.upgradeManager.Status())
@@ -923,6 +949,10 @@ func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status := h.upgradeManager.Status(); !status.AutoUpgradeSupported {
+		if status.AutoUpgradeUnsupportedReason == "desktop_managed" {
+			http.Error(w, "desktop updates are managed by Electron", http.StatusConflict)
+			return
+		}
 		http.Error(w, "current installation is not an official csgclaw bundle; please upgrade manually", http.StatusConflict)
 		return
 	}

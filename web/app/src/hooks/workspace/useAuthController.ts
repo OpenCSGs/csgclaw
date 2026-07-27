@@ -14,6 +14,7 @@ import {
 import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import type { TranslateFn } from "@/models/conversations";
 import { avatarFallbackText } from "@/shared/avatar";
+import { prepareOAuthNavigation } from "@/shared/platform/externalNavigation";
 import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from "@/shared/storage/authEnvironment";
 import { workspaceQueryKeys } from "./workspaceQueries";
 
@@ -90,6 +91,7 @@ export function useAuthController(t: TranslateFn): AuthController {
       }
       setBusyAction("login");
       setAuthError("");
+      const navigation = prepareOAuthNavigation("opencsg-auth");
       try {
         const nextEnvironment = resolveAuthEnvironmentDraft(requestedEnvironment ?? environment);
         setSelectedEnvironment(nextEnvironment);
@@ -101,8 +103,11 @@ export function useAuthController(t: TranslateFn): AuthController {
         }
         markPendingAuthLogin();
         setLoginPending(true);
-        window.location.assign(loginResp.login_url);
+        if (!(await navigation.open(loginResp.login_url))) {
+          throw new Error(t("csghubLoginFailed"));
+        }
       } catch (err) {
+        navigation.close();
         clearPendingAuthLogin();
         setLoginPending(false);
         setAuthError(errorMessage(err, t("csghubLoginFailed")));

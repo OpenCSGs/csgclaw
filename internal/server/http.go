@@ -27,6 +27,7 @@ import (
 
 type Options struct {
 	ListenAddr         string
+	Listener           net.Listener
 	Service            *agent.Service
 	Hub                *hub.Service
 	MCP                *mcp.Service
@@ -50,6 +51,8 @@ type Options struct {
 	ConfigPath         string
 	AccessToken        string
 	NoAuth             bool
+	AdvertiseBaseURL   string
+	Desktop            *DesktopOptions
 	Context            context.Context
 	OnReady            func(h *api.Handler, router chi.Router)
 }
@@ -72,6 +75,11 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetUserInputResponder(opts.UserInputResponder)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)
 	handler.SetConfigPath(opts.ConfigPath)
+	handler.SetAdvertiseBaseURL(opts.AdvertiseBaseURL)
+	if opts.Desktop != nil {
+		handler.SetRuntimeDistribution("electron")
+		handler.SetDesktopSessionToken(opts.Desktop.SessionToken)
+	}
 	return handler
 }
 
@@ -79,13 +87,33 @@ func Run(opts Options) error {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
+
+	listener := opts.Listener
+	if listener == nil {
+		var err error
+		listener, err = net.Listen("tcp", opts.ListenAddr)
+		if err != nil {
+			return err
+		}
+	}
+
 	handler := newHandler(opts)
 	router := handler.Routes()
 	router.Handle("/*", uiFallbackHandler())
 
+	var rootHandler http.Handler = router
+	if opts.Desktop != nil {
+		var err error
+		rootHandler, err = desktopSecurityHandler(rootHandler, listener.Addr(), *opts.Desktop)
+		if err != nil {
+			_ = listener.Close()
+			return err
+		}
+	}
+
 	httpServer := &http.Server{
 		Addr:              opts.ListenAddr,
-		Handler:           accessLog(slog.Default(), router),
+		Handler:           accessLog(slog.Default(), rootHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -108,7 +136,7 @@ func Run(opts Options) error {
 		}()
 	}
 
-	if opts.Upgrade != nil {
+	if opts.Upgrade != nil && opts.Desktop == nil {
 		go opts.Upgrade.Start(opts.Context)
 	}
 	if opts.ScheduledTask != nil {
@@ -123,10 +151,6 @@ func Run(opts Options) error {
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
 
-	listener, err := net.Listen("tcp", opts.ListenAddr)
-	if err != nil {
-		return err
-	}
 	if opts.OnReady != nil {
 		go opts.OnReady(handler, router)
 	}
