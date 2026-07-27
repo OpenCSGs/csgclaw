@@ -23,7 +23,7 @@ const (
 	ProviderCodex      = "codex"
 	ProviderClaudeCode = "claude_code"
 
-	DefaultReasoningEffort = "medium"
+	DefaultReasoningEffort = config.ReasoningEffortAuto
 )
 
 var (
@@ -131,7 +131,7 @@ func normalizeProfile(profile AgentProfile, fallbackName, fallbackDescription st
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
 	out.APIKey = strings.TrimSpace(out.APIKey)
 	out.ModelID = strings.TrimSpace(out.ModelID)
-	out.ReasoningEffort = strings.ToLower(strings.TrimSpace(out.ReasoningEffort))
+	out.ReasoningEffort = config.NormalizeReasoningEffort(out.ReasoningEffort)
 	if out.ReasoningEffort == "" {
 		out.ReasoningEffort = DefaultReasoningEffort
 	}

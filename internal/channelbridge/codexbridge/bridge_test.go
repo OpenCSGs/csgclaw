@@ -17,6 +17,7 @@ import (
 	"csgclaw/internal/apitypes"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channelbridge/runtimebridge"
+	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/worklease"
 )
@@ -260,13 +261,14 @@ type resetCall struct {
 }
 
 type fakePrompter struct {
-	mu      sync.Mutex
-	calls   []promptCall
-	ensures []ensureCall
-	resets  []resetCall
-	prompt  func(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) error
-	ensure  func(context.Context, runtimecodex.SessionHandle, string) (string, error)
-	reset   func(context.Context, runtimecodex.SessionHandle, string) error
+	mu             sync.Mutex
+	calls          []promptCall
+	ensures        []ensureCall
+	resets         []resetCall
+	prompt         func(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) error
+	promptResponse func(context.Context, runtimecodex.SessionHandle, runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error)
+	ensure         func(context.Context, runtimecodex.SessionHandle, string) (string, error)
+	reset          func(context.Context, runtimecodex.SessionHandle, string) error
 }
 
 func (p *fakePrompter) Prompt(ctx context.Context, handle runtimecodex.SessionHandle, req runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error) {
@@ -278,6 +280,9 @@ func (p *fakePrompter) Prompt(ctx context.Context, handle runtimecodex.SessionHa
 	p.calls = append(p.calls, call)
 	p.mu.Unlock()
 
+	if p.promptResponse != nil {
+		return p.promptResponse(ctx, handle, req)
+	}
 	if p.prompt != nil {
 		if err := p.prompt(ctx, handle, req); err != nil {
 			return runtimecodex.PromptResponse{}, err
@@ -2533,6 +2538,8 @@ type fakeWorkReporter struct {
 	leases          []worklease.ParticipantWorkLease
 	stops           []worklease.ParticipantWorkLease
 	stopContextErrs []error
+	statuses        []apitypes.ParticipantWorkStatusPatchRequest
+	outcomes        []string
 }
 
 func (f *fakeWorkReporter) StartOrRenew(_ context.Context, lease worklease.ParticipantWorkLease) (apitypes.ParticipantWorkUpdate, error) {
@@ -2543,17 +2550,39 @@ func (f *fakeWorkReporter) StartOrRenew(_ context.Context, lease worklease.Parti
 }
 
 func (f *fakeWorkReporter) Stop(ctx context.Context, participantID, leaseID string) error {
+	return f.Finish(ctx, participantID, leaseID, apitypes.ParticipantWorkOutcomeReleased)
+}
+
+func (f *fakeWorkReporter) Finish(ctx context.Context, participantID, leaseID, outcome string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.stops = append(f.stops, worklease.ParticipantWorkLease{ParticipantID: participantID, LeaseID: leaseID})
 	f.stopContextErrs = append(f.stopContextErrs, ctx.Err())
+	f.outcomes = append(f.outcomes, outcome)
 	return nil
+}
+
+func (f *fakeWorkReporter) UpdateStatus(
+	_ context.Context,
+	_, _ string,
+	request apitypes.ParticipantWorkStatusPatchRequest,
+) (apitypes.ParticipantWorkUpdate, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.statuses = append(f.statuses, request)
+	return apitypes.ParticipantWorkUpdate{}, true, nil
 }
 
 func (f *fakeWorkReporter) snapshot() ([]worklease.ParticipantWorkLease, []worklease.ParticipantWorkLease, []error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]worklease.ParticipantWorkLease(nil), f.leases...), append([]worklease.ParticipantWorkLease(nil), f.stops...), append([]error(nil), f.stopContextErrs...)
+}
+
+func (f *fakeWorkReporter) controlSnapshot() ([]apitypes.ParticipantWorkStatusPatchRequest, []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]apitypes.ParticipantWorkStatusPatchRequest(nil), f.statuses...), append([]string(nil), f.outcomes...)
 }
 
 func TestParticipantWorkReporterLifecycle(t *testing.T) {
@@ -2607,6 +2636,84 @@ func TestParticipantWorkReporterSkipsFeishu(t *testing.T) {
 	leases, stops, _ := reporter.snapshot()
 	if len(leases) != 0 || len(stops) != 0 {
 		t.Fatalf("feishu work reporting calls = leases %#v stops %#v", leases, stops)
+	}
+}
+
+func TestCodexTurnControlRequiresRuntimeStopConfirmation(t *testing.T) {
+	tests := []struct {
+		name        string
+		stopReason  string
+		wantOutcome string
+	}{
+		{
+			name:        "confirmed",
+			stopReason:  runtimecodex.StopReasonInterrupted,
+			wantOutcome: apitypes.ParticipantWorkOutcomeStopped,
+		},
+		{
+			name:        "unconfirmed",
+			wantOutcome: apitypes.ParticipantWorkOutcomeStopTimedOut,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stream := make(chan BotEvent, 1)
+			errs := make(chan error)
+			stream <- BotEvent{Channel: localChannel, MessageID: "message-1", RoomID: "room-1", Text: "keep working"}
+			reporter := &fakeWorkReporter{}
+			dispatcher := worklease.NewTurnControlDispatcher(nil)
+			promptStarted := make(chan struct{})
+			prompter := &fakePrompter{promptResponse: func(ctx context.Context, _ runtimecodex.SessionHandle, _ runtimecodex.PromptRequest) (runtimecodex.PromptResponse, error) {
+				close(promptStarted)
+				<-ctx.Done()
+				return runtimecodex.PromptResponse{StopReason: test.stopReason}, ctx.Err()
+			}}
+			service := NewService(
+				&fakeBotClient{streams: map[string][]streamResult{"pt-worker": {{events: stream, errs: errs}}}},
+				prompter,
+				runtimecodex.NewEventSink(),
+				WithParticipantWorkReporter(reporter),
+				WithTurnControllerRegistrar(dispatcher),
+			)
+			if err := service.StartBot(context.Background(), Binding{BotID: "pt-worker", RuntimeID: "runtime-1", SessionID: "session-1"}); err != nil {
+				t.Fatal(err)
+			}
+			defer service.Close()
+			select {
+			case <-promptStarted:
+			case <-time.After(time.Second):
+				t.Fatal("prompt did not start")
+			}
+			waitFor(t, func() bool {
+				statuses, _ := reporter.controlSnapshot()
+				return len(statuses) == 1
+			})
+			leases, _, _ := reporter.snapshot()
+			if len(leases) == 0 {
+				t.Fatal("missing participant work lease")
+			}
+			stopCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if err := dispatcher.StopTurn(stopCtx, agentruntime.TurnRef{
+				ParticipantID: "pt-worker",
+				RoomID:        "room-1",
+				LeaseID:       leases[0].LeaseID,
+				RequestID:     "message-1",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			waitFor(t, func() bool {
+				_, outcomes := reporter.controlSnapshot()
+				return len(outcomes) == 1
+			})
+			statuses, outcomes := reporter.controlSnapshot()
+			if len(statuses) != 1 || !slices.Equal(statuses[0].Capabilities, []string{apitypes.ParticipantWorkCapabilityTurnStopV1}) {
+				t.Fatalf("status reports = %#v", statuses)
+			}
+			if !slices.Equal(outcomes, []string{test.wantOutcome}) {
+				t.Fatalf("completion outcomes = %#v, want %q", outcomes, test.wantOutcome)
+			}
+		})
 	}
 }
 

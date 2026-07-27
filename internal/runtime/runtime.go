@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"csgclaw/internal/config"
 )
 
 const (
@@ -107,7 +109,7 @@ func (p Profile) Normalized() Profile {
 	p.ModelID = strings.TrimSpace(p.ModelID)
 	p.BaseURL = strings.TrimRight(strings.TrimSpace(p.BaseURL), "/")
 	p.APIKey = strings.TrimSpace(p.APIKey)
-	p.ReasoningEffort = strings.TrimSpace(p.ReasoningEffort)
+	p.ReasoningEffort = config.NormalizeReasoningEffort(p.ReasoningEffort)
 	if len(p.Env) == 0 {
 		p.Env = nil
 		return p

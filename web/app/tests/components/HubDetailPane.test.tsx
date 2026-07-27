@@ -246,7 +246,13 @@ function renderHubSkillDetailPane() {
   );
 }
 
-function renderMCPDetailPane() {
+function renderMCPDetailPane({
+  mcpCreateDialogOpen = false,
+  mcpCreateError = "",
+}: {
+  mcpCreateDialogOpen?: boolean;
+  mcpCreateError?: string;
+} = {}) {
   const onUpdateMCP = vi.fn().mockResolvedValue(true);
   const mcp = {
     name: "grafana",
@@ -289,6 +295,8 @@ function renderMCPDetailPane() {
           skillTreeLoading: false,
           templates: [],
           mcpServers: [mcp],
+          mcpCreateDialogOpen,
+          mcpCreateError,
           mcpMutationBusy: false,
           mcpMutationError: "",
           mcpStateError: "",
@@ -344,10 +352,15 @@ describe("HubDetailPane", () => {
     renderHubDetailPane();
 
     await user.click(screen.getByRole("button", { name: "Instructions" }));
+    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveClass(
+      "hub-template-instructions-editor",
+      "is-default",
+    );
     await user.click(screen.getByRole("button", { name: "Advanced" }));
 
     expect(screen.getByRole("button", { name: /^Skills/ })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Describe how this agent should work.")).toBeDisabled();
+    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveClass("is-advanced");
     expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue(
       "# Instructions\n\nFollow the template rules.",
     );
@@ -395,5 +408,15 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onUpdateMCP).not.toHaveBeenCalled();
+  });
+
+  it("shows MCP creation errors only inside the creation dialog", () => {
+    renderMCPDetailPane({
+      mcpCreateDialogOpen: true,
+      mcpCreateError: "mcp server already exists: filesystem",
+    });
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("mcp server already exists: filesystem");
+    expect(screen.getAllByText("mcp server already exists: filesystem")).toHaveLength(1);
   });
 });

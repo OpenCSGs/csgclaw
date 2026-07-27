@@ -224,6 +224,26 @@ export function conversationWorkingParticipantsWithActivity(
 ): ConversationWorkingParticipant[] {
   return participants
     .map((participant, originalIndex) => {
+      const hasThinkingText = Boolean(participant.thinkingText?.trim());
+      const explicitStageAction = conversationWorkingActionForStage(participant.workStage, hasThinkingText);
+      if (
+        explicitStageAction ||
+        (participant.workStage === undefined && hasThinkingText) ||
+        participant.stopping ||
+        participant.stopSending
+      ) {
+        return {
+          originalIndex,
+          participant: {
+            ...participant,
+            activity: {
+              action:
+                explicitStageAction ??
+                (hasThinkingText ? ConversationWorkingActions.thinking : ConversationWorkingActions.preparingReply),
+            },
+          },
+        };
+      }
       const agent = agents.find(
         (candidate) =>
           identityMatches(participant.id, candidate.identities) ||
@@ -248,7 +268,10 @@ export function conversationWorkingParticipantsWithActivity(
           participant: {
             ...participant,
             activity: {
-              action: ConversationWorkingActions.thinking,
+              action:
+                participant.workStage === "running_tool"
+                  ? ConversationWorkingActions.usingTool
+                  : ConversationWorkingActions.preparingReply,
             },
           },
         };
@@ -261,6 +284,7 @@ export function conversationWorkingParticipantsWithActivity(
             action: conversationWorkingActionForEntry(entry),
             entryID: entry.id,
             summary: compactWorkingSummary(conversationActivityEntrySummary(entry)),
+            toolName: entry.tone === "tool" ? entry.eventType : undefined,
             updatedAt: entry.updatedAt || entry.createdAt,
           },
         },
@@ -273,6 +297,22 @@ export function conversationWorkingParticipantsWithActivity(
       return timeDelta || left.originalIndex - right.originalIndex;
     })
     .map(({ participant }) => participant);
+}
+
+function conversationWorkingActionForStage(
+  stage: ConversationWorkingParticipant["workStage"],
+  hasThinkingText: boolean,
+): ConversationWorkingAction | null {
+  switch (stage) {
+    case "preparing_reply":
+      return ConversationWorkingActions.preparingReply;
+    case "thinking":
+      return hasThinkingText ? ConversationWorkingActions.thinking : ConversationWorkingActions.preparingReply;
+    case "generating_reply":
+      return ConversationWorkingActions.generatingReply;
+    default:
+      return null;
+  }
 }
 
 export function conversationActivityEntryDetails(entry: ConversationActivityEntry): ConversationActivityDetail[] {

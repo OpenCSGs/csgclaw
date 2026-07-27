@@ -104,11 +104,11 @@
 
 # Documentation.
 # /docs/ @TODO-owner
-# /docs/channel/ @TODO-owner
-# /docs/im/ @TODO-owner
-# /docs/sandbox/ @TODO-owner
-# /docs/web/ @TODO-owner
-# /docs/weekly-releases/ @TODO-owner
+# /docs/tech/channel/ @TODO-owner
+# /docs/tech/im/ @TODO-owner
+# /docs/tech/sandbox/ @TODO-owner
+# /docs/tech/web/ @TODO-owner
+# /docs/tech/weekly-releases/ @TODO-owner
 
 # Scripts and release tooling.
 /scripts/ @wanghaojie124

@@ -98,3 +98,76 @@ func TestAgenticHubSkillBlobURLUsesRefQuery(t *testing.T) {
 		t.Fatalf("blob URL = %q, want %q", got, want)
 	}
 }
+
+func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/hub/api/v1/skills" {
+			t.Fatalf("path = %q, want catalog endpoint", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("page"); got != "2" {
+			t.Fatalf("page = %q, want 2", got)
+		}
+		if got := r.URL.Query().Get("per"); got != "16" {
+			t.Fatalf("per = %q, want 16", got)
+		}
+		if got := r.URL.Query().Get("search"); got != "agent" {
+			t.Fatalf("search = %q, want agent", got)
+		}
+		if got := r.URL.Query().Get("sort"); got != "trending" {
+			t.Fatalf("sort = %q, want trending", got)
+		}
+		if got := r.URL.Query().Get("source"); got != "" {
+			t.Fatalf("source = %q, want empty", got)
+		}
+		_, _ = io.WriteString(w, `{
+			"data":[
+				{"name":"Skill","path":"AIWizards/agent-builder","description":"Build agents","default_branch":"dev"},
+				{"name":"broken","description":"missing path"}
+			],
+			"total":"78"
+		}`)
+	}))
+	defer server.Close()
+
+	page, err := ListAgenticHubSkills(context.Background(), server.URL+"/hub", AgenticHubSkillListOptions{
+		Page:   2,
+		Per:    16,
+		Search: " agent ",
+	})
+	if err != nil {
+		t.Fatalf("ListAgenticHubSkills() error = %v", err)
+	}
+	if page.RecordCount != 2 {
+		t.Fatalf("RecordCount = %d, want 2", page.RecordCount)
+	}
+	if page.Total == nil || *page.Total != 78 {
+		t.Fatalf("Total = %v, want 78", page.Total)
+	}
+	if len(page.Items) != 1 {
+		t.Fatalf("items = %#v, want one valid record", page.Items)
+	}
+	if got, want := page.Items[0], (AgenticHubSkillSummary{
+		Description: "Build agents",
+		Name:        "agent-builder",
+		Ref:         "dev",
+		RemotePath:  "AIWizards/agent-builder",
+	}); got != want {
+		t.Fatalf("item = %#v, want %#v", got, want)
+	}
+}
+
+func TestAgenticHubSkillWebURLPreservesHubBasePath(t *testing.T) {
+	got, err := AgenticHubSkillWebURL("https://hub.example.test/community", "AIWizards/agent-builder")
+	if err != nil {
+		t.Fatalf("AgenticHubSkillWebURL() error = %v", err)
+	}
+	if want := "https://hub.example.test/community/skills/AIWizards/agent-builder"; got != want {
+		t.Fatalf("web URL = %q, want %q", got, want)
+	}
+}
+
+func TestAgenticHubTotalTreatsNullAsUnknown(t *testing.T) {
+	if got := agenticHubTotal([]byte("null")); got != nil {
+		t.Fatalf("agenticHubTotal(null) = %v, want nil", got)
+	}
+}

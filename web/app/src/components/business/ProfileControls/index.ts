@@ -10,6 +10,8 @@ export * from "./MCPServersPanel";
 export * from "./ModelProviderModelList";
 export * from "./ModelOptionLabel";
 export * from "./NotifierControls";
+export * from "./ReasoningControls";
+export * from "./reasoningLabels";
 export * from "./requiredFieldLabel";
 export * from "./RuntimeOptionsFields";
 export * from "./types";

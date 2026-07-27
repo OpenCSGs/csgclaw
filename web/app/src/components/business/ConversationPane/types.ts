@@ -10,6 +10,7 @@ import type {
   IMMessage,
   IMUser,
   LocaleCode,
+  ParticipantWorkStage,
   ThreadView,
   TranslateFn,
   UsersById,
@@ -24,6 +25,8 @@ export type VoidOrPromise = void | Promise<void>;
 
 export const ConversationWorkingActions = {
   editing: "editing",
+  generatingReply: "generating_reply",
+  preparingReply: "preparing_reply",
   reading: "reading",
   replying: "replying",
   running: "running",
@@ -42,12 +45,23 @@ export type ConversationWorkingParticipant = {
     action: ConversationWorkingAction;
     entryID?: string;
     summary?: string;
+    toolName?: string;
     updatedAt?: string;
   };
   activityAfter?: string;
+  canStop?: boolean;
   id: string;
+  leaseID?: string;
   name: string;
+  participantID?: string;
   requestID?: string;
+  roomID?: string;
+  stopError?: string;
+  stopSending?: boolean;
+  stopping?: boolean;
+  thinkingText?: string;
+  thinkingTruncated?: boolean;
+  workStage?: ParticipantWorkStage;
 };
 
 export type ConversationPaneProps = {
@@ -124,6 +138,7 @@ export type ConversationPaneProps = {
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;
+  onStopWorkingTurn?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
   onSendThreadReply: () => VoidOrPromise;
   onSetThreadSlashIndex?: (index: number) => void;
   onSyncComposer: () => void;

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
-import { FileCode2, Plus, Server } from "lucide-react";
+import { FileCode2, Plus } from "lucide-react";
 import { RoomAvatar } from "@/components/business";
-import { ModelsIcon } from "@/components/ui/Icons";
+import { ModelsIcon, SidebarMcpIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
 import { modelProviderAvatarPath, providerStatusTone, type ModelProvider } from "@/models/modelProviders";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
@@ -895,7 +895,7 @@ export function WorkspaceTabPanels({
               onClick={() => onSelectMCPServer(item)}
             >
               <span className={rowStyles.icon}>
-                <Server size={16} strokeWidth={2} aria-hidden="true" />
+                <SidebarMcpIcon size={16} aria-hidden="true" />
               </span>
               <span className={rowStyles.main}>
                 <span className={classNames(rowStyles.title, "truncate")}>{item.name}</span>

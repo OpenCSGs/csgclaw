@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	pathpkg "path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 
 const (
 	agenticHubDefaultRef        = "main"
+	agenticHubDefaultSkillsPage = 16
 	agenticHubMaxArchiveFiles   = 10000
 	agenticHubSkillTreeLimit    = 500
 	agenticHubMaxTreePages      = 1000
@@ -30,6 +32,25 @@ const (
 )
 
 var ErrInvalidAgenticHubRequest = errors.New("invalid AgenticHub skill request")
+
+type AgenticHubSkillListOptions struct {
+	Page   int
+	Per    int
+	Search string
+}
+
+type AgenticHubSkillSummary struct {
+	Description string
+	Name        string
+	Ref         string
+	RemotePath  string
+}
+
+type AgenticHubSkillList struct {
+	Items       []AgenticHubSkillSummary
+	RecordCount int
+	Total       *int
+}
 
 type agenticHubTreeResponse struct {
 	Data struct {
@@ -52,6 +73,24 @@ type agenticHubBlobResponse struct {
 		Size    int64  `json:"size"`
 		Type    string `json:"type"`
 	} `json:"data"`
+}
+
+type agenticHubSkillsResponse struct {
+	Data  []agenticHubSkillRecord `json:"data"`
+	Total json.RawMessage         `json:"total"`
+}
+
+type agenticHubSkillRecord struct {
+	DefaultBranch      string `json:"default_branch"`
+	DefaultBranchCamel string `json:"defaultBranch"`
+	Description        string `json:"description"`
+	DisplayName        string `json:"displayName"`
+	DisplayNameSnake   string `json:"display_name"`
+	Name               string `json:"name"`
+	Nickname           string `json:"nickname"`
+	Path               string `json:"path"`
+	Summary            string `json:"summary"`
+	Title              string `json:"title"`
 }
 
 type agenticHubArchiveBuilder struct {
@@ -99,6 +138,37 @@ func FetchAgenticHubSkillArchive(ctx context.Context, baseURL, remotePath, ref s
 	return buf.Bytes(), nil
 }
 
+func ListAgenticHubSkills(ctx context.Context, baseURL string, options AgenticHubSkillListOptions) (AgenticHubSkillList, error) {
+	page := options.Page
+	if page <= 0 {
+		page = 1
+	}
+	per := options.Per
+	if per <= 0 {
+		per = agenticHubDefaultSkillsPage
+	}
+	endpoint, err := agenticHubSkillsListURL(baseURL, page, per, options.Search)
+	if err != nil {
+		return AgenticHubSkillList{}, err
+	}
+	var payload agenticHubSkillsResponse
+	if err := getAgenticHubJSON(ctx, &http.Client{Timeout: agenticHubRequestTimeout}, endpoint, &payload); err != nil {
+		return AgenticHubSkillList{}, err
+	}
+	items := make([]AgenticHubSkillSummary, 0, len(payload.Data))
+	for _, record := range payload.Data {
+		item, ok := agenticHubSkillSummaryFromRecord(record)
+		if ok {
+			items = append(items, item)
+		}
+	}
+	return AgenticHubSkillList{
+		Items:       items,
+		RecordCount: len(payload.Data),
+		Total:       agenticHubTotal(payload.Total),
+	}, nil
+}
+
 func NormalizeAgenticHubSkillRequest(remotePath, ref string) (string, string, error) {
 	remotePath, err := cleanAgenticHubPath(remotePath, false)
 	if err != nil {
@@ -113,6 +183,16 @@ func NormalizeAgenticHubSkillRequest(remotePath, ref string) (string, string, er
 
 func AgenticHubSkillArchiveName(remotePath string) string {
 	return agenticHubSkillName(remotePath) + ".zip"
+}
+
+func AgenticHubSkillWebURL(baseURL, remotePath string) (string, error) {
+	remotePath, err := cleanAgenticHubPath(remotePath, false)
+	if err != nil {
+		return "", err
+	}
+	parts := []string{"skills"}
+	parts = append(parts, strings.Split(remotePath, "/")...)
+	return buildAgenticHubURL(baseURL, parts, false, nil)
 }
 
 func IsInvalidAgenticHubRequest(err error) bool {
@@ -271,6 +351,16 @@ func agenticHubSkillBlobURL(baseURL, remotePath, ref, filePath string) (string, 
 	return buildAgenticHubURL(baseURL, parts, false, query)
 }
 
+func agenticHubSkillsListURL(baseURL string, page, per int, search string) (string, error) {
+	query := url.Values{}
+	query.Set("page", fmt.Sprintf("%d", page))
+	query.Set("per", fmt.Sprintf("%d", per))
+	query.Set("search", strings.TrimSpace(search))
+	query.Set("sort", "trending")
+	query.Set("source", "")
+	return buildAgenticHubURL(baseURL, []string{"api", "v1", agenticHubSkillsAPIPathRoot}, false, query)
+}
+
 func buildAgenticHubURL(baseURL string, parts []string, trailingSlash bool, query url.Values) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil || u.Scheme == "" || u.Host == "" {
@@ -348,6 +438,67 @@ func cleanAgenticHubRef(value string) (string, error) {
 func agenticHubSkillName(remotePath string) string {
 	parts := strings.Split(strings.Trim(remotePath, "/"), "/")
 	return strings.TrimSpace(parts[len(parts)-1])
+}
+
+func agenticHubSkillSummaryFromRecord(record agenticHubSkillRecord) (AgenticHubSkillSummary, bool) {
+	remotePath, err := cleanAgenticHubPath(record.Path, false)
+	if err != nil {
+		return AgenticHubSkillSummary{}, false
+	}
+	name := usefulAgenticHubSkillTitle(
+		record.Name,
+		record.Nickname,
+		record.DisplayName,
+		record.DisplayNameSnake,
+		record.Title,
+	)
+	if name == "" {
+		name = agenticHubSkillName(remotePath)
+	}
+	return AgenticHubSkillSummary{
+		Description: firstAgenticHubValue(record.Description, record.Summary),
+		Name:        name,
+		Ref:         firstAgenticHubValue(record.DefaultBranch, record.DefaultBranchCamel),
+		RemotePath:  remotePath,
+	}, true
+}
+
+func usefulAgenticHubSkillTitle(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" && !strings.EqualFold(value, "skill") {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstAgenticHubValue(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func agenticHubTotal(raw json.RawMessage) *int {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil
+	}
+	var value int
+	if err := json.Unmarshal(raw, &value); err == nil && value >= 0 {
+		return &value
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return nil
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(text))
+	if err != nil || value < 0 {
+		return nil
+	}
+	return &value
 }
 
 func isAgenticHubDir(value string) bool {

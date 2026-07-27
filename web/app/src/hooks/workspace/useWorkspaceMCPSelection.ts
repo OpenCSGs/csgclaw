@@ -31,6 +31,7 @@ export function useWorkspaceMCPSelection({
 }: UseWorkspaceMCPSelectionArgs) {
   const queryClient = useQueryClient();
   const [mcpCreateDialogOpen, setMCPCreateDialogOpen] = useState(false);
+  const [mcpCreateError, setMCPCreateError] = useState("");
   const [mcpMutationBusy, setMCPMutationBusy] = useState(false);
   const [mcpMutationError, setMCPMutationError] = useState("");
   const mcpServersQuery = useWorkspaceMCPServersQuery();
@@ -63,14 +64,19 @@ export function useWorkspaceMCPSelection({
 
   const openCreateMCPDialog = useCallback(() => {
     setSelectedHubResourceType("mcp");
-    setMCPMutationError("");
+    setMCPCreateError("");
     setMCPCreateDialogOpen(true);
   }, [setSelectedHubResourceType]);
+
+  const changeMCPCreateDialogOpen = useCallback((open: boolean) => {
+    setMCPCreateError("");
+    setMCPCreateDialogOpen(open);
+  }, []);
 
   const createMCPServer = useCallback(
     async (payload: MCPServerPayload) => {
       setMCPMutationBusy(true);
-      setMCPMutationError("");
+      setMCPCreateError("");
       try {
         const state = await createMCPServerRequest(payload);
         queryClient.setQueryData(workspaceQueryKeys.mcpServers(), state);
@@ -79,7 +85,7 @@ export function useWorkspaceMCPSelection({
         setMCPCreateDialogOpen(false);
         return true;
       } catch (error) {
-        setMCPMutationError(errorMessage(error, t("resourcesMCPSaveFailed")));
+        setMCPCreateError(errorMessage(error, t("resourcesMCPSaveFailed")));
         return false;
       } finally {
         setMCPMutationBusy(false);
@@ -142,6 +148,7 @@ export function useWorkspaceMCPSelection({
     deleteMCPServer,
     mcpServersFetching: mcpServersQuery.isFetching,
     mcpServers,
+    mcpCreateError,
     mcpCreateDialogOpen,
     mcpMutationBusy,
     mcpMutationError,
@@ -149,7 +156,7 @@ export function useWorkspaceMCPSelection({
     openCreateMCPDialog,
     refetchMCPServers: mcpServersQuery.refetch,
     selectedMCPServer,
-    setMCPCreateDialogOpen,
+    setMCPCreateDialogOpen: changeMCPCreateDialogOpen,
     updateMCPServer,
   };
 }

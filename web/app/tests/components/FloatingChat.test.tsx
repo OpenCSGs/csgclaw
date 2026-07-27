@@ -21,6 +21,9 @@ const labels: Record<string, string> = {
   composerConnectors: "Connectors",
   composerFiles: "Files",
   composerTip: "Enter to send · Shift + Enter for a new line",
+  conversationWorkingPreparingReply: "Preparing a reply",
+  conversationWorkingStop: "Stop",
+  conversationWorkingStopAria: "Stop {name}'s current turn",
   connectorConnect: "Connect",
   connectorConnected: "Connected",
   connectorDisconnect: "Disconnect",
@@ -168,11 +171,11 @@ function managerChatProps(
   };
 }
 
-function renderOpenManagerFloatingChat(conversation: IMConversation) {
+function renderOpenManagerFloatingChat(conversation: IMConversation, overrides: Partial<ConversationPaneProps> = {}) {
   render(
     <FloatingChat
       avatarFallback="M"
-      chatProps={managerChatProps(conversation)}
+      chatProps={managerChatProps(conversation, overrides)}
       locale="en"
       open={true}
       t={t}
@@ -366,5 +369,38 @@ describe("FloatingChat manager prompts", () => {
     expect(screen.getByLabelText("Type a message. Use / for commands or skills")).toHaveTextContent(
       "Create a copywriting worker for me",
     );
+  });
+
+  it("stops the active manager turn from the floating chat composer", async () => {
+    const user = userEvent.setup();
+    const onStopWorkingTurn = vi.fn();
+    const workingParticipant = {
+      canStop: true,
+      id: "manager",
+      leaseID: "lease-manager-1",
+      name: "manager",
+      participantID: "manager",
+      requestID: "message-1",
+      roomID: "room-manager",
+    };
+
+    renderOpenManagerFloatingChat(
+      {
+        id: "room-manager",
+        is_direct: true,
+        members: users.map((item) => item.id),
+        messages: [],
+        title: "manager",
+      },
+      {
+        onStopWorkingTurn,
+        workingParticipants: [workingParticipant],
+      },
+    );
+
+    const stopButton = screen.getByRole("button", { name: "Stop manager's current turn" });
+    await user.click(stopButton);
+
+    expect(onStopWorkingTurn).toHaveBeenCalledWith(workingParticipant);
   });
 });

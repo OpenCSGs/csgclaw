@@ -17,6 +17,7 @@ import {
   isToolCallMessage,
   latestAt,
   removeUserFromData,
+  resolveAgentForUser,
   sortConversations,
   THREAD_RELATION_TYPE,
   resolveConversationUser,
@@ -231,6 +232,28 @@ describe("conversation model helpers", () => {
       ),
     ).toBe(true);
     expect(agentMatchesUser(null, { id: "u-1" })).toBe(false);
+  });
+
+  it("prefers agent identity matches over same-name fallback", () => {
+    const notificationParticipant = {
+      available: true,
+      id: "pt-notification-qa",
+      name: "qa",
+      participants: [{ id: "pt-notification-qa", user_id: "user-notification-qa" }],
+      status: "active",
+      type: "notification",
+    };
+    const offlineWorker = {
+      id: "agent-qa",
+      name: "qa",
+      participants: [{ id: "pt-qa", user_id: "user-qa" }],
+      runtime: { state: "runtime_unavailable" },
+      user_id: "user-qa",
+    };
+
+    expect(resolveAgentForUser([notificationParticipant, offlineWorker], { id: "pt-qa", name: "qa" })).toBe(
+      offlineWorker,
+    );
   });
 
   it("resolves typed participant IDs through canonical local users", () => {

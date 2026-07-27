@@ -16,16 +16,17 @@ import (
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/codexcli"
+	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
 )
 
 const (
-	appServerStopTimeout          = 3 * time.Second
 	appServerTurnInterruptTimeout = 5 * time.Second
 	appServerTrackedTurnLimit     = 256
 )
 
 var (
+	appServerStopTimeout                = 3 * time.Second
 	appServerSemanticInactivityTimeout  = 10 * time.Minute
 	appServerFirstTurnNoProgressTimeout = 5 * time.Minute
 	appServerMaximumTurnDuration        = 30 * time.Minute
@@ -296,6 +297,13 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 			"duration", time.Since(turnStartAt),
 			"error", err,
 		)
+		if ctx.Err() != nil {
+			response, stopErr := m.stopCanceledAppServerTurn(ctx, live, waiter, "turn/start context canceled")
+			if m.deps.EventSink != nil {
+				m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, stopErr))
+			}
+			return response, stopErr
+		}
 		err = fmt.Errorf("codex turn/start failed: %w", err)
 		if m.deps.EventSink != nil {
 			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, err))
@@ -325,7 +333,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		if m.deps.EventSink != nil {
 			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, err))
 		}
-		return PromptResponse{}, err
+		return resp, err
 	}
 	live.appClient.logDebug("codex app-server turn wait completed",
 		"runtime_id", runtimeID,
@@ -547,7 +555,7 @@ func appServerTurnStartParams(spec SessionSpec, threadID string, prompt string) 
 			{"type": "text", "text": prompt},
 		},
 	}
-	if effort := strings.TrimSpace(spec.Profile.ReasoningEffort); effort != "" {
+	if effort := config.NormalizeReasoningEffort(spec.Profile.ReasoningEffort); !config.UsesModelReasoningDefault(effort) {
 		params["effort"] = effort
 	}
 	return params
@@ -681,8 +689,8 @@ func appServerRequestID(raw json.RawMessage) string {
 }
 
 func appServerReasoningConfig(effort string) map[string]any {
-	effort = strings.TrimSpace(effort)
-	if effort == "" {
+	effort = config.NormalizeReasoningEffort(effort)
+	if config.UsesModelReasoningDefault(effort) {
 		return nil
 	}
 	return map[string]any{"model_reasoning_effort": effort}
@@ -1135,18 +1143,29 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 		case <-maximumC:
 			return PromptResponse{}, m.failTimedOutAppServerTurn(live, waiter, "maximum turn duration", maximumDuration)
 		case <-ctx.Done():
-			m.stopAppServerTurn(live, waiter, "prompt context canceled")
-			return PromptResponse{}, ctx.Err()
+			return m.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
 		}
 	}
 }
 
+func (m *appServerManager) stopCanceledAppServerTurn(
+	ctx context.Context,
+	live *liveSession,
+	waiter *appServerTurnWaiter,
+	reason string,
+) (PromptResponse, error) {
+	if err := m.stopAppServerTurn(live, waiter, reason); err != nil {
+		return PromptResponse{}, fmt.Errorf("stop canceled Codex turn: %w", err)
+	}
+	return PromptResponse{StopReason: StopReasonInterrupted}, ctx.Err()
+}
+
 func (m *appServerManager) failTimedOutAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string, timeout time.Duration) error {
-	m.stopAppServerTurn(live, waiter, reason)
+	_ = m.stopAppServerTurn(live, waiter, reason)
 	return fmt.Errorf("Codex stopped responding after %s. The turn was canceled; try again", timeout)
 }
 
-func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string) {
+func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServerTurnWaiter, reason string) error {
 	if m.deps.UserInput != nil {
 		m.deps.UserInput.CancelSession(live.spec.RuntimeID, waiter.threadID)
 	}
@@ -1164,16 +1183,22 @@ func (m *appServerManager) stopAppServerTurn(live *liveSession, waiter *appServe
 		)
 	}
 	if interruptErr == nil {
-		return
+		return nil
 	}
 	stopCtx, cancel := context.WithTimeout(context.Background(), appServerStopTimeout)
 	defer cancel()
-	if err := m.Stop(stopCtx, SessionHandle{RuntimeID: live.spec.RuntimeID}); err != nil && live.appClient != nil {
-		live.appClient.logError("stop codex app-server after turn interrupt failure",
+	stopErr := m.Stop(stopCtx, SessionHandle{RuntimeID: live.spec.RuntimeID})
+	if stopErr == nil || errors.Is(stopErr, os.ErrNotExist) {
+		return nil
+	}
+	if live.appClient != nil {
+		live.appClient.logError(
+			"stop codex app-server after turn interrupt failure",
 			"runtime_id", strings.TrimSpace(live.spec.RuntimeID),
-			"error", err,
+			"error", stopErr,
 		)
 	}
+	return fmt.Errorf("interrupt turn: %v; stop app-server: %w", interruptErr, stopErr)
 }
 
 func (m *appServerManager) interruptAppServerTurn(live *liveSession, waiter *appServerTurnWaiter) error {

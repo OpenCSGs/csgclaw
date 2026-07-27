@@ -4,6 +4,7 @@ import {
   CircleDashed,
   Edit3,
   ExternalLink,
+  FileCode2,
   Link2,
   MoreHorizontal,
   Plus,
@@ -15,13 +16,15 @@ import {
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { fetchAgentInstructionsDocument, updateAgentEffectiveInstructions } from "@/api/agents";
-import { REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
+import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   EnvKeyValueEditor,
   FieldHelpTooltip,
   ModelOptionLabel,
   NotifierControls,
+  ReasoningControls,
+  reasoningEffortLabel,
   requiredFieldLabel,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
@@ -380,8 +383,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             ...(workspaceSupported
               ? [{ id: "skills" as const, label: t("agentProfileSkillsTab"), count: skills.length }]
               : []),
-            ...(!isNotificationBotAgent(item) ? [{ id: "channels" as const, label: t("agentChannelsTitle") }] : []),
             ...(showMCPServers ? [{ id: "mcp" as const, label: t("agentProfileMCPTab") }] : []),
+            ...(!isNotificationBotAgent(item) ? [{ id: "channels" as const, label: t("agentChannelsTitle") }] : []),
           ]
         : [],
     [draft, isNotifierDraft, item, showMCPServers, skills.length, t, workspaceSupported],
@@ -723,7 +726,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         ) : null}
       </div>
       <div
-        className={`agent-profile-scroll-region${isProfileScrolling ? " is-scrolling" : ""}`}
+        className={`agent-profile-scroll-region${
+          visibleActiveProfileTab === "instructions" ? " agent-profile-scroll-region-instructions" : ""
+        }${isProfileScrolling ? " is-scrolling" : ""}`}
         onScroll={onProfileScroll}
       >
         {!draft ? (
@@ -743,7 +748,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               </div>
               <div className="entity-field">
                 <span>{t("profileReasoning")}</span>
-                <strong>{item.reasoning_effort || profile?.reasoning_effort || "medium"}</strong>
+                <strong>{reasoningEffortLabel(t, item.reasoning_effort || profile?.reasoning_effort)}</strong>
               </div>
               <div className="entity-field">
                 <span>{t("profileFastMode")}</span>
@@ -757,7 +762,11 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </>
         ) : null}
         {draft ? (
-          <div className="profile-editor-shell agent-page-editor">
+          <div
+            className={`profile-editor-shell agent-page-editor${
+              visibleActiveProfileTab === "instructions" ? " agent-page-editor-instructions" : ""
+            }`}
+          >
             {visibleActiveProfileTab === "profile" ? (
               <div id="agent-profile-profile" className="agent-profile-tab-panel">
                 <AgentRuntimePanel
@@ -1215,66 +1224,75 @@ function AgentMCPPanel({
       id="agent-profile-mcp"
       className="profile-section agent-skills-section agent-mcp-section agent-profile-scroll-target"
     >
-      <div className="profile-section-heading">
-        <div className="profile-section-title">{t("profileMCPServers")}</div>
-        <p className="profile-section-description">{t("profileMCPServersHubHint")}</p>
-      </div>
-      <div className="agent-section-form">
-        <div className="agent-page-form-content agent-skills-form-content">
-          <div className="agent-skills-title">
-            <div className="agent-skills-title-copy">
-              <span>{t("profileMCPServers")}</span>
-              <small className="agent-section-count-badge">{servers.length}</small>
-            </div>
-            <Tooltip content={t("agentMCPAdd")}>
-              <span>
-                <Button
-                  className="agent-skill-add-button"
-                  variant="secondaryGray"
-                  size="sm"
-                  aria-label={t("agentMCPAdd")}
-                  disabled={addBusy}
-                  onClick={onOpenAddMCP}
-                >
-                  <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-                </Button>
-              </span>
-            </Tooltip>
-          </div>
-          {addError ? <div className="form-error">{addError}</div> : null}
-          {deleteError ? <div className="form-error">{deleteError}</div> : null}
-          {!servers.length ? <div className="agent-skills-empty">{t("agentMCPEmpty")}</div> : null}
-          {servers.length ? (
-            <div className="agent-skills-list">
-              {servers.map((server) => (
-                <article key={server.name} className="agent-skill-card agent-mcp-card">
-                  <div className="agent-skill-card-header">
-                    <div className="agent-skill-name">
-                      <Server aria-hidden="true" size={14} strokeWidth={2} />
-                      <span>{server.name}</span>
-                    </div>
-                    <Tooltip content={t("agentDeleteMCP")}>
-                      <span>
-                        <Button
-                          className="agent-skill-icon-button"
-                          variant="outlineDanger"
-                          size="sm"
-                          aria-label={t("agentDeleteMCP")}
-                          disabled={deleteBusy}
-                          onClick={() => onRequestDeleteMCP(server)}
-                        >
-                          <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
-                        </Button>
-                      </span>
-                    </Tooltip>
-                  </div>
-                  <p className="agent-skill-description">{server.description || "-"}</p>
-                </article>
-              ))}
-            </div>
-          ) : null}
+      <div className="agent-skills-summary-heading">
+        <div className="profile-section-heading">
+          <div className="profile-section-title">{t("profileMCPServers")}</div>
+          <p className="profile-section-description">{t("profileMCPServersHubHint")}</p>
+        </div>
+        <div className="agent-skills-summary-actions">
+          <span className="agent-skills-summary-count">{t("agentMCPCount", { count: servers.length })}</span>
+          <Tooltip content={t("agentMCPAdd")}>
+            <span>
+              <Button
+                className="agent-skill-add-button"
+                variant="secondaryGray"
+                size="sm"
+                aria-label={t("agentMCPAdd")}
+                disabled={addBusy}
+                onClick={onOpenAddMCP}
+              >
+                <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+              </Button>
+            </span>
+          </Tooltip>
         </div>
       </div>
+      {addError ? <div className="form-error">{addError}</div> : null}
+      {deleteError ? <div className="form-error">{deleteError}</div> : null}
+      {!servers.length ? (
+        <div className="agent-skills-summary-empty">
+          <span className="agent-skills-summary-icon" aria-hidden="true">
+            <Server size={18} strokeWidth={1.8} />
+          </span>
+          <div className="agent-skills-summary-empty-copy">
+            <strong>{t("agentMCPEmpty")}</strong>
+            <p>{t("agentMCPEmptyHint")}</p>
+          </div>
+          <Button variant="secondaryGray" size="sm" disabled={addBusy} onClick={onOpenAddMCP}>
+            <Plus aria-hidden="true" size={15} strokeWidth={2.2} />
+            {t("agentMCPAdd")}
+          </Button>
+        </div>
+      ) : null}
+      {servers.length ? (
+        <div className="agent-skills-summary-list">
+          {servers.map((server) => (
+            <article key={server.name} className="agent-skills-summary-row agent-mcp-summary-row">
+              <span className="agent-skills-summary-icon" aria-hidden="true">
+                <Server size={18} strokeWidth={1.8} />
+              </span>
+              <div className="agent-skills-summary-copy">
+                <div className="agent-skills-summary-name">{server.name}</div>
+                <p>{server.description || "-"}</p>
+              </div>
+              <Tooltip content={t("agentDeleteMCP")}>
+                <span className="agent-skills-summary-delete">
+                  <Button
+                    className="agent-skill-icon-button"
+                    variant="outlineDanger"
+                    size="sm"
+                    aria-label={t("agentDeleteMCP")}
+                    disabled={deleteBusy}
+                    onClick={() => onRequestDeleteMCP(server)}
+                  >
+                    <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                  </Button>
+                </span>
+              </Tooltip>
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1395,15 +1413,11 @@ function AgentModelPanel({
                 <span className="field-hint error">{errorMessage(modelError, t("modelLoadFailed"))}</span>
               ) : null}
             </label>
-            <label className="field">
-              <span>{t("profileReasoning")}</span>
-              <Select
-                value={draft.reasoning_effort}
-                onValueChange={(value) => updateDraft({ reasoning_effort: value })}
-                triggerProps={{ "aria-label": t("profileReasoning") }}
-                options={REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))}
-              />
-            </label>
+            <ReasoningControls
+              value={draft.reasoning_effort}
+              onChange={(value) => updateDraft({ reasoning_effort: value })}
+              t={t}
+            />
             <div className="field agent-fast-mode-field">
               <span>{t("profileFastMode")}</span>
               <label className="selection-item compact-toggle-row agent-fast-mode-toggle">
@@ -1499,28 +1513,40 @@ function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPane
       id="agent-profile-instructions"
       className="profile-section agent-instructions-section agent-profile-scroll-target"
     >
-      <div className="agent-instructions-mode-switch" role="group" aria-label={t("agentInstructionsViewMode")}>
-        <button type="button" aria-pressed={mode === "default"} onClick={() => setMode("default")}>
-          {t("agentInstructionsDefaultMode")}
-        </button>
-        <button type="button" aria-pressed={mode === "advanced"} onClick={() => setMode("advanced")}>
-          {t("agentInstructionsAdvancedMode")}
-        </button>
+      <div className="agent-instructions-header">
+        <div className="profile-section-heading">
+          <div className="profile-section-title">{t("agentInstructions")}</div>
+          <p className="profile-section-description">
+            {mode === "default" ? t("agentInstructionsDefaultHint") : t("agentInstructionsAdvancedHint")}
+          </p>
+        </div>
+        <div className="agent-instructions-mode-switch" role="group" aria-label={t("agentInstructionsViewMode")}>
+          <button type="button" aria-pressed={mode === "default"} onClick={() => setMode("default")}>
+            {t("agentInstructionsDefaultMode")}
+          </button>
+          <button type="button" aria-pressed={mode === "advanced"} onClick={() => setMode("advanced")}>
+            {t("agentInstructionsAdvancedMode")}
+          </button>
+        </div>
       </div>
-      <div className="profile-grid-compact">
-        <label className="field span-2">
-          <span>{mode === "advanced" ? t("agentInstructionsEffective") : t("agentInstructions")}</span>
-          <textarea
-            className="compact-textarea"
-            value={mode === "advanced" ? effective : draft.instructions || ""}
-            onInput={(event) =>
-              mode === "advanced"
-                ? setEffective(event.currentTarget.value)
-                : updateDraft({ instructions: event.currentTarget.value })
-            }
-            placeholder={t("agentInstructionsPlaceholder")}
-          />
-        </label>
+      <div className="agent-instructions-content">
+        <div className="profile-grid-compact">
+          <label className="field span-2">
+            <span className="sr-only">
+              {mode === "advanced" ? t("agentInstructionsEffective") : t("agentInstructions")}
+            </span>
+            <textarea
+              className="compact-textarea agent-instructions-editor"
+              value={mode === "advanced" ? effective : draft.instructions || ""}
+              onInput={(event) =>
+                mode === "advanced"
+                  ? setEffective(event.currentTarget.value)
+                  : updateDraft({ instructions: event.currentTarget.value })
+              }
+              placeholder={t("agentInstructionsPlaceholder")}
+            />
+          </label>
+        </div>
       </div>
       {advancedError ? <div className="form-error">{advancedError}</div> : null}
       {mode === "advanced" ? (
@@ -1563,65 +1589,91 @@ function AgentSkillsPanel({
 }: AgentSkillsPanelProps) {
   return (
     <section id="agent-profile-skills" className="profile-section agent-skills-section agent-profile-scroll-target">
-      <div className="profile-section-heading">
-        <div className="profile-section-title">{t("agentSkillsTitle")}</div>
-        <p className="profile-section-description">{t("agentSkillsDescription")}</p>
-      </div>
-      <div className="agent-section-form">
-        <div className="agent-page-form-content agent-skills-form-content">
-          <div className="agent-skills-title">
-            <div className="agent-skills-title-copy">
-              <span>{t("agentSkillsTitle")}</span>
-              <small className="agent-section-count-badge">{skills.length}</small>
-            </div>
-            <Tooltip content={t("agentSkillAdd")}>
-              <span>
-                <Button
-                  className="agent-skill-add-button"
-                  variant="secondaryGray"
-                  size="sm"
-                  aria-label={t("agentSkillAdd")}
-                  disabled={skillCandidatesLoading || skillAddBusy}
-                  onClick={onOpenAddSkills}
-                >
-                  <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
-                </Button>
-              </span>
-            </Tooltip>
-          </div>
-          {skillsError ? <div className="form-error">{skillsError}</div> : null}
-          {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
-          {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
-          {skillsLoading ? <div className="agent-skills-empty">{t("agentSkillsLoading")}</div> : null}
-          {!skillsLoading && !skills.length ? <div className="agent-skills-empty">{t("agentSkillsEmpty")}</div> : null}
-          {!skillsLoading && skills.length ? (
-            <div className="agent-skills-list">
-              {skills.map((skill) => (
-                <article key={skill.name} className="agent-skill-card">
-                  <div className="agent-skill-card-header">
-                    <div className="agent-skill-name">{skill.name}</div>
-                    <Tooltip content={t("agentDeleteSkill")}>
-                      <span>
-                        <Button
-                          className="agent-skill-icon-button"
-                          variant="outlineDanger"
-                          size="sm"
-                          aria-label={t("agentDeleteSkill")}
-                          disabled={skillDeleteBusy}
-                          onClick={() => onRequestDeleteSkill(skill)}
-                        >
-                          <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
-                        </Button>
-                      </span>
-                    </Tooltip>
-                  </div>
-                  <p className="agent-skill-description">{skill.description || "-"}</p>
-                </article>
-              ))}
-            </div>
-          ) : null}
+      <div className="agent-skills-summary-heading">
+        <div className="profile-section-heading">
+          <div className="profile-section-title">{t("agentSkillsTitle")}</div>
+          <p className="profile-section-description">{t("agentSkillsDescription")}</p>
+        </div>
+        <div className="agent-skills-summary-actions">
+          <span className="agent-skills-summary-count">{t("agentSkillsCount", { count: skills.length })}</span>
+          <Tooltip content={t("agentSkillAdd")}>
+            <span>
+              <Button
+                className="agent-skill-add-button"
+                variant="secondaryGray"
+                size="sm"
+                aria-label={t("agentSkillAdd")}
+                disabled={skillCandidatesLoading || skillAddBusy}
+                onClick={onOpenAddSkills}
+              >
+                <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
+              </Button>
+            </span>
+          </Tooltip>
         </div>
       </div>
+      {skillsError ? <div className="form-error">{skillsError}</div> : null}
+      {skillAddError ? <div className="form-error">{skillAddError}</div> : null}
+      {skillDeleteError ? <div className="form-error">{skillDeleteError}</div> : null}
+      {skillsLoading ? (
+        <div className="agent-skills-summary-empty">
+          <span className="agent-skills-summary-icon" aria-hidden="true">
+            <FileCode2 size={18} strokeWidth={1.8} />
+          </span>
+          <div>
+            <strong>{t("agentSkillsLoading")}</strong>
+          </div>
+        </div>
+      ) : null}
+      {!skillsLoading && !skills.length ? (
+        <div className="agent-skills-summary-empty">
+          <span className="agent-skills-summary-icon" aria-hidden="true">
+            <FileCode2 size={18} strokeWidth={1.8} />
+          </span>
+          <div className="agent-skills-summary-empty-copy">
+            <strong>{t("agentSkillsEmpty")}</strong>
+            <p>{t("agentSkillsEmptyHint")}</p>
+          </div>
+          <Button
+            variant="secondaryGray"
+            size="sm"
+            disabled={skillCandidatesLoading || skillAddBusy}
+            onClick={onOpenAddSkills}
+          >
+            <Plus aria-hidden="true" size={15} strokeWidth={2.2} />
+            {t("agentSkillAdd")}
+          </Button>
+        </div>
+      ) : null}
+      {!skillsLoading && skills.length ? (
+        <div className="agent-skills-summary-list">
+          {skills.map((skill) => (
+            <article key={skill.name} className="agent-skills-summary-row">
+              <span className="agent-skills-summary-icon" aria-hidden="true">
+                <FileCode2 size={18} strokeWidth={1.8} />
+              </span>
+              <div className="agent-skills-summary-copy">
+                <div className="agent-skills-summary-name">{skill.name}</div>
+                <p>{skill.description || "-"}</p>
+              </div>
+              <Tooltip content={t("agentDeleteSkill")}>
+                <span className="agent-skills-summary-delete">
+                  <Button
+                    className="agent-skill-icon-button"
+                    variant="outlineDanger"
+                    size="sm"
+                    aria-label={t("agentDeleteSkill")}
+                    disabled={skillDeleteBusy}
+                    onClick={() => onRequestDeleteSkill(skill)}
+                  >
+                    <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                  </Button>
+                </span>
+              </Tooltip>
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }

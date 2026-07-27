@@ -58,8 +58,14 @@
   text-decoration: none;
 }
 
+button.modelProviderRow,
+button.hubTemplateRow,
+button.hubSkillRow {
+  padding: 8px;
+}
+
 .teamRow {
-  padding: 12px;
+  padding: 8px;
 }
 
 .modelProviderIconShell {

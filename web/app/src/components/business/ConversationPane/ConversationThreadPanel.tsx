@@ -26,10 +26,10 @@ import {
   type ComposerSegment,
 } from "@/models/composer";
 import {
-  agentMatchesUser,
   formatMessageTimestampParts,
   formatThreadReplyCount,
   isToolCallMessage,
+  resolveAgentForUser,
   resolveUserByLocalIdentity,
   type IMMessage,
   type IMUser,
@@ -42,7 +42,7 @@ import type { SlashPickerCandidate } from "@/models/slashCommands";
 import type { ThemeMode } from "@/shared/theme/theme";
 import { AttachmentDraftStrip, MessageAttachments } from "./ConversationAttachments";
 import { ConversationMessageActions } from "./ConversationMessageActions";
-import { filesFromDataTransfer } from "./attachmentFiles";
+import { dataTransferHasFiles, filesFromDataTransfer } from "./attachmentFiles";
 import { MentionPicker } from "./MentionPicker";
 import { MessageTimestamp } from "./MessageTime";
 import { SlashPicker } from "./SlashPicker";
@@ -349,10 +349,11 @@ export function ConversationThreadPanel({
         <div
           className="thread-composer"
           onDragOver={(event) => {
-            if (disabled || filesFromDataTransfer(event.dataTransfer).length === 0) {
+            if (disabled || !dataTransferHasFiles(event.dataTransfer)) {
               return;
             }
             event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
           }}
           onDrop={(event) => {
             const files = filesFromDataTransfer(event.dataTransfer);
@@ -626,15 +627,7 @@ function resolveThreadMessageAgent(
   senderID: string | null | undefined,
 ): AgentLike | null {
   const senderIdentity = String(senderID || "").trim();
-  return (
-    agents.find((item) => {
-      if (agentMatchesUser(item, user)) {
-        return true;
-      }
-      if (!senderIdentity || senderIdentity === user.id) {
-        return false;
-      }
-      return agentMatchesUser(item, { ...user, id: senderIdentity, user_id: user.id });
-    }) ?? null
-  );
+  const alternateUser =
+    senderIdentity && senderIdentity !== user.id ? { ...user, id: senderIdentity, user_id: user.id } : null;
+  return resolveAgentForUser(agents, user, alternateUser ? [alternateUser] : []);
 }

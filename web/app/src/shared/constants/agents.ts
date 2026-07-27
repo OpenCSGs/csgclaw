@@ -6,7 +6,8 @@ export const WORKER_AGENT_ROLE = "worker";
 export const DEFAULT_MANAGER_DESCRIPTION = "Agent Teams Manager";
 
 export const DEFAULT_PROVIDER = "csghub_lite";
-export const DEFAULT_REASONING_EFFORT = "medium";
+export const DEFAULT_REASONING_EFFORT = "auto";
+export const REASONING_DISABLED_EFFORT = "none";
 export const DEFAULT_RUNTIME_KIND = "picoclaw_sandbox";
 
 export const BOT_TYPE_NORMAL = "normal";
@@ -38,6 +39,7 @@ export const GATEWAY_RUNTIME_KIND_OPTIONS = RUNTIME_KIND_OPTIONS.filter(
 export const NOTIFIER_DELIVERY_OPTIONS = ["webhook", "remote_pull"];
 export const DEFAULT_NOTIFIER_POLL_INTERVAL = "5s";
 export const CLIPROXY_AUTH_PROVIDERS = new Set(["codex", "claude_code"]);
-export const REASONING_EFFORTS = ["low", "medium", "high", "xhigh"];
+export const REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh"] as const;
+export const REASONING_OPTIONS = [DEFAULT_REASONING_EFFORT, REASONING_DISABLED_EFFORT, ...REASONING_EFFORTS] as const;
 
 export const SHOW_AGENT_LIFECYCLE_ACTIONS = false;

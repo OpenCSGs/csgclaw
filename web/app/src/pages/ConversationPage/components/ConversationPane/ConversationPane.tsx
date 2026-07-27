@@ -195,6 +195,7 @@ export function ConversationPane({
   onThreadDraftChange,
   onThreadSlashQueryChange,
   onSendThreadReply,
+  onStopWorkingTurn,
   onAddThreadAttachments,
   onRemoveThreadAttachment,
   agentDetailPanelProps,
@@ -468,6 +469,7 @@ export function ConversationPane({
           onSendMessage={onSendMessage}
           onStopSend={onStopSend}
           onUndoRemoveAttachment={onUndoRemoveAttachment}
+          onStopWorkingTurn={onStopWorkingTurn}
           onRemoveAttachment={onRemoveAttachment}
           onSyncComposer={onSyncComposer}
           onWorkingAction={handleOpenActivityPanel}

@@ -1,7 +1,6 @@
 import {
   CLIPROXY_AUTH_PROVIDERS,
   DEFAULT_PROVIDER,
-  DEFAULT_REASONING_EFFORT,
   BOT_CREATE_KIND_NOTIFICATION,
   BOT_CREATE_KIND_WORKER,
   BOT_TYPE_NOTIFICATION,
@@ -18,6 +17,7 @@ import {
 import { avatarFallbackText, normalizeAvatarPath } from "@/shared/avatar";
 import type { LocaleCode } from "@/models/conversations";
 import { providerIDForProvider, providerNameForProviderID, selectorForProviderModel } from "@/models/modelProviders";
+import { normalizeReasoningEffort } from "@/models/reasoning";
 
 export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | string;
 export type RuntimeName = "picoclaw" | "openclaw" | "codex" | string;
@@ -904,6 +904,9 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
   if (normalized === "profile_incomplete") {
     return t("offline");
   }
+  if (normalized === "runtime_unavailable") {
+    return t("agentStatusUnknown");
+  }
   if (normalized === "failed" || normalized === "error") {
     return t("agentStatusFailed");
   }
@@ -911,6 +914,25 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
     return t("agentStatusDone");
   }
   return t("agentStatusUnknown");
+}
+
+export function agentOfflineReasonLabel(status: unknown, t: TranslateFn): string {
+  const normalized = String(status || "unknown")
+    .trim()
+    .toLowerCase();
+  if (normalized === "runtime_unavailable") {
+    return t("agentOfflineReasonRuntimeUnavailable");
+  }
+  if (normalized === "profile_incomplete") {
+    return t("agentOfflineReasonProfileIncomplete");
+  }
+  if (normalized === "failed" || normalized === "error") {
+    return t("agentOfflineReasonFailed");
+  }
+  if (normalized === "offline" || normalized === "stopped" || normalized === "exited") {
+    return t("agentOfflineReasonStopped");
+  }
+  return t("agentOfflineReasonUnknown");
 }
 
 export function notificationBotMetaLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
@@ -1216,7 +1238,7 @@ export function profileToDraft(profile: AgentProfileLike | null | undefined, age
     api_key_set: Boolean(profile?.api_key_set),
     api_key_preview: profile?.api_key_preview || "",
     model_id: profile?.model_id || "",
-    reasoning_effort: profile?.reasoning_effort || DEFAULT_REASONING_EFFORT,
+    reasoning_effort: normalizeReasoningEffort(profile?.reasoning_effort),
     enable_fast_mode: Boolean(profile?.enable_fast_mode),
     headersText: stringifyJSON(profile?.headers || {}),
     requestOptionsText: stringifyJSON(requestOptionsWithoutNotifier),
@@ -1425,7 +1447,7 @@ export function draftToProfile(draft: AgentDraft, options: DraftProfileOptions =
     base_url: "",
     api_key: "",
     model_id: draft.model_id,
-    reasoning_effort: draft.reasoning_effort || DEFAULT_REASONING_EFFORT,
+    reasoning_effort: normalizeReasoningEffort(draft.reasoning_effort),
     enable_fast_mode: Boolean(draft.enable_fast_mode),
     headers: {},
     request_options: requestOptions,
@@ -1442,7 +1464,7 @@ export function draftToProfileComparePayload(draft: AgentDraft, options: DraftPr
     base_url: "",
     api_key: "",
     model_id: draft.model_id,
-    reasoning_effort: draft.reasoning_effort || DEFAULT_REASONING_EFFORT,
+    reasoning_effort: normalizeReasoningEffort(draft.reasoning_effort),
     enable_fast_mode: Boolean(draft.enable_fast_mode),
     headers: {},
     request_options: requestOptions,
@@ -1750,6 +1772,11 @@ export function isAgentRunning(item: AgentLike | null | undefined): boolean {
   }
   const status = agentRuntimeState(item).toLowerCase();
   return status === "running" || status === "online";
+}
+
+export function isAgentRuntimeUnavailable(item: AgentLike | null | undefined): boolean {
+  const status = agentRuntimeState(item).toLowerCase();
+  return status === "runtime_unavailable";
 }
 
 export function isAgentProfileMarkedComplete(item: AgentLike | null | undefined): boolean {

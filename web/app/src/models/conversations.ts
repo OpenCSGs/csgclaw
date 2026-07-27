@@ -128,17 +128,42 @@ export type IMData = {
   users: IMUser[];
 };
 
+export type ParticipantWorkStage = "preparing_reply" | "thinking" | "running_tool" | "generating_reply";
+
 export type ParticipantWorkUpdate = {
+  capabilities?: Array<"thinking_status_v1" | "turn_stop_v1" | "work_stage_v1"> | null;
   expires_at: string;
   kind: "agent_turn";
   lease_id: string;
   participant_id: string;
-  reason: "started" | "renewed" | "released" | "expired";
+  reason:
+    | "started"
+    | "renewed"
+    | "status_updated"
+    | "stop_requested"
+    | "stop_failed"
+    | "stop_timed_out"
+    | "released"
+    | "stopped"
+    | "expired";
   registry_epoch: string;
   request_id: string;
   revision: number;
   room_id: string;
   state: "working" | "idle";
+  status?: {
+    phase: "working" | "thinking";
+    sequence: number;
+    stage?: ParticipantWorkStage | null;
+    thinking?: {
+      format: "plain_text";
+      text: string;
+      truncated: boolean;
+    } | null;
+  } | null;
+  stop_error?: string | null;
+  stop_requested_at?: string | null;
+  stop_state?: "stop_requested" | "stop_failed" | "stop_timed_out" | "stopped" | null;
   thread_root_id?: string | null;
   user_id: string;
 };
@@ -569,10 +594,27 @@ export function agentMatchesUser(
   if (!agent || !user) {
     return false;
   }
+  if (agentIdentityMatchesUser(agent, user)) {
+    return true;
+  }
   const agentName = normalizeComparable(agent.name);
   const userName = normalizeComparable(user.name);
   if (agentName && userName && agentName === userName) {
     return true;
+  }
+  return false;
+}
+
+export function agentIdentityMatchesUser(
+  agent: {
+    id?: string | null;
+    participants?: IMParticipantLike[] | null;
+    user_id?: string | null;
+  } | null,
+  user: { id?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null } | null | undefined,
+): boolean {
+  if (!agent || !user) {
+    return false;
   }
   const agentAliases = localEntityAliasSet([
     agent.id,
@@ -585,6 +627,34 @@ export function agentMatchesUser(
     ...(user.participants || []).flatMap(participantAliases),
   ]);
   return [...agentAliases].some((alias) => userAliases.has(alias));
+}
+
+export function resolveAgentForUser<
+  T extends {
+    id?: string | null;
+    name?: string | null;
+    participants?: IMParticipantLike[] | null;
+    user_id?: string | null;
+  },
+>(
+  agents: readonly T[],
+  user:
+    | { id?: string | null; name?: string | null; participants?: IMParticipantLike[] | null; user_id?: string | null }
+    | null
+    | undefined,
+  alternateUsers: readonly {
+    id?: string | null;
+    name?: string | null;
+    participants?: IMParticipantLike[] | null;
+    user_id?: string | null;
+  }[] = [],
+): T | null {
+  const users = [user, ...alternateUsers].filter((item): item is NonNullable<typeof user> => item != null);
+  return (
+    agents.find((agent) => users.some((candidate) => agentIdentityMatchesUser(agent, candidate))) ??
+    agents.find((agent) => users.some((candidate) => agentMatchesUser(agent, candidate))) ??
+    null
+  );
 }
 
 function localEntityAliasSet(values: Array<string | null | undefined>): Set<string> {

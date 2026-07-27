@@ -41,7 +41,7 @@ Official release bundles are also published for macOS amd64 and Windows amd64. W
 make build
 ```
 
-See [docs/build.md](docs/build.md) for runtime image refs, sandbox CLI packaging, and other Makefile targets.
+See [docs/tech/build.md](docs/tech/build.md) for runtime image refs, sandbox CLI packaging, and other Makefile targets.
 
 For most users, the install script above is the simpler option.
 
@@ -55,9 +55,9 @@ CSGClaw will open the IM workspace in your browser automatically when possible. 
 
 ## Configuration
 
-`csgclaw serve` uses a local config with server, bootstrap, sandbox, and channel settings, and auto-creates any missing bootstrap state on first run. Agent model/provider profiles are stored in agent state and managed from the Web UI. See [docs/config.md](docs/config.md) for sandbox provider options, Worker override examples, and agent profile details.
+`csgclaw serve` uses a local config with server, bootstrap, sandbox, and channel settings, and auto-creates any missing bootstrap state on first run. Agent model/provider profiles are stored in agent state and managed from the Web UI. See [docs/tech/config.md](docs/tech/config.md) for sandbox provider options, Worker override examples, and agent profile details.
 
-Maintainer-facing architecture, API, structured skill output, and IM thread design notes live in [docs/architecture.md](docs/architecture.md), [docs/api.md](docs/api.md), [docs/structured-output.md](docs/structured-output.md), and [docs/im-threads.md](docs/im-threads.md).
+Maintainer-facing architecture, API, structured skill output, and IM thread design notes live in [docs/tech/architecture.md](docs/tech/architecture.md), [docs/tech/api.md](docs/tech/api.md), [docs/tech/structured-output.md](docs/tech/structured-output.md), and [docs/tech/im/im-threads.md](docs/tech/im/im-threads.md).
 
 ## Features
 

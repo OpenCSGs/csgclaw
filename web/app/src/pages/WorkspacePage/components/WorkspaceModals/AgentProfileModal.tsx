@@ -9,6 +9,7 @@ import {
   MCPServersPanel,
   ModelOptionLabel,
   NotifierControls,
+  ReasoningControls,
   requiredFieldLabel,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
@@ -705,18 +706,11 @@ export function AgentProfileModal({
                           ]}
                         />
                       </label>
-                      <label className="field">
-                        <span>{t("profileReasoning")}</span>
-                        <Select
-                          value={agentDraft.reasoning_effort}
-                          onValueChange={(value) => onAgentDraftChange({ ...agentDraft, reasoning_effort: value })}
-                          triggerProps={{ "aria-label": t("profileReasoning") }}
-                          options={["low", "medium", "high", "xhigh"].map((effort) => ({
-                            value: effort,
-                            label: effort,
-                          }))}
-                        />
-                      </label>
+                      <ReasoningControls
+                        value={agentDraft.reasoning_effort}
+                        onChange={(value) => onAgentDraftChange({ ...agentDraft, reasoning_effort: value })}
+                        t={t}
+                      />
                       <div className="field agent-fast-mode-field">
                         <span>{t("profileFastMode")}</span>
                         <label className="selection-item compact-toggle-row agent-fast-mode-toggle">

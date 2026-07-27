@@ -11,13 +11,13 @@ import {
 } from "@/models/agents";
 import { providerNameForProviderID } from "@/models/modelProviders";
 import {
-  agentMatchesUser,
   formatConversationPreview,
   formatMessagePreviewText,
   formatThreadReplyCount,
   formatSidebarTime,
   hasConnectedHumanChannel,
   isDirectConversation,
+  resolveAgentForUser,
   resolveConversationUser,
 } from "@/models/conversations";
 import { MessagePreviewText } from "@/components/business/MessageContent";
@@ -341,7 +341,7 @@ export function WorkspaceConversationRow({
   const lastMessage = conversation.messages[conversation.messages.length - 1];
   const isDirect = isDirectConversation(conversation);
   const displayUser = isDirect ? resolveConversationUser(conversation, currentUserID, usersById) : null;
-  const directAgent = isDirect && displayUser ? agents.find((item) => agentMatchesUser(item, displayUser)) : null;
+  const directAgent = isDirect && displayUser ? resolveAgentForUser(agents, displayUser) : null;
   const directAgentRunning = isAgentRunning(directAgent);
   const directAvatar = displayUser?.avatar || directAgent?.avatar || "";
   const directAvatarFallback = directAgent

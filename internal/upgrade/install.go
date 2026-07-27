@@ -181,6 +181,19 @@ func refreshCompanionLauncher(installRoot string) error {
 	if err != nil || source == "" {
 		return err
 	}
+	if strings.EqualFold(filepath.Ext(source), ".exe") {
+		stale := filepath.Join(launcherDir, "csgclaw-cli")
+		if info, statErr := os.Lstat(stale); statErr == nil {
+			if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
+				return fmt.Errorf("stale companion launcher %s is not a regular file", stale)
+			}
+			if removeErr := os.Remove(stale); removeErr != nil {
+				return fmt.Errorf("remove stale companion launcher: %w", removeErr)
+			}
+		} else if !os.IsNotExist(statErr) {
+			return fmt.Errorf("stat stale companion launcher: %w", statErr)
+		}
+	}
 	target := filepath.Join(launcherDir, filepath.Base(source))
 	if info, err := os.Lstat(target); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {

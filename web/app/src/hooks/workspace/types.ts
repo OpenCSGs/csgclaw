@@ -212,10 +212,12 @@ export type UseConversationControllerArgs = {
   managerProfile: AgentProfileLike | null;
   managerProfileIncomplete: boolean | null;
   managerRuntimeUnavailable?: boolean | null;
+  managerRuntimeWarning?: string;
   messageActionBusy: string;
   messageActionFeedback: MessageActionFeedback;
   messageListActive?: boolean;
   hasObservedWorkLease: ParticipantWorkStatus["hasObservedWorkLease"];
+  stopWorkingTurn?: ParticipantWorkStatus["stopWorkingTurn"];
   workingParticipantsForRoom: ParticipantWorkStatus["workingParticipantsForRoom"];
   navigatePane: WorkspaceNavigationController["navigatePane"];
   onMessageAction: (

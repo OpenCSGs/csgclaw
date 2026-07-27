@@ -53,7 +53,14 @@ import {
   updateDrafts,
 } from "@/models/composer";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { normalizeAuthProviderName, providerNeedsAuth } from "@/models/agents";
+import {
+  agentOfflineReasonLabel,
+  agentRuntimeState,
+  isAgentRunning,
+  normalizeAuthProviderName,
+  providerNeedsAuth,
+  type AgentLike,
+} from "@/models/agents";
 import {
   type AttachmentSelectionResult,
   createAttachmentDrafts,
@@ -190,6 +197,23 @@ function conversationHasLocalIdentity(
   return (conversation?.members || []).some((memberID) => localIdentitiesMatch(memberID, id));
 }
 
+function conversationAgentForMember(
+  memberID: string,
+  agents: readonly AgentLike[],
+  usersById: Map<string, IMUser>,
+): AgentLike | null {
+  const user = resolveUserByLocalIdentity(memberID, usersById);
+  return (
+    agents.find(
+      (agent) =>
+        agent.id === memberID ||
+        localIdentitiesMatch(agent.id, memberID) ||
+        localIdentitiesMatch(agent.user_id, memberID) ||
+        (user && agentMatchesUser(agent, user)),
+    ) ?? null
+  );
+}
+
 export function useConversationController({
   activeConversationId,
   activePane,
@@ -208,6 +232,7 @@ export function useConversationController({
   managerProfile,
   managerProfileIncomplete,
   managerRuntimeUnavailable = false,
+  managerRuntimeWarning = "",
   navigatePane,
   onMessageAction,
   onConnectConnector,
@@ -231,6 +256,7 @@ export function useConversationController({
   messageActionFeedback,
   messageListActive = true,
   hasObservedWorkLease,
+  stopWorkingTurn,
   workingParticipantsForRoom,
 }: UseConversationControllerArgs) {
   const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
@@ -355,6 +381,33 @@ export function useConversationController({
       )
       .map((entry) => entry.memberId);
   }, [agents, data?.current_user_id, selectedConversation, usersById]);
+  const activeConversationAgents = useMemo(() => {
+    if (!selectedConversation) {
+      return [];
+    }
+    const seen = new Set<string>();
+    return selectedConversation.members
+      .filter((memberID) => !localIdentitiesMatch(memberID, data?.current_user_id))
+      .map((memberID) => conversationAgentForMember(memberID, agents, usersById))
+      .filter((agent): agent is AgentLike => {
+        const id = String(agent?.id ?? "").trim();
+        if (!id || seen.has(id)) {
+          return false;
+        }
+        seen.add(id);
+        return true;
+      });
+  }, [agents, data?.current_user_id, selectedConversation, usersById]);
+  const managerRuntimeErrorMessage = managerRuntimeWarning || t("managerCodexMissingWarning");
+  function activeConversationAgentOfflineMessage(): string {
+    if (activeConversationAgents.length === 0 || activeConversationAgents.some(isAgentRunning)) {
+      return "";
+    }
+    const agent = activeConversationAgents[0];
+    const name = String(agent.name || agent.id || "").trim();
+    const reason = agentOfflineReasonLabel(agentRuntimeState(agent), t);
+    return t("conversationAgentOffline", { name, reason });
+  }
   const hasActiveConversationAgent = useMemo(() => {
     return activeConversationAgentMembers.length > 0;
   }, [activeConversationAgentMembers]);
@@ -775,7 +828,7 @@ export function useConversationController({
 
   async function sendMessage(): Promise<void> {
     if (managerRuntimeUnavailable) {
-      setComposerError(t("managerCodexMissingWarning"));
+      setComposerError(managerRuntimeErrorMessage);
       return;
     }
     if (managerProfileIncomplete) {
@@ -791,6 +844,11 @@ export function useConversationController({
       return;
     }
     if (composerSendState.status === "sending") {
+      return;
+    }
+    const agentOfflineMessage = activeConversationAgentOfflineMessage();
+    if (agentOfflineMessage) {
+      setComposerError(agentOfflineMessage);
       return;
     }
 
@@ -930,7 +988,7 @@ export function useConversationController({
 
   async function sendThreadReply(): Promise<void> {
     if (managerRuntimeUnavailable) {
-      setThreadError(t("managerCodexMissingWarning"));
+      setThreadError(managerRuntimeErrorMessage);
       return;
     }
     if (managerProfileIncomplete) {
@@ -953,6 +1011,11 @@ export function useConversationController({
       !activeThreadRootID ||
       (!text.trim() && activeThreadAttachmentDrafts.length === 0)
     ) {
+      return;
+    }
+    const agentOfflineMessage = activeConversationAgentOfflineMessage();
+    if (agentOfflineMessage) {
+      setThreadError(agentOfflineMessage);
       return;
     }
 
@@ -1475,6 +1538,7 @@ export function useConversationController({
       t,
       theme,
       workingParticipants,
+      onStopWorkingTurn: stopWorkingTurn,
       selectedMessageCount,
       logAgent,
       conversationMembers: activeConversationMembers,

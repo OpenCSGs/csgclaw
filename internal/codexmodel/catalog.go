@@ -1,6 +1,10 @@
 package codexmodel
 
-import "strings"
+import (
+	"strings"
+
+	"csgclaw/internal/config"
+)
 
 type Profile struct {
 	ModelID         string
@@ -18,22 +22,34 @@ func Metadata(profile Profile) map[string]any {
 	if modelID == "" {
 		modelID = "unknown"
 	}
-	reasoningEffort := strings.ToLower(strings.TrimSpace(profile.ReasoningEffort))
+	reasoningEffort := config.NormalizeReasoningEffort(profile.ReasoningEffort)
+	var defaultReasoningLevel any
 	switch reasoningEffort {
-	case "none", "minimal", "low", "medium", "high", "xhigh":
+	case "", config.ReasoningEffortAuto:
+		defaultReasoningLevel = nil
+	case config.ReasoningEffortNone,
+		config.ReasoningEffortMinimal,
+		config.ReasoningEffortLow,
+		config.ReasoningEffortMedium,
+		config.ReasoningEffortHigh,
+		config.ReasoningEffortXHigh:
+		defaultReasoningLevel = reasoningEffort
 	default:
-		reasoningEffort = "medium"
+		defaultReasoningLevel = nil
 	}
 	baseInstructions := "You are Codex, a coding agent. Follow the user's instructions and use available tools carefully."
 	return map[string]any{
 		"slug":                    modelID,
 		"display_name":            modelID,
 		"description":             "CSGClaw OpenAI-compatible provider model",
-		"default_reasoning_level": reasoningEffort,
+		"default_reasoning_level": defaultReasoningLevel,
 		"supported_reasoning_levels": []map[string]any{
-			{"effort": "low", "description": "low"},
-			{"effort": "medium", "description": "medium"},
-			{"effort": "high", "description": "high"},
+			{"effort": config.ReasoningEffortNone, "description": config.ReasoningEffortNone},
+			{"effort": config.ReasoningEffortMinimal, "description": config.ReasoningEffortMinimal},
+			{"effort": config.ReasoningEffortLow, "description": config.ReasoningEffortLow},
+			{"effort": config.ReasoningEffortMedium, "description": config.ReasoningEffortMedium},
+			{"effort": config.ReasoningEffortHigh, "description": config.ReasoningEffortHigh},
+			{"effort": config.ReasoningEffortXHigh, "description": config.ReasoningEffortXHigh},
 		},
 		"shell_type":                   "default",
 		"visibility":                   "list",

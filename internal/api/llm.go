@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -78,14 +79,13 @@ func (h *Handler) handleBotLLMChatCompletions(w http.ResponseWriter, r *http.Req
 		http.Error(w, "read request body", http.StatusBadRequest)
 		return
 	}
-	respBody, status, contentType, callErr := h.llm.ChatCompletions(r.Context(), botID, body)
+	resp, callErr := h.llm.ChatCompletionsStream(r.Context(), botID, body)
 	if callErr != nil {
 		writeLLMError(w, callErr)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
-	w.WriteHeader(status)
-	_, _ = w.Write(respBody)
+	defer resp.Body.Close()
+	writeLLMUpstreamResponse(w, resp)
 }
 
 func (h *Handler) handleBotLLMResponses(w http.ResponseWriter, r *http.Request, botID string) {
@@ -104,9 +104,44 @@ func (h *Handler) handleBotLLMResponses(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	defer resp.Body.Close()
+	writeLLMUpstreamResponse(w, resp)
+}
+
+func writeLLMUpstreamResponse(w http.ResponseWriter, resp *llm.UpstreamResponse) {
 	copyLLMHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
+	if isLLMEventStream(resp.Header.Get("Content-Type")) {
+		_ = copyAndFlushLLMStream(w, resp.Body)
+		return
+	}
 	_, _ = io.Copy(w, resp.Body)
+}
+
+func isLLMEventStream(contentType string) bool {
+	mediaType, _, _ := strings.Cut(contentType, ";")
+	return strings.EqualFold(strings.TrimSpace(mediaType), "text/event-stream")
+}
+
+func copyAndFlushLLMStream(w http.ResponseWriter, src io.Reader) error {
+	controller := http.NewResponseController(w)
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			if flushErr := controller.Flush(); flushErr != nil && !errors.Is(flushErr, http.ErrNotSupported) {
+				return flushErr
+			}
+		}
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			return readErr
+		}
+	}
 }
 
 func (h *Handler) handleBotLLMResponsesWebsocket(w http.ResponseWriter, r *http.Request, botID string) {

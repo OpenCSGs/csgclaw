@@ -1,5 +1,12 @@
 import { del, get, post, resolveRequestPath, type ApiError } from "@/api/client";
-import type { IMConversation, IMMessage, IMUser, MessageRelation, ThreadView } from "@/models/conversations";
+import type {
+  IMConversation,
+  IMMessage,
+  IMUser,
+  MessageRelation,
+  ParticipantWorkUpdate,
+  ThreadView,
+} from "@/models/conversations";
 
 export type SendMessagePayload = {
   attachments?: File[];
@@ -49,6 +56,23 @@ export type JoinAgentToRoomPayload = {
   inviter_id: string;
   locale?: string;
   room_id: string;
+};
+
+export type StopParticipantWorkPayload = {
+  lease_id: string;
+  request_id: string;
+  room_id: string;
+};
+
+export type StopParticipantWorkResponse = {
+  accepted: true;
+  lease_id: string;
+  participant_id: string;
+  registry_epoch: string;
+  request_id: string;
+  requested_at: string;
+  room_id: string;
+  state: "stop_requested";
 };
 
 export type CreateUserPayload = Partial<IMUser> & {
@@ -170,4 +194,11 @@ export function joinAgentToRoomRequest(payload: JoinAgentToRoomPayload): Promise
 
 export function createUserRequest(payload: CreateUserPayload): Promise<IMUser> {
   return post("api/v1/channels/csgclaw/users", payload);
+}
+
+export function stopParticipantWorkRequest(
+  participantID: ParticipantWorkUpdate["participant_id"],
+  payload: StopParticipantWorkPayload,
+): Promise<StopParticipantWorkResponse> {
+  return post(`api/v1/channels/csgclaw/participants/${encodeURIComponent(participantID)}/work:stop`, payload);
 }

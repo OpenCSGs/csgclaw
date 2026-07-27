@@ -135,7 +135,9 @@ const t: TranslateFn = (key, params = {}) => {
     inputPlaceholder: "Message",
     localIdentityFallback: "Local user",
     conversationWorkingEditing: "Editing",
+    conversationWorkingGeneratingReply: "Generating reply",
     conversationWorkingOpenActivity: "View {name}'s activity: {detail}",
+    conversationWorkingPreparingReply: "Preparing a reply",
     conversationWorkingReading: "Reading",
     conversationWorkingReplying: "Replying",
     conversationWorkingRunning: "Running",
@@ -1008,10 +1010,10 @@ describe("ConversationPane", () => {
 
     const view = render(<Harness />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("AtlasThinking");
-    expect(screen.getByRole("status")).toHaveTextContent("BramThinking");
+    expect(screen.getByRole("status")).toHaveTextContent("AtlasPreparing a reply");
+    expect(screen.getByRole("status")).toHaveTextContent("BramPreparing a reply");
     expect(screen.queryByRole("button", { name: "View activity" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "View Atlas's activity: Thinking" }));
+    await user.click(screen.getByRole("button", { name: "View Atlas's activity: Preparing a reply" }));
 
     expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
     expect(document.querySelector(".conversation-activity-panel")).toBeInTheDocument();

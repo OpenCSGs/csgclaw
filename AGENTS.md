@@ -25,7 +25,7 @@ web/static-dist/        generated Web UI assets for Go embed; run make web-build
 
 ## Commands
 
-See [docs/build.md](docs/build.md) or [docs/build.zh.md](docs/build.zh.md) for Makefile targets, fixed runtime image refs, and sandbox CLI packaging.
+See [docs/tech/build.md](docs/tech/build.md) or [docs/tech/build.zh.md](docs/tech/build.zh.md) for Makefile targets, fixed runtime image refs, and sandbox CLI packaging.
 
 ```bash
 make                    # default build (no docker images)
@@ -46,7 +46,7 @@ make release
 - Prefer existing patterns and the standard library before adding dependencies.
 - Format with `make fmt`.
 - Add or update tests when changing CLI, config, API, or runtime behavior.
-- Before changing the Vite web app, read and follow `docs/web/development.md`; it owns frontend structure, source layout, components, styling, state/data flow, accessibility, assets, and verification. This includes changes under `web/app/src`, frontend tests, package/config files, CSS/Tailwind/tokens, public asset paths, routes, i18n text, and generated `web/static-dist` handling.
+- Before changing the Vite web app, read and follow `docs/tech/web/development.md`; it owns frontend structure, source layout, components, styling, state/data flow, accessibility, assets, and verification. This includes changes under `web/app/src`, frontend tests, package/config files, CSS/Tailwind/tokens, public asset paths, routes, i18n text, and generated `web/static-dist` handling.
 - Do not change BoxLite sandbox integration or packaging paths unless the task is about sandbox/runtime integration.
 - When changing config fields or defaults, update loader, saver, onboard flow, tests, and docs together.
 - Never hardcode or print real secrets; startup and logs must keep tokens redacted.
@@ -70,8 +70,8 @@ make release
 ## References
 
 - `README.md`
-- `docs/build.md`
-- `docs/build.zh.md`
-- `docs/web/development.md`
+- `docs/tech/build.md`
+- `docs/tech/build.zh.md`
+- `docs/tech/web/development.md`
 - `Makefile`
 - `.github/workflows/release.yml`

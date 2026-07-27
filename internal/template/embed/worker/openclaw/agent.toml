@@ -2,8 +2,8 @@ name = "generic-assistant-openclaw"
 description = "通用型助手（OpenClaw版）"
 role = "worker"
 runtime_kind = "openclaw"
-updated_at = "2026-07-17T09:10:03Z"
-version = "0.1.6"
+updated_at = "2026-07-22T08:23:15Z"
+version = "0.1.7"
 
 [image]
-ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260717.27-csgclaw"
+ref = "opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260723.2-csgclaw"

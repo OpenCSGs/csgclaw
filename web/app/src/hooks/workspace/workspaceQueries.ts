@@ -7,8 +7,8 @@ import type { FetchVersionOptions } from "@/api/app";
 import { fetchMCPServers } from "@/api/mcp";
 import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
 import { fetchModelProviders } from "@/api/modelProviders";
-import { fetchAgenticHubOfficialSkillsPage, fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
-import type { AgenticHubSkillsPage } from "@/api/skills";
+import { fetchRemoteSkillsPage, fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
+import type { RemoteSkillsPage } from "@/api/skills";
 import { fetchManagerProfile } from "@/api/agents";
 import { fetchUpgradeStatus } from "@/api/upgrade";
 import {
@@ -250,13 +250,10 @@ export function useWorkspaceSkillsQuery(): UseQueryResult<SkillSummary[]> {
 
 export function useWorkspaceOfficialSkillsQuery(search = "", options: { enabled?: boolean } = {}) {
   const normalizedSearch = String(search || "").trim();
-  return useInfiniteQuery<AgenticHubSkillsPage>({
+  return useInfiniteQuery<RemoteSkillsPage>({
     queryKey: workspaceQueryKeys.officialSkills(normalizedSearch),
     queryFn: ({ pageParam }) =>
-      fetchAgenticHubOfficialSkillsPage(
-        typeof pageParam === "number" ? pageParam : Number(pageParam) || 1,
-        normalizedSearch,
-      ),
+      fetchRemoteSkillsPage(typeof pageParam === "number" ? pageParam : Number(pageParam) || 1, normalizedSearch),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => lastPage.nextPage ?? undefined,
     enabled: Boolean(options.enabled),

@@ -35,6 +35,7 @@ type Options struct {
 	IMBus              *im.Bus
 	WorkReporter       worklease.ParticipantWorkReporter
 	WorkBus            *worklease.Bus
+	WorkControlBus     *worklease.ControlBus
 	ParticipantBridge  *im.ParticipantBridge
 	Feishu             *feishu.Service
 	LLM                *llm.Service
@@ -56,7 +57,7 @@ type Options struct {
 func newHandler(opts Options) *api.Handler {
 	handler := api.NewHandlerWithAuth(opts.Service, opts.IM, opts.IMBus, opts.ParticipantBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
 	handler.SetParticipantService(opts.Participant)
-	handler.SetParticipantWorkService(opts.WorkReporter, opts.WorkBus)
+	handler.SetParticipantWorkService(opts.WorkReporter, opts.WorkBus, opts.WorkControlBus)
 	handler.SetHubService(opts.Hub)
 	handler.SetMCPService(opts.MCP)
 	handler.SetTeamService(opts.Team)

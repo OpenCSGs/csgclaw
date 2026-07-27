@@ -41,7 +41,7 @@ curl.exe -fsSL https://csgclaw.opencsg.com/install.ps1 | powershell -ExecutionPo
 make build
 ```
 
-Makefile 详细说明（embed 模板 version、可选 Docker 镜像构建等）见 [docs/build.zh.md](docs/build.zh.md)。
+Makefile 详细说明（embed 模板 version、可选 Docker 镜像构建等）见 [docs/tech/build.zh.md](docs/tech/build.zh.md)。
 
 对大多数用户来说，直接使用上面的安装脚本会更简单。
 
@@ -55,9 +55,9 @@ csgclaw serve
 
 ## 配置
 
-`csgclaw serve` 会使用本地配置中的 server、bootstrap、sandbox 和 channel 设置，并在首次运行时自动补齐缺失的 bootstrap 状态。Agent 模型/provider profile 存储在 agent 状态中，并通过 Web UI 管理。Sandbox provider 选项、Worker 覆盖示例和 agent profile 详情见 [docs/config.zh.md](docs/config.zh.md)。
+`csgclaw serve` 会使用本地配置中的 server、bootstrap、sandbox 和 channel 设置，并在首次运行时自动补齐缺失的 bootstrap 状态。Agent 模型/provider profile 存储在 agent 状态中，并通过 Web UI 管理。Sandbox provider 选项、Worker 覆盖示例和 agent profile 详情见 [docs/tech/config.zh.md](docs/tech/config.zh.md)。
 
-面向维护者的架构、API、结构化 skill 输出和 IM thread 设计说明见 [docs/architecture.md](docs/architecture.md)、[docs/api.zh.md](docs/api.zh.md)、[docs/structured-output.zh.md](docs/structured-output.zh.md) 和 [docs/im-threads.zh.md](docs/im-threads.zh.md)。
+面向维护者的架构、API、结构化 skill 输出和 IM thread 设计说明见 [docs/tech/architecture.md](docs/tech/architecture.md)、[docs/tech/api.zh.md](docs/tech/api.zh.md)、[docs/tech/structured-output.zh.md](docs/tech/structured-output.zh.md) 和 [docs/tech/im/im-threads.zh.md](docs/tech/im/im-threads.zh.md)。
 
 ## 功能特性
 

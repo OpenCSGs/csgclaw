@@ -870,7 +870,12 @@ describe("agent action visibility", () => {
 
     await user.click(within(navigation).getByRole("button", { name: "Instructions" }));
 
-    expect(screen.getByDisplayValue("reply in Chinese")).toBeInTheDocument();
+    const instructionsEditor = screen.getByDisplayValue("reply in Chinese");
+    expect(instructionsEditor).toHaveClass("agent-instructions-editor");
+    expect(instructionsEditor.closest(".agent-page-editor")).toHaveClass("agent-page-editor-instructions");
+    expect(instructionsEditor.closest(".agent-profile-scroll-region")).toHaveClass(
+      "agent-profile-scroll-region-instructions",
+    );
     expect(screen.queryByText("Provider")).not.toBeInTheDocument();
   });
 
@@ -986,7 +991,7 @@ describe("agent action visibility", () => {
       within(navigation)
         .getAllByRole("button")
         .map((button) => button.textContent),
-    ).toEqual(["Profile", "Activity", "Instructions", "Skills0", "Channels", "MCP"]);
+    ).toEqual(["Profile", "Activity", "Instructions", "Skills0", "MCP", "Channels"]);
 
     await user.click(within(navigation).getByRole("button", { name: "MCP" }));
 
@@ -1417,8 +1422,8 @@ describe("agent action visibility", () => {
       "Activity",
       "Instructions",
       "Skills0",
-      "Channels",
       "MCP",
+      "Channels",
     ]);
     expect(tabs[0]).toHaveAttribute("aria-current", "location");
     expect(screen.getByText("Request options")).toBeInTheDocument();

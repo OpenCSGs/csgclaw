@@ -603,6 +603,75 @@ func TestAppServerManagerPromptPublishesStructuredDeltaBeforeCompletion(t *testi
 	}
 }
 
+func TestAppServerManagerPromptCancellationReturnsConfirmedStop(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-cancel-confirmed")
+	spec := testAppServerSessionSpec(t.TempDir())
+	manager := newAppServerManager(testAppServerManagerDeps())
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	type promptResult struct {
+		response PromptResponse
+		err      error
+	}
+	promptDone := make(chan promptResult, 1)
+	go func() {
+		response, promptErr := manager.Prompt(ctx, SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+			SessionID: session.SessionID,
+			Prompt:    []PromptContentBlock{TextBlock("keep working")},
+		})
+		promptDone <- promptResult{response: response, err: promptErr}
+	}()
+	waitForRuntime(t, func() bool {
+		live := manager.liveSession(spec.RuntimeID)
+		if live == nil {
+			return false
+		}
+		waiter := live.appServerTurnWaiter(session.SessionID)
+		return waiter != nil && waiter.currentTurnID() == "turn-cancel"
+	})
+	cancel()
+
+	select {
+	case result := <-promptDone:
+		if result.response.StopReason != StopReasonInterrupted || !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("Prompt() result = %#v, error = %v; want interrupted response with context cancellation", result.response, result.err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Prompt() did not return after confirmed runtime stop")
+	}
+}
+
+func TestAppServerManagerPromptCancellationDoesNotConfirmFailedStop(t *testing.T) {
+	originalStopTimeout := appServerStopTimeout
+	appServerStopTimeout = 10 * time.Millisecond
+	t.Cleanup(func() { appServerStopTimeout = originalStopTimeout })
+
+	manager := newAppServerManager(testAppServerManagerDeps())
+	live := &liveSession{
+		spec:      SessionSpec{RuntimeID: "runtime-1"},
+		done:      make(chan struct{}),
+		appClient: newAppServerClient(appServerFailingWriter{}, nil),
+	}
+	manager.sessions[live.spec.RuntimeID] = live
+	waiter := &appServerTurnWaiter{
+		threadID: "thread-1",
+		turnID:   "turn-1",
+		ch:       make(chan appServerTurnResult, 1),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	response, err := manager.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
+	if response.StopReason != "" || err == nil || !strings.Contains(err.Error(), "stop app-server") {
+		t.Fatalf("stopCanceledAppServerTurn() response = %#v, error = %v; want unconfirmed stop failure", response, err)
+	}
+}
+
 func TestAppServerManagerPromptFailedTurnPublishesFailure(t *testing.T) {
 	withAppServerHelperCommand(t, "prompt-failed")
 	dir := t.TempDir()
@@ -1555,6 +1624,12 @@ func testAppServerManagerDepsWithSink(sink SessionEventSink) managerDeps {
 	return deps
 }
 
+type appServerFailingWriter struct{}
+
+func (appServerFailingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
+}
+
 func testAppServerSessionSpec(dir string) SessionSpec {
 	runtimeDir := filepath.Join(dir, ".codex")
 	workspaceDir := filepath.Join(runtimeDir, workspaceDirName)
@@ -1584,6 +1659,33 @@ func testProfile() agentruntime.Profile {
 		APIKey:          "sk-test",
 		ModelID:         "gpt-5",
 		ReasoningEffort: "medium",
+	}
+}
+
+func TestAppServerParamsMapOffToCodexNone(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.Profile.ReasoningEffort = "off"
+
+	threadConfig := appServerThreadStartParams(spec)["config"].(map[string]any)
+	if got, want := threadConfig["model_reasoning_effort"], "none"; got != want {
+		t.Fatalf("model_reasoning_effort = %v, want %v", got, want)
+	}
+	turn := appServerTurnStartParams(spec, "thread-1", "hello")
+	if got, want := turn["effort"], "none"; got != want {
+		t.Fatalf("turn effort = %v, want %v", got, want)
+	}
+}
+
+func TestAppServerParamsOmitReasoningForModelDefault(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.Profile.ReasoningEffort = "auto"
+
+	if config, ok := appServerThreadStartParams(spec)["config"]; ok {
+		t.Fatalf("thread config = %v, want omitted", config)
+	}
+	turn := appServerTurnStartParams(spec, "thread-1", "hello")
+	if effort, ok := turn["effort"]; ok {
+		t.Fatalf("turn effort = %v, want omitted", effort)
 	}
 }
 
@@ -1859,6 +1961,28 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				writeRPCNotification(t, "turn/completed", map[string]any{
 					"threadId": "main-thread",
 					"turn":     map[string]any{"id": "turn-delta", "status": "interrupted"},
+				})
+				return rpcResult(msg["id"], map[string]any{}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-cancel-confirmed":
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				writeRPCNotification(t, "turn/started", map[string]any{
+					"threadId": "main-thread",
+					"turn":     map[string]any{"id": "turn-cancel"},
+				})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-cancel"}), true
+			case "turn/interrupt":
+				assertTurnInterruptParams(t, msg, "main-thread", "turn-cancel")
+				writeRPCNotification(t, "turn/completed", map[string]any{
+					"threadId": "main-thread",
+					"turn":     map[string]any{"id": "turn-cancel", "status": "interrupted"},
 				})
 				return rpcResult(msg["id"], map[string]any{}), true
 			default:

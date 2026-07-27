@@ -165,6 +165,58 @@ func TestStartWaitsForDockerReadiness(t *testing.T) {
 	}
 }
 
+func TestInfoChecksDockerGatewayReadinessForRunningBox(t *testing.T) {
+	var attempts int
+	rt := New(testGatewayDeps(func() string { return "docker" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {
+		attempts++
+		return 0, nil
+	}))
+
+	info, err := rt.Info(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-manager", HandleID: "box-1"})
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	if info.State != agentruntime.StateRunning {
+		t.Fatalf("Info() state = %q, want running", info.State)
+	}
+	if attempts != 1 {
+		t.Fatalf("readiness attempts = %d, want 1", attempts)
+	}
+}
+
+func TestInfoReturnsErrorWhenDockerGatewayReadinessFails(t *testing.T) {
+	rt := New(testGatewayDeps(func() string { return "docker" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {
+		return 1, fmt.Errorf("docker exec failed")
+	}))
+
+	_, err := rt.Info(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-manager", HandleID: "box-1"})
+	if err == nil {
+		t.Fatal("Info() error = nil, want readiness error")
+	}
+	if !strings.Contains(err.Error(), "check openclaw_sandbox gateway ready") {
+		t.Fatalf("Info() error = %v, want gateway readiness context", err)
+	}
+}
+
+func TestInfoSkipsReadinessForNonDockerProvider(t *testing.T) {
+	var attempts int
+	rt := New(testGatewayDeps(func() string { return "boxlite" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {
+		attempts++
+		return 1, fmt.Errorf("should not run")
+	}))
+
+	info, err := rt.Info(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-manager", HandleID: "box-1"})
+	if err != nil {
+		t.Fatalf("Info() error = %v", err)
+	}
+	if info.State != agentruntime.StateRunning {
+		t.Fatalf("Info() state = %q, want running", info.State)
+	}
+	if attempts != 0 {
+		t.Fatalf("readiness attempts = %d, want 0 for boxlite", attempts)
+	}
+}
+
 func TestDeleteStopsBoxBeforeForceRemove(t *testing.T) {
 	var calls []string
 	deps := testGatewayDeps(func() string { return "docker" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {

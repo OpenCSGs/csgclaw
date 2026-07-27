@@ -34,7 +34,8 @@ export function ScheduledTaskFormFields({
           maxLength={TASK_TITLE_MAX_LENGTH}
           placeholder={t("taskTitlePlaceholder")}
           onInput={(event) => {
-            onChange((current) => ({ ...current, title: event.currentTarget.value }));
+            const value = event.currentTarget.value;
+            onChange((current) => ({ ...current, title: value }));
             onClearError("title");
           }}
         />
@@ -63,7 +64,8 @@ export function ScheduledTaskFormFields({
           value={draft.prompt}
           placeholder={t("scheduledTaskPromptPlaceholder")}
           onInput={(event) => {
-            onChange((current) => ({ ...current, prompt: event.currentTarget.value }));
+            const value = event.currentTarget.value;
+            onChange((current) => ({ ...current, prompt: value }));
             onClearError("prompt");
           }}
         />
@@ -91,7 +93,8 @@ export function ScheduledTaskFormFields({
           type="date"
           value={draft.date}
           onInput={(event) => {
-            onChange((current) => ({ ...current, date: event.currentTarget.value }));
+            const value = event.currentTarget.value;
+            onChange((current) => ({ ...current, date: value }));
             onClearError("date");
           }}
         />
@@ -103,7 +106,8 @@ export function ScheduledTaskFormFields({
           type="time"
           value={draft.time}
           onInput={(event) => {
-            onChange((current) => ({ ...current, time: event.currentTarget.value }));
+            const value = event.currentTarget.value;
+            onChange((current) => ({ ...current, time: value }));
             onClearError("time");
           }}
         />
@@ -114,7 +118,10 @@ export function ScheduledTaskFormFields({
         <input
           type="date"
           value={draft.expiresDate}
-          onInput={(event) => onChange((current) => ({ ...current, expiresDate: event.currentTarget.value }))}
+          onInput={(event) => {
+            const value = event.currentTarget.value;
+            onChange((current) => ({ ...current, expiresDate: value }));
+          }}
         />
       </label>
     </div>

@@ -80,6 +80,9 @@ func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	if _, ok := defaults["thinkingDefault"]; ok {
 		t.Fatalf("thinkingDefault should be omitted for non-reasoning OpenAI-compatible bridge model: %#v", defaults["thinkingDefault"])
 	}
+	if got, want := defaults["reasoningDefault"], "stream"; got != want {
+		t.Fatalf("reasoningDefault = %v, want %v", got, want)
+	}
 	if got, want := defaults["verboseDefault"], "on"; got != want {
 		t.Fatalf("verboseDefault = %v, want %v", got, want)
 	}
@@ -95,6 +98,81 @@ func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	text := string(data)
 	if strings.Contains(text, "https://api.minimaxi.com/v1") || strings.Contains(text, "sk-minimax-test") {
 		t.Fatalf("rendered OpenClaw config should use CSGClaw bridge, not upstream credentials:\n%s", text)
+	}
+}
+
+func TestRenderAgentOpenClawConfigMapsCommonReasoningControl(t *testing.T) {
+	tests := []struct {
+		name             string
+		effort           string
+		wantReasoning    bool
+		wantThinking     string
+		wantThinkingSet  bool
+		wantVisibility   string
+		wantEffortValues []any
+	}{
+		{
+			name:             "enabled",
+			effort:           "medium",
+			wantReasoning:    true,
+			wantThinking:     "medium",
+			wantThinkingSet:  true,
+			wantVisibility:   "stream",
+			wantEffortValues: []any{"minimal", "low", "medium", "high", "xhigh"},
+		},
+		{
+			name:             "disabled alias",
+			effort:           "off",
+			wantReasoning:    false,
+			wantThinking:     "off",
+			wantThinkingSet:  true,
+			wantVisibility:   "off",
+			wantEffortValues: []any{},
+		},
+		{
+			name:             "model default",
+			effort:           "auto",
+			wantReasoning:    false,
+			wantThinkingSet:  false,
+			wantVisibility:   "stream",
+			wantEffortValues: []any{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := renderConfig("agent-1", "u-agent-1", config.ServerConfig{
+				AdvertiseBaseURL: "http://127.0.0.1:18080",
+				AccessToken:      "token",
+			}, config.ModelConfig{
+				Provider:        "opencsg",
+				ModelID:         "qwen3.7-plus",
+				ReasoningEffort: tt.effort,
+			}, testBaseURLResolver, nil)
+			if err != nil {
+				t.Fatalf("renderConfig() error = %v", err)
+			}
+			var cfg map[string]any
+			if err := json.Unmarshal(data, &cfg); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+			providers := cfg["models"].(map[string]any)["providers"].(map[string]any)
+			entry := providers[openClawBridgeProviderID].(map[string]any)["models"].([]any)[0].(map[string]any)
+			if got := entry["reasoning"]; got != tt.wantReasoning {
+				t.Fatalf("model reasoning = %v, want %v", got, tt.wantReasoning)
+			}
+			compat := entry["compat"].(map[string]any)
+			if got := compat["supportedReasoningEfforts"]; !reflect.DeepEqual(got, tt.wantEffortValues) {
+				t.Fatalf("supportedReasoningEfforts = %#v, want %#v", got, tt.wantEffortValues)
+			}
+			defaults := cfg["agents"].(map[string]any)["defaults"].(map[string]any)
+			gotThinking, gotThinkingSet := defaults["thinkingDefault"]
+			if gotThinkingSet != tt.wantThinkingSet || (gotThinkingSet && gotThinking != tt.wantThinking) {
+				t.Fatalf("thinkingDefault = %v (set=%v), want %v (set=%v)", gotThinking, gotThinkingSet, tt.wantThinking, tt.wantThinkingSet)
+			}
+			if got := defaults["reasoningDefault"]; got != tt.wantVisibility {
+				t.Fatalf("reasoningDefault = %v, want %v", got, tt.wantVisibility)
+			}
+		})
 	}
 }
 
@@ -425,11 +503,11 @@ func TestRenderAgentOpenClawConfigUsesCodexResponsesModelMetadata(t *testing.T) 
 	if got, want := compat["supportsReasoningEffort"], true; got != want {
 		t.Fatalf("model compat.supportsReasoningEffort = %v, want %v", got, want)
 	}
-	if got, want := compat["supportedReasoningEfforts"], []any{"low", "medium", "high", "xhigh"}; !reflect.DeepEqual(got, want) {
+	if got, want := compat["supportedReasoningEfforts"], []any{"minimal", "low", "medium", "high", "xhigh"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("model compat.supportedReasoningEfforts = %#v, want %#v", got, want)
 	}
 	wantReasoningMap := map[string]any{
-		"minimal": "low",
+		"minimal": "minimal",
 		"low":     "low",
 		"medium":  "medium",
 		"high":    "high",
@@ -445,6 +523,39 @@ func TestRenderAgentOpenClawConfigUsesCodexResponsesModelMetadata(t *testing.T) 
 	defaults := agents["defaults"].(map[string]any)
 	if got, want := defaults["thinkingDefault"], "high"; got != want {
 		t.Fatalf("thinkingDefault = %v, want %v", got, want)
+	}
+	if got, want := defaults["reasoningDefault"], "stream"; got != want {
+		t.Fatalf("reasoningDefault = %v, want %v", got, want)
+	}
+}
+
+func TestRenderAgentOpenClawConfigUsesCodexModelDefaultAndStreamsReasoning(t *testing.T) {
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
+		AdvertiseBaseURL: "http://127.0.0.1:18080",
+		AccessToken:      "shared-token",
+	}, config.ModelConfig{
+		Provider:        "codex",
+		ModelID:         "gpt-5.5",
+		ReasoningEffort: "auto",
+	}, testBaseURLResolver, nil)
+	if err != nil {
+		t.Fatalf("renderConfig() error = %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	providers := cfg["models"].(map[string]any)["providers"].(map[string]any)
+	entry := providers[openClawBridgeProviderID].(map[string]any)["models"].([]any)[0].(map[string]any)
+	if got, want := entry["reasoning"], true; got != want {
+		t.Fatalf("model reasoning = %v, want %v", got, want)
+	}
+	defaults := cfg["agents"].(map[string]any)["defaults"].(map[string]any)
+	if _, ok := defaults["thinkingDefault"]; ok {
+		t.Fatalf("thinkingDefault = %v, want omitted", defaults["thinkingDefault"])
+	}
+	if got, want := defaults["reasoningDefault"], "stream"; got != want {
+		t.Fatalf("reasoningDefault = %v, want %v", got, want)
 	}
 }
 

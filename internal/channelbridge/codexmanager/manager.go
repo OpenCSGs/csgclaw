@@ -242,6 +242,13 @@ type csgclawManager struct {
 }
 
 func newCSGClawManager(deps managerDeps) *csgclawManager {
+	bridgeOptions := []codexbridge.ServiceOption{
+		codexbridge.WithUserInputBroker(deps.runtime.UserInputBroker()),
+		codexbridge.WithParticipantWorkReporter(deps.reporter),
+	}
+	if registrar, ok := deps.reporter.(agentruntime.TurnControllerRegistrar); ok {
+		bridgeOptions = append(bridgeOptions, codexbridge.WithTurnControllerRegistrar(registrar))
+	}
 	return &csgclawManager{
 		agents:  deps.agents,
 		runtime: deps.runtime,
@@ -249,8 +256,7 @@ func newCSGClawManager(deps managerDeps) *csgclawManager {
 			deps.client,
 			deps.runtime.SessionManager(),
 			deps.events,
-			codexbridge.WithUserInputBroker(deps.runtime.UserInputBroker()),
-			codexbridge.WithParticipantWorkReporter(deps.reporter),
+			bridgeOptions...,
 		),
 		ensuring: newEnsureGate(),
 	}

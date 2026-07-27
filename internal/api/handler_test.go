@@ -4269,6 +4269,103 @@ func TestHandleSkillUpload(t *testing.T) {
 	}
 }
 
+func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
+	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/skills" {
+			t.Fatalf("path = %q, want /api/v1/skills", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("page"); got != "2" {
+			t.Fatalf("page = %q, want 2", got)
+		}
+		if got := r.URL.Query().Get("per"); got != "16" {
+			t.Fatalf("per = %q, want 16", got)
+		}
+		if got := r.URL.Query().Get("search"); got != "agents" {
+			t.Fatalf("search = %q, want agents", got)
+		}
+		if got := r.URL.Query().Get("sort"); got != "trending" {
+			t.Fatalf("sort = %q, want trending", got)
+		}
+		if got := r.URL.Query().Get("source"); got != "" {
+			t.Fatalf("source = %q, want empty", got)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{
+				"default_branch": "dev",
+				"description":    "Build agents",
+				"name":           "Skill",
+				"path":           "AIWizards/agent-builder",
+			}},
+			"total": "78",
+		})
+	}))
+	defer officialHub.Close()
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+
+[models]
+default = "default.model"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["model"]
+
+[[hub.registries]]
+name = "official"
+kind = "remote"
+url = "` + officialHub.URL + `/"
+enabled = true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+
+	srv := &Handler{}
+	srv.SetConfigPath(configPath)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/skills/remote?page=2&per=16&search=agents", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var response struct {
+		Items []struct {
+			Name       string `json:"name"`
+			Readonly   bool   `json:"readonly"`
+			RemotePath string `json:"remote_path"`
+			RemoteRef  string `json:"remote_ref"`
+			RemoteURL  string `json:"remote_url"`
+			Source     string `json:"source"`
+		} `json:"items"`
+		NextPage *int `json:"next_page"`
+		Page     int  `json:"page"`
+		Per      int  `json:"per"`
+		Total    *int `json:"total"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Page != 2 || response.Per != 16 || response.Total == nil || *response.Total != 78 {
+		t.Fatalf("response pagination = %+v, want page 2/per 16/total 78", response)
+	}
+	if response.NextPage == nil || *response.NextPage != 3 {
+		t.Fatalf("next_page = %v, want 3", response.NextPage)
+	}
+	if len(response.Items) != 1 {
+		t.Fatalf("items = %+v, want one", response.Items)
+	}
+	item := response.Items[0]
+	if item.Name != "agent-builder" || !item.Readonly || item.RemotePath != "AIWizards/agent-builder" || item.RemoteRef != "dev" || item.Source != "official" {
+		t.Fatalf("item = %+v, want normalized official skill", item)
+	}
+	if want := officialHub.URL + "/skills/AIWizards/agent-builder"; item.RemoteURL != want {
+		t.Fatalf("remote_url = %q, want %q", item.RemoteURL, want)
+	}
+}
+
 func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

@@ -76,6 +76,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Put("/{id}/workspace/file", h.putHubTemplateWorkspaceFileByID)
 		})
 		r.Get("/skills", h.listSkills)
+		r.Get("/skills/remote", h.handleRemoteSkills)
 		r.Post("/skills:upload", h.handleSkillUpload)
 		r.Post("/skills:install", h.handleSkillInstall)
 		r.Delete("/skills/{name}", h.deleteSkill)
@@ -227,7 +228,9 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Post("/messages", h.createParticipantMessage)
 			r.Post("/notifications", h.createParticipantNotification)
 			r.Put("/work-leases/{lease_id}", h.putParticipantWorkLease)
+			r.Patch("/work-leases/{lease_id}", h.patchParticipantWorkLease)
 			r.Delete("/work-leases/{lease_id}", h.deleteParticipantWorkLease)
+			r.Post("/work:stop", h.stopParticipantWork)
 		})
 		r.Post("/{channel}/activities/{activity_action}", h.handleChannelActivityAction)
 

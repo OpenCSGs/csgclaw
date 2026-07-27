@@ -2668,6 +2668,16 @@ func (s *Service) hydrateAgentStatus(ctx context.Context, a Agent) Agent {
 func statusAfterHydrateFailure(a Agent, stage string, err error) Agent {
 	if status := strings.TrimSpace(a.Status); status != "" {
 		if !sandbox.IsNotFound(err) {
+			if errors.Is(err, context.DeadlineExceeded) && isGatewayRuntimeKind(strings.TrimSpace(a.RuntimeKind)) {
+				logHydrateUnknownStatus(a, stage, err)
+				a.Status = StatusRuntimeUnavailable
+				return a
+			}
+			if isSandboxRuntimeUnavailable(err) {
+				logHydrateUnknownStatus(a, stage, err)
+				a.Status = StatusRuntimeUnavailable
+				return a
+			}
 			logHydrateStaleStatus(a, stage, err)
 			return a
 		}
@@ -2708,6 +2718,26 @@ func isSandboxRuntimeContention(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "failed to acquire runtime lock") ||
 		strings.Contains(msg, "another boxliteruntime is already using directory")
+}
+
+func isSandboxRuntimeUnavailable(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "check ") && strings.Contains(msg, " gateway ready") {
+		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	return strings.Contains(msg, "cannot connect to the docker daemon") ||
+		strings.Contains(msg, "docker daemon is not running") ||
+		strings.Contains(msg, "is the docker daemon running") ||
+		strings.Contains(msg, "error during connect") && strings.Contains(msg, "docker") ||
+		strings.Contains(msg, "docker_engine") && strings.Contains(msg, "cannot find the file") ||
+		strings.Contains(msg, "docker_engine") && strings.Contains(msg, "the system cannot find the file specified") ||
+		strings.Contains(msg, "sandbox provider") && strings.Contains(msg, "not available")
 }
 
 func logHydrateUnknownStatus(a Agent, stage string, err error) {

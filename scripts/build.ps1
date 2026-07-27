@@ -182,6 +182,26 @@ function Get-BinaryName {
     return $BaseName
 }
 
+function Remove-StaleHostBinaries {
+    param(
+        [Parameter(Mandatory = $true)][string]$Directory,
+        [Parameter(Mandatory = $true)][string]$Goos
+    )
+
+    $staleNames = if ($Goos -eq "windows") {
+        @("csgclaw", "csgclaw-cli")
+    }
+    else {
+        @("csgclaw.exe", "csgclaw-cli.exe")
+    }
+    foreach ($name in $staleNames) {
+        $path = Join-Path $Directory $name
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            Remove-Item -LiteralPath $path -Force
+        }
+    }
+}
+
 function Ensure-Directory {
     param([Parameter(Mandatory = $true)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -369,6 +389,7 @@ function Invoke-GoBuild {
 
 function Invoke-TargetBuildServerBin {
     Ensure-Directory -Path $script:BinDir
+    Remove-StaleHostBinaries -Directory $script:BinDir -Goos $script:TargetOs
 
     $serverBinary = Join-Path $script:BinDir (Get-BinaryName -BaseName "csgclaw" -Goos $script:TargetOs)
     $cliBinary = Join-Path $script:BinDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $script:TargetOs)

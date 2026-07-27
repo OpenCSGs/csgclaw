@@ -71,7 +71,7 @@ func (c ModelConfig) Resolved() ModelConfig {
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
 	out.APIKey = strings.TrimSpace(out.APIKey)
 	out.ModelID = strings.TrimSpace(out.ModelID)
-	out.ReasoningEffort = strings.ToLower(strings.TrimSpace(out.ReasoningEffort))
+	out.ReasoningEffort = NormalizeReasoningEffort(out.ReasoningEffort)
 	return out
 }
 
@@ -121,7 +121,7 @@ func (c ProviderConfig) Resolved() ProviderConfig {
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
 	out.APIKey = strings.TrimSpace(out.APIKey)
 	out.Headers = normalizeHeaderMap(out.Headers)
-	out.ReasoningEffort = strings.ToLower(strings.TrimSpace(out.ReasoningEffort))
+	out.ReasoningEffort = NormalizeReasoningEffort(out.ReasoningEffort)
 	out.Models = normalizeModelIDs(out.Models)
 	out.Status = strings.ToLower(strings.TrimSpace(out.Status))
 	out.Message = strings.TrimSpace(out.Message)

@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { SetStateAction } from "react";
 import { vi } from "vitest";
 import { TasksView } from "@/pages/TasksPage/components";
+import { ScheduledTaskFormFields } from "@/pages/TasksPage/components/TasksView/ScheduledTaskFormFields";
+import { TaskCreateDialog } from "@/pages/TasksPage/components/TasksView/TaskCreateDialog";
+import type { ScheduledTaskFormDraft, TaskCreateDraft } from "@/pages/TasksPage/components/TasksView/taskDialogTypes";
 import type { AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceScheduledTask, WorkspaceScheduledTaskRun } from "@/models/scheduledTasks";
@@ -139,6 +144,10 @@ const t: TranslateFn = (key, params = {}) => {
   }
   return labels[key] ?? key;
 };
+
+function applyStateAction<Value>(action: SetStateAction<Value>, current: Value): Value {
+  return typeof action === "function" ? (action as (value: Value) => Value)(current) : action;
+}
 
 function task(overrides: Partial<WorkspaceTask>): WorkspaceTask {
   return {
@@ -515,6 +524,107 @@ describe("TasksView", () => {
     expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Schedule" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Description")).not.toBeInTheDocument();
+  });
+
+  it("accepts consecutive characters in the task create text fields", async () => {
+    const user = userEvent.setup();
+
+    render(<TasksView showCreateTaskModal agents={[agent()]} teams={[team()]} t={t} />);
+
+    await user.type(screen.getByLabelText("Title"), "AB");
+    await user.type(screen.getByLabelText("Description"), "CD");
+
+    expect(screen.getByLabelText("Title")).toHaveValue("AB");
+    expect(screen.getByLabelText("Description")).toHaveValue("CD");
+  });
+
+  it("accepts consecutive changes in every scheduled-task input field", async () => {
+    const user = userEvent.setup();
+
+    render(<TasksView showCreateScheduledTaskModal agents={[agent()]} teams={[team()]} t={t} />);
+
+    await user.type(screen.getByLabelText("Title"), "AB");
+    await user.type(screen.getByLabelText("Prompt"), "CD");
+
+    const date = screen.getByLabelText("Date");
+    fireEvent.input(date, { target: { value: "2026-07-25" } });
+    fireEvent.input(date, { target: { value: "2026-07-26" } });
+
+    const time = screen.getByLabelText("Time");
+    fireEvent.input(time, { target: { value: "09:30" } });
+    fireEvent.input(time, { target: { value: "10:45" } });
+
+    const expiresDate = screen.getByLabelText("End date (optional)");
+    fireEvent.input(expiresDate, { target: { value: "2026-08-01" } });
+    fireEvent.input(expiresDate, { target: { value: "2026-08-02" } });
+
+    expect(screen.getByLabelText("Title")).toHaveValue("AB");
+    expect(screen.getByLabelText("Prompt")).toHaveValue("CD");
+    expect(date).toHaveValue("2026-07-26");
+    expect(time).toHaveValue("10:45");
+    expect(expiresDate).toHaveValue("2026-08-02");
+  });
+
+  it("captures task form values before passing deferred state updaters", () => {
+    const draft: TaskCreateDraft = { assignee: "", description: "", title: "" };
+    const updates: Array<SetStateAction<TaskCreateDraft>> = [];
+
+    render(
+      <TaskCreateDialog
+        assignmentOptions={[]}
+        busy={false}
+        draft={draft}
+        error=""
+        errors={{}}
+        onChange={(update) => updates.push(update)}
+        onClearError={vi.fn()}
+        onSubmit={vi.fn()}
+        open
+        t={t}
+      />,
+    );
+
+    fireEvent.input(screen.getByLabelText("Title"), { target: { value: "Task title" } });
+    fireEvent.input(screen.getByLabelText("Description"), { target: { value: "Task description" } });
+
+    expect(applyStateAction(updates[0], draft)).toEqual({ ...draft, title: "Task title" });
+    expect(applyStateAction(updates[1], draft)).toEqual({ ...draft, description: "Task description" });
+  });
+
+  it("captures scheduled-task values before passing deferred state updaters", () => {
+    const draft: ScheduledTaskFormDraft = {
+      agentID: "",
+      date: "",
+      expiresDate: "",
+      prompt: "",
+      recurrence: "once",
+      time: "",
+      title: "",
+    };
+    const updates: Array<SetStateAction<ScheduledTaskFormDraft>> = [];
+
+    render(
+      <ScheduledTaskFormFields
+        draft={draft}
+        errors={{}}
+        onChange={(update) => updates.push(update)}
+        onClearError={vi.fn()}
+        scheduledAgentOptions={[]}
+        t={t}
+      />,
+    );
+
+    fireEvent.input(screen.getByLabelText("Title"), { target: { value: "Scheduled title" } });
+    fireEvent.input(screen.getByLabelText("Prompt"), { target: { value: "Scheduled prompt" } });
+    fireEvent.input(screen.getByLabelText("Date"), { target: { value: "2026-07-25" } });
+    fireEvent.input(screen.getByLabelText("Time"), { target: { value: "09:30" } });
+    fireEvent.input(screen.getByLabelText("End date (optional)"), { target: { value: "2026-08-01" } });
+
+    expect(applyStateAction(updates[0], draft)).toEqual({ ...draft, title: "Scheduled title" });
+    expect(applyStateAction(updates[1], draft)).toEqual({ ...draft, prompt: "Scheduled prompt" });
+    expect(applyStateAction(updates[2], draft)).toEqual({ ...draft, date: "2026-07-25" });
+    expect(applyStateAction(updates[3], draft)).toEqual({ ...draft, time: "09:30" });
+    expect(applyStateAction(updates[4], draft)).toEqual({ ...draft, expiresDate: "2026-08-01" });
   });
 
   it("does not show planner as the current worker after a parent task is completed", () => {

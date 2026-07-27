@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"csgclaw/internal/activity"
+	"csgclaw/internal/apitypes"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channelbridge/runtimebridge"
+	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/slashcommand"
 	"csgclaw/internal/worklease"
@@ -30,6 +32,7 @@ const (
 	participantWorkTTLSeconds  = 15
 	participantWorkRenewEvery  = 5 * time.Second
 	participantWorkStopTimeout = 2 * time.Second
+	turnControlDrainTimeout    = 9 * time.Second
 )
 
 type Binding struct {
@@ -62,6 +65,7 @@ type Service struct {
 	promptSettle   time.Duration
 	workReporter   worklease.ParticipantWorkReporter
 	workRenewEvery time.Duration
+	turnControls   agentruntime.TurnControllerRegistrar
 
 	mu      sync.Mutex
 	workers map[string]*worker
@@ -78,6 +82,12 @@ func WithUserInputBroker(broker runtimecodex.UserInputBroker) ServiceOption {
 func WithParticipantWorkReporter(reporter worklease.ParticipantWorkReporter) ServiceOption {
 	return func(service *Service) {
 		service.workReporter = reporter
+	}
+}
+
+func WithTurnControllerRegistrar(registrar agentruntime.TurnControllerRegistrar) ServiceOption {
+	return func(service *Service) {
+		service.turnControls = registrar
 	}
 }
 
@@ -154,6 +164,10 @@ func (s *Service) StartBot(ctx context.Context, binding Binding) error {
 		seen:        newRecentSet(s.seenWindow),
 		cancel:      cancel,
 		done:        make(chan struct{}),
+	}
+	if s.turnControls != nil {
+		w.unregisterTurnControl = s.turnControls.RegisterTurnController(binding.BotID, w)
+		w.turnControlRegistered = true
 	}
 	s.workers[binding.BotID] = w
 	slog.Debug("codex bridge bot started",
@@ -291,15 +305,32 @@ type worker struct {
 	cancel  context.CancelFunc
 	done    chan struct{}
 
+	turnControlRegistered bool
+	unregisterTurnControl func()
+
 	mu          sync.Mutex
 	processing  string
 	lastEvent   string
 	latest      map[string]string
 	contextSent map[string]struct{}
+	activeTurn  *activeTurnControl
+}
+
+type activeTurnControl struct {
+	ref    agentruntime.TurnRef
+	cancel context.CancelFunc
+
+	mu            sync.Mutex
+	promptStarted bool
+	stopRequested bool
+	stopConfirmed bool
 }
 
 func (w *worker) run(ctx context.Context) {
 	defer close(w.done)
+	if w.unregisterTurnControl != nil {
+		defer w.unregisterTurnControl()
+	}
 
 	eventCh, cancelEvents := w.service.events.Subscribe(w.binding.RuntimeID)
 	defer cancelEvents()
@@ -371,8 +402,9 @@ func (w *worker) enqueue(ctx context.Context, evt BotEvent) {
 }
 
 func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-chan runtimecodex.SessionEvent) error {
-	stopParticipantWork := w.startParticipantWork(ctx, evt)
-	defer stopParticipantWork()
+	turnCtx, finishTurn := w.startControlledTurn(ctx, evt)
+	defer finishTurn()
+	ctx = turnCtx
 	eventStartedAt := time.Now()
 	cleanupProcessingReaction := w.startProcessingReaction(ctx, evt)
 	defer cleanupProcessingReaction(context.Background())
@@ -482,21 +514,24 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 	}
 
 	type promptResult struct {
-		err error
+		response runtimecodex.PromptResponse
+		err      error
 	}
 	promptDone := make(chan promptResult, 1)
+	w.markActiveTurnPromptStarted()
 	go func() {
 		promptStartedAt := time.Now()
-		_, err := w.service.prompter.Prompt(ctx, runtimecodex.SessionHandle{RuntimeID: w.binding.RuntimeID}, req)
+		response, err := w.service.prompter.Prompt(ctx, runtimecodex.SessionHandle{RuntimeID: w.binding.RuntimeID}, req)
 		slog.Debug("codex bridge prompt returned",
 			"bot_id", w.binding.BotID,
 			"runtime_id", w.binding.RuntimeID,
 			"session_id", sessionID,
 			"message_id", strings.TrimSpace(evt.MessageID),
 			"duration", time.Since(promptStartedAt),
+			"stop_reason", strings.TrimSpace(response.StopReason),
 			"error", err,
 		)
-		promptDone <- promptResult{err: err}
+		promptDone <- promptResult{response: response, err: err}
 	}()
 
 	promptReturned := false
@@ -604,6 +639,23 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 	for {
 		select {
 		case <-ctx.Done():
+			if !w.activeTurnStopWasRequested() {
+				return ctx.Err()
+			}
+			drainTimer := time.NewTimer(turnControlDrainTimeout)
+			select {
+			case result := <-promptDone:
+				if result.response.StopReason == runtimecodex.StopReasonInterrupted {
+					w.confirmActiveTurnStop()
+				}
+			case <-drainTimer.C:
+			}
+			if !drainTimer.Stop() {
+				select {
+				case <-drainTimer.C:
+				default:
+				}
+			}
 			return ctx.Err()
 		case event, ok := <-runtimeEvents:
 			if !ok {
@@ -627,6 +679,12 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 			}
 		case result := <-promptDone:
 			promptReturned = true
+			if ctx.Err() != nil {
+				if result.response.StopReason == runtimecodex.StopReasonInterrupted {
+					w.confirmActiveTurnStop()
+				}
+				return ctx.Err()
+			}
 			if w.isSuperseded(evt) {
 				cleanupProcessingReaction(ctx)
 				// Prompt completion is published through the event sink before the
@@ -695,23 +753,81 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 	}
 }
 
-func (w *worker) startParticipantWork(ctx context.Context, evt BotEvent) func() {
-	if w == nil || w.service == nil || w.service.workReporter == nil || !strings.EqualFold(strings.TrimSpace(evt.Channel), localChannel) {
-		return func() {}
-	}
+func (w *worker) startControlledTurn(ctx context.Context, evt BotEvent) (context.Context, func()) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if w == nil || w.service == nil || w.service.workReporter == nil || !strings.EqualFold(strings.TrimSpace(evt.Channel), localChannel) {
+		return ctx, func() {}
+	}
+	turnCtx, cancelTurn := context.WithCancel(ctx)
 	lease := worklease.ParticipantWorkLease{
 		ParticipantID: w.binding.BotID,
 		LeaseID:       worklease.NewID(),
 		RoomID:        strings.TrimSpace(evt.RoomID),
 		ThreadRootID:  strings.TrimSpace(evt.ThreadRootID),
 		RequestID:     strings.TrimSpace(evt.MessageID),
-		Kind:          "agent_turn",
+		Kind:          apitypes.ParticipantWorkKindAgentTurn,
 		TTLSeconds:    participantWorkTTLSeconds,
 		TTLExplicit:   true,
 	}
+	var control *activeTurnControl
+	if w.turnControlRegistered {
+		control = &activeTurnControl{
+			ref: agentruntime.TurnRef{
+				ParticipantID: lease.ParticipantID,
+				RoomID:        lease.RoomID,
+				LeaseID:       lease.LeaseID,
+				RequestID:     lease.RequestID,
+			},
+			cancel: cancelTurn,
+		}
+		w.mu.Lock()
+		w.activeTurn = control
+		w.mu.Unlock()
+	}
+	finishWork := w.startParticipantWorkLease(turnCtx, lease, control != nil)
+
+	var once sync.Once
+	return turnCtx, func() {
+		once.Do(func() {
+			outcome := apitypes.ParticipantWorkOutcomeReleased
+			requested := false
+			confirmed := false
+			if control != nil {
+				control.mu.Lock()
+				requested = control.stopRequested
+				confirmed = requested && control.stopConfirmed
+				if confirmed {
+					outcome = apitypes.ParticipantWorkOutcomeStopped
+				} else if requested {
+					outcome = apitypes.ParticipantWorkOutcomeStopTimedOut
+				}
+				control.mu.Unlock()
+			}
+			_ = finishWork(outcome)
+			if control != nil {
+				w.mu.Lock()
+				if w.activeTurn == control {
+					w.activeTurn = nil
+				}
+				w.mu.Unlock()
+			}
+			cancelTurn()
+		})
+	}
+}
+
+func (w *worker) startParticipantWork(ctx context.Context, evt BotEvent) func() {
+	_, finish := w.startControlledTurn(ctx, evt)
+	return finish
+}
+
+func (w *worker) startParticipantWorkLease(
+	ctx context.Context,
+	lease worklease.ParticipantWorkLease,
+	advertiseTurnStop bool,
+) func(string) error {
 	reporter := w.service.workReporter
 	closed := false
 	if _, err := reporter.StartOrRenew(ctx, lease); err != nil {
@@ -723,6 +839,23 @@ func (w *worker) startParticipantWork(ctx context.Context, evt BotEvent) func() 
 			"lease_id", lease.LeaseID,
 			"error", err,
 		)
+	}
+	if !closed && advertiseTurnStop {
+		if statusReporter, ok := reporter.(worklease.ParticipantWorkStatusReporter); ok {
+			if _, _, err := statusReporter.UpdateStatus(ctx, lease.ParticipantID, lease.LeaseID, apitypes.ParticipantWorkStatusPatchRequest{
+				Capabilities: []string{apitypes.ParticipantWorkCapabilityTurnStopV1},
+				Sequence:     1,
+				Phase:        apitypes.ParticipantWorkPhaseWorking,
+			}); err != nil {
+				slog.Warn("codex bridge participant turn stop capability report failed",
+					"participant_id", lease.ParticipantID,
+					"room_id", lease.RoomID,
+					"message_id", lease.RequestID,
+					"lease_id", lease.LeaseID,
+					"error", err,
+				)
+			}
+		}
 	}
 
 	renewCtx, cancelRenew := context.WithCancel(ctx)
@@ -757,23 +890,109 @@ func (w *worker) startParticipantWork(ctx context.Context, evt BotEvent) func() 
 	}
 
 	var once sync.Once
-	return func() {
+	var finishErr error
+	return func(outcome string) error {
 		once.Do(func() {
 			cancelRenew()
 			<-renewDone
 			releaseCtx, cancelRelease := context.WithTimeout(context.WithoutCancel(ctx), participantWorkStopTimeout)
 			defer cancelRelease()
-			if err := reporter.Stop(releaseCtx, lease.ParticipantID, lease.LeaseID); err != nil {
-				slog.Warn("codex bridge participant work lease stop failed",
+			if finisher, ok := reporter.(worklease.ParticipantWorkFinisher); ok {
+				finishErr = finisher.Finish(releaseCtx, lease.ParticipantID, lease.LeaseID, outcome)
+			} else {
+				finishErr = reporter.Stop(releaseCtx, lease.ParticipantID, lease.LeaseID)
+			}
+			if finishErr != nil {
+				slog.Warn("codex bridge participant work lease finish failed",
 					"participant_id", lease.ParticipantID,
 					"room_id", lease.RoomID,
 					"message_id", lease.RequestID,
 					"lease_id", lease.LeaseID,
-					"error", err,
+					"outcome", outcome,
+					"error", finishErr,
 				)
 			}
 		})
+		return finishErr
 	}
+}
+
+func (w *worker) StopTurn(ctx context.Context, ref agentruntime.TurnRef) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if w == nil {
+		return agentruntime.ErrTurnNotFound
+	}
+	w.mu.Lock()
+	active := w.activeTurn
+	w.mu.Unlock()
+	if active == nil || !sameTurnRef(active.ref, ref) {
+		return agentruntime.ErrTurnNotFound
+	}
+	active.mu.Lock()
+	active.stopRequested = true
+	if !active.promptStarted {
+		active.stopConfirmed = true
+	}
+	cancel := active.cancel
+	active.mu.Unlock()
+	cancel()
+	return nil
+}
+
+func (w *worker) confirmActiveTurnStop() {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	active := w.activeTurn
+	w.mu.Unlock()
+	if active == nil {
+		return
+	}
+	active.mu.Lock()
+	if active.stopRequested {
+		active.stopConfirmed = true
+	}
+	active.mu.Unlock()
+}
+
+func (w *worker) markActiveTurnPromptStarted() {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	active := w.activeTurn
+	w.mu.Unlock()
+	if active == nil {
+		return
+	}
+	active.mu.Lock()
+	active.promptStarted = true
+	active.mu.Unlock()
+}
+
+func (w *worker) activeTurnStopWasRequested() bool {
+	if w == nil {
+		return false
+	}
+	w.mu.Lock()
+	active := w.activeTurn
+	w.mu.Unlock()
+	if active == nil {
+		return false
+	}
+	active.mu.Lock()
+	defer active.mu.Unlock()
+	return active.stopRequested
+}
+
+func sameTurnRef(left, right agentruntime.TurnRef) bool {
+	return strings.TrimSpace(left.ParticipantID) == strings.TrimSpace(right.ParticipantID) &&
+		strings.TrimSpace(left.RoomID) == strings.TrimSpace(right.RoomID) &&
+		strings.TrimSpace(left.LeaseID) == strings.TrimSpace(right.LeaseID) &&
+		strings.TrimSpace(left.RequestID) == strings.TrimSpace(right.RequestID)
 }
 
 func (w *worker) activateStructuredUserInput(
