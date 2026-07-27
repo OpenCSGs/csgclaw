@@ -107,6 +107,56 @@ func TestOpenPrefersEnvOverAuthStore(t *testing.T) {
 	}
 }
 
+func TestRuntimeCloseWaitsForInFlightOperation(t *testing.T) {
+	requestStarted := make(chan struct{})
+	releaseRequest := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/sandboxes/worker-1" {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusNotFound)
+			return
+		}
+		close(requestStarted)
+		<-releaseRequest
+		writeSandboxState(w, "worker-1", "img:1", "running")
+	}))
+	t.Cleanup(server.Close)
+	setRequiredEnv(t, server.URL)
+
+	rtAny, err := NewProvider().Open(context.Background(), "")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	rt := rtAny.(*Runtime)
+	getDone := make(chan error, 1)
+	go func() {
+		_, getErr := rt.Get(context.Background(), "worker-1")
+		getDone <- getErr
+	}()
+	<-requestStarted
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- rt.Close()
+	}()
+	select {
+	case err := <-closeDone:
+		t.Fatalf("Close() completed during in-flight Get(), error = %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(releaseRequest)
+	if err := <-getDone; err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if err := <-closeDone; err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if _, err := rt.Get(context.Background(), "worker-1"); err == nil {
+		t.Fatal("Get() after Close() error = nil, want invalid runtime error")
+	}
+}
+
 func TestRuntimeCreateBuildsRequestAndMapsMounts(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

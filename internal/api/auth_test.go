@@ -280,6 +280,32 @@ func TestHandleAuthLogout(t *testing.T) {
 	}
 }
 
+func TestHandleAuthLogoutResetsRuntimeAfterCredentialsAreDeleted(t *testing.T) {
+	logoutComplete := false
+	restore := stubAuthLogout(func(*http.Request) (auth.Status, error) {
+		logoutComplete = true
+		return auth.Status{}, nil
+	})
+	defer restore()
+	resetCalls := 0
+	handler := &Handler{environmentRuntimeReset: func() error {
+		if !logoutComplete {
+			t.Fatal("runtime reset before credentials were deleted")
+		}
+		resetCalls++
+		return nil
+	}}
+
+	rec := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if resetCalls != 1 {
+		t.Fatalf("runtime reset calls = %d, want 1", resetCalls)
+	}
+}
+
 func TestHandleAuthLogoutClearsCachedOpenCSGModels(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	writeCachedOpenCSGModelsConfig(t, configPath)

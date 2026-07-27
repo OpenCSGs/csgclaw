@@ -159,12 +159,12 @@ func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	h.resetEnvironmentSensitiveRuntimes()
 	status, err := appAuthLogout(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.resetEnvironmentSensitiveRuntimes()
 	if err := h.clearOpenCSGModelProviderCache(); err != nil {
 		slog.Warn("clear OpenCSG models after logout failed", "error", err)
 	}
@@ -185,10 +185,17 @@ func (h *Handler) syncAgentHubService(r *http.Request) {
 }
 
 func (h *Handler) resetEnvironmentSensitiveRuntimes() {
-	if h == nil || h.svc == nil {
+	if h == nil {
 		return
 	}
-	if err := h.svc.ResetSandboxRuntimes(); err != nil {
+	reset := h.environmentRuntimeReset
+	if reset == nil && h.svc != nil {
+		reset = h.svc.ResetSandboxRuntimes
+	}
+	if reset == nil {
+		return
+	}
+	if err := reset(); err != nil {
 		slog.Warn("reset sandbox runtimes after OpenCSG environment change failed", "error", err)
 	}
 }

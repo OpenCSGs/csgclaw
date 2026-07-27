@@ -73,6 +73,7 @@ type Handler struct {
 	upgradeApply               func(upgrade.ApplyHelperOptions) error
 	serverRestartApply         func(upgrade.RestartHelperOptions) error
 	localRuntimeImages         func(context.Context, config.Config) ([]string, error)
+	environmentRuntimeReset    func() error
 	notificationDeliver        notification.Fanouter
 	activityDecider            ActivityDecider
 	userInputResponder         UserInputResponder
