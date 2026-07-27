@@ -1,30 +1,30 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, Monitor, Moon, SlidersHorizontal, Sun } from "lucide-react";
-import { Button, Select, Tooltip } from "@/components/ui";
+import { Monitor, Moon, Sun } from "lucide-react";
+import { Button, Tooltip } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
-  AUTH_ENVIRONMENT_PRESETS,
   authEnvironmentDisplayLabel,
-  authEnvironmentDraftFromPreset,
   authEnvironmentDraftFromStatus,
-  authEnvironmentLoginReady,
-  resolveAuthEnvironmentDraft,
+  defaultAuthEnvironmentDraft,
 } from "@/models/authEnvironment";
-import type { AuthEnvironmentDraft, AuthEnvironmentPresetID } from "@/models/authEnvironment";
+import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import { githubFeedbackIssueURL } from "@/models/feedback";
 import { formatSidebarVersionLabel, hasUpgradeAttention, isLocalBuildUpgradeStatus } from "@/models/upgradeStatus";
 import { classNames } from "@/shared/lib/classNames";
 import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from "@/shared/storage/authEnvironment";
 import type { ThemeMode } from "@/shared/theme/theme";
+import { OpenCSGConnectionDialog, OpenCSGSwitchDialog } from "./components/OpenCSGConnectionDialog";
 import styles from "./SettingsPage.module.css";
 
 export function SettingsPage() {
   const controller = useWorkspaceControllerContext();
   const [uncontrolledAuthEnvironmentDraft, setUncontrolledAuthEnvironmentDraft] =
     useState<AuthEnvironmentDraft>(readStoredAuthEnvironmentDraft);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [connectionDraft, setConnectionDraft] = useState<AuthEnvironmentDraft>(defaultAuthEnvironmentDraft);
+  const [connectionOpen, setConnectionOpen] = useState(false);
+  const [switchOpen, setSwitchOpen] = useState(false);
   const sidebar = controller.sidebarProps;
 
   if (!controller.ready || !sidebar) {
@@ -38,11 +38,6 @@ export function SettingsPage() {
     sidebar.authStatus.user_id ||
     sidebar.authStatus.user_uuid ||
     sidebar.t("csghubSignedIn");
-  const loginLabel = sidebar.authPending
-    ? sidebar.t("csghubLoginPending")
-    : sidebar.authBusy
-      ? sidebar.t("csghubSigningIn")
-      : sidebar.t("settingsAccountLogin");
   const currentVersion = sidebar.upgradeStatus?.current_version || sidebar.appVersion;
   const version = formatSidebarVersionLabel(currentVersion);
   const mockUpgradeAvailable = import.meta.env.DEV && isMockUpgradePreviewEnabled();
@@ -62,21 +57,9 @@ export function SettingsPage() {
   const activeAuthEnvironmentDraft = signedIn
     ? authEnvironmentDraftFromStatus(sidebar.authStatus, authEnvironmentDraft)
     : authEnvironmentDraft;
-  const authEnvironmentReady = authEnvironmentLoginReady(authEnvironmentDraft);
-  const authActionDisabled = sidebar.authBusy || sidebar.authPending || !authEnvironmentReady;
-  const showAuthEnvironmentAdvanced = advancedOpen || authEnvironmentDraft.preset === "custom";
   const authEnvironmentLabel = authEnvironmentDisplayLabel(activeAuthEnvironmentDraft, sidebar.t("csghubEnvCustom"));
-  const authEnvironmentOptions = [
-    ...AUTH_ENVIRONMENT_PRESETS.map((preset) => ({
-      label: preset.label,
-      value: preset.id,
-    })),
-    {
-      label: sidebar.t("csghubEnvCustom"),
-      value: "custom",
-    },
-  ];
   const onLogin = sidebar.onLogin;
+  const onLogout = sidebar.onLogout;
   const onAuthEnvironmentChange = sidebar.onAuthEnvironmentChange;
 
   function updateAuthEnvironment(next: AuthEnvironmentDraft) {
@@ -85,39 +68,21 @@ export function SettingsPage() {
     onAuthEnvironmentChange?.(next);
   }
 
-  function handleAuthEnvironmentPresetChange(preset: AuthEnvironmentPresetID) {
-    if (preset === "custom") {
-      setAdvancedOpen(true);
-      updateAuthEnvironment(
-        authEnvironmentDraft.preset === "custom"
-          ? authEnvironmentDraft
-          : {
-              preset: "custom",
-              opencsgBaseURL: "",
-              csgHubBaseURL: "",
-              aiGatewayBaseURL: "",
-            },
-      );
-      return;
-    }
-    setAdvancedOpen(false);
-    updateAuthEnvironment(authEnvironmentDraftFromPreset(preset));
-  }
-
-  function handleAuthEnvironmentInputChange(value: string) {
-    updateAuthEnvironment({
-      ...authEnvironmentDraft,
-      preset: "custom",
-      opencsgBaseURL: value,
-      csgHubBaseURL: "",
-      aiGatewayBaseURL: "",
-    });
+  function openConnectionDialog(draft = authEnvironmentDraft) {
+    setConnectionDraft(draft);
+    setConnectionOpen(true);
   }
 
   function handleLogin() {
-    const next = resolveAuthEnvironmentDraft(authEnvironmentDraft);
-    updateAuthEnvironment(next);
-    void onLogin(next);
+    updateAuthEnvironment(connectionDraft);
+    setConnectionOpen(false);
+    void onLogin(connectionDraft);
+  }
+
+  async function handleSwitchEnvironment() {
+    await onLogout();
+    setSwitchOpen(false);
+    openConnectionDialog(activeAuthEnvironmentDraft);
   }
 
   return (
@@ -130,17 +95,24 @@ export function SettingsPage() {
       </header>
 
       <div className={styles.content}>
-        <SettingsRow
-          className={styles.rowNoDivider}
-          title={sidebar.t("settingsCommunityAccount")}
-          description={sidebar.t("settingsCommunityAccountDescription")}
-          contentClassName={styles.accountContent}
-        >
+        <SettingsRow title={sidebar.t("settingsOpenCSGAccount")} description={sidebar.t("settingsOpenCSGDescription")}>
           <div className={styles.accountStack}>
             <div className={styles.accountActionLine}>
               {signedIn ? (
                 <>
-                  <span className={styles.accountIdentity}>{accountName}</span>
+                  <span className={styles.accountSummary}>
+                    <strong className={styles.accountIdentity}>{accountName}</strong>
+                    <span>{authEnvironmentLabel}</span>
+                  </span>
+                  <Button
+                    className={styles.designButton}
+                    variant="secondaryGray"
+                    size="md"
+                    disabled={sidebar.authBusy}
+                    onClick={() => setSwitchOpen(true)}
+                  >
+                    {sidebar.t("csghubSwitchEnvironment")}
+                  </Button>
                   <Button
                     className={styles.designButton}
                     variant="secondaryGray"
@@ -156,61 +128,16 @@ export function SettingsPage() {
                   className={styles.designButton}
                   variant="secondaryGray"
                   size="md"
-                  disabled={authActionDisabled}
-                  onClick={handleLogin}
+                  disabled={sidebar.authBusy || sidebar.authPending}
+                  onClick={() => openConnectionDialog()}
                 >
-                  {loginLabel}
+                  {sidebar.authPending ? sidebar.t("csghubLoginPending") : sidebar.t("settingsAccountLogin")}
                 </Button>
               )}
             </div>
             {sidebar.authPending ? <p className={styles.statusHint}>{sidebar.t("csghubLoginPendingDetail")}</p> : null}
             {sidebar.authError ? <div className={styles.inlineError}>{sidebar.authError}</div> : null}
           </div>
-        </SettingsRow>
-
-        <SettingsRow
-          title={sidebar.t("csghubSwitchEnvironment")}
-          description={sidebar.t("settingsEnvironmentDescription")}
-        >
-          <div className={styles.environmentLine}>
-            <span className={styles.controlLabel}>{sidebar.t("csghubLoginEnvironment")}</span>
-            {signedIn ? (
-              <strong className={styles.environmentValue}>{authEnvironmentLabel}</strong>
-            ) : (
-              <span className={styles.environmentControls}>
-                <Select
-                  contentClassName={styles.environmentSelectContent}
-                  options={authEnvironmentOptions}
-                  size="md"
-                  triggerClassName={styles.environmentSelectTrigger}
-                  value={authEnvironmentDraft.preset}
-                  onValueChange={(value) => handleAuthEnvironmentPresetChange(value as AuthEnvironmentPresetID)}
-                />
-                <Tooltip content={sidebar.t("csghubAdvancedSettings")}>
-                  <button
-                    type="button"
-                    className={classNames(styles.advancedToggle, showAuthEnvironmentAdvanced && styles.open)}
-                    aria-label={sidebar.t("csghubAdvancedSettings")}
-                    aria-expanded={showAuthEnvironmentAdvanced}
-                    onClick={() => setAdvancedOpen((value) => !value)}
-                  >
-                    <SlidersHorizontal size={16} strokeWidth={2} aria-hidden="true" />
-                    <ChevronDown size={14} strokeWidth={2.2} aria-hidden="true" />
-                  </button>
-                </Tooltip>
-              </span>
-            )}
-          </div>
-          {!signedIn && showAuthEnvironmentAdvanced ? (
-            <label className={styles.environmentAdvanced}>
-              <span>{sidebar.t("csghubOpenCSGBaseURL")}</span>
-              <input
-                value={authEnvironmentDraft.opencsgBaseURL}
-                placeholder="https://openeast.opencsg.com"
-                onChange={(event) => handleAuthEnvironmentInputChange(event.currentTarget.value)}
-              />
-            </label>
-          ) : null}
         </SettingsRow>
 
         <SettingsRow title={sidebar.t("appearanceSettings")} description={sidebar.t("settingsAppearanceDescription")}>
@@ -317,6 +244,25 @@ export function SettingsPage() {
           </div>
         </SettingsRow>
       </div>
+
+      <OpenCSGConnectionDialog
+        busy={sidebar.authBusy}
+        draft={connectionDraft}
+        open={connectionOpen}
+        t={sidebar.t}
+        onConnect={handleLogin}
+        onDraftChange={setConnectionDraft}
+        onOpenChange={setConnectionOpen}
+      />
+      <OpenCSGSwitchDialog
+        accountName={accountName}
+        busy={sidebar.authBusy}
+        environmentLabel={authEnvironmentLabel}
+        open={switchOpen}
+        t={sidebar.t}
+        onConfirm={() => void handleSwitchEnvironment()}
+        onOpenChange={setSwitchOpen}
+      />
     </section>
   );
 }

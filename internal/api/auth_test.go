@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,11 +148,37 @@ func TestHandleAuthCallback(t *testing.T) {
 	if rec.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusFound, rec.Body.String())
 	}
-	if got := rec.Header().Get("Location"); got != "http://127.0.0.1:18080/#/workspace" {
+	if got := rec.Header().Get("Location"); got != "http://127.0.0.1:18080/#/workspace?auth_result=success" {
 		t.Fatalf("Location = %q", got)
 	}
 	if gotToken != "jwt-value" {
 		t.Fatalf("jwt_token = %q", gotToken)
+	}
+}
+
+func TestHandleAuthCallbackReturnsFailureToSettings(t *testing.T) {
+	restore := stubAuthCallback(func(*http.Request, string) (string, error) {
+		return "", errors.New("sensitive callback detail")
+	})
+	defer restore()
+
+	state := url.Values{"return_url": []string{"http://127.0.0.1:18080/#/settings"}}.Encode()
+	authState := base64.RawURLEncoding.EncodeToString([]byte(state))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/callback?auth_state="+url.QueryEscape(authState), nil)
+	(&Handler{}).Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusFound, rec.Body.String())
+	}
+	location := rec.Header().Get("Location")
+	if !strings.Contains(location, "#/settings?") ||
+		!strings.Contains(location, "auth_result=failed") ||
+		!strings.Contains(location, "auth_reason=account_sync_failed") {
+		t.Fatalf("Location = %q, want safe settings failure redirect", location)
+	}
+	if strings.Contains(rec.Body.String(), "sensitive callback detail") {
+		t.Fatalf("response exposed callback error: %s", rec.Body.String())
 	}
 }
 

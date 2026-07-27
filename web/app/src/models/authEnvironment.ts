@@ -138,7 +138,15 @@ export function authEnvironmentLoginPayload(draft: AuthEnvironmentDraft): AuthEn
 }
 
 export function authEnvironmentLoginReady(draft: AuthEnvironmentDraft): boolean {
-  return Boolean(resolveAuthEnvironmentDraft(draft).opencsgBaseURL);
+  const { opencsgBaseURL } = resolveAuthEnvironmentDraft(draft);
+  try {
+    const url = new URL(opencsgBaseURL);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") && Boolean(url.hostname) && !url.username && !url.password
+    );
+  } catch (_) {
+    return false;
+  }
 }
 
 export function authEnvironmentDisplayLabel(draft: AuthEnvironmentDraft, customLabel = "Custom"): string {

@@ -658,6 +658,12 @@ func callbackReturnURL(values url.Values, advertiseBaseURL string) string {
 	return ""
 }
 
+// CallbackReturnURL extracts and validates the UI return target packed into an
+// authentication callback so failures can return users to the app safely.
+func CallbackReturnURL(values url.Values, advertiseBaseURL string) string {
+	return callbackReturnURL(callbackValuesWithAuthState(values), advertiseBaseURL)
+}
+
 func normalizeAuthBaseURL(raw, name string) (string, error) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	if raw == "" {

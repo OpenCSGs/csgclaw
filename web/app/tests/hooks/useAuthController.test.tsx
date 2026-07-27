@@ -43,6 +43,7 @@ function createWrapper() {
 
 describe("useAuthController", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/#/settings");
     window.localStorage.clear();
     window.sessionStorage.clear();
     vi.mocked(beginAuthLogin).mockReset();
@@ -66,6 +67,21 @@ describe("useAuthController", () => {
 
     act(() => result.current.dismissNotice());
     expect(result.current.notice).toBeNull();
+  });
+
+  it("restores the completed login notice from the callback result", async () => {
+    window.history.replaceState({}, "", "/#/settings?auth_result=success");
+    vi.mocked(fetchAuthStatus).mockResolvedValue({
+      authenticated: true,
+      user_id: "alice",
+      user_uuid: "user-1",
+    });
+
+    const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.notice?.message).toBe("User alice signed in."));
+    expect(window.location.hash).toBe("#/settings");
+    expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBeNull();
   });
 
   it("keeps the default completed login notice for production", async () => {
@@ -164,5 +180,17 @@ describe("useAuthController", () => {
         ai_gateway_base_url: "https://openeast.opencsg.com/aigateway/v1",
       }),
     );
+  });
+
+  it("surfaces a safe callback failure and removes it from the URL", async () => {
+    window.history.replaceState({}, "", "/#/settings?auth_result=failed&auth_reason=invalid_callback");
+    window.sessionStorage.setItem(loginPendingStorageKey, "1");
+    vi.mocked(fetchAuthStatus).mockResolvedValue({ authenticated: false });
+
+    const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.error).toBe("csghubCallbackInvalid"));
+    expect(window.location.hash).toBe("#/settings");
+    expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBeNull();
   });
 });

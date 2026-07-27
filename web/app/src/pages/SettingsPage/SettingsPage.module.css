@@ -155,6 +155,15 @@
   white-space: nowrap;
 }
 
+.accountSummary {
+  min-width: 0;
+  display: grid;
+  justify-items: end;
+  color: var(--gray-500);
+  font-size: 13px;
+  line-height: 18px;
+}
+
 .inlineError,
 .statusHint {
   margin: 0;
@@ -448,6 +457,10 @@
   color: var(--gray-100);
 }
 
+:root[data-theme="dark"] .accountSummary {
+  color: var(--gray-400);
+}
+
 :root[data-theme="dark"] .header p,
 :root[data-theme="dark"] .rowIntro p,
 :root[data-theme="dark"] .versionValue strong,
@@ -541,6 +554,15 @@
   .statusHint {
     justify-content: flex-start;
     text-align: left;
+  }
+
+  .accountActionLine {
+    flex-wrap: wrap;
+  }
+
+  .accountSummary {
+    width: 100%;
+    justify-items: start;
   }
 
   .environmentControls {

@@ -38,6 +38,7 @@
   gap: 10px;
   overflow: hidden;
   isolation: isolate;
+  animation: toastEnter 200ms cubic-bezier(0.2, 1, 0.2, 1) both;
 }
 
 .toastRoot::before {
@@ -52,14 +53,6 @@
     color-mix(in oklab, var(--brand-100) 22%, transparent)
   );
   opacity: 0.3;
-}
-
-.toastRoot[data-state="open"] {
-  animation: toastEnter 200ms cubic-bezier(0.2, 1, 0.2, 1) both;
-}
-
-.toastRoot[data-state="closed"] {
-  animation: toastExit 160ms ease-in both;
 }
 
 .toastBody {
@@ -107,6 +100,7 @@
 
 .toastText {
   min-width: 0;
+  display: grid;
 }
 
 .toastTitle {
@@ -159,17 +153,5 @@
   to {
     transform: translate3d(0, 0, 0) scale(1);
     opacity: 1;
-  }
-}
-
-@keyframes toastExit {
-  from {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translate3d(12px, -6px, 0);
   }
 }

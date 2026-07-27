@@ -2,6 +2,7 @@ import {
   authEnvironmentDisplayLabel,
   authEnvironmentDraftFromPreset,
   authEnvironmentDraftFromStatus,
+  authEnvironmentLoginReady,
   authEnvironmentLoginPayload,
   normalizeAuthEnvironmentDraft,
 } from "@/models/authEnvironment";
@@ -106,5 +107,25 @@ describe("auth environment model", () => {
     expect(authEnvironmentDisplayLabel(normalizeAuthEnvironmentDraft({ preset: "custom" }), "Custom environment")).toBe(
       "Custom environment",
     );
+  });
+
+  it("requires a valid HTTP or HTTPS site before login", () => {
+    expect(authEnvironmentLoginReady(authEnvironmentDraftFromPreset("prod"))).toBe(true);
+    expect(
+      authEnvironmentLoginReady({
+        preset: "custom",
+        opencsgBaseURL: "not-a-url",
+        csgHubBaseURL: "",
+        aiGatewayBaseURL: "",
+      }),
+    ).toBe(false);
+    expect(
+      authEnvironmentLoginReady({
+        preset: "custom",
+        opencsgBaseURL: "javascript:alert(1)",
+        csgHubBaseURL: "",
+        aiGatewayBaseURL: "",
+      }),
+    ).toBe(false);
   });
 });
