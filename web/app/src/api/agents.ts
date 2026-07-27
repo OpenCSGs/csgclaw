@@ -1,6 +1,7 @@
 import { del, get, patch, post, put, requestText, type ApiError } from "@/api/client";
 import { BOT_TYPE_NOTIFICATION, MANAGER_AGENT_ID } from "@/shared/constants/agents";
 import {
+  isNotificationBotAgent,
   resolveRuntimeSelection,
   type AgentLike,
   type AgentProfileLike,
@@ -350,6 +351,14 @@ export function deleteBotRequest(botID: string, options: DeleteBotOptions = {}):
   }
   const query = params.toString();
   return del(`api/v1/channels/csgclaw/participants/${encodeURIComponent(botID)}${query ? `?${query}` : ""}`);
+}
+
+export function deleteAgentLikeRequest(item: AgentLike): Promise<void> {
+  const id = String(item.id ?? "").trim();
+  if (!id) {
+    return Promise.reject(new Error("agent id is required"));
+  }
+  return isNotificationBotAgent(item) ? deleteBotRequest(id) : deleteAgentRequest(id);
 }
 
 export function deleteFeishuParticipantRequest(participantID: string): Promise<void> {
