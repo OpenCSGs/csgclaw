@@ -176,10 +176,10 @@ export function OpenCSGSwitchDialog({
           <p className={styles.switchNote}>{t("csghubSwitchConfirmNote")}</p>
         </DialogBody>
         <DialogFooter className={styles.actions}>
-          <Button variant="secondaryGray" size="sm" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => onOpenChange(false)}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" size="sm" loading={busy} onClick={onConfirm}>
+          <Button variant="primary" size="md" loading={busy} onClick={onConfirm}>
             {t("csghubSwitchConfirmAction")}
           </Button>
         </DialogFooter>
