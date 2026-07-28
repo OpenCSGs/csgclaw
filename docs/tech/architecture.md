@@ -63,7 +63,7 @@ The following diagram shows the relationships among the main CSGClaw concepts.
 <details>
 <summary>View the colored version</summary>
 
-![CSGClaw concepts relationship diagram](../assets/architecture.png)
+![CSGClaw concepts relationship diagram](../../assets/architecture.png)
 
 </details>
 
@@ -125,7 +125,7 @@ The local HTTP server and Web UI sit beside these layers as operator and user en
 
 ## IM Threads
 
-The built-in IM thread model is documented in [im-threads.md](./im-threads.md).
+The built-in IM thread model is documented in [im-threads.md](im/im-threads.md).
 Threads are root-message-anchored sub-conversations inside a room or DM. They
 use Matrix-shaped `m.thread` relation metadata while staying inside the existing
 CSGClaw IM API surface.

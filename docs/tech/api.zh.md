@@ -804,7 +804,7 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
 这组接口对应 CSGClaw 本地 IM 数据。
 
 Thread 模型、不变量、隐藏上下文行为和 bridge 规则见
-[im-threads.zh.md](./im-threads.zh.md)。
+[im-threads.zh.md](im/im-threads.zh.md)。
 
 ### `GET /api/v1/bootstrap`
 
@@ -1213,7 +1213,7 @@ participant 的 `channel_app_config` 中，通过 `participant bind` 或 partici
 Runtime client 使用 participant-scoped 路由处理 channel 消息，使用 agent-scoped 路由处理 LLM provider 流量。旧的 `/api/bots/*` 路由不再注册。
 
 Runtime 和 Codex bridge 使用的 thread/session 隔离规则见
-[im-threads.zh.md](./im-threads.zh.md)。
+[im-threads.zh.md](im/im-threads.zh.md)。
 
 ### `GET /api/v1/channels/{channel}/participants/{id}/events`
 

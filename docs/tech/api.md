@@ -823,7 +823,7 @@ Notes:
 These endpoints expose CSGClaw local IM data.
 
 For the thread model, invariants, hidden context behavior, and bridge rules, see
-[im-threads.md](./im-threads.md).
+[im-threads.md](im/im-threads.md).
 
 ### `GET /api/v1/bootstrap`
 
@@ -1240,7 +1240,7 @@ agent-scoped routes for LLM provider traffic. The legacy `/api/bots/*` routes
 are not registered.
 
 For thread/session isolation rules used by runtime and Codex bridges, see
-[im-threads.md](./im-threads.md).
+[im-threads.md](im/im-threads.md).
 
 ### `GET /api/v1/channels/{channel}/participants/{id}/events`
 
