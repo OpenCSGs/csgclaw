@@ -3,6 +3,7 @@ package activity
 import (
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 const userInputMarkdownSeparator = "："
@@ -33,7 +34,7 @@ func UserInputQuestionMarkdown(snapshot UserInputSnapshot) string {
 		return ""
 	}
 	var out strings.Builder
-	out.WriteString("## Questions\n\n")
+	out.WriteString("## " + userInputMarkdownHeading(snapshot, "Questions", "问题") + "\n\n")
 	for _, question := range snapshot.Questions {
 		fmt.Fprintf(&out, "- %s%s%s\n", markdownLine(question.ID), userInputMarkdownSeparator, markdownLine(question.Question))
 		for _, option := range question.Options {
@@ -61,7 +62,7 @@ func UserInputAnswerMarkdown(snapshot UserInputSnapshot) string {
 		return ""
 	}
 	var out strings.Builder
-	out.WriteString("## Answers\n\n")
+	out.WriteString("## " + userInputMarkdownHeading(snapshot, "Answers", "回答") + "\n\n")
 	for _, question := range snapshot.Questions {
 		answer, ok := snapshot.Answers[question.ID]
 		if !ok {
@@ -76,6 +77,22 @@ func UserInputAnswerMarkdown(snapshot UserInputSnapshot) string {
 		)
 	}
 	return strings.TrimSpace(out.String())
+}
+
+func userInputMarkdownHeading(snapshot UserInputSnapshot, english, chinese string) string {
+	for _, question := range snapshot.Questions {
+		prompt := strings.TrimSpace(question.Question)
+		if prompt == "" {
+			continue
+		}
+		for _, char := range prompt {
+			if unicode.Is(unicode.Han, char) {
+				return chinese
+			}
+		}
+		return english
+	}
+	return english
 }
 
 func userInputAnswerLabelAndDescription(question UserInputQuestionSnapshot, answer UserInputAnswerSnapshot) (string, string) {
