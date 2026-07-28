@@ -93,6 +93,12 @@ var (
 		}
 		return svc.StartConfiguredAgents(ctx)
 	}
+	StopRunningSandboxAgents = func(ctx context.Context, svc *agent.Service) error {
+		if svc == nil {
+			return nil
+		}
+		return svc.StopRunningSandboxAgents(ctx)
+	}
 	NewCodexBridgeManager = newCodexBridgeManager
 	OpenBrowser           = openBrowser
 	WaitForHealthy        = waitForHealthy
@@ -700,6 +706,12 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		defer agentManagerSvc.Close()
 	}
 	agentRuntimeSvc := NewAgentRuntimeService()
+	var beforeShutdown func(context.Context) error
+	if serveOpts.Distribution == "electron" {
+		beforeShutdown = func(shutdownCtx context.Context) error {
+			return StopRunningSandboxAgents(shutdownCtx, svc)
+		}
+	}
 	return RunServer(server.Options{
 		ListenAddr:         cfg.Server.ListenAddr,
 		Listener:           serveOpts.Listener,
@@ -730,6 +742,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		AdvertiseBaseURL:   apiURL,
 		Desktop:            serveOpts.Desktop,
 		Context:            ctx,
+		BeforeShutdown:     beforeShutdown,
 		OnReady: func(handler *api.Handler, router chi.Router) {
 			deliver := channelwiring.WireNotificationParticipantPull(ctx, participantSvc, imSvc, apiURL, cfg.Server.AccessToken)
 			handler.SetNotificationDeliver(deliver)

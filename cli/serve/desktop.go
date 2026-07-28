@@ -22,6 +22,7 @@ import (
 const (
 	maxDesktopControlMessageBytes = 64 * 1024
 	desktopParentEOFGracePeriod   = 1500 * time.Millisecond
+	desktopRendererListenAddr     = "127.0.0.1:18791"
 )
 
 func (desktopServeCmd) Name() string {
@@ -127,7 +128,7 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 }
 
 func listenDesktopEndpoints() (net.Listener, net.Listener, error) {
-	rendererListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	rendererListener, err := net.Listen("tcp4", desktopRendererListenAddr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("listen on desktop renderer loopback address: %w", err)
 	}

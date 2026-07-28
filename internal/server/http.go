@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -57,6 +58,7 @@ type Options struct {
 	Desktop            *DesktopOptions
 	Context            context.Context
 	OnReady            func(h *api.Handler, router chi.Router)
+	BeforeShutdown     func(context.Context) error
 }
 
 func newHandler(opts Options) *api.Handler {
@@ -173,8 +175,14 @@ func Run(opts Options) error {
 	runCtx, cancelRun := context.WithCancel(opts.Context)
 	defer cancelRun()
 	shutdownDone := make(chan struct{})
+	var shutdownErr error
 	go func() {
 		<-runCtx.Done()
+		if opts.BeforeShutdown != nil {
+			hookCtx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+			shutdownErr = opts.BeforeShutdown(hookCtx)
+			cancel()
+		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		for _, endpoint := range endpoints {
@@ -208,12 +216,12 @@ func Run(opts Options) error {
 	}
 
 	if firstErr != nil {
-		return firstErr
+		return errors.Join(firstErr, shutdownErr)
 	}
 	if opts.Service != nil {
-		return opts.Service.Close()
+		return errors.Join(shutdownErr, opts.Service.Close())
 	}
-	return nil
+	return shutdownErr
 }
 
 func newHTTPServer(addr string, handler http.Handler) *http.Server {

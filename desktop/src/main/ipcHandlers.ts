@@ -11,6 +11,7 @@ export function registerIPCHandlers(
   getAllowedOrigin: () => string,
   supervisor: SidecarSupervisor,
   updater: DesktopUpdater,
+  restartSidecar: () => Promise<void>,
 ): () => void {
   const assertSender = (event: IpcMainInvokeEvent) => {
     const window = getWindow();
@@ -55,12 +56,17 @@ export function registerIPCHandlers(
     assertSender(event);
     await updater.installDownloadedUpdate();
   });
+  ipcMain.handle(DesktopIPC.restartSidecar, async (event) => {
+    assertSender(event);
+    await restartSidecar();
+  });
 
   return () => {
     ipcMain.removeHandler(DesktopIPC.getRuntimeInfo);
     ipcMain.removeHandler(DesktopIPC.openOAuth);
     ipcMain.removeHandler(DesktopIPC.checkForUpdates);
     ipcMain.removeHandler(DesktopIPC.installDownloadedUpdate);
+    ipcMain.removeHandler(DesktopIPC.restartSidecar);
   };
 }
 

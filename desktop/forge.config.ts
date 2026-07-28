@@ -20,7 +20,11 @@ const backendResources = path.resolve(
   "backend",
 );
 const entitlements = path.resolve(__dirname, "resources", "entitlements", "macos.plist");
-const appIcon = path.resolve(__dirname, "resources", "icons", "csgclaw.icns");
+const iconDirectory = path.resolve(__dirname, "resources", "icons");
+const macIcon = path.join(iconDirectory, "csgclaw.icns");
+const windowsIcon = path.join(iconDirectory, "csgclaw.ico");
+const linuxIcon = path.join(iconDirectory, "csgclaw.png");
+const appIcon = targetGoOS === "darwin" ? macIcon : targetGoOS === "windows" ? windowsIcon : linuxIcon;
 const adHocEntitlements = path.resolve(
   __dirname,
   "resources",
@@ -100,6 +104,7 @@ const config: ForgeConfig = {
   makers: [
     new MakerSquirrel({
       name: "csgclaw_desktop",
+      setupIcon: windowsIcon,
       setupExe: `CSGClaw-Desktop-${desktopVersion}-${targetElectronArch}-Setup.exe`,
       ...(updateBaseURL ? { remoteReleases: `${updateBaseURL}/win32/${targetElectronArch}` } : {}),
       ...(windowsSign ? { windowsSign } : {}),
@@ -124,6 +129,7 @@ const config: ForgeConfig = {
         categories: ["Development"],
         genericName: "CSGClaw Desktop",
         homepage: "https://github.com/OpenCSGs/csgclaw",
+        icon: linuxIcon,
         maintainer: "OpenCSG",
       },
     }),

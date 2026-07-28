@@ -52,6 +52,7 @@ func TestRunDesktopServesRendererAndSandboxOnSeparateListeners(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ready := make(chan struct{})
+	beforeShutdown := make(chan struct{})
 	runErr := make(chan error, 1)
 	go func() {
 		runErr <- Run(Options{
@@ -68,6 +69,10 @@ func TestRunDesktopServesRendererAndSandboxOnSeparateListeners(t *testing.T) {
 			Context: ctx,
 			OnReady: func(_ *api.Handler, _ chi.Router) {
 				close(ready)
+			},
+			BeforeShutdown: func(context.Context) error {
+				close(beforeShutdown)
+				return nil
 			},
 		})
 	}()
@@ -149,5 +154,10 @@ func TestRunDesktopServesRendererAndSandboxOnSeparateListeners(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("desktop server did not stop")
+	}
+	select {
+	case <-beforeShutdown:
+	default:
+		t.Fatal("BeforeShutdown was not called")
 	}
 }

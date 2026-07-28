@@ -43,10 +43,10 @@ csgclaw _desktop-serve
 
 `_desktop-serve` 复用普通 `serve` 的业务服务，但使用桌面专用启动方式：
 
-- Renderer 监听系统动态分配的 `127.0.0.1` 端口，避免端口冲突和局域网暴露。
+- Renderer 固定监听 `127.0.0.1:18791`，保证 Electron 持久化分区始终使用同一个 Web Storage origin，同时不向局域网暴露。
 - Sandbox API 使用独立的动态端口监听宿主机 IPv4 接口，并强制校验 Host、server access token 和空 Origin。
 - Electron 通过 stdin 发送启动信息，Go 通过 stdout 返回就绪信息。
-- Electron 退出时通知 Go 优雅关闭。
+- Electron 退出或监督重启 sidecar 时通知 Go 先停止运行中的 Agent，再优雅关闭 HTTP 服务。
 - Go 自升级在桌面版中关闭，由 Electron 统一更新完整应用。
 
 ### 2.2 启动流程
@@ -56,7 +56,7 @@ csgclaw _desktop-serve
 2. Electron 生成 instance ID 和随机 session token
 3. Electron 启动 csgclaw _desktop-serve
 4. Go 获取 ~/.csgclaw/runtime.lock
-5. Go 分别监听 Renderer 回环端口和 Sandbox API 端口
+5. Go 监听固定的 Renderer 回环端口和动态的 Sandbox API 端口
 6. Go 在 ready 消息中只返回 Renderer 回环地址
 7. Electron 校验 ready 消息并加载 Web UI
 ```
@@ -71,7 +71,7 @@ Renderer 和 Sandbox 复用同一个业务 Router，但通过独立 listener、�
 
 ```text
 Electron Renderer
-    │ http://127.0.0.1:<renderer-port>
+    │ http://127.0.0.1:18791
     │ desktop session token
     ▼
 CSGClaw Go Sidecar
@@ -147,10 +147,10 @@ Preload 只暴露获取桌面信息、打开受信任 OAuth 地址和管理桌�
 
 ### 4.3 HTTP
 
-| 调用方 | Host | 凭据 | 额外限制 |
-| --- | --- | --- | --- |
-| Renderer | `127.0.0.1:<renderer-port>` | session token 或 server token | 独立回环 listener；携带 Origin 时必须与 sidecar 一致 |
-| Sandbox | 启动时计算的 Host 和独立端口 | server token | 独立 IPv4 listener；Origin 必须为空 |
+| 调用方   | Host                         | 凭据                          | 额外限制                                                      |
+| -------- | ---------------------------- | ----------------------------- | ------------------------------------------------------------- |
+| Renderer | `127.0.0.1:18791`            | session token 或 server token | 独立回环 listener；固定 origin 保存主题、语言和布局等本地状态 |
+| Sandbox  | 启动时计算的 Host 和独立端口 | server token                  | 独立 IPv4 listener；Origin 必须为空                           |
 
 两个 listener 分别拒绝另一入口的 Host；desktop session token 不能用于 Sandbox listener。`/healthz` 和 OAuth callback 的免认证规则只适用于 Renderer 回环地址。
 
@@ -163,7 +163,7 @@ React 页面不直接判断 Electron，也不直接调用 Preload。平台差异
 - `externalNavigation.ts`：统一页面跳转和系统浏览器行为。
 - `updatePort.ts`：统一 Go 升级与 Electron 更新状态。
 
-浏览器模式继续使用原有 OAuth 页面跳转；桌面模式通过系统浏览器完成 OAuth。桌面应用更新由 Electron `autoUpdater` 负责，避免只升级 Go 后端造成版本不一致。
+浏览器模式继续使用原有 OAuth 页面跳转；桌面模式通过系统浏览器完成 OAuth。保存服务配置后，桌面模式通过受控 IPC 让 Main 进程停止旧 sidecar 和 Agent，再启动新的 sidecar；浏览器模式继续调用普通服务重启 API。桌面应用更新由 Electron `autoUpdater` 负责，避免只升级 Go 后端造成版本不一致。
 
 ## 6. 本地开发
 
@@ -230,6 +230,8 @@ make desktop-package TARGET_OS=windows TARGET_ARCH=amd64
 - macOS：`.app`、DMG、ZIP。
 - Windows：Squirrel Setup 和更新文件。
 - Linux：DEB。
+
+打包配置按目标平台分别使用 `csgclaw.icns`、`csgclaw.ico` 和 `csgclaw.png`，Windows 安装器和 Linux DEB 也显式复用对应图标。
 
 输出目录是 `desktop/out/`，backend 中间产物位于 `dist/desktop-input/<os>-<arch>/backend/`。
 

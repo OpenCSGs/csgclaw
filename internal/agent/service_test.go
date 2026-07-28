@@ -8696,6 +8696,65 @@ func TestStartConfiguredAgentsStartsStoppedCompleteWorkersAndLeavesRunningWorker
 	}
 }
 
+func TestStopRunningSandboxAgentsStopsOnlyLiveSandboxRuntimes(t *testing.T) {
+	var stopped []string
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			stop: func(_ context.Context, handle agentruntime.Handle) (agentruntime.State, error) {
+				stopped = append(stopped, handle.RuntimeID)
+				return agentruntime.StateStopped, nil
+			},
+		}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			stop: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+				t.Fatal("in-process Codex runtime should be closed, not explicitly stopped")
+				return agentruntime.StateStopped, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeID:   "rt-u-alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Status:      string(agentruntime.StateRunning),
+	}
+	svc.agents["u-bob"] = Agent{
+		ID:          "u-bob",
+		Name:        "bob",
+		RuntimeID:   "rt-u-bob",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Status:      string(agentruntime.StateStopped),
+	}
+	svc.agents["u-carol"] = Agent{
+		ID:          "u-carol",
+		Name:        "carol",
+		RuntimeID:   "rt-u-carol",
+		RuntimeKind: RuntimeKindCodex,
+		Status:      string(agentruntime.StateRunning),
+	}
+
+	if err := svc.StopRunningSandboxAgents(context.Background()); err != nil {
+		t.Fatalf("StopRunningSandboxAgents() error = %v", err)
+	}
+	if got := strings.Join(stopped, ","); got != "rt-agent-alice" {
+		t.Fatalf("stopped runtimes = %q, want only rt-agent-alice", got)
+	}
+	alice, ok := svc.Agent("u-alice")
+	if !ok || alice.Status != string(agentruntime.StateStopped) {
+		t.Fatalf("Agent(u-alice) = %+v, %v, want stopped", alice, ok)
+	}
+}
+
 func TestStartConfiguredAgentsRestoresRunningCodexWorker(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	startCalls := 0

@@ -9,6 +9,8 @@ export class AppLifecycle {
   private cleanupIPC: (() => void) | null = null;
   private quitting = false;
   private recoveryActive = false;
+  private rendererOrigin = "";
+  private restartActive: Promise<void> | null = null;
   private shutdownComplete = false;
   private supervisor: SidecarSupervisor | null = null;
   private tray: Tray | null = null;
@@ -42,16 +44,17 @@ export class AppLifecycle {
     );
     this.cleanupIPC = registerIPCHandlers(
       () => this.windowManager?.window ?? null,
-      () => this.supervisor?.connection.ready.base_url ?? "",
+      () => this.rendererOrigin,
       this.supervisor,
       this.updater,
+      () => this.restartSidecar(),
     );
 
     this.createApplicationMenu();
     this.createTray();
     try {
       const connection = await this.supervisor.startWithRetry();
-      this.windowManager.setConnection(connection.ready.base_url, connection.sessionToken);
+      this.setConnection(connection.ready.base_url, connection.sessionToken);
       await this.windowManager.open();
     } catch (error) {
       await this.recoverSidecar(asError(error));
@@ -119,7 +122,7 @@ export class AppLifecycle {
         }
         try {
           const connection = await this.supervisor.startWithRetry();
-          this.windowManager.setConnection(connection.ready.base_url, connection.sessionToken);
+          this.setConnection(connection.ready.base_url, connection.sessionToken);
           await this.windowManager.open();
           return;
         } catch (retryError) {
@@ -165,6 +168,41 @@ export class AppLifecycle {
     } finally {
       this.recoveryActive = false;
     }
+  }
+
+  private async restartSidecar(): Promise<void> {
+    if (this.quitting) {
+      throw new Error("CSGClaw is quitting.");
+    }
+    if (!this.supervisor || !this.windowManager) {
+      throw new Error("Desktop backend is unavailable.");
+    }
+    if (this.restartActive) {
+      return this.restartActive;
+    }
+
+    const task = (async () => {
+      try {
+        const connection = await this.supervisor!.restart("settings-change");
+        this.setConnection(connection.ready.base_url, connection.sessionToken);
+      } catch (error) {
+        void this.recoverSidecar(asError(error));
+        throw error;
+      }
+    })();
+    this.restartActive = task;
+    try {
+      await task;
+    } finally {
+      if (this.restartActive === task) {
+        this.restartActive = null;
+      }
+    }
+  }
+
+  private setConnection(baseURL: string, sessionToken: string): void {
+    this.rendererOrigin = new URL(baseURL).origin;
+    this.windowManager?.setConnection(baseURL, sessionToken);
   }
 
   private createTray(): void {

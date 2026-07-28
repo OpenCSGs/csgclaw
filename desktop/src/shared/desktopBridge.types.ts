@@ -3,6 +3,7 @@ export const DesktopIPC = {
   getRuntimeInfo: "csgclaw:desktop:get-runtime-info",
   installDownloadedUpdate: "csgclaw:desktop:install-downloaded-update",
   openOAuth: "csgclaw:desktop:open-oauth",
+  restartSidecar: "csgclaw:desktop:restart-sidecar",
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
 
@@ -42,5 +43,6 @@ export type DesktopBridge = {
   openOAuth(input: DesktopOAuthInput): Promise<{ opened: boolean }>;
   checkForUpdates(): Promise<void>;
   installDownloadedUpdate(): Promise<void>;
+  restartSidecar(): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };

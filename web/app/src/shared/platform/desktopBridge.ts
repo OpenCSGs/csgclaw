@@ -20,6 +20,7 @@ export type DesktopBridge = {
   openOAuth(input: { purpose: DesktopOAuthPurpose; url: string }): Promise<{ opened: boolean }>;
   checkForUpdates(): Promise<void>;
   installDownloadedUpdate(): Promise<void>;
+  restartSidecar(): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };
 
@@ -39,6 +40,7 @@ export function getDesktopBridge(): DesktopBridge | null {
     typeof bridge.openOAuth === "function" &&
     typeof bridge.checkForUpdates === "function" &&
     typeof bridge.installDownloadedUpdate === "function" &&
+    typeof bridge.restartSidecar === "function" &&
     typeof bridge.onUpdateStatus === "function"
     ? bridge
     : null;

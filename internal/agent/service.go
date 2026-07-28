@@ -2002,6 +2002,38 @@ func (s *Service) StartConfiguredAgents(ctx context.Context) error {
 	return startErr
 }
 
+// StopRunningSandboxAgents stops every registered sandbox agent whose runtime
+// is currently running. Desktop uses this before stopping its sidecar so
+// sandbox processes cannot retain a callback URL from the previous instance.
+// In-process runtimes are closed normally and keep their persisted running
+// state so they can be restored on the next launch.
+func (s *Service) StopRunningSandboxAgents(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	agents := sortedAgentsFromMap(s.agents)
+	s.mu.RUnlock()
+
+	var stopErr error
+	for _, a := range agents {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(stopErr, err)
+		}
+		if !isGatewayRuntimeKind(strings.TrimSpace(a.RuntimeKind)) {
+			continue
+		}
+		live := s.hydrateAgentStatus(ctx, a)
+		if !isRuntimeRunning(live) {
+			continue
+		}
+		if _, err := s.Stop(ctx, live.ID); err != nil {
+			stopErr = errors.Join(stopErr, fmt.Errorf("%s: %w", live.Name, err))
+		}
+	}
+	return stopErr
+}
+
 func (s *Service) startupAgentCandidates() []Agent {
 	s.mu.RLock()
 	agents := sortedAgentsFromMap(s.agents)

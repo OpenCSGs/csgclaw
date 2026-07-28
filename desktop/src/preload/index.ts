@@ -11,6 +11,7 @@ const bridge: DesktopBridge = Object.freeze({
   openOAuth: (input: DesktopOAuthInput) => ipcRenderer.invoke(DesktopIPC.openOAuth, input),
   checkForUpdates: () => ipcRenderer.invoke(DesktopIPC.checkForUpdates),
   installDownloadedUpdate: () => ipcRenderer.invoke(DesktopIPC.installDownloadedUpdate),
+  restartSidecar: () => ipcRenderer.invoke(DesktopIPC.restartSidecar),
   onUpdateStatus: (listener: (status: DesktopUpdateStatus) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: DesktopUpdateStatus) => {
       listener(status);

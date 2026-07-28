@@ -25,7 +25,7 @@ export type SidecarConnection = {
 };
 
 const READY_TIMEOUT_MS = 30_000;
-const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 5_000;
+const GRACEFUL_SHUTDOWN_TIMEOUT_MS = 45_000;
 const TERMINATE_TIMEOUT_MS = 2_000;
 const MAX_STDERR_SUMMARY_BYTES = 12 * 1024;
 
@@ -206,6 +206,11 @@ export class SidecarSupervisor extends EventEmitter {
     }
     child.kill("SIGKILL");
     await resolvesWithin(exitPromise, TERMINATE_TIMEOUT_MS);
+  }
+
+  async restart(reason = "desktop-restart"): Promise<SidecarConnection> {
+    await this.stop(reason);
+    return this.startWithRetry();
   }
 
   private async stopOwnedProcess(): Promise<void> {

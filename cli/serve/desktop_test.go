@@ -18,6 +18,9 @@ func TestListenDesktopEndpointsSeparatesRendererAndSandboxBindings(t *testing.T)
 	if !ok || !rendererAddr.IP.IsLoopback() {
 		t.Fatalf("renderer address = %v, want loopback TCP address", rendererListener.Addr())
 	}
+	if got := rendererAddr.String(); got != desktopRendererListenAddr {
+		t.Fatalf("renderer address = %q, want stable address %q", got, desktopRendererListenAddr)
+	}
 	sandboxAddr, ok := sandboxListener.Addr().(*net.TCPAddr)
 	if !ok || !sandboxAddr.IP.IsUnspecified() {
 		t.Fatalf("sandbox address = %v, want wildcard TCP address", sandboxListener.Addr())
