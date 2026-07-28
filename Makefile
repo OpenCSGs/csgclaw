@@ -18,8 +18,11 @@ CGO_ENABLED ?= 0
 WEB_APP_DIR ?= web/app
 WEB_STATIC_DIST_DIR ?= web/static-dist
 WEB_PNPM ?= $(CURDIR)/scripts/web-pnpm.sh
+WEB_BUILD_REPORT ?= full
+WEB_BUILD_PNPM_ARGS ?= $(if $(filter summary,$(WEB_BUILD_REPORT)),--silent build --logLevel warn,build)
 DESKTOP_DIR ?= desktop
 DESKTOP_PNPM ?= $(CURDIR)/scripts/desktop-pnpm.sh
+DESKTOP_PACKAGE_REPORT ?= summary
 TARGET_OS ?= $(shell $(GO) env GOOS)
 TARGET_ARCH ?= $(shell $(GO) env GOARCH)
 DESKTOP_PLATFORM ?= $(if $(filter windows,$(TARGET_OS)),win32,$(TARGET_OS))
@@ -59,7 +62,7 @@ test:
 	env GOCACHE=$(GOCACHE) $(GO) test ./...
 
 check-web-toolchain:
-	$(WEB_PNPM) --check
+	@$(WEB_PNPM) --check
 
 check-web-layout:
 	@if [ ! -d "$(WEB_APP_DIR)" ]; then \
@@ -97,8 +100,11 @@ web-dev: ensure-web-deps
 	$(WEB_PNPM) dev
 
 build-web: ensure-web-deps
+	@if [ "$(WEB_BUILD_REPORT)" = "summary" ]; then \
+		printf '%s\n' "Building Web UI..."; \
+	fi
 	@mkdir -p "$(WEB_STATIC_DIST_DIR)"
-	@$(WEB_PNPM) build || { \
+	@$(WEB_PNPM) $(WEB_BUILD_PNPM_ARGS) || { \
 		status=$$?; \
 		printf '%s\n' "Failed to build Web UI."; \
 		printf '%s\n' "If the error mentions vite not found, rerun make web-install and check the install output."; \
@@ -108,6 +114,11 @@ build-web: ensure-web-deps
 		printf '%s\n' "Web UI build did not produce $(WEB_STATIC_DIST_DIR)/index.html."; \
 		exit 1; \
 	}
+	@if [ "$(WEB_BUILD_REPORT)" = "summary" ]; then \
+		file_count=$$(find "$(WEB_STATIC_DIST_DIR)" -type f | wc -l | tr -d '[:space:]'); \
+		total_size=$$(du -sh "$(WEB_STATIC_DIST_DIR)" | awk '{print $$1}'); \
+		printf 'Web UI ready: %s (%s files, %s total).\n' "$(WEB_STATIC_DIST_DIR)" "$$file_count" "$$total_size"; \
+	fi
 
 check-desktop-layout:
 	@if [ ! -d "$(DESKTOP_DIR)" ]; then \
@@ -138,10 +149,42 @@ desktop-dev: ensure-desktop-deps build-web build-server-bin build-sandbox-cli
 	$(DESKTOP_PNPM) start
 
 desktop-backend-bundle: build-web
-	VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 $(CURDIR)/scripts/package-desktop-backend.sh $(TARGET_OS) $(TARGET_ARCH)
+	@printf 'Building desktop backend (%s/%s)...\n' "$(TARGET_OS)" "$(TARGET_ARCH)"
+	@VERSION=$(VERSION) COMMIT=$(COMMIT) BUILD_TIME=$(BUILD_TIME) GOCACHE=$(GOCACHE) INCLUDE_BOXLITE=0 $(CURDIR)/scripts/package-desktop-backend.sh $(TARGET_OS) $(TARGET_ARCH)
 
+desktop-package: WEB_BUILD_REPORT := summary
 desktop-package: ensure-desktop-deps desktop-backend-bundle
-	CSGCLAW_DESKTOP_GOOS=$(TARGET_OS) CSGCLAW_DESKTOP_GOARCH=$(TARGET_ARCH) CSGCLAW_DESKTOP_ARCH=$(DESKTOP_ARCH) CSGCLAW_DESKTOP_VERSION=$(VERSION) $(DESKTOP_PNPM) make -- --platform=$(DESKTOP_PLATFORM) --arch=$(DESKTOP_ARCH)
+	@printf 'Building desktop packages (%s/%s)...\n' "$(DESKTOP_PLATFORM)" "$(DESKTOP_ARCH)"
+	@run_package() { \
+		CSGCLAW_DESKTOP_GOOS=$(TARGET_OS) \
+		CSGCLAW_DESKTOP_GOARCH=$(TARGET_ARCH) \
+		CSGCLAW_DESKTOP_ARCH=$(DESKTOP_ARCH) \
+		CSGCLAW_DESKTOP_VERSION=$(VERSION) \
+		$(DESKTOP_PNPM) $(if $(filter summary,$(DESKTOP_PACKAGE_REPORT)),--silent make,make) --platform=$(DESKTOP_PLATFORM) --arch=$(DESKTOP_ARCH); \
+	}; \
+	if [ "$(DESKTOP_PACKAGE_REPORT)" = "summary" ]; then \
+		log_file=$$(mktemp); \
+		trap 'rm -f "$$log_file"' EXIT; \
+		run_package >"$$log_file" 2>&1 & \
+		package_pid=$$!; \
+		elapsed=0; \
+		while kill -0 "$$package_pid" 2>/dev/null; do \
+			if [ -t 1 ]; then printf '\rPackaging in progress... %ss' "$$elapsed"; fi; \
+			sleep 1; \
+			elapsed=$$((elapsed + 1)); \
+		done; \
+		wait "$$package_pid"; \
+		status=$$?; \
+		if [ -t 1 ]; then printf '\rPackaging finished in %ss.   \n' "$$elapsed"; fi; \
+		if [ $$status -ne 0 ]; then \
+			printf '%s\n' "Desktop packaging failed; Electron Forge output follows:" >&2; \
+			cat "$$log_file" >&2; \
+			exit $$status; \
+		fi; \
+		printf 'Desktop packages ready: %s\n' "$(abspath $(DESKTOP_DIR)/out/make)"; \
+	else \
+		run_package; \
+	fi
 
 build: build-web build-server-bin build-sandbox-cli
 

@@ -202,10 +202,16 @@ Electron 和 sidecar 日志位于系统应用日志目录，Go 输出记录在 `
 
 ## 7. 打包
 
-桌面打包统一使用：
+macOS/Linux 桌面打包使用：
 
 ```bash
 make desktop-package
+```
+
+Windows 无需安装 `make`，使用：
+
+```powershell
+.\scripts\build.cmd desktop-package
 ```
 
 它会构建 backend bundle，并通过 Electron Forge 生成当前平台的应用和分发产物，不需要先运行其他打包命令。
@@ -214,15 +220,15 @@ Desktop backend 默认不打包 BoxLite CLI，因此打包过程不会下载 Box
 
 常用目标：
 
-```bash
+```text
 # macOS Apple Silicon
 make desktop-package TARGET_OS=darwin TARGET_ARCH=arm64
 
 # macOS Intel
 make desktop-package TARGET_OS=darwin TARGET_ARCH=amd64
 
-# Windows x64
-make desktop-package TARGET_OS=windows TARGET_ARCH=amd64
+# Windows x64（在 Windows 终端中）
+.\scripts\build.cmd desktop-package
 ```
 
 产物：

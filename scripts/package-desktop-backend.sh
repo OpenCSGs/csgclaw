@@ -37,7 +37,7 @@ mkdir -p "$BACKEND_ROOT" "$TEMP_ROOT/release"
     INCLUDE_BOXLITE="${INCLUDE_BOXLITE:-0}" \
     BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}" \
     BOXLITE_CLI_BASE_URL="${BOXLITE_CLI_BASE_URL:-https://github.com/boxlite-ai/boxlite/releases/download}" \
-    "$SCRIPT_DIR/package-release.sh" "$GOOS_TARGET" "$GOARCH_TARGET"
+    "$SCRIPT_DIR/package-release.sh" "$GOOS_TARGET" "$GOARCH_TARGET" >/dev/null
 )
 
 if [ "$GOOS_TARGET" = "windows" ]; then
@@ -57,4 +57,4 @@ else
 fi
 
 test -f "$BACKEND_ROOT/csgclaw/.csgclaw-bundle.json"
-printf 'staged desktop backend at %s\n' "$BACKEND_ROOT/csgclaw"
+printf 'Desktop backend ready: %s\n' "$BACKEND_ROOT/csgclaw"

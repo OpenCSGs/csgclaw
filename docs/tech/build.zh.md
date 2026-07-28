@@ -38,6 +38,7 @@ make
 .\scripts\build.cmd build
 .\scripts\build.cmd build-server-bin
 .\scripts\build.cmd build-sandbox-cli
+.\scripts\build.cmd desktop-package
 .\scripts\build.cmd test
 ```
 
@@ -98,6 +99,8 @@ csgclaw/
 |---|---|
 | `make package` | 打包当前平台 |
 | `make package-all` | 构建并打包当前平台产物 |
+| `make desktop-package` | 在 macOS/Linux 构建当前平台的桌面安装包 |
+| `scripts\build.cmd desktop-package` | 在 Windows 无需 `make` 构建桌面安装包 |
 | `make release` | 构建配置的跨平台 release bundle |
 
 发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。GitLab CI 发布 CSGClaw release 产物和 CSGClaw 产品镜像，不再构建 PicoClaw/OpenClaw 运行时镜像。
