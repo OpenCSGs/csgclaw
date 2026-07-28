@@ -16,9 +16,9 @@ type DesktopOptions struct {
 	ServerAccessHosts []string
 }
 
-func desktopSecurityHandler(next http.Handler, listenerAddr net.Addr, opts DesktopOptions) (http.Handler, error) {
+func desktopRendererSecurityHandler(next http.Handler, listenerAddr net.Addr, opts DesktopOptions) (http.Handler, error) {
 	if next == nil {
-		return nil, fmt.Errorf("desktop handler is required")
+		return nil, fmt.Errorf("desktop renderer handler is required")
 	}
 	token := strings.TrimSpace(opts.SessionToken)
 	if len(token) < 43 {
@@ -34,10 +34,6 @@ func desktopSecurityHandler(next http.Handler, listenerAddr net.Addr, opts Deskt
 	}
 	if listenerAddr == nil || baseURL.Host != listenerAddr.String() {
 		return nil, fmt.Errorf("desktop base URL does not match listener")
-	}
-	serverAccessHosts, err := normalizeDesktopServerAccessHosts(opts.ServerAccessHosts, baseURL.Port())
-	if err != nil {
-		return nil, err
 	}
 
 	expectedOrigin := baseURL.Scheme + "://" + baseURL.Host
@@ -55,32 +51,60 @@ func desktopSecurityHandler(next http.Handler, listenerAddr net.Addr, opts Deskt
 		requestHost := strings.ToLower(strings.TrimSpace(r.Host))
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
 
-		if requestHost == strings.ToLower(baseURL.Host) {
-			if origin != "" && origin != expectedOrigin {
-				http.Error(w, "invalid origin", http.StatusForbidden)
-				return
-			}
-			if desktopAuthExemptPath(r.URL.Path) {
-				next.ServeHTTP(w, r)
-				return
-			}
-			if sessionAuthorized || serverAuthorized {
-				next.ServeHTTP(w, r)
-				return
-			}
-			w.Header().Set("WWW-Authenticate", `Bearer realm="csgclaw-desktop"`)
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if requestHost != strings.ToLower(baseURL.Host) {
+			http.Error(w, "invalid host", http.StatusBadRequest)
 			return
 		}
+		if origin != "" && origin != expectedOrigin {
+			http.Error(w, "invalid origin", http.StatusForbidden)
+			return
+		}
+		if desktopAuthExemptPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if sessionAuthorized || serverAuthorized {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("WWW-Authenticate", `Bearer realm="csgclaw-desktop"`)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}), nil
+}
 
+func desktopSandboxSecurityHandler(next http.Handler, listenerAddr net.Addr, opts DesktopOptions) (http.Handler, error) {
+	if next == nil {
+		return nil, fmt.Errorf("desktop sandbox handler is required")
+	}
+	if listenerAddr == nil {
+		return nil, fmt.Errorf("desktop sandbox listener is required")
+	}
+	_, listenerPort, err := net.SplitHostPort(listenerAddr.String())
+	if err != nil || listenerPort == "" {
+		return nil, fmt.Errorf("invalid desktop sandbox listener address")
+	}
+	serverAccessHosts, err := normalizeDesktopServerAccessHosts(opts.ServerAccessHosts, listenerPort)
+	if err != nil {
+		return nil, err
+	}
+	expectedServerAuthorization := ""
+	if serverToken := strings.TrimSpace(opts.ServerAccessToken); serverToken != "" {
+		expectedServerAuthorization = "Bearer " + serverToken
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		setDesktopSecurityHeaders(w.Header())
+		requestHost := strings.ToLower(strings.TrimSpace(r.Host))
 		if _, ok := serverAccessHosts[requestHost]; !ok {
 			http.Error(w, "invalid host", http.StatusBadRequest)
 			return
 		}
-		if origin != "" {
+		if strings.TrimSpace(r.Header.Get("Origin")) != "" {
 			http.Error(w, "invalid origin", http.StatusForbidden)
 			return
 		}
+		got := r.Header.Get("Authorization")
+		serverAuthorized := expectedServerAuthorization != "" &&
+			subtle.ConstantTimeCompare([]byte(got), []byte(expectedServerAuthorization)) == 1
 		if !serverAuthorized {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="csgclaw-desktop"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

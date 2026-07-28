@@ -43,7 +43,8 @@ csgclaw _desktop-serve
 
 `_desktop-serve` 复用普通 `serve` 的业务服务，但使用桌面专用启动方式：
 
-- 监听系统动态分配的 `127.0.0.1` 端口，避免端口冲突和局域网暴露。
+- Renderer 监听系统动态分配的 `127.0.0.1` 端口，避免端口冲突和局域网暴露。
+- Sandbox API 使用独立的动态端口监听宿主机 IPv4 接口，并强制校验 Host、server access token 和空 Origin。
 - Electron 通过 stdin 发送启动信息，Go 通过 stdout 返回就绪信息。
 - Electron 退出时通知 Go 优雅关闭。
 - Go 自升级在桌面版中关闭，由 Electron 统一更新完整应用。
@@ -55,8 +56,8 @@ csgclaw _desktop-serve
 2. Electron 生成 instance ID 和随机 session token
 3. Electron 启动 csgclaw _desktop-serve
 4. Go 获取 ~/.csgclaw/runtime.lock
-5. Go 监听 127.0.0.1:<动态端口>
-6. Go 返回 ready 消息
+5. Go 分别监听 Renderer 回环端口和 Sandbox API 端口
+6. Go 在 ready 消息中只返回 Renderer 回环地址
 7. Electron 校验 ready 消息并加载 Web UI
 ```
 
@@ -66,23 +67,25 @@ csgclaw _desktop-serve
 
 ### 2.3 Renderer 与 Sandbox 访问
 
-Renderer 和 Sandbox 访问同一个 sidecar 端口，但地址和凭据不同：
+Renderer 和 Sandbox 复用同一个业务 Router，但通过独立 listener、地址和凭据访问：
 
 ```text
 Electron Renderer
-    │ http://127.0.0.1:<port>
+    │ http://127.0.0.1:<renderer-port>
     │ desktop session token
     ▼
 CSGClaw Go Sidecar
     ▲
-    │ http://host.docker.internal:<port>
+    │ http://host.docker.internal:<sandbox-port>
+    │ 或 http://<host-lan-ip>:<sandbox-port>
     │ server access token
-OpenClaw / PicoClaw Docker
+OpenClaw / PicoClaw Sandbox
 ```
 
 - Desktop session token 由 Electron 每次启动随机生成，只用于当前桌面会话。
 - Server access token 来自 CSGClaw 配置，供 CLI 和 Sandbox Runtime 访问服务。
 - Docker Desktop 使用 `host.docker.internal` 回连宿主机；容器内的 `127.0.0.1` 只表示容器自己。
+- Linux Docker 和非 Docker provider 使用宿主机 LAN IPv4 回连独立的 Sandbox listener。
 - Agent 配置创建和后续同步使用同一套 Sandbox 地址解析规则。
 
 ### 2.4 单实例
@@ -146,10 +149,10 @@ Preload 只暴露获取桌面信息、打开受信任 OAuth 地址和管理桌�
 
 | 调用方 | Host | 凭据 | 额外限制 |
 | --- | --- | --- | --- |
-| Renderer | `127.0.0.1:<port>` | session token 或 server token | 携带 Origin 时必须与 sidecar 一致 |
-| Sandbox | 启动时计算的 Host | server token | Origin 必须为空 |
+| Renderer | `127.0.0.1:<renderer-port>` | session token 或 server token | 独立回环 listener；携带 Origin 时必须与 sidecar 一致 |
+| Sandbox | 启动时计算的 Host 和独立端口 | server token | 独立 IPv4 listener；Origin 必须为空 |
 
-未知 Host 会被拒绝；desktop session token 不能用于 Sandbox Host。`/healthz` 和 OAuth callback 的免认证规则只适用于 Renderer 回环地址。
+两个 listener 分别拒绝另一入口的 Host；desktop session token 不能用于 Sandbox listener。`/healthz` 和 OAuth callback 的免认证规则只适用于 Renderer 回环地址。
 
 ## 5. Web UI 适配
 
@@ -195,7 +198,7 @@ Electron 和 sidecar 日志位于系统应用日志目录，Go 输出记录在 `
 
 1. 是否已有 `csgclaw serve` 或 daemon 占用 `runtime.lock`。
 2. `backend.log` 中是否有启动、端口或协议错误。
-3. OpenClaw 配置中的服务地址是否为 `host.docker.internal:<动态端口>`。
+3. Agent 配置中的服务地址是否为 `host.docker.internal:<sandbox-port>` 或宿主机 LAN IPv4 对应的动态端口。
 
 ## 7. 打包
 

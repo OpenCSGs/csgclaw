@@ -2025,6 +2025,16 @@ func TestAPIBaseURLFallsBackToSharedDefault(t *testing.T) {
 	}
 }
 
+func TestServeAPIBaseURLUsesDesktopRendererEndpoint(t *testing.T) {
+	got := serveAPIBaseURL(
+		config.ServerConfig{ListenAddr: "0.0.0.0:59843"},
+		serveOptions{Desktop: &server.DesktopOptions{BaseURL: "http://127.0.0.1:59842/"}},
+	)
+	if want := "http://127.0.0.1:59842"; got != want {
+		t.Fatalf("serveAPIBaseURL() = %q, want %q", got, want)
+	}
+}
+
 func TestParseServeLogLevel(t *testing.T) {
 	cases := map[string]slog.Level{
 		"":        slog.LevelInfo,

@@ -11,29 +11,41 @@ import (
 func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) {
 	const (
 		rendererHost = "127.0.0.1:59842"
-		sandboxHost  = "host.docker.internal:59842"
+		sandboxHost  = "host.docker.internal:59843"
 		sessionToken = "sssssssssssssssssssssssssssssssssssssssssss"
 		serverToken  = "server-access-token"
 	)
 
-	handler, err := desktopSecurityHandler(
+	opts := DesktopOptions{
+		BaseURL:           "http://" + rendererHost,
+		SessionToken:      sessionToken,
+		ServerAccessToken: serverToken,
+		ServerAccessHosts: []string{"127.0.0.1:59843", sandboxHost},
+	}
+	rendererHandler, err := desktopRendererSecurityHandler(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 		}),
 		&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 59842},
-		DesktopOptions{
-			BaseURL:           "http://" + rendererHost,
-			SessionToken:      sessionToken,
-			ServerAccessToken: serverToken,
-			ServerAccessHosts: []string{sandboxHost},
-		},
+		opts,
 	)
 	if err != nil {
-		t.Fatalf("desktopSecurityHandler() error = %v", err)
+		t.Fatalf("desktopRendererSecurityHandler() error = %v", err)
+	}
+	sandboxHandler, err := desktopSandboxSecurityHandler(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}),
+		&net.TCPAddr{IP: net.IPv4zero, Port: 59843},
+		opts,
+	)
+	if err != nil {
+		t.Fatalf("desktopSandboxSecurityHandler() error = %v", err)
 	}
 
 	tests := []struct {
 		name          string
+		sandbox       bool
 		host          string
 		path          string
 		authorization string
@@ -56,6 +68,7 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 		},
 		{
 			name:          "sandbox accepts server token without browser origin",
+			sandbox:       true,
 			host:          sandboxHost,
 			path:          "/api/v1/channels/csgclaw/participants/pt-worker/events",
 			authorization: "Bearer " + serverToken,
@@ -63,6 +76,7 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 		},
 		{
 			name:          "sandbox rejects renderer session token",
+			sandbox:       true,
 			host:          sandboxHost,
 			path:          "/api/v1/messages",
 			authorization: "Bearer " + sessionToken,
@@ -70,12 +84,14 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 		},
 		{
 			name:       "sandbox health still requires server token",
+			sandbox:    true,
 			host:       sandboxHost,
 			path:       "/healthz",
 			wantStatus: http.StatusUnauthorized,
 		},
 		{
 			name:          "sandbox rejects browser origin",
+			sandbox:       true,
 			host:          sandboxHost,
 			path:          "/api/v1/messages",
 			authorization: "Bearer " + serverToken,
@@ -84,6 +100,7 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 		},
 		{
 			name:          "server token cannot authorize an unknown host",
+			sandbox:       true,
 			host:          "attacker.invalid:59842",
 			path:          "/api/v1/messages",
 			authorization: "Bearer " + serverToken,
@@ -96,6 +113,21 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 			authorization: "Bearer " + sessionToken,
 			origin:        "https://attacker.invalid",
 			wantStatus:    http.StatusForbidden,
+		},
+		{
+			name:          "sandbox listener rejects renderer host",
+			sandbox:       true,
+			host:          rendererHost,
+			path:          "/api/v1/messages",
+			authorization: "Bearer " + sessionToken,
+			wantStatus:    http.StatusBadRequest,
+		},
+		{
+			name:          "renderer listener rejects sandbox host",
+			host:          sandboxHost,
+			path:          "/api/v1/messages",
+			authorization: "Bearer " + serverToken,
+			wantStatus:    http.StatusBadRequest,
 		},
 	}
 
@@ -111,7 +143,11 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 			}
 			recorder := httptest.NewRecorder()
 
-			handler.ServeHTTP(recorder, req)
+			requestHandler := rendererHandler
+			if tt.sandbox {
+				requestHandler = sandboxHandler
+			}
+			requestHandler.ServeHTTP(recorder, req)
 
 			if recorder.Code != tt.wantStatus {
 				t.Fatalf("status = %d, want %d; body = %q", recorder.Code, tt.wantStatus, recorder.Body.String())
@@ -124,13 +160,13 @@ func TestDesktopSecurityRejectsInvalidSandboxHosts(t *testing.T) {
 	const sessionToken = "sssssssssssssssssssssssssssssssssssssssssss"
 	for _, host := range []string{
 		"host.docker.internal:12345",
-		"host.docker.internal:59842/path",
-		"user@host.docker.internal:59842",
+		"host.docker.internal:59843/path",
+		"user@host.docker.internal:59843",
 	} {
 		t.Run(strings.ReplaceAll(host, "/", "_"), func(t *testing.T) {
-			_, err := desktopSecurityHandler(
+			_, err := desktopSandboxSecurityHandler(
 				http.NotFoundHandler(),
-				&net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 59842},
+				&net.TCPAddr{IP: net.IPv4zero, Port: 59843},
 				DesktopOptions{
 					BaseURL:           "http://127.0.0.1:59842",
 					SessionToken:      sessionToken,

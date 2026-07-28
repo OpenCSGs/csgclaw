@@ -84,18 +84,18 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 		return err
 	}
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	rendererListener, sandboxListener, err := listenDesktopEndpoints()
 	if err != nil {
-		return fmt.Errorf("listen on desktop loopback address: %w", err)
+		return err
 	}
-	defer listener.Close()
+	defer rendererListener.Close()
+	defer sandboxListener.Close()
 
-	cfg.Server.ListenAddr = listener.Addr().String()
-	// Desktop always exposes the Renderer through the exact loopback listener.
-	// Keep advertise_base_url implicit so the existing sandbox-provider resolver
-	// can derive a container-reachable callback URL from the same listener.
+	// Agent runtime configuration uses the sandbox listener, while Electron only
+	// receives the separate Renderer loopback URL in the ready message.
+	cfg.Server.ListenAddr = sandboxListener.Addr().String()
 	cfg.Server.AdvertiseBaseURL = ""
-	rendererBaseURL := "http://" + listener.Addr().String()
+	rendererBaseURL := "http://" + rendererListener.Addr().String()
 	sandboxManagerBaseURL := agent.ResolveManagerBaseURLForSandboxProvider(
 		cfg.Server,
 		cfg.Sandbox.Resolved().Provider,
@@ -107,15 +107,16 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 	}
 
 	return serveForegroundWithConfigPath(ctx, run, cfg, configPath, "", serveOptions{
-		NoBrowser:    true,
-		Quiet:        true,
-		Distribution: "electron",
-		Listener:     listener,
+		NoBrowser:       true,
+		Quiet:           true,
+		Distribution:    "electron",
+		Listener:        rendererListener,
+		SandboxListener: sandboxListener,
 		Desktop: &server.DesktopOptions{
 			BaseURL:           ready.BaseURL,
 			SessionToken:      bootstrap.SessionToken,
 			ServerAccessToken: cfg.Server.AccessToken,
-			ServerAccessHosts: desktopServerAccessHosts(sandboxManagerBaseURL, listener.Addr()),
+			ServerAccessHosts: desktopServerAccessHosts(sandboxManagerBaseURL, sandboxListener.Addr()),
 		},
 		OnReady: func() {
 			if err := json.NewEncoder(run.Stdout).Encode(ready); err != nil {
@@ -123,6 +124,19 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 			}
 		},
 	})
+}
+
+func listenDesktopEndpoints() (net.Listener, net.Listener, error) {
+	rendererListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		return nil, nil, fmt.Errorf("listen on desktop renderer loopback address: %w", err)
+	}
+	sandboxListener, err := net.Listen("tcp4", "0.0.0.0:0")
+	if err != nil {
+		_ = rendererListener.Close()
+		return nil, nil, fmt.Errorf("listen on desktop sandbox address: %w", err)
+	}
+	return rendererListener, sandboxListener, nil
 }
 
 func desktopServerAccessHosts(runtimeBaseURL string, listenerAddr net.Addr) []string {
@@ -137,7 +151,11 @@ func desktopServerAccessHosts(runtimeBaseURL string, listenerAddr net.Addr) []st
 	if err != nil || parsed.Port() != listenerPort {
 		return nil
 	}
-	return []string{parsed.Host}
+	loopbackHost := net.JoinHostPort("127.0.0.1", listenerPort)
+	if strings.EqualFold(parsed.Host, loopbackHost) {
+		return []string{loopbackHost}
+	}
+	return []string{loopbackHost, parsed.Host}
 }
 
 func readDesktopBootstrap(reader *bufio.Reader) (desktop.BootstrapMessage, error) {

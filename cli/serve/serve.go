@@ -379,11 +379,16 @@ type serveOptions struct {
 	Quiet              bool
 	Distribution       string
 	Listener           net.Listener
+	SandboxListener    net.Listener
 	Desktop            *server.DesktopOptions
 	OnReady            func()
 }
 
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
+	serveOpts := serveOptions{}
+	if len(opts) > 0 {
+		serveOpts = opts[0]
+	}
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}
@@ -404,13 +409,9 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 	if err != nil {
 		return err
 	}
-	apiURL := apiBaseURL(cfg.Server)
+	apiURL := serveAPIBaseURL(cfg.Server, serveOpts)
 	imURL := imOpenURL(apiURL)
 
-	serveOpts := serveOptions{}
-	if len(opts) > 0 {
-		serveOpts = opts[0]
-	}
 	if serveOpts.Quiet {
 		// Machine entrypoints own stdout and emit their versioned protocol messages.
 	} else if output == "json" {
@@ -633,7 +634,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
-	apiURL := apiBaseURL(cfg.Server)
+	apiURL := serveAPIBaseURL(cfg.Server, serveOpts)
 	imURL := imOpenURL(apiURL)
 	currentVersion := appversion.Current()
 	upgradeClient := upgrade.Client{
@@ -702,6 +703,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	return RunServer(server.Options{
 		ListenAddr:         cfg.Server.ListenAddr,
 		Listener:           serveOpts.Listener,
+		SandboxListener:    serveOpts.SandboxListener,
 		Service:            svc,
 		Hub:                hubSvc,
 		MCP:                mcpSvc,
@@ -982,6 +984,15 @@ func openBrowser(rawURL string) error {
 
 func apiBaseURL(server config.ServerConfig) string {
 	return config.ResolveAdvertiseBaseURL(server)
+}
+
+func serveAPIBaseURL(serverConfig config.ServerConfig, opts serveOptions) string {
+	if opts.Desktop != nil {
+		if baseURL := strings.TrimRight(strings.TrimSpace(opts.Desktop.BaseURL), "/"); baseURL != "" {
+			return baseURL
+		}
+	}
+	return apiBaseURL(serverConfig)
 }
 
 func printEffectiveConfig(run *command.Context, cfg config.Config, output string) {
