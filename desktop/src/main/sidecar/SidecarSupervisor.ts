@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { app } from "electron";
+import { resolveSidecarEnvironment } from "./childEnvironment";
 import { DesktopMessageType, DESKTOP_PROTOCOL_VERSION, type DesktopBootstrapMessage, type DesktopReadyMessage } from "./contract";
 import { locateBackendBundle } from "./locateBundle";
 import { assertCompatibleVersions, parseReadyMessage } from "./readyProtocol";
@@ -35,6 +36,7 @@ export class SidecarSupervisor extends EventEmitter {
   private expectedStop = false;
   private stderrSummary = "";
   private stateValue: SidecarState = "idle";
+  private childEnvironmentPromise: Promise<NodeJS.ProcessEnv> | null = null;
   readonly logPath: string;
 
   constructor() {
@@ -97,9 +99,10 @@ export class SidecarSupervisor extends EventEmitter {
     if (configPath) {
       args.push("--config", configPath);
     }
+    const childEnvironment = await this.resolveChildEnvironment();
     const child = spawn(bundle.executable, args, {
       cwd: bundle.root,
-      env: sanitizedChildEnvironment(),
+      env: childEnvironment,
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
     });
@@ -210,6 +213,7 @@ export class SidecarSupervisor extends EventEmitter {
 
   async restart(reason = "desktop-restart"): Promise<SidecarConnection> {
     await this.stop(reason);
+    this.childEnvironmentPromise = null;
     return this.startWithRetry();
   }
 
@@ -238,6 +242,13 @@ export class SidecarSupervisor extends EventEmitter {
     });
   }
 
+  private resolveChildEnvironment(): Promise<NodeJS.ProcessEnv> {
+    this.childEnvironmentPromise ??= resolveSidecarEnvironment({
+      homeDirectory: app.getPath("home"),
+    });
+    return this.childEnvironmentPromise;
+  }
+
   private setState(next: SidecarState): void {
     if (this.stateValue === next) {
       return;
@@ -245,32 +256,6 @@ export class SidecarSupervisor extends EventEmitter {
     this.stateValue = next;
     this.emit("state", next);
   }
-}
-
-function sanitizedChildEnvironment(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.NODE_OPTIONS;
-  if (process.platform === "darwin") {
-    env.PATH = mergeExecutableSearchPath(env.PATH, [
-      path.join(app.getPath("home"), ".docker", "bin"),
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-      "/Applications/Docker.app/Contents/Resources/bin",
-      "/usr/bin",
-      "/bin",
-      "/usr/sbin",
-      "/sbin",
-    ]);
-  }
-  return env;
-}
-
-function mergeExecutableSearchPath(current: string | undefined, fallbacks: string[]): string {
-  const entries = [...(current || "").split(path.delimiter), ...fallbacks]
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  return [...new Set(entries)].join(path.delimiter);
 }
 
 function waitForExit(child: ChildProcessWithoutNullStreams): Promise<void> {
