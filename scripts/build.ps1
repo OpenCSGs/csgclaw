@@ -297,12 +297,7 @@ function Ensure-DesktopDeps {
     }
 
     Assert-WebToolchain | Out-Null
-    $forge = Join-Path $script:DesktopDir "node_modules/.bin/electron-forge.cmd"
-    if (Test-Path -LiteralPath $forge -PathType Leaf) {
-        return
-    }
-
-    Write-Host "Electron Desktop dependencies are missing; installing them before continuing."
+    Write-Host "Checking Electron Desktop dependencies..."
     Invoke-Pnpm -Arguments @("--dir", $script:DesktopDir, "install", "--frozen-lockfile")
 }
 
