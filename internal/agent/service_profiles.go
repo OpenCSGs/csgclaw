@@ -11,6 +11,7 @@ import (
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/identity"
+	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
@@ -208,7 +209,7 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 		if err != nil {
 			return err
 		}
-		if _, err := picoclawsandbox.EnsureConfigWithMCPServers(agentHome, participantID, got.ID, s.server, modelCfg, got.MCPServers, resolveManagerBaseURL, feishuProvider); err != nil {
+		if _, err := picoclawsandbox.EnsureConfigWithMCPServers(agentHome, participantID, got.ID, s.server, modelCfg, got.MCPServers, s.resolveManagerBaseURL, feishuProvider); err != nil {
 			return fmt.Errorf("sync gateway picoclaw config: %w", err)
 		}
 	case RuntimeKindOpenClawSandbox:
@@ -217,7 +218,7 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 			return err
 		}
 		feishuProvider := s.currentFeishuProviderForRuntime(RuntimeKindOpenClawSandbox)
-		if _, err := openclawsandbox.EnsureConfigWithMCPServers(agentHome, participantID, got.ID, s.server, modelCfg, got.MCPServers, resolveManagerBaseURL, feishuProvider); err != nil {
+		if _, err := openclawsandbox.EnsureConfigWithMCPServers(agentHome, participantID, got.ID, s.server, modelCfg, got.MCPServers, s.resolveManagerBaseURL, feishuProvider); err != nil {
 			return fmt.Errorf("sync gateway openclaw config: %w", err)
 		}
 	default:
@@ -416,7 +417,7 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 			if req.MCPServers == nil {
 				current.MCPServers = nil
 			} else {
-				normalizedMCPServers, err := agentruntime.NormalizeMCPServers(*req.MCPServers)
+				normalizedMCPServers, err := mcpschema.NormalizeMCPServers(*req.MCPServers)
 				if err != nil {
 					s.mu.Unlock()
 					return Agent{}, err
@@ -620,12 +621,16 @@ func (s *Service) DeleteMCPServers(ctx context.Context, id string, names []strin
 }
 
 // currentMCPServersForManagement uses persisted MCPServers once an agent has
-// entered CSGClaw management. For an unmanaged agent, it reads the runtime
-// configuration once so the first management action can adopt every server.
+// entered CSGClaw management. It deliberately returns that stored state
+// without revalidating it: a later validation rule must not prevent an
+// operator from deleting a legacy or malformed MCP entry. Update validates the
+// resulting desired state before it is persisted or provisioned.
+//
+// For an unmanaged agent, it reads the runtime configuration once so the first
+// management action can adopt every server.
 func (s *Service) currentMCPServersForManagement(ctx context.Context, current Agent) (map[string]any, error) {
-	servers, err := agentruntime.NormalizeMCPServers(current.MCPServers)
-	if err != nil || servers != nil {
-		return servers, err
+	if current.MCPServers != nil {
+		return cloneMCPServers(current.MCPServers), nil
 	}
 
 	runtimeKind := strings.TrimSpace(current.RuntimeKind)
@@ -645,7 +650,7 @@ func (s *Service) currentMCPServersForManagement(ctx context.Context, current Ag
 	if err != nil {
 		return nil, fmt.Errorf("read runtime mcpServers for agent %q: %w", current.ID, err)
 	}
-	servers, err = agentruntime.NormalizeMCPServers(listed.Servers)
+	servers, err := mcpschema.NormalizeMCPServers(listed.Servers)
 	if err != nil {
 		return nil, fmt.Errorf("normalize runtime mcpServers for agent %q: %w", current.ID, err)
 	}
@@ -674,7 +679,7 @@ func runtimeMCPServerConfigFromCatalog(name string, raw any) (map[string]any, er
 	if !ok {
 		return nil, fmt.Errorf("mcp server %q config must be an object", name)
 	}
-	normalized, err := agentruntime.NormalizeMCPServers(map[string]any{name: rawConfig})
+	normalized, err := mcpschema.NormalizeMCPServers(map[string]any{name: rawConfig})
 	if err != nil {
 		return nil, err
 	}
@@ -966,7 +971,7 @@ func normalizeMCPServers(config map[string]any) (map[string]any, error) {
 	if config == nil {
 		return nil, nil
 	}
-	return agentruntime.NormalizeMCPServers(config)
+	return mcpschema.NormalizeMCPServers(config)
 }
 
 func (s *Service) storedAPIKeyForModelRequest(req ProfileModelRequest, profile AgentProfile) string {

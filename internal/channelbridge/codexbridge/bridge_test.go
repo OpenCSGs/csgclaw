@@ -2350,7 +2350,9 @@ func TestHTTPClientStreamEventsMentionOnly(t *testing.T) {
 							"event: message\n" +
 							"data: {\"message_id\":\"m-3\",\"room_id\":\"room-1\",\"chat_type\":\"group\",\"text\":\"@codex hello\",\"mentions\":[\"u-codex\"],\"thread_root_id\":\"msg-root\"}\n\n" +
 							"event: message\n" +
-							"data: {\"message_id\":\"m-4\",\"room_id\":\"room-2\",\"chat_type\":\"direct\",\"text\":\"direct hello\"}\n\n",
+							"data: {\"message_id\":\"m-4\",\"room_id\":\"room-2\",\"chat_type\":\"direct\",\"text\":\"direct hello\"}\n\n" +
+							"event: message\n" +
+							"data: {\"message_id\":\"m-5\",\"room_id\":\"room-3\",\"chat_type\":\"group\",\"text\":\"fanout hello\",\"mentioned\":true}\n\n",
 					)),
 				}, nil
 			}),
@@ -2368,8 +2370,8 @@ func TestHTTPClientStreamEventsMentionOnly(t *testing.T) {
 		}
 	}
 
-	if len(got) != 3 {
-		t.Fatalf("received %d events, want 3: %+v", len(got), got)
+	if len(got) != 4 {
+		t.Fatalf("received %d events, want 4: %+v", len(got), got)
 	}
 	if got[0].MessageID != "m-2" {
 		t.Fatalf("received first event = %+v, want m-2", got[0])
@@ -2382,6 +2384,9 @@ func TestHTTPClientStreamEventsMentionOnly(t *testing.T) {
 	}
 	if got[2].MessageID != "m-4" {
 		t.Fatalf("received third event = %+v, want m-4", got[2])
+	}
+	if got[3].MessageID != "m-5" || !got[3].Mentioned {
+		t.Fatalf("received fourth event = %+v, want mentioned m-5", got[3])
 	}
 }
 

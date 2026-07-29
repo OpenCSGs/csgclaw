@@ -334,6 +334,16 @@
   gap: 14px;
 }
 
+.mcp-form-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcp-form-mode .btn-content {
+  gap: 6px;
+}
+
 .hub-template-card-meta {
   display: flex;
   align-items: center;

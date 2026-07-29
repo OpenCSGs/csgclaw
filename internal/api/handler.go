@@ -66,13 +66,17 @@ type Handler struct {
 	teamPlanJobsMu             sync.Mutex
 	teamPlanJobs               map[string]struct{}
 	configPath                 string
+	advertiseBaseURL           string
+	runtimeDistribution        string
 	serverAccessToken          string
+	desktopSessionToken        string
 	serverNoAuth               bool
 	upgradeManager             *upgrade.Manager
 	upgradeConfigPath          string
 	upgradeApply               func(upgrade.ApplyHelperOptions) error
 	serverRestartApply         func(upgrade.RestartHelperOptions) error
 	localRuntimeImages         func(context.Context, config.Config) ([]string, error)
+	environmentRuntimeReset    func() error
 	notificationDeliver        notification.Fanouter
 	activityDecider            ActivityDecider
 	userInputResponder         UserInputResponder
@@ -865,8 +869,29 @@ func (h *Handler) SetConfigPath(path string) {
 	}
 }
 
+func (h *Handler) SetAdvertiseBaseURL(baseURL string) {
+	if h != nil {
+		h.advertiseBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	}
+}
+
+func (h *Handler) SetRuntimeDistribution(distribution string) {
+	if h != nil {
+		h.runtimeDistribution = strings.TrimSpace(distribution)
+	}
+}
+
+func (h *Handler) SetDesktopSessionToken(token string) {
+	if h != nil {
+		h.desktopSessionToken = strings.TrimSpace(token)
+	}
+}
+
 func (h *Handler) validateServerAccessToken(authHeader string) bool {
 	if h.serverNoAuth {
+		return true
+	}
+	if token := strings.TrimSpace(h.desktopSessionToken); token != "" && authHeader == "Bearer "+token {
 		return true
 	}
 	token := strings.TrimSpace(h.serverAccessToken)
@@ -897,17 +922,19 @@ func (h *Handler) handleUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upgrade manager is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	if outcome, err := upgrade.ConsumeApplyStatus(h.upgradeConfigPath); err != nil {
-		http.Error(w, fmt.Sprintf("read upgrade helper status: %v", err), http.StatusInternalServerError)
-		return
-	} else {
-		switch outcome.Status {
-		case upgrade.ApplyStatusFailed:
-			if outcome.Message != "" {
-				h.upgradeManager.MarkUpgradeFailedWithDetails(errors.New(outcome.Message), outcome.ErrorKind, outcome.LogPath)
+	if h.runtimeDistribution != "electron" {
+		if outcome, err := upgrade.ConsumeApplyStatus(h.upgradeConfigPath); err != nil {
+			http.Error(w, fmt.Sprintf("read upgrade helper status: %v", err), http.StatusInternalServerError)
+			return
+		} else {
+			switch outcome.Status {
+			case upgrade.ApplyStatusFailed:
+				if outcome.Message != "" {
+					h.upgradeManager.MarkUpgradeFailedWithDetails(errors.New(outcome.Message), outcome.ErrorKind, outcome.LogPath)
+				}
+			case upgrade.ApplyStatusManualRestartRequired:
+				h.upgradeManager.MarkManualRestartRequired()
 			}
-		case upgrade.ApplyStatusManualRestartRequired:
-			h.upgradeManager.MarkManualRestartRequired()
 		}
 	}
 	writeJSON(w, http.StatusOK, h.upgradeManager.Status())
@@ -923,6 +950,10 @@ func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status := h.upgradeManager.Status(); !status.AutoUpgradeSupported {
+		if status.AutoUpgradeUnsupportedReason == "desktop_managed" {
+			http.Error(w, "desktop updates are managed by Electron", http.StatusConflict)
+			return
+		}
 		http.Error(w, "current installation is not an official csgclaw bundle; please upgrade manually", http.StatusConflict)
 		return
 	}
@@ -1417,7 +1448,14 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	created, err := h.svc.Create(r.Context(), agentCreateRequestFromAPI(req))
+	hubSvc, err := h.hubServiceForRequest(r)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("resolve hub service: %v", err), http.StatusInternalServerError)
+		return
+	}
+	createReq := agentCreateRequestFromAPI(req)
+	createReq.HubService = hubSvc
+	created, err := h.svc.Create(r.Context(), createReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1909,6 +1947,24 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 	}
 
 	switch r.Method {
+	case http.MethodPatch:
+		var req apitypes.UpdateRoomRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		room, err := channel.UpdateRoom(id, req)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				http.Error(w, "room not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, room)
 	case http.MethodDelete:
 		var deletedRoom im.Room
 		hasDeletedRoom := false
@@ -2099,6 +2155,11 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.participant != nil && h.svc != nil && shouldCreateWorkerForUser(id, role) {
+		hubSvc, err := h.hubServiceForRequest(r)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("resolve hub service: %v", err), http.StatusInternalServerError)
+			return
+		}
 		participantID := workerParticipantIDFromUserID(id)
 		workerAgentID := workerAgentIDFromUserID(id)
 		if existing, ok := h.participant.Get(participant.ChannelCSGClaw, participantID); ok && strings.TrimSpace(existing.Type) == participant.TypeAgent {
@@ -2126,10 +2187,11 @@ func (h *Handler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		created, err := h.participant.Create(r.Context(), participant.CreateRequest{
-			ID:      participantID,
-			Channel: participant.ChannelCSGClaw,
-			Type:    participant.TypeAgent,
-			Name:    name,
+			ID:              participantID,
+			Channel:         participant.ChannelCSGClaw,
+			Type:            participant.TypeAgent,
+			Name:            name,
+			AgentHubService: hubSvc,
 			ChannelUser: participant.ChannelUserSpec{
 				Ref:  id,
 				Kind: participant.ChannelUserKindLocalUserID,

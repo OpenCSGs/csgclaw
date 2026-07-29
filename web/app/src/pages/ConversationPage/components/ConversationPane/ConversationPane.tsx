@@ -124,6 +124,9 @@ export function ConversationPane({
   onPreviewUser,
   onDeleteRoom,
   onClearRoomMessages = (_id) => {},
+  notifyAllAgentsBusy = false,
+  notifyAllAgentsError = "",
+  onNotifyAllAgentsChange,
   inviteActionLabel,
   onInviteAction,
   mentionCandidates,
@@ -382,6 +385,8 @@ export function ConversationPane({
         logModalOpen={logModalOpen}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={visibleMessages.length}
+        notifyAllAgentsBusy={notifyAllAgentsBusy}
+        notifyAllAgentsError={notifyAllAgentsError}
         showChannelTools={showChannelTools}
         showInviteAction={true}
         showMemberListAction={false}
@@ -390,6 +395,7 @@ export function ConversationPane({
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
         onInviteAction={onInviteAction}
+        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onOpenAgentLogs={handleOpenAgentLogs}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}

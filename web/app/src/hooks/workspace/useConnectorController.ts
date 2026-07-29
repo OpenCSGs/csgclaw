@@ -22,6 +22,7 @@ import {
 } from "@/models/connectors";
 import type { ConnectorConfigDraft, ConnectorStatus, GitLabConnectorConfigDraft } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
+import { prepareOAuthNavigation } from "@/shared/platform/externalNavigation";
 import { workspaceQueryKeys } from "./workspaceQueries";
 
 const GITHUB_CONNECTOR_LOGIN_PENDING_STORAGE_KEY = "csgclaw.connectors.github.loginPending";
@@ -176,13 +177,13 @@ export function useConnectorController(t: TranslateFn): ConnectorController {
     }
     setBusyAction("connect");
     setConnectorError("");
-    const authWindow = openBlankWindow();
+    const navigation = prepareOAuthNavigation("github-connector");
     try {
       const start = normalizeOAuthStartResponse(await startGitHubConnectorOAuthRequest(window.location.href));
       if (!start.authorization_url) {
         throw new Error(t("connectorOAuthURLMissing"));
       }
-      if (!navigateWindow(authWindow, start.authorization_url)) {
+      if (!(await navigation.open(start.authorization_url))) {
         clearPendingGitHubAuth();
         setLoginPending(false);
         setConnectorError(t("connectorOAuthPopupBlocked"));
@@ -192,7 +193,7 @@ export function useConnectorController(t: TranslateFn): ConnectorController {
       markPendingGitHubAuth();
       setLoginPending(true);
     } catch (err) {
-      closeWindow(authWindow);
+      navigation.close();
       clearPendingGitHubAuth();
       setLoginPending(false);
       setConnectorError(errorMessage(err, t("connectorConnectFailed")));
@@ -226,18 +227,18 @@ export function useConnectorController(t: TranslateFn): ConnectorController {
     }
     setBusyAction("manage");
     setConnectorError("");
-    const manageWindow = openBlankWindow();
+    const navigation = prepareOAuthNavigation("github-connector");
     try {
       const start = normalizeAppInstallStartResponse(await startGitHubConnectorAppInstallRequest());
       if (!start.install_url) {
         throw new Error(t("connectorManageURLMissing"));
       }
-      if (!navigateWindow(manageWindow, start.install_url)) {
+      if (!(await navigation.open(start.install_url))) {
         setConnectorError(t("connectorManagePopupBlocked"));
         return;
       }
     } catch (err) {
-      closeWindow(manageWindow);
+      navigation.close();
       setConnectorError(errorMessage(err, t("connectorManageFailed")));
     } finally {
       setBusyAction("");
@@ -348,54 +349,5 @@ function hasPendingGitHubAuth(): boolean {
     return window.sessionStorage.getItem(GITHUB_CONNECTOR_LOGIN_PENDING_STORAGE_KEY) === "1";
   } catch (_) {
     return false;
-  }
-}
-
-function openBlankWindow(): Window | null {
-  try {
-    return window.open("about:blank", "_blank");
-  } catch (_) {
-    return null;
-  }
-}
-
-function navigateWindow(targetWindow: Window | null, targetURL: string): boolean {
-  if (targetWindow) {
-    try {
-      targetWindow.opener = null;
-    } catch (_) {
-      // Some browser contexts make opener read-only.
-    }
-    try {
-      targetWindow.location.href = targetURL;
-      return true;
-    } catch (_) {
-      closeWindow(targetWindow);
-    }
-  }
-  try {
-    const fallbackWindow = window.open(targetURL, "_blank");
-    if (!fallbackWindow) {
-      return false;
-    }
-    try {
-      fallbackWindow.opener = null;
-    } catch (_) {
-      // Some browser contexts make opener read-only.
-    }
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
-function closeWindow(targetWindow: Window | null) {
-  if (!targetWindow) {
-    return;
-  }
-  try {
-    targetWindow.close();
-  } catch (_) {
-    // Closing a blocked or already-navigated window can throw in restricted contexts.
   }
 }

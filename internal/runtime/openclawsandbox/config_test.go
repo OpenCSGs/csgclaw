@@ -2,6 +2,8 @@ package openclawsandbox
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -311,11 +313,17 @@ func TestRenderAgentOpenClawConfigRendersMCPServers(t *testing.T) {
 	if got, want := context7["args"], []any{"context7-mcp"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("context7 args = %#v, want %#v", got, want)
 	}
-	if got, want := context7["startup_timeout_sec"], float64(90); got != want {
-		t.Fatalf("context7 startup_timeout_sec = %#v, want %#v", got, want)
+	if got, want := context7["connectionTimeoutMs"], float64(90000); got != want {
+		t.Fatalf("context7 connectionTimeoutMs = %#v, want %#v", got, want)
 	}
-	if got, want := context7["tool_timeout_sec"], float64(120); got != want {
-		t.Fatalf("context7 tool_timeout_sec = %#v, want %#v", got, want)
+	if got, want := context7["requestTimeoutMs"], float64(120000); got != want {
+		t.Fatalf("context7 requestTimeoutMs = %#v, want %#v", got, want)
+	}
+	if _, ok := context7["startup_timeout_sec"]; ok {
+		t.Fatalf("context7 retained CSGClaw-only startup timeout: %#v", context7)
+	}
+	if _, ok := context7["tool_timeout_sec"]; ok {
+		t.Fatalf("context7 retained CSGClaw-only tool timeout: %#v", context7)
 	}
 	env := context7["env"].(map[string]any)
 	if got, want := env["CONTEXT7_API_KEY"], "secret"; got != want {
@@ -347,6 +355,67 @@ func TestRenderAgentOpenClawConfigRendersMCPServers(t *testing.T) {
 	headers := remote["headers"].(map[string]any)
 	if got, want := headers["Authorization"], "Bearer secret"; got != want {
 		t.Fatalf("remote-search Authorization = %#v, want %q", got, want)
+	}
+}
+
+func TestReadOpenClawMCPServersRoundTripsNativeTimeouts(t *testing.T) {
+	native := map[string]any{
+		"context7": map[string]any{
+			"command":             "uvx",
+			"connectionTimeoutMs": float64(90000),
+			"requestTimeoutMs":    120000,
+		},
+	}
+
+	data, err := json.Marshal(map[string]any{"mcp": map[string]any{"servers": native}})
+	if err != nil {
+		t.Fatalf("json.Marshal(native MCP config) error = %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "openclaw.json")
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatalf("WriteFile(native MCP config) error = %v", err)
+	}
+	snapshot, err := readOpenClawMCPServers(configPath)
+	if err != nil {
+		t.Fatalf("readOpenClawMCPServers() error = %v", err)
+	}
+	shared := snapshot.Servers
+	context7 := shared["context7"].(map[string]any)
+	if got, want := context7["startup_timeout_sec"], int64(90); got != want {
+		t.Fatalf("startup_timeout_sec = %#v, want %#v", got, want)
+	}
+	if got, want := context7["tool_timeout_sec"], int64(120); got != want {
+		t.Fatalf("tool_timeout_sec = %#v, want %#v", got, want)
+	}
+	if _, exists := context7["connectionTimeoutMs"]; exists {
+		t.Fatalf("shared MCP config retained OpenClaw timeout: %#v", context7)
+	}
+	if _, exists := context7["requestTimeoutMs"]; exists {
+		t.Fatalf("shared MCP config retained OpenClaw timeout: %#v", context7)
+	}
+
+	rendered, err := resolveOpenClawMCPWorkspaceConfig(shared, "")
+	if err != nil {
+		t.Fatalf("resolveOpenClawMCPWorkspaceConfig() error = %v", err)
+	}
+	context7 = rendered["context7"].(map[string]any)
+	if got, want := context7["connectionTimeoutMs"], int64(90000); got != want {
+		t.Fatalf("connectionTimeoutMs = %#v, want %#v", got, want)
+	}
+	if got, want := context7["requestTimeoutMs"], int64(120000); got != want {
+		t.Fatalf("requestTimeoutMs = %#v, want %#v", got, want)
+	}
+}
+
+func TestOpenClawMCPTimeoutProjectionRejectsSubsecondNativeValues(t *testing.T) {
+	_, err := openClawMCPServersToGeneric(map[string]any{
+		"context7": map[string]any{
+			"command":             "uvx",
+			"connectionTimeoutMs": 1500,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "connectionTimeoutMs must be a positive multiple of 1000") {
+		t.Fatalf("openClawMCPServersToGeneric() error = %v, want unsupported millisecond timeout", err)
 	}
 }
 
@@ -441,6 +510,11 @@ func TestRenderAgentOpenClawConfigRejectsInvalidMCPServer(t *testing.T) {
 			name: "env values must be strings",
 			mcp:  map[string]any{"broken": map[string]any{"command": "uvx", "env": map[string]any{"TOKEN": 1}}},
 			want: "env must be an object with string values",
+		},
+		{
+			name: "invalid HTTP headers are rejected before gateway startup",
+			mcp:  map[string]any{"broken": map[string]any{"url": "https://mcp.example.com/mcp", "headers": map[string]any{"invalid header": "value"}}},
+			want: "headers contains an invalid HTTP header name",
 		},
 		{
 			name: "unsupported transport is rejected before gateway startup",

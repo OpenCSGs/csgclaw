@@ -266,9 +266,12 @@ function Assert-WebToolchain {
 }
 
 function Invoke-Pnpm {
-    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [hashtable]$Env = @{}
+    )
     $runner = Resolve-PnpmRunner
-    Invoke-Checked -FilePath $runner.FilePath -Arguments ($runner.Prefix + $Arguments)
+    Invoke-Checked -FilePath $runner.FilePath -Arguments ($runner.Prefix + $Arguments) -Env $Env
 }
 
 function Ensure-WebDeps {
@@ -285,6 +288,19 @@ function Ensure-WebDeps {
     Invoke-TargetWebInstall
 }
 
+function Ensure-DesktopDeps {
+    foreach ($file in @("package.json", "pnpm-lock.yaml")) {
+        $path = Join-Path $script:DesktopDir $file
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+            throw "Electron Desktop $file is missing: $path."
+        }
+    }
+
+    Assert-WebToolchain | Out-Null
+    Write-Host "Checking Electron Desktop dependencies..."
+    Invoke-Pnpm -Arguments @("--dir", $script:DesktopDir, "install", "--frozen-lockfile")
+}
+
 function Invoke-TargetHelp {
     @(
         "scripts\build.cmd build                         - Windows wrapper; same as build with execution-policy bypass"
@@ -295,6 +311,7 @@ function Invoke-TargetHelp {
         "powershell -File scripts/build.ps1 web-install  - install Web UI dependencies"
         "powershell -File scripts/build.ps1 web-dev      - run Vite Web UI dev server"
         "powershell -File scripts/build.ps1 build-web    - build Web UI app into web/static-dist"
+        "scripts\build.cmd desktop-package               - build Windows Electron installers"
         "powershell -File scripts/build.ps1 build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli"
         "powershell -File scripts/build.ps1 build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools"
         "powershell -File scripts/build.ps1 run          - build, then run the server"
@@ -348,13 +365,34 @@ function Invoke-TargetWebDev {
 }
 
 function Invoke-TargetBuildWeb {
-    Write-Host "Building Web UI into $script:WebStaticDistDir."
+    param([switch]$Summary)
+
+    if ($Summary) {
+        Write-Host "Building Web UI..."
+    }
+    else {
+        Write-Host "Building Web UI into $script:WebStaticDistDir."
+    }
     Ensure-WebDeps
     Ensure-Directory -Path $script:WebStaticDistDir
-    Invoke-Pnpm -Arguments @("--dir", $script:WebAppDir, "build")
+    $arguments = @("--dir", $script:WebAppDir)
+    if ($Summary) {
+        $arguments += "--silent"
+    }
+    $arguments += "build"
+    if ($Summary) {
+        $arguments += @("--logLevel", "warn")
+    }
+    Invoke-Pnpm -Arguments $arguments
     $indexPath = Join-Path $script:WebStaticDistDir "index.html"
     if (-not (Test-Path -LiteralPath $indexPath -PathType Leaf)) {
         throw "Web UI build did not produce $indexPath."
+    }
+    if ($Summary) {
+        $files = @(Get-ChildItem -LiteralPath $script:WebStaticDistDir -Recurse -File)
+        $totalBytes = ($files | Measure-Object -Property Length -Sum).Sum
+        $totalMegabytes = [math]::Round($totalBytes / 1MB, 1)
+        Write-Host "Web UI ready: $script:WebStaticDistDir ($($files.Count) files, ${totalMegabytes}M total)."
     }
 }
 
@@ -364,7 +402,8 @@ function Invoke-GoBuild {
         [Parameter(Mandatory = $true)][string]$PackagePath,
         [Parameter(Mandatory = $true)][string]$Ldflags,
         [hashtable]$Env = @{},
-        [string]$Tags = ""
+        [string]$Tags = "",
+        [switch]$Quiet
     )
 
     $go = Get-CommandPathOrNull "go"
@@ -383,7 +422,9 @@ function Invoke-GoBuild {
         $baseEnv[$key] = $Env[$key]
     }
 
-    Write-Host "Building $OutputPath from $PackagePath."
+    if (-not $Quiet) {
+        Write-Host "Building $OutputPath from $PackagePath."
+    }
     Invoke-Checked -FilePath $go -Arguments $args -Env $baseEnv
 }
 
@@ -409,6 +450,39 @@ function Invoke-TargetBuildSandboxCli {
         GOOS        = "linux"
         GOARCH      = $script:TargetArch
     }
+}
+
+function Invoke-DesktopBackendBundle {
+    param(
+        [Parameter(Mandatory = $true)][string]$Goos,
+        [Parameter(Mandatory = $true)][string]$Goarch
+    )
+
+    $outputRoot = Join-Path (Join-Path $script:DistDir "desktop-input") "$Goos-$Goarch"
+    if (Test-Path -LiteralPath $outputRoot) {
+        Remove-Item -LiteralPath $outputRoot -Recurse -Force
+    }
+
+    $bundleRoot = Join-Path (Join-Path $outputRoot "backend") "csgclaw"
+    $binDir = Join-Path $bundleRoot "bin"
+    $sandboxCliDir = Join-Path $binDir "sandbox-tools"
+    Ensure-Directory -Path $sandboxCliDir
+    Set-Content -LiteralPath (Join-Path $bundleRoot ".csgclaw-bundle.json") -Value "{""app"":""csgclaw"",""layout"":""official-bundle"",""version"":""$($script:Version)""}" -NoNewline
+
+    $targetEnv = @{
+        CGO_ENABLED = "0"
+        GOOS        = $Goos
+        GOARCH      = $Goarch
+    }
+    Invoke-GoBuild -OutputPath (Join-Path $binDir (Get-BinaryName -BaseName "csgclaw" -Goos $Goos)) -PackagePath "./cmd/csgclaw" -Ldflags $script:Ldflags -Env $targetEnv -Tags $script:GoBuildTags -Quiet
+    Invoke-GoBuild -OutputPath (Join-Path $binDir (Get-BinaryName -BaseName "csgclaw-cli" -Goos $Goos)) -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env $targetEnv -Quiet
+    Invoke-GoBuild -OutputPath (Join-Path $sandboxCliDir "csgclaw-cli") -PackagePath $script:SandboxCliCmdPath -Ldflags $script:CliLdflags -Env @{
+        CGO_ENABLED = "0"
+        GOOS        = "linux"
+        GOARCH      = $Goarch
+    } -Quiet
+
+    Write-Host "Desktop backend ready: $bundleRoot"
 }
 
 function Supports-BoxLiteBundle {
@@ -638,6 +712,44 @@ function Invoke-TargetBuild {
     Write-Host "Build complete."
 }
 
+function Invoke-TargetDesktopPackage {
+    if ($script:TargetOs -ne "windows") {
+        throw "scripts\build.cmd desktop-package must run with TARGET_OS=windows."
+    }
+
+    $desktopArch = switch ($script:TargetArch) {
+        "amd64" { "x64" }
+        "arm64" { "arm64" }
+        default { throw "unsupported Windows desktop architecture: $($script:TargetArch)" }
+    }
+
+    Ensure-DesktopDeps
+    Invoke-TargetBuildWeb -Summary
+    Write-Host "Building desktop backend ($($script:TargetOs)/$($script:TargetArch))..."
+    Invoke-DesktopBackendBundle -Goos $script:TargetOs -Goarch $script:TargetArch
+    Write-Host "Building desktop packages (win32/$desktopArch)..."
+    if (Test-Path -LiteralPath $script:DesktopMakeDir) {
+        Remove-Item -LiteralPath $script:DesktopMakeDir -Recurse -Force
+    }
+    Invoke-Pnpm -Arguments @("--dir", $script:DesktopDir, "--silent", "make", "--platform=win32", "--arch=$desktopArch") -Env @{
+        CSGCLAW_DESKTOP_GOOS    = $script:TargetOs
+        CSGCLAW_DESKTOP_GOARCH  = $script:TargetArch
+        CSGCLAW_DESKTOP_ARCH    = $desktopArch
+        CSGCLAW_DESKTOP_VERSION = $script:Version
+    }
+
+    $installers = @(
+        Get-ChildItem -LiteralPath $script:DesktopMakeDir -Recurse -File -Filter "*-Setup.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Length -gt 0 }
+    )
+    if ($installers.Count -eq 0) {
+        throw "Electron Forge completed without producing a Windows installer under $script:DesktopMakeDir."
+    }
+
+    Write-Host "Desktop installer ready:"
+    $installers | ForEach-Object { Write-Host "  $($_.FullName)" }
+}
+
 function Invoke-TargetRun {
     Invoke-TargetBuild
     $serverBinary = Join-Path $script:BinDir (Get-BinaryName -BaseName "csgclaw" -Goos $script:TargetOs)
@@ -694,6 +806,8 @@ $script:CliLdflags = Get-EnvOrDefault -Name "CLI_LDFLAGS" -Default "-s -w $($scr
 $script:CgoEnabled = Get-EnvOrDefault -Name "CGO_ENABLED" -Default "0"
 $script:WebAppDir = Get-EnvOrDefault -Name "WEB_APP_DIR" -Default (Join-Path $RootDir "web/app")
 $script:WebStaticDistDir = Get-EnvOrDefault -Name "WEB_STATIC_DIST_DIR" -Default (Join-Path $RootDir "web/static-dist")
+$script:DesktopDir = Get-EnvOrDefault -Name "DESKTOP_DIR" -Default (Join-Path $RootDir "desktop")
+$script:DesktopMakeDir = Join-Path $script:DesktopDir "out/make"
 $script:SandboxBundleToolsDir = Get-EnvOrDefault -Name "SANDBOX_BUNDLE_TOOLS_DIR" -Default (Join-Path $script:BinDir "sandbox-tools")
 $script:SandboxCliBin = Get-EnvOrDefault -Name "SANDBOX_CLI_BIN" -Default (Join-Path $script:SandboxBundleToolsDir "csgclaw-cli")
 $script:HostGoos = Resolve-GoEnv -Name "GOOS"
@@ -723,6 +837,7 @@ try {
         "install-sandbox-cli" { Invoke-TargetBuildSandboxCli }
         "build" { Invoke-TargetBuild }
         "build-all" { Invoke-TargetBuild }
+        "desktop-package" { Invoke-TargetDesktopPackage }
         "run" { Invoke-TargetRun }
         "package" { Invoke-TargetPackage }
         "package-all" { Invoke-TargetPackageAll }

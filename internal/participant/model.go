@@ -3,6 +3,7 @@ package participant
 import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
+	hub "csgclaw/internal/template"
 )
 
 const (
@@ -43,6 +44,7 @@ type CreateRequest struct {
 	Type             string           `json:"type"`
 	Name             string           `json:"name"`
 	Avatar           string           `json:"-"`
+	AgentHubService  *hub.Service     `json:"-"`
 	ChannelAppRef    string           `json:"channel_app_ref,omitempty"`
 	ChannelAppConfig map[string]any   `json:"channel_app_config,omitempty"`
 	ChannelUser      ChannelUserSpec  `json:"channel_user,omitempty"`

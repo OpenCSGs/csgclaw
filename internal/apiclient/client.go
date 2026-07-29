@@ -167,6 +167,18 @@ func (c *Client) CreateRoomByChannel(ctx context.Context, channel string, req ap
 	return created, nil
 }
 
+func (c *Client) UpdateRoom(ctx context.Context, roomID string, req apitypes.UpdateRoomRequest) (apitypes.Room, error) {
+	var updated apitypes.Room
+	path, err := roomDeletePath("csgclaw", roomID)
+	if err != nil {
+		return apitypes.Room{}, err
+	}
+	if err := c.DoJSON(ctx, http.MethodPatch, path, req, &updated); err != nil {
+		return apitypes.Room{}, err
+	}
+	return updated, nil
+}
+
 func (c *Client) SendMessageByChannel(ctx context.Context, channel string, req apitypes.CreateMessageRequest) (apitypes.Message, error) {
 	var created apitypes.Message
 	path, err := channelPath(channel, "messages")

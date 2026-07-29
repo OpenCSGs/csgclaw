@@ -132,6 +132,14 @@
   text-align: left;
 }
 
+.tool-menu-row > .btn-content {
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
 .tool-menu-row strong {
   color: var(--muted);
   font-size: 12px;
@@ -144,6 +152,80 @@
 
 .tool-menu-row.danger {
   color: var(--danger);
+}
+
+.tool-menu-row.room-notification-row {
+  --btn-height: auto;
+
+  min-height: 72px;
+  height: auto;
+  padding-block: 10px;
+  white-space: normal;
+}
+
+.tool-menu-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  white-space: normal;
+}
+
+.tool-menu-copy > span {
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.tool-menu-copy small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.room-notification-switch {
+  width: 34px;
+  height: 20px;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--line);
+  display: flex;
+  align-items: center;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.room-notification-switch > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.room-notification-switch.is-on {
+  border-color: var(--brand-600);
+  background: var(--brand-600);
+}
+
+.room-notification-switch.is-on > span {
+  background: var(--white);
+  transform: translateX(14px);
+}
+
+.tool-menu-error {
+  padding: 0 4px;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .tool-menu-icon {

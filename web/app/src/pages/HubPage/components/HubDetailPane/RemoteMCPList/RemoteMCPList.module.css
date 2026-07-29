@@ -1,0 +1,82 @@
+.panel {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.list {
+  max-height: min(360px, 46dvh);
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 2px;
+}
+
+.row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--gray-50);
+  color: var(--primary-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.main {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.description,
+.meta {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.meta {
+  color: color-mix(in oklab, var(--muted) 82%, var(--text));
+}
+
+.state,
+.listState {
+  min-height: 44px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background: var(--field);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+}
+
+:global(:root[data-theme="dark"]) .icon,
+:global(:root[data-theme="dark"]) .state,
+:global(:root[data-theme="dark"]) .listState {
+  background: var(--panel-strong);
+}

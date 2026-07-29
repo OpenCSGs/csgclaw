@@ -63,12 +63,13 @@ func (h *Handler) newConversationBridgeTargets(room im.Room, message im.Message)
 	if h == nil {
 		return nil
 	}
+	notifyAllAgents := room.NotifyAllAgents && !h.isAgentSender(message.SenderID)
 	targets := make([]participantBridgeTarget, 0)
 	for _, target := range h.participantBridgeTargetsForRoom(room) {
 		if strings.TrimSpace(target.bridgeID) == "" || target.matches(message.SenderID) || !h.isAgentSender(target.bridgeID) {
 			continue
 		}
-		if !room.IsDirect && !messageMentionsBridgeTarget(message, target) {
+		if !room.IsDirect && !notifyAllAgents && !messageMentionsBridgeTarget(message, target) {
 			continue
 		}
 		targets = append(targets, target)
@@ -89,13 +90,14 @@ func newConversationTargets(room im.Room, message im.Message, isAgent func(strin
 	if isAgent == nil {
 		return nil
 	}
+	notifyAllAgents := room.NotifyAllAgents && !isAgent(message.SenderID)
 	targets := make([]string, 0)
 	for _, memberID := range room.Members {
 		memberID = strings.TrimSpace(memberID)
 		if memberID == "" || memberID == strings.TrimSpace(message.SenderID) || !isAgent(memberID) {
 			continue
 		}
-		if !room.IsDirect && !messageMentions(message, memberID) {
+		if !room.IsDirect && !notifyAllAgents && !messageMentions(message, memberID) {
 			continue
 		}
 		targets = append(targets, memberID)

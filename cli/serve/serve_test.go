@@ -284,6 +284,13 @@ func TestServeRunNoAuthDetectDisablesCLIProxyAutoLoginDuringStartup(t *testing.T
 	restore := stubServeDependencies(t)
 	defer restore()
 	t.Setenv("CSGCLAW_CLIPROXY_AUTO_LOGIN", "true")
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := (config.Config{
+		Server:  config.ServerConfig{ListenAddr: "127.0.0.1:18080", AccessToken: "pc-secret"},
+		Sandbox: config.SandboxConfig{Provider: config.DefaultSandboxProvider},
+	}).Save(configPath); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	origRunServer := RunServer
 	t.Cleanup(func() {
@@ -297,6 +304,7 @@ func TestServeRunNoAuthDetectDisablesCLIProxyAutoLoginDuringStartup(t *testing.T
 
 	run := testContext()
 	err := NewServeCmd().Run(context.Background(), run, []string{"--no-auth-detect"}, command.GlobalOptions{
+		Config: configPath,
 		Output: "json",
 	})
 	if err != nil {
@@ -1429,6 +1437,7 @@ func TestServeForegroundStartsCodexBridgesAfterConfiguredAgents(t *testing.T) {
 }
 
 func TestServeForegroundPreservesBootstrapDefaultTemplates(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
 	origEnsureBootstrapManager := EnsureBootstrapManager
@@ -1902,6 +1911,7 @@ func stubBoxLiteAvailable(t *testing.T) func() {
 
 func stubServeDependencies(t *testing.T) func() {
 	t.Helper()
+	t.Setenv("HOME", t.TempDir())
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
 	origNewIMService := NewIMService
@@ -1909,6 +1919,7 @@ func stubServeDependencies(t *testing.T) func() {
 	origNewLLMService := NewLLMService
 	origEnsureBootstrapManager := EnsureBootstrapManager
 	origStartConfiguredAgents := StartConfiguredAgents
+	origStopRunningSandboxAgents := StopRunningSandboxAgents
 	origNewCodexBridgeManager := NewCodexBridgeManager
 	origEnsureCLIProxy := EnsureCLIProxy
 	origShutdownCLIProxy := ShutdownCLIProxy
@@ -1932,6 +1943,7 @@ func stubServeDependencies(t *testing.T) func() {
 	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) { return nil, nil }
 	EnsureBootstrapManager = func(context.Context, *agent.Service) error { return nil }
 	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
+	StopRunningSandboxAgents = func(context.Context, *agent.Service) error { return nil }
 	NewCodexBridgeManager = func(config.Config, *agent.Service, *feishu.Service, worklease.ParticipantWorkReporter) (codexBridgeManager, error) {
 		return nil, nil
 	}
@@ -1962,6 +1974,7 @@ func stubServeDependencies(t *testing.T) func() {
 		NewLLMService = origNewLLMService
 		EnsureBootstrapManager = origEnsureBootstrapManager
 		StartConfiguredAgents = origStartConfiguredAgents
+		StopRunningSandboxAgents = origStopRunningSandboxAgents
 		NewCodexBridgeManager = origNewCodexBridgeManager
 		EnsureCLIProxy = origEnsureCLIProxy
 		ShutdownCLIProxy = origShutdownCLIProxy
@@ -1971,6 +1984,39 @@ func stubServeDependencies(t *testing.T) func() {
 		CheckCatalogModelProvider = origCheckCatalogModelProvider
 		OpenBrowser = origOpenBrowser
 		WaitForHealthy = origWaitForHealthy
+	}
+}
+
+func TestServeForegroundConfiguresDesktopAgentShutdown(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+	t.Setenv("HOME", t.TempDir())
+
+	shutdownCalled := false
+	StopRunningSandboxAgents = func(context.Context, *agent.Service) error {
+		shutdownCalled = true
+		return nil
+	}
+	RunServer = func(opts server.Options) error {
+		if opts.BeforeShutdown == nil {
+			t.Fatal("BeforeShutdown is nil for Electron distribution")
+		}
+		return opts.BeforeShutdown(context.Background())
+	}
+
+	cfg := config.Config{Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"}}
+	if err := serveForegroundWithConfigPath(
+		context.Background(),
+		testContext(),
+		cfg,
+		"",
+		"json",
+		serveOptions{Distribution: "electron"},
+	); err != nil {
+		t.Fatalf("serveForegroundWithConfigPath() error = %v", err)
+	}
+	if !shutdownCalled {
+		t.Fatal("StopRunningSandboxAgents was not called")
 	}
 }
 
@@ -2022,6 +2068,16 @@ func TestAPIBaseURLFallsBackToSharedDefault(t *testing.T) {
 	got := apiBaseURL(config.ServerConfig{})
 	if got != config.DefaultAPIBaseURL() {
 		t.Fatalf("apiBaseURL() = %q, want %q", got, config.DefaultAPIBaseURL())
+	}
+}
+
+func TestServeAPIBaseURLUsesDesktopRendererEndpoint(t *testing.T) {
+	got := serveAPIBaseURL(
+		config.ServerConfig{ListenAddr: "0.0.0.0:59843"},
+		serveOptions{Desktop: &server.DesktopOptions{BaseURL: "http://127.0.0.1:59842/"}},
+	)
+	if want := "http://127.0.0.1:59842"; got != want {
+		t.Fatalf("serveAPIBaseURL() = %q, want %q", got, want)
 	}
 }
 

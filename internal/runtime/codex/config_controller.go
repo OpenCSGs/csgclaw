@@ -7,15 +7,18 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
 	"csgclaw/internal/auth"
+	"csgclaw/internal/mcpschema"
 	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
 )
 
 var checkResponsesAPIForProvider = modelprovider.CheckResponsesOrChatCompletionsAPI
+var codexMCPServerNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 var openCSGCredentialsForResponsesProbe = func(ctx context.Context) (string, string, bool, error) {
 	store, err := auth.DefaultStore()
 	if err != nil {
@@ -65,7 +68,44 @@ func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, ch
 }
 
 func (r *Runtime) ValidateMCPServers(_ context.Context, current agentruntime.MCPServersSnapshot) error {
-	return agentruntime.ValidateMCPServers(current.Servers)
+	return validateCodexMCPServers(current.Servers)
+}
+
+// validateCodexMCPServers enforces the transports that Codex can represent in
+// config.toml. Codex configures URL-based MCP servers as Streamable HTTP and
+// has no transport field for legacy SSE servers, so accepting SSE here would
+// silently turn it into a different protocol when the config is rendered.
+func validateCodexMCPServers(servers map[string]any) error {
+	normalized, err := mcpschema.NormalizeMCPServers(servers)
+	if err != nil {
+		return err
+	}
+	for name, raw := range normalized {
+		if !codexMCPServerNamePattern.MatchString(name) {
+			return fmt.Errorf("%s server name %q is not supported by codex; must match %s", mcpschema.MCPServersKey, name, codexMCPServerNamePattern)
+		}
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s.%s must be an object", mcpschema.MCPServersKey, name)
+		}
+		if mcpTrimmedString(entry["url"]) == "" {
+			continue
+		}
+		for headerName := range mcpStringMap(entry["env_http_headers"]) {
+			if !mcpschema.ValidMCPHTTPHeaderName(headerName) {
+				return fmt.Errorf("%s.%s.env_http_headers contains an invalid HTTP header name", mcpschema.MCPServersKey, name)
+			}
+		}
+		switch strings.ToLower(strings.TrimSpace(mcpTrimmedString(entry["transport"]))) {
+		case "", "streamable", "streamable-http", "streamable_http":
+			continue
+		case "sse":
+			return fmt.Errorf("%s.%s.transport %q is not supported by codex; use %q", mcpschema.MCPServersKey, name, "sse", "streamable-http")
+		default:
+			return fmt.Errorf("%s.%s.transport must be %q for a remote codex MCP server", mcpschema.MCPServersKey, name, "streamable-http")
+		}
+	}
+	return nil
 }
 
 func (r *Runtime) MCPServersRestartRequired(change agentruntime.MCPServersChange) (bool, error) {

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/mcpschema"
 )
 
-const ServersKey = agentruntime.MCPServersKey
+const ServersKey = mcpschema.MCPServersKey
 
 func normalizeServerInput(name string, config map[string]any) (string, map[string]any, error) {
 	name = strings.TrimSpace(name)
@@ -22,7 +22,7 @@ func normalizeServerInput(name string, config map[string]any) (string, map[strin
 		return "", nil, fmt.Errorf("mcp server config must be a single server object, not an %s map", ServersKey)
 	}
 
-	normalized, err := agentruntime.NormalizeMCPServers(map[string]any{name: config})
+	normalized, err := mcpschema.NormalizeMCPServers(map[string]any{name: config})
 	if err != nil {
 		return "", nil, err
 	}

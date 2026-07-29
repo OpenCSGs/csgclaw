@@ -23,6 +23,7 @@ export type ConversationHeaderProps = {
   onClearMessages: () => void;
   onDeleteRoom: () => void;
   onInviteAction: () => void;
+  onNotifyAllAgentsChange?: (enabled: boolean) => void;
   onOpenAgentLogs: () => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onToggleChannelTools: BooleanStateSetter;
@@ -30,6 +31,8 @@ export type ConversationHeaderProps = {
   onToggleToolCalls: BooleanStateSetter;
   selectedMessageCount: number;
   selectedVisibleMessageCount?: number;
+  notifyAllAgentsBusy?: boolean;
+  notifyAllAgentsError?: string;
   showChannelTools: boolean;
   showInviteAction: boolean;
   showMemberList?: boolean;
@@ -55,10 +58,13 @@ export const ConversationHeader = memo(function ConversationHeader({
   showMemberList = false,
   showMemberListAction = true,
   showToolCalls,
+  notifyAllAgentsBusy = false,
+  notifyAllAgentsError = "",
   t,
   onClearMessages,
   onDeleteRoom,
   onInviteAction,
+  onNotifyAllAgentsChange,
   onOpenAgentLogs,
   onPreviewUser,
   onToggleChannelTools,
@@ -179,6 +185,33 @@ export const ConversationHeader = memo(function ConversationHeader({
                     <span>{showToolCalls ? t("toggleToolCallsHide") : t("toggleToolCallsShow")}</span>
                     <strong>{showToolCalls ? t("enabled") : t("disabled")}</strong>
                   </Button>
+                  {!isDirectConversation(conversation) && onNotifyAllAgentsChange ? (
+                    <>
+                      <Button
+                        className="tool-menu-row room-notification-row"
+                        disabled={notifyAllAgentsBusy}
+                        role="switch"
+                        aria-checked={Boolean(conversation.notify_all_agents)}
+                        onClick={() => onNotifyAllAgentsChange(!conversation.notify_all_agents)}
+                      >
+                        <span className="tool-menu-copy">
+                          <span>{t("notifyAllAgents")}</span>
+                          <small>{t("notifyAllAgentsHint")}</small>
+                        </span>
+                        <span
+                          className={`room-notification-switch${conversation.notify_all_agents ? " is-on" : ""}`}
+                          aria-hidden="true"
+                        >
+                          <span />
+                        </span>
+                      </Button>
+                      {notifyAllAgentsError ? (
+                        <div className="tool-menu-error" role="alert">
+                          {notifyAllAgentsError}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
                   <Button variant="outlineDanger" className="tool-menu-row danger" onClick={onClearMessages}>
                     <span>{t("clearRoomMessages")}</span>
                     <span className="tool-menu-icon" aria-hidden="true">

@@ -40,7 +40,7 @@ func TestChatTypeForRoomRespectsIsDirect(t *testing.T) {
 	}
 }
 
-func TestShouldNotifyParticipantPushesForTwoMemberGroupWithoutMention(t *testing.T) {
+func TestShouldNotifyParticipantRequiresMentionWhenRoomFanoutIsDisabled(t *testing.T) {
 	room := Room{
 		ID:       "room-group",
 		IsDirect: false,
@@ -54,20 +54,32 @@ func TestShouldNotifyParticipantPushesForTwoMemberGroupWithoutMention(t *testing
 		CreatedAt: time.Now().UTC(),
 	}
 
+	if shouldNotifyParticipant(room, message, "u-bot") {
+		t.Fatal("shouldNotifyParticipant() = true, want false without mention")
+	}
+
+	message.Mentions = []Mention{{ID: "u-bot", Name: "bot"}}
 	if !shouldNotifyParticipant(room, message, "u-bot") {
-		t.Fatal("shouldNotifyParticipant() = false, want true for room member without mention")
+		t.Fatal("shouldNotifyParticipant() = false, want true for mentioned room member")
+	}
+
+	message.Mentions = nil
+	room.NotifyAllAgents = true
+	if !shouldNotifyParticipant(room, message, "u-bot") {
+		t.Fatal("shouldNotifyParticipant() = false, want true when room fanout is enabled")
 	}
 }
 
-func TestPublishMessageEventUsesGroupChatTypeForTwoMemberGroup(t *testing.T) {
+func TestPublishMessageEventMarksRoomFanoutAsMentioned(t *testing.T) {
 	bridge := NewParticipantBridge("")
 	events, cancel := bridge.Subscribe("u-bot")
 	defer cancel()
 
 	room := Room{
-		ID:       "room-group",
-		IsDirect: false,
-		Members:  []string{"u-admin", "u-bot"},
+		ID:              "room-group",
+		IsDirect:        false,
+		NotifyAllAgents: true,
+		Members:         []string{"u-admin", "u-bot"},
 	}
 	sender := User{ID: "u-admin", Name: "Admin"}
 	message := Message{
@@ -83,6 +95,9 @@ func TestPublishMessageEventUsesGroupChatTypeForTwoMemberGroup(t *testing.T) {
 	case evt := <-events:
 		if evt.ChatType != "group" {
 			t.Fatalf("PublishMessageEvent() chat_type = %q, want group", evt.ChatType)
+		}
+		if !evt.Mentioned || !evt.Context.Mentioned {
+			t.Fatalf("PublishMessageEvent() mentioned = %v/%v, want true/true", evt.Mentioned, evt.Context.Mentioned)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("PublishMessageEvent() timed out waiting for event")
@@ -228,10 +243,11 @@ func TestPublishMessageEventIncludesAttachments(t *testing.T) {
 		},
 	}
 	room := Room{
-		ID:       "room-group",
-		IsDirect: false,
-		Members:  []string{"u-admin", "u-bot"},
-		Messages: []Message{root, reply},
+		ID:              "room-group",
+		IsDirect:        false,
+		NotifyAllAgents: true,
+		Members:         []string{"u-admin", "u-bot"},
+		Messages:        []Message{root, reply},
 		Threads: []ThreadState{{
 			RootMessageID: root.ID,
 			Context:       []Message{root},

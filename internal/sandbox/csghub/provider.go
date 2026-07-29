@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"csgclaw/internal/auth"
@@ -113,6 +114,7 @@ var _ sandbox.Provider = Provider{}
 
 // Runtime adapts the csghub lifecycle API to sandbox.Runtime.
 type Runtime struct {
+	mu     sync.RWMutex
 	cfg    runtimeConfig
 	client *csghubsdk.Client
 }
@@ -130,7 +132,12 @@ func (runtimeLogger) Errorf(format string, args ...any) {
 var _ sandbox.Runtime = (*Runtime)(nil)
 
 func (r *Runtime) Create(ctx context.Context, spec sandbox.CreateSpec) (sandbox.Instance, error) {
-	if r == nil || r.client == nil {
+	if r == nil {
+		return nil, fmt.Errorf("invalid csghub runtime")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.client == nil {
 		return nil, fmt.Errorf("invalid csghub runtime")
 	}
 	req, err := r.createRequest(spec)
@@ -166,7 +173,12 @@ func (r *Runtime) Create(ctx context.Context, spec sandbox.CreateSpec) (sandbox.
 }
 
 func (r *Runtime) Get(ctx context.Context, idOrName string) (sandbox.Instance, error) {
-	if r == nil || r.client == nil {
+	if r == nil {
+		return nil, fmt.Errorf("invalid csghub runtime")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.client == nil {
 		return nil, fmt.Errorf("invalid csghub runtime")
 	}
 	name, err := r.sandboxName(idOrName)
@@ -183,7 +195,12 @@ func (r *Runtime) Get(ctx context.Context, idOrName string) (sandbox.Instance, e
 }
 
 func (r *Runtime) Remove(ctx context.Context, idOrName string, _ sandbox.RemoveOptions) error {
-	if r == nil || r.client == nil {
+	if r == nil {
+		return fmt.Errorf("invalid csghub runtime")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.client == nil {
 		return fmt.Errorf("invalid csghub runtime")
 	}
 	name, err := r.sandboxName(idOrName)
@@ -197,6 +214,13 @@ func (r *Runtime) Remove(ctx context.Context, idOrName string, _ sandbox.RemoveO
 }
 
 func (r *Runtime) Close() error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	r.client = nil
+	r.cfg = runtimeConfig{}
+	r.mu.Unlock()
 	return nil
 }
 
@@ -444,51 +468,57 @@ type Instance struct {
 var _ sandbox.Instance = (*Instance)(nil)
 
 func (i *Instance) Start(ctx context.Context) error {
-	if err := i.valid(); err != nil {
-		return err
-	}
-	name, err := i.runtime.sandboxName(i.name)
+	runtime, err := i.lockRuntime()
 	if err != nil {
 		return err
 	}
-	if _, err := i.runtime.startSandboxIdempotent(ctx, name); err != nil {
+	defer runtime.mu.RUnlock()
+	name, err := runtime.sandboxName(i.name)
+	if err != nil {
 		return err
 	}
-	if _, err := i.runtime.waitForRunning(ctx, name); err != nil {
+	if _, err := runtime.startSandboxIdempotent(ctx, name); err != nil {
 		return err
 	}
-	return i.runtime.waitForRuntimeHealth(ctx, name)
+	if _, err := runtime.waitForRunning(ctx, name); err != nil {
+		return err
+	}
+	return runtime.waitForRuntimeHealth(ctx, name)
 }
 
 func (i *Instance) Stop(ctx context.Context, opts sandbox.StopOptions) error {
-	if err := i.valid(); err != nil {
+	runtime, err := i.lockRuntime()
+	if err != nil {
 		return err
 	}
+	defer runtime.mu.RUnlock()
 	if opts.Force {
 		return fmt.Errorf("unsupported sandbox option: force stop")
 	}
 	if opts.Timeout != 0 {
 		return fmt.Errorf("unsupported sandbox option: stop timeout")
 	}
-	name, err := i.runtime.sandboxName(i.name)
+	name, err := runtime.sandboxName(i.name)
 	if err != nil {
 		return err
 	}
-	if err := i.runtime.client.Stop(ctx, name); err != nil {
+	if err := runtime.client.Stop(ctx, name); err != nil {
 		return wrapError("stop csghub sandbox", err)
 	}
-	return i.runtime.waitForStopped(ctx, name)
+	return runtime.waitForStopped(ctx, name)
 }
 
 func (i *Instance) Info(ctx context.Context) (sandbox.Info, error) {
-	if err := i.valid(); err != nil {
-		return sandbox.Info{}, err
-	}
-	name, err := i.runtime.sandboxName(i.name)
+	runtime, err := i.lockRuntime()
 	if err != nil {
 		return sandbox.Info{}, err
 	}
-	resp, err := i.runtime.client.Get(ctx, name)
+	defer runtime.mu.RUnlock()
+	name, err := runtime.sandboxName(i.name)
+	if err != nil {
+		return sandbox.Info{}, err
+	}
+	resp, err := runtime.client.Get(ctx, name)
 	if err != nil {
 		return sandbox.Info{}, wrapError("read csghub sandbox info", err)
 	}
@@ -496,9 +526,11 @@ func (i *Instance) Info(ctx context.Context) (sandbox.Info, error) {
 }
 
 func (i *Instance) Run(ctx context.Context, spec sandbox.CommandSpec) (sandbox.CommandResult, error) {
-	if err := i.valid(); err != nil {
+	runtime, err := i.lockRuntime()
+	if err != nil {
 		return sandbox.CommandResult{}, err
 	}
+	defer runtime.mu.RUnlock()
 	name := strings.TrimSpace(spec.Name)
 	if name == "" {
 		return sandbox.CommandResult{}, fmt.Errorf("invalid sandbox command: name is required")
@@ -518,11 +550,11 @@ func (i *Instance) Run(ctx context.Context, spec sandbox.CommandSpec) (sandbox.C
 		}
 		return nil
 	}
-	name, err := i.runtime.sandboxName(i.name)
+	name, err = runtime.sandboxName(i.name)
 	if err != nil {
 		return sandbox.CommandResult{}, err
 	}
-	if err := i.runtime.client.StreamExecute(ctx, name, command, emit); err != nil {
+	if err := runtime.client.StreamExecute(ctx, name, command, emit); err != nil {
 		return sandbox.CommandResult{}, fmt.Errorf("run csghub command: %w", err)
 	}
 	if firstStreamError != "" {
@@ -537,14 +569,21 @@ func (i *Instance) Close() error {
 	return nil
 }
 
-func (i *Instance) valid() error {
-	if i == nil || i.runtime == nil || i.runtime.client == nil {
-		return fmt.Errorf("invalid csghub sandbox")
+func (i *Instance) lockRuntime() (*Runtime, error) {
+	if i == nil || i.runtime == nil {
+		return nil, fmt.Errorf("invalid csghub sandbox")
+	}
+	runtime := i.runtime
+	runtime.mu.RLock()
+	if runtime.client == nil {
+		runtime.mu.RUnlock()
+		return nil, fmt.Errorf("invalid csghub sandbox")
 	}
 	if strings.TrimSpace(i.name) == "" {
-		return fmt.Errorf("csghub sandbox id or name is required")
+		runtime.mu.RUnlock()
+		return nil, fmt.Errorf("csghub sandbox id or name is required")
 	}
-	return nil
+	return runtime, nil
 }
 
 func loadRuntimeConfigFromEnv() (runtimeConfig, error) {

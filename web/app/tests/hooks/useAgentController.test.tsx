@@ -9,7 +9,7 @@ import {
   createBotRequest,
   createManagerAgentRequest,
   createNotificationBotRequest,
-  deleteAgentRequest,
+  deleteAgentLikeRequest,
   deleteAgentSkillRequest,
   deleteBotRequest,
   fetchAgent,
@@ -74,7 +74,7 @@ vi.mock("@/api/agents", async () => {
     createBotRequest: vi.fn(),
     createManagerAgentRequest: vi.fn(),
     createNotificationBotRequest: vi.fn(),
-    deleteAgentRequest: vi.fn(),
+    deleteAgentLikeRequest: vi.fn(),
     deleteAgentSkillRequest: vi.fn(),
     deleteBotRequest: vi.fn(),
     fetchAgent: vi.fn(),
@@ -292,7 +292,7 @@ describe("useAgentController", () => {
     vi.mocked(createBotRequest).mockReset();
     vi.mocked(createManagerAgentRequest).mockReset();
     vi.mocked(createNotificationBotRequest).mockReset();
-    vi.mocked(deleteAgentRequest).mockReset();
+    vi.mocked(deleteAgentLikeRequest).mockReset();
     vi.mocked(deleteAgentSkillRequest).mockReset();
     vi.mocked(deleteBotRequest).mockReset();
     vi.mocked(fetchAgentMCPServers).mockReset();
@@ -343,7 +343,7 @@ describe("useAgentController", () => {
       type: "notification",
       user_id: "user-notifier",
     });
-    vi.mocked(deleteAgentRequest).mockResolvedValue(undefined);
+    vi.mocked(deleteAgentLikeRequest).mockResolvedValue(undefined);
     vi.mocked(deleteAgentSkillRequest).mockResolvedValue(undefined);
     vi.mocked(deleteBotRequest).mockResolvedValue(undefined);
     vi.mocked(fetchAgentMCPServers).mockResolvedValue({
@@ -843,14 +843,14 @@ describe("useAgentController", () => {
     });
   });
 
-  it("deletes an agent through the agent delete endpoint", async () => {
+  it("deletes an agent through the agent-aware delete endpoint", async () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await act(async () => {
       await result.current.agentViewProps.onDelete?.(oldAgent);
     });
 
-    expect(deleteAgentRequest).toHaveBeenCalledWith("u-manager");
+    expect(deleteAgentLikeRequest).toHaveBeenCalledWith(oldAgent);
     expect(deleteBotRequest).not.toHaveBeenCalled();
   });
 

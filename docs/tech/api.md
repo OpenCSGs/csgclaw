@@ -495,6 +495,49 @@ Catalog list and mutation responses use `mcpServers` as the direct server map.
 Creating or replacing one catalog entry uses `{ "name": "...", "config": { ... } }`;
 `config` is that entry's server configuration.
 
+#### `GET /api/v1/mcp-servers/remote`
+
+Lists installable remote MCP server summaries through CSGClaw. The browser only
+calls CSGClaw; the server resolves the effective OpenCSG Hub from the current
+login environment or explicitly configured official Hub and forwards the
+current user's Hub credential. Query parameters follow the remote Skill list
+style: `page` (default `1`), `per` (default `12`, maximum `100`), and `search`.
+
+Each item contains its Hub `id`, name, and display metadata. It intentionally
+does not contain its install configuration or headers. `description` is catalog
+metadata used to describe the MCP in CSGClaw; it is removed before a catalog
+entry is added to an agent runtime.
+
+```json
+{
+  "items": [
+    {
+      "id": "builtin:calendar",
+      "name": "calendar",
+      "description": "Calendar tools",
+      "url": "https://mcp.example.test/calendar",
+      "protocol": "streamable-http"
+    }
+  ],
+  "page": 1,
+  "per": 12,
+  "total": 13,
+  "next_page": 2
+}
+```
+
+#### `POST /api/v1/mcp-servers/remote/{id}/install`
+
+Installs or refreshes one remote MCP entry. CSGClaw fetches the Hub item's
+detail endpoint server-side, converts `protocol`, `url`, and `headers` into the
+catalog configuration, and uses the detail response's `name` as the catalog
+key. New remote entries default to `enabled: true`, `startup_timeout_sec: 30`,
+and `tool_timeout_sec: 60`. The response returns only the installed name:
+
+```json
+{ "name": "calendar" }
+```
+
 ### `DELETE /api/v1/agents/{id}`
 
 Deletes an agent.
@@ -780,7 +823,7 @@ Notes:
 These endpoints expose CSGClaw local IM data.
 
 For the thread model, invariants, hidden context behavior, and bridge rules, see
-[im-threads.md](./im-threads.md).
+[im-threads.md](im/im-threads.md).
 
 ### `GET /api/v1/bootstrap`
 
@@ -897,6 +940,23 @@ Request body:
 Compatibility field:
 
 - Legacy `participant_ids` is still accepted and mapped to `member_ids`
+
+### `PATCH /api/v1/rooms/{id}`
+
+Updates local room behavior.
+
+Request body:
+
+```json
+{
+  "notify_all_agents": true
+}
+```
+
+Group rooms are mention-only by default.
+When `notify_all_agents` is enabled, every human-authored message wakes every agent in the room, including messages with explicit mentions.
+Agent-authored replies still wake only explicitly mentioned agents to prevent response loops.
+Direct rooms always notify their agent and reject this update.
 
 ### `DELETE /api/v1/rooms/{id}`
 
@@ -1197,7 +1257,7 @@ agent-scoped routes for LLM provider traffic. The legacy `/api/bots/*` routes
 are not registered.
 
 For thread/session isolation rules used by runtime and Codex bridges, see
-[im-threads.md](./im-threads.md).
+[im-threads.md](im/im-threads.md).
 
 ### `GET /api/v1/channels/{channel}/participants/{id}/events`
 

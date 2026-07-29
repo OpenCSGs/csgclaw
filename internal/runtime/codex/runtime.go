@@ -723,7 +723,7 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 	if runtimeCodexHome == "" {
 		return fmt.Errorf("codex home dir is required")
 	}
-	if err := agentruntime.ValidateMCPServers(mcpServers); err != nil {
+	if err := validateCodexMCPServers(mcpServers); err != nil {
 		return err
 	}
 	configPath := filepath.Join(runtimeCodexHome, configFileName)

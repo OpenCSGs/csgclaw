@@ -12,6 +12,7 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
+	hub "csgclaw/internal/template"
 )
 
 type Service struct {
@@ -524,7 +525,7 @@ func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participa
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("participant store is required")
 	}
-	if s.agents == nil {
+	if s.agents == nil || s.im == nil {
 		return nil, nil
 	}
 
@@ -621,6 +622,7 @@ type normalizedCreateRequest struct {
 	ChannelAppConfig map[string]any
 	ChannelUser      ChannelUserSpec
 	AgentBinding     AgentBindingSpec
+	AgentHubService  *hub.Service
 	AgentID          string
 	Metadata         map[string]any
 }
@@ -713,6 +715,7 @@ func (s *Service) normalizeCreateRequest(req CreateRequest) (normalizedCreateReq
 		ChannelAppConfig: cloneMap(req.ChannelAppConfig),
 		ChannelUser:      channelUser,
 		AgentBinding:     binding,
+		AgentHubService:  req.AgentHubService,
 		Metadata:         cloneMetadata(req.Metadata),
 	}, nil
 }
@@ -881,7 +884,10 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if strings.TrimSpace(spec.Role) == "" {
 			spec.Role = agent.RoleWorker
 		}
-		created, err := s.agents.Create(ctx, agent.CreateRequest{Spec: spec})
+		created, err := s.agents.Create(ctx, agent.CreateRequest{
+			Spec:       spec,
+			HubService: req.AgentHubService,
+		})
 		if err != nil {
 			return "", err
 		}

@@ -8,8 +8,8 @@ It is not MCP and does not rely on arbitrary JSON detection.
 
 ## Canonical executable example
 
-The built-in Manager skill [`csgclaw-interactive-output-demo`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/) is the complete reference implementation.
-Its [`emit_demo.py`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) documents every supported request and resource-link field at its first use and emits three successive question stages.
+The built-in Manager skill [`csgclaw-interactive-output-demo`](../../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/) is the complete reference implementation.
+Its [`emit_demo.py`](../../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) documents every supported request and resource-link field at its first use and emits three successive question stages.
 The first two stages each emit the same full and minimal `ResourceLink` examples, while the third stage focuses only on final action and secret input.
 The stages cover ordinary options, Recommended and Unicode labels, a four-question navigation page, an option-or-freeform question, a freeform-only question, and a secret question.
 The Manager reads each automatic continuation response and selects the next allowlisted script stage itself, while the Python emitter never receives or parses response JSON.

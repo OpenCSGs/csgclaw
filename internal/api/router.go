@@ -63,6 +63,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			})
 		})
 		r.Get("/mcp-servers", h.handleMCPServers)
+		r.Get("/mcp-servers/remote", h.handleRemoteMCPServers)
+		r.Post("/mcp-servers/remote/{id}/install", h.handleInstallRemoteMCPServer)
 		r.Post("/mcp-servers", h.handleMCPServers)
 		r.Put("/mcp-servers/{name}", h.handleMCPServerByName)
 		r.Delete("/mcp-servers/{name}", h.handleMCPServerByName)
@@ -142,6 +144,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/", h.createRoom)
 			r.Post("/{id}:clearMessages", h.clearRoomMessages)
 			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", h.updateRoom)
 				r.Delete("/", h.deleteRoom)
 				r.Get("/threads", h.listThreads)
 				r.Post("/threads", h.createThread)
@@ -247,6 +250,7 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Get("/", h.listRooms)
 			r.Post("/", h.createRoom)
 			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", h.updateCsgclawRoom)
 				r.Delete("/", h.deleteCsgclawRoom)
 				r.Get("/threads", h.listThreads)
 				r.Post("/threads", h.createThread)

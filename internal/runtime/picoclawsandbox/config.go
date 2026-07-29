@@ -11,7 +11,7 @@ import (
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
-	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/mcpschema"
 )
 
 //go:embed defaults/picoclaw-config.json
@@ -115,7 +115,7 @@ func RenderConfigWithMCPServers(participantID, agentID string, server config.Ser
 }
 
 func updatePicoClawMCP(cfg map[string]any, mcpServers map[string]any) error {
-	servers, err := agentruntime.NormalizeMCPServers(mcpServers)
+	servers, err := mcpschema.NormalizeMCPServers(mcpServers)
 	if err != nil {
 		return err
 	}

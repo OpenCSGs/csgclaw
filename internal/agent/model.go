@@ -7,6 +7,7 @@ import (
 	"time"
 
 	agentruntime "csgclaw/internal/runtime"
+	hub "csgclaw/internal/template"
 	"csgclaw/internal/utils"
 )
 
@@ -568,9 +569,10 @@ func normalizeCompactUpdateFieldMask(fieldMask []string, profileField string, ha
 }
 
 type CreateRequest struct {
-	Spec      CreateAgentSpec
-	Replace   bool
-	FieldMask []string
+	Spec       CreateAgentSpec
+	Replace    bool
+	FieldMask  []string
+	HubService *hub.Service
 }
 
 func normalizeRole(role string) string {

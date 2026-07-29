@@ -6,6 +6,14 @@ export type MCPServer = {
   name: string;
 };
 
+export type RemoteMCPServer = {
+  description?: string;
+  id: string;
+  name: string;
+  protocol?: string;
+  url?: string;
+};
+
 export type MCPServerPayload = {
   config: JSONRecord;
   name: string;
@@ -38,6 +46,11 @@ export function mcpServersFromMap(servers: unknown): MCPServer[] {
 
 export function mcpServersMap(servers: unknown): Record<string, JSONRecord> {
   return cloneMCPServersRecord(isJSONRecord(servers) ? servers : null);
+}
+
+export function hasMCPServerName(servers: readonly MCPServer[], name: string | null | undefined): boolean {
+  const normalizedName = String(name || "").trim();
+  return Boolean(normalizedName && servers.some((server) => server.name === normalizedName));
 }
 
 export function mcpServerPayloadFromDocument(document: unknown): MCPServerPayload | null {

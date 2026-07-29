@@ -8,8 +8,8 @@ CSGClaw 为需要附加资源链接或打开交互式问答流程的 skill 脚�
 
 ## 规范可执行示例
 
-Manager 内置 skill [`csgclaw-interactive-output-demo`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/) 是完整的参考实现。
-其中的 [`emit_demo.py`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) 会在每个支持字段首次出现时解释其作用，并连续发出三个问答阶段。
+Manager 内置 skill [`csgclaw-interactive-output-demo`](../../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/) 是完整的参考实现。
+其中的 [`emit_demo.py`](../../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) 会在每个支持字段首次出现时解释其作用，并连续发出三个问答阶段。
 前两个阶段都会发出相同的完整与最小 `ResourceLink` 示例，第三个阶段仅演示最终操作和 secret 输入。
 这三个阶段覆盖普通选项、Recommended 与 Unicode label、包含四个问题的导航页面、选项或自由输入、仅自由输入以及 secret 问题。
 Manager 会读取每次自动续接响应并自行选择下一个白名单脚本阶段，而 Python emitter 永远不会接收或解析响应 JSON。

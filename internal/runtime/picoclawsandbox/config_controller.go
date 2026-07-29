@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/sandboxgateway"
 )
@@ -17,7 +18,7 @@ var _ agentruntime.MCPServersReconciler = (*Runtime)(nil)
 var _ agentruntime.MCPServersListController = (*Runtime)(nil)
 
 func (r *Runtime) ValidateMCPServers(_ context.Context, current agentruntime.MCPServersSnapshot) error {
-	return agentruntime.ValidateMCPServers(current.Servers)
+	return mcpschema.ValidateMCPServers(current.Servers)
 }
 
 func (r *Runtime) MCPServersRestartRequired(change agentruntime.MCPServersChange) (bool, error) {
@@ -92,7 +93,7 @@ func readPicoClawMCPServers(path string) (agentruntime.MCPServersSnapshot, error
 	rawServers, ok := mcpRoot["servers"]
 	if !ok || rawServers == nil {
 		if enabled, _ := mcpRoot["enabled"].(bool); enabled {
-			normalized, err := agentruntime.NormalizeMCPServers(map[string]any{})
+			normalized, err := mcpschema.NormalizeMCPServers(map[string]any{})
 			if err != nil {
 				return agentruntime.MCPServersSnapshot{}, err
 			}
@@ -104,7 +105,7 @@ func readPicoClawMCPServers(path string) (agentruntime.MCPServersSnapshot, error
 	if !ok {
 		return agentruntime.MCPServersSnapshot{}, fmt.Errorf("picoclaw mcp config servers must be an object")
 	}
-	normalized, err := agentruntime.NormalizeMCPServers(servers)
+	normalized, err := mcpschema.NormalizeMCPServers(servers)
 	if err != nil {
 		return agentruntime.MCPServersSnapshot{}, err
 	}

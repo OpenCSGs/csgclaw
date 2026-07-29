@@ -176,6 +176,33 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 	if !strings.HasSuffix(request.Questions[0].Options[0].Label, " (Recommended)") {
 		t.Fatalf("recommended option = %+v", request.Questions[0].Options[0])
 	}
+	chineseOutput, err := exec.Command("python3", emitterPath, "start", "--language", "zh").Output()
+	if err != nil {
+		t.Fatalf("run Chinese demo emitter: %v", err)
+	}
+	chineseCleaned, chineseArtifact, chineseErrors := decodeStructuredCommandOutput(string(chineseOutput))
+	if len(chineseErrors) != 0 || strings.TrimSpace(chineseCleaned) != "## 交互式输出演示 - 第 1/3 步\n\n请选择工作流分支。" {
+		t.Fatalf("decode Chinese demo emitter: stdout=%q artifact=%+v errors=%v", chineseCleaned, chineseArtifact, chineseErrors)
+	}
+	chineseRequest := chineseArtifact.RequestUserInput
+	if chineseRequest == nil || len(chineseRequest.Questions) != 1 || chineseRequest.Questions[0].Question != "演示应该执行哪种工作流？" {
+		t.Fatalf("Chinese stage 1 request = %+v", chineseRequest)
+	}
+	chineseSnapshot := activity.UserInputSnapshot{
+		Questions: []activity.UserInputQuestionSnapshot{{
+			ID:       chineseRequest.Questions[0].ID,
+			Question: chineseRequest.Questions[0].Question,
+		}},
+		Answers: map[string]activity.UserInputAnswerSnapshot{
+			chineseRequest.Questions[0].ID: {Answered: true, Text: "修复缺陷"},
+		},
+	}
+	if questionMarkdown := activity.UserInputQuestionMarkdown(chineseSnapshot); !strings.HasPrefix(questionMarkdown, "## 问题\n\n") {
+		t.Fatalf("Chinese question transcript = %q", questionMarkdown)
+	}
+	if answerMarkdown := activity.UserInputAnswerMarkdown(chineseSnapshot); !strings.HasPrefix(answerMarkdown, "## 回答\n\n") {
+		t.Fatalf("Chinese answer transcript = %q", answerMarkdown)
+	}
 	contextOutput, err := exec.Command("python3", emitterPath, "context", "--workflow", "bug-fix").Output()
 	if err != nil {
 		t.Fatalf("run demo context stage: %v", err)
@@ -199,6 +226,14 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		!strings.HasSuffix(contextRequest.Questions[3].Options[0].Label, " (Recommended)") ||
 		!strings.Contains(contextRequest.Questions[3].Options[2].Label, "中文") {
 		t.Fatalf("stage 2 request = %+v, want four mixed questions including Unicode, other, freeform-only, and Recommended", contextRequest)
+	}
+	chineseContextOutput, err := exec.Command("python3", emitterPath, "context", "--workflow", "bug-fix", "--language", "zh").Output()
+	if err != nil {
+		t.Fatalf("run Chinese demo context stage: %v", err)
+	}
+	_, chineseContextArtifact, chineseContextErrors := decodeStructuredCommandOutput(string(chineseContextOutput))
+	if len(chineseContextErrors) != 0 || chineseContextArtifact.RequestUserInput == nil || chineseContextArtifact.RequestUserInput.Questions[0].Question != "验证应该多严格？" {
+		t.Fatalf("decode Chinese context stage: artifact=%+v errors=%v", chineseContextArtifact, chineseContextErrors)
 	}
 
 	confirmOutput, err := exec.Command(
@@ -226,6 +261,21 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		!strings.Contains(confirmRequest.Questions[1].Question, "never a real credential") {
 		t.Fatalf("stage 3 request = %+v, want final options and freeform secret", confirmRequest)
 	}
+	chineseConfirmOutput, err := exec.Command(
+		"python3", emitterPath, "confirm",
+		"--workflow", "bug-fix",
+		"--destination", "qa-thread",
+		"--verification", "strict",
+		"--presentation", "bilingual",
+		"--language", "zh",
+	).Output()
+	if err != nil {
+		t.Fatalf("run Chinese demo confirmation stage: %v", err)
+	}
+	_, chineseConfirmArtifact, chineseConfirmErrors := decodeStructuredCommandOutput(string(chineseConfirmOutput))
+	if len(chineseConfirmErrors) != 0 || chineseConfirmArtifact.RequestUserInput == nil || chineseConfirmArtifact.RequestUserInput.Questions[0].Question != "演示接下来应该执行什么？" {
+		t.Fatalf("decode Chinese confirmation stage: artifact=%+v errors=%v", chineseConfirmArtifact, chineseConfirmErrors)
+	}
 
 	completeOutput, err := exec.Command(
 		"python3", emitterPath, "complete",
@@ -252,6 +302,21 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		if !strings.Contains(completion, want) {
 			t.Fatalf("completion output = %q, want %q", completion, want)
 		}
+	}
+	chineseCompleteOutput, err := exec.Command(
+		"python3", emitterPath, "complete",
+		"--workflow", "bug-fix",
+		"--destination", "qa-thread",
+		"--verification", "strict",
+		"--presentation", "bilingual",
+		"--action", "execute",
+		"--language", "zh",
+	).Output()
+	if err != nil {
+		t.Fatalf("run Chinese demo completion stage: %v", err)
+	}
+	if chineseCompletion := string(chineseCompleteOutput); !strings.Contains(chineseCompletion, "## 交互式输出演示完成") || !strings.Contains(chineseCompletion, "- 已执行操作：`execute`") {
+		t.Fatalf("Chinese completion output = %q", chineseCompletion)
 	}
 
 	emitter, err := os.ReadFile(filepath.Join(dir, "scripts", "emit_demo.py"))
@@ -281,8 +346,8 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		"Each supported protocol field is documented at its first use",
 		"The script deliberately has no response JSON input",
 		"def emit_resource_links()",
-		"def emit_start()",
-		"def emit_context(workflow: str)",
+		"def emit_start(language: str)",
+		"def emit_context(workflow: str, language: str)",
 		"def emit_confirmation(",
 		"def complete(",
 		"Required ResourceLink discriminator",
@@ -308,6 +373,7 @@ func TestEmbeddedInteractiveOutputDemoExercisesEveryPositiveFeature(t *testing.T
 		"complete --workflow <bug-fix|new-feature|code-review|custom> --destination",
 		"Never include received response JSON in a user-visible response.",
 		"Never repeat a secret answer value",
+		"--language <en|zh>",
 	} {
 		if !strings.Contains(string(workflowInstructions), workflowContract) {
 			t.Fatalf("skill instructions are missing multi-stage contract %q:\n%s", workflowContract, workflowInstructions)

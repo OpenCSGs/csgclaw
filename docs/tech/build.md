@@ -38,6 +38,7 @@ On Windows hosts that do not have `make`, use the PowerShell build script:
 .\scripts\build.cmd build
 .\scripts\build.cmd build-server-bin
 .\scripts\build.cmd build-sandbox-cli
+.\scripts\build.cmd desktop-package
 .\scripts\build.cmd test
 ```
 
@@ -98,6 +99,8 @@ The installer exposes both host binaries from the same `INSTALL_DIR` and copies 
 |---|---|
 | `make package` | Package the current platform |
 | `make package-all` | Build and package the current platform artifacts |
+| `make desktop-package` | Build native desktop installers on macOS/Linux |
+| `scripts\build.cmd desktop-package` | Build native desktop installers on Windows without `make` |
 | `make release` | Build the configured cross-platform release bundles |
 
 Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`. GitLab CI publishes CSGClaw release artifacts and the CSGClaw product image; it does not build PicoClaw/OpenClaw runtime images.

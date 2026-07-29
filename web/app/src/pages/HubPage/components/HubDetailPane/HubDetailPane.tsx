@@ -8,7 +8,7 @@ import type { Diagnostic } from "@codemirror/lint";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { FileCode2, Server, Trash2 } from "lucide-react";
+import { CloudDownload, FileCode2, Server, Trash2 } from "lucide-react";
 import { formatRuntimeKindLabel } from "@/models/agents";
 import type { JSONRecord } from "@/models/agents";
 import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
@@ -18,7 +18,7 @@ import {
   mcpServerPayloadFromDocument,
   mcpServersFromMap,
 } from "@/models/mcp";
-import type { MCPServerPayload } from "@/models/mcp";
+import type { MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { ModelsIcon } from "@/components/ui/Icons";
@@ -39,9 +39,11 @@ import type { MCPServer } from "@/models/mcp";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
+import { RemoteMCPList } from "./RemoteMCPList";
 
 const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
 type TemplateDetailTabID = "profile" | "instructions" | "skills" | "mcp";
+type MCPCreateMode = "manual" | "remote";
 
 type TemplateSkillSummary = {
   description: string;
@@ -219,6 +221,18 @@ type HubDetailPaneHub = {
     mcpCreateError?: string;
     mcpCreateDialogOpen?: boolean;
     onMCPCreateDialogOpenChange?: (open: boolean) => void;
+    onInstallRemoteMCP?: (item: RemoteMCPServer) => Promise<boolean> | boolean;
+    onLoadMoreRemoteMCPServers?: () => Promise<unknown> | unknown;
+    onRefreshRemoteMCPServers?: () => Promise<unknown> | unknown;
+    onRemoteMCPServersSearchChange?: (value: string) => void;
+    onRemoteMCPVisibleChange?: (visible: boolean) => void;
+    remoteMCPInstallBusy?: string;
+    remoteMCPServers?: readonly RemoteMCPServer[];
+    remoteMCPServersError?: string;
+    remoteMCPServersHasMore?: boolean;
+    remoteMCPServersLoading?: boolean;
+    remoteMCPServersLoadingMore?: boolean;
+    remoteMCPServersSearch?: string;
     selectedMCPServer?: MCPServer | null;
     selectedMCPServerName?: string;
     selectedResourceType?: "mcp" | "skill" | "template";
@@ -258,6 +272,13 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   mcpMutationError: "",
   mcpCreateError: "",
   mcpCreateDialogOpen: false,
+  remoteMCPInstallBusy: "",
+  remoteMCPServers: [],
+  remoteMCPServersError: "",
+  remoteMCPServersHasMore: false,
+  remoteMCPServersLoading: false,
+  remoteMCPServersLoadingMore: false,
+  remoteMCPServersSearch: "",
   selectedMCPServer: null,
   selectedMCPServerName: "",
   onSelectSkillFile: () => {},
@@ -584,6 +605,13 @@ export function HubDetailPane({
     mcpMutationError = "",
     mcpCreateError = "",
     mcpCreateDialogOpen = false,
+    remoteMCPInstallBusy = "",
+    remoteMCPServers = [],
+    remoteMCPServersError = "",
+    remoteMCPServersHasMore = false,
+    remoteMCPServersLoading = false,
+    remoteMCPServersLoadingMore = false,
+    remoteMCPServersSearch = "",
     onSelectWorkspaceFile,
     onToggleWorkspaceDir,
     workspaceEntries = EMPTY_WORKSPACE_ENTRIES,
@@ -594,6 +622,11 @@ export function HubDetailPane({
     onDeleteMCP,
     onDeleteTemplate,
     onMCPCreateDialogOpenChange,
+    onInstallRemoteMCP,
+    onLoadMoreRemoteMCPServers,
+    onRefreshRemoteMCPServers,
+    onRemoteMCPServersSearchChange,
+    onRemoteMCPVisibleChange,
     onUpdateMCP,
     onUpdateTemplateInstructions,
     deleteBusy = false,
@@ -626,6 +659,7 @@ export function HubDetailPane({
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
   const [mcpDetailError, setMCPDetailError] = useState("");
   const [mcpFormError, setMCPFormError] = useState("");
+  const [mcpCreateMode, setMCPCreateMode] = useState<MCPCreateMode>("manual");
   const [activeTemplateTab, setActiveTemplateTab] = useState<TemplateDetailTabID>("profile");
   const [templateInstructionsMode, setTemplateInstructionsMode] = useState<"default" | "advanced">("default");
   const [templateInstructionsDraft, setTemplateInstructionsDraft] = useState("");
@@ -701,6 +735,7 @@ export function HubDetailPane({
     if (mcpCreateDialogOpen) {
       setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
       setMCPFormError("");
+      setMCPCreateMode("manual");
     }
   }, [mcpCreateDialogOpen]);
   useEffect(() => {
@@ -767,6 +802,7 @@ export function HubDetailPane({
 
   function closeMCPFormDialog() {
     setMCPFormError("");
+    setMCPCreateMode("manual");
     onMCPCreateDialogOpenChange?.(false);
   }
 
@@ -1322,6 +1358,7 @@ export function HubDetailPane({
           if (open) {
             setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
             setMCPFormError("");
+            setMCPCreateMode("manual");
             onMCPCreateDialogOpenChange?.(true);
           } else {
             closeMCPFormDialog();
@@ -1337,25 +1374,72 @@ export function HubDetailPane({
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           <DialogBody className="mcp-form">
-            <JSONConfigEditor
-              hideLabel
-              label={t("resourcesMCPServerDocumentJSONLabel")}
-              value={mcpDraftDocument}
-              onChange={handleMCPDraftDocumentChange}
-              invalid={Boolean(mcpFormError)}
-              minRows={12}
-            />
-            {mcpFormError || mcpCreateError ? (
-              <div className="form-error hub-json-editor-error">{mcpFormError || mcpCreateError}</div>
-            ) : null}
+            <div className="mcp-form-mode" role="tablist" aria-label={t("resourcesMCPCreateTitle")}>
+              <Button
+                active={mcpCreateMode === "manual"}
+                aria-selected={mcpCreateMode === "manual"}
+                role="tab"
+                size="sm"
+                variant={mcpCreateMode === "manual" ? "primary" : "secondaryGray"}
+                onClick={() => setMCPCreateMode("manual")}
+              >
+                <Server size={15} strokeWidth={2} aria-hidden="true" />
+                {t("resourcesMCPManualTab")}
+              </Button>
+              <Button
+                active={mcpCreateMode === "remote"}
+                aria-selected={mcpCreateMode === "remote"}
+                role="tab"
+                size="sm"
+                variant={mcpCreateMode === "remote" ? "primary" : "secondaryGray"}
+                onClick={() => setMCPCreateMode("remote")}
+              >
+                <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
+                {t("resourcesMCPRemoteInstallTab")}
+              </Button>
+            </div>
+            {mcpCreateMode === "manual" ? (
+              <>
+                <JSONConfigEditor
+                  hideLabel
+                  label={t("resourcesMCPServerDocumentJSONLabel")}
+                  value={mcpDraftDocument}
+                  onChange={handleMCPDraftDocumentChange}
+                  invalid={Boolean(mcpFormError)}
+                  minRows={12}
+                />
+                {mcpFormError || mcpCreateError ? (
+                  <div className="form-error hub-json-editor-error">{mcpFormError || mcpCreateError}</div>
+                ) : null}
+              </>
+            ) : (
+              <RemoteMCPList
+                error={remoteMCPServersError || mcpMutationError}
+                hasMore={remoteMCPServersHasMore}
+                installedServers={mcpServers}
+                installBusy={remoteMCPInstallBusy}
+                items={remoteMCPServers}
+                loading={remoteMCPServersLoading}
+                loadingMore={remoteMCPServersLoadingMore}
+                onInstall={onInstallRemoteMCP}
+                onLoadMore={onLoadMoreRemoteMCPServers}
+                onRefresh={onRefreshRemoteMCPServers}
+                onSearchChange={onRemoteMCPServersSearchChange}
+                onVisibleChange={onRemoteMCPVisibleChange}
+                search={remoteMCPServersSearch}
+                t={t}
+              />
+            )}
           </DialogBody>
           <DialogFooter className="hub-skill-delete-dialog-actions">
             <Button variant="secondaryGray" size="sm" disabled={mcpMutationBusy} onClick={closeMCPFormDialog}>
               {t("cancel")}
             </Button>
-            <Button variant="primary" size="sm" loading={mcpMutationBusy} onClick={handleSaveMCP}>
-              {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
-            </Button>
+            {mcpCreateMode === "manual" ? (
+              <Button variant="primary" size="sm" loading={mcpMutationBusy} onClick={handleSaveMCP}>
+                {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </DialogRoot>

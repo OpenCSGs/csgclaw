@@ -198,6 +198,8 @@ function renderThreadPane({
   visibleMessages,
   memberActionBusyID = "",
   memberActionError = "",
+  notifyAllAgents = false,
+  onNotifyAllAgentsChange = vi.fn(),
   onClearMemberActionError = vi.fn(),
   onApplyMention = vi.fn(),
   agentDetailPanelProps = null,
@@ -222,6 +224,8 @@ function renderThreadPane({
   onRemoveMember?: (memberID: string) => void;
   memberActionBusyID?: string;
   memberActionError?: string;
+  notifyAllAgents?: boolean;
+  onNotifyAllAgentsChange?: (enabled: boolean) => void;
   onClearMemberActionError?: () => void;
   replies?: ThreadView["replies"];
   showToolCalls?: boolean;
@@ -239,6 +243,7 @@ function renderThreadPane({
     is_direct: isDirect,
     members: conversationMembers.map((user) => user.id),
     messages: timelineMessages,
+    notify_all_agents: notifyAllAgents,
     title: "manager",
   };
   const thread: ThreadView = {
@@ -295,6 +300,7 @@ function renderThreadPane({
         onDeleteRoom={onDeleteRoom}
         onInviteAction={() => {}}
         onMessageAction={() => {}}
+        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onCancelProfilePreviewClose={onCancelProfilePreviewClose}
         onCloseProfilePreview={onCloseProfilePreview}
         onOpenAgentDetail={onOpenAgentDetail}
@@ -1190,6 +1196,20 @@ describe("ConversationPane", () => {
 
     expect(onClearRoomMessages).toHaveBeenCalledWith("room-1");
     expect(onDeleteRoom).not.toHaveBeenCalled();
+  });
+
+  it("toggles whether every human message notifies every room agent", async () => {
+    const user = userEvent.setup();
+    const onNotifyAllAgentsChange = vi.fn();
+    renderThreadPane({ isDirect: false, onNotifyAllAgentsChange });
+
+    await user.click(screen.getByRole("button", { name: "channelTools" }));
+    const notificationSwitch = screen.getByRole("switch", { name: /notifyAllAgents/ });
+    expect(notificationSwitch).toHaveAttribute("aria-checked", "false");
+
+    await user.click(notificationSwitch);
+
+    expect(onNotifyAllAgentsChange).toHaveBeenCalledWith(true);
   });
 
   it("confirms before deleting a room from the tools menu", async () => {

@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
-import { createMCPServerRequest, deleteMCPServerRequest, updateMCPServerRequest } from "@/api/mcp";
+import {
+  createMCPServerRequest,
+  deleteMCPServerRequest,
+  installRemoteMCPServerRequest,
+  updateMCPServerRequest,
+} from "@/api/mcp";
 import { mcpServersFromCatalogResponse } from "@/models/mcp";
-import type { MCPServer, MCPServerPayload } from "@/models/mcp";
-import { workspaceQueryKeys, useWorkspaceMCPServersQuery } from "./workspaceQueries";
+import type { MCPServer, MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
+import { workspaceQueryKeys, useWorkspaceMCPServersQuery, useWorkspaceRemoteMCPServersQuery } from "./workspaceQueries";
 
 type HubResourceType = "template" | "skill" | "mcp";
 
@@ -34,9 +39,30 @@ export function useWorkspaceMCPSelection({
   const [mcpCreateError, setMCPCreateError] = useState("");
   const [mcpMutationBusy, setMCPMutationBusy] = useState(false);
   const [mcpMutationError, setMCPMutationError] = useState("");
+  const [remoteMCPServersEnabled, setRemoteMCPServersEnabled] = useState(false);
+  const [remoteMCPServersSearch, setRemoteMCPServersSearch] = useState("");
+  const [remoteMCPServersSearchQuery, setRemoteMCPServersSearchQuery] = useState("");
+  const [remoteMCPInstallBusy, setRemoteMCPInstallBusy] = useState("");
   const mcpServersQuery = useWorkspaceMCPServersQuery();
+  const remoteMCPServersQuery = useWorkspaceRemoteMCPServersQuery(remoteMCPServersSearchQuery, {
+    enabled: remoteMCPServersEnabled,
+  });
 
   const mcpServers = useMemo(() => mcpServersFromCatalogResponse(mcpServersQuery.data ?? null), [mcpServersQuery.data]);
+  const remoteMCPServers = useMemo(() => {
+    const pages = remoteMCPServersQuery.data?.pages ?? [];
+    const seen = new Set<string>();
+    return pages.flatMap((page) =>
+      page.items.filter((item) => {
+        const key = item.id || item.name;
+        if (!key || seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      }),
+    );
+  }, [remoteMCPServersQuery.data]);
   const selectedMCPServer = useMemo(
     () => mcpServers.find((item) => item.name === selectedMCPServerName) || mcpServers[0] || null,
     [mcpServers, selectedMCPServerName],
@@ -61,6 +87,13 @@ export function useWorkspaceMCPSelection({
       setSelectedHubResourceType(mcpServers.length ? "mcp" : skillCount ? "skill" : "template");
     }
   }, [mcpServers.length, selectedHubResourceType, setSelectedHubResourceType, skillCount, templateCount]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setRemoteMCPServersSearchQuery(remoteMCPServersSearch.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [remoteMCPServersSearch]);
 
   const openCreateMCPDialog = useCallback(() => {
     setSelectedHubResourceType("mcp");
@@ -114,6 +147,34 @@ export function useWorkspaceMCPSelection({
     [queryClient, setSelectedMCPServerName, setSelectedHubResourceType, t],
   );
 
+  const installRemoteMCPServer = useCallback(
+    async (item: RemoteMCPServer | null | undefined) => {
+      const id = String(item?.id || "").trim();
+      if (!id) {
+        setMCPMutationError(t("resourcesMCPRemoteInstallFailed"));
+        return false;
+      }
+      setMCPMutationBusy(true);
+      setMCPMutationError("");
+      setRemoteMCPInstallBusy(id);
+      try {
+        const name = await installRemoteMCPServerRequest(id);
+        await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.mcpServers() });
+        setSelectedHubResourceType("mcp");
+        setSelectedMCPServerName(name);
+        setMCPCreateDialogOpen(false);
+        return true;
+      } catch (error) {
+        setMCPMutationError(errorMessage(error, t("resourcesMCPRemoteInstallFailed")));
+        return false;
+      } finally {
+        setRemoteMCPInstallBusy("");
+        setMCPMutationBusy(false);
+      }
+    },
+    [queryClient, setSelectedMCPServerName, setSelectedHubResourceType, t],
+  );
+
   const deleteMCPServer = useCallback(
     async (item: MCPServer | null | undefined) => {
       const name = String(item?.name || "").trim();
@@ -142,10 +203,21 @@ export function useWorkspaceMCPSelection({
     ? errorMessage(mcpServersQuery.error, t("resourcesMCPLoadFailed"))
     : "";
   const mcpStateError = selectedHubResourceType === "mcp" ? rawMCPServersError : "";
+  const remoteMCPServersError =
+    remoteMCPServersEnabled && remoteMCPServersQuery.error
+      ? errorMessage(remoteMCPServersQuery.error, t("resourcesMCPRemoteServersLoadFailed"))
+      : "";
+  const loadMoreRemoteMCPServers = useCallback(async () => {
+    if (!remoteMCPServersEnabled || !remoteMCPServersQuery.hasNextPage || remoteMCPServersQuery.isFetchingNextPage) {
+      return;
+    }
+    await remoteMCPServersQuery.fetchNextPage();
+  }, [remoteMCPServersEnabled, remoteMCPServersQuery]);
 
   return {
     createMCPServer,
     deleteMCPServer,
+    installRemoteMCPServer,
     mcpServersFetching: mcpServersQuery.isFetching,
     mcpServers,
     mcpCreateError,
@@ -154,7 +226,19 @@ export function useWorkspaceMCPSelection({
     mcpMutationError,
     mcpStateError,
     openCreateMCPDialog,
+    loadMoreRemoteMCPServers,
+    refetchRemoteMCPServers: remoteMCPServersQuery.refetch,
     refetchMCPServers: mcpServersQuery.refetch,
+    remoteMCPInstallBusy,
+    remoteMCPServers,
+    remoteMCPServersError,
+    remoteMCPServersHasMore: Boolean(remoteMCPServersQuery.hasNextPage),
+    remoteMCPServersLoading:
+      remoteMCPServersEnabled && remoteMCPServersQuery.isFetching && !remoteMCPServersQuery.isFetchingNextPage,
+    remoteMCPServersLoadingMore: remoteMCPServersQuery.isFetchingNextPage,
+    remoteMCPServersSearch,
+    setRemoteMCPServersEnabled,
+    setRemoteMCPServersSearch,
     selectedMCPServer,
     setMCPCreateDialogOpen: changeMCPCreateDialogOpen,
     updateMCPServer,

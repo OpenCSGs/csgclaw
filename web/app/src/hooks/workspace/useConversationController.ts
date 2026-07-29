@@ -9,6 +9,7 @@ import {
   inviteRoomUsersRequest,
   removeRoomUserRequest,
   sendMessageRequest,
+  updateRoomRequest,
 } from "@/api/im";
 import { fetchAgentSkills, fetchAgentSkillsFile } from "@/api/agents";
 import {
@@ -295,6 +296,8 @@ export function useConversationController({
   const [submitError, setSubmitError] = useState("");
   const [memberActionBusyID, setMemberActionBusyID] = useState("");
   const [memberActionError, setMemberActionError] = useState("");
+  const [notifyAllAgentsBusy, setNotifyAllAgentsBusy] = useState(false);
+  const [notifyAllAgentsError, setNotifyAllAgentsError] = useState("");
   const [composerError, setComposerError] = useState("");
   const editorRef = useRef<HTMLDivElement | null>(null);
   const sendAbortControllersRef = useRef<Record<string, AbortController>>({});
@@ -304,6 +307,7 @@ export function useConversationController({
   const memberMenuRef = useRef<HTMLDivElement | null>(null);
   const channelToolsRef = useRef<HTMLDivElement | null>(null);
   const activeThreadKeyRef = useRef("");
+  const notifyAllAgentsRequestRef = useRef(0);
 
   const usersById = useMemo(() => buildUsersById(data?.users), [data]);
   const activeConversation = useMemo(
@@ -701,8 +705,11 @@ export function useConversationController({
   }, [activeConversationId, activePane.type]);
 
   useEffect(() => {
+    notifyAllAgentsRequestRef.current += 1;
     setMemberActionBusyID("");
     setMemberActionError("");
+    setNotifyAllAgentsBusy(false);
+    setNotifyAllAgentsError("");
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -1225,6 +1232,28 @@ export function useConversationController({
     }
   }
 
+  async function updateNotifyAllAgents(enabled: boolean): Promise<void> {
+    if (!activeConversation || isDirectConversation(activeConversation)) {
+      return;
+    }
+    const requestID = notifyAllAgentsRequestRef.current + 1;
+    notifyAllAgentsRequestRef.current = requestID;
+    setNotifyAllAgentsBusy(true);
+    setNotifyAllAgentsError("");
+    try {
+      const updated = await updateRoomRequest(activeConversation.id, { notify_all_agents: enabled });
+      setBootstrapData((current) => upsertConversationInData(current, updated));
+    } catch (err) {
+      if (notifyAllAgentsRequestRef.current === requestID) {
+        setNotifyAllAgentsError(localizeError(errorMessage(err, ""), t) || t("notifyAllAgentsUpdateFailed"));
+      }
+    } finally {
+      if (notifyAllAgentsRequestRef.current === requestID) {
+        setNotifyAllAgentsBusy(false);
+      }
+    }
+  }
+
   function applyMention(user: IMUser | null | undefined) {
     const editor = editorRef.current;
     const state = getComposerMentionState(editor);
@@ -1554,6 +1583,9 @@ export function useConversationController({
       editorRef,
       onDeleteRoom: deleteRoom,
       onClearRoomMessages: clearRoomMessages,
+      notifyAllAgentsBusy,
+      notifyAllAgentsError,
+      onNotifyAllAgentsChange: updateNotifyAllAgents,
       inviteActionLabel,
       onInviteAction: handleInviteAction,
       mentionCandidates,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/api"
 	"csgclaw/internal/apitypes"
+	appbootstrap "csgclaw/internal/app"
 	"csgclaw/internal/app/channelwiring"
 	"csgclaw/internal/app/runtimewiring"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
@@ -91,6 +93,12 @@ var (
 		}
 		return svc.StartConfiguredAgents(ctx)
 	}
+	StopRunningSandboxAgents = func(ctx context.Context, svc *agent.Service) error {
+		if svc == nil {
+			return nil
+		}
+		return svc.StopRunningSandboxAgents(ctx)
+	}
 	NewCodexBridgeManager = newCodexBridgeManager
 	OpenBrowser           = openBrowser
 	WaitForHealthy        = waitForHealthy
@@ -99,6 +107,7 @@ var (
 type serveCmd struct{}
 type stopCmd struct{}
 type internalServeCmd struct{}
+type desktopServeCmd struct{}
 
 const cliproxyAutoLoginEnv = "CSGCLAW_CLIPROXY_AUTO_LOGIN"
 
@@ -112,6 +121,10 @@ func NewStopCmd() command.Command {
 
 func NewInternalServeCmd() command.Command {
 	return internalServeCmd{}
+}
+
+func NewDesktopServeCmd() command.Command {
+	return desktopServeCmd{}
 }
 
 func (serveCmd) Name() string {
@@ -147,6 +160,15 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}
+	instanceLock, err := appbootstrap.AcquireInstanceLock()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if instanceLock != nil {
+			_ = instanceLock.Release()
+		}
+	}()
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
 	defer restoreAuthDetect()
 
@@ -184,6 +206,10 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 		NoCodexAutoInstall: *noCodexAutoInstall,
 	}
 	if *daemon {
+		if err := instanceLock.Release(); err != nil {
+			return err
+		}
+		instanceLock = nil
 		serveGlobals := globals
 		serveGlobals.Config = configPath
 		return serveBackground(run, cfg, serveGlobals, *logPath, *pidPath, *logLevel, serveOpts)
@@ -268,6 +294,11 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}
+	instanceLock, err := appbootstrap.AcquireInstanceLock()
+	if err != nil {
+		return err
+	}
+	defer instanceLock.Release()
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
 	defer restoreAuthDetect()
 
@@ -282,7 +313,6 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	}
 
 	configPath := strings.TrimSpace(*configPathFlag)
-	var err error
 	if configPath == "" {
 		configPath, err = config.DefaultPath()
 		if err != nil {
@@ -352,9 +382,19 @@ type serveOptions struct {
 	NoBrowser          bool
 	NoAuthDetect       bool
 	NoCodexAutoInstall bool
+	Quiet              bool
+	Distribution       string
+	Listener           net.Listener
+	SandboxListener    net.Listener
+	Desktop            *server.DesktopOptions
+	OnReady            func()
 }
 
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
+	serveOpts := serveOptions{}
+	if len(opts) > 0 {
+		serveOpts = opts[0]
+	}
 	if err := validateServeInstallation(); err != nil {
 		return err
 	}
@@ -375,10 +415,12 @@ func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cf
 	if err != nil {
 		return err
 	}
-	apiURL := apiBaseURL(cfg.Server)
+	apiURL := serveAPIBaseURL(cfg.Server, serveOpts)
 	imURL := imOpenURL(apiURL)
 
-	if output == "json" {
+	if serveOpts.Quiet {
+		// Machine entrypoints own stdout and emit their versioned protocol messages.
+	} else if output == "json" {
 		if err := command.RenderAction(output, run.Stdout, command.ActionResult{
 			Command:         "serve",
 			Action:          "start",
@@ -553,7 +595,11 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if serveOpts.NoAuthDetect && svc != nil {
 		svc.SetStartupProfileDetectionDisabled(true)
 	}
-	if refreshed, results, err := refreshStartupModelProviders(ctx, cfg, configPath, svc); err != nil {
+	refreshConfigPath := configPath
+	if serveOpts.Distribution == "electron" {
+		refreshConfigPath = ""
+	}
+	if refreshed, results, err := refreshStartupModelProviders(ctx, cfg, refreshConfigPath, svc); err != nil {
 		slog.Warn("refresh model provider catalog at startup failed", "error", err)
 	} else {
 		cfg = refreshed
@@ -594,7 +640,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
-	apiURL := apiBaseURL(cfg.Server)
+	apiURL := serveAPIBaseURL(cfg.Server, serveOpts)
 	imURL := imOpenURL(apiURL)
 	currentVersion := appversion.Current()
 	upgradeClient := upgrade.Client{
@@ -603,6 +649,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		GOARCH:     runtime.GOARCH,
 	}
 	upgradeSupport := upgradeClient.AutoUpgradeSupport(currentVersion)
+	if serveOpts.Distribution == "electron" {
+		upgradeSupport.Supported = false
+		upgradeSupport.Reason = "desktop_managed"
+	}
 	upgradeManager := upgrade.NewManager(upgradeClient, currentVersion, upgrade.ManagerOptions{
 		AutoUpgradeSupported:         upgradeSupport.Supported,
 		AutoUpgradeUnsupportedReason: upgradeSupport.Reason,
@@ -622,10 +672,12 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		},
 	})
 	configureFeishuService(feishuSvc, svc)
-	if outcome, err := upgrade.ConsumeApplyStatus(configPath); err != nil {
-		slog.Warn("load upgrade helper failure", "error", err)
-	} else if outcome.Status == upgrade.ApplyStatusFailed && outcome.Message != "" {
-		upgradeManager.MarkUpgradeFailedWithDetails(errors.New(outcome.Message), outcome.ErrorKind, outcome.LogPath)
+	if serveOpts.Distribution != "electron" {
+		if outcome, err := upgrade.ConsumeApplyStatus(configPath); err != nil {
+			slog.Warn("load upgrade helper failure", "error", err)
+		} else if outcome.Status == upgrade.ApplyStatusFailed && outcome.Message != "" {
+			upgradeManager.MarkUpgradeFailedWithDetails(errors.New(outcome.Message), outcome.ErrorKind, outcome.LogPath)
+		}
 	}
 	hubSvc, err := newAgentTemplateHubService(cfg.Hub)
 	if err != nil {
@@ -654,8 +706,16 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		defer agentManagerSvc.Close()
 	}
 	agentRuntimeSvc := NewAgentRuntimeService()
+	var beforeShutdown func(context.Context) error
+	if serveOpts.Distribution == "electron" {
+		beforeShutdown = func(shutdownCtx context.Context) error {
+			return StopRunningSandboxAgents(shutdownCtx, svc)
+		}
+	}
 	return RunServer(server.Options{
 		ListenAddr:         cfg.Server.ListenAddr,
+		Listener:           serveOpts.Listener,
+		SandboxListener:    serveOpts.SandboxListener,
 		Service:            svc,
 		Hub:                hubSvc,
 		MCP:                mcpSvc,
@@ -679,10 +739,16 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		ConfigPath:         configPath,
 		AccessToken:        cfg.Server.AccessToken,
 		NoAuth:             cfg.Server.NoAuth,
+		AdvertiseBaseURL:   apiURL,
+		Desktop:            serveOpts.Desktop,
 		Context:            ctx,
+		BeforeShutdown:     beforeShutdown,
 		OnReady: func(handler *api.Handler, router chi.Router) {
 			deliver := channelwiring.WireNotificationParticipantPull(ctx, participantSvc, imSvc, apiURL, cfg.Server.AccessToken)
 			handler.SetNotificationDeliver(deliver)
+			if serveOpts.OnReady != nil {
+				serveOpts.OnReady()
+			}
 			if !serveOpts.NoBrowser && output != "json" && run != nil {
 				go func() {
 					if err := WaitForHealthy(apiURL, 5*time.Second); err != nil {
@@ -931,6 +997,15 @@ func openBrowser(rawURL string) error {
 
 func apiBaseURL(server config.ServerConfig) string {
 	return config.ResolveAdvertiseBaseURL(server)
+}
+
+func serveAPIBaseURL(serverConfig config.ServerConfig, opts serveOptions) string {
+	if opts.Desktop != nil {
+		if baseURL := strings.TrimRight(strings.TrimSpace(opts.Desktop.BaseURL), "/"); baseURL != "" {
+			return baseURL
+		}
+	}
+	return apiBaseURL(serverConfig)
 }
 
 func printEffectiveConfig(run *command.Context, cfg config.Config, output string) {

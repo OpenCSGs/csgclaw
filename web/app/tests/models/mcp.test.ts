@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatMCPServerDocument,
+  hasMCPServerName,
   mcpServersFromCatalogResponse,
   mcpServersFromMap,
   mcpServerPayloadFromDocument,
@@ -72,5 +73,13 @@ describe("MCP catalog helpers", () => {
         description: "npx -y context7-mcp",
       },
     ]);
+  });
+
+  it("detects whether a remote MCP install replaces a local catalog entry", () => {
+    const servers = [{ name: "calendar", config: { url: "https://mcp.example.test/calendar" } }];
+
+    expect(hasMCPServerName(servers, "calendar")).toBe(true);
+    expect(hasMCPServerName(servers, "calendar ")).toBe(true);
+    expect(hasMCPServerName(servers, "github")).toBe(false);
   });
 });
