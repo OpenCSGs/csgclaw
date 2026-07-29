@@ -180,6 +180,7 @@ const t: TranslateFn = (key, params = {}) => {
 
 function renderThreadPane({
   agents = [],
+  conversationTitle = "manager",
   conversationMembers = users,
   isDirect = true,
   messages,
@@ -207,6 +208,7 @@ function renderThreadPane({
 }: {
   agents?: NonNullable<ConversationPaneProps["agents"]>;
   agentDetailPanelProps?: ConversationPaneProps["agentDetailPanelProps"];
+  conversationTitle?: string;
   conversationMembers?: IMUser[];
   isDirect?: boolean;
   messages?: IMConversation["messages"];
@@ -244,7 +246,7 @@ function renderThreadPane({
     members: conversationMembers.map((user) => user.id),
     messages: timelineMessages,
     notify_all_agents: notifyAllAgents,
-    title: "manager",
+    title: conversationTitle,
   };
   const thread: ThreadView = {
     replies,
@@ -584,6 +586,22 @@ describe("ConversationPane", () => {
     renderThreadPane({ messages, visibleMessages: [messages[0]] });
 
     expect(screen.getByText("1/2")).toBeInTheDocument();
+  });
+
+  it("shows the complete room title on hover and keyboard focus", async () => {
+    const user = userEvent.setup();
+    const title = "Anonymous Session: e932c5cd-1865-4f0e-bca7-784377fcc3af | Agent: dev (agent-u26ehm)";
+    renderThreadPane({ conversationTitle: title, isDirect: false });
+
+    const titleElement = screen.getByText(title, { selector: ".chat-title" });
+    expect(titleElement).toHaveAttribute("tabindex", "0");
+
+    await user.hover(titleElement);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(title);
+
+    await user.unhover(titleElement);
+    titleElement.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(title);
   });
 
   it("previews human message avatars on hover without opening details on click", async () => {

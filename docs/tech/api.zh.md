@@ -7,6 +7,7 @@
 - 除流式接口外，请求和响应均为 `application/json`
 - 时间字段使用 RFC3339 / ISO8601
 - 常规错误通常返回纯文本错误正文
+- Agent session response 错误使用 OpenAI 风格的 JSON error envelope
 - SSE 接口返回 `text/event-stream`
 - 当前 API 主要分为 3 组：
   - 核心 API：`/api/v1/*`
@@ -1298,6 +1299,108 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
   }
 }
 ```
+
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
+
+通过选定 Agent 及其真实 CSGClaw runtime 执行一次非流式 turn。
+`{agent}` selector 可以使用 Agent ID，也可以使用不区分大小写的唯一 Agent 名称。
+该接口与 `/llm/responses` 相互独立，后者只代理模型流量，不执行 Agent。
+
+该接口不要求 Bearer token。
+因为 admin 目前是唯一用户，Anonymous 复用现有 `user-admin` 身份表示。
+服务端不接受调用方指定身份，每条输入消息都以 `sender_id: "user-admin"` 持久化。
+
+客户端提供一个全局 `session_id`，长度为 1-128 位，只能包含 path-safe ASCII 字符。
+第一次请求创建一个 non-direct room，后续请求复用该 room。
+Room 中只能包含 admin 和所选 Agent，服务端会保持 `notify_all_agents` 开启。
+Room title 创建后不再变化，并使用以下便于审计的格式：
+
+```text
+Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
+```
+
+最简请求使用字符串 input：
+
+```json
+{
+  "input": "Review this patch."
+}
+```
+
+也可以使用仅包含文本的 user message items：
+
+```json
+{
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Review this patch."
+        }
+      ]
+    }
+  ],
+  "stream": false
+}
+```
+
+成功时返回非流式 Responses 风格子集：
+
+```json
+{
+  "id": "resp_7ac7b41c",
+  "object": "response",
+  "created_at": 1785300000,
+  "completed_at": 1785300012,
+  "status": "completed",
+  "model": "agent-reviewer",
+  "output": [
+    {
+      "id": "msg-1785300012000",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "The patch is ready.",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "session_id": "review-2026-07-29",
+    "room_id": "room-1785300000000",
+    "agent_id": "agent-reviewer"
+  }
+}
+```
+
+同一个 session 同时只允许一个 turn。
+不同 session ID 可以并发执行。
+同一个全局 session 改用其它 Agent 时返回 `409 session_agent_conflict`。
+服务端最多等待五分钟，之后返回 `504 response_timeout`。
+
+错误使用以下 JSON 格式：
+
+```json
+{
+  "error": {
+    "message": "another response is already running for this session",
+    "type": "conflict_error",
+    "param": "session_id",
+    "code": "session_busy"
+  }
+}
+```
+
+V1 只接受文本并返回最终文本。
+流式输出、tools、instructions、非 user role、attachments 和未知请求字段都会被拒绝。
+内置 live demo 和可替换的前端 mock 边界见 [Session API Demo 前端指南](web/session-api-demo.zh.md)。
 
 ### `GET /api/v1/agents/{id}/llm/models`
 

@@ -85,6 +85,8 @@ type Handler struct {
 
 	participantActivityTurnsMu sync.Mutex
 	participantActivityTurns   map[string]participantActivityTurn
+	sessionTurnsMu             sync.Mutex
+	sessionTurns               map[string]struct{}
 }
 
 const (

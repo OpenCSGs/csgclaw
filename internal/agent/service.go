@@ -1516,6 +1516,17 @@ func (s *Service) Agent(id string) (Agent, bool) {
 	return s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, a)), true
 }
 
+// AgentByName resolves the unique case-insensitive display name used by public
+// agent selector APIs.
+func (s *Service) AgentByName(name string) (Agent, bool) {
+	a, ok := s.agentSnapshotByName(name)
+	if !ok {
+		return Agent{}, false
+	}
+	ctx := context.Background()
+	return s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, a)), true
+}
+
 func (s *Service) AgentMetadata(id string) (AgentMetadata, bool) {
 	a, ok := s.agentSnapshot(id)
 	if !ok {

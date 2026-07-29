@@ -71,6 +71,18 @@
   max-width: 100%;
 }
 
+.chat-title:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.chat-title-tooltip {
+  max-width: min(720px, calc(100vw - 24px));
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .header-menu {
   position: relative;
   flex-shrink: 0;

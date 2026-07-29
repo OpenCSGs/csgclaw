@@ -3792,10 +3792,15 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, ag
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
-	if err != nil {
-		t.Fatalf("hub.NewService() error = %v", err)
-	}
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-worker", hub.Template{
+		ID:          "picoclaw-worker",
+		Name:        "picoclaw-worker",
+		Description: "PicoClaw worker",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: agent.RuntimeNamePicoClaw,
+		Version:     "test",
+		Image:       "picoclaw-image:test",
+	})
 	mcpSvc := mcp.NewService()
 
 	svc, err := agent.NewService(config.ModelConfig{
@@ -3806,8 +3811,7 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, ag
 	}, config.ServerConfig{}, "manager-image:test", "",
 		agent.WithHubService(hubSvc),
 		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{
-			DefaultManagerTemplate: config.DefaultBootstrapManagerTemplate,
-			DefaultWorkerTemplate:  config.DefaultBootstrapWorkerTemplate,
+			DefaultWorkerTemplate: "local/picoclaw-worker",
 		}),
 	)
 	if err != nil {

@@ -167,6 +167,8 @@ type Room struct {
 	Title           string        `json:"title"`
 	Subtitle        string        `json:"subtitle"`
 	Description     string        `json:"description,omitempty"`
+	SessionID       string        `json:"session_id,omitempty"`
+	SessionAgentID  string        `json:"session_agent_id,omitempty"`
 	IsDirect        bool          `json:"is_direct,omitempty"`
 	NotifyAllAgents bool          `json:"notify_all_agents"`
 	Members         []string      `json:"members"`

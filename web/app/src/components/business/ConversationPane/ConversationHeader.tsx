@@ -87,7 +87,14 @@ export const ConversationHeader = memo(function ConversationHeader({
                   <strong>{messageCountLabel}</strong>
                 </Tooltip>
               </div>
-              <div className="chat-title truncate">{conversation.title}</div>
+              <Tooltip
+                content={conversation.title}
+                contentProps={{ align: "start", className: "chat-title-tooltip", side: "bottom", sideOffset: 6 }}
+              >
+                <div className="chat-title truncate" tabIndex={0}>
+                  {conversation.title}
+                </div>
+              </Tooltip>
               {showMemberListAction ? (
                 <div ref={memberMenuRef} className="header-menu">
                   <Tooltip content={t("membersTitle")}>

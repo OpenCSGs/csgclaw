@@ -15,6 +15,9 @@ const ModelProviderPage = lazy(() =>
   import("@/pages/ModelProviderPage/ModelProviderPage").then((module) => ({ default: module.ModelProviderPage })),
 );
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const SessionDemoPage = lazy(() =>
+  import("@/pages/SessionDemoPage").then((module) => ({ default: module.SessionDemoPage })),
+);
 const TeamPage = lazy(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage })));
 const TasksPage = lazy(() => import("@/pages/TasksPage").then((module) => ({ default: module.TasksPage })));
 
@@ -27,6 +30,7 @@ function routeElement(Page: ComponentType): ReactElement {
 }
 
 const routes: RouteObject[] = [
+  { path: "/session-demo", element: routeElement(SessionDemoPage) },
   {
     path: "/",
     element: <WorkspacePage />,

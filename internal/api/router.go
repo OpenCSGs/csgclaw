@@ -60,6 +60,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Post("/connectors/{provider}/credential", h.handleAgentConnectorCredential)
 				r.Post("/recreate", h.recreateAgent)
 				r.Post("/upgrade", h.upgradeAgent)
+				r.Post("/sessions/{session_id}/responses", h.createAgentSessionResponse)
 			})
 		})
 		r.Get("/mcp-servers", h.handleMCPServers)

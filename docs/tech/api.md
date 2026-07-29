@@ -7,6 +7,7 @@ This document is generated from the HTTP routes and behaviors currently implemen
 - Except for streaming endpoints, requests and responses use `application/json`
 - Time fields use RFC3339 / ISO8601
 - Most non-streaming errors are returned as plain-text response bodies
+- Agent session response errors use an OpenAI-style JSON error envelope
 - SSE endpoints use `text/event-stream`
 - The current API is mainly grouped into 3 areas:
   - Core API: `/api/v1/*`
@@ -1327,6 +1328,108 @@ PicoClaw outbound message shape is also accepted:
   }
 }
 ```
+
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
+
+Runs one non-streaming turn through the selected agent and its real CSGClaw runtime.
+The `{agent}` selector accepts an agent ID or a unique case-insensitive agent name.
+This endpoint is separate from `/llm/responses`, which proxies model traffic without running the agent.
+
+The endpoint does not require a Bearer token.
+Anonymous is represented by the existing `user-admin` identity because admin is currently the only user.
+The server ignores caller identity and persists every input message with `sender_id: "user-admin"`.
+
+The client owns a global `session_id` containing 1-128 path-safe ASCII characters.
+The first request creates one non-direct room, while later requests reuse it.
+The room contains exactly admin and the selected agent, and the server keeps `notify_all_agents` enabled.
+The room title is immutable and uses this audit-friendly format:
+
+```text
+Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
+```
+
+The shortest request uses string input:
+
+```json
+{
+  "input": "Review this patch."
+}
+```
+
+Text-only user message items are also accepted:
+
+```json
+{
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Review this patch."
+        }
+      ]
+    }
+  ],
+  "stream": false
+}
+```
+
+The successful response is a non-streaming Responses-style subset:
+
+```json
+{
+  "id": "resp_7ac7b41c",
+  "object": "response",
+  "created_at": 1785300000,
+  "completed_at": 1785300012,
+  "status": "completed",
+  "model": "agent-reviewer",
+  "output": [
+    {
+      "id": "msg-1785300012000",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "The patch is ready.",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "session_id": "review-2026-07-29",
+    "room_id": "room-1785300000000",
+    "agent_id": "agent-reviewer"
+  }
+}
+```
+
+Only one turn may run for a session at a time.
+Different session IDs may run concurrently.
+Using the same global session with another agent returns `409 session_agent_conflict`.
+The server waits up to five minutes for a final agent response and returns `504 response_timeout` afterward.
+
+Errors use this JSON shape:
+
+```json
+{
+  "error": {
+    "message": "another response is already running for this session",
+    "type": "conflict_error",
+    "param": "session_id",
+    "code": "session_busy"
+  }
+}
+```
+
+The v1 endpoint accepts text and final output only.
+It rejects streaming, tools, instructions, non-user roles, attachments, and unknown request fields.
+See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
 ### `GET /api/v1/agents/{id}/llm/models`
 
