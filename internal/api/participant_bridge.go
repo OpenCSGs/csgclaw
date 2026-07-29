@@ -188,7 +188,7 @@ func (h *Handler) materializeAttachmentsForParticipant(attachments []im.MessageA
 	if strings.TrimSpace(agentID) == "" {
 		return append([]im.MessageAttachment(nil), attachments...)
 	}
-	workspaceRoot, err := h.svc.WorkspaceRoot(agentID)
+	workspaceRoot, err := h.svc.WorkspaceRootByID(agentID)
 	if err != nil {
 		slog.Warn("resolve attachment workspace failed", "agent_id", agentID, "participant_id", bridgeID, "error", err)
 		return append([]im.MessageAttachment(nil), attachments...)

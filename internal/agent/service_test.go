@@ -10783,6 +10783,14 @@ func TestServiceWorkspaceRootUsesRegisteredRuntimeCapability(t *testing.T) {
 		t.Fatalf("WorkspaceRoot() = %q, want %q", got, want)
 	}
 
+	gotByID, err := svc.WorkspaceRootByID("u-alice")
+	if err != nil {
+		t.Fatalf("WorkspaceRootByID() error = %v", err)
+	}
+	if gotByID != want {
+		t.Fatalf("WorkspaceRootByID() = %q, want %q", gotByID, want)
+	}
+
 	skillsRoot, err := svc.SkillsRoot("alice")
 	if err != nil {
 		t.Fatalf("SkillsRoot() error = %v", err)

@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
@@ -224,6 +226,83 @@ func TestHandleCsgclawMessageMultipartAttachmentAndDownload(t *testing.T) {
 	}
 	if participantMessage.RelatesTo == nil || participantMessage.RelatesTo.EventID != msg.ID {
 		t.Fatalf("participant message relation = %+v, want thread root %q", participantMessage.RelatesTo, msg.ID)
+	}
+}
+
+func TestMaterializeAttachmentsForParticipantResolvesAgentByID(t *testing.T) {
+	agentSvc := mustNewSeededService(t, []agent.Agent{{
+		ID:          "agent-resume",
+		Name:        "resume-scorer",
+		Role:        agent.RoleWorker,
+		RuntimeKind: agent.RuntimeKindOpenClawSandbox,
+	}})
+	workspaceRoot, err := agentSvc.WorkspaceRootByID("agent-resume")
+	if err != nil {
+		t.Fatalf("WorkspaceRootByID() error = %v", err)
+	}
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(workspace root) error = %v", err)
+	}
+
+	imSvc, err := im.NewServiceFromPath(filepath.Join(t.TempDir(), "im", "state.json"))
+	if err != nil {
+		t.Fatalf("NewServiceFromPath() error = %v", err)
+	}
+	worker, _, err := imSvc.EnsureAgentUser(im.EnsureAgentUserRequest{
+		ID:   "resume",
+		Name: "resume-scorer",
+		Role: agent.RoleWorker,
+	})
+	if err != nil {
+		t.Fatalf("EnsureAgentUser() error = %v", err)
+	}
+	room, err := imSvc.CreateRoom(im.CreateRoomRequest{
+		Title:     "Resume review",
+		CreatorID: "user-admin",
+		MemberIDs: []string{worker.ID},
+	})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+	message, err := imSvc.CreateMessage(im.CreateMessageRequest{
+		RoomID:   room.ID,
+		SenderID: "user-admin",
+		Content:  "review this resume",
+		Attachments: []im.MessageAttachmentUpload{{
+			Name:      "resume.pdf",
+			MediaType: "application/pdf",
+			Data:      []byte("resume contents"),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage() error = %v", err)
+	}
+	participantSvc := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{
+		ID:             "pt-resume",
+		Channel:        participant.ChannelCSGClaw,
+		Type:           participant.TypeAgent,
+		Name:           "resume-scorer",
+		ChannelUserRef: worker.ID,
+		AgentID:        "agent-resume",
+	}}))
+	handler := &Handler{svc: agentSvc, im: imSvc, participant: participantSvc}
+
+	attachments := handler.materializeAttachmentsForParticipant(
+		message.Attachments,
+		room.ID,
+		message.ID,
+		"pt-resume",
+	)
+	if len(attachments) != 1 || attachments[0].WorkspacePath == "" {
+		t.Fatalf("materialized attachments = %+v, want one workspace-backed attachment", attachments)
+	}
+	materializedPath := filepath.Join(workspaceRoot, filepath.FromSlash(attachments[0].WorkspacePath))
+	got, err := os.ReadFile(materializedPath)
+	if err != nil {
+		t.Fatalf("ReadFile(materialized attachment) error = %v", err)
+	}
+	if string(got) != "resume contents" {
+		t.Fatalf("materialized attachment = %q, want resume contents", string(got))
 	}
 }
 
