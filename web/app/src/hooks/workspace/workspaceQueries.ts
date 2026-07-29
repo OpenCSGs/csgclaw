@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, fetchAgents } from "@/api/agents";
@@ -12,6 +13,8 @@ import { fetchRemoteSkillsPage, fetchSkillFile, fetchSkills, fetchSkillTree } fr
 import type { RemoteSkillsPage } from "@/api/skills";
 import { fetchManagerProfile } from "@/api/agents";
 import {
+  isAgentRunning,
+  isManagerAgent,
   modelRequestKey,
   normalizeRuntimeImageMap,
   normalizeRuntimeKind,
@@ -35,6 +38,19 @@ import type { UpgradeStatus } from "@/models/upgradeStatus";
 import { fetchPlatformUpgradeStatus } from "@/shared/platform/updatePort";
 
 const WORKSPACE_QUERY_SCOPE = "workspace";
+export const WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS = 1_500;
+export const WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS = 120_000;
+
+export function workspaceAgentsStartupRefetchInterval(
+  items: AgentLike[] | undefined,
+  elapsedMs: number,
+): number | false {
+  if (elapsedMs >= WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS) {
+    return false;
+  }
+  const manager = items?.find(isManagerAgent);
+  return manager && isAgentRunning(manager) ? false : WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS;
+}
 
 export const workspaceQueryKeys = {
   bootstrap: () => [WORKSPACE_QUERY_SCOPE, "bootstrap"] as const,
@@ -172,9 +188,12 @@ export function useWorkspaceManagerProfileQuery(): UseQueryResult<AgentProfileLi
 }
 
 export function useWorkspaceAgentsQuery(): UseQueryResult<AgentLike[]> {
+  const startupPollStartedAtRef = useRef(Date.now());
   return useQuery<AgentLike[]>({
     queryKey: workspaceQueryKeys.agents(),
     queryFn: () => fetchAgents(),
+    refetchInterval: (query) =>
+      workspaceAgentsStartupRefetchInterval(query.state.data, Date.now() - startupPollStartedAtRef.current),
   });
 }
 

@@ -728,13 +728,26 @@ function Invoke-TargetDesktopPackage {
     Write-Host "Building desktop backend ($($script:TargetOs)/$($script:TargetArch))..."
     Invoke-DesktopBackendBundle -Goos $script:TargetOs -Goarch $script:TargetArch
     Write-Host "Building desktop packages (win32/$desktopArch)..."
+    if (Test-Path -LiteralPath $script:DesktopMakeDir) {
+        Remove-Item -LiteralPath $script:DesktopMakeDir -Recurse -Force
+    }
     Invoke-Pnpm -Arguments @("--dir", $script:DesktopDir, "--silent", "make", "--platform=win32", "--arch=$desktopArch") -Env @{
         CSGCLAW_DESKTOP_GOOS    = $script:TargetOs
         CSGCLAW_DESKTOP_GOARCH  = $script:TargetArch
         CSGCLAW_DESKTOP_ARCH    = $desktopArch
         CSGCLAW_DESKTOP_VERSION = $script:Version
     }
-    Write-Host "Desktop packages ready: $script:DesktopMakeDir"
+
+    $installers = @(
+        Get-ChildItem -LiteralPath $script:DesktopMakeDir -Recurse -File -Filter "*-Setup.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Length -gt 0 }
+    )
+    if ($installers.Count -eq 0) {
+        throw "Electron Forge completed without producing a Windows installer under $script:DesktopMakeDir."
+    }
+
+    Write-Host "Desktop installer ready:"
+    $installers | ForEach-Object { Write-Host "  $($_.FullName)" }
 }
 
 function Invoke-TargetRun {

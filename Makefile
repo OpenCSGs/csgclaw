@@ -162,6 +162,19 @@ desktop-package: ensure-desktop-deps desktop-backend-bundle
 		CSGCLAW_DESKTOP_VERSION=$(VERSION) \
 		$(DESKTOP_PNPM) $(if $(filter summary,$(DESKTOP_PACKAGE_REPORT)),--silent make,make) --platform=$(DESKTOP_PLATFORM) --arch=$(DESKTOP_ARCH); \
 	}; \
+	print_artifacts() { \
+		artifacts=$$(find "$(abspath $(DESKTOP_DIR)/out/make)" -type f -size +0c \( \
+			-name '*.dmg' -o -name '*.zip' -o -name '*.deb' -o \
+			-name '*.rpm' -o -name '*-Setup.exe' -o -name '*.msi' \
+		\) -print 2>/dev/null); \
+		if [ -z "$$artifacts" ]; then \
+			printf 'Desktop packaging produced no distributables under %s\n' "$(abspath $(DESKTOP_DIR)/out/make)" >&2; \
+			return 1; \
+		fi; \
+		printf '%s\n' "Desktop packages ready:"; \
+		printf '%s\n' "$$artifacts" | sed 's/^/  /'; \
+	}; \
+	rm -rf "$(DESKTOP_DIR)/out/make"; \
 	if [ "$(DESKTOP_PACKAGE_REPORT)" = "summary" ]; then \
 		log_file=$$(mktemp); \
 		trap 'rm -f "$$log_file"' EXIT; \
@@ -181,9 +194,13 @@ desktop-package: ensure-desktop-deps desktop-backend-bundle
 			cat "$$log_file" >&2; \
 			exit $$status; \
 		fi; \
-		printf 'Desktop packages ready: %s\n' "$(abspath $(DESKTOP_DIR)/out/make)"; \
+		print_artifacts || { \
+			printf '%s\n' "Electron Forge output follows:" >&2; \
+			cat "$$log_file" >&2; \
+			exit 1; \
+		}; \
 	else \
-		run_package; \
+		run_package && print_artifacts; \
 	fi
 
 build: build-web build-server-bin build-sandbox-cli
