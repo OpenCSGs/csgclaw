@@ -282,6 +282,45 @@ func TestAppServerClientCloseAllPending(t *testing.T) {
 	}
 }
 
+func TestAppServerClientCloseAllPendingDoesNotWaitForBlockedWrite(t *testing.T) {
+	writer := newBlockingWriter()
+	defer writer.unblock()
+	client := newAppServerClient(writer, nil)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := client.request(context.Background(), "turn/start", map[string]any{"threadId": "thread-1"})
+		errCh <- err
+	}()
+
+	select {
+	case <-writer.started:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for blocked app-server write")
+	}
+
+	closed := make(chan struct{})
+	go func() {
+		client.closeAllPending(errors.New("app-server stopping"))
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("closeAllPending waited for blocked app-server write")
+	}
+
+	writer.unblock()
+	select {
+	case err := <-errCh:
+		if err == nil || !strings.Contains(err.Error(), "app-server stopping") {
+			t.Fatalf("request() error = %v, want app-server stopping", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for request to observe app-server shutdown")
+	}
+}
+
 func TestAppServerClientRejectsRequestsAfterClose(t *testing.T) {
 	writer := &lockedStringWriter{}
 	client := newAppServerClient(writer, nil)
@@ -299,6 +338,30 @@ func TestAppServerClientRejectsRequestsAfterClose(t *testing.T) {
 type lockedStringWriter struct {
 	mu sync.Mutex
 	b  strings.Builder
+}
+
+type blockingWriter struct {
+	started     chan struct{}
+	release     chan struct{}
+	startedOnce sync.Once
+	releaseOnce sync.Once
+}
+
+func newBlockingWriter() *blockingWriter {
+	return &blockingWriter{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+}
+
+func (w *blockingWriter) Write(p []byte) (int, error) {
+	w.startedOnce.Do(func() { close(w.started) })
+	<-w.release
+	return len(p), nil
+}
+
+func (w *blockingWriter) unblock() {
+	w.releaseOnce.Do(func() { close(w.release) })
 }
 
 func (w *lockedStringWriter) Write(p []byte) (int, error) {

@@ -23,6 +23,7 @@ import {
   isThreadReply,
   isToolCallMessage,
   localIdentitiesMatch,
+  mergeRoomNotificationUpdateInData,
   participantIDForLocalIdentity,
   removeConversationFromData,
   resolveConversationUser,
@@ -1148,7 +1149,7 @@ export function useConversationController({
     setNotifyAllAgentsError("");
     try {
       const updated = await updateRoomRequest(activeConversation.id, { notify_all_agents: enabled });
-      setBootstrapData((current) => upsertConversationInData(current, updated));
+      setBootstrapData((current) => mergeRoomNotificationUpdateInData(current, updated));
     } catch (err) {
       if (notifyAllAgentsRequestRef.current === requestID) {
         setNotifyAllAgentsError(localizeError(errorMessage(err, ""), t) || t("notifyAllAgentsUpdateFailed"));

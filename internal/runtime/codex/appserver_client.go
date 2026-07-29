@@ -293,7 +293,6 @@ func (c *appServerClient) closeAllPending(err error) {
 	if err == nil {
 		err = fmt.Errorf("codex app-server client closed")
 	}
-	c.writeMu.Lock()
 	c.mu.Lock()
 	if c.closed == nil {
 		c.closed = err
@@ -302,7 +301,6 @@ func (c *appServerClient) closeAllPending(err error) {
 	pending := c.pending
 	c.pending = make(map[int64]*appServerPendingRequest)
 	c.mu.Unlock()
-	c.writeMu.Unlock()
 	for _, req := range pending {
 		req.ch <- appServerRPCResult{err: err}
 	}

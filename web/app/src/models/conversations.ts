@@ -870,11 +870,13 @@ export function applyIMEvent<T extends IMData | null | undefined>(
   if ((event.type === "thread.created" || event.type === "thread.updated") && event.thread) {
     return applyThreadToData(current, event.room_id || event.thread.room_id, event.thread);
   }
+  if (event.type === "room.updated" && event.room?.id) {
+    return mergeRoomNotificationUpdateInData(current, event.room as IMConversation);
+  }
   if (
     (event.type === "conversation.created" ||
       event.type === "conversation.members_added" ||
       event.type === "room.created" ||
-      event.type === "room.updated" ||
       event.type === "room.members_added" ||
       event.type === "room.members_removed" ||
       event.type === "room.messages_cleared") &&
@@ -1071,6 +1073,26 @@ export function upsertConversationInData<T extends IMData | null | undefined>(
     ? current.rooms.map((item) => (item.id === conversation.id ? normalized : item))
     : [normalized, ...current.rooms];
   return { ...current, rooms: sortConversations(rooms) };
+}
+
+export function mergeRoomNotificationUpdateInData<T extends IMData | null | undefined>(
+  current: T,
+  conversation: IMConversation | null | undefined,
+): T | IMData {
+  if (!current || !conversation) {
+    return current;
+  }
+
+  const existing = current.rooms.some((item) => item.id === conversation.id);
+  if (!existing) {
+    return upsertConversationInData(current, conversation);
+  }
+  const rooms = current.rooms.map((item) =>
+    item.id === conversation.id
+      ? { ...item, notify_all_agents: conversation.notify_all_agents ?? item.notify_all_agents }
+      : item,
+  );
+  return { ...current, rooms };
 }
 
 export function upsertUserInData<T extends IMData | null | undefined>(
