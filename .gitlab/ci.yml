@@ -25,6 +25,12 @@
 #   BOXLITE_CLI_VERSION – default v0.9.0
 #   BOXLITE_CLI_BASE_URL – boxlite-cli tarballs; default mirrors https://csgclaw.opencsg.com/boxlite-cli/{version}/{filename} (matches fetch-boxlite-cli.sh)
 #   BOXLITE_CURL_INSECURE – default 1 (TLS inspection); set 0 if csgclaw.opencsg.com is trusted as-is
+#   CSGCLAW_MACOS_CERTIFICATE_P12 – GitLab File variable for the Developer ID Application P12
+#   CSGCLAW_MACOS_CERTIFICATE_PASSWORD / CSGCLAW_MACOS_SIGN_IDENTITY – enable macOS signing when both are set
+#   APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID – optional macOS notarization (all three required)
+#   CSGCLAW_WINDOWS_CERTIFICATE_PFX – GitLab File variable for the Windows signing PFX
+#   CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD – enables Windows installer certificate signing when set with the PFX
+#   CSGCLAW_WINDOWS_SIGN_TOOL / CSGCLAW_WINDOWS_SIGN_PARAMS – optional full Windows signing command (both required)
 #
 # Debian apt: before install, rewrite official mirrors to Aliyun (faster in CN). Override DEBIAN_APT_MIRROR_* in CI vars if needed.
 #
@@ -146,6 +152,164 @@ release-build:
   artifacts:
     paths:
       - dist/
+    expire_in: 1 day
+
+desktop-build-linux:
+  extends:
+    - .release_image
+    - .release_rules
+  stage: release
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+      when: manual
+      allow_failure: true
+  parallel:
+    matrix:
+      - GOOS: linux
+        GOARCH: amd64
+      - GOOS: linux
+        GOARCH: arm64
+  before_script:
+    - chmod +x .gitlab/bookworm-mirror.sh
+    - bash .gitlab/bookworm-mirror.sh
+    - apt-get update -qq && apt-get install -y --no-install-recommends ca-certificates curl dpkg fakeroot xz-utils
+    - |
+      NODE_VERSION="$(tr -d '[:space:]' < .nvmrc)"
+      case "$(uname -m)" in
+        x86_64|amd64) NODE_ARCH=x64 ;;
+        aarch64|arm64) NODE_ARCH=arm64 ;;
+        *) echo "unsupported Linux runner architecture: $(uname -m)" >&2; exit 1 ;;
+      esac
+      curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" -o /tmp/node.tar.xz
+      tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+      corepack enable
+      node --version
+      pnpm --version
+  script:
+    - export VERSION="$CI_COMMIT_TAG"
+    - export COMMIT="$(git rev-parse --short HEAD)"
+    - export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    - export GOCACHE="${CI_PROJECT_DIR}/.gocache"
+    - make desktop-package TARGET_OS="$GOOS" TARGET_ARCH="$GOARCH"
+    - node scripts/collect-desktop-release-assets.mjs "$VERSION" "$GOOS" "$GOARCH" desktop/out/make dist
+  artifacts:
+    paths:
+      - dist/csgclaw-desktop_*
+    expire_in: 1 day
+
+desktop-build-macos:
+  extends: .release_rules
+  stage: release
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+      when: manual
+      allow_failure: true
+  parallel:
+    matrix:
+      - GOARCH: arm64
+        RUNNER_TAG: csgclaw-macos-arm64
+      - GOARCH: amd64
+        RUNNER_TAG: csgclaw-macos-amd64
+  tags:
+    - $RUNNER_TAG
+  before_script:
+    - node --version
+    - corepack enable
+    - pnpm --version
+    - |
+      requested_identity="${CSGCLAW_MACOS_SIGN_IDENTITY:-}"
+      requested_apple_id="${APPLE_ID:-}"
+      requested_apple_password="${APPLE_PASSWORD:-}"
+      requested_apple_team_id="${APPLE_TEAM_ID:-}"
+      unset CSGCLAW_MACOS_SIGN_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+
+      if [ -z "${CSGCLAW_MACOS_CERTIFICATE_P12:-}" ] || [ -z "${CSGCLAW_MACOS_CERTIFICATE_PASSWORD:-}" ] || [ -z "${requested_identity}" ]; then
+        echo "macOS signing is not fully configured; using Forge defaults."
+      elif [ ! -f "${CSGCLAW_MACOS_CERTIFICATE_P12}" ]; then
+        echo "CSGCLAW_MACOS_CERTIFICATE_P12 must be a GitLab File variable." >&2
+        exit 1
+      else
+        keychain_path="${CI_PROJECT_DIR}/.csgclaw-signing.keychain-db"
+        keychain_password="$(openssl rand -hex 32)"
+        security create-keychain -p "${keychain_password}" "${keychain_path}"
+        security set-keychain-settings -lut 21600 "${keychain_path}"
+        security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+        security import "${CSGCLAW_MACOS_CERTIFICATE_P12}" -k "${keychain_path}" -P "${CSGCLAW_MACOS_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+        security set-key-partition-list -S apple-tool:,apple: -s -k "${keychain_password}" "${keychain_path}"
+        security list-keychains -d user -s "${keychain_path}"
+        export CSGCLAW_MACOS_SIGN_IDENTITY="${requested_identity}"
+
+        if [ -n "${requested_apple_id}" ] && [ -n "${requested_apple_password}" ] && [ -n "${requested_apple_team_id}" ]; then
+          export APPLE_ID="${requested_apple_id}"
+          export APPLE_PASSWORD="${requested_apple_password}"
+          export APPLE_TEAM_ID="${requested_apple_team_id}"
+        fi
+      fi
+  script:
+    - export VERSION="$CI_COMMIT_TAG"
+    - export COMMIT="$(git rev-parse --short HEAD)"
+    - export BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    - export GOCACHE="${CI_PROJECT_DIR}/.gocache"
+    - make desktop-package TARGET_OS=darwin TARGET_ARCH="$GOARCH"
+    - node scripts/collect-desktop-release-assets.mjs "$VERSION" darwin "$GOARCH" desktop/out/make dist
+  after_script:
+    - security delete-keychain "${CI_PROJECT_DIR}/.csgclaw-signing.keychain-db" || true
+  artifacts:
+    paths:
+      - dist/csgclaw-desktop_*
+    expire_in: 1 day
+
+desktop-build-windows:
+  extends: .release_rules
+  stage: release
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+      when: manual
+      allow_failure: true
+  tags:
+    - csgclaw-windows-amd64
+  before_script:
+    - $ErrorActionPreference = 'Stop'
+    - node --version
+    - corepack enable
+    - pnpm --version
+    - |
+      $certificatePassword = $env:CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD
+      $signTool = $env:CSGCLAW_WINDOWS_SIGN_TOOL
+      $signParams = $env:CSGCLAW_WINDOWS_SIGN_PARAMS
+      Remove-Item Env:CSGCLAW_WINDOWS_CERTIFICATE_FILE -ErrorAction SilentlyContinue
+      Remove-Item Env:CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD -ErrorAction SilentlyContinue
+      Remove-Item Env:CSGCLAW_WINDOWS_SIGN_TOOL -ErrorAction SilentlyContinue
+      Remove-Item Env:CSGCLAW_WINDOWS_SIGN_PARAMS -ErrorAction SilentlyContinue
+
+      if ($env:CSGCLAW_WINDOWS_CERTIFICATE_PFX -and $certificatePassword) {
+        if (-not (Test-Path -LiteralPath $env:CSGCLAW_WINDOWS_CERTIFICATE_PFX -PathType Leaf)) {
+          throw 'CSGCLAW_WINDOWS_CERTIFICATE_PFX must be a GitLab File variable.'
+        }
+        $env:CSGCLAW_WINDOWS_CERTIFICATE_FILE = $env:CSGCLAW_WINDOWS_CERTIFICATE_PFX
+        $env:CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD = $certificatePassword
+      }
+      else {
+        Write-Host 'Windows certificate signing is not fully configured; using Forge defaults.'
+      }
+
+      if ($signTool -and $signParams) {
+        $env:CSGCLAW_WINDOWS_SIGN_TOOL = $signTool
+        $env:CSGCLAW_WINDOWS_SIGN_PARAMS = $signParams
+      }
+  script:
+    - $env:VERSION = $env:CI_COMMIT_TAG
+    - $env:COMMIT = (git rev-parse --short HEAD)
+    - $env:BUILD_TIME = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    - $env:GOCACHE = Join-Path $env:CI_PROJECT_DIR '.gocache'
+    - .\scripts\build.cmd desktop-package
+    - node scripts/collect-desktop-release-assets.mjs $env:VERSION windows amd64 desktop/out/make dist
+  artifacts:
+    paths:
+      - dist/csgclaw-desktop_*
     expire_in: 1 day
 
 docker-build-amd64:

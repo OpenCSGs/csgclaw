@@ -239,11 +239,11 @@ make desktop-package TARGET_OS=darwin TARGET_ARCH=amd64
 
 打包配置按目标平台分别使用 `csgclaw.icns`、`csgclaw.ico` 和 `csgclaw.png`，Windows 安装器和 Linux DEB 也显式复用对应图标。
 
-输出目录是 `desktop/out/`，backend 中间产物位于 `dist/desktop-input/<os>-<arch>/backend/`。
+输出目录是 `desktop/out/`，backend 中间产物位于 `dist/desktop-input/<os>-<arch>/backend/`。GitHub Release CI 会从 `desktop/out/make/` 归档最终文件，生成如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的稳定名称并附加到对应 GitHub Release。GitLab 的桌面 job 仅供可选手动构建，成功产物作为 GitLab artifact 保留一天，不上传到 `https://csgclaw.opencsg.com/releases/<tag>/`。
 
 正式安装包建议在目标系统构建。跨平台编译成功不代表签名、安装、启动和更新已经通过目标系统验证。
 
-macOS 正式发布需要配置签名和公证账号；Windows 可通过 `CSGCLAW_WINDOWS_SIGN_*` 和证书变量接入签名。更新源通过 `CSGCLAW_DESKTOP_UPDATE_BASE_URL` 设置，必须使用 HTTPS。
+macOS 正式发布需要配置签名和公证账号；Windows 可通过 `CSGCLAW_WINDOWS_SIGN_*` 和证书变量接入签名。CI 仅在完整签名变量组存在时传递这些配置；否则 macOS 保持 ad-hoc 签名、Windows 保持未签名。GitLab 的 macOS/Windows 桌面 job 必须运行在对应原生 runner 上，且为可选手动 job。更新源可通过 `CSGCLAW_DESKTOP_UPDATE_BASE_URL` 设置且必须使用 HTTPS，但当前发布 CI 不设置它。
 
 ## 8. 开发约定
 
