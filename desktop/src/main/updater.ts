@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app, autoUpdater } from "electron";
 import type { DesktopUpdateStatus } from "../shared/desktopBridge.types";
+import { usesMicrosoftStoreUpdates } from "./updatePolicy";
 
 export class DesktopUpdater {
   private downloaded = false;
@@ -25,6 +26,14 @@ export class DesktopUpdater {
   async checkForUpdates(): Promise<void> {
     if (this.downloaded) {
       this.publishStatus({ ...this.status });
+      return;
+    }
+    if (usesMicrosoftStoreUpdates(process.platform, process.windowsStore)) {
+      this.updateStatus({
+        state: "unsupported",
+        currentVersion: app.getVersion(),
+        message: "Updates are managed automatically by Microsoft Store.",
+      });
       return;
     }
     if (process.platform === "linux") {

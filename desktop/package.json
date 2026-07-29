@@ -9,7 +9,7 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "pnpm run build && node --test dist/main/sidecar/childEnvironment.test.js",
+    "test": "pnpm run build && node --test dist/main/sidecar/childEnvironment.test.js dist/main/updatePolicy.test.js",
     "start": "pnpm run build && electron-forge start",
     "make": "pnpm run build && electron-forge make",
     "publish": "pnpm run build && electron-forge publish"
@@ -21,6 +21,7 @@
     "@electron-forge/cli": "7.11.2",
     "@electron-forge/maker-deb": "7.11.2",
     "@electron-forge/maker-dmg": "7.11.2",
+    "@electron-forge/maker-msix": "7.11.2",
     "@electron-forge/maker-squirrel": "7.11.2",
     "@electron-forge/maker-zip": "7.11.2",
     "@electron-forge/plugin-fuses": "7.11.2",

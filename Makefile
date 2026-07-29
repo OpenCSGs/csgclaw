@@ -49,7 +49,7 @@ help:
 		'make web-dev    - run Vite Web UI dev server' \
 		'make build-web  - build Web UI app into web/static-dist' \
 		'make desktop-dev - install dependencies when needed, build the local backend, and start Electron Forge' \
-		'make desktop-package - create platform Electron installers/archives' \
+		'make desktop-package - create platform Electron installers/archives (set CSGCLAW_DESKTOP_WINDOWS_CHANNEL=store for MSIX)' \
 		'make build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli' \
 		'make build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools' \
 		'make run        - build (no docker images), then run the server' \
@@ -165,7 +165,8 @@ desktop-package: ensure-desktop-deps desktop-backend-bundle
 	print_artifacts() { \
 		artifacts=$$(find "$(abspath $(DESKTOP_DIR)/out/make)" -type f -size +0c \( \
 			-name '*.dmg' -o -name '*.zip' -o -name '*.deb' -o \
-			-name '*.rpm' -o -name '*-Setup.exe' -o -name '*.msi' \
+			-name '*.rpm' -o -name '*-Setup.exe' -o -name '*.msi' -o \
+			-name '*.msix' \
 		\) -print 2>/dev/null); \
 		if [ -z "$$artifacts" ]; then \
 			printf 'Desktop packaging produced no distributables under %s\n' "$(abspath $(DESKTOP_DIR)/out/make)" >&2; \

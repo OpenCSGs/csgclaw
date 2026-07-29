@@ -311,7 +311,8 @@ function Invoke-TargetHelp {
         "powershell -File scripts/build.ps1 web-install  - install Web UI dependencies"
         "powershell -File scripts/build.ps1 web-dev      - run Vite Web UI dev server"
         "powershell -File scripts/build.ps1 build-web    - build Web UI app into web/static-dist"
-        "scripts\build.cmd desktop-package               - build Windows Electron installers"
+        "scripts\build.cmd desktop-package               - build the Windows website package"
+        "scripts\build.cmd desktop-msix                  - build the Windows Microsoft Store MSIX package"
         "powershell -File scripts/build.ps1 build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli"
         "powershell -File scripts/build.ps1 build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools"
         "powershell -File scripts/build.ps1 run          - build, then run the server"
@@ -713,8 +714,12 @@ function Invoke-TargetBuild {
 }
 
 function Invoke-TargetDesktopPackage {
+    param(
+        [string]$WindowsChannel = ""
+    )
+
     if ($script:TargetOs -ne "windows") {
-        throw "scripts\build.cmd desktop-package must run with TARGET_OS=windows."
+        throw "Windows desktop packaging must run with TARGET_OS=windows."
     }
 
     $desktopArch = switch ($script:TargetArch) {
@@ -731,23 +736,30 @@ function Invoke-TargetDesktopPackage {
     if (Test-Path -LiteralPath $script:DesktopMakeDir) {
         Remove-Item -LiteralPath $script:DesktopMakeDir -Recurse -Force
     }
-    Invoke-Pnpm -Arguments @("--dir", $script:DesktopDir, "--silent", "make", "--platform=win32", "--arch=$desktopArch") -Env @{
+    $packageEnvironment = @{
         CSGCLAW_DESKTOP_GOOS    = $script:TargetOs
         CSGCLAW_DESKTOP_GOARCH  = $script:TargetArch
         CSGCLAW_DESKTOP_ARCH    = $desktopArch
         CSGCLAW_DESKTOP_VERSION = $script:Version
     }
+    if (-not [string]::IsNullOrWhiteSpace($WindowsChannel)) {
+        $packageEnvironment["CSGCLAW_DESKTOP_WINDOWS_CHANNEL"] = $WindowsChannel
+    }
+    Invoke-Pnpm -Arguments @("--dir", $script:DesktopDir, "--silent", "make", "--platform=win32", "--arch=$desktopArch") -Env $packageEnvironment
 
-    $installers = @(
-        Get-ChildItem -LiteralPath $script:DesktopMakeDir -Recurse -File -Filter "*-Setup.exe" -ErrorAction SilentlyContinue |
-            Where-Object { $_.Length -gt 0 }
+    $packages = @(
+        Get-ChildItem -LiteralPath $script:DesktopMakeDir -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.Length -gt 0 -and
+                ($_.Name -like "*-Setup.exe" -or $_.Extension -eq ".msix")
+            }
     )
-    if ($installers.Count -eq 0) {
-        throw "Electron Forge completed without producing a Windows installer under $script:DesktopMakeDir."
+    if ($packages.Count -eq 0) {
+        throw "Electron Forge completed without producing a Windows Setup.exe or MSIX package under $script:DesktopMakeDir."
     }
 
-    Write-Host "Desktop installer ready:"
-    $installers | ForEach-Object { Write-Host "  $($_.FullName)" }
+    Write-Host "Desktop packages ready:"
+    $packages | ForEach-Object { Write-Host "  $($_.FullName)" }
 }
 
 function Invoke-TargetRun {
@@ -838,6 +850,7 @@ try {
         "build" { Invoke-TargetBuild }
         "build-all" { Invoke-TargetBuild }
         "desktop-package" { Invoke-TargetDesktopPackage }
+        "desktop-msix" { Invoke-TargetDesktopPackage -WindowsChannel "store" }
         "run" { Invoke-TargetRun }
         "package" { Invoke-TargetPackage }
         "package-all" { Invoke-TargetPackageAll }

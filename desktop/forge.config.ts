@@ -3,6 +3,7 @@ import path from "node:path";
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerDMG } from "@electron-forge/maker-dmg";
+import { MakerMSIX } from "@electron-forge/maker-msix";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
@@ -24,6 +25,7 @@ const iconDirectory = path.resolve(__dirname, "resources", "icons");
 const macIcon = path.join(iconDirectory, "csgclaw.icns");
 const windowsIcon = path.join(iconDirectory, "csgclaw.ico");
 const linuxIcon = path.join(iconDirectory, "csgclaw.png");
+const msixAssets = path.resolve(__dirname, "resources", "msix");
 const appIcon = targetGoOS === "darwin" ? macIcon : targetGoOS === "windows" ? windowsIcon : linuxIcon;
 const adHocEntitlements = path.resolve(
   __dirname,
@@ -55,6 +57,18 @@ const windowsSign =
         signWithParams: process.env.CSGCLAW_WINDOWS_SIGN_PARAMS,
       }
     : undefined;
+const windowsPackageChannel = resolveWindowsPackageChannel(
+  process.env.CSGCLAW_DESKTOP_WINDOWS_CHANNEL,
+);
+const makeSquirrel = windowsPackageChannel !== "store";
+const makeMSIX = targetGoOS === "windows" && windowsPackageChannel !== "website";
+const msixIdentity = makeMSIX
+  ? requireEnvironmentVariables([
+      "CSGCLAW_MSIX_IDENTITY_NAME",
+      "CSGCLAW_MSIX_PUBLISHER",
+      "CSGCLAW_MSIX_PUBLISHER_DISPLAY_NAME",
+    ])
+  : undefined;
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -102,19 +116,46 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({
-      name: "csgclaw_desktop",
-      setupIcon: windowsIcon,
-      setupExe: `CSGClaw-Desktop-${desktopVersion}-${targetElectronArch}-Setup.exe`,
-      ...(updateBaseURL ? { remoteReleases: `${updateBaseURL}/win32/${targetElectronArch}` } : {}),
-      ...(windowsSign ? { windowsSign } : {}),
-      ...(process.env.CSGCLAW_WINDOWS_CERTIFICATE_FILE && process.env.CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD
-        ? {
-            certificateFile: process.env.CSGCLAW_WINDOWS_CERTIFICATE_FILE,
-            certificatePassword: process.env.CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD,
-          }
-        : {}),
-    }),
+    ...(makeSquirrel
+      ? [
+          new MakerSquirrel({
+            name: "csgclaw_desktop",
+            setupIcon: windowsIcon,
+            setupExe: `CSGClaw-Desktop-${desktopVersion}-${targetElectronArch}-Setup.exe`,
+            ...(updateBaseURL ? { remoteReleases: `${updateBaseURL}/win32/${targetElectronArch}` } : {}),
+            ...(windowsSign ? { windowsSign } : {}),
+            ...(process.env.CSGCLAW_WINDOWS_CERTIFICATE_FILE &&
+            process.env.CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD
+              ? {
+                  certificateFile: process.env.CSGCLAW_WINDOWS_CERTIFICATE_FILE,
+                  certificatePassword: process.env.CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD,
+                }
+              : {}),
+          }),
+        ]
+      : []),
+    ...(makeMSIX && msixIdentity
+      ? [
+          new MakerMSIX({
+            packageAssets: msixAssets,
+            createPri: true,
+            logLevel: "warn",
+            ...(process.env.CSGCLAW_MSIX_WINDOWS_KIT_VERSION
+              ? { windowsKitVersion: process.env.CSGCLAW_MSIX_WINDOWS_KIT_VERSION }
+              : {}),
+            ...(windowsSign ? { windowsSignOptions: windowsSign } : {}),
+            manifestVariables: {
+              packageIdentity: msixIdentity.CSGCLAW_MSIX_IDENTITY_NAME,
+              publisher: msixIdentity.CSGCLAW_MSIX_PUBLISHER,
+              publisherDisplayName: msixIdentity.CSGCLAW_MSIX_PUBLISHER_DISPLAY_NAME,
+              packageDisplayName: "CSGClaw",
+              appDisplayName: "CSGClaw",
+              packageDescription: "CSGClaw Desktop",
+              packageBackgroundColor: "transparent",
+            },
+          }),
+        ]
+      : []),
     new MakerZIP(
       updateBaseURL ? { macUpdateManifestBaseUrl: `${updateBaseURL}/darwin/${targetElectronArch}` } : {},
       ["darwin"],
@@ -176,6 +217,39 @@ function normalizeHTTPSBaseURL(rawURL: string | undefined): string {
     throw new Error("CSGCLAW_DESKTOP_UPDATE_BASE_URL must be an HTTPS URL without credentials, query, or fragment.");
   }
   return parsed.toString().replace(/\/+$/, "");
+}
+
+function resolveWindowsPackageChannel(
+  rawChannel: string | undefined,
+): "website" | "store" | "all" {
+  const channel = rawChannel?.trim().toLowerCase() || "website";
+  if (channel === "website" || channel === "store" || channel === "all") {
+    return channel;
+  }
+  throw new Error(
+    "CSGCLAW_DESKTOP_WINDOWS_CHANNEL must be website, store, or all.",
+  );
+}
+
+function requireEnvironmentVariables<const Name extends string>(
+  names: readonly Name[],
+): Record<Name, string> {
+  const values = {} as Record<Name, string>;
+  const missing: string[] = [];
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (!value) {
+      missing.push(name);
+    } else {
+      values[name] = value;
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `Microsoft Store MSIX packaging requires: ${missing.join(", ")}.`,
+    );
+  }
+  return values;
 }
 
 export default config;

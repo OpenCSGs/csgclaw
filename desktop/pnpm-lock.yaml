@@ -24,6 +24,9 @@ importers:
       '@electron-forge/maker-dmg':
         specifier: 7.11.2
         version: 7.11.2
+      '@electron-forge/maker-msix':
+        specifier: 7.11.2
+        version: 7.11.2
       '@electron-forge/maker-squirrel':
         specifier: 7.11.2
         version: 7.11.2
@@ -83,6 +86,10 @@ packages:
 
   '@electron-forge/maker-dmg@7.11.2':
     resolution: {integrity: sha512-vh8/mnu3xyMbRcz3S0TV1rB7ZyGhMK60Yz2f2R+Zmj1EbAivLEq5UAvzHdB+kLttr0Dpjp2FIX4TcZ9neD4Y9g==}
+    engines: {node: '>= 16.4.0'}
+
+  '@electron-forge/maker-msix@7.11.2':
+    resolution: {integrity: sha512-02+KlzPyY1aJRT3mNLyx8j5PUPVUA6fvx4DzCgUUkE1XJlu+YPkKoJZL/n1o05Y9UzoIJ1y5b9o1nmNuzyeiXQ==}
     engines: {node: '>= 16.4.0'}
 
   '@electron-forge/maker-squirrel@7.11.2':
@@ -560,6 +567,10 @@ packages:
   caniuse-lite@1.0.30001806:
     resolution: {integrity: sha512-72Cuvd95zbSYPKq6Fhg8eDJRlzgWDf7/mtoZv6Qe/DYNCEBdNxoA3+rZAU2ZhGCpZlns3EssFavaZomckT5Uuw==}
 
+  chalk@3.0.0:
+    resolution: {integrity: sha512-4D3B6Wf41KOYRFdszmDqMCGq5VV/uMAB273JILmO+3jAlh8X4qDtdtgCR3fxtbLEMzSx22QdhnDcJvu2u1fVwg==}
+    engines: {node: '>=8'}
+
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
     engines: {node: '>=10'}
@@ -735,6 +746,9 @@ packages:
 
   electron-to-chromium@1.5.396:
     resolution: {integrity: sha512-yHiw2Y3C3H9U6TMbOfoWK/BPreiOPXRfTWPBwQBoZG6/8TB6eOPnsy5oaRYuatR7Fw2SJ4kKforgufeo7fq0EQ==}
+
+  electron-windows-msix@2.0.4:
+    resolution: {integrity: sha512-rYRrCWT7Hey52995JNgtmXKwG0saTTVPRd4KymeejOdIgNrSP5hHC5nSmVyClOICGbc5/vL4U5A2Am6L/5t0lw==}
 
   electron-winstaller@5.4.4:
     resolution: {integrity: sha512-j9ETcBGJaXxAY/b6UBpR7LZfjdU4BAO+yvr4ifqHEdyuc3UNCy91PDGkWKY5UQ4coHNYfnwFggrqD6QPeFGAlg==}
@@ -1979,6 +1993,9 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  xml-escape@1.1.0:
+    resolution: {integrity: sha512-B/T4sDK8Z6aUh/qNr7mjKAwwncIljFuUP+DO/D5hloYFj+90O88z8Wf7oSucZTHxBAsC1/CTP4rtx/x1Uf72Mg==}
+
   xmlbuilder@15.1.1:
     resolution: {integrity: sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg==}
     engines: {node: '>=8.0'}
@@ -2153,6 +2170,19 @@ snapshots:
       fs-extra: 10.1.0
     optionalDependencies:
       electron-installer-dmg: 5.0.1
+    transitivePeerDependencies:
+      - bluebird
+      - supports-color
+
+  '@electron-forge/maker-msix@7.11.2':
+    dependencies:
+      '@electron-forge/core-utils': 7.11.2
+      '@electron-forge/maker-base': 7.11.2
+      '@electron-forge/shared-types': 7.11.2
+      cross-spawn: 7.0.6
+      electron-windows-msix: 2.0.4
+      fs-extra: 10.1.0
+      parse-author: 2.0.0
     transitivePeerDependencies:
       - bluebird
       - supports-color
@@ -2890,6 +2920,11 @@ snapshots:
 
   caniuse-lite@1.0.30001806: {}
 
+  chalk@3.0.0:
+    dependencies:
+      ansi-styles: 4.3.0
+      supports-color: 7.2.0
+
   chalk@4.1.2:
     dependencies:
       ansi-styles: 4.3.0
@@ -3080,6 +3115,17 @@ snapshots:
       - supports-color
 
   electron-to-chromium@1.5.396: {}
+
+  electron-windows-msix@2.0.4:
+    dependencies:
+      '@electron/windows-sign': 1.2.2
+      '@malept/cross-spawn-promise': 2.0.0
+      chalk: 3.0.0
+      debug: 4.4.3
+      fs-extra: 11.4.0
+      xml-escape: 1.1.0
+    transitivePeerDependencies:
+      - supports-color
 
   electron-winstaller@5.4.4:
     dependencies:
@@ -4327,6 +4373,8 @@ snapshots:
       strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
+
+  xml-escape@1.1.0: {}
 
   xmlbuilder@15.1.1: {}
 

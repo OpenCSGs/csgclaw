@@ -4,9 +4,11 @@ import { AppLifecycle } from "./appLifecycle";
 
 app.enableSandbox();
 app.setName("CSGClaw");
-app.setAppUserModelId(
-  process.platform === "win32" ? "com.squirrel.csgclaw_desktop.CSGClaw" : "com.opencsg.csgclaw.desktop",
-);
+if (process.platform !== "win32" || !process.windowsStore) {
+  app.setAppUserModelId(
+    process.platform === "win32" ? "com.squirrel.csgclaw_desktop.CSGClaw" : "com.opencsg.csgclaw.desktop",
+  );
+}
 app.setAppLogsPath();
 
 if (electronSquirrelStartup) {
