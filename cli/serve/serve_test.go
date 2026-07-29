@@ -284,6 +284,13 @@ func TestServeRunNoAuthDetectDisablesCLIProxyAutoLoginDuringStartup(t *testing.T
 	restore := stubServeDependencies(t)
 	defer restore()
 	t.Setenv("CSGCLAW_CLIPROXY_AUTO_LOGIN", "true")
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := (config.Config{
+		Server:  config.ServerConfig{ListenAddr: "127.0.0.1:18080", AccessToken: "pc-secret"},
+		Sandbox: config.SandboxConfig{Provider: config.DefaultSandboxProvider},
+	}).Save(configPath); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
 	origRunServer := RunServer
 	t.Cleanup(func() {
@@ -297,6 +304,7 @@ func TestServeRunNoAuthDetectDisablesCLIProxyAutoLoginDuringStartup(t *testing.T
 
 	run := testContext()
 	err := NewServeCmd().Run(context.Background(), run, []string{"--no-auth-detect"}, command.GlobalOptions{
+		Config: configPath,
 		Output: "json",
 	})
 	if err != nil {
@@ -1429,6 +1437,7 @@ func TestServeForegroundStartsCodexBridgesAfterConfiguredAgents(t *testing.T) {
 }
 
 func TestServeForegroundPreservesBootstrapDefaultTemplates(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
 	origEnsureBootstrapManager := EnsureBootstrapManager
@@ -1902,6 +1911,7 @@ func stubBoxLiteAvailable(t *testing.T) func() {
 
 func stubServeDependencies(t *testing.T) func() {
 	t.Helper()
+	t.Setenv("HOME", t.TempDir())
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
 	origNewIMService := NewIMService

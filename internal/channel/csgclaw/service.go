@@ -36,6 +36,10 @@ func (s *Service) DeleteRoom(roomID string) error {
 	return s.im.DeleteRoom(roomID)
 }
 
+func (s *Service) UpdateRoom(roomID string, req im.UpdateRoomRequest) (im.Room, error) {
+	return s.im.UpdateRoom(roomID, req)
+}
+
 func (s *Service) ListRoomMembers(roomID string) ([]im.User, error) {
 	return s.im.ListMembers(roomID)
 }

@@ -1,4 +1,4 @@
-import { del, get, post } from "@/api/client";
+import { del, get, patch, post } from "@/api/client";
 import type {
   IMConversation,
   IMMessage,
@@ -37,6 +37,10 @@ export type InviteRoomUsersPayload = {
   locale?: string;
   room_id: string;
   user_ids: string[];
+};
+
+export type UpdateRoomPayload = {
+  notify_all_agents: boolean;
 };
 
 export type RemoveRoomUserPayload = {
@@ -106,6 +110,10 @@ export function fetchThreadRequest(roomID: string, rootMessageID: string): Promi
 
 export function createRoomRequest(payload: CreateRoomPayload): Promise<IMConversation> {
   return post("api/v1/rooms", payload);
+}
+
+export function updateRoomRequest(roomID: string, payload: UpdateRoomPayload): Promise<IMConversation> {
+  return patch(`api/v1/rooms/${encodeURIComponent(roomID)}`, payload);
 }
 
 export function inviteRoomUsersRequest(payload: InviteRoomUsersPayload): Promise<IMConversation> {

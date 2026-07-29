@@ -53,9 +53,15 @@ function t(key: string, params: Record<string, string | number> = {}) {
     agentInstructions: "Instructions",
     agentInstructionsDefaultMode: "Default",
     agentInstructionsAdvancedMode: "Advanced",
+    agentInstructionsEffective: "Effective AGENTS.md",
     agentInstructionsViewMode: "Instructions view",
     agentInstructionsPlaceholder: "Describe how this agent should work.",
     resourcesTemplateInstructionsDefaultHint: "Default mode shows only user-defined instructions.",
+    resourcesTemplateInstructionsAdvancedHint: "View the complete AGENTS.md content applied by this template.",
+    resourcesTemplateInstructionsEmptyTitle: "No custom instructions",
+    resourcesTemplateInstructionsEmptyDescription:
+      "This template only contains generated defaults. Switch to Advanced to view the full content.",
+    resourcesTemplateInstructionsViewAdvancedAction: "View complete AGENTS.md",
     agentProfileSkillsTab: "Skills",
     agentProfileMCPTab: "MCP",
     agentProfileSectionNavLabel: "Template sections",
@@ -396,12 +402,13 @@ describe("HubDetailPane", () => {
 
     await user.click(screen.getByRole("button", { name: "Instructions" }));
     expect(screen.getByRole("button", { name: "Profile" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue("");
+    expect(screen.getByText("No custom instructions")).toBeInTheDocument();
+    expect(
+      screen.getByText("This template only contains generated defaults. Switch to Advanced to view the full content."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Default mode shows only user-defined instructions.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Advanced" }));
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue(
-      "# Instructions\n\nFollow the template rules.",
-    );
+    expect(screen.getByLabelText("Instructions")).toHaveTextContent("# Instructions Follow the template rules.");
     await user.click(screen.getByRole("button", { name: /^Skills/ }));
     expect(screen.getByText("demo")).toBeInTheDocument();
     expect(screen.getByText("Demo template skill")).toBeInTheDocument();
@@ -418,23 +425,17 @@ describe("HubDetailPane", () => {
     expect(screen.queryByText("demo-template")).not.toBeInTheDocument();
   });
 
-  it("shows template profile instructions as a readonly profile textarea", async () => {
+  it("shows template profile instructions as a readonly preview", async () => {
     const user = userEvent.setup();
     renderHubDetailPane();
 
     await user.click(screen.getByRole("button", { name: "Instructions" }));
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveClass(
-      "hub-template-instructions-editor",
-      "is-default",
-    );
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByText("No custom instructions")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View complete AGENTS.md" }));
 
     expect(screen.getByRole("button", { name: /^Skills/ })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toBeDisabled();
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveClass("is-advanced");
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue(
-      "# Instructions\n\nFollow the template rules.",
-    );
+    expect(screen.getByLabelText("Instructions")).toHaveTextContent("# Instructions Follow the template rules.");
+    expect(screen.getByText("Effective AGENTS.md")).toBeInTheDocument();
     expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
   });
 

@@ -108,6 +108,7 @@ func (h *Handler) getIMEvents(w http.ResponseWriter, r *http.Request)    { h.han
 func (h *Handler) listRooms(w http.ResponseWriter, r *http.Request)      { h.handleRooms(w, r) }
 func (h *Handler) createRoom(w http.ResponseWriter, r *http.Request)     { h.handleCreateRoom(w, r) }
 func (h *Handler) deleteRoom(w http.ResponseWriter, r *http.Request)     { h.handleRoomByID(w, r) }
+func (h *Handler) updateRoom(w http.ResponseWriter, r *http.Request)     { h.handleRoomByID(w, r) }
 func (h *Handler) clearRoomMessages(w http.ResponseWriter, r *http.Request) {
 	h.handleClearRoomMessages(w, r)
 }
@@ -223,6 +224,9 @@ func (h *Handler) deleteCsgclawUser(w http.ResponseWriter, r *http.Request) {
 	h.handleCsgclawUserByID(w, r)
 }
 func (h *Handler) deleteCsgclawRoom(w http.ResponseWriter, r *http.Request) {
+	h.handleCsgclawRoomByID(w, r)
+}
+func (h *Handler) updateCsgclawRoom(w http.ResponseWriter, r *http.Request) {
 	h.handleCsgclawRoomByID(w, r)
 }
 func (h *Handler) listCsgclawRoomMembers(w http.ResponseWriter, r *http.Request) {

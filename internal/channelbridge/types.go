@@ -19,6 +19,7 @@ type BotEvent struct {
 	Text          string              `json:"text"`
 	Attachments   []MessageAttachment `json:"attachments,omitempty"`
 	Mentions      []string            `json:"mentions,omitempty"`
+	Mentioned     bool                `json:"mentioned,omitempty"`
 	ThreadRootID  string              `json:"thread_root_id,omitempty"`
 	ThreadContext *BotThreadContext   `json:"thread_context,omitempty"`
 }

@@ -29,6 +29,7 @@ type ParticipantEvent struct {
 	Attachments   []MessageAttachment       `json:"attachments,omitempty"`
 	Timestamp     string                    `json:"timestamp"`
 	Mentions      []string                  `json:"mentions,omitempty"`
+	Mentioned     bool                      `json:"mentioned,omitempty"`
 	ThreadRootID  string                    `json:"thread_root_id,omitempty"`
 	ThreadContext *ParticipantThreadContext `json:"thread_context,omitempty"`
 	Context       ParticipantMessageContext `json:"context,omitempty"`
@@ -357,6 +358,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 	threadRootID := threadRootID(message)
 	chatType := chatTypeForRoom(room)
 	mentions := mentionsForParticipant(message.Mentions, participantID)
+	mentioned := len(mentions) > 0 || (!room.IsDirect && room.NotifyAllAgents)
 	text := textForParticipantEvent(message, participantID)
 	return ParticipantEvent{
 		MessageID:    message.ID,
@@ -376,6 +378,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 		Attachments:   cloneMessageAttachments(message.Attachments),
 		Timestamp:     fmt.Sprintf("%d", message.CreatedAt.UnixMilli()),
 		Mentions:      mentions,
+		Mentioned:     mentioned,
 		ThreadContext: participantThreadContext(room, threadRootID),
 		Context: ParticipantMessageContext{
 			Channel:   "csgclaw",
@@ -385,7 +388,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 			TopicID:   threadRootID,
 			SenderID:  sender.ID,
 			MessageID: message.ID,
-			Mentioned: len(mentions) > 0,
+			Mentioned: mentioned,
 			Raw: map[string]string{
 				"room_id":        room.ID,
 				"thread_root_id": threadRootID,
@@ -554,7 +557,7 @@ func shouldNotifyParticipant(room Room, message Message, participantID string) b
 	if !containsUserIDInRoom(room, participantID) {
 		return false
 	}
-	return true
+	return room.IsDirect || room.NotifyAllAgents || messageMentionsParticipant(message, participantID)
 }
 
 func mentionsForParticipant(mentions []Mention, participantID string) []string {

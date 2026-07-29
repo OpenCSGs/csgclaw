@@ -51,6 +51,7 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	if !ok {
 		return
 	}
+	room = h.participantDeliveryRoom(room, *evt.Message)
 	if reason, ok, err := newConversationCommandReason(evt.Message.Content); err != nil {
 		slog.Warn("parse new conversation command failed", "room_id", evt.RoomID, "message_id", evt.Message.ID, "error", err)
 	} else if ok {
@@ -60,6 +61,13 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	}
 	missed := h.publishMessageParticipantEvent(room, *evt.Sender, *evt.Message)
 	h.reconnectMissedParticipantAgents(evt.Sender.ID, missed)
+}
+
+func (h *Handler) participantDeliveryRoom(room im.Room, message im.Message) im.Room {
+	if room.NotifyAllAgents && h.isAgentSender(message.SenderID) {
+		room.NotifyAllAgents = false
+	}
+	return room
 }
 
 func isParticipantControlRecord(message im.Message) bool {

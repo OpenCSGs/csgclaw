@@ -80,7 +80,7 @@ func (c *HTTPClient) StreamEvents(ctx context.Context, botID, lastEventID string
 			if strings.TrimSpace(event.ChatType) != "group" {
 				return true
 			}
-			return botEventMentions(event, botID) || hasInboundBotAtMention(event.Text, botID)
+			return event.Mentioned || botEventMentions(event, botID) || hasInboundBotAtMention(event.Text, botID)
 		}); err != nil && ctx.Err() == nil {
 			errs <- err
 		}

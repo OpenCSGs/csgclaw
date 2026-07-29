@@ -110,6 +110,55 @@ func TestCreateMessagePersistsUserIDsAndMentionNames(t *testing.T) {
 	}
 }
 
+func TestUpdateRoomPersistsNotifyAllAgentsAndPublishesEvent(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "im", "state.json")
+	bus := NewBus()
+	events, cancel := bus.Subscribe()
+	defer cancel()
+	svc, err := NewServiceFromPathWithBus(statePath, bus)
+	if err != nil {
+		t.Fatalf("NewServiceFromPathWithBus() error = %v", err)
+	}
+	if _, _, err := svc.EnsureAgentUser(EnsureAgentUserRequest{ID: "agent-worker", Name: "worker", Role: "worker"}); err != nil {
+		t.Fatalf("EnsureAgentUser(worker) error = %v", err)
+	}
+	room, err := svc.CreateRoom(CreateRoomRequest{
+		Title:     "Ops",
+		CreatorID: "user-admin",
+		MemberIDs: []string{"user-worker"},
+	})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+	_ = mustReceiveEvent(t, events)
+
+	enabled := true
+	updated, err := svc.UpdateRoom(room.ID, UpdateRoomRequest{NotifyAllAgents: &enabled})
+	if err != nil {
+		t.Fatalf("UpdateRoom() error = %v", err)
+	}
+	if !updated.NotifyAllAgents {
+		t.Fatal("UpdateRoom() NotifyAllAgents = false, want true")
+	}
+	event := mustReceiveEvent(t, events)
+	if event.Type != EventTypeRoomUpdated || event.Room == nil || !event.Room.NotifyAllAgents {
+		t.Fatalf("event = %+v, want room.updated with notify_all_agents", event)
+	}
+
+	loaded, err := LoadBootstrap(statePath)
+	if err != nil {
+		t.Fatalf("LoadBootstrap() error = %v", err)
+	}
+	if len(loaded.Rooms) != 2 {
+		t.Fatalf("loaded rooms = %d, want bootstrap direct room and Ops room", len(loaded.Rooms))
+	}
+	for _, candidate := range loaded.Rooms {
+		if candidate.ID == room.ID && !candidate.NotifyAllAgents {
+			t.Fatal("persisted NotifyAllAgents = false, want true")
+		}
+	}
+}
+
 func TestCreateMessageWithAttachmentStoresObjectAndBlob(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "im", "state.json")
 	svc, err := NewServiceFromPath(path)

@@ -118,6 +118,7 @@ export type IMConversation = {
   is_direct?: boolean | null;
   members: string[];
   messages: IMMessage[];
+  notify_all_agents?: boolean | null;
   threads?: ThreadState[] | null;
   title?: string | null;
 };
@@ -873,6 +874,7 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     (event.type === "conversation.created" ||
       event.type === "conversation.members_added" ||
       event.type === "room.created" ||
+      event.type === "room.updated" ||
       event.type === "room.members_added" ||
       event.type === "room.members_removed" ||
       event.type === "room.messages_cleared") &&

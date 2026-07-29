@@ -921,6 +921,23 @@ room 消息列表默认不包含 thread reply；当 thread 存在时，root mess
 
 - 旧请求中的 `participant_ids` 仍可被识别并映射到 `member_ids`
 
+### `PATCH /api/v1/rooms/{id}`
+
+更新本地房间行为。
+
+请求体：
+
+```json
+{
+  "notify_all_agents": true
+}
+```
+
+群组房间默认仅通知被提及的 Agent。
+启用 `notify_all_agents` 后，每条用户消息都会唤醒房间内的所有 Agent，包括带有显式提及的消息。
+Agent 回复仍只会唤醒被显式提及的 Agent，以防止回复循环。
+直接消息房间始终会通知对应 Agent，因此会拒绝此更新。
+
 ### `DELETE /api/v1/rooms/{id}`
 
 删除房间，成功返回 `204`。

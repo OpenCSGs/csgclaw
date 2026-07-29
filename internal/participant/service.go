@@ -525,7 +525,7 @@ func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participa
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("participant store is required")
 	}
-	if s.agents == nil {
+	if s.agents == nil || s.im == nil {
 		return nil, nil
 	}
 

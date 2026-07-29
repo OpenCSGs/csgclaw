@@ -213,6 +213,7 @@ GET    /api/v1/agents/{id}/logs      Fetch or stream agent logs
 # Built-in csgclaw IM
 GET    /api/v1/rooms                 List rooms
 POST   /api/v1/rooms                 Create a room
+PATCH  /api/v1/rooms/{id}            Update room notification behavior
 DELETE /api/v1/rooms/{id}            Delete a room
 GET    /api/v1/users                 List users
 DELETE /api/v1/users/{id}            Kick a user

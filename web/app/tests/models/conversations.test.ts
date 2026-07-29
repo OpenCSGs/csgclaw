@@ -402,6 +402,21 @@ describe("conversation model helpers", () => {
     expect(next.rooms.find((item) => item.id === "other")?.messages.map((item) => item.id)).toEqual(["other-message"]);
   });
 
+  it("applies room notification updates as authoritative room updates", () => {
+    const current = {
+      rooms: [room("general", "2026-05-15T00:00:00Z", { notify_all_agents: false })],
+      users: [],
+    };
+
+    const next = applyIMEvent(current, {
+      room: { ...current.rooms[0], notify_all_agents: true },
+      room_id: "general",
+      type: "room.updated",
+    });
+
+    expect(next.rooms[0].notify_all_agents).toBe(true);
+  });
+
   it("applies room members removed events as authoritative room updates", () => {
     const current = {
       rooms: [

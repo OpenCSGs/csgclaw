@@ -107,6 +107,8 @@ type CreateRoomRequest = apitypes.CreateRoomRequest
 
 type CreateConversationRequest = CreateRoomRequest
 
+type UpdateRoomRequest = apitypes.UpdateRoomRequest
+
 type AddRoomMembersRequest = apitypes.AddRoomMembersRequest
 
 type AddConversationMembersRequest = AddRoomMembersRequest
@@ -212,14 +214,15 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	ID          string            `json:"id"`
-	Title       string            `json:"title"`
-	Subtitle    string            `json:"subtitle"`
-	Description string            `json:"description,omitempty"`
-	IsDirect    bool              `json:"is_direct,omitempty"`
-	Members     []string          `json:"members"`
-	Messages    string            `json:"messages"`
-	Threads     []persistedThread `json:"threads,omitempty"`
+	ID              string            `json:"id"`
+	Title           string            `json:"title"`
+	Subtitle        string            `json:"subtitle"`
+	Description     string            `json:"description,omitempty"`
+	IsDirect        bool              `json:"is_direct,omitempty"`
+	NotifyAllAgents bool              `json:"notify_all_agents,omitempty"`
+	Members         []string          `json:"members"`
+	Messages        string            `json:"messages"`
+	Threads         []persistedThread `json:"threads,omitempty"`
 }
 
 type persistedThread struct {
@@ -420,14 +423,15 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			return nil, err
 		}
 		loaded = append(loaded, Room{
-			ID:          room.ID,
-			Title:       room.Title,
-			Subtitle:    room.Subtitle,
-			Description: room.Description,
-			IsDirect:    room.IsDirect,
-			Members:     append([]string(nil), room.Members...),
-			Messages:    messages,
-			Threads:     threads,
+			ID:              room.ID,
+			Title:           room.Title,
+			Subtitle:        room.Subtitle,
+			Description:     room.Description,
+			IsDirect:        room.IsDirect,
+			NotifyAllAgents: room.NotifyAllAgents,
+			Members:         append([]string(nil), room.Members...),
+			Messages:        messages,
+			Threads:         threads,
 		})
 	}
 	return loaded, nil
@@ -587,14 +591,15 @@ func saveRoomThreadsForState(statePath string, room Room) error {
 
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
-		ID:          room.ID,
-		Title:       room.Title,
-		Subtitle:    room.Subtitle,
-		Description: room.Description,
-		IsDirect:    room.IsDirect,
-		Members:     append([]string(nil), room.Members...),
-		Messages:    sessionRelativePath(room.ID),
-		Threads:     persistedThreadsFromStates(room.Threads),
+		ID:              room.ID,
+		Title:           room.Title,
+		Subtitle:        room.Subtitle,
+		Description:     room.Description,
+		IsDirect:        room.IsDirect,
+		NotifyAllAgents: room.NotifyAllAgents,
+		Members:         append([]string(nil), room.Members...),
+		Messages:        sessionRelativePath(room.ID),
+		Threads:         persistedThreadsFromStates(room.Threads),
 	}
 }
 
@@ -1459,6 +1464,45 @@ func (s *Service) DeleteRoom(roomID string) error {
 	}
 	delete(s.rooms, roomID)
 	return s.saveLocked()
+}
+
+func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error) {
+	roomID = strings.TrimSpace(roomID)
+	if roomID == "" {
+		return Room{}, fmt.Errorf("room_id is required")
+	}
+	if req.NotifyAllAgents == nil {
+		return Room{}, fmt.Errorf("notify_all_agents is required")
+	}
+
+	s.mu.Lock()
+	room, ok := s.rooms[roomID]
+	if !ok {
+		s.mu.Unlock()
+		return Room{}, fmt.Errorf("room not found")
+	}
+	if room.IsDirect {
+		s.mu.Unlock()
+		return Room{}, fmt.Errorf("direct rooms always notify their agent")
+	}
+	if room.NotifyAllAgents == *req.NotifyAllAgents {
+		presented := s.presentRoomLocked(*room, "")
+		s.mu.Unlock()
+		return presented, nil
+	}
+	previous := room.NotifyAllAgents
+	room.NotifyAllAgents = *req.NotifyAllAgents
+	if err := s.saveRoomLocked(*room); err != nil {
+		room.NotifyAllAgents = previous
+		s.mu.Unlock()
+		return Room{}, err
+	}
+	presented := s.presentRoomLocked(*room, "")
+	bus := s.bus
+	s.mu.Unlock()
+
+	publishRoomEvent(bus, EventTypeRoomUpdated, presented)
+	return presented, nil
 }
 
 func (s *Service) DeleteConversation(conversationID string) error {

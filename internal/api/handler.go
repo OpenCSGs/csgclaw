@@ -1947,6 +1947,24 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 	}
 
 	switch r.Method {
+	case http.MethodPatch:
+		var req apitypes.UpdateRoomRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+			return
+		}
+		room, err := channel.UpdateRoom(id, req)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				http.Error(w, "room not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, http.StatusOK, room)
 	case http.MethodDelete:
 		var deletedRoom im.Room
 		hasDeletedRoom := false

@@ -941,6 +941,23 @@ Compatibility field:
 
 - Legacy `participant_ids` is still accepted and mapped to `member_ids`
 
+### `PATCH /api/v1/rooms/{id}`
+
+Updates local room behavior.
+
+Request body:
+
+```json
+{
+  "notify_all_agents": true
+}
+```
+
+Group rooms are mention-only by default.
+When `notify_all_agents` is enabled, every human-authored message wakes every agent in the room, including messages with explicit mentions.
+Agent-authored replies still wake only explicitly mentioned agents to prevent response loops.
+Direct rooms always notify their agent and reject this update.
+
 ### `DELETE /api/v1/rooms/{id}`
 
 Deletes a room and returns `204` on success.

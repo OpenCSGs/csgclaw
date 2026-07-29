@@ -96,6 +96,8 @@ export type ConversationPaneProps = {
   messageActionBusy: string;
   messageActionFeedback: MessageActionFeedback;
   messageListRef: RefObject<HTMLElement | null>;
+  notifyAllAgentsBusy?: boolean;
+  notifyAllAgentsError?: string;
   memberActionBusyID?: string;
   memberActionError?: string;
   onApplyMention: (user: MentionPickerUser) => void;
@@ -117,6 +119,7 @@ export type ConversationPaneProps = {
   onDismissThreadSlashPicker?: () => void;
   onInviteAction: () => void;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
+  onNotifyAllAgentsChange?: (enabled: boolean) => VoidOrPromise;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onRemoveMember?: (memberID: string) => VoidOrPromise;

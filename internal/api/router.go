@@ -144,6 +144,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/", h.createRoom)
 			r.Post("/{id}:clearMessages", h.clearRoomMessages)
 			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", h.updateRoom)
 				r.Delete("/", h.deleteRoom)
 				r.Get("/threads", h.listThreads)
 				r.Post("/threads", h.createThread)
@@ -249,6 +250,7 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Get("/", h.listRooms)
 			r.Post("/", h.createRoom)
 			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", h.updateCsgclawRoom)
 				r.Delete("/", h.deleteCsgclawRoom)
 				r.Get("/threads", h.listThreads)
 				r.Post("/threads", h.createThread)

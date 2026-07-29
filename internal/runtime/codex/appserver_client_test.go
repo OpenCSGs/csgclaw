@@ -282,6 +282,20 @@ func TestAppServerClientCloseAllPending(t *testing.T) {
 	}
 }
 
+func TestAppServerClientRejectsRequestsAfterClose(t *testing.T) {
+	writer := &lockedStringWriter{}
+	client := newAppServerClient(writer, nil)
+	client.closeAllPending(errors.New("app-server stopping"))
+
+	_, err := client.request(context.Background(), "turn/start", map[string]any{"threadId": "thread-1"})
+	if err == nil || !strings.Contains(err.Error(), "app-server stopping") {
+		t.Fatalf("request() error = %v, want app-server stopping", err)
+	}
+	if got := writer.String(); got != "" {
+		t.Fatalf("writer = %q, want no request after close", got)
+	}
+}
+
 type lockedStringWriter struct {
 	mu sync.Mutex
 	b  strings.Builder
