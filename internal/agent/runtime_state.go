@@ -189,7 +189,7 @@ func (s *Service) WorkspaceRoot(agentName string) (string, error) {
 }
 
 func (s *Service) WorkspaceRootByID(agentID string) (string, error) {
-	got, ok := s.Agent(agentID)
+	got, ok := s.agentSnapshot(agentID)
 	if !ok {
 		return "", fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
 	}
