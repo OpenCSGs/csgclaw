@@ -28,7 +28,6 @@ var (
 	agentSessionResponseTimeout = 5 * time.Minute
 	agentSessionIdleGrace       = 500 * time.Millisecond
 	agentSessionCleanupGrace    = 60 * time.Second
-	agentSessionStreamTailGrace = 1500 * time.Millisecond
 
 	errSessionAgentUnavailable = errors.New("agent participant is unavailable")
 	errSessionRuntimeEnded     = errors.New("agent turn ended without a final response")
@@ -360,30 +359,6 @@ func (h *Handler) streamDirectCodexSessionResponse(
 	}()
 	promptReturned := false
 	runtimeDone := false
-	var tailTimer *time.Timer
-	var tail <-chan time.Time
-	defer func() {
-		if tailTimer != nil {
-			tailTimer.Stop()
-		}
-	}()
-	resetTailTimer := func() {
-		if eventStream.text.Len() == 0 {
-			return
-		}
-		if tailTimer == nil {
-			tailTimer = time.NewTimer(agentSessionStreamTailGrace)
-		} else {
-			if !tailTimer.Stop() {
-				select {
-				case <-tailTimer.C:
-				default:
-				}
-			}
-			tailTimer.Reset(agentSessionStreamTailGrace)
-		}
-		tail = tailTimer.C
-	}
 	finalize := func() (string, error) {
 		finalText := eventStream.text.String()
 		if strings.TrimSpace(finalText) != "" {
@@ -411,8 +386,6 @@ func (h *Handler) streamDirectCodexSessionResponse(
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
-		case <-tail:
-			return finalize()
 		case err := <-promptDone:
 			promptReturned = true
 			if err != nil {
@@ -439,7 +412,6 @@ func (h *Handler) streamDirectCodexSessionResponse(
 					if err := eventStream.writeDelta(outputID, event.Text); err != nil {
 						return "", err
 					}
-					resetTailTimer()
 				}
 			}
 			if event.Kind == activity.RuntimeEventPromptCompleted {

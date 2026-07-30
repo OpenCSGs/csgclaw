@@ -1397,10 +1397,11 @@ response.completed
 
 每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
 中的 `type` 与事件名一致，`sequence_number` 从 0 开始递增。对于 Codex
-智能体，Codex app-server 发布的每个 `item/agentMessage/delta` 都会即时转发为
-`response.output_text.delta`；完成事件只表达状态，不再重复携带全量文本，前端应
-通过追加 delta 构建可见回答。只发布 final message 的 runtime 会降级为一个文本
-delta。Agent 完成前，连接已建立并先 flush `response.created`。
+智能体，Codex app-server 发布的 final-answer `item/agentMessage/delta` 会即时转发为
+`response.output_text.delta`；commentary 和无法分类的 agent message 不会计入回答。
+完成事件只表达状态，不再重复携带全量文本，前端应通过追加 delta 构建可见回答。
+只发布 final message 的 runtime 会降级为一个文本 delta。Agent 完成前，连接已建立
+并先 flush `response.created`。
 
 同一个 session 同时只允许一个 turn。
 不同 session ID 可以并发执行。

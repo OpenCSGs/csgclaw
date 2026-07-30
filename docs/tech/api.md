@@ -1426,12 +1426,13 @@ response.completed
 
 Each SSE block contains both `event: <type>` and a JSON `data:` payload whose
 `type` matches the event name and whose `sequence_number` increases from zero.
-For Codex agents, every `item/agentMessage/delta` emitted by Codex app-server is
-forwarded immediately as a `response.output_text.delta`. Completion events carry
-state only and do not repeat the full text; clients should build the visible
-answer by appending deltas. Runtimes that only publish a final message fall back
-to one text delta. The stream is established and `response.created` is flushed
-before the agent finishes.
+For Codex agents, final-answer `item/agentMessage/delta` events emitted by Codex
+app-server are forwarded immediately as `response.output_text.delta`; commentary
+and unclassified agent-message events are not included in the answer. Completion
+events carry state only and do not repeat the full text; clients should build the
+visible answer by appending deltas. Runtimes that only publish a final message
+fall back to one text delta. The stream is established and `response.created` is
+flushed before the agent finishes.
 
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.
@@ -1451,8 +1452,8 @@ Errors use this JSON shape:
 }
 ```
 
-The v1 endpoint accepts text and final output only.
-It rejects streaming, tools, instructions, non-user roles, attachments, and unknown request fields.
+The v1 endpoint accepts text input and optional text-output streaming.
+It rejects tools, instructions, non-user roles, attachments, and unknown request fields.
 See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
 ### `GET /api/v1/agents/{id}/llm/models`

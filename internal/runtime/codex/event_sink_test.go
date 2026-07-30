@@ -2,9 +2,57 @@ package codex
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 )
+
+func TestEventSinkReliableBurstDoesNotBlockPublisher(t *testing.T) {
+	t.Parallel()
+
+	sink := NewEventSink()
+	events, cancel := sink.Subscribe("rt-1")
+	defer cancel()
+
+	eventCount := defaultSessionEventBuffer * 3
+	published := make(chan struct{})
+	go func() {
+		defer close(published)
+		for i := 0; i < eventCount; i++ {
+			sink.Publish(SessionEvent{
+				RuntimeID: "rt-1",
+				Kind:      SessionEventTextDelta,
+				Text:      strconv.Itoa(i),
+			})
+		}
+		sink.Publish(SessionEvent{RuntimeID: "rt-1", Kind: SessionEventPromptCompleted})
+	}()
+
+	select {
+	case <-published:
+	case <-time.After(time.Second):
+		t.Fatal("reliable event burst blocked the publisher before the subscriber drained")
+	}
+
+	for i := 0; i < eventCount; i++ {
+		select {
+		case event := <-events:
+			if event.Kind != SessionEventTextDelta || event.Text != strconv.Itoa(i) {
+				t.Fatalf("event %d = %#v, want ordered text delta", i, event)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for text delta %d", i)
+		}
+	}
+	select {
+	case event := <-events:
+		if event.Kind != SessionEventPromptCompleted {
+			t.Fatalf("last event = %#v, want prompt completed", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for prompt completion after reliable burst")
+	}
+}
 
 func TestEventSinkReliablyDeliversActionEventsWhenSubscriberBufferIsFull(t *testing.T) {
 	t.Parallel()

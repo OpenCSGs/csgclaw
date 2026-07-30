@@ -141,6 +141,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		replayedAgentMessages: make(map[string]struct{}),
 		streamedAgentMessages: make(map[string]struct{}),
 		streamedAgentThreads:  make(map[string]struct{}),
+		agentMessagePhases:    make(map[string]string),
 	}
 	appClient.onNotification = func(note appServerNotification) {
 		m.handleAppServerNotification(spec.RuntimeID, live, note)

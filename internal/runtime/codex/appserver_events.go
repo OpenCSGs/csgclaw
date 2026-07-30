@@ -44,7 +44,8 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 		m.handleLegacyResponseItemEvent(runtimeID, live, params)
 		return
 	}
-	if note.Method == "item/agentMessage/delta" {
+	if isRawAppServerNotificationMethod(note.Method) {
+		live.appServerProtocol(note.Method)
 		m.handleRawAppServerNotification(runtimeID, live, note.Method, params)
 		return
 	}
@@ -57,6 +58,13 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 	if protocol == appServerProtocolRaw {
 		m.handleRawAppServerNotification(runtimeID, live, note.Method, params)
 	}
+}
+
+func isRawAppServerNotificationMethod(method string) bool {
+	return strings.HasPrefix(method, "turn/") ||
+		strings.HasPrefix(method, "thread/") ||
+		strings.HasPrefix(method, "item/") ||
+		method == "error"
 }
 
 func appServerRequestIDValue(value any) string {
@@ -202,8 +210,19 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 		itemID := appServerString(params, "itemId")
 		delta, _ := params["delta"].(string)
 		if itemID != "" && delta != "" {
-			live.markStreamedAgentMessage(itemID)
-			live.markStreamedAgentThread(threadID)
+			payload := cloneAppServerParams(params)
+			phase := strings.TrimSpace(strings.ToLower(appServerString(payload, "phase")))
+			if phase == "" {
+				phase = live.agentMessagePhase(itemID)
+			}
+			if phase == "" {
+				phase = "unknown"
+			}
+			payload["phase"] = phase
+			if phase == "final_answer" {
+				live.markStreamedAgentMessage(itemID)
+				live.markStreamedAgentThread(threadID)
+			}
 			m.publishAppServerEvent(SessionEvent{
 				RuntimeID: runtimeID,
 				SessionID: threadID,
@@ -211,7 +230,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 				Kind:      SessionEventTextDelta,
 				MessageID: itemID,
 				Text:      delta,
-				Payload:   params,
+				Payload:   payload,
 			})
 		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
@@ -244,6 +263,8 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	})
 
 	switch {
+	case method == "item/started" && itemType == "agentMessage":
+		live.setAgentMessagePhase(itemID, appServerString(item, "phase"))
 	case method == "item/started" && itemType == "commandExecution":
 		command := appServerString(item, "command")
 		m.publishAppServerEvent(SessionEvent{
@@ -384,8 +405,12 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			Payload:           item,
 		})
 	case method == "item/completed" && itemType == "agentMessage":
+		defer live.clearAgentMessageState(itemID)
+		live.setAgentMessagePhase(itemID, appServerString(item, "phase"))
+		text := appServerString(item, "text")
+		cleanedText := m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, itemID, text, live)
 		if live.hasStreamedAgentMessage(itemID) {
-			if appServerAgentMessageCompletesTurn(item) {
+			if appServerAgentMessageCompletesTurn(live, itemID, item) {
 				live.notifyAppServerTurn(threadID, appServerTurnResult{
 					success:    true,
 					stopReason: StopReasonEndTurn,
@@ -394,19 +419,17 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			}
 			return
 		}
-		text := appServerString(item, "text")
-		text = m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, itemID, text, live)
-		if text != "" {
+		if cleanedText != "" {
 			m.publishAppServerEvent(SessionEvent{
 				RuntimeID: runtimeID,
 				SessionID: threadID,
 				Kind:      SessionEventTextDelta,
 				MessageID: itemID,
-				Text:      text,
+				Text:      cleanedText,
 				Payload:   item,
 			})
 		}
-		if appServerAgentMessageCompletesTurn(item) {
+		if appServerAgentMessageCompletesTurn(live, itemID, item) {
 			live.notifyAppServerTurn(threadID, appServerTurnResult{
 				success:    true,
 				stopReason: StopReasonEndTurn,
@@ -416,9 +439,55 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	}
 }
 
-func appServerAgentMessageCompletesTurn(item map[string]any) bool {
+func cloneAppServerParams(params map[string]any) map[string]any {
+	cloned := make(map[string]any, len(params)+1)
+	for key, value := range params {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func appServerAgentMessageCompletesTurn(live *liveSession, itemID string, item map[string]any) bool {
 	phase := strings.TrimSpace(strings.ToLower(appServerString(item, "phase")))
+	if phase == "" && live != nil {
+		phase = live.agentMessagePhase(itemID)
+	}
 	return phase == "final_answer"
+}
+
+func (s *liveSession) setAgentMessagePhase(itemID, phase string) {
+	itemID = strings.TrimSpace(itemID)
+	phase = strings.TrimSpace(strings.ToLower(phase))
+	if itemID == "" || phase == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.agentMessagePhases == nil {
+		s.agentMessagePhases = make(map[string]string)
+	}
+	s.agentMessagePhases[itemID] = phase
+}
+
+func (s *liveSession) agentMessagePhase(itemID string) string {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.agentMessagePhases[itemID]
+}
+
+func (s *liveSession) clearAgentMessageState(itemID string) {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return
+	}
+	s.mu.Lock()
+	delete(s.agentMessagePhases, itemID)
+	delete(s.streamedAgentMessages, itemID)
+	s.mu.Unlock()
 }
 
 func (s *liveSession) markStreamedAgentMessage(itemID string) {

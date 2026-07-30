@@ -263,10 +263,12 @@ func TestAgentSessionResponsesStreamsCodexRuntimeDeltasAsTheyArrive(t *testing.T
 		source.publish(activity.RuntimeEvent{
 			RuntimeID: "rt-agent-alpha", SessionID: "codex-thread-1",
 			Kind: activity.RuntimeEventTextDelta, MessageID: "codex-msg-1", Text: "hello",
+			Payload: map[string]any{"phase": "final_answer"},
 		})
 		source.publish(activity.RuntimeEvent{
 			RuntimeID: "rt-agent-alpha", SessionID: "codex-thread-1",
 			Kind: activity.RuntimeEventTextDelta, MessageID: "codex-msg-1", Text: " world",
+			Payload: map[string]any{"phase": "final_answer"},
 		})
 		source.publish(activity.RuntimeEvent{
 			RuntimeID: "rt-agent-alpha", SessionID: "codex-thread-1",
@@ -304,26 +306,33 @@ func TestAgentSessionResponsesStreamsCodexRuntimeDeltasAsTheyArrive(t *testing.T
 	}
 }
 
-func TestAgentSessionResponsesCompletesCodexStreamAfterTailIdle(t *testing.T) {
-	origTailGrace := agentSessionStreamTailGrace
-	agentSessionStreamTailGrace = 10 * time.Millisecond
-	t.Cleanup(func() { agentSessionStreamTailGrace = origTailGrace })
-
+func TestAgentSessionResponsesWaitsForCodexPromptCompletion(t *testing.T) {
 	codexAgent := completeWorkerAgent("agent-alpha", "Alpha")
 	codexAgent.RuntimeKind = agent.RuntimeKindCodex
 	codexAgent.RuntimeID = "rt-agent-alpha"
 	handler, _, _ := newAgentSessionTestHandler(t, []agent.Agent{codexAgent})
 	source := newFakeSessionEventSource("codex-thread-1")
 	handler.SetSessionEventSource(source)
-	source.prompt = func(ctx context.Context, runtimeID, sessionID, prompt string) error {
+	source.prompt = func(_ context.Context, runtimeID, sessionID, prompt string) error {
 		source.publish(activity.RuntimeEvent{
 			RuntimeID: runtimeID, SessionID: sessionID,
 			Kind: activity.RuntimeEventTextDelta, MessageID: "codex-msg-1", Text: "tail",
+			Payload: map[string]any{"phase": "final_answer"},
 		})
-		<-ctx.Done()
-		return ctx.Err()
+		time.Sleep(30 * time.Millisecond)
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID,
+			Kind: activity.RuntimeEventTextDelta, MessageID: "codex-msg-1", Text: " end",
+			Payload: map[string]any{"phase": "final_answer"},
+		})
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID,
+			Kind: activity.RuntimeEventPromptCompleted,
+		})
+		return nil
 	}
 
+	startedAt := time.Now()
 	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "codex-tail", map[string]any{
 		"input": "Stream this", "stream": true,
 	})
@@ -331,8 +340,13 @@ func TestAgentSessionResponsesCompletesCodexStreamAfterTailIdle(t *testing.T) {
 		t.Fatalf("status = %d; body=%s", recorder.Code, recorder.Body.String())
 	}
 	body := recorder.Body.String()
-	if !strings.Contains(body, `"delta":"tail"`) || !strings.Contains(body, "event: response.completed") {
-		t.Fatalf("SSE body = %q, want delta and completed after tail idle", body)
+	if time.Since(startedAt) < 30*time.Millisecond {
+		t.Fatal("request completed before Codex prompt completion")
+	}
+	if !strings.Contains(body, `"delta":"tail"`) ||
+		!strings.Contains(body, `"delta":" end"`) ||
+		!strings.Contains(body, "event: response.completed") {
+		t.Fatalf("SSE body = %q, want all deltas before completion", body)
 	}
 }
 

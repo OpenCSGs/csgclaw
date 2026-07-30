@@ -19,9 +19,12 @@ type EventSink struct {
 type sessionSubscription struct {
 	runtimeID string
 	ch        chan SessionEvent
-	reliable  chan SessionEvent
 	done      chan struct{}
 	stopped   chan struct{}
+
+	reliableMu    sync.Mutex
+	reliableQueue []SessionEvent
+	reliableWake  chan struct{}
 }
 
 func NewEventSink() *EventSink {
@@ -63,11 +66,11 @@ func (s *EventSink) Subscribe(runtimeID string) (<-chan SessionEvent, func()) {
 	id := s.nextID
 	s.nextID++
 	sub := &sessionSubscription{
-		runtimeID: strings.TrimSpace(runtimeID),
-		ch:        ch,
-		reliable:  make(chan SessionEvent, defaultSessionEventBuffer),
-		done:      make(chan struct{}),
-		stopped:   make(chan struct{}),
+		runtimeID:    strings.TrimSpace(runtimeID),
+		ch:           ch,
+		done:         make(chan struct{}),
+		stopped:      make(chan struct{}),
+		reliableWake: make(chan struct{}, 1),
 	}
 	s.subscribers[id] = sub
 	s.mu.Unlock()
@@ -98,24 +101,46 @@ func (s *sessionSubscription) deliver(event SessionEvent) {
 }
 
 func (s *sessionSubscription) sendReliable(event SessionEvent) {
+	s.reliableMu.Lock()
+	s.reliableQueue = append(s.reliableQueue, event)
+	s.reliableMu.Unlock()
 	select {
 	case <-s.done:
-	case s.reliable <- event:
+	case s.reliableWake <- struct{}{}:
+	default:
 	}
 }
 
 func (s *sessionSubscription) pumpReliable() {
 	defer close(s.stopped)
 	for {
-		select {
-		case <-s.done:
-			return
-		case event := <-s.reliable:
+		if event, ok := s.popReliable(); ok {
 			if !sendSessionEventUntilDone(s.ch, s.done, event) {
 				return
 			}
+			continue
+		}
+		select {
+		case <-s.done:
+			return
+		case <-s.reliableWake:
 		}
 	}
+}
+
+func (s *sessionSubscription) popReliable() (SessionEvent, bool) {
+	s.reliableMu.Lock()
+	defer s.reliableMu.Unlock()
+	if len(s.reliableQueue) == 0 {
+		return SessionEvent{}, false
+	}
+	event := s.reliableQueue[0]
+	s.reliableQueue[0] = SessionEvent{}
+	s.reliableQueue = s.reliableQueue[1:]
+	if len(s.reliableQueue) == 0 {
+		s.reliableQueue = nil
+	}
+	return event, true
 }
 
 func trySendSessionEvent(ch chan SessionEvent, event SessionEvent) (sent bool) {

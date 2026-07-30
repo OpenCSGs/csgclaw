@@ -26,6 +26,7 @@ type liveSession struct {
 	replayedAgentMessages map[string]struct{}
 	streamedAgentMessages map[string]struct{}
 	streamedAgentThreads  map[string]struct{}
+	agentMessagePhases    map[string]string
 	appProtocol           string
 }
 
