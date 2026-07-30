@@ -4,7 +4,7 @@ import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
-import { app } from "electron";
+import { app, session } from "electron";
 import { resolveSidecarEnvironment } from "./childEnvironment";
 import { DesktopMessageType, DESKTOP_PROTOCOL_VERSION, type DesktopBootstrapMessage, type DesktopReadyMessage } from "./contract";
 import { locateBackendBundle } from "./locateBundle";
@@ -245,6 +245,7 @@ export class SidecarSupervisor extends EventEmitter {
   private resolveChildEnvironment(): Promise<NodeJS.ProcessEnv> {
     this.childEnvironmentPromise ??= resolveSidecarEnvironment({
       homeDirectory: app.getPath("home"),
+      resolveSystemProxy: (url) => session.defaultSession.resolveProxy(url),
     });
     return this.childEnvironmentPromise;
   }

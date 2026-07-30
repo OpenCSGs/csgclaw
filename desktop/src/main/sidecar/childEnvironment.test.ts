@@ -76,6 +76,31 @@ test("keeps the inherited environment when login shell discovery fails", async (
   );
 });
 
+test("uses the system proxy without importing shell proxy settings", async () => {
+  const env = await resolveSidecarEnvironment({
+    baseEnvironment: { PATH: "/usr/bin:/bin" },
+    homeDirectory: "/Users/test",
+    loginShell: "/bin/zsh",
+    platform: "darwin",
+    runCommand: async () =>
+      [
+        "PATH=/opt/homebrew/bin:/usr/bin",
+        "https_proxy=http://127.0.0.1:7890",
+        "UNRELATED_SECRET=not-imported",
+        "",
+      ].join("\0"),
+    resolveSystemProxy: async () => "PROXY 127.0.0.1:7890",
+  });
+
+  assert.equal(env.HTTP_PROXY, "http://127.0.0.1:7890");
+  assert.equal(env.HTTPS_PROXY, "http://127.0.0.1:7890");
+  assert.equal(env.http_proxy, "http://127.0.0.1:7890");
+  assert.equal(env.https_proxy, "http://127.0.0.1:7890");
+  assert.equal(env.NO_PROXY, "localhost,127.0.0.1,::1");
+  assert.equal(env.no_proxy, "localhost,127.0.0.1,::1");
+  assert.equal(env.UNRELATED_SECRET, undefined);
+});
+
 test("uses an interactive non-login shell for Linux terminal configuration", async () => {
   const runCommand: EnvironmentCommandRunner = async (executable, args) => {
     assert.equal(executable, "/bin/bash");
@@ -145,7 +170,7 @@ test("uses Windows user and machine environment without overriding an explicit C
 test("parses only allowlisted values from null-separated shell output", () => {
   assert.deepEqual(
     parseNullSeparatedEnvironment(
-      "shell_notice=value\nPATH=/shell/bin\0DOCKER_HOST=unix:///tmp/docker.sock\0TOKEN=secret\0",
+      "shell_notice=value\nPATH=/shell/bin\0DOCKER_HOST=unix:///tmp/docker.sock\0HTTPS_PROXY=http://127.0.0.1:7890\0TOKEN=secret\0",
     ),
     {
       PATH: "/shell/bin",

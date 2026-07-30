@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { userInfo } from "node:os";
 import path from "node:path";
+import { resolveSystemProxyEnvironment, type SystemProxyResolver } from "./systemProxy";
 
 const ENVIRONMENT_CAPTURE_TIMEOUT_MS = 5_000;
 const ENVIRONMENT_CAPTURE_MAX_BYTES = 1024 * 1024;
@@ -55,6 +56,7 @@ export type ResolveSidecarEnvironmentOptions = {
   loginShell?: string;
   platform?: NodeJS.Platform;
   runCommand?: EnvironmentCommandRunner;
+  resolveSystemProxy?: SystemProxyResolver;
 };
 
 export async function resolveSidecarEnvironment({
@@ -63,6 +65,7 @@ export async function resolveSidecarEnvironment({
   loginShell,
   platform = process.platform,
   runCommand = runEnvironmentCommand,
+  resolveSystemProxy,
 }: ResolveSidecarEnvironmentOptions): Promise<NodeJS.ProcessEnv> {
   // Keep executable discovery in the Go server unchanged. Electron only
   // restores the environment that a newly opened terminal would normally
@@ -120,6 +123,15 @@ export async function resolveSidecarEnvironment({
     const value = environmentValue(discovered, key, platform)?.trim();
     if (value) {
       setEnvironmentValue(env, key, value, platform);
+    }
+  }
+
+  if (resolveSystemProxy) {
+    const systemProxy = await resolveSystemProxyEnvironment(resolveSystemProxy);
+    for (const [key, value] of Object.entries(systemProxy)) {
+      if (value && !environmentValue(env, key, platform)?.trim()) {
+        setEnvironmentValue(env, key, value, platform);
+      }
     }
   }
 
