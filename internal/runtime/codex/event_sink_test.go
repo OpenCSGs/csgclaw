@@ -54,6 +54,37 @@ func TestEventSinkReliableBurstDoesNotBlockPublisher(t *testing.T) {
 	}
 }
 
+func TestEventSinkSessionSubscriptionOnlyQueuesMatchingSession(t *testing.T) {
+	t.Parallel()
+
+	sink := NewEventSink()
+	events, cancel := sink.SubscribeSession("rt-1", "session-active")
+	defer cancel()
+
+	for index := 0; index < defaultSessionEventBuffer*3; index++ {
+		sink.Publish(SessionEvent{
+			RuntimeID: "rt-1",
+			SessionID: "session-idle",
+			Kind:      SessionEventTextDelta,
+			Text:      strconv.Itoa(index),
+		})
+	}
+	sink.Publish(SessionEvent{
+		RuntimeID: "rt-1",
+		SessionID: "session-active",
+		Kind:      SessionEventPromptCompleted,
+	})
+
+	select {
+	case event := <-events:
+		if event.Kind != SessionEventPromptCompleted || event.SessionID != "session-active" {
+			t.Fatalf("event = %#v, want only matching session completion", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for matching session event")
+	}
+}
+
 func TestEventSinkReliablyDeliversActionEventsWhenSubscriberBufferIsFull(t *testing.T) {
 	t.Parallel()
 

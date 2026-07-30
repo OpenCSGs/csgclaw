@@ -223,15 +223,17 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 				live.markStreamedAgentMessage(itemID)
 				live.markStreamedAgentThread(threadID)
 			}
-			m.publishAppServerEvent(SessionEvent{
-				RuntimeID: runtimeID,
-				SessionID: threadID,
-				TurnID:    appServerNotificationTurnID(params),
-				Kind:      SessionEventTextDelta,
-				MessageID: itemID,
-				Text:      delta,
-				Payload:   payload,
-			})
+			if cleanedDelta := live.filterAgentMessageDelta(itemID, delta); cleanedDelta != "" {
+				m.publishAppServerEvent(SessionEvent{
+					RuntimeID: runtimeID,
+					SessionID: threadID,
+					TurnID:    appServerNotificationTurnID(params),
+					Kind:      SessionEventTextDelta,
+					MessageID: itemID,
+					Text:      cleanedDelta,
+					Payload:   payload,
+				})
+			}
 		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
 			activity:          "agentMessage:delta:" + itemID,
@@ -410,6 +412,16 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 		text := appServerString(item, "text")
 		cleanedText := m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, itemID, text, live)
 		if live.hasStreamedAgentMessage(itemID) {
+			if remainder := live.finishAgentMessageStream(itemID, cleanedText); remainder != "" {
+				m.publishAppServerEvent(SessionEvent{
+					RuntimeID: runtimeID,
+					SessionID: threadID,
+					Kind:      SessionEventTextDelta,
+					MessageID: itemID,
+					Text:      remainder,
+					Payload:   item,
+				})
+			}
 			if appServerAgentMessageCompletesTurn(live, itemID, item) {
 				live.notifyAppServerTurn(threadID, appServerTurnResult{
 					success:    true,
@@ -487,7 +499,40 @@ func (s *liveSession) clearAgentMessageState(itemID string) {
 	s.mu.Lock()
 	delete(s.agentMessagePhases, itemID)
 	delete(s.streamedAgentMessages, itemID)
+	delete(s.agentMessageStreams, itemID)
 	s.mu.Unlock()
+}
+
+func (s *liveSession) filterAgentMessageDelta(itemID, delta string) string {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" || delta == "" {
+		return delta
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.agentMessageStreams == nil {
+		s.agentMessageStreams = make(map[string]*assistantStructuredOutputStream)
+	}
+	stream := s.agentMessageStreams[itemID]
+	if stream == nil {
+		stream = newAssistantStructuredOutputStream()
+		s.agentMessageStreams[itemID] = stream
+	}
+	return stream.append(delta)
+}
+
+func (s *liveSession) finishAgentMessageStream(itemID, cleaned string) string {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return cleaned
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stream := s.agentMessageStreams[itemID]
+	if stream == nil {
+		return cleaned
+	}
+	return stream.finish(cleaned)
 }
 
 func (s *liveSession) markStreamedAgentMessage(itemID string) {
@@ -679,6 +724,10 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 		}
 		text = m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, appServerString(params, "id"), text, live)
 		if text != "" {
+			if live.hasStreamedAgentThread(threadID) {
+				live.notifyAppServerTurn(threadID, legacyMessageTurnResult(params, "legacy:response_item:message"))
+				return
+			}
 			m.publishAppServerEvent(SessionEvent{
 				RuntimeID: runtimeID,
 				SessionID: threadID,

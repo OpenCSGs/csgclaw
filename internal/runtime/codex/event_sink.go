@@ -18,6 +18,7 @@ type EventSink struct {
 
 type sessionSubscription struct {
 	runtimeID string
+	sessionID string
 	ch        chan SessionEvent
 	done      chan struct{}
 	stopped   chan struct{}
@@ -46,6 +47,9 @@ func (s *EventSink) Publish(event SessionEvent) {
 		if sub.runtimeID != "" && sub.runtimeID != runtimeID {
 			continue
 		}
+		if sub.sessionID != "" && sub.sessionID != strings.TrimSpace(event.SessionID) {
+			continue
+		}
 		targets = append(targets, sub)
 	}
 	s.mu.Unlock()
@@ -56,6 +60,14 @@ func (s *EventSink) Publish(event SessionEvent) {
 }
 
 func (s *EventSink) Subscribe(runtimeID string) (<-chan SessionEvent, func()) {
+	return s.subscribe(runtimeID, "")
+}
+
+func (s *EventSink) SubscribeSession(runtimeID, sessionID string) (<-chan SessionEvent, func()) {
+	return s.subscribe(runtimeID, sessionID)
+}
+
+func (s *EventSink) subscribe(runtimeID, sessionID string) (<-chan SessionEvent, func()) {
 	ch := make(chan SessionEvent, defaultSessionEventBuffer)
 	if s == nil {
 		close(ch)
@@ -67,6 +79,7 @@ func (s *EventSink) Subscribe(runtimeID string) (<-chan SessionEvent, func()) {
 	s.nextID++
 	sub := &sessionSubscription{
 		runtimeID:    strings.TrimSpace(runtimeID),
+		sessionID:    strings.TrimSpace(sessionID),
 		ch:           ch,
 		done:         make(chan struct{}),
 		stopped:      make(chan struct{}),

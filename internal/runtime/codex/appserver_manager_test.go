@@ -1155,8 +1155,8 @@ func TestAppServerEventAdapterDecodesStructuredOutputAfterStreamedDeltas(t *test
 	})
 
 	events := sink.snapshot()
-	if len(events) != 2 || events[0].Kind != SessionEventTextDelta || events[1].Kind != SessionEventStructuredOutput {
-		t.Fatalf("events = %#v, want streamed delta followed by decoded structured artifact", events)
+	if len(events) != 1 || events[0].Kind != SessionEventStructuredOutput {
+		t.Fatalf("events = %#v, want decoded structured artifact without raw text delta", events)
 	}
 }
 
@@ -1196,6 +1196,40 @@ func TestAppServerEventAdapterKeepsLegacyFinalAfterUnclassifiedTypedDeltas(t *te
 	}
 	if live.appProtocol != appServerProtocolLegacy {
 		t.Fatalf("protocol = %q, want legacy connection classification", live.appProtocol)
+	}
+}
+
+func TestAppServerEventAdapterSuppressesResponseItemFinalAfterTypedFinalDeltas(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	for _, delta := range []string{"hello", " world"} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/agentMessage/delta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-1",
+				"itemId":   "msg-1",
+				"phase":    "final_answer",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "codex/response_item",
+		Params: mustJSONRaw(t, map[string]any{
+			"type":  "message",
+			"id":    "msg-1",
+			"role":  "assistant",
+			"phase": "final_answer",
+			"content": []map[string]any{
+				{"type": "output_text", "text": "hello world"},
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 || events[0].Text != "hello" || events[1].Text != " world" {
+		t.Fatalf("events = %#v, want typed deltas without response_item duplicate", events)
 	}
 }
 

@@ -124,6 +124,8 @@ type SessionEventSink = activity.RuntimeEventSink
 
 type SessionEventSubscriber = activity.RuntimeEventSubscriber
 
+type SessionEventScopedSubscriber = activity.RuntimeSessionEventSubscriber
+
 type BinaryProvider interface {
 	Ensure(ctx context.Context) (string, error)
 }
@@ -250,6 +252,13 @@ func (r *Runtime) Subscribe(runtimeID string) (<-chan SessionEvent, func()) {
 		return ch, func() {}
 	}
 	return subscriber.Subscribe(runtimeID)
+}
+
+func (r *Runtime) SubscribeSession(runtimeID, sessionID string) (<-chan SessionEvent, func()) {
+	if subscriber, ok := r.deps.EventSink.(SessionEventScopedSubscriber); ok && subscriber != nil {
+		return subscriber.SubscribeSession(runtimeID, sessionID)
+	}
+	return r.Subscribe(runtimeID)
 }
 
 func (r *Runtime) PermissionBroker() PermissionBroker {

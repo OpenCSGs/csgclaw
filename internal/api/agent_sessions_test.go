@@ -350,6 +350,101 @@ func TestAgentSessionResponsesWaitsForCodexPromptCompletion(t *testing.T) {
 	}
 }
 
+func TestAgentSessionResponsesFailFastForUnsupportedInteractiveEvents(t *testing.T) {
+	tests := []struct {
+		name  string
+		event activity.RuntimeEvent
+	}{
+		{
+			name:  "approval",
+			event: activity.RuntimeEvent{Kind: activity.RuntimeEventActionRequest},
+		},
+		{
+			name:  "native user input",
+			event: activity.RuntimeEvent{Kind: activity.RuntimeEventUserInputRequest},
+		},
+		{
+			name: "structured user input",
+			event: activity.RuntimeEvent{
+				Kind: activity.RuntimeEventStructuredOutput,
+				Payload: activity.StructuredOutputArtifact{
+					RequestUserInput: &activity.RequestUserInputArgs{},
+				},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			codexAgent := completeWorkerAgent("agent-alpha", "Alpha")
+			codexAgent.RuntimeKind = agent.RuntimeKindCodex
+			codexAgent.RuntimeID = "rt-agent-alpha"
+			handler, _, _ := newAgentSessionTestHandler(t, []agent.Agent{codexAgent})
+			source := newFakeSessionEventSource("codex-thread-1")
+			handler.SetSessionEventSource(source)
+			source.prompt = func(ctx context.Context, runtimeID, sessionID, _ string) error {
+				event := test.event
+				event.RuntimeID = runtimeID
+				event.SessionID = sessionID
+				source.publish(event)
+				<-ctx.Done()
+				return ctx.Err()
+			}
+
+			startedAt := time.Now()
+			recorder := performAgentSessionRequest(t, handler, "agent-alpha", "interactive-"+strings.ReplaceAll(test.name, " ", "-"), map[string]any{
+				"input": "Ask me", "stream": true,
+			})
+			if elapsed := time.Since(startedAt); elapsed > time.Second {
+				t.Fatalf("interactive request took %s, want fail-fast response", elapsed)
+			}
+			body := recorder.Body.String()
+			if !strings.Contains(body, "event: response.failed") ||
+				!strings.Contains(body, "interactive approval and user-input requests are not supported") {
+				t.Fatalf("SSE body = %q, want unsupported-interactive failure", body)
+			}
+			if strings.Contains(body, "event: response.completed") {
+				t.Fatalf("SSE body = %q, must not report completion", body)
+			}
+		})
+	}
+}
+
+func TestAgentSessionResponsesFailsWhenFinalAuditMessageCannotBePersisted(t *testing.T) {
+	codexAgent := completeWorkerAgent("agent-alpha", "Alpha")
+	codexAgent.RuntimeKind = agent.RuntimeKindCodex
+	codexAgent.RuntimeID = "rt-agent-alpha"
+	handler, imSvc, _ := newAgentSessionTestHandler(t, []agent.Agent{codexAgent})
+	source := newFakeSessionEventSource("codex-thread-1")
+	handler.SetSessionEventSource(source)
+	source.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID,
+			Kind: activity.RuntimeEventTextDelta, Text: "answer",
+			Payload: map[string]any{"phase": "final_answer"},
+		})
+		if err := imSvc.DeleteRoom(source.conversationKey); err != nil {
+			t.Errorf("DeleteRoom(%q): %v", source.conversationKey, err)
+		}
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID,
+			Kind: activity.RuntimeEventPromptCompleted,
+		})
+		return nil
+	}
+
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "audit-failure", map[string]any{
+		"input": "Stream this", "stream": true,
+	})
+	body := recorder.Body.String()
+	if !strings.Contains(body, "event: response.failed") ||
+		!strings.Contains(body, "persist final assistant message") {
+		t.Fatalf("SSE body = %q, want persistence failure", body)
+	}
+	if strings.Contains(body, "event: response.completed") {
+		t.Fatalf("SSE body = %q, must not report completion", body)
+	}
+}
+
 type fakeSessionEventSource struct {
 	sessionID       string
 	conversationKey string

@@ -332,9 +332,6 @@ func (w *worker) run(ctx context.Context) {
 		defer w.unregisterTurnControl()
 	}
 
-	eventCh, cancelEvents := w.service.events.Subscribe(w.binding.RuntimeID)
-	defer cancelEvents()
-
 	go w.pumpEvents(ctx)
 
 	for {
@@ -344,7 +341,7 @@ func (w *worker) run(ctx context.Context) {
 		case evt := <-w.queue:
 			w.beginProcessing(eventDedupKey(evt))
 			if !w.isSuperseded(evt) {
-				_ = w.handleEvent(ctx, evt, eventCh)
+				_ = w.handleEvent(ctx, evt)
 			} else {
 				slog.Debug("codex bridge skipped superseded message",
 					"bot_id", w.binding.BotID,
@@ -401,7 +398,7 @@ func (w *worker) enqueue(ctx context.Context, evt BotEvent) {
 	}
 }
 
-func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-chan runtimecodex.SessionEvent) error {
+func (w *worker) handleEvent(ctx context.Context, evt BotEvent) error {
 	turnCtx, finishTurn := w.startControlledTurn(ctx, evt)
 	defer finishTurn()
 	ctx = turnCtx
@@ -426,6 +423,8 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 		_, err := w.flushTurn(ctx, evt.RoomID, "", renderer, codexFinalDeliveryMetadata(evt.MessageID))
 		return err
 	}
+	runtimeEvents, cancelEvents := subscribeTurnEvents(w.service.events, w.binding.RuntimeID, sessionID)
+	defer cancelEvents()
 	req := runtimecodex.PromptRequest{
 		SessionID: sessionID,
 		Meta:      cloneMeta(w.binding.PromptMeta),
@@ -751,6 +750,17 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 			}
 		}
 	}
+}
+
+func subscribeTurnEvents(
+	events runtimecodex.SessionEventSubscriber,
+	runtimeID string,
+	sessionID string,
+) (<-chan runtimecodex.SessionEvent, func()) {
+	if scoped, ok := events.(runtimecodex.SessionEventScopedSubscriber); ok {
+		return scoped.SubscribeSession(runtimeID, sessionID)
+	}
+	return events.Subscribe(runtimeID)
 }
 
 func (w *worker) startControlledTurn(ctx context.Context, evt BotEvent) (context.Context, func()) {

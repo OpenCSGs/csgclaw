@@ -97,6 +97,10 @@ type SessionEventSource interface {
 	Subscribe(runtimeID string) (<-chan activity.RuntimeEvent, func())
 }
 
+type scopedSessionEventSource interface {
+	SubscribeSession(runtimeID, sessionID string) (<-chan activity.RuntimeEvent, func())
+}
+
 const (
 	createOperationTimeout = 10 * time.Minute
 	agentListStatusTimeout = 2 * time.Second

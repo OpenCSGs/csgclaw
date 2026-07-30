@@ -29,8 +29,9 @@ var (
 	agentSessionIdleGrace       = 500 * time.Millisecond
 	agentSessionCleanupGrace    = 60 * time.Second
 
-	errSessionAgentUnavailable = errors.New("agent participant is unavailable")
-	errSessionRuntimeEnded     = errors.New("agent turn ended without a final response")
+	errSessionAgentUnavailable           = errors.New("agent participant is unavailable")
+	errSessionRuntimeEnded               = errors.New("agent turn ended without a final response")
+	errSessionInteractiveTurnUnsupported = errors.New("interactive approval and user-input requests are not supported for anonymous streamed sessions")
 )
 
 type agentSessionResponseRequest struct {
@@ -209,13 +210,12 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		h.sessionEventSource != nil &&
 		runtimeID != ""
 	if directCodexStream {
-		runtimeEvents, cancelRuntime = h.sessionEventSource.Subscribe(runtimeID)
 		runtimeSessionID, err = h.sessionEventSource.EnsureSession(r.Context(), runtimeID, room.ID)
 		if err != nil {
-			cancelRuntime()
 			writeAgentSessionError(w, http.StatusServiceUnavailable, "session_stream_failed", err.Error(), nil)
 			return
 		}
+		runtimeEvents, cancelRuntime = subscribeAgentSessionEvents(h.sessionEventSource, runtimeID, runtimeSessionID)
 	}
 	defer cancelRuntime()
 	if stream {
@@ -335,6 +335,13 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, response)
 }
 
+func subscribeAgentSessionEvents(source SessionEventSource, runtimeID, sessionID string) (<-chan activity.RuntimeEvent, func()) {
+	if scoped, ok := source.(scopedSessionEventSource); ok {
+		return scoped.SubscribeSession(runtimeID, sessionID)
+	}
+	return source.Subscribe(runtimeID)
+}
+
 func (h *Handler) streamDirectCodexSessionResponse(
 	ctx context.Context,
 	eventStream *agentSessionEventStream,
@@ -362,7 +369,7 @@ func (h *Handler) streamDirectCodexSessionResponse(
 	finalize := func() (string, error) {
 		finalText := eventStream.text.String()
 		if strings.TrimSpace(finalText) != "" {
-			_, _ = h.im.DeliverMessage(im.DeliverMessageRequest{
+			if _, err := h.im.DeliverMessage(im.DeliverMessageRequest{
 				RoomID:   roomID,
 				SenderID: resolved.userID,
 				Content:  finalText,
@@ -371,7 +378,9 @@ func (h *Handler) streamDirectCodexSessionResponse(
 					"request_id":        requestID,
 					"source_message_id": requestID,
 				}},
-			})
+			}); err != nil {
+				return "", fmt.Errorf("persist final assistant message: %w", err)
+			}
 		}
 		return finalText, nil
 	}
@@ -406,6 +415,9 @@ func (h *Handler) streamDirectCodexSessionResponse(
 				}
 				return "", errSessionRuntimeEnded
 			}
+			if unsupportedInteractiveSessionEvent(event) {
+				return "", errSessionInteractiveTurnUnsupported
+			}
 			if event.Kind == activity.RuntimeEventTextDelta {
 				phase := runtimeEventPhase(event)
 				if phase == "" || phase == "final_answer" {
@@ -418,6 +430,18 @@ func (h *Handler) streamDirectCodexSessionResponse(
 				runtimeDone = true
 			}
 		}
+	}
+}
+
+func unsupportedInteractiveSessionEvent(event activity.RuntimeEvent) bool {
+	switch event.Kind {
+	case activity.RuntimeEventActionRequest, activity.RuntimeEventUserInputRequest:
+		return true
+	case activity.RuntimeEventStructuredOutput:
+		artifact, ok := event.Payload.(activity.StructuredOutputArtifact)
+		return ok && artifact.RequestUserInput != nil
+	default:
+		return false
 	}
 }
 

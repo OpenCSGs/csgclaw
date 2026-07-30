@@ -245,6 +245,10 @@ type RuntimeEventSubscriber interface {
 	Subscribe(runtimeID string) (<-chan RuntimeEvent, func())
 }
 
+type RuntimeSessionEventSubscriber interface {
+	SubscribeSession(runtimeID, sessionID string) (<-chan RuntimeEvent, func())
+}
+
 func RuntimeEventRequiresReliableDelivery(event RuntimeEvent) bool {
 	switch event.Kind {
 	case RuntimeEventTextDelta,
