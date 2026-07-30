@@ -266,7 +266,15 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 
 	switch {
 	case method == "item/started" && itemType == "agentMessage":
-		live.setAgentMessagePhase(itemID, appServerString(item, "phase"))
+		phase := appServerString(item, "phase")
+		if strings.TrimSpace(phase) == "" {
+			// Some OpenAI-compatible providers, including qwen3.6-plus,
+			// omit the Codex-specific phase field. A typed agentMessage item
+			// is still assistant output; treat it as the final answer unless
+			// the provider explicitly labels another phase.
+			phase = "final_answer"
+		}
+		live.setAgentMessagePhase(itemID, phase)
 	case method == "item/started" && itemType == "commandExecution":
 		command := appServerString(item, "command")
 		m.publishAppServerEvent(SessionEvent{

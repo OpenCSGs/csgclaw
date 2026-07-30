@@ -1086,6 +1086,55 @@ func TestAppServerEventAdapterStreamsAgentMessageDeltasWithoutCompletedDuplicate
 	}
 }
 
+func TestAppServerEventAdapterStreamsAgentMessageWithoutProviderPhase(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/started",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id": "msg-qwen", "type": "agentMessage",
+			},
+		}),
+	})
+	for _, delta := range []string{"你好", "，世界"} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/agentMessage/delta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-1",
+				"itemId":   "msg-qwen",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id": "msg-qwen", "type": "agentMessage", "text": "你好，世界",
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 {
+		t.Fatalf("events = %#v, want only streamed provider deltas", events)
+	}
+	for index, want := range []string{"你好", "，世界"} {
+		event := events[index]
+		if event.Kind != SessionEventTextDelta ||
+			event.Text != want ||
+			event.Payload.(map[string]any)["phase"] != "final_answer" {
+			t.Fatalf("event[%d] = %#v, want final-answer delta %q", index, event, want)
+		}
+	}
+}
+
 func TestAppServerEventAdapterDoesNotClassifyUnknownAgentDeltaAsFinal(t *testing.T) {
 	manager, live, sink := testAppServerEventAdapter(t)
 
