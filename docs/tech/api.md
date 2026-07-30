@@ -1331,7 +1331,7 @@ PicoClaw outbound message shape is also accepted:
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
-Runs one non-streaming turn through the selected agent and its real CSGClaw runtime.
+Runs one turn through the selected agent and its real CSGClaw runtime.
 The `{agent}` selector accepts an agent ID or a unique case-insensitive agent name.
 This endpoint is separate from `/llm/responses`, which proxies model traffic without running the agent.
 
@@ -1376,7 +1376,7 @@ Text-only user message items are also accepted:
 }
 ```
 
-The successful response is a non-streaming Responses-style subset:
+With `stream: false` (the default), the successful response is a Responses-style subset:
 
 ```json
 {
@@ -1408,6 +1408,30 @@ The successful response is a non-streaming Responses-style subset:
   }
 }
 ```
+
+With `stream: true`, the endpoint returns `text/event-stream` and flushes an
+OpenAI Responses-compatible event stream. The event sequence is:
+
+```text
+response.created
+response.in_progress
+response.output_item.added
+response.content_part.added
+response.output_text.delta
+response.output_text.done
+response.content_part.done
+response.output_item.done
+response.completed
+```
+
+Each SSE block contains both `event: <type>` and a JSON `data:` payload whose
+`type` matches the event name and whose `sequence_number` increases from zero.
+For Codex agents, every `item/agentMessage/delta` emitted by Codex app-server is
+forwarded immediately as a `response.output_text.delta`. Completion events carry
+state only and do not repeat the full text; clients should build the visible
+answer by appending deltas. Runtimes that only publish a final message fall back
+to one text delta. The stream is established and `response.created` is flushed
+before the agent finishes.
 
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.

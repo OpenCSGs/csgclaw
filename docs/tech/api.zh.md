@@ -1302,7 +1302,7 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
 
 ### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
 
-通过选定 Agent 及其真实 CSGClaw runtime 执行一次非流式 turn。
+通过选定 Agent 及其真实 CSGClaw runtime 执行一次 turn。
 `{agent}` selector 可以使用 Agent ID，也可以使用不区分大小写的唯一 Agent 名称。
 该接口与 `/llm/responses` 相互独立，后者只代理模型流量，不执行 Agent。
 
@@ -1347,7 +1347,7 @@ Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
 }
 ```
 
-成功时返回非流式 Responses 风格子集：
+`stream: false`（默认值）时，成功响应为 Responses 风格子集：
 
 ```json
 {
@@ -1379,6 +1379,28 @@ Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
   }
 }
 ```
+
+`stream: true` 时，接口返回 `text/event-stream`，并即时 flush 与 OpenAI
+Responses 兼容的事件流。事件顺序为：
+
+```text
+response.created
+response.in_progress
+response.output_item.added
+response.content_part.added
+response.output_text.delta
+response.output_text.done
+response.content_part.done
+response.output_item.done
+response.completed
+```
+
+每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
+中的 `type` 与事件名一致，`sequence_number` 从 0 开始递增。对于 Codex
+智能体，Codex app-server 发布的每个 `item/agentMessage/delta` 都会即时转发为
+`response.output_text.delta`；完成事件只表达状态，不再重复携带全量文本，前端应
+通过追加 delta 构建可见回答。只发布 final message 的 runtime 会降级为一个文本
+delta。Agent 完成前，连接已建立并先 flush `response.created`。
 
 同一个 session 同时只允许一个 turn。
 不同 session ID 可以并发执行。

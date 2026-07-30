@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agent"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
@@ -80,6 +81,7 @@ type Handler struct {
 	notificationDeliver        notification.Fanouter
 	activityDecider            ActivityDecider
 	userInputResponder         UserInputResponder
+	sessionEventSource         SessionEventSource
 	localDirectoryPicker       func(context.Context) (string, error)
 	feishuRegistrationStateDir string
 
@@ -87,6 +89,12 @@ type Handler struct {
 	participantActivityTurns   map[string]participantActivityTurn
 	sessionTurnsMu             sync.Mutex
 	sessionTurns               map[string]struct{}
+}
+
+type SessionEventSource interface {
+	EnsureSession(ctx context.Context, runtimeID, conversationKey string) (string, error)
+	Prompt(ctx context.Context, runtimeID, sessionID, prompt string) error
+	Subscribe(runtimeID string) (<-chan activity.RuntimeEvent, func())
 }
 
 const (
@@ -773,6 +781,12 @@ func (h *Handler) SetActivityDecider(decider ActivityDecider) {
 func (h *Handler) SetUserInputResponder(responder UserInputResponder) {
 	if h != nil {
 		h.userInputResponder = responder
+	}
+}
+
+func (h *Handler) SetSessionEventSource(source SessionEventSource) {
+	if h != nil {
+		h.sessionEventSource = source
 	}
 }
 

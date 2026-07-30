@@ -1016,6 +1016,86 @@ func TestAppServerEventAdapterStructuredOutputRawAndLegacyRoutes(t *testing.T) {
 	}
 }
 
+func TestAppServerEventAdapterStreamsAgentMessageDeltasWithoutCompletedDuplicate(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	for _, delta := range []string{"hello", " world"} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/agentMessage/delta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-1",
+				"itemId":   "msg-1",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id":   "msg-1",
+				"type": "agentMessage",
+				"text": "hello world",
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 {
+		t.Fatalf("events = %#v, want only two agent message deltas", events)
+	}
+	if events[0].Text != "hello" || events[1].Text != " world" {
+		t.Fatalf("events = %#v, want ordered text deltas", events)
+	}
+	for _, event := range events {
+		if event.Kind != SessionEventTextDelta ||
+			event.SessionID != "main-thread" ||
+			event.TurnID != "turn-1" ||
+			event.MessageID != "msg-1" {
+			t.Fatalf("event = %#v, want scoped agent message delta", event)
+		}
+	}
+}
+
+func TestAppServerEventAdapterStreamsTypedAgentDeltasOnLegacyConnection(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "codex/event",
+		Params: mustJSONRaw(t, map[string]any{"type": "task_started"}),
+	})
+	for _, delta := range []string{"mixed", " protocol"} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/agentMessage/delta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-1",
+				"itemId":   "msg-1",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "codex/event",
+		Params: mustJSONRaw(t, map[string]any{
+			"type":    "agent_message",
+			"message": "mixed protocol",
+			"phase":   "final_answer",
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 || events[0].Text != "mixed" || events[1].Text != " protocol" {
+		t.Fatalf("events = %#v, want typed deltas without legacy final duplicate", events)
+	}
+	if live.appProtocol != appServerProtocolLegacy {
+		t.Fatalf("protocol = %q, want legacy connection classification", live.appProtocol)
+	}
+}
+
 func TestAppServerEventAdapterAccumulatesCanonicalCommandOutputDeltas(t *testing.T) {
 	t.Parallel()
 

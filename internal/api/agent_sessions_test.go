@@ -2,15 +2,18 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
@@ -161,7 +164,7 @@ func TestAgentSessionResponsesReturnsOpenAIStyleValidationErrors(t *testing.T) {
 		code      string
 	}{
 		{name: "invalid session", sessionID: "bad!session", body: map[string]any{"input": "hello"}, code: "invalid_session_id"},
-		{name: "streaming", sessionID: "valid", body: map[string]any{"input": "hello", "stream": true}, code: "invalid_request"},
+		{name: "unknown field", sessionID: "valid", body: map[string]any{"input": "hello", "unknown": true}, code: "invalid_request"},
 		{name: "assistant role", sessionID: "valid", body: map[string]any{"input": []map[string]any{{"role": "assistant", "content": "hello"}}}, code: "invalid_request"},
 	}
 	for _, test := range tests {
@@ -172,6 +175,236 @@ func TestAgentSessionResponsesReturnsOpenAIStyleValidationErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAgentSessionResponsesStreamsOpenAIResponseEvents(t *testing.T) {
+	handler, imSvc, bus := newAgentSessionTestHandler(t, []agent.Agent{
+		completeWorkerAgent("agent-alpha", "Alpha"),
+	})
+	events, cancel := bus.Subscribe()
+	defer cancel()
+	go replyToNextAdminMessage(events, imSvc, "user-alpha", "streamed answer")
+
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "stream-session", map[string]any{
+		"input":  "Stream this",
+		"stream": true,
+	})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", got)
+	}
+
+	var eventTypes []string
+	var sequenceNumbers []int
+	for _, block := range strings.Split(strings.TrimSpace(recorder.Body.String()), "\n\n") {
+		lines := strings.Split(block, "\n")
+		if len(lines) != 2 || !strings.HasPrefix(lines[0], "event: ") || !strings.HasPrefix(lines[1], "data: ") {
+			t.Fatalf("invalid SSE block %q", block)
+		}
+		eventType := strings.TrimPrefix(lines[0], "event: ")
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[1], "data: ")), &payload); err != nil {
+			t.Fatalf("decode SSE payload: %v", err)
+		}
+		if payload["type"] != eventType {
+			t.Fatalf("payload type = %v, event = %q", payload["type"], eventType)
+		}
+		eventTypes = append(eventTypes, eventType)
+		sequenceNumbers = append(sequenceNumbers, int(payload["sequence_number"].(float64)))
+	}
+	wantEvents := []string{
+		"response.created",
+		"response.in_progress",
+		"response.output_item.added",
+		"response.content_part.added",
+		"response.output_text.delta",
+		"response.output_text.done",
+		"response.content_part.done",
+		"response.output_item.done",
+		"response.completed",
+	}
+	if strings.Join(eventTypes, ",") != strings.Join(wantEvents, ",") {
+		t.Fatalf("event types = %v, want %v", eventTypes, wantEvents)
+	}
+	for index, sequence := range sequenceNumbers {
+		if sequence != index {
+			t.Fatalf("sequence_numbers = %v, want monotonically increasing from zero", sequenceNumbers)
+		}
+	}
+	if !strings.Contains(recorder.Body.String(), `"delta":"streamed answer"`) {
+		t.Fatalf("SSE body = %q, want output text delta", recorder.Body.String())
+	}
+	if strings.Count(recorder.Body.String(), "streamed answer") != 1 {
+		t.Fatalf("SSE body = %q, want full text only in delta event", recorder.Body.String())
+	}
+}
+
+func TestAgentSessionResponsesStreamsCodexRuntimeDeltasAsTheyArrive(t *testing.T) {
+	codexAgent := completeWorkerAgent("agent-alpha", "Alpha")
+	codexAgent.RuntimeKind = agent.RuntimeKindCodex
+	codexAgent.RuntimeID = "rt-agent-alpha"
+	handler, _, _ := newAgentSessionTestHandler(t, []agent.Agent{codexAgent})
+	source := newFakeSessionEventSource("codex-thread-1")
+	handler.SetSessionEventSource(source)
+	promptCalled := make(chan struct{}, 1)
+	source.prompt = func(_ context.Context, runtimeID, sessionID, prompt string) error {
+		promptCalled <- struct{}{}
+		source.mu.Lock()
+		subscriberCount := len(source.subscribers)
+		source.mu.Unlock()
+		if subscriberCount == 0 {
+			t.Error("Prompt called before Subscribe")
+		}
+		if runtimeID != "rt-agent-alpha" || sessionID != "codex-thread-1" || prompt != "Stream this" {
+			t.Errorf("Prompt(%q, %q, %q), want rt-agent-alpha/codex-thread-1/Stream this", runtimeID, sessionID, prompt)
+		}
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: "rt-agent-alpha", SessionID: "codex-thread-1",
+			Kind: activity.RuntimeEventTextDelta, MessageID: "codex-msg-1", Text: "hello",
+		})
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: "rt-agent-alpha", SessionID: "codex-thread-1",
+			Kind: activity.RuntimeEventTextDelta, MessageID: "codex-msg-1", Text: " world",
+		})
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: "rt-agent-alpha", SessionID: "codex-thread-1",
+			Kind: activity.RuntimeEventPromptCompleted,
+		})
+		return nil
+	}
+
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "codex-stream", map[string]any{
+		"input": "Stream this", "stream": true,
+	})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d; body=%s", recorder.Code, recorder.Body.String())
+	}
+	select {
+	case <-promptCalled:
+	default:
+		t.Fatal("direct Codex source Prompt was not called")
+	}
+	body := recorder.Body.String()
+	if strings.Count(body, "event: response.output_text.delta") != 2 ||
+		!strings.Contains(body, `"delta":"hello"`) ||
+		!strings.Contains(body, `"delta":" world"`) {
+		t.Fatalf("SSE body = %q, want two source text deltas", body)
+	}
+	if source.conversationKey != recorderRoomID(t, body) {
+		t.Fatalf("EnsureSession conversation key = %q, want response room id", source.conversationKey)
+	}
+	messages, err := handler.im.ListMessages(source.conversationKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) < 3 || messages[len(messages)-1].SenderID != "user-alpha" || messages[len(messages)-1].Content != "hello world" {
+		t.Fatalf("messages = %#v, want direct Codex final audit message", messages)
+	}
+}
+
+func TestAgentSessionResponsesCompletesCodexStreamAfterTailIdle(t *testing.T) {
+	origTailGrace := agentSessionStreamTailGrace
+	agentSessionStreamTailGrace = 10 * time.Millisecond
+	t.Cleanup(func() { agentSessionStreamTailGrace = origTailGrace })
+
+	codexAgent := completeWorkerAgent("agent-alpha", "Alpha")
+	codexAgent.RuntimeKind = agent.RuntimeKindCodex
+	codexAgent.RuntimeID = "rt-agent-alpha"
+	handler, _, _ := newAgentSessionTestHandler(t, []agent.Agent{codexAgent})
+	source := newFakeSessionEventSource("codex-thread-1")
+	handler.SetSessionEventSource(source)
+	source.prompt = func(ctx context.Context, runtimeID, sessionID, prompt string) error {
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID,
+			Kind: activity.RuntimeEventTextDelta, MessageID: "codex-msg-1", Text: "tail",
+		})
+		<-ctx.Done()
+		return ctx.Err()
+	}
+
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "codex-tail", map[string]any{
+		"input": "Stream this", "stream": true,
+	})
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d; body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"delta":"tail"`) || !strings.Contains(body, "event: response.completed") {
+		t.Fatalf("SSE body = %q, want delta and completed after tail idle", body)
+	}
+}
+
+type fakeSessionEventSource struct {
+	sessionID       string
+	conversationKey string
+	prompt          func(context.Context, string, string, string) error
+
+	mu          sync.Mutex
+	subscribers []chan activity.RuntimeEvent
+}
+
+func newFakeSessionEventSource(sessionID string) *fakeSessionEventSource {
+	return &fakeSessionEventSource{sessionID: sessionID}
+}
+
+func (s *fakeSessionEventSource) EnsureSession(_ context.Context, _, conversationKey string) (string, error) {
+	s.conversationKey = conversationKey
+	return s.sessionID, nil
+}
+
+func (s *fakeSessionEventSource) Prompt(ctx context.Context, runtimeID, sessionID, prompt string) error {
+	if s.prompt != nil {
+		return s.prompt(ctx, runtimeID, sessionID, prompt)
+	}
+	return nil
+}
+
+func (s *fakeSessionEventSource) Subscribe(string) (<-chan activity.RuntimeEvent, func()) {
+	ch := make(chan activity.RuntimeEvent, 8)
+	s.mu.Lock()
+	s.subscribers = append(s.subscribers, ch)
+	s.mu.Unlock()
+	return ch, func() {
+		s.mu.Lock()
+		for i, candidate := range s.subscribers {
+			if candidate == ch {
+				s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+				break
+			}
+		}
+		s.mu.Unlock()
+		close(ch)
+	}
+}
+
+func (s *fakeSessionEventSource) publish(event activity.RuntimeEvent) {
+	s.mu.Lock()
+	subscribers := append([]chan activity.RuntimeEvent(nil), s.subscribers...)
+	s.mu.Unlock()
+	for _, ch := range subscribers {
+		ch <- event
+	}
+}
+
+func recorderRoomID(t *testing.T, body string) string {
+	t.Helper()
+	for _, block := range strings.Split(strings.TrimSpace(body), "\n\n") {
+		lines := strings.Split(block, "\n")
+		if len(lines) != 2 || lines[0] != "event: response.created" {
+			continue
+		}
+		var payload struct {
+			Response agentSessionResponse `json:"response"`
+		}
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[1], "data: ")), &payload); err != nil {
+			t.Fatal(err)
+		}
+		return payload.Response.Metadata["room_id"]
+	}
+	t.Fatal("response.created event not found")
+	return ""
 }
 
 func newAgentSessionTestHandler(t *testing.T, agents []agent.Agent) (*Handler, *im.Service, *im.Bus) {
@@ -188,6 +421,7 @@ func newAgentSessionTestHandler(t *testing.T, agents []agent.Agent) (*Handler, *
 	agentSvc, err := agent.NewService(
 		config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath,
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
 	)
 	if err != nil {
 		t.Fatalf("agent.NewService() error = %v", err)

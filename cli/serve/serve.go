@@ -736,6 +736,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		Upgrade:            upgradeManager,
 		ActivityDecider:    channelActivityDecider(codexBridgeMgr),
 		UserInputResponder: channelUserInputResponder(codexBridgeMgr),
+		SessionEventSource: channelSessionEventSource(codexBridgeMgr),
 		ConfigPath:         configPath,
 		AccessToken:        cfg.Server.AccessToken,
 		NoAuth:             cfg.Server.NoAuth,
@@ -1245,6 +1246,16 @@ func channelUserInputResponder(m codexBridgeManager) api.UserInputResponder {
 		return nil
 	}
 	return withUserInput.UserInputResponder()
+}
+
+func channelSessionEventSource(m codexBridgeManager) api.SessionEventSource {
+	withEvents, ok := m.(interface {
+		SessionEventSource() *runtimecodex.Runtime
+	})
+	if !ok {
+		return nil
+	}
+	return withEvents.SessionEventSource()
 }
 
 func newCodexBridgeManager(cfg config.Config, svc *agent.Service, feishuSvc *feishu.Service, workReporter worklease.ParticipantWorkReporter) (codexBridgeManager, error) {

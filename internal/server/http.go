@@ -51,6 +51,7 @@ type Options struct {
 	Upgrade            *upgrade.Manager
 	ActivityDecider    api.ActivityDecider
 	UserInputResponder api.UserInputResponder
+	SessionEventSource api.SessionEventSource
 	ConfigPath         string
 	AccessToken        string
 	NoAuth             bool
@@ -77,6 +78,7 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetUpgradeManager(opts.Upgrade)
 	handler.SetActivityDecider(opts.ActivityDecider)
 	handler.SetUserInputResponder(opts.UserInputResponder)
+	handler.SetSessionEventSource(opts.SessionEventSource)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)
 	handler.SetConfigPath(opts.ConfigPath)
 	handler.SetAdvertiseBaseURL(opts.AdvertiseBaseURL)

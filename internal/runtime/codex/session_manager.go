@@ -24,6 +24,8 @@ type liveSession struct {
 	commandOutputs        map[string]*appServerCommandOutputState
 	replayedExecCommands  map[string]struct{}
 	replayedAgentMessages map[string]struct{}
+	streamedAgentMessages map[string]struct{}
+	streamedAgentThreads  map[string]struct{}
 	appProtocol           string
 }
 

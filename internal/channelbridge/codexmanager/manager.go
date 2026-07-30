@@ -234,6 +234,21 @@ func (m *multiManager) UserInputResponder() runtimecodex.UserInputBroker {
 	return nil
 }
 
+func (m *multiManager) SessionEventSource() *runtimecodex.Runtime {
+	if m == nil {
+		return nil
+	}
+	for _, manager := range m.managers {
+		source, ok := manager.(interface {
+			SessionEventSource() *runtimecodex.Runtime
+		})
+		if ok && source.SessionEventSource() != nil {
+			return source.SessionEventSource()
+		}
+	}
+	return nil
+}
+
 type csgclawManager struct {
 	agents   AgentLister
 	runtime  *runtimecodex.Runtime
@@ -356,6 +371,13 @@ func (m *csgclawManager) UserInputResponder() runtimecodex.UserInputBroker {
 		return nil
 	}
 	return m.runtime.UserInputBroker()
+}
+
+func (m *csgclawManager) SessionEventSource() *runtimecodex.Runtime {
+	if m == nil {
+		return nil
+	}
+	return m.runtime
 }
 
 type feishuManager struct {
@@ -517,6 +539,13 @@ func (m *feishuManager) UserInputResponder() runtimecodex.UserInputBroker {
 		return nil
 	}
 	return m.runtime.UserInputBroker()
+}
+
+func (m *feishuManager) SessionEventSource() *runtimecodex.Runtime {
+	if m == nil {
+		return nil
+	}
+	return m.runtime
 }
 
 func (m *feishuManager) participantIDForAgent(a agent.Agent) string {

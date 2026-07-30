@@ -75,6 +75,9 @@ func isParticipantControlRecord(message im.Message) bool {
 	if !ok {
 		return false
 	}
+	if direct, _ := csgclaw["agent_session_stream_direct"].(bool); direct {
+		return true
+	}
 	return strings.EqualFold(strings.TrimSpace(fmt.Sprint(csgclaw["delivery_kind"])), "turn_stopped")
 }
 

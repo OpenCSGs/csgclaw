@@ -224,6 +224,34 @@ func (r *Runtime) EventSink() SessionEventSink {
 	return r.deps.EventSink
 }
 
+func (r *Runtime) EnsureSession(ctx context.Context, runtimeID, conversationKey string) (string, error) {
+	ensurer, ok := r.SessionManager().(interface {
+		EnsureSession(context.Context, SessionHandle, string) (string, error)
+	})
+	if !ok {
+		return "", fmt.Errorf("codex session manager does not support conversation sessions")
+	}
+	return ensurer.EnsureSession(ctx, SessionHandle{RuntimeID: runtimeID}, conversationKey)
+}
+
+func (r *Runtime) Prompt(ctx context.Context, runtimeID, sessionID, prompt string) error {
+	_, err := r.SessionManager().Prompt(ctx, SessionHandle{RuntimeID: runtimeID}, PromptRequest{
+		SessionID: strings.TrimSpace(sessionID),
+		Prompt:    []PromptContentBlock{TextBlock(prompt)},
+	})
+	return err
+}
+
+func (r *Runtime) Subscribe(runtimeID string) (<-chan SessionEvent, func()) {
+	subscriber, ok := r.deps.EventSink.(SessionEventSubscriber)
+	if !ok || subscriber == nil {
+		ch := make(chan SessionEvent)
+		close(ch)
+		return ch, func() {}
+	}
+	return subscriber.Subscribe(runtimeID)
+}
+
 func (r *Runtime) PermissionBroker() PermissionBroker {
 	return r.permissionBroker()
 }
