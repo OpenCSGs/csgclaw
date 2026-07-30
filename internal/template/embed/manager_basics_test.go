@@ -165,6 +165,8 @@ func TestManagerInstructionsEnforceStructuredOutputTurnBoundary(t *testing.T) {
 
 	for _, want := range []string{
 		"::csgclaw-output::request_user_input",
+		"native Codex `request_user_input` is unavailable",
+		"Never add a third leading colon",
 		"final tool call of the current turn",
 		"do not call another tool",
 		"RequestUserInputResponse",
@@ -172,6 +174,24 @@ func TestManagerInstructionsEnforceStructuredOutputTurnBoundary(t *testing.T) {
 	} {
 		if !strings.Contains(string(instructions), want) {
 			t.Fatalf("manager instructions missing structured-output boundary %q", want)
+		}
+	}
+}
+
+func TestWorkerInstructionsExplainClickableQuestionOutput(t *testing.T) {
+	instructions, err := fs.ReadFile(FS(), path.Join(CodexWorkerRoot, InstructionsDirName, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read embedded worker instructions: %v", err)
+	}
+
+	for _, want := range []string{
+		"native Codex `request_user_input` is unavailable",
+		"::csgclaw-output::request_user_input",
+		"Never add a third leading colon",
+		"end the turn immediately",
+	} {
+		if !strings.Contains(string(instructions), want) {
+			t.Fatalf("worker instructions missing clickable question guidance %q", want)
 		}
 	}
 }

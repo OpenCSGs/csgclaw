@@ -2,7 +2,7 @@
 
 English | [中文](structured-output.zh.md)
 
-CSGClaw provides a line-oriented stdout protocol for skill scripts that need to attach resource links or open an interactive question flow.
+CSGClaw provides a line-oriented output protocol for skill scripts and completed assistant responses that need to attach resource links or open an interactive question flow.
 The protocol belongs to CSGClaw and is not bound to a particular skill engine, model, or agent runtime.
 It is not MCP and does not rely on arbitrary JSON detection.
 
@@ -43,8 +43,9 @@ Two kinds are registered:
 
 The prefix must begin at the first character of the line.
 Encode each JSON payload on one physical line and write ordinary logs or status text on separate lines.
-CSGClaw removes valid control lines from visible tool output and preserves ordinary stdout.
+CSGClaw removes valid control lines from visible output and preserves ordinary text.
 Unknown, malformed, oversized, or invalid records are ignored and remain visible as ordinary output.
+For compatibility, the runtime also recognizes an assistant response with one accidental extra leading colon or a payload placed on the immediately following line, but emitters must always produce the canonical one-line form.
 
 A minimal Python emitter is:
 
@@ -60,7 +61,7 @@ def emit(kind: str, payload: dict[str, object]) -> None:
 ## Turn lifecycle
 
 1. A skill script prints ordinary output and zero or more control records.
-2. A CSGClaw runtime adapter decodes records only from a successfully completed command execution.
+2. A CSGClaw runtime adapter decodes records from a successfully completed command execution or a completed assistant response.
 3. A valid `request_user_input` record becomes a runtime-enforced turn boundary, so the model cannot execute another stage before the user answers.
 4. CSGClaw intentionally interrupts that turn and treats the boundary as successful.
 5. Ordinary stdout from the emitting command becomes the readable response when the model has not already produced one.
@@ -68,6 +69,7 @@ def emit(kind: str, payload: dict[str, object]) -> None:
 7. Resource links are appended to the end of that response as Markdown, including the first safe HTTP(S) icon when one is provided.
 8. A detached question request is activated after the final response and links are visible.
 9. A submitted answer first updates the existing agent-owned question message and persists a separate readable local-user answer message.
+   In a group room, that answer message mentions the agent that asked the question using server-owned requester identity.
 10. CSGClaw then automatically continues the same originating agent session with a wire-compatible response JSON copy whose submitted secret values are replaced with `<redacted>`.
 
 Skill authors should print concise readable Markdown before the control record, as shown by the demo emitter.
@@ -204,6 +206,7 @@ Resolving, skipping, expiring, canceling, or interrupting the request updates th
 
 A non-empty submission creates one separate message owned by the authenticated current local user.
 The answer message stays in the same room and thread as the question and is marked by `metadata.csgclaw.request_user_input`.
+In a group room, CSGClaw places a structured mention of the requesting agent on its own line before the answer heading.
 It updates the UI through normal IM events but is never dispatched as a second participant prompt.
 The automatic continuation remains the only new agent turn.
 

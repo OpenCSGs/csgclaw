@@ -294,7 +294,7 @@ func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
 			if !ok || len(request.Questions) != 1 || request.Questions[0].ID != "color" {
 				t.Fatalf("request snapshot = %+v", request)
 			}
-			if _, err := broker.Bind(requestID, "csgclaw", "room-1", ""); err != nil {
+			if _, err := broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent"); err != nil {
 				t.Fatalf("Bind() error = %v", err)
 			}
 			if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
@@ -360,7 +360,7 @@ func TestAppServerManagerPausesTurnWatchdogsWhileWaitingForUser(t *testing.T) {
 		promptResult <- err
 	}()
 	requestID := waitForUserInputRequest(t, sink)
-	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "")
+	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent")
 	time.Sleep(75 * time.Millisecond)
 	select {
 	case err := <-promptResult:
@@ -444,7 +444,7 @@ func TestAppServerManagerKeepsTurnOpenWhenAgentMessagePrecedesQuestion(t *testin
 		t.Fatalf("prompt ended before the user-input request was answered: %v", err)
 	default:
 	}
-	if _, err := broker.Bind(requestID, "csgclaw", "room-1", ""); err != nil {
+	if _, err := broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent"); err != nil {
 		t.Fatalf("Bind() error = %v", err)
 	}
 	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
@@ -1223,6 +1223,29 @@ func TestAppServerEventAdapterRoutesLegacyStructuredOutputToActiveConversationTu
 	}
 	if events[2].Kind != SessionEventToolCallUpdate {
 		t.Fatalf("events[2] = %#v, want raw duplicate tool update", events[2])
+	}
+}
+
+func TestAppServerEventAdapterRoutesAssistantStructuredOutput(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	text := "Choose the next step.\n\n:::csgclaw-output::request_user_input\n" +
+		`{"questions":[{"id":"next","header":"Next step","question":"What should happen next?","options":[{"label":"Continue","description":"Keep working."}]}]}`
+	manager.handleRawItemNotification("runtime-1", live, "main-thread", "item/completed", map[string]any{
+		"item": map[string]any{"id": "assistant-question", "type": "agentMessage", "text": text},
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput || events[1].Kind != SessionEventTextDelta {
+		t.Fatalf("events = %#v, want structured request followed by cleaned assistant text", events)
+	}
+	request := events[0].Payload.(activity.StructuredOutputArtifact).RequestUserInput
+	if request == nil || request.Questions[0].ID != "next" {
+		t.Fatalf("request = %+v, want next question", request)
+	}
+	if events[1].Text != "Choose the next step.\n" {
+		t.Fatalf("assistant text = %q, want control record removed", events[1].Text)
 	}
 }
 

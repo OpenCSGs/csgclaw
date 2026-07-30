@@ -43,6 +43,28 @@ func TestDecodeStructuredCommandOutputRoutesCodexRecordsAndPreservesStdout(t *te
 	}
 }
 
+func TestDecodeStructuredCommandOutputAcceptsAssistantLineBreakVariant(t *testing.T) {
+	t.Parallel()
+
+	output := strings.Join([]string{
+		"What kind of help do you need?",
+		"",
+		":::csgclaw-output::request_user_input",
+		`{"questions":[{"id":"help_type","header":"Help type","question":"What would you like help with?","options":[{"label":"Debug code","description":"Investigate a failure."}]}]}`,
+	}, "\n")
+
+	cleaned, artifact, errs := decodeStructuredCommandOutput(output)
+	if len(errs) != 0 {
+		t.Fatalf("decode errors = %v", errs)
+	}
+	if cleaned != "What kind of help do you need?\n" {
+		t.Fatalf("cleaned output = %q", cleaned)
+	}
+	if artifact.RequestUserInput == nil || artifact.RequestUserInput.Questions[0].ID != "help_type" {
+		t.Fatalf("request = %+v, want clickable help question", artifact.RequestUserInput)
+	}
+}
+
 func TestDecodeStructuredCommandOutputRejectsMalformedDuplicateAndUnsafeRecords(t *testing.T) {
 	t.Parallel()
 

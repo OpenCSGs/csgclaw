@@ -583,7 +583,7 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent, runtimeEvents <-
 				return false, nil
 			}
 			if event.Kind == runtimecodex.SessionEventUserInputRequest && w.service.userInput != nil {
-				bound, err := w.service.userInput.Bind(snapshot.ID, evt.Channel, evt.RoomID, evt.ThreadRootID)
+				bound, err := w.service.userInput.Bind(snapshot.ID, evt.Channel, evt.RoomID, evt.ThreadRootID, w.binding.BotID)
 				if err != nil {
 					return false, err
 				}
@@ -1042,6 +1042,7 @@ func (w *worker) activateStructuredUserInput(
 		RoomID:          evt.RoomID,
 		ThreadRootID:    evt.ThreadRootID,
 		SourceMessageID: evt.MessageID,
+		RequesterID:     w.binding.BotID,
 	})
 	if err != nil {
 		return err

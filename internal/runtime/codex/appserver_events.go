@@ -358,6 +358,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 		})
 	case method == "item/completed" && itemType == "agentMessage":
 		text := appServerString(item, "text")
+		text = m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, itemID, text, live)
 		if text != "" {
 			m.publishAppServerEvent(SessionEvent{
 				RuntimeID: runtimeID,
@@ -382,6 +383,7 @@ func (m *appServerManager) handleLegacyAppServerEvent(runtimeID string, live *li
 		live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "status:running", started: true})
 	case "agent_message":
 		text := appServerString(params, "message")
+		text = m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, appServerString(params, "id"), text, live)
 		if text != "" {
 			if live.hasReplayedAgentMessage(params) {
 				return
@@ -494,14 +496,17 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 		if text == "" || live.hasReplayedAgentMessage(params) {
 			return
 		}
-		m.publishAppServerEvent(SessionEvent{
-			RuntimeID: runtimeID,
-			SessionID: threadID,
-			Kind:      SessionEventTextDelta,
-			MessageID: appServerString(params, "id"),
-			Text:      text,
-			Payload:   params,
-		})
+		text = m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, appServerString(params, "id"), text, live)
+		if text != "" {
+			m.publishAppServerEvent(SessionEvent{
+				RuntimeID: runtimeID,
+				SessionID: threadID,
+				Kind:      SessionEventTextDelta,
+				MessageID: appServerString(params, "id"),
+				Text:      text,
+				Payload:   params,
+			})
+		}
 		live.markReplayedAgentMessage(params)
 		live.notifyAppServerTurn(threadID, legacyMessageTurnResult(params, "legacy:response_item:message"))
 	case "function_call":
@@ -551,6 +556,21 @@ func (m *appServerManager) handleLegacyResponseItemEvent(runtimeID string, live 
 	}
 }
 
+func (m *appServerManager) decodeAndPublishStructuredAssistantOutput(
+	runtimeID string,
+	threadID string,
+	messageID string,
+	output string,
+	live *liveSession,
+) string {
+	if !strings.Contains(output, "csgclaw-output::") {
+		return output
+	}
+	cleaned, artifact, decodeErrors := decodeStructuredCommandOutput(output)
+	m.publishStructuredOutputArtifact(runtimeID, threadID, messageID, "assistant_message", artifact, decodeErrors, cleaned, live)
+	return cleaned
+}
+
 func (m *appServerManager) decodeAndPublishStructuredCommandOutput(
 	runtimeID string,
 	threadID string,
@@ -564,7 +584,7 @@ func (m *appServerManager) decodeAndPublishStructuredCommandOutput(
 		return output
 	}
 	cleaned, artifact, decodeErrors := decodeStructuredCommandOutput(output)
-	m.publishStructuredCommandArtifact(runtimeID, threadID, toolCallID, artifact, decodeErrors, cleaned, live)
+	m.publishStructuredOutputArtifact(runtimeID, threadID, toolCallID, "exec_command", artifact, decodeErrors, cleaned, live)
 	return cleaned
 }
 
@@ -577,9 +597,22 @@ func (m *appServerManager) publishStructuredCommandArtifact(
 	fallbackText string,
 	live *liveSession,
 ) {
+	m.publishStructuredOutputArtifact(runtimeID, threadID, toolCallID, "exec_command", artifact, decodeErrors, fallbackText, live)
+}
+
+func (m *appServerManager) publishStructuredOutputArtifact(
+	runtimeID string,
+	threadID string,
+	sourceID string,
+	sourceKind string,
+	artifact activitypkg.StructuredOutputArtifact,
+	decodeErrors []error,
+	fallbackText string,
+	live *liveSession,
+) {
 	for _, err := range decodeErrors {
 		if live != nil && live.appClient != nil {
-			live.appClient.logDebug("ignore invalid structured command output", "tool_call_id", toolCallID, "error", err)
+			live.appClient.logDebug("ignore invalid structured output", "source_id", sourceID, "source_kind", sourceKind, "error", err)
 		}
 	}
 	if structuredOutputArtifactEmpty(artifact) {
@@ -589,8 +622,8 @@ func (m *appServerManager) publishStructuredCommandArtifact(
 		RuntimeID:  runtimeID,
 		SessionID:  threadID,
 		Kind:       SessionEventStructuredOutput,
-		ToolCallID: toolCallID,
-		ToolKind:   "exec_command",
+		ToolCallID: sourceID,
+		ToolKind:   sourceKind,
 		Text:       strings.TrimSpace(fallbackText),
 		Payload:    artifact,
 	})

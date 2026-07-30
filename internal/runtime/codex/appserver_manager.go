@@ -1234,7 +1234,7 @@ func (m *appServerManager) interruptAppServerTurn(live *liveSession, waiter *app
 	}
 }
 
-// interruptAppServerStructuredOutputTurn makes a script-emitted question a
+// interruptAppServerStructuredOutputTurn makes an emitted question a
 // runtime-enforced turn boundary. The request runs asynchronously because this
 // method is called while the app-server stdout reader is dispatching the
 // command-completion notification that revealed the control record.

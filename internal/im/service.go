@@ -83,14 +83,15 @@ type ThreadListOptions struct {
 }
 
 type DeliverMessageRequest struct {
-	RoomID       string                    `json:"room_id"`
-	SenderID     string                    `json:"sender_id,omitempty"`
-	MentionID    string                    `json:"mention_id,omitempty"`
-	Content      string                    `json:"text"`
-	MessageID    string                    `json:"message_id,omitempty"`
-	ThreadRootID string                    `json:"thread_root_id,omitempty"`
-	Metadata     map[string]any            `json:"metadata,omitempty"`
-	Attachments  []MessageAttachmentUpload `json:"attachments,omitempty"`
+	RoomID           string                    `json:"room_id"`
+	SenderID         string                    `json:"sender_id,omitempty"`
+	MentionID        string                    `json:"mention_id,omitempty"`
+	MentionOnOwnLine bool                      `json:"mention_on_own_line,omitempty"`
+	Content          string                    `json:"text"`
+	MessageID        string                    `json:"message_id,omitempty"`
+	ThreadRootID     string                    `json:"thread_root_id,omitempty"`
+	Metadata         map[string]any            `json:"metadata,omitempty"`
+	Attachments      []MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type DeliverEventRequest struct {
@@ -1942,7 +1943,7 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 		return Message{}, fmt.Errorf("sender not found")
 	}
 	senderID = senderUserID
-	content, err := s.contentWithMentionPrefixLocked(content, req.MentionID)
+	content, err := s.contentWithMentionPrefixLocked(content, req.MentionID, false)
 	if err != nil {
 		return Message{}, err
 	}
@@ -1997,7 +1998,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 		return Message{}, fmt.Errorf("sender not found")
 	}
 	senderID = senderUserID
-	content, err := s.contentWithMentionPrefixLocked(content, mentionID)
+	content, err := s.contentWithMentionPrefixLocked(content, mentionID, req.MentionOnOwnLine)
 	if err != nil {
 		return Message{}, err
 	}
@@ -2081,7 +2082,7 @@ func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 		return Message{}, fmt.Errorf("sender not found")
 	}
 	senderID = senderUserID
-	content, err := s.contentWithMentionPrefixLocked(content, mentionID)
+	content, err := s.contentWithMentionPrefixLocked(content, mentionID, false)
 	if err != nil {
 		return Message{}, err
 	}
@@ -3136,7 +3137,7 @@ func (s *Service) newMessage(messageID, senderID, kind, content string) Message 
 	}
 }
 
-func (s *Service) contentWithMentionPrefixLocked(content, mentionID string) (string, error) {
+func (s *Service) contentWithMentionPrefixLocked(content, mentionID string, ownLine bool) (string, error) {
 	mentionID = s.resolveUserIDLocked(mentionID)
 	if mentionID == "" {
 		return content, nil
@@ -3152,21 +3153,25 @@ func (s *Service) contentWithMentionPrefixLocked(content, mentionID string) (str
 	}
 
 	prefix := fmt.Sprintf("<at user_id=\"%s\">%s</at>", mentionID, displayName)
-	if content == prefix || strings.HasPrefix(content, prefix+" ") {
+	if content == prefix || strings.HasPrefix(content, prefix+" ") || strings.HasPrefix(content, prefix+"\n") {
 		return content, nil
+	}
+	separator := " "
+	if ownLine {
+		separator = "\n\n"
 	}
 	cmd, isSlash, err := slashcommand.Parse(content)
 	if err != nil {
 		return "", err
 	}
 	if isSlash {
-		if cmd.Body == prefix || strings.HasPrefix(cmd.Body, prefix+" ") {
+		if cmd.Body == prefix || strings.HasPrefix(cmd.Body, prefix+" ") || strings.HasPrefix(cmd.Body, prefix+"\n") {
 			return slashcommand.Render(cmd)
 		}
-		cmd.Body = strings.TrimSpace(prefix + " " + cmd.Body)
+		cmd.Body = strings.TrimSpace(prefix + separator + cmd.Body)
 		return slashcommand.Render(cmd)
 	}
-	return prefix + " " + strings.TrimSpace(content), nil
+	return prefix + separator + strings.TrimSpace(content), nil
 }
 
 func (s *Service) mentionsForUserIDs(userIDs []string) []Mention {

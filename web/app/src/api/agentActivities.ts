@@ -50,6 +50,7 @@ export type UserInputSnapshot = {
     question: string;
   }>;
   requested_at?: string;
+  requester_id?: string;
   resolved_at?: string;
   responder_id?: string;
   room_id?: string;

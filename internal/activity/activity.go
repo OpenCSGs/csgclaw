@@ -140,7 +140,7 @@ type ResourceLink struct {
 }
 
 // StructuredOutputArtifact is the normalized result of decoding CSGClaw
-// control records from one completed command output.
+// control records from one completed runtime output.
 type StructuredOutputArtifact struct {
 	RequestUserInput *RequestUserInputArgs `json:"requestUserInput,omitempty"`
 	ResourceLinks    []ResourceLink        `json:"resourceLinks,omitempty"`
@@ -169,6 +169,7 @@ type UserInputSnapshot struct {
 	Channel       string                             `json:"channel,omitempty"`
 	RoomID        string                             `json:"room_id,omitempty"`
 	ThreadRootID  string                             `json:"thread_root_id,omitempty"`
+	RequesterID   string                             `json:"requester_id,omitempty"`
 	Status        UserInputStatus                    `json:"status"`
 	Questions     []UserInputQuestionSnapshot        `json:"questions"`
 	Answers       map[string]UserInputAnswerSnapshot `json:"answers,omitempty"`

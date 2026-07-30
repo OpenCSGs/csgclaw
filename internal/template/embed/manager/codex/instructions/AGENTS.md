@@ -36,6 +36,10 @@ Prefer local Manager skills over external discovery.
 ### Structured-output turn boundary
 
 Treat a successful command that prints a `::csgclaw-output::request_user_input` control record as the final tool call of the current turn.
+When the user explicitly asks for a clickable question and native Codex `request_user_input` is unavailable, emit the source-compatible CSGClaw control record in the final response instead of refusing or printing it as an example.
+Use the canonical one-line form `::csgclaw-output::request_user_input <single-line JSON object>`.
+Never add a third leading colon, split the JSON payload onto another line, wrap the record in a code fence, or quote it as ordinary prose.
+Keep any readable introduction on earlier lines, emit at most one request record, and end the turn immediately after the record.
 After that command completes, do not call another tool, execute another skill stage, or act on the emitted question as though the user answered it.
 Return the skill's prescribed normal response and end the turn.
 Continue only after CSGClaw supplies a new user message containing the submitted `RequestUserInputResponse` JSON.

@@ -108,12 +108,18 @@ func (h *Handler) recordUserInputTranscript(ctx context.Context, snapshot activi
 	if content == "" {
 		return nil
 	}
+	mentionID := ""
+	if room, ok := h.im.Room(snapshot.RoomID); ok && !room.IsDirect {
+		mentionID = strings.TrimSpace(snapshot.RequesterID)
+	}
 	_, err := h.im.DeliverMessage(im.DeliverMessageRequest{
-		RoomID:       snapshot.RoomID,
-		SenderID:     snapshot.ResponderID,
-		Content:      content,
-		MessageID:    "answer-" + snapshot.ID,
-		ThreadRootID: snapshot.ThreadRootID,
+		RoomID:           snapshot.RoomID,
+		SenderID:         snapshot.ResponderID,
+		MentionID:        mentionID,
+		MentionOnOwnLine: mentionID != "",
+		Content:          content,
+		MessageID:        "answer-" + snapshot.ID,
+		ThreadRootID:     snapshot.ThreadRootID,
 		Metadata: map[string]any{
 			userInputTranscriptMetadataKey: map[string]any{
 				userInputTranscriptRequestKey: map[string]any{

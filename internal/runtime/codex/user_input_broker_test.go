@@ -33,7 +33,7 @@ func TestUserInputBrokerRespondsWithCodexLabelsAndNotes(t *testing.T) {
 	}()
 
 	requestID := waitForUserInputRequest(t, sink)
-	if _, err := broker.Bind(requestID, "csgclaw", "room-1", ""); err != nil {
+	if _, err := broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent"); err != nil {
 		t.Fatalf("Bind() error = %v", err)
 	}
 	snapshot, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
@@ -46,8 +46,8 @@ func TestUserInputBrokerRespondsWithCodexLabelsAndNotes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Respond() error = %v", err)
 	}
-	if snapshot.Status != activity.UserInputStatusAnswered || snapshot.ResponderID != "user-1" {
-		t.Fatalf("snapshot = %+v, want answered by user-1", snapshot)
+	if snapshot.Status != activity.UserInputStatusAnswered || snapshot.ResponderID != "user-1" || snapshot.RequesterID != "pt-agent" {
+		t.Fatalf("snapshot = %+v, want pt-agent question answered by user-1", snapshot)
 	}
 
 	select {
@@ -82,7 +82,7 @@ func TestUserInputBrokerRecordsTranscriptBeforeReleasingRuntime(t *testing.T) {
 	}()
 
 	requestID := waitForUserInputRequest(t, sink)
-	if _, err := broker.Bind(requestID, "csgclaw", "room-1", "thread-1"); err != nil {
+	if _, err := broker.Bind(requestID, "csgclaw", "room-1", "thread-1", "pt-agent"); err != nil {
 		t.Fatalf("Bind() error = %v", err)
 	}
 	recorded := make(chan activity.UserInputSnapshot, 1)
@@ -109,7 +109,7 @@ func TestUserInputBrokerRecordsTranscriptBeforeReleasingRuntime(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("transcript recorder did not run")
 	}
-	if snapshot.ThreadRootID != "thread-1" || snapshot.ResponderID != "user-1" || snapshot.Answers["kind"].OptionLabel != "Standard" {
+	if snapshot.ThreadRootID != "thread-1" || snapshot.RequesterID != "pt-agent" || snapshot.ResponderID != "user-1" || snapshot.Answers["kind"].OptionLabel != "Standard" {
 		t.Fatalf("recorded snapshot = %+v", snapshot)
 	}
 	select {
@@ -227,7 +227,7 @@ func TestUserInputBrokerSynthesizesOtherAndRedactsSecrets(t *testing.T) {
 	}()
 
 	requestID := waitForUserInputRequest(t, sink)
-	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "")
+	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent")
 	snapshot, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
 		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "user-1",
 		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
@@ -268,7 +268,7 @@ func TestUserInputBrokerFirstResponseWinsAndValidatesRoom(t *testing.T) {
 	}()
 
 	requestID := waitForUserInputRequest(t, sink)
-	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "")
+	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent")
 	wrongRoom := activity.UserInputResponseRequest{
 		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-2", ResponderID: "user-1",
 		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
