@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app, autoUpdater } from "electron";
 import type { DesktopUpdateStatus } from "../shared/desktopBridge.types";
+import { DesktopPlatform } from "../shared/desktopEnvironment";
 import { usesMicrosoftStoreUpdates } from "./updatePolicy";
 
 export class DesktopUpdater {
@@ -36,7 +37,7 @@ export class DesktopUpdater {
       });
       return;
     }
-    if (process.platform === "linux") {
+    if (process.platform === DesktopPlatform.Linux) {
       this.updateStatus({
         state: "unsupported",
         currentVersion: app.getVersion(),

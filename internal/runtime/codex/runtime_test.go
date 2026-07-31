@@ -20,6 +20,8 @@ import (
 	"csgclaw/internal/codexcli"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
+
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 type fakeBinaryProvider struct {
@@ -2404,6 +2406,79 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		if !strings.Contains(first, expected) {
 			t.Fatalf("managed config should contain sandbox directive %q:\n%s", expected, first)
 		}
+	}
+}
+
+func TestBuildSandboxConfigBlockUsesUnelevatedWindowsSandbox(t *testing.T) {
+	config := buildSandboxConfigBlock()
+	for _, want := range []string{
+		`sandbox_mode = "workspace-write"`,
+		`sandbox_workspace_write.network_access = true`,
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("cross-platform sandbox config missing %q:\n%s", want, config)
+		}
+	}
+	if strings.Contains(config, "windows") {
+		t.Fatalf("cross-platform sandbox config contains a platform override:\n%s", config)
+	}
+	if config := buildWindowsSandboxConfigBlock(); !strings.Contains(config, `sandbox = "unelevated"`) {
+		t.Fatalf("Windows sandbox config does not select restricted-token mode:\n%s", config)
+	}
+}
+
+func TestConfigureCodexHomeConfigStripsInheritedElevatedWindowsSandbox(t *testing.T) {
+	existing := strings.Join([]string{
+		`[windows]`,
+		`sandbox = "elevated"`,
+		`sandbox_private_desktop = false`,
+		``,
+	}, "\n")
+	config := configureCodexHomeConfigWithWorkspaceForPlatform(
+		existing,
+		agentruntime.Profile{},
+		nil,
+		"",
+		true,
+	)
+
+	if strings.Contains(config, `sandbox = "elevated"`) || strings.Contains(config, `windows.sandbox = "elevated"`) {
+		t.Fatalf("managed config retained elevated Windows sandbox:\n%s", config)
+	}
+	if !strings.Contains(config, `sandbox = "unelevated"`) {
+		t.Fatalf("managed config did not select the unelevated Windows sandbox:\n%s", config)
+	}
+	if !strings.Contains(config, "sandbox_private_desktop = false") {
+		t.Fatalf("managed config removed unrelated Windows sandbox setting:\n%s", config)
+	}
+	var parsed map[string]any
+	if err := toml.Unmarshal([]byte(config), &parsed); err != nil {
+		t.Fatalf("managed Windows sandbox config is invalid TOML: %v\n%s", err, config)
+	}
+
+	nonWindowsConfig := configureCodexHomeConfigWithWorkspaceForPlatform(
+		existing,
+		agentruntime.Profile{},
+		nil,
+		"",
+		false,
+	)
+	if !strings.Contains(nonWindowsConfig, `sandbox = "elevated"`) {
+		t.Fatalf("non-Windows config unexpectedly changed the Windows-only preference:\n%s", nonWindowsConfig)
+	}
+
+	dottedConfig := configureCodexHomeConfigWithWorkspaceForPlatform(
+		`windows.sandbox = "elevated"`+"\n",
+		agentruntime.Profile{},
+		nil,
+		"",
+		true,
+	)
+	if strings.Contains(dottedConfig, `"elevated"`) || !strings.Contains(dottedConfig, `sandbox = "unelevated"`) {
+		t.Fatalf("managed config did not replace a dotted elevated Windows sandbox:\n%s", dottedConfig)
+	}
+	if err := toml.Unmarshal([]byte(dottedConfig), &parsed); err != nil {
+		t.Fatalf("managed dotted Windows sandbox config is invalid TOML: %v\n%s", err, dottedConfig)
 	}
 }
 

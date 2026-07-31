@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
+import {
+  csgclawExecutableForPlatform,
+  goArchForDesktopArch,
+  goOSForDesktopPlatform,
+} from "../../shared/desktopEnvironment";
 
 export type BackendBundle = {
   executable: string;
@@ -8,9 +13,9 @@ export type BackendBundle = {
 };
 
 export function locateBackendBundle(): BackendBundle {
-  const binaryName = process.platform === "win32" ? "csgclaw.exe" : "csgclaw";
-  const goOS = process.platform === "win32" ? "windows" : process.platform;
-  const goArch = process.arch === "x64" ? "amd64" : process.arch;
+  const binaryName = csgclawExecutableForPlatform(process.platform);
+  const goOS = goOSForDesktopPlatform(process.platform);
+  const goArch = goArchForDesktopArch(process.arch);
   const configured = process.env.CSGCLAW_DESKTOP_BACKEND?.trim();
   const candidates = configured
     ? [configured]

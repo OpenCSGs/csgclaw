@@ -39,6 +39,9 @@ import { fetchPlatformUpgradeStatus } from "@/shared/platform/updatePort";
 
 const WORKSPACE_QUERY_SCOPE = "workspace";
 export const WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS = 1_500;
+// The manager can become ready before configured workers finish restoring.
+// Keep refreshing the complete roster at a lower rate during the startup window.
+export const WORKSPACE_AGENTS_SETTLE_POLL_INTERVAL_MS = 5_000;
 export const WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS = 120_000;
 
 export function workspaceAgentsStartupRefetchInterval(
@@ -49,7 +52,9 @@ export function workspaceAgentsStartupRefetchInterval(
     return false;
   }
   const manager = items?.find(isManagerAgent);
-  return manager && isAgentRunning(manager) ? false : WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS;
+  return manager && isAgentRunning(manager)
+    ? WORKSPACE_AGENTS_SETTLE_POLL_INTERVAL_MS
+    : WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS;
 }
 
 export const workspaceQueryKeys = {

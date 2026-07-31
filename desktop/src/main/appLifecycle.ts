@@ -2,6 +2,12 @@ import path from "node:path";
 import { app, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { DesktopIPC, type DesktopUpdateStatus } from "../shared/desktopBridge.types";
 import { registerIPCHandlers } from "./ipcHandlers";
+import {
+  desktopIconResourcePath,
+  isMacOSDesktop,
+  isWindowsDesktop,
+  windowsAppIconPath,
+} from "./platform";
 import { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
 import { DesktopUpdater } from "./updater";
 import { WindowManager } from "./windowManager";
@@ -209,14 +215,8 @@ export class AppLifecycle {
   }
 
   private createTray(): void {
-    const svg = [
-      '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">',
-      '<path fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"',
-      ' d="M7 5 4 8v7l3 3h8l3-3V8l-3-3-2 3H9L7 5Zm1 8h.01M14 13h.01"/>',
-      "</svg>",
-    ].join("");
-    const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
-    if (process.platform === "darwin") {
+    const icon = isWindowsDesktop ? this.loadWindowsIcon() : this.createTemplateTrayIcon();
+    if (isMacOSDesktop) {
       icon.setTemplateImage(true);
     }
     this.tray = new Tray(icon);
@@ -232,7 +232,7 @@ export class AppLifecycle {
   }
 
   private configureDockThemeIcon(): void {
-    if (process.platform !== "darwin" || !app.dock) {
+    if (!isMacOSDesktop || !app.dock) {
       return;
     }
     const iconDirectory = app.isPackaged
@@ -252,20 +252,44 @@ export class AppLifecycle {
     updateDockIcon();
   }
 
+  private createTemplateTrayIcon(): Electron.NativeImage {
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">',
+      '<path fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"',
+      ' d="M7 5 4 8v7l3 3h8l3-3V8l-3-3-2 3H9L7 5Zm1 8h.01M14 13h.01"/>',
+      "</svg>",
+    ].join("");
+    return nativeImage.createFromDataURL(
+      `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`,
+    );
+  }
+
+  private loadWindowsIcon(): Electron.NativeImage {
+    const markIconName = nativeTheme.shouldUseDarkColors
+      ? "csgclaw-mark-dark.svg"
+      : "csgclaw-mark-light.svg";
+    const markIcon = nativeImage.createFromPath(desktopIconResourcePath(markIconName));
+    if (!markIcon.isEmpty()) {
+      return markIcon.resize({ width: 22, height: 22 });
+    }
+    const icon = nativeImage.createFromPath(windowsAppIconPath());
+    return icon.isEmpty() ? this.createTemplateTrayIcon() : icon;
+  }
+
   private createApplicationMenu(): void {
+    if (!isMacOSDesktop) {
+      Menu.setApplicationMenu(null);
+      return;
+    }
     const template: Electron.MenuItemConstructorOptions[] = [
-      ...(process.platform === "darwin"
-        ? [
-            {
-              label: app.name,
-              submenu: [
-                { role: "about" as const },
-                { type: "separator" as const },
-                { label: "Quit CSGClaw", accelerator: "Command+Q", click: () => void this.requestQuit(true) },
-              ],
-            },
-          ]
-        : []),
+      {
+        label: app.name,
+        submenu: [
+          { role: "about" },
+          { type: "separator" },
+          { label: "Quit CSGClaw", accelerator: "Command+Q", click: () => void this.requestQuit(true) },
+        ],
+      },
       {
         label: "Edit",
         submenu: [

@@ -99,7 +99,7 @@ export class SidecarSupervisor extends EventEmitter {
     if (configPath) {
       args.push("--config", configPath);
     }
-    const childEnvironment = await this.resolveChildEnvironment();
+    const childEnvironment = await this.resolveChildEnvironment(bundle.root);
     const child = spawn(bundle.executable, args, {
       cwd: bundle.root,
       env: childEnvironment,
@@ -242,8 +242,9 @@ export class SidecarSupervisor extends EventEmitter {
     });
   }
 
-  private resolveChildEnvironment(): Promise<NodeJS.ProcessEnv> {
+  private resolveChildEnvironment(bundleRoot: string): Promise<NodeJS.ProcessEnv> {
     this.childEnvironmentPromise ??= resolveSidecarEnvironment({
+      executableSearchPathEntries: [path.join(bundleRoot, "bin")],
       homeDirectory: app.getPath("home"),
       resolveSystemProxy: (url) => session.defaultSession.resolveProxy(url),
     });

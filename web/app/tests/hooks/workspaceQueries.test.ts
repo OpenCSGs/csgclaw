@@ -1,4 +1,5 @@
 import {
+  WORKSPACE_AGENTS_SETTLE_POLL_INTERVAL_MS,
   WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS,
   WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS,
   workspaceAgentsStartupRefetchInterval,
@@ -13,6 +14,14 @@ const manager = (status: string): AgentLike => ({
   status,
 });
 
+const worker = (status: string): AgentLike => ({
+  id: "u-worker",
+  name: "worker",
+  role: "worker",
+  runtime_kind: "picoclaw_sandbox",
+  status,
+});
+
 describe("workspaceAgentsStartupRefetchInterval", () => {
   it("polls every 1.5 seconds until the manager is running", () => {
     expect(workspaceAgentsStartupRefetchInterval(undefined, 0)).toBe(WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS);
@@ -21,8 +30,10 @@ describe("workspaceAgentsStartupRefetchInterval", () => {
     );
   });
 
-  it("stops immediately when the manager is running", () => {
-    expect(workspaceAgentsStartupRefetchInterval([manager("running")], 1_000)).toBe(false);
+  it("keeps refreshing the complete agent list after the manager starts", () => {
+    expect(workspaceAgentsStartupRefetchInterval([manager("running"), worker("stopped")], 1_000)).toBe(
+      WORKSPACE_AGENTS_SETTLE_POLL_INTERVAL_MS,
+    );
   });
 
   it("stops after the two-minute startup window", () => {

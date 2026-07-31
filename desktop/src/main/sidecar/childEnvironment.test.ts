@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DesktopPlatform } from "../../shared/desktopEnvironment";
 import {
   mergeExecutableSearchPath,
   parseNullSeparatedEnvironment,
@@ -27,7 +28,7 @@ test("uses the login shell PATH before Electron's inherited macOS PATH", async (
     },
     homeDirectory: "/Users/test",
     loginShell: "/bin/zsh",
-    platform: "darwin",
+    platform: DesktopPlatform.MacOS,
     runCommand,
   });
 
@@ -56,7 +57,7 @@ test("keeps the inherited environment when login shell discovery fails", async (
     baseEnvironment: { PATH: "/custom/bin:/usr/bin" },
     homeDirectory: "/home/test",
     loginShell: "/bin/bash",
-    platform: "linux",
+    platform: DesktopPlatform.Linux,
     runCommand: async () => {
       throw new Error("shell startup timed out");
     },
@@ -81,7 +82,7 @@ test("uses the system proxy without importing shell proxy settings", async () =>
     baseEnvironment: { PATH: "/usr/bin:/bin" },
     homeDirectory: "/Users/test",
     loginShell: "/bin/zsh",
-    platform: "darwin",
+    platform: DesktopPlatform.MacOS,
     runCommand: async () =>
       [
         "PATH=/opt/homebrew/bin:/usr/bin",
@@ -112,7 +113,7 @@ test("uses an interactive non-login shell for Linux terminal configuration", asy
     baseEnvironment: { PATH: "/usr/bin:/bin" },
     homeDirectory: "/home/test",
     loginShell: "/bin/bash",
-    platform: "linux",
+    platform: DesktopPlatform.Linux,
     runCommand,
   });
 
@@ -154,14 +155,22 @@ test("uses Windows user and machine environment without overriding an explicit C
       CSGCLAW_CODEX_PATH: "D:\\codex\\codex.exe",
       SystemRoot: "C:\\Windows",
     },
+    executableSearchPathEntries: [
+      "C:\\Program Files\\CSGClaw\\resources\\backend\\csgclaw\\bin",
+    ],
     homeDirectory: "C:\\Users\\test",
-    platform: "win32",
+    platform: DesktopPlatform.Windows,
     runCommand,
   });
 
   assert.equal(
     env.Path,
-    "C:\\Windows\\System32;C:\\Users\\test\\AppData\\Roaming\\npm;C:\\Tools",
+    [
+      "C:\\Program Files\\CSGClaw\\resources\\backend\\csgclaw\\bin",
+      "C:\\Windows\\System32",
+      "C:\\Users\\test\\AppData\\Roaming\\npm",
+      "C:\\Tools",
+    ].join(";"),
   );
   assert.equal(env.CSGCLAW_CODEX_PATH, "D:\\codex\\codex.exe");
   assert.equal(env.Node_Options, undefined);
@@ -182,9 +191,9 @@ test("parses only allowlisted values from null-separated shell output", () => {
 test("deduplicates Windows PATH entries case-insensitively", () => {
   assert.equal(
     mergeExecutableSearchPath(
-      "C:\\Tools;C:\\Windows",
+      ["C:\\Tools", "C:\\Windows"],
       ["c:\\tools;D:\\Bin"],
-      "win32",
+      DesktopPlatform.Windows,
     ),
     "C:\\Tools;C:\\Windows;D:\\Bin",
   );

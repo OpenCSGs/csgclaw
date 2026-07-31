@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { userInfo } from "node:os";
 import path from "node:path";
+import { DesktopPlatform } from "../../shared/desktopEnvironment";
 import { resolveSystemProxyEnvironment, type SystemProxyResolver } from "./systemProxy";
 
 const ENVIRONMENT_CAPTURE_TIMEOUT_MS = 5_000;
@@ -52,6 +53,7 @@ export type EnvironmentCommandRunner = (
 
 export type ResolveSidecarEnvironmentOptions = {
   baseEnvironment?: NodeJS.ProcessEnv;
+  executableSearchPathEntries?: readonly string[];
   homeDirectory: string;
   loginShell?: string;
   platform?: NodeJS.Platform;
@@ -61,21 +63,21 @@ export type ResolveSidecarEnvironmentOptions = {
 
 export async function resolveSidecarEnvironment({
   baseEnvironment = process.env,
+  executableSearchPathEntries = [],
   homeDirectory,
   loginShell,
   platform = process.platform,
   runCommand = runEnvironmentCommand,
   resolveSystemProxy,
 }: ResolveSidecarEnvironmentOptions): Promise<NodeJS.ProcessEnv> {
-  // Keep executable discovery in the Go server unchanged. Electron only
-  // restores the environment that a newly opened terminal would normally
-  // provide before it starts the same server entrypoint.
+  // Restore the environment that a newly opened terminal would normally
+  // provide, while keeping packaged helper executables ahead of host tools.
   const env = sanitizeEnvironment(baseEnvironment, platform);
   const currentPath = environmentValue(env, "PATH", platform);
   let discovered: NodeJS.ProcessEnv = {};
 
   try {
-    if (platform === "darwin" || platform === "linux") {
+    if (platform === DesktopPlatform.MacOS || platform === DesktopPlatform.Linux) {
       const shell = resolveLoginShell(env, loginShell, platform);
       const output = await runCommand(
         shell,
@@ -83,7 +85,7 @@ export async function resolveSidecarEnvironment({
         commandOptions(env),
       );
       discovered = parseNullSeparatedEnvironment(output);
-    } else if (platform === "win32") {
+    } else if (platform === DesktopPlatform.Windows) {
       const powershell = resolveWindowsPowerShell(env);
       const output = await runCommand(
         powershell,
@@ -109,8 +111,8 @@ export async function resolveSidecarEnvironment({
     env,
     "PATH",
     mergeExecutableSearchPath(
-      discoveredPath,
-      [currentPath, ...platformPathFallbacks(platform, homeDirectory)],
+      executableSearchPathEntries,
+      [discoveredPath, currentPath, ...platformPathFallbacks(platform, homeDirectory)],
       platform,
     ),
     platform,
@@ -164,22 +166,22 @@ export function parseNullSeparatedEnvironment(
 }
 
 export function mergeExecutableSearchPath(
-  primary: string | undefined,
+  primary: readonly string[],
   fallbacks: Array<string | undefined>,
   platform: NodeJS.Platform,
 ): string {
-  const delimiter =
-    platform === "win32" ? path.win32.delimiter : path.posix.delimiter;
+  const isWindows = platform === DesktopPlatform.Windows;
+  const delimiter = isWindows ? path.win32.delimiter : path.posix.delimiter;
   const seen = new Set<string>();
   const entries: string[] = [];
 
-  for (const value of [primary, ...fallbacks]) {
+  for (const value of [...primary, ...fallbacks]) {
     for (const rawEntry of (value || "").split(delimiter)) {
       const entry = rawEntry.trim();
       if (!entry) {
         continue;
       }
-      const comparisonKey = platform === "win32" ? entry.toLowerCase() : entry;
+      const comparisonKey = isWindows ? entry.toLowerCase() : entry;
       if (seen.has(comparisonKey)) {
         continue;
       }
@@ -213,7 +215,7 @@ function resolveLoginShell(
   if (configured && path.posix.isAbsolute(configured)) {
     return configured;
   }
-  return platform === "darwin" ? "/bin/zsh" : "/bin/sh";
+  return platform === DesktopPlatform.MacOS ? "/bin/zsh" : "/bin/sh";
 }
 
 function operatingSystemLoginShell(): string | undefined {
@@ -229,7 +231,7 @@ function terminalShellArguments(
   platform: NodeJS.Platform,
 ): string[] {
   const shellName = path.posix.basename(shell).toLowerCase();
-  const useLoginShell = platform === "darwin";
+  const useLoginShell = platform === DesktopPlatform.MacOS;
   if (shellName === "fish") {
     return [
       ...(useLoginShell ? ["--login"] : []),
@@ -245,7 +247,7 @@ function terminalShellArguments(
 }
 
 function resolveWindowsPowerShell(env: NodeJS.ProcessEnv): string {
-  const systemRoot = environmentValue(env, "SystemRoot", "win32")?.trim();
+  const systemRoot = environmentValue(env, "SystemRoot", DesktopPlatform.Windows)?.trim();
   if (!systemRoot) {
     return "powershell.exe";
   }
@@ -287,7 +289,7 @@ function platformPathFallbacks(
   platform: NodeJS.Platform,
   homeDirectory: string,
 ): string[] {
-  if (platform === "darwin") {
+  if (platform === DesktopPlatform.MacOS) {
     return [
       path.join(homeDirectory, ".docker", "bin"),
       "/opt/homebrew/bin",
@@ -299,7 +301,7 @@ function platformPathFallbacks(
       "/sbin",
     ];
   }
-  if (platform === "linux") {
+  if (platform === DesktopPlatform.Linux) {
     return [
       path.join(homeDirectory, ".local", "bin"),
       "/usr/local/bin",
@@ -317,7 +319,7 @@ function environmentValue(
   key: string,
   platform: NodeJS.Platform,
 ): string | undefined {
-  if (platform !== "win32") {
+  if (platform !== DesktopPlatform.Windows) {
     return env[key];
   }
   const existingKey = Object.keys(env).find(
@@ -332,7 +334,7 @@ function setEnvironmentValue(
   value: string,
   platform: NodeJS.Platform,
 ): void {
-  if (platform !== "win32") {
+  if (platform !== DesktopPlatform.Windows) {
     env[key] = value;
     return;
   }
@@ -347,7 +349,7 @@ function deleteEnvironmentValue(
   key: string,
   platform: NodeJS.Platform,
 ): void {
-  if (platform !== "win32") {
+  if (platform !== DesktopPlatform.Windows) {
     delete env[key];
     return;
   }

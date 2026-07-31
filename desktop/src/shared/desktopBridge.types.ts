@@ -1,3 +1,7 @@
+import { DesktopPlatform } from "./desktopEnvironment";
+
+export { DesktopPlatform } from "./desktopEnvironment";
+
 export const DesktopIPC = {
   checkForUpdates: "csgclaw:desktop:check-for-updates",
   getRuntimeInfo: "csgclaw:desktop:get-runtime-info",
@@ -7,7 +11,6 @@ export const DesktopIPC = {
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
 
-export type DesktopPlatform = "darwin" | "win32" | "linux";
 export type OAuthPurpose = "opencsg-auth" | "github-connector";
 
 export type DesktopRuntimeInfo = {

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { BrowserWindow, session, type Session } from "electron";
 import { installNavigationPolicy } from "./navigationPolicy";
+import { isWindowsDesktop, windowsAppIconPath } from "./platform";
 import { installPermissionPolicy } from "./permissionPolicy";
 
 export type WindowManagerOptions = {
@@ -42,6 +43,11 @@ export class WindowManager {
       show: false,
       title: "CSGClaw",
       backgroundColor: "#0d1017",
+      ...(isWindowsDesktop
+        ? {
+            icon: windowsAppIconPath(),
+          }
+        : {}),
       webPreferences: {
         preload: path.join(__dirname, "..", "preload", "index.js"),
         partition: "persist:csgclaw-desktop",

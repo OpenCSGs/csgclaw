@@ -8,10 +8,19 @@ import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import {
+  desktopArchForGoArch,
+  DesktopPlatform,
+  GoOperatingSystem,
+  goArchForDesktopArch,
+  goOSForDesktopPlatform,
+} from "./src/shared/desktopEnvironment";
 
-const targetGoOS = process.env.CSGCLAW_DESKTOP_GOOS || electronPlatformToGoOS(process.platform);
-const targetGoArch = process.env.CSGCLAW_DESKTOP_GOARCH || electronArchToGoArch(process.arch);
-const targetElectronArch = process.env.CSGCLAW_DESKTOP_ARCH || goArchToElectronArch(targetGoArch);
+const targetGoOS = process.env.CSGCLAW_DESKTOP_GOOS || goOSForDesktopPlatform(process.platform);
+const targetGoArch = process.env.CSGCLAW_DESKTOP_GOARCH || goArchForDesktopArch(process.arch);
+const targetElectronArch = process.env.CSGCLAW_DESKTOP_ARCH || desktopArchForGoArch(targetGoArch);
+const isMacTarget = targetGoOS === GoOperatingSystem.MacOS;
+const isWindowsTarget = targetGoOS === GoOperatingSystem.Windows;
 const backendResources = path.resolve(
   __dirname,
   "..",
@@ -25,10 +34,14 @@ const iconDirectory = path.resolve(__dirname, "resources", "icons");
 const macIcon = path.join(iconDirectory, "csgclaw-theme.icns");
 const macDockLightIcon = path.join(iconDirectory, "csgclaw-dock-light.png");
 const macDockDarkIcon = path.join(iconDirectory, "csgclaw-dock-dark.png");
+const markLightIcon = path.join(iconDirectory, "csgclaw-mark-light.svg");
+const markDarkIcon = path.join(iconDirectory, "csgclaw-mark-dark.svg");
 const windowsIcon = path.join(iconDirectory, "csgclaw.ico");
 const linuxIcon = path.join(iconDirectory, "csgclaw.png");
+const windowsIconURL =
+  "https://raw.githubusercontent.com/OpenCSGs/csgclaw/main/desktop/resources/icons/csgclaw.ico";
 const msixAssets = path.resolve(__dirname, "resources", "msix");
-const appIcon = targetGoOS === "darwin" ? macIcon : targetGoOS === "windows" ? windowsIcon : linuxIcon;
+const appIcon = isMacTarget ? macIcon : isWindowsTarget ? windowsIcon : linuxIcon;
 const adHocEntitlements = path.resolve(
   __dirname,
   "resources",
@@ -51,7 +64,7 @@ const hasAppleNotarizationCredentials = Boolean(
 const macSignIdentity =
   requestedMacSignIdentity || (!hasAppleNotarizationCredentials ? "-" : undefined);
 const usesAdHocMacSignature = macSignIdentity === "-";
-const enableCookieEncryption = targetGoOS !== "darwin" || !usesAdHocMacSignature;
+const enableCookieEncryption = !isMacTarget || !usesAdHocMacSignature;
 const windowsSign =
   process.env.CSGCLAW_WINDOWS_SIGN_TOOL && process.env.CSGCLAW_WINDOWS_SIGN_PARAMS
     ? {
@@ -63,7 +76,7 @@ const windowsPackageChannel = resolveWindowsPackageChannel(
   process.env.CSGCLAW_DESKTOP_WINDOWS_CHANNEL,
 );
 const makeSquirrel = windowsPackageChannel !== "store";
-const makeMSIX = targetGoOS === "windows" && windowsPackageChannel !== "website";
+const makeMSIX = isWindowsTarget && windowsPackageChannel !== "website";
 const msixIdentity = makeMSIX
   ? requireEnvironmentVariables([
       "CSGCLAW_MSIX_IDENTITY_NAME",
@@ -82,7 +95,10 @@ const config: ForgeConfig = {
     extraResource: [
       backendResources,
       updateConfig,
-      ...(targetGoOS === "darwin" ? [macDockLightIcon, macDockDarkIcon] : []),
+      markLightIcon,
+      markDarkIcon,
+      ...(isMacTarget ? [macDockLightIcon, macDockDarkIcon] : []),
+      ...(isWindowsTarget ? [windowsIcon] : []),
     ],
     icon: appIcon,
     name: "CSGClaw",
@@ -126,9 +142,12 @@ const config: ForgeConfig = {
       ? [
           new MakerSquirrel({
             name: "csgclaw_desktop",
+            iconUrl: windowsIconURL,
             setupIcon: windowsIcon,
             setupExe: `CSGClaw-Desktop-${desktopVersion}-${targetElectronArch}-Setup.exe`,
-            ...(updateBaseURL ? { remoteReleases: `${updateBaseURL}/win32/${targetElectronArch}` } : {}),
+            ...(updateBaseURL
+              ? { remoteReleases: `${updateBaseURL}/${DesktopPlatform.Windows}/${targetElectronArch}` }
+              : {}),
             ...(windowsSign ? { windowsSign } : {}),
             ...(process.env.CSGCLAW_WINDOWS_CERTIFICATE_FILE &&
             process.env.CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD
@@ -163,8 +182,10 @@ const config: ForgeConfig = {
         ]
       : []),
     new MakerZIP(
-      updateBaseURL ? { macUpdateManifestBaseUrl: `${updateBaseURL}/darwin/${targetElectronArch}` } : {},
-      ["darwin"],
+      updateBaseURL
+        ? { macUpdateManifestBaseUrl: `${updateBaseURL}/${DesktopPlatform.MacOS}/${targetElectronArch}` }
+        : {},
+      [DesktopPlatform.MacOS],
     ),
     new MakerDMG({
       format: "ULFO",
@@ -200,18 +221,6 @@ const config: ForgeConfig = {
     }),
   },
 };
-
-function electronArchToGoArch(arch: string): string {
-  return arch === "x64" ? "amd64" : arch;
-}
-
-function electronPlatformToGoOS(platform: NodeJS.Platform): string {
-  return platform === "win32" ? "windows" : platform;
-}
-
-function goArchToElectronArch(arch: string): string {
-  return arch === "amd64" ? "x64" : arch;
-}
 
 function normalizeHTTPSBaseURL(rawURL: string | undefined): string {
   const value = rawURL?.trim();

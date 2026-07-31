@@ -53,8 +53,9 @@ export function CreateTeamModal({
           <label className="field">
             <span>{requiredFieldLabel(t("teamNameLabel"))}</span>
             <input
+              autoFocus
               value={teamTitle}
-              onInput={(event) => onTeamTitleChange(event.currentTarget.value)}
+              onChange={(event) => onTeamTitleChange(event.currentTarget.value)}
               placeholder={t("teamNamePlaceholder")}
             />
           </label>

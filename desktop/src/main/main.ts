@@ -1,12 +1,15 @@
 import { app, dialog } from "electron";
 import electronSquirrelStartup from "electron-squirrel-startup";
 import { AppLifecycle } from "./appLifecycle";
+import { isWindowsDesktop } from "./platform";
 
 app.enableSandbox();
 app.setName("CSGClaw");
-if (process.platform !== "win32" || !process.windowsStore) {
+if (!isWindowsDesktop || !process.windowsStore) {
   app.setAppUserModelId(
-    process.platform === "win32" ? "com.squirrel.csgclaw_desktop.CSGClaw" : "com.opencsg.csgclaw.desktop",
+    isWindowsDesktop
+      ? "com.squirrel.csgclaw_desktop.CSGClaw"
+      : "com.opencsg.csgclaw.desktop",
   );
 }
 app.setAppLogsPath();

@@ -1,5 +1,5 @@
-import { render } from "@testing-library/react";
-import { CreateRoomModal, InviteMembersModal } from "@/pages/WorkspacePage/components/WorkspaceModals";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { CreateRoomModal, CreateTeamModal, InviteMembersModal } from "@/pages/WorkspacePage/components/WorkspaceModals";
 import type { TranslateFn } from "@/models/conversations";
 
 const t: TranslateFn = (key) => key;
@@ -55,5 +55,29 @@ describe("WorkspaceModals", () => {
       "src",
       avatarUser.avatar,
     );
+  });
+
+  it("forwards Windows and IME-compatible team name change events", () => {
+    const onTeamTitleChange = vi.fn();
+    render(
+      <CreateTeamModal
+        candidates={[]}
+        onClose={() => {}}
+        onCreate={async () => {}}
+        onTeamMemberIDsChange={() => {}}
+        onTeamTitleChange={onTeamTitleChange}
+        submitError=""
+        t={t}
+        teamActionBusy={false}
+        teamMemberIDs={[]}
+        teamTitle=""
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("teamNamePlaceholder"), {
+      target: { value: "Windows 测试团队" },
+    });
+
+    expect(onTeamTitleChange).toHaveBeenCalledWith("Windows 测试团队");
   });
 });
