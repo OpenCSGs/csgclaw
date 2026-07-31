@@ -7,6 +7,7 @@ This document is generated from the HTTP routes and behaviors currently implemen
 - Except for streaming endpoints, requests and responses use `application/json`
 - Time fields use RFC3339 / ISO8601
 - Most non-streaming errors are returned as plain-text response bodies
+- Agent session response errors use an OpenAI-style JSON error envelope
 - SSE endpoints use `text/event-stream`
 - The current API is mainly grouped into 3 areas:
   - Core API: `/api/v1/*`
@@ -495,6 +496,49 @@ Catalog list and mutation responses use `mcpServers` as the direct server map.
 Creating or replacing one catalog entry uses `{ "name": "...", "config": { ... } }`;
 `config` is that entry's server configuration.
 
+#### `GET /api/v1/mcp-servers/remote`
+
+Lists installable remote MCP server summaries through CSGClaw. The browser only
+calls CSGClaw; the server resolves the effective OpenCSG Hub from the current
+login environment or explicitly configured official Hub and forwards the
+current user's Hub credential. Query parameters follow the remote Skill list
+style: `page` (default `1`), `per` (default `12`, maximum `100`), and `search`.
+
+Each item contains its Hub `id`, name, and display metadata. It intentionally
+does not contain its install configuration or headers. `description` is catalog
+metadata used to describe the MCP in CSGClaw; it is removed before a catalog
+entry is added to an agent runtime.
+
+```json
+{
+  "items": [
+    {
+      "id": "builtin:calendar",
+      "name": "calendar",
+      "description": "Calendar tools",
+      "url": "https://mcp.example.test/calendar",
+      "protocol": "streamable-http"
+    }
+  ],
+  "page": 1,
+  "per": 12,
+  "total": 13,
+  "next_page": 2
+}
+```
+
+#### `POST /api/v1/mcp-servers/remote/{id}/install`
+
+Installs or refreshes one remote MCP entry. CSGClaw fetches the Hub item's
+detail endpoint server-side, converts `protocol`, `url`, and `headers` into the
+catalog configuration, and uses the detail response's `name` as the catalog
+key. New remote entries default to `enabled: true`, `startup_timeout_sec: 30`,
+and `tool_timeout_sec: 60`. The response returns only the installed name:
+
+```json
+{ "name": "calendar" }
+```
+
 ### `DELETE /api/v1/agents/{id}`
 
 Deletes an agent.
@@ -780,7 +824,7 @@ Notes:
 These endpoints expose CSGClaw local IM data.
 
 For the thread model, invariants, hidden context behavior, and bridge rules, see
-[im-threads.md](./im-threads.md).
+[im-threads.md](im/im-threads.md).
 
 ### `GET /api/v1/bootstrap`
 
@@ -897,6 +941,23 @@ Request body:
 Compatibility field:
 
 - Legacy `participant_ids` is still accepted and mapped to `member_ids`
+
+### `PATCH /api/v1/rooms/{id}`
+
+Updates local room behavior.
+
+Request body:
+
+```json
+{
+  "notify_all_agents": true
+}
+```
+
+Group rooms are mention-only by default.
+When `notify_all_agents` is enabled, every human-authored message wakes every agent in the room, including messages with explicit mentions.
+Agent-authored replies still wake only explicitly mentioned agents to prevent response loops.
+Direct rooms always notify their agent and reject this update.
 
 ### `DELETE /api/v1/rooms/{id}`
 
@@ -1197,7 +1258,7 @@ agent-scoped routes for LLM provider traffic. The legacy `/api/bots/*` routes
 are not registered.
 
 For thread/session isolation rules used by runtime and Codex bridges, see
-[im-threads.md](./im-threads.md).
+[im-threads.md](im/im-threads.md).
 
 ### `GET /api/v1/channels/{channel}/participants/{id}/events`
 
@@ -1267,6 +1328,133 @@ PicoClaw outbound message shape is also accepted:
   }
 }
 ```
+
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
+
+Runs one turn through the selected agent and its real CSGClaw runtime.
+The `{agent}` selector accepts an agent ID or a unique case-insensitive agent name.
+This endpoint is separate from `/llm/responses`, which proxies model traffic without running the agent.
+
+The endpoint does not require a Bearer token.
+Anonymous is represented by the existing `user-admin` identity because admin is currently the only user.
+The server ignores caller identity and persists every input message with `sender_id: "user-admin"`.
+
+The client owns a global `session_id` containing 1-128 path-safe ASCII characters.
+The first request creates one non-direct room, while later requests reuse it.
+The room contains exactly admin and the selected agent, and the server keeps `notify_all_agents` enabled.
+The room title is immutable and uses this audit-friendly format:
+
+```text
+Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
+```
+
+The shortest request uses string input:
+
+```json
+{
+  "input": "Review this patch."
+}
+```
+
+Text-only user message items are also accepted:
+
+```json
+{
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Review this patch."
+        }
+      ]
+    }
+  ],
+  "stream": false
+}
+```
+
+With `stream: false` (the default), the successful response is a Responses-style subset:
+
+```json
+{
+  "id": "resp_7ac7b41c",
+  "object": "response",
+  "created_at": 1785300000,
+  "completed_at": 1785300012,
+  "status": "completed",
+  "model": "agent-reviewer",
+  "output": [
+    {
+      "id": "msg-1785300012000",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "The patch is ready.",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "session_id": "review-2026-07-29",
+    "room_id": "room-1785300000000",
+    "agent_id": "agent-reviewer"
+  }
+}
+```
+
+With `stream: true`, the endpoint returns `text/event-stream` and flushes an
+OpenAI Responses-compatible event stream. The event sequence is:
+
+```text
+response.created
+response.in_progress
+response.output_item.added
+response.content_part.added
+response.output_text.delta
+response.output_text.done
+response.content_part.done
+response.output_item.done
+response.completed
+```
+
+Each SSE block contains both `event: <type>` and a JSON `data:` payload whose
+`type` matches the event name and whose `sequence_number` increases from zero.
+For Codex agents, final-answer `item/agentMessage/delta` events emitted by Codex
+app-server are forwarded immediately as `response.output_text.delta`; commentary
+and unclassified agent-message events are not included in the answer. Completion
+events carry state only and do not repeat the full text; clients should build the
+visible answer by appending deltas. Runtimes that only publish a final message
+fall back to one text delta. The stream is established and `response.created` is
+flushed before the agent finishes.
+
+Only one turn may run for a session at a time.
+Different session IDs may run concurrently.
+Using the same global session with another agent returns `409 session_agent_conflict`.
+The server waits up to five minutes for a final agent response and returns `504 response_timeout` afterward.
+
+Errors use this JSON shape:
+
+```json
+{
+  "error": {
+    "message": "another response is already running for this session",
+    "type": "conflict_error",
+    "param": "session_id",
+    "code": "session_busy"
+  }
+}
+```
+
+The v1 endpoint accepts text input and optional text-output streaming.
+It rejects tools, instructions, non-user roles, attachments, and unknown request fields.
+See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
 ### `GET /api/v1/agents/{id}/llm/models`
 

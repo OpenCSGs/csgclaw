@@ -113,7 +113,7 @@ GET  /api/v1/messages?room_id=...&include_thread_replies=true
 csgclaw channel mirror 也在
 `/api/v1/channels/csgclaw/rooms/{room_id}/...` 下暴露等价 thread 路由。
 
-请求和响应结构见 [api.zh.md](./api.zh.md)。
+请求和响应结构见 [api.zh.md](../api.zh.md)。
 
 ## 事件
 

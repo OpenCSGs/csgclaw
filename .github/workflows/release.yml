@@ -27,6 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      desktop_matrix: ${{ steps.set-matrix.outputs.desktop_matrix }}
+      version: ${{ steps.release_meta.outputs.version }}
+      commit: ${{ steps.release_meta.outputs.commit }}
+      build_time: ${{ steps.release_meta.outputs.build_time }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +43,14 @@ jobs:
           from pathlib import Path
 
           rows = []
+          desktop_rows = []
+          desktop_runners = {
+              ("linux", "amd64"): "ubuntu-24.04",
+              ("linux", "arm64"): "ubuntu-24.04-arm",
+              ("darwin", "arm64"): "macos-15",
+              ("darwin", "amd64"): "macos-15-intel",
+              ("windows", "amd64"): "windows-2025",
+          }
           for line in Path("scripts/release-platforms.txt").read_text().splitlines():
               line = line.strip()
               if not line or line.startswith("#"):
@@ -47,9 +59,28 @@ jobs:
               if len(parts) != 2:
                   raise SystemExit(f"bad platform line: {line!r}")
               goos, goarch = parts
-              rows.append({"goos": goos, "goarch": goarch})
+              row = {"goos": goos, "goarch": goarch}
+              rows.append(row)
+              try:
+                  desktop_rows.append({**row, "runner": desktop_runners[(goos, goarch)]})
+              except KeyError:
+                  raise SystemExit(f"no desktop runner configured for {goos}/{goarch}")
           print("matrix=" + json.dumps({"include": rows}))
+          print("desktop_matrix=" + json.dumps({"include": desktop_rows}))
           PY
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
   web:
     runs-on: ubuntu-latest
@@ -149,31 +180,13 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Resolve version
-        id: version
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
-          else
-            version="${GITHUB_REF_NAME}"
-          fi
-          echo "value=${version}" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve build metadata
-        id: build_meta
-        shell: bash
-        run: |
-          echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
       - name: Package release archives (one platform)
         shell: bash
         run: |
           chmod +x scripts/release-build-all.sh
-          VERSION="${{ steps.version.outputs.value }}" \
-          COMMIT="${{ steps.build_meta.outputs.commit }}" \
-          BUILD_TIME="${{ steps.build_meta.outputs.build_time }}" \
+          VERSION="${{ needs.prepare.outputs.version }}" \
+          COMMIT="${{ needs.prepare.outputs.commit }}" \
+          BUILD_TIME="${{ needs.prepare.outputs.build_time }}" \
           DIST_DIR=dist \
           GOCACHE="${{ github.workspace }}/.gocache" \
           BOXLITE_CLI_VERSION="${{ env.BOXLITE_CLI_VERSION }}" \
@@ -186,21 +199,165 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  merge-and-release:
-    needs: [build]
-    runs-on: ubuntu-latest
+  desktop-build:
+    needs: [prepare]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.desktop_matrix) }}
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      COMMIT: ${{ needs.prepare.outputs.commit }}
+      BUILD_TIME: ${{ needs.prepare.outputs.build_time }}
+      CI_MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.CSGCLAW_MACOS_CERTIFICATE_P12_BASE64 }}
+      CI_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.CSGCLAW_MACOS_CERTIFICATE_PASSWORD }}
+      CI_MACOS_SIGN_IDENTITY: ${{ secrets.CSGCLAW_MACOS_SIGN_IDENTITY }}
+      CI_APPLE_ID: ${{ secrets.APPLE_ID }}
+      CI_APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+      CI_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CI_WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.CSGCLAW_WINDOWS_CERTIFICATE_PFX_BASE64 }}
+      CI_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD }}
+      CI_WINDOWS_SIGN_TOOL: ${{ secrets.CSGCLAW_WINDOWS_SIGN_TOOL }}
+      CI_WINDOWS_SIGN_PARAMS: ${{ secrets.CSGCLAW_WINDOWS_SIGN_PARAMS }}
     steps:
-      - name: Resolve version
-        id: version
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/app/package.json
+
+      - name: Enable Corepack
+        shell: bash
+        run: corepack enable
+
+      - name: Resolve pnpm store path
+        id: pnpm_store
+        shell: bash
+        working-directory: desktop
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm_store.outputs.path }}
+          key: ${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('web/app/pnpm-lock.yaml', 'desktop/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-pnpm-
+
+      - name: Install Linux package tools
+        if: ${{ matrix.goos == 'linux' }}
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
-          else
-            version="${GITHUB_REF_NAME}"
-          fi
-          echo "value=${version}" >> "$GITHUB_OUTPUT"
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends fakeroot dpkg
 
+      - name: Configure macOS signing
+        if: ${{ matrix.goos == 'darwin' }}
+        shell: bash
+        run: |
+          requested_identity="${CI_MACOS_SIGN_IDENTITY:-}"
+          requested_apple_id="${CI_APPLE_ID:-}"
+          requested_apple_password="${CI_APPLE_PASSWORD:-}"
+          requested_apple_team_id="${CI_APPLE_TEAM_ID:-}"
+          unset CSGCLAW_MACOS_SIGN_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+
+          if [ -z "${CI_MACOS_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${CI_MACOS_CERTIFICATE_PASSWORD:-}" ] || [ -z "${requested_identity}" ]; then
+            echo "macOS signing is not fully configured; using Forge defaults."
+            exit 0
+          fi
+
+          certificate_path="${RUNNER_TEMP}/csgclaw-signing.p12"
+          keychain_path="${RUNNER_TEMP}/csgclaw-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          node --input-type=module -e 'import fs from "node:fs"; fs.writeFileSync(process.argv[1], Buffer.from(process.env.CI_MACOS_CERTIFICATE_P12_BASE64, "base64"), { mode: 0o600 });' "${certificate_path}"
+          security create-keychain -p "${keychain_password}" "${keychain_path}"
+          security set-keychain-settings -lut 21600 "${keychain_path}"
+          security unlock-keychain -p "${keychain_password}" "${keychain_path}"
+          security import "${certificate_path}" -k "${keychain_path}" -P "${CI_MACOS_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "${keychain_password}" "${keychain_path}"
+          security list-keychains -d user -s "${keychain_path}"
+          {
+            echo "CSGCLAW_CI_MACOS_KEYCHAIN=${keychain_path}"
+            echo "CSGCLAW_MACOS_SIGN_IDENTITY=${requested_identity}"
+          } >> "$GITHUB_ENV"
+
+          if [ -n "${requested_apple_id}" ] && [ -n "${requested_apple_password}" ] && [ -n "${requested_apple_team_id}" ]; then
+            {
+              echo "APPLE_ID=${requested_apple_id}"
+              echo "APPLE_PASSWORD=${requested_apple_password}"
+              echo "APPLE_TEAM_ID=${requested_apple_team_id}"
+            } >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure Windows signing
+        if: ${{ matrix.goos == 'windows' }}
+        shell: pwsh
+        run: |
+          Remove-Item Env:CSGCLAW_WINDOWS_CERTIFICATE_FILE -ErrorAction SilentlyContinue
+          Remove-Item Env:CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD -ErrorAction SilentlyContinue
+          Remove-Item Env:CSGCLAW_WINDOWS_SIGN_TOOL -ErrorAction SilentlyContinue
+          Remove-Item Env:CSGCLAW_WINDOWS_SIGN_PARAMS -ErrorAction SilentlyContinue
+
+          if ($env:CI_WINDOWS_CERTIFICATE_PFX_BASE64 -and $env:CI_WINDOWS_CERTIFICATE_PASSWORD) {
+            $certificatePath = Join-Path $env:RUNNER_TEMP "csgclaw-signing.pfx"
+            [System.IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:CI_WINDOWS_CERTIFICATE_PFX_BASE64))
+            "CSGCLAW_WINDOWS_CERTIFICATE_FILE=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD=$env:CI_WINDOWS_CERTIFICATE_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+
+          if ($env:CI_WINDOWS_SIGN_TOOL -and $env:CI_WINDOWS_SIGN_PARAMS) {
+            "CSGCLAW_WINDOWS_SIGN_TOOL=$env:CI_WINDOWS_SIGN_TOOL" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "CSGCLAW_WINDOWS_SIGN_PARAMS=$env:CI_WINDOWS_SIGN_PARAMS" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
+
+      - name: Package Unix desktop artifacts
+        if: ${{ matrix.goos != 'windows' }}
+        shell: bash
+        run: |
+          make desktop-package TARGET_OS="${{ matrix.goos }}" TARGET_ARCH="${{ matrix.goarch }}"
+
+      - name: Package Windows desktop artifacts
+        if: ${{ matrix.goos == 'windows' }}
+        shell: pwsh
+        run: .\scripts\build.cmd desktop-package
+
+      - name: Stage Unix release assets
+        if: ${{ matrix.goos != 'windows' }}
+        shell: bash
+        run: |
+          node scripts/collect-desktop-release-assets.mjs "$VERSION" "${{ matrix.goos }}" "${{ matrix.goarch }}" desktop/out/make dist
+
+      - name: Stage Windows release assets
+        if: ${{ matrix.goos == 'windows' }}
+        shell: pwsh
+        run: node scripts/collect-desktop-release-assets.mjs $env:VERSION "${{ matrix.goos }}" "${{ matrix.goarch }}" desktop/out/make dist
+
+      - name: Remove temporary macOS keychain
+        if: ${{ always() && matrix.goos == 'darwin' }}
+        shell: bash
+        run: |
+          if [ -n "${CSGCLAW_CI_MACOS_KEYCHAIN:-}" ]; then
+            security delete-keychain "${CSGCLAW_CI_MACOS_KEYCHAIN}" || true
+          fi
+
+      - name: Upload desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/csgclaw-desktop_*
+          if-no-files-found: error
+
+  merge-and-release:
+    needs: [prepare, build, desktop-build]
+    runs-on: ubuntu-latest
+    steps:
       - name: Download all platform artifacts
         uses: actions/download-artifact@v4
         with:
@@ -208,8 +365,15 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Download all desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-dist-*
+          path: dist
+          merge-multiple: true
+
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.value }}
+          tag_name: ${{ needs.prepare.outputs.version }}
           files: dist/*

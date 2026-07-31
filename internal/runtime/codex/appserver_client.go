@@ -18,6 +18,7 @@ type appServerClient struct {
 	mu      sync.Mutex
 	nextID  int64
 	pending map[int64]*appServerPendingRequest
+	closed  error
 
 	onNotification  func(appServerNotification)
 	onServerRequest func(appServerServerRequest) (any, error)
@@ -54,6 +55,11 @@ func (c *appServerClient) request(ctx context.Context, method string, params any
 	}
 
 	c.mu.Lock()
+	if c.closed != nil {
+		err := c.closed
+		c.mu.Unlock()
+		return nil, fmt.Errorf("%s: %w", method, err)
+	}
 	c.nextID++
 	id := c.nextID
 	pending := &appServerPendingRequest{
@@ -273,6 +279,12 @@ func (c *appServerClient) writeJSONLine(msg any) error {
 	data = append(data, '\n')
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	c.mu.Lock()
+	closed := c.closed
+	c.mu.Unlock()
+	if closed != nil {
+		return closed
+	}
 	_, err = c.stdin.Write(data)
 	return err
 }
@@ -282,6 +294,10 @@ func (c *appServerClient) closeAllPending(err error) {
 		err = fmt.Errorf("codex app-server client closed")
 	}
 	c.mu.Lock()
+	if c.closed == nil {
+		c.closed = err
+	}
+	err = c.closed
 	pending := c.pending
 	c.pending = make(map[int64]*appServerPendingRequest)
 	c.mu.Unlock()

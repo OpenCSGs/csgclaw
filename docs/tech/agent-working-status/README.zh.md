@@ -64,6 +64,7 @@ OpenClaw 的上报逻辑位于 `openclaw-csgclaw-extension`。入站消息通过
 - 正常回复、可见的失败回复和 abort 清理全部结束后，再释放租约。
 - 首次上报和续租不会阻塞回复；最终释放会等待清理请求结束。
 - 上报失败只记录日志，不会让 Agent 回复失败。
+- Runtime 通过工作状态阶段区分模型等待、真实 reasoning、工具执行、工具结果处理和正文生成；旧服务端不支持阶段字段时会自动降级到原有状态格式。
 
 当前内置 worker 模板使用 `20260717.27-csgclaw`，已经包含基于 reply dispatch 的实现。
 
@@ -73,7 +74,9 @@ OpenClaw 的上报逻辑位于 `openclaw-csgclaw-extension`。入站消息通过
 
 ```http
 PUT    /api/v1/channels/csgclaw/participants/{participant_id}/work-leases/{lease_id}
+PATCH  /api/v1/channels/csgclaw/participants/{participant_id}/work-leases/{lease_id}
 DELETE /api/v1/channels/csgclaw/participants/{participant_id}/work-leases/{lease_id}
+POST   /api/v1/channels/csgclaw/participants/{participant_id}/work:stop
 ```
 
 `PUT` 同时用于创建和续租。请求体示例：
@@ -90,11 +93,28 @@ DELETE /api/v1/channels/csgclaw/participants/{participant_id}/work-leases/{lease
 
 `ttl_seconds` 可省略，默认是 15 秒；服务端会把显式值限制在 5～60 秒。对同一个 `lease_id` 续租时，participant、房间和请求等元数据必须保持一致。
 
+`PATCH` 上报单调递增的状态序号和可选阶段。阶段只来自 Runtime 可验证的事件：
+
+| 阶段 | 页面文案 | 触发事件 |
+|---|---|---|
+| `preparing_reply` | 正在准备回复 | 租约创建或新一轮模型输出开始，但还没有 reasoning/正文 |
+| `thinking` | 正在思考 | 收到非空 reasoning stream；空回调继续保持“正在准备回复” |
+| `running_tool` | 正在执行/调用工具 | 工具或 work item 开始 |
+| `generating_reply` | 正在生成回复 | 收到非空 final partial reply |
+
+阶段通过 `work_stage_v1` capability 协商；`thinking` 正文仍通过 `thinking_status_v1` 上报。显式 `thinking` 阶段必须同时携带非空正文，最后一段正文会保留到工具执行或最终回复开始。工具结束后 Runtime 只切换回无细分阶段的 `thinking` phase，Web 在下一段 reasoning 或最终回复到达前继续展示最近的具体工具调用。服务端保留原来的 `working/thinking` phase，供旧 Runtime 和旧 Web 兼容使用。
+
+停止能力通过 `turn_stop_v1` capability 协商。`POST work:stop` 只先持久化 `stop_requested`，再由 `TurnControlDispatcher` 调用 Runtime 的可选 `TurnController`：Codex bridge 取消对应 Prompt context，并由 app-server 执行 `turn/interrupt`；OpenClaw adapter 当前通过 participant SSE 投递。投递失败和超时分别上报 `stop_failed`、`stop_timed_out`，不会伪装成已经停止。
+
+Runtime 结束租约时，`DELETE` 可提交 `{"outcome":"released"}`、`{"outcome":"stopped"}` 或 `{"outcome":"stop_timed_out"}`。只有 Runtime 在处理停止请求后显式确认 `stopped`，服务端才发布 `stopped`；旧 Runtime 省略请求体时按普通 `released` 处理。
+
+Runtime 显式确认 `stopped` 后，服务端会用对应 Agent 的用户身份在原房间（有话题时在原话题）写入一条 “Conversation interrupted” 记录。仅投递停止请求、投递失败或停止超时都不会写入该记录。同一 `lease_id` 使用固定消息 ID，重复完成请求不会产生重复记录；该内部控制记录只进入会话历史和 Web 实时流，不会再次分发给任何 Agent。
+
 ## 服务端如何避免脏状态
 
 核心实现在 `internal/worklease/`：
 
-- Registry 只在内存中保存活动租约，不写入消息历史。
+- Registry 只在内存中保存活动租约；只有 Runtime 显式确认 `stopped` 时，统一完成路径才会额外写入上述会话记录。
 - janitor 每秒清理一次过期租约。
 - 租约释放或过期后保留 70 秒 tombstone；迟到的续租会收到 `410 Gone`，不能重新激活已经结束的请求。
 - 每个服务进程都有独立的 `registry_epoch`。服务重启后，Web 收到新 epoch 会丢弃旧进程的状态。

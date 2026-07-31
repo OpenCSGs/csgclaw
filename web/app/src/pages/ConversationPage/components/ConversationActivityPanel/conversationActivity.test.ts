@@ -221,7 +221,75 @@ describe("conversation activity model", () => {
       entries,
     );
 
-    expect(working?.activity).toEqual({ action: "thinking" });
+    expect(working?.activity).toEqual({ action: "preparing_reply" });
+  });
+
+  it("keeps the latest tool command visible while the runtime processes its result", () => {
+    const roomAgents = conversationActivityAgents(room, agents);
+    const entries = conversationActivityEntries(
+      [
+        toolMessage(
+          "tool-start",
+          "2026-07-16T10:00:00Z",
+          {
+            input: { command: "csgclaw-cli participant list --channel csgclaw" },
+            kind: "exec_command",
+            status: "running",
+            title: "Run shell command",
+            tool_call_id: "call-list",
+          },
+          "u-dev",
+        ),
+        toolMessage(
+          "tool-end",
+          "2026-07-16T10:00:01Z",
+          {
+            kind: "exec_command",
+            output: "3 participants",
+            status: "completed",
+            title: "Run shell command",
+            tool_call_id: "call-list",
+          },
+          "u-dev",
+        ),
+      ],
+      roomAgents,
+      room.members,
+    );
+
+    const [working] = conversationWorkingParticipantsWithActivity(
+      [{ id: "u-dev", name: "dev", requestID: "turn-7" }],
+      roomAgents,
+      entries,
+    );
+
+    expect(working?.activity).toMatchObject({
+      action: "running",
+      summary: "csgclaw-cli participant list --channel csgclaw",
+      toolName: "exec_command",
+    });
+  });
+
+  it("uses explicit work stages for model waits and final generation", () => {
+    const working = conversationWorkingParticipantsWithActivity(
+      [
+        { id: "u-dev", name: "prepare", workStage: "preparing_reply" },
+        { id: "u-dev", name: "reason", thinkingText: "checking", workStage: "thinking" },
+        { id: "u-dev", name: "empty-reason", thinkingText: "", workStage: "thinking" },
+        { id: "u-dev", name: "final", workStage: "generating_reply" },
+        { id: "u-dev", name: "tool", workStage: "running_tool" },
+      ],
+      [],
+      [],
+    );
+
+    expect(working.map((participant) => participant.activity?.action)).toEqual([
+      "preparing_reply",
+      "thinking",
+      "preparing_reply",
+      "generating_reply",
+      "using_tool",
+    ]);
   });
 
   it("ignores previous replies for legacy work inferred from a newer prompt", () => {
@@ -246,7 +314,7 @@ describe("conversation activity model", () => {
       entries,
     );
 
-    expect(beforeReply?.activity).toEqual({ action: "thinking" });
+    expect(beforeReply?.activity).toEqual({ action: "preparing_reply" });
     expect(afterReply?.activity).toMatchObject({ action: "replying", summary: "Current answer" });
   });
 

@@ -163,15 +163,18 @@ type EventPayload struct {
 }
 
 type Room struct {
-	ID          string        `json:"id"`
-	Title       string        `json:"title"`
-	Subtitle    string        `json:"subtitle"`
-	Description string        `json:"description,omitempty"`
-	IsDirect    bool          `json:"is_direct,omitempty"`
-	Members     []string      `json:"members"`
-	MemberNames []string      `json:"member_names,omitempty"`
-	Messages    []Message     `json:"messages"`
-	Threads     []ThreadState `json:"threads,omitempty"`
+	ID              string        `json:"id"`
+	Title           string        `json:"title"`
+	Subtitle        string        `json:"subtitle"`
+	Description     string        `json:"description,omitempty"`
+	SessionID       string        `json:"session_id,omitempty"`
+	SessionAgentID  string        `json:"session_agent_id,omitempty"`
+	IsDirect        bool          `json:"is_direct,omitempty"`
+	NotifyAllAgents bool          `json:"notify_all_agents"`
+	Members         []string      `json:"members"`
+	MemberNames     []string      `json:"member_names,omitempty"`
+	Messages        []Message     `json:"messages"`
+	Threads         []ThreadState `json:"threads,omitempty"`
 }
 
 type CreateRoomRequest struct {
@@ -180,6 +183,10 @@ type CreateRoomRequest struct {
 	CreatorID   string   `json:"creator_id"`
 	MemberIDs   []string `json:"member_ids"`
 	Locale      string   `json:"locale"`
+}
+
+type UpdateRoomRequest struct {
+	NotifyAllAgents *bool `json:"notify_all_agents,omitempty"`
 }
 
 type AddRoomMembersRequest struct {

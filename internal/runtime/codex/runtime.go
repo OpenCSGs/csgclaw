@@ -124,6 +124,8 @@ type SessionEventSink = activity.RuntimeEventSink
 
 type SessionEventSubscriber = activity.RuntimeEventSubscriber
 
+type SessionEventScopedSubscriber = activity.RuntimeSessionEventSubscriber
+
 type BinaryProvider interface {
 	Ensure(ctx context.Context) (string, error)
 }
@@ -222,6 +224,41 @@ func (r *Runtime) SessionManager() Manager {
 
 func (r *Runtime) EventSink() SessionEventSink {
 	return r.deps.EventSink
+}
+
+func (r *Runtime) EnsureSession(ctx context.Context, runtimeID, conversationKey string) (string, error) {
+	ensurer, ok := r.SessionManager().(interface {
+		EnsureSession(context.Context, SessionHandle, string) (string, error)
+	})
+	if !ok {
+		return "", fmt.Errorf("codex session manager does not support conversation sessions")
+	}
+	return ensurer.EnsureSession(ctx, SessionHandle{RuntimeID: runtimeID}, conversationKey)
+}
+
+func (r *Runtime) Prompt(ctx context.Context, runtimeID, sessionID, prompt string) error {
+	_, err := r.SessionManager().Prompt(ctx, SessionHandle{RuntimeID: runtimeID}, PromptRequest{
+		SessionID: strings.TrimSpace(sessionID),
+		Prompt:    []PromptContentBlock{TextBlock(prompt)},
+	})
+	return err
+}
+
+func (r *Runtime) Subscribe(runtimeID string) (<-chan SessionEvent, func()) {
+	subscriber, ok := r.deps.EventSink.(SessionEventSubscriber)
+	if !ok || subscriber == nil {
+		ch := make(chan SessionEvent)
+		close(ch)
+		return ch, func() {}
+	}
+	return subscriber.Subscribe(runtimeID)
+}
+
+func (r *Runtime) SubscribeSession(runtimeID, sessionID string) (<-chan SessionEvent, func()) {
+	if subscriber, ok := r.deps.EventSink.(SessionEventScopedSubscriber); ok && subscriber != nil {
+		return subscriber.SubscribeSession(runtimeID, sessionID)
+	}
+	return r.Subscribe(runtimeID)
 }
 
 func (r *Runtime) PermissionBroker() PermissionBroker {
@@ -723,7 +760,7 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 	if runtimeCodexHome == "" {
 		return fmt.Errorf("codex home dir is required")
 	}
-	if err := agentruntime.ValidateMCPServers(mcpServers); err != nil {
+	if err := validateCodexMCPServers(mcpServers); err != nil {
 		return err
 	}
 	configPath := filepath.Join(runtimeCodexHome, configFileName)

@@ -20,6 +20,7 @@ import (
 	"csgclaw/internal/assets"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
+	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
@@ -72,7 +73,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-type fakeRuntime struct{}
+type fakeRuntime struct {
+	close func() error
+}
 
 type fakeProvider struct {
 	open func(context.Context, string) (sandbox.Runtime, error)
@@ -106,6 +109,9 @@ func (f *fakeRuntime) Remove(context.Context, string, sandbox.RemoveOptions) err
 }
 
 func (f *fakeRuntime) Close() error {
+	if f != nil && f.close != nil {
+		return f.close()
+	}
 	return nil
 }
 
@@ -297,7 +303,7 @@ func (f fakeAgentRuntime) ValidateMCPServers(ctx context.Context, current agentr
 	if f.mcpValidate != nil {
 		return f.mcpValidate(ctx, current)
 	}
-	return agentruntime.ValidateMCPServers(current.Servers)
+	return mcpschema.ValidateMCPServers(current.Servers)
 }
 
 func (f fakeAgentRuntime) MCPServersRestartRequired(change agentruntime.MCPServersChange) (bool, error) {
@@ -1764,8 +1770,12 @@ func TestAddMCPServersFromHubImportsRuntimeServersOnce(t *testing.T) {
 		CreatedAt:   time.Date(2026, 5, 18, 9, 0, 0, 0, time.UTC),
 	}
 	catalogServers := map[string]any{
-		"context7": map[string]any{"command": "uvx", "args": []any{"context7-mcp"}},
-		"remote":   map[string]any{"url": "https://mcp.example.com/mcp"},
+		"context7": map[string]any{
+			"command":     "uvx",
+			"args":        []any{"context7-mcp"},
+			"description": "Context7 documentation tools",
+		},
+		"remote": map[string]any{"url": "https://mcp.example.com/mcp"},
 	}
 
 	updated, err := svc.AddMCPServersFromHub(context.Background(), "u-dev", []string{"context7"}, catalogServers)
@@ -1774,6 +1784,13 @@ func TestAddMCPServersFromHubImportsRuntimeServersOnce(t *testing.T) {
 	}
 	for _, name := range []string{"manual", "context7"} {
 		assertMCPServersHasServer(t, updated.MCPServers, name)
+	}
+	context7, ok := updated.MCPServers["context7"].(map[string]any)
+	if !ok {
+		t.Fatalf("context7 MCP server = %#v, want object", updated.MCPServers["context7"])
+	}
+	if _, exists := context7["description"]; exists {
+		t.Fatalf("agent MCP server retained catalog description: %#v", context7)
 	}
 	if listCalls != 1 {
 		t.Fatalf("ListMCPServers() calls = %d, want 1 for initial runtime import", listCalls)
@@ -1835,6 +1852,46 @@ func TestDeleteMCPServersImportsRuntimeServersBeforeDeleting(t *testing.T) {
 	if listCalls != 1 {
 		t.Fatalf("ListMCPServers() calls = %d, want 1 for initial runtime import", listCalls)
 	}
+}
+
+func TestDeleteMCPServersCanRemoveLegacyInvalidHeaderConfig(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-dev"] = Agent{
+		ID:          "u-dev",
+		Name:        "dev",
+		RuntimeID:   "rt-u-dev",
+		RuntimeKind: RuntimeKindCodex,
+		Role:        RoleWorker,
+		Status:      string(agentruntime.StateStopped),
+		CreatedAt:   time.Date(2026, 7, 24, 9, 0, 0, 0, time.UTC),
+		MCPServers: map[string]any{
+			"legacy": map[string]any{
+				"url":     "https://mcp.example.com/mcp",
+				"headers": map[string]any{"invalid header": "value"},
+			},
+			"context7": map[string]any{"command": "context7-mcp"},
+		},
+	}
+
+	updated, err := svc.DeleteMCPServers(context.Background(), "u-dev", []string{"legacy"})
+	if err != nil {
+		t.Fatalf("DeleteMCPServers() error = %v", err)
+	}
+	if _, exists := updated.MCPServers["legacy"]; exists {
+		t.Fatalf("DeleteMCPServers() retained legacy server: %#v", updated.MCPServers)
+	}
+	assertMCPServersHasServer(t, updated.MCPServers, "context7")
 }
 
 func TestAddMCPServersFromHubFailsWhenRuntimeMCPReadFails(t *testing.T) {
@@ -1899,7 +1956,7 @@ func TestAddMCPServersSerializesConcurrentNameMerges(t *testing.T) {
 						return ctx.Err()
 					}
 				}
-				return agentruntime.ValidateMCPServers(current.Servers)
+				return mcpschema.ValidateMCPServers(current.Servers)
 			},
 			mcpRestart: func(agentruntime.MCPServersChange) (bool, error) {
 				return false, nil
@@ -1963,7 +2020,7 @@ func TestAddMCPServersSerializesConcurrentNameMerges(t *testing.T) {
 	if !ok {
 		t.Fatal("Agent(\"u-dev\") not found")
 	}
-	servers, err := agentruntime.NormalizeMCPServers(got.MCPServers)
+	servers, err := mcpschema.NormalizeMCPServers(got.MCPServers)
 	if err != nil {
 		t.Fatalf("NormalizeMCPServers() error = %v", err)
 	}
@@ -1997,7 +2054,7 @@ func TestAddMCPServersSerializesWithDirectMCPServersUpdate(t *testing.T) {
 						return ctx.Err()
 					}
 				}
-				return agentruntime.ValidateMCPServers(current.Servers)
+				return mcpschema.ValidateMCPServers(current.Servers)
 			},
 			mcpRestart: func(agentruntime.MCPServersChange) (bool, error) {
 				return false, nil
@@ -7399,6 +7456,48 @@ func TestApplyTemplateEnvDefaults(t *testing.T) {
 	}
 }
 
+func TestCreateFromTemplateUsesRequestHubService(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
+
+	requestHub := mustNewLocalTemplateHubService(t, "request-worker", hub.Template{
+		ID:          "request-worker",
+		Name:        "request-worker",
+		Description: "request-scoped template",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: RuntimeNamePicoClaw,
+		Image:       "worker-image:request",
+	})
+	startupHub, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:1",
+		"",
+		WithHubService(startupHub),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.Create(context.Background(), CreateRequest{
+		Spec: CreateAgentSpec{
+			Name:         "alice",
+			FromTemplate: "local.request-worker",
+		},
+		HubService: requestHub,
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if got.Description != "request-scoped template" || got.Image != "worker-image:request" {
+		t.Fatalf("created agent = %+v, want request-scoped template defaults", got)
+	}
+}
+
 func TestCreateWorkerFromTemplateAppliesImageEnvToSandbox(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -8693,6 +8792,65 @@ func TestStartConfiguredAgentsStartsStoppedCompleteWorkersAndLeavesRunningWorker
 	}
 	if carol.Status != string(sandbox.StateRunning) {
 		t.Fatalf("Agent(u-carol).Status = %q, want running", carol.Status)
+	}
+}
+
+func TestStopRunningSandboxAgentsStopsOnlyLiveSandboxRuntimes(t *testing.T) {
+	var stopped []string
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			stop: func(_ context.Context, handle agentruntime.Handle) (agentruntime.State, error) {
+				stopped = append(stopped, handle.RuntimeID)
+				return agentruntime.StateStopped, nil
+			},
+		}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			stop: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+				t.Fatal("in-process Codex runtime should be closed, not explicitly stopped")
+				return agentruntime.StateStopped, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeID:   "rt-u-alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Status:      string(agentruntime.StateRunning),
+	}
+	svc.agents["u-bob"] = Agent{
+		ID:          "u-bob",
+		Name:        "bob",
+		RuntimeID:   "rt-u-bob",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Status:      string(agentruntime.StateStopped),
+	}
+	svc.agents["u-carol"] = Agent{
+		ID:          "u-carol",
+		Name:        "carol",
+		RuntimeID:   "rt-u-carol",
+		RuntimeKind: RuntimeKindCodex,
+		Status:      string(agentruntime.StateRunning),
+	}
+
+	if err := svc.StopRunningSandboxAgents(context.Background()); err != nil {
+		t.Fatalf("StopRunningSandboxAgents() error = %v", err)
+	}
+	if got := strings.Join(stopped, ","); got != "rt-agent-alice" {
+		t.Fatalf("stopped runtimes = %q, want only rt-agent-alice", got)
+	}
+	alice, ok := svc.Agent("u-alice")
+	if !ok || alice.Status != string(agentruntime.StateStopped) {
+		t.Fatalf("Agent(u-alice) = %+v, %v, want stopped", alice, ok)
 	}
 }
 
@@ -10570,6 +10728,28 @@ func TestServiceCloseClosesRegisteredAgentRuntimes(t *testing.T) {
 	}
 }
 
+func TestResetSandboxRuntimesClosesAndDropsCachedClients(t *testing.T) {
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	closeCalls := 0
+	svc.runtimes["agent-home"] = &fakeRuntime{close: func() error {
+		closeCalls++
+		return nil
+	}}
+
+	if err := svc.ResetSandboxRuntimes(); err != nil {
+		t.Fatalf("ResetSandboxRuntimes() error = %v", err)
+	}
+	if closeCalls != 1 {
+		t.Fatalf("sandbox runtime Close() calls = %d, want 1", closeCalls)
+	}
+	if len(svc.runtimes) != 0 {
+		t.Fatalf("cached runtimes = %d, want 0", len(svc.runtimes))
+	}
+}
+
 func TestServiceWorkspaceRootUsesRegisteredRuntimeCapability(t *testing.T) {
 	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
 	if err != nil {
@@ -10577,10 +10757,15 @@ func TestServiceWorkspaceRootUsesRegisteredRuntimeCapability(t *testing.T) {
 	}
 
 	const runtimeKind = "custom_runtime"
+	infoCalls := 0
 	if err := WithRuntime(fakeAgentRuntime{
 		kind: runtimeKind,
 		workspace: func(agentHome string) string {
 			return filepath.Join(agentHome, ".custom", "workspace")
+		},
+		info: func(context.Context, agentruntime.Handle) (agentruntime.Info, error) {
+			infoCalls++
+			return agentruntime.Info{}, nil
 		},
 	})(svc); err != nil {
 		t.Fatalf("WithRuntime() error = %v", err)
@@ -10601,6 +10786,17 @@ func TestServiceWorkspaceRootUsesRegisteredRuntimeCapability(t *testing.T) {
 	want := filepath.Join(agentHome, ".custom", "workspace")
 	if got != want {
 		t.Fatalf("WorkspaceRoot() = %q, want %q", got, want)
+	}
+
+	gotByID, err := svc.WorkspaceRootByID("u-alice")
+	if err != nil {
+		t.Fatalf("WorkspaceRootByID() error = %v", err)
+	}
+	if gotByID != want {
+		t.Fatalf("WorkspaceRootByID() = %q, want %q", gotByID, want)
+	}
+	if infoCalls != 0 {
+		t.Fatalf("WorkspaceRootByID() runtime Info() calls = %d, want 0", infoCalls)
 	}
 
 	skillsRoot, err := svc.SkillsRoot("alice")

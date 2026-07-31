@@ -91,7 +91,7 @@ describe("agent model helpers", () => {
       model_id: "qwen3",
       name: "Worker",
       provider: "api",
-      reasoning_effort: "medium",
+      reasoning_effort: "auto",
       runtime_kind: "openclaw_sandbox",
     });
     expect(draft.envRows).toEqual([
@@ -408,7 +408,7 @@ describe("agent model helpers", () => {
       enable_fast_mode: true,
       env: { MODEL_HOME: "/models" },
       headers: {},
-      reasoning_effort: "medium",
+      reasoning_effort: "auto",
       request_options: { top_p: 0.9 },
     });
   });

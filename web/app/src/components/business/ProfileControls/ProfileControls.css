@@ -145,6 +145,10 @@
   overflow-wrap: anywhere;
 }
 
+.reasoning-controls-field {
+  min-width: 0;
+}
+
 .auth-status-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

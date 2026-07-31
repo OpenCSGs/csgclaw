@@ -135,7 +135,9 @@ const t: TranslateFn = (key, params = {}) => {
     inputPlaceholder: "Message",
     localIdentityFallback: "Local user",
     conversationWorkingEditing: "Editing",
+    conversationWorkingGeneratingReply: "Generating reply",
     conversationWorkingOpenActivity: "View {name}'s activity: {detail}",
+    conversationWorkingPreparingReply: "Preparing a reply",
     conversationWorkingReading: "Reading",
     conversationWorkingReplying: "Replying",
     conversationWorkingRunning: "Running",
@@ -178,6 +180,7 @@ const t: TranslateFn = (key, params = {}) => {
 
 function renderThreadPane({
   agents = [],
+  conversationTitle = "manager",
   conversationMembers = users,
   isDirect = true,
   messages,
@@ -196,6 +199,8 @@ function renderThreadPane({
   visibleMessages,
   memberActionBusyID = "",
   memberActionError = "",
+  notifyAllAgents = false,
+  onNotifyAllAgentsChange = vi.fn(),
   onClearMemberActionError = vi.fn(),
   onApplyMention = vi.fn(),
   agentDetailPanelProps = null,
@@ -203,6 +208,7 @@ function renderThreadPane({
 }: {
   agents?: NonNullable<ConversationPaneProps["agents"]>;
   agentDetailPanelProps?: ConversationPaneProps["agentDetailPanelProps"];
+  conversationTitle?: string;
   conversationMembers?: IMUser[];
   isDirect?: boolean;
   messages?: IMConversation["messages"];
@@ -220,6 +226,8 @@ function renderThreadPane({
   onRemoveMember?: (memberID: string) => void;
   memberActionBusyID?: string;
   memberActionError?: string;
+  notifyAllAgents?: boolean;
+  onNotifyAllAgentsChange?: (enabled: boolean) => void;
   onClearMemberActionError?: () => void;
   replies?: ThreadView["replies"];
   showToolCalls?: boolean;
@@ -237,7 +245,8 @@ function renderThreadPane({
     is_direct: isDirect,
     members: conversationMembers.map((user) => user.id),
     messages: timelineMessages,
-    title: "manager",
+    notify_all_agents: notifyAllAgents,
+    title: conversationTitle,
   };
   const thread: ThreadView = {
     replies,
@@ -293,6 +302,7 @@ function renderThreadPane({
         onDeleteRoom={onDeleteRoom}
         onInviteAction={() => {}}
         onMessageAction={() => {}}
+        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onCancelProfilePreviewClose={onCancelProfilePreviewClose}
         onCloseProfilePreview={onCloseProfilePreview}
         onOpenAgentDetail={onOpenAgentDetail}
@@ -576,6 +586,22 @@ describe("ConversationPane", () => {
     renderThreadPane({ messages, visibleMessages: [messages[0]] });
 
     expect(screen.getByText("1/2")).toBeInTheDocument();
+  });
+
+  it("shows the complete room title on hover and keyboard focus", async () => {
+    const user = userEvent.setup();
+    const title = "Anonymous Session: e932c5cd-1865-4f0e-bca7-784377fcc3af | Agent: dev (agent-u26ehm)";
+    renderThreadPane({ conversationTitle: title, isDirect: false });
+
+    const titleElement = screen.getByText(title, { selector: ".chat-title" });
+    expect(titleElement).toHaveAttribute("tabindex", "0");
+
+    await user.hover(titleElement);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(title);
+
+    await user.unhover(titleElement);
+    titleElement.focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(title);
   });
 
   it("previews human message avatars on hover without opening details on click", async () => {
@@ -1008,10 +1034,10 @@ describe("ConversationPane", () => {
 
     const view = render(<Harness />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("AtlasThinking");
-    expect(screen.getByRole("status")).toHaveTextContent("BramThinking");
+    expect(screen.getByRole("status")).toHaveTextContent("AtlasPreparing a reply");
+    expect(screen.getByRole("status")).toHaveTextContent("BramPreparing a reply");
     expect(screen.queryByRole("button", { name: "View activity" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "View Atlas's activity: Thinking" }));
+    await user.click(screen.getByRole("button", { name: "View Atlas's activity: Preparing a reply" }));
 
     expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
     expect(document.querySelector(".conversation-activity-panel")).toBeInTheDocument();
@@ -1188,6 +1214,20 @@ describe("ConversationPane", () => {
 
     expect(onClearRoomMessages).toHaveBeenCalledWith("room-1");
     expect(onDeleteRoom).not.toHaveBeenCalled();
+  });
+
+  it("toggles whether every human message notifies every room agent", async () => {
+    const user = userEvent.setup();
+    const onNotifyAllAgentsChange = vi.fn();
+    renderThreadPane({ isDirect: false, onNotifyAllAgentsChange });
+
+    await user.click(screen.getByRole("button", { name: "channelTools" }));
+    const notificationSwitch = screen.getByRole("switch", { name: /notifyAllAgents/ });
+    expect(notificationSwitch).toHaveAttribute("aria-checked", "false");
+
+    await user.click(notificationSwitch);
+
+    expect(onNotifyAllAgentsChange).toHaveBeenCalledWith(true);
   });
 
   it("confirms before deleting a room from the tools menu", async () => {

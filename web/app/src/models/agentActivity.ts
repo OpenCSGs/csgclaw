@@ -85,6 +85,7 @@ export type AgentActivityQuestion = {
   id: string;
   questions: AgentActivityQuestionItem[];
   requested_at?: string;
+  requester_id?: string;
   resolved_at?: string;
   responder_id?: string;
   room_id?: string;
@@ -509,6 +510,7 @@ function parseQuestion(value: unknown): AgentActivityQuestion | undefined {
     id: stringValue(value.id),
     questions,
     requested_at: stringValue(value.requested_at),
+    requester_id: stringValue(value.requester_id),
     resolved_at: stringValue(value.resolved_at),
     responder_id: stringValue(value.responder_id),
     room_id: stringValue(value.room_id),

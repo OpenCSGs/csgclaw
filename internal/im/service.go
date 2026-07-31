@@ -83,14 +83,15 @@ type ThreadListOptions struct {
 }
 
 type DeliverMessageRequest struct {
-	RoomID       string                    `json:"room_id"`
-	SenderID     string                    `json:"sender_id,omitempty"`
-	MentionID    string                    `json:"mention_id,omitempty"`
-	Content      string                    `json:"text"`
-	MessageID    string                    `json:"message_id,omitempty"`
-	ThreadRootID string                    `json:"thread_root_id,omitempty"`
-	Metadata     map[string]any            `json:"metadata,omitempty"`
-	Attachments  []MessageAttachmentUpload `json:"attachments,omitempty"`
+	RoomID           string                    `json:"room_id"`
+	SenderID         string                    `json:"sender_id,omitempty"`
+	MentionID        string                    `json:"mention_id,omitempty"`
+	MentionOnOwnLine bool                      `json:"mention_on_own_line,omitempty"`
+	Content          string                    `json:"text"`
+	MessageID        string                    `json:"message_id,omitempty"`
+	ThreadRootID     string                    `json:"thread_root_id,omitempty"`
+	Metadata         map[string]any            `json:"metadata,omitempty"`
+	Attachments      []MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type DeliverEventRequest struct {
@@ -106,6 +107,8 @@ type DeliverEventRequest struct {
 type CreateRoomRequest = apitypes.CreateRoomRequest
 
 type CreateConversationRequest = CreateRoomRequest
+
+type UpdateRoomRequest = apitypes.UpdateRoomRequest
 
 type AddRoomMembersRequest = apitypes.AddRoomMembersRequest
 
@@ -144,14 +147,29 @@ type AddAgentToConversationRequest struct {
 	Locale    string `json:"locale"`
 }
 
+type EnsureAgentSessionRoomRequest struct {
+	SessionID   string
+	AgentID     string
+	AgentName   string
+	AgentUserID string
+}
+
+var (
+	ErrSessionRoomConflict        = errors.New("session room mapping is ambiguous")
+	ErrSessionAgentConflict       = errors.New("session is already bound to another agent")
+	ErrSessionRoomMembersConflict = errors.New("session room members do not match admin and agent")
+)
+
 type Service struct {
-	mu            sync.RWMutex
-	bus           *Bus
-	statePath     string
-	currentUserID string
-	users         map[string]User
-	byName        map[string]string
-	rooms         map[string]*Room
+	mu               sync.RWMutex
+	bus              *Bus
+	statePath        string
+	currentUserID    string
+	users            map[string]User
+	byName           map[string]string
+	rooms            map[string]*Room
+	sessionRooms     map[string]string
+	sessionConflicts map[string]struct{}
 }
 
 var mentionPattern = regexp.MustCompile(`(^|[^\pL\pM\pN._-])@([\pL\pM\pN._-]+)`)
@@ -212,14 +230,17 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	ID          string            `json:"id"`
-	Title       string            `json:"title"`
-	Subtitle    string            `json:"subtitle"`
-	Description string            `json:"description,omitempty"`
-	IsDirect    bool              `json:"is_direct,omitempty"`
-	Members     []string          `json:"members"`
-	Messages    string            `json:"messages"`
-	Threads     []persistedThread `json:"threads,omitempty"`
+	ID              string            `json:"id"`
+	Title           string            `json:"title"`
+	Subtitle        string            `json:"subtitle"`
+	Description     string            `json:"description,omitempty"`
+	SessionID       string            `json:"session_id,omitempty"`
+	SessionAgentID  string            `json:"session_agent_id,omitempty"`
+	IsDirect        bool              `json:"is_direct,omitempty"`
+	NotifyAllAgents bool              `json:"notify_all_agents,omitempty"`
+	Members         []string          `json:"members"`
+	Messages        string            `json:"messages"`
+	Threads         []persistedThread `json:"threads,omitempty"`
 }
 
 type persistedThread struct {
@@ -420,14 +441,17 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			return nil, err
 		}
 		loaded = append(loaded, Room{
-			ID:          room.ID,
-			Title:       room.Title,
-			Subtitle:    room.Subtitle,
-			Description: room.Description,
-			IsDirect:    room.IsDirect,
-			Members:     append([]string(nil), room.Members...),
-			Messages:    messages,
-			Threads:     threads,
+			ID:              room.ID,
+			Title:           room.Title,
+			Subtitle:        room.Subtitle,
+			Description:     room.Description,
+			SessionID:       room.SessionID,
+			SessionAgentID:  room.SessionAgentID,
+			IsDirect:        room.IsDirect,
+			NotifyAllAgents: room.NotifyAllAgents,
+			Members:         append([]string(nil), room.Members...),
+			Messages:        messages,
+			Threads:         threads,
 		})
 	}
 	return loaded, nil
@@ -587,14 +611,17 @@ func saveRoomThreadsForState(statePath string, room Room) error {
 
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
-		ID:          room.ID,
-		Title:       room.Title,
-		Subtitle:    room.Subtitle,
-		Description: room.Description,
-		IsDirect:    room.IsDirect,
-		Members:     append([]string(nil), room.Members...),
-		Messages:    sessionRelativePath(room.ID),
-		Threads:     persistedThreadsFromStates(room.Threads),
+		ID:              room.ID,
+		Title:           room.Title,
+		Subtitle:        room.Subtitle,
+		Description:     room.Description,
+		SessionID:       room.SessionID,
+		SessionAgentID:  room.SessionAgentID,
+		IsDirect:        room.IsDirect,
+		NotifyAllAgents: room.NotifyAllAgents,
+		Members:         append([]string(nil), room.Members...),
+		Messages:        sessionRelativePath(room.ID),
+		Threads:         persistedThreadsFromStates(room.Threads),
 	}
 }
 
@@ -1458,7 +1485,160 @@ func (s *Service) DeleteRoom(roomID string) error {
 		return fmt.Errorf("room not found")
 	}
 	delete(s.rooms, roomID)
+	s.rebuildSessionRoomIndexLocked()
 	return s.saveLocked()
+}
+
+// EnsureAgentSessionRoom atomically resolves or creates the persisted room for
+// an anonymous API session. Anonymous callers are represented by user-admin.
+func (s *Service) EnsureAgentSessionRoom(req EnsureAgentSessionRoomRequest) (Room, error) {
+	sessionID := strings.TrimSpace(req.SessionID)
+	agentID := strings.TrimSpace(req.AgentID)
+	agentName := strings.TrimSpace(req.AgentName)
+	agentUserID := strings.TrimSpace(req.AgentUserID)
+	if sessionID == "" {
+		return Room{}, fmt.Errorf("session_id is required")
+	}
+	if agentID == "" {
+		return Room{}, fmt.Errorf("agent_id is required")
+	}
+	if agentName == "" {
+		agentName = agentID
+	}
+	if agentUserID == "" {
+		return Room{}, fmt.Errorf("agent_user_id is required")
+	}
+
+	s.mu.Lock()
+	agentUserID = s.resolveRoomUserIDLocked(agentUserID)
+	if _, ok := s.users[adminUserID]; !ok {
+		s.mu.Unlock()
+		return Room{}, fmt.Errorf("admin user not found")
+	}
+	if _, ok := s.users[agentUserID]; !ok {
+		s.mu.Unlock()
+		return Room{}, fmt.Errorf("agent user not found")
+	}
+	if _, conflicted := s.sessionConflicts[sessionID]; conflicted {
+		s.mu.Unlock()
+		return Room{}, ErrSessionRoomConflict
+	}
+	if roomID, ok := s.sessionRooms[sessionID]; ok {
+		room, exists := s.rooms[roomID]
+		if !exists {
+			s.rebuildSessionRoomIndexLocked()
+			s.mu.Unlock()
+			return Room{}, ErrSessionRoomConflict
+		}
+		if strings.TrimSpace(room.SessionAgentID) != agentID {
+			s.mu.Unlock()
+			return Room{}, ErrSessionAgentConflict
+		}
+		if room.IsDirect || !sessionRoomMembersMatch(*room, adminUserID, agentUserID) {
+			s.mu.Unlock()
+			return Room{}, ErrSessionRoomMembersConflict
+		}
+		updated := false
+		if !room.NotifyAllAgents {
+			room.NotifyAllAgents = true
+			if err := s.saveRoomLocked(*room); err != nil {
+				room.NotifyAllAgents = false
+				s.mu.Unlock()
+				return Room{}, err
+			}
+			updated = true
+		}
+		presented := s.presentRoomLocked(*room, "")
+		bus := s.bus
+		s.mu.Unlock()
+		if updated {
+			publishRoomEvent(bus, EventTypeRoomUpdated, presented)
+		}
+		return presented, nil
+	}
+
+	now := time.Now().UTC()
+	title := fmt.Sprintf("Anonymous Session: %s | Agent: %s (%s)", sessionID, agentName, agentID)
+	room := Room{
+		ID:              fmt.Sprintf("room-%d", now.UnixNano()),
+		Title:           title,
+		Subtitle:        formatRoomSubtitle(2),
+		Description:     "Created by the anonymous agent session API. Anonymous messages are represented as admin.",
+		SessionID:       sessionID,
+		SessionAgentID:  agentID,
+		NotifyAllAgents: true,
+		Members:         []string{adminUserID, agentUserID},
+		Messages: []Message{{
+			ID:       fmt.Sprintf("msg-%d", now.UnixNano()+1),
+			SenderID: adminUserID,
+			Kind:     MessageKindEvent,
+			Event: &EventPayload{
+				Key:     "room_created",
+				ActorID: adminUserID,
+				Title:   title,
+			},
+			CreatedAt: now,
+		}},
+	}
+	s.rooms[room.ID] = &room
+	s.sessionRooms[sessionID] = room.ID
+	if err := s.saveLocked(); err != nil {
+		delete(s.rooms, room.ID)
+		delete(s.sessionRooms, sessionID)
+		s.mu.Unlock()
+		return Room{}, err
+	}
+	presented := s.presentRoomLocked(room, "")
+	bus := s.bus
+	s.mu.Unlock()
+	publishRoomEvent(bus, EventTypeRoomCreated, presented)
+	return presented, nil
+}
+
+func sessionRoomMembersMatch(room Room, adminID, agentUserID string) bool {
+	if len(room.Members) != 2 {
+		return false
+	}
+	return containsUserIDInRoom(room, adminID) && containsUserIDInRoom(room, agentUserID)
+}
+
+func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error) {
+	roomID = strings.TrimSpace(roomID)
+	if roomID == "" {
+		return Room{}, fmt.Errorf("room_id is required")
+	}
+	if req.NotifyAllAgents == nil {
+		return Room{}, fmt.Errorf("notify_all_agents is required")
+	}
+
+	s.mu.Lock()
+	room, ok := s.rooms[roomID]
+	if !ok {
+		s.mu.Unlock()
+		return Room{}, fmt.Errorf("room not found")
+	}
+	if room.IsDirect {
+		s.mu.Unlock()
+		return Room{}, fmt.Errorf("direct rooms always notify their agent")
+	}
+	if room.NotifyAllAgents == *req.NotifyAllAgents {
+		presented := s.presentRoomLocked(*room, "")
+		s.mu.Unlock()
+		return presented, nil
+	}
+	previous := room.NotifyAllAgents
+	room.NotifyAllAgents = *req.NotifyAllAgents
+	if err := s.saveRoomLocked(*room); err != nil {
+		room.NotifyAllAgents = previous
+		s.mu.Unlock()
+		return Room{}, err
+	}
+	presented := s.presentRoomLocked(*room, "")
+	bus := s.bus
+	s.mu.Unlock()
+
+	publishRoomEvent(bus, EventTypeRoomUpdated, presented)
+	return presented, nil
 }
 
 func (s *Service) DeleteConversation(conversationID string) error {
@@ -1537,6 +1717,7 @@ func (s *Service) DeleteUser(userID string) error {
 		s.rebuildThreadStatesLocked(room)
 		room.Subtitle = formatRoomSubtitle(len(members))
 	}
+	s.rebuildSessionRoomIndexLocked()
 
 	if err := s.saveLocked(); err != nil {
 		s.mu.Unlock()
@@ -1762,7 +1943,7 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 		return Message{}, fmt.Errorf("sender not found")
 	}
 	senderID = senderUserID
-	content, err := s.contentWithMentionPrefixLocked(content, req.MentionID)
+	content, err := s.contentWithMentionPrefixLocked(content, req.MentionID, false)
 	if err != nil {
 		return Message{}, err
 	}
@@ -1817,7 +1998,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 		return Message{}, fmt.Errorf("sender not found")
 	}
 	senderID = senderUserID
-	content, err := s.contentWithMentionPrefixLocked(content, mentionID)
+	content, err := s.contentWithMentionPrefixLocked(content, mentionID, req.MentionOnOwnLine)
 	if err != nil {
 		return Message{}, err
 	}
@@ -1901,7 +2082,7 @@ func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 		return Message{}, fmt.Errorf("sender not found")
 	}
 	senderID = senderUserID
-	content, err := s.contentWithMentionPrefixLocked(content, mentionID)
+	content, err := s.contentWithMentionPrefixLocked(content, mentionID, false)
 	if err != nil {
 		return Message{}, err
 	}
@@ -2074,6 +2255,9 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	if room.IsDirect {
 		return Room{}, fmt.Errorf("cannot add members to direct room")
 	}
+	if strings.TrimSpace(room.SessionID) != "" {
+		return Room{}, fmt.Errorf("cannot add members to agent session room")
+	}
 
 	existing := make(map[string]struct{}, len(room.Members))
 	for _, id := range room.Members {
@@ -2152,6 +2336,9 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	}
 	if room.IsDirect {
 		return Room{}, fmt.Errorf("cannot remove members from direct room")
+	}
+	if strings.TrimSpace(room.SessionID) != "" {
+		return Room{}, fmt.Errorf("cannot remove members from agent session room")
 	}
 
 	removing := make(map[string]struct{}, len(req.UserIDs))
@@ -2950,7 +3137,7 @@ func (s *Service) newMessage(messageID, senderID, kind, content string) Message 
 	}
 }
 
-func (s *Service) contentWithMentionPrefixLocked(content, mentionID string) (string, error) {
+func (s *Service) contentWithMentionPrefixLocked(content, mentionID string, ownLine bool) (string, error) {
 	mentionID = s.resolveUserIDLocked(mentionID)
 	if mentionID == "" {
 		return content, nil
@@ -2966,21 +3153,25 @@ func (s *Service) contentWithMentionPrefixLocked(content, mentionID string) (str
 	}
 
 	prefix := fmt.Sprintf("<at user_id=\"%s\">%s</at>", mentionID, displayName)
-	if content == prefix || strings.HasPrefix(content, prefix+" ") {
+	if content == prefix || strings.HasPrefix(content, prefix+" ") || strings.HasPrefix(content, prefix+"\n") {
 		return content, nil
+	}
+	separator := " "
+	if ownLine {
+		separator = "\n\n"
 	}
 	cmd, isSlash, err := slashcommand.Parse(content)
 	if err != nil {
 		return "", err
 	}
 	if isSlash {
-		if cmd.Body == prefix || strings.HasPrefix(cmd.Body, prefix+" ") {
+		if cmd.Body == prefix || strings.HasPrefix(cmd.Body, prefix+" ") || strings.HasPrefix(cmd.Body, prefix+"\n") {
 			return slashcommand.Render(cmd)
 		}
-		cmd.Body = strings.TrimSpace(prefix + " " + cmd.Body)
+		cmd.Body = strings.TrimSpace(prefix + separator + cmd.Body)
 		return slashcommand.Render(cmd)
 	}
-	return prefix + " " + strings.TrimSpace(content), nil
+	return prefix + separator + strings.TrimSpace(content), nil
 }
 
 func (s *Service) mentionsForUserIDs(userIDs []string) []Mention {
@@ -3079,6 +3270,26 @@ func (s *Service) replaceStateLocked(state Bootstrap) {
 	for i := range rooms {
 		room := rooms[i]
 		s.rooms[room.ID] = &room
+	}
+	s.rebuildSessionRoomIndexLocked()
+}
+
+func (s *Service) rebuildSessionRoomIndexLocked() {
+	s.sessionRooms = make(map[string]string)
+	s.sessionConflicts = make(map[string]struct{})
+	for roomID, room := range s.rooms {
+		sessionID := strings.TrimSpace(room.SessionID)
+		if sessionID == "" {
+			continue
+		}
+		if existingRoomID, ok := s.sessionRooms[sessionID]; ok && existingRoomID != roomID {
+			delete(s.sessionRooms, sessionID)
+			s.sessionConflicts[sessionID] = struct{}{}
+			continue
+		}
+		if _, conflicted := s.sessionConflicts[sessionID]; !conflicted {
+			s.sessionRooms[sessionID] = roomID
+		}
 	}
 }
 

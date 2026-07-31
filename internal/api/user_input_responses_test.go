@@ -77,7 +77,7 @@ func TestChannelUserInputResponsePersistsReadableLocalUserTranscript(t *testing.
 			{ID: "secret", Header: "Secret", Question: "Disposable only", IsOther: true, IsSecret: true},
 		},
 	}, runtimecodex.DetachedUserInputContext{
-		Channel: "csgclaw", RoomID: "room-1", ThreadRootID: "thread-root", SourceMessageID: "source-1",
+		Channel: "csgclaw", RoomID: "room-1", ThreadRootID: "thread-root", SourceMessageID: "source-1", RequesterID: "pt-agent",
 	})
 	if err != nil {
 		t.Fatalf("CreateDetached() error = %v", err)
@@ -111,10 +111,10 @@ func TestChannelUserInputResponsePersistsReadableLocalUserTranscript(t *testing.
 			answer = message
 		}
 	}
-	if answer.ID == "" || answer.SenderID != "user-admin" || answer.RelatesTo == nil || answer.RelatesTo.EventID != "thread-root" {
-		t.Fatalf("answer message = %+v, want local user reply in question thread", answer)
+	if answer.ID == "" || answer.SenderID != "user-admin" || answer.RelatesTo == nil || answer.RelatesTo.EventID != "thread-root" || len(answer.Mentions) != 1 || answer.Mentions[0].ID != "user-agent" {
+		t.Fatalf("answer message = %+v, want local user reply mentioning the asking agent in the question thread", answer)
 	}
-	want := "## Answers\n\n- kind：Standard (Normal checks.)\n- note：Skipped (No answer provided)\n- secret：Secret recorded (Secret value redacted)"
+	want := "<at user_id=\"user-agent\">Agent</at>\n\n## Answers\n\n- kind：Standard (Normal checks.)\n- note：Skipped (No answer provided)\n- secret：Secret recorded (Secret value redacted)"
 	if answer.Content != want {
 		t.Fatalf("answer content = %q, want %q", answer.Content, want)
 	}
@@ -180,6 +180,40 @@ func TestChannelUserInputResponseSkipAllDoesNotPersistTranscript(t *testing.T) {
 	for _, message := range room.Messages {
 		if strings.HasPrefix(message.ID, "answer-") {
 			t.Fatalf("unexpected answer transcript: %+v", message)
+		}
+	}
+}
+
+func TestChannelUserInputResponseDoesNotMentionAskingAgentInDirectRoom(t *testing.T) {
+	t.Parallel()
+
+	broker := runtimecodex.NewUserInputBroker(nil)
+	bootstrap := userInputTestBootstrap()
+	bootstrap.Rooms[0].IsDirect = true
+	h := &Handler{im: im.NewServiceFromBootstrap(bootstrap)}
+	h.SetUserInputResponder(broker)
+	snapshot, err := broker.CreateDetached(runtimecodex.PendingUserInputRequest{
+		Questions: []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Answer?", IsOther: true}},
+	}, runtimecodex.DetachedUserInputContext{Channel: "csgclaw", RoomID: "room-1", RequesterID: "pt-agent"})
+	if err != nil {
+		t.Fatalf("CreateDetached() error = %v", err)
+	}
+	rec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(rec, httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/channels/csgclaw/activities/"+snapshot.ID+":respond",
+		strings.NewReader(`{"answers":{"q":{"answers":["user_note: direct answer"]}}}`),
+	))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	messages, err := h.im.ListMessages("room-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	for _, message := range messages {
+		if message.ID == "answer-"+snapshot.ID && (len(message.Mentions) != 0 || strings.HasPrefix(message.Content, "<at ")) {
+			t.Fatalf("direct-room answer unexpectedly mentioned asking agent: %+v", message)
 		}
 	}
 }

@@ -33,10 +33,21 @@ const t: TranslateFn = (key, params) => {
     inputPlaceholder: "Message",
     addAttachment: "Add attachment",
     attachments: "Attachments",
+    previewAttachmentNamed: `Preview attachment: ${params?.name ?? ""}`,
     attachmentsScrollPrevious: "View previous attachments",
     attachmentsScrollNext: "View more attachments",
     removeAttachment: "Remove attachment",
     removeAttachmentNamed: `Remove attachment: ${params?.name ?? ""}`,
+    attachmentRemoved: `Removed attachment "${params?.name ?? ""}"`,
+    attachmentUploadingProgress: `Uploading ${params?.progress ?? 0}%`,
+    attachmentUploadingNamed: `Uploading attachment: ${params?.name ?? ""}`,
+    attachmentUploadFailed: "Upload failed",
+    sendingWithProgress: `Sending ${params?.progress ?? 0}%`,
+    retrySend: "Retry send",
+    stopSending: "Stop sending",
+    undo: "Undo",
+    suggestedActions: "Suggested actions",
+    suggestedActionsOnly: "Suggestions only; nothing runs automatically",
     composerTip: "Enter to send · Shift + Enter for a new line",
     send: "Send",
   };
@@ -113,7 +124,7 @@ describe("ConversationComposer connectors", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Add content" });
     expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText("Files")).toBeInTheDocument();
+    expect(within(dialog).getByText("Add attachment")).toBeInTheDocument();
     expect(within(dialog).getByText("Connectors")).toBeInTheDocument();
     expect(screen.getByText("GitHub")).toBeInTheDocument();
     expect(screen.getByText("GitLab")).toBeInTheDocument();
@@ -163,7 +174,7 @@ describe("ConversationComposer connectors", () => {
     renderComposer();
 
     await user.click(screen.getByRole("button", { name: "Add content" }));
-    await user.click(screen.getByRole("button", { name: "Files" }));
+    await user.click(screen.getByRole("button", { name: "Add attachment" }));
 
     expect(inputClick).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog", { name: "Add content" })).not.toBeInTheDocument();
@@ -182,11 +193,15 @@ describe("ConversationComposer connectors", () => {
       onSendMessage,
     });
 
-    expect(screen.getByText("note.txt")).toBeInTheDocument();
+    expect(screen.getByTitle("note.txt")).toBeInTheDocument();
     const sendButton = screen.getByRole("button", { name: "Send" });
     expect(sendButton).not.toBeDisabled();
 
-    expect(screen.getByText("note.txt")).toHaveAttribute("title", "note.txt");
+    expect(screen.getByTitle("note.txt")).toHaveAttribute("title", "note.txt");
+    expect(screen.getByRole("link", { name: "Preview attachment: note.txt" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/^blob:/),
+    );
     await user.click(screen.getByRole("button", { name: "Remove attachment: note.txt" }));
     expect(onRemoveAttachment).toHaveBeenCalledWith(attachmentDrafts[0].id);
     await user.click(sendButton);
@@ -271,6 +286,59 @@ describe("ConversationComposer connectors", () => {
     expect(onAddAttachments).toHaveBeenNthCalledWith(1, [pickerFile]);
     expect(onAddAttachments).toHaveBeenNthCalledWith(2, [pastedFile]);
     expect(onAddAttachments).toHaveBeenNthCalledWith(3, [droppedFile]);
+  });
+
+  it("shows upload progress and lets the user stop sending", async () => {
+    const user = userEvent.setup();
+    const onStopSend = vi.fn();
+    const attachmentDrafts = createAttachmentDrafts([new File(["hello"], "report.final.pdf")]);
+    renderComposer({
+      attachmentDrafts,
+      sendProgress: 42,
+      sendStatus: "sending",
+      onStopSend,
+    });
+
+    expect(screen.getByRole("progressbar", { name: "Uploading attachment: report.final.pdf" })).toHaveAttribute(
+      "aria-valuenow",
+      "42",
+    );
+    expect(screen.getByText("Sending 42%")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop sending" }));
+    expect(onStopSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers retry after failure and undo after attachment removal", async () => {
+    const user = userEvent.setup();
+    const onRetrySend = vi.fn();
+    const onUndoRemoveAttachment = vi.fn();
+    renderComposer({
+      removedAttachmentName: "report.pdf",
+      sendError: "Network unavailable",
+      sendStatus: "failed",
+      onRetrySend,
+      onUndoRemoveAttachment,
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Network unavailable");
+    await user.click(screen.getByRole("button", { name: "Retry send" }));
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    expect(onRetrySend).toHaveBeenCalledTimes(1);
+    expect(onUndoRemoveAttachment).toHaveBeenCalledTimes(1);
+  });
+
+  it("suggests natural-language actions without running them automatically", async () => {
+    const user = userEvent.setup();
+    const onApplySlashCandidate = vi.fn();
+    renderComposer({
+      draftText: "帮我创建一个 dev 智能体",
+      onApplySlashCandidate,
+    });
+
+    expect(onApplySlashCandidate).not.toHaveBeenCalled();
+    expect(screen.getByText("Suggestions only; nothing runs automatically")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "/创建智能体" }));
+    expect(onApplySlashCandidate).toHaveBeenCalledWith("创建智能体");
   });
 
   it("starts GitHub authorization from the dropdown row connect action", async () => {

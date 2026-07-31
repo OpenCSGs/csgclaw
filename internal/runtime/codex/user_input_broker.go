@@ -36,6 +36,7 @@ type DetachedUserInputContext struct {
 	RoomID          string
 	ThreadRootID    string
 	SourceMessageID string
+	RequesterID     string
 }
 
 type DetachedUserInputResolution struct {
@@ -61,7 +62,7 @@ type UserInputBroker interface {
 	Request(ctx context.Context, req PendingUserInputRequest) (UserInputDecision, error)
 	CreateDetached(req PendingUserInputRequest, detached DetachedUserInputContext) (activity.UserInputSnapshot, error)
 	AddDetachedHandler(handler DetachedUserInputHandler)
-	Bind(requestID, channel, roomID, threadRootID string) (activity.UserInputSnapshot, error)
+	Bind(requestID, channel, roomID, threadRootID, requesterID string) (activity.UserInputSnapshot, error)
 	Get(requestID string) (activity.UserInputSnapshot, bool)
 	CancelSession(runtimeID, sessionID string)
 	CancelServerRequest(runtimeID, sessionID, serverRequestID string)
@@ -168,6 +169,7 @@ func (b *MemoryUserInputBroker) start(req PendingUserInputRequest, detached *Det
 		copy.RoomID = strings.TrimSpace(copy.RoomID)
 		copy.ThreadRootID = strings.TrimSpace(copy.ThreadRootID)
 		copy.SourceMessageID = strings.TrimSpace(copy.SourceMessageID)
+		copy.RequesterID = strings.TrimSpace(copy.RequesterID)
 		if copy.Channel == "" || copy.RoomID == "" {
 			return nil, fmt.Errorf("%w: detached user input requires channel and room", ErrUserInputInvalidResponse)
 		}
@@ -175,6 +177,7 @@ func (b *MemoryUserInputBroker) start(req PendingUserInputRequest, detached *Det
 		snapshot.Channel = copy.Channel
 		snapshot.RoomID = copy.RoomID
 		snapshot.ThreadRootID = copy.ThreadRootID
+		snapshot.RequesterID = copy.RequesterID
 	}
 	if req.AutoResolve > 0 {
 		deadline := now.Add(req.AutoResolve)
@@ -263,11 +266,12 @@ func (b *MemoryUserInputBroker) notifyDetached(state userInputState) {
 	}()
 }
 
-func (b *MemoryUserInputBroker) Bind(requestID, channel, roomID, threadRootID string) (activity.UserInputSnapshot, error) {
+func (b *MemoryUserInputBroker) Bind(requestID, channel, roomID, threadRootID, requesterID string) (activity.UserInputSnapshot, error) {
 	requestID = strings.TrimSpace(requestID)
 	channel = strings.TrimSpace(channel)
 	roomID = strings.TrimSpace(roomID)
 	threadRootID = strings.TrimSpace(threadRootID)
+	requesterID = strings.TrimSpace(requesterID)
 	if requestID == "" || channel == "" || roomID == "" {
 		return activity.UserInputSnapshot{}, ErrUserInputInvalidResponse
 	}
@@ -287,9 +291,15 @@ func (b *MemoryUserInputBroker) Bind(requestID, channel, roomID, threadRootID st
 	if snapshot.Channel != "" && (snapshot.Channel != channel || snapshot.RoomID != roomID) {
 		return activity.UserInputSnapshot{}, ErrUserInputInvalidResponse
 	}
+	if snapshot.RequesterID != "" && requesterID != "" && snapshot.RequesterID != requesterID {
+		return activity.UserInputSnapshot{}, ErrUserInputInvalidResponse
+	}
 	snapshot.Channel = channel
 	snapshot.RoomID = roomID
 	snapshot.ThreadRootID = threadRootID
+	if requesterID != "" {
+		snapshot.RequesterID = requesterID
+	}
 	pending.state.snapshot = snapshot
 	return publicUserInputSnapshot(snapshot), nil
 }

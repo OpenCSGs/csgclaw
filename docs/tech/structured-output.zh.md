@@ -2,14 +2,14 @@
 
 [English](structured-output.md) | 中文
 
-CSGClaw 为需要附加资源链接或打开交互式问答流程的 skill 脚本提供行式 stdout 协议。
+CSGClaw 为需要附加资源链接或打开交互式问答流程的 skill 脚本和已完成的 Assistant 响应提供行式输出协议。
 该协议归 CSGClaw 所有，不绑定特定的 skill 引擎、模型或 Agent Runtime。
 它不是 MCP，也不依赖对任意 JSON 的识别。
 
 ## 规范可执行示例
 
-Manager 内置 skill [`csgclaw-interactive-output-demo`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/) 是完整的参考实现。
-其中的 [`emit_demo.py`](../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) 会在每个支持字段首次出现时解释其作用，并连续发出三个问答阶段。
+Manager 内置 skill [`csgclaw-interactive-output-demo`](../../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/) 是完整的参考实现。
+其中的 [`emit_demo.py`](../../internal/template/embed/manager/codex/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py) 会在每个支持字段首次出现时解释其作用，并连续发出三个问答阶段。
 前两个阶段都会发出相同的完整与最小 `ResourceLink` 示例，第三个阶段仅演示最终操作和 secret 输入。
 这三个阶段覆盖普通选项、Recommended 与 Unicode label、包含四个问题的导航页面、选项或自由输入、仅自由输入以及 secret 问题。
 Manager 会读取每次自动续接响应并自行选择下一个白名单脚本阶段，而 Python emitter 永远不会接收或解析响应 JSON。
@@ -43,8 +43,9 @@ Use $csgclaw-interactive-output-demo to run the complete interactive output demo
 
 前缀必须从该行的第一个字符开始。
 每个 JSON payload 必须编码为一个物理行，普通日志或状态文本需要输出到其他行。
-CSGClaw 会从可见工具输出中移除有效控制行，同时保留普通 stdout。
+CSGClaw 会从可见输出中移除有效控制行，同时保留普通文本。
 未知、格式错误、过大或无效的记录会被忽略，并作为普通输出继续显示。
+为了兼容 Agent 偶发的格式偏差，Runtime 也能识别多出一个前导冒号或把 payload 放在紧随其后一行的 Assistant 响应，但 emitter 必须始终输出规范的单行格式。
 
 最小 Python emitter 如下：
 
@@ -60,7 +61,7 @@ def emit(kind: str, payload: dict[str, object]) -> None:
 ## Turn 生命周期
 
 1. Skill 脚本输出普通文本以及零条或多条控制记录。
-2. CSGClaw Runtime Adapter 只从成功完成的命令执行中解码记录。
+2. CSGClaw Runtime Adapter 会从成功完成的命令执行或已完成的 Assistant 响应中解码记录。
 3. 有效的 `request_user_input` 记录会成为 Runtime 强制执行的 turn 边界，因此模型不能在用户回答前执行后续阶段。
 4. CSGClaw 会主动中断该 turn，并把这个边界视为成功结束。
 5. 如果模型尚未生成响应，发出控制记录的命令所产生的普通 stdout 会成为可读响应。
@@ -68,6 +69,7 @@ def emit(kind: str, payload: dict[str, object]) -> None:
 7. 资源链接以 Markdown 形式追加到响应末尾，如果提供了安全的 HTTP(S) 图标，还会渲染第一个有效图标。
 8. 最终响应和链接显示后，CSGClaw 再激活独立的问答请求。
 9. 用户提交答案后，CSGClaw 会先更新原有的 Agent 问题消息，并持久化一条独立且可读的本地用户答案消息。
+   在群聊中，该答案消息会使用服务端持有的提问者身份 mention 发起问题的 Agent。
 10. 随后，CSGClaw 会携带 wire 兼容的响应 JSON 副本自动续接同一个原始 Agent 会话，其中已提交的 secret 值会替换为 `<redacted>`。
 
 Skill 作者应当像 demo emitter 一样，在控制记录之前输出简洁、可读的 Markdown。
@@ -204,6 +206,7 @@ CSGClaw 会从已存储的 activity 中推导 room 和当前 responder。
 
 非空提交会创建一条由当前已认证本地用户所有的独立消息。
 答案消息与问题位于同一个 room 和 thread，并由 `metadata.csgclaw.request_user_input` 标记。
+在群聊中，CSGClaw 会把对提问 Agent 的结构化 mention 单独放在答案标题前一行。
 该消息会通过普通 IM event 更新 UI，但绝不会作为第二个 participant prompt 分发。
 自动续接仍然是唯一的新 Agent turn。
 

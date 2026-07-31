@@ -311,6 +311,35 @@ func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testi
 	}
 }
 
+func TestRepairDanglingCSGClawAgentParticipantsRequiresIMService(t *testing.T) {
+	agentSvc := mustNewAgentService(t)
+	store := NewMemoryStore([]Participant{
+		{
+			ID:              "pt-dev",
+			Channel:         ChannelCSGClaw,
+			Type:            TypeAgent,
+			Name:            "dev",
+			ChannelUserRef:  "user-dev",
+			ChannelUserKind: ChannelUserKindLocalUserID,
+			AgentID:         "agent-dev",
+			LifecycleStatus: LifecycleStatusActive,
+			Mentionable:     true,
+		},
+	})
+	svc := NewService(store, WithAgentService(agentSvc))
+
+	deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
+	if err != nil {
+		t.Fatalf("RepairDanglingCSGClawAgentParticipants() error = %v", err)
+	}
+	if len(deleted) != 0 {
+		t.Fatalf("deleted = %+v, want no cleanup without IM service", deleted)
+	}
+	if _, ok := store.Get(ChannelCSGClaw, "pt-dev"); !ok {
+		t.Fatal("participant was deleted without an IM service")
+	}
+}
+
 func TestCreateFeishuBotParticipantStoresChannelAppConfigWithoutOpenID(t *testing.T) {
 	svc := NewService(NewMemoryStore(nil))
 

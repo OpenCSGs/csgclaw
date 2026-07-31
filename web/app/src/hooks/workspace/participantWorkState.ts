@@ -1,5 +1,5 @@
 import { localIdentitiesMatch, participantIDForLocalIdentity } from "@/models/conversations";
-import type { ParticipantWorkUpdate } from "@/models/conversations";
+import type { ParticipantWorkStage, ParticipantWorkUpdate } from "@/models/conversations";
 
 export const PARTICIPANT_WORK_CLOSED_RETENTION_MS = 70_000;
 
@@ -59,6 +59,33 @@ export function activeParticipantWorkForRoom(
   roomID: string | null | undefined,
 ): Record<string, Record<string, ActiveParticipantWorkLease>> {
   return state.activeByRoom[String(roomID || "").trim()] ?? {};
+}
+
+export const activeWorkLeasesForRoom = activeParticipantWorkForRoom;
+
+export function workLeaseForRequest(
+  state: ParticipantWorkState,
+  roomIDValue: string | null | undefined,
+  participantIDValue: string | null | undefined,
+  requestIDValue: string | null | undefined,
+): ActiveParticipantWorkLease | null {
+  const roomID = String(roomIDValue || "").trim();
+  const participantID = String(participantIDValue || "").trim();
+  const requestID = String(requestIDValue || "").trim();
+  if (!roomID || !participantID || !requestID) {
+    return null;
+  }
+  const byParticipant = state.activeByRoom[roomID] ?? {};
+  for (const [candidateID, byLease] of Object.entries(byParticipant)) {
+    if (!localIdentitiesMatch(candidateID, participantID)) {
+      continue;
+    }
+    const match = Object.values(byLease).find((lease) => lease.request_id === requestID);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
 }
 
 export function nextParticipantWorkDeadline(state: ParticipantWorkState): number | null {
@@ -260,24 +287,106 @@ function normalizeWorkEvent(work: ParticipantWorkUpdate): ParticipantWorkUpdate 
     !requestID ||
     work?.kind !== "agent_turn" ||
     (work?.state !== "working" && work?.state !== "idle") ||
-    !["started", "renewed", "released", "expired"].includes(work?.reason) ||
+    ![
+      "started",
+      "renewed",
+      "status_updated",
+      "stop_requested",
+      "stop_failed",
+      "stop_timed_out",
+      "released",
+      "stopped",
+      "expired",
+    ].includes(work?.reason) ||
     !Number.isInteger(revision) ||
     revision <= 0 ||
     !Number.isFinite(expiresAt)
   ) {
     return null;
   }
+  const capabilities = Array.isArray(work.capabilities)
+    ? work.capabilities.filter(
+        (value): value is "thinking_status_v1" | "turn_stop_v1" | "work_stage_v1" =>
+          value === "thinking_status_v1" || value === "turn_stop_v1" || value === "work_stage_v1",
+      )
+    : undefined;
+  const status = normalizeParticipantWorkStatus(work.status);
+  if (work.status && !status) {
+    return null;
+  }
+  const stopRequestedAt = String(work.stop_requested_at || "").trim();
+  if (stopRequestedAt && !Number.isFinite(Date.parse(stopRequestedAt))) {
+    return null;
+  }
+  const stopState = String(work.stop_state || "").trim();
+  if (stopState && !["stop_requested", "stop_failed", "stop_timed_out", "stopped"].includes(stopState)) {
+    return null;
+  }
   return {
     ...work,
+    capabilities,
     lease_id: leaseID,
     participant_id: participantID,
     registry_epoch: registryEpoch,
     request_id: requestID,
     revision,
     room_id: roomID,
+    status,
+    stop_error: String(work.stop_error || "").trim() || undefined,
+    stop_requested_at: stopRequestedAt || undefined,
+    stop_state: (stopState || undefined) as ParticipantWorkUpdate["stop_state"],
     thread_root_id: String(work.thread_root_id || "").trim() || undefined,
     user_id: userID,
   };
+}
+
+function normalizeParticipantWorkStatus(
+  status: ParticipantWorkUpdate["status"],
+): ParticipantWorkUpdate["status"] | undefined {
+  if (!status) {
+    return undefined;
+  }
+  const sequence = Number(status.sequence);
+  if (!Number.isInteger(sequence) || sequence <= 0 || (status.phase !== "working" && status.phase !== "thinking")) {
+    return undefined;
+  }
+  const stage = normalizeParticipantWorkStage(status.stage, status.phase);
+  if (status.phase === "working") {
+    return { phase: "working", sequence, stage };
+  }
+  if (!status.thinking) {
+    return { phase: "thinking", sequence, stage };
+  }
+  if (
+    status.thinking.format !== "plain_text" ||
+    typeof status.thinking.text !== "string" ||
+    typeof status.thinking.truncated !== "boolean"
+  ) {
+    return undefined;
+  }
+  return {
+    phase: "thinking",
+    sequence,
+    stage,
+    thinking: {
+      format: "plain_text",
+      text: status.thinking.text,
+      truncated: status.thinking.truncated,
+    },
+  };
+}
+
+function normalizeParticipantWorkStage(
+  stage: ParticipantWorkStage | null | undefined,
+  phase: "working" | "thinking",
+): ParticipantWorkStage | undefined {
+  if (phase === "working" && (stage === "running_tool" || stage === "generating_reply")) {
+    return stage;
+  }
+  if (phase === "thinking" && (stage === "preparing_reply" || stage === "thinking")) {
+    return stage;
+  }
+  return undefined;
 }
 
 function findLeaseLocation(

@@ -44,6 +44,48 @@ func TestUserInputQuestionMarkdown(t *testing.T) {
 	}
 }
 
+func TestUserInputMarkdownUsesChineseHeadingsForChineseQuestions(t *testing.T) {
+	t.Parallel()
+
+	snapshot := UserInputSnapshot{
+		Status: UserInputStatusAnswered,
+		Questions: []UserInputQuestionSnapshot{
+			{
+				ID:       "demo_kind",
+				Question: "演示应该执行哪种工作流？",
+				Options: []UserInputOptionSnapshot{
+					{Label: "修复缺陷（推荐）", Description: "执行聚焦的修复流程。"},
+				},
+			},
+		},
+		Answers: map[string]UserInputAnswerSnapshot{
+			"demo_kind": {Answered: true, OptionIndex: 1, OptionLabel: "修复缺陷（推荐）"},
+		},
+	}
+
+	if got := UserInputQuestionMarkdown(snapshot); !strings.HasPrefix(got, "## 问题\n\n") {
+		t.Fatalf("UserInputQuestionMarkdown() = %q, want Chinese heading", got)
+	}
+	if got := UserInputAnswerMarkdown(snapshot); !strings.HasPrefix(got, "## 回答\n\n") {
+		t.Fatalf("UserInputAnswerMarkdown() = %q, want Chinese heading", got)
+	}
+}
+
+func TestUserInputMarkdownUsesFirstQuestionToDetectLanguage(t *testing.T) {
+	t.Parallel()
+
+	snapshot := UserInputSnapshot{
+		Questions: []UserInputQuestionSnapshot{
+			{ID: "primary", Question: "Choose the primary option."},
+			{ID: "unicode", Question: "Choose 中文 punctuation?"},
+		},
+	}
+
+	if got := UserInputQuestionMarkdown(snapshot); !strings.HasPrefix(got, "## Questions\n\n") {
+		t.Fatalf("UserInputQuestionMarkdown() = %q, want primary question language", got)
+	}
+}
+
 func TestUserInputAnswerMarkdownUsesStrictReadableShape(t *testing.T) {
 	t.Parallel()
 

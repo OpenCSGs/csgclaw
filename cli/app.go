@@ -92,6 +92,7 @@ func (a *App) registerDefaultCommands() {
 		completioncmd.NewCmd("csgclaw", completioncmd.FullSpec()),
 		completioncmd.NewCompleteCmd("csgclaw", completioncmd.FullSpec()),
 		servecmd.NewInternalServeCmd(),
+		servecmd.NewDesktopServeCmd(),
 		servecmd.NewInternalRestartCmd(),
 	)
 }

@@ -152,9 +152,30 @@ func bridgeModelMetadata(profile agent.AgentProfile) map[string]any {
 }
 
 func (s *Service) ChatCompletions(ctx context.Context, botID string, body []byte) ([]byte, int, string, error) {
-	profile, err := s.resolveProfile(botID)
+	resp, err := s.ChatCompletionsStream(ctx, botID, body)
 	if err != nil {
 		return nil, 0, "", err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	if err != nil {
+		return nil, 0, "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read upstream response: %v", err)}
+	}
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	return respBody, resp.StatusCode, contentType, nil
+}
+
+// ChatCompletionsStream returns the upstream response body without buffering it.
+// Callers that proxy streaming chat completions must copy and flush this body as
+// chunks arrive; callers that need a buffered result should use ChatCompletions.
+func (s *Service) ChatCompletionsStream(ctx context.Context, botID string, body []byte) (*UpstreamResponse, error) {
+	profile, err := s.resolveProfile(botID)
+	if err != nil {
+		return nil, err
 	}
 	return s.forwardRemoteChat(ctx, profile, body)
 }
@@ -220,60 +241,52 @@ func (s *Service) resolveProfile(botID string) (agent.AgentProfile, error) {
 	return profile, nil
 }
 
-func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProfile, body []byte) ([]byte, int, string, error) {
+func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProfile, body []byte) (*UpstreamResponse, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, 0, "", &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
 	}
 	mergeProfilePayload(payload, profile)
 	normalizeCompletionTokenLimits(payload)
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return nil, 0, "", &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
 	}
 
 	baseURL, apiKey, err := s.agentProfileTarget(ctx, profile)
 	if err != nil {
-		return nil, 0, "", err
+		return nil, err
 	}
 	if baseURL == "" {
-		return nil, 0, "", &HTTPError{Status: http.StatusBadRequest, Message: "profile base_url is required"}
+		return nil, &HTTPError{Status: http.StatusBadRequest, Message: "profile base_url is required"}
 	}
 	upstreamURL := strings.TrimRight(baseURL, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upstreamURL, bytes.NewReader(encoded))
+	req, err := newProfileJSONRequest(ctx, upstreamURL, encoded, apiKey, profile.Headers)
 	if err != nil {
-		return nil, 0, "", &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
-	}
-	if apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	for key, value := range profile.Headers {
-		key = strings.TrimSpace(key)
-		if key == "" || strings.EqualFold(key, "authorization") || strings.EqualFold(key, "content-type") {
-			continue
-		}
-		req.Header.Set(key, value)
+		return nil, &HTTPError{Status: http.StatusInternalServerError, Message: fmt.Sprintf("build upstream request: %v", err)}
 	}
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, 0, "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
-	if err != nil {
-		return nil, 0, "", &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read upstream response: %v", err)}
-	}
-	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
-	if contentType == "" {
-		contentType = "application/json"
+		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		respBody, contentType = compactUpstreamErrorResponse(resp.Header, respBody, contentType)
+		return compactUpstreamErrorStream(resp)
 	}
-	return respBody, resp.StatusCode, contentType, nil
+	header := resp.Header.Clone()
+	header.Del("Content-Length")
+	if strings.TrimSpace(header.Get("Content-Type")) == "" {
+		if payloadBool(payload["stream"]) {
+			header.Set("Content-Type", "text/event-stream")
+		} else {
+			header.Set("Content-Type", "application/json")
+		}
+	}
+	return &UpstreamResponse{
+		StatusCode: resp.StatusCode,
+		Header:     header,
+		Body:       resp.Body,
+	}, nil
 }
 
 func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.AgentProfile, body []byte) (*UpstreamResponse, error) {
@@ -1091,8 +1104,12 @@ func payloadBool(value any) bool {
 }
 
 func applyReasoningEffortDefault(payload map[string]any, defaultEffort string) {
-	defaultEffort = strings.ToLower(strings.TrimSpace(defaultEffort))
-	if defaultEffort == "" {
+	defaultEffort = config.NormalizeReasoningEffort(defaultEffort)
+	if config.UsesModelReasoningDefault(defaultEffort) {
+		return
+	}
+	if defaultEffort == config.ReasoningEffortNone {
+		payload["reasoning_effort"] = config.ReasoningEffortNone
 		return
 	}
 	if value, ok := payload["reasoning_effort"]; ok {

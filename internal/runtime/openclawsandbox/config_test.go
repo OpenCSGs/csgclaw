@@ -2,6 +2,8 @@ package openclawsandbox
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -80,6 +82,9 @@ func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	if _, ok := defaults["thinkingDefault"]; ok {
 		t.Fatalf("thinkingDefault should be omitted for non-reasoning OpenAI-compatible bridge model: %#v", defaults["thinkingDefault"])
 	}
+	if got, want := defaults["reasoningDefault"], "stream"; got != want {
+		t.Fatalf("reasoningDefault = %v, want %v", got, want)
+	}
 	if got, want := defaults["verboseDefault"], "on"; got != want {
 		t.Fatalf("verboseDefault = %v, want %v", got, want)
 	}
@@ -95,6 +100,81 @@ func TestRenderAgentOpenClawConfigUsesBridgeForMinimaxBaseURL(t *testing.T) {
 	text := string(data)
 	if strings.Contains(text, "https://api.minimaxi.com/v1") || strings.Contains(text, "sk-minimax-test") {
 		t.Fatalf("rendered OpenClaw config should use CSGClaw bridge, not upstream credentials:\n%s", text)
+	}
+}
+
+func TestRenderAgentOpenClawConfigMapsCommonReasoningControl(t *testing.T) {
+	tests := []struct {
+		name             string
+		effort           string
+		wantReasoning    bool
+		wantThinking     string
+		wantThinkingSet  bool
+		wantVisibility   string
+		wantEffortValues []any
+	}{
+		{
+			name:             "enabled",
+			effort:           "medium",
+			wantReasoning:    true,
+			wantThinking:     "medium",
+			wantThinkingSet:  true,
+			wantVisibility:   "stream",
+			wantEffortValues: []any{"minimal", "low", "medium", "high", "xhigh"},
+		},
+		{
+			name:             "disabled alias",
+			effort:           "off",
+			wantReasoning:    false,
+			wantThinking:     "off",
+			wantThinkingSet:  true,
+			wantVisibility:   "off",
+			wantEffortValues: []any{},
+		},
+		{
+			name:             "model default",
+			effort:           "auto",
+			wantReasoning:    false,
+			wantThinkingSet:  false,
+			wantVisibility:   "stream",
+			wantEffortValues: []any{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := renderConfig("agent-1", "u-agent-1", config.ServerConfig{
+				AdvertiseBaseURL: "http://127.0.0.1:18080",
+				AccessToken:      "token",
+			}, config.ModelConfig{
+				Provider:        "opencsg",
+				ModelID:         "qwen3.7-plus",
+				ReasoningEffort: tt.effort,
+			}, testBaseURLResolver, nil)
+			if err != nil {
+				t.Fatalf("renderConfig() error = %v", err)
+			}
+			var cfg map[string]any
+			if err := json.Unmarshal(data, &cfg); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+			providers := cfg["models"].(map[string]any)["providers"].(map[string]any)
+			entry := providers[openClawBridgeProviderID].(map[string]any)["models"].([]any)[0].(map[string]any)
+			if got := entry["reasoning"]; got != tt.wantReasoning {
+				t.Fatalf("model reasoning = %v, want %v", got, tt.wantReasoning)
+			}
+			compat := entry["compat"].(map[string]any)
+			if got := compat["supportedReasoningEfforts"]; !reflect.DeepEqual(got, tt.wantEffortValues) {
+				t.Fatalf("supportedReasoningEfforts = %#v, want %#v", got, tt.wantEffortValues)
+			}
+			defaults := cfg["agents"].(map[string]any)["defaults"].(map[string]any)
+			gotThinking, gotThinkingSet := defaults["thinkingDefault"]
+			if gotThinkingSet != tt.wantThinkingSet || (gotThinkingSet && gotThinking != tt.wantThinking) {
+				t.Fatalf("thinkingDefault = %v (set=%v), want %v (set=%v)", gotThinking, gotThinkingSet, tt.wantThinking, tt.wantThinkingSet)
+			}
+			if got := defaults["reasoningDefault"]; got != tt.wantVisibility {
+				t.Fatalf("reasoningDefault = %v, want %v", got, tt.wantVisibility)
+			}
+		})
 	}
 }
 
@@ -233,11 +313,17 @@ func TestRenderAgentOpenClawConfigRendersMCPServers(t *testing.T) {
 	if got, want := context7["args"], []any{"context7-mcp"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("context7 args = %#v, want %#v", got, want)
 	}
-	if got, want := context7["startup_timeout_sec"], float64(90); got != want {
-		t.Fatalf("context7 startup_timeout_sec = %#v, want %#v", got, want)
+	if got, want := context7["connectionTimeoutMs"], float64(90000); got != want {
+		t.Fatalf("context7 connectionTimeoutMs = %#v, want %#v", got, want)
 	}
-	if got, want := context7["tool_timeout_sec"], float64(120); got != want {
-		t.Fatalf("context7 tool_timeout_sec = %#v, want %#v", got, want)
+	if got, want := context7["requestTimeoutMs"], float64(120000); got != want {
+		t.Fatalf("context7 requestTimeoutMs = %#v, want %#v", got, want)
+	}
+	if _, ok := context7["startup_timeout_sec"]; ok {
+		t.Fatalf("context7 retained CSGClaw-only startup timeout: %#v", context7)
+	}
+	if _, ok := context7["tool_timeout_sec"]; ok {
+		t.Fatalf("context7 retained CSGClaw-only tool timeout: %#v", context7)
 	}
 	env := context7["env"].(map[string]any)
 	if got, want := env["CONTEXT7_API_KEY"], "secret"; got != want {
@@ -269,6 +355,67 @@ func TestRenderAgentOpenClawConfigRendersMCPServers(t *testing.T) {
 	headers := remote["headers"].(map[string]any)
 	if got, want := headers["Authorization"], "Bearer secret"; got != want {
 		t.Fatalf("remote-search Authorization = %#v, want %q", got, want)
+	}
+}
+
+func TestReadOpenClawMCPServersRoundTripsNativeTimeouts(t *testing.T) {
+	native := map[string]any{
+		"context7": map[string]any{
+			"command":             "uvx",
+			"connectionTimeoutMs": float64(90000),
+			"requestTimeoutMs":    120000,
+		},
+	}
+
+	data, err := json.Marshal(map[string]any{"mcp": map[string]any{"servers": native}})
+	if err != nil {
+		t.Fatalf("json.Marshal(native MCP config) error = %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "openclaw.json")
+	if err := os.WriteFile(configPath, data, 0o600); err != nil {
+		t.Fatalf("WriteFile(native MCP config) error = %v", err)
+	}
+	snapshot, err := readOpenClawMCPServers(configPath)
+	if err != nil {
+		t.Fatalf("readOpenClawMCPServers() error = %v", err)
+	}
+	shared := snapshot.Servers
+	context7 := shared["context7"].(map[string]any)
+	if got, want := context7["startup_timeout_sec"], int64(90); got != want {
+		t.Fatalf("startup_timeout_sec = %#v, want %#v", got, want)
+	}
+	if got, want := context7["tool_timeout_sec"], int64(120); got != want {
+		t.Fatalf("tool_timeout_sec = %#v, want %#v", got, want)
+	}
+	if _, exists := context7["connectionTimeoutMs"]; exists {
+		t.Fatalf("shared MCP config retained OpenClaw timeout: %#v", context7)
+	}
+	if _, exists := context7["requestTimeoutMs"]; exists {
+		t.Fatalf("shared MCP config retained OpenClaw timeout: %#v", context7)
+	}
+
+	rendered, err := resolveOpenClawMCPWorkspaceConfig(shared, "")
+	if err != nil {
+		t.Fatalf("resolveOpenClawMCPWorkspaceConfig() error = %v", err)
+	}
+	context7 = rendered["context7"].(map[string]any)
+	if got, want := context7["connectionTimeoutMs"], int64(90000); got != want {
+		t.Fatalf("connectionTimeoutMs = %#v, want %#v", got, want)
+	}
+	if got, want := context7["requestTimeoutMs"], int64(120000); got != want {
+		t.Fatalf("requestTimeoutMs = %#v, want %#v", got, want)
+	}
+}
+
+func TestOpenClawMCPTimeoutProjectionRejectsSubsecondNativeValues(t *testing.T) {
+	_, err := openClawMCPServersToGeneric(map[string]any{
+		"context7": map[string]any{
+			"command":             "uvx",
+			"connectionTimeoutMs": 1500,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "connectionTimeoutMs must be a positive multiple of 1000") {
+		t.Fatalf("openClawMCPServersToGeneric() error = %v, want unsupported millisecond timeout", err)
 	}
 }
 
@@ -365,6 +512,11 @@ func TestRenderAgentOpenClawConfigRejectsInvalidMCPServer(t *testing.T) {
 			want: "env must be an object with string values",
 		},
 		{
+			name: "invalid HTTP headers are rejected before gateway startup",
+			mcp:  map[string]any{"broken": map[string]any{"url": "https://mcp.example.com/mcp", "headers": map[string]any{"invalid header": "value"}}},
+			want: "headers contains an invalid HTTP header name",
+		},
+		{
 			name: "unsupported transport is rejected before gateway startup",
 			mcp:  map[string]any{"broken": map[string]any{"url": "https://mcp.example.com/mcp", "transport": "http"}},
 			want: `transport: must be "sse" or "streamable-http"`,
@@ -425,11 +577,11 @@ func TestRenderAgentOpenClawConfigUsesCodexResponsesModelMetadata(t *testing.T) 
 	if got, want := compat["supportsReasoningEffort"], true; got != want {
 		t.Fatalf("model compat.supportsReasoningEffort = %v, want %v", got, want)
 	}
-	if got, want := compat["supportedReasoningEfforts"], []any{"low", "medium", "high", "xhigh"}; !reflect.DeepEqual(got, want) {
+	if got, want := compat["supportedReasoningEfforts"], []any{"minimal", "low", "medium", "high", "xhigh"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("model compat.supportedReasoningEfforts = %#v, want %#v", got, want)
 	}
 	wantReasoningMap := map[string]any{
-		"minimal": "low",
+		"minimal": "minimal",
 		"low":     "low",
 		"medium":  "medium",
 		"high":    "high",
@@ -445,6 +597,39 @@ func TestRenderAgentOpenClawConfigUsesCodexResponsesModelMetadata(t *testing.T) 
 	defaults := agents["defaults"].(map[string]any)
 	if got, want := defaults["thinkingDefault"], "high"; got != want {
 		t.Fatalf("thinkingDefault = %v, want %v", got, want)
+	}
+	if got, want := defaults["reasoningDefault"], "stream"; got != want {
+		t.Fatalf("reasoningDefault = %v, want %v", got, want)
+	}
+}
+
+func TestRenderAgentOpenClawConfigUsesCodexModelDefaultAndStreamsReasoning(t *testing.T) {
+	data, err := renderConfig("u-manager", "u-manager", config.ServerConfig{
+		AdvertiseBaseURL: "http://127.0.0.1:18080",
+		AccessToken:      "shared-token",
+	}, config.ModelConfig{
+		Provider:        "codex",
+		ModelID:         "gpt-5.5",
+		ReasoningEffort: "auto",
+	}, testBaseURLResolver, nil)
+	if err != nil {
+		t.Fatalf("renderConfig() error = %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	providers := cfg["models"].(map[string]any)["providers"].(map[string]any)
+	entry := providers[openClawBridgeProviderID].(map[string]any)["models"].([]any)[0].(map[string]any)
+	if got, want := entry["reasoning"], true; got != want {
+		t.Fatalf("model reasoning = %v, want %v", got, want)
+	}
+	defaults := cfg["agents"].(map[string]any)["defaults"].(map[string]any)
+	if _, ok := defaults["thinkingDefault"]; ok {
+		t.Fatalf("thinkingDefault = %v, want omitted", defaults["thinkingDefault"])
+	}
+	if got, want := defaults["reasoningDefault"], "stream"; got != want {
+		t.Fatalf("reasoningDefault = %v, want %v", got, want)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/auth"
 	"csgclaw/internal/config"
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
@@ -73,6 +74,11 @@ func TestHandleServerRestartStatusConsumesManualRestartRequired(t *testing.T) {
 }
 
 func TestHandleServerConfigGetPut(t *testing.T) {
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{}, nil
+	})
+	defer restore()
+
 	dir := t.TempDir()
 	configPath := dir + "/config.toml"
 	writeMinimalAPIConfig(t, configPath)

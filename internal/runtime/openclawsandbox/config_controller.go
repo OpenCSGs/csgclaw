@@ -79,7 +79,7 @@ func readOpenClawMCPServers(path string) (agentruntime.MCPServersSnapshot, error
 	if !ok {
 		return agentruntime.MCPServersSnapshot{}, fmt.Errorf("openclaw mcp config servers must be an object")
 	}
-	normalized, err := agentruntime.NormalizeMCPServers(servers)
+	normalized, err := openClawMCPServersToGeneric(servers)
 	if err != nil {
 		return agentruntime.MCPServersSnapshot{}, err
 	}

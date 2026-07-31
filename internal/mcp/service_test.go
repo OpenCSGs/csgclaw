@@ -80,6 +80,31 @@ func TestCreateServerRejectsWrappedMCPServersConfig(t *testing.T) {
 	}
 }
 
+func TestInstallRemoteServerCreatesAndReplacesServer(t *testing.T) {
+	store := &memoryServerStore{}
+	svc := NewService(WithServerStore(store))
+	ctx := context.Background()
+
+	if _, err := svc.InstallRemoteServer(ctx, RemoteServer{Name: "calendar", URL: "https://mcp.example.test/v1"}); err != nil {
+		t.Fatalf("InstallRemoteServer(create) error = %v", err)
+	}
+	name, err := svc.InstallRemoteServer(ctx, RemoteServer{Name: " calendar ", URL: "https://mcp.example.test/v2"})
+	if err != nil {
+		t.Fatalf("InstallRemoteServer(replace) error = %v", err)
+	}
+	if got, want := name, "calendar"; got != want {
+		t.Fatalf("InstallRemoteServer() name = %q, want %q", got, want)
+	}
+	servers, err := svc.ListServers(ctx)
+	if err != nil {
+		t.Fatalf("ListServers() error = %v", err)
+	}
+	calendar := servers["calendar"].(map[string]any)
+	if got, want := calendar["url"], "https://mcp.example.test/v2"; got != want {
+		t.Fatalf("calendar.url = %#v, want %q", got, want)
+	}
+}
+
 func TestServiceCRUDAndErrors(t *testing.T) {
 	svc := NewService(WithServerStore(&memoryServerStore{}))
 	ctx := context.Background()

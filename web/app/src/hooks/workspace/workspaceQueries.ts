@@ -1,17 +1,20 @@
+import { useRef } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { fetchAgentProfileModels, fetchAgentWorkspace, fetchAgentWorkspaceFile, fetchAgents } from "@/api/agents";
 import type { AgentProfileModelRequest } from "@/api/agents";
 import { fetchBootstrap, fetchBootstrapConfig, fetchRuntimeImages, fetchVersion } from "@/api/app";
 import type { FetchVersionOptions } from "@/api/app";
-import { fetchMCPServers } from "@/api/mcp";
+import { fetchMCPServers, fetchRemoteMCPServersPage } from "@/api/mcp";
+import type { RemoteMCPServersPage } from "@/api/mcp";
 import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
 import { fetchModelProviders } from "@/api/modelProviders";
 import { fetchRemoteSkillsPage, fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
 import type { RemoteSkillsPage } from "@/api/skills";
 import { fetchManagerProfile } from "@/api/agents";
-import { fetchUpgradeStatus } from "@/api/upgrade";
 import {
+  isAgentRunning,
+  isManagerAgent,
   modelRequestKey,
   normalizeRuntimeImageMap,
   normalizeRuntimeKind,
@@ -31,10 +34,23 @@ import type { HubTemplate, HubWorkspaceFile, HubWorkspaceListing } from "@/model
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceFile, WorkspaceListing } from "@/models/workspace";
-import { normalizeUpgradeStatus } from "@/models/upgradeStatus";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
+import { fetchPlatformUpgradeStatus } from "@/shared/platform/updatePort";
 
 const WORKSPACE_QUERY_SCOPE = "workspace";
+export const WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS = 1_500;
+export const WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS = 120_000;
+
+export function workspaceAgentsStartupRefetchInterval(
+  items: AgentLike[] | undefined,
+  elapsedMs: number,
+): number | false {
+  if (elapsedMs >= WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS) {
+    return false;
+  }
+  const manager = items?.find(isManagerAgent);
+  return manager && isAgentRunning(manager) ? false : WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS;
+}
 
 export const workspaceQueryKeys = {
   bootstrap: () => [WORKSPACE_QUERY_SCOPE, "bootstrap"] as const,
@@ -47,6 +63,8 @@ export const workspaceQueryKeys = {
   runtimeImages: () => [WORKSPACE_QUERY_SCOPE, "runtime-images"] as const,
   hubTemplates: () => [WORKSPACE_QUERY_SCOPE, "hub-templates"] as const,
   mcpServers: () => [WORKSPACE_QUERY_SCOPE, "mcp-servers"] as const,
+  remoteMCPServers: (search: string | null | undefined = "") =>
+    [WORKSPACE_QUERY_SCOPE, "remote-mcp-servers", String(search || "").trim()] as const,
   hubTemplate: (templateID: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-template", templateID || ""] as const,
   hubWorkspace: (templateID: string | null | undefined, workspacePath: string | null | undefined) =>
@@ -132,7 +150,7 @@ export async function fetchWorkspaceAppVersion(options: FetchVersionOptions = {}
 }
 
 export async function fetchWorkspaceUpgradeStatus(): Promise<UpgradeStatus | null> {
-  return normalizeUpgradeStatus(await fetchUpgradeStatus());
+  return fetchPlatformUpgradeStatus();
 }
 
 export async function fetchWorkspaceAgentProfileModels(
@@ -170,9 +188,12 @@ export function useWorkspaceManagerProfileQuery(): UseQueryResult<AgentProfileLi
 }
 
 export function useWorkspaceAgentsQuery(): UseQueryResult<AgentLike[]> {
+  const startupPollStartedAtRef = useRef(Date.now());
   return useQuery<AgentLike[]>({
     queryKey: workspaceQueryKeys.agents(),
     queryFn: () => fetchAgents(),
+    refetchInterval: (query) =>
+      workspaceAgentsStartupRefetchInterval(query.state.data, Date.now() - startupPollStartedAtRef.current),
   });
 }
 
@@ -205,6 +226,19 @@ export function useWorkspaceMCPServersQuery(): UseQueryResult<JSONRecord> {
   return useQuery<JSONRecord>({
     queryKey: workspaceQueryKeys.mcpServers(),
     queryFn: fetchMCPServers,
+  });
+}
+
+export function useWorkspaceRemoteMCPServersQuery(search = "", options: { enabled?: boolean } = {}) {
+  const normalizedSearch = String(search || "").trim();
+  return useInfiniteQuery<RemoteMCPServersPage>({
+    queryKey: workspaceQueryKeys.remoteMCPServers(normalizedSearch),
+    queryFn: ({ pageParam }) =>
+      fetchRemoteMCPServersPage(typeof pageParam === "number" ? pageParam : Number(pageParam) || 1, normalizedSearch),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.nextPage ?? undefined,
+    enabled: Boolean(options.enabled),
+    retry: 0,
   });
 }
 

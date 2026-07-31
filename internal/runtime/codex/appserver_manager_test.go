@@ -294,7 +294,7 @@ func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
 			if !ok || len(request.Questions) != 1 || request.Questions[0].ID != "color" {
 				t.Fatalf("request snapshot = %+v", request)
 			}
-			if _, err := broker.Bind(requestID, "csgclaw", "room-1", ""); err != nil {
+			if _, err := broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent"); err != nil {
 				t.Fatalf("Bind() error = %v", err)
 			}
 			if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
@@ -360,7 +360,7 @@ func TestAppServerManagerPausesTurnWatchdogsWhileWaitingForUser(t *testing.T) {
 		promptResult <- err
 	}()
 	requestID := waitForUserInputRequest(t, sink)
-	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "")
+	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent")
 	time.Sleep(75 * time.Millisecond)
 	select {
 	case err := <-promptResult:
@@ -444,7 +444,7 @@ func TestAppServerManagerKeepsTurnOpenWhenAgentMessagePrecedesQuestion(t *testin
 		t.Fatalf("prompt ended before the user-input request was answered: %v", err)
 	default:
 	}
-	if _, err := broker.Bind(requestID, "csgclaw", "room-1", ""); err != nil {
+	if _, err := broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent"); err != nil {
 		t.Fatalf("Bind() error = %v", err)
 	}
 	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
@@ -600,6 +600,75 @@ func TestAppServerManagerPromptPublishesStructuredDeltaBeforeCompletion(t *testi
 	}
 	if strings.Contains(events[2].ToolOutputSummary, structuredOutputPrefix) || !strings.Contains(events[2].ToolOutputSummary, "ordinary") {
 		t.Fatalf("tool output summary = %q, want cleaned ordinary output", events[2].ToolOutputSummary)
+	}
+}
+
+func TestAppServerManagerPromptCancellationReturnsConfirmedStop(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-cancel-confirmed")
+	spec := testAppServerSessionSpec(t.TempDir())
+	manager := newAppServerManager(testAppServerManagerDeps())
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	type promptResult struct {
+		response PromptResponse
+		err      error
+	}
+	promptDone := make(chan promptResult, 1)
+	go func() {
+		response, promptErr := manager.Prompt(ctx, SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+			SessionID: session.SessionID,
+			Prompt:    []PromptContentBlock{TextBlock("keep working")},
+		})
+		promptDone <- promptResult{response: response, err: promptErr}
+	}()
+	waitForRuntime(t, func() bool {
+		live := manager.liveSession(spec.RuntimeID)
+		if live == nil {
+			return false
+		}
+		waiter := live.appServerTurnWaiter(session.SessionID)
+		return waiter != nil && waiter.currentTurnID() == "turn-cancel"
+	})
+	cancel()
+
+	select {
+	case result := <-promptDone:
+		if result.response.StopReason != StopReasonInterrupted || !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("Prompt() result = %#v, error = %v; want interrupted response with context cancellation", result.response, result.err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Prompt() did not return after confirmed runtime stop")
+	}
+}
+
+func TestAppServerManagerPromptCancellationDoesNotConfirmFailedStop(t *testing.T) {
+	originalStopTimeout := appServerStopTimeout
+	appServerStopTimeout = 10 * time.Millisecond
+	t.Cleanup(func() { appServerStopTimeout = originalStopTimeout })
+
+	manager := newAppServerManager(testAppServerManagerDeps())
+	live := &liveSession{
+		spec:      SessionSpec{RuntimeID: "runtime-1"},
+		done:      make(chan struct{}),
+		appClient: newAppServerClient(appServerFailingWriter{}, nil),
+	}
+	manager.sessions[live.spec.RuntimeID] = live
+	waiter := &appServerTurnWaiter{
+		threadID: "thread-1",
+		turnID:   "turn-1",
+		ch:       make(chan appServerTurnResult, 1),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	response, err := manager.stopCanceledAppServerTurn(ctx, live, waiter, "prompt context canceled")
+	if response.StopReason != "" || err == nil || !strings.Contains(err.Error(), "stop app-server") {
+		t.Fatalf("stopCanceledAppServerTurn() response = %#v, error = %v; want unconfirmed stop failure", response, err)
 	}
 }
 
@@ -947,6 +1016,310 @@ func TestAppServerEventAdapterStructuredOutputRawAndLegacyRoutes(t *testing.T) {
 	}
 }
 
+func TestAppServerEventAdapterStreamsAgentMessageDeltasWithoutCompletedDuplicate(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	waiter, err := live.registerAppServerTurnWaiter("main-thread")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/started",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id": "msg-1", "type": "agentMessage", "phase": "final_answer",
+			},
+		}),
+	})
+	for _, delta := range []string{"hello", " world"} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/agentMessage/delta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-1",
+				"itemId":   "msg-1",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id":   "msg-1",
+				"type": "agentMessage",
+				"text": "hello world",
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 {
+		t.Fatalf("events = %#v, want only two agent message deltas", events)
+	}
+	if events[0].Text != "hello" || events[1].Text != " world" {
+		t.Fatalf("events = %#v, want ordered text deltas", events)
+	}
+	for _, event := range events {
+		if event.Kind != SessionEventTextDelta ||
+			event.SessionID != "main-thread" ||
+			event.TurnID != "turn-1" ||
+			event.MessageID != "msg-1" ||
+			event.Payload.(map[string]any)["phase"] != "final_answer" {
+			t.Fatalf("event = %#v, want scoped agent message delta", event)
+		}
+	}
+	completed := false
+	for len(waiter.ch) > 0 {
+		result := <-waiter.ch
+		completed = completed || result.success
+	}
+	if !completed {
+		t.Fatal("item/completed without phase did not finish the final-answer turn")
+	}
+	if phase := live.agentMessagePhase("msg-1"); phase != "" || live.hasStreamedAgentMessage("msg-1") {
+		t.Fatalf("completed agent message retained stream state: phase=%q streamed=%v", phase, live.hasStreamedAgentMessage("msg-1"))
+	}
+}
+
+func TestAppServerEventAdapterStreamsAgentMessageWithoutProviderPhase(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/started",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id": "msg-qwen", "type": "agentMessage",
+			},
+		}),
+	})
+	for _, delta := range []string{"你好", "，世界"} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/agentMessage/delta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-1",
+				"itemId":   "msg-qwen",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id": "msg-qwen", "type": "agentMessage", "text": "你好，世界",
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 {
+		t.Fatalf("events = %#v, want only streamed provider deltas", events)
+	}
+	for index, want := range []string{"你好", "，世界"} {
+		event := events[index]
+		if event.Kind != SessionEventTextDelta ||
+			event.Text != want ||
+			event.Payload.(map[string]any)["phase"] != "final_answer" {
+			t.Fatalf("event[%d] = %#v, want final-answer delta %q", index, event, want)
+		}
+	}
+}
+
+func TestAppServerEventAdapterDoesNotClassifyUnknownAgentDeltaAsFinal(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/agentMessage/delta",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"itemId":   "msg-1",
+			"delta":    "unclassified",
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 1 || events[0].Payload.(map[string]any)["phase"] != "unknown" {
+		t.Fatalf("events = %#v, want unknown phase preserved for downstream filtering", events)
+	}
+}
+
+func TestAppServerEventAdapterFallsBackToCompletedFinalAfterUnknownDelta(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/agentMessage/delta",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-1", "itemId": "msg-1", "delta": "answer",
+		}),
+	})
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id": "msg-1", "type": "agentMessage", "phase": "final_answer", "text": "answer",
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 ||
+		events[0].Payload.(map[string]any)["phase"] != "unknown" ||
+		events[1].Payload.(map[string]any)["phase"] != "final_answer" {
+		t.Fatalf("events = %#v, want unknown delta followed by completed final fallback", events)
+	}
+}
+
+func TestAppServerEventAdapterDecodesStructuredOutputAfterStreamedDeltas(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	record := `::csgclaw-output::resource_link {"type":"resource_link","name":"example","uri":"https://example.com"}`
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/agentMessage/delta",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-1", "itemId": "msg-1", "delta": record,
+		}),
+	})
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turnId":   "turn-1",
+			"item": map[string]any{
+				"id": "msg-1", "type": "agentMessage", "phase": "final_answer", "text": record,
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 1 || events[0].Kind != SessionEventStructuredOutput {
+		t.Fatalf("events = %#v, want decoded structured artifact without raw text delta", events)
+	}
+}
+
+func TestAppServerEventAdapterKeepsLegacyFinalAfterUnclassifiedTypedDeltas(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "codex/event",
+		Params: mustJSONRaw(t, map[string]any{"type": "task_started"}),
+	})
+	for _, delta := range []string{"mixed", " protocol"} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/agentMessage/delta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-1",
+				"itemId":   "msg-1",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "codex/event",
+		Params: mustJSONRaw(t, map[string]any{
+			"type":    "agent_message",
+			"message": "mixed protocol",
+			"phase":   "final_answer",
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 3 ||
+		events[0].Payload.(map[string]any)["phase"] != "unknown" ||
+		events[1].Payload.(map[string]any)["phase"] != "unknown" ||
+		events[2].Payload.(map[string]any)["phase"] != "final_answer" {
+		t.Fatalf("events = %#v, want unclassified typed deltas followed by legacy final", events)
+	}
+	if live.appProtocol != appServerProtocolLegacy {
+		t.Fatalf("protocol = %q, want legacy connection classification", live.appProtocol)
+	}
+}
+
+func TestAppServerEventAdapterSuppressesResponseItemFinalAfterTypedFinalDeltas(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+
+	for _, delta := range []string{"hello", " world"} {
+		manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+			Method: "item/agentMessage/delta",
+			Params: mustJSONRaw(t, map[string]any{
+				"threadId": "main-thread",
+				"turnId":   "turn-1",
+				"itemId":   "msg-1",
+				"phase":    "final_answer",
+				"delta":    delta,
+			}),
+		})
+	}
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "codex/response_item",
+		Params: mustJSONRaw(t, map[string]any{
+			"type":  "message",
+			"id":    "msg-1",
+			"role":  "assistant",
+			"phase": "final_answer",
+			"content": []map[string]any{
+				{"type": "output_text", "text": "hello world"},
+			},
+		}),
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 || events[0].Text != "hello" || events[1].Text != " world" {
+		t.Fatalf("events = %#v, want typed deltas without response_item duplicate", events)
+	}
+}
+
+func TestAppServerEventAdapterHandlesRawTurnCompletedOnLegacyConnection(t *testing.T) {
+	manager, live, _ := testAppServerEventAdapter(t)
+	waiter, err := live.registerAppServerTurnWaiter("main-thread")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "codex/event",
+		Params: mustJSONRaw(t, map[string]any{"type": "task_started"}),
+	})
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "item/agentMessage/delta",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread", "turnId": "turn-1", "itemId": "msg-1", "delta": "answer",
+		}),
+	})
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "turn/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turn":     map[string]any{"id": "turn-1", "status": "completed"},
+		}),
+	})
+
+	completed := false
+	for len(waiter.ch) > 0 {
+		result := <-waiter.ch
+		completed = completed || result.success
+	}
+	if !completed {
+		t.Fatal("raw turn/completed was ignored after legacy protocol classification")
+	}
+	if live.appProtocol != appServerProtocolLegacy {
+		t.Fatalf("protocol = %q, want legacy classification retained", live.appProtocol)
+	}
+}
+
 func TestAppServerEventAdapterAccumulatesCanonicalCommandOutputDeltas(t *testing.T) {
 	t.Parallel()
 
@@ -1154,6 +1527,29 @@ func TestAppServerEventAdapterRoutesLegacyStructuredOutputToActiveConversationTu
 	}
 	if events[2].Kind != SessionEventToolCallUpdate {
 		t.Fatalf("events[2] = %#v, want raw duplicate tool update", events[2])
+	}
+}
+
+func TestAppServerEventAdapterRoutesAssistantStructuredOutput(t *testing.T) {
+	t.Parallel()
+
+	manager, live, sink := testAppServerEventAdapter(t)
+	text := "Choose the next step.\n\n:::csgclaw-output::request_user_input\n" +
+		`{"questions":[{"id":"next","header":"Next step","question":"What should happen next?","options":[{"label":"Continue","description":"Keep working."}]}]}`
+	manager.handleRawItemNotification("runtime-1", live, "main-thread", "item/completed", map[string]any{
+		"item": map[string]any{"id": "assistant-question", "type": "agentMessage", "text": text},
+	})
+
+	events := sink.snapshot()
+	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput || events[1].Kind != SessionEventTextDelta {
+		t.Fatalf("events = %#v, want structured request followed by cleaned assistant text", events)
+	}
+	request := events[0].Payload.(activity.StructuredOutputArtifact).RequestUserInput
+	if request == nil || request.Questions[0].ID != "next" {
+		t.Fatalf("request = %+v, want next question", request)
+	}
+	if events[1].Text != "Choose the next step.\n" {
+		t.Fatalf("assistant text = %q, want control record removed", events[1].Text)
 	}
 }
 
@@ -1555,6 +1951,12 @@ func testAppServerManagerDepsWithSink(sink SessionEventSink) managerDeps {
 	return deps
 }
 
+type appServerFailingWriter struct{}
+
+func (appServerFailingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failed")
+}
+
 func testAppServerSessionSpec(dir string) SessionSpec {
 	runtimeDir := filepath.Join(dir, ".codex")
 	workspaceDir := filepath.Join(runtimeDir, workspaceDirName)
@@ -1584,6 +1986,33 @@ func testProfile() agentruntime.Profile {
 		APIKey:          "sk-test",
 		ModelID:         "gpt-5",
 		ReasoningEffort: "medium",
+	}
+}
+
+func TestAppServerParamsMapOffToCodexNone(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.Profile.ReasoningEffort = "off"
+
+	threadConfig := appServerThreadStartParams(spec)["config"].(map[string]any)
+	if got, want := threadConfig["model_reasoning_effort"], "none"; got != want {
+		t.Fatalf("model_reasoning_effort = %v, want %v", got, want)
+	}
+	turn := appServerTurnStartParams(spec, "thread-1", "hello")
+	if got, want := turn["effort"], "none"; got != want {
+		t.Fatalf("turn effort = %v, want %v", got, want)
+	}
+}
+
+func TestAppServerParamsOmitReasoningForModelDefault(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.Profile.ReasoningEffort = "auto"
+
+	if config, ok := appServerThreadStartParams(spec)["config"]; ok {
+		t.Fatalf("thread config = %v, want omitted", config)
+	}
+	turn := appServerTurnStartParams(spec, "thread-1", "hello")
+	if effort, ok := turn["effort"]; ok {
+		t.Fatalf("turn effort = %v, want omitted", effort)
 	}
 }
 
@@ -1859,6 +2288,28 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				writeRPCNotification(t, "turn/completed", map[string]any{
 					"threadId": "main-thread",
 					"turn":     map[string]any{"id": "turn-delta", "status": "interrupted"},
+				})
+				return rpcResult(msg["id"], map[string]any{}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-cancel-confirmed":
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				writeRPCNotification(t, "turn/started", map[string]any{
+					"threadId": "main-thread",
+					"turn":     map[string]any{"id": "turn-cancel"},
+				})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-cancel"}), true
+			case "turn/interrupt":
+				assertTurnInterruptParams(t, msg, "main-thread", "turn-cancel")
+				writeRPCNotification(t, "turn/completed", map[string]any{
+					"threadId": "main-thread",
+					"turn":     map[string]any{"id": "turn-cancel", "status": "interrupted"},
 				})
 				return rpcResult(msg["id"], map[string]any{}), true
 			default:

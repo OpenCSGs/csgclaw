@@ -122,7 +122,7 @@ GET  /api/v1/messages?room_id=...&include_thread_replies=true
 The csgclaw channel mirror exposes equivalent thread routes under
 `/api/v1/channels/csgclaw/rooms/{room_id}/...`.
 
-See [api.md](./api.md) for request and response shapes.
+See [api.md](../api.md) for request and response shapes.
 
 ## Events
 

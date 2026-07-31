@@ -217,6 +217,7 @@ export type UseConversationControllerArgs = {
   messageActionFeedback: MessageActionFeedback;
   messageListActive?: boolean;
   hasObservedWorkLease: ParticipantWorkStatus["hasObservedWorkLease"];
+  stopWorkingTurn?: ParticipantWorkStatus["stopWorkingTurn"];
   workingParticipantsForRoom: ParticipantWorkStatus["workingParticipantsForRoom"];
   navigatePane: WorkspaceNavigationController["navigatePane"];
   onMessageAction: (

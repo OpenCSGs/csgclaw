@@ -16,6 +16,7 @@ import {
   isAgentRosterEvent,
   isToolCallMessage,
   latestAt,
+  mergeRoomNotificationUpdateInData,
   removeUserFromData,
   resolveAgentForUser,
   sortConversations,
@@ -400,6 +401,62 @@ describe("conversation model helpers", () => {
     expect(next.rooms.find((item) => item.id === "general")?.messages).toEqual([]);
     expect(next.rooms.find((item) => item.id === "general")?.threads).toEqual([]);
     expect(next.rooms.find((item) => item.id === "other")?.messages.map((item) => item.id)).toEqual(["other-message"]);
+  });
+
+  it("preserves newer messages when applying an older room notification event", () => {
+    const staleRoom = room("general", "2026-05-15T00:00:00Z", { notify_all_agents: false });
+    const current = appendMessageToData(
+      {
+        rooms: [staleRoom],
+        users: [],
+      },
+      "general",
+      message("new-message", "2026-05-15T00:01:00Z"),
+    );
+
+    const next = applyIMEvent(current, {
+      room: { ...staleRoom, notify_all_agents: true },
+      room_id: "general",
+      type: "room.updated",
+    });
+
+    expect(next.rooms[0].notify_all_agents).toBe(true);
+    expect(next.rooms[0].messages.map((item) => item.id)).toEqual(["general-message", "new-message"]);
+  });
+
+  it("preserves newer messages when merging an older room notification response", () => {
+    const staleRoom = room("general", "2026-05-15T00:00:00Z", { notify_all_agents: false });
+    const current = appendMessageToData(
+      {
+        rooms: [staleRoom],
+        users: [],
+      },
+      "general",
+      message("new-message", "2026-05-15T00:01:00Z"),
+    );
+
+    const next = mergeRoomNotificationUpdateInData(current, {
+      ...staleRoom,
+      notify_all_agents: true,
+    });
+
+    expect(next.rooms[0].notify_all_agents).toBe(true);
+    expect(next.rooms[0].messages.map((item) => item.id)).toEqual(["general-message", "new-message"]);
+  });
+
+  it("adds an unknown room received through a room notification event", () => {
+    const current = {
+      rooms: [],
+      users: [],
+    };
+
+    const next = applyIMEvent(current, {
+      room: room("general", "2026-05-15T00:00:00Z", { notify_all_agents: true }),
+      room_id: "general",
+      type: "room.updated",
+    });
+
+    expect(next.rooms[0].notify_all_agents).toBe(true);
   });
 
   it("applies room members removed events as authoritative room updates", () => {

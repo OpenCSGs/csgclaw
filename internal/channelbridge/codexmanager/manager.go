@@ -234,6 +234,21 @@ func (m *multiManager) UserInputResponder() runtimecodex.UserInputBroker {
 	return nil
 }
 
+func (m *multiManager) SessionEventSource() *runtimecodex.Runtime {
+	if m == nil {
+		return nil
+	}
+	for _, manager := range m.managers {
+		source, ok := manager.(interface {
+			SessionEventSource() *runtimecodex.Runtime
+		})
+		if ok && source.SessionEventSource() != nil {
+			return source.SessionEventSource()
+		}
+	}
+	return nil
+}
+
 type csgclawManager struct {
 	agents   AgentLister
 	runtime  *runtimecodex.Runtime
@@ -242,6 +257,13 @@ type csgclawManager struct {
 }
 
 func newCSGClawManager(deps managerDeps) *csgclawManager {
+	bridgeOptions := []codexbridge.ServiceOption{
+		codexbridge.WithUserInputBroker(deps.runtime.UserInputBroker()),
+		codexbridge.WithParticipantWorkReporter(deps.reporter),
+	}
+	if registrar, ok := deps.reporter.(agentruntime.TurnControllerRegistrar); ok {
+		bridgeOptions = append(bridgeOptions, codexbridge.WithTurnControllerRegistrar(registrar))
+	}
 	return &csgclawManager{
 		agents:  deps.agents,
 		runtime: deps.runtime,
@@ -249,8 +271,7 @@ func newCSGClawManager(deps managerDeps) *csgclawManager {
 			deps.client,
 			deps.runtime.SessionManager(),
 			deps.events,
-			codexbridge.WithUserInputBroker(deps.runtime.UserInputBroker()),
-			codexbridge.WithParticipantWorkReporter(deps.reporter),
+			bridgeOptions...,
 		),
 		ensuring: newEnsureGate(),
 	}
@@ -350,6 +371,13 @@ func (m *csgclawManager) UserInputResponder() runtimecodex.UserInputBroker {
 		return nil
 	}
 	return m.runtime.UserInputBroker()
+}
+
+func (m *csgclawManager) SessionEventSource() *runtimecodex.Runtime {
+	if m == nil {
+		return nil
+	}
+	return m.runtime
 }
 
 type feishuManager struct {
@@ -511,6 +539,13 @@ func (m *feishuManager) UserInputResponder() runtimecodex.UserInputBroker {
 		return nil
 	}
 	return m.runtime.UserInputBroker()
+}
+
+func (m *feishuManager) SessionEventSource() *runtimecodex.Runtime {
+	if m == nil {
+		return nil
+	}
+	return m.runtime
 }
 
 func (m *feishuManager) participantIDForAgent(a agent.Agent) string {

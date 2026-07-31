@@ -38,6 +38,7 @@ On Windows hosts that do not have `make`, use the PowerShell build script:
 .\scripts\build.cmd build
 .\scripts\build.cmd build-server-bin
 .\scripts\build.cmd build-sandbox-cli
+.\scripts\build.cmd desktop-package
 .\scripts\build.cmd test
 ```
 
@@ -63,7 +64,7 @@ Sandbox runtimes use these fixed default images:
 
 | Runtime | Fixed image |
 |---|---|
-| OpenClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260717.27-csgclaw` |
+| OpenClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/openclaw:20260723.2-csgclaw` |
 | PicoClaw | `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/picoclaw:2026.6.10` |
 
 The OpenClaw ref is stored in its builtin `agent.toml`. PicoClaw no longer has a builtin template, so its ref is maintained as a runtime default. CSGClaw does not generate these image tags or build the runtime images in CI.
@@ -98,9 +99,13 @@ The installer exposes both host binaries from the same `INSTALL_DIR` and copies 
 |---|---|
 | `make package` | Package the current platform |
 | `make package-all` | Build and package the current platform artifacts |
+| `make desktop-package` | Build native desktop installers on macOS/Linux |
+| `scripts\build.cmd desktop-package` | Build native desktop installers on Windows without `make` |
 | `make release` | Build the configured cross-platform release bundles |
 
-Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`. GitLab CI publishes CSGClaw release artifacts and the CSGClaw product image; it does not build PicoClaw/OpenClaw runtime images.
+Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`. GitHub attaches the CLI and native desktop installers to the matching GitHub Release. GitLab uploads CLI release artifacts to `https://csgclaw.opencsg.com/releases/<tag>/` and publishes the CSGClaw product image. Its desktop jobs are optional manual builds: successful installers remain GitLab artifacts for one day and are not uploaded to the public release directory. GitLab macOS and Windows desktop jobs require native runners tagged `csgclaw-macos-arm64`, `csgclaw-macos-amd64`, and `csgclaw-windows-amd64`.
+
+Desktop installers use names such as `csgclaw-desktop_v0.4.3_darwin_arm64.dmg`. Signing and notarization values are optional CI secrets/variables: when they are absent or incomplete, Electron Forge keeps its macOS ad-hoc and Windows unsigned defaults. Release CI does not configure a desktop update feed.
 
 ## Related docs
 

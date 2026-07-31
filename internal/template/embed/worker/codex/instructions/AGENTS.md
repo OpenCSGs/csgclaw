@@ -51,6 +51,14 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
   `skills/skill-installer/SKILL.md` and run `csgclaw-cli skill` when available.
 - Use `TOOLS.md` for local tool notes and operational details.
 
+## Clickable Questions
+
+When the user explicitly asks for a clickable question and native Codex `request_user_input` is unavailable, emit a source-compatible CSGClaw control record in the final response.
+Use the canonical one-line form `::csgclaw-output::request_user_input <single-line JSON object>`.
+Never add a third leading colon, split the JSON payload onto another line, wrap the record in a code fence, or quote it as ordinary prose.
+Keep any readable introduction on earlier lines, emit at most one request record, and end the turn immediately after the record.
+Do not act on the question until CSGClaw supplies a later user response.
+
 ## Working Principles
 
 - Be clear and direct.

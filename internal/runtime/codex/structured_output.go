@@ -11,6 +11,7 @@ import (
 
 const (
 	structuredOutputPrefix             = "::csgclaw-output::"
+	structuredOutputAssistantPrefix    = ":" + structuredOutputPrefix
 	structuredOutputRequestUserInput   = "request_user_input"
 	structuredOutputResourceLink       = "resource_link"
 	maxStructuredOutputRecordBytes     = 256 * 1024
@@ -33,23 +34,37 @@ func decodeStructuredCommandOutput(output string) (string, activity.StructuredOu
 	lines := strings.Split(output, "\n")
 	kept := make([]string, 0, len(lines))
 
-	for _, original := range lines {
+	for index := 0; index < len(lines); index++ {
+		original := lines[index]
 		line := strings.TrimSuffix(original, "\r")
-		if !strings.HasPrefix(line, structuredOutputPrefix) {
-			kept = append(kept, original)
-			continue
-		}
-		if len(line) > maxStructuredOutputRecordBytes {
-			decodeErrors = append(decodeErrors, fmt.Errorf("structured output record exceeds %d bytes", maxStructuredOutputRecordBytes))
+		prefix := structuredOutputPrefix
+		if strings.HasPrefix(line, structuredOutputAssistantPrefix) {
+			prefix = structuredOutputAssistantPrefix
+		} else if !strings.HasPrefix(line, structuredOutputPrefix) {
 			kept = append(kept, original)
 			continue
 		}
 
-		rest := strings.TrimPrefix(line, structuredOutputPrefix)
+		rest := strings.TrimPrefix(line, prefix)
 		kind, payload, ok := strings.Cut(rest, " ")
 		kind = strings.TrimSpace(kind)
 		payload = strings.TrimSpace(payload)
 		decoder := structuredOutputDecoders[kind]
+		consumePayloadLine := false
+		if (!ok || payload == "") && decoder != nil && index+1 < len(lines) {
+			payload = strings.TrimSpace(strings.TrimSuffix(lines[index+1], "\r"))
+			consumePayloadLine = payload != ""
+			ok = consumePayloadLine
+		}
+		recordBytes := len(line)
+		if consumePayloadLine {
+			recordBytes += 1 + len(lines[index+1])
+		}
+		if recordBytes > maxStructuredOutputRecordBytes {
+			decodeErrors = append(decodeErrors, fmt.Errorf("structured output record exceeds %d bytes", maxStructuredOutputRecordBytes))
+			kept = append(kept, original)
+			continue
+		}
 		if !ok || payload == "" || decoder == nil {
 			kept = append(kept, original)
 			continue
@@ -60,6 +75,9 @@ func decodeStructuredCommandOutput(output string) (string, activity.StructuredOu
 			decodeErrors = append(decodeErrors, fmt.Errorf("decode %s structured output: %w", kind, err))
 			kept = append(kept, original)
 			continue
+		}
+		if consumePayloadLine {
+			index++
 		}
 
 		switch value := decoded.(type) {

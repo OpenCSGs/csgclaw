@@ -32,9 +32,15 @@ export type MessageAttachment = {
 
 export type AttachmentSelectionResult = {
   countExceeded: boolean;
+  duplicateNames: string[];
   fileTooLarge: boolean;
   files: File[];
   totalTooLarge: boolean;
+};
+
+export type AttachmentFilenameParts = {
+  extension: string;
+  stem: string;
 };
 
 export function createAttachmentDrafts(files: Iterable<File>, existingCount = 0): AttachmentDraft[] {
@@ -55,18 +61,29 @@ export function createAttachmentDrafts(files: Iterable<File>, existingCount = 0)
 
 export function selectAttachmentFiles(
   files: Iterable<File>,
-  existing: readonly Pick<AttachmentDraft, "sizeBytes">[] = [],
+  existing: readonly (Pick<AttachmentDraft, "sizeBytes"> & Partial<Pick<AttachmentDraft, "name">>)[] = [],
 ): AttachmentSelectionResult {
   const result: AttachmentSelectionResult = {
     countExceeded: false,
+    duplicateNames: [],
     fileTooLarge: false,
     files: [],
     totalTooLarge: false,
   };
+  const signatures = new Set(
+    existing
+      .filter((attachment) => Boolean(attachment.name))
+      .map((attachment) => attachmentSignature(attachment.name || "", attachment.sizeBytes)),
+  );
   let count = existing.length;
   let totalBytes = existing.reduce((total, attachment) => total + Math.max(0, attachment.sizeBytes), 0);
   for (const file of files) {
     if (file.size <= 0) {
+      continue;
+    }
+    const signature = attachmentSignature(file.name, file.size);
+    if (signatures.has(signature)) {
+      result.duplicateNames.push(file.name || "attachment");
       continue;
     }
     if (file.size > MAX_ATTACHMENT_FILE_BYTES) {
@@ -82,10 +99,23 @@ export function selectAttachmentFiles(
       continue;
     }
     result.files.push(file);
+    signatures.add(signature);
     count += 1;
     totalBytes += file.size;
   }
   return result;
+}
+
+export function splitAttachmentFilename(name: string): AttachmentFilenameParts {
+  const normalized = String(name || "attachment");
+  const extensionStart = normalized.lastIndexOf(".");
+  if (extensionStart <= 0 || extensionStart === normalized.length - 1) {
+    return { extension: "", stem: normalized };
+  }
+  return {
+    extension: normalized.slice(extensionStart),
+    stem: normalized.slice(0, extensionStart),
+  };
 }
 
 export function attachmentKindFromMediaType(mediaType: string | null | undefined): AttachmentKind {
@@ -128,4 +158,10 @@ function sanitizeDraftIDPart(value: string): string {
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
+}
+
+function attachmentSignature(name: string, sizeBytes: number): string {
+  return `${String(name || "attachment")
+    .trim()
+    .toLocaleLowerCase()}:${Math.max(0, Number(sizeBytes || 0))}`;
 }

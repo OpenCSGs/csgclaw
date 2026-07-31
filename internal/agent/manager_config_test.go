@@ -154,6 +154,42 @@ func TestResolveManagerBaseURLForDockerUsesHostAliasWhenAdvertiseURLIsImplicit(t
 	}
 }
 
+func TestResolveManagerBaseURLForLinuxDockerUsesHostLANAddress(t *testing.T) {
+	origDockerHostAliasEnabled := dockerHostAliasEnabled
+	origLocalIPv4Resolver := localIPv4Resolver
+	dockerHostAliasEnabled = func() bool { return false }
+	localIPv4Resolver = func() string { return "192.168.1.24" }
+	defer func() {
+		dockerHostAliasEnabled = origDockerHostAliasEnabled
+		localIPv4Resolver = origLocalIPv4Resolver
+	}()
+
+	got := ResolveManagerBaseURLForSandboxProvider(config.ServerConfig{
+		ListenAddr: "0.0.0.0:18080",
+	}, config.DockerProvider)
+	if want := "http://192.168.1.24:18080"; got != want {
+		t.Fatalf("ResolveManagerBaseURLForSandboxProvider() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveManagerBaseURLForNonDockerUsesHostLANAddress(t *testing.T) {
+	origDockerHostAliasEnabled := dockerHostAliasEnabled
+	origLocalIPv4Resolver := localIPv4Resolver
+	dockerHostAliasEnabled = func() bool { return true }
+	localIPv4Resolver = func() string { return "192.168.1.24" }
+	defer func() {
+		dockerHostAliasEnabled = origDockerHostAliasEnabled
+		localIPv4Resolver = origLocalIPv4Resolver
+	}()
+
+	got := ResolveManagerBaseURLForSandboxProvider(config.ServerConfig{
+		ListenAddr: "0.0.0.0:18080",
+	}, config.BoxLiteProvider)
+	if want := "http://192.168.1.24:18080"; got != want {
+		t.Fatalf("ResolveManagerBaseURLForSandboxProvider() = %q, want %q", got, want)
+	}
+}
+
 func TestResolveManagerBaseURLForDockerKeepsExplicitAdvertiseURL(t *testing.T) {
 	origDockerHostAliasEnabled := dockerHostAliasEnabled
 	dockerHostAliasEnabled = func() bool { return true }

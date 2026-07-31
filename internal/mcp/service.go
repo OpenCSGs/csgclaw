@@ -64,6 +64,28 @@ func (s *Service) CreateServer(ctx context.Context, name string, config map[stri
 	})
 }
 
+// InstallRemoteServer writes a Hub-resolved server into the local catalog.
+// Remote discovery and authentication stay outside this service, while the
+// server configuration follows the same schema validation and persistence
+// path as locally authored catalog entries.
+//
+// Reinstalling replaces a same-named catalog entry. This is intentional: the
+// Hub UI explicitly presents that operation as a replacement.
+func (s *Service) InstallRemoteServer(ctx context.Context, server RemoteServer) (string, error) {
+	name, config, err := normalizeServerInput(server.Name, server.Config())
+	if err != nil {
+		return "", err
+	}
+	_, err = s.updateServers(ctx, func(servers map[string]any) error {
+		servers[name] = config
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
 func (s *Service) UpdateServer(ctx context.Context, currentName, nextName string, config map[string]any) (map[string]any, error) {
 	currentName = strings.TrimSpace(currentName)
 	nextName, config, err := normalizeServerInput(nextName, config)

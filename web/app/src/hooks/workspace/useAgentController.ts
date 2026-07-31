@@ -10,7 +10,7 @@ import {
   createBotRequest,
   createManagerAgentRequest,
   createNotificationBotRequest,
-  deleteAgentRequest,
+  deleteAgentLikeRequest,
   deleteAgentSkillRequest,
   deleteBotRequest,
   deleteFeishuParticipantRequest,
@@ -1829,13 +1829,14 @@ export function useAgentController({
     }
     try {
       let updatedAgent: AgentLike | null = null;
+      const deletingNotificationBot = action === "delete" && isNotificationBotAgent(item);
       if (action === "delete") {
-        await deleteAgentRequest(item.id);
+        await deleteAgentLikeRequest(item);
       } else {
         updatedAgent = await runAgentActionRequest(item.id, action);
       }
       await refreshAgentsWithUpdatedAgent(updatedAgent);
-      if (action === "delete") {
+      if (action === "delete" && !deletingNotificationBot) {
         await refreshAgentSkills(item.id);
       }
       if (item.id === MANAGER_AGENT_ID) {

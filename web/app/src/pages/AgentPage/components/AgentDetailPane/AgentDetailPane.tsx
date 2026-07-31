@@ -16,13 +16,15 @@ import {
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { fetchAgentInstructionsDocument, updateAgentEffectiveInstructions } from "@/api/agents";
-import { REASONING_EFFORTS, SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
+import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   EnvKeyValueEditor,
   FieldHelpTooltip,
   ModelOptionLabel,
   NotifierControls,
+  ReasoningControls,
+  reasoningEffortLabel,
   requiredFieldLabel,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
@@ -746,7 +748,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               </div>
               <div className="entity-field">
                 <span>{t("profileReasoning")}</span>
-                <strong>{item.reasoning_effort || profile?.reasoning_effort || "medium"}</strong>
+                <strong>{reasoningEffortLabel(t, item.reasoning_effort || profile?.reasoning_effort)}</strong>
               </div>
               <div className="entity-field">
                 <span>{t("profileFastMode")}</span>
@@ -1411,15 +1413,11 @@ function AgentModelPanel({
                 <span className="field-hint error">{errorMessage(modelError, t("modelLoadFailed"))}</span>
               ) : null}
             </label>
-            <label className="field">
-              <span>{t("profileReasoning")}</span>
-              <Select
-                value={draft.reasoning_effort}
-                onValueChange={(value) => updateDraft({ reasoning_effort: value })}
-                triggerProps={{ "aria-label": t("profileReasoning") }}
-                options={REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))}
-              />
-            </label>
+            <ReasoningControls
+              value={draft.reasoning_effort}
+              onChange={(value) => updateDraft({ reasoning_effort: value })}
+              t={t}
+            />
             <div className="field agent-fast-mode-field">
               <span>{t("profileFastMode")}</span>
               <label className="selection-item compact-toggle-row agent-fast-mode-toggle">

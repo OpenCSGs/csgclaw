@@ -61,15 +61,7 @@ func (h *Handler) hubServiceForRequest(r *http.Request) (*hub.Service, error) {
 }
 
 func (h *Handler) officialHubBaseURLForRequest(r *http.Request, cfg config.Config) string {
-	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r), cfg.HasExplicitOfficialHubRegistry())
-	resolved := hubCfg.Resolved()
-	for _, registry := range resolved.Registries {
-		if strings.TrimSpace(registry.Name) == config.DefaultOfficialHubRegistryName &&
-			strings.TrimSpace(registry.Kind) == config.HubRegistryKindRemote {
-			return strings.TrimRight(strings.TrimSpace(registry.URL), "/")
-		}
-	}
-	return ""
+	return strings.TrimRight(strings.TrimSpace(h.officialHubRegistryForRequest(r, cfg).URL), "/")
 }
 
 func skillConfigForEnvironment(cfg config.SkillConfig, env auth.Environment) config.SkillConfig {

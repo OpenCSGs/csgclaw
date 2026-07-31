@@ -10,6 +10,7 @@ import (
 
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
+	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox/hostuser"
 )
@@ -106,7 +107,7 @@ func TestReconcileMCPServersWritesProvisionedGatewayConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readPicoClawMCPServers() error = %v", err)
 	}
-	servers, err := agentruntime.NormalizeMCPServers(snapshot.Servers)
+	servers, err := mcpschema.NormalizeMCPServers(snapshot.Servers)
 	if err != nil {
 		t.Fatalf("NormalizeMCPServers() error = %v", err)
 	}

@@ -84,6 +84,22 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 	}
 }
 
+func TestApplyReasoningEffortDefaultKeepsDisabledProfileAuthoritative(t *testing.T) {
+	payload := map[string]any{"reasoning_effort": "high"}
+	applyReasoningEffortDefault(payload, "off")
+	if got, want := payload["reasoning_effort"], "none"; got != want {
+		t.Fatalf("reasoning_effort = %v, want %v", got, want)
+	}
+}
+
+func TestApplyReasoningEffortDefaultLeavesModelDefaultUnchanged(t *testing.T) {
+	payload := map[string]any{"messages": []any{}}
+	applyReasoningEffortDefault(payload, "auto")
+	if _, ok := payload["reasoning_effort"]; ok {
+		t.Fatalf("reasoning_effort = %v, want omitted for model default", payload["reasoning_effort"])
+	}
+}
+
 func TestChatCompletionsUsesCSGHubAIGatewayAuthStore(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

@@ -2,7 +2,10 @@ package codex
 
 import "strings"
 
-const StopReasonEndTurn = "end_turn"
+const (
+	StopReasonEndTurn     = "end_turn"
+	StopReasonInterrupted = "interrupted"
+)
 
 type PromptRequest struct {
 	SessionID string

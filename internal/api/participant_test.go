@@ -17,6 +17,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	hub "csgclaw/internal/template"
 )
 
 func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
@@ -85,6 +86,59 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 		t.Fatalf("channel user = %+v, ok=%v; want u-qa display user", user, ok)
 	} else if user.Avatar == "" {
 		t.Fatalf("channel user avatar is empty, want user-owned default")
+	}
+}
+
+func TestCreateCSGClawAgentParticipantViaAPIUsesRequestHub(t *testing.T) {
+	agentSvc, _ := mustNewSeededServiceWithPath(t, nil)
+	requestHub := mustNewLocalTemplateHubService(t, "request-worker", hub.Template{
+		ID:          "request-worker",
+		Name:        "request-worker",
+		Description: "request-scoped template",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: agent.RuntimeNamePicoClaw,
+		Image:       "agent-image:request",
+	})
+	imSvc := im.NewService()
+	participantSvc := participant.NewService(
+		participant.NewMemoryStore(nil),
+		participant.WithAgentService(agentSvc),
+		participant.WithIMService(imSvc),
+	)
+	srv := &Handler{
+		svc:         agentSvc,
+		hub:         requestHub,
+		im:          imSvc,
+		participant: participantSvc,
+	}
+	body := `{
+		"id": "request-worker",
+		"type": "agent",
+		"name": "request-worker",
+		"channel_user": {"ref": "u-request-worker", "kind": "local_user_id"},
+		"agent_binding": {
+			"mode": "create",
+			"agent": {
+				"name": "request-worker",
+				"role": "worker",
+				"from_template": "local.request-worker"
+			}
+		}
+	}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/participants", strings.NewReader(body))
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	created, ok := agentSvc.Agent("agent-request-worker")
+	if !ok {
+		t.Fatal("request-scoped template agent was not created")
+	}
+	if created.Description != "request-scoped template" || created.Image != "agent-image:request" {
+		t.Fatalf("created agent = %+v, want request-scoped template defaults", created)
 	}
 }
 

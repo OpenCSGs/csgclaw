@@ -60,9 +60,12 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Post("/connectors/{provider}/credential", h.handleAgentConnectorCredential)
 				r.Post("/recreate", h.recreateAgent)
 				r.Post("/upgrade", h.upgradeAgent)
+				r.Post("/sessions/{session_id}/responses", h.createAgentSessionResponse)
 			})
 		})
 		r.Get("/mcp-servers", h.handleMCPServers)
+		r.Get("/mcp-servers/remote", h.handleRemoteMCPServers)
+		r.Post("/mcp-servers/remote/{id}/install", h.handleInstallRemoteMCPServer)
 		r.Post("/mcp-servers", h.handleMCPServers)
 		r.Put("/mcp-servers/{name}", h.handleMCPServerByName)
 		r.Delete("/mcp-servers/{name}", h.handleMCPServerByName)
@@ -142,6 +145,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/", h.createRoom)
 			r.Post("/{id}:clearMessages", h.clearRoomMessages)
 			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", h.updateRoom)
 				r.Delete("/", h.deleteRoom)
 				r.Get("/threads", h.listThreads)
 				r.Post("/threads", h.createThread)
@@ -228,7 +232,9 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Post("/messages", h.createParticipantMessage)
 			r.Post("/notifications", h.createParticipantNotification)
 			r.Put("/work-leases/{lease_id}", h.putParticipantWorkLease)
+			r.Patch("/work-leases/{lease_id}", h.patchParticipantWorkLease)
 			r.Delete("/work-leases/{lease_id}", h.deleteParticipantWorkLease)
+			r.Post("/work:stop", h.stopParticipantWork)
 		})
 		r.Post("/{channel}/activities/{activity_action}", h.handleChannelActivityAction)
 
@@ -245,6 +251,7 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 			r.Get("/", h.listRooms)
 			r.Post("/", h.createRoom)
 			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", h.updateCsgclawRoom)
 				r.Delete("/", h.deleteCsgclawRoom)
 				r.Get("/threads", h.listThreads)
 				r.Post("/threads", h.createThread)

@@ -188,6 +188,14 @@ func (s *Service) WorkspaceRoot(agentName string) (string, error) {
 	return s.agentWorkspaceRoot(got.ID, got.RuntimeKind)
 }
 
+func (s *Service) WorkspaceRootByID(agentID string) (string, error) {
+	got, ok := s.agentSnapshot(agentID)
+	if !ok {
+		return "", fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
+	}
+	return s.agentWorkspaceRoot(got.ID, got.RuntimeKind)
+}
+
 func (s *Service) SkillsRoot(agentName string) (string, error) {
 	got, ok := s.agentSnapshotByName(agentName)
 	if !ok {

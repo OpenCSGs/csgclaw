@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -27,6 +29,8 @@ import (
 
 type Options struct {
 	ListenAddr         string
+	Listener           net.Listener
+	SandboxListener    net.Listener
 	Service            *agent.Service
 	Hub                *hub.Service
 	MCP                *mcp.Service
@@ -35,6 +39,7 @@ type Options struct {
 	IMBus              *im.Bus
 	WorkReporter       worklease.ParticipantWorkReporter
 	WorkBus            *worklease.Bus
+	WorkControlBus     *worklease.ControlBus
 	ParticipantBridge  *im.ParticipantBridge
 	Feishu             *feishu.Service
 	LLM                *llm.Service
@@ -46,17 +51,21 @@ type Options struct {
 	Upgrade            *upgrade.Manager
 	ActivityDecider    api.ActivityDecider
 	UserInputResponder api.UserInputResponder
+	SessionEventSource api.SessionEventSource
 	ConfigPath         string
 	AccessToken        string
 	NoAuth             bool
+	AdvertiseBaseURL   string
+	Desktop            *DesktopOptions
 	Context            context.Context
 	OnReady            func(h *api.Handler, router chi.Router)
+	BeforeShutdown     func(context.Context) error
 }
 
 func newHandler(opts Options) *api.Handler {
 	handler := api.NewHandlerWithAuth(opts.Service, opts.IM, opts.IMBus, opts.ParticipantBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
 	handler.SetParticipantService(opts.Participant)
-	handler.SetParticipantWorkService(opts.WorkReporter, opts.WorkBus)
+	handler.SetParticipantWorkService(opts.WorkReporter, opts.WorkBus, opts.WorkControlBus)
 	handler.SetHubService(opts.Hub)
 	handler.SetMCPService(opts.MCP)
 	handler.SetTeamService(opts.Team)
@@ -69,8 +78,14 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetUpgradeManager(opts.Upgrade)
 	handler.SetActivityDecider(opts.ActivityDecider)
 	handler.SetUserInputResponder(opts.UserInputResponder)
+	handler.SetSessionEventSource(opts.SessionEventSource)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)
 	handler.SetConfigPath(opts.ConfigPath)
+	handler.SetAdvertiseBaseURL(opts.AdvertiseBaseURL)
+	if opts.Desktop != nil {
+		handler.SetRuntimeDistribution("electron")
+		handler.SetDesktopSessionToken(opts.Desktop.SessionToken)
+	}
 	return handler
 }
 
@@ -78,15 +93,60 @@ func Run(opts Options) error {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
+
+	listener := opts.Listener
+	if listener == nil {
+		var err error
+		listener, err = net.Listen("tcp", opts.ListenAddr)
+		if err != nil {
+			return err
+		}
+	}
+
 	handler := newHandler(opts)
 	router := handler.Routes()
 	router.Handle("/*", uiFallbackHandler())
 
-	httpServer := &http.Server{
-		Addr:              opts.ListenAddr,
-		Handler:           accessLog(slog.Default(), router),
-		ReadHeaderTimeout: 5 * time.Second,
+	var rootHandler http.Handler = router
+	type serverEndpoint struct {
+		server   *http.Server
+		listener net.Listener
 	}
+	endpoints := make([]serverEndpoint, 0, 2)
+	if opts.Desktop != nil {
+		var err error
+		rootHandler, err = desktopRendererSecurityHandler(rootHandler, listener.Addr(), *opts.Desktop)
+		if err != nil {
+			_ = listener.Close()
+			if opts.SandboxListener != nil {
+				_ = opts.SandboxListener.Close()
+			}
+			return err
+		}
+		if opts.SandboxListener == nil {
+			_ = listener.Close()
+			return fmt.Errorf("desktop sandbox listener is required")
+		}
+		sandboxHandler, err := desktopSandboxSecurityHandler(router, opts.SandboxListener.Addr(), *opts.Desktop)
+		if err != nil {
+			_ = listener.Close()
+			_ = opts.SandboxListener.Close()
+			return err
+		}
+		endpoints = append(endpoints, serverEndpoint{
+			server:   newHTTPServer(opts.SandboxListener.Addr().String(), sandboxHandler),
+			listener: opts.SandboxListener,
+		})
+	} else if opts.SandboxListener != nil {
+		_ = listener.Close()
+		_ = opts.SandboxListener.Close()
+		return fmt.Errorf("sandbox listener requires desktop options")
+	}
+
+	endpoints = append([]serverEndpoint{{
+		server:   newHTTPServer(listener.Addr().String(), rootHandler),
+		listener: listener,
+	}}, endpoints...)
 
 	if opts.IMBus != nil && opts.ParticipantBridge != nil {
 		events, cancel := opts.IMBus.Subscribe()
@@ -107,39 +167,69 @@ func Run(opts Options) error {
 		}()
 	}
 
-	if opts.Upgrade != nil {
+	if opts.Upgrade != nil && opts.Desktop == nil {
 		go opts.Upgrade.Start(opts.Context)
 	}
 	if opts.ScheduledTask != nil {
 		go opts.ScheduledTask.Start(opts.Context)
 	}
 
-	errCh := make(chan error, 1)
+	runCtx, cancelRun := context.WithCancel(opts.Context)
+	defer cancelRun()
+	shutdownDone := make(chan struct{})
+	var shutdownErr error
 	go func() {
-		<-opts.Context.Done()
+		<-runCtx.Done()
+		if opts.BeforeShutdown != nil {
+			hookCtx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+			shutdownErr = opts.BeforeShutdown(hookCtx)
+			cancel()
+		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = httpServer.Shutdown(shutdownCtx)
+		for _, endpoint := range endpoints {
+			_ = endpoint.server.Shutdown(shutdownCtx)
+		}
+		close(shutdownDone)
 	}()
 
-	listener, err := net.Listen("tcp", opts.ListenAddr)
-	if err != nil {
-		return err
+	errCh := make(chan error, len(endpoints))
+	for _, endpoint := range endpoints {
+		go func(endpoint serverEndpoint) {
+			err := endpoint.server.Serve(endpoint.listener)
+			if err == http.ErrServerClosed {
+				err = nil
+			}
+			errCh <- err
+		}(endpoint)
 	}
+
 	if opts.OnReady != nil {
 		go opts.OnReady(handler, router)
 	}
 
-	if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
-		errCh <- err
+	firstErr := <-errCh
+	cancelRun()
+	<-shutdownDone
+	for range len(endpoints) - 1 {
+		if err := <-errCh; firstErr == nil && err != nil {
+			firstErr = err
+		}
 	}
 
-	close(errCh)
-	if err := <-errCh; err != nil {
-		return err
+	if firstErr != nil {
+		return errors.Join(firstErr, shutdownErr)
 	}
 	if opts.Service != nil {
-		return opts.Service.Close()
+		return errors.Join(shutdownErr, opts.Service.Close())
 	}
-	return nil
+	return shutdownErr
+}
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           accessLog(slog.Default(), handler),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 }

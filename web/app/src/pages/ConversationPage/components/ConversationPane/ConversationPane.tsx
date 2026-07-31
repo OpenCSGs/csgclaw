@@ -124,6 +124,9 @@ export function ConversationPane({
   onPreviewUser,
   onDeleteRoom,
   onClearRoomMessages = (_id) => {},
+  notifyAllAgentsBusy = false,
+  notifyAllAgentsError = "",
+  onNotifyAllAgentsChange,
   inviteActionLabel,
   onInviteAction,
   mentionCandidates,
@@ -162,12 +165,19 @@ export function ConversationPane({
   draftSegments,
   draftText,
   attachmentDrafts,
+  removedAttachmentName,
+  sendError,
+  sendProgress,
+  sendStatus,
   mentionableUsersByName,
   onSyncComposer,
   onComposerKeyDown,
   onComposerCompositionStart,
   onComposerCompositionEnd,
   onSendMessage,
+  onRetrySend,
+  onStopSend,
+  onUndoRemoveAttachment,
   onAddAttachments,
   onRemoveAttachment,
   composerError,
@@ -188,6 +198,7 @@ export function ConversationPane({
   onThreadDraftChange,
   onThreadSlashQueryChange,
   onSendThreadReply,
+  onStopWorkingTurn,
   onAddThreadAttachments,
   onRemoveThreadAttachment,
   agentDetailPanelProps,
@@ -374,6 +385,8 @@ export function ConversationPane({
         logModalOpen={logModalOpen}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={visibleMessages.length}
+        notifyAllAgentsBusy={notifyAllAgentsBusy}
+        notifyAllAgentsError={notifyAllAgentsError}
         showChannelTools={showChannelTools}
         showInviteAction={true}
         showMemberListAction={false}
@@ -382,6 +395,7 @@ export function ConversationPane({
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
         onInviteAction={onInviteAction}
+        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onOpenAgentLogs={handleOpenAgentLogs}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}
@@ -428,6 +442,10 @@ export function ConversationPane({
           draftSegments={draftSegments}
           draftText={draftText}
           attachmentDrafts={attachmentDrafts}
+          removedAttachmentName={removedAttachmentName}
+          sendError={sendError}
+          sendProgress={sendProgress}
+          sendStatus={sendStatus}
           editorRef={editorRef}
           managerProfile={managerProfile}
           managerProvider={managerProvider}
@@ -451,9 +469,13 @@ export function ConversationPane({
           onDisconnectGitLabConnector={onDisconnectGitLabConnector}
           onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
+          onRetrySend={onRetrySend}
           onSaveConnectorConfig={onSaveConnectorConfig}
           onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}
           onSendMessage={onSendMessage}
+          onStopSend={onStopSend}
+          onUndoRemoveAttachment={onUndoRemoveAttachment}
+          onStopWorkingTurn={onStopWorkingTurn}
           onRemoveAttachment={onRemoveAttachment}
           onSyncComposer={onSyncComposer}
           onWorkingAction={handleOpenActivityPanel}

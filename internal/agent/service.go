@@ -275,6 +275,17 @@ func WithHubService(svc *hub.Service) ServiceOption {
 	}
 }
 
+// SetHubService replaces the default template service used by operations that
+// do not carry an HTTP request-scoped Hub.
+func (s *Service) SetHubService(hubSvc *hub.Service) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.hub = hubSvc
+	s.mu.Unlock()
+}
+
 func WithBootstrapDefaultTemplates(cfg config.BootstrapConfig) ServiceOption {
 	return func(s *Service) error {
 		if s == nil {
@@ -1023,7 +1034,17 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Agent, error) 
 	if shouldResolveTemplateCreateSpec(req.Spec) {
 		var cleanup func()
 		var err error
-		req.Spec, cleanup, err = s.resolveTemplateCreateSpec(ctx, req.Spec)
+		var hubSvc templateService
+		s.mu.RLock()
+		defaultHubSvc := s.hub
+		s.mu.RUnlock()
+		if defaultHubSvc != nil {
+			hubSvc = defaultHubSvc
+		}
+		if req.HubService != nil {
+			hubSvc = req.HubService
+		}
+		req.Spec, cleanup, err = s.resolveTemplateCreateSpecWithService(ctx, req.Spec, hubSvc)
 		if err != nil {
 			return Agent{}, err
 		}
@@ -1035,6 +1056,17 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Agent, error) 
 }
 
 func (s *Service) resolveTemplateCreateSpec(ctx context.Context, spec CreateAgentSpec) (CreateAgentSpec, func(), error) {
+	s.mu.RLock()
+	hubSvc := s.hub
+	s.mu.RUnlock()
+	return s.resolveTemplateCreateSpecWithService(ctx, spec, hubSvc)
+}
+
+func (s *Service) resolveTemplateCreateSpecWithService(
+	ctx context.Context,
+	spec CreateAgentSpec,
+	hubSvc templateService,
+) (CreateAgentSpec, func(), error) {
 	if s == nil {
 		return CreateAgentSpec{}, nil, fmt.Errorf("agent service is required")
 	}
@@ -1042,14 +1074,14 @@ func (s *Service) resolveTemplateCreateSpec(ctx context.Context, spec CreateAgen
 	if templateRef == "" {
 		return spec, nil, nil
 	}
-	if s.hub == nil {
+	if hubSvc == nil {
 		if usedDefault {
 			return CreateAgentSpec{}, nil, fmt.Errorf("default %s template %q requires hub service, but hub service is not configured", expectedRole, templateRef)
 		}
 		return CreateAgentSpec{}, nil, fmt.Errorf("hub service is not configured")
 	}
 
-	item, err := s.hub.Get(ctx, templateRef)
+	item, err := hubSvc.Get(ctx, templateRef)
 	if err != nil {
 		if usedDefault {
 			return CreateAgentSpec{}, nil, fmt.Errorf("resolve default %s template %q: %w", expectedRole, templateRef, err)
@@ -1064,7 +1096,7 @@ func (s *Service) resolveTemplateCreateSpec(ctx context.Context, spec CreateAgen
 			return CreateAgentSpec{}, nil, err
 		}
 	}
-	workspace, err := s.hub.FetchWorkspace(ctx, templateRef)
+	workspace, err := hubSvc.FetchWorkspace(ctx, templateRef)
 	if err != nil {
 		if usedDefault {
 			return CreateAgentSpec{}, nil, fmt.Errorf("fetch default %s template workspace %q: %w", expectedRole, templateRef, err)
@@ -1477,6 +1509,17 @@ func normalizeCreateID(id string) string {
 
 func (s *Service) Agent(id string) (Agent, bool) {
 	a, ok := s.agentSnapshot(id)
+	if !ok {
+		return Agent{}, false
+	}
+	ctx := context.Background()
+	return s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, a)), true
+}
+
+// AgentByName resolves the unique case-insensitive display name used by public
+// agent selector APIs.
+func (s *Service) AgentByName(name string) (Agent, bool) {
+	a, ok := s.agentSnapshotByName(name)
 	if !ok {
 		return Agent{}, false
 	}
@@ -2000,6 +2043,38 @@ func (s *Service) StartConfiguredAgents(ctx context.Context) error {
 		}
 	}
 	return startErr
+}
+
+// StopRunningSandboxAgents stops every registered sandbox agent whose runtime
+// is currently running. Desktop uses this before stopping its sidecar so
+// sandbox processes cannot retain a callback URL from the previous instance.
+// In-process runtimes are closed normally and keep their persisted running
+// state so they can be restored on the next launch.
+func (s *Service) StopRunningSandboxAgents(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	agents := sortedAgentsFromMap(s.agents)
+	s.mu.RUnlock()
+
+	var stopErr error
+	for _, a := range agents {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(stopErr, err)
+		}
+		if !isGatewayRuntimeKind(strings.TrimSpace(a.RuntimeKind)) {
+			continue
+		}
+		live := s.hydrateAgentStatus(ctx, a)
+		if !isRuntimeRunning(live) {
+			continue
+		}
+		if _, err := s.Stop(ctx, live.ID); err != nil {
+			stopErr = errors.Join(stopErr, fmt.Errorf("%s: %w", live.Name, err))
+		}
+	}
+	return stopErr
 }
 
 func (s *Service) startupAgentCandidates() []Agent {
@@ -2778,6 +2853,30 @@ func (s *Service) Close() error {
 	for kind, rt := range registeredRuntimes {
 		if err := rt.Close(); err != nil {
 			closeErr = errors.Join(closeErr, fmt.Errorf("close agent runtime %q: %w", kind, err))
+		}
+	}
+	return closeErr
+}
+
+// ResetSandboxRuntimes drops cached sandbox clients so the next operation
+// reloads environment-sensitive credentials, such as the active CSGHub site
+// and access token.
+func (s *Service) ResetSandboxRuntimes() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	sandboxRuntimes := make(map[string]sandbox.Runtime, len(s.runtimes))
+	for name, rt := range s.runtimes {
+		sandboxRuntimes[name] = rt
+		delete(s.runtimes, name)
+	}
+	s.mu.Unlock()
+
+	var closeErr error
+	for name, rt := range sandboxRuntimes {
+		if err := rt.Close(); err != nil {
+			closeErr = errors.Join(closeErr, fmt.Errorf("close sandbox runtime %q: %w", name, err))
 		}
 	}
 	return closeErr

@@ -3,6 +3,7 @@ import { fetchServerConfig, fetchServerRestartStatus, restartServer, updateServe
 import { errorMessage } from "@/api/client";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
 import { configDraftToUpdatePayload, configSettingsToDraft, normalizeConfigSettings } from "@/models/configSettings";
+import { getDesktopBridge } from "@/shared/platform/desktopBridge";
 import type { ConfigController, UseConfigControllerArgs } from "./types";
 
 export type ConfigPhase = "idle" | "loading" | "saving" | "restarting" | "manual_restart" | "done" | "error";
@@ -150,6 +151,15 @@ export function useConfigController({
         setSandboxProviders(saved.supported_sandbox_providers || sandboxProviders);
       }
       setConfigPhase("restarting");
+      const desktopBridge = getDesktopBridge();
+      if (desktopBridge) {
+        await desktopBridge.restartSidecar();
+        await refreshWorkspaceAppVersion({ cacheBust: true });
+        setConfigBusy(false);
+        setConfigPhase("done");
+        setConfigError("");
+        return;
+      }
       await restartServer();
       startConfigReconnectPoll();
     } catch (err: unknown) {
@@ -157,7 +167,7 @@ export function useConfigController({
       setConfigPhase("error");
       setConfigError(configErrorDetail(err, t("configSettingsSaveFailed")));
     }
-  }, [configBusy, configDraft, sandboxProviders, startConfigReconnectPoll, t]);
+  }, [configBusy, configDraft, refreshWorkspaceAppVersion, sandboxProviders, startConfigReconnectPoll, t]);
 
   useEffect(() => {
     return () => {

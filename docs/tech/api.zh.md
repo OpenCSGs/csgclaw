@@ -7,6 +7,7 @@
 - 除流式接口外，请求和响应均为 `application/json`
 - 时间字段使用 RFC3339 / ISO8601
 - 常规错误通常返回纯文本错误正文
+- Agent session response 错误使用 OpenAI 风格的 JSON error envelope
 - SSE 接口返回 `text/event-stream`
 - 当前 API 主要分为 3 组：
   - 核心 API：`/api/v1/*`
@@ -479,6 +480,46 @@ catalog 的列表和变更响应以 `mcpServers` 作为直接 server 映射。�
 catalog 条目时使用 `{ "name": "...", "config": { ... } }`，其中 `config`
 就是该条目的 server 配置。
 
+#### `GET /api/v1/mcp-servers/remote`
+
+通过 CSGClaw 列出可安装的远端 MCP server 摘要。浏览器只请求 CSGClaw；服务端根据
+当前登录环境或显式配置的 official Hub 解析有效 OpenCSG Hub，并转发当前用户的
+Hub 凭据。查询参数与远端 Skill 列表保持一致：`page`（默认 `1`）、`per`（默认
+`12`，最大 `100`）和 `search`。
+
+每个条目只包含 Hub 的 `id`、名称和展示元数据，不包含安装配置或 headers。
+`description` 是 CSGClaw 用于说明 MCP 用途的 catalog 元数据；向 Agent runtime
+添加条目时会移除该字段。
+
+```json
+{
+  "items": [
+    {
+      "id": "builtin:calendar",
+      "name": "calendar",
+      "description": "Calendar tools",
+      "url": "https://mcp.example.test/calendar",
+      "protocol": "streamable-http"
+    }
+  ],
+  "page": 1,
+  "per": 12,
+  "total": 13,
+  "next_page": 2
+}
+```
+
+#### `POST /api/v1/mcp-servers/remote/{id}/install`
+
+安装或刷新一个远端 MCP 条目。CSGClaw 会在服务端请求 Hub 详情接口，将详情中的
+`protocol`、`url` 和 `headers` 转换为 catalog 配置，并使用详情响应的 `name` 作为
+catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec: 30` 和
+`tool_timeout_sec: 60`。响应只返回已安装的名称：
+
+```json
+{ "name": "calendar" }
+```
+
 ### `DELETE /api/v1/agents/{id}`
 
 删除 agent。
@@ -764,7 +805,7 @@ catalog 条目时使用 `{ "name": "...", "config": { ... } }`，其中 `config`
 这组接口对应 CSGClaw 本地 IM 数据。
 
 Thread 模型、不变量、隐藏上下文行为和 bridge 规则见
-[im-threads.zh.md](./im-threads.zh.md)。
+[im-threads.zh.md](im/im-threads.zh.md)。
 
 ### `GET /api/v1/bootstrap`
 
@@ -880,6 +921,23 @@ room 消息列表默认不包含 thread reply；当 thread 存在时，root mess
 兼容字段：
 
 - 旧请求中的 `participant_ids` 仍可被识别并映射到 `member_ids`
+
+### `PATCH /api/v1/rooms/{id}`
+
+更新本地房间行为。
+
+请求体：
+
+```json
+{
+  "notify_all_agents": true
+}
+```
+
+群组房间默认仅通知被提及的 Agent。
+启用 `notify_all_agents` 后，每条用户消息都会唤醒房间内的所有 Agent，包括带有显式提及的消息。
+Agent 回复仍只会唤醒被显式提及的 Agent，以防止回复循环。
+直接消息房间始终会通知对应 Agent，因此会拒绝此更新。
 
 ### `DELETE /api/v1/rooms/{id}`
 
@@ -1173,7 +1231,7 @@ participant 的 `channel_app_config` 中，通过 `participant bind` 或 partici
 Runtime client 使用 participant-scoped 路由处理 channel 消息，使用 agent-scoped 路由处理 LLM provider 流量。旧的 `/api/bots/*` 路由不再注册。
 
 Runtime 和 Codex bridge 使用的 thread/session 隔离规则见
-[im-threads.zh.md](./im-threads.zh.md)。
+[im-threads.zh.md](im/im-threads.zh.md)。
 
 ### `GET /api/v1/channels/{channel}/participants/{id}/events`
 
@@ -1241,6 +1299,131 @@ prompt context 使用；它不是 thread reply 列表。PicoClaw 原生 client �
   }
 }
 ```
+
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses`
+
+通过选定 Agent 及其真实 CSGClaw runtime 执行一次 turn。
+`{agent}` selector 可以使用 Agent ID，也可以使用不区分大小写的唯一 Agent 名称。
+该接口与 `/llm/responses` 相互独立，后者只代理模型流量，不执行 Agent。
+
+该接口不要求 Bearer token。
+因为 admin 目前是唯一用户，Anonymous 复用现有 `user-admin` 身份表示。
+服务端不接受调用方指定身份，每条输入消息都以 `sender_id: "user-admin"` 持久化。
+
+客户端提供一个全局 `session_id`，长度为 1-128 位，只能包含 path-safe ASCII 字符。
+第一次请求创建一个 non-direct room，后续请求复用该 room。
+Room 中只能包含 admin 和所选 Agent，服务端会保持 `notify_all_agents` 开启。
+Room title 创建后不再变化，并使用以下便于审计的格式：
+
+```text
+Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
+```
+
+最简请求使用字符串 input：
+
+```json
+{
+  "input": "Review this patch."
+}
+```
+
+也可以使用仅包含文本的 user message items：
+
+```json
+{
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Review this patch."
+        }
+      ]
+    }
+  ],
+  "stream": false
+}
+```
+
+`stream: false`（默认值）时，成功响应为 Responses 风格子集：
+
+```json
+{
+  "id": "resp_7ac7b41c",
+  "object": "response",
+  "created_at": 1785300000,
+  "completed_at": 1785300012,
+  "status": "completed",
+  "model": "agent-reviewer",
+  "output": [
+    {
+      "id": "msg-1785300012000",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "The patch is ready.",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "session_id": "review-2026-07-29",
+    "room_id": "room-1785300000000",
+    "agent_id": "agent-reviewer"
+  }
+}
+```
+
+`stream: true` 时，接口返回 `text/event-stream`，并即时 flush 与 OpenAI
+Responses 兼容的事件流。事件顺序为：
+
+```text
+response.created
+response.in_progress
+response.output_item.added
+response.content_part.added
+response.output_text.delta
+response.output_text.done
+response.content_part.done
+response.output_item.done
+response.completed
+```
+
+每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
+中的 `type` 与事件名一致，`sequence_number` 从 0 开始递增。对于 Codex
+智能体，Codex app-server 发布的 final-answer `item/agentMessage/delta` 会即时转发为
+`response.output_text.delta`；commentary 和无法分类的 agent message 不会计入回答。
+完成事件只表达状态，不再重复携带全量文本，前端应通过追加 delta 构建可见回答。
+只发布 final message 的 runtime 会降级为一个文本 delta。Agent 完成前，连接已建立
+并先 flush `response.created`。
+
+同一个 session 同时只允许一个 turn。
+不同 session ID 可以并发执行。
+同一个全局 session 改用其它 Agent 时返回 `409 session_agent_conflict`。
+服务端最多等待五分钟，之后返回 `504 response_timeout`。
+
+错误使用以下 JSON 格式：
+
+```json
+{
+  "error": {
+    "message": "another response is already running for this session",
+    "type": "conflict_error",
+    "param": "session_id",
+    "code": "session_busy"
+  }
+}
+```
+
+V1 只接受文本并返回最终文本。
+流式输出、tools、instructions、非 user role、attachments 和未知请求字段都会被拒绝。
+内置 live demo 和可替换的前端 mock 边界见 [Session API Demo 前端指南](web/session-api-demo.zh.md)。
 
 ### `GET /api/v1/agents/{id}/llm/models`
 

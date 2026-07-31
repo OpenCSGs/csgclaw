@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	skilllocal "csgclaw/internal/skill/local"
@@ -49,7 +48,7 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	page, per, err := remoteSkillsPageOptions(r)
+	page, per, err := remoteHubPageOptions(r, remoteSkillsDefaultPage, remoteSkillsDefaultPer, remoteSkillsMaxPer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -142,11 +141,11 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) remoteSkillsHubBaseURL(r *http.Request) (string, error) {
-	cfg, _, err := h.loadBootstrapConfig()
+	registry, err := h.remoteHubRegistryForRequest(r)
 	if err != nil {
 		return "", err
 	}
-	baseURL := strings.TrimRight(strings.TrimSpace(h.officialHubBaseURLForRequest(r, cfg)), "/")
+	baseURL := strings.TrimRight(strings.TrimSpace(registry.URL), "/")
 	if baseURL == "" {
 		return "", errOfficialHubURLNotConfigured
 	}
@@ -159,33 +158,6 @@ func writeRemoteSkillsHubError(w http.ResponseWriter, err error) {
 		return
 	}
 	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
-func remoteSkillsPageOptions(r *http.Request) (int, int, error) {
-	page, err := remoteSkillsQueryInt(r, "page", remoteSkillsDefaultPage, 0)
-	if err != nil {
-		return 0, 0, err
-	}
-	per, err := remoteSkillsQueryInt(r, "per", remoteSkillsDefaultPer, remoteSkillsMaxPer)
-	if err != nil {
-		return 0, 0, err
-	}
-	return page, per, nil
-}
-
-func remoteSkillsQueryInt(r *http.Request, key string, fallback, maximum int) (int, error) {
-	raw := strings.TrimSpace(r.URL.Query().Get(key))
-	if raw == "" {
-		return fallback, nil
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil || value < 1 || (maximum > 0 && value > maximum) {
-		if maximum > 0 {
-			return 0, fmt.Errorf("%s must be an integer between 1 and %d", key, maximum)
-		}
-		return 0, fmt.Errorf("%s must be a positive integer", key)
-	}
-	return value, nil
 }
 
 func nextRemoteSkillsPage(page, per int, total *int, recordCount int) *int {

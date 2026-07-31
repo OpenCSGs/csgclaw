@@ -150,8 +150,10 @@ csgclaw agent create --name alice --runtime openclaw_sandbox
 CSGClaw 为普通 OpenAI-compatible profile 生成保守的 OpenClaw bridge 模型元数据。
 默认使用 `openai-completions`、`input: ["text"]`，不声明 reasoning effort 支持，也不写入 `agents.defaults.thinkingDefault`。
 这样可以避免 OpenClaw 向未通过 CSGClaw 声明能力的 provider 发送图片或 reasoning payload。
-使用 Codex profile 时，CSGClaw 会把 bridge 模型声明为 `openai-codex-responses`，启用 `input: ["text", "image"]`，写入 `low`、`medium`、`high`、`xhigh` reasoning 档位，并写入 streaming usage 兼容元数据。
-Codex 的 `reasoningEffortMap` 会把 `minimal` 映射到 `low`，其他档位按同名值透传。
+Agent profile 只持久化一个 `reasoning_effort` 策略：`auto`、`none`、`minimal`、`low`、`medium`、`high` 或 `xhigh`。旧 profile 缺少该字段时规范化为 `auto`，已有显式值保持不变。
+对于 OpenClaw，`auto` 不写入 `thinkingDefault`，显式强度写入对应值，`none` 映射为 `off`。未关闭推理时 CSGClaw 还会写入 `reasoningDefault: "stream"`，让 channel plugin 可以收到公开 reasoning callback；模型没有产生 reasoning 时继续使用原来的普通回复流程。
+使用 Codex profile 时，CSGClaw 会把 bridge 模型声明为 `openai-codex-responses`，启用 `input: ["text", "image"]`，写入 `minimal`、`low`、`medium`、`high`、`xhigh` reasoning 档位，并写入 streaming usage 兼容元数据。
+Codex 的 `reasoningEffortMap` 会按同名值透传这些档位。
 
 ## Sandbox Provider
 

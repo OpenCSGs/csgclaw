@@ -5,6 +5,7 @@ import {
   createParticipantWorkState,
   nextParticipantWorkDeadline,
   participantWorkReducer,
+  workLeaseForRequest,
 } from "@/hooks/workspace/participantWorkState";
 
 const now = Date.parse("2026-07-14T12:00:00Z");
@@ -130,5 +131,55 @@ describe("participantWorkReducer", () => {
       work: work({ participant_id: canonicalID, user_id: "user-agent-worker-d59735ad" }),
     });
     expect(activeParticipantWorkForRoom(state, "room-1")[canonicalID]?.["lease-1"]).toBeDefined();
+  });
+
+  it("replaces thinking snapshots, preserves stopping leases, and selects exact turns", () => {
+    let state = participantWorkReducer(createParticipantWorkState(), {
+      now,
+      type: "workEvent",
+      work: work({
+        capabilities: ["thinking_status_v1", "turn_stop_v1", "work_stage_v1"],
+        reason: "status_updated",
+        revision: 2,
+        status: {
+          phase: "thinking",
+          sequence: 1,
+          stage: "thinking",
+          thinking: { format: "plain_text", text: "checking config", truncated: false },
+        },
+      }),
+    });
+    expect(workLeaseForRequest(state, "room-1", "user-worker", "message-1")?.status?.thinking?.text).toBe(
+      "checking config",
+    );
+    expect(workLeaseForRequest(state, "room-1", "user-worker", "message-1")?.status?.stage).toBe("thinking");
+
+    state = participantWorkReducer(state, {
+      now,
+      type: "workEvent",
+      work: work({
+        capabilities: ["thinking_status_v1", "turn_stop_v1", "work_stage_v1"],
+        reason: "stop_requested",
+        revision: 3,
+        status: {
+          phase: "thinking",
+          sequence: 1,
+          stage: "thinking",
+          thinking: { format: "plain_text", text: "checking config", truncated: false },
+        },
+        stop_requested_at: "2026-07-14T12:00:01Z",
+        stop_state: "stop_requested",
+      }),
+    });
+    expect(activeParticipantWorkForRoom(state, "room-1")["pt-worker"]?.["lease-1"]?.stop_requested_at).toBe(
+      "2026-07-14T12:00:01Z",
+    );
+
+    state = participantWorkReducer(state, {
+      now,
+      type: "workEvent",
+      work: work({ reason: "stopped", revision: 4, state: "idle" }),
+    });
+    expect(workLeaseForRequest(state, "room-1", "pt-worker", "message-1")).toBeNull();
   });
 });

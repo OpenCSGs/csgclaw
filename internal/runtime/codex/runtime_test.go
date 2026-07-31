@@ -2445,6 +2445,7 @@ func TestConfigureCodexHomeConfigRendersMCPServers(t *testing.T) {
 		"remote": map[string]any{
 			"url":                  "https://mcp.example.com/mcp",
 			"bearer_token_env_var": "MCP_TOKEN",
+			"startup_timeout_sec":  75,
 			"headers": map[string]any{
 				"X-MCP-Trace": "trace-id",
 			},
@@ -2467,6 +2468,7 @@ func TestConfigureCodexHomeConfigRendersMCPServers(t *testing.T) {
 		`[mcp_servers."remote"]`,
 		`url = "https://mcp.example.com/mcp"`,
 		`bearer_token_env_var = "MCP_TOKEN"`,
+		`startup_timeout_sec = 75`,
 		`http_headers = { "X-MCP-Trace" = "trace-id" }`,
 		csgclawMCPEndMarker,
 		`approval_policy = "manual"`,
@@ -2485,6 +2487,9 @@ func TestConfigureCodexHomeConfigRendersMCPServers(t *testing.T) {
 		t.Fatalf("context7 startup_timeout_sec = %#v, want %#v", got, want)
 	}
 	remote := parsed["remote"].(map[string]any)
+	if got, want := remote["startup_timeout_sec"], int64(75); got != want {
+		t.Fatalf("remote startup_timeout_sec = %#v, want %#v", got, want)
+	}
 	headers := remote["headers"].(map[string]any)
 	if got, want := headers["X-MCP-Trace"], "trace-id"; got != want {
 		t.Fatalf("remote headers X-MCP-Trace = %#v, want %q", got, want)
@@ -2497,6 +2502,112 @@ func TestConfigureCodexHomeConfigRendersMCPServers(t *testing.T) {
 	}
 	if _, ok := remote["approval_policy"]; ok {
 		t.Fatalf("remote captured root config fields = %#v", remote)
+	}
+}
+
+func TestConfigureCodexHomeConfigUsesDefaultRemoteMCPStartupTimeout(t *testing.T) {
+	name := "remote-search"
+	config := configureCodexHomeConfig("", agentruntime.Profile{}, map[string]any{
+		name: map[string]any{
+			"url": "https://mcp.example.com/search",
+		},
+	})
+
+	if !strings.Contains(config, `[mcp_servers."`+name+`"]`) {
+		t.Fatalf("config missing remote MCP name %q:\n%s", name, config)
+	}
+	if !strings.Contains(config, "startup_timeout_sec = 30") {
+		t.Fatalf("config missing the default remote MCP startup timeout:\n%s", config)
+	}
+
+	parsed, err := parseCodexMCPServers(config)
+	if err != nil {
+		t.Fatalf("parseCodexMCPServers() error = %v", err)
+	}
+	if _, ok := parsed[name]; !ok {
+		t.Fatalf("parsed MCP servers = %#v, want key %q", parsed, name)
+	}
+	remote := parsed[name].(map[string]any)
+	if got, want := remote["startup_timeout_sec"], int64(defaultRemoteMCPStartupTimeout); got != want {
+		t.Fatalf("remote startup_timeout_sec = %#v, want %#v", got, want)
+	}
+}
+
+func TestRuntimeValidateMCPServersRejectsUnsupportedRemoteTransport(t *testing.T) {
+	runtime := New(Dependencies{})
+
+	tests := []struct {
+		name    string
+		servers map[string]any
+		wantErr string
+	}{
+		{
+			name: "accepts streamable HTTP",
+			servers: map[string]any{
+				"weather": map[string]any{
+					"url":       "https://mcp.example.com/mcp",
+					"transport": "streamable-http",
+				},
+			},
+		},
+		{
+			name: "rejects legacy SSE",
+			servers: map[string]any{
+				"gitlab": map[string]any{
+					"url":       "https://mcp.example.com/sse",
+					"transport": "sse",
+				},
+			},
+			wantErr: `mcpServers.gitlab.transport "sse" is not supported by codex; use "streamable-http"`,
+		},
+		{
+			name: "rejects a name Codex cannot load",
+			servers: map[string]any{
+				"Web Fetch": map[string]any{
+					"url":       "https://mcp.example.com/mcp",
+					"transport": "streamable-http",
+				},
+			},
+			wantErr: `mcpServers server name "Web Fetch" is not supported by codex; must match ^[A-Za-z0-9_-]+$`,
+		},
+		{
+			name: "rejects invalid Codex environment HTTP header names",
+			servers: map[string]any{
+				"remote": map[string]any{
+					"url":       "https://mcp.example.com/mcp",
+					"transport": "streamable-http",
+					"env_http_headers": map[string]any{
+						"invalid header": "value",
+					},
+				},
+			},
+			wantErr: `mcpServers.remote.env_http_headers contains an invalid HTTP header name`,
+		},
+		{
+			name: "rejects unknown remote transport",
+			servers: map[string]any{
+				"remote": map[string]any{
+					"url":       "https://mcp.example.com/mcp",
+					"transport": "websocket",
+				},
+			},
+			wantErr: `mcpServers.remote.transport must be "streamable-http" for a remote codex MCP server`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := runtime.ValidateMCPServers(context.Background(), agentruntime.MCPServersSnapshot{Servers: test.servers})
+			if test.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ValidateMCPServers() error = %v", err)
+				}
+				return
+			}
+			if err == nil || err.Error() != test.wantErr {
+				t.Fatalf("ValidateMCPServers() error = %v, want %q", err, test.wantErr)
+			}
+		})
 	}
 }
 

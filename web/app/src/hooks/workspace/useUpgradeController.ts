@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyUpgradeRequest } from "@/api/upgrade";
 import { normalizeUpgradeStatus, upgradeErrorMessage } from "@/models/upgradeStatus";
 import type { UpgradePhase } from "@/models/upgradeStatus";
+import { applyPlatformUpgrade, subscribePlatformUpgradeStatus } from "@/shared/platform/updatePort";
 import type { UpgradeController, UseUpgradeControllerArgs } from "./types";
 
 export const UPGRADE_PAGE_RELOAD_DELAY_MS = 600;
@@ -144,7 +144,7 @@ export function useUpgradeController({
     setUpgradePhase("starting");
     setShowUpgradeModal(true);
     try {
-      await applyUpgradeRequest();
+      const applyMode = await applyPlatformUpgrade();
       setUpgradePhase("restarting");
       setUpgradeStatusData((current) => ({
         auto_upgrade_supported: current?.auto_upgrade_supported ?? upgradeStatus?.auto_upgrade_supported ?? true,
@@ -161,7 +161,9 @@ export function useUpgradeController({
         last_error_kind: "",
         last_error_log_path: "",
       }));
-      startUpgradeReconnectPoll(upgradeStatus?.latest_version);
+      if (applyMode === "browser-daemon") {
+        startUpgradeReconnectPoll(upgradeStatus?.latest_version);
+      }
       setShowUpgradeModal(false);
     } catch (err: unknown) {
       setUpgradeBusy(false);
@@ -200,6 +202,10 @@ export function useUpgradeController({
     });
     setShowUpgradeModal(true);
   }, [upgradeBusy, upgradePhase, upgradeStatus?.manual_restart_required, upgradeStatus?.upgrading]);
+
+  useEffect(() => {
+    return subscribePlatformUpgradeStatus(handleUpgradeStatusChange);
+  }, [handleUpgradeStatusChange]);
 
   useEffect(() => {
     return () => {

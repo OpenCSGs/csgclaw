@@ -17,6 +17,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/worklease"
 )
 
 const (
@@ -42,7 +43,7 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	if evt.Type != im.EventTypeMessageCreated || evt.Message == nil || evt.Sender == nil {
 		return
 	}
-	if isUserInputAnswerTranscript(evt.Message) {
+	if isUserInputAnswerTranscript(evt.Message) || isParticipantControlRecord(*evt.Message) {
 		return
 	}
 
@@ -50,6 +51,7 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	if !ok {
 		return
 	}
+	room = h.participantDeliveryRoom(room, *evt.Message)
 	if reason, ok, err := newConversationCommandReason(evt.Message.Content); err != nil {
 		slog.Warn("parse new conversation command failed", "room_id", evt.RoomID, "message_id", evt.Message.ID, "error", err)
 	} else if ok {
@@ -59,6 +61,24 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	}
 	missed := h.publishMessageParticipantEvent(room, *evt.Sender, *evt.Message)
 	h.reconnectMissedParticipantAgents(evt.Sender.ID, missed)
+}
+
+func (h *Handler) participantDeliveryRoom(room im.Room, message im.Message) im.Room {
+	if room.NotifyAllAgents && h.isAgentSender(message.SenderID) {
+		room.NotifyAllAgents = false
+	}
+	return room
+}
+
+func isParticipantControlRecord(message im.Message) bool {
+	csgclaw, ok := message.Metadata["csgclaw"].(map[string]any)
+	if !ok {
+		return false
+	}
+	if direct, _ := csgclaw["agent_session_stream_direct"].(bool); direct {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(fmt.Sprint(csgclaw["delivery_kind"])), "turn_stopped")
 }
 
 type participantBridgeTarget struct {
@@ -171,7 +191,7 @@ func (h *Handler) materializeAttachmentsForParticipant(attachments []im.MessageA
 	if strings.TrimSpace(agentID) == "" {
 		return append([]im.MessageAttachment(nil), attachments...)
 	}
-	workspaceRoot, err := h.svc.WorkspaceRoot(agentID)
+	workspaceRoot, err := h.svc.WorkspaceRootByID(agentID)
 	if err != nil {
 		slog.Warn("resolve attachment workspace failed", "agent_id", agentID, "participant_id", bridgeID, "error", err)
 		return append([]im.MessageAttachment(nil), attachments...)
@@ -407,6 +427,12 @@ func (h *Handler) handleParticipantEventsStream(w http.ResponseWriter, r *http.R
 		cancel()
 		h.requeueBufferedParticipantEvents(participantID, events)
 	}()
+	var controls <-chan worklease.ControlEvent
+	var cancelControls func()
+	if h.workControlBus != nil {
+		controls, cancelControls = h.workControlBus.Subscribe(participantID)
+		defer cancelControls()
+	}
 	controller := http.NewResponseController(w)
 
 	if _, err := io.WriteString(w, ": connected\n\n"); err != nil {
@@ -429,13 +455,22 @@ func (h *Handler) handleParticipantEventsStream(w http.ResponseWriter, r *http.R
 			}
 		case evt, ok := <-events:
 			if !ok {
-				return
+				events = nil
+				continue
 			}
 			if err := writeParticipantSSEEvent(w, controller, flusher, evt); err != nil {
 				h.participantBridge.Requeue(participantID, evt)
 				return
 			}
 			h.participantBridge.Ack(participantID, evt.MessageID)
+		case control, ok := <-controls:
+			if !ok {
+				controls = nil
+				continue
+			}
+			if err := writeParticipantWorkControlSSEEvent(w, controller, flusher, control); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -451,6 +486,27 @@ func writeParticipantSSEEvent(w http.ResponseWriter, controller *http.ResponseCo
 		}
 	}
 	if _, err := fmt.Fprintf(w, "event: message\ndata: %s\n\n", data); err != nil {
+		return err
+	}
+	return flushParticipantSSE(controller, fallback)
+}
+
+func writeParticipantWorkControlSSEEvent(
+	w http.ResponseWriter,
+	controller *http.ResponseController,
+	fallback http.Flusher,
+	event worklease.ControlEvent,
+) error {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(
+		w,
+		"event: %s\ndata: %s\n\n",
+		worklease.ControlEventTypeParticipantWorkStopRequested,
+		data,
+	); err != nil {
 		return err
 	}
 	return flushParticipantSSE(controller, fallback)

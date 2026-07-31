@@ -151,8 +151,10 @@ The recommended image shape is a slim OpenClaw base image with CSGClaw-managed p
 Generated OpenClaw bridge models use conservative metadata for plain OpenAI-compatible profiles.
 They default to `openai-completions`, `input: ["text"]`, no reasoning effort support, and no `agents.defaults.thinkingDefault` value.
 This prevents OpenClaw from sending image or reasoning payloads to providers that have not advertised those capabilities through CSGClaw.
-With a Codex profile, CSGClaw declares the bridge model as `openai-codex-responses`, enables `input: ["text", "image"]`, writes the `low`, `medium`, `high`, and `xhigh` reasoning levels, and adds streaming usage compatibility metadata.
-The Codex `reasoningEffortMap` maps `minimal` to `low` and passes the other levels through by name.
+Agent profiles persist one `reasoning_effort` strategy: `auto`, `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`. Missing legacy values normalize to `auto`; existing explicit values remain unchanged.
+For OpenClaw, `auto` omits `thinkingDefault`, explicit efforts set it, and `none` maps it to `off`. CSGClaw also sets `reasoningDefault: "stream"` unless reasoning is disabled so the channel plugin receives public reasoning callbacks; models that emit no reasoning continue through the normal reply flow.
+With a Codex profile, CSGClaw declares the bridge model as `openai-codex-responses`, enables `input: ["text", "image"]`, writes the `minimal`, `low`, `medium`, `high`, and `xhigh` reasoning levels, and adds streaming usage compatibility metadata.
+The Codex `reasoningEffortMap` passes these levels through by name.
 
 ## Sandbox Providers
 

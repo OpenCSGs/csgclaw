@@ -3792,10 +3792,15 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, ag
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
-	if err != nil {
-		t.Fatalf("hub.NewService() error = %v", err)
-	}
+	hubSvc := mustNewLocalTemplateHubServiceWithoutWorkspace(t, "picoclaw-worker", hub.Template{
+		ID:          "picoclaw-worker",
+		Name:        "picoclaw-worker",
+		Description: "PicoClaw worker",
+		Role:        hub.TemplateRoleWorker,
+		RuntimeKind: agent.RuntimeNamePicoClaw,
+		Version:     "test",
+		Image:       "picoclaw-image:test",
+	})
 	mcpSvc := mcp.NewService()
 
 	svc, err := agent.NewService(config.ModelConfig{
@@ -3806,8 +3811,7 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, ag
 	}, config.ServerConfig{}, "manager-image:test", "",
 		agent.WithHubService(hubSvc),
 		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{
-			DefaultManagerTemplate: config.DefaultBootstrapManagerTemplate,
-			DefaultWorkerTemplate:  config.DefaultBootstrapWorkerTemplate,
+			DefaultWorkerTemplate: "local/picoclaw-worker",
 		}),
 	)
 	if err != nil {
@@ -6367,6 +6371,44 @@ func TestHandleRoomsPostUsesCsgclawChannelAdapter(t *testing.T) {
 	}
 }
 
+func TestHandleRoomsPatchUpdatesNotifyAllAgents(t *testing.T) {
+	bus := im.NewBus()
+	events, cancel := bus.Subscribe()
+	defer cancel()
+	svc := im.NewServiceFromBootstrapWithBus(im.Bootstrap{
+		CurrentUserID: "u-admin",
+		Users: []im.User{
+			{ID: "u-admin", Name: "admin"},
+			{ID: "u-alice", Name: "Alice"},
+		},
+		Rooms: []im.Room{{
+			ID:      "room-1",
+			Title:   "Launch",
+			Members: []string{"u-admin", "u-alice"},
+		}},
+	}, bus)
+	srv := &Handler{im: svc}
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/rooms/room-1", strings.NewReader(`{"notify_all_agents":true}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got im.Room
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !got.NotifyAllAgents {
+		t.Fatal("notify_all_agents = false, want true")
+	}
+	event := mustReceiveIMEvent(t, events)
+	if event.Type != im.EventTypeRoomUpdated || event.Room == nil || !event.Room.NotifyAllAgents {
+		t.Fatalf("event = %+v, want room.updated with notify_all_agents", event)
+	}
+}
+
 func TestHandleUsersDeleteRemovesUser(t *testing.T) {
 	srv := &Handler{
 		im: im.NewServiceFromBootstrap(im.Bootstrap{
@@ -6992,6 +7034,121 @@ func TestPublishParticipantEventQueuesUntilParticipantSubscribes(t *testing.T) {
 	}
 }
 
+func TestPublishParticipantEventNotifyAllFansOutHumanMessagesWithoutCascadingAgentReplies(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{
+		{ID: "agent-a", Name: "agent-a", Role: agent.RoleWorker},
+		{ID: "agent-b", Name: "agent-b", Role: agent.RoleWorker},
+	})
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{
+		CurrentUserID: "user-admin",
+		Users: []im.User{
+			{ID: "user-admin", Name: "admin"},
+			{ID: "user-a", Name: "agent-a"},
+			{ID: "user-b", Name: "agent-b"},
+		},
+		Rooms: []im.Room{
+			{
+				ID:              "room-1",
+				NotifyAllAgents: true,
+				Members:         []string{"user-admin", "user-a", "user-b"},
+			},
+		},
+	})
+	bridge := im.NewParticipantBridge("")
+	events, cancel := bridge.Subscribe("pt-b")
+	defer cancel()
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: bridge}
+	humanSender, ok := imSvc.User("user-admin")
+	if !ok {
+		t.Fatal("missing human sender")
+	}
+	sender, ok := imSvc.User("user-a")
+	if !ok {
+		t.Fatal("missing agent sender")
+	}
+
+	srv.PublishParticipantEvent(im.Event{
+		Type:   im.EventTypeMessageCreated,
+		RoomID: "room-1",
+		Sender: &humanSender,
+		Message: &im.Message{
+			ID:       "msg-human",
+			SenderID: "user-admin",
+			Content:  "human message without mention",
+		},
+	})
+	select {
+	case event := <-events:
+		if event.MessageID != "msg-human" || !event.Mentioned {
+			t.Fatalf("implicit human fanout event = %+v, want mentioned msg-human", event)
+		}
+		bridge.Ack("pt-b", event.MessageID)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for implicit human fanout delivery")
+	}
+
+	srv.PublishParticipantEvent(im.Event{
+		Type:   im.EventTypeMessageCreated,
+		RoomID: "room-1",
+		Sender: &humanSender,
+		Message: &im.Message{
+			ID:       "msg-human-mention",
+			SenderID: "user-admin",
+			Content:  `<at user_id="user-a">agent-a</at> please handle this`,
+			Mentions: []im.Mention{{ID: "user-a", Name: "agent-a"}},
+		},
+	})
+	select {
+	case event := <-events:
+		if event.MessageID != "msg-human-mention" || !event.Mentioned {
+			t.Fatalf("explicit human mention fanout event = %+v, want mentioned msg-human-mention", event)
+		}
+		bridge.Ack("pt-b", event.MessageID)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for explicit human mention fanout delivery")
+	}
+
+	srv.PublishParticipantEvent(im.Event{
+		Type:   im.EventTypeMessageCreated,
+		RoomID: "room-1",
+		Sender: &sender,
+		Message: &im.Message{
+			ID:       "msg-agent-reply",
+			SenderID: "user-a",
+			Content:  "agent reply without mention",
+		},
+	})
+	select {
+	case event := <-events:
+		t.Fatalf("unexpected implicit delivery for agent reply: %+v", event)
+	default:
+	}
+	room, ok := imSvc.Room("room-1")
+	if !ok || !room.NotifyAllAgents {
+		t.Fatalf("room = %+v, want notify-all setting to remain enabled", room)
+	}
+
+	srv.PublishParticipantEvent(im.Event{
+		Type:   im.EventTypeMessageCreated,
+		RoomID: "room-1",
+		Sender: &sender,
+		Message: &im.Message{
+			ID:       "msg-agent-mention",
+			SenderID: "user-a",
+			Content:  "please review",
+			Mentions: []im.Mention{{ID: "user-b"}},
+		},
+	})
+	select {
+	case event := <-events:
+		if event.MessageID != "msg-agent-mention" || !event.Mentioned {
+			t.Fatalf("explicit agent mention event = %+v, want mentioned msg-agent-mention", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for explicit agent mention delivery")
+	}
+}
+
 func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	started := make(chan string, 1)
@@ -7044,9 +7201,10 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 		},
 		Rooms: []im.Room{
 			{
-				ID:       "room-1",
-				Members:  []string{"u-admin", "u-worker"},
-				Messages: []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", CreatedAt: time.Now().UTC()}},
+				ID:              "room-1",
+				NotifyAllAgents: true,
+				Members:         []string{"u-admin", "u-worker"},
+				Messages:        []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", CreatedAt: time.Now().UTC()}},
 			},
 		},
 	})
@@ -7126,9 +7284,10 @@ func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 		},
 		Rooms: []im.Room{
 			{
-				ID:       "room-1",
-				Members:  []string{"u-admin", "u-worker"},
-				Messages: []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", CreatedAt: time.Now().UTC()}},
+				ID:              "room-1",
+				NotifyAllAgents: true,
+				Members:         []string{"u-admin", "u-worker"},
+				Messages:        []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", CreatedAt: time.Now().UTC()}},
 			},
 		},
 	})

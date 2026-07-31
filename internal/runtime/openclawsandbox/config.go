@@ -230,21 +230,33 @@ func updateOpenClawModelProvider(cfg map[string]any, botID string, server config
 
 func applyOpenClawModelCapabilities(providerCfg, entry map[string]any, modelCfg config.ModelConfig) {
 	caps := modelcap.ForProviderModel(modelCfg.Provider, modelCfg.ModelID)
+	supportsReasoning := caps.SupportsReasoningEffort
+	supportedEfforts := caps.SupportedReasoningEfforts
+	reasoningEffortMap := caps.ReasoningEffortMap
+	requestedEffort := config.NormalizeReasoningEffort(modelCfg.ReasoningEffort)
+	if !supportsReasoning && config.HasExplicitReasoningEffort(requestedEffort) {
+		supportsReasoning = true
+		supportedEfforts = config.CommonReasoningEfforts()
+		reasoningEffortMap = make(map[string]string, len(supportedEfforts))
+		for _, effort := range supportedEfforts {
+			reasoningEffortMap[effort] = effort
+		}
+	}
 	providerCfg["api"] = caps.OpenClawAPI
 	if caps.OpenClawAPI == modelcap.OpenClawAPICodexResponses {
 		entry["api"] = caps.OpenClawAPI
 	} else {
 		delete(entry, "api")
 	}
-	entry["reasoning"] = caps.SupportsReasoningEffort
+	entry["reasoning"] = supportsReasoning
 	entry["input"] = stringSliceToAny(caps.InputModalities)
 	compat, _ := entry["compat"].(map[string]any)
 	if compat == nil {
 		compat = map[string]any{}
 	}
-	compat["supportsReasoningEffort"] = caps.SupportsReasoningEffort
-	compat["supportedReasoningEfforts"] = stringSliceToAny(caps.SupportedReasoningEfforts)
-	compat["reasoningEffortMap"] = stringMapToAny(caps.ReasoningEffortMap)
+	compat["supportsReasoningEffort"] = supportsReasoning
+	compat["supportedReasoningEfforts"] = stringSliceToAny(supportedEfforts)
+	compat["reasoningEffortMap"] = stringMapToAny(reasoningEffortMap)
 	compat["supportsUsageInStreaming"] = caps.SupportsStreamingUsage
 	entry["compat"] = compat
 }
@@ -279,14 +291,21 @@ func updateOpenClawAgentDefaults(cfg map[string]any, providerID string, modelCfg
 		return fmt.Errorf("embedded openclaw config is missing agents.defaults.model")
 	}
 	modelBlock["primary"] = providerID + "/" + strings.TrimSpace(modelCfg.ModelID)
-	caps := modelcap.ForProviderModel(modelCfg.Provider, modelCfg.ModelID)
-	if !caps.SupportsReasoningEffort {
-		delete(defaults, "thinkingDefault")
+	reasoningEffort := config.NormalizeReasoningEffort(modelCfg.ReasoningEffort)
+	if reasoningEffort == config.ReasoningEffortNone {
+		defaults["thinkingDefault"] = "off"
+		defaults["reasoningDefault"] = "off"
 		return nil
 	}
-	if thinkingDefault := strings.TrimSpace(modelCfg.ReasoningEffort); thinkingDefault != "" {
-		defaults["thinkingDefault"] = thinkingDefault
+	// OpenClaw only invokes onReasoningStream when reasoning visibility is
+	// "stream". Keep that runtime-specific detail behind the common profile
+	// field so callers configure a single reasoning strategy.
+	defaults["reasoningDefault"] = "stream"
+	if !config.UsesModelReasoningDefault(reasoningEffort) {
+		defaults["thinkingDefault"] = reasoningEffort
+		return nil
 	}
+	delete(defaults, "thinkingDefault")
 	return nil
 }
 

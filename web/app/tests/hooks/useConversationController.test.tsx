@@ -5,6 +5,7 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import type { IMConversation, IMData, IMMessage, IMUser, TranslateFn } from "@/models/conversations";
 import type { AgentLike } from "@/models/agents";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
+import type { SendMessageRequestOptions } from "@/api/im";
 
 const subscribeIMEventsMock = vi.fn();
 const apiMocks = vi.hoisted(() => ({
@@ -396,6 +397,76 @@ describe("useConversationController", () => {
     });
 
     expect(result.current.conversationViewProps.workingParticipants).toEqual([]);
+  });
+
+  it("tracks upload progress, stops an in-flight send, and keeps the draft retryable", async () => {
+    apiMocks.sendMessageRequest.mockImplementation(
+      (_payload, options: SendMessageRequestOptions) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("The request was aborted.", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    const { result } = renderConversationController();
+    const file = new File(["report"], "report.pdf", { type: "application/pdf" });
+
+    act(() => {
+      result.current.conversationViewProps.onAddAttachments?.([file]);
+    });
+    let sendPromise: Promise<void> | undefined;
+    act(() => {
+      sendPromise = result.current.conversationViewProps.onSendMessage() as Promise<void>;
+    });
+
+    expect(result.current.conversationViewProps.sendStatus).toBe("sending");
+    const options = apiMocks.sendMessageRequest.mock.calls[0][1] as SendMessageRequestOptions;
+    act(() => {
+      options.onUploadProgress?.(48);
+    });
+    expect(result.current.conversationViewProps.sendProgress).toBe(48);
+
+    act(() => {
+      result.current.conversationViewProps.onStopSend?.();
+    });
+    await act(async () => {
+      await sendPromise;
+    });
+
+    expect(options.signal?.aborted).toBe(true);
+    expect(result.current.conversationViewProps.sendStatus).toBe("failed");
+    expect(result.current.conversationViewProps.sendError).toBe("sendStopped");
+    expect(result.current.conversationViewProps.attachmentDrafts).toHaveLength(1);
+  });
+
+  it("restores a removed attachment and reports duplicate selections", () => {
+    const { result } = renderConversationController();
+    const file = new File(["same"], "report.pdf", { type: "application/pdf" });
+
+    act(() => {
+      result.current.conversationViewProps.onAddAttachments?.([file]);
+    });
+    const draftID = result.current.conversationViewProps.attachmentDrafts?.[0]?.id;
+    expect(draftID).toBeTruthy();
+
+    act(() => {
+      result.current.conversationViewProps.onAddAttachments?.([file]);
+    });
+    expect(result.current.conversationViewProps.composerError).toBe("attachmentDuplicate");
+
+    act(() => {
+      result.current.conversationViewProps.onRemoveAttachment?.(draftID || "");
+    });
+    expect(result.current.conversationViewProps.attachmentDrafts).toHaveLength(0);
+    expect(result.current.conversationViewProps.removedAttachmentName).toBe("report.pdf");
+
+    act(() => {
+      result.current.conversationViewProps.onUndoRemoveAttachment?.();
+    });
+    expect(result.current.conversationViewProps.attachmentDrafts).toHaveLength(1);
+    expect(result.current.conversationViewProps.removedAttachmentName).toBe("");
   });
 
   it("does not derive working participants from recent message history", () => {

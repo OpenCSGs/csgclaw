@@ -67,6 +67,64 @@ func TestNewConversationTargetsGroupRoomRequiresMentionedAgent(t *testing.T) {
 	}
 }
 
+func TestNewConversationTargetsGroupRoomFanoutTargetsAllAgentPeers(t *testing.T) {
+	room := im.Room{
+		ID:              "room-1",
+		NotifyAllAgents: true,
+		Members:         []string{"u-user", "u-agent-a", "u-agent-b"},
+	}
+	message := im.Message{SenderID: "u-user"}
+	got := newConversationTargets(room, message, func(id string) bool {
+		return id == "u-agent-a" || id == "u-agent-b"
+	})
+	want := []string{"u-agent-a", "u-agent-b"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("newConversationTargets() = %#v, want %#v", got, want)
+	}
+}
+
+func TestNewConversationTargetsGroupRoomFanoutIncludesExplicitlyMentionedMessages(t *testing.T) {
+	room := im.Room{
+		ID:              "room-1",
+		NotifyAllAgents: true,
+		Members:         []string{"u-user", "u-agent-a", "u-agent-b"},
+	}
+	message := im.Message{
+		SenderID: "u-user",
+		Content:  `<at user_id="u-agent-b">agent-b</at> please handle this`,
+		Mentions: []im.Mention{{ID: "u-agent-b", Name: "agent-b"}},
+	}
+	got := newConversationTargets(room, message, func(id string) bool {
+		return id == "u-agent-a" || id == "u-agent-b"
+	})
+	want := []string{"u-agent-a", "u-agent-b"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("newConversationTargets() = %#v, want notify-all targets %#v", got, want)
+	}
+}
+
+func TestNewConversationTargetsGroupRoomFanoutDoesNotCascadeAgentReplies(t *testing.T) {
+	room := im.Room{
+		ID:              "room-1",
+		NotifyAllAgents: true,
+		Members:         []string{"u-user", "u-agent-a", "u-agent-b"},
+	}
+	isAgent := func(id string) bool {
+		return id == "u-agent-a" || id == "u-agent-b"
+	}
+
+	message := im.Message{SenderID: "u-agent-a"}
+	if got := newConversationTargets(room, message, isAgent); len(got) != 0 {
+		t.Fatalf("newConversationTargets() = %#v, want no implicit targets for agent reply", got)
+	}
+
+	message.Mentions = []im.Mention{{ID: "u-agent-b"}}
+	want := []string{"u-agent-b"}
+	if got := newConversationTargets(room, message, isAgent); !reflect.DeepEqual(got, want) {
+		t.Fatalf("newConversationTargets() = %#v, want explicit target %#v", got, want)
+	}
+}
+
 func TestNewConversationTargetsGroupRoomSupportsAtMentionTag(t *testing.T) {
 	room := im.Room{
 		ID:       "room-1",

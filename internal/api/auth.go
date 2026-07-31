@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net"
@@ -68,6 +69,7 @@ func (h *Handler) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.syncAgentHubService(r)
 	writeJSON(w, http.StatusOK, status)
 }
 
@@ -96,7 +98,13 @@ func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if err := h.refreshOpenCSGModelProvider(r.Context()); err != nil {
 		slog.Warn("refresh OpenCSG models after login failed", "error", err)
 	}
+	h.syncAgentHubService(r)
+	h.resetEnvironmentSensitiveRuntimes()
 	setNoStoreHeaders(w)
+	if h.runtimeDistribution == "electron" {
+		writeOAuthCompletePage(w, "Login complete", "Authentication completed. You can close this tab and return to CSGClaw.")
+		return
+	}
 	w.Header().Set("Location", authCallbackResultRedirectURL(redirectURL, "success", ""))
 	w.WriteHeader(http.StatusFound)
 }
@@ -167,6 +175,9 @@ func (h *Handler) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) authAdvertiseBaseURL() string {
+	if h != nil && h.advertiseBaseURL != "" {
+		return h.advertiseBaseURL
+	}
 	if h == nil || strings.TrimSpace(h.configPath) == "" {
 		return ""
 	}
@@ -175,6 +186,18 @@ func (h *Handler) authAdvertiseBaseURL() string {
 		return ""
 	}
 	return strings.TrimRight(strings.TrimSpace(cfg.Server.AdvertiseBaseURL), "/")
+}
+
+func writeOAuthCompletePage(w http.ResponseWriter, title, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = fmt.Fprintf(
+		w,
+		"<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>%s</title></head><body><main><h1>%s</h1><p>%s</p></main></body></html>",
+		html.EscapeString(title),
+		html.EscapeString(title),
+		html.EscapeString(message),
+	)
 }
 
 func authAdvertisedCallbackURL(advertiseBaseURL string) string {
@@ -204,10 +227,40 @@ func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	h.resetEnvironmentSensitiveRuntimes()
 	if err := h.clearOpenCSGModelProviderCache(); err != nil {
 		slog.Warn("clear OpenCSG models after logout failed", "error", err)
 	}
+	h.syncAgentHubService(r)
 	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) syncAgentHubService(r *http.Request) {
+	if h == nil || h.svc == nil {
+		return
+	}
+	hubSvc, err := h.hubServiceForRequest(r)
+	if err != nil {
+		slog.Warn("sync agent Hub service after OpenCSG environment change failed", "error", err)
+		return
+	}
+	h.svc.SetHubService(hubSvc)
+}
+
+func (h *Handler) resetEnvironmentSensitiveRuntimes() {
+	if h == nil {
+		return
+	}
+	reset := h.environmentRuntimeReset
+	if reset == nil && h.svc != nil {
+		reset = h.svc.ResetSandboxRuntimes
+	}
+	if reset == nil {
+		return
+	}
+	if err := reset(); err != nil {
+		slog.Warn("reset sandbox runtimes after OpenCSG environment change failed", "error", err)
+	}
 }
 
 func (h *Handler) clearOpenCSGModelProviderCache() error {

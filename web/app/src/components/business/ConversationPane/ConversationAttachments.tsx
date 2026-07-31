@@ -5,17 +5,24 @@ import { Button, Tooltip } from "@/components/ui";
 import {
   formatAttachmentSize,
   isImageAttachment,
+  splitAttachmentFilename,
   type AttachmentDraft,
   type MessageAttachment,
 } from "@/models/attachments";
 import type { TranslateFn } from "@/models/conversations";
 
+type AttachmentDraftStatus = "failed" | "idle" | "uploading";
+
 export function AttachmentDraftStrip({
   drafts,
+  progress = 0,
+  status = "idle",
   t,
   onRemove,
 }: {
   drafts: readonly AttachmentDraft[];
+  progress?: number;
+  status?: AttachmentDraftStatus;
   t: TranslateFn;
   onRemove: (id: string) => void;
 }) {
@@ -111,7 +118,14 @@ export function AttachmentDraftStrip({
         onWheel={handleWheel}
       >
         {drafts.map((draft) => (
-          <AttachmentDraftItem key={draft.id} draft={draft} t={t} onRemove={onRemove} />
+          <AttachmentDraftItem
+            key={draft.id}
+            draft={draft}
+            progress={progress}
+            status={status}
+            t={t}
+            onRemove={onRemove}
+          />
         ))}
       </div>
       {scrollState.canScrollLeft ? <span className="attachment-scroll-fade is-previous" aria-hidden="true" /> : null}
@@ -150,34 +164,60 @@ export function AttachmentDraftStrip({
 
 function AttachmentDraftItem({
   draft,
+  progress,
+  status,
   t,
   onRemove,
 }: {
   draft: AttachmentDraft;
+  progress: number;
+  status: AttachmentDraftStatus;
   t: TranslateFn;
   onRemove: (id: string) => void;
 }) {
-  const previewURL = useObjectURL(isImageAttachment(draft) ? draft.file : null);
+  const previewURL = useObjectURL(draft.file);
   const removeLabel = t("removeAttachmentNamed", { name: draft.name });
+  const previewLabel = t("previewAttachmentNamed", { name: draft.name });
+  const filename = splitAttachmentFilename(draft.name);
   return (
-    <div className={`attachment-draft ${isImageAttachment(draft) ? "is-image" : ""}`.trim()} role="listitem">
-      {previewURL ? (
-        <img className="attachment-draft-preview" src={previewURL} alt="" />
-      ) : (
-        <span className="attachment-file-icon" aria-hidden="true">
-          <FileText size={18} />
+    <div
+      className={`attachment-draft ${isImageAttachment(draft) ? "is-image" : ""} is-${status}`.trim()}
+      role="listitem"
+    >
+      <a
+        aria-label={previewLabel}
+        className="attachment-draft-preview-link"
+        href={previewURL || undefined}
+        target="_blank"
+        rel="noreferrer"
+        title={previewLabel}
+      >
+        {isImageAttachment(draft) && previewURL ? (
+          <img className="attachment-draft-preview" src={previewURL} alt="" />
+        ) : (
+          <span className="attachment-file-icon" aria-hidden="true">
+            <FileText size={18} />
+          </span>
+        )}
+        <span className="attachment-draft-meta">
+          <span className="attachment-name" title={draft.name}>
+            <span className="attachment-name-stem">{filename.stem}</span>
+            {filename.extension ? <span className="attachment-name-extension">{filename.extension}</span> : null}
+          </span>
+          <span className="attachment-size">
+            {status === "uploading"
+              ? t("attachmentUploadingProgress", { progress: Math.max(0, Math.min(100, Math.round(progress))) })
+              : status === "failed"
+                ? t("attachmentUploadFailed")
+                : formatAttachmentSize(draft.sizeBytes)}
+          </span>
         </span>
-      )}
-      <span className="attachment-draft-meta">
-        <span className="attachment-name truncate" title={draft.name}>
-          {draft.name}
-        </span>
-        <span className="attachment-size">{formatAttachmentSize(draft.sizeBytes)}</span>
-      </span>
+      </a>
       <Tooltip content={removeLabel}>
         <Button
           aria-label={removeLabel}
           className="attachment-remove-button"
+          disabled={status === "uploading"}
           iconOnly
           size="sm"
           variant="tertiaryGray"
@@ -186,6 +226,18 @@ function AttachmentDraftItem({
           <X aria-hidden="true" size={14} />
         </Button>
       </Tooltip>
+      {status === "uploading" ? (
+        <span
+          className="attachment-upload-progress"
+          role="progressbar"
+          aria-label={t("attachmentUploadingNamed", { name: draft.name })}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.max(0, Math.min(100, Math.round(progress)))}
+        >
+          <span style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
+        </span>
+      ) : null}
     </div>
   );
 }

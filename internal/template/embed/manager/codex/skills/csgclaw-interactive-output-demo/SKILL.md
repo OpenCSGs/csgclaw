@@ -1,6 +1,6 @@
 ---
 name: csgclaw-interactive-output-demo
-description: Run the complete three-stage CSGClaw structured-output demo when the user explicitly invokes $csgclaw-interactive-output-demo. Exercise resource links, Codex-style options, recommended and Unicode labels, freeform alternatives, secret input, and agent-directed automatic continuation.
+description: Run the complete three-stage CSGClaw structured-output demo in English or Chinese when the user explicitly invokes $csgclaw-interactive-output-demo. Exercise resource links, Codex-style options, recommended and Unicode labels, freeform alternatives, secret input, and agent-directed automatic continuation.
 ---
 
 # CSGClaw Interactive Output Demo
@@ -12,7 +12,7 @@ It never receives or parses `RequestUserInputResponse`.
 After each question submission, CSGClaw automatically continues this same Manager session with the wire-compatible response JSON.
 Submitted secret values are replaced with `<redacted>` before that JSON enters the model session.
 The Manager brain reads that JSON and chooses the next allowlisted stage.
-The readable `## Answers` message is persisted separately by CSGClaw as a local-user message and must not be parsed or echoed by this skill.
+The readable `## Answers` message is persisted separately by CSGClaw as a local-user message, using `## 回答` for Chinese questions, and must not be parsed or echoed by this skill.
 
 ## Mandatory one-stage boundary
 
@@ -24,13 +24,16 @@ After the one emitter command returns, do not route again, read another file, or
 
 ## Initial invocation
 
-When the current prompt does not contain an automatic continuation response JSON, execute this command exactly once:
+When the current prompt does not contain an automatic continuation response JSON, detect the language of the user's invocation.
+Use `zh` for Chinese and `en` otherwise, then execute this command exactly once:
 
 ```bash
-python3 "$CODEX_HOME/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py" start
+python3 "$CODEX_HOME/skills/csgclaw-interactive-output-demo/scripts/emit_demo.py" start --language <en|zh>
 ```
 
-After the command succeeds, return this exact Markdown and end the turn:
+After the command succeeds, return the matching exact Markdown and end the turn.
+
+English:
 
 ```markdown
 ## Interactive output demo - step 1 of 3
@@ -38,11 +41,20 @@ After the command succeeds, return this exact Markdown and end the turn:
 Choose the workflow branch.
 ```
 
+Chinese:
+
+```markdown
+## 交互式输出演示 - 第 1/3 步
+
+请选择工作流分支。
+```
+
 Do not quote, summarize, or restate emitted control records.
 
 ## Automatic continuation routing
 
 Inspect only the question IDs in the response JSON that was present when this turn began.
+Keep the language selected during the initial invocation for every later stage.
 Read exactly one matching reference completely, follow it, and do not read another reference in this turn:
 
 - If it contains `demo_kind`, read `references/stage-2.md`.

@@ -29,12 +29,22 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesMCPServerDocumentObjectRequired: "MCP server definition must be a JSON object.",
     resourcesMCPServerDocumentInvalidShape:
       "MCP server definition must be an mcpServers JSON object with exactly one server.",
+    resourcesMCPCreateTitle: "Add MCP Server",
     resourcesMCPDelete: "Delete",
     resourcesMCPDeleteConfirmMessage: 'Delete MCP server "{name}"?',
     resourcesMCPEmpty: "No MCP servers available yet.",
     resourcesMCPLoading: "Loading MCP servers",
     resourcesMCPSave: "Save",
     resourcesMCPSaving: "Saving...",
+    resourcesMCPManualTab: "Manual configuration",
+    resourcesMCPRemoteInstallAction: "Install",
+    resourcesMCPRemoteInstallTab: "Remote install",
+    resourcesMCPRemoteInstalling: "Installing...",
+    resourcesMCPRemoteReplaceAction: "Replace",
+    resourcesMCPRemoteServersEmpty: "No remote MCP servers yet.",
+    resourcesMCPRemoteServersLoading: "Loading remote MCP servers...",
+    resourcesMCPRemoteServersRefresh: "Refresh",
+    resourcesMCPRemoteServersSearchPlaceholder: "Search remote MCP servers",
     resourcesRefresh: "Refresh templates",
     resourcesSkillsEmpty: "No skills",
     resourcesSkillsLabel: "Skills",
@@ -43,9 +53,15 @@ function t(key: string, params: Record<string, string | number> = {}) {
     agentInstructions: "Instructions",
     agentInstructionsDefaultMode: "Default",
     agentInstructionsAdvancedMode: "Advanced",
+    agentInstructionsEffective: "Effective AGENTS.md",
     agentInstructionsViewMode: "Instructions view",
     agentInstructionsPlaceholder: "Describe how this agent should work.",
     resourcesTemplateInstructionsDefaultHint: "Default mode shows only user-defined instructions.",
+    resourcesTemplateInstructionsAdvancedHint: "View the complete AGENTS.md content applied by this template.",
+    resourcesTemplateInstructionsEmptyTitle: "No custom instructions",
+    resourcesTemplateInstructionsEmptyDescription:
+      "This template only contains generated defaults. Switch to Advanced to view the full content.",
+    resourcesTemplateInstructionsViewAdvancedAction: "View complete AGENTS.md",
     agentProfileSkillsTab: "Skills",
     agentProfileMCPTab: "MCP",
     agentProfileSectionNavLabel: "Template sections",
@@ -246,7 +262,13 @@ function renderHubSkillDetailPane() {
   );
 }
 
-function renderMCPDetailPane() {
+function renderMCPDetailPane({
+  mcpCreateDialogOpen = false,
+  mcpCreateError = "",
+}: {
+  mcpCreateDialogOpen?: boolean;
+  mcpCreateError?: string;
+} = {}) {
   const onUpdateMCP = vi.fn().mockResolvedValue(true);
   const mcp = {
     name: "grafana",
@@ -289,6 +311,8 @@ function renderMCPDetailPane() {
           skillTreeLoading: false,
           templates: [],
           mcpServers: [mcp],
+          mcpCreateDialogOpen,
+          mcpCreateError,
           mcpMutationBusy: false,
           mcpMutationError: "",
           mcpStateError: "",
@@ -305,6 +329,67 @@ function renderMCPDetailPane() {
   return { ...result, onUpdateMCP };
 }
 
+function renderMCPCreateDialog() {
+  const onInstallRemoteMCP = vi.fn().mockResolvedValue(true);
+  const onRemoteMCPVisibleChange = vi.fn();
+  const remoteMCP = {
+    description: "Calendar tools",
+    id: "builtin:calendar",
+    name: "calendar",
+    protocol: "streamable-http",
+    url: "https://mcp.example.test/calendar",
+  };
+  const result = render(
+    <HubDetailPane
+      locale="en"
+      t={t}
+      onCreateFromTemplate={vi.fn()}
+      hub={{
+        detailPaneProps: {
+          detailLoading: false,
+          error: "",
+          loaded: true,
+          mcpCreateDialogOpen: true,
+          mcpServers: [],
+          onInstallRemoteMCP,
+          onMCPCreateDialogOpenChange: vi.fn(),
+          onRemoteMCPVisibleChange,
+          onRetry: vi.fn(),
+          onSelectSkillFile: vi.fn(),
+          onSelectWorkspaceFile: vi.fn(),
+          remoteMCPInstallBusy: "",
+          remoteMCPServers: [remoteMCP],
+          remoteMCPServersError: "",
+          remoteMCPServersHasMore: false,
+          remoteMCPServersLoading: false,
+          remoteMCPServersLoadingMore: false,
+          remoteMCPServersSearch: "",
+          selectedMCPServer: null,
+          selectedMCPServerName: "",
+          selectedResourceType: "mcp",
+          selectedSkill: null,
+          selectedSkillPath: "",
+          selectedTemplate: null,
+          selectedTemplateId: "",
+          selectedWorkspacePath: "",
+          skillFile: null,
+          skillFileError: "",
+          skillFileLoading: false,
+          skills: [],
+          skillTree: null,
+          skillTreeError: "",
+          skillTreeLoading: false,
+          templates: [],
+          workspaceFile: null,
+          workspaceFileError: "",
+          workspaceFileLoading: false,
+        },
+      }}
+    />,
+  );
+  return { ...result, onInstallRemoteMCP, onRemoteMCPVisibleChange };
+}
+
 describe("HubDetailPane", () => {
   it("groups template details into runtime, instructions, skills, and MCP tabs", async () => {
     const user = userEvent.setup();
@@ -317,12 +402,13 @@ describe("HubDetailPane", () => {
 
     await user.click(screen.getByRole("button", { name: "Instructions" }));
     expect(screen.getByRole("button", { name: "Profile" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue("");
+    expect(screen.getByText("No custom instructions")).toBeInTheDocument();
+    expect(
+      screen.getByText("This template only contains generated defaults. Switch to Advanced to view the full content."),
+    ).toBeInTheDocument();
     expect(screen.getByText("Default mode shows only user-defined instructions.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Advanced" }));
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue(
-      "# Instructions\n\nFollow the template rules.",
-    );
+    expect(screen.getByLabelText("Instructions")).toHaveTextContent("# Instructions Follow the template rules.");
     await user.click(screen.getByRole("button", { name: /^Skills/ }));
     expect(screen.getByText("demo")).toBeInTheDocument();
     expect(screen.getByText("Demo template skill")).toBeInTheDocument();
@@ -339,23 +425,17 @@ describe("HubDetailPane", () => {
     expect(screen.queryByText("demo-template")).not.toBeInTheDocument();
   });
 
-  it("shows template profile instructions as a readonly profile textarea", async () => {
+  it("shows template profile instructions as a readonly preview", async () => {
     const user = userEvent.setup();
     renderHubDetailPane();
 
     await user.click(screen.getByRole("button", { name: "Instructions" }));
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveClass(
-      "hub-template-instructions-editor",
-      "is-default",
-    );
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByText("No custom instructions")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "View complete AGENTS.md" }));
 
     expect(screen.getByRole("button", { name: /^Skills/ })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toBeDisabled();
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveClass("is-advanced");
-    expect(screen.getByPlaceholderText("Describe how this agent should work.")).toHaveValue(
-      "# Instructions\n\nFollow the template rules.",
-    );
+    expect(screen.getByLabelText("Instructions")).toHaveTextContent("# Instructions Follow the template rules.");
+    expect(screen.getByText("Effective AGENTS.md")).toBeInTheDocument();
     expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
   });
 
@@ -400,5 +480,35 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onUpdateMCP).not.toHaveBeenCalled();
+  });
+
+  it("shows MCP creation errors only inside the creation dialog", () => {
+    renderMCPDetailPane({
+      mcpCreateDialogOpen: true,
+      mcpCreateError: "mcp server already exists: filesystem",
+    });
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("mcp server already exists: filesystem");
+    expect(screen.getAllByText("mcp server already exists: filesystem")).toHaveLength(1);
+  });
+
+  it("installs a remote MCP through the Hub install flow", async () => {
+    const user = userEvent.setup();
+    const { onInstallRemoteMCP, onRemoteMCPVisibleChange } = renderMCPCreateDialog();
+
+    await user.click(screen.getByRole("tab", { name: "Remote install" }));
+
+    expect(onRemoteMCPVisibleChange).toHaveBeenCalledWith(true);
+    expect(screen.getByText("calendar")).toBeInTheDocument();
+    expect(screen.getByText("Calendar tools")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Install" }));
+
+    expect(onInstallRemoteMCP).toHaveBeenCalledWith({
+      description: "Calendar tools",
+      id: "builtin:calendar",
+      name: "calendar",
+      protocol: "streamable-http",
+      url: "https://mcp.example.test/calendar",
+    });
   });
 });

@@ -1,0 +1,13 @@
+blockExoticSubdeps: false
+
+nodeLinker: hoisted
+
+# Forge 7 uses extract-zip through Packager 18. yauzl 3 avoids the Node.js
+# 24.16+ stream regression; remove this after upgrading to stable Forge 8.
+overrides:
+  yauzl: 3.3.1
+
+allowBuilds:
+  electron-winstaller: true
+  fs-xattr: true
+  macos-alias: true

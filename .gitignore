@@ -19,6 +19,9 @@ node_modules/
 web/app/playwright-report/
 web/app/test-results/
 web/app/.vite/
+desktop/dist/
+desktop/out/
+desktop/.forge-generated/
 web/static-dist/*
 !web/static-dist/
 !web/static-dist/.gitkeep

@@ -45,7 +45,6 @@
       "compaction": {
         "mode": "safeguard"
       },
-      "thinkingDefault": "medium",
       "maxConcurrent": 4,
       "subagents": {
         "maxConcurrent": 8

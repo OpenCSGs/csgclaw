@@ -14,6 +14,7 @@ import {
 import { providerNameForProviderID } from "@/models/modelProviders";
 import { localizeRole } from "@/shared/i18n";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { reasoningEffortLabel } from "@/components/business/ProfileControls";
 import { avatarFallbackText } from "@/shared/avatar";
 import { Button } from "@/components/ui";
 import type { AgentLike } from "@/models/agents";
@@ -38,10 +39,10 @@ function previewFieldLabel(label: string): string {
   return String(label || "").toLocaleUpperCase();
 }
 
-function agentModelWithReasoning(agent: AgentLike): string {
+function agentModelWithReasoning(agent: AgentLike, t: TranslateFn): string {
   const model = agentModelID(agent);
   const profile = agentProfileConfig(agent);
-  const reasoning = agent?.reasoning_effort || profile?.reasoning_effort || "medium";
+  const reasoning = reasoningEffortLabel(t, agent?.reasoning_effort || profile?.reasoning_effort);
   return reasoning ? `${model}(${reasoning})` : model;
 }
 
@@ -60,7 +61,7 @@ export function ProfilePreviewContent({ agent, user, t, onOpenAgent, onOpenDM }:
   const provider = agent?.provider || profile?.provider || providerNameForProviderID(profile?.model_provider_id || "");
   const previewRuntime = agent ? formatRuntimeKindLabel(agentRuntimeKind(agent), t) : t("profileLocalRuntime");
   const previewProvider = agent ? formatProviderLabel(provider) : t("profileLocalProvider");
-  const previewModel = agent ? agentModelWithReasoning(agent) : localizeRole(user?.role || "admin", t);
+  const previewModel = agent ? agentModelWithReasoning(agent, t) : localizeRole(user?.role || "admin", t);
   const displayName = agent?.name || user?.name || "";
   const displayRole = agent ? agent.role || "worker" : user?.role || "";
   const statusLabel = agent ? agentStatusLabel(agentRuntimeState(agent), t) : t("online");

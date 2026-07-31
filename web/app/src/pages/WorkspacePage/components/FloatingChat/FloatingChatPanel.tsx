@@ -49,6 +49,10 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     draftSegments,
     draftText,
     attachmentDrafts,
+    removedAttachmentName,
+    sendError,
+    sendProgress,
+    sendStatus,
     editorRef,
     inviteActionLabel,
     locale,
@@ -64,6 +68,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     messageActionBusy,
     messageActionFeedback,
     messageListRef,
+    notifyAllAgentsBusy = false,
+    notifyAllAgentsError = "",
     onApplyMention,
     onApplySlashCandidate = (_name) => {},
     onApplyThreadSlashCandidate = (_name) => {},
@@ -81,18 +87,23 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onDismissThreadSlashPicker = () => {},
     onInviteAction,
     onMessageAction,
+    onNotifyAllAgentsChange,
     onManageConnector,
     onOpenThread,
     onPreviewUser,
     onProviderLogin,
+    onRetrySend,
     onRemoveAttachment,
     onRemoveThreadAttachment,
     onSendMessage,
+    onStopSend,
+    onUndoRemoveAttachment,
     onSendThreadReply,
     onSaveConnectorConfig,
     onSaveGitLabConnectorConfig,
     onSetThreadSlashIndex = (_index) => {},
     onSyncComposer,
+    onStopWorkingTurn,
     onThreadDraftChange,
     onThreadSlashQueryChange,
     onToggleChannelTools,
@@ -243,6 +254,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         memberMenuRef={memberMenuRef}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={floatingVisibleMessages.length}
+        notifyAllAgentsBusy={notifyAllAgentsBusy}
+        notifyAllAgentsError={notifyAllAgentsError}
         showChannelTools={showChannelTools}
         showInviteAction={false}
         showMemberList={showMemberList}
@@ -251,6 +264,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
         onInviteAction={onInviteAction}
+        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onOpenAgentLogs={handleOpenAgentLogs}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}
@@ -294,6 +308,10 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           draftSegments={draftSegments}
           draftText={draftText}
           attachmentDrafts={attachmentDrafts}
+          removedAttachmentName={removedAttachmentName}
+          sendError={sendError}
+          sendProgress={sendProgress}
+          sendStatus={sendStatus}
           editorRef={editorRef}
           managerProfile={managerProfile}
           managerProvider={managerProvider}
@@ -317,9 +335,13 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           onDisconnectGitLabConnector={onDisconnectGitLabConnector}
           onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
+          onRetrySend={onRetrySend}
           onSaveConnectorConfig={onSaveConnectorConfig}
           onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}
           onSendMessage={onSendMessage}
+          onStopSend={onStopSend}
+          onUndoRemoveAttachment={onUndoRemoveAttachment}
+          onStopWorkingTurn={onStopWorkingTurn}
           onRemoveAttachment={onRemoveAttachment}
           onSyncComposer={onSyncComposer}
         />

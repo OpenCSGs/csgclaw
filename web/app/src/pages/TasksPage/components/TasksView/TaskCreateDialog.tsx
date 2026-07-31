@@ -68,7 +68,8 @@ export function TaskCreateDialog({
                 aria-describedby={errors.title ? "task-create-title-error" : undefined}
                 aria-invalid={errors.title ? true : undefined}
                 onInput={(event) => {
-                  onChange((current) => ({ ...current, title: event.currentTarget.value }));
+                  const value = event.currentTarget.value;
+                  onChange((current) => ({ ...current, title: value }));
                   onClearError("title");
                 }}
                 placeholder={t("taskTitlePlaceholder")}
@@ -85,7 +86,8 @@ export function TaskCreateDialog({
                 value={draft.description}
                 aria-label={t("taskDescriptionLabel")}
                 onInput={(event) => {
-                  onChange((current) => ({ ...current, description: event.currentTarget.value }));
+                  const value = event.currentTarget.value;
+                  onChange((current) => ({ ...current, description: value }));
                 }}
                 placeholder={t("taskDescriptionPlaceholder")}
               />
