@@ -161,9 +161,11 @@ func (h *Handler) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	req.AdvertiseBaseURL = h.authAdvertiseBaseURL()
 	if req.CallbackURL == "" {
-		req.CallbackURL = authAdvertisedCallbackURL(req.AdvertiseBaseURL)
-		if req.CallbackURL == "" {
+		if isLocalReturnURL(req.ReturnURL) {
 			req.CallbackURL = authLocalCallbackURL(r)
+		}
+		if req.CallbackURL == "" {
+			req.CallbackURL = authAdvertisedCallbackURL(req.AdvertiseBaseURL)
 		}
 	}
 	resp, err := appAuthLogin(r, req)
@@ -300,6 +302,19 @@ func authLocalCallbackURL(r *http.Request) string {
 		Path:   authCallbackPath,
 	}
 	return u.String()
+}
+
+func isLocalReturnURL(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.User != nil || u.Scheme == "" || u.Host == "" {
+		return false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+	default:
+		return false
+	}
+	return isLocalRequestHost(u.Host)
 }
 
 func isLocalRequestHost(hostport string) bool {

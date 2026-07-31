@@ -134,6 +134,34 @@ advertise_base_url = "${CSGCLAW_ADVERTISE_BASE_URL}"
 	}
 }
 
+func TestHandleAuthLoginPrefersLocalCallbackOverAdvertiseBaseURL(t *testing.T) {
+	const advertiseBaseURL = "http://host.docker.internal:18080"
+	var got authLoginRequest
+	restore := stubAuthLogin(func(_ *http.Request, req authLoginRequest) (auth.LoginResponse, error) {
+		got = req
+		return auth.LoginResponse{LoginURL: "https://opencsg.com/sso/login"}, nil
+	})
+	defer restore()
+
+	handler := &Handler{advertiseBaseURL: advertiseBaseURL}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{
+		"return_url":"http://127.0.0.1:5174/#/settings"
+	}`))
+	req.Host = "127.0.0.1:5174"
+	handler.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if got.AdvertiseBaseURL != advertiseBaseURL {
+		t.Fatalf("advertise_base_url = %q, want %q", got.AdvertiseBaseURL, advertiseBaseURL)
+	}
+	if want := "http://127.0.0.1:5174" + authCallbackPath; got.CallbackURL != want {
+		t.Fatalf("callback_url = %q, want %q", got.CallbackURL, want)
+	}
+}
+
 func TestHandleAuthCallback(t *testing.T) {
 	var gotToken string
 	restore := stubAuthCallback(func(r *http.Request, _ string) (string, error) {
