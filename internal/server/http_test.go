@@ -91,6 +91,11 @@ func TestRunDesktopServesRendererAndSandboxOnSeparateListeners(t *testing.T) {
 		wantStatus    int
 	}{
 		{
+			name:       "renderer UI accepts external browser",
+			url:        "http://" + rendererHost + "/",
+			wantStatus: http.StatusOK,
+		},
+		{
 			name:       "renderer health is loopback accessible",
 			url:        "http://" + rendererHost + "/healthz",
 			wantStatus: http.StatusOK,

@@ -37,17 +37,8 @@ func desktopRendererSecurityHandler(next http.Handler, listenerAddr net.Addr, op
 	}
 
 	expectedOrigin := baseURL.Scheme + "://" + baseURL.Host
-	expectedSessionAuthorization := "Bearer " + token
-	expectedServerAuthorization := ""
-	if serverToken := strings.TrimSpace(opts.ServerAccessToken); serverToken != "" {
-		expectedServerAuthorization = "Bearer " + serverToken
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setDesktopSecurityHeaders(w.Header())
-		got := r.Header.Get("Authorization")
-		sessionAuthorized := subtle.ConstantTimeCompare([]byte(got), []byte(expectedSessionAuthorization)) == 1
-		serverAuthorized := expectedServerAuthorization != "" &&
-			subtle.ConstantTimeCompare([]byte(got), []byte(expectedServerAuthorization)) == 1
 		requestHost := strings.ToLower(strings.TrimSpace(r.Host))
 		origin := strings.TrimSpace(r.Header.Get("Origin"))
 
@@ -59,16 +50,7 @@ func desktopRendererSecurityHandler(next http.Handler, listenerAddr net.Addr, op
 			http.Error(w, "invalid origin", http.StatusForbidden)
 			return
 		}
-		if desktopAuthExemptPath(r.URL.Path) {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if sessionAuthorized || serverAuthorized {
-			next.ServeHTTP(w, r)
-			return
-		}
-		w.Header().Set("WWW-Authenticate", `Bearer realm="csgclaw-desktop"`)
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		next.ServeHTTP(w, r)
 	}), nil
 }
 
@@ -129,15 +111,6 @@ func normalizeDesktopServerAccessHosts(hosts []string, expectedPort string) (map
 		normalized[strings.ToLower(parsed.Host)] = struct{}{}
 	}
 	return normalized, nil
-}
-
-func desktopAuthExemptPath(path string) bool {
-	switch path {
-	case "/healthz", "/api/v1/auth/callback", "/api/v1/connectors/github/oauth/callback":
-		return true
-	default:
-		return false
-	}
 }
 
 func setDesktopSecurityHeaders(header http.Header) {

@@ -43,7 +43,7 @@ csgclaw _desktop-serve
 
 `_desktop-serve` 复用普通 `serve` 的业务服务，但使用桌面专用启动方式：
 
-- Renderer 固定监听 `127.0.0.1:18791`，保证 Electron 持久化分区始终使用同一个 Web Storage origin，同时不向局域网暴露。
+- Renderer 固定监听 `127.0.0.1:18080`，保证 Electron 持久化分区始终使用同一个 Web Storage origin，并允许本机外部浏览器使用标准 CSGClaw 地址访问，同时不向局域网暴露。
 - Sandbox API 使用独立的动态端口监听宿主机 IPv4 接口，并强制校验 Host、server access token 和空 Origin。
 - Electron 通过 stdin 发送启动信息，Go 通过 stdout 返回就绪信息。
 - Electron 退出或监督重启 sidecar 时通知 Go 先停止运行中的 Agent，再优雅关闭 HTTP 服务。
@@ -70,9 +70,10 @@ csgclaw _desktop-serve
 Renderer 和 Sandbox 复用同一个业务 Router，但通过独立 listener、地址和凭据访问：
 
 ```text
-Electron Renderer
-    │ http://127.0.0.1:18791
-    │ desktop session token
+Electron Renderer / External Browser
+    │ http://127.0.0.1:18080
+    │ Electron: desktop session token
+    │ External Browser: same-origin loopback request
     ▼
 CSGClaw Go Sidecar
     ▲
@@ -149,10 +150,11 @@ Preload 只暴露获取桌面信息、打开受信任 OAuth 地址和管理桌�
 
 | 调用方   | Host                         | 凭据                          | 额外限制                                                      |
 | -------- | ---------------------------- | ----------------------------- | ------------------------------------------------------------- |
-| Renderer | `127.0.0.1:18791`            | session token 或 server token | 独立回环 listener；固定 origin 保存主题、语言和布局等本地状态 |
+| Renderer | `127.0.0.1:18080`            | Electron 使用 session token；同源本机浏览器可直接访问 | 独立回环 listener；固定 origin 保存主题、语言和布局等本地状态 |
 | Sandbox  | 启动时计算的 Host 和独立端口 | server token                  | 独立 IPv4 listener；Origin 必须为空                           |
 
-两个 listener 分别拒绝另一入口的 Host；desktop session token 不能用于 Sandbox listener。`/healthz` 和 OAuth callback 的免认证规则只适用于 Renderer 回环地址。
+两个 listener 分别拒绝另一入口的 Host；Renderer 允许同源本机浏览器访问，desktop session token 不能用于 Sandbox listener。
+Sandbox listener 始终要求 server token，并拒绝浏览器 Origin。
 
 ## 5. Web UI 适配
 

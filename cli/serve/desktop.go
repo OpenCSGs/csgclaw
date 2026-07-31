@@ -22,7 +22,7 @@ import (
 const (
 	maxDesktopControlMessageBytes = 64 * 1024
 	desktopParentEOFGracePeriod   = 1500 * time.Millisecond
-	desktopRendererListenAddr     = "127.0.0.1:18791"
+	desktopRendererListenAddr     = "127.0.0.1:" + config.DefaultHTTPPort
 )
 
 func (desktopServeCmd) Name() string {

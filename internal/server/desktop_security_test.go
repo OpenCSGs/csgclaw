@@ -53,6 +53,13 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 		wantStatus    int
 	}{
 		{
+			name:       "renderer accepts external loopback browser",
+			host:       rendererHost,
+			path:       "/api/v1/messages",
+			origin:     "http://" + rendererHost,
+			wantStatus: http.StatusNoContent,
+		},
+		{
 			name:       "renderer health remains unauthenticated",
 			host:       rendererHost,
 			path:       "/healthz",
