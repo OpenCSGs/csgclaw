@@ -18,8 +18,9 @@ CGO_ENABLED ?= 0
 WEB_APP_DIR ?= web/app
 WEB_STATIC_DIST_DIR ?= web/static-dist
 WEB_PNPM ?= $(CURDIR)/scripts/web-pnpm.sh
-WEB_BUILD_REPORT ?= full
-WEB_BUILD_PNPM_ARGS ?= $(if $(filter summary,$(WEB_BUILD_REPORT)),--silent build --logLevel warn,build)
+WEB_BUILD_REPORT ?= summary
+WEB_TYPECHECK_PNPM_ARGS ?= $(if $(filter summary,$(WEB_BUILD_REPORT)),--silent typecheck,typecheck)
+WEB_BUILD_PNPM_ARGS ?= $(if $(filter summary,$(WEB_BUILD_REPORT)),--silent exec vite build --logLevel warn,exec vite build)
 DESKTOP_DIR ?= desktop
 DESKTOP_PNPM ?= $(CURDIR)/scripts/desktop-pnpm.sh
 DESKTOP_PACKAGE_REPORT ?= summary
@@ -36,7 +37,7 @@ SANDBOX_CLI_BIN ?= $(SANDBOX_BUNDLE_TOOLS_DIR)/csgclaw-cli
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package build build-all build-server build-server-bin build-sandbox-cli install-sandbox-cli run clean package package-all release
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package build build-all build-server build-server-bin build-sandbox-cli install-sandbox-cli run clean package package-all release
 
 help:
 	@printf '%s\n' \
@@ -99,10 +100,17 @@ web-install: check-web-toolchain check-web-layout
 web-dev: ensure-web-deps
 	$(WEB_PNPM) dev
 
-build-web: ensure-web-deps
-	@if [ "$(WEB_BUILD_REPORT)" = "summary" ]; then \
-		printf '%s\n' "Building Web UI..."; \
-	fi
+web-typecheck:
+	@printf '%s\n' "Checking Web UI TypeScript..."
+	@$(WEB_PNPM) $(WEB_TYPECHECK_PNPM_ARGS) || { \
+		status=$$?; \
+		printf '%s\n' "Web UI TypeScript check failed."; \
+		exit $$status; \
+	}
+	@printf '%s\n' "Web UI TypeScript check passed."
+
+web-build-assets:
+	@printf '%s\n' "Building Web UI assets..."
 	@mkdir -p "$(WEB_STATIC_DIST_DIR)"
 	@$(WEB_PNPM) $(WEB_BUILD_PNPM_ARGS) || { \
 		status=$$?; \
@@ -119,6 +127,9 @@ build-web: ensure-web-deps
 		total_size=$$(du -sh "$(WEB_STATIC_DIST_DIR)" | awk '{print $$1}'); \
 		printf 'Web UI ready: %s (%s files, %s total).\n' "$(WEB_STATIC_DIST_DIR)" "$$file_count" "$$total_size"; \
 	fi
+
+build-web: ensure-web-deps
+	+@$(MAKE) --no-print-directory -j2 web-typecheck web-build-assets
 
 check-desktop-layout:
 	@if [ ! -d "$(DESKTOP_DIR)" ]; then \
