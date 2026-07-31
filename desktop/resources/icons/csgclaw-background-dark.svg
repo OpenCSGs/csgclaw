@@ -1,0 +1,60 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="metalBackground" x1="92" y1="76" x2="932" y2="948" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2B374B"/>
+      <stop offset="0.30" stop-color="#1A2539"/>
+      <stop offset="0.62" stop-color="#101828"/>
+      <stop offset="0.86" stop-color="#0A1120"/>
+      <stop offset="1" stop-color="#142038"/>
+    </linearGradient>
+    <radialGradient
+      id="topLeftSheen"
+      cx="0"
+      cy="0"
+      r="1"
+      gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(214 148) rotate(42) scale(650 590)"
+    >
+      <stop stop-color="#F2F6FC" stop-opacity="0.16"/>
+      <stop offset="0.38" stop-color="#AEBACB" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#718097" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient
+      id="bottomRightReflection"
+      cx="0"
+      cy="0"
+      r="1"
+      gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(900 894) rotate(-136) scale(360 310)"
+    >
+      <stop stop-color="#9FB0CA" stop-opacity="0.13"/>
+      <stop offset="0.44" stop-color="#667A99" stop-opacity="0.045"/>
+      <stop offset="1" stop-color="#53657F" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edgeGlow" x1="160" y1="38" x2="862" y2="986" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F1F5FA" stop-opacity="0.52"/>
+      <stop offset="0.38" stop-color="#C0CBDA" stop-opacity="0.26"/>
+      <stop offset="0.72" stop-color="#8190A6" stop-opacity="0.09"/>
+      <stop offset="1" stop-color="#DFE6EF" stop-opacity="0.20"/>
+    </linearGradient>
+    <filter id="softEdgeGlow" x="-24" y="-24" width="1072" height="1072" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="218" fill="url(#metalBackground)"/>
+  <rect x="32" y="32" width="960" height="960" rx="218" fill="url(#topLeftSheen)"/>
+  <rect x="32" y="32" width="960" height="960" rx="218" fill="url(#bottomRightReflection)"/>
+  <rect
+    x="34"
+    y="34"
+    width="956"
+    height="956"
+    rx="216"
+    stroke="url(#edgeGlow)"
+    stroke-width="18"
+    opacity="0.46"
+    filter="url(#softEdgeGlow)"
+  />
+  <rect x="34" y="34" width="956" height="956" rx="216" stroke="url(#edgeGlow)" stroke-width="3"/>
+  <rect x="41" y="41" width="942" height="942" rx="209" stroke="#FFFFFF" stroke-opacity="0.07"/>
+</svg>

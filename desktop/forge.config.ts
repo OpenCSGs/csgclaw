@@ -22,7 +22,9 @@ const backendResources = path.resolve(
 );
 const entitlements = path.resolve(__dirname, "resources", "entitlements", "macos.plist");
 const iconDirectory = path.resolve(__dirname, "resources", "icons");
-const macIcon = path.join(iconDirectory, "csgclaw.icns");
+const macIcon = path.join(iconDirectory, "csgclaw-theme.icns");
+const macDockLightIcon = path.join(iconDirectory, "csgclaw-dock-light.png");
+const macDockDarkIcon = path.join(iconDirectory, "csgclaw-dock-dark.png");
 const windowsIcon = path.join(iconDirectory, "csgclaw.ico");
 const linuxIcon = path.join(iconDirectory, "csgclaw.png");
 const msixAssets = path.resolve(__dirname, "resources", "msix");
@@ -77,7 +79,11 @@ const config: ForgeConfig = {
     appVersion: desktopVersion,
     asar: true,
     executableName: "CSGClaw",
-    extraResource: [backendResources, updateConfig],
+    extraResource: [
+      backendResources,
+      updateConfig,
+      ...(targetGoOS === "darwin" ? [macDockLightIcon, macDockDarkIcon] : []),
+    ],
     icon: appIcon,
     name: "CSGClaw",
     osxSign: {

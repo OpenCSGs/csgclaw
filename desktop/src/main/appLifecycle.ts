@@ -1,4 +1,5 @@
-import { app, dialog, Menu, nativeImage, shell, Tray } from "electron";
+import path from "node:path";
+import { app, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { DesktopIPC, type DesktopUpdateStatus } from "../shared/desktopBridge.types";
 import { registerIPCHandlers } from "./ipcHandlers";
 import { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
@@ -7,6 +8,7 @@ import { WindowManager } from "./windowManager";
 
 export class AppLifecycle {
   private cleanupIPC: (() => void) | null = null;
+  private cleanupDockThemeIcon: (() => void) | null = null;
   private quitting = false;
   private recoveryActive = false;
   private rendererOrigin = "";
@@ -50,6 +52,7 @@ export class AppLifecycle {
       () => this.restartSidecar(),
     );
 
+    this.configureDockThemeIcon();
     this.createApplicationMenu();
     this.createTray();
     try {
@@ -228,6 +231,27 @@ export class AppLifecycle {
     this.tray.on("double-click", () => this.show());
   }
 
+  private configureDockThemeIcon(): void {
+    if (process.platform !== "darwin" || !app.dock) {
+      return;
+    }
+    const iconDirectory = app.isPackaged
+      ? process.resourcesPath
+      : path.resolve(__dirname, "..", "..", "resources", "icons");
+    const updateDockIcon = (): void => {
+      const iconName = nativeTheme.shouldUseDarkColors
+        ? "csgclaw-dock-dark.png"
+        : "csgclaw-dock-light.png";
+      const icon = nativeImage.createFromPath(path.join(iconDirectory, iconName));
+      if (!icon.isEmpty()) {
+        app.dock?.setIcon(icon);
+      }
+    };
+    nativeTheme.on("updated", updateDockIcon);
+    this.cleanupDockThemeIcon = () => nativeTheme.removeListener("updated", updateDockIcon);
+    updateDockIcon();
+  }
+
   private createApplicationMenu(): void {
     const template: Electron.MenuItemConstructorOptions[] = [
       ...(process.platform === "darwin"
@@ -289,6 +313,8 @@ export class AppLifecycle {
   }
 
   private cleanup(): void {
+    this.cleanupDockThemeIcon?.();
+    this.cleanupDockThemeIcon = null;
     this.cleanupIPC?.();
     this.cleanupIPC = null;
   }
