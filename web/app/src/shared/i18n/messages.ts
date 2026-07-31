@@ -47,7 +47,7 @@ export const messages = {
     settingsCommunityAccount: "社区账号",
     settingsCommunityAccountDescription: "查看当前 OpenCSG 社区账号登录信息，必要时可退出登录。",
     settingsOpenCSGAccount: "登录 OpenCSG（可选）",
-    settingsOpenCSGDescription: "登录后可使用 OpenCSG 模型与社区服务；不登录也不影响本地功能。",
+    settingsOpenCSGDescription: "登录后可使用 OpenCSG 模型与社区服务。",
     settingsEnvironmentDescription: "选择要登录的 OpenCSG 社区分站点。",
     settingsAppearanceDescription: "自定义应用的显示主题和界面语言。",
     settingsVersionDescription: "查看当前应用版本及更新状态。",
@@ -1313,8 +1313,7 @@ export const messages = {
     settingsCommunityAccountDescription:
       "View the current OpenCSG community account sign-in status and sign out when needed.",
     settingsOpenCSGAccount: "Sign in to OpenCSG (optional)",
-    settingsOpenCSGDescription:
-      "Sign in to use OpenCSG models and community services. Local features remain available without signing in.",
+    settingsOpenCSGDescription: "Sign in to use OpenCSG models and community services.",
     settingsEnvironmentDescription: "Choose the OpenCSG community site to sign in to.",
     settingsAppearanceDescription: "Customize the app theme and interface language.",
     settingsVersionDescription: "View the current app version and update status.",
