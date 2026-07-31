@@ -21,6 +21,15 @@ import {
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { UseWorkspaceHubSelectionArgs } from "./types";
 
+type TemplateWorkspaceFilesState = {
+  files: Record<string, HubWorkspaceFile>;
+  templateID: string;
+};
+
+export function templateWorkspaceFilesStateNeedsReset(state: TemplateWorkspaceFilesState): boolean {
+  return Boolean(state.templateID || Object.keys(state.files).length);
+}
+
 export function useWorkspaceHubSelection({
   templates,
   templatesQuery,
@@ -82,10 +91,10 @@ export function useWorkspaceHubSelection({
   }>({ templateID: "", listings: {} });
   const [loadingWorkspaceDirs, setLoadingWorkspaceDirs] = useState<ReadonlySet<string>>(new Set());
   const [workspaceDirectoryError, setWorkspaceDirectoryError] = useState("");
-  const [templateWorkspaceFilesState, setTemplateWorkspaceFilesState] = useState<{
-    files: Record<string, HubWorkspaceFile>;
-    templateID: string;
-  }>({ files: {}, templateID: "" });
+  const [templateWorkspaceFilesState, setTemplateWorkspaceFilesState] = useState<TemplateWorkspaceFilesState>({
+    files: {},
+    templateID: "",
+  });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -154,7 +163,9 @@ export function useWorkspaceHubSelection({
 
   useEffect(() => {
     if (!selectedHubTemplateId) {
-      setTemplateWorkspaceFilesState({ files: {}, templateID: "" });
+      if (templateWorkspaceFilesStateNeedsReset(templateWorkspaceFilesState)) {
+        setTemplateWorkspaceFilesState({ files: {}, templateID: "" });
+      }
       return;
     }
     const desiredPaths = [
