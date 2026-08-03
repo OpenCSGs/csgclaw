@@ -60,7 +60,13 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	withAppServerHelperCommand(t, "conversation-thread")
 	dir := t.TempDir()
 	spec := testAppServerSessionSpec(dir)
-	manager := newAppServerManager(testAppServerManagerDeps())
+	var persisted []map[string]string
+	deps := testAppServerManagerDeps()
+	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string) error {
+		persisted = append(persisted, cloneConversationSessions(conversations))
+		return nil
+	}
+	manager := newAppServerManager(deps)
 	session, err := manager.Start(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -99,6 +105,38 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	}
 	if threadAfterReset == thread {
 		t.Fatalf("conversation thread after reset = %q, want a new thread", threadAfterReset)
+	}
+	if len(persisted) != 3 {
+		t.Fatalf("persisted conversation snapshots = %#v, want create/reset/recreate", persisted)
+	}
+	if got := persisted[0]["room-1"]; got != thread {
+		t.Fatalf("first persisted room thread = %q, want %q", got, thread)
+	}
+	if len(persisted[1]) != 0 {
+		t.Fatalf("reset persisted conversations = %#v, want empty", persisted[1])
+	}
+	if got := persisted[2]["room-1"]; got != threadAfterReset {
+		t.Fatalf("recreated persisted room thread = %q, want %q", got, threadAfterReset)
+	}
+}
+
+func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
+	withAppServerHelperCommand(t, "conversation-thread")
+	dir := t.TempDir()
+	spec := testAppServerSessionSpec(dir)
+	spec.ConversationSessions = map[string]string{"room-1": "persisted-room-thread"}
+	manager := newAppServerManager(testAppServerManagerDeps())
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	thread, err := manager.EnsureSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
+	if err != nil {
+		t.Fatalf("EnsureSession() error = %v", err)
+	}
+	if got, want := thread, "persisted-room-thread"; got != want {
+		t.Fatalf("EnsureSession() = %q, want restored %q", got, want)
 	}
 }
 

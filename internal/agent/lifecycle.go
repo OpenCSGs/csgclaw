@@ -18,7 +18,10 @@ func (s *Service) restartCodexRuntime(ctx context.Context, id string) (Agent, er
 		return Agent{}, err
 	}
 	defer release()
+	return s.restartCodexRuntimeLocked(ctx, id)
+}
 
+func (s *Service) restartCodexRuntimeLocked(ctx context.Context, id string) (Agent, error) {
 	got, ok := s.Agent(id)
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", strings.TrimSpace(id))
@@ -35,6 +38,12 @@ func (s *Service) restartCodexRuntime(ctx context.Context, id string) (Agent, er
 	s.stopLifecycleAgent(got.ID)
 	if _, err := runtimeImpl.Stop(ctx, handle); err != nil {
 		return Agent{}, fmt.Errorf("stop codex agent for restart: %w", err)
+	}
+	if _, err := s.updateRuntimeState(got.ID, agentruntime.Info{
+		HandleID: strings.TrimSpace(got.BoxID),
+		State:    agentruntime.StateStopped,
+	}); err != nil {
+		return Agent{}, fmt.Errorf("save stopped codex agent state: %w", err)
 	}
 	if err := s.provisionRuntimeForAgent(ctx, runtimeImpl, got, ""); err != nil {
 		return Agent{}, fmt.Errorf("provision codex agent for restart: %w", err)

@@ -1678,6 +1678,9 @@ func (s *Service) Start(ctx context.Context, id string) (Agent, error) {
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
+	if got.AgentProfile.EnvRestartRequired && !got.AgentProfile.ImageUpgradeRequired && strings.EqualFold(strings.TrimSpace(got.RuntimeKind), RuntimeKindCodex) {
+		return s.restartCodexRuntimeLocked(ctx, id)
+	}
 	if got.AgentProfile.EnvRestartRequired || got.AgentProfile.ImageUpgradeRequired {
 		return s.Recreate(ctx, id)
 	}

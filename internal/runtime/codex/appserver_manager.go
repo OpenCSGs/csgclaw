@@ -126,6 +126,10 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 
 	logger := slog.New(slog.NewTextHandler(stderrFile, &slog.HandlerOptions{}))
 	appClient := newAppServerClient(stdin, logger)
+	conversationSessions := cloneConversationSessions(spec.ConversationSessions)
+	if conversationSessions == nil {
+		conversationSessions = make(map[string]string)
+	}
 	live := &liveSession{
 		cmd:                   cmd,
 		stdin:                 stdin,
@@ -133,7 +137,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		done:                  make(chan struct{}),
 		spec:                  spec,
 		appClient:             appClient,
-		conversationSessions:  make(map[string]string),
+		conversationSessions:  conversationSessions,
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
 		turnThreads:           make(map[string]string),
 		commandOutputs:        make(map[string]*appServerCommandOutputState),
@@ -176,19 +180,20 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 
 	now := time.Now().UTC()
 	session := &Session{
-		RuntimeID:    spec.RuntimeID,
-		AgentID:      spec.AgentID,
-		AgentName:    spec.AgentName,
-		SessionID:    threadID,
-		BinaryPath:   spec.BinaryPath,
-		RuntimeDir:   spec.RuntimeDir,
-		WorkspaceDir: spec.WorkspaceDir,
-		HomeDir:      spec.HomeDir,
-		CodexHomeDir: spec.CodexHomeDir,
-		StderrPath:   spec.StderrPath,
-		ProcessID:    cmd.Process.Pid,
-		CreatedAt:    now,
-		StartedAt:    now,
+		RuntimeID:            spec.RuntimeID,
+		AgentID:              spec.AgentID,
+		AgentName:            spec.AgentName,
+		SessionID:            threadID,
+		BinaryPath:           spec.BinaryPath,
+		RuntimeDir:           spec.RuntimeDir,
+		WorkspaceDir:         spec.WorkspaceDir,
+		HomeDir:              spec.HomeDir,
+		CodexHomeDir:         spec.CodexHomeDir,
+		StderrPath:           spec.StderrPath,
+		ProcessID:            cmd.Process.Pid,
+		CreatedAt:            now,
+		StartedAt:            now,
+		ConversationSessions: cloneConversationSessions(spec.ConversationSessions),
 	}
 	live.mu.Lock()
 	live.session = session
@@ -377,11 +382,21 @@ func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHand
 	}
 
 	live.mu.Lock()
-	defer live.mu.Unlock()
 	if existing := strings.TrimSpace(live.conversationSessions[conversationKey]); existing != "" {
+		live.mu.Unlock()
 		return existing, nil
 	}
 	live.conversationSessions[conversationKey] = threadID
+	conversations := cloneConversationSessions(live.conversationSessions)
+	live.mu.Unlock()
+	if err := m.persistConversationSessions(live, conversations); err != nil {
+		live.mu.Lock()
+		if live.conversationSessions[conversationKey] == threadID {
+			delete(live.conversationSessions, conversationKey)
+		}
+		live.mu.Unlock()
+		return "", err
+	}
 	return threadID, nil
 }
 
@@ -403,7 +418,16 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 	live.mu.Lock()
 	sessionID := strings.TrimSpace(live.conversationSessions[conversationKey])
 	delete(live.conversationSessions, conversationKey)
+	conversations := cloneConversationSessions(live.conversationSessions)
 	live.mu.Unlock()
+	if err := m.persistConversationSessions(live, conversations); err != nil {
+		live.mu.Lock()
+		if sessionID != "" {
+			live.conversationSessions[conversationKey] = sessionID
+		}
+		live.mu.Unlock()
+		return err
+	}
 
 	if m.deps.Permission != nil && sessionID != "" {
 		m.deps.Permission.CancelSession(runtimeID, sessionID)
@@ -412,6 +436,13 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 		m.deps.UserInput.CancelSession(runtimeID, sessionID)
 	}
 	return nil
+}
+
+func (m *appServerManager) persistConversationSessions(live *liveSession, conversations map[string]string) error {
+	if m == nil || live == nil || live.session == nil || m.deps.OnConversationSessionsChange == nil {
+		return nil
+	}
+	return m.deps.OnConversationSessionsChange(live.session, conversations)
 }
 
 func (m *appServerManager) ensureLiveSession(ctx context.Context, handle SessionHandle) (*liveSession, error) {

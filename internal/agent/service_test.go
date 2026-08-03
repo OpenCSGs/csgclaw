@@ -1389,6 +1389,67 @@ func TestUpdateAgentProfileCodexRuntimeFallbackRestartsActiveBridge(t *testing.T
 	}
 }
 
+func TestCodexAutomaticRestartFailurePersistsStoppedAndRetriesWithoutDelete(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	startErr := errors.New("start failed")
+	deleteCalls := 0
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		filepath.Join(t.TempDir(), "agents.json"),
+		WithRuntime(fakeAgentRuntime{
+			kind:    RuntimeKindCodex,
+			restart: func(agentruntime.RuntimeConfigChange) (bool, error) { return true, nil },
+			start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+				if startErr != nil {
+					return agentruntime.StateStopped, startErr
+				}
+				return agentruntime.StateRunning, nil
+			},
+			info: func(context.Context, agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{State: agentruntime.StateRunning}, nil
+			},
+			del: func(context.Context, agentruntime.Handle) error {
+				deleteCalls++
+				return nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	profile := AgentProfile{Name: "dev", Provider: ProviderAPI, BaseURL: "https://old.example/v1", APIKey: "key", ModelID: "old", ProfileComplete: true}
+	svc.agents["u-dev"] = Agent{ID: "u-dev", Name: "dev", RuntimeID: "rt-u-dev", RuntimeKind: RuntimeKindCodex, Role: RoleWorker, Status: string(agentruntime.StateRunning), AgentProfile: profile, ProfileComplete: true}
+
+	_, err = svc.Update(context.Background(), "u-dev", UpdateRequest{AgentProfile: &AgentProfile{Provider: ProviderAPI, BaseURL: "https://new.example/v1", APIKey: "key", ModelID: "new"}})
+	if !errors.Is(err, startErr) {
+		t.Fatalf("Update() error = %v, want %v", err, startErr)
+	}
+	failed, ok := svc.agentSnapshot("u-dev")
+	if !ok {
+		t.Fatal("Agent() ok = false")
+	}
+	if got, want := failed.Status, string(agentruntime.StateStopped); got != want {
+		t.Fatalf("failed restart status = %q, want %q", got, want)
+	}
+	if !failed.AgentProfile.EnvRestartRequired {
+		t.Fatal("failed restart cleared EnvRestartRequired")
+	}
+
+	startErr = nil
+	restarted, err := svc.Start(context.Background(), "u-dev")
+	if err != nil {
+		t.Fatalf("Start() retry error = %v", err)
+	}
+	if restarted.AgentProfile.EnvRestartRequired || restarted.Status != string(agentruntime.StateRunning) {
+		t.Fatalf("Start() retry agent = %+v, want running without restart flag", restarted)
+	}
+	if deleteCalls != 0 {
+		t.Fatalf("Delete() calls = %d, want 0 to preserve history", deleteCalls)
+	}
+}
+
 func TestUpdateAgentProfileRejectsCodexModelProviderWhenCodexCLIMissing(t *testing.T) {
 	origLocateCodexCLI := locateCodexCLI
 	locateCodexCLI = func() (string, error) { return "", fmt.Errorf("codex missing") }
