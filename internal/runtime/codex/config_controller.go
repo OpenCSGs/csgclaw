@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -59,7 +60,8 @@ func (r *Runtime) ValidateConfig(ctx context.Context, current agentruntime.Runti
 }
 
 func (r *Runtime) RestartRequired(change agentruntime.RuntimeConfigChange) (bool, error) {
-	return codexWorkspaceOptionChanged(change.Previous.Options, change.Current.Options), nil
+	return codexWorkspaceOptionChanged(change.Previous.Options, change.Current.Options) ||
+		!reflect.DeepEqual(change.Previous.Profile, change.Current.Profile), nil
 }
 
 func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, change agentruntime.RuntimeConfigChange) error {

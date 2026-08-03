@@ -333,25 +333,38 @@ func TestRestartRequiredReturnsTrueWhenLocalWorkspaceDirChanges(t *testing.T) {
 	}
 }
 
-func TestRestartRequiredIgnoresProfileChanges(t *testing.T) {
-	rt := &Runtime{}
-	got, err := rt.RestartRequired(agentruntime.RuntimeConfigChange{
-		Previous: agentruntime.RuntimeConfigSnapshot{
-			Profile: agentruntime.RuntimeProfileConfig{
-				ModelID: "gpt-5.5",
-			},
+func TestRestartRequiredReturnsTrueWhenProfileChanges(t *testing.T) {
+	tests := []struct {
+		name     string
+		previous agentruntime.RuntimeProfileConfig
+		current  agentruntime.RuntimeProfileConfig
+	}{
+		{
+			name:     "model",
+			previous: agentruntime.RuntimeProfileConfig{ModelID: "qwen3.6-plus"},
+			current:  agentruntime.RuntimeProfileConfig{ModelID: "claude-sonnet-4-7"},
 		},
-		Current: agentruntime.RuntimeConfigSnapshot{
-			Profile: agentruntime.RuntimeProfileConfig{
-				ModelID: "gpt-5.6",
-			},
+		{
+			name:     "reasoning effort",
+			previous: agentruntime.RuntimeProfileConfig{ReasoningEffort: "medium"},
+			current:  agentruntime.RuntimeProfileConfig{ReasoningEffort: "high"},
 		},
-	})
-	if err != nil {
-		t.Fatalf("RestartRequired() error = %v", err)
 	}
-	if got {
-		t.Fatal("RestartRequired() = true, want false when only profile changes")
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rt := &Runtime{}
+			got, err := rt.RestartRequired(agentruntime.RuntimeConfigChange{
+				Previous: agentruntime.RuntimeConfigSnapshot{Profile: test.previous},
+				Current:  agentruntime.RuntimeConfigSnapshot{Profile: test.current},
+			})
+			if err != nil {
+				t.Fatalf("RestartRequired() error = %v", err)
+			}
+			if !got {
+				t.Fatal("RestartRequired() = false, want true after Codex profile change")
+			}
+		})
 	}
 }
 

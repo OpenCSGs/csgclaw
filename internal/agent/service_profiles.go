@@ -135,7 +135,11 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 		return AgentProfileView{}, err
 	}
 	s.mu.Unlock()
-	if restartRequired && runtimeRunning && !isGatewayRuntimeKind(runtimeKind) {
+	if restartRequired && runtimeRunning && strings.EqualFold(runtimeKind, RuntimeKindCodex) {
+		if _, err := s.restartCodexRuntime(context.Background(), id); err != nil {
+			return AgentProfileView{}, err
+		}
+	} else if restartRequired && runtimeRunning && !isGatewayRuntimeKind(runtimeKind) {
 		s.stopLifecycleAgent(id)
 	}
 	if err := s.syncGatewayAfterProfileChange(context.Background(), id, previous, normalized, restartRequired); err != nil {
@@ -503,7 +507,11 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 			}
 		}
 	}
-	if restartRequired && runtimeRunning && !isGatewayRuntimeKind(runtimeKind) {
+	if restartRequired && runtimeRunning && strings.EqualFold(runtimeKind, RuntimeKindCodex) {
+		if _, err := s.restartCodexRuntime(ctx, id); err != nil {
+			return Agent{}, err
+		}
+	} else if restartRequired && runtimeRunning && !isGatewayRuntimeKind(runtimeKind) {
 		s.stopLifecycleAgent(id)
 	}
 
@@ -511,7 +519,7 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
-	if mcpServersUpdated && restartRequired && runtimeRunning && isManagerAgent(updated) {
+	if mcpServersUpdated && restartRequired && runtimeRunning && isManagerAgent(updated) && updated.AgentProfile.EnvRestartRequired {
 		return s.Recreate(ctx, id)
 	}
 	if runtimeAffectingUpdate {
