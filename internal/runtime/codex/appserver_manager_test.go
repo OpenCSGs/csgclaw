@@ -121,7 +121,7 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 }
 
 func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
-	withAppServerHelperCommand(t, "conversation-thread")
+	withAppServerHelperCommand(t, "resume-success")
 	dir := t.TempDir()
 	spec := testAppServerSessionSpec(dir)
 	spec.ConversationSessions = map[string]string{"room-1": "persisted-room-thread"}
@@ -135,8 +135,61 @@ func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureSession() error = %v", err)
 	}
-	if got, want := thread, "persisted-room-thread"; got != want {
+	if got, want := thread, "resumed-thread"; got != want {
 		t.Fatalf("EnsureSession() = %q, want restored %q", got, want)
+	}
+	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: thread,
+		Prompt:    []PromptContentBlock{TextBlock("continue")},
+	})
+	if err != nil {
+		t.Fatalf("Prompt(restored conversation) error = %v", err)
+	}
+	if resp.StopReason != StopReasonEndTurn {
+		t.Fatalf("Prompt(restored conversation) stop reason = %q, want %q", resp.StopReason, StopReasonEndTurn)
+	}
+}
+
+func TestAppServerManagerSerializesConversationPersistence(t *testing.T) {
+	withAppServerHelperCommand(t, "conversation-thread")
+	dir := t.TempDir()
+	spec := testAppServerSessionSpec(dir)
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	deps := testAppServerManagerDeps()
+	deps.OnConversationSessionsChange = func(_ *Session, _ map[string]string) error {
+		entered <- struct{}{}
+		<-release
+		return nil
+	}
+	manager := newAppServerManager(deps)
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	errCh := make(chan error, 2)
+	go func() {
+		_, err := manager.EnsureSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
+		errCh <- err
+	}()
+	<-entered
+	go func() {
+		_, err := manager.EnsureSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-2")
+		errCh <- err
+	}()
+	select {
+	case <-entered:
+		t.Fatal("conversation persistence callbacks overlapped")
+	case <-time.After(50 * time.Millisecond):
+	}
+	release <- struct{}{}
+	<-entered
+	release <- struct{}{}
+	for range 2 {
+		if err := <-errCh; err != nil {
+			t.Fatalf("EnsureSession() error = %v", err)
+		}
 	}
 }
 

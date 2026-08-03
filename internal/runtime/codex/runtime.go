@@ -357,11 +357,18 @@ func (r *Runtime) Start(ctx context.Context, h agentruntime.Handle) (agentruntim
 		return agentruntime.StateUnknown, err
 	}
 	agentRef.Profile = agentRef.Profile.Normalized()
+	var conversationSessions map[string]string
+	if sessionMeta, readErr := r.readSessionMetadata(strings.TrimSpace(h.RuntimeID)); readErr == nil {
+		conversationSessions = cloneConversationSessions(sessionMeta.ConversationSessions)
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return agentruntime.StateUnknown, fmt.Errorf("read persisted codex conversations: %w", readErr)
+	}
 	session, err := r.ensureSession(ctx, SessionSpec{
-		RuntimeID: strings.TrimSpace(h.RuntimeID),
-		AgentID:   strings.TrimSpace(agentRef.ID),
-		AgentName: strings.TrimSpace(agentRef.Name),
-		Profile:   agentRef.Profile,
+		RuntimeID:            strings.TrimSpace(h.RuntimeID),
+		AgentID:              strings.TrimSpace(agentRef.ID),
+		AgentName:            strings.TrimSpace(agentRef.Name),
+		Profile:              agentRef.Profile,
+		ConversationSessions: conversationSessions,
 	})
 	if err != nil {
 		if sessionRestoreErr != nil {

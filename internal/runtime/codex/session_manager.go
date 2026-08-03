@@ -10,6 +10,8 @@ import (
 
 type liveSession struct {
 	mu                    sync.Mutex
+	conversationResumeMu  sync.Mutex
+	conversationPersistMu sync.Mutex
 	session               *Session
 	appClient             *appServerClient
 	cmd                   *exec.Cmd
@@ -18,6 +20,7 @@ type liveSession struct {
 	done                  chan struct{}
 	spec                  SessionSpec
 	conversationSessions  map[string]string
+	loadedConversations   map[string]bool
 	turnWaiters           map[string]*appServerTurnWaiter
 	turnThreads           map[string]string
 	turnThreadOrder       []string

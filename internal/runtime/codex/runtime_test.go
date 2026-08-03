@@ -3121,6 +3121,68 @@ func TestRuntimeStartKeepsExistingRunningSession(t *testing.T) {
 	}
 }
 
+func TestRuntimeStartRestoresPersistedConversationMappings(t *testing.T) {
+	root := t.TempDir()
+	var startedSpec SessionSpec
+	startCalls := 0
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentID string) (string, error) {
+			return filepath.Join(root, agentID), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID}, nil
+		},
+		Manager: fakeManager{start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+			startCalls++
+			startedSpec = spec
+			return &Session{
+				RuntimeID:            spec.RuntimeID,
+				AgentID:              spec.AgentID,
+				AgentName:            spec.AgentName,
+				SessionID:            "main-thread",
+				RuntimeDir:           spec.RuntimeDir,
+				WorkspaceDir:         spec.WorkspaceDir,
+				HomeDir:              spec.HomeDir,
+				CodexHomeDir:         spec.CodexHomeDir,
+				StderrPath:           spec.StderrPath,
+				ConversationSessions: cloneConversationSessions(spec.ConversationSessions),
+				CreatedAt:            time.Now().UTC(),
+				StartedAt:            time.Now().UTC(),
+			}, nil
+		}},
+	})
+	handle, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	runtimeDir := filepath.Join(root, "agent-alice", ".codex")
+	if err := writeJSONFile(os.WriteFile, filepath.Join(runtimeDir, sessionFileName), sessionMetadata{
+		RuntimeID:            "rt-u-alice",
+		SessionID:            "main-thread",
+		ConversationSessions: map[string]string{"room-1": "room-thread"},
+	}); err != nil {
+		t.Fatalf("write session metadata: %v", err)
+	}
+
+	if _, err := rt.Stop(context.Background(), handle); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if _, err := rt.Start(context.Background(), handle); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if startCalls != 2 {
+		t.Fatalf("manager Start() calls = %d, want 2", startCalls)
+	}
+	if got, want := startedSpec.ConversationSessions["room-1"], "room-thread"; got != want {
+		t.Fatalf("Start() conversation mapping = %q, want %q", got, want)
+	}
+}
+
 func TestRuntimeStartRepairsFailedPersistedSession(t *testing.T) {
 	root := t.TempDir()
 	oldProcess := exec.Command("sleep", "30")

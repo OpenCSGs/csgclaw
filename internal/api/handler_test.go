@@ -12,9 +12,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -205,11 +207,24 @@ func (apiFakeCodexBinaryProvider) Ensure(context.Context) (string, error) {
 	return "/tmp/codex", nil
 }
 
-type apiFakeCodexManager struct{}
+type apiFakeCodexManager struct {
+	mu       sync.Mutex
+	sessions map[string]*apiFakeCodexProcess
+}
 
-func (apiFakeCodexManager) Start(_ context.Context, spec codexruntime.SessionSpec) (*codexruntime.Session, error) {
+type apiFakeCodexProcess struct {
+	cmd     *exec.Cmd
+	session *codexruntime.Session
+}
+
+func (m *apiFakeCodexManager) Start(_ context.Context, spec codexruntime.SessionSpec) (*codexruntime.Session, error) {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestAPIFakeCodexProcess$")
+	cmd.Env = append(os.Environ(), "CSGCLAW_API_FAKE_CODEX_PROCESS=1")
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
-	return &codexruntime.Session{
+	session := &codexruntime.Session{
 		RuntimeID:    spec.RuntimeID,
 		AgentID:      spec.AgentID,
 		AgentName:    spec.AgentName,
@@ -220,26 +235,68 @@ func (apiFakeCodexManager) Start(_ context.Context, spec codexruntime.SessionSpe
 		HomeDir:      spec.HomeDir,
 		CodexHomeDir: spec.CodexHomeDir,
 		StderrPath:   spec.StderrPath,
-		ProcessID:    os.Getpid(),
+		ProcessID:    cmd.Process.Pid,
 		CreatedAt:    now,
 		StartedAt:    now,
-	}, nil
+	}
+	m.mu.Lock()
+	if m.sessions == nil {
+		m.sessions = make(map[string]*apiFakeCodexProcess)
+	}
+	m.sessions[spec.RuntimeID] = &apiFakeCodexProcess{cmd: cmd, session: session}
+	m.mu.Unlock()
+	return session, nil
 }
 
-func (apiFakeCodexManager) Stop(context.Context, codexruntime.SessionHandle) error {
+func (m *apiFakeCodexManager) Stop(_ context.Context, handle codexruntime.SessionHandle) error {
+	m.mu.Lock()
+	process := m.sessions[handle.RuntimeID]
+	delete(m.sessions, handle.RuntimeID)
+	m.mu.Unlock()
+	if process == nil || process.cmd == nil || process.cmd.Process == nil {
+		return os.ErrNotExist
+	}
+	_ = process.cmd.Process.Kill()
+	_ = process.cmd.Wait()
 	return nil
 }
 
-func (apiFakeCodexManager) LiveSession(codexruntime.SessionHandle) (*codexruntime.Session, error) {
-	return nil, os.ErrNotExist
+func (m *apiFakeCodexManager) LiveSession(handle codexruntime.SessionHandle) (*codexruntime.Session, error) {
+	return m.Session(handle)
 }
 
-func (apiFakeCodexManager) Session(codexruntime.SessionHandle) (*codexruntime.Session, error) {
-	return nil, os.ErrNotExist
+func (m *apiFakeCodexManager) Session(handle codexruntime.SessionHandle) (*codexruntime.Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	process := m.sessions[handle.RuntimeID]
+	if process == nil || process.session == nil {
+		return nil, os.ErrNotExist
+	}
+	cloned := *process.session
+	return &cloned, nil
 }
 
-func (apiFakeCodexManager) Prompt(context.Context, codexruntime.SessionHandle, codexruntime.PromptRequest) (codexruntime.PromptResponse, error) {
+func (*apiFakeCodexManager) Prompt(context.Context, codexruntime.SessionHandle, codexruntime.PromptRequest) (codexruntime.PromptResponse, error) {
 	return codexruntime.PromptResponse{}, os.ErrNotExist
+}
+
+func (m *apiFakeCodexManager) close() {
+	m.mu.Lock()
+	var handles []codexruntime.SessionHandle
+	for runtimeID := range m.sessions {
+		handles = append(handles, codexruntime.SessionHandle{RuntimeID: runtimeID})
+	}
+	m.mu.Unlock()
+	for _, handle := range handles {
+		_ = m.Stop(context.Background(), handle)
+	}
+}
+
+func TestAPIFakeCodexProcess(t *testing.T) {
+	if os.Getenv("CSGCLAW_API_FAKE_CODEX_PROCESS") != "1" {
+		return
+	}
+	select {}
 }
 
 type fakeCodexBridgeController struct {
@@ -2443,6 +2500,8 @@ func TestHandleAgentsMCPServersClosedLoopForSupportedRuntimes(t *testing.T) {
 	codexRoot := t.TempDir()
 	codexHomes := map[string]string{}
 	statePath := filepath.Join(t.TempDir(), "agents.json")
+	codexManager := &apiFakeCodexManager{}
+	t.Cleanup(codexManager.close)
 	codexRT := codexruntime.New(codexruntime.Dependencies{
 		BinaryProvider: apiFakeCodexBinaryProvider{},
 		AgentHome: func(agentID string) (string, error) {
@@ -2458,7 +2517,7 @@ func TestHandleAgentsMCPServersClosedLoopForSupportedRuntimes(t *testing.T) {
 				ModelID:  "model-1",
 			})
 		},
-		Manager: apiFakeCodexManager{},
+		Manager: codexManager,
 	})
 
 	svc, err := agent.NewService(
