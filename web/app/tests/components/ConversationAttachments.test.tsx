@@ -1,12 +1,31 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 import { MessageAttachments } from "@/components/business/ConversationPane/ConversationAttachments";
 import type { MessageAttachment } from "@/models/attachments";
 import type { TranslateFn } from "@/models/conversations";
 
-const t: TranslateFn = (key) => (key === "attachment" ? "Attachment" : key);
+const t: TranslateFn = (key, params) => {
+  const labels: Record<string, string> = {
+    attachment: "Attachment",
+    attachmentPreviewDescription: "Preview without leaving the app",
+    attachmentPreviewFailed: "Preview failed",
+    attachmentPreviewLoading: "Loading preview",
+    attachmentPreviewUnavailable: "Preview unavailable",
+    close: "Close",
+    downloadAttachment: "Download attachment",
+    previewAttachmentNamed: `Preview attachment: ${params?.name ?? ""}`,
+  };
+  return labels[key] ?? key;
+};
 
 describe("MessageAttachments", () => {
-  it("renders capability-backed attachments relative to the application base path", () => {
+  it("previews capability-backed attachments in-app relative to the application base path", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn<typeof fetch>(
+      async () => new Response("report", { headers: { "Content-Type": "text/plain" }, status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
     const base = document.createElement("base");
     base.href = "/v1/sandboxes/csgship-test/";
     document.head.prepend(base);
@@ -43,12 +62,23 @@ describe("MessageAttachments", () => {
       expect(image).toHaveAttribute("loading", "lazy");
       expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
 
-      const file = screen.getByRole("link", { name: /report\.txt/ }) as HTMLAnchorElement;
-      expect(file).toHaveAttribute("href", "api/v1/attachments/att-file?token=file-token");
-      expect(new URL(file.href).pathname).toBe("/v1/sandboxes/csgship-test/api/v1/attachments/att-file");
-      expect(file).toHaveAttribute("download");
+      await user.click(screen.getByRole("button", { name: "Preview attachment: diagram.png" }));
+      expect(screen.getByRole("dialog", { name: "diagram.png" })).toBeInTheDocument();
+      const download = screen.getByRole("link", { name: "Download attachment" }) as HTMLAnchorElement;
+      expect(new URL(download.href).pathname).toBe("/v1/sandboxes/csgship-test/api/v1/attachments/att-image");
+      await user.click(screen.getByRole("button", { name: "Close" }));
+
+      await user.click(screen.getByRole("button", { name: "Preview attachment: report.txt" }));
+      expect(screen.getByRole("dialog", { name: "report.txt" })).toBeInTheDocument();
+      const frame = (await screen.findByTitle("Preview attachment: report.txt")) as HTMLIFrameElement;
+      expect(frame.src).toMatch(/^blob:/);
+      expect(fetchMock).toHaveBeenCalledWith("api/v1/attachments/att-file?token=file-token", {
+        credentials: "same-origin",
+        signal: expect.any(AbortSignal),
+      });
     } finally {
       base.remove();
+      vi.unstubAllGlobals();
     }
   });
 });

@@ -1199,13 +1199,24 @@ button.composer-working-item:active {
 }
 
 .attachment-draft-preview-link {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr);
   min-width: 0;
   align-items: center;
   gap: 8px;
   color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
   text-decoration: none;
+}
+
+.attachment-draft-preview-link:disabled {
+  cursor: default;
 }
 
 .attachment-draft-preview-link:hover .attachment-name,
@@ -1403,12 +1414,15 @@ button.composer-working-item:active {
 
 .message-image-attachment {
   display: block;
+  width: 100%;
+  padding: 0;
   min-width: 0;
   aspect-ratio: 1;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--field);
+  cursor: pointer;
 }
 
 .message-image-attachment img {
@@ -1432,6 +1446,125 @@ button.composer-working-item:active {
 
 .message-file-attachment {
   grid-template-columns: 32px minmax(0, 1fr);
+}
+
+button.message-file-attachment {
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.attachment-preview-dialog {
+  width: min(960px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.attachment-preview-heading {
+  min-width: 0;
+}
+
+.attachment-preview-heading .csg-dialog-title,
+.attachment-preview-heading .csg-dialog-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-preview-body {
+  min-height: min(420px, 60dvh);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  background: var(--field);
+}
+
+.attachment-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 180px);
+  object-fit: contain;
+}
+
+.attachment-preview-frame {
+  width: 100%;
+  height: min(720px, calc(100dvh - 180px));
+  min-height: min(420px, 60dvh);
+  border: 0;
+  background: white;
+}
+
+.attachment-preview-unsupported {
+  max-width: 360px;
+  padding: 32px;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.attachment-preview-unsupported p {
+  margin: 0;
+}
+
+.attachment-preview-status {
+  max-width: 360px;
+  padding: 32px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.attachment-preview-status.is-error {
+  color: var(--danger);
+}
+
+.attachment-preview-file-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--panel);
+}
+
+.attachment-preview-download {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  text-decoration: none;
+}
+
+.attachment-preview-download:hover,
+.attachment-preview-download:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+@media (max-width: 640px) {
+  .attachment-preview-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+
+  .attachment-preview-body,
+  .attachment-preview-frame {
+    min-height: 50dvh;
+  }
 }
 
 .composer-send-button,

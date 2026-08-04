@@ -34,6 +34,12 @@ const t: TranslateFn = (key, params) => {
     addAttachment: "Add attachment",
     attachments: "Attachments",
     previewAttachmentNamed: `Preview attachment: ${params?.name ?? ""}`,
+    attachmentPreviewDescription: "Preview without leaving the app",
+    attachmentPreviewFailed: "Preview failed",
+    attachmentPreviewLoading: "Loading preview",
+    attachmentPreviewUnavailable: "Preview unavailable",
+    downloadAttachment: "Download attachment",
+    close: "Close",
     attachmentsScrollPrevious: "View previous attachments",
     attachmentsScrollNext: "View more attachments",
     removeAttachment: "Remove attachment",
@@ -199,10 +205,14 @@ describe("ConversationComposer connectors", () => {
     expect(sendButton).not.toBeDisabled();
 
     expect(screen.getByTitle("note.txt")).toHaveAttribute("title", "note.txt");
-    expect(screen.getByRole("link", { name: "Preview attachment: note.txt" })).toHaveAttribute(
-      "href",
+    await user.click(screen.getByRole("button", { name: "Preview attachment: note.txt" }));
+    const previewDialog = screen.getByRole("dialog", { name: "note.txt" });
+    expect(previewDialog).toBeInTheDocument();
+    expect(within(previewDialog).getByTitle("Preview attachment: note.txt")).toHaveAttribute(
+      "src",
       expect.stringMatching(/^blob:/),
     );
+    await user.click(screen.getByRole("button", { name: "Close" }));
     await user.click(screen.getByRole("button", { name: "Remove attachment: note.txt" }));
     expect(onRemoveAttachment).toHaveBeenCalledWith(attachmentDrafts[0].id);
     await user.click(sendButton);

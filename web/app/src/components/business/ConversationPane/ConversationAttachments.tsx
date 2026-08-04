@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type WheelEvent } from "react";
-import { ChevronLeft, ChevronRight, FileText, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileText, X } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
-import { Button, Tooltip } from "@/components/ui";
+import {
+  Button,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+  Tooltip,
+} from "@/components/ui";
 import {
   formatAttachmentSize,
   isImageAttachment,
@@ -12,6 +23,14 @@ import {
 import type { TranslateFn } from "@/models/conversations";
 
 type AttachmentDraftStatus = "failed" | "idle" | "uploading";
+type AttachmentPreview = {
+  downloadURL: string;
+  id: string;
+  mediaType: string;
+  name: string;
+  previewURL: string;
+  requiresFetch: boolean;
+};
 
 export function AttachmentDraftStrip({
   drafts,
@@ -27,6 +46,7 @@ export function AttachmentDraftStrip({
   onRemove: (id: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [preview, setPreview] = useState<AttachmentPreview | null>(null);
   const [scrollState, setScrollState] = useState({
     canScrollLeft: false,
     canScrollRight: false,
@@ -124,7 +144,13 @@ export function AttachmentDraftStrip({
             progress={progress}
             status={status}
             t={t}
-            onRemove={onRemove}
+            onPreview={setPreview}
+            onRemove={(id) => {
+              if (preview?.id === id) {
+                setPreview(null);
+              }
+              onRemove(id);
+            }}
           />
         ))}
       </div>
@@ -158,6 +184,7 @@ export function AttachmentDraftStrip({
           </Button>
         </Tooltip>
       ) : null}
+      <AttachmentPreviewDialog preview={preview} t={t} onClose={() => setPreview(null)} />
     </div>
   );
 }
@@ -167,12 +194,14 @@ function AttachmentDraftItem({
   progress,
   status,
   t,
+  onPreview,
   onRemove,
 }: {
   draft: AttachmentDraft;
   progress: number;
   status: AttachmentDraftStatus;
   t: TranslateFn;
+  onPreview: (preview: AttachmentPreview) => void;
   onRemove: (id: string) => void;
 }) {
   const previewURL = useObjectURL(draft.file);
@@ -184,13 +213,25 @@ function AttachmentDraftItem({
       className={`attachment-draft ${isImageAttachment(draft) ? "is-image" : ""} is-${status}`.trim()}
       role="listitem"
     >
-      <a
+      <button
+        type="button"
         aria-label={previewLabel}
         className="attachment-draft-preview-link"
-        href={previewURL || undefined}
-        target="_blank"
-        rel="noreferrer"
+        disabled={!previewURL}
         title={previewLabel}
+        onClick={() => {
+          if (!previewURL) {
+            return;
+          }
+          onPreview({
+            downloadURL: previewURL,
+            id: draft.id,
+            mediaType: draft.mediaType,
+            name: draft.name,
+            previewURL,
+            requiresFetch: false,
+          });
+        }}
       >
         {isImageAttachment(draft) && previewURL ? (
           <img className="attachment-draft-preview" src={previewURL} alt="" />
@@ -212,7 +253,7 @@ function AttachmentDraftItem({
                 : formatAttachmentSize(draft.sizeBytes)}
           </span>
         </span>
-      </a>
+      </button>
       <Tooltip content={removeLabel}>
         <Button
           aria-label={removeLabel}
@@ -249,6 +290,7 @@ export function MessageAttachments({
   attachments?: readonly MessageAttachment[] | null;
   t: TranslateFn;
 }) {
+  const [preview, setPreview] = useState<AttachmentPreview | null>(null);
   if (!attachments?.length) {
     return null;
   }
@@ -263,7 +305,21 @@ export function MessageAttachments({
             const previewURL = resolveRequestPath(attachment.preview_url || attachment.download_url);
             return (
               <Tooltip key={attachment.id} content={attachment.name}>
-                <a className="message-image-attachment" href={downloadURL} target="_blank" rel="noreferrer">
+                <button
+                  type="button"
+                  className="message-image-attachment"
+                  aria-label={t("previewAttachmentNamed", { name: attachment.name })}
+                  onClick={() =>
+                    setPreview({
+                      downloadURL,
+                      id: attachment.id,
+                      mediaType: attachment.media_type,
+                      name: attachment.name,
+                      previewURL,
+                      requiresFetch: false,
+                    })
+                  }
+                >
                   <img
                     src={previewURL}
                     alt={attachment.name}
@@ -271,7 +327,7 @@ export function MessageAttachments({
                     loading="lazy"
                     referrerPolicy="no-referrer"
                   />
-                </a>
+                </button>
               </Tooltip>
             );
           })}
@@ -279,14 +335,10 @@ export function MessageAttachments({
       ) : null}
       {files.length > 0 ? (
         <div className="message-file-list">
-          {files.map((attachment) => (
-            <Tooltip key={attachment.id} content={attachment.name}>
-              <a
-                className="message-file-attachment"
-                href={resolveRequestPath(attachment.download_url)}
-                download
-                referrerPolicy="no-referrer"
-              >
+          {files.map((attachment) => {
+            const downloadURL = resolveRequestPath(attachment.download_url);
+            const content = (
+              <>
                 <span className="attachment-file-icon" aria-hidden="true">
                   <FileText size={18} />
                 </span>
@@ -294,13 +346,174 @@ export function MessageAttachments({
                   <span className="attachment-name truncate">{attachment.name || t("attachment")}</span>
                   <span className="attachment-size">{formatAttachmentSize(attachment.size_bytes)}</span>
                 </span>
-              </a>
-            </Tooltip>
-          ))}
+              </>
+            );
+            return (
+              <Tooltip key={attachment.id} content={attachment.name}>
+                {isInlinePreviewableMediaType(attachment.media_type) ? (
+                  <button
+                    type="button"
+                    className="message-file-attachment"
+                    aria-label={t("previewAttachmentNamed", { name: attachment.name })}
+                    onClick={() =>
+                      setPreview({
+                        downloadURL,
+                        id: attachment.id,
+                        mediaType: attachment.media_type,
+                        name: attachment.name,
+                        previewURL: resolveRequestPath(attachment.preview_url || attachment.download_url),
+                        requiresFetch: true,
+                      })
+                    }
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <a className="message-file-attachment" href={downloadURL} download referrerPolicy="no-referrer">
+                    {content}
+                  </a>
+                )}
+              </Tooltip>
+            );
+          })}
         </div>
       ) : null}
+      <AttachmentPreviewDialog preview={preview} t={t} onClose={() => setPreview(null)} />
     </div>
   );
+}
+
+function AttachmentPreviewDialog({
+  preview,
+  t,
+  onClose,
+}: {
+  preview: AttachmentPreview | null;
+  t: TranslateFn;
+  onClose: () => void;
+}) {
+  const [resolvedPreviewURL, setResolvedPreviewURL] = useState("");
+  const [previewLoadState, setPreviewLoadState] = useState<"error" | "idle" | "loading">("idle");
+  const previewKind = attachmentPreviewKind(preview?.mediaType ?? "");
+  useEffect(() => {
+    if (!preview) {
+      setResolvedPreviewURL("");
+      setPreviewLoadState("idle");
+      return undefined;
+    }
+    if (!preview.requiresFetch) {
+      setResolvedPreviewURL(preview.previewURL);
+      setPreviewLoadState("idle");
+      return undefined;
+    }
+
+    const abortController = new AbortController();
+    let cancelled = false;
+    let objectURL = "";
+    setResolvedPreviewURL("");
+    setPreviewLoadState("loading");
+    void fetch(preview.previewURL, { credentials: "same-origin", signal: abortController.signal })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Attachment preview failed with status ${response.status}`);
+        }
+        return response.blob();
+      })
+      .then((blob) => {
+        const nextURL = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(nextURL);
+          return;
+        }
+        objectURL = nextURL;
+        setResolvedPreviewURL(nextURL);
+        setPreviewLoadState("idle");
+      })
+      .catch((error: unknown) => {
+        if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+          setPreviewLoadState("error");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      abortController.abort();
+      if (objectURL) {
+        URL.revokeObjectURL(objectURL);
+      }
+    };
+  }, [preview]);
+
+  return (
+    <DialogRoot open={Boolean(preview)} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="attachment-preview-dialog">
+        <DialogHeader>
+          <div className="attachment-preview-heading">
+            <DialogTitle>{preview?.name || t("attachmentPreview")}</DialogTitle>
+            <DialogDescription>{t("attachmentPreviewDescription")}</DialogDescription>
+          </div>
+          <DialogCloseButton label={t("close")} variant="tertiaryGray" />
+        </DialogHeader>
+        <DialogBody className="attachment-preview-body">
+          {previewLoadState === "loading" ? (
+            <div className="attachment-preview-status" role="status">
+              {t("attachmentPreviewLoading")}
+            </div>
+          ) : null}
+          {previewLoadState === "error" ? (
+            <div className="attachment-preview-status is-error" role="alert">
+              {t("attachmentPreviewFailed")}
+            </div>
+          ) : null}
+          {preview && resolvedPreviewURL && previewKind === "image" ? (
+            <img className="attachment-preview-image" src={resolvedPreviewURL} alt={preview.name} />
+          ) : null}
+          {preview && resolvedPreviewURL && (previewKind === "document" || previewKind === "text") ? (
+            <iframe
+              className="attachment-preview-frame"
+              src={resolvedPreviewURL}
+              title={t("previewAttachmentNamed", { name: preview.name })}
+              referrerPolicy="no-referrer"
+            />
+          ) : null}
+          {preview && previewKind === "unsupported" ? (
+            <div className="attachment-preview-unsupported">
+              <span className="attachment-preview-file-icon" aria-hidden="true">
+                <FileText size={32} />
+              </span>
+              <p>{t("attachmentPreviewUnavailable")}</p>
+            </div>
+          ) : null}
+        </DialogBody>
+        {preview ? (
+          <DialogFooter>
+            <a className="attachment-preview-download" href={preview.downloadURL} download={preview.name}>
+              <Download aria-hidden="true" size={16} />
+              {t("downloadAttachment")}
+            </a>
+          </DialogFooter>
+        ) : null}
+      </DialogContent>
+    </DialogRoot>
+  );
+}
+
+function attachmentPreviewKind(mediaType: string): "document" | "image" | "text" | "unsupported" {
+  const normalized = mediaType.toLowerCase().split(";", 1)[0]?.trim() ?? "";
+  if (normalized.startsWith("image/")) {
+    return "image";
+  }
+  if (normalized === "application/pdf") {
+    return "document";
+  }
+  if (["application/json", "text/csv", "text/plain"].includes(normalized)) {
+    return "text";
+  }
+  return "unsupported";
+}
+
+function isInlinePreviewableMediaType(mediaType: string): boolean {
+  return attachmentPreviewKind(mediaType) !== "unsupported";
 }
 
 function useObjectURL(file: File | null): string {
