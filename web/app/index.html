@@ -5,7 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
     <title>CSGClaw</title>
-    <script vite-ignore src="document-bootstrap.js"></script>
+    <script id="document-bootstrap">
+      // Keep this script in sync with documentBootstrapCSPHash in
+      // internal/server/desktop_security.go. Content or whitespace changes require a new hash.
+      (() => {
+        const base = document.createElement("base");
+        const pathname = window.location.pathname || "/";
+        base.href = pathname.endsWith("/") ? pathname : `${pathname}/`;
+        document.head.appendChild(base);
+
+        try {
+          const theme = localStorage.getItem("csgclaw.im.theme");
+          const next = theme === "light" || theme === "dark" ? theme : "dark";
+          document.documentElement.dataset.theme = next;
+          document.documentElement.style.colorScheme = next;
+        } catch (_) {
+          document.documentElement.dataset.theme = "dark";
+          document.documentElement.style.colorScheme = "dark";
+        }
+      })();
+    </script>
     <link rel="icon" href="favicon.ico?v=20260507" type="image/x-icon" />
     <link rel="shortcut icon" href="favicon.ico?v=20260507" type="image/x-icon" />
   </head>

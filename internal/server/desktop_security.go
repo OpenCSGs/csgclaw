@@ -16,6 +16,10 @@ type DesktopOptions struct {
 	ServerAccessHosts []string
 }
 
+// SHA-256 of the exact inline #document-bootstrap script in web/app/index.html.
+// Update this value whenever that script's content or whitespace changes.
+const documentBootstrapCSPHash = "'sha256-6+LwiuNI3rMs0s+LRNmErC0KIlO7j9xL7m1zp4RZ7hg='"
+
 func desktopRendererSecurityHandler(next http.Handler, listenerAddr net.Addr, opts DesktopOptions) (http.Handler, error) {
 	if next == nil {
 		return nil, fmt.Errorf("desktop renderer handler is required")
@@ -119,7 +123,7 @@ func setDesktopSecurityHeaders(header http.Header) {
 		"base-uri 'self'",
 		"object-src 'none'",
 		"frame-ancestors 'none'",
-		"script-src 'self'",
+		"script-src 'self' " + documentBootstrapCSPHash,
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data: blob: https:",
 		"font-src 'self' data:",

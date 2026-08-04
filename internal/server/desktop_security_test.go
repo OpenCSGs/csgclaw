@@ -8,6 +8,18 @@ import (
 	"testing"
 )
 
+func TestDesktopSecurityHeadersAllowOnlyHashedInlineBootstrap(t *testing.T) {
+	header := make(http.Header)
+	setDesktopSecurityHeaders(header)
+	csp := header.Get("Content-Security-Policy")
+	if !strings.Contains(csp, "script-src 'self' "+documentBootstrapCSPHash) {
+		t.Fatalf("Content-Security-Policy = %q, want bootstrap script hash", csp)
+	}
+	if strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
+		t.Fatalf("Content-Security-Policy = %q, unsafe-inline must remain disabled", csp)
+	}
+}
+
 func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) {
 	const (
 		rendererHost = "127.0.0.1:59842"
