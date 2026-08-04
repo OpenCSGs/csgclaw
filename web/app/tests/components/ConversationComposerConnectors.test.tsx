@@ -39,6 +39,7 @@ const t: TranslateFn = (key, params) => {
     removeAttachment: "Remove attachment",
     removeAttachmentNamed: `Remove attachment: ${params?.name ?? ""}`,
     attachmentRemoved: `Removed attachment "${params?.name ?? ""}"`,
+    attachmentsRemoved: `Removed ${params?.count ?? 0} attachments`,
     attachmentUploadingProgress: `Uploading ${params?.progress ?? 0}%`,
     attachmentUploadingNamed: `Uploading attachment: ${params?.name ?? ""}`,
     attachmentUploadFailed: "Upload failed",
@@ -313,6 +314,7 @@ describe("ConversationComposer connectors", () => {
     const onRetrySend = vi.fn();
     const onUndoRemoveAttachment = vi.fn();
     renderComposer({
+      removedAttachmentCount: 1,
       removedAttachmentName: "report.pdf",
       sendError: "Network unavailable",
       sendStatus: "failed",
@@ -325,6 +327,16 @@ describe("ConversationComposer connectors", () => {
     await user.click(screen.getByRole("button", { name: "Undo" }));
     expect(onRetrySend).toHaveBeenCalledTimes(1);
     expect(onUndoRemoveAttachment).toHaveBeenCalledTimes(1);
+  });
+
+  it("summarizes a batch of removed attachments behind one undo action", () => {
+    renderComposer({
+      removedAttachmentCount: 3,
+      onUndoRemoveAttachment: vi.fn(),
+    });
+
+    expect(screen.getByRole("status")).toHaveTextContent("Removed 3 attachments");
+    expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
   });
 
   it("suggests natural-language actions without running them automatically", async () => {

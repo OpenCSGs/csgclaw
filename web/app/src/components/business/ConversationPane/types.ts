@@ -84,6 +84,7 @@ export type ConversationPaneProps = {
   draftSegments: ComposerSegment[];
   draftText: string;
   attachmentDrafts?: AttachmentDraft[];
+  removedAttachmentCount?: number;
   removedAttachmentName?: string;
   sendError?: string;
   sendProgress?: number;

@@ -49,6 +49,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     draftSegments,
     draftText,
     attachmentDrafts,
+    removedAttachmentCount,
     removedAttachmentName,
     sendError,
     sendProgress,
@@ -308,6 +309,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           draftSegments={draftSegments}
           draftText={draftText}
           attachmentDrafts={attachmentDrafts}
+          removedAttachmentCount={removedAttachmentCount}
           removedAttachmentName={removedAttachmentName}
           sendError={sendError}
           sendProgress={sendProgress}

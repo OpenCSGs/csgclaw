@@ -165,6 +165,7 @@ export function ConversationPane({
   draftSegments,
   draftText,
   attachmentDrafts,
+  removedAttachmentCount,
   removedAttachmentName,
   sendError,
   sendProgress,
@@ -442,6 +443,7 @@ export function ConversationPane({
           draftSegments={draftSegments}
           draftText={draftText}
           attachmentDrafts={attachmentDrafts}
+          removedAttachmentCount={removedAttachmentCount}
           removedAttachmentName={removedAttachmentName}
           sendError={sendError}
           sendProgress={sendProgress}

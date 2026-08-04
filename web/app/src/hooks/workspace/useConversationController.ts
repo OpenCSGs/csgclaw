@@ -107,9 +107,12 @@ type ComposerSendStatesByKey = Record<string, ComposerSendState>;
 type RemovedAttachment = {
   draft: AttachmentDraft;
   index: number;
+};
+type RemovedAttachmentBatch = {
+  attachments: RemovedAttachment[];
   removedAt: number;
 };
-type RemovedAttachmentsByKey = Record<string, RemovedAttachment>;
+type RemovedAttachmentsByKey = Record<string, RemovedAttachmentBatch>;
 
 const idleComposerSendState: ComposerSendState = {
   error: "",
@@ -1481,10 +1484,16 @@ export function useConversationController({
     if (index < 0) {
       return;
     }
-    setRemovedAttachmentsByConversationId((current) => ({
-      ...current,
-      [activeConversationId]: { draft: attachmentDrafts[index], index, removedAt: Date.now() },
-    }));
+    setRemovedAttachmentsByConversationId((current) => {
+      const existing = current[activeConversationId]?.attachments ?? [];
+      return {
+        ...current,
+        [activeConversationId]: {
+          attachments: [...existing, { draft: attachmentDrafts[index], index }],
+          removedAt: Date.now(),
+        },
+      };
+    });
     setAttachmentDraftsByConversationId((current) =>
       updateAttachmentDrafts(
         current,
@@ -1503,17 +1512,16 @@ export function useConversationController({
       return;
     }
     const removed = removedAttachmentsByConversationId[activeConversationId];
-    if (!removed) {
+    if (!removed || removed.attachments.length === 0) {
       return;
     }
     setAttachmentDraftsByConversationId((current) => {
-      const existing = current[activeConversationId] ?? [];
-      const insertAt = Math.max(0, Math.min(removed.index, existing.length));
-      return updateAttachmentDrafts(current, activeConversationId, [
-        ...existing.slice(0, insertAt),
-        removed.draft,
-        ...existing.slice(insertAt),
-      ]);
+      let restored = current[activeConversationId] ?? [];
+      for (const attachment of [...removed.attachments].reverse()) {
+        const insertAt = Math.max(0, Math.min(attachment.index, restored.length));
+        restored = [...restored.slice(0, insertAt), attachment.draft, ...restored.slice(insertAt)];
+      }
+      return updateAttachmentDrafts(current, activeConversationId, restored);
     });
     setRemovedAttachmentsByConversationId((current) => {
       const { [activeConversationId]: _removed, ...rest } = current;
@@ -1642,7 +1650,9 @@ export function useConversationController({
       draftSegments,
       draftText,
       attachmentDrafts,
-      removedAttachmentName: removedAttachment?.draft.name ?? "",
+      removedAttachmentCount: removedAttachment?.attachments.length ?? 0,
+      removedAttachmentName:
+        removedAttachment?.attachments.length === 1 ? (removedAttachment.attachments[0]?.draft.name ?? "") : "",
       sendError: composerSendState.error,
       sendProgress: composerSendState.progress,
       sendStatus: composerSendState.status,

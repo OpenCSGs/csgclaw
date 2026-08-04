@@ -503,13 +503,49 @@ describe("useConversationController", () => {
       result.current.conversationViewProps.onRemoveAttachment?.(draftID || "");
     });
     expect(result.current.conversationViewProps.attachmentDrafts).toHaveLength(0);
+    expect(result.current.conversationViewProps.removedAttachmentCount).toBe(1);
     expect(result.current.conversationViewProps.removedAttachmentName).toBe("report.pdf");
 
     act(() => {
       result.current.conversationViewProps.onUndoRemoveAttachment?.();
     });
     expect(result.current.conversationViewProps.attachmentDrafts).toHaveLength(1);
+    expect(result.current.conversationViewProps.removedAttachmentCount).toBe(0);
     expect(result.current.conversationViewProps.removedAttachmentName).toBe("");
+  });
+
+  it("restores a batch of quickly removed attachments in their original order", () => {
+    const { result } = renderConversationController();
+    const files = [
+      new File(["a"], "a.txt", { type: "text/plain" }),
+      new File(["b"], "b.txt", { type: "text/plain" }),
+      new File(["c"], "c.txt", { type: "text/plain" }),
+    ];
+
+    act(() => {
+      result.current.conversationViewProps.onAddAttachments?.(files);
+    });
+    const attachmentIDs = result.current.conversationViewProps.attachmentDrafts?.map((draft) => draft.id) ?? [];
+    for (const attachmentID of attachmentIDs) {
+      act(() => {
+        result.current.conversationViewProps.onRemoveAttachment?.(attachmentID);
+      });
+    }
+
+    expect(result.current.conversationViewProps.attachmentDrafts).toHaveLength(0);
+    expect(result.current.conversationViewProps.removedAttachmentCount).toBe(3);
+    expect(result.current.conversationViewProps.removedAttachmentName).toBe("");
+
+    act(() => {
+      result.current.conversationViewProps.onUndoRemoveAttachment?.();
+    });
+
+    expect(result.current.conversationViewProps.attachmentDrafts?.map((draft) => draft.name)).toEqual([
+      "a.txt",
+      "b.txt",
+      "c.txt",
+    ]);
+    expect(result.current.conversationViewProps.removedAttachmentCount).toBe(0);
   });
 
   it("keeps duplicate attachment errors scoped to the conversation where they occurred", () => {
