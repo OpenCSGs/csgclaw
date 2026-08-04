@@ -97,6 +97,7 @@ type ComposerMentionState = {
 type DraftsByConversationId = Record<string, ComposerSegment[]>;
 type DraftsByThreadKey = Record<string, ComposerSegment[]>;
 type AttachmentDraftsByKey = Record<string, AttachmentDraft[]>;
+type ComposerErrorsByKey = Record<string, string>;
 type ComposerSendState = {
   error: string;
   progress: number;
@@ -299,7 +300,7 @@ export function useConversationController({
   const [memberActionError, setMemberActionError] = useState("");
   const [notifyAllAgentsBusy, setNotifyAllAgentsBusy] = useState(false);
   const [notifyAllAgentsError, setNotifyAllAgentsError] = useState("");
-  const [composerError, setComposerError] = useState("");
+  const [composerErrorsByConversationId, setComposerErrorsByConversationId] = useState<ComposerErrorsByKey>({});
   const editorRef = useRef<HTMLDivElement | null>(null);
   const sendAbortControllersRef = useRef<Record<string, AbortController>>({});
   const composerIsComposingRef = useRef(false);
@@ -309,6 +310,27 @@ export function useConversationController({
   const channelToolsRef = useRef<HTMLDivElement | null>(null);
   const activeThreadKeyRef = useRef("");
   const notifyAllAgentsRequestRef = useRef(0);
+  const managerProfileIncompleteRef = useRef(managerProfileIncomplete);
+
+  const setComposerError = useCallback(
+    (error: string, conversationID = activeConversationId) => {
+      if (!conversationID) {
+        return;
+      }
+      setComposerErrorsByConversationId((current) => {
+        if (current[conversationID] === error) {
+          return current;
+        }
+        if (!error) {
+          const { [conversationID]: _cleared, ...rest } = current;
+          return rest;
+        }
+        return { ...current, [conversationID]: error };
+      });
+    },
+    [activeConversationId],
+  );
+  const composerError = composerErrorsByConversationId[activeConversationId] ?? "";
 
   const usersById = useMemo(() => buildUsersById(data?.users), [data]);
   const activeConversation = useMemo(
@@ -678,10 +700,12 @@ export function useConversationController({
   }, [activeConversationAgentId, isAnySlashPickerNeeded]);
 
   useEffect(() => {
-    if (!managerProfileIncomplete) {
+    const wasIncomplete = managerProfileIncompleteRef.current;
+    managerProfileIncompleteRef.current = managerProfileIncomplete;
+    if (wasIncomplete && !managerProfileIncomplete) {
       setComposerError("");
     }
-  }, [managerProfileIncomplete]);
+  }, [managerProfileIncomplete, setComposerError]);
 
   useEffect(() => {
     if (!showCreateRoom) {
@@ -863,7 +887,7 @@ export function useConversationController({
     const roomID = activeConversation.id;
     const senderID = data.current_user_id;
     const attachments = attachmentDrafts.map((draft) => draft.file);
-    setComposerError("");
+    setComposerError("", roomID);
     const serializedDraft = serializeComposerSegments(draftSegments);
     const content = normalizeSlashShorthandForPayload(serializedDraft);
     const abortController = new AbortController();
@@ -903,7 +927,7 @@ export function useConversationController({
       }));
     } catch (err) {
       const message = isAbortError(err) ? t("sendStopped") : errorMessage(err, t("sendFailed"));
-      setComposerError(message);
+      setComposerError(message, roomID);
       setComposerSendStatesByConversationId((current) => ({
         ...current,
         [roomID]: { error: message, progress: current[roomID]?.progress ?? 0, status: "failed" },
@@ -1181,7 +1205,7 @@ export function useConversationController({
     try {
       await deleteRoomRequest(roomID);
     } catch (err) {
-      setComposerError(localizeError(errorMessage(err, ""), t));
+      setComposerError(localizeError(errorMessage(err, ""), t), roomID);
       return;
     }
 
@@ -1197,7 +1221,7 @@ export function useConversationController({
     });
     setAttachmentDraftsByConversationId((current) => clearAttachmentDraftsForConversation(current, roomID));
     setThreadAttachmentDraftsByKey((current) => clearAttachmentDraftsForConversation(current, roomID));
-    setComposerError("");
+    setComposerError("", roomID);
     setSubmitError("");
     if (activeConversationId === roomID) {
       const nextID = remainingRooms[0]?.id ?? "";
@@ -1219,14 +1243,14 @@ export function useConversationController({
     try {
       clearedRoom = await clearRoomMessagesRequest(roomID);
     } catch (err) {
-      setComposerError(localizeError(errorMessage(err, ""), t));
+      setComposerError(localizeError(errorMessage(err, ""), t), roomID);
       return;
     }
 
     setBootstrapData((current) => upsertConversationInData(current, clearedRoom));
     setThreadDraftsByKey((current) => clearThreadDraftsForConversation(current, roomID));
     setThreadAttachmentDraftsByKey((current) => clearAttachmentDraftsForConversation(current, roomID));
-    setComposerError("");
+    setComposerError("", roomID);
     setSubmitError("");
     if (activeConversationId === roomID) {
       resetThread();
@@ -1434,7 +1458,7 @@ export function useConversationController({
       return;
     }
     const selection = selectAttachmentFiles(files, attachmentDrafts);
-    setComposerError(attachmentSelectionError(selection, t));
+    setComposerError(attachmentSelectionError(selection, t), activeConversationId);
     if (selection.files.length === 0) {
       return;
     }

@@ -93,6 +93,7 @@ function dataWithMessages(messages: IMMessage[]): IMData {
 
 function renderConversationController(
   options: {
+    activeConversationId?: string;
     agents?: AgentLike[];
     data?: IMData;
     managerRuntimeUnavailable?: boolean;
@@ -114,10 +115,10 @@ function renderConversationController(
   const defaultData = dataWithMessages([]);
 
   return renderHook(
-    ({ data = defaultData, messageListActive = true }) =>
+    ({ activeConversationId = directConversation.id, data = defaultData, messageListActive = true }) =>
       useConversationController({
-        activeConversationId: directConversation.id,
-        activePane: { type: WorkspacePaneTypes.conversation, id: directConversation.id },
+        activeConversationId,
+        activePane: { type: WorkspacePaneTypes.conversation, id: activeConversationId },
         agents,
         authBusyProvider: "",
         authStatuses: {},
@@ -145,7 +146,13 @@ function renderConversationController(
         theme: "light",
         workingParticipantsForRoom: options.workingParticipantsForRoom ?? (() => []),
       }),
-    { initialProps: { data: options.data, messageListActive: options.messageListActive } },
+    {
+      initialProps: {
+        activeConversationId: options.activeConversationId,
+        data: options.data,
+        messageListActive: options.messageListActive,
+      },
+    },
   );
 }
 
@@ -503,6 +510,34 @@ describe("useConversationController", () => {
     });
     expect(result.current.conversationViewProps.attachmentDrafts).toHaveLength(1);
     expect(result.current.conversationViewProps.removedAttachmentName).toBe("");
+  });
+
+  it("keeps duplicate attachment errors scoped to the conversation where they occurred", () => {
+    const otherConversation: IMConversation = {
+      ...directConversation,
+      id: "room-2",
+      title: "other agent",
+    };
+    const data: IMData = {
+      ...dataWithMessages([]),
+      rooms: [directConversation, otherConversation],
+    };
+    const { result, rerender } = renderConversationController({ data });
+    const file = new File(["same"], "report.pdf", { type: "application/pdf" });
+
+    act(() => {
+      result.current.conversationViewProps.onAddAttachments?.([file]);
+    });
+    act(() => {
+      result.current.conversationViewProps.onAddAttachments?.([file]);
+    });
+    expect(result.current.conversationViewProps.composerError).toBe("attachmentDuplicate");
+
+    rerender({ activeConversationId: "room-2", data, messageListActive: true });
+    expect(result.current.conversationViewProps.composerError).toBe("");
+
+    rerender({ activeConversationId: directConversation.id, data, messageListActive: true });
+    expect(result.current.conversationViewProps.composerError).toBe("attachmentDuplicate");
   });
 
   it("does not derive working participants from recent message history", () => {
