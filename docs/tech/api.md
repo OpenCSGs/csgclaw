@@ -1376,63 +1376,36 @@ Text-only user message items are also accepted:
 }
 ```
 
-With `stream: false` (the default), the successful response is a Responses-style subset:
-
-```json
-{
-  "id": "resp_7ac7b41c",
-  "object": "response",
-  "created_at": 1785300000,
-  "completed_at": 1785300012,
-  "status": "completed",
-  "model": "agent-reviewer",
-  "output": [
-    {
-      "id": "msg-1785300012000",
-      "type": "message",
-      "status": "completed",
-      "role": "assistant",
-      "content": [
-        {
-          "type": "output_text",
-          "text": "The patch is ready.",
-          "annotations": []
-        }
-      ]
-    }
-  ],
-  "metadata": {
-    "session_id": "review-2026-07-29",
-    "room_id": "room-1785300000000",
-    "agent_id": "agent-reviewer"
-  }
-}
-```
-
-With `stream: true`, the endpoint returns `text/event-stream` and flushes an
-OpenAI Responses-compatible event stream. The event sequence is:
+With `stream` omitted or set to `false`, the endpoint returns the completed
+Responses-style JSON object containing the final assistant text and session
+metadata. With `stream: true`, it returns `text/event-stream` using a CSGBot
+Genius-compatible, Anthropic-style event stream. A text-only stream uses:
 
 ```text
-response.created
-response.in_progress
-response.output_item.added
-response.content_part.added
-response.output_text.delta
-response.output_text.done
-response.content_part.done
-response.output_item.done
-response.completed
+message_start
+content_block_start       (text)
+content_block_delta       (text_delta)
+content_block_stop
+message_delta             (stop_reason: end_turn)
+message_stop
 ```
 
 Each SSE block contains both `event: <type>` and a JSON `data:` payload whose
-`type` matches the event name and whose `sequence_number` increases from zero.
+`type` matches the event name. Codex tool activity is included as `tool_use`
+content blocks with `input_json_delta`, followed by custom `tool_result` content
+blocks with `tool_result_delta`, matching the Genius chat protocol. Tool-use
+blocks preserve the runtime's concrete tool name and structured input; sensitive
+values are redacted before they leave the server. While a response is idle, the
+server sends an SSE `: heartbeat` comment about every 15 seconds to keep the
+connection alive.
 For Codex agents, final-answer `item/agentMessage/delta` events emitted by Codex
-app-server are forwarded immediately as `response.output_text.delta`; commentary
+app-server are forwarded immediately as `text_delta`; commentary
 and unclassified agent-message events are not included in the answer. Completion
-events carry state only and do not repeat the full text; clients should build the
-visible answer by appending deltas. Runtimes that only publish a final message
-fall back to one text delta. The stream is established and `response.created` is
-flushed before the agent finishes.
+events do not repeat the full text; clients should build the visible answer by
+appending deltas. Runtimes that only publish a final message fall back to one text
+delta. The stream is established and `message_start` is flushed before the agent
+finishes. Stream failures emit `error`, `message_delta` with `stop_reason: error`,
+and `message_stop`.
 
 Only one turn may run for a session at a time.
 Different session IDs may run concurrently.

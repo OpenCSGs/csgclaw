@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"csgclaw/internal/activity"
@@ -24,10 +25,11 @@ import (
 const agentSessionResponseBodyLimit = 1024 * 1024
 
 var (
-	agentSessionIDPattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`)
-	agentSessionResponseTimeout = 5 * time.Minute
-	agentSessionIdleGrace       = 500 * time.Millisecond
-	agentSessionCleanupGrace    = 60 * time.Second
+	agentSessionIDPattern         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`)
+	agentSessionResponseTimeout   = 5 * time.Minute
+	agentSessionIdleGrace         = 500 * time.Millisecond
+	agentSessionCleanupGrace      = 60 * time.Second
+	agentSessionHeartbeatInterval = 15 * time.Second
 
 	errSessionAgentUnavailable           = errors.New("agent participant is unavailable")
 	errSessionRuntimeEnded               = errors.New("agent turn ended without a final response")
@@ -220,12 +222,11 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	defer cancelRuntime()
 	if stream {
 		eventStream = newAgentSessionEventStream(w)
-		if err := eventStream.write("response.created", map[string]any{"response": response}); err != nil {
+		if err := eventStream.writeMessageStart(responseID); err != nil {
 			return
 		}
-		if err := eventStream.write("response.in_progress", map[string]any{"response": response}); err != nil {
-			return
-		}
+		eventStream.startHeartbeat(agentSessionHeartbeatInterval)
+		defer eventStream.stopHeartbeat()
 	}
 	message, err := h.im.CreateMessage(im.CreateMessageRequest{
 		RoomID:   room.ID,
@@ -251,7 +252,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	if directCodexStream {
 		h.publishMessageCreated(room.ID, im.AdminUserID, message)
 		finalText, waitErr := h.streamDirectCodexSessionResponse(
-			r.Context(), eventStream, response, outputID, resolved, room.ID, message.ID, prompt, runtimeEvents, runtimeID, runtimeSessionID,
+			r.Context(), eventStream, response, resolved, room.ID, message.ID, prompt, runtimeEvents, runtimeID, runtimeSessionID,
 		)
 		if waitErr != nil {
 			if errors.Is(waitErr, context.Canceled) {
@@ -275,7 +276,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 				Annotations: []any{},
 			}},
 		}}
-		_ = eventStream.writeCompleted(response, outputID, finalText)
+		_ = eventStream.writeCompleted(finalText)
 		return
 	}
 	waiter.requestID = message.ID
@@ -284,7 +285,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	waiter.runtimeSessionID = runtimeSessionID
 	if eventStream != nil && runtimeEvents != nil {
 		waiter.onTextDelta = func(delta string) error {
-			return eventStream.writeDelta(outputID, delta)
+			return eventStream.writeDelta(delta)
 		}
 	}
 	h.publishMessageCreated(room.ID, im.AdminUserID, message)
@@ -329,7 +330,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		}},
 	}}
 	if eventStream != nil {
-		_ = eventStream.writeCompleted(response, outputID, finalMessage.Content)
+		_ = eventStream.writeCompleted(finalMessage.Content)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -346,7 +347,6 @@ func (h *Handler) streamDirectCodexSessionResponse(
 	ctx context.Context,
 	eventStream *agentSessionEventStream,
 	response agentSessionResponse,
-	outputID string,
 	resolved resolvedSessionAgent,
 	roomID string,
 	requestID string,
@@ -421,9 +421,19 @@ func (h *Handler) streamDirectCodexSessionResponse(
 			if event.Kind == activity.RuntimeEventTextDelta {
 				phase := runtimeEventPhase(event)
 				if phase == "" || phase == "final_answer" {
-					if err := eventStream.writeDelta(outputID, event.Text); err != nil {
+					if err := eventStream.writeDelta(event.Text); err != nil {
 						return "", err
 					}
+				}
+			}
+			if event.Kind == activity.RuntimeEventToolCallStart {
+				if err := eventStream.writeToolUse(event); err != nil {
+					return "", err
+				}
+			}
+			if event.Kind == activity.RuntimeEventToolCallUpdate {
+				if err := eventStream.writeToolResult(event); err != nil {
+					return "", err
 				}
 			}
 			if event.Kind == activity.RuntimeEventPromptCompleted {
@@ -466,9 +476,13 @@ func parseAgentSessionResponseRequest(w http.ResponseWriter, r *http.Request) (s
 type agentSessionEventStream struct {
 	writer        http.ResponseWriter
 	flusher       *http.ResponseController
-	sequence      int64
-	outputStarted bool
+	writeMu       sync.Mutex
+	contentIndex  int
+	textBlockOpen bool
 	text          strings.Builder
+	heartbeatStop chan struct{}
+	heartbeatDone chan struct{}
+	heartbeatOnce sync.Once
 }
 
 func newAgentSessionEventStream(w http.ResponseWriter) *agentSessionEventStream {
@@ -480,13 +494,17 @@ func newAgentSessionEventStream(w http.ResponseWriter) *agentSessionEventStream 
 }
 
 func (s *agentSessionEventStream) write(eventType string, fields map[string]any) error {
-	payload := make(map[string]any, len(fields)+2)
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return s.writeLocked(eventType, fields)
+}
+
+func (s *agentSessionEventStream) writeLocked(eventType string, fields map[string]any) error {
+	payload := make(map[string]any, len(fields)+1)
 	for key, value := range fields {
 		payload[key] = value
 	}
 	payload["type"] = eventType
-	payload["sequence_number"] = s.sequence
-	s.sequence++
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -500,30 +518,66 @@ func (s *agentSessionEventStream) write(eventType string, fields map[string]any)
 	return nil
 }
 
-func (s *agentSessionEventStream) writeDelta(itemID, delta string) error {
+func (s *agentSessionEventStream) startHeartbeat(interval time.Duration) {
+	if s == nil || interval <= 0 || s.heartbeatStop != nil {
+		return
+	}
+	s.heartbeatStop = make(chan struct{})
+	s.heartbeatDone = make(chan struct{})
+	go func() {
+		defer close(s.heartbeatDone)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.writeMu.Lock()
+				_, err := io.WriteString(s.writer, ": heartbeat\n\n")
+				if err == nil {
+					err = s.flusher.Flush()
+				}
+				s.writeMu.Unlock()
+				if err != nil && !errors.Is(err, http.ErrNotSupported) {
+					return
+				}
+			case <-s.heartbeatStop:
+				return
+			}
+		}
+	}()
+}
+
+func (s *agentSessionEventStream) stopHeartbeat() {
+	if s == nil || s.heartbeatStop == nil {
+		return
+	}
+	s.heartbeatOnce.Do(func() { close(s.heartbeatStop) })
+	<-s.heartbeatDone
+}
+
+func (s *agentSessionEventStream) writeMessageStart(messageID string) error {
+	return s.write("message_start", map[string]any{"message": map[string]any{
+		"id": messageID, "type": "message", "role": "assistant",
+		"content": []any{}, "stop_reason": nil,
+	}})
+}
+
+func (s *agentSessionEventStream) writeDelta(delta string) error {
 	if delta == "" {
 		return nil
 	}
-	if !s.outputStarted {
-		inProgressItem := agentSessionResponseOutput{
-			ID: itemID, Type: "message", Status: "in_progress", Role: "assistant",
-			Content: []agentSessionResponseContent{},
-		}
-		if err := s.write("response.output_item.added", map[string]any{
-			"output_index": 0, "item": inProgressItem,
+	if !s.textBlockOpen {
+		if err := s.write("content_block_start", map[string]any{
+			"index":         s.contentIndex,
+			"content_block": map[string]any{"type": "text", "text": ""},
 		}); err != nil {
 			return err
 		}
-		if err := s.write("response.content_part.added", map[string]any{
-			"item_id": itemID, "output_index": 0, "content_index": 0,
-			"part": agentSessionResponseContent{Type: "output_text", Text: "", Annotations: []any{}},
-		}); err != nil {
-			return err
-		}
-		s.outputStarted = true
+		s.textBlockOpen = true
 	}
-	if err := s.write("response.output_text.delta", map[string]any{
-		"item_id": itemID, "output_index": 0, "content_index": 0, "delta": delta,
+	if err := s.write("content_block_delta", map[string]any{
+		"index": s.contentIndex,
+		"delta": map[string]any{"type": "text_delta", "text": delta},
 	}); err != nil {
 		return err
 	}
@@ -531,61 +585,200 @@ func (s *agentSessionEventStream) writeDelta(itemID, delta string) error {
 	return nil
 }
 
-func (s *agentSessionEventStream) writeCompleted(response agentSessionResponse, itemID, text string) error {
+func (s *agentSessionEventStream) closeTextBlock() error {
+	if !s.textBlockOpen {
+		return nil
+	}
+	if err := s.write("content_block_stop", map[string]any{"index": s.contentIndex}); err != nil {
+		return err
+	}
+	s.contentIndex++
+	s.textBlockOpen = false
+	return nil
+}
+
+func (s *agentSessionEventStream) writeCompleted(text string) error {
+	s.stopHeartbeat()
 	streamedText := s.text.String()
 	switch {
-	case !s.outputStarted:
-		if err := s.writeDelta(itemID, text); err != nil {
+	case streamedText == "":
+		if err := s.writeDelta(text); err != nil {
 			return err
 		}
 	case strings.HasPrefix(text, streamedText):
-		if err := s.writeDelta(itemID, strings.TrimPrefix(text, streamedText)); err != nil {
+		if err := s.writeDelta(strings.TrimPrefix(text, streamedText)); err != nil {
 			return err
 		}
 	}
-	if err := s.write("response.output_text.done", map[string]any{
-		"item_id": itemID, "output_index": 0, "content_index": 0,
+	if err := s.closeTextBlock(); err != nil {
+		return err
+	}
+	if err := s.write("message_delta", map[string]any{
+		"delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil},
 	}); err != nil {
 		return err
 	}
-	content := agentSessionResponseContent{Type: "output_text", Text: "", Annotations: []any{}}
-	if err := s.write("response.content_part.done", map[string]any{
-		"item_id": itemID, "output_index": 0, "content_index": 0, "part": content,
+	return s.write("message_stop", map[string]any{})
+}
+
+func (s *agentSessionEventStream) writeToolUse(event activity.RuntimeEvent) error {
+	if err := s.closeTextBlock(); err != nil {
+		return err
+	}
+	toolID := strings.TrimSpace(event.ToolCallID)
+	if toolID == "" {
+		toolID = newAgentSessionAPIID("toolu")
+	}
+	toolName, inputValue := agentSessionToolUse(event)
+	if err := s.write("content_block_start", map[string]any{
+		"index":         s.contentIndex,
+		"content_block": map[string]any{"type": "tool_use", "id": toolID, "name": toolName, "input": map[string]any{}},
 	}); err != nil {
 		return err
 	}
-	streamResponse := response
-	if len(streamResponse.Output) > 0 {
-		streamResponse.Output = cloneAgentSessionResponseOutput(streamResponse.Output)
-		for outputIndex := range streamResponse.Output {
-			for contentIndex := range streamResponse.Output[outputIndex].Content {
-				streamResponse.Output[outputIndex].Content[contentIndex].Text = ""
+	encoded, err := json.Marshal(inputValue)
+	if err != nil {
+		return err
+	}
+	if err := s.write("content_block_delta", map[string]any{
+		"index": s.contentIndex,
+		"delta": map[string]any{"type": "input_json_delta", "partial_json": string(encoded)},
+	}); err != nil {
+		return err
+	}
+	if err := s.write("content_block_stop", map[string]any{"index": s.contentIndex}); err != nil {
+		return err
+	}
+	s.contentIndex++
+	return nil
+}
+
+func agentSessionToolUse(event activity.RuntimeEvent) (string, map[string]any) {
+	name := strings.TrimSpace(event.ToolKind)
+	input := any(nil)
+	payload, _ := event.Payload.(map[string]any)
+	if payload != nil {
+		switch name {
+		case "mcp_tool_call", "dynamic_tool_call":
+			if tool := strings.TrimSpace(agentSessionStringValue(payload["tool"])); tool != "" {
+				name = tool
+			}
+			input = payload["arguments"]
+		case "exec_command":
+			input = map[string]any{"command": payload["command"]}
+		case "web_search":
+			input = map[string]any{"query": payload["query"], "action": payload["action"]}
+		case "patch_apply":
+			if changes, ok := payload["changes"]; ok {
+				input = map[string]any{"changes": changes}
+			} else {
+				input = payload
 			}
 		}
 	}
-	if err := s.write("response.output_item.done", map[string]any{
-		"output_index": 0, "item": streamResponse.Output[0],
+	if input == nil {
+		var decoded any
+		if summary := strings.TrimSpace(event.ToolInputSummary); summary != "" && json.Unmarshal([]byte(summary), &decoded) == nil {
+			input = decoded
+		}
+	}
+	if name == "" {
+		name = strings.TrimSpace(event.ToolTitle)
+	}
+	if name == "" {
+		name = "unknown"
+	}
+	return name, normalizeAgentSessionToolInput(redactAgentSessionToolValue(input))
+}
+
+func agentSessionStringValue(value any) string {
+	text, _ := value.(string)
+	return text
+}
+
+func normalizeAgentSessionToolInput(value any) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+	if object, ok := value.(map[string]any); ok {
+		return object
+	}
+	return map[string]any{"value": value}
+}
+
+var (
+	agentSessionBearerPattern           = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._\-]+`)
+	agentSessionAPIKeyPattern           = regexp.MustCompile(`\bsk-[A-Za-z0-9._\-]+\b`)
+	agentSessionSecretAssignmentPattern = regexp.MustCompile(`(?i)\b(token|api[_-]?key|apikey|password|secret)(\s*[:=]\s*)[^\s"']+`)
+)
+
+func redactAgentSessionToolValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			lower := strings.ToLower(strings.TrimSpace(key))
+			if strings.Contains(lower, "token") || strings.Contains(lower, "secret") ||
+				strings.Contains(lower, "password") || strings.Contains(lower, "api_key") ||
+				strings.Contains(lower, "apikey") || strings.Contains(lower, "authorization") {
+				out[key] = "[redacted]"
+				continue
+			}
+			out[key] = redactAgentSessionToolValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			out[i] = redactAgentSessionToolValue(item)
+		}
+		return out
+	case string:
+		redacted := agentSessionBearerPattern.ReplaceAllString(typed, "Bearer [redacted]")
+		redacted = agentSessionAPIKeyPattern.ReplaceAllString(redacted, "[redacted]")
+		return agentSessionSecretAssignmentPattern.ReplaceAllString(redacted, "$1$2[redacted]")
+	default:
+		return value
+	}
+}
+
+func (s *agentSessionEventStream) writeToolResult(event activity.RuntimeEvent) error {
+	if err := s.closeTextBlock(); err != nil {
+		return err
+	}
+	toolID := strings.TrimSpace(event.ToolCallID)
+	if toolID == "" {
+		toolID = "unknown"
+	}
+	if err := s.write("content_block_start", map[string]any{
+		"index":         s.contentIndex,
+		"content_block": map[string]any{"type": "tool_result", "tool_use_id": toolID, "content": ""},
 	}); err != nil {
 		return err
 	}
-	return s.write("response.completed", map[string]any{"response": streamResponse})
-}
-
-func cloneAgentSessionResponseOutput(items []agentSessionResponseOutput) []agentSessionResponseOutput {
-	out := make([]agentSessionResponseOutput, len(items))
-	copy(out, items)
-	for i := range out {
-		out[i].Content = append([]agentSessionResponseContent(nil), out[i].Content...)
+	if err := s.write("content_block_delta", map[string]any{
+		"index": s.contentIndex,
+		"delta": map[string]any{"type": "tool_result_delta", "content": event.ToolOutputSummary},
+	}); err != nil {
+		return err
 	}
-	return out
+	if err := s.write("content_block_stop", map[string]any{"index": s.contentIndex}); err != nil {
+		return err
+	}
+	s.contentIndex++
+	return nil
 }
 
 func (s *agentSessionEventStream) writeFailure(response agentSessionResponse, cause error) {
-	response.Status = "failed"
-	response.Error = map[string]any{
-		"code": "agent_response_failed", "message": cause.Error(),
-	}
-	_ = s.write("response.failed", map[string]any{"response": response})
+	s.stopHeartbeat()
+	_ = s.closeTextBlock()
+	_ = s.write("error", map[string]any{"error": map[string]any{
+		"type": "server_error", "message": cause.Error(), "request_id": response.ID,
+	}})
+	_ = s.write("message_delta", map[string]any{
+		"delta": map[string]any{"stop_reason": "error", "stop_sequence": nil},
+	})
+	_ = s.write("message_stop", map[string]any{})
 }
 
 func parseAgentSessionInput(raw json.RawMessage) (string, error) {

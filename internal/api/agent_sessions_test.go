@@ -177,7 +177,32 @@ func TestAgentSessionResponsesReturnsOpenAIStyleValidationErrors(t *testing.T) {
 	}
 }
 
-func TestAgentSessionResponsesStreamsOpenAIResponseEvents(t *testing.T) {
+func TestParseAgentSessionResponseRequestHonorsStreamFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{name: "omitted", body: `{"input":"hello"}`, want: false},
+		{name: "false", body: `{"input":"hello","stream":false}`, want: false},
+		{name: "true", body: `{"input":"hello","stream":true}`, want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
+			_, got, err := parseAgentSessionResponseRequest(recorder, request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Fatalf("stream = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestAgentSessionResponsesStreamsGeniusCompatibleEvents(t *testing.T) {
 	handler, imSvc, bus := newAgentSessionTestHandler(t, []agent.Agent{
 		completeWorkerAgent("agent-alpha", "Alpha"),
 	})
@@ -197,7 +222,6 @@ func TestAgentSessionResponsesStreamsOpenAIResponseEvents(t *testing.T) {
 	}
 
 	var eventTypes []string
-	var sequenceNumbers []int
 	for _, block := range strings.Split(strings.TrimSpace(recorder.Body.String()), "\n\n") {
 		lines := strings.Split(block, "\n")
 		if len(lines) != 2 || !strings.HasPrefix(lines[0], "event: ") || !strings.HasPrefix(lines[1], "data: ") {
@@ -212,28 +236,19 @@ func TestAgentSessionResponsesStreamsOpenAIResponseEvents(t *testing.T) {
 			t.Fatalf("payload type = %v, event = %q", payload["type"], eventType)
 		}
 		eventTypes = append(eventTypes, eventType)
-		sequenceNumbers = append(sequenceNumbers, int(payload["sequence_number"].(float64)))
 	}
 	wantEvents := []string{
-		"response.created",
-		"response.in_progress",
-		"response.output_item.added",
-		"response.content_part.added",
-		"response.output_text.delta",
-		"response.output_text.done",
-		"response.content_part.done",
-		"response.output_item.done",
-		"response.completed",
+		"message_start",
+		"content_block_start",
+		"content_block_delta",
+		"content_block_stop",
+		"message_delta",
+		"message_stop",
 	}
 	if strings.Join(eventTypes, ",") != strings.Join(wantEvents, ",") {
 		t.Fatalf("event types = %v, want %v", eventTypes, wantEvents)
 	}
-	for index, sequence := range sequenceNumbers {
-		if sequence != index {
-			t.Fatalf("sequence_numbers = %v, want monotonically increasing from zero", sequenceNumbers)
-		}
-	}
-	if !strings.Contains(recorder.Body.String(), `"delta":"streamed answer"`) {
+	if !strings.Contains(recorder.Body.String(), `"delta":{"text":"streamed answer","type":"text_delta"}`) {
 		t.Fatalf("SSE body = %q, want output text delta", recorder.Body.String())
 	}
 	if strings.Count(recorder.Body.String(), "streamed answer") != 1 {
@@ -289,13 +304,13 @@ func TestAgentSessionResponsesStreamsCodexRuntimeDeltasAsTheyArrive(t *testing.T
 		t.Fatal("direct Codex source Prompt was not called")
 	}
 	body := recorder.Body.String()
-	if strings.Count(body, "event: response.output_text.delta") != 2 ||
-		!strings.Contains(body, `"delta":"hello"`) ||
-		!strings.Contains(body, `"delta":" world"`) {
+	if strings.Count(body, "event: content_block_delta") != 2 ||
+		!strings.Contains(body, `"text":"hello"`) ||
+		!strings.Contains(body, `"text":" world"`) {
 		t.Fatalf("SSE body = %q, want two source text deltas", body)
 	}
-	if source.conversationKey != recorderRoomID(t, body) {
-		t.Fatalf("EnsureSession conversation key = %q, want response room id", source.conversationKey)
+	if source.conversationKey == "" {
+		t.Fatal("EnsureSession conversation key is empty")
 	}
 	messages, err := handler.im.ListMessages(source.conversationKey)
 	if err != nil {
@@ -303,6 +318,70 @@ func TestAgentSessionResponsesStreamsCodexRuntimeDeltasAsTheyArrive(t *testing.T
 	}
 	if len(messages) < 3 || messages[len(messages)-1].SenderID != "user-alpha" || messages[len(messages)-1].Content != "hello world" {
 		t.Fatalf("messages = %#v, want direct Codex final audit message", messages)
+	}
+}
+
+func TestAgentSessionResponsesStreamsGeniusCompatibleToolBlocks(t *testing.T) {
+	codexAgent := completeWorkerAgent("agent-alpha", "Alpha")
+	codexAgent.RuntimeKind = agent.RuntimeKindCodex
+	codexAgent.RuntimeID = "rt-agent-alpha"
+	handler, _, _ := newAgentSessionTestHandler(t, []agent.Agent{codexAgent})
+	source := newFakeSessionEventSource("codex-thread-1")
+	handler.SetSessionEventSource(source)
+	longQuery := strings.Repeat("q", 300)
+	source.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventToolCallStart,
+			ToolCallID: "call-1", ToolKind: "mcp_tool_call", ToolInputSummary: `{"truncated":true}`,
+			Payload: map[string]any{
+				"server": "wiki", "tool": "search",
+				"arguments": map[string]any{"query": longQuery, "api_key": "sk-secret-value"},
+			},
+		})
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventToolCallUpdate,
+			ToolCallID: "call-1", ToolKind: "exec_command", ToolStatus: "completed", ToolOutputSummary: "/workspace",
+		})
+		source.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventTextDelta,
+			Text: "done", Payload: map[string]any{"phase": "final_answer"},
+		})
+		source.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
+		return nil
+	}
+
+	recorder := performAgentSessionRequest(t, handler, "agent-alpha", "codex-tools", map[string]any{
+		"input": "Use a tool", "stream": true,
+	})
+	body := recorder.Body.String()
+	for _, want := range []string{
+		`"content_block":{"id":"call-1","input":{},"name":"search","type":"tool_use"}`,
+		`\"api_key\":\"[redacted]\"`,
+		longQuery,
+		`"content_block":{"content":"","tool_use_id":"call-1","type":"tool_result"}`,
+		`"delta":{"content":"/workspace","type":"tool_result_delta"}`,
+		`"delta":{"text":"done","type":"text_delta"}`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("SSE body = %q, want %s", body, want)
+		}
+	}
+}
+
+func TestAgentSessionEventStreamEmitsAndStopsHeartbeat(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	stream := newAgentSessionEventStream(recorder)
+	stream.startHeartbeat(5 * time.Millisecond)
+	time.Sleep(18 * time.Millisecond)
+	stream.stopHeartbeat()
+
+	body := recorder.Body.String()
+	if count := strings.Count(body, ": heartbeat\n\n"); count < 2 {
+		t.Fatalf("heartbeat count = %d, body = %q", count, body)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if recorder.Body.String() != body {
+		t.Fatalf("heartbeat continued after stop: before=%q after=%q", body, recorder.Body.String())
 	}
 }
 
@@ -343,9 +422,9 @@ func TestAgentSessionResponsesWaitsForCodexPromptCompletion(t *testing.T) {
 	if time.Since(startedAt) < 30*time.Millisecond {
 		t.Fatal("request completed before Codex prompt completion")
 	}
-	if !strings.Contains(body, `"delta":"tail"`) ||
-		!strings.Contains(body, `"delta":" end"`) ||
-		!strings.Contains(body, "event: response.completed") {
+	if !strings.Contains(body, `"text":"tail"`) ||
+		!strings.Contains(body, `"text":" end"`) ||
+		!strings.Contains(body, "event: message_stop") {
 		t.Fatalf("SSE body = %q, want all deltas before completion", body)
 	}
 }
@@ -398,11 +477,11 @@ func TestAgentSessionResponsesFailFastForUnsupportedInteractiveEvents(t *testing
 				t.Fatalf("interactive request took %s, want fail-fast response", elapsed)
 			}
 			body := recorder.Body.String()
-			if !strings.Contains(body, "event: response.failed") ||
+			if !strings.Contains(body, "event: error") ||
 				!strings.Contains(body, "interactive approval and user-input requests are not supported") {
 				t.Fatalf("SSE body = %q, want unsupported-interactive failure", body)
 			}
-			if strings.Contains(body, "event: response.completed") {
+			if !strings.Contains(body, `"stop_reason":"error"`) {
 				t.Fatalf("SSE body = %q, must not report completion", body)
 			}
 		})
@@ -436,11 +515,11 @@ func TestAgentSessionResponsesFailsWhenFinalAuditMessageCannotBePersisted(t *tes
 		"input": "Stream this", "stream": true,
 	})
 	body := recorder.Body.String()
-	if !strings.Contains(body, "event: response.failed") ||
+	if !strings.Contains(body, "event: error") ||
 		!strings.Contains(body, "persist final assistant message") {
 		t.Fatalf("SSE body = %q, want persistence failure", body)
 	}
-	if strings.Contains(body, "event: response.completed") {
+	if !strings.Contains(body, `"stop_reason":"error"`) {
 		t.Fatalf("SSE body = %q, must not report completion", body)
 	}
 }
@@ -495,25 +574,6 @@ func (s *fakeSessionEventSource) publish(event activity.RuntimeEvent) {
 	for _, ch := range subscribers {
 		ch <- event
 	}
-}
-
-func recorderRoomID(t *testing.T, body string) string {
-	t.Helper()
-	for _, block := range strings.Split(strings.TrimSpace(body), "\n\n") {
-		lines := strings.Split(block, "\n")
-		if len(lines) != 2 || lines[0] != "event: response.created" {
-			continue
-		}
-		var payload struct {
-			Response agentSessionResponse `json:"response"`
-		}
-		if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[1], "data: ")), &payload); err != nil {
-			t.Fatal(err)
-		}
-		return payload.Response.Metadata["room_id"]
-	}
-	t.Fatal("response.created event not found")
-	return ""
 }
 
 func newAgentSessionTestHandler(t *testing.T, agents []agent.Agent) (*Handler, *im.Service, *im.Bus) {

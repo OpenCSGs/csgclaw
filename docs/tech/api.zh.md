@@ -1347,61 +1347,32 @@ Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
 }
 ```
 
-`stream: false`（默认值）时，成功响应为 Responses 风格子集：
-
-```json
-{
-  "id": "resp_7ac7b41c",
-  "object": "response",
-  "created_at": 1785300000,
-  "completed_at": 1785300012,
-  "status": "completed",
-  "model": "agent-reviewer",
-  "output": [
-    {
-      "id": "msg-1785300012000",
-      "type": "message",
-      "status": "completed",
-      "role": "assistant",
-      "content": [
-        {
-          "type": "output_text",
-          "text": "The patch is ready.",
-          "annotations": []
-        }
-      ]
-    }
-  ],
-  "metadata": {
-    "session_id": "review-2026-07-29",
-    "room_id": "room-1785300000000",
-    "agent_id": "agent-reviewer"
-  }
-}
-```
-
-`stream: true` 时，接口返回 `text/event-stream`，并即时 flush 与 OpenAI
-Responses 兼容的事件流。事件顺序为：
+省略 `stream` 或设置为 `false` 时，接口返回包含最终 assistant 文本和 session
+元数据的 Responses 风格 JSON。设置 `stream: true` 时，接口返回
+`text/event-stream`，格式为与 CSGBot Genius 兼容的 Anthropic 风格事件流。
+纯文本流的事件顺序为：
 
 ```text
-response.created
-response.in_progress
-response.output_item.added
-response.content_part.added
-response.output_text.delta
-response.output_text.done
-response.content_part.done
-response.output_item.done
-response.completed
+message_start
+content_block_start       (text)
+content_block_delta       (text_delta)
+content_block_stop
+message_delta             (stop_reason: end_turn)
+message_stop
 ```
 
 每个 SSE block 同时包含 `event: <type>` 和 JSON `data:` payload；payload
-中的 `type` 与事件名一致，`sequence_number` 从 0 开始递增。对于 Codex
-智能体，Codex app-server 发布的 final-answer `item/agentMessage/delta` 会即时转发为
-`response.output_text.delta`；commentary 和无法分类的 agent message 不会计入回答。
-完成事件只表达状态，不再重复携带全量文本，前端应通过追加 delta 构建可见回答。
-只发布 final message 的 runtime 会降级为一个文本 delta。Agent 完成前，连接已建立
-并先 flush `response.created`。
+中的 `type` 与事件名一致。Codex 工具活动以 `tool_use` content block 和
+`input_json_delta` 返回，随后以自定义的 `tool_result` content block 和
+`tool_result_delta` 返回工具结果，与 Genius chat 协议一致。`tool_use` 会保留
+runtime 提供的具体工具名和结构化输入，敏感值在返回前会被脱敏。响应空闲期间，
+服务端约每 15 秒发送一次 SSE `: heartbeat` comment 以保持连接。对于 Codex 智能体，
+Codex app-server 发布的 final-answer `item/agentMessage/delta` 会即时转发为
+`text_delta`；commentary 和无法分类的 agent message 不会计入回答。完成事件不再
+重复携带全量文本，前端应通过追加 delta 构建可见回答。只发布 final message 的
+runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先 flush
+`message_start`。流式失败依次返回 `error`、带 `stop_reason: error` 的
+`message_delta` 和 `message_stop`。
 
 同一个 session 同时只允许一个 turn。
 不同 session ID 可以并发执行。
