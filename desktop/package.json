@@ -9,7 +9,7 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "pnpm run build && node --test dist/main/navigationPolicy.test.js dist/main/sidecar/childEnvironment.test.js dist/main/sidecar/systemProxy.test.js dist/main/updatePolicy.test.js dist/shared/desktopEnvironment.test.js",
+    "test": "pnpm run build && node --test dist/main/navigationPolicy.test.js dist/main/sidecar/childEnvironment.test.js dist/main/sidecar/systemProxy.test.js dist/main/updatePolicy.test.js dist/shared/desktopEnvironment.test.js dist/shared/releaseVersion.test.js",
     "start": "pnpm run build && electron-forge start",
     "make": "pnpm run build && electron-forge make",
     "publish": "pnpm run build && electron-forge publish"

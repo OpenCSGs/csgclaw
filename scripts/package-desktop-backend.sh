@@ -10,13 +10,13 @@ GOOS_TARGET="$1"
 GOARCH_TARGET="$2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_ROOT="$ROOT_DIR/dist/desktop-input/${GOOS_TARGET}-${GOARCH_TARGET}"
+OUTPUT_ROOT="$ROOT_DIR/desktop/out/input/${GOOS_TARGET}-${GOARCH_TARGET}"
 BACKEND_ROOT="$OUTPUT_ROOT/backend"
 TEMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
 
 case "$OUTPUT_ROOT" in
-  "$ROOT_DIR"/dist/desktop-input/*) ;;
+  "$ROOT_DIR"/desktop/out/input/*) ;;
   *)
     printf 'refuse to replace unexpected desktop output path: %s\n' "$OUTPUT_ROOT" >&2
     exit 1

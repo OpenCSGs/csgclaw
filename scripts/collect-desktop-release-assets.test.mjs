@@ -10,9 +10,9 @@ const version = "v0.4.3";
 
 test("collects the public asset set for each supported target", async (t) => {
   for (const fixture of [
-    { goos: "darwin", goarch: "arm64", files: ["dmg/CSGClaw.dmg", "zip/darwin/arm64/CSGClaw.zip"], want: [".dmg", ".zip"] },
-    { goos: "darwin", goarch: "amd64", files: ["dmg/CSGClaw.dmg", "zip/darwin/x64/CSGClaw.zip"], want: [".dmg", ".zip"] },
-    { goos: "windows", goarch: "amd64", files: ["squirrel.windows/x64/CSGClaw-Setup.exe"], want: [".exe"] },
+    { goos: "darwin", goarch: "arm64", files: ["dmg/CSGClaw-0.4.3-arm64.dmg", "zip/darwin/arm64/CSGClaw-darwin-arm64-0.4.3.zip"], want: [".dmg", ".zip"] },
+    { goos: "darwin", goarch: "amd64", files: ["dmg/CSGClaw-0.4.3-x64.dmg", "zip/darwin/x64/CSGClaw-darwin-x64-0.4.3.zip"], want: [".dmg", ".zip"] },
+    { goos: "windows", goarch: "amd64", files: ["squirrel.windows/x64/CSGClaw-Desktop-0.4.3-x64-Setup.exe"], want: [".exe"] },
     { goos: "linux", goarch: "amd64", files: ["deb/x64/csgclaw.deb"], want: [".deb"] },
     { goos: "linux", goarch: "arm64", files: ["deb/arm64/csgclaw.deb"], want: [".deb"] },
   ]) {
@@ -32,7 +32,7 @@ test("collects the public asset set for each supported target", async (t) => {
 });
 
 test("rejects a missing expected asset", () => {
-  const { makeDirectory, outputDirectory, cleanup } = fixtureDirectories(["CSGClaw.dmg"]);
+  const { makeDirectory, outputDirectory, cleanup } = fixtureDirectories(["CSGClaw-0.4.3-arm64.dmg"]);
   try {
     assert.throws(
       () => collectDesktopReleaseAssets({ version, goos: "darwin", goarch: "arm64", makeDirectory, outputDirectory }),
@@ -50,6 +50,43 @@ test("rejects ambiguous Forge output", () => {
       () => collectDesktopReleaseAssets({ version, goos: "linux", goarch: "amd64", makeDirectory, outputDirectory }),
       /expected exactly one source/,
     );
+  } finally {
+    cleanup();
+  }
+});
+
+test("ignores stale artifacts for another version", () => {
+  const { makeDirectory, outputDirectory, cleanup } = fixtureDirectories([
+    "dmg/CSGClaw-0.4.2-arm64.dmg",
+    "dmg/CSGClaw-0.4.3-arm64.dmg",
+    "zip/darwin/arm64/CSGClaw-darwin-arm64-0.4.2.zip",
+    "zip/darwin/arm64/CSGClaw-darwin-arm64-0.4.3.zip",
+  ]);
+  try {
+    collectDesktopReleaseAssets({ version, goos: "darwin", goarch: "arm64", makeDirectory, outputDirectory });
+    assert.deepEqual(
+      fs.readdirSync(outputDirectory).sort(),
+      [
+        "csgclaw-desktop_v0.4.3_darwin_arm64.dmg",
+        "csgclaw-desktop_v0.4.3_darwin_arm64.zip",
+      ],
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test("uses the same canonical asset name for versions with or without v", () => {
+  const { makeDirectory, outputDirectory, cleanup } = fixtureDirectories(["deb/x64/csgclaw.deb"]);
+  try {
+    collectDesktopReleaseAssets({
+      version: "0.4.3",
+      goos: "linux",
+      goarch: "amd64",
+      makeDirectory,
+      outputDirectory,
+    });
+    assert.deepEqual(fs.readdirSync(outputDirectory), ["csgclaw-desktop_v0.4.3_linux_amd64.deb"]);
   } finally {
     cleanup();
   }

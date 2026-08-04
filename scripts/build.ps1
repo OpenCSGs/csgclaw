@@ -476,7 +476,7 @@ function Invoke-DesktopBackendBundle {
         [Parameter(Mandatory = $true)][string]$Goarch
     )
 
-    $outputRoot = Join-Path (Join-Path $script:DistDir "desktop-input") "$Goos-$Goarch"
+    $outputRoot = Join-Path (Join-Path (Join-Path $script:DesktopDir "out") "input") "$Goos-$Goarch"
     if (Test-Path -LiteralPath $outputRoot) {
         Remove-Item -LiteralPath $outputRoot -Recurse -Force
     }

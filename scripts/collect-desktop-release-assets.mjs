@@ -4,10 +4,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import {
+  desktopReleaseArtifactNames,
+  normalizeReleaseVersion,
+} from "./desktop-release-artifacts.mjs";
+
 export function collectDesktopReleaseAssets({ version, goos, goarch, makeDirectory, outputDirectory }) {
   const files = listFiles(makeDirectory);
-  const prefix = `csgclaw-desktop_${version}_${goos}_${goarch}`;
-  const assets = releaseAssetsFor(goos, goarch, files, prefix);
+  const names = desktopReleaseArtifactNames({ version, goos, goarch });
+  const assets = releaseAssetsFor(goos, goarch, files, names, normalizeReleaseVersion(version));
 
   fs.mkdirSync(outputDirectory, { recursive: true });
   for (const asset of assets) {
@@ -28,22 +33,43 @@ function listFiles(directory) {
     .map((entry) => path.join(entry.parentPath, entry.name));
 }
 
-function releaseAssetsFor(goos, goarch, files, prefix) {
+function releaseAssetsFor(goos, goarch, files, names, packageVersion) {
+  const electronArch = goarch === "amd64" ? "x64" : goarch;
   switch (`${goos}/${goarch}`) {
     case "darwin/arm64":
     case "darwin/amd64":
       return [
-        asset(files, (file) => file.endsWith(".dmg"), `${prefix}.dmg`),
-        asset(files, (file) => file.endsWith(".zip"), `${prefix}.zip`),
+        asset(
+          files,
+          (file) => path.basename(file) === `CSGClaw-${packageVersion}-${electronArch}.dmg`,
+          names[0],
+        ),
+        asset(
+          files,
+          (file) =>
+            path.basename(file).endsWith(`-${packageVersion}.zip`) &&
+            normalizedPath(file).includes(`/zip/darwin/${electronArch}/`),
+          names[1],
+        ),
       ];
     case "windows/amd64":
-      return [asset(files, (file) => file.endsWith("-Setup.exe"), `${prefix}.exe`)];
+      return [
+        asset(
+          files,
+          (file) => path.basename(file) === `CSGClaw-Desktop-${packageVersion}-${electronArch}-Setup.exe`,
+          names[0],
+        ),
+      ];
     case "linux/amd64":
     case "linux/arm64":
-      return [asset(files, (file) => file.endsWith(".deb"), `${prefix}.deb`)];
+      return [asset(files, (file) => file.endsWith(".deb"), names[0])];
     default:
       throw new Error(`unsupported desktop release target: ${goos}/${goarch}`);
   }
+}
+
+function normalizedPath(file) {
+  return `/${file.split(path.sep).join("/")}`;
 }
 
 function asset(files, matches, name) {

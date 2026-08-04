@@ -25,9 +25,8 @@ export function locateBackendBundle(): BackendBundle {
           path.resolve(app.getAppPath(), "..", "bin", binaryName),
           path.resolve(
             app.getAppPath(),
-            "..",
-            "dist",
-            "desktop-input",
+            "out",
+            "input",
             `${goOS}-${goArch}`,
             "backend",
             "csgclaw",
