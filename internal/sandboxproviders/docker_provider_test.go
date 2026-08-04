@@ -95,12 +95,12 @@ func TestDockerServiceOptionWiresProvider(t *testing.T) {
 	}
 	field := reflect.ValueOf(svc).Elem().FieldByName("sandbox")
 	got := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface().(sandbox.Provider)
-	if _, ok := got.(dockercli.Provider); !ok {
-		t.Fatalf("sandbox provider = %T, want dockercli.Provider", got)
+	if got.Name() != config.DockerProvider {
+		t.Fatalf("sandbox provider name = %q, want %q", got.Name(), config.DockerProvider)
 	}
 }
 
-func TestDockerProviderFactoryErrorsWhenCLIUnavailable(t *testing.T) {
+func TestDockerProviderDefersCLIAvailabilityUntilOpen(t *testing.T) {
 	restore := stubDockerAvailability(t, func(string) (string, error) {
 		return "", os.ErrNotExist
 	}, func(string) (os.FileInfo, error) {
@@ -108,13 +108,16 @@ func TestDockerProviderFactoryErrorsWhenCLIUnavailable(t *testing.T) {
 	})
 	defer restore()
 
-	factory := factories[config.DockerProvider]
-	_, err := factory(config.SandboxConfig{Provider: config.DockerProvider})
+	provider, err := Provider(config.SandboxConfig{Provider: config.DockerProvider})
+	if err != nil {
+		t.Fatalf("Provider() error = %v, want deferred availability check", err)
+	}
+	_, err = provider.Open(t.Context(), t.TempDir())
 	if err == nil {
-		t.Fatal("factory() error = nil, want docker CLI availability error")
+		t.Fatal("provider.Open() error = nil, want docker CLI availability error")
 	}
 	if got := err.Error(); !strings.Contains(got, `sandbox provider "docker" is configured`) || !strings.Contains(got, `"docker" is not available`) {
-		t.Fatalf("factory() error = %q, want docker availability warning", got)
+		t.Fatalf("provider.Open() error = %q, want docker availability warning", got)
 	}
 }
 

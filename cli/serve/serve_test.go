@@ -1840,6 +1840,29 @@ func TestNewAgentServiceExplainsMissingConfiguredBoxLite(t *testing.T) {
 	}
 }
 
+func TestNewAgentServiceAllowsMissingConfiguredDockerAtStartup(t *testing.T) {
+	prevLookPath := sandboxprovidersTestOnlyLookPath(t, func(string) (string, error) {
+		return "", fmt.Errorf("not found")
+	})
+	defer prevLookPath()
+
+	prevStatPath := sandboxprovidersTestOnlyStatPath(t, func(string) (os.FileInfo, error) {
+		return nil, os.ErrNotExist
+	})
+	defer prevStatPath()
+	t.Setenv("HOME", t.TempDir())
+
+	svc, err := newAgentService(config.Config{
+		Sandbox: config.SandboxConfig{
+			Provider: config.DockerProvider,
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("newAgentService() error = %v, want host-only startup to succeed", err)
+	}
+	defer svc.Close()
+}
+
 func TestNewAgentServiceRegistersCodexRuntime(t *testing.T) {
 	restoreBoxLite := stubBoxLiteAvailable(t)
 	defer restoreBoxLite()

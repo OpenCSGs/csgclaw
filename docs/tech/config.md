@@ -192,6 +192,8 @@ provider = "docker"
 
 For `provider = "boxlite"`, CSGClaw resolves the bundled sibling `boxlite` binary next to `csgclaw` first, then falls back to `PATH` if that bundle is missing. If neither exists, startup fails with an actionable error instead of silently rewriting the provider.
 
+For `provider = "docker"`, Docker executable availability is checked when an operation actually opens the provider, such as creating or starting a sandbox Agent or listing local images. The server and a host-only manager can therefore start without Docker installed; the first Docker-backed operation still returns an actionable error.
+
 `debian_registries_override` controls where BoxLite pulls `debian:bookworm-slim` when you need to override the built-in default order. If omitted or empty, CSGClaw uses `harbor.opencsg.com` then `docker.io`. When CSGClaw writes `config.toml`, it keeps this field visible as an empty array so it can be edited in place:
 
 ```toml

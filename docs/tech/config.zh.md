@@ -191,6 +191,8 @@ provider = "docker"
 
 对于 `provider = "boxlite"`，CSGClaw 会优先解析与 `csgclaw` 同 bundle 的 `boxlite`，只有 bundle 缺失时才回退到 `PATH`。如果两者都找不到，启动会直接报带操作建议的错误，而不是静默改写 provider。
 
+对于 `provider = "docker"`，Docker 可执行文件会在真正打开 provider 的操作中检查，例如创建或启动 sandbox Agent、列出本地镜像。这样，即使未安装 Docker，服务和仅使用宿主机 runtime 的 manager 也可以正常启动；第一次 Docker sandbox 操作仍会返回带操作建议的错误。
+
 `debian_registries_override` 用于在你需要覆盖内置顺序时，控制 BoxLite 拉取 `debian:bookworm-slim` 的仓库顺序。若省略或为空，CSGClaw 会使用默认顺序 `harbor.opencsg.com`、`docker.io`。当 CSGClaw 写入 `config.toml` 时，会把该字段保留为空数组，方便直接原地修改：
 
 ```toml

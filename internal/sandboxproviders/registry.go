@@ -1,6 +1,7 @@
 package sandboxproviders
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -41,7 +42,43 @@ func Provider(cfg config.SandboxConfig) (sandbox.Provider, error) {
 	if !ok {
 		return nil, fmt.Errorf("unsupported sandbox provider %q; supported values are %s", cfg.Provider, SupportedProvidersText())
 	}
-	return factory(cfg)
+	provider, err := factory(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Provider != config.DockerProvider {
+		return provider, nil
+	}
+	return deferredAvailabilityProvider{
+		cfg:      cfg,
+		provider: provider,
+	}, nil
+}
+
+// deferredAvailabilityProvider keeps host-only runtimes usable when Docker is
+// not installed. Availability is checked at the first operation that actually
+// needs Docker instead of while the Agent service is starting.
+type deferredAvailabilityProvider struct {
+	cfg      config.SandboxConfig
+	provider sandbox.Provider
+}
+
+func (p deferredAvailabilityProvider) Name() string {
+	return p.provider.Name()
+}
+
+func (p deferredAvailabilityProvider) Open(ctx context.Context, homeDir string) (sandbox.Runtime, error) {
+	if err := Availability(p.cfg); err != nil {
+		return nil, err
+	}
+	return p.provider.Open(ctx, homeDir)
+}
+
+func (p deferredAvailabilityProvider) ListImages(ctx context.Context, homeDir string) ([]string, error) {
+	if err := Availability(p.cfg); err != nil {
+		return nil, err
+	}
+	return p.provider.ListImages(ctx, homeDir)
 }
 
 // ServiceOptions resolves the configured sandbox provider against the set of
