@@ -12,12 +12,6 @@ import (
 	"time"
 )
 
-const (
-	CSGHubLiteProviderName   = "csghub-lite"
-	CSGHubLiteDefaultBaseURL = "http://127.0.0.1:11435/v1"
-	CSGHubLiteDefaultAPIKey  = "local"
-)
-
 type openAIModelsResponse struct {
 	Data []struct {
 		ID string `json:"id"`

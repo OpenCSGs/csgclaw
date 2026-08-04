@@ -65,11 +65,12 @@ type ModelProviderSummary struct {
 }
 
 type ModelProviderCheckResult struct {
-	ID            string   `json:"id"`
-	Status        string   `json:"status"`
-	Message       string   `json:"message,omitempty"`
-	Models        []string `json:"models"`
-	LastCheckedAt string   `json:"last_checked_at"`
+	ID              string   `json:"id"`
+	ResolvedBaseURL string   `json:"base_url,omitempty"`
+	Status          string   `json:"status"`
+	Message         string   `json:"message,omitempty"`
+	Models          []string `json:"models"`
+	LastCheckedAt   string   `json:"last_checked_at"`
 }
 
 type ModelProviderCheckInput struct {
@@ -332,17 +333,19 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		models, err = listCLIProxyModelChoices(ctx, ProviderCodex)
 	case ModelProviderIDClaude:
 		models, err = listCLIProxyModelChoices(ctx, ProviderClaudeCode)
+	case ModelProviderIDCSGHubLite:
+		discovery, discoveryErr := modelprovider.ListCSGHubLiteModels(
+			ctx,
+			input.BaseURL,
+			input.APIKey,
+			input.Headers,
+		)
+		models = discovery.Models
+		result.ResolvedBaseURL = discovery.ResolvedBaseURL
+		err = discoveryErr
 	default:
 		baseURL := strings.TrimRight(strings.TrimSpace(input.BaseURL), "/")
 		apiKey := strings.TrimSpace(input.APIKey)
-		if id == ModelProviderIDCSGHubLite {
-			if baseURL == "" {
-				baseURL = defaultCSGHubLiteBaseURL
-			}
-			if apiKey == "" {
-				apiKey = defaultCSGHubLiteAPIKey
-			}
-		}
 		models, err = modelprovider.ListOpenAIModelsWithClient(ctx, &http.Client{Timeout: 3 * time.Second}, baseURL, apiKey, input.Headers)
 	}
 	if err != nil {
@@ -447,7 +450,9 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 		out.Models = append([]string(nil), result.Models...)
 	}
 	if result.Status == ModelProviderStatusConnected && NormalizeModelProviderID(id) == ModelProviderIDCSGHubLite {
-		if strings.TrimSpace(out.BaseURL) == "" {
+		if baseURL := strings.TrimRight(strings.TrimSpace(result.ResolvedBaseURL), "/"); baseURL != "" {
+			out.BaseURL = baseURL
+		} else if strings.TrimSpace(out.BaseURL) == "" {
 			out.BaseURL = defaultCSGHubLiteBaseURL
 		}
 		if strings.TrimSpace(out.APIKey) == "" {

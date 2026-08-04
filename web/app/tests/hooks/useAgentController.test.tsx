@@ -452,6 +452,67 @@ describe("useAgentController", () => {
     });
   });
 
+  it("discovers live models for the selected agent when the provider catalog cache is empty", async () => {
+    const csghubLiteAgent: AgentLike = {
+      id: "u-manager",
+      name: "manager",
+      role: "manager",
+      runtime_kind: "codex",
+      status: "running",
+      provider: "csghub_lite",
+      model_provider_id: "csghub-lite",
+      model_id: "",
+      profile_complete: false,
+      agent_profile: {
+        provider: "csghub_lite",
+        model_provider_id: "csghub-lite",
+        model_id: "",
+        profile_complete: false,
+      },
+    };
+    const catalog = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "csghub-lite",
+          kind: "csghub_lite",
+          display_name: "CSGHub Lite",
+          builtin: true,
+          models: [],
+          status: "failed",
+        },
+      ],
+    });
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgentProfile).mockReset();
+    vi.mocked(fetchAgentProfileModels).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValue(csghubLiteAgent);
+    vi.mocked(fetchAgentProfile).mockResolvedValue(csghubLiteAgent.agent_profile ?? {});
+    vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["Qwen/Qwen3-0.6B-GGUF"] });
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          agents: [csghubLiteAgent],
+          managerProfile: csghubLiteAgent.agent_profile,
+          modelProviders: catalog,
+          modelProvidersLoaded: true,
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(fetchAgentProfileModels).toHaveBeenCalledWith(expect.objectContaining({ provider: "csghub_lite" })),
+    );
+    await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe("Qwen/Qwen3-0.6B-GGUF"));
+    expect(result.current.agentViewProps.modelOptions).toEqual([
+      expect.objectContaining({
+        providerID: "csghub-lite",
+        modelID: "Qwen/Qwen3-0.6B-GGUF",
+      }),
+    ]);
+    expect(result.current.agentViewProps.modelError).toBeNull();
+  });
+
   it("merges the selected agent readiness observation into the shared agent item", async () => {
     const inspectedAgent: AgentLike = {
       ...oldAgent,

@@ -137,6 +137,32 @@ describe("ModelProviderPage", () => {
     );
   });
 
+  it("shows the resolved CSGHub Lite desktop API after fallback discovery", async () => {
+    vi.mocked(checkModelProvider).mockResolvedValue({
+      id: "csghub-lite",
+      base_url: "http://127.0.0.1:11436/v1",
+      last_checked_at: "2026-08-03T12:00:00Z",
+      models: ["Qwen3.5-2B"],
+      status: "connected",
+    });
+    renderModelProviderPage(
+      createCatalog({
+        id: "csghub-lite",
+        kind: "csghub_lite",
+        preset: "csghub-lite",
+        builtin: true,
+        display_name: "CSGHub Lite",
+        base_url: "http://127.0.0.1:11435/v1",
+        models: [],
+        status: "failed",
+      }),
+      "csghub-lite",
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("Base URL")).toHaveValue("http://127.0.0.1:11436/v1"));
+    expect(screen.getByText("Qwen3.5-2B")).toBeInTheDocument();
+  });
+
   it("keeps form values while typing and saves the updated provider", async () => {
     const user = userEvent.setup();
     renderModelProviderPage();

@@ -263,6 +263,37 @@ export function modelProviderOptionsFromCatalog(
   return options;
 }
 
+export function modelProviderCatalogWithModels(
+  catalog: ModelProviderCatalog | null | undefined,
+  providerID: string,
+  models: readonly string[],
+): ModelProviderCatalog | null {
+  if (!catalog) {
+    return null;
+  }
+  const normalizedProviderID = normalizeModelProviderID(providerID);
+  const normalizedModels = normalizeModelIDs(models);
+  if (!normalizedProviderID || normalizedModels.length === 0) {
+    return catalog;
+  }
+  let matched = false;
+  const providers = catalog.providers.map((provider) => {
+    if (provider.id !== normalizedProviderID) {
+      return provider;
+    }
+    matched = true;
+    return { ...provider, models: normalizedModels };
+  });
+  if (!matched) {
+    return catalog;
+  }
+  return {
+    providers,
+    builtinProviders: providers.filter((provider) => provider.builtin),
+    customProviders: providers.filter((provider) => !provider.builtin),
+  };
+}
+
 export function modelProviderCatalogForAgentAvailability(
   catalog: ModelProviderCatalog | null | undefined,
   availability: AgentModelProviderAvailability = {},

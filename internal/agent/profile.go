@@ -506,6 +506,19 @@ func ListModelsForProfile(ctx context.Context, profile AgentProfile) ([]string, 
 		return nil, fmt.Errorf("base_url is required")
 	}
 	client := &http.Client{Timeout: 3 * time.Second}
+	if profile.Provider == ProviderCSGHubLite {
+		discovery, err := modelprovider.ListCSGHubLiteModelsWithClient(
+			ctx,
+			client,
+			baseURL,
+			profileAPIKey(profile),
+			profile.Headers,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return sortModelIDs(discovery.Models), nil
+	}
 	models, err := modelprovider.ListOpenAIModelsWithClient(ctx, client, baseURL, profileAPIKey(profile), profile.Headers)
 	if err != nil {
 		return nil, err

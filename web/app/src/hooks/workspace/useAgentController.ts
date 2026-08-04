@@ -106,6 +106,7 @@ import { displayTeam } from "@/models/tasks";
 import type { WorkspaceTeam } from "@/models/tasks";
 import {
   modelProviderCatalogForAgentAvailability,
+  modelProviderCatalogWithModels,
   modelProviderOptionsFromCatalog,
   providerNameForProviderID,
 } from "@/models/modelProviders";
@@ -117,6 +118,7 @@ import { workspaceQueryKeys } from "./workspaceQueries";
 import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 import type { IMConversation, IMUser } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
+import { useProfileModelOptions } from "./useProfileModelOptions";
 
 type AgentModalMode = "create" | "edit";
 type AgentAction = "delete" | "recreate" | "start" | "stop" | "upgrade";
@@ -728,13 +730,30 @@ export function useAgentController({
     [codexModelProviderAvailable, modelProviders],
   );
   const agentModelOptions = useMemo(() => modelProviderOptionsFromCatalog(agentModelProviders), [agentModelProviders]);
+  const {
+    models: agentPageDiscoveredModels,
+    modelBusy: agentPageModelProbeBusy,
+    modelError: agentPageModelError,
+  } = useProfileModelOptions({
+    draft: agentPageDraft,
+    enabled: Boolean(selectedAgentForPage),
+    onDraftChange: setAgentPageDraft,
+  });
+  const agentPageModelProviders = useMemo(
+    () =>
+      modelProviderCatalogWithModels(
+        agentModelProviders,
+        String(agentPageDraft?.model_provider_id || ""),
+        agentPageDiscoveredModels,
+      ),
+    [agentModelProviders, agentPageDiscoveredModels, agentPageDraft?.model_provider_id],
+  );
   const agentPageModelOptions = useMemo(
-    () => modelProviderOptionsFromCatalog(agentModelProviders),
-    [agentModelProviders],
+    () => modelProviderOptionsFromCatalog(agentPageModelProviders),
+    [agentPageModelProviders],
   );
   const agentModelBusy = Boolean(showAgentModal && !modelProvidersLoaded);
-  const agentPageModelBusy = Boolean(selectedAgentForPage && !modelProvidersLoaded);
-  const agentPageModelError = "";
+  const agentPageModelBusy = Boolean(selectedAgentForPage && (!modelProvidersLoaded || agentPageModelProbeBusy));
   const resetAgentModels = useCallback(() => {
     void refreshWorkspaceModelProviders();
   }, [refreshWorkspaceModelProviders]);
@@ -2390,7 +2409,7 @@ export function useAgentController({
       hasUnsavedChanges: agentPageHasUnsavedChanges,
       models: agentPageModelOptions.map((option) => option.modelID),
       modelOptions: agentPageModelOptions,
-      modelProviders: agentModelProviders,
+      modelProviders: agentPageModelProviders,
       modelBusy: agentPageModelBusy,
       modelError: agentPageModelError,
       saving: agentPageBusy,

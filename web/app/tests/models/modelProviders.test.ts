@@ -1,6 +1,7 @@
 import {
   modelProviderDisplayNameExists,
   modelProviderCatalogForAgentAvailability,
+  modelProviderCatalogWithModels,
   modelProviderCatalogForOpenCSGState,
   modelProviderOptionsFromCatalog,
   modelProviderSelectOptionsFromCatalog,
@@ -251,5 +252,29 @@ describe("model provider catalog helpers", () => {
     ]);
 
     expect(options).toMatchObject([{ id: "codex", displayName: "Codex", models: ["gpt-5.5"] }]);
+  });
+
+  it("replaces stale provider models with a successful live discovery", () => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [
+        {
+          id: "csghub-lite",
+          display_name: "CSGHub Lite",
+          builtin: true,
+          models: ["stale-model"],
+        },
+        { id: "codex", display_name: "Codex", builtin: true, models: ["gpt-5.5"] },
+      ],
+    });
+
+    const refreshed = modelProviderCatalogWithModels(catalog, "csghub_lite", [
+      "Qwen/Qwen3-0.6B-GGUF",
+      "Qwen/Qwen3-0.6B-GGUF",
+    ]);
+
+    expect(refreshed?.providers.find((provider) => provider.id === "csghub-lite")?.models).toEqual([
+      "Qwen/Qwen3-0.6B-GGUF",
+    ]);
+    expect(refreshed?.providers.find((provider) => provider.id === "codex")?.models).toEqual(["gpt-5.5"]);
   });
 });

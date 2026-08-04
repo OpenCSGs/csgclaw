@@ -14,6 +14,7 @@ export type ModelProviderPayload = {
 
 export type ModelProviderCheckResult = {
   id: string;
+  base_url?: string;
   status: string;
   message?: string;
   models: string[];

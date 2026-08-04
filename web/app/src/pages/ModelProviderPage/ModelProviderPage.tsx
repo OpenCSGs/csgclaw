@@ -99,8 +99,12 @@ export function ModelProviderPage() {
           message: result.message || result.status,
           status: result.status,
         });
-        if (result.models?.length) {
-          setDraft((current) => ({ ...current, modelsText: result.models.join("\n") }));
+        if (result.base_url || result.models?.length) {
+          setDraft((current) => ({
+            ...current,
+            baseURL: result.base_url && current.baseURL.trim() === baseURL.trim() ? result.base_url : current.baseURL,
+            modelsText: result.models?.length ? result.models.join("\n") : current.modelsText,
+          }));
         }
         await refreshWorkspaceModelProviders();
       } catch (err) {

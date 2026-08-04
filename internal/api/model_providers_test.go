@@ -81,6 +81,9 @@ models = ["gpt-test"]
 	if got.Providers[0].Kind != "opencsg" {
 		t.Fatalf("opencsg kind = %q, want opencsg", got.Providers[0].Kind)
 	}
+	if got.Providers[1].DisplayName != "CSGHub Lite" {
+		t.Fatalf("CSGHub Lite display name = %q, want CSGHub Lite", got.Providers[1].DisplayName)
+	}
 	if got.Providers[4].Preset != "openai" {
 		t.Fatalf("custom provider preset = %q, want openai", got.Providers[4].Preset)
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelprovider"
 )
 
 func TestRefreshModelProviderCatalogUpdatesBuiltinAndPreservesDefaults(t *testing.T) {
@@ -37,6 +38,28 @@ func TestRefreshModelProviderCatalogUpdatesBuiltinAndPreservesDefaults(t *testin
 	}
 	if len(provider.Models) != 1 || provider.Models[0] != "qwen3" {
 		t.Fatalf("CSGHub Lite models = %+v, want [qwen3]", provider.Models)
+	}
+}
+
+func TestApplyModelProviderCheckResultPersistsResolvedCSGHubLiteDesktopAPI(t *testing.T) {
+	llm := config.LLMConfig{Providers: map[string]config.ProviderConfig{
+		ModelProviderIDCSGHubLite: {
+			BaseURL: modelprovider.CSGHubLiteDefaultBaseURL,
+		},
+	}}
+
+	got, changed := ApplyModelProviderCheckResult(llm, ModelProviderIDCSGHubLite, ModelProviderCheckResult{
+		ID:              ModelProviderIDCSGHubLite,
+		ResolvedBaseURL: modelprovider.CSGHubLiteDesktopAPIBaseURL,
+		Status:          ModelProviderStatusConnected,
+		Models:          []string{"Qwen3.5-2B"},
+	})
+
+	if !changed {
+		t.Fatal("ApplyModelProviderCheckResult() changed = false, want true")
+	}
+	if baseURL := got.Providers[ModelProviderIDCSGHubLite].BaseURL; baseURL != modelprovider.CSGHubLiteDesktopAPIBaseURL {
+		t.Fatalf("BaseURL = %q, want %q", baseURL, modelprovider.CSGHubLiteDesktopAPIBaseURL)
 	}
 }
 
