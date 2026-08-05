@@ -116,7 +116,7 @@ PowerShell 和 Docker 打包均读取该文件。正式 release 平台仍维护�
 
 桌面安装包采用如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的命名。签名和公证信息是可选 CI secrets/variables：未配置或配置不完整时，Electron Forge 保持 macOS ad-hoc、Windows 未签名的默认行为。发布 CI 不配置桌面端更新源。
 
-OSS 桌面发布命令的完整说明见 [Electron Desktop OSS 发布](electron-desktop-oss-release.zh.md)。`desktop-package` 仍是单平台原子构建，OSS 上传只放在聚合命令中，避免并行 runner 使用不完整产物发布。
+OSS 桌面发布命令的完整说明见 [Electron Desktop OSS 发布](desktop/electron-desktop-oss-release.zh.md)。`desktop-package` 仍是单平台原子构建，OSS 上传只放在聚合命令中，避免并行 runner 使用不完整产物发布。
 
 本地桌面构建文件统一维护在 `desktop/out/`：`input/` 是后端 bundle 中间件，`make/` 是 Forge 原始产物，`oss/` 是可上传版本、外部导入包和 channel manifest。仓库根 `dist/` 继续作为 Go release 与 CI runner 的临时平铺汇总目录。
 
