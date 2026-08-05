@@ -14,11 +14,8 @@ export function ComputerPage() {
     <ComputerView
       {...controller.computerViewProps}
       runtimeSectionProps={{
-        busyRuntimeName: agentRuntimes.busyRuntimeName,
         error: agentRuntimes.error,
-        installError: agentRuntimes.installError,
         loading: agentRuntimes.loading,
-        onInstall: agentRuntimes.installRuntime,
         onRetryLoad: agentRuntimes.refresh,
         refreshing: agentRuntimes.refreshing,
         runtimes: agentRuntimes.runtimes,

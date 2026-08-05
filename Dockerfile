@@ -25,7 +25,7 @@ WORKDIR /src
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache bash ca-certificates curl tar gzip
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -39,6 +39,7 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
 ARG VERSION_PKG=csgclaw/internal/version
+ARG CODEX_CLI_DOWNLOAD_BASE_URL=https://csgclaw.opencsg.com/codex-cli/latest
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath \
@@ -49,18 +50,29 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
       -ldflags="-s -w -X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.Commit=${COMMIT} -X ${VERSION_PKG}.BuildTime=${BUILD_TIME}" \
       -o /out/csgclaw-cli ./cmd/csgclaw-cli
 
+RUN set -eux; \
+    test "${TARGETOS}" = linux || { echo "unsupported bundled Codex CLI target: ${TARGETOS}/${TARGETARCH}" >&2; exit 1; }; \
+    CODEX_CLI_DOWNLOAD_BASE_URL="${CODEX_CLI_DOWNLOAD_BASE_URL}" \
+      ./scripts/fetch-codex-cli.sh "${TARGETOS}" "${TARGETARCH}" /out; \
+    /out/codex --version
+
 FROM ${RUNTIME_IMAGE}
 
 USER root
 
 RUN apk add --no-cache ca-certificates tzdata
 
-COPY --from=build /out/csgclaw /usr/local/bin/csgclaw
-COPY --from=build /out/csgclaw-cli /usr/local/bin/csgclaw-cli
+COPY --from=build /out/csgclaw /opt/csgclaw/bin/csgclaw
+COPY --from=build /out/csgclaw-cli /opt/csgclaw/bin/csgclaw-cli
+COPY --from=build /out/codex /opt/csgclaw/bin/codex
 
-RUN chmod 755 /usr/local/bin/csgclaw /usr/local/bin/csgclaw-cli
+RUN chmod 755 /opt/csgclaw/bin/csgclaw /opt/csgclaw/bin/csgclaw-cli /opt/csgclaw/bin/codex && \
+    printf '%s\n' '{"app":"csgclaw","layout":"official-bundle"}' > /opt/csgclaw/.csgclaw-bundle.json && \
+    ln -s /opt/csgclaw/bin/csgclaw /usr/local/bin/csgclaw && \
+    ln -s /opt/csgclaw/bin/csgclaw-cli /usr/local/bin/csgclaw-cli && \
+    ln -s /opt/csgclaw/bin/codex /usr/local/bin/codex
 
 WORKDIR /opt/csgclaw
 
-ENTRYPOINT ["/usr/local/bin/csgclaw"]
+ENTRYPOINT ["/opt/csgclaw/bin/csgclaw"]
 CMD ["--help"]

@@ -603,7 +603,7 @@ func jsonResponse(status int, body string) *http.Response {
 func releaseTarball(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 
-	files = withOfficialBundleMarker(files)
+	files = withOfficialBundleFiles(files)
 	var buf bytes.Buffer
 	gzw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gzw)
@@ -625,13 +625,16 @@ func releaseTarball(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-func withOfficialBundleMarker(files map[string]string) map[string]string {
-	out := make(map[string]string, len(files)+1)
+func withOfficialBundleFiles(files map[string]string) map[string]string {
+	out := make(map[string]string, len(files)+2)
 	for name, content := range files {
 		out[name] = content
 	}
 	if _, ok := out["csgclaw/.csgclaw-bundle.json"]; !ok {
 		out["csgclaw/.csgclaw-bundle.json"] = `{"app":"csgclaw","layout":"official-bundle","version":"test"}`
+	}
+	if _, ok := out["csgclaw/bin/codex"]; !ok {
+		out["csgclaw/bin/codex"] = "bundled codex"
 	}
 	return out
 }
@@ -643,6 +646,7 @@ func writeInstalledBundle(t *testing.T, parentDir, marker string) string {
 	for path, content := range map[string]string{
 		filepath.Join(root, ".csgclaw-bundle.json"): `{"app":"csgclaw","layout":"official-bundle","version":"test"}`,
 		filepath.Join(root, "bin", "csgclaw"):       "#!/bin/sh\n# " + marker + "\n",
+		filepath.Join(root, "bin", "codex"):          "bundled codex",
 		filepath.Join(root, "bin", "boxlite"):       "#!/bin/sh\n# " + marker + " boxlite\n",
 		filepath.Join(root, "README.md"):            marker,
 	} {

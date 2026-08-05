@@ -100,13 +100,6 @@ export function agentRuntimeByName(
   return runtimes?.find((runtime) => runtime.name === normalizedName) ?? null;
 }
 
-export function shouldPollAgentRuntimeInstallation(runtimes: readonly AgentRuntime[] | null | undefined): boolean {
-  const codex = agentRuntimeByName(runtimes, "codex");
-  return Boolean(
-    codex && (codex.status === AgentRuntimeStatuses.notInstalled || codex.status === AgentRuntimeStatuses.installing),
-  );
-}
-
 function sortAgentRuntimes(runtimes: AgentRuntime[]): AgentRuntime[] {
   return runtimes.sort((left, right) => {
     const leftRank = runtimeOrder.get(left.name) ?? Number.MAX_SAFE_INTEGER;

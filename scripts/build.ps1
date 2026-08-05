@@ -329,7 +329,7 @@ function Invoke-TargetHelp {
         "powershell -File scripts/build.ps1 build-web    - build Web UI app into web/static-dist"
         "scripts\build.cmd desktop-package               - build the Windows website package"
         "scripts\build.cmd desktop-msix                  - build the Windows Microsoft Store MSIX package"
-        "powershell -File scripts/build.ps1 build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli"
+        "powershell -File scripts/build.ps1 build-server-bin - build bin/csgclaw, bin/csgclaw-cli, and bundled Codex"
         "powershell -File scripts/build.ps1 build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools"
         "powershell -File scripts/build.ps1 run          - build, then run the server"
         "powershell -File scripts/build.ps1 package      - package the current platform"
@@ -458,6 +458,7 @@ function Invoke-TargetBuildServerBin {
         GOOS        = $script:TargetOs
         GOARCH      = $script:TargetArch
     }
+    Fetch-CodexCli -Goos $script:TargetOs -Goarch $script:TargetArch -OutputDir $script:BinDir
 }
 
 function Invoke-TargetBuildSandboxCli {
@@ -475,7 +476,7 @@ function Invoke-DesktopBackendBundle {
         [Parameter(Mandatory = $true)][string]$Goarch
     )
 
-    $outputRoot = Join-Path (Join-Path $script:DistDir "desktop-input") "$Goos-$Goarch"
+    $outputRoot = Join-Path (Join-Path (Join-Path $script:DesktopDir "out") "input") "$Goos-$Goarch"
     if (Test-Path -LiteralPath $outputRoot) {
         Remove-Item -LiteralPath $outputRoot -Recurse -Force
     }
@@ -498,6 +499,7 @@ function Invoke-DesktopBackendBundle {
         GOOS        = "linux"
         GOARCH      = $Goarch
     } -Quiet
+    Fetch-CodexCli -Goos $Goos -Goarch $Goarch -OutputDir $binDir
 
     Write-Host "Desktop backend ready: $bundleRoot"
 }
@@ -596,6 +598,119 @@ function Fetch-BoxLiteCli {
     }
 }
 
+function Resolve-CodexCliDownloadTarget {
+    param(
+        [Parameter(Mandatory = $true)][string]$Goos,
+        [Parameter(Mandatory = $true)][string]$Goarch
+    )
+
+    if (-not (Test-Path -LiteralPath $script:CodexCliPlatformsPath -PathType Leaf)) {
+        throw "Codex CLI platform map is missing: $script:CodexCliPlatformsPath"
+    }
+
+    foreach ($rawLine in Get-Content -LiteralPath $script:CodexCliPlatformsPath) {
+        $line = $rawLine.Trim()
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+            continue
+        }
+        $fields = $line -split "\s+"
+        if ($fields.Count -ne 5) {
+            throw "invalid Codex CLI platform map entry: $rawLine"
+        }
+        if ($fields[0] -eq $Goos -and $fields[1] -eq $Goarch) {
+            return @{ Os = $fields[2]; Arch = $fields[3]; Binary = $fields[4] }
+        }
+    }
+
+    throw "unsupported bundled Codex CLI target: $Goos/$Goarch"
+}
+
+function Invoke-CodexCliDownload {
+    param(
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [Parameter(Mandatory = $true)][string]$OutputPath
+    )
+
+    $maxAttempts = 3
+    $partialPath = "$OutputPath.download"
+    $previousProgressPreference = $ProgressPreference
+    try {
+        # Windows PowerShell renders Invoke-WebRequest progress updates slowly
+        # for large release binaries. Keep the setting local to this download.
+        $ProgressPreference = "SilentlyContinue"
+
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            if (Test-Path -LiteralPath $partialPath) {
+                Remove-Item -LiteralPath $partialPath -Force
+            }
+            try {
+                Invoke-WebRequest -Uri $Uri -OutFile $partialPath -UseBasicParsing -ErrorAction Stop
+                if (-not (Test-Path -LiteralPath $partialPath -PathType Leaf) -or (Get-Item -LiteralPath $partialPath).Length -eq 0) {
+                    throw "downloaded Codex CLI file is empty"
+                }
+                Move-Item -LiteralPath $partialPath -Destination $OutputPath -Force
+                return
+            }
+            catch {
+                if ($attempt -eq $maxAttempts) {
+                    throw "download bundled Codex CLI after $maxAttempts attempts: $($_.Exception.Message)"
+                }
+                Write-Warning "Codex CLI download attempt $attempt of $maxAttempts failed: $($_.Exception.Message); retrying"
+                Start-Sleep -Seconds (2 * $attempt)
+            }
+        }
+    }
+    finally {
+        $ProgressPreference = $previousProgressPreference
+        if (Test-Path -LiteralPath $partialPath) {
+            Remove-Item -LiteralPath $partialPath -Force
+        }
+    }
+}
+
+function Fetch-CodexCli {
+    param(
+        [Parameter(Mandatory = $true)][string]$Goos,
+        [Parameter(Mandatory = $true)][string]$Goarch,
+        [Parameter(Mandatory = $true)][string]$OutputDir
+    )
+
+    $target = Resolve-CodexCliDownloadTarget -Goos $Goos -Goarch $Goarch
+    $downloadUrl = "$($script:CodexCliDownloadBaseUrl.TrimEnd('/'))/$($target.Os)/$($target.Arch)?package=codex-cli"
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("csgclaw-codex-" + [guid]::NewGuid().ToString("N"))
+    Ensure-Directory -Path $tmpDir
+    Ensure-Directory -Path $OutputDir
+
+    try {
+        Write-Host "fetching bundled Codex CLI $downloadUrl"
+        if ($Goos -eq "windows") {
+            $targetPath = Join-Path $OutputDir "codex.exe"
+            Invoke-CodexCliDownload -Uri $downloadUrl -OutputPath $targetPath
+            return
+        }
+
+        $archivePath = Join-Path $tmpDir "codex.tar.gz"
+        $extractDir = Join-Path $tmpDir "extract"
+        Ensure-Directory -Path $extractDir
+        Invoke-CodexCliDownload -Uri $downloadUrl -OutputPath $archivePath
+        $tar = Get-CommandPathOrNull "tar"
+        if ($null -eq $tar) {
+            throw "missing required command: tar"
+        }
+        Invoke-Checked -FilePath $tar -Arguments @("-xzf", $archivePath, "-C", $extractDir)
+        $binaryPath = Join-Path $extractDir $target.Binary
+        if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
+            throw "Codex archive did not contain expected binary: $($target.Binary)"
+        }
+        Copy-Item -LiteralPath $binaryPath -Destination (Join-Path $OutputDir "codex") -Force
+    }
+    finally {
+        if (Test-Path -LiteralPath $tmpDir) {
+            Remove-Item -LiteralPath $tmpDir -Recurse -Force
+        }
+    }
+}
+
 function Require-WebAssets {
     param([Parameter(Mandatory = $true)][string]$AppName)
 
@@ -681,6 +796,10 @@ function Invoke-PackageRelease {
 
         if ($AppName -eq "csgclaw" -and $includeBoxlite -eq "1") {
             Fetch-BoxLiteCli -Goos $Goos -Goarch $Goarch -OutputDir (Split-Path -Parent $binaryOutput)
+        }
+
+        if ($AppName -eq "csgclaw") {
+            Fetch-CodexCli -Goos $Goos -Goarch $Goarch -OutputDir (Split-Path -Parent $binaryOutput)
         }
 
         $archiveBase = "${AppName}_$($script:Version)_${Goos}_${Goarch}"
@@ -847,6 +966,8 @@ $script:PackageMode = Get-EnvOrDefault -Name "PACKAGE_MODE" -Default ""
 $script:IncludeBoxlite = Get-EnvOrDefault -Name "INCLUDE_BOXLITE" -Default ""
 $script:BoxliteCliVersion = Get-EnvOrDefault -Name "BOXLITE_CLI_VERSION" -Default "v0.9.0"
 $script:BoxliteCliBaseUrl = Get-EnvOrDefault -Name "BOXLITE_CLI_BASE_URL" -Default "https://github.com/boxlite-ai/boxlite/releases/download"
+$script:CodexCliDownloadBaseUrl = Get-EnvOrDefault -Name "CODEX_CLI_DOWNLOAD_BASE_URL" -Default "https://csgclaw.opencsg.com/codex-cli/latest"
+$script:CodexCliPlatformsPath = Join-Path $RootDir "scripts/codex-cli-platforms.txt"
 $script:SandboxCliCmdPath = Get-EnvOrDefault -Name "SANDBOX_CLI_CMD_PATH" -Default "./cmd/csgclaw-cli"
 
 Push-Location $RootDir

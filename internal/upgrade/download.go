@@ -25,11 +25,12 @@ type PreparedBundle struct {
 //	csgclaw/
 //	  bin/
 //	    csgclaw[.exe]
+//	    codex[.exe]
 //	    boxlite[.exe]   (optional)
 //
-// The main csgclaw binary is always required. Bundled boxlite is optional so
-// release artifacts can support platforms where only the Docker-backed runtime
-// is shipped.
+// The main CSGClaw and Codex binaries are always required. Bundled BoxLite is
+// optional so release artifacts can support platforms where only the
+// Docker-backed runtime is shipped.
 type BundleLayout struct {
 	RootDir     string
 	CSGClawPath string
@@ -288,6 +289,21 @@ func archiveTargetPath(rootDir, name string) (string, error) {
 }
 
 func inspectBundleDir(bundleDir string) (BundleLayout, error) {
+	layout, err := inspectInstalledBundleDir(bundleDir)
+	if err != nil {
+		return BundleLayout{}, err
+	}
+	if _, err := requiredBundleExecutable(bundleDir, "codex"); err != nil {
+		return BundleLayout{}, err
+	}
+	return layout, nil
+}
+
+// inspectInstalledBundleDir validates an installed official bundle. Older
+// marker-bearing releases did not ship Codex, so this intentionally does not
+// require it; the next successful upgrade replaces that layout with one that
+// does.
+func inspectInstalledBundleDir(bundleDir string) (BundleLayout, error) {
 	if err := validateBundleMarker(bundleDir); err != nil {
 		return BundleLayout{}, err
 	}
@@ -311,7 +327,12 @@ func validateBundleDir(bundleDir string) error {
 	return err
 }
 
-func requireRegularBundleFile(bundleDir, path string) error {
+func validateInstalledBundleDir(bundleDir string) error {
+	_, err := inspectInstalledBundleDir(bundleDir)
+	return err
+}
+
+func requireBundleExecutable(bundleDir, path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -321,6 +342,9 @@ func requireRegularBundleFile(bundleDir, path string) error {
 	}
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("release bundle entry %s is not a file", bundleRelativePath(bundleDir, path))
+	}
+	if !strings.EqualFold(filepath.Ext(path), ".exe") && info.Mode()&0o111 == 0 {
+		return fmt.Errorf("release bundle entry %s is not executable", bundleRelativePath(bundleDir, path))
 	}
 	return nil
 }
@@ -333,7 +357,7 @@ func requiredBundleExecutable(bundleDir, baseName string) (string, error) {
 			}
 			return "", fmt.Errorf("stat %s: %w", path, err)
 		}
-		if err := requireRegularBundleFile(bundleDir, path); err == nil {
+		if err := requireBundleExecutable(bundleDir, path); err == nil {
 			return path, nil
 		} else {
 			return "", err

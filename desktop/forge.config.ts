@@ -15,6 +15,10 @@ import {
   goArchForDesktopArch,
   goOSForDesktopPlatform,
 } from "./src/shared/desktopEnvironment";
+import {
+  normalizeDesktopReleaseVersion,
+  numericDesktopAppVersion,
+} from "./src/shared/releaseVersion";
 
 const targetGoOS = process.env.CSGCLAW_DESKTOP_GOOS || goOSForDesktopPlatform(process.platform);
 const targetGoArch = process.env.CSGCLAW_DESKTOP_GOARCH || goArchForDesktopArch(process.arch);
@@ -23,9 +27,8 @@ const isMacTarget = targetGoOS === GoOperatingSystem.MacOS;
 const isWindowsTarget = targetGoOS === GoOperatingSystem.Windows;
 const backendResources = path.resolve(
   __dirname,
-  "..",
-  "dist",
-  "desktop-input",
+  "out",
+  "input",
   `${targetGoOS}-${targetGoArch}`,
   "backend",
 );
@@ -49,11 +52,8 @@ const adHocEntitlements = path.resolve(
   "macos-adhoc.plist",
 );
 const updateConfig = path.resolve(__dirname, ".forge-generated", "desktop-update.json");
-const requestedVersion = (process.env.CSGCLAW_DESKTOP_VERSION || "").trim().replace(/^v/, "");
-const versionParts = /^(\d+)\.(\d+)\.(\d+)/.exec(requestedVersion);
-const desktopVersion = versionParts
-  ? `${versionParts[1]}.${versionParts[2]}.${versionParts[3]}`
-  : "0.0.0-development";
+const desktopVersion = normalizeDesktopReleaseVersion(process.env.CSGCLAW_DESKTOP_VERSION);
+const desktopAppVersion = numericDesktopAppVersion(desktopVersion);
 const updateBaseURL = normalizeHTTPSBaseURL(process.env.CSGCLAW_DESKTOP_UPDATE_BASE_URL);
 fs.mkdirSync(path.dirname(updateConfig), { recursive: true });
 fs.writeFileSync(updateConfig, `${JSON.stringify({ base_url: updateBaseURL || "" }, null, 2)}\n`, { mode: 0o600 });
@@ -64,6 +64,7 @@ const hasAppleNotarizationCredentials = Boolean(
 const macSignIdentity =
   requestedMacSignIdentity || (!hasAppleNotarizationCredentials ? "-" : undefined);
 const usesAdHocMacSignature = macSignIdentity === "-";
+const skipMacSigning = process.env.CSGCLAW_MACOS_SKIP_SIGN === "1";
 const enableCookieEncryption = !isMacTarget || !usesAdHocMacSignature;
 const windowsSign =
   process.env.CSGCLAW_WINDOWS_SIGN_TOOL && process.env.CSGCLAW_WINDOWS_SIGN_PARAMS
@@ -89,7 +90,7 @@ const config: ForgeConfig = {
   packagerConfig: {
     appBundleId: "com.opencsg.csgclaw.desktop",
     appCategoryType: "public.app-category.developer-tools",
-    appVersion: desktopVersion,
+    appVersion: desktopAppVersion,
     asar: true,
     executableName: "CSGClaw",
     extraResource: [
@@ -102,29 +103,33 @@ const config: ForgeConfig = {
     ],
     icon: appIcon,
     name: "CSGClaw",
-    osxSign: {
-      hardenedRuntime: true,
-      entitlements,
-      entitlementsInherit: entitlements,
-      continueOnError: false,
-      ignore: (filePath) =>
-        filePath.endsWith(path.join("sandbox-tools", "csgclaw-cli")),
-      ...(macSignIdentity
-        ? {
-            identity: macSignIdentity,
-            identityValidation: !usesAdHocMacSignature,
-            ...(usesAdHocMacSignature
+    ...(isMacTarget && !skipMacSigning
+      ? {
+          osxSign: {
+            hardenedRuntime: true,
+            entitlements,
+            entitlementsInherit: entitlements,
+            continueOnError: false,
+            ignore: (filePath: string) =>
+              filePath.endsWith(path.join("sandbox-tools", "csgclaw-cli")),
+            ...(macSignIdentity
               ? {
-                  timestamp: "none",
-                  optionsForFile: (filePath: string) =>
-                    path.extname(filePath) === ".app"
-                      ? { entitlements: adHocEntitlements }
-                      : {},
+                  identity: macSignIdentity,
+                  identityValidation: !usesAdHocMacSignature,
+                  ...(usesAdHocMacSignature
+                    ? {
+                        timestamp: "none",
+                        optionsForFile: (filePath: string) =>
+                          path.extname(filePath) === ".app"
+                            ? { entitlements: adHocEntitlements }
+                            : {},
+                      }
+                    : {}),
                 }
               : {}),
-          }
-        : {}),
-    },
+          },
+        }
+      : {}),
     ...(windowsSign ? { windowsSign } : {}),
     ...(hasAppleNotarizationCredentials
       ? {
@@ -189,7 +194,6 @@ const config: ForgeConfig = {
     ),
     new MakerDMG({
       format: "ULFO",
-      name: `CSGClaw-Desktop-${desktopVersion}-${targetElectronArch}`,
     }),
     new MakerDeb({
       options: {

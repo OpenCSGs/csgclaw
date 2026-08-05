@@ -52,7 +52,7 @@ var localIPv4Resolver = localIPv4
 
 var osRemoveAll = os.RemoveAll
 var locateCodexCLI = func() (string, error) {
-	return codexcli.Locator{}.Locate()
+	return codexcli.BundledPath()
 }
 
 var defaultSandboxProvider sandbox.Provider = unconfiguredSandboxProvider{}

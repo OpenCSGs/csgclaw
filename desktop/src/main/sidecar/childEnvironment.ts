@@ -2,15 +2,16 @@ import { execFile } from "node:child_process";
 import { userInfo } from "node:os";
 import path from "node:path";
 import { DesktopPlatform } from "../../shared/desktopEnvironment";
-import { resolveSystemProxyEnvironment, type SystemProxyResolver } from "./systemProxy";
+import {
+  resolveSystemProxyEnvironment,
+  type SystemProxyResolver,
+} from "./systemProxy";
 
 const ENVIRONMENT_CAPTURE_TIMEOUT_MS = 5_000;
 const ENVIRONMENT_CAPTURE_MAX_BYTES = 1024 * 1024;
 const POSIX_ENVIRONMENT_COMMAND = "/usr/bin/env -0";
 const SHELL_ENVIRONMENT_KEYS = [
   "PATH",
-  "CSGCLAW_CODEX_PATH",
-  "CSGCLAW_CODEX_ACP_PATH",
   "DOCKER_HOST",
   "DOCKER_CONTEXT",
   "DOCKER_CONFIG",
@@ -77,7 +78,10 @@ export async function resolveSidecarEnvironment({
   let discovered: NodeJS.ProcessEnv = {};
 
   try {
-    if (platform === DesktopPlatform.MacOS || platform === DesktopPlatform.Linux) {
+    if (
+      platform === DesktopPlatform.MacOS ||
+      platform === DesktopPlatform.Linux
+    ) {
       const shell = resolveLoginShell(env, loginShell, platform);
       const output = await runCommand(
         shell,
@@ -112,7 +116,11 @@ export async function resolveSidecarEnvironment({
     "PATH",
     mergeExecutableSearchPath(
       executableSearchPathEntries,
-      [discoveredPath, currentPath, ...platformPathFallbacks(platform, homeDirectory)],
+      [
+        discoveredPath,
+        currentPath,
+        ...platformPathFallbacks(platform, homeDirectory),
+      ],
       platform,
     ),
     platform,
@@ -200,6 +208,8 @@ function sanitizeEnvironment(
   const env = { ...baseEnvironment };
   deleteEnvironmentValue(env, "ELECTRON_RUN_AS_NODE", platform);
   deleteEnvironmentValue(env, "NODE_OPTIONS", platform);
+  deleteEnvironmentValue(env, "CSGCLAW_CODEX_PATH", platform);
+  deleteEnvironmentValue(env, "CSGCLAW_CODEX_ACP_PATH", platform);
   return env;
 }
 
@@ -247,7 +257,11 @@ function terminalShellArguments(
 }
 
 function resolveWindowsPowerShell(env: NodeJS.ProcessEnv): string {
-  const systemRoot = environmentValue(env, "SystemRoot", DesktopPlatform.Windows)?.trim();
+  const systemRoot = environmentValue(
+    env,
+    "SystemRoot",
+    DesktopPlatform.Windows,
+  )?.trim();
   if (!systemRoot) {
     return "powershell.exe";
   }

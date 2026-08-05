@@ -32,35 +32,32 @@ manager/worker 路径。
 
 1. 将 `CSGCLAW_BASE_IMAGE` 更新为
    `opencsg-registry.cn-beijing.cr.aliyuncs.com/opencsghq/csgclaw:v0.3.18`。
-2. 在 Dockerfile 顶部固定下载根地址：
+2. 在 Go build stage 中声明 Codex 下载根地址：
 
    ```dockerfile
-   ARG CSGCLAW_CODEX_DOWNLOAD_BASE_URL=https://csgclaw.opencsg.com/codex-cli/latest
+   ARG CODEX_CLI_DOWNLOAD_BASE_URL=https://csgclaw.opencsg.com/codex-cli/latest
    ```
 
-   在 `FROM ${CSGCLAW_BASE_IMAGE}` 后为当前 stage 重新声明该 `ARG`（Docker 的作用域
-   要求），安装 `curl`，并按 `TARGETARCH` 下载：
+   `ARG` 只在下载 Codex 的 build stage 使用；安装 `curl`，并按 `TARGETARCH` 下载：
 
    ```text
    https://csgclaw.opencsg.com/codex-cli/latest/linux/<amd64|arm64>?package=codex-cli
    ```
 
    下载的是包含 musl 原生二进制的 tar.gz。构建脚本必须：映射 `amd64`/`arm64` 到 archive
-   中的对应文件名、解包、以 `0755` 安装到 `/opt/codex/bin/codex`、软链到
-   `/usr/local/bin/codex`，最后执行 `codex --version`。这一步失败必须让 image build
-   失败。
+   中的对应文件名、解包、以 `0755` 安装到 `/opt/csgclaw/bin/codex`，最后执行
+   `codex --version`。这一步失败必须让 image build 失败。
 
    该 URL 只作为 Dockerfile build arg 的默认值；**不**通过 Makefile、CI pipeline variable
    或最终容器的环境变量暴露。每次构建取得当前 `latest`，因此并不承诺固定 Codex 版本。
-3. 设置 `CSGCLAW_CODEX_PATH=/usr/local/bin/codex`，使 CSGClaw 在启动时优先使用镜像内
-   CLI，不触发运行期自动安装。
+3. 将 `csgclaw` 与 `codex` 放在同一目录（本仓库镜像为 `/opt/csgclaw/bin`）。CSGClaw 会只解析
+   该同目录的内置 CLI，不使用 `CSGCLAW_CODEX_PATH`，也没有运行期自动安装。
 4. 将基座中直接位于 `/usr/local/bin` 的 `csgclaw` / `csgclaw-cli` 规范化为
    `/opt/csgclaw/bin/...` 的官方 bundle 布局，并保留原命令路径的软链。
    `v0.3.18` 基座本身没有这个布局，而正式版本的 `csgclaw serve` 会校验它；不做这
    一步会在启动前直接退出，与 Codex 无关。
 
-不要依赖 `csgclaw serve` 的运行期自动下载；它失败只会告警，可能造成 HTTP server
-健康而 Codex manager 不可用。
+Codex 下载必须在镜像构建期完成；缺失的内置 CLI 会使 Codex runtime 不可用。
 
 这次 Dockerfile 改动不触及以下兼容层：
 

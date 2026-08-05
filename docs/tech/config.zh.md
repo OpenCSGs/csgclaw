@@ -132,10 +132,7 @@ bootstrap manager 当前固定使用 `picoclaw_sandbox`；`openclaw_sandbox` 支
 当正在使用的模型 provider 修改 base URL、API key 或 headers 时，CSGClaw 会在保存前检查新连接，并在检查失败时保留之前可用的配置。
 原始上游 API key 不会写入这个文件，而是通过 `env_key = "OPENAI_API_KEY"` 注入到 runtime 环境变量。
 
-当 worker 使用 Codex runtime 时，CSGClaw 会通过 `codex app-server --listen stdio://` 启动本地 `codex` CLI。你可以通过下面的环境变量覆盖二进制查找行为：
-
-- `CSGCLAW_CODEX_PATH`：指定本地 `codex` 可执行文件路径。Windows 支持 npm 的 `codex.cmd`/`codex.bat` shim 和原生 `codex.exe`；CSGClaw 会通过 `cmd.exe` 启动命令 shim，但不支持 `codex.ps1`。
-- `CSGCLAW_CODEX_ACP_PATH`：迁移期间的兼容回退项，也指向同一个 `codex` 可执行文件路径
+当 worker 使用 Codex runtime 时，CSGClaw 会通过与 CSGClaw 可执行文件同目录打包的 Codex CLI 执行 `codex app-server --listen stdio://`。不会使用 `PATH`、`CSGCLAW_CODEX_PATH` 或 `CSGCLAW_CODEX_ACP_PATH`；如该内置文件缺失，请重新安装 CSGClaw。
 
 ## OpenClaw Runtime
 

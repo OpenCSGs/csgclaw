@@ -101,7 +101,7 @@ main() {
   need_cmd mktemp
   need_cmd install
 
-  local os arch version archive_name download_url archive_path extracted_path bundle_path bundle_bin_path bundle_cli_path bundle_host_cli_path bundle_host_cli_relative install_root
+  local os arch version archive_name download_url archive_path extracted_path bundle_path bundle_bin_path bundle_codex_path bundle_cli_path bundle_host_cli_path bundle_host_cli_relative install_root bundled_codex_message
   os="$(detect_os)"
   arch="$(detect_arch)"
   ensure_supported_platform "$os" "$arch"
@@ -123,6 +123,7 @@ main() {
   tar -xzf "$archive_path" -C "$TMPDIR_INSTALL"
   bundle_path="${TMPDIR_INSTALL}/${APP}"
   bundle_bin_path="${bundle_path}/bin/${APP}"
+  bundle_codex_path="${bundle_path}/bin/codex"
   bundle_cli_path="${bundle_path}/bin/sandbox-tools/csgclaw-cli"
   if [ ! -f "$bundle_cli_path" ]; then
     bundle_cli_path="${bundle_path}/bin/csgclaw_dir/csgclaw-cli"
@@ -146,6 +147,10 @@ main() {
       echo "archive did not contain ${APP}/bin/csgclaw-cli" >&2
       exit 1
     fi
+    if [ ! -f "$bundle_codex_path" ]; then
+      echo "archive did not contain ${APP}/bin/codex" >&2
+      exit 1
+    fi
     install_root="${LIB_DIR}/${version}"
     rm -rf "$install_root"
     mkdir -p "$install_root"
@@ -153,6 +158,7 @@ main() {
     ln -sfn "${install_root}/${APP}/bin/${APP}" "${INSTALL_DIR}/${APP}"
     ln -sfn "${install_root}/${APP}/${bundle_host_cli_relative}" "${INSTALL_DIR}/csgclaw-cli"
     extracted_path="${install_root}/${APP}/bin/${APP}"
+    bundled_codex_message="Installed bundled Codex CLI to ${install_root}/${APP}/bin/codex"
   else
     extracted_path="${TMPDIR_INSTALL}/${APP}"
     if [ ! -f "$extracted_path" ]; then
@@ -168,6 +174,7 @@ main() {
 
   cat <<EOF
 Installed ${APP} ${version} to ${extracted_path}
+${bundled_codex_message:-}
 Installed companion CLI to ${INSTALL_DIR}/csgclaw-cli
 Installed sandbox CLI to ${SANDBOX_TOOLS_DIR}/csgclaw-cli
 

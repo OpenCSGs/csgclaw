@@ -3,7 +3,6 @@ import {
   agentRuntimeByName,
   normalizeAgentRuntime,
   normalizeAgentRuntimeList,
-  shouldPollAgentRuntimeInstallation,
   upsertAgentRuntime,
 } from "@/models/agentRuntimes";
 
@@ -83,18 +82,5 @@ describe("agent runtimes", () => {
       installed: true,
       path: "/opt/csgclaw/codex",
     });
-  });
-
-  it("polls during the serve-time install race and stops at terminal states", () => {
-    const runtime = (status: string) =>
-      normalizeAgentRuntimeList([
-        { name: "codex", status, installed: status === "installed", supported: true, installable: true },
-      ]);
-
-    expect(shouldPollAgentRuntimeInstallation(runtime("not_installed"))).toBe(true);
-    expect(shouldPollAgentRuntimeInstallation(runtime("installing"))).toBe(true);
-    expect(shouldPollAgentRuntimeInstallation(runtime("installed"))).toBe(false);
-    expect(shouldPollAgentRuntimeInstallation(runtime("failed"))).toBe(false);
-    expect(shouldPollAgentRuntimeInstallation(runtime("unsupported"))).toBe(false);
   });
 });

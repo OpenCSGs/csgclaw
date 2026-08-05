@@ -116,7 +116,6 @@ csgclaw serve [-d|--daemon] [flags]
 - `--daemon`、`-d`：后台运行。
 - `--no-browser`：启动后不自动打开浏览器。
 - `--no-auth-detect`：禁用启动时的 auth/model 自动检测，让 Manager Profile 配置流程保持未完成，便于手动测试。
-- `--no-codex-auto-install`：启动时不自动安装 Codex CLI；Computer 页面仍会显示运行时状态，并支持手动安装。
 - `--log-level string`：日志级别，支持 `debug`、`info`、`warn`、`error`，默认 `info`。
 - `--log string`：后台模式日志路径，仅 daemon 模式有效。默认 `~/.csgclaw/server.log`。
 - `--pid string`：后台模式 PID 文件路径，仅 daemon 模式有效。默认 `~/.csgclaw/server.pid`。
@@ -128,7 +127,7 @@ csgclaw serve [-d|--daemon] [flags]
 - 启动前会校验最终模型配置是否完整。
 - 对 `csghub-lite` 会做连通性预检查。
 - 使用 `--no-auth-detect` 时，启动会跳过 CLI auth 自动导入和 Manager Profile provider/model 自动检测；已保存的完整 Manager Profile 不会被覆盖。
-- 使用 `--no-codex-auto-install` 时，只会跳过启动阶段的 Codex CLI 自动安装；仍可在 Computer 页面手动安装或重试。
+- Codex CLI 会随 CSGClaw 安装包一起提供，并始终从安装包中启动，不依赖系统中已有的 Codex。
 - 前台模式下会打印生效配置和 IM 访问地址。
 - 后台模式会拉起隐藏的 `_serve` 内部入口，并等待 `/healthz` 健康检查成功。
 
@@ -136,7 +135,6 @@ csgclaw serve [-d|--daemon] [flags]
 
 ```bash
 csgclaw serve
-csgclaw serve --no-codex-auto-install
 csgclaw serve --no-auth-detect --no-browser
 csgclaw serve --daemon
 csgclaw serve --config /path/to/config.toml
@@ -375,8 +373,7 @@ csgclaw agent delete --all --force
 
 说明：
 
-- `--runtime codex` 依赖本地已安装且支持 `app-server --listen stdio://` 的 `codex` CLI。
-- 默认从 `PATH` 查找二进制，也可以用 `CSGCLAW_CODEX_PATH` 显式覆盖。Windows 支持 `codex.cmd`、`codex.bat` 和 `codex.exe`，但不支持 PowerShell 的 `codex.ps1` shim。
+- `--runtime codex` 使用 CSGClaw 可执行文件同目录内置的 Codex CLI；不会查找系统 `PATH`，也不会使用用户单独安装的 Codex。
 
 ### `csgclaw user`
 

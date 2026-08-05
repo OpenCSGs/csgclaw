@@ -65,7 +65,6 @@ func FullSpec() CommandSpec {
 					{Name: "daemon", Short: "d"},
 					{Name: "no-auth-detect"},
 					{Name: "no-browser"},
-					{Name: "no-codex-auto-install"},
 					{Name: "log-level", TakesValue: true, Values: logLevelValues()},
 					{Name: "log", TakesValue: true},
 					{Name: "pid", TakesValue: true},

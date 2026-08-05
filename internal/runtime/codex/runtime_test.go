@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
-	"csgclaw/internal/codexcli"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 
@@ -27,6 +26,12 @@ import (
 type fakeBinaryProvider struct {
 	path string
 	err  error
+}
+
+type binaryProviderFunc func(context.Context) (string, error)
+
+func (f binaryProviderFunc) Ensure(ctx context.Context) (string, error) {
+	return f(ctx)
 }
 
 func (f fakeBinaryProvider) Ensure(context.Context) (string, error) {
@@ -1470,9 +1475,11 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 			t.Fatalf("write test codex binary %s: %v", path, err)
 		}
 	}
-	t.Setenv(codexcli.EnvBinaryPath, initialBinary)
+	selectedBinary := initialBinary
 	deps := Dependencies{
-		BinaryProvider: codexcli.Provider{},
+		BinaryProvider: binaryProviderFunc(func(context.Context) (string, error) {
+			return selectedBinary, nil
+		}),
 		AgentHome: func(agentName string) (string, error) {
 			return filepath.Join(root, agentName), nil
 		},
@@ -1527,7 +1534,7 @@ func TestRuntimeSessionManagerHydratesPersistedSession(t *testing.T) {
 		t.Fatalf("write legacy session metadata: %v", err)
 	}
 
-	t.Setenv(codexcli.EnvBinaryPath, explicitBinary)
+	selectedBinary = explicitBinary
 	reloaded := New(deps)
 	manager := reloaded.SessionManager()
 	session, err := manager.Session(SessionHandle{RuntimeID: "rt-u-alice"})

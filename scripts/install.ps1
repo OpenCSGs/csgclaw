@@ -176,6 +176,7 @@ function Install-Bundle {
         $bundlePath = Join-Path $extractDir $App
         $bundleBinPath = Join-Path $bundlePath "bin"
         $bundleExePath = Join-Path $bundleBinPath "${App}.exe"
+        $bundleCodexPath = Join-Path $bundleBinPath "codex.exe"
         $bundleCliPath = Join-Path $bundleBinPath "sandbox-tools\csgclaw-cli"
         if (-not (Test-Path -LiteralPath $bundleCliPath)) {
             $bundleCliPath = Join-Path $bundleBinPath "csgclaw_dir\csgclaw-cli"
@@ -194,6 +195,9 @@ function Install-Bundle {
         }
         if (-not (Test-Path -LiteralPath $bundleHostCliPath)) {
             throw "Archive did not contain $App/bin/csgclaw-cli.exe"
+        }
+        if (-not (Test-Path -LiteralPath $bundleCodexPath)) {
+            throw "Archive did not contain $App/bin/codex.exe"
         }
 
         Ensure-Directory -Path $InstallDir
@@ -219,6 +223,7 @@ function Install-Bundle {
 
         Write-Host ""
         Write-Host "Installed $App $ResolvedVersion to $targetExePath"
+        Write-Host "Installed bundled Codex CLI to $(Join-Path $installedBundlePath 'bin\\codex.exe')"
         Write-Host "Launcher: $launcherPath"
         Write-Host "Companion CLI: $cliLauncherPath"
         Write-Host "Sandbox CLI: $(Join-Path $SandboxToolsDir 'csgclaw-cli')"

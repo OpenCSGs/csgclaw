@@ -1,14 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  CircleDashed,
-  Clock3,
-  Download,
-  LoaderCircle,
-  RefreshCw,
-  SquareTerminal,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, CircleDashed, Clock3, LoaderCircle, RefreshCw, SquareTerminal } from "lucide-react";
 import { Button, Tooltip } from "@/components/ui";
 import { AgentRuntimeStatuses } from "@/models/agentRuntimes";
 import type { AgentRuntime, AgentRuntimeStatus } from "@/models/agentRuntimes";
@@ -19,11 +10,8 @@ import styles from "./AgentRuntimeSection.module.css";
 type VoidOrPromise = void | Promise<void>;
 
 export type AgentRuntimeSectionProps = {
-  busyRuntimeName?: string;
   error?: string;
-  installError?: string;
   loading?: boolean;
-  onInstall?: (runtimeName: string) => VoidOrPromise;
   onRetryLoad?: () => VoidOrPromise;
   refreshing?: boolean;
   runtimes?: AgentRuntime[];
@@ -36,11 +24,8 @@ const runtimeLogos: Record<string, string> = {
 };
 
 export function AgentRuntimeSection({
-  busyRuntimeName = "",
   error = "",
-  installError = "",
   loading = false,
-  onInstall = () => {},
   onRetryLoad = () => {},
   refreshing = false,
   runtimes = [],
@@ -90,14 +75,7 @@ export function AgentRuntimeSection({
           {runtimes.length ? (
             <ul className={styles.grid}>
               {runtimes.map((runtime) => (
-                <RuntimeCard
-                  key={runtime.name}
-                  runtime={runtime}
-                  busy={busyRuntimeName === runtime.name}
-                  installError={runtime.name === "codex" ? installError : ""}
-                  onInstall={onInstall}
-                  t={t}
-                />
+                <RuntimeCard key={runtime.name} runtime={runtime} t={t} />
               ))}
             </ul>
           ) : error ? null : (
@@ -109,29 +87,10 @@ export function AgentRuntimeSection({
   );
 }
 
-function RuntimeCard({
-  runtime,
-  busy,
-  installError,
-  onInstall,
-  t,
-}: {
-  busy: boolean;
-  installError: string;
-  onInstall: (runtimeName: string) => VoidOrPromise;
-  runtime: AgentRuntime;
-  t: TranslateFn;
-}) {
+function RuntimeCard({ runtime, t }: { runtime: AgentRuntime; t: TranslateFn }) {
   const status = runtimeStatus(runtime);
   const statusMeta = runtimeStatusMeta(status, t);
-  const installing = busy || status === AgentRuntimeStatuses.installing;
-  const failed = status === AgentRuntimeStatuses.failed || Boolean(installError);
-  const visibleError = installError || (status === AgentRuntimeStatuses.failed ? runtime.message || "" : "");
-  const canInstall =
-    runtime.name === "codex" &&
-    runtime.installable &&
-    !runtime.installed &&
-    status !== AgentRuntimeStatuses.unsupported;
+  const visibleError = status === AgentRuntimeStatuses.failed ? runtime.message || "" : "";
   const logo = runtimeLogos[runtime.name];
 
   return (
@@ -176,19 +135,6 @@ function RuntimeCard({
 
       <footer className={styles.cardFooter}>
         <span>{runtimeHint(status, t)}</span>
-        {canInstall ? (
-          <Button
-            className={styles.installButton}
-            variant="primary"
-            size="sm"
-            loading={installing}
-            loadingLabel={t("computerRuntimeInstalling")}
-            onClick={() => void onInstall(runtime.name)}
-          >
-            {failed ? <RefreshCw size={15} aria-hidden="true" /> : <Download size={15} aria-hidden="true" />}
-            {failed ? t("computerRuntimeRetry") : t("computerRuntimeInstall")}
-          </Button>
-        ) : null}
       </footer>
     </li>
   );
@@ -263,7 +209,7 @@ function runtimeHint(status: AgentRuntimeStatus, t: TranslateFn): string {
     case AgentRuntimeStatuses.installing:
       return t("computerRuntimeInstallingHint");
     case AgentRuntimeStatuses.failed:
-      return t("computerRuntimeRetryHint");
+      return t("computerRuntimeBundleMissingHint");
     case AgentRuntimeStatuses.comingSoon:
       return t("computerRuntimeComingSoonHint");
     case AgentRuntimeStatuses.unsupported:

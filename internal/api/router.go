@@ -19,7 +19,6 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		})
 		r.Route("/agent-runtimes", func(r chi.Router) {
 			r.Get("/", h.listAgentRuntimes)
-			r.Post("/{name}/install", h.installAgentRuntime)
 		})
 		r.Route("/agents", func(r chi.Router) {
 			r.Get("/", h.listAgents)

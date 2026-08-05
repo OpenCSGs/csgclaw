@@ -72,9 +72,7 @@ func (f failingMCPServersListRuntime) ListMCPServers(context.Context, agentrunti
 }
 
 func init() {
-	codexPath := filepath.Join(os.TempDir(), "csgclaw-test-codex.exe")
-	_ = os.WriteFile(codexPath, []byte("#!/bin/sh\nexit 0\n"), 0o755)
-	_ = os.Setenv("CSGCLAW_CODEX_PATH", codexPath)
+	locateCodexCLI = func() (string, error) { return "/opt/csgclaw/bin/codex", nil }
 	_ = agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
 		if err := runtimewiring.WithPicoClawSandboxRuntime(nil)(s); err != nil {
 			return err

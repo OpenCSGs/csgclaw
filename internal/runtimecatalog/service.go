@@ -2,7 +2,6 @@ package runtimecatalog
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -14,13 +13,7 @@ const (
 	RuntimeCodex      = "codex"
 	RuntimeClaudeCode = "claude_code"
 
-	StatusComingSoon  = "coming_soon"
-	StatusUnsupported = "unsupported"
-)
-
-var (
-	ErrRuntimeNotFound    = errors.New("agent runtime not found")
-	ErrInstallUnsupported = errors.New("agent runtime installation is not supported")
+	StatusComingSoon = "coming_soon"
 )
 
 type Runtime struct {
@@ -37,17 +30,21 @@ type Runtime struct {
 	Message     string `json:"message,omitempty"`
 }
 
+type CodexResolver interface {
+	Ensure(context.Context) (string, error)
+}
+
 type Option func(*Service)
 
 type Service struct {
-	codex  *codexcli.Installer
+	codex  CodexResolver
 	goos   string
 	goarch string
 }
 
 func NewService(opts ...Option) *Service {
 	service := &Service{
-		codex:  codexcli.NewInstaller(codexcli.InstallerOptions{}),
+		codex:  codexcli.Provider{},
 		goos:   runtime.GOOS,
 		goarch: runtime.GOARCH,
 	}
@@ -59,10 +56,10 @@ func NewService(opts ...Option) *Service {
 	return service
 }
 
-func WithCodexInstaller(installer *codexcli.Installer) Option {
+func WithCodexResolver(resolver CodexResolver) Option {
 	return func(service *Service) {
-		if installer != nil {
-			service.codex = installer
+		if resolver != nil {
+			service.codex = resolver
 		}
 	}
 }
@@ -82,50 +79,31 @@ func (s *Service) List() []Runtime {
 	return []Runtime{s.codexRuntime(), s.claudeCodeRuntime()}
 }
 
-func (s *Service) Install(ctx context.Context, name string) (Runtime, error) {
-	switch normalizeRuntimeName(name) {
-	case RuntimeCodex:
-		return s.EnsureCodex(ctx)
-	case RuntimeClaudeCode:
-		return s.claudeCodeRuntime(), fmt.Errorf("%w: %s", ErrInstallUnsupported, RuntimeClaudeCode)
-	default:
-		return Runtime{}, fmt.Errorf("%w: %s", ErrRuntimeNotFound, strings.TrimSpace(name))
-	}
-}
-
-func (s *Service) EnsureCodex(ctx context.Context) (Runtime, error) {
-	if s == nil || s.codex == nil {
-		return Runtime{}, errors.New("Codex runtime installer is not configured")
-	}
-	_, err := s.codex.Ensure(ctx)
-	return s.codexRuntime(), err
-}
-
 func (s *Service) codexRuntime() Runtime {
-	status := codexcli.InstallStatus{State: codexcli.InstallStateFailed, Message: "Codex runtime installer is not configured"}
-	if s != nil && s.codex != nil {
-		status = s.codex.Status()
-	}
-	goos := s.resolvedGOOS()
-	goarch := s.resolvedGOARCH()
-	platformSupported := codexcli.SupportedPlatform(goos, goarch)
-	if !status.Installed && !platformSupported {
-		status.State = codexcli.InstallState(StatusUnsupported)
-		status.Message = fmt.Sprintf("Codex CLI auto-install is not supported on %s/%s", goos, goarch)
-	}
-	return Runtime{
+	runtimeInfo := Runtime{
 		Name:        RuntimeCodex,
 		Label:       "Codex CLI",
-		Supported:   status.Installed || platformSupported,
-		Installed:   status.Installed,
-		Installable: platformSupported,
-		Status:      string(status.State),
-		Path:        status.Path,
-		OS:          goos,
-		Arch:        goarch,
+		Supported:   true,
+		Installable: false,
+		OS:          s.resolvedGOOS(),
+		Arch:        s.resolvedGOARCH(),
 		DocsURL:     "https://developers.openai.com/codex",
-		Message:     status.Message,
 	}
+	if s == nil || s.codex == nil {
+		runtimeInfo.Status = "failed"
+		runtimeInfo.Message = "Bundled Codex CLI resolver is not configured"
+		return runtimeInfo
+	}
+	path, err := s.codex.Ensure(context.Background())
+	if err != nil {
+		runtimeInfo.Status = "failed"
+		runtimeInfo.Message = fmt.Sprintf("Bundled Codex CLI is unavailable: %v", err)
+		return runtimeInfo
+	}
+	runtimeInfo.Installed = true
+	runtimeInfo.Status = "installed"
+	runtimeInfo.Path = path
+	return runtimeInfo
 }
 
 func (s *Service) claudeCodeRuntime() Runtime {
@@ -155,8 +133,4 @@ func (s *Service) resolvedGOARCH() string {
 		return strings.TrimSpace(s.goarch)
 	}
 	return runtime.GOARCH
-}
-
-func normalizeRuntimeName(name string) string {
-	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), "-", "_")
 }

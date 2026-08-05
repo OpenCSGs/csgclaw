@@ -12,7 +12,7 @@ make
 The default build:
 
 1. Builds the Web UI into `web/static-dist/`.
-2. Builds `bin/csgclaw` and the host-platform `bin/csgclaw-cli`.
+2. Builds `bin/csgclaw`, the host-platform `bin/csgclaw-cli`, and the bundled `bin/codex`.
 3. Builds a static Linux `csgclaw-cli` for the current CPU architecture into `bin/sandbox-tools/csgclaw-cli`.
 
 `make build-all` is retained as an alias of `make build`. CSGClaw no longer builds derived PicoClaw/OpenClaw images locally.
@@ -21,7 +21,7 @@ Useful targets:
 
 | Target | Description |
 |---|---|
-| `make build-server-bin` | Build `bin/csgclaw` and host-platform `bin/csgclaw-cli` |
+| `make build-server-bin` | Build `bin/csgclaw`, host-platform `bin/csgclaw-cli`, and bundled `bin/codex` |
 | `make build-sandbox-cli` | Build Linux `csgclaw-cli` into `bin/sandbox-tools` |
 | `make install-sandbox-cli` | Compatibility alias of `make build-sandbox-cli` |
 | `make run` | Build and run `csgclaw serve` |
@@ -53,7 +53,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 build
 The default `build` target mirrors `make build`:
 
 1. Builds the Web UI into `web/static-dist/`.
-2. Builds `bin/csgclaw.exe` and the host-platform `bin/csgclaw-cli.exe`.
+2. Builds `bin/csgclaw.exe`, the host-platform `bin/csgclaw-cli.exe`, and bundled `bin/codex.exe`.
 3. Builds a Linux `csgclaw-cli` into `bin/sandbox-tools/csgclaw-cli`.
 
 When a locally built `bin/csgclaw[.exe]` starts a sandbox, it synchronizes the adjacent `bin/sandbox-tools/csgclaw-cli` into `~/.csgclaw/sandbox-tools/csgclaw-cli`, then mounts that managed directory read-only at `/opt/csgclaw/bin` inside the sandbox. Official installers perform the same initial synchronization from the installed bundle.
@@ -88,10 +88,16 @@ csgclaw/
   bin/
     csgclaw[.exe]
     csgclaw-cli[.exe]            # companion CLI for the release host platform
+    codex[.exe]                  # bundled Codex CLI for the release host platform
     boxlite[.exe]                 # supported platforms only
     sandbox-tools/
       csgclaw-cli                # Linux, same CPU architecture as the release
 ```
+
+The canonical CSGClaw-platform-to-Codex-artifact mapping is in
+[`scripts/codex-cli-platforms.txt`](../../scripts/codex-cli-platforms.txt). Shell,
+PowerShell, and Docker packaging consume that file; formal release targets remain
+in [`scripts/release-platforms.txt`](../../scripts/release-platforms.txt).
 
 The installer exposes both host binaries from the same `INSTALL_DIR` and copies the sandbox CLI to `~/.csgclaw/sandbox-tools/csgclaw-cli`. Bundle replacement during upgrade updates both companion host binaries together, and built-in upgrade creates or refreshes a missing companion entry for older installer layouts. Runtime asset refresh only synchronizes the sandbox CLI. Older bundles that stored it at `bin/csgclaw_dir/csgclaw-cli` remain readable during upgrades.
 
@@ -101,11 +107,16 @@ The installer exposes both host binaries from the same `INSTALL_DIR` and copies 
 | `make package-all` | Build and package the current platform artifacts |
 | `make desktop-package` | Build native desktop installers on macOS/Linux |
 | `scripts\build.cmd desktop-package` | Build native desktop installers on Windows without `make` |
+| `make desktop-package-oss VERSION=<version>` | Reuse `desktop-package` and stage this host's OSS desktop artifacts |
+| `make desktop-oss-manifest VERSION=<version>` | Validate all three website installers and generate `downloads.json` |
+| `make desktop-oss-publish VERSION=<version>` | Validate and publish all three website installers to OSS |
 | `make release` | Build the configured cross-platform release bundles |
 
-Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`. GitHub attaches the CLI and native desktop installers to the matching GitHub Release. GitLab uploads CLI release artifacts to `https://csgclaw.opencsg.com/releases/<tag>/` and publishes the CSGClaw product image. Its desktop jobs are optional manual builds: successful installers remain GitLab artifacts for one day and are not uploaded to the public release directory. GitLab macOS and Windows desktop jobs require native runners tagged `csgclaw-macos-arm64`, `csgclaw-macos-amd64`, and `csgclaw-windows-amd64`.
+Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`. GitHub attaches the CLI and native desktop installers to the matching GitHub Release, then publishes the two macOS DMGs and Windows x64 installer to the beta or release OSS channel. GitLab uploads CLI release artifacts to `https://csgclaw.opencsg.com/releases/<tag>/` and publishes the CSGClaw product image. Its desktop jobs are optional manual builds: successful installers remain GitLab artifacts for one day and are not uploaded to the public release directory. GitLab macOS and Windows desktop jobs require native runners tagged `csgclaw-macos-arm64`, `csgclaw-macos-amd64`, and `csgclaw-windows-amd64`.
 
 Desktop installers use names such as `csgclaw-desktop_v0.4.3_darwin_arm64.dmg`. Signing and notarization values are optional CI secrets/variables: when they are absent or incomplete, Electron Forge keeps its macOS ad-hoc and Windows unsigned defaults. Release CI does not configure a desktop update feed.
+
+Local desktop outputs are kept under `desktop/out/`: backend inputs in `input/`, raw Forge artifacts in `make/`, and OSS release files and manifests in `oss/`. The repository-root `dist/` remains the Go release and CI runner staging directory.
 
 ## Related docs
 

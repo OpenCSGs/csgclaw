@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { fetchAgentRuntimes, installAgentRuntimeRequest } from "@/api/agentRuntimes";
+import { fetchAgentRuntimes } from "@/api/agentRuntimes";
 
 function mockFetch(payload: unknown): Mock<typeof fetch> {
   const fetchMock = vi.fn<typeof fetch>(
@@ -19,22 +19,11 @@ describe("agent runtimes API", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads agent runtimes without browser caching", async () => {
+  it("loads bundled runtime status without browser caching", async () => {
     const fetchMock = mockFetch([]);
 
     await fetchAgentRuntimes();
 
     expect(fetchMock).toHaveBeenCalledWith("api/v1/agent-runtimes", expect.objectContaining({ cache: "no-store" }));
-  });
-
-  it("posts install requests to the encoded runtime resource", async () => {
-    const fetchMock = mockFetch({ name: "codex", status: "installed" });
-
-    await installAgentRuntimeRequest("codex");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/agent-runtimes/codex/install",
-      expect.objectContaining({ method: "POST" }),
-    );
   });
 });

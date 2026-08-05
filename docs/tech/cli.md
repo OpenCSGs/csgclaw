@@ -116,7 +116,6 @@ Flags:
 - `--daemon`, `-d`: run in background.
 - `--no-browser`: do not open the browser after startup.
 - `--no-auth-detect`: disable startup auth/model auto-detection so the Manager Profile setup flow remains incomplete for manual testing.
-- `--no-codex-auto-install`: start without automatically installing Codex CLI. Runtime status and manual installation from the Computer page remain available.
 - `--log-level string`: log level. Supported values: `debug`, `info`, `warn`, `error`. Default `info`.
 - `--log string`: daemon log path. Daemon mode only. Default `~/.csgclaw/server.log`.
 - `--pid string`: daemon PID path. Daemon mode only. Default `~/.csgclaw/server.pid`.
@@ -128,7 +127,7 @@ Behavior:
 - Validates effective model configuration before startup.
 - For `csghub-lite`, it performs a provider reachability preflight.
 - With `--no-auth-detect`, startup skips automatic CLI auth import and Manager Profile provider/model detection unless an existing complete Manager Profile is already saved.
-- With `--no-codex-auto-install`, startup skips only the Codex CLI installation attempt; the Computer page can still install or retry it manually.
+- Codex CLI is included in the CSGClaw bundle and is always launched from the bundle, independent of any Codex installation on the host system.
 - In foreground mode it prints the effective config and IM URL.
 - In daemon mode it launches the hidden internal `_serve` entrypoint and waits for `/healthz`.
 
@@ -136,7 +135,6 @@ Examples:
 
 ```bash
 csgclaw serve
-csgclaw serve --no-codex-auto-install
 csgclaw serve --no-auth-detect --no-browser
 csgclaw serve --daemon
 csgclaw serve --config /path/to/config.toml
@@ -375,9 +373,7 @@ csgclaw agent delete --all --force
 
 Notes:
 
-- `--runtime codex` requires a local `codex` CLI that supports `app-server --listen stdio://`.
-- Binary lookup uses `PATH` by default and can be overridden with `CSGCLAW_CODEX_PATH`.
-  On Windows, native `codex.exe` and npm's `codex.cmd`/`codex.bat` shims are supported; the PowerShell `codex.ps1` shim is not.
+- `--runtime codex` uses the Codex CLI bundled beside the CSGClaw executable. A host-installed Codex CLI and `PATH` are not consulted.
 
 ### `csgclaw user`
 

@@ -241,7 +241,7 @@ make desktop-package TARGET_OS=darwin TARGET_ARCH=amd64
 
 打包配置按目标平台分别使用 `csgclaw.icns`、`csgclaw.ico` 和 `csgclaw.png`，Windows 安装器和 Linux DEB 也显式复用对应图标。
 
-输出目录是 `desktop/out/`，backend 中间产物位于 `dist/desktop-input/<os>-<arch>/backend/`。GitHub Release CI 会从 `desktop/out/make/` 归档最终文件，生成如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的稳定名称并附加到对应 GitHub Release。GitLab 的桌面 job 仅供可选手动构建，成功产物作为 GitLab artifact 保留一天，不上传到 `https://csgclaw.opencsg.com/releases/<tag>/`。
+所有本地桌面构建产物统一位于 `desktop/out/`：backend 中间产物在 `desktop/out/input/<os>-<arch>/backend/`，Forge 原始安装包在 `desktop/out/make/`，OSS 发布工作区在 `desktop/out/oss/`。GitHub Release CI 会从 `desktop/out/make/` 归档最终文件到 runner 的临时 `dist/`，生成如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的稳定名称并附加到对应 GitHub Release。GitLab 的桌面 job 仅供可选手动构建，成功产物作为 GitLab artifact 保留一天，不上传到 `https://csgclaw.opencsg.com/releases/<tag>/`。
 
 正式安装包建议在目标系统构建。跨平台编译成功不代表签名、安装、启动和更新已经通过目标系统验证。
 

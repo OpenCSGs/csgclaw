@@ -132,11 +132,7 @@ Runtime validation probes the chat completions fallback when Responses is unsupp
 When an in-use model provider's base URL, API key, or headers change, CSGClaw checks the new transport before saving it and preserves the previous working configuration if the check fails.
 The raw upstream API key is not written to this file; it is injected into the runtime environment through `env_key = "OPENAI_API_KEY"`.
 
-When a worker uses the Codex runtime, CSGClaw launches the local `codex` CLI with `codex app-server --listen stdio://`. You can override the binary lookup with:
-
-- `CSGCLAW_CODEX_PATH` to point at a preinstalled `codex` binary.
-  On Windows, native `codex.exe` and npm's `codex.cmd`/`codex.bat` shims are supported; `codex.ps1` is not. CSGClaw launches command shims through `cmd.exe` and prefers a sibling native executable when one exists.
-- `CSGCLAW_CODEX_ACP_PATH` as a temporary compatibility fallback to the same `codex` binary path during migration
+When a worker uses the Codex runtime, CSGClaw launches the Codex CLI bundled next to the CSGClaw executable with `codex app-server --listen stdio://`. It does not use `PATH`, `CSGCLAW_CODEX_PATH`, or `CSGCLAW_CODEX_ACP_PATH`; reinstall CSGClaw if that bundled executable is missing.
 
 ## OpenClaw Runtime
 

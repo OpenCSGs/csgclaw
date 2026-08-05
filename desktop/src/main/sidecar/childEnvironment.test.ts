@@ -46,7 +46,7 @@ test("uses the login shell PATH before Electron's inherited macOS PATH", async (
       "/sbin",
     ].join(":"),
   );
-  assert.equal(env.CSGCLAW_CODEX_PATH, "/Users/test/bin/codex");
+  assert.equal(env.CSGCLAW_CODEX_PATH, undefined);
   assert.equal(env.UNRELATED_SECRET, undefined);
   assert.equal(env.ELECTRON_RUN_AS_NODE, undefined);
   assert.equal(env.NODE_OPTIONS, undefined);
@@ -130,7 +130,7 @@ test("uses an interactive non-login shell for Linux terminal configuration", asy
   );
 });
 
-test("uses Windows user and machine environment without overriding an explicit Codex path", async () => {
+test("uses Windows user and machine environment while ignoring Codex path overrides", async () => {
   const runCommand: EnvironmentCommandRunner = async (executable, args) => {
     assert.equal(
       executable,
@@ -172,7 +172,7 @@ test("uses Windows user and machine environment without overriding an explicit C
       "C:\\Tools",
     ].join(";"),
   );
-  assert.equal(env.CSGCLAW_CODEX_PATH, "D:\\codex\\codex.exe");
+  assert.equal(env.CSGCLAW_CODEX_PATH, undefined);
   assert.equal(env.Node_Options, undefined);
 });
 

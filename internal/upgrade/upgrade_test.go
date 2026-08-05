@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -271,6 +272,7 @@ func TestClientPrepareReleaseDownloadsVerifiesAndExtracts(t *testing.T) {
 	}
 	for _, path := range []string{
 		filepath.Join(prepared.BundleDir, "bin", "csgclaw"),
+		filepath.Join(prepared.BundleDir, "bin", "codex"),
 		filepath.Join(prepared.BundleDir, "bin", "boxlite"),
 	} {
 		if _, err := os.Stat(path); err != nil {
@@ -310,8 +312,59 @@ func TestClientPrepareReleaseAllowsBundleWithoutBoxLite(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(prepared.BundleDir, "bin", "csgclaw")); err != nil {
 		t.Fatalf("Stat(csgclaw) error = %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(prepared.BundleDir, "bin", "codex")); err != nil {
+		t.Fatalf("Stat(codex) error = %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(prepared.BundleDir, "bin", "boxlite")); !os.IsNotExist(err) {
 		t.Fatalf("Stat(boxlite) error = %v, want not exist", err)
+	}
+}
+
+func TestClientPrepareReleaseRejectsMissingCodex(t *testing.T) {
+	archive := releaseTarballWithoutMarker(t, map[string]string{
+		filepath.Join("csgclaw", bundleMarkerFileName): `{"app":"csgclaw","layout":"official-bundle"}`,
+		"csgclaw/bin/csgclaw":                          "#!/bin/sh\n",
+	})
+	sum := sha256.Sum256(archive)
+
+	client := Client{
+		HTTPClient: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     http.StatusText(http.StatusOK),
+				Header:     make(http.Header),
+				Body:       io.NopCloser(bytes.NewReader(archive)),
+			}, nil
+		}),
+	}
+
+	_, err := client.PrepareRelease(context.Background(), ReleaseAsset{
+		Name:        "csgclaw_v0.2.7_linux_amd64.tar.gz",
+		DownloadURL: "https://downloads.example.test/csgclaw.tar.gz",
+		Size:        int64(len(archive)),
+		SHA256:      hex.EncodeToString(sum[:]),
+	}, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "release bundle is missing bin/codex") {
+		t.Fatalf("PrepareRelease() error = %v, want missing bundled Codex error", err)
+	}
+}
+
+func TestInspectBundleDirRejectsNonExecutableCodex(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not use POSIX executable mode bits")
+	}
+
+	bundleDir := writeBundleFiles(t, t.TempDir(), map[string]string{
+		"csgclaw/bin/csgclaw": "#!/bin/sh\n",
+	})
+	codexPath := filepath.Join(bundleDir, "bin", "codex")
+	if err := os.Chmod(codexPath, 0o644); err != nil {
+		t.Fatalf("Chmod(%q) error = %v", codexPath, err)
+	}
+
+	_, err := inspectBundleDir(bundleDir)
+	if err == nil || !strings.Contains(err.Error(), "release bundle entry bin/codex is not executable") {
+		t.Fatalf("inspectBundleDir() error = %v, want non-executable bundled Codex error", err)
 	}
 }
 
@@ -345,6 +398,9 @@ func TestClientPrepareReleaseExtractsWindowsZipBundle(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(prepared.BundleDir, "bin", "csgclaw.exe")); err != nil {
 		t.Fatalf("Stat(csgclaw.exe) error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(prepared.BundleDir, "bin", "codex.exe")); err != nil {
+		t.Fatalf("Stat(codex.exe) error = %v", err)
 	}
 }
 
@@ -585,6 +641,32 @@ func TestClientInstallPreparedAllowsLegacyOfficialBundleWithoutMarker(t *testing
 	}
 	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
 	assertFileContent(t, filepath.Join(installRoot, bundleMarkerFileName), `{"app":"csgclaw","layout":"official-bundle","version":"test"}`)
+}
+
+func TestClientInstallPreparedMigratesMarkedOfficialBundleWithoutCodex(t *testing.T) {
+	installRoot := writeBundleFilesWithoutMarker(t, t.TempDir(), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw"):     "#!/bin/sh\n# old\n",
+		filepath.Join("csgclaw", "README.md"):          "old",
+		filepath.Join("csgclaw", bundleMarkerFileName): `{"app":"csgclaw","layout":"official-bundle","version":"v0.4.5"}`,
+	})
+	preparedRoot := writeBundleDir(t, t.TempDir(), "new")
+	client := Client{
+		ExecutablePath: func() (string, error) {
+			return filepath.Join(installRoot, "bin", "csgclaw"), nil
+		},
+	}
+
+	installed, err := client.InstallPrepared(PreparedBundle{BundleDir: preparedRoot})
+	if err != nil {
+		t.Fatalf("InstallPrepared() error = %v", err)
+	}
+	if got, want := installed.InstallRoot, installRoot; got != want {
+		t.Fatalf("InstallRoot = %q, want %q", got, want)
+	}
+	assertFileContent(t, filepath.Join(installRoot, "README.md"), "new")
+	if _, err := os.Stat(filepath.Join(installRoot, "bin", "codex")); err != nil {
+		t.Fatalf("Stat(upgraded bundled Codex) error = %v", err)
+	}
 }
 
 func TestClientInstallPreparedRejectsLegacyOfficialPathWithSourceMarker(t *testing.T) {
@@ -864,6 +946,26 @@ func TestClientAutoUpgradeSupportReportsOfficialBundle(t *testing.T) {
 	}
 }
 
+func TestClientAutoUpgradeSupportReportsMarkedBundleWithoutCodex(t *testing.T) {
+	installRoot := writeBundleFilesWithoutMarker(t, t.TempDir(), map[string]string{
+		filepath.Join("csgclaw", "bin", "csgclaw"):     "#!/bin/sh\n",
+		filepath.Join("csgclaw", bundleMarkerFileName): `{"app":"csgclaw","layout":"official-bundle","version":"v0.4.5"}`,
+	})
+	client := Client{
+		ExecutablePath: func() (string, error) {
+			return filepath.Join(installRoot, "bin", "csgclaw"), nil
+		},
+	}
+
+	got := client.AutoUpgradeSupport("v0.4.5")
+	if !got.Supported {
+		t.Fatalf("AutoUpgradeSupport().Supported = false, reason=%q", got.Reason)
+	}
+	if got.InstallRoot != installRoot {
+		t.Fatalf("InstallRoot = %q, want %q", got.InstallRoot, installRoot)
+	}
+}
+
 func TestClientAutoUpgradeSupportSkipsBundleDetectionForLocalBuild(t *testing.T) {
 	client := Client{ExecutablePath: func() (string, error) {
 		t.Fatal("local builds should not inspect the executable path")
@@ -1084,7 +1186,7 @@ func jsonResponse(status int, body string) *http.Response {
 func releaseTarball(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 
-	files = withBundleMarker(files)
+	files = withOfficialBundleFiles(files)
 	return releaseTarballWithoutMarker(t, files)
 }
 
@@ -1129,7 +1231,7 @@ func writeBundleDir(t *testing.T, parentDir, marker string) string {
 func releaseZipArchive(t *testing.T, files map[string]string) []byte {
 	t.Helper()
 
-	files = withBundleMarker(files)
+	files = withOfficialBundleFiles(files)
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	for name, content := range files {
@@ -1150,7 +1252,7 @@ func releaseZipArchive(t *testing.T, files map[string]string) []byte {
 func writeBundleFiles(t *testing.T, parentDir string, files map[string]string) string {
 	t.Helper()
 
-	files = withBundleMarker(files)
+	files = withOfficialBundleFiles(files)
 	return writeBundleFilesWithoutMarker(t, parentDir, files)
 }
 
@@ -1168,6 +1270,19 @@ func writeBundleFilesWithoutMarker(t *testing.T, parentDir string, files map[str
 		}
 	}
 	return root
+}
+
+func withOfficialBundleFiles(files map[string]string) map[string]string {
+	out := withBundleMarker(files)
+	codexName := "codex"
+	if _, ok := out[filepath.Join("csgclaw", "bin", "csgclaw.exe")]; ok {
+		codexName += ".exe"
+	}
+	codexPath := filepath.Join("csgclaw", "bin", codexName)
+	if _, ok := out[codexPath]; !ok {
+		out[codexPath] = "bundled codex"
+	}
+	return out
 }
 
 func withBundleMarker(files map[string]string) map[string]string {

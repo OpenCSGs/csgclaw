@@ -141,7 +141,6 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	fs.BoolVar(daemon, "d", false, "run server in background")
 	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup")
 	noAuthDetect := fs.Bool("no-auth-detect", false, "disable automatic auth detection during startup")
-	noCodexAutoInstall := fs.Bool("no-codex-auto-install", false, "do not automatically install Codex CLI during startup")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 
 	defaultLogPath, err := defaultServerLogPath()
@@ -201,9 +200,8 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 
 	serveOpts := serveOptions{
-		NoBrowser:          *noBrowser,
-		NoAuthDetect:       *noAuthDetect,
-		NoCodexAutoInstall: *noCodexAutoInstall,
+		NoBrowser:    *noBrowser,
+		NoAuthDetect: *noAuthDetect,
 	}
 	if *daemon {
 		if err := instanceLock.Release(); err != nil {
@@ -287,7 +285,6 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup")
 	noAuthDetect := fs.Bool("no-auth-detect", false, "disable automatic auth detection during startup")
-	noCodexAutoInstall := fs.Bool("no-codex-auto-install", false, "do not automatically install Codex CLI during startup")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -351,9 +348,8 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 		return err
 	}
 	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, globals.Output, serveOptions{
-		NoBrowser:          *noBrowser,
-		NoAuthDetect:       *noAuthDetect,
-		NoCodexAutoInstall: *noCodexAutoInstall,
+		NoBrowser:    *noBrowser,
+		NoAuthDetect: *noAuthDetect,
 	})
 }
 
@@ -379,15 +375,14 @@ func officialInstallGuidance(goos string) (string, string) {
 }
 
 type serveOptions struct {
-	NoBrowser          bool
-	NoAuthDetect       bool
-	NoCodexAutoInstall bool
-	Quiet              bool
-	Distribution       string
-	Listener           net.Listener
-	SandboxListener    net.Listener
-	Desktop            *server.DesktopOptions
-	OnReady            func()
+	NoBrowser       bool
+	NoAuthDetect    bool
+	Quiet           bool
+	Distribution    string
+	Listener        net.Listener
+	SandboxListener net.Listener
+	Desktop         *server.DesktopOptions
+	OnReady         func()
 }
 
 func serveForegroundWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, configPath string, output string, opts ...serveOptions) error {
@@ -504,9 +499,6 @@ func backgroundServeArgs(configPath, pidPath, logLevel string, opts serveOptions
 	}
 	if opts.NoAuthDetect {
 		args = append(args, "--no-auth-detect")
-	}
-	if opts.NoCodexAutoInstall {
-		args = append(args, "--no-codex-auto-install")
 	}
 	return args
 }
@@ -770,11 +762,6 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 				}()
 			}
 			go func() {
-				if !serveOpts.NoCodexAutoInstall && agentRuntimeSvc != nil {
-					if _, err := agentRuntimeSvc.EnsureCodex(ctx); err != nil {
-						slog.Warn("Codex CLI auto-install failed", "error", err)
-					}
-				}
 				if agentManagerSvc != nil {
 					if err := agentManagerSvc.Start(ctx); err != nil {
 						slog.Warn("bootstrap manager failed to start", "error", err)

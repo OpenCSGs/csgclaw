@@ -12,7 +12,7 @@ make
 默认构建会：
 
 1. 将 Web UI 构建到 `web/static-dist/`。
-2. 构建 `bin/csgclaw` 和宿主平台的 `bin/csgclaw-cli`。
+2. 构建 `bin/csgclaw`、宿主平台的 `bin/csgclaw-cli` 和 bundled `bin/codex`。
 3. 按当前 CPU 架构构建静态 Linux `csgclaw-cli` 到 `bin/sandbox-tools/csgclaw-cli`。
 
 `make build-all` 保留为 `make build` 的别名。CSGClaw 不再在本地构建派生的 PicoClaw/OpenClaw 镜像。
@@ -21,7 +21,7 @@ make
 
 | Target | 说明 |
 |---|---|
-| `make build-server-bin` | 构建 `bin/csgclaw` 和宿主平台的 `bin/csgclaw-cli` |
+| `make build-server-bin` | 构建 `bin/csgclaw`、宿主平台的 `bin/csgclaw-cli` 和 bundled `bin/codex` |
 | `make build-sandbox-cli` | 将 Linux `csgclaw-cli` 构建到 `bin/sandbox-tools` |
 | `make install-sandbox-cli` | `make build-sandbox-cli` 的兼容别名 |
 | `make run` | 构建并运行 `csgclaw serve` |
@@ -53,7 +53,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1 build
 其中默认的 `build` 会对齐 `make build` 的行为：
 
 1. 构建 Web UI 到 `web/static-dist/`。
-2. 构建 `bin/csgclaw.exe` 和宿主平台的 `bin/csgclaw-cli.exe`。
+2. 构建 `bin/csgclaw.exe`、宿主平台的 `bin/csgclaw-cli.exe` 和 bundled `bin/codex.exe`。
 3. 构建 Linux 版 `csgclaw-cli` 到 `bin/sandbox-tools/csgclaw-cli`。
 
 本地编译的 `bin/csgclaw[.exe]` 启动沙盒时，会把相邻的 `bin/sandbox-tools/csgclaw-cli` 同步到 `~/.csgclaw/sandbox-tools/csgclaw-cli`，然后将这个托管目录只读挂载到沙盒内的 `/opt/csgclaw/bin`。正式安装器也会从已安装 bundle 完成同样的首次同步。
@@ -88,10 +88,16 @@ csgclaw/
   bin/
     csgclaw[.exe]
     csgclaw-cli[.exe]            # release 宿主平台的伴生 CLI
+    codex[.exe]                  # release 宿主平台的 bundled Codex CLI
     boxlite[.exe]                 # 仅支持的平台
     sandbox-tools/
       csgclaw-cli                # Linux，CPU 架构与 release 一致
 ```
+
+CSGClaw 平台到 Codex artifact 的统一映射维护在
+[`scripts/codex-cli-platforms.txt`](../../scripts/codex-cli-platforms.txt)；Shell、
+PowerShell 和 Docker 打包均读取该文件。正式 release 平台仍维护在
+[`scripts/release-platforms.txt`](../../scripts/release-platforms.txt)。
 
 安装脚本会从同一个 `INSTALL_DIR` 暴露两个宿主程序，并把沙盒 CLI 复制到 `~/.csgclaw/sandbox-tools/csgclaw-cli`。升级替换 bundle 时会同时更新两个伴生宿主程序，内置升级也会为旧安装布局创建或刷新缺失的伴生程序入口；runtime asset 刷新只同步沙盒 CLI。升级时仍兼容旧 bundle 的 `bin/csgclaw_dir/csgclaw-cli` 路径。
 
@@ -101,11 +107,18 @@ csgclaw/
 | `make package-all` | 构建并打包当前平台产物 |
 | `make desktop-package` | 在 macOS/Linux 构建当前平台的桌面安装包 |
 | `scripts\build.cmd desktop-package` | 在 Windows 无需 `make` 构建桌面安装包 |
+| `make desktop-package-oss VERSION=<version>` | 复用 `desktop-package` 构建并归档本机支持的 OSS 桌面产物 |
+| `make desktop-oss-manifest VERSION=<version>` | 收齐三平台安装器后生成 `downloads.json` |
+| `make desktop-oss-publish VERSION=<version>` | 严格检查三平台安装器并发布到 OSS |
 | `make release` | 构建配置的跨平台 release bundle |
 
-发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。GitHub 将 CLI 和原生桌面安装包附加到对应的 GitHub Release。GitLab 将 CLI release 产物上传到 `https://csgclaw.opencsg.com/releases/<tag>/`，并发布 CSGClaw 产品镜像。其桌面 job 是可选手动构建：成功的安装包作为 GitLab artifact 保留一天，不会上传到公开发布目录。GitLab 的 macOS 和 Windows 桌面 job 需要提供并打上 `csgclaw-macos-arm64`、`csgclaw-macos-amd64`、`csgclaw-windows-amd64` tag 的原生 runner。
+发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。GitHub 将 CLI 和原生桌面安装包附加到对应的 GitHub Release，随后把两个 macOS DMG 和 Windows x64 安装器发布到 beta 或 release OSS channel。GitLab 将 CLI release 产物上传到 `https://csgclaw.opencsg.com/releases/<tag>/`，并发布 CSGClaw 产品镜像。其桌面 job 是可选手动构建：成功的安装包作为 GitLab artifact 保留一天，不会上传到公开发布目录。GitLab 的 macOS 和 Windows 桌面 job 需要提供并打上 `csgclaw-macos-arm64`、`csgclaw-macos-amd64`、`csgclaw-windows-amd64` tag 的原生 runner。
 
 桌面安装包采用如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的命名。签名和公证信息是可选 CI secrets/variables：未配置或配置不完整时，Electron Forge 保持 macOS ad-hoc、Windows 未签名的默认行为。发布 CI 不配置桌面端更新源。
+
+OSS 桌面发布命令的完整说明见 [Electron Desktop OSS 发布](electron-desktop-oss-release.zh.md)。`desktop-package` 仍是单平台原子构建，OSS 上传只放在聚合命令中，避免并行 runner 使用不完整产物发布。
+
+本地桌面构建文件统一维护在 `desktop/out/`：`input/` 是后端 bundle 中间件，`make/` 是 Forge 原始产物，`oss/` 是可上传版本、外部导入包和 channel manifest。仓库根 `dist/` 继续作为 Go release 与 CI runner 的临时平铺汇总目录。
 
 ## 相关文档
 

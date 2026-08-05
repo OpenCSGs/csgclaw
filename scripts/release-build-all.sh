@@ -32,7 +32,7 @@ GOCACHE="${GOCACHE:-${ROOT}/.gocache}"
 mkdir -p "${DIST_DIR}" "${GOCACHE}"
 export GOCACHE
 
-chmod +x scripts/package-release.sh scripts/fetch-boxlite-cli.sh
+chmod +x scripts/package-release.sh scripts/fetch-boxlite-cli.sh scripts/fetch-codex-cli.sh
 
 RELEASE_APPS="${RELEASE_APPS:-csgclaw csgclaw-cli}"
 

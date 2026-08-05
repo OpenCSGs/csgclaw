@@ -1,41 +1,21 @@
 package codexcli
 
 import (
-	"strings"
+	"context"
+	"reflect"
 	"testing"
 )
 
-func TestWindowsBatchAppServerCommandLine(t *testing.T) {
-	path := `C:\Users\Jane Doe\AppData\Roaming\npm & tools\codex.cmd`
-	got, err := windowsBatchAppServerCommandLine(path)
+func TestAppServerCommandContextUsesBundledNativeBinary(t *testing.T) {
+	binaryPath := "/opt/csgclaw/bin/codex"
+	cmd, err := AppServerCommandContext(context.Background(), binaryPath)
 	if err != nil {
-		t.Fatalf("windowsBatchAppServerCommandLine() error = %v", err)
+		t.Fatalf("AppServerCommandContext() error = %v", err)
 	}
-	want := `/d /s /v:off /c ""C:\Users\Jane Doe\AppData\Roaming\npm & tools\codex.cmd" app-server --listen stdio://"`
-	if got != want {
-		t.Fatalf("windowsBatchAppServerCommandLine() = %q, want %q", got, want)
+	if got, want := cmd.Path, binaryPath; got != want {
+		t.Fatalf("command path = %q, want %q", got, want)
 	}
-}
-
-func TestWindowsBatchAppServerCommandLineRejectsUnsafePath(t *testing.T) {
-	for _, path := range []string{"", `C:\npm\%USER%\codex.cmd`, "C:\\npm\\codex.cmd\r\nwhoami"} {
-		t.Run(strings.ReplaceAll(path, "\\", "_"), func(t *testing.T) {
-			if _, err := windowsBatchAppServerCommandLine(path); err == nil {
-				t.Fatalf("windowsBatchAppServerCommandLine(%q) error = nil, want error", path)
-			}
-		})
-	}
-}
-
-func TestIsWindowsCommandShimPath(t *testing.T) {
-	for _, path := range []string{`C:\npm\codex.cmd`, `C:\npm\CODEX.BAT`} {
-		if !isWindowsCommandShimPath(path) {
-			t.Fatalf("isWindowsCommandShimPath(%q) = false, want true", path)
-		}
-	}
-	for _, path := range []string{`C:\npm\codex.exe`, `C:\npm\codex.ps1`, "/usr/bin/codex"} {
-		if isWindowsCommandShimPath(path) {
-			t.Fatalf("isWindowsCommandShimPath(%q) = true, want false", path)
-		}
+	if got, want := cmd.Args, []string{binaryPath, "app-server", "--listen", "stdio://"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("command args = %q, want %q", got, want)
 	}
 }

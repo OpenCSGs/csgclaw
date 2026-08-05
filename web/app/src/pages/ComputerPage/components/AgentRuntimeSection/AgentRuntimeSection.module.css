@@ -235,12 +235,6 @@
   line-height: 17px;
 }
 
-.installButton {
-  flex: 0 0 auto;
-  border-radius: 8px;
-  gap: 7px;
-}
-
 .loadingState,
 .emptyState {
   min-height: 138px;
@@ -364,9 +358,5 @@
   .card {
     min-height: 0;
     padding: 16px;
-  }
-
-  .installButton {
-    width: 100%;
   }
 }

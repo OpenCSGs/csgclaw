@@ -3,27 +3,30 @@ package runtimecatalog
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
-
-	"csgclaw/internal/codexcli"
 )
 
-func TestServiceListReportsCodexAndClaudeCode(t *testing.T) {
-	target := filepath.Join(t.TempDir(), "codex")
-	if err := os.WriteFile(target, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	t.Setenv(codexcli.EnvBinaryPath, target)
-	service := NewService(WithPlatform("darwin", "arm64"))
+type fakeCodexResolver struct {
+	path string
+	err  error
+}
+
+func (f fakeCodexResolver) Ensure(context.Context) (string, error) {
+	return f.path, f.err
+}
+
+func TestServiceListReportsBundledCodex(t *testing.T) {
+	service := NewService(
+		WithCodexResolver(fakeCodexResolver{path: "/opt/csgclaw/bin/codex"}),
+		WithPlatform("darwin", "arm64"),
+	)
 
 	runtimes := service.List()
 	if len(runtimes) != 2 {
 		t.Fatalf("List() length = %d, want 2: %+v", len(runtimes), runtimes)
 	}
-	if got := runtimes[0]; got.Name != RuntimeCodex || !got.Supported || !got.Installed || !got.Installable || got.Path != target {
-		t.Fatalf("Codex runtime = %+v, want installed and installable", got)
+	if got := runtimes[0]; got.Name != RuntimeCodex || !got.Supported || !got.Installed || got.Installable || got.Status != "installed" || got.Path != "/opt/csgclaw/bin/codex" {
+		t.Fatalf("Codex runtime = %+v, want installed bundled Codex", got)
 	}
 	if got := runtimes[1]; got.Name != RuntimeClaudeCode || got.Supported || got.Installed || got.Installable || got.Status != StatusComingSoon {
 		t.Fatalf("Claude Code runtime = %+v, want coming soon", got)
@@ -35,58 +38,14 @@ func TestServiceListReportsCodexAndClaudeCode(t *testing.T) {
 	}
 }
 
-func TestServiceListReportsMissingCodexFromEnvOverride(t *testing.T) {
-	t.Setenv(codexcli.EnvBinaryPath, filepath.Join(t.TempDir(), "missing-codex"))
-
-	got := NewService().List()[0]
-	if got.Name != RuntimeCodex || got.Installed || got.Status != string(codexcli.InstallStateNotInstalled) {
-		t.Fatalf("Codex runtime = %+v, want not installed", got)
-	}
-}
-
-func TestServiceListReportsWindowsCommandShimAsInstalled(t *testing.T) {
-	target := filepath.Join(t.TempDir(), "npm", "codex.cmd")
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
-	}
-	if err := os.WriteFile(target, []byte("@echo off\r\n"), 0o755); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	installer := codexcli.NewInstaller(codexcli.InstallerOptions{
-		Locator: codexcli.Locator{GOOS: "windows", ExplicitPath: target},
-		GOOS:    "windows",
-		GOARCH:  "amd64",
-		BaseURL: "https://unused.invalid",
-	})
-	service := NewService(
-		WithCodexInstaller(installer),
-		WithPlatform("windows", "amd64"),
-	)
+func TestServiceListReportsMissingBundledCodex(t *testing.T) {
+	service := NewService(WithCodexResolver(fakeCodexResolver{err: errors.New("bundle missing")}))
 
 	got := service.List()[0]
-	if !got.Installed || got.Status != string(codexcli.InstallStateInstalled) || got.Path != target {
-		t.Fatalf("Codex runtime = %+v, want installed command shim at %q", got, target)
-	}
-}
-
-func TestServiceInstallRejectsUnsupportedAndUnknownRuntimes(t *testing.T) {
-	service := NewService()
-	if _, err := service.Install(context.Background(), RuntimeClaudeCode); !errors.Is(err, ErrInstallUnsupported) {
-		t.Fatalf("Install(claude_code) error = %v, want ErrInstallUnsupported", err)
-	}
-	if _, err := service.Install(context.Background(), "unknown"); !errors.Is(err, ErrRuntimeNotFound) {
-		t.Fatalf("Install(unknown) error = %v, want ErrRuntimeNotFound", err)
-	}
-}
-
-func TestServiceListDisablesInstallOnUnsupportedPlatform(t *testing.T) {
-	t.Setenv(codexcli.EnvBinaryPath, filepath.Join(t.TempDir(), "missing-codex"))
-
-	got := NewService(WithPlatform("freebsd", "amd64")).List()[0]
-	if got.Supported || got.Installable || got.Installed || got.Status != StatusUnsupported {
-		t.Fatalf("Codex runtime = %+v, want unsupported and not installable", got)
+	if got.Name != RuntimeCodex || got.Installed || got.Installable || got.Status != "failed" {
+		t.Fatalf("Codex runtime = %+v, want failed non-installable bundled runtime", got)
 	}
 	if got.Message == "" {
-		t.Fatal("Codex unsupported runtime message is empty")
+		t.Fatal("Codex missing bundle message is empty")
 	}
 }

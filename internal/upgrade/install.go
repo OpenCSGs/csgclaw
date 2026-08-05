@@ -79,7 +79,7 @@ func (c Client) officialInstallRoot() (string, error) {
 		if isLauncherInstallRoot(root) {
 			continue
 		}
-		if err := validateBundleDir(root); err == nil {
+		if err := validateInstalledBundleDir(root); err == nil {
 			return root, nil
 		}
 		if isLegacyOfficialInstallRoot(root) {
@@ -246,7 +246,7 @@ func installedBundleRootFromLauncher(root string) (string, bool) {
 			continue
 		}
 		bundleRoot := filepath.Join(libDir, entry.Name(), "csgclaw")
-		if err := validateBundleDir(bundleRoot); err != nil && !isLegacyOfficialInstallRoot(bundleRoot) {
+		if err := validateInstalledBundleDir(bundleRoot); err != nil && !isLegacyOfficialInstallRoot(bundleRoot) {
 			continue
 		}
 		candidates = append(candidates, bundleCandidate{
@@ -310,7 +310,7 @@ func isCSGClawExecutableName(name string) bool {
 }
 
 func installBundle(bundleDir, installRoot string) error {
-	if err := validateBundleDir(installRoot); err != nil && !isLegacyOfficialInstallRoot(installRoot) {
+	if err := validateInstalledBundleDir(installRoot); err != nil && !isLegacyOfficialInstallRoot(installRoot) {
 		return fmt.Errorf("%w: invalid current bundle: %v", ErrNotOfficialBundle, err)
 	}
 

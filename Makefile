@@ -14,6 +14,7 @@ BOXLITE_CLI_BASE_URL ?= https://github.com/boxlite-ai/boxlite/releases/download
 
 GO ?= go
 GOFMT ?= gofmt
+NODE ?= node
 CGO_ENABLED ?= 0
 WEB_APP_DIR ?= web/app
 WEB_STATIC_DIST_DIR ?= web/static-dist
@@ -24,6 +25,15 @@ WEB_BUILD_PNPM_ARGS ?= $(if $(filter summary,$(WEB_BUILD_REPORT)),--silent exec 
 DESKTOP_DIR ?= desktop
 DESKTOP_PNPM ?= $(CURDIR)/scripts/desktop-pnpm.sh
 DESKTOP_PACKAGE_REPORT ?= summary
+DESKTOP_OSS_RELEASE_SCRIPT ?= $(CURDIR)/scripts/desktop-oss-release.mjs
+DESKTOP_OSS_CHANNEL ?=
+DESKTOP_OSS_TARGETS ?=
+DESKTOP_OSS_RELEASE_DIR ?=
+DESKTOP_OSS_OUTPUT_ROOT ?=
+DESKTOP_OSS_ENV_FILE ?=
+DESKTOP_OSS_FORCE ?= 0
+DESKTOP_OSS_ALLOW_PARTIAL ?= 0
+DESKTOP_OSS_COMMON_ARGS = --version "$(VERSION)" $(if $(strip $(DESKTOP_OSS_CHANNEL)),--channel "$(DESKTOP_OSS_CHANNEL)",) $(if $(strip $(DESKTOP_OSS_RELEASE_DIR)),--release-directory "$(DESKTOP_OSS_RELEASE_DIR)",) $(if $(strip $(DESKTOP_OSS_OUTPUT_ROOT)),--output-root "$(DESKTOP_OSS_OUTPUT_ROOT)",)
 TARGET_OS ?= $(shell $(GO) env GOOS)
 TARGET_ARCH ?= $(shell $(GO) env GOARCH)
 DESKTOP_PLATFORM ?= $(if $(filter windows,$(TARGET_OS)),win32,$(TARGET_OS))
@@ -37,7 +47,7 @@ SANDBOX_CLI_BIN ?= $(SANDBOX_BUNDLE_TOOLS_DIR)/csgclaw-cli
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package build build-all build-server build-server-bin build-sandbox-cli install-sandbox-cli run clean package package-all release
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package desktop-package-oss desktop-oss-manifest desktop-oss-publish desktop-oss-release build build-all build-server build-server-bin build-codex-cli build-sandbox-cli install-sandbox-cli run clean package package-all release
 
 help:
 	@printf '%s\n' \
@@ -51,7 +61,10 @@ help:
 		'make build-web  - build Web UI app into web/static-dist' \
 		'make desktop-dev - install dependencies when needed, build the local backend, and start Electron Forge' \
 		'make desktop-package - create platform Electron installers/archives (set CSGCLAW_DESKTOP_WINDOWS_CHANNEL=store for MSIX)' \
-		'make build-server-bin - build bin/csgclaw and the host-platform bin/csgclaw-cli' \
+		'make desktop-package-oss - build and stage this host desktop OSS artifacts' \
+		'make desktop-oss-manifest - validate the collected macOS/Windows installers and write downloads.json' \
+		'make desktop-oss-publish - validate the complete installer set, then upload artifacts and downloads.json to OSS' \
+		'make build-server-bin - build bin/csgclaw, bin/csgclaw-cli, and bundled Codex' \
 		'make build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools' \
 		'make run        - build (no docker images), then run the server' \
 		'make clean      - remove local build outputs'
@@ -215,11 +228,26 @@ desktop-package: ensure-desktop-deps desktop-backend-bundle
 		run_package && print_artifacts; \
 	fi
 
+# These are thin release wrappers. desktop-package remains the single-platform
+# build primitive used by CI; the Node script calls it and then reuses the same
+# release asset collector as the existing GitHub workflow.
+desktop-package-oss:
+	@$(NODE) "$(DESKTOP_OSS_RELEASE_SCRIPT)" build $(DESKTOP_OSS_COMMON_ARGS) $(if $(strip $(DESKTOP_OSS_TARGETS)),--targets "$(DESKTOP_OSS_TARGETS)",) $(if $(filter 1 true yes,$(DESKTOP_OSS_FORCE)),--force,)
+
+desktop-oss-manifest:
+	@$(NODE) "$(DESKTOP_OSS_RELEASE_SCRIPT)" manifest $(DESKTOP_OSS_COMMON_ARGS) $(if $(filter 1 true yes,$(DESKTOP_OSS_ALLOW_PARTIAL)),--allow-partial,)
+
+desktop-oss-publish:
+	@$(NODE) "$(DESKTOP_OSS_RELEASE_SCRIPT)" manifest $(DESKTOP_OSS_COMMON_ARGS)
+	@$(NODE) "$(DESKTOP_OSS_RELEASE_SCRIPT)" upload $(DESKTOP_OSS_COMMON_ARGS) $(if $(strip $(DESKTOP_OSS_ENV_FILE)),--env-file "$(DESKTOP_OSS_ENV_FILE)",)
+
+desktop-oss-release: desktop-oss-publish
+
 build: build-web build-server-bin build-sandbox-cli
 
 build-all: build
 
-build-server-bin:
+build-server-bin: build-codex-cli
 	mkdir -p $(BIN_DIR)
 	@if [ "$(TARGET_OS)" = "windows" ]; then \
 		rm -f "$(BIN_DIR)/csgclaw" "$(BIN_DIR)/csgclaw-cli"; \
@@ -230,6 +258,10 @@ build-server-bin:
 		$(GO) build -ldflags "$(LDFLAGS)" -o "$(SERVER_BIN)" ./cmd/csgclaw
 	env GOCACHE=$(GOCACHE) CGO_ENABLED=$(CGO_ENABLED) GOOS=$(TARGET_OS) GOARCH=$(TARGET_ARCH) \
 		$(GO) build -ldflags "$(CLI_LDFLAGS)" -o "$(HOST_CLI_BIN)" ./cmd/csgclaw-cli
+
+build-codex-cli:
+	mkdir -p "$(BIN_DIR)"
+	"$(CURDIR)/scripts/fetch-codex-cli.sh" "$(TARGET_OS)" "$(TARGET_ARCH)" "$(BIN_DIR)"
 
 build-server: build-server-bin build-sandbox-cli
 

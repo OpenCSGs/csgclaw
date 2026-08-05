@@ -108,7 +108,7 @@ const (
 
 var sseHeartbeatInterval = 15 * time.Second
 var locateCodexCLI = func() (string, error) {
-	return (codexcli.Locator{}).Locate()
+	return codexcli.BundledPath()
 }
 
 func detachedCreateContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -568,21 +568,12 @@ func managerRuntimeReadiness() managerRuntimeResponse {
 		return resp
 	}
 	resp.Installed = false
-	resp.Message = "Codex CLI not installed"
+	resp.Message = "Bundled Codex CLI is unavailable"
 	return resp
 }
 
-func codexInstallGuidance(goos string) string {
-	switch strings.ToLower(strings.TrimSpace(goos)) {
-	case "darwin":
-		return "Install the Codex CLI for macOS, or set CSGCLAW_CODEX_PATH to the codex binary."
-	case "windows":
-		return "Install the Codex CLI for Windows, or set CSGCLAW_CODEX_PATH to codex.exe or the npm codex.cmd shim."
-	case "linux":
-		return "Install the Codex CLI for Linux, or set CSGCLAW_CODEX_PATH to the codex binary."
-	default:
-		return "Install the Codex CLI, or set CSGCLAW_CODEX_PATH to the codex binary."
-	}
+func codexInstallGuidance(_ string) string {
+	return "Codex CLI is bundled with CSGClaw. Reinstall CSGClaw if the bundled executable is missing."
 }
 
 func workerRuntimeChoices(cfg config.Config) []workerRuntimeChoiceResponse {
@@ -616,7 +607,7 @@ func workerRuntimeChoices(cfg config.Config) []workerRuntimeChoiceResponse {
 	}
 	if _, err := locateCodexCLI(); err != nil {
 		choices[0].Installed = false
-		choices[0].Message = "Codex CLI not installed"
+		choices[0].Message = "Bundled Codex CLI is unavailable"
 	}
 	if strings.EqualFold(strings.TrimSpace(cfg.Sandbox.Provider), config.CSGHubProvider) {
 		return choices[:1]
