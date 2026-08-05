@@ -211,6 +211,10 @@
   box-shadow: none;
 }
 
+.btn.btn-tertiary-gray {
+  box-shadow: none;
+}
+
 .csg-icon-button.btn-tertiary-gray,
 .csg-icon-button.btn-tertiary-color,
 .csg-icon-button.btn-link-gray,

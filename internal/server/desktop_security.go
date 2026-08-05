@@ -129,7 +129,7 @@ func setDesktopSecurityHeaders(header http.Header) {
 		"font-src 'self' data:",
 		"connect-src 'self' https: wss:",
 		"worker-src 'self' blob:",
-		"frame-src 'none'",
+		"frame-src 'self' blob:",
 		"form-action 'self' https:",
 	}, "; "))
 	header.Set("Cross-Origin-Opener-Policy", "same-origin")

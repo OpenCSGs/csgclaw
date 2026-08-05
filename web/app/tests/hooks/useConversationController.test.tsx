@@ -548,7 +548,7 @@ describe("useConversationController", () => {
     expect(result.current.conversationViewProps.removedAttachmentCount).toBe(0);
   });
 
-  it("keeps duplicate attachment errors scoped to the conversation where they occurred", () => {
+  it("clears duplicate attachment errors when switching conversations", () => {
     const otherConversation: IMConversation = {
       ...directConversation,
       id: "room-2",
@@ -573,7 +573,7 @@ describe("useConversationController", () => {
     expect(result.current.conversationViewProps.composerError).toBe("");
 
     rerender({ activeConversationId: directConversation.id, data, messageListActive: true });
-    expect(result.current.conversationViewProps.composerError).toBe("attachmentDuplicate");
+    expect(result.current.conversationViewProps.composerError).toBe("");
   });
 
   it("does not derive working participants from recent message history", () => {

@@ -304,6 +304,7 @@ export function useConversationController({
   const [notifyAllAgentsBusy, setNotifyAllAgentsBusy] = useState(false);
   const [notifyAllAgentsError, setNotifyAllAgentsError] = useState("");
   const [composerErrorsByConversationId, setComposerErrorsByConversationId] = useState<ComposerErrorsByKey>({});
+  const [attachmentErrorsByConversationId, setAttachmentErrorsByConversationId] = useState<ComposerErrorsByKey>({});
   const editorRef = useRef<HTMLDivElement | null>(null);
   const sendAbortControllersRef = useRef<Record<string, AbortController>>({});
   const composerIsComposingRef = useRef(false);
@@ -333,7 +334,25 @@ export function useConversationController({
     },
     [activeConversationId],
   );
-  const composerError = composerErrorsByConversationId[activeConversationId] ?? "";
+  const setAttachmentError = useCallback((error: string, conversationID: string) => {
+    if (!conversationID) {
+      return;
+    }
+    setAttachmentErrorsByConversationId((current) => {
+      if (current[conversationID] === error) {
+        return current;
+      }
+      if (!error) {
+        const { [conversationID]: _cleared, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [conversationID]: error };
+    });
+  }, []);
+  const composerError =
+    composerErrorsByConversationId[activeConversationId] ??
+    attachmentErrorsByConversationId[activeConversationId] ??
+    "";
 
   const usersById = useMemo(() => buildUsersById(data?.users), [data]);
   const activeConversation = useMemo(
@@ -599,6 +618,10 @@ export function useConversationController({
     setSlashIndex(0);
     setSlashPickerDismissed(false);
     setComposerSlashQuery(null);
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    setAttachmentErrorsByConversationId({});
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -1461,7 +1484,7 @@ export function useConversationController({
       return;
     }
     const selection = selectAttachmentFiles(files, attachmentDrafts);
-    setComposerError(attachmentSelectionError(selection, t), activeConversationId);
+    setAttachmentError(attachmentSelectionError(selection, t), activeConversationId);
     if (selection.files.length === 0) {
       return;
     }
@@ -1484,6 +1507,7 @@ export function useConversationController({
     if (index < 0) {
       return;
     }
+    setAttachmentError("", activeConversationId);
     setRemovedAttachmentsByConversationId((current) => {
       const existing = current[activeConversationId]?.attachments ?? [];
       return {
@@ -1560,6 +1584,7 @@ export function useConversationController({
 
   function clearComposerError() {
     setComposerError("");
+    setAttachmentError("", activeConversationId);
   }
 
   function clearMemberActionError() {

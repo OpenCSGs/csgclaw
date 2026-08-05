@@ -363,7 +363,7 @@ export const ConversationComposer = memo(function ConversationComposer({
               ? t("attachmentRemoved", { name: removedAttachmentName })
               : t("attachmentsRemoved", { count: removedAttachmentCount })}
           </span>
-          <Button size="sm" variant="tertiaryGray" onClick={onUndoRemoveAttachment}>
+          <Button size="sm" variant="secondaryGray" onClick={onUndoRemoveAttachment}>
             <Undo2 aria-hidden="true" size={14} />
             {t("undo")}
           </Button>

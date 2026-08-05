@@ -13,7 +13,7 @@ const t: TranslateFn = (key, params) => {
     attachmentPreviewLoading: "Loading preview",
     attachmentPreviewUnavailable: "Preview unavailable",
     close: "Close",
-    downloadAttachment: "Download attachment",
+    downloadAttachment: "download",
     previewAttachmentNamed: `Preview attachment: ${params?.name ?? ""}`,
   };
   return labels[key] ?? key;
@@ -64,7 +64,7 @@ describe("MessageAttachments", () => {
 
       await user.click(screen.getByRole("button", { name: "Preview attachment: diagram.png" }));
       expect(screen.getByRole("dialog", { name: "diagram.png" })).toBeInTheDocument();
-      const download = screen.getByRole("link", { name: "Download attachment" }) as HTMLAnchorElement;
+      const download = screen.getByRole("link", { name: "download" }) as HTMLAnchorElement;
       expect(new URL(download.href).pathname).toBe("/v1/sandboxes/csgship-test/api/v1/attachments/att-image");
       await user.click(screen.getByRole("button", { name: "Close" }));
 

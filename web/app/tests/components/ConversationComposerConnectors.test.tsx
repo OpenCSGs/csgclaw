@@ -38,7 +38,7 @@ const t: TranslateFn = (key, params) => {
     attachmentPreviewFailed: "Preview failed",
     attachmentPreviewLoading: "Loading preview",
     attachmentPreviewUnavailable: "Preview unavailable",
-    downloadAttachment: "Download attachment",
+    downloadAttachment: "download",
     close: "Close",
     attachmentsScrollPrevious: "View previous attachments",
     attachmentsScrollNext: "View more attachments",
