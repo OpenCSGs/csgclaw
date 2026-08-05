@@ -74,6 +74,29 @@ ditto -c -k --keepParent \
 
 Windows Website/Squirrel 安装包的日志位于 Electron `userData` 目录下，通常可以从 `%APPDATA%\CSGClaw` 找到。下面的 PowerShell 命令递归查找文件，不依赖日志位于该目录的哪一层。
 
+在仓库根目录运行诊断收集脚本：
+
+```powershell
+.\scripts\collect-desktop-diagnostics.cmd
+```
+
+脚本会把最新的 `main.log`、`main.previous.log`、`backend.log`、Crashpad dump、当前进程状态以及最近 30 分钟的 Windows Application 事件打包到桌面：
+
+```text
+csgclaw-diagnostics-YYYYMMDD-HHMMSS.zip
+```
+
+需要修改 Windows 事件回溯时间或 userData 位置时，可以直接调用 PowerShell 脚本：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\collect-desktop-diagnostics.ps1 `
+  -EventLookbackMinutes 60 `
+  -UserDataDirectory "$env:APPDATA\CSGClaw"
+```
+
+以下命令用于不生成诊断包时手工查看日志。
+
 查找并查看最新 `main.log` 的最后 300 行：
 
 ```powershell
@@ -101,20 +124,6 @@ if (-not $backendLog) { throw '未找到 CSGClaw backend.log' }
 Get-Content -LiteralPath $backendLog.FullName -Tail 300
 ```
 
-把主进程日志复制到桌面，便于发送：
-
-```powershell
-Copy-Item -LiteralPath $mainLog.FullName `
-  -Destination (Join-Path $env:USERPROFILE 'Desktop\csgclaw-main.log') `
-  -Force
-```
-
-也可以用下面的一条命令完成查找和导出：
-
-```powershell
-$log = Get-ChildItem "$env:APPDATA\CSGClaw" -Recurse -File -Filter 'main.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if (-not $log) { throw '未找到 CSGClaw main.log' }; Copy-Item $log.FullName "$env:USERPROFILE\Desktop\csgclaw-main.log" -Force; Write-Host '日志已导出到桌面: csgclaw-main.log'
-```
-
 Crashpad 通常位于 `%APPDATA%\CSGClaw\Crashpad`。列出 dump：
 
 ```powershell
@@ -126,7 +135,7 @@ Get-ChildItem (Join-Path $root 'Crashpad') -Recurse -File -ErrorAction SilentlyC
 1. 确认旧版 CSGClaw 已完全退出。
 2. 安装或打开待验证的新包，只启动一次。
 3. 如果窗口闪退，先不要立即第二次启动。
-4. 导出 `main.log`；如果 Crashpad 中存在 `.dmp`，同时导出对应 dump。
+4. 在仓库根目录运行 `.\scripts\collect-desktop-diagnostics.cmd` 并保存生成的 ZIP。
 5. 第二次启动后仍可导出日志，但分析时必须按不同 `runId` 区分两次启动。
 
 常见事件含义：
