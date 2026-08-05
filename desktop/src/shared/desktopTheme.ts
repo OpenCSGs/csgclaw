@@ -6,3 +6,10 @@ export function parseDesktopThemeSource(input: unknown): DesktopThemeSource {
   }
   return input;
 }
+
+export function shouldUseDarkDockIcon(
+  theme: DesktopThemeSource,
+  systemUsesDarkColors: boolean,
+): boolean {
+  return theme === "system" ? systemUsesDarkColors : theme === "dark";
+}

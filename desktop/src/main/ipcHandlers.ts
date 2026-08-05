@@ -2,7 +2,6 @@ import {
   app,
   dialog,
   ipcMain,
-  nativeTheme,
   shell,
   type BrowserWindow,
   type IpcMainInvokeEvent,
@@ -11,6 +10,7 @@ import {
   DesktopIPC,
   type DesktopOAuthInput,
   type OAuthPurpose,
+  type DesktopThemeSource,
 } from "../shared/desktopBridge.types";
 import { parseDesktopThemeSource } from "../shared/desktopTheme";
 import { isSafeHTTPSURL, isTrustedMainFrame } from "./navigationPolicy";
@@ -25,6 +25,7 @@ export function registerIPCHandlers(
   supervisor: SidecarSupervisor,
   updater: DesktopUpdater,
   restartSidecar: () => Promise<void>,
+  setThemeSource: (theme: DesktopThemeSource) => void,
 ): () => void {
   const assertSender = (event: IpcMainInvokeEvent) => {
     const window = getWindow();
@@ -75,7 +76,7 @@ export function registerIPCHandlers(
   });
   ipcMain.handle(DesktopIPC.setThemeSource, (event, input: unknown) => {
     assertSender(event);
-    nativeTheme.themeSource = parseDesktopThemeSource(input);
+    setThemeSource(parseDesktopThemeSource(input));
   });
 
   return () => {
