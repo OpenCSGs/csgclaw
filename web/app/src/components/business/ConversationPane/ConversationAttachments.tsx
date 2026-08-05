@@ -337,6 +337,7 @@ export function MessageAttachments({
         <div className="message-file-list">
           {files.map((attachment) => {
             const downloadURL = resolveRequestPath(attachment.download_url);
+            const inlinePreviewable = isInlinePreviewableMediaType(attachment.media_type);
             const content = (
               <>
                 <span className="attachment-file-icon" aria-hidden="true">
@@ -350,29 +351,23 @@ export function MessageAttachments({
             );
             return (
               <Tooltip key={attachment.id} content={attachment.name}>
-                {isInlinePreviewableMediaType(attachment.media_type) ? (
-                  <button
-                    type="button"
-                    className="message-file-attachment"
-                    aria-label={t("previewAttachmentNamed", { name: attachment.name })}
-                    onClick={() =>
-                      setPreview({
-                        downloadURL,
-                        id: attachment.id,
-                        mediaType: attachment.media_type,
-                        name: attachment.name,
-                        previewURL: resolveRequestPath(attachment.preview_url || attachment.download_url),
-                        requiresFetch: true,
-                      })
-                    }
-                  >
-                    {content}
-                  </button>
-                ) : (
-                  <a className="message-file-attachment" href={downloadURL} download referrerPolicy="no-referrer">
-                    {content}
-                  </a>
-                )}
+                <button
+                  type="button"
+                  className="message-file-attachment"
+                  aria-label={t("previewAttachmentNamed", { name: attachment.name })}
+                  onClick={() =>
+                    setPreview({
+                      downloadURL,
+                      id: attachment.id,
+                      mediaType: attachment.media_type,
+                      name: attachment.name,
+                      previewURL: resolveRequestPath(attachment.preview_url || attachment.download_url),
+                      requiresFetch: inlinePreviewable,
+                    })
+                  }
+                >
+                  {content}
+                </button>
               </Tooltip>
             );
           })}

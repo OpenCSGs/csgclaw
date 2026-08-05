@@ -1405,6 +1405,14 @@ button.composer-working-item:active {
   margin-left: auto;
 }
 
+.message-row.own .message-attachment-grid {
+  justify-content: end;
+}
+
+.message-row.own .message-file-list {
+  justify-items: end;
+}
+
 .message-attachment-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(104px, 148px));

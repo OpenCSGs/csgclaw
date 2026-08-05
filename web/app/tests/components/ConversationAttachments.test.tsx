@@ -51,6 +51,16 @@ describe("MessageAttachments", () => {
         created_at: "2026-07-10T00:00:00Z",
         download_url: "/api/v1/attachments/att-file?token=file-token",
       },
+      {
+        id: "att-unsupported",
+        name: "report.docx",
+        kind: "file",
+        media_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size_bytes: 256,
+        sha256: "unsupported-sha",
+        created_at: "2026-07-10T00:00:00Z",
+        download_url: "/api/v1/attachments/att-unsupported?token=unsupported-token",
+      },
     ];
 
     try {
@@ -76,6 +86,16 @@ describe("MessageAttachments", () => {
         credentials: "same-origin",
         signal: expect.any(AbortSignal),
       });
+      await user.click(screen.getByRole("button", { name: "Close" }));
+
+      await user.click(screen.getByRole("button", { name: "Preview attachment: report.docx" }));
+      expect(screen.getByRole("dialog", { name: "report.docx" })).toBeInTheDocument();
+      expect(screen.getByText("Preview unavailable")).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const unsupportedDownload = screen.getByRole("link", { name: "download" }) as HTMLAnchorElement;
+      expect(new URL(unsupportedDownload.href).pathname).toBe(
+        "/v1/sandboxes/csgship-test/api/v1/attachments/att-unsupported",
+      );
     } finally {
       base.remove();
       vi.unstubAllGlobals();
