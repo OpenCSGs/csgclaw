@@ -2,6 +2,7 @@ import path from "node:path";
 import { app, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { DesktopIPC, type DesktopUpdateStatus } from "../shared/desktopBridge.types";
 import { DesktopPlatform } from "../shared/desktopEnvironment";
+import { logDesktopError, logDesktopInfo } from "./desktopLogger";
 import { registerIPCHandlers } from "./ipcHandlers";
 import { desktopIconResourcePath, isMacOSDesktop, windowsAppIconPath } from "./platform";
 import { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
@@ -22,8 +23,13 @@ export class AppLifecycle {
   private windowManager: WindowManager | null = null;
 
   async start(): Promise<void> {
+    logDesktopInfo("lifecycle-start");
     this.supervisor = new SidecarSupervisor();
+    this.supervisor.on("state", (state: string) => {
+      logDesktopInfo("sidecar-state", { state });
+    });
     this.supervisor.on("crashed", (error: Error) => {
+      logDesktopError("sidecar-crashed", error);
       if (!this.quitting) {
         void this.recoverSidecar(error);
       }
@@ -32,6 +38,7 @@ export class AppLifecycle {
     this.windowManager = new WindowManager({
       shouldQuit: () => this.quitting,
       onLoadFailure: (error) => {
+        logDesktopError("renderer-load-failed", error);
         if (!this.quitting) {
           void this.recoverRenderer(error);
         }
@@ -40,10 +47,12 @@ export class AppLifecycle {
     this.updater = new DesktopUpdater(
       (status) => this.publishUpdateStatus(status),
       async () => {
+        logDesktopInfo("update-install-quit-requested");
         this.quitting = true;
         this.cleanup();
         await this.supervisor?.stop("install-update");
         this.shutdownComplete = true;
+        logDesktopInfo("update-install-shutdown-complete");
       },
     );
     this.cleanupIPC = registerIPCHandlers(
@@ -57,11 +66,19 @@ export class AppLifecycle {
     this.configureDockThemeIcon();
     this.createApplicationMenu();
     this.createTray();
+    logDesktopInfo("desktop-shell-ready");
     try {
       const connection = await this.supervisor.startWithRetry();
+      logDesktopInfo("sidecar-ready", {
+        distribution: connection.ready.distribution,
+        sidecarPid: connection.ready.pid,
+        version: connection.ready.version,
+      });
       this.setConnection(connection.ready.base_url, connection.sessionToken);
       await this.windowManager.open();
+      logDesktopInfo("window-opened");
     } catch (error) {
+      logDesktopError("lifecycle-start-failed", error);
       await this.recoverSidecar(asError(error));
     }
   }
@@ -86,7 +103,9 @@ export class AppLifecycle {
     if (this.quitting) {
       return;
     }
+    logDesktopInfo("quit-requested", { confirm });
     if (confirm && !(await this.confirmQuit())) {
+      logDesktopInfo("quit-cancelled");
       return;
     }
     this.quitting = true;
@@ -96,6 +115,7 @@ export class AppLifecycle {
     this.tray = null;
     await this.supervisor?.stop("app-quit");
     this.shutdownComplete = true;
+    logDesktopInfo("shutdown-complete");
     app.quit();
   }
 
@@ -103,6 +123,7 @@ export class AppLifecycle {
     if (this.recoveryActive || this.quitting || !this.supervisor || !this.windowManager) {
       return;
     }
+    logDesktopError("sidecar-recovery-started", error);
     this.recoveryActive = true;
     this.windowManager.destroy();
     try {
@@ -118,20 +139,25 @@ export class AppLifecycle {
           detail: this.supervisor.failureSummary,
         });
         if (result.response === 1) {
+          logDesktopInfo("sidecar-recovery-open-logs");
           await shell.openPath(app.getPath("logs"));
           continue;
         }
         if (result.response === 2) {
+          logDesktopInfo("sidecar-recovery-quit");
           await this.requestQuit(false);
           return;
         }
+        logDesktopInfo("sidecar-recovery-retry");
         try {
           const connection = await this.supervisor.startWithRetry();
           this.setConnection(connection.ready.base_url, connection.sessionToken);
           await this.windowManager.open();
+          logDesktopInfo("sidecar-recovery-succeeded");
           return;
         } catch (retryError) {
           error = asError(retryError);
+          logDesktopError("sidecar-recovery-failed", error);
         }
       }
     } finally {
@@ -143,6 +169,7 @@ export class AppLifecycle {
     if (this.recoveryActive || this.quitting || !this.windowManager) {
       return;
     }
+    logDesktopError("renderer-recovery-started", error);
     this.recoveryActive = true;
     this.windowManager.destroy();
     try {
@@ -157,16 +184,20 @@ export class AppLifecycle {
         detail: "The local service is still running. Reloading only recreates the desktop window.",
       });
       if (result.response === 1) {
+        logDesktopInfo("renderer-recovery-open-logs");
         await shell.openPath(app.getPath("logs"));
         await this.windowManager.open();
         return;
       }
       if (result.response === 2) {
+        logDesktopInfo("renderer-recovery-quit");
         await this.requestQuit(false);
         return;
       }
       await this.windowManager.open();
+      logDesktopInfo("renderer-recovery-succeeded");
     } catch (reloadError) {
+      logDesktopError("renderer-recovery-failed", reloadError);
       this.recoveryActive = false;
       await this.recoverSidecar(asError(reloadError));
       return;
@@ -188,9 +219,12 @@ export class AppLifecycle {
 
     const task = (async () => {
       try {
+        logDesktopInfo("sidecar-restart-started");
         const connection = await this.supervisor!.restart("settings-change");
         this.setConnection(connection.ready.base_url, connection.sessionToken);
+        logDesktopInfo("sidecar-restart-succeeded");
       } catch (error) {
+        logDesktopError("sidecar-restart-failed", error);
         void this.recoverSidecar(asError(error));
         throw error;
       }
