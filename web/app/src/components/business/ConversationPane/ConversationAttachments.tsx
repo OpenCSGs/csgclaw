@@ -338,13 +338,19 @@ export function MessageAttachments({
           {files.map((attachment) => {
             const downloadURL = resolveRequestPath(attachment.download_url);
             const inlinePreviewable = isInlinePreviewableMediaType(attachment.media_type);
+            const filename = splitAttachmentFilename(attachment.name || t("attachment"));
             const content = (
               <>
                 <span className="attachment-file-icon" aria-hidden="true">
                   <FileText size={18} />
                 </span>
                 <span className="attachment-draft-meta">
-                  <span className="attachment-name truncate">{attachment.name || t("attachment")}</span>
+                  <span className="attachment-name" title={attachment.name || t("attachment")}>
+                    <span className="attachment-name-stem">{filename.stem}</span>
+                    {filename.extension ? (
+                      <span className="attachment-name-extension">{filename.extension}</span>
+                    ) : null}
+                  </span>
                   <span className="attachment-size">{formatAttachmentSize(attachment.size_bytes)}</span>
                 </span>
               </>

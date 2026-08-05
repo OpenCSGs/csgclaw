@@ -72,6 +72,10 @@ describe("MessageAttachments", () => {
       expect(image).toHaveAttribute("loading", "lazy");
       expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
 
+      const unsupportedName = screen.getByTitle("report.docx");
+      expect(unsupportedName.querySelector(".attachment-name-stem")).toHaveTextContent("report");
+      expect(unsupportedName.querySelector(".attachment-name-extension")).toHaveTextContent(".docx");
+
       await user.click(screen.getByRole("button", { name: "Preview attachment: diagram.png" }));
       expect(screen.getByRole("dialog", { name: "diagram.png" })).toBeInTheDocument();
       const download = screen.getByRole("link", { name: "download" }) as HTMLAnchorElement;
