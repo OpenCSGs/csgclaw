@@ -284,6 +284,8 @@ func templateSpec() CommandSpec {
 				Flags: []FlagSpec{
 					{Name: "agent", TakesValue: true},
 					{Name: "registry", TakesValue: true},
+					{Name: "name", TakesValue: true},
+					{Name: "description", TakesValue: true},
 				},
 			},
 		},

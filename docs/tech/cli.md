@@ -487,7 +487,7 @@ Subcommands:
 - `--role string`: agent role for `--bind create`.
 - `--runtime string`: agent runtime kind for `--bind create`.
 - `--image string`: agent image for `--bind create`.
-- `--from-template string`: hub template for `--bind create`.
+- `--from-template string`: exact template ID returned by `template list` for `--bind create`. Remote IDs use `<namespace>/<name>`.
 - `--model-id string`: agent model ID for `--bind create`.
 - `--env KEY=VALUE`: agent image environment variable for `--bind create`; repeatable.
 

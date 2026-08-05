@@ -2,6 +2,7 @@ package template
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -50,8 +51,9 @@ type Service struct {
 }
 
 type configuredStore struct {
-	ref   RegistryRef
-	store Store
+	ref     RegistryRef
+	baseURL string
+	store   Store
 }
 
 type ServiceOption func(*Service)
@@ -87,7 +89,8 @@ func NewService(cfg config.HubConfig, factory StoreFactory, options ...ServiceOp
 				Name: registry.Name,
 				Kind: normalizeRegistryKind(registry.Kind),
 			},
-			store: store,
+			baseURL: strings.TrimRight(strings.TrimSpace(registry.URL), "/"),
+			store:   store,
 		}
 		svc.order = append(svc.order, registry.Name)
 	}
@@ -111,7 +114,7 @@ func (s *Service) List(ctx context.Context) ([]Template, error) {
 			continue
 		}
 		for _, item := range items {
-			out = append(out, decorateTemplate(cfgStore.ref, item))
+			out = append(out, decorateTemplate(cfgStore, item))
 		}
 	}
 	if len(listErrs) > 0 {
@@ -133,7 +136,7 @@ func (s *Service) Get(ctx context.Context, id string) (Template, error) {
 	if err != nil {
 		return Template{}, fmt.Errorf("get hub template %q from %q: %w", templateID, cfgStore.ref.Name, err)
 	}
-	return decorateTemplate(cfgStore.ref, item), nil
+	return decorateTemplate(cfgStore, item), nil
 }
 
 func (s *Service) FetchWorkspace(ctx context.Context, id string) (WorkspaceRef, error) {
@@ -226,7 +229,40 @@ func (s *Service) Publish(ctx context.Context, spec PublishSpec) (Template, erro
 	if err != nil {
 		return Template{}, fmt.Errorf("publish hub template to %q: %w", cfgStore.ref.Name, err)
 	}
-	return decorateTemplate(cfgStore.ref, item), nil
+	return decorateTemplate(cfgStore, item), nil
+}
+
+func (s *Service) PublishTemplate(ctx context.Context, id, registry string) (Template, error) {
+	item, err := s.Get(ctx, id)
+	if err != nil {
+		return Template{}, err
+	}
+	workspace, err := s.FetchWorkspace(ctx, id)
+	if err != nil {
+		return Template{}, err
+	}
+	if workspace.Temporary && strings.TrimSpace(workspace.Path) != "" {
+		defer func() { _ = os.RemoveAll(workspace.Path) }()
+	}
+	var mcpServers map[string]any
+	if raw := strings.TrimSpace(workspace.MCPServersJSON); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &mcpServers); err != nil {
+			return Template{}, fmt.Errorf("decode hub template MCP servers: %w", err)
+		}
+	}
+	return s.Publish(ctx, PublishSpec{
+		Registry:     registry,
+		ID:           item.Name,
+		Name:         item.Name,
+		Description:  item.Description,
+		Role:         item.Role,
+		RuntimeKind:  item.RuntimeKind,
+		Version:      item.Version,
+		Image:        item.Image,
+		WorkspaceRef: workspace,
+		MCPServers:   mcpServers,
+		UpdatedAt:    item.UpdatedAt,
+	})
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
@@ -247,6 +283,12 @@ func (s *Service) resolveRead(id string) (configuredStore, string, error) {
 	registryName, templateID := s.splitTemplateRef(id)
 	if registryName == "" {
 		registryName = s.defaultRegistry
+		if strings.Contains(templateID, "/") {
+			if cfgStore, ok := s.stores[config.DefaultOfficialHubRegistryName]; ok &&
+				normalizeRegistryKind(cfgStore.ref.Kind) == RegistryKindRemote {
+				registryName = config.DefaultOfficialHubRegistryName
+			}
+		}
 	}
 	cfgStore, ok := s.stores[registryName]
 	if !ok {
@@ -257,10 +299,14 @@ func (s *Service) resolveRead(id string) (configuredStore, string, error) {
 	}
 	return cfgStore, templateID, nil
 }
-
-func decorateTemplate(source RegistryRef, item Template) Template {
-	item.Source = source
-	item.ID = namespacedTemplateID(source.Name, localTemplateID(source.Name, item))
+func decorateTemplate(cfgStore configuredStore, item Template) Template {
+	item.Source = cfgStore.ref
+	templateID := localTemplateID(cfgStore.ref.Name, item)
+	if normalizeRegistryKind(cfgStore.ref.Kind) == RegistryKindRemote {
+		item.ID = templateID
+	} else {
+		item.ID = namespacedTemplateID(cfgStore.ref.Name, templateID)
+	}
 	return item
 }
 

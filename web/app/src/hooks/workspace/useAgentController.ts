@@ -28,7 +28,7 @@ import {
 } from "@/api/agents";
 import type { AgentUpdatePayload, FeishuRegistration, FetchAgentsOptions } from "@/api/agents";
 import { patchCsgclawUserRequest } from "@/api/participants";
-import { publishAgentTemplateRequest } from "@/api/hub";
+import { publishAgentTemplateRequest, type AgentTemplatePublishTarget } from "@/api/hub";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
@@ -51,6 +51,7 @@ import {
   applyTemplateToDraft,
   advanceAgentProgress,
   agentOfflineReasonLabel,
+  agentRuntimeKind,
   agentRuntimeState,
   agentDraftMissingRequiredEnv,
   agentDraftWithRuntimeFieldsFromAgent,
@@ -435,6 +436,7 @@ export function useAgentController({
   managerProfile,
   modelProviders = null,
   modelProvidersLoaded = false,
+  openCSGAuthenticated = false,
   profileDetailAgentID = "",
   refreshMCPServers = async () => null,
   refreshHubTemplates,
@@ -1630,21 +1632,34 @@ export function useAgentController({
     }
   }
 
-  async function publishAgentPage(): Promise<void> {
+  async function publishAgentPage(
+    target: AgentTemplatePublishTarget,
+    name: string,
+    description: string,
+  ): Promise<boolean> {
     if (!selectedAgentForPage?.id || agentPagePublishBusy) {
-      return;
+      return false;
+    }
+    if (target !== "local" && !openCSGAuthenticated) {
+      setAgentPageError(t("agentPublishLoginRequired"));
+      return false;
+    }
+    if (target !== "local" && agentRuntimeKind(selectedAgentForPage) !== "codex") {
+      return false;
     }
     setAgentPagePublishBusy(true);
     setAgentPageError("");
     try {
-      const published = await publishAgentTemplateRequest(selectedAgentForPage.id);
+      const published = await publishAgentTemplateRequest(selectedAgentForPage.id, target, name, description);
       await refreshHubTemplates();
       if (published?.id) {
         setSelectedHubTemplateId(published.id);
       }
       selectHub();
+      return true;
     } catch (err) {
       setAgentPageError(errorMessage(err, t("agentActionFailed")));
+      return false;
     } finally {
       setAgentPagePublishBusy(false);
     }
@@ -2414,6 +2429,7 @@ export function useAgentController({
       modelError: agentPageModelError,
       saving: agentPageBusy,
       publishBusy: agentPagePublishBusy,
+      publishDisabled: !openCSGAuthenticated,
       saveError: agentPageError,
       notice: selectedAgentPageNotice?.message || "",
       noticeTone: selectedAgentPageNotice?.tone || "warning",

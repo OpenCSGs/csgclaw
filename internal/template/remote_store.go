@@ -1,6 +1,8 @@
 package template
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -8,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,6 +37,7 @@ type RemoteStore struct {
 	hubBaseURL     string
 	contentBaseURL string
 	token          string
+	username       string
 	httpClient     *http.Client
 	maxJSON        int64
 	maxWorkspace   int64
@@ -44,8 +48,48 @@ type remoteCodeListResponse struct {
 	Total int                    `json:"total"`
 }
 
+type remoteAgentTemplateListResponse struct {
+	Data  []remoteAgentTemplate `json:"data"`
+	Total int                   `json:"total"`
+}
+
+type remoteAgentTemplate struct {
+	ID          int64                       `json:"id"`
+	Type        string                      `json:"type"`
+	Name        string                      `json:"name"`
+	Description string                      `json:"description"`
+	Public      bool                        `json:"public"`
+	Metadata    remoteAgentTemplateMetadata `json:"metadata"`
+	UpdatedAt   time.Time                   `json:"updated_at"`
+}
+
+type remoteAgentTemplateMetadata struct {
+	RepoPath string `json:"repo_path"`
+}
+
 type remoteCodeResponse struct {
 	Data remoteCodeRepository `json:"data"`
+}
+
+type remoteUploadURLResponse struct {
+	Data remoteUploadURL `json:"data"`
+}
+
+type remoteUploadURL struct {
+	URL      string            `json:"url"`
+	FormData map[string]string `json:"formData"`
+	UUID     string            `json:"uuid"`
+}
+
+type remoteCreateCodeRequest struct {
+	Namespace     string `json:"namespace"`
+	Name          string `json:"name"`
+	Nickname      string `json:"nickname"`
+	Description   string `json:"description"`
+	Private       bool   `json:"private"`
+	DefaultBranch string `json:"default_branch"`
+	Type          string `json:"type"`
+	CodeFile      string `json:"code_file"`
 }
 
 type remoteCodeRepository struct {
@@ -96,14 +140,46 @@ func NewRemoteStore(baseURL, token string) *RemoteStore {
 	}
 }
 
+func NewAuthenticatedRemoteStore(baseURL, token, username string) *RemoteStore {
+	store := NewRemoteStore(baseURL, token)
+	store.username = strings.TrimSpace(username)
+	return store
+}
+
 func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
-	var payload remoteCodeListResponse
-	if err := s.getJSON(ctx, s.templatesURL(), &payload); err != nil {
-		return nil, err
+	repositories := make([]remoteCodeRepository, 0)
+	seen := make(map[string]struct{})
+	var listErrs []error
+	var organizationTemplates remoteCodeListResponse
+	if err := s.getJSON(ctx, s.templatesURL(), &organizationTemplates); err != nil {
+		listErrs = append(listErrs, err)
+	} else {
+		repositories = appendRemoteTemplateRepositories(repositories, seen, organizationTemplates.Data)
 	}
 
-	items := make([]Template, 0, len(payload.Data))
-	for _, repository := range payload.Data {
+	var agentTemplates remoteAgentTemplateListResponse
+	if err := s.getJSON(ctx, s.agentTemplatesURL(), &agentTemplates); err != nil {
+		listErrs = append(listErrs, err)
+	} else {
+		for _, item := range agentTemplates.Data {
+			if !strings.EqualFold(strings.TrimSpace(item.Type), "csgclaw") {
+				continue
+			}
+			repositories = appendRemoteTemplateRepositories(repositories, seen, []remoteCodeRepository{{
+				Name:        strings.TrimSpace(item.Name),
+				Nickname:    strings.TrimSpace(item.Name),
+				Description: strings.TrimSpace(item.Description),
+				Path:        strings.TrimSpace(item.Metadata.RepoPath),
+				UpdatedAt:   item.UpdatedAt,
+			}})
+		}
+	}
+	if len(repositories) == 0 && len(listErrs) > 0 {
+		return nil, errors.Join(listErrs...)
+	}
+
+	items := make([]Template, 0, len(repositories))
+	for _, repository := range repositories {
 		id, err := normalizeRemoteTemplateID(repository.Path)
 		if err != nil {
 			slog.Warn("skip invalid remote hub template path", "path", repository.Path, "error", err)
@@ -117,6 +193,26 @@ func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 		items = append(items, item)
 	}
 	return items, nil
+}
+
+func appendRemoteTemplateRepositories(
+	repositories []remoteCodeRepository,
+	seen map[string]struct{},
+	items []remoteCodeRepository,
+) []remoteCodeRepository {
+	for _, repository := range items {
+		id, err := normalizeRemoteTemplateID(repository.Path)
+		if err != nil {
+			slog.Warn("skip invalid remote hub template path", "path", repository.Path, "error", err)
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		repositories = append(repositories, repository)
+	}
+	return repositories
 }
 
 func (s *RemoteStore) Get(ctx context.Context, id string) (Template, error) {
@@ -168,8 +264,10 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 	if name == "" {
 		name = strings.TrimSpace(repository.Name)
 	}
+	namespace := strings.SplitN(id, "/", 2)[0]
 	return Template{
 		ID:           remoteTemplateName(id),
+		Namespace:    namespace,
 		Name:         name,
 		Description:  description,
 		Role:         normalizeTemplateRole(manifest.Role),
@@ -456,8 +554,60 @@ func (s *RemoteStore) fetchBlob(ctx context.Context, id, filePath, branch string
 	return data, nil
 }
 
-func (s *RemoteStore) Publish(context.Context, PublishSpec) (Template, error) {
-	return Template{}, ErrRegistryNotWritable
+func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, error) {
+	if strings.TrimSpace(s.token) == "" || strings.TrimSpace(s.username) == "" {
+		return Template{}, fmt.Errorf("OpenCSG sign-in is required to publish templates")
+	}
+	normalized, err := normalizePublishSpec(spec)
+	if err != nil {
+		return Template{}, err
+	}
+	archive, err := buildRemoteTemplateArchive(normalized)
+	if err != nil {
+		return Template{}, err
+	}
+	if int64(len(archive)) > s.maxWorkspace {
+		return Template{}, fmt.Errorf("remote hub template archive exceeds %d bytes", s.maxWorkspace)
+	}
+
+	var upload remoteUploadURLResponse
+	if err := s.postJSON(ctx, s.uploadURL(), nil, &upload); err != nil {
+		return Template{}, fmt.Errorf("request remote hub upload URL: %w", err)
+	}
+	if err := s.uploadArchive(ctx, upload.Data, archive); err != nil {
+		return Template{}, err
+	}
+
+	request := remoteCreateCodeRequest{
+		Namespace:     s.username,
+		Name:          normalized.Name,
+		Nickname:      normalized.Name,
+		Description:   normalized.Description,
+		Private:       false,
+		DefaultBranch: "main",
+		Type:          "template",
+		CodeFile:      strings.TrimSpace(upload.Data.UUID),
+	}
+	var created remoteCodeResponse
+	if err := s.postJSON(ctx, s.codesURL(), request, &created); err != nil {
+		return Template{}, fmt.Errorf("create remote hub template: %w", err)
+	}
+	id := strings.TrimSpace(created.Data.Path)
+	if id == "" {
+		id = path.Join(s.username, normalized.Name)
+	}
+	return Template{
+		ID:           id,
+		Namespace:    s.username,
+		Name:         normalized.Name,
+		Description:  normalized.Description,
+		Role:         normalized.Role,
+		RuntimeKind:  normalized.RuntimeKind,
+		Version:      normalized.Version,
+		Image:        normalized.Image,
+		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir},
+		UpdatedAt:    normalized.UpdatedAt,
+	}, nil
 }
 
 func (s *RemoteStore) Delete(context.Context, string) error {
@@ -466,6 +616,24 @@ func (s *RemoteStore) Delete(context.Context, string) error {
 
 func (s *RemoteStore) templatesURL() string {
 	return s.hubBaseURL + "/api/v1/organization/" + url.PathEscape(officialTemplateNamespace) + "/codes"
+}
+
+func (s *RemoteStore) agentTemplatesURL() string {
+	query := url.Values{}
+	query.Set("type", "csgclaw")
+	return s.hubBaseURL + "/api/v1/agent/templates?" + query.Encode()
+}
+
+func (s *RemoteStore) uploadURL() string {
+	query := url.Values{}
+	query.Set("current_user", s.username)
+	return s.hubBaseURL + "/api/v1/codes/upload_url?" + query.Encode()
+}
+
+func (s *RemoteStore) codesURL() string {
+	query := url.Values{}
+	query.Set("current_user", s.username)
+	return s.hubBaseURL + "/api/v1/codes?" + query.Encode()
 }
 
 func (s *RemoteStore) templateURL(id string) string {
@@ -512,6 +680,151 @@ func (s *RemoteStore) getJSON(ctx context.Context, endpoint string, out any) err
 	return nil
 }
 
+func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out any) error {
+	var body io.Reader
+	if input != nil {
+		data, err := json.Marshal(input)
+		if err != nil {
+			return fmt.Errorf("encode remote hub request: %w", err)
+		}
+		body = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, body)
+	if err != nil {
+		return fmt.Errorf("create remote hub request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.token)
+	req.Header.Set("Accept", "application/json")
+	if input != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("remote hub request POST %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, s.maxJSON+1))
+	if err != nil {
+		return fmt.Errorf("read remote hub response: %w", err)
+	}
+	if int64(len(data)) > s.maxJSON {
+		return fmt.Errorf("remote hub response exceeds %d bytes", s.maxJSON)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("remote hub request failed with status %d: %s", resp.StatusCode, truncateRemoteBody(data))
+	}
+	if out == nil {
+		return nil
+	}
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("decode remote hub response: %w", err)
+	}
+	return nil
+}
+
+func (s *RemoteStore) uploadArchive(ctx context.Context, upload remoteUploadURL, archive []byte) error {
+	if strings.TrimSpace(upload.URL) == "" || strings.TrimSpace(upload.UUID) == "" {
+		return fmt.Errorf("remote hub upload response is incomplete")
+	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range upload.FormData {
+		if err := writer.WriteField(key, value); err != nil {
+			return fmt.Errorf("encode remote hub upload field %q: %w", key, err)
+		}
+	}
+	part, err := writer.CreateFormFile("file", upload.UUID+".zip")
+	if err != nil {
+		return fmt.Errorf("encode remote hub upload file: %w", err)
+	}
+	if _, err := part.Write(archive); err != nil {
+		return fmt.Errorf("encode remote hub template archive: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("finish remote hub upload body: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upload.URL, &body)
+	if err != nil {
+		return fmt.Errorf("create remote hub archive upload request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("upload remote hub template archive: %w", err)
+	}
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 513))
+	if err != nil {
+		return fmt.Errorf("read remote hub archive upload response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("remote hub archive upload failed with status %d: %s", resp.StatusCode, truncateRemoteBody(responseBody))
+	}
+	return nil
+}
+
+func buildRemoteTemplateArchive(spec PublishSpec) ([]byte, error) {
+	tmpDir, err := os.MkdirTemp("", "csgclaw-hub-publish-*")
+	if err != nil {
+		return nil, fmt.Errorf("create remote hub template temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	if err := (&LocalStore{}).writeManifest(filepath.Join(tmpDir, localManifestFileName), spec); err != nil {
+		return nil, err
+	}
+	if spec.WorkspaceRef.Kind == WorkspaceKindDir {
+		if err := writeTemplateLayout(spec.WorkspaceRef, tmpDir, spec.MCPServers); err != nil {
+			return nil, err
+		}
+	}
+	var output bytes.Buffer
+	archive := zip.NewWriter(&output)
+	err = filepath.WalkDir(tmpDir, func(filePath string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(tmpDir, filePath)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(relative)
+		header.Method = zip.Deflate
+		target, err := archive.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		source, err := os.Open(filePath)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(target, source)
+		closeErr := source.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
+	if err != nil {
+		_ = archive.Close()
+		return nil, fmt.Errorf("build remote hub template archive: %w", err)
+	}
+	if err := archive.Close(); err != nil {
+		return nil, fmt.Errorf("finish remote hub template archive: %w", err)
+	}
+	return output.Bytes(), nil
+}
+
 func (s *RemoteStore) request(ctx context.Context, method, endpoint string, maxBody int64) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
 	if err != nil {
@@ -548,7 +861,7 @@ func normalizeRemoteTemplateID(id string) (string, error) {
 		id = officialTemplateNamespace + "/" + id
 	}
 	parts := strings.Split(id, "/")
-	if len(parts) != 2 || parts[0] != officialTemplateNamespace {
+	if len(parts) != 2 {
 		return "", ErrWorkspacePathUnsafe
 	}
 	for _, part := range parts {
@@ -568,7 +881,7 @@ func escapeRemotePath(value string) string {
 }
 
 func remoteTemplateName(id string) string {
-	return strings.TrimPrefix(id, officialTemplateNamespace+"/")
+	return strings.Trim(strings.TrimSpace(id), "/")
 }
 
 func normalizeRemoteWorkspacePath(value string) (string, error) {

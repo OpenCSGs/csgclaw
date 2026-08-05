@@ -49,7 +49,7 @@ func TestListAggregatesAndNamespacesTemplates(t *testing.T) {
 		DefaultPublishRegistry: "local",
 		Registries: []config.HubRegistryConfig{
 			{Name: "builtin", Kind: RegistryKindBuiltin, Enabled: true},
-			{Name: "team", Kind: RegistryKindRemote, Enabled: true},
+			{Name: "team", Kind: RegistryKindRemote, URL: "https://team.example.test", Enabled: true},
 		},
 	}, map[string]Store{
 		"builtin": stubStore{
@@ -57,7 +57,7 @@ func TestListAggregatesAndNamespacesTemplates(t *testing.T) {
 		},
 		"local": stubStore{},
 		"team": stubStore{
-			listResult: []Template{{Name: "review-bot"}},
+			listResult: []Template{{ID: "alice/review-bot", Name: "review-bot"}},
 		},
 	})
 
@@ -74,7 +74,7 @@ func TestListAggregatesAndNamespacesTemplates(t *testing.T) {
 	if got, want := items[0].Source.Name, "builtin"; got != want {
 		t.Fatalf("List()[0].Source.Name = %q, want %q", got, want)
 	}
-	if got, want := items[1].ID, "team.review-bot"; got != want {
+	if got, want := items[1].ID, "alice/review-bot"; got != want {
 		t.Fatalf("List()[1].ID = %q, want %q", got, want)
 	}
 	if got, want := items[1].Source.Kind, RegistryKindRemote; got != want {
@@ -103,7 +103,30 @@ func TestGetUsesDefaultRegistryForUnqualifiedID(t *testing.T) {
 	if got, want := teamStore.lastGetID, "frontend-alice"; got != want {
 		t.Fatalf("store Get id = %q, want %q", got, want)
 	}
-	if got, want := item.ID, "team.frontend-alice"; got != want {
+	if got, want := item.ID, "frontend-alice"; got != want {
+		t.Fatalf("Get().ID = %q, want %q", got, want)
+	}
+}
+
+func TestGetUsesOfficialRegistryForNamespaceTemplateRef(t *testing.T) {
+	officialStore := &recordingStore{
+		getResult: Template{ID: "jun/generic-assistant-codex", Name: "generic-assistant-codex"},
+	}
+	svc := mustService(t, config.HubConfig{
+		DefaultRegistry: "builtin",
+		Registries: []config.HubRegistryConfig{
+			{Name: "official", Kind: RegistryKindRemote, URL: "https://opencsg-stg.com", Enabled: true},
+		},
+	}, map[string]Store{"official": officialStore})
+
+	item, err := svc.Get(context.Background(), "jun/generic-assistant-codex")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got, want := officialStore.lastGetID, "jun/generic-assistant-codex"; got != want {
+		t.Fatalf("store Get id = %q, want %q", got, want)
+	}
+	if got, want := item.ID, "jun/generic-assistant-codex"; got != want {
 		t.Fatalf("Get().ID = %q, want %q", got, want)
 	}
 }
@@ -159,7 +182,7 @@ func TestGetUsesLongestQualifiedRegistryPrefix(t *testing.T) {
 	if got, want := regionalStore.lastGetID, "review.bot"; got != want {
 		t.Fatalf("store Get id = %q, want %q", got, want)
 	}
-	if got, want := item.ID, "team.us.review.bot"; got != want {
+	if got, want := item.ID, "review.bot"; got != want {
 		t.Fatalf("Get().ID = %q, want %q", got, want)
 	}
 }

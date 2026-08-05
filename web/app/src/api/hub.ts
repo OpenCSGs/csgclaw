@@ -3,8 +3,14 @@ import type { HubTemplate, HubWorkspaceFile, HubWorkspaceListing } from "@/model
 
 const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";
 
+export type AgentTemplatePublishTarget = "local" | "official" | "official_deploy";
+
 type PublishAgentTemplatePayload = {
   agent_id: string;
+  registry: AgentTemplatePublishTarget;
+  name: string;
+  description: string;
+  deploy?: boolean;
 };
 
 export function fetchHubTemplates(): Promise<HubTemplate[]> {
@@ -34,11 +40,27 @@ export function updateHubWorkspaceFile(
   return put(`${hubTemplatePath(templateID)}/workspace/file?path=${encodeURIComponent(workspacePath)}`, { content });
 }
 
-export function publishAgentTemplateRequest(agentID: string): Promise<HubTemplate> {
+export function publishAgentTemplateRequest(
+  agentID: string,
+  registry: AgentTemplatePublishTarget,
+  name: string,
+  description: string,
+): Promise<HubTemplate> {
   const payload: PublishAgentTemplatePayload = {
     agent_id: agentID,
+    registry: registry === "official_deploy" ? "official" : registry,
+    name,
+    description,
+    ...(registry === "official_deploy" ? { deploy: true } : {}),
   };
   return post<HubTemplate>(HUB_TEMPLATES_PATH, payload);
+}
+
+export function publishHubTemplateToCommunityRequest(templateID: string): Promise<HubTemplate> {
+  return post<HubTemplate>(HUB_TEMPLATES_PATH, {
+    template_id: templateID,
+    registry: "official",
+  });
 }
 
 export function deleteHubTemplateRequest(templateID: string): Promise<void> {
@@ -46,5 +68,6 @@ export function deleteHubTemplateRequest(templateID: string): Promise<void> {
 }
 
 function hubTemplatePath(templateID: string): string {
-  return `${HUB_TEMPLATES_PATH}/${encodeURIComponent(String(templateID || "").trim())}`;
+  const encodedID = encodeURIComponent(String(templateID || "").trim());
+  return `${HUB_TEMPLATES_PATH}/${encodeURIComponent(encodedID)}`;
 }

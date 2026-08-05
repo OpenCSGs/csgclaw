@@ -51,6 +51,7 @@ If the user wants to create, add, set up, or provision an agent, robot, bot, or 
 This includes capability-specific workers such as GitLab, frontend, backend, QA, review, or Feishu-connected workers.
 Never run `participant create --type agent` for a new CSGClaw worker unless it binds a real Agent with `--bind create` or `--bind reuse`.
 Never run `participant create --bind create` without `--from-template` for a new worker.
+Use the exact ID returned by `template list` for both `template get` and `--from-template`; remote template IDs include the registry domain and must not be rewritten.
 For a request that only connects an already-named worker to Feishu, do not infer that the Agent is missing from `participant list`; read `skills/feishu/SKILL.md` first so its helper can resolve the global Agent registry by runtime ID or display name.
 
 ### Single-worker task assignment second

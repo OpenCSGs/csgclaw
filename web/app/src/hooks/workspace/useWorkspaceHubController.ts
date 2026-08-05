@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
-import { deleteHubTemplateRequest } from "@/api/hub";
+import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
 import { deleteSkillRequest, installRemoteSkillRequest, uploadSkillArchive } from "@/api/skills";
-import { isDeletableHubTemplate, isVisibleInHubTemplateList } from "@/models/hubWorkspace";
+import { isDeletableHubTemplate, isHubTemplateNameConflict, isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
@@ -22,6 +22,8 @@ export type WorkspaceHubController = {
   hub: Omit<WorkspaceHubSelection, "detailPaneProps"> & {
     deleteBusy: boolean;
     deleteHubTemplate: DeleteHubTemplate;
+    publishBusy: boolean;
+    publishHubTemplate: (template: HubTemplate | null | undefined) => Promise<boolean>;
     deleteSkill: DeleteSkill;
     skillDeleteBusy: boolean;
     remoteInstallBusy: string;
@@ -36,6 +38,9 @@ export type WorkspaceHubController = {
     detailPaneProps: WorkspaceHubSelection["detailPaneProps"] & {
       deleteBusy: boolean;
       onDeleteTemplate: DeleteHubTemplate;
+      onPublishTemplate: (template: HubTemplate | null | undefined) => Promise<boolean>;
+      publishBusy: boolean;
+      publishDisabled: boolean;
       onDeleteSkill: DeleteSkill;
       skillDeleteBusy: boolean;
     };
@@ -47,6 +52,7 @@ export function useWorkspaceHubController({
   hubLoaded,
   hubTemplates,
   hubTemplatesQuery,
+  openCSGAuthenticated = false,
   refreshWorkspaceHubTemplates,
   t,
 }: UseWorkspaceHubControllerArgs): WorkspaceHubController {
@@ -54,6 +60,8 @@ export function useWorkspaceHubController({
   const [resourcesManualError, setResourcesManualError] = useState("");
   const [resourcesDeleteBusy, setResourcesDeleteBusy] = useState(false);
   const [resourcesDeleteError, setResourcesDeleteError] = useState("");
+  const [resourcesPublishBusy, setResourcesPublishBusy] = useState(false);
+  const [resourcesPublishError, setResourcesPublishError] = useState("");
   const [skillDeleteBusy, setSkillDeleteBusy] = useState(false);
   const [skillDeleteError, setSkillDeleteError] = useState("");
   const [resourcesUploadBusy, setResourcesUploadBusy] = useState(false);
@@ -85,7 +93,7 @@ export function useWorkspaceHubController({
     templates: visibleHubTemplates,
     templatesQuery: hubTemplatesQuery,
     loaded: hubLoaded,
-    manualError: resourcesManualError || resourcesDeleteError || skillDeleteError,
+    manualError: resourcesManualError || resourcesDeleteError || resourcesPublishError || skillDeleteError,
     refreshTemplates: refreshHubTemplates,
     t,
   });
@@ -144,6 +152,34 @@ export function useWorkspaceHubController({
       }
     },
     [queryClient, setSelectedHubSkillName, setSelectedHubSkillPath, t],
+  );
+
+  const publishHubTemplate = useCallback(
+    async (template: HubTemplate | null | undefined): Promise<boolean> => {
+      if (!template?.id || !isDeletableHubTemplate(template) || !openCSGAuthenticated) {
+        return false;
+      }
+      setResourcesPublishBusy(true);
+      setResourcesPublishError("");
+      try {
+        const published = await publishHubTemplateToCommunityRequest(template.id);
+        await refreshHubTemplates();
+        if (published.id) {
+          setSelectedHubTemplateId(published.id);
+        }
+        return true;
+      } catch (err) {
+        setResourcesPublishError(
+          isHubTemplateNameConflict(err)
+            ? t("resourcesPublishCommunityNameExists")
+            : errorMessage(err, t("resourcesPublishCommunityFailed")),
+        );
+        return false;
+      } finally {
+        setResourcesPublishBusy(false);
+      }
+    },
+    [openCSGAuthenticated, refreshHubTemplates, setSelectedHubTemplateId, t],
   );
 
   const uploadSkill = useCallback(
@@ -207,6 +243,8 @@ export function useWorkspaceHubController({
       ...hub,
       deleteBusy: resourcesDeleteBusy,
       deleteHubTemplate,
+      publishBusy: resourcesPublishBusy,
+      publishHubTemplate,
       deleteSkill,
       installRemoteSkill,
       remoteInstallBusy: resourcesRemoteInstallBusy,
@@ -219,6 +257,9 @@ export function useWorkspaceHubController({
         ...hub.detailPaneProps,
         deleteBusy: resourcesDeleteBusy,
         onDeleteTemplate: deleteHubTemplate,
+        onPublishTemplate: publishHubTemplate,
+        publishBusy: resourcesPublishBusy,
+        publishDisabled: !openCSGAuthenticated,
         onDeleteSkill: deleteSkill,
         skillDeleteBusy,
       },

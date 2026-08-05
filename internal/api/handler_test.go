@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/app/runtimewiring"
+	"csgclaw/internal/auth"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
@@ -3334,17 +3336,20 @@ func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 
 func TestFilterHubTemplatesForConfiguredProvider(t *testing.T) {
 	items := []hub.Template{
-		{ID: "codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex},
-		{ID: "codex-manager", Role: hub.TemplateRoleManager, RuntimeKind: agent.RuntimeKindCodex},
-		{ID: "openclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "openclaw"},
+		{ID: "codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindRemote}},
+		{ID: "codex-manager", Role: hub.TemplateRoleManager, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindBuiltin}},
+		{ID: "openclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "openclaw", Source: hub.RegistryRef{Kind: hub.RegistryKindRemote}},
+		{ID: "local-codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindLocal}},
+		{ID: "local-openclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "openclaw", Source: hub.RegistryRef{Kind: hub.RegistryKindLocal}},
+		{ID: "picoclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox, Source: hub.RegistryRef{Kind: hub.RegistryKindBuiltin}},
 	}
 	tests := []struct {
 		name     string
 		provider string
 		wantIDs  []string
 	}{
-		{name: "csghub only returns codex workers", provider: config.CSGHubProvider, wantIDs: []string{"codex-worker"}},
-		{name: "other providers are unchanged", provider: config.DockerProvider, wantIDs: []string{"codex-worker", "codex-manager", "openclaw-worker"}},
+		{name: "csghub lists only codex workers including local templates", provider: config.CSGHubProvider, wantIDs: []string{"codex-worker", "local-codex-worker"}},
+		{name: "other providers are unchanged", provider: config.DockerProvider, wantIDs: []string{"codex-worker", "codex-manager", "openclaw-worker", "local-codex-worker", "local-openclaw-worker", "picoclaw-worker"}},
 	}
 
 	for _, tt := range tests {
@@ -4879,7 +4884,9 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 
 	srv := &Handler{svc: svc}
 	srv.SetHubService(hubSvc)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(`{"agent_id":"u-alice","registry":"local"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
+		`{"agent_id":"u-alice","registry":"local","name":"ReviewBot_2","description":"Published review template"}`,
+	))
 	rec := httptest.NewRecorder()
 
 	srv.Routes().ServeHTTP(rec, req)
@@ -4891,8 +4898,11 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.ID != "local.alice" {
-		t.Fatalf("template id = %q, want %q", got.ID, "local.alice")
+	if got.ID != "local.ReviewBot_2" {
+		t.Fatalf("template id = %q, want %q", got.ID, "local.ReviewBot_2")
+	}
+	if got.Name != "ReviewBot_2" || got.Description != "Published review template" {
+		t.Fatalf("template metadata = %q/%q, want request values", got.Name, got.Description)
 	}
 	if got.Role != hub.TemplateRoleWorker {
 		t.Fatalf("template role = %q, want %q", got.Role, hub.TemplateRoleWorker)
@@ -4900,11 +4910,104 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if got.Source.Name != "local" || got.Source.Kind != "local" {
 		t.Fatalf("template source = %+v, want local/local", got.Source)
 	}
-	publishedWorkspace := filepath.Join(registryRoot, "templates", "alice", "instructions", "PLAYBOOK.md")
+	publishedWorkspace := filepath.Join(registryRoot, "templates", "ReviewBot_2", "instructions", "PLAYBOOK.md")
 	if data, err := os.ReadFile(publishedWorkspace); err != nil {
 		t.Fatalf("ReadFile(PLAYBOOK.md) error = %v", err)
 	} else if strings.TrimSpace(string(data)) != "published workspace" {
 		t.Fatalf("PLAYBOOK.md = %q, want %q", strings.TrimSpace(string(data)), "published workspace")
+	}
+}
+
+func TestHandleHubTemplatesRequiresOpenCSGLoginForOfficialPublish(t *testing.T) {
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{Authenticated: false}, nil
+	})
+	defer restore()
+
+	hubSvc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry:        "local",
+		DefaultPublishRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "local", Kind: hub.RegistryKindLocal, Path: t.TempDir(), Enabled: true},
+		},
+	}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+
+	srv := &Handler{svc: mustNewService(t)}
+	srv.SetHubService(hubSvc)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/hub/templates",
+		strings.NewReader(`{"agent_id":"u-alice","registry":"official"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+	}
+}
+
+func TestHandleHubTemplatesRejectsInvalidPublishName(t *testing.T) {
+	svc := mustNewService(t)
+	created, err := svc.Create(context.Background(), agent.CreateRequest{Spec: agent.CreateAgentSpec{
+		ID: "u-alice", Name: "alice", RuntimeKind: agent.RuntimeKindPicoClawSandbox, Image: "worker-image:1",
+	}})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	hubSvc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry:        "local",
+		DefaultPublishRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "local", Kind: hub.RegistryKindLocal, Path: t.TempDir(), Enabled: true},
+		},
+	}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+	srv := &Handler{svc: svc}
+	srv.SetHubService(hubSvc)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
+		fmt.Sprintf(`{"agent_id":%q,"registry":"local","name":"2-invalid"}`, created.ID),
+	))
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "must start with an English letter") {
+		t.Fatalf("body = %q, want template name validation error", rec.Body.String())
+	}
+}
+
+func TestValidateAgentTemplatePublishTarget(t *testing.T) {
+	tests := []struct {
+		name        string
+		runtimeKind string
+		registry    string
+		wantErr     bool
+	}{
+		{name: "Codex to community", runtimeKind: agent.RuntimeKindCodex, registry: "official"},
+		{name: "Codex to local", runtimeKind: agent.RuntimeKindCodex, registry: "local"},
+		{name: "OpenClaw to local", runtimeKind: agent.RuntimeKindOpenClawSandbox, registry: "local"},
+		{name: "OpenClaw to community", runtimeKind: agent.RuntimeKindOpenClawSandbox, registry: "official", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateAgentTemplatePublishTarget(hub.PublishSpec{RuntimeKind: tt.runtimeKind}, tt.registry)
+			if tt.wantErr && err == nil {
+				t.Fatal("validateAgentTemplatePublishTarget() error = nil, want rejection")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("validateAgentTemplatePublishTarget() error = %v", err)
+			}
+		})
 	}
 }
 

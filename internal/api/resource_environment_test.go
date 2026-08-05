@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -91,6 +92,100 @@ func TestCurrentOpenCSGEnvironmentPrefersLoginSiteOverStoredHubURL(t *testing.T)
 	env := (&Handler{}).currentOpenCSGEnvironment(httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil))
 	if got, want := env.CSGHubBaseURL, auth.StageCSGHubBaseURL; got != want {
 		t.Fatalf("CSGHubBaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestCurrentOpenCSGEnvironmentUsesManagedHubURLWithoutLogin(t *testing.T) {
+	t.Setenv("CSGHUB_BASE_URL", "https://opencsg-stg.com/")
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{}, nil
+	})
+	defer restore()
+
+	env := (&Handler{}).currentOpenCSGEnvironment(httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil))
+	if got, want := env.CSGHubBaseURL, "https://opencsg-stg.com"; got != want {
+		t.Fatalf("CSGHubBaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestCurrentOpenCSGEnvironmentPrefersLoginOverManagedHubURL(t *testing.T) {
+	t.Setenv("CSGHUB_BASE_URL", "https://managed.example.test/")
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{
+			Authenticated:  true,
+			OpenCSGBaseURL: auth.StageOpenCSGBaseURL,
+			BaseURL:        auth.StageCSGHubBaseURL,
+		}, nil
+	})
+	defer restore()
+
+	env := (&Handler{}).currentOpenCSGEnvironment(httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil))
+	if got, want := env.CSGHubBaseURL, auth.StageCSGHubBaseURL; got != want {
+		t.Fatalf("CSGHubBaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestHubServiceUsesManagedCredentialsWithoutLogin(t *testing.T) {
+	hubServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.Header.Get("Authorization"), "Bearer managed-token"; got != want {
+			t.Errorf("Authorization = %q, want %q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[],"total":0}`))
+	}))
+	defer hubServer.Close()
+	t.Setenv("CSGHUB_BASE_URL", hubServer.URL)
+	t.Setenv("CSGHUB_USER_TOKEN", "managed-token")
+	t.Setenv("CSGHUB_USER_NAME", "alice")
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{}, nil
+	})
+	defer restore()
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(configPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hubSvc, err := (&Handler{configPath: configPath}).hubServiceForRequest(
+		httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil),
+	)
+	if err != nil {
+		t.Fatalf("hubServiceForRequest() error = %v", err)
+	}
+	if _, err := hubSvc.List(context.Background()); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+}
+
+func TestHubServiceUsesManagedTokenWithoutBaseURLEnvironment(t *testing.T) {
+	hubServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.Header.Get("Authorization"), "Bearer managed-token"; got != want {
+			t.Errorf("Authorization = %q, want %q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[],"total":0}`))
+	}))
+	defer hubServer.Close()
+	t.Setenv("CSGHUB_BASE_URL", "")
+	t.Setenv("CSGHUB_USER_TOKEN", "managed-token")
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{}, nil
+	})
+	defer restore()
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	configBody := []byte("[hub]\n\n[[hub.registries]]\nname = \"official\"\nkind = \"remote\"\nurl = \"" + hubServer.URL + "\"\nenabled = true\n")
+	if err := os.WriteFile(configPath, configBody, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hubSvc, err := (&Handler{configPath: configPath}).hubServiceForRequest(
+		httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil),
+	)
+	if err != nil {
+		t.Fatalf("hubServiceForRequest() error = %v", err)
+	}
+	if _, err := hubSvc.List(context.Background()); err != nil {
+		t.Fatalf("List() error = %v", err)
 	}
 }
 

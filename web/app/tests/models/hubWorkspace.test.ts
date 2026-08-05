@@ -3,6 +3,7 @@ import {
   formatHubDateTime,
   formatHubTemplateCount,
   isDeletableHubTemplate,
+  isHubTemplateNameConflict,
   isVisibleInHubTemplateList,
 } from "@/models/hubWorkspace";
 
@@ -18,6 +19,18 @@ describe("hub workspace helpers", () => {
     expect(isDeletableHubTemplate({ id: "local.gitlab-assistant", source: { kind: "local" } })).toBe(true);
     expect(isDeletableHubTemplate({ id: "builtin.picoclaw-worker", source: { kind: "builtin" } })).toBe(false);
     expect(isDeletableHubTemplate({ id: "official.review-bot", source: { kind: "remote" } })).toBe(false);
+  });
+
+  it("recognizes duplicate community template errors", () => {
+    expect(
+      isHubTemplateNameConflict({
+        status: 502,
+        message:
+          'remote hub request failed with status 500: {"code":"SPACE_ERR_1","msg":"SPACE_ERR_1: The space name already exists."}',
+      }),
+    ).toBe(true);
+    expect(isHubTemplateNameConflict(new Error("The space name already exists."))).toBe(true);
+    expect(isHubTemplateNameConflict(new Error("network unavailable"))).toBe(false);
   });
 
   it("shows worker templates and official remote templates in hub lists", () => {

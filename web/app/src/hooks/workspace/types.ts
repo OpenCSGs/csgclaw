@@ -93,6 +93,7 @@ export type UseWorkspaceHubControllerArgs = {
   hubLoaded: boolean;
   hubTemplates: HubTemplate[];
   hubTemplatesQuery: UseQueryResult<HubTemplate[]>;
+  openCSGAuthenticated?: boolean;
   refreshWorkspaceHubTemplates: () => Promise<HubTemplate[]>;
   t: TranslateFn;
 };
@@ -259,6 +260,7 @@ export type UseAgentControllerArgs = {
   managerProfile: AgentProfileLike | null;
   modelProviders?: ModelProviderCatalog | null;
   modelProvidersLoaded?: boolean;
+  openCSGAuthenticated?: boolean;
   profileDetailAgentID?: string;
   refreshMCPServers?: () => Promise<unknown>;
   refreshHubTemplates: () => Promise<void>;

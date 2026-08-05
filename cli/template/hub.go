@@ -95,7 +95,9 @@ func (c cmd) runGet(ctx context.Context, run *command.Context, args []string, gl
 func (c cmd) runPublish(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
 	fs := run.NewFlagSet("template publish", run.Program+" template publish --agent <id> [flags]", "Publish an agent as a template.")
 	agentID := fs.String("agent", "", "existing agent id to publish")
-	registry := fs.String("registry", "", "template registry to publish into")
+	registry := fs.String("registry", "official", "template registry to publish into")
+	name := fs.String("name", "", "template name (starts with a letter; letters, numbers, and underscores only)")
+	description := fs.String("description", "", "template description")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -106,10 +108,17 @@ func (c cmd) runPublish(ctx context.Context, run *command.Context, args []string
 		return fmt.Errorf("template publish requires --agent")
 	}
 
-	item, err := publishTemplate(ctx, run.APIClient(globals), apitypes.CreateHubTemplateRequest{
+	request := apitypes.CreateHubTemplateRequest{
 		AgentID:  *agentID,
 		Registry: *registry,
+		Name:     *name,
+	}
+	fs.Visit(func(flag *flag.Flag) {
+		if flag.Name == "description" {
+			request.Description = description
+		}
 	})
+	item, err := publishTemplate(ctx, run.APIClient(globals), request)
 	if err != nil {
 		return err
 	}
@@ -126,7 +135,8 @@ func listTemplates(ctx context.Context, client *apiclient.Client) ([]apitypes.Hu
 
 func getTemplate(ctx context.Context, client *apiclient.Client, id string) (apitypes.HubTemplate, error) {
 	var item apitypes.HubTemplate
-	if err := client.GetJSON(ctx, "/api/v1/hub/templates/"+url.PathEscape(strings.TrimSpace(id)), &item); err != nil {
+	encodedID := url.PathEscape(url.PathEscape(strings.TrimSpace(id)))
+	if err := client.GetJSON(ctx, "/api/v1/hub/templates/"+encodedID, &item); err != nil {
 		return apitypes.HubTemplate{}, err
 	}
 	return item, nil

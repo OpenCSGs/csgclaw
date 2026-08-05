@@ -2389,3 +2389,43 @@
     gap: 12px;
   }
 }
+.agent-publish-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.agent-publish-dialog-body {
+  display: grid;
+  gap: 16px;
+}
+
+.agent-publish-field {
+  display: grid;
+  gap: 7px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.agent-publish-field input,
+.agent-publish-field textarea {
+  width: 100%;
+  font-weight: 400;
+}
+
+.agent-publish-field input:focus,
+.agent-publish-field textarea:focus {
+  border-color: var(--input-border-focus);
+  box-shadow: var(--input-shadow-focus);
+}
+
+.agent-publish-field small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.agent-publish-field-error {
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 500;
+}

@@ -3,8 +3,12 @@ package apitypes
 import "time"
 
 type CreateHubTemplateRequest struct {
-	AgentID  string `json:"agent_id"`
-	Registry string `json:"registry,omitempty"`
+	AgentID     string  `json:"agent_id,omitempty"`
+	TemplateID  string  `json:"template_id,omitempty"`
+	Registry    string  `json:"registry,omitempty"`
+	Name        string  `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Deploy      bool    `json:"deploy,omitempty"`
 }
 
 type ImageEnvContract struct {
@@ -21,6 +25,7 @@ type ImageEnvContract struct {
 
 type HubTemplate struct {
 	ID          string               `json:"id"`
+	Namespace   string               `json:"namespace,omitempty"`
 	Name        string               `json:"name"`
 	Description string               `json:"description,omitempty"`
 	Role        string               `json:"role,omitempty"`

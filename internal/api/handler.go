@@ -19,6 +19,7 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/auth"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/csgclaw/notification"
 	"csgclaw/internal/channel/feishu"
@@ -1567,25 +1568,76 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
-		spec, err := h.svc.HubPublishSpec(req.AgentID)
+		var authStatus auth.Status
+		if strings.TrimSpace(req.Registry) == config.DefaultOfficialHubRegistryName {
+			authStatus, err = appAuthStatus(r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if !authStatus.Authenticated {
+				http.Error(w, "OpenCSG sign-in is required to publish templates", http.StatusUnauthorized)
+				return
+			}
+		}
+		if req.Deploy && strings.TrimSpace(req.Registry) != config.DefaultOfficialHubRegistryName {
+			http.Error(w, "only community templates can be deployed", http.StatusBadRequest)
+			return
+		}
+		var item hub.Template
+		publishingTemplate := strings.TrimSpace(req.TemplateID) != ""
+		if publishingTemplate {
+			item, err = hubSvc.PublishTemplate(r.Context(), req.TemplateID, req.Registry)
+		} else {
+			var spec hub.PublishSpec
+			spec, err = h.svc.HubPublishSpec(req.AgentID)
+			if err == nil {
+				spec.Registry = req.Registry
+				if strings.TrimSpace(req.Name) != "" {
+					spec.ID = strings.TrimSpace(req.Name)
+					spec.Name = strings.TrimSpace(req.Name)
+				}
+				if req.Description != nil {
+					spec.Description = strings.TrimSpace(*req.Description)
+				}
+				err = hub.ValidatePublishTemplateName(spec.Name)
+				if err == nil {
+					err = validateAgentTemplatePublishTarget(spec, req.Registry)
+				}
+			}
+			if err == nil {
+				item, err = hubSvc.Publish(r.Context(), spec)
+			}
+		}
 		if err != nil {
-			status := http.StatusBadRequest
+			status := http.StatusBadGateway
+			if !publishingTemplate {
+				status = http.StatusBadRequest
+			}
 			if strings.Contains(strings.ToLower(err.Error()), "not found") {
 				status = http.StatusNotFound
 			}
 			http.Error(w, err.Error(), status)
 			return
 		}
-		spec.Registry = req.Registry
-		item, err := hubSvc.Publish(r.Context(), spec)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
+		if req.Deploy {
+			if err := createCommunityAgentInstance(r.Context(), item, authStatus); err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
 		}
 		writeJSON(w, http.StatusCreated, presentHubTemplate(item))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func validateAgentTemplatePublishTarget(spec hub.PublishSpec, registry string) error {
+	if strings.TrimSpace(registry) == config.DefaultOfficialHubRegistryName &&
+		agentruntime.NormalizeRuntimeName(spec.RuntimeKind) != agentruntime.NameCodex {
+		return fmt.Errorf("only Codex agents can be published to the community")
+	}
+	return nil
 }
 
 func (h *Handler) filterHubTemplatesForConfiguredProvider(items []hub.Template) ([]hub.Template, error) {
@@ -1602,8 +1654,9 @@ func (h *Handler) filterHubTemplatesForConfiguredProvider(items []hub.Template) 
 
 	filtered := make([]hub.Template, 0, len(items))
 	for _, item := range items {
+		runtimeName := agentruntime.NormalizeRuntimeName(item.RuntimeKind)
 		if strings.EqualFold(strings.TrimSpace(item.Role), hub.TemplateRoleWorker) &&
-			bootstrapRuntimeKind(item.RuntimeKind) == agent.RuntimeKindCodex {
+			runtimeName == agentruntime.NameCodex {
 			filtered = append(filtered, item)
 		}
 	}
@@ -1682,6 +1735,7 @@ func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
 func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 	return apitypes.HubTemplate{
 		ID:          item.ID,
+		Namespace:   item.Namespace,
 		Name:        item.Name,
 		Description: item.Description,
 		Role:        item.Role,

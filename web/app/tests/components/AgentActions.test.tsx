@@ -21,6 +21,18 @@ const labels: Record<string, string> = {
   agentStop: "Stop",
   agentUpgrade: "Upgrade",
   agentMoreActions: "More",
+  agentSaveLocalTemplate: "Save as local template",
+  agentPublishCommunity: "Publish to community",
+  agentPublishCommunityTemplateOnly: "Publish template only",
+  agentPublishCommunityAndDeploy: "Publish and deploy",
+  agentPublishLoginRequired: "Sign in to OpenCSG before publishing a template.",
+  agentPublishTemplateTitle: "Publish agent template",
+  agentPublishTemplateLocalSubtitle: "Save locally",
+  agentPublishTemplateCommunitySubtitle: "Publish remotely",
+  agentPublishTemplateName: "Template name",
+  agentPublishTemplateNameHint: "Use letters, numbers, and underscores.",
+  agentPublishTemplateNameInvalid: "Invalid template name",
+  agentPublishTemplateDescription: "Template description",
   agentProfileSectionNavLabel: "Profile sections",
   agentProfileTab: "Profile",
   agentProfileSkillsTab: "Skills",
@@ -89,7 +101,7 @@ const worker = {
   name: "Worker",
   description: "Agent description",
   role: "worker",
-  runtime_kind: "picoclaw_sandbox",
+  runtime_kind: "openclaw_sandbox",
   status: "running",
   provider: "api",
   model_id: "gpt-test",
@@ -98,6 +110,141 @@ const worker = {
 describe("agent action visibility", () => {
   beforeEach(() => {
     window.localStorage.removeItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
+  });
+
+  it("allows OpenClaw agents to save local templates but not publish to the community", async () => {
+    const user = userEvent.setup();
+    const onPublish = vi.fn().mockResolvedValue(true);
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onPublish={onPublish}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    const saveLocal = screen.getByRole("menuitem", { name: "Save as local template" });
+    expect(saveLocal).not.toHaveAttribute("aria-disabled", "true");
+    await user.click(saveLocal);
+    expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Template name" })).toHaveValue("Worker");
+    expect(screen.getByRole("textbox", { name: "Template description" })).toHaveValue("Agent description");
+    await user.click(screen.getByRole("button", { name: "Save as local template" }));
+    expect(onPublish).toHaveBeenCalledWith("local", "Worker", "Agent description");
+    expect(screen.queryByRole("dialog", { name: "Publish agent template" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.queryByRole("menuitem", { name: "Publish to community" })).not.toBeInTheDocument();
+  });
+
+  it("allows Codex agents to publish locally and to the community", async () => {
+    const user = userEvent.setup();
+    const onPublish = vi.fn().mockResolvedValue(true);
+    render(
+      <AgentDetailPane
+        item={{ ...worker, runtime_kind: "codex" }}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onPublish={onPublish}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.getByRole("menuitem", { name: "Save as local template" })).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Publish template only" }));
+    await user.click(screen.getByRole("button", { name: "Publish template only" }));
+
+    expect(onPublish).toHaveBeenCalledWith("official", "Worker", "Agent description");
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Publish and deploy" }));
+    await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
+    expect(onPublish).toHaveBeenCalledWith("official_deploy", "Worker", "Agent description");
+  });
+
+  it("requires sign-in for Codex community publishing without blocking local templates", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentDetailPane
+        item={{ ...worker, runtime_kind: "codex" }}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        publishDisabled
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onPublish={vi.fn()}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.getByRole("menuitem", { name: "Save as local template" })).not.toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    for (const name of ["Publish template only", "Publish and deploy"]) {
+      const publishCommunity = screen.getByRole("menuitem", { name });
+      expect(publishCommunity).toHaveAttribute("aria-disabled", "true");
+      expect(publishCommunity).toHaveAttribute("title", "Sign in to OpenCSG before publishing a template.");
+    }
+  });
+
+  it("rejects an invalid template name before publishing", async () => {
+    const user = userEvent.setup();
+    const onPublish = vi.fn().mockResolvedValue(true);
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onPublish={onPublish}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Save as local template" }));
+    const nameInput = screen.getByRole("textbox", { name: "Template name" });
+    await user.clear(nameInput);
+    await user.type(nameInput, "2-invalid");
+    await user.click(screen.getByRole("button", { name: "Save as local template" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Invalid template name");
+    expect(onPublish).not.toHaveBeenCalled();
   });
 
   it("shows a recreate warning when backend marks an agent restart required", () => {

@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { deleteHubTemplateRequest, fetchHubTemplate, fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
+import {
+  deleteHubTemplateRequest,
+  fetchHubTemplate,
+  fetchHubWorkspace,
+  fetchHubWorkspaceFile,
+  publishAgentTemplateRequest,
+  publishHubTemplateToCommunityRequest,
+} from "@/api/hub";
 
 function mockFetch(): Mock<typeof fetch> {
   const fetchMock = vi.fn<typeof fetch>(async (_input, _init) => new Response("{}", { status: 200 }));
@@ -19,6 +26,70 @@ describe("hub API", () => {
     await fetchHubTemplate("builtin.manager-codex");
 
     expect(fetchMock).toHaveBeenCalledWith("api/v1/hub/templates/builtin.manager-codex", expect.any(Object));
+  });
+
+  it("keeps namespace/name template IDs inside one route segment", async () => {
+    const fetchMock = mockFetch();
+
+    await fetchHubTemplate("official.alice/review-bot");
+
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/hub/templates/official.alice%252Freview-bot", expect.any(Object));
+  });
+
+  it.each([
+    ["local", "local"],
+    ["official", "official"],
+  ] as const)("publishes agents to the selected %s registry", async (_label, registry) => {
+    const fetchMock = mockFetch();
+
+    await publishAgentTemplateRequest("agent-alice", registry, "ReviewBot_2", "Reviews changes");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates",
+      expect.objectContaining({
+        body: JSON.stringify({
+          agent_id: "agent-alice",
+          registry,
+          name: "ReviewBot_2",
+          description: "Reviews changes",
+        }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("publishes and deploys an agent through the official registry", async () => {
+    const fetchMock = mockFetch();
+
+    await publishAgentTemplateRequest("agent-alice", "official_deploy", "ReviewBot_2", "Reviews changes");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates",
+      expect.objectContaining({
+        body: JSON.stringify({
+          agent_id: "agent-alice",
+          registry: "official",
+          name: "ReviewBot_2",
+          description: "Reviews changes",
+          deploy: true,
+        }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("publishes a local template to the official registry", async () => {
+    const fetchMock = mockFetch();
+
+    await publishHubTemplateToCommunityRequest("local.review-bot");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates",
+      expect.objectContaining({
+        body: JSON.stringify({ template_id: "local.review-bot", registry: "official" }),
+        method: "POST",
+      }),
+    );
   });
 
   it("uses single-id paths for template delete requests", async () => {

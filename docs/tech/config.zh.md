@@ -269,7 +269,9 @@ enabled = true
 - `url` 和 `token`：用于 `remote` registry。
 - `enabled`：控制该 registry 是否参与 hub 相关操作；如果省略，默认值为 `true`。
 
-内置 `builtin` registry 是只读的。发布模板时应选择可写的 `local` 或 `remote` registry。
+内置 `builtin` registry 是只读的。发布模板时应选择可写的 `local` 或 `remote` registry。Web UI 会发布到当前 OpenCSG 登录站点对应的 `official` registry；未登录 OpenCSG 时不能执行该发布流程。远端模板列表会合并旧的 `Agentic` 组织目录和 CSGClaw Agent 模板目录。远端模板 ID 使用 `<namespace>/<name>` 格式，并通过 `official` remote registry 解析。
+
+已登录时，始终优先使用当前登录站点及其 access token 选择并访问 official registry，即使环境变量已经存在。未登录时，`CSGHUB_BASE_URL` 用于选择 official registry，`CSGHUB_USER_TOKEN` 用于鉴权并读取私有模板；未设置 base URL 时回退到生产 registry。`TEMPLATE_ID` 应使用 `<namespace>/<name>` 格式的模板仓库路径。
 
 旧模板 Hub 地址 `https://csgclaw.opencsg.com` 不再自动重写；请显式配置需要的远端，或使用由登录环境自动推导的 official registry。
 

@@ -930,6 +930,28 @@ func TestExecuteHubGetUsesHTTPClient(t *testing.T) {
 	}
 }
 
+func TestExecuteHubGetEscapesNamespaceTemplateIDAsSinglePathSegment(t *testing.T) {
+	var stdout bytes.Buffer
+	app := &App{
+		stdout: &stdout,
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if got, want := req.URL.String(), "http://example.test/api/v1/hub/templates/official.alice%252Freview-bot"; got != want {
+				t.Fatalf("url = %q, want %q", got, want)
+			}
+			return jsonResponse(http.StatusOK, `{"id":"official.alice/review-bot","namespace":"alice","name":"review-bot","source":{"name":"official","kind":"remote"}}`), nil
+		}),
+	}
+
+	if err := app.Execute(context.Background(), []string{
+		"--endpoint", "http://example.test",
+		"--output", "json",
+		"template", "get", "official.alice/review-bot",
+	}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+}
+
 func TestExecuteHubPublishUsesHTTPClient(t *testing.T) {
 	var stdout bytes.Buffer
 	app := &App{
@@ -952,15 +974,46 @@ func TestExecuteHubPublishUsesHTTPClient(t *testing.T) {
 			if payload["registry"] != "local" {
 				t.Fatalf("payload[registry] = %#v, want %q", payload["registry"], "local")
 			}
+			if payload["name"] != "ReviewBot_2" || payload["description"] != "Reviews changes" {
+				t.Fatalf("payload metadata = %#v/%#v, want CLI values", payload["name"], payload["description"])
+			}
 			return jsonResponse(http.StatusCreated, `{"id":"local.alice","name":"alice","runtime_kind":"codex","source":{"name":"local","kind":"local"}}`), nil
 		}),
 	}
 
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "--output", "json", "template", "publish", "--agent", "u-alice", "--registry", "local"}); err != nil {
+	if err := app.Execute(context.Background(), []string{
+		"--endpoint", "http://example.test", "--output", "json", "template", "publish",
+		"--agent", "u-alice", "--registry", "local", "--name", "ReviewBot_2", "--description", "Reviews changes",
+	}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), `"id": "local.alice"`) {
 		t.Fatalf("stdout = %q, want template id", stdout.String())
+	}
+}
+
+func TestExecuteHubPublishDefaultsToOfficialRegistry(t *testing.T) {
+	app := &App{
+		stdout: &bytes.Buffer{},
+		stderr: &bytes.Buffer{},
+		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			var payload map[string]any
+			if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if got, want := payload["registry"], "official"; got != want {
+				t.Fatalf("payload[registry] = %#v, want %q", got, want)
+			}
+			return jsonResponse(http.StatusCreated, `{"id":"official.alice/review-bot","name":"review-bot","source":{"name":"official","kind":"remote"}}`), nil
+		}),
+	}
+
+	if err := app.Execute(context.Background(), []string{
+		"--endpoint", "http://example.test",
+		"--output", "json",
+		"template", "publish", "--agent", "u-alice",
+	}); err != nil {
+		t.Fatalf("Execute() error = %v", err)
 	}
 }
 
@@ -2093,7 +2146,7 @@ func TestAgentCreateSubcommandHelpShowsReplaceAndForceFlags(t *testing.T) {
 		"--image string          agent image",
 		"--profile string        agent llm profile",
 		"--runtime string        agent runtime kind (for example: picoclaw_sandbox, openclaw_sandbox, codex)",
-		"--from-template string  hub template to use as creation defaults and workspace overlay",
+		"--from-template string  template ID from template list (remote IDs use namespace/name)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("help = %q, want substring %q", got, want)

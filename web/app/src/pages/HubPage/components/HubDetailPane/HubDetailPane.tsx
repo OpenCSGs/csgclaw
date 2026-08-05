@@ -11,7 +11,7 @@ import { tags } from "@lezer/highlight";
 import { CloudDownload, FileCode2, Server, Trash2 } from "lucide-react";
 import { formatRuntimeKindLabel } from "@/models/agents";
 import type { JSONRecord } from "@/models/agents";
-import { formatHubDateTime, isDeletableHubTemplate } from "@/models/hubWorkspace";
+import { formatHubDateTime, hubTemplateFullName, isDeletableHubTemplate } from "@/models/hubWorkspace";
 import {
   formatMCPServerDocument,
   mcpServerDescription,
@@ -204,6 +204,7 @@ type HubDetailPaneHub = {
     onCreateMCP?: (payload: MCPServerPayload) => Promise<boolean> | boolean;
     onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
     onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
+    onPublishTemplate?: (item: HubTemplate | null | undefined) => Promise<boolean> | boolean;
     onSelectMCP?: (name: string | null | undefined) => void;
     onUpdateMCP?: (currentName: string, payload: MCPServerPayload) => Promise<boolean> | boolean;
     onRetry: () => void | Promise<void>;
@@ -245,6 +246,8 @@ type HubDetailPaneHub = {
     skillFileError: string;
     skillFileLoading: boolean;
     skillDeleteBusy?: boolean;
+    publishBusy?: boolean;
+    publishDisabled?: boolean;
     skills: readonly SkillSummary[];
     skillTree: SkillTree | null;
     skillTreeError: string;
@@ -621,6 +624,7 @@ export function HubDetailPane({
     onCreateMCP,
     onDeleteMCP,
     onDeleteTemplate,
+    onPublishTemplate,
     onMCPCreateDialogOpenChange,
     onInstallRemoteMCP,
     onLoadMoreRemoteMCPServers,
@@ -630,6 +634,8 @@ export function HubDetailPane({
     onUpdateMCP,
     onUpdateTemplateInstructions,
     deleteBusy = false,
+    publishBusy = false,
+    publishDisabled = false,
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
@@ -654,6 +660,7 @@ export function HubDetailPane({
     return "template";
   }, [mcpServers.length, selectedResourceType, skills.length, templates.length]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
+  const [publishSuccessDialogOpen, setPublishSuccessDialogOpen] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
@@ -788,6 +795,13 @@ export function HubDetailPane({
     }
   }
 
+  async function handlePublishTemplate() {
+    const published = await onPublishTemplate?.(selectedTemplate);
+    if (published) {
+      setPublishSuccessDialogOpen(true);
+    }
+  }
+
   function handleMCPDraftDocumentChange(value: string) {
     setMCPDraftDocument(value);
     const result = parseMCPServerDocument(value, t);
@@ -856,7 +870,7 @@ export function HubDetailPane({
                         <span className="hub-inspector-title-icon" aria-hidden="true">
                           <ModelsIcon />
                         </span>
-                        <h2>{selectedTemplate.name || selectedTemplate.id}</h2>
+                        <h2>{hubTemplateFullName(selectedTemplate)}</h2>
                         <div className="hub-inspector-badge-row">
                           <span className="mini-badge template-runtime-badge">
                             {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind
@@ -879,6 +893,18 @@ export function HubDetailPane({
                     <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
                       <span>{t("createAgent")}</span>
                     </Button>
+                    {canDeleteTemplate ? (
+                      <Button
+                        variant="secondaryGray"
+                        size="md"
+                        loading={publishBusy}
+                        disabled={publishBusy || publishDisabled}
+                        title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
+                        onClick={handlePublishTemplate}
+                      >
+                        {t("agentPublishCommunity")}
+                      </Button>
+                    ) : null}
                     {canDeleteTemplate ? (
                       <Button
                         variant="danger"
@@ -1348,6 +1374,22 @@ export function HubDetailPane({
             </Button>
             <Button variant="danger" size="sm" loading={skillDeleteBusy} onClick={handleDeleteSkillConfirm}>
               {t("resourcesDeleteSkillConfirmAction")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot open={publishSuccessDialogOpen} onOpenChange={setPublishSuccessDialogOpen}>
+        <DialogContent className="hub-skill-delete-dialog">
+          <DialogHeader className="hub-skill-delete-dialog-header">
+            <div className="hub-skill-delete-dialog-copy">
+              <DialogTitle>{t("resourcesPublishCommunitySuccessTitle")}</DialogTitle>
+              <DialogDescription>{t("resourcesPublishCommunitySuccessMessage")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogFooter className="hub-skill-delete-dialog-actions">
+            <Button variant="primary" size="sm" onClick={() => setPublishSuccessDialogOpen(false)}>
+              {t("resourcesPublishCommunitySuccessDismiss")}
             </Button>
           </DialogFooter>
         </DialogContent>

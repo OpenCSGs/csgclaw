@@ -346,6 +346,8 @@ Participant 是 channel-scoped identity，用于房间、消息、mention、通�
 - `mcpServers`
 - `agent_profile`
 
+`from_template` 应使用模板列表 API 返回的原始 ID。内置和本地模板使用 `builtin.codex-worker`、`local.my-worker` 等格式；远端模板使用 `<namespace>/<name>` 格式。
+
 请求体示例：
 
 ```json

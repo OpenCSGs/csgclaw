@@ -17,6 +17,7 @@ const (
 
 type Template struct {
 	ID           string
+	Namespace    string
 	Name         string
 	Description  string
 	Role         string

@@ -349,6 +349,8 @@ Request fields:
 - `mcpServers`
 - `agent_profile`
 
+`from_template` should use the exact ID returned by the template list API. Built-in and local IDs use forms such as `builtin.codex-worker` and `local.my-worker`; remote IDs use `<namespace>/<name>`.
+
 Example request body:
 
 ```json

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -30,6 +31,7 @@ var (
 	ErrTemplateNotFound       = errors.New("hub template not found")
 	ErrTemplateIDRequired     = errors.New("hub template id is required")
 	ErrTemplateNameRequired   = errors.New("hub template name is required")
+	ErrTemplateNameInvalid    = errors.New("hub template name must start with an English letter and contain only English letters, numbers, and underscores")
 	ErrRuntimeKindRequired    = errors.New("hub runtime kind is required")
 	ErrWorkspaceDirRequired   = errors.New("hub workspace directory is required")
 	ErrWorkspacePathUnsafe    = errors.New("hub workspace path is unsafe")
@@ -60,7 +62,8 @@ func (s *LocalStore) List(context.Context) ([]Template, error) {
 		}
 		id := strings.TrimSpace(entry.Name())
 		if err := validateLocalTemplateID(id); err != nil {
-			return nil, fmt.Errorf("invalid local hub template %q: %w", id, err)
+			slog.Warn("skip invalid local hub template path", "id", id, "error", err)
+			continue
 		}
 		ids = append(ids, id)
 	}
@@ -70,7 +73,8 @@ func (s *LocalStore) List(context.Context) ([]Template, error) {
 	for _, id := range ids {
 		item, err := s.Get(context.Background(), id)
 		if err != nil {
-			return nil, err
+			slog.Warn("skip invalid local hub template", "id", id, "error", err)
+			continue
 		}
 		items = append(items, item)
 	}
@@ -262,6 +266,7 @@ func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 	if err != nil {
 		return fmt.Errorf("encode local hub manifest: %w", err)
 	}
+	data = append([]byte("schema_version = \""+currentAgentFileSchemaVersion+"\"\n"), data...)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write local hub manifest: %w", err)
 	}

@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 
 	"csgclaw/internal/auth"
@@ -12,10 +14,16 @@ import (
 func (h *Handler) currentOpenCSGEnvironment(r *http.Request) auth.Environment {
 	env := auth.DefaultEnvironment()
 	if r == nil {
+		if baseURL := trustedCSGHubEnvironmentBaseURL(); baseURL != "" {
+			env.CSGHubBaseURL = baseURL
+		}
 		return env
 	}
 	status, err := appAuthStatus(r)
 	if err != nil || !status.Authenticated {
+		if baseURL := trustedCSGHubEnvironmentBaseURL(); baseURL != "" {
+			env.CSGHubBaseURL = baseURL
+		}
 		return env
 	}
 	if openCSGBaseURL := strings.TrimSpace(status.OpenCSGBaseURL); openCSGBaseURL != "" {
@@ -57,7 +65,61 @@ func (h *Handler) hubServiceForRequest(r *http.Request) (*hub.Service, error) {
 		return nil, err
 	}
 	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r), cfg.HasExplicitOfficialHubRegistry())
-	return hub.NewService(hubCfg, hub.DefaultStoreFactory)
+	username := ""
+	managedBaseURL := trustedCSGHubEnvironmentBaseURL()
+	managedToken := strings.TrimSpace(os.Getenv("CSGHUB_USER_TOKEN"))
+	status, statusErr := appAuthStatus(r)
+	if statusErr != nil {
+		return nil, statusErr
+	}
+	if status.Authenticated {
+		token, tokenErr := currentOpenCSGAccessToken()
+		if tokenErr != nil {
+			return nil, tokenErr
+		}
+		for i, registry := range hubCfg.Registries {
+			if strings.TrimSpace(registry.Name) == config.DefaultOfficialHubRegistryName &&
+				strings.TrimSpace(registry.Kind) == config.HubRegistryKindRemote &&
+				strings.EqualFold(
+					strings.TrimRight(strings.TrimSpace(registry.URL), "/"),
+					strings.TrimRight(strings.TrimSpace(status.BaseURL), "/"),
+				) {
+				registry.Token = strings.TrimSpace(token)
+				username = strings.TrimSpace(status.UserID)
+				hubCfg.Registries[i] = registry
+			}
+		}
+	} else {
+		for i, registry := range hubCfg.Registries {
+			if strings.TrimSpace(registry.Name) == config.DefaultOfficialHubRegistryName &&
+				strings.TrimSpace(registry.Kind) == config.HubRegistryKindRemote &&
+				(managedBaseURL == "" || strings.EqualFold(strings.TrimRight(strings.TrimSpace(registry.URL), "/"), managedBaseURL)) {
+				registry.Token = managedToken
+				username = strings.TrimSpace(os.Getenv("CSGHUB_USER_NAME"))
+				hubCfg.Registries[i] = registry
+			}
+		}
+	}
+	return hub.NewService(hubCfg, func(registry config.HubRegistryConfig) (hub.Store, error) {
+		if strings.TrimSpace(registry.Name) == config.DefaultOfficialHubRegistryName &&
+			strings.TrimSpace(registry.Kind) == config.HubRegistryKindRemote &&
+			username != "" {
+			return hub.NewAuthenticatedRemoteStore(registry.URL, registry.Token, username), nil
+		}
+		return hub.DefaultStoreFactory(registry)
+	})
+}
+
+func trustedCSGHubEnvironmentBaseURL() string {
+	raw := strings.TrimRight(strings.TrimSpace(os.Getenv("CSGHUB_BASE_URL")), "/")
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return ""
+	}
+	return raw
 }
 
 func (h *Handler) officialHubBaseURLForRequest(r *http.Request, cfg config.Config) string {

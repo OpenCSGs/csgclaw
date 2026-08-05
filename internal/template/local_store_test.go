@@ -104,6 +104,38 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLocalStoreListSkipsInvalidTemplates(t *testing.T) {
+	registryRoot := t.TempDir()
+	store := NewLocalStore(registryRoot)
+	if _, err := store.Publish(context.Background(), PublishSpec{
+		Name:        "valid_codex_worker",
+		Role:        TemplateRoleWorker,
+		RuntimeKind: runtime.KindCodex,
+	}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	invalidRoot := filepath.Join(registryRoot, localTemplatesDirName, "legacy-openclaw-worker")
+	if err := os.MkdirAll(invalidRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	manifest := "name = \"legacy-openclaw-worker\"\nrole = \"worker\"\nruntime_kind = \"openclaw\"\n"
+	if err := os.WriteFile(filepath.Join(invalidRoot, localManifestFileName), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile(agent.toml) error = %v", err)
+	}
+
+	listed, err := store.List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got, want := len(listed), 1; got != want {
+		t.Fatalf("len(List()) = %d, want %d", got, want)
+	}
+	if got, want := listed[0].ID, "valid_codex_worker"; got != want {
+		t.Fatalf("List()[0].ID = %q, want %q", got, want)
+	}
+}
+
 func TestLocalStorePublishUsesRuntimeAwareInstructionAndSkillPaths(t *testing.T) {
 	registryRoot := t.TempDir()
 	runtimeRoot := t.TempDir()

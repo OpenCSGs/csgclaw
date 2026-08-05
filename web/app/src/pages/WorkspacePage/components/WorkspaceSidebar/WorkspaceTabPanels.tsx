@@ -4,6 +4,7 @@ import { FileCode2, Plus } from "lucide-react";
 import { RoomAvatar } from "@/components/business";
 import { ModelsIcon, SidebarMcpIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
+import { hubTemplateFullName } from "@/models/hubWorkspace";
 import { modelProviderAvatarPath, providerStatusTone, type ModelProvider } from "@/models/modelProviders";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { displayTeam, resolveTeamAvatarMembers, teamMemberIDs } from "@/models/tasks";
@@ -846,7 +847,7 @@ export function WorkspaceTabPanels({
                 <ModelsIcon />
               </span>
               <span className={rowStyles.main}>
-                <span className={classNames(rowStyles.title, "truncate")}>{item.name || item.id}</span>
+                <span className={classNames(rowStyles.title, "truncate")}>{hubTemplateFullName(item)}</span>
                 <span className={classNames(rowStyles.meta, "truncate")}>
                   {item.description || item.source?.name || item.id}
                 </span>

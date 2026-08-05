@@ -41,7 +41,19 @@ export function isVisibleInHubTemplateList(template: HubTemplate | null | undefi
   );
 }
 
+export function isHubTemplateNameConflict(error: unknown): boolean {
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : error instanceof Error
+        ? error.message
+        : String(error ?? "");
+  const normalized = message.toLowerCase();
+  return normalized.includes("space_err_1") || normalized.includes("space name already exists");
+}
+
 export type HubTemplate = AgentTemplateLike & {
+  namespace?: string;
   source?: HubTemplateSource | null;
   updated_at?: string | null;
   workspace?: {
@@ -49,6 +61,15 @@ export type HubTemplate = AgentTemplateLike & {
     kind?: string | null;
   } | null;
 };
+
+export function hubTemplateFullName(template: HubTemplate | null | undefined): string {
+  const name = String(template?.name ?? "").trim();
+  const namespace = String(template?.namespace ?? "").trim();
+  if (namespace && name) {
+    return `${namespace}/${name}`;
+  }
+  return name || String(template?.id ?? "").trim();
+}
 
 export function formatHubDate(value: string | number | Date | null | undefined, locale: LocaleCode): string {
   if (!value) {

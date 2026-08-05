@@ -2,12 +2,15 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { HubDetailPane } from "@/pages/HubPage/components";
+import type { HubTemplate } from "@/models/hubWorkspace";
 
 function t(key: string, params: Record<string, string | number> = {}) {
   const messages: Record<string, string> = {
     cancel: "Cancel",
     close: "Close",
     createAgent: "Create",
+    agentPublishCommunity: "Publish to community",
+    agentPublishLoginRequired: "Sign in first",
     resourcesDeleteSkill: "Delete skill",
     resourcesDeleteSkillConfirmAction: "Delete",
     resourcesDeleteSkillConfirmMessage: 'Delete skill "{name}"? This action cannot be undone.',
@@ -46,6 +49,9 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesMCPRemoteServersRefresh: "Refresh",
     resourcesMCPRemoteServersSearchPlaceholder: "Search remote MCP servers",
     resourcesRefresh: "Refresh templates",
+    resourcesPublishCommunitySuccessTitle: "Published successfully",
+    resourcesPublishCommunitySuccessMessage: "The template has been published to the community.",
+    resourcesPublishCommunitySuccessDismiss: "OK",
     resourcesSkillsEmpty: "No skills",
     resourcesSkillsLabel: "Skills",
     resourcesRuntimeLabel: "Runtime",
@@ -115,7 +121,15 @@ const template = {
   },
 };
 
-function renderHubDetailPane(selectedResourceType: "mcp" | "skill" | "template" = "template") {
+function renderHubDetailPane(
+  selectedResourceType: "mcp" | "skill" | "template" = "template",
+  options: {
+    selectedTemplate?: HubTemplate;
+    onPublishTemplate?: (item: HubTemplate | null | undefined) => Promise<boolean> | boolean;
+    publishDisabled?: boolean;
+  } = {},
+) {
+  const selectedTemplate = options.selectedTemplate ?? template;
   const workspaceFiles = {
     "instructions/AGENTS.md": {
       binary: false,
@@ -169,8 +183,8 @@ function renderHubDetailPane(selectedResourceType: "mcp" | "skill" | "template" 
             selectedResourceType,
             selectedSkill: null,
             selectedSkillPath: "",
-            selectedTemplate: template,
-            selectedTemplateId: template.id,
+            selectedTemplate,
+            selectedTemplateId: selectedTemplate.id || "",
             selectedWorkspacePath,
             skillFile: null,
             skillFileError: "",
@@ -179,7 +193,7 @@ function renderHubDetailPane(selectedResourceType: "mcp" | "skill" | "template" 
             skillTree: null,
             skillTreeError: "",
             skillTreeLoading: false,
-            templates: [template],
+            templates: [selectedTemplate],
             workspaceFile,
             workspaceFiles,
             workspaceFileError: "",
@@ -195,6 +209,8 @@ function renderHubDetailPane(selectedResourceType: "mcp" | "skill" | "template" 
             ],
             deleteBusy: false,
             onDeleteTemplate: vi.fn(),
+            onPublishTemplate: options.onPublishTemplate,
+            publishDisabled: options.publishDisabled,
           },
         }}
       />
@@ -391,6 +407,56 @@ function renderMCPCreateDialog() {
 }
 
 describe("HubDetailPane", () => {
+  it("publishes a local template to the community", async () => {
+    const user = userEvent.setup();
+    const onPublishTemplate = vi.fn().mockResolvedValue(true);
+    const localTemplate = {
+      ...template,
+      id: "local.demo-template",
+      source: { name: "local", kind: "local" },
+    };
+    renderHubDetailPane("template", { selectedTemplate: localTemplate, onPublishTemplate });
+
+    await user.click(screen.getByRole("button", { name: "Publish to community" }));
+
+    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate);
+    expect(await screen.findByRole("dialog", { name: "Published successfully" })).toBeInTheDocument();
+    expect(screen.getByText("The template has been published to the community.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "OK" }));
+    expect(screen.queryByRole("dialog", { name: "Published successfully" })).not.toBeInTheDocument();
+  });
+
+  it("does not show publishing success when publishing fails", async () => {
+    const user = userEvent.setup();
+    const localTemplate = {
+      ...template,
+      id: "local.demo-template",
+      source: { name: "local", kind: "local" },
+    };
+    renderHubDetailPane("template", {
+      selectedTemplate: localTemplate,
+      onPublishTemplate: vi.fn().mockResolvedValue(false),
+    });
+
+    await user.click(screen.getByRole("button", { name: "Publish to community" }));
+
+    expect(screen.queryByRole("dialog", { name: "Published successfully" })).not.toBeInTheDocument();
+  });
+
+  it("requires sign-in before publishing a local template to the community", () => {
+    const localTemplate = {
+      ...template,
+      id: "local.demo-template",
+      source: { name: "local", kind: "local" },
+    };
+    renderHubDetailPane("template", { selectedTemplate: localTemplate, publishDisabled: true });
+
+    const publish = screen.getByRole("button", { name: "Publish to community" });
+    expect(publish).toBeDisabled();
+    expect(publish).toHaveAttribute("title", "Sign in first");
+  });
+
   it("groups template details into runtime, instructions, skills, and MCP tabs", async () => {
     const user = userEvent.setup();
     renderHubDetailPane();

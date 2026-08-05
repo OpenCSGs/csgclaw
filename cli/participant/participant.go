@@ -104,7 +104,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 	role := fs.String("role", "", "agent role for bind create")
 	runtimeKind := fs.String("runtime", "", "agent runtime kind for bind create")
 	image := fs.String("image", "", "agent image for bind create")
-	fromTemplate := fs.String("from-template", "", "hub template for bind create")
+	fromTemplate := fs.String("from-template", "", "template ID from template list for bind create (remote IDs use namespace/name)")
 	modelID := fs.String("model-id", "", "agent model id for bind create")
 	var envValues envFlag
 	fs.Var(&envValues, "env", "agent image environment variable as KEY=VALUE (repeatable)")

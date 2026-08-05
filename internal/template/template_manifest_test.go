@@ -66,3 +66,16 @@ func TestValidateImageEnvRejectsSecretDefault(t *testing.T) {
 		t.Fatal("validateImageEnvContracts() error = nil, want secret default rejection")
 	}
 }
+
+func TestValidatePublishTemplateName(t *testing.T) {
+	for _, name := range []string{"ReviewBot", "review_bot_2", "A1"} {
+		if err := ValidatePublishTemplateName(name); err != nil {
+			t.Errorf("ValidatePublishTemplateName(%q) error = %v", name, err)
+		}
+	}
+	for _, name := range []string{"", "2review", "review-bot", "中文模板", "review bot"} {
+		if err := ValidatePublishTemplateName(name); err == nil {
+			t.Errorf("ValidatePublishTemplateName(%q) error = nil, want rejection", name)
+		}
+	}
+}

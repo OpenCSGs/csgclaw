@@ -10,14 +10,30 @@ import (
 	"csgclaw/internal/runtime"
 )
 
+const currentAgentFileSchemaVersion = "agentfile/v1"
+
+var publishTemplateNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
+
+func ValidatePublishTemplateName(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ErrTemplateNameRequired
+	}
+	if !publishTemplateNamePattern.MatchString(name) {
+		return ErrTemplateNameInvalid
+	}
+	return nil
+}
+
 type templateManifest struct {
-	Name        string               `toml:"name"`
-	Description string               `toml:"description,omitempty"`
-	Role        string               `toml:"role"`
-	RuntimeKind string               `toml:"runtime_kind"`
-	Version     string               `toml:"version,omitempty"`
-	Image       templateImageSection `toml:"image"`
-	UpdatedAt   string               `toml:"updated_at,omitempty"`
+	SchemaVersion string               `toml:"schema_version,omitempty"`
+	Name          string               `toml:"name"`
+	Description   string               `toml:"description,omitempty"`
+	Role          string               `toml:"role"`
+	RuntimeKind   string               `toml:"runtime_kind"`
+	Version       string               `toml:"version,omitempty"`
+	Image         templateImageSection `toml:"image"`
+	UpdatedAt     string               `toml:"updated_at,omitempty"`
 }
 
 type templateImageSection struct {

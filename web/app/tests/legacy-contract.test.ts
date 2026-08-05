@@ -81,21 +81,21 @@ describe("legacy UI contract", () => {
   });
 
   it("keeps the agent publish action contract", () => {
-    expect(source).toContain('agentPublish: "Publish"');
-    expect(source).toContain('agentPublish: "发布"');
-    expect(source).toContain("async function publishAgentPage()");
+    expect(source).toContain('agentSaveLocalTemplate: "Save as local template"');
+    expect(source).toContain('agentPublishCommunity: "发布到社区"');
+    expect(source).toContain("async function publishAgentPage(");
     expect(source).toContain("function publishAgentTemplateRequest");
     expect(source).toContain('const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";');
     expect(source).toContain("post<HubTemplate>(HUB_TEMPLATES_PATH, payload)");
-    expect(source).toContain("publishAgentTemplateRequest(selectedAgentForPage.id)");
+    expect(source).toContain("publishAgentTemplateRequest(selectedAgentForPage.id, target, name, description)");
     expect(source).toContain('get("api/v1/agents/image-candidates")');
     expect(source).toContain("agent_id: agentID");
     expect(source).toContain("setSelectedHubTemplateId(published.id);");
     expect(source).toContain('className="agent-actions-menu"');
-    expect(source).toContain("onSelect={() => onPublish?.()}");
-    expect(source).toContain(
-      'const canPublish = runtimeKind === "picoclaw_sandbox" || runtimeKind === "openclaw_sandbox";',
-    );
+    expect(source).toContain('onSelect={() => onPublish?.("local")}');
+    expect(source).toContain('onSelect={() => onPublish?.("official")}');
+    expect(source).toContain('const canPublishLocal = runtimeKind === "codex" || runtimeKind === "openclaw_sandbox";');
+    expect(source).toContain('const canPublishCommunity = runtimeKind === "codex";');
   });
 
   it("keeps thread context hidden and shows the thread affordance as a message hover toolbar", () => {

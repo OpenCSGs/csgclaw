@@ -242,6 +242,7 @@ export function useWorkspaceController() {
     hubLoaded,
     hubTemplates,
     hubTemplatesQuery,
+    openCSGAuthenticated: isAuthenticated(auth.status),
     refreshWorkspaceHubTemplates,
     t,
   });
@@ -277,6 +278,7 @@ export function useWorkspaceController() {
     managerProfile,
     modelProviders,
     modelProvidersLoaded,
+    openCSGAuthenticated: isAuthenticated(auth.status),
     profileDetailAgentID: conversationProfileDetailAgentID,
     refreshMCPServers: hub.refetchMCPServers,
     refreshHubTemplates,

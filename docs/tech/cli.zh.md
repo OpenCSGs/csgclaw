@@ -487,7 +487,7 @@ csgclaw pt <subcommand> [flags]
 - `--role string`：`--bind create` 时的 Agent role。
 - `--runtime string`：`--bind create` 时的 Agent runtime kind。
 - `--image string`：`--bind create` 时的 Agent image。
-- `--from-template string`：`--bind create` 时使用的 hub template。
+- `--from-template string`：`--bind create` 时使用的 `template list` 原始模板 ID；远端 ID 格式为 `<namespace>/<name>`。
 - `--model-id string`：`--bind create` 时的 Agent model ID。
 - `--env KEY=VALUE`：`--bind create` 时的 Agent image 环境变量，可重复传入。
 
