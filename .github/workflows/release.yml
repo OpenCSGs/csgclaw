@@ -388,6 +388,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
+          prerelease: ${{ needs.prepare.outputs.release_channel == 'beta' }}
           files: dist/*
 
   publish-desktop-oss:

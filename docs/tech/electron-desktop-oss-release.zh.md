@@ -83,7 +83,18 @@ make desktop-oss-publish \
   DESKTOP_OSS_RELEASE_DIR=desktop-release
 ```
 
-GitHub Release 中仍保留 macOS ZIP 和 Linux DEB，但 OSS 上传只包含官网清单使用的三个安装器，不会上传 Linux 包。预发布版本自动发布到 `beta` channel，稳定版本自动发布到 `release` channel；两个 channel 共用 `oss-publish` GitHub Environment，只通过不同的 `downloads.json` 路径分流。
+GitHub Release 中仍保留 macOS ZIP 和 Linux DEB，但 OSS 上传只包含官网清单使用的三个安装器，不会上传 Linux 包。
+
+### Tag 路由规则
+
+GitHub 不会仅根据 tag 名称自动设置 Pre-release。CI 使用 `desktop-release-artifacts.mjs channel` 解析 SemVer，再把同一个 `release_channel` 同时用于 GitHub Release 类型和 OSS channel：
+
+| Tag 示例 | `release_channel` | GitHub Release | OSS manifest |
+|---|---|---|---|
+| `v0.4.6-beta.2`、`v0.4.6-alpha.1`、`v0.4.6-rc.1` | `beta` | Pre-release | `channels/beta/downloads.json` |
+| `v0.4.6` | `release` | 普通 Release | `channels/release/downloads.json` |
+
+所有合法的 SemVer 预发布版本都会进入 `beta`；稳定版本进入 `release`。两个 channel 共用 `oss-publish` GitHub Environment，只通过不同的 `downloads.json` 路径分流。
 
 在仓库 Settings → Environments 中创建 `oss-publish`，并配置以下 secrets：
 
