@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -232,6 +233,59 @@ func TestRemoteStoreListMergesOrganizationAndAgentTemplatesByNamespacePath(t *te
 	}
 	if got, want := items[1].ID, "alice/personal-bot"; got != want {
 		t.Fatalf("List()[1].ID = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteStoreListPaginatesAgentTemplates(t *testing.T) {
+	t.Parallel()
+
+	const total = remoteAgentTemplatesPerPage + 1
+	requestedPages := make([]string, 0, 2)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/organization/Agentic/codes":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+		case r.URL.Path == "/api/v1/agent/templates":
+			if got, want := r.URL.Query().Get("per"), "20"; got != want {
+				t.Errorf("agent templates per = %q, want %q", got, want)
+			}
+			page := r.URL.Query().Get("page")
+			requestedPages = append(requestedPages, page)
+			start, end := 0, remoteAgentTemplatesPerPage
+			if page == "2" {
+				start, end = remoteAgentTemplatesPerPage, total
+			}
+			data := make([]map[string]any, 0, end-start)
+			for i := start; i < end; i++ {
+				path := fmt.Sprintf("alice/template-%02d", i)
+				data = append(data, map[string]any{
+					"id": i + 1, "type": "csgclaw", "name": path,
+					"metadata": map[string]any{"repo_path": path},
+				})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": data, "total": total})
+		case strings.HasSuffix(r.URL.Path, "/blob/agent.toml"):
+			writeRemoteBlob(t, w, "agent.toml", []byte(remoteTestManifest))
+		case strings.HasPrefix(r.URL.Path, "/api/v1/codes/alice/template-"):
+			path := strings.TrimPrefix(r.URL.Path, "/api/v1/codes/")
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
+				"name": path[strings.LastIndex(path, "/")+1:], "path": path, "default_branch": "main",
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	items, err := NewRemoteStore(srv.URL, "access-token").List(context.Background())
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if got, want := len(items), total; got != want {
+		t.Fatalf("len(List()) = %d, want %d", got, want)
+	}
+	if got, want := strings.Join(requestedPages, ","), "1,2"; got != want {
+		t.Fatalf("agent template pages = %q, want %q", got, want)
 	}
 }
 

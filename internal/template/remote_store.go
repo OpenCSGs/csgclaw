@@ -16,6 +16,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -25,12 +26,13 @@ import (
 )
 
 const (
-	defaultRemoteHTTPTimeout  = 60 * time.Second
-	defaultRemoteMaxJSONBytes = 4 * 1024 * 1024
-	defaultRemoteMaxFileBytes = 50 * 1024 * 1024
-	officialTemplateNamespace = "Agentic"
-	remoteManifestFileName    = "agent.toml"
-	remoteFilePreviewMaxBytes = 256 * 1024
+	defaultRemoteHTTPTimeout    = 60 * time.Second
+	defaultRemoteMaxJSONBytes   = 4 * 1024 * 1024
+	defaultRemoteMaxFileBytes   = 50 * 1024 * 1024
+	officialTemplateNamespace   = "Agentic"
+	remoteManifestFileName      = "agent.toml"
+	remoteFilePreviewMaxBytes   = 256 * 1024
+	remoteAgentTemplatesPerPage = 20
 )
 
 type RemoteStore struct {
@@ -157,22 +159,21 @@ func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 		repositories = appendRemoteTemplateRepositories(repositories, seen, organizationTemplates.Data)
 	}
 
-	var agentTemplates remoteAgentTemplateListResponse
-	if err := s.getJSON(ctx, s.agentTemplatesURL(), &agentTemplates); err != nil {
+	agentTemplates, err := s.listAgentTemplates(ctx)
+	if err != nil {
 		listErrs = append(listErrs, err)
-	} else {
-		for _, item := range agentTemplates.Data {
-			if !strings.EqualFold(strings.TrimSpace(item.Type), "csgclaw") {
-				continue
-			}
-			repositories = appendRemoteTemplateRepositories(repositories, seen, []remoteCodeRepository{{
-				Name:        strings.TrimSpace(item.Name),
-				Nickname:    strings.TrimSpace(item.Name),
-				Description: strings.TrimSpace(item.Description),
-				Path:        strings.TrimSpace(item.Metadata.RepoPath),
-				UpdatedAt:   item.UpdatedAt,
-			}})
+	}
+	for _, item := range agentTemplates {
+		if !strings.EqualFold(strings.TrimSpace(item.Type), "csgclaw") {
+			continue
 		}
+		repositories = appendRemoteTemplateRepositories(repositories, seen, []remoteCodeRepository{{
+			Name:        strings.TrimSpace(item.Name),
+			Nickname:    strings.TrimSpace(item.Name),
+			Description: strings.TrimSpace(item.Description),
+			Path:        strings.TrimSpace(item.Metadata.RepoPath),
+			UpdatedAt:   item.UpdatedAt,
+		}})
 	}
 	if len(repositories) == 0 && len(listErrs) > 0 {
 		return nil, errors.Join(listErrs...)
@@ -193,6 +194,20 @@ func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 		items = append(items, item)
 	}
 	return items, nil
+}
+
+func (s *RemoteStore) listAgentTemplates(ctx context.Context) ([]remoteAgentTemplate, error) {
+	items := make([]remoteAgentTemplate, 0)
+	for page := 1; ; page++ {
+		var payload remoteAgentTemplateListResponse
+		if err := s.getJSON(ctx, s.agentTemplatesURL(page), &payload); err != nil {
+			return items, err
+		}
+		items = append(items, payload.Data...)
+		if len(items) >= payload.Total || len(payload.Data) == 0 {
+			return items, nil
+		}
+	}
 }
 
 func appendRemoteTemplateRepositories(
@@ -618,9 +633,11 @@ func (s *RemoteStore) templatesURL() string {
 	return s.hubBaseURL + "/api/v1/organization/" + url.PathEscape(officialTemplateNamespace) + "/codes"
 }
 
-func (s *RemoteStore) agentTemplatesURL() string {
+func (s *RemoteStore) agentTemplatesURL(page int) string {
 	query := url.Values{}
 	query.Set("type", "csgclaw")
+	query.Set("page", strconv.Itoa(page))
+	query.Set("per", strconv.Itoa(remoteAgentTemplatesPerPage))
 	return s.hubBaseURL + "/api/v1/agent/templates?" + query.Encode()
 }
 

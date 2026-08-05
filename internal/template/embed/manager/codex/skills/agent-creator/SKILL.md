@@ -16,7 +16,7 @@ Before running **any** `csgclaw-cli participant create --type agent --bind creat
 1. Read this skill first.
 2. Run `csgclaw-cli --output json template list` and pick a template (do not skip even if the user named a capability like GitLab).
 3. Run `csgclaw-cli --output json template get <template-id>` using the exact ID returned by `template list`.
-4. Create with that exact ID in `--from-template` and add required `--env` values. Remote template IDs are absolute URLs such as `https://hub.opencsg.com/namespace/name`; do not rewrite them as `official.namespace/name`.
+4. Create with that exact ID in `--from-template` and add required `--env` values. Remote template IDs use `<namespace>/<name>` such as `Agentic/gitlab-assistant`; do not rewrite them as URLs or `official.namespace/name`.
 
 If dispatch or the managed CSGClaw rules say "create a worker", that means **this skill**, not the general room/member/message rules.
 
@@ -52,7 +52,7 @@ Never skip `template list` / `template get` because you think you already know t
 
 1. Confirm the user wants a **new** worker (or dispatch lacks one). If an available worker already matches, stop and reuse it.
 2. `csgclaw-cli participant list --channel <current_channel> --type agent` — avoid duplicate names; ask reuse vs new if ambiguous.
-3. `csgclaw-cli --output json template list` — match by `name`, `description`, and `role`; preserve the returned `id` exactly. Remote IDs include the registry domain.
+3. `csgclaw-cli --output json template list` — match by `name`, `description`, and `role`; preserve the returned `id` exactly. Remote IDs use `<namespace>/<name>`.
 4. No match → say so plainly; do not fall back to bare `participant create --bind create`.
 5. Multiple matches → short comparison; let the user choose.
 6. `csgclaw-cli --output json template get <template-id>` — read `image_env`.
@@ -82,7 +82,7 @@ csgclaw-cli participant create --type agent --bind create \
 ```bash
 csgclaw-cli --output json template list
 csgclaw-cli --output json template get builtin.gitlab-worker
-csgclaw-cli --output json template get https://hub.opencsg.com/Agentic/gitlab-assistant
+csgclaw-cli --output json template get Agentic/gitlab-assistant
 csgclaw-cli participant list --channel csgclaw --type agent
 csgclaw-cli participant create --type agent --bind create --id <slug> --agent-id u-<slug> --from-template <id> --channel csgclaw --channel-user-ref <slug> --channel-user-kind local_user_id --env KEY=VALUE ...
 ```
