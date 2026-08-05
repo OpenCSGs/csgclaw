@@ -196,11 +196,12 @@ CSGCLAW_DESKTOP_CONFIG=/absolute/path/to/config.toml make desktop-dev
 CSGCLAW_DESKTOP_DEVTOOLS=1 make desktop-dev
 ```
 
-Electron 和 sidecar 日志位于系统应用日志目录，Go 输出记录在 `backend.log`。启动失败时先检查：
+Electron 和 sidecar 日志位于系统应用日志目录，Electron 主进程记录在 `main.log`，Go 输出记录在 `backend.log`。macOS 和 Windows 的查看、持续跟踪及导出命令参见 [Electron Desktop 日志查看与导出](electron-desktop-logs.zh.md)。启动失败时先检查：
 
 1. 是否已有 `csgclaw serve` 或 daemon 占用 `runtime.lock`。
-2. `backend.log` 中是否有启动、端口或协议错误。
-3. Agent 配置中的服务地址是否为 `host.docker.internal:<sandbox-port>` 或宿主机 LAN IPv4 对应的动态端口。
+2. `main.log` 中当前 `runId` 的最后一个启动或退出事件。
+3. `backend.log` 中是否有启动、端口或协议错误。
+4. Agent 配置中的服务地址是否为 `host.docker.internal:<sandbox-port>` 或宿主机 LAN IPv4 对应的动态端口。
 
 ## 7. 打包
 
