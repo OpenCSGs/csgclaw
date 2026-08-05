@@ -393,6 +393,10 @@ jobs:
 
   publish-desktop-oss:
     needs: [prepare, merge-and-release]
+    concurrency:
+      group: desktop-oss-${{ needs.prepare.outputs.release_channel }}
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

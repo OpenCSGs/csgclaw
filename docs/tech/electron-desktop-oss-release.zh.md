@@ -98,6 +98,8 @@ GitHub 不会仅根据 tag 名称自动设置 Pre-release。CI 使用 `desktop-r
 
 发布脚本会按 SemVer 比较待发布版本和远端 manifest 的 `latest`。可以重新发布同一版本，但不能发布比当前 `latest` 更旧的版本；遇到旧 tag 时任务会失败并提示当前 `latest`，需要改用更高的版本号重新打 tag。
 
+CI 只对最终的 `publish-desktop-oss` job 按 channel 串行：相同 channel 的 OSS 发布依次排队，`beta` 和 `release` 使用不同的并发组。多平台构建和 GitHub Release 仍可并行执行；等待中的发布不会取消正在上传的任务，也不会因后续发布进入队列而被替换。
+
 在仓库 Settings → Environments 中创建 `oss-publish`，并配置以下 secrets：
 
 - `OSS_ACCESS_KEY_ID`
