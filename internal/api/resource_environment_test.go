@@ -96,7 +96,7 @@ func TestCurrentOpenCSGEnvironmentPrefersLoginSiteOverStoredHubURL(t *testing.T)
 }
 
 func TestCurrentOpenCSGEnvironmentUsesManagedHubURLWithoutLogin(t *testing.T) {
-	t.Setenv("CSGHUB_BASE_URL", "https://opencsg-stg.com/")
+	t.Setenv("CSGHUB_API_BASE_URL", "https://opencsg-stg.com/")
 	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
 		return auth.Status{}, nil
 	})
@@ -109,7 +109,7 @@ func TestCurrentOpenCSGEnvironmentUsesManagedHubURLWithoutLogin(t *testing.T) {
 }
 
 func TestCurrentOpenCSGEnvironmentPrefersLoginOverManagedHubURL(t *testing.T) {
-	t.Setenv("CSGHUB_BASE_URL", "https://managed.example.test/")
+	t.Setenv("CSGHUB_API_BASE_URL", "https://managed.example.test/")
 	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
 		return auth.Status{
 			Authenticated:  true,
@@ -134,7 +134,7 @@ func TestHubServiceUsesManagedCredentialsWithoutLogin(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[],"total":0}`))
 	}))
 	defer hubServer.Close()
-	t.Setenv("CSGHUB_BASE_URL", hubServer.URL)
+	t.Setenv("CSGHUB_API_BASE_URL", hubServer.URL)
 	t.Setenv("CSGHUB_USER_TOKEN", "managed-token")
 	t.Setenv("CSGHUB_USER_NAME", "alice")
 	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
@@ -166,7 +166,7 @@ func TestHubServiceUsesManagedTokenWithoutBaseURLEnvironment(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[],"total":0}`))
 	}))
 	defer hubServer.Close()
-	t.Setenv("CSGHUB_BASE_URL", "")
+	t.Setenv("CSGHUB_API_BASE_URL", "")
 	t.Setenv("CSGHUB_USER_TOKEN", "managed-token")
 	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
 		return auth.Status{}, nil

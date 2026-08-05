@@ -14,14 +14,14 @@ import (
 func (h *Handler) currentOpenCSGEnvironment(r *http.Request) auth.Environment {
 	env := auth.DefaultEnvironment()
 	if r == nil {
-		if baseURL := trustedCSGHubEnvironmentBaseURL(); baseURL != "" {
+		if baseURL := trustedCSGHubAPIBaseURL(); baseURL != "" {
 			env.CSGHubBaseURL = baseURL
 		}
 		return env
 	}
 	status, err := appAuthStatus(r)
 	if err != nil || !status.Authenticated {
-		if baseURL := trustedCSGHubEnvironmentBaseURL(); baseURL != "" {
+		if baseURL := trustedCSGHubAPIBaseURL(); baseURL != "" {
 			env.CSGHubBaseURL = baseURL
 		}
 		return env
@@ -66,7 +66,7 @@ func (h *Handler) hubServiceForRequest(r *http.Request) (*hub.Service, error) {
 	}
 	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r), cfg.HasExplicitOfficialHubRegistry())
 	username := ""
-	managedBaseURL := trustedCSGHubEnvironmentBaseURL()
+	managedBaseURL := trustedCSGHubAPIBaseURL()
 	managedToken := strings.TrimSpace(os.Getenv("CSGHUB_USER_TOKEN"))
 	status, statusErr := appAuthStatus(r)
 	if statusErr != nil {
@@ -110,8 +110,8 @@ func (h *Handler) hubServiceForRequest(r *http.Request) (*hub.Service, error) {
 	})
 }
 
-func trustedCSGHubEnvironmentBaseURL() string {
-	raw := strings.TrimRight(strings.TrimSpace(os.Getenv("CSGHUB_BASE_URL")), "/")
+func trustedCSGHubAPIBaseURL() string {
+	raw := strings.TrimRight(strings.TrimSpace(os.Getenv("CSGHUB_API_BASE_URL")), "/")
 	if raw == "" {
 		return ""
 	}

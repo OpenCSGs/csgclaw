@@ -271,7 +271,7 @@ Field behavior:
 
 The built-in registry is read-only. Use a writable `local` or `remote` registry as the publish target. The Web UI publishes to the `official` registry for the currently signed-in OpenCSG site and disables that flow when no OpenCSG account is signed in. Remote template discovery combines the legacy `Agentic` organization catalog with the CSGClaw agent template catalog. Remote template IDs use `<namespace>/<name>` and resolve through the `official` remote registry.
 
-When signed in, the current login site and access token select and authorize the official registry, even when managed environment variables are present. Without an interactive login, `CSGHUB_BASE_URL` selects the official registry and `CSGHUB_USER_TOKEN` authorizes private template reads; when the base URL is omitted, CSGClaw falls back to the production registry. `TEMPLATE_ID` should contain the template repository path in `<namespace>/<name>` form.
+When signed in, the current login site and access token select and authorize the official registry, even when managed environment variables are present. Without an interactive login, `CSGHUB_API_BASE_URL` selects the official registry and `CSGHUB_USER_TOKEN` authorizes private template reads; when the base URL is omitted, CSGClaw falls back to the production registry. `TEMPLATE_ID` should contain the template repository path in `<namespace>/<name>` form.
 
 The old template Hub URL `https://csgclaw.opencsg.com` is no longer rewritten automatically; configure the desired remote explicitly or rely on the login-environment-derived official registry.
 
