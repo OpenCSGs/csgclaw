@@ -12,6 +12,13 @@ test("drops build metadata that packaging formats do not need", () => {
   assert.equal(normalizeDesktopReleaseVersion("v0.4.5-beta.1+local"), "0.4.5-beta.1");
 });
 
+test("normalizes local git describe versions for Squirrel", () => {
+  assert.equal(
+    normalizeDesktopReleaseVersion("v0.4.5-12-g27f214c7+local"),
+    "0.4.5-12g27f214c7",
+  );
+});
+
 test("uses the development version for invalid input", () => {
   assert.equal(normalizeDesktopReleaseVersion("not-a-version"), "0.0.0-development");
   assert.equal(normalizeDesktopReleaseVersion(undefined), "0.0.0-development");

@@ -8,7 +8,10 @@ export function normalizeDesktopReleaseVersion(rawVersion: string | undefined): 
     return "0.0.0-development";
   }
 
-  const prerelease = match[4] ? `-${match[4]}` : "";
+  // electron-winstaller removes dots from prerelease versions but leaves
+  // additional hyphens intact; NuGet rejects versions such as
+  // 0.3.15-179-gabcdef. Keep a single prerelease separator instead.
+  const prerelease = match[4] ? `-${match[4].replace(/-/g, "")}` : "";
   return `${match[1]}.${match[2]}.${match[3]}${prerelease}`;
 }
 
