@@ -8,10 +8,12 @@ export const DesktopIPC = {
   installDownloadedUpdate: "csgclaw:desktop:install-downloaded-update",
   openOAuth: "csgclaw:desktop:open-oauth",
   restartSidecar: "csgclaw:desktop:restart-sidecar",
+  setThemeSource: "csgclaw:desktop:set-theme-source",
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
 
 export type OAuthPurpose = "opencsg-auth" | "github-connector";
+export type DesktopThemeSource = "system" | "light" | "dark";
 
 export type DesktopRuntimeInfo = {
   platform: DesktopPlatform;
@@ -47,5 +49,6 @@ export type DesktopBridge = {
   checkForUpdates(): Promise<void>;
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;
+  setThemeSource(theme: DesktopThemeSource): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };

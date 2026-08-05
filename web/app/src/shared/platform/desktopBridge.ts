@@ -1,5 +1,6 @@
 export type DesktopPlatform = "darwin" | "win32" | "linux";
 export type DesktopOAuthPurpose = "opencsg-auth" | "github-connector";
+export type DesktopThemeSource = "system" | "light" | "dark";
 
 export type DesktopRuntimeInfo = {
   platform: DesktopPlatform;
@@ -21,6 +22,7 @@ export type DesktopBridge = {
   checkForUpdates(): Promise<void>;
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;
+  setThemeSource(theme: DesktopThemeSource): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };
 
@@ -41,6 +43,7 @@ export function getDesktopBridge(): DesktopBridge | null {
     typeof bridge.checkForUpdates === "function" &&
     typeof bridge.installDownloadedUpdate === "function" &&
     typeof bridge.restartSidecar === "function" &&
+    typeof bridge.setThemeSource === "function" &&
     typeof bridge.onUpdateStatus === "function"
     ? bridge
     : null;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { initializeMermaidTheme } from "@/components/business/MessageContent";
 import { messages } from "@/shared/i18n/messages";
+import { getDesktopBridge } from "@/shared/platform/desktopBridge";
 import {
   HUB_NEW_BADGE_SEEN_STORAGE_KEY,
   LOCALE_STORAGE_KEY,
@@ -119,6 +120,7 @@ export function useWorkspaceShellController({
 
     applyTheme();
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    void getDesktopBridge()?.setThemeSource(theme);
 
     if (theme !== "system" || typeof window.matchMedia !== "function") {
       return undefined;

@@ -63,6 +63,7 @@ describe("useConfigController", () => {
       checkForUpdates: vi.fn().mockResolvedValue(undefined),
       installDownloadedUpdate: vi.fn().mockResolvedValue(undefined),
       restartSidecar,
+      setThemeSource: vi.fn().mockResolvedValue(undefined),
       onUpdateStatus: vi.fn().mockReturnValue(() => undefined),
     };
     window.csgclawDesktop = bridge;

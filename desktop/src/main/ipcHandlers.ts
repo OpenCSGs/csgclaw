@@ -1,5 +1,18 @@
-import { app, dialog, ipcMain, shell, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
-import { DesktopIPC, type DesktopOAuthInput, type OAuthPurpose } from "../shared/desktopBridge.types";
+import {
+  app,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  shell,
+  type BrowserWindow,
+  type IpcMainInvokeEvent,
+} from "electron";
+import {
+  DesktopIPC,
+  type DesktopOAuthInput,
+  type OAuthPurpose,
+} from "../shared/desktopBridge.types";
+import { parseDesktopThemeSource } from "../shared/desktopTheme";
 import { isSafeHTTPSURL, isTrustedMainFrame } from "./navigationPolicy";
 import type { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
 import type { DesktopUpdater } from "./updater";
@@ -60,6 +73,10 @@ export function registerIPCHandlers(
     assertSender(event);
     await restartSidecar();
   });
+  ipcMain.handle(DesktopIPC.setThemeSource, (event, input: unknown) => {
+    assertSender(event);
+    nativeTheme.themeSource = parseDesktopThemeSource(input);
+  });
 
   return () => {
     ipcMain.removeHandler(DesktopIPC.getRuntimeInfo);
@@ -67,6 +84,7 @@ export function registerIPCHandlers(
     ipcMain.removeHandler(DesktopIPC.checkForUpdates);
     ipcMain.removeHandler(DesktopIPC.installDownloadedUpdate);
     ipcMain.removeHandler(DesktopIPC.restartSidecar);
+    ipcMain.removeHandler(DesktopIPC.setThemeSource);
   };
 }
 
@@ -75,16 +93,25 @@ function parseOAuthInput(input: unknown): DesktopOAuthInput {
     throw new Error("OAuth request is invalid.");
   }
   const source = input as Record<string, unknown>;
-  if (source.purpose !== "opencsg-auth" && source.purpose !== "github-connector") {
+  if (
+    source.purpose !== "opencsg-auth" &&
+    source.purpose !== "github-connector"
+  ) {
     throw new Error("OAuth purpose is invalid.");
   }
   if (typeof source.url !== "string" || !isSafeHTTPSURL(source.url)) {
-    throw new Error("OAuth URL must be an HTTPS URL without embedded credentials.");
+    throw new Error(
+      "OAuth URL must be an HTTPS URL without embedded credentials.",
+    );
   }
   return { purpose: source.purpose, url: source.url };
 }
 
-async function authorizeOAuthHost(window: BrowserWindow, purpose: OAuthPurpose, rawURL: string): Promise<boolean> {
+async function authorizeOAuthHost(
+  window: BrowserWindow,
+  purpose: OAuthPurpose,
+  rawURL: string,
+): Promise<boolean> {
   const hostname = new URL(rawURL).hostname.toLowerCase();
   if (purpose === "github-connector") {
     if (hostname !== "github.com") {
