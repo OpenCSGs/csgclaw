@@ -32,7 +32,6 @@ jobs:
       desktop_matrix: ${{ steps.set-matrix.outputs.desktop_matrix }}
       version: ${{ steps.release_meta.outputs.version }}
       release_channel: ${{ steps.release_meta.outputs.release_channel }}
-      oss_environment: ${{ steps.release_meta.outputs.oss_environment }}
       oss_manifest_url: ${{ steps.release_meta.outputs.oss_manifest_url }}
       commit: ${{ steps.release_meta.outputs.commit }}
       build_time: ${{ steps.release_meta.outputs.build_time }}
@@ -89,14 +88,8 @@ jobs:
             version="${GITHUB_REF_NAME}"
           fi
           release_channel="$(node scripts/desktop-release-artifacts.mjs channel "${version}")"
-          case "${release_channel}" in
-            beta) oss_environment="stg" ;;
-            release) oss_environment="prd" ;;
-            *) echo "unexpected release channel: ${release_channel}" >&2; exit 1 ;;
-          esac
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "release_channel=${release_channel}" >> "$GITHUB_OUTPUT"
-          echo "oss_environment=${oss_environment}" >> "$GITHUB_OUTPUT"
           echo "oss_manifest_url=https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels/${release_channel}/downloads.json" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -404,7 +397,7 @@ jobs:
     permissions:
       contents: read
     environment:
-      name: ${{ needs.prepare.outputs.oss_environment }}
+      name: oss-publish
       url: ${{ needs.prepare.outputs.oss_manifest_url }}
     steps:
       - name: Checkout

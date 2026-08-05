@@ -83,14 +83,14 @@ make desktop-oss-publish \
   DESKTOP_OSS_RELEASE_DIR=desktop-release
 ```
 
-GitHub Release 中仍保留 macOS ZIP 和 Linux DEB，但 OSS 上传只包含官网清单使用的三个安装器，不会上传 Linux 包。预发布版本自动发布到 `beta` channel 并使用 `stg` GitHub Environment；稳定版本自动发布到 `release` channel 并使用 `prd` GitHub Environment。
+GitHub Release 中仍保留 macOS ZIP 和 Linux DEB，但 OSS 上传只包含官网清单使用的三个安装器，不会上传 Linux 包。预发布版本自动发布到 `beta` channel，稳定版本自动发布到 `release` channel；两个 channel 共用 `oss-publish` GitHub Environment，只通过不同的 `downloads.json` 路径分流。
 
-在仓库 Settings → Environments 中为 `stg` 和 `prd` 分别配置同名 secrets：
+在仓库 Settings → Environments 中创建 `oss-publish`，并配置以下 secrets：
 
 - `OSS_ACCESS_KEY_ID`
 - `OSS_ACCESS_KEY_SECRET`
 
-也可以先把这两个值配置为 repository secrets；同名 environment secrets 存在时会覆盖 repository secrets。建议为 `prd` Environment 配置 required reviewers，避免稳定 channel 被未经确认的手动发布更新。
+`oss-publish` 只负责为最终上传 job 提供凭证和部署记录；版本中的预发布段仍由 `release_channel` 单独解析，不影响凭证选择。如果将来稳定 channel 需要独立的人工审批或独立凭证，再拆分为两个受保护的 GitHub Environment。
 
 OSS 区域、endpoint、bucket、对象前缀和公开地址由发布脚本统一维护，GitHub Environment 不需要重复配置。CI 只读取上述两项 secrets。
 
