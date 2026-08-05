@@ -28,6 +28,7 @@ import { WindowManager } from "./windowManager";
 export class AppLifecycle {
   private cleanupIPC: (() => void) | null = null;
   private cleanupDockThemeIcon: (() => void) | null = null;
+  private desktopThemeSource: DesktopThemeSource = "system";
   private quitting = false;
   private recoveryActive = false;
   private rendererOrigin = "";
@@ -249,18 +250,24 @@ export class AppLifecycle {
     if (!isMacOSDesktop || !app.dock) {
       return;
     }
-    nativeTheme.on("updated", this.updateDockThemeIcon);
+    nativeTheme.on("updated", this.handleNativeThemeUpdated);
     this.cleanupDockThemeIcon = () =>
-      nativeTheme.removeListener("updated", this.updateDockThemeIcon);
+      nativeTheme.removeListener("updated", this.handleNativeThemeUpdated);
     this.updateDockThemeIcon();
   }
 
-  private readonly updateDockThemeIcon = (
-    useDarkColors = nativeTheme.shouldUseDarkColors,
-  ): void => {
+  private readonly handleNativeThemeUpdated = (): void => {
+    this.updateDockThemeIcon();
+  };
+
+  private updateDockThemeIcon(): void {
     if (!isMacOSDesktop || !app.dock) {
       return;
     }
+    const useDarkColors = shouldUseDarkDockIcon(
+      this.desktopThemeSource,
+      nativeTheme.shouldUseDarkColors,
+    );
     const iconDirectory = app.isPackaged
       ? process.resourcesPath
       : path.resolve(__dirname, "..", "..", "resources", "icons");
@@ -271,13 +278,12 @@ export class AppLifecycle {
     if (!icon.isEmpty()) {
       app.dock.setIcon(icon);
     }
-  };
+  }
 
   private setThemeSource(theme: DesktopThemeSource): void {
+    this.desktopThemeSource = theme;
     nativeTheme.themeSource = theme;
-    this.updateDockThemeIcon(
-      shouldUseDarkDockIcon(theme, nativeTheme.shouldUseDarkColors),
-    );
+    this.updateDockThemeIcon();
   }
 
   private createTemplateTrayIcon(): Electron.NativeImage {

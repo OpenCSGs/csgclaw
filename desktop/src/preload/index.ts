@@ -1,11 +1,22 @@
 import { contextBridge, ipcRenderer } from "electron";
-import {
-  DesktopIPC,
-  type DesktopBridge,
-  type DesktopOAuthInput,
-  type DesktopThemeSource,
-  type DesktopUpdateStatus,
+import type {
+  DesktopBridge,
+  DesktopOAuthInput,
+  DesktopThemeSource,
+  DesktopUpdateStatus,
 } from "../shared/desktopBridge.types";
+
+// Sandboxed preload scripts cannot require local CommonJS modules at runtime.
+// Keep these channels inlined so the compiled preload remains a single file.
+const DesktopIPC = {
+  checkForUpdates: "csgclaw:desktop:check-for-updates",
+  getRuntimeInfo: "csgclaw:desktop:get-runtime-info",
+  installDownloadedUpdate: "csgclaw:desktop:install-downloaded-update",
+  openOAuth: "csgclaw:desktop:open-oauth",
+  restartSidecar: "csgclaw:desktop:restart-sidecar",
+  setThemeSource: "csgclaw:desktop:set-theme-source",
+  updateStatus: "csgclaw:desktop:update-status",
+} as const;
 
 const bridge: DesktopBridge = Object.freeze({
   getRuntimeInfo: () => ipcRenderer.invoke(DesktopIPC.getRuntimeInfo),
