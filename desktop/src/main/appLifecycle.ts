@@ -1,13 +1,9 @@
 import path from "node:path";
 import { app, dialog, Menu, nativeImage, nativeTheme, shell, Tray } from "electron";
 import { DesktopIPC, type DesktopUpdateStatus } from "../shared/desktopBridge.types";
+import { DesktopPlatform } from "../shared/desktopEnvironment";
 import { registerIPCHandlers } from "./ipcHandlers";
-import {
-  desktopIconResourcePath,
-  isMacOSDesktop,
-  isWindowsDesktop,
-  windowsAppIconPath,
-} from "./platform";
+import { desktopIconResourcePath, isMacOSDesktop, windowsAppIconPath } from "./platform";
 import { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
 import { DesktopUpdater } from "./updater";
 import { WindowManager } from "./windowManager";
@@ -215,11 +211,7 @@ export class AppLifecycle {
   }
 
   private createTray(): void {
-    const icon = isWindowsDesktop ? this.loadWindowsIcon() : this.createTemplateTrayIcon();
-    if (isMacOSDesktop) {
-      icon.setTemplateImage(true);
-    }
-    this.tray = new Tray(icon);
+    this.tray = new Tray(this.loadTrayIcon());
     this.tray.setToolTip("CSGClaw");
     this.tray.setContextMenu(
       Menu.buildFromTemplate([
@@ -229,6 +221,17 @@ export class AppLifecycle {
       ]),
     );
     this.tray.on("double-click", () => this.show());
+  }
+
+  private loadTrayIcon(): Electron.NativeImage {
+    switch (process.platform) {
+      case DesktopPlatform.Windows:
+        return this.loadWindowsIcon();
+      case DesktopPlatform.MacOS:
+        return this.loadMacOSTrayIcon();
+      default:
+        return this.createTemplateTrayIcon();
+    }
   }
 
   private configureDockThemeIcon(): void {
@@ -250,6 +253,12 @@ export class AppLifecycle {
     nativeTheme.on("updated", updateDockIcon);
     this.cleanupDockThemeIcon = () => nativeTheme.removeListener("updated", updateDockIcon);
     updateDockIcon();
+  }
+
+  private loadMacOSTrayIcon(): Electron.NativeImage {
+    return nativeImage
+      .createFromPath(desktopIconResourcePath("csgclaw-dock-light.png"))
+      .resize({ width: 16, height: 16 });
   }
 
   private createTemplateTrayIcon(): Electron.NativeImage {
