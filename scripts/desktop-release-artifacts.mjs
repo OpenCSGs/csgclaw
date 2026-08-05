@@ -12,14 +12,74 @@ const targetArtifacts = {
   "windows-amd64": ["exe"],
 };
 
-export function normalizeReleaseVersion(rawVersion) {
+function parseReleaseVersion(rawVersion) {
   const requested = String(rawVersion || "").trim().replace(/^v/, "");
   const match = semanticVersionPattern.exec(requested);
   if (!match) {
     throw new Error(`invalid release version: ${rawVersion || "<empty>"}`);
   }
+  const prereleaseIdentifiers = match[4] ? match[4].split(".") : [];
+  if (
+    prereleaseIdentifiers.some(
+      (identifier) => /^\d+$/.test(identifier) && identifier.length > 1 && identifier.startsWith("0"),
+    )
+  ) {
+    throw new Error(`invalid release version: ${rawVersion || "<empty>"}`);
+  }
   const prerelease = match[4] ? `-${match[4]}` : "";
-  return `${match[1]}.${match[2]}.${match[3]}${prerelease}`;
+  return {
+    normalized: `${match[1]}.${match[2]}.${match[3]}${prerelease}`,
+    core: [BigInt(match[1]), BigInt(match[2]), BigInt(match[3])],
+    prerelease: prereleaseIdentifiers,
+  };
+}
+
+export function normalizeReleaseVersion(rawVersion) {
+  return parseReleaseVersion(rawVersion).normalized;
+}
+
+export function compareReleaseVersions(leftVersion, rightVersion) {
+  const left = parseReleaseVersion(leftVersion);
+  const right = parseReleaseVersion(rightVersion);
+
+  for (let index = 0; index < left.core.length; index += 1) {
+    if (left.core[index] < right.core[index]) {
+      return -1;
+    }
+    if (left.core[index] > right.core[index]) {
+      return 1;
+    }
+  }
+
+  if (left.prerelease.length === 0 || right.prerelease.length === 0) {
+    if (left.prerelease.length === right.prerelease.length) {
+      return 0;
+    }
+    return left.prerelease.length === 0 ? 1 : -1;
+  }
+
+  const identifierCount = Math.min(left.prerelease.length, right.prerelease.length);
+  for (let index = 0; index < identifierCount; index += 1) {
+    const leftIdentifier = left.prerelease[index];
+    const rightIdentifier = right.prerelease[index];
+    if (leftIdentifier === rightIdentifier) {
+      continue;
+    }
+    const leftNumeric = /^\d+$/.test(leftIdentifier);
+    const rightNumeric = /^\d+$/.test(rightIdentifier);
+    if (leftNumeric && rightNumeric) {
+      return BigInt(leftIdentifier) < BigInt(rightIdentifier) ? -1 : 1;
+    }
+    if (leftNumeric !== rightNumeric) {
+      return leftNumeric ? -1 : 1;
+    }
+    return leftIdentifier < rightIdentifier ? -1 : 1;
+  }
+
+  if (left.prerelease.length === right.prerelease.length) {
+    return 0;
+  }
+  return left.prerelease.length < right.prerelease.length ? -1 : 1;
 }
 
 export function releaseTag(version) {

@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { collectDesktopReleaseAssets } from "./collect-desktop-release-assets.mjs";
 import {
+  compareReleaseVersions,
   desktopDownloadArtifacts,
   desktopReleaseArtifactNames,
   inferReleaseChannel,
@@ -18,6 +19,7 @@ import {
 } from "./desktop-release-artifacts.mjs";
 
 export {
+  compareReleaseVersions,
   inferReleaseChannel,
   normalizeReleaseVersion,
   releaseTag,
@@ -85,6 +87,11 @@ export function generateDownloadsManifest({
   }
 
   const previous = readExistingManifest(manifestPath, channel);
+  if (previous?.latest && compareReleaseVersions(version, previous.latest) < 0) {
+    throw new Error(
+      `refusing to publish ${version} to ${channel}: current latest is newer (${previous.latest}); create a tag newer than or equal to ${previous.latest}`,
+    );
+  }
   const versions = {
     [version]: {
       version,

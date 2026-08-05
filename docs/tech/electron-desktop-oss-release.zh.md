@@ -96,6 +96,8 @@ GitHub 不会仅根据 tag 名称自动设置 Pre-release。CI 使用 `desktop-r
 
 所有合法的 SemVer 预发布版本都会进入 `beta`；稳定版本进入 `release`。两个 channel 共用 `oss-publish` GitHub Environment，只通过不同的 `downloads.json` 路径分流。
 
+发布脚本会按 SemVer 比较待发布版本和远端 manifest 的 `latest`。可以重新发布同一版本，但不能发布比当前 `latest` 更旧的版本；遇到旧 tag 时任务会失败并提示当前 `latest`，需要改用更高的版本号重新打 tag。
+
 在仓库 Settings → Environments 中创建 `oss-publish`，并配置以下 secrets：
 
 - `OSS_ACCESS_KEY_ID`

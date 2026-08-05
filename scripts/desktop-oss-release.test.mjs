@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  compareReleaseVersions,
   desktopUploadPaths,
   generateDownloadsManifest,
   inferReleaseChannel,
@@ -22,6 +23,15 @@ test("normalizes public desktop versions", () => {
   assert.equal(inferReleaseChannel("v0.4.6-beta.1"), "beta");
   assert.equal(inferReleaseChannel("v0.4.6"), "release");
   assert.throws(() => inferReleaseChannel("v0.4.6.beta.1"), /invalid release version/);
+  assert.throws(() => inferReleaseChannel("v0.4.6-beta.01"), /invalid release version/);
+});
+
+test("orders public desktop versions using SemVer precedence", () => {
+  assert.equal(compareReleaseVersions("v0.4.6", "0.4.6+build.2"), 0);
+  assert.ok(compareReleaseVersions("0.4.6", "0.4.6-rc.1") > 0);
+  assert.ok(compareReleaseVersions("0.4.6-beta.10", "0.4.6-beta.2") > 0);
+  assert.ok(compareReleaseVersions("0.4.6-beta.2", "0.4.6-beta.2.1") < 0);
+  assert.ok(compareReleaseVersions("0.4.5", "0.4.6") < 0);
 });
 
 test("keeps beta and release versions in their channels", () => {
@@ -72,6 +82,51 @@ test("generates a downloads manifest compatible with the existing csglite schema
     assert.match(manifest.versions[version].artifacts[0].sha256, /^[a-f0-9]{64}$/);
     assert.match(manifest.versions[version].artifacts[0].url, /csgclaw-desktop_v0\.4\.5-beta\.1_darwin_arm64\.dmg$/);
     assert.equal(JSON.parse(fs.readFileSync(manifestPath, "utf8")).channel, "beta");
+
+    const repeated = generateDownloadsManifest({
+      version,
+      channel: "beta",
+      releaseDirectory,
+      manifestPath,
+      publishedAt: "2026-08-05T00:00:00.000Z",
+    });
+    assert.equal(repeated.latest, version);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("rejects moving a channel latest backward", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "csgclaw-desktop-rollback-"));
+  const version = "0.4.5-beta.1";
+  const currentLatest = "0.4.5-beta.2";
+  const releaseDirectory = path.join(root, "releases", version);
+  const manifestPath = path.join(root, "channels", "beta", "downloads.json");
+  fs.mkdirSync(releaseDirectory, { recursive: true });
+  for (const suffix of ["darwin_arm64.dmg", "darwin_amd64.dmg", "windows_amd64.exe"]) {
+    fs.writeFileSync(path.join(releaseDirectory, `csgclaw-desktop_v${version}_${suffix}`), suffix);
+  }
+  const existingManifest = `${JSON.stringify({
+    schema_version: 1,
+    channel: "beta",
+    latest: currentLatest,
+    versions: {
+      [currentLatest]: {
+        version: currentLatest,
+        published_at: "2026-08-04T00:00:00.000Z",
+        artifacts: [],
+      },
+    },
+  }, null, 2)}\n`;
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, existingManifest);
+
+  try {
+    assert.throws(
+      () => generateDownloadsManifest({ version, channel: "beta", releaseDirectory, manifestPath }),
+      /refusing to publish 0\.4\.5-beta\.1 to beta: current latest is newer \(0\.4\.5-beta\.2\)/,
+    );
+    assert.equal(fs.readFileSync(manifestPath, "utf8"), existingManifest);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
