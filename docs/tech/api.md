@@ -1414,6 +1414,12 @@ Different session IDs may run concurrently.
 Using the same global session with another agent returns `409 session_agent_conflict`.
 The server waits up to five minutes for a final agent response and returns `504 response_timeout` afterward.
 
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
+
+Cancels the active response for the selected Agent and Session.
+The request returns `204 No Content` only after Runtime cancellation and turn cleanup have finished, so the client can safely send the next turn.
+Calling it when no response is active is idempotent and also returns `204 No Content`.
+
 Errors use this JSON shape:
 
 ```json

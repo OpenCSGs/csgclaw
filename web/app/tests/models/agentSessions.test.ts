@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentSessionResponseText, agentSessionRoomTitle, isValidAgentSessionID } from "@/models/agentSessions";
+import { agentSessionConversationLabel, agentSessionResponseText, isValidAgentSessionID } from "@/models/agentSessions";
 import {
   emptySessionDemoStorageState,
   findSessionRecord,
@@ -12,10 +12,10 @@ import {
 } from "@/pages/SessionDemoPage/sessionDemoStorage";
 
 describe("agent session models", () => {
-  it("validates path-safe session identifiers and formats searchable room titles", () => {
+  it("validates path-safe session identifiers and formats conversation labels", () => {
     expect(isValidAgentSessionID("session_01.test~dev")).toBe(true);
     expect(isValidAgentSessionID("bad/session")).toBe(false);
-    expect(agentSessionRoomTitle("session-01", "Reviewer", "agent-reviewer")).toBe(
+    expect(agentSessionConversationLabel("session-01", "Reviewer", "agent-reviewer")).toBe(
       "Anonymous Session: session-01 | Agent: Reviewer (agent-reviewer)",
     );
   });

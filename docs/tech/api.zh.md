@@ -1381,6 +1381,12 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 同一个全局 session 改用其它 Agent 时返回 `409 session_agent_conflict`。
 服务端最多等待五分钟，之后返回 `504 response_timeout`。
 
+### `POST /api/v1/agents/{agent}/sessions/{session_id}/responses/cancel`
+
+取消所选 Agent 与 Session 当前正在执行的 response。
+只有 Runtime 取消和 turn cleanup 都完成后，该请求才返回 `204 No Content`，此时 client 可以安全发送下一个 turn。
+没有 active response 时重复调用也是幂等的，并返回 `204 No Content`。
+
 错误使用以下 JSON 格式：
 
 ```json

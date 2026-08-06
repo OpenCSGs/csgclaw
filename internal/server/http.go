@@ -12,6 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/api"
 	"csgclaw/internal/channel/feishu"
@@ -51,7 +53,8 @@ type Options struct {
 	Upgrade            *upgrade.Manager
 	ActivityDecider    api.ActivityDecider
 	UserInputResponder api.UserInputResponder
-	SessionEventSource api.SessionEventSource
+	AgentEngine        *agentengine.Engine
+	SessionBindings    *agentsession.Store
 	ConfigPath         string
 	AccessToken        string
 	NoAuth             bool
@@ -78,7 +81,7 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetUpgradeManager(opts.Upgrade)
 	handler.SetActivityDecider(opts.ActivityDecider)
 	handler.SetUserInputResponder(opts.UserInputResponder)
-	handler.SetSessionEventSource(opts.SessionEventSource)
+	handler.SetAgentEngine(opts.AgentEngine, opts.SessionBindings)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)
 	handler.SetConfigPath(opts.ConfigPath)
 	handler.SetAdvertiseBaseURL(opts.AdvertiseBaseURL)

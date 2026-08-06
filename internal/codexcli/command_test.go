@@ -15,7 +15,7 @@ func TestAppServerCommandContextUsesBundledNativeBinary(t *testing.T) {
 	if got, want := cmd.Path, binaryPath; got != want {
 		t.Fatalf("command path = %q, want %q", got, want)
 	}
-	if got, want := cmd.Args, []string{binaryPath, "app-server", "--listen", "stdio://"}; !reflect.DeepEqual(got, want) {
+	if got, want := cmd.Args, []string{binaryPath, "app-server", "--disable", "plugins", "--listen", "stdio://"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("command args = %q, want %q", got, want)
 	}
 }

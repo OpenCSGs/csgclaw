@@ -59,6 +59,10 @@ func (r *Runtime) ValidateConfig(ctx context.Context, current agentruntime.Runti
 	return nil
 }
 
+func (r *Runtime) ValidateStartConfig(_ context.Context, _ agentruntime.RuntimeConfigSnapshot) error {
+	return nil
+}
+
 func (r *Runtime) RestartRequired(change agentruntime.RuntimeConfigChange) (bool, error) {
 	return codexWorkspaceOptionChanged(change.Previous.Options, change.Current.Options) ||
 		!reflect.DeepEqual(change.Previous.Profile, change.Current.Profile), nil

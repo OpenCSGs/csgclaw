@@ -72,6 +72,16 @@ func TestDefaultTasksDirUsesDomainSubdirectory(t *testing.T) {
 	}
 }
 
+func TestDefaultAgentSessionBindingsDirUsesDomainSubdirectory(t *testing.T) {
+	dir, err := DefaultAgentSessionBindingsDir()
+	if err != nil {
+		t.Fatalf("DefaultAgentSessionBindingsDir() error = %v", err)
+	}
+	if got, want := filepath.Base(dir), AgentSessionBindingsDirName; got != want {
+		t.Fatalf("filepath.Base(DefaultAgentSessionBindingsDir()) = %q, want %q", got, want)
+	}
+}
+
 func TestLoadUsesDefaultBootstrapTemplatesWhenSectionIsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -1954,6 +1964,18 @@ func TestValidateRejectsUnsupportedProvider(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "only \"llm-api\" is supported now") {
 		t.Fatalf("Validate() error = %q, want unsupported provider rejection", err)
+	}
+}
+
+func TestResolveLocalBaseURLIgnoresAdvertiseBaseURL(t *testing.T) {
+	t.Parallel()
+
+	server := ServerConfig{
+		ListenAddr:       "0.0.0.0:19090",
+		AdvertiseBaseURL: "https://public.example.test/csgclaw",
+	}
+	if got, want := ResolveLocalBaseURL(server), "http://127.0.0.1:19090"; got != want {
+		t.Fatalf("ResolveLocalBaseURL() = %q, want %q", got, want)
 	}
 }
 

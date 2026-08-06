@@ -316,13 +316,14 @@ type rawHubRegistryConfig struct {
 }
 
 const (
-	AppDirName      = ".csgclaw"
-	ConfigFileName  = "config.toml"
-	StateFileName   = "state.json"
-	AgentsDirName   = "agents"
-	HubDirName      = "hub"
-	IMDirName       = "im"
-	ChannelsDirName = "channels"
+	AppDirName                  = ".csgclaw"
+	ConfigFileName              = "config.toml"
+	StateFileName               = "state.json"
+	AgentsDirName               = "agents"
+	HubDirName                  = "hub"
+	IMDirName                   = "im"
+	ChannelsDirName             = "channels"
+	AgentSessionBindingsDirName = "session-bindings"
 
 	DefaultHTTPHost                 = "127.0.0.1"
 	DefaultHTTPPort                 = "18080"
@@ -367,12 +368,10 @@ func ListenPort(listenAddr string) string {
 	return port
 }
 
-// ResolveAdvertiseBaseURL resolves server.advertise_base_url, falling back to a URL derived from listen_addr.
-func ResolveAdvertiseBaseURL(server ServerConfig) string {
-	if u := strings.TrimRight(strings.TrimSpace(server.AdvertiseBaseURL), "/"); u != "" {
-		return u
-	}
-
+// ResolveLocalBaseURL resolves the in-process callback URL from listen_addr.
+// Host runtimes must not use advertise_base_url because a public address may
+// not be reachable from the same machine on networks without hairpin routing.
+func ResolveLocalBaseURL(server ServerConfig) string {
 	host := DefaultHTTPHost
 	if listenHost, _, err := net.SplitHostPort(server.ListenAddr); err == nil {
 		if listenHost != "" && listenHost != "0.0.0.0" && listenHost != "::" {
@@ -380,6 +379,14 @@ func ResolveAdvertiseBaseURL(server ServerConfig) string {
 		}
 	}
 	return "http://" + net.JoinHostPort(host, ListenPort(server.ListenAddr))
+}
+
+// ResolveAdvertiseBaseURL resolves server.advertise_base_url, falling back to a URL derived from listen_addr.
+func ResolveAdvertiseBaseURL(server ServerConfig) string {
+	if u := strings.TrimRight(strings.TrimSpace(server.AdvertiseBaseURL), "/"); u != "" {
+		return u
+	}
+	return ResolveLocalBaseURL(server)
 }
 
 func DefaultDir() (string, error) {
@@ -432,6 +439,10 @@ func DefaultTasksDir() (string, error) {
 
 func DefaultScheduledTasksDir() (string, error) {
 	return DefaultDomainDir("scheduled-tasks")
+}
+
+func DefaultAgentSessionBindingsDir() (string, error) {
+	return DefaultDomainDir(AgentSessionBindingsDirName)
 }
 
 func DefaultHubRegistryPath() string {

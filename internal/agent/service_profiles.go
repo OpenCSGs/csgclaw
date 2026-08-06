@@ -862,6 +862,31 @@ func (s *Service) validateRuntimeConfig(ctx context.Context, runtimeKind string,
 	return controller.ValidateConfig(ctx, current)
 }
 
+func (s *Service) validateRuntimeStartConfig(ctx context.Context, runtimeKind string, current agentruntime.RuntimeConfigSnapshot) error {
+	if s == nil {
+		return fmt.Errorf("agent service is required")
+	}
+	if err := validateRuntimeProfileAvailability(current); err != nil {
+		return err
+	}
+	runtimeKind = strings.TrimSpace(runtimeKind)
+	if runtimeKind == "" {
+		return nil
+	}
+	rt, err := s.runtimeForKind(runtimeKind)
+	if err != nil {
+		return err
+	}
+	if validator, ok := rt.(agentruntime.RuntimeStartConfigValidator); ok {
+		return validator.ValidateStartConfig(ctx, current)
+	}
+	controller, ok := rt.(agentruntime.RuntimeConfigController)
+	if !ok {
+		return nil
+	}
+	return controller.ValidateConfig(ctx, current)
+}
+
 func validateRuntimeProfileAvailability(current agentruntime.RuntimeConfigSnapshot) error {
 	if normalizeProfileProvider(current.Profile.Provider) != ProviderCodex {
 		return nil

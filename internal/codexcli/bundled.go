@@ -113,5 +113,5 @@ func (l BundleLocator) stat(path string) (os.FileInfo, error) {
 }
 
 func AppServerArgs() []string {
-	return []string{"app-server", "--listen", "stdio://"}
+	return []string{"app-server", "--disable", "plugins", "--listen", "stdio://"}
 }

@@ -24,7 +24,9 @@ import (
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentmanager"
+	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/api"
 	"csgclaw/internal/apitypes"
@@ -698,6 +700,22 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		defer agentManagerSvc.Close()
 	}
 	agentRuntimeSvc := NewAgentRuntimeService()
+	sessionBindingsDir, err := config.DefaultAgentSessionBindingsDir()
+	if err != nil {
+		return err
+	}
+	sessionBindings, err := agentsession.NewStore(sessionBindingsDir)
+	if err != nil {
+		return err
+	}
+	legacyStatePath, err := config.DefaultStatePath()
+	if err != nil {
+		return err
+	}
+	if err := agentsession.ImportLegacyState(legacyStatePath, sessionBindings); err != nil {
+		return err
+	}
+	conversationEngine := agentengine.New(svc)
 	var beforeShutdown func(context.Context) error
 	if serveOpts.Distribution == "electron" {
 		beforeShutdown = func(shutdownCtx context.Context) error {
@@ -734,7 +752,8 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		Upgrade:            upgradeManager,
 		ActivityDecider:    channelActivityDecider(codexBridgeMgr),
 		UserInputResponder: channelUserInputResponder(codexBridgeMgr),
-		SessionEventSource: channelSessionEventSource(codexBridgeMgr),
+		AgentEngine:        conversationEngine,
+		SessionBindings:    sessionBindings,
 		ConfigPath:         configPath,
 		AccessToken:        cfg.Server.AccessToken,
 		NoAuth:             cfg.Server.NoAuth,
@@ -993,6 +1012,10 @@ func apiBaseURL(server config.ServerConfig) string {
 	return config.ResolveAdvertiseBaseURL(server)
 }
 
+func codexBridgeBaseURL(server config.ServerConfig) string {
+	return config.ResolveLocalBaseURL(server)
+}
+
 func serveAPIBaseURL(serverConfig config.ServerConfig, opts serveOptions) string {
 	if opts.Desktop != nil {
 		if baseURL := strings.TrimRight(strings.TrimSpace(opts.Desktop.BaseURL), "/"); baseURL != "" {
@@ -1241,16 +1264,6 @@ func channelUserInputResponder(m codexBridgeManager) api.UserInputResponder {
 	return withUserInput.UserInputResponder()
 }
 
-func channelSessionEventSource(m codexBridgeManager) api.SessionEventSource {
-	withEvents, ok := m.(interface {
-		SessionEventSource() *runtimecodex.Runtime
-	})
-	if !ok {
-		return nil
-	}
-	return withEvents.SessionEventSource()
-}
-
 func newCodexBridgeManager(cfg config.Config, svc *agent.Service, feishuSvc *feishu.Service, workReporter worklease.ParticipantWorkReporter) (codexBridgeManager, error) {
 	if svc == nil {
 		return nil, nil
@@ -1260,7 +1273,7 @@ func newCodexBridgeManager(cfg config.Config, svc *agent.Service, feishuSvc *fei
 		Runtimes:     svc,
 		WorkReporter: workReporter,
 		CSGClawClient: &codexbridge.HTTPClient{
-			BaseURL:     apiBaseURL(cfg.Server),
+			BaseURL:     codexBridgeBaseURL(cfg.Server),
 			Token:       cfg.Server.AccessToken,
 			MentionOnly: true,
 		},

@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"csgclaw/internal/activity"
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/auth"
@@ -82,24 +82,15 @@ type Handler struct {
 	notificationDeliver        notification.Fanouter
 	activityDecider            ActivityDecider
 	userInputResponder         UserInputResponder
-	sessionEventSource         SessionEventSource
+	agentEngine                sessionConversationEngine
+	sessionBindings            *agentsession.Store
 	localDirectoryPicker       func(context.Context) (string, error)
 	feishuRegistrationStateDir string
 
 	participantActivityTurnsMu sync.Mutex
 	participantActivityTurns   map[string]participantActivityTurn
 	sessionTurnsMu             sync.Mutex
-	sessionTurns               map[string]struct{}
-}
-
-type SessionEventSource interface {
-	EnsureSession(ctx context.Context, runtimeID, conversationKey string) (string, error)
-	Prompt(ctx context.Context, runtimeID, sessionID, prompt string) error
-	Subscribe(runtimeID string) (<-chan activity.RuntimeEvent, func())
-}
-
-type scopedSessionEventSource interface {
-	SubscribeSession(runtimeID, sessionID string) (<-chan activity.RuntimeEvent, func())
+	sessionTurns               map[string]*agentSessionTurn
 }
 
 const (
@@ -780,9 +771,10 @@ func (h *Handler) SetUserInputResponder(responder UserInputResponder) {
 	}
 }
 
-func (h *Handler) SetSessionEventSource(source SessionEventSource) {
+func (h *Handler) SetAgentEngine(engine sessionConversationEngine, bindings *agentsession.Store) {
 	if h != nil {
-		h.sessionEventSource = source
+		h.agentEngine = engine
+		h.sessionBindings = bindings
 	}
 }
 

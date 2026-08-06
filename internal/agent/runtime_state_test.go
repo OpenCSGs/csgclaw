@@ -81,6 +81,37 @@ func TestRuntimeProfileForAgentUsesBridgeForCodex(t *testing.T) {
 	}
 }
 
+func TestRuntimeProfileForAgentIgnoresPublicAdvertiseURLForCodex(t *testing.T) {
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "https://public.example.test/csgclaw",
+			AccessToken:      "shared-token",
+		}, "manager-image:test", "",
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	profile := svc.runtimeProfileForAgent(Agent{
+		ID:          "u-alice",
+		Name:        "alice",
+		RuntimeKind: RuntimeKindCodex,
+		AgentProfile: AgentProfile{
+			Provider: ProviderCodex,
+			ModelID:  "gpt-5.5",
+		},
+	})
+
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
+		t.Fatalf("runtimeProfileForAgent().BaseURL = %q, want local bridge %q", got, want)
+	}
+	if got, want := profile.Env["CSGCLAW_BASE_URL"], "http://127.0.0.1:18080"; got != want {
+		t.Fatalf("runtimeProfileForAgent().Env[CSGCLAW_BASE_URL] = %q, want %q", got, want)
+	}
+}
+
 func TestRuntimeProfileInjectsConnectorCapabilityOnlyForManager(t *testing.T) {
 	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{AdvertiseBaseURL: "http://127.0.0.1:18080", AccessToken: "shared-token"}, "manager-image:test", "")
 	if err != nil {

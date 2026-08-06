@@ -2256,7 +2256,19 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	hostConfig := strings.Join([]string{
+		`model = "stale-host-model"`,
+		`model_provider = "proxy"`,
+		`model_catalog_json = "stale-catalog.json"`,
 		`approval_policy = "manual"`,
+		``,
+		`[model_providers.proxy]`,
+		`name = "Stale host proxy"`,
+		`base_url = "https://stale.example/v1"`,
+		``,
+		`[model_providers.preserved]`,
+		`name = "Preserved provider"`,
+		`base_url = "https://preserved.example/v1"`,
+		``,
 		`[[skills.config]]`,
 		`name = "superpowers:brainstorming"`,
 		``,
@@ -2334,6 +2346,8 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 	}
 	for _, want := range []string{
 		`approval_policy = "manual"`,
+		`[model_providers.preserved]`,
+		`base_url = "https://preserved.example/v1"`,
 		csgclawProviderBeginMarker,
 		csgclawSandboxBeginMarker,
 		csgclawMultiAgentBeginMarker,
@@ -2346,6 +2360,10 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		}
 	}
 	for _, unwanted := range []string{
+		`stale-host-model`,
+		`stale-catalog.json`,
+		`Stale host proxy`,
+		`https://stale.example/v1`,
 		`multi_agent = true`,
 		`default_mode_request_user_input = false`,
 		`memories = true`,

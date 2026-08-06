@@ -45,7 +45,7 @@ export function createAgentSessionID(): string {
   return `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export function agentSessionRoomTitle(sessionId: string, agentName: string, agentId: string): string {
+export function agentSessionConversationLabel(sessionId: string, agentName: string, agentId: string): string {
   return `Anonymous Session: ${sessionId} | Agent: ${agentName || agentId} (${agentId})`;
 }
 

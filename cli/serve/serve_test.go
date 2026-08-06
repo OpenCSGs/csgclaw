@@ -1825,6 +1825,17 @@ func TestAPIBaseURLPrefersAdvertiseBaseURL(t *testing.T) {
 	}
 }
 
+func TestCodexBridgeBaseURLUsesLocalListener(t *testing.T) {
+	got := codexBridgeBaseURL(config.ServerConfig{
+		ListenAddr:       "0.0.0.0:19090",
+		AdvertiseBaseURL: "https://public.example.test/csgclaw",
+	})
+	want := "http://127.0.0.1:19090"
+	if got != want {
+		t.Fatalf("codexBridgeBaseURL() = %q, want %q", got, want)
+	}
+}
+
 func TestAPIBaseURLFallsBackToSharedDefault(t *testing.T) {
 	got := apiBaseURL(config.ServerConfig{})
 	if got != config.DefaultAPIBaseURL() {

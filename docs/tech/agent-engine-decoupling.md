@@ -4,10 +4,11 @@ Chinese version: [agent-engine-decoupling.zh.md](agent-engine-decoupling.zh.md)
 
 ## Status
 
-Status: **Architecture proposal; review interface implemented**.
+Status: **Architecture proposal; Phase 1 Session path implemented**.
 
-The contract-only implementation is in [`internal/agentengine`](../../internal/agentengine).
-It is not wired to the existing Agent, API, IM, or Runtime packages.
+The contract and Phase 1 in-process Conversation implementation are in [`internal/agentengine`](../../internal/agentengine).
+Phase 1 is wired only to the anonymous Session API and the existing Codex Runtime.
+The broader Agent, Channel, file, interaction, and lifecycle design remains incremental.
 That package is the source of truth for exact Go types and method signatures.
 This document explains the intended ownership, behavior, and incremental implementation plan.
 
@@ -73,7 +74,7 @@ It may hold only process-local admission, active-turn, and pending-interaction s
 
 ### 2.2 Existing Execution Paths
 
-The current anonymous Session API still creates an IM Room and Messages:
+Before Phase 1, the anonymous Session API created an IM Room and Messages:
 
 ```text
 POST /api/v1/agents/{agent}/sessions/{session_id}/responses
@@ -84,7 +85,8 @@ POST /api/v1/agents/{agent}/sessions/{session_id}/responses
   -> persist final Message
 ```
 
-The target path removes that IM dependency while preserving the request, SSE, and error shapes.
+Phase 1 replaces that path with `Conversations(agentID).Run` while preserving the request, SSE, and error shapes.
+It no longer creates anonymous Session IM entities.
 
 Built-in IM and host-side Feishu Codex execution currently use `internal/channelbridge/codexbridge`.
 That bridge already owns source subscription, deduplication, conversation-key construction, hidden Channel and Thread context, attachment manifests, activity rendering, interactions, Stop, and `/new`.
@@ -130,8 +132,8 @@ The review surface is:
 | Resource | Operations | Purpose |
 |---|---|---|
 | `Agents()` | Create, Get, List, Update, Delete, Start, Stop, Recreate | Desired Agent configuration and Runtime lifecycle |
-| `Conversations(agentID)` | Run, Cancel, Reset, Resolve | Conversation execution scoped to one Agent |
-| `ConversationRuntime` | Run, Cancel, Reset, Resolve | Runtime-specific direct execution behind Engine |
+| `Conversations(agentID)` | Run; Cancel, Reset, and Resolve planned | Conversation execution scoped to one Agent |
+| `ConversationRuntime` | Run; additional lifecycle operations planned | Runtime-specific direct execution behind Engine |
 
 `AgentInterface` is the collection-scoped API for Agent resources, not an adapter around the current `internal/agent.Service`.
 Its implementation owns Agent persistence and Runtime lifecycle through explicit storage and Runtime dependencies.
@@ -159,9 +161,15 @@ The Codex Adapter does not receive Feishu credentials when the host Feishu Adapt
 Updating an Agent replaces its desired specification as one resource update.
 
 `ConversationInterface` does not expose CRUD methods because Engine does not persist Conversation resources.
-`Run`, `Cancel`, `Reset`, and `Resolve` describe the actual lifecycle available to callers.
+Phase 1 activates only `Run`.
+The planned `Cancel`, `Reset`, and `Resolve` signatures and their related request fields remain commented in the Go contract until a migrated caller needs them.
+Request cancellation currently uses `context.Context`.
 
 ### 3.3 Conversation Semantics
+
+This section describes the complete target contract.
+Phase 1 uses only `TurnID`, `ConversationKey`, text `InputPart` values, text and tool events, and a terminal result.
+Continuation policy, configurable admission, files, interactions, structured output, and explicit lifecycle methods remain later-phase design.
 
 `ConversationKey` is an opaque caller-owned identity.
 Engine validates only that it is non-empty and length-bounded.
@@ -216,6 +224,9 @@ Feishu keeps its current `skip_user_input` behavior.
 A text part contains `Text`.
 A file part contains one caller-authorized `InputFile`.
 There is no parallel file list and no Engine file-preparation step.
+Incremental implementation does not narrow this contract to a string.
+The Phase 1 Session HTTP Adapter creates one text part, and the private Codex Runtime Adapter joins ordered text parts before calling the current Runtime API.
+A file part retains its public type but returns `file_unavailable` before Runtime dispatch until a later phase implements file execution.
 
 The Event Sink receives ordered, non-terminal progress for one `Run` call:
 
@@ -248,8 +259,8 @@ Each fact has one owner:
 | Channel Adapter | Ingress, identity, binding and Channel Event Worker lifecycle, host-side Channel credentials, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
 | Session HTTP Adapter | HTTP validation, Session Binding, SSE and error mapping | IM Room, Message, Participant, transcript |
 
-During Phase 1, the current Agent Service and conversation execution must share one Agent Lifecycle Gate so Stop, Runtime-affecting Update, Recreate, and Delete cannot replace resources used by an active Turn.
-After Phase 2, the new Agent resource implementation and conversation execution share the same Gate.
+Lifecycle coordination is not part of the minimal Phase 1 Session implementation.
+After the Agent control plane is implemented, the Agent resource implementation and conversation execution share one Agent Lifecycle Gate so lifecycle changes cannot replace resources used by an active Turn.
 The Gate remains an implementation detail and is not part of the public interfaces.
 
 ## 5. Primary Flows
@@ -273,15 +284,10 @@ Session HTTP Adapter
   -> map Engine events to existing SSE
 ```
 
-The Session Binding Store is uniquely keyed by `(agentID, externalSessionID)` and contains only those IDs, an opaque Conversation Key, and `initializing` or `ready` state.
-It stores no prompt, output, file, Runtime handle, or interaction.
-
-An `initializing` Session uses `create_or_resume`.
-It becomes `ready` after the first result with `Dispatched=true`.
-A mapping failure leaves it `initializing` because that result has `Dispatched=false`.
-A `ready` Session uses `require_existing`.
-After a process restart, an `initializing` binding retries `create_or_resume` with the same Conversation Key.
-This recovery does not promise exactly-once Turn execution.
+The Phase 1 Session Binding Store is uniquely keyed by `(agentID, externalSessionID)` and contains only those IDs and one random opaque Conversation Key.
+It stores no prompt, output, file, Runtime handle, interaction, or recovery state.
+After a process restart, the binding reuses the same Conversation Key and the Codex Adapter calls the existing idempotent `EnsureSession` behavior.
+The later strict-continuation design may add explicit mapping state when another caller requires it.
 
 The route preserves current request input, `stream`, body limit, timeout, SSE, error envelope, `409 session_busy`, and empty `room_id` response metadata.
 It creates no Room, User, Participant, IM Message, Participant Work, or hidden Channel context.
@@ -375,9 +381,9 @@ Engine indexes queued and running Turns by `(agentID, ConversationKey, TurnID)` 
 If a sink fails, Engine requests Runtime cancellation when possible and waits for a true Runtime terminal state before releasing admission.
 If cancellation is unsupported, Engine continues supervising the Runtime until termination.
 
-The Agent Lifecycle Gate is a process-local concurrency primitive for one Agent, not a service or public interface.
+The Agent Lifecycle Gate is a planned process-local concurrency primitive for one Agent, not a service or public interface.
 It records whether admission is open and which Turns are active while Engine continues to own the queue.
-Phase 1 extends the existing `internal/agent.agentLifecycleGate`, which currently serializes Agent lifecycle operations, instead of introducing a second coordinator.
+When lifecycle coordination is implemented, it extends the existing `internal/agent.agentLifecycleGate`, which currently serializes Agent lifecycle operations, instead of introducing a second coordinator.
 If its expanded responsibility later warrants a different internal name, it may be renamed without changing this public contract.
 
 Run admission and lifecycle changes serialize through the same Gate.
@@ -426,11 +432,12 @@ Agent deletion is coordinated at the application and Binding boundary: reference
 - Implement `Conversations(agentID)` without implementing or migrating the `Agents()` control plane.
 - Keep existing Agent CRUD and lifecycle APIs on the current Agent Service.
 - Isolate all Conversation access to that Service behind one private Adapter; do not add `ExecutionTarget` or another public contract.
-- Extend the existing `internal/agent.agentLifecycleGate` and make the current Agent Service and Conversation execution share it before routing any Session Turn through Engine.
-- Implement bounded admission and per-Conversation serialization.
-- Implement the Codex Runtime Adapter.
-- Add the Session Binding Store.
-- Route the existing anonymous Session API through Agent Engine.
+- Activate only `Run`; keep later operations and fields commented in the Go contract.
+- Reuse the current Codex `EnsureSession`, `Prompt`, and scoped Runtime events through the private Adapter.
+- Add the minimal Agent-scoped Session Binding Store without mapping state.
+- Keep only the current fail-fast lock for the same Agent and external Session; do not add queues or configurable admission.
+- Route streaming and non-streaming anonymous Session requests through Agent Engine.
+- Adapt Session text to `InputPartText` without narrowing `TurnRequest.Input`; the private Codex Runtime Adapter rejects file parts explicitly until file execution is implemented.
 - Preserve the public API while removing anonymous IM persistence.
 - Reject unsupported Runtime Adapters before creating state.
 - Treat the private Adapter as transitional and remove it in Phase 2.
@@ -464,7 +471,20 @@ A later phase must not be required to validate an earlier phase.
 
 ## 8. Acceptance Criteria
 
-### 8.1 Architecture
+### 8.1 Phase 1
+
+- Streaming and non-streaming Session requests use `Conversations(agentID).Run`.
+- Anonymous Session execution creates no IM entities and preserves the existing HTTP, JSON, SSE, timeout, and error shapes.
+- Session Bindings are uniquely keyed by `(agentID, externalSessionID)`, persist one opaque Conversation Key, and reuse it after restart.
+- Same-Agent, same-Session overlap returns `409 session_busy`; different Sessions and the same external Session ID under different Agents can run concurrently.
+- Codex text deltas and tool activities preserve the existing SSE shape and secret redaction.
+- The Session Adapter sends one text `InputPart`, and the private Codex Runtime Adapter preserves ordered multi-part text input.
+- Unsupported Runtime Adapters fail explicitly before binding creation, without fallback.
+- Request cancellation reaches the Codex Runtime through `context.Context`.
+- A request arriving after cancellation waits for Runtime cleanup before starting; active overlapping requests still fail fast with `409 session_busy`.
+- Agent CRUD, built-in IM, Feishu, Team, Task, Scheduled Task, Notification, and Work behavior remains unchanged.
+
+### 8.2 Target Architecture
 
 - `internal/agentengine` imports no IM, Participant, Channel, Team, or concrete Runtime package.
 - `Interface` exposes `Agents()` and Agent-scoped `Conversations(agentID)`.
@@ -480,10 +500,9 @@ A later phase must not be required to validate an earlier phase.
 - Missing Runtime Adapters fail explicitly with no fallback path.
 - The Go contract and both language documents remain synchronized.
 
-### 8.2 Behavior
+### 8.3 Target Behavior
 
 - Anonymous Sessions create no IM entities and preserve their public API contract.
-- During Phase 1, current Agent Service lifecycle operations and Session Turns use the same Agent Lifecycle Gate.
 - Different Conversations can run concurrently while one Conversation remains serialized.
 - Built-in IM preserves Room, Thread, Mention, file, Activity, Stop, Work, interaction, and `/new` behavior.
 - Feishu preserves its currently supported text behavior without claiming file support.
@@ -501,17 +520,16 @@ A later phase must not be required to validate an earlier phase.
 - CSGClaw Structured Output never leaks raw control lines.
 - Secret answers enter neither logs nor transcripts.
 
-### 8.3 Verification
+### 8.4 Target Verification
 
 - Contract tests cover Run, Cancel, Reset, Resolve, event ordering, terminal results, and stable errors.
 - Tests cover one Turn, configured concurrency, busy admission, queue exhaustion, sink failure, and cancellation behavior.
 - Tests cover no MCP, local MCP, remote MCP, text input, and file input.
-- Anonymous tests verify that IM entity counts do not change, Session Binding scope is Agent-specific, and `initializing` recovery preserves its Conversation Key.
+- Anonymous tests verify that IM entity counts do not change and Session Binding scope is Agent-specific.
 - Channel tests verify deduplication, replay, superseding, rendering, Binding-driven Event Worker lifecycle, and idempotent reconciliation.
 - Lifecycle tests verify that Agent Stop, Recreate, and Runtime restart do not start or stop Channel Event Workers.
 - Agent deletion tests verify Binding cleanup, Event Worker shutdown, and transcript retention.
 - Lifecycle tests verify admission closure, queued cancellation, active Turn drain, drain timeout, lifecycle failure, and Runtime pinning.
-- Phase 1 race tests cover Session Run against current Agent Service Stop, Runtime-affecting Update, Recreate, and Delete through the shared Gate.
 - Phase 2 tests verify that Agent APIs use `Agents()` and that the temporary private Adapter has been removed.
 - Runtime tests verify mapping creation and persistence before dispatch, strict continuation, Reset, Stop and Start, Recreate, and Delete semantics.
 - Runtime Adapter tests verify credential serialization, `InitShell` ordering, reruns, failure handling, and secret redaction.

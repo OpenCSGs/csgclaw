@@ -33,7 +33,7 @@ export function SessionDemoPage() {
     } else {
       messages.scrollTop = messages.scrollHeight;
     }
-  }, [session.messages.length, session.pendingInput]);
+  }, [session.messages.length, session.pendingInput, session.streamingOutput]);
 
   async function copyValue(name: string, value: string) {
     if (!value) return;
@@ -124,28 +124,27 @@ export function SessionDemoPage() {
 
             <div className={styles.auditBlock}>
               <div className={styles.auditHeader}>
-                <span>{t("sessionDemoRoomName")}</span>
+                <span>{t("sessionDemoConversationLabel")}</span>
                 <Button
                   iconOnly
                   size="sm"
                   variant="ghost"
-                  aria-label={t("sessionDemoCopyRoomName")}
-                  title={t("sessionDemoCopyRoomName")}
-                  disabled={!session.roomTitle}
-                  onClick={() => copyValue("room", session.roomTitle)}
+                  aria-label={t("sessionDemoCopyConversationLabel")}
+                  title={t("sessionDemoCopyConversationLabel")}
+                  disabled={!session.conversationLabel}
+                  onClick={() => copyValue("conversation", session.conversationLabel)}
                 >
-                  {copied === "room" ? <Check size={14} /> : <Copy size={14} />}
+                  {copied === "conversation" ? <Check size={14} /> : <Copy size={14} />}
                 </Button>
               </div>
-              <code>{session.roomTitle || t("sessionDemoSelectAgentFirst")}</code>
-              {session.roomId ? <small>{t("sessionDemoRoomCreated", { roomId: session.roomId })}</small> : null}
+              <code>{session.conversationLabel || t("sessionDemoSelectAgentFirst")}</code>
             </div>
 
             <div className={styles.identityNotice}>
               <ShieldCheck size={18} aria-hidden="true" />
               <div>
-                <strong>{t("sessionDemoAnonymousAsAdmin")}</strong>
-                <span>{t("sessionDemoAnonymousAsAdminHint")}</span>
+                <strong>{t("sessionDemoDirectEngine")}</strong>
+                <span>{t("sessionDemoDirectEngineHint")}</span>
               </div>
             </div>
           </aside>
@@ -175,17 +174,23 @@ export function SessionDemoPage() {
               ) : null}
               {session.messages.map((message) => (
                 <article key={message.id} className={styles.message} data-role={message.role}>
-                  <span>{message.role === "user" ? t("sessionDemoAdminLabel") : session.selectedAgent?.name}</span>
+                  <span>{message.role === "user" ? t("sessionDemoUserLabel") : session.selectedAgent?.name}</span>
                   <div>{message.content}</div>
                 </article>
               ))}
               {session.pendingInput ? (
                 <article className={styles.message} data-role="user" data-pending="true">
-                  <span>{t("sessionDemoAdminLabel")}</span>
+                  <span>{t("sessionDemoUserLabel")}</span>
                   <div>{session.pendingInput}</div>
                 </article>
               ) : null}
-              {session.busy ? (
+              {session.streamingOutput ? (
+                <article className={styles.message} data-role="assistant" data-pending="true">
+                  <span>{session.selectedAgent?.name}</span>
+                  <div>{session.streamingOutput}</div>
+                </article>
+              ) : null}
+              {session.busy && !session.streamingOutput ? (
                 <div className={styles.thinking} role="status">
                   <span />
                   <span />
@@ -230,9 +235,14 @@ export function SessionDemoPage() {
                 <div className={styles.composerFooter}>
                   <span>{t("sessionDemoComposerHint")}</span>
                   {session.busy ? (
-                    <Button variant="outlineDanger" onClick={session.cancel}>
+                    <Button
+                      variant="outlineDanger"
+                      loading={session.canceling}
+                      loadingLabel={t("sessionDemoCanceling")}
+                      onClick={session.cancel}
+                    >
                       <Square size={13} fill="currentColor" aria-hidden="true" />
-                      {t("sessionDemoCancel")}
+                      {session.canceling ? t("sessionDemoCanceling") : t("sessionDemoCancel")}
                     </Button>
                   ) : (
                     <Button type="submit" variant="primary" disabled={!session.draft.trim() || !session.selectedAgent}>

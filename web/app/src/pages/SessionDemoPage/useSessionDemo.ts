@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { createAgentSessionResponse, fetchSessionAgents, type SessionAgent } from "@/api/agentSessions";
+import {
+  cancelAgentSessionResponse,
+  fetchSessionAgents,
+  streamAgentSessionResponse,
+  type SessionAgent,
+} from "@/api/agentSessions";
 import { errorMessage } from "@/api/client";
 import {
-  agentSessionResponseText,
-  agentSessionRoomTitle,
+  agentSessionConversationLabel,
   createAgentSessionID,
   isValidAgentSessionID,
   type AgentSessionMessage,
@@ -21,12 +25,14 @@ import { SESSION_DEMO_STORAGE_KEY } from "@/shared/storage/keys";
 
 export type SessionDemoTransport = {
   listAgents: typeof fetchSessionAgents;
-  createResponse: typeof createAgentSessionResponse;
+  streamResponse: typeof streamAgentSessionResponse;
+  cancelResponse: typeof cancelAgentSessionResponse;
 };
 
 export const liveSessionDemoTransport: SessionDemoTransport = {
   listAgents: fetchSessionAgents,
-  createResponse: createAgentSessionResponse,
+  streamResponse: streamAgentSessionResponse,
+  cancelResponse: cancelAgentSessionResponse,
 };
 
 export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport = liveSessionDemoTransport) {
@@ -53,14 +59,22 @@ export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport =
   const [messages, setMessages] = useState<AgentSessionMessage[]>(initialRecord?.messages ?? []);
   const [draft, setDraft] = useState("");
   const [pendingInput, setPendingInput] = useState("");
+  const [streamingOutput, setStreamingOutput] = useState("");
   const [requestError, setRequestError] = useState("");
-  const [roomId, setRoomId] = useState("");
   const [busy, setBusy] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const [canceling, setCanceling] = useState(false);
+  const activeRequestRef = useRef<{
+    controller: AbortController;
+    agentName: string;
+    sessionId: string;
+    cancelPromise?: Promise<void>;
+  } | null>(null);
 
   const selectedAgent = useMemo(() => agents.find((item) => item.id === agentId) ?? null, [agentId, agents]);
   const agentLocked = messages.length > 0 || busy;
-  const roomTitle = selectedAgent ? agentSessionRoomTitle(sessionId, selectedAgent.name, selectedAgent.id) : "";
+  const conversationLabel = selectedAgent
+    ? agentSessionConversationLabel(sessionId, selectedAgent.name, selectedAgent.id)
+    : "";
 
   const persist = useCallback((state: SessionDemoStorageState) => {
     saveSessionDemoStorage(window.localStorage, SESSION_DEMO_STORAGE_KEY, state);
@@ -115,7 +129,7 @@ export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport =
       if (agentLocked) return;
       setAgentId(nextAgentID);
       setMessages(findSessionRecord(storageRef.current, sessionId, nextAgentID)?.messages ?? []);
-      setRoomId("");
+      setStreamingOutput("");
       setRequestError("");
     },
     [agentLocked, sessionId],
@@ -131,7 +145,7 @@ export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport =
     setSessionId(nextSessionID);
     setSessionDraft(nextSessionID);
     setMessages(findSessionRecord(storageRef.current, nextSessionID, agentId)?.messages ?? []);
-    setRoomId("");
+    setStreamingOutput("");
     setRequestError("");
   }, [agentId, sessionDraft, t]);
 
@@ -140,9 +154,9 @@ export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport =
     setSessionId(nextSessionID);
     setSessionDraft(nextSessionID);
     setMessages([]);
-    setRoomId("");
     setDraft("");
     setPendingInput("");
+    setStreamingOutput("");
     setRequestError("");
     setSessionError("");
   }, []);
@@ -160,19 +174,23 @@ export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport =
     }
 
     const controller = new AbortController();
-    abortControllerRef.current = controller;
+    activeRequestRef.current = { controller, agentName: selectedAgent.name, sessionId };
     setBusy(true);
     setDraft("");
     setPendingInput(input);
+    setStreamingOutput("");
     setRequestError("");
     try {
-      const response = await transport.createResponse({
-        agentName: selectedAgent.name,
-        sessionId,
-        input,
-        signal: controller.signal,
-      });
-      const output = agentSessionResponseText(response);
+      const response = await transport.streamResponse(
+        {
+          agentName: selectedAgent.name,
+          sessionId,
+          input,
+          signal: controller.signal,
+        },
+        (delta) => setStreamingOutput((current) => current + delta),
+      );
+      const output = response.text.trim();
       if (!output) {
         throw new Error(t("sessionDemoEmptyResponse"));
       }
@@ -181,14 +199,13 @@ export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport =
         ...messages,
         { id: `user-${response.id}`, role: "user", content: input, createdAt: now },
         {
-          id: response.output[0]?.id || `assistant-${response.id}`,
+          id: `assistant-${response.id}`,
           role: "assistant",
           content: output,
           createdAt: now,
         },
       ];
       setMessages(nextMessages);
-      setRoomId(response.metadata.room_id);
       persist(
         upsertSessionRecord(storageRef.current, {
           agentId: selectedAgent.id,
@@ -200,21 +217,41 @@ export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport =
       );
     } catch (error) {
       setDraft(input);
-      if (error instanceof DOMException && error.name === "AbortError") {
+      const cancellationRequested =
+        activeRequestRef.current?.controller === controller && activeRequestRef.current.cancelPromise !== undefined;
+      if (cancellationRequested || (error instanceof DOMException && error.name === "AbortError")) {
         setRequestError(t("sessionDemoRequestCanceled"));
       } else {
         setRequestError(errorMessage(error, t("sessionDemoRequestFailed")));
       }
     } finally {
-      if (abortControllerRef.current === controller) abortControllerRef.current = null;
+      const activeRequest = activeRequestRef.current;
+      if (activeRequest?.controller === controller && activeRequest.cancelPromise) {
+        try {
+          await activeRequest.cancelPromise;
+        } catch (error) {
+          setRequestError(errorMessage(error, t("sessionDemoCancelFailed")));
+        }
+      }
+      if (activeRequestRef.current?.controller === controller) activeRequestRef.current = null;
       setPendingInput("");
+      setStreamingOutput("");
+      setCanceling(false);
       setBusy(false);
     }
   }, [busy, draft, messages, persist, selectedAgent, sessionId, t, transport]);
 
   const cancel = useCallback(() => {
-    abortControllerRef.current?.abort();
-  }, []);
+    const activeRequest = activeRequestRef.current;
+    if (!activeRequest || activeRequest.cancelPromise) return;
+    setCanceling(true);
+    const cancelPromise = transport.cancelResponse({
+      agentName: activeRequest.agentName,
+      sessionId: activeRequest.sessionId,
+    });
+    activeRequest.cancelPromise = cancelPromise;
+    void cancelPromise.catch(() => activeRequest.controller.abort());
+  }, [transport]);
 
   return {
     agents,
@@ -234,10 +271,11 @@ export function useSessionDemo(t: TranslateFn, transport: SessionDemoTransport =
     draft,
     setDraft,
     pendingInput,
+    streamingOutput,
     requestError,
-    roomId,
-    roomTitle,
+    conversationLabel,
     busy,
+    canceling,
     send,
     cancel,
   };

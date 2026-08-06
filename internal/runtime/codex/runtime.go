@@ -162,6 +162,7 @@ var (
 	_ agentruntime.ConversationStarter         = (*Runtime)(nil)
 	_ agentruntime.RuntimeOptionSchemaProvider = (*Runtime)(nil)
 	_ agentruntime.RuntimeConfigController     = (*Runtime)(nil)
+	_ agentruntime.RuntimeStartConfigValidator = (*Runtime)(nil)
 	_ agentruntime.MCPServersController        = (*Runtime)(nil)
 	_ agentruntime.MCPServersReconciler        = (*Runtime)(nil)
 	_ agentruntime.MCPServersListController    = (*Runtime)(nil)

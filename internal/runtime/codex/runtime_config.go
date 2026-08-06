@@ -38,9 +38,11 @@ const (
 )
 
 var (
-	rootFeaturesTableHeaderRe = regexp.MustCompile(`^\s*\[\s*features\s*\]\s*(?:#.*)?$`)
-	rootMemoriesTableHeaderRe = regexp.MustCompile(`^\s*\[\s*memories\s*\]\s*(?:#.*)?$`)
-	mcpServersTableHeaderRe   = regexp.MustCompile(`^\s*\[\s*mcp_servers\s*(?:\.\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z0-9_-]+)\s*)*\]\s*(?:#.*)?$`)
+	rootFeaturesTableHeaderRe  = regexp.MustCompile(`^\s*\[\s*features\s*\]\s*(?:#.*)?$`)
+	rootMemoriesTableHeaderRe  = regexp.MustCompile(`^\s*\[\s*memories\s*\]\s*(?:#.*)?$`)
+	mcpServersTableHeaderRe    = regexp.MustCompile(`^\s*\[\s*mcp_servers\s*(?:\.\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z0-9_-]+)\s*)*\]\s*(?:#.*)?$`)
+	proxyProviderTableHeaderRe = regexp.MustCompile(`^\s*\[\s*model_providers\s*\.\s*proxy\s*\]\s*(?:#.*)?$`)
+	rootProviderDirectiveRe    = regexp.MustCompile(`^\s*(?:model|model_provider|model_catalog_json)\s*=`)
 
 	rootDottedMultiAgentRe    = regexp.MustCompile(`^\s*features\s*\.\s*multi_agent\s*=`)
 	featuresTableMultiAgentRe = regexp.MustCompile(`^\s*multi_agent\s*=`)
@@ -308,6 +310,8 @@ func configureCodexHomeConfigWithWorkspaceForPlatform(
 	}
 
 	content = stripLegacySandboxDirectives(content, isWindows)
+	content = stripUserProviderDirectives(content)
+	content = stripTableBlocks(content, proxyProviderTableHeaderRe)
 	content = stripUserMultiAgentDirectives(content)
 	content = stripUserInputDirectives(content)
 	content = stripUserMemoryDirectives(content)
@@ -361,6 +365,23 @@ func configureCodexHomeConfigWithWorkspaceForPlatform(
 		return ""
 	}
 	return strings.TrimRight(content, "\n") + "\n"
+}
+
+func stripUserProviderDirectives(content string) string {
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, len(lines))
+	atRoot := true
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") {
+			atRoot = false
+		}
+		if atRoot && rootProviderDirectiveRe.MatchString(trimmed) {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
 }
 
 func mcpTrimmedString(value any) string {

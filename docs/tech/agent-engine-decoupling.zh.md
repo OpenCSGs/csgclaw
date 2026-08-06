@@ -4,10 +4,11 @@
 
 ## 状态
 
-状态：**架构提案；评审接口已实现**。
+状态：**架构提案；阶段 1 Session Path 已实现**。
 
-仅包含 Contract 的实现位于 [`internal/agentengine`](../../internal/agentengine)。
-它尚未接入现有 Agent、API、IM 或 Runtime Package。
+Contract 和阶段 1 的进程内 Conversation 实现位于 [`internal/agentengine`](../../internal/agentengine)。
+阶段 1 只接入匿名 Session API 和现有 Codex Runtime。
+更完整的 Agent、Channel、File、Interaction 和生命周期设计继续按阶段实现。
 该 Package 是精确 Go Type 和 Method Signature 的 Source of Truth。
 本文档说明期望的 Owner、行为和增量实现计划。
 
@@ -73,7 +74,7 @@ Agent Engine 不能复制这些持久化状态。
 
 ### 2.2 现有执行路径
 
-当前匿名 Session API 仍会创建 IM Room 和 Message：
+阶段 1 之前，匿名 Session API 会创建 IM Room 和 Message：
 
 ```text
 POST /api/v1/agents/{agent}/sessions/{session_id}/responses
@@ -84,7 +85,8 @@ POST /api/v1/agents/{agent}/sessions/{session_id}/responses
   -> 持久化最终 Message
 ```
 
-目标路径删除该 IM 依赖，同时保留 Request、SSE 和 Error Shape。
+阶段 1 使用 `Conversations(agentID).Run` 替换该路径，同时保留 Request、SSE 和 Error Shape。
+它不再创建匿名 Session IM Entity。
 
 内置 IM 和 Host 侧飞书 Codex 执行当前使用 `internal/channelbridge/codexbridge`。
 该 Bridge 已负责 Source Subscription、Deduplication、Conversation Key 构造、隐藏 Channel 和 Thread Context、Attachment Manifest、Activity 渲染、Interaction、Stop 和 `/new`。
@@ -130,8 +132,8 @@ Composition Root 注册 Runtime Adapter，并把接口连接到现有 Owner。
 | Resource | 操作 | 用途 |
 |---|---|---|
 | `Agents()` | Create、Get、List、Update、Delete、Start、Stop、Recreate | Agent 期望配置和 Runtime 生命周期 |
-| `Conversations(agentID)` | Run、Cancel、Reset、Resolve | 限定到一个 Agent 的 Conversation 执行 |
-| `ConversationRuntime` | Run、Cancel、Reset、Resolve | Engine 后面的 Runtime 特有直接执行 |
+| `Conversations(agentID)` | Run；计划支持 Cancel、Reset 和 Resolve | 限定到一个 Agent 的 Conversation 执行 |
+| `ConversationRuntime` | Run；计划支持其他生命周期操作 | Engine 后面的 Runtime 特有直接执行 |
 
 `AgentInterface` 是 Agent Resource 的 Collection-scoped API，不是当前 `internal/agent.Service` 的 Adapter。
 它的实现通过明确的 Storage 和 Runtime Dependency 拥有 Agent 持久化及 Runtime 生命周期。
@@ -159,9 +161,15 @@ Host Feishu Adapter 负责 Delivery 时，Codex Adapter 不接收 Feishu Credent
 更新 Agent 时，把完整期望 Specification 作为一个 Resource Update 替换。
 
 `ConversationInterface` 不暴露 CRUD Method，因为 Engine 不持久化 Conversation Resource。
-`Run`、`Cancel`、`Reset` 和 `Resolve` 描述调用方实际可用的生命周期。
+阶段 1 只启用 `Run`。
+计划中的 `Cancel`、`Reset`、`Resolve` Signature 和相关 Request Field 继续以注释形式保留在 Go Contract 中，等迁移后的调用方真正需要时再启用。
+当前 Request Cancellation 使用 `context.Context`。
 
 ### 3.3 Conversation 语义
+
+本节描述完整的目标 Contract。
+阶段 1 只使用 `TurnID`、`ConversationKey`、Text `InputPart`、Text 和 Tool Event，以及终态 Result。
+Continuation Policy、可配置 Admission、File、Interaction、Structured Output 和显式生命周期 Method 留到后续阶段。
 
 `ConversationKey` 是调用方拥有的不透明 Identity。
 Engine 只校验其非空且长度有界。
@@ -216,6 +224,9 @@ Resolve 额外携带 `InteractionID` 来标识一个 Pending Interaction。
 Text Part 包含 `Text`。
 File Part 包含一个调用方已授权的 `InputFile`。
 不存在并行 File List，也不存在 Engine File Preparation 步骤。
+增量实现不会把这个 Contract 缩窄为 String。
+阶段 1 的 Session HTTP Adapter 创建一个 Text Part，私有 Codex Runtime Adapter 则在调用当前 Runtime API 前按顺序合并 Text Part。
+File Part 保留公共 Type，但在后续阶段实现 File Execution 前，会在 Runtime Dispatch 前返回 `file_unavailable`。
 
 Event Sink 接收一次 `Run` 调用内有序且非终态的进度：
 
@@ -248,8 +259,8 @@ Sink 不是 Event Bus、Transcript Store 或 Channel Renderer。
 | Channel Adapter | Ingress、Identity、Binding 和 Channel Event Worker 生命周期、Host 侧 Channel Credential、Deduplication、Hidden Context、File Authorization、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
 | Session HTTP Adapter | HTTP Validation、Session Binding、SSE 和 Error Mapping | IM Room、Message、Participant、Transcript |
 
-阶段 1 中，当前 Agent Service 和 Conversation Execution 必须共享一个 Agent Lifecycle Gate，确保 Stop、影响 Runtime 的 Update、Recreate 和 Delete 不会替换活动 Turn 正在使用的资源。
-阶段 2 完成后，新的 Agent Resource 实现与 Conversation Execution 共享同一个 Gate。
+生命周期协调不属于最小阶段 1 Session 实现。
+Agent Control Plane 实现后，Agent Resource 实现和 Conversation Execution 共享一个 Agent Lifecycle Gate，确保生命周期变更不会替换活动 Turn 正在使用的资源。
 Gate 保持为实现细节，不进入公共 Interface。
 
 ## 5. 主要流程
@@ -273,15 +284,10 @@ Session HTTP Adapter
   -> 把 Engine Event 映射为现有 SSE
 ```
 
-Session Binding Store 以 `(agentID, externalSessionID)` 作为唯一 Key，只包含这些 ID、不透明 Conversation Key，以及 `initializing` 或 `ready` 状态。
-它不保存 Prompt、Output、File、Runtime Handle 或 Interaction。
-
-`initializing` Session 使用 `create_or_resume`。
-第一个 `Dispatched=true` 的 Result 返回后，它变为 `ready`。
-Mapping 失败时 Result 的 `Dispatched=false`，因此它保持 `initializing`。
-`ready` Session 使用 `require_existing`。
-进程重启后，`initializing` Binding 使用相同的 Conversation Key 重试 `create_or_resume`。
-该恢复不承诺 Turn 的 Exactly-once 执行。
+阶段 1 Session Binding Store 以 `(agentID, externalSessionID)` 作为唯一 Key，只包含这些 ID 和一个随机不透明 Conversation Key。
+它不保存 Prompt、Output、File、Runtime Handle、Interaction 或 Recovery State。
+进程重启后，Binding 复用相同 Conversation Key，Codex Adapter 调用现有的幂等 `EnsureSession` 行为。
+后续严格续接设计可以在其他调用方真正需要时增加显式 Mapping State。
 
 Route 保留当前 Request Input、`stream`、Body Limit、Timeout、SSE、Error Envelope、`409 session_busy` 和空 `room_id` Response Metadata。
 它不创建 Room、User、Participant、IM Message、Participant Work 或 Hidden Channel Context。
@@ -375,9 +381,9 @@ Engine 使用 `(agentID, ConversationKey, TurnID)` 索引排队中和运行中�
 Sink 失败时，Engine 在可能时请求 Runtime Cancel，并等待 Runtime 真实终态后才释放 Admission。
 Runtime 不支持 Cancel 时，Engine 继续监督到终态。
 
-Agent Lifecycle Gate 是每个 Agent 一个的进程内并发控制原语，不是 Service 或公共 Interface。
+Agent Lifecycle Gate 是计划中的每 Agent 进程内并发控制原语，不是 Service 或公共 Interface。
 它记录 Admission 是否开放以及哪些 Turn 正在运行，Queue 仍然由 Engine 拥有。
-阶段 1 扩展现有的 `internal/agent.agentLifecycleGate`；它目前只负责串行化 Agent 生命周期操作，不再引入第二个 Coordinator。
+实现生命周期协调时，扩展现有的 `internal/agent.agentLifecycleGate`；它目前只负责串行化 Agent 生命周期操作，不再引入第二个 Coordinator。
 如果扩展后的职责以后需要更合适的内部名称，可以重命名，但不改变该公共 Contract。
 
 Run Admission 和生命周期变更通过同一个 Gate 串行化。
@@ -426,11 +432,12 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 - 实现 `Conversations(agentID)`，不实现或迁移 `Agents()` Control Plane。
 - 现有 Agent CRUD 和生命周期 API 继续使用当前 Agent Service。
 - Conversation 只能通过一个私有 Adapter 访问该 Service；不增加 `ExecutionTarget` 或其他公共 Contract。
-- 扩展现有的 `internal/agent.agentLifecycleGate`，并在任何 Session Turn 通过 Engine 执行前，让当前 Agent Service 和 Conversation Execution 共享它。
-- 实现有界 Admission 和每 Conversation 串行化。
-- 实现 Codex Runtime Adapter。
-- 增加 Session Binding Store。
-- 让现有匿名 Session API 通过 Agent Engine 执行。
+- 只启用 `Run`；后续 Operation 和 Field 继续以注释形式保留在 Go Contract 中。
+- 通过私有 Adapter 复用当前 Codex 的 `EnsureSession`、`Prompt` 和 Scoped Runtime Event。
+- 增加最小的 Agent-scoped Session Binding Store，不增加 Mapping State。
+- 只保留当前同一 Agent 和外部 Session 的快速失败 Lock；不增加 Queue 或可配置 Admission。
+- 让 Streaming 和 Non-streaming 匿名 Session Request 通过 Agent Engine 执行。
+- 把 Session Text 适配为 `InputPartText`，不缩窄 `TurnRequest.Input`；私有 Codex Runtime Adapter 在实现 File Execution 前明确拒绝 File Part。
 - 保留公共 API，同时删除匿名 IM 持久化。
 - 在创建 State 前拒绝不受支持的 Runtime Adapter。
 - 把私有 Adapter 视为过渡实现，并在阶段 2 删除。
@@ -464,7 +471,20 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 
 ## 8. 验收标准
 
-### 8.1 架构
+### 8.1 阶段 1
+
+- Streaming 和 Non-streaming Session Request 都使用 `Conversations(agentID).Run`。
+- 匿名 Session Execution 不创建 IM Entity，并保留现有 HTTP、JSON、SSE、Timeout 和 Error Shape。
+- Session Binding 以 `(agentID, externalSessionID)` 作为唯一 Key，持久化一个不透明 Conversation Key，并在重启后复用它。
+- 同一 Agent 和 Session 的重叠请求返回 `409 session_busy`；不同 Session，以及不同 Agent 下相同外部 Session ID 可以并发执行。
+- Codex Text Delta 和 Tool Activity 保留现有 SSE Shape 和 Secret Redaction。
+- Session Adapter 发送一个 Text `InputPart`，私有 Codex Runtime Adapter 保留有序的 Multi-part Text Input。
+- 不受支持的 Runtime Adapter 在创建 Binding 前明确失败，不启动 Fallback。
+- Request Cancellation 通过 `context.Context` 到达 Codex Runtime。
+- 取消后的新请求会等待 Runtime Cleanup 完成再开始；仍在运行的重叠请求继续立即返回 `409 session_busy`。
+- Agent CRUD、内置 IM、飞书、Team、Task、Scheduled Task、Notification 和 Work 行为保持不变。
+
+### 8.2 目标架构
 
 - `internal/agentengine` 不 Import IM、Participant、Channel、Team 或具体 Runtime Package。
 - `Interface` 暴露 `Agents()` 和按 Agent 限定的 `Conversations(agentID)`。
@@ -480,10 +500,9 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 - 缺少 Runtime Adapter 时明确失败，不启动 Fallback Path。
 - Go Contract 和两种语言文档保持同步。
 
-### 8.2 行为
+### 8.3 目标行为
 
 - 匿名 Session 不创建 IM Entity，并保留公共 API Contract。
-- 阶段 1 中，当前 Agent Service 的生命周期操作和 Session Turn 使用同一个 Agent Lifecycle Gate。
 - 不同 Conversation 可以并发，一个 Conversation 内保持串行。
 - 内置 IM 保留 Room、Thread、Mention、File、Activity、Stop、Work、Interaction 和 `/new` 行为。
 - 飞书保留当前支持的 Text 行为，不声称支持 File。
@@ -501,17 +520,16 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 - CSGClaw Structured Output 不泄漏原始控制行。
 - Secret Answer 不进入 Log 或 Transcript。
 
-### 8.3 验证
+### 8.4 目标验证
 
 - Contract Test 覆盖 Run、Cancel、Reset、Resolve、Event 顺序、终态 Result 和稳定 Error。
 - 测试覆盖单 Turn、配置并发、Busy Admission、Queue Exhaustion、Sink Failure 和 Cancel 行为。
 - 测试覆盖无 MCP、本地 MCP、远程 MCP、Text Input 和 File Input。
-- 匿名测试验证 IM Entity 数量不变、Session Binding Scope 按 Agent 隔离，并且 `initializing` 恢复保留原 Conversation Key。
+- 匿名测试验证 IM Entity 数量不变，并且 Session Binding Scope 按 Agent 隔离。
 - Channel 测试验证 Deduplication、Replay、Superseding、Rendering、Binding 驱动的 Event Worker 生命周期和幂等协调。
 - Lifecycle 测试验证 Agent Stop、Recreate 和 Runtime Restart 不启动或停止 Channel Event Worker。
 - Agent 删除测试验证 Binding 清理、Event Worker 停止和 Transcript 保留。
 - Lifecycle 测试验证 Admission 关闭、Queued Turn 取消、Active Turn Drain、Drain Timeout、Lifecycle Failure 和 Runtime Pinning。
-- 阶段 1 Race Test 覆盖 Session Run 与当前 Agent Service 的 Stop、影响 Runtime 的 Update、Recreate 和 Delete 通过共享 Gate 并发执行。
 - 阶段 2 测试验证 Agent API 使用 `Agents()`，并且临时私有 Adapter 已删除。
 - Runtime 测试验证分派前完成 Mapping 创建和持久化、严格续接、Reset、Stop 和 Start、Recreate 和 Delete 语义。
 - Runtime Adapter 测试验证 Credential 序列化、`InitShell` 顺序、重跑、失败处理和 Secret Redaction。

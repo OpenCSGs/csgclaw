@@ -27,3 +27,7 @@ type RuntimeConfigController interface {
 	RestartRequired(change RuntimeConfigChange) (bool, error)
 	ReconcileConfig(ctx context.Context, h Handle, change RuntimeConfigChange) error
 }
+
+type RuntimeStartConfigValidator interface {
+	ValidateStartConfig(ctx context.Context, current RuntimeConfigSnapshot) error
+}

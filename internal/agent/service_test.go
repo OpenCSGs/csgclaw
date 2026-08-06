@@ -180,6 +180,18 @@ type fakeReadinessAgentRuntime struct {
 	readiness func(context.Context, agentruntime.Handle) error
 }
 
+type fakeStartConfigAgentRuntime struct {
+	fakeAgentRuntime
+	startValidate func(context.Context, agentruntime.RuntimeConfigSnapshot) error
+}
+
+func (f fakeStartConfigAgentRuntime) ValidateStartConfig(ctx context.Context, current agentruntime.RuntimeConfigSnapshot) error {
+	if f.startValidate != nil {
+		return f.startValidate(ctx, current)
+	}
+	return nil
+}
+
 func (f fakeReadinessAgentRuntime) CheckReadiness(ctx context.Context, h agentruntime.Handle) error {
 	if f.readiness != nil {
 		return f.readiness(ctx, h)
@@ -7348,6 +7360,60 @@ func TestStartProvisionsRuntimeBeforeStart(t *testing.T) {
 	}
 	if got, want := strings.Join(callOrder, ","), "provision,start"; got != want {
 		t.Fatalf("call order = %q, want %q", got, want)
+	}
+}
+
+func TestStartUsesRuntimeStartValidationInsteadOfOnlineConfigProbe(t *testing.T) {
+	configProbeCalls := 0
+	startValidationCalls := 0
+	startCalls := 0
+	rt := fakeStartConfigAgentRuntime{fakeAgentRuntime: fakeAgentRuntime{
+		kind: RuntimeKindCodex,
+		validate: func(context.Context, agentruntime.RuntimeConfigSnapshot) error {
+			configProbeCalls++
+			return errors.New("provider temporarily unavailable")
+		},
+		start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+			startCalls++
+			return agentruntime.StateRunning, nil
+		},
+		info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+			return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+		},
+	}, startValidate: func(_ context.Context, current agentruntime.RuntimeConfigSnapshot) error {
+		startValidationCalls++
+		if current.Profile.ModelID != "glm-5.1" {
+			t.Fatalf("start validation model = %q, want glm-5.1", current.Profile.ModelID)
+		}
+		return nil
+	}}
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "", WithRuntime(rt))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["agent-alice"] = Agent{
+		ID:              "agent-alice",
+		Name:            "alice",
+		Role:            RoleWorker,
+		RuntimeID:       "rt-agent-alice",
+		RuntimeKind:     RuntimeKindCodex,
+		Status:          string(agentruntime.StateStopped),
+		AgentProfile:    AgentProfile{Name: "alice", Provider: ProviderAPI, BaseURL: "https://api.example/v1", APIKey: "api-key", ModelID: "glm-5.1", ProfileComplete: true},
+		ProfileComplete: true,
+	}
+
+	got, err := svc.Start(context.Background(), "agent-alice")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if got.Status != string(agentruntime.StateRunning) {
+		t.Fatalf("Start() status = %q, want running", got.Status)
+	}
+	if configProbeCalls != 0 {
+		t.Fatalf("online config probe calls = %d, want 0", configProbeCalls)
+	}
+	if startValidationCalls != 1 || startCalls != 1 {
+		t.Fatalf("start validation calls = %d, runtime start calls = %d, want 1 each", startValidationCalls, startCalls)
 	}
 }
 
