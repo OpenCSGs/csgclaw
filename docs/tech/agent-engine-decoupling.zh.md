@@ -119,7 +119,8 @@ flowchart TB
 
 Agent Engine 不 Import IM、Participant、Channel、Team 或具体 Runtime Package。
 Composition Root 注册 Runtime Adapter，并把接口连接到现有 Owner。
-缺少 Runtime Adapter 时，在创建 Engine Execution State、Session Binding 或 Channel Consumer 前返回 `runtime_adapter_unavailable`。
+缺少 Runtime Adapter 时，在创建 Engine Execution State 或 Session Binding 前返回 `runtime_adapter_unavailable`。
+它不会启动 Fallback Execution Path。
 
 ### 3.2 公共 Resource Interface
 
@@ -238,10 +239,10 @@ Sink 不是 Event Bus、Transcript Store 或 Channel Renderer。
 
 | 组件 | 负责 | 不负责 |
 |---|---|---|
-| Agent Resource 实现 | Agent 持久化、包含 Runtime Credential 和 `InitShell` 的期望配置、Runtime 生命周期、Workspace 和 Runtime Provision | Turn Input、Transcript、Runtime 原生 Conversation Mapping |
+| Agent Resource 实现 | Agent 持久化、包含 Runtime Credential 和 `InitShell` 的期望配置、Runtime 生命周期、Workspace 和 Runtime Provision | Turn Input、Transcript、Runtime 原生 Conversation Mapping、Channel Event Worker 生命周期 |
 | Agent Engine | Admission、每 Conversation 串行化、Dispatch、Active Turn、Pending Interaction、Event 顺序、规范化 Result | 持久化 Agent 或 Conversation State、File、Channel 行为 |
 | Runtime Adapter | Runtime Credential 序列化、`InitShell` 执行、原生 Conversation Mapping、直接 Runtime 协议、Runtime Event 转换、向 Runtime 暴露 File | Channel Subscription、Transcript、Agent 持久化 |
-| Channel Adapter | Ingress、Identity、Binding、Host 侧 Channel Credential、Deduplication、Hidden Context、File Authorization、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
+| Channel Adapter | Ingress、Identity、Binding 和 Channel Event Worker 生命周期、Host 侧 Channel Credential、Deduplication、Hidden Context、File Authorization、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
 | Session HTTP Adapter | HTTP Validation、Session Binding、SSE 和 Error Mapping | IM Room、Message、Participant、Transcript |
 
 Agent Resource 实现和 Conversation Execution Engine 必须使用一个内部的 Agent 级 Coordinator，确保 Stop、影响 Runtime 的 Update、Recreate 和 Delete 不会替换活动 Turn 正在使用的资源。
@@ -387,6 +388,22 @@ Stop 保留 Runtime Conversation Store，Start 只在 Runtime Ready 后重新开
 Recreate 和 Delete 在替代 Runtime Ready 或删除完成前，删除 Runtime 所有的 Conversation Mapping。
 Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 
+### 6.5 Channel Event Worker 生命周期
+
+Channel 层是 Channel Event Worker 生命周期的唯一 Owner。
+Composition Root 只启动每个 Channel Adapter 一次，Adapter 按稳定的 Binding Identity 协调已启用的 Binding。
+Binding 的创建、更新和删除通过幂等操作启动、重新配置和停止唯一的 Worker。
+Worker 监听传入的 Channel Event，面向 Agent ID 并调用 `Conversations(agentID)`，不绑定 Runtime ID 或原生 Session ID。
+
+Agent Resource 实现、Agent Engine 和 Runtime Adapter 既不控制 Channel Event Worker，也不访问 IM Message 持久化。
+每个 Channel 迁移时，从 Agent Resource Path 删除当前 `LifecycleObserver` 和 `BindingActivator -> codexBridgeMgr` 控制链。
+Binding 变更直接调用所属 Channel 层。
+
+Agent Stop、影响 Runtime 的 Update、Recreate 和 Runtime Restart 不改变 Binding、Worker 或已保存的 Transcript。
+Agent 不可用期间，Worker 继续正常 Ingress 和 Ack，并按 Channel 行为处理 `agent_unavailable`。
+Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Binding，Channel Adapter 停止对应 Worker，已保存的 Transcript 继续由 Channel 拥有。
+`AgentInterface.Delete` 本身保持 Channel-neutral。
+
 ## 7. 增量实现
 
 ### 阶段 0：评审 Contract
@@ -408,12 +425,14 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 ### 阶段 2：内置 IM
 
 - 把内置 IM 执行迁移到 Agent Engine 后面。
+- 把内置 IM Event Worker 迁移到 Binding 驱动的 Channel Owner，并删除它到 `codexBridgeMgr` 的 Agent 生命周期回调。
 - 保留 Channel Routing、Hidden Context、File、Interaction、Work、Stop、`/new`、Transcript 和 Rendering。
 - 运行 Team、Task、Scheduled Task、Notification 和 Work 回归测试。
 
 ### 阶段 3：飞书和更多 Runtime
 
 - 把受支持的飞书 Text Path 迁移到 Agent Engine 后面。
+- 把飞书 Event Worker 迁移到 Binding 驱动的 Channel Owner，并删除它到 `codexBridgeMgr` 的 Agent 生命周期回调。
 - 保留当前 Mention、Thread、Reaction、Rendering 和 `skip_user_input` 行为。
 - 只有 Direct Protocol 存在后才增加 OpenClaw。
 - 真正需要时再单独设计远程传输和新 Channel File 支持。
@@ -431,6 +450,8 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - Conversation Key 保持不透明并由调用方拥有。
 - 每次 Run 都携带调用方生成的不透明 Turn ID，Cancel 使用 Conversation Key 和 Turn ID 定位一个 Turn。
 - Engine 不持久化 Agent、Conversation、Transcript、File 或 Delivery State。
+- Agent Resource 实现、Agent Engine 和 Runtime Adapter 不依赖 Channel Event Worker，也不访问 IM Message 持久化。
+- Channel Event Worker 按稳定的 Binding Identity 建立索引，不使用 Runtime ID 或原生 Session ID。
 - Runtime 原生 Conversation Mapping 只有一个 Owner。
 - Runtime Credential File Layout 和初始化由各 Runtime Adapter 负责。
 - 缺少 Runtime Adapter 时明确失败，不启动 Fallback Path。
@@ -442,6 +463,9 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - 不同 Conversation 可以并发，一个 Conversation 内保持串行。
 - 内置 IM 保留 Room、Thread、Mention、File、Activity、Stop、Work、Interaction 和 `/new` 行为。
 - 飞书保留当前支持的 Text 行为，不声称支持 File。
+- Binding 创建、更新和删除通过幂等操作协调唯一的 Channel Event Worker。
+- Agent Stop、Recreate 和 Runtime Restart 既不重启 Channel Event Worker，也不删除 Binding 或 Transcript。
+- Agent API 删除会删除或停用关联 Binding、停止对应 Event Worker，并保留已保存的 Transcript。
 - Codex Conversation 在 Stop 后再次 Start 时可以继续。
 - 生命周期变更关闭 Admission、取消排队中的 Turn、Drain 运行中的 Turn，并且不会替换活动 Turn 正在使用的 Runtime。
 - Lifecycle Drain Timeout 保持当前 Runtime 不变，并返回失败的生命周期操作。
@@ -459,7 +483,9 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - 测试覆盖单 Turn、配置并发、Busy Admission、Queue Exhaustion、Sink Failure 和 Cancel 行为。
 - 测试覆盖无 MCP、本地 MCP、远程 MCP、Text Input 和 File Input。
 - 匿名测试验证 IM Entity 数量不变、Session Binding Scope 按 Agent 隔离，并且 `initializing` 恢复保留原 Conversation Key。
-- Channel 测试验证 Deduplication、Replay、Superseding 和 Rendering。
+- Channel 测试验证 Deduplication、Replay、Superseding、Rendering、Binding 驱动的 Event Worker 生命周期和幂等协调。
+- Lifecycle 测试验证 Agent Stop、Recreate 和 Runtime Restart 不启动或停止 Channel Event Worker。
+- Agent 删除测试验证 Binding 清理、Event Worker 停止和 Transcript 保留。
 - Lifecycle 测试验证 Admission 关闭、Queued Turn 取消、Active Turn Drain、Drain Timeout、Lifecycle Failure 和 Runtime Pinning。
 - Runtime 测试验证分派前完成 Mapping 创建和持久化、严格续接、Reset、Stop 和 Start、Recreate 和 Delete 语义。
 - Runtime Adapter 测试验证 Credential 序列化、`InitShell` 顺序、重跑、失败处理和 Secret Redaction。

@@ -119,7 +119,8 @@ flowchart TB
 
 Agent Engine does not import IM, Participant, Channel, Team, or concrete Runtime packages.
 The composition root registers Runtime Adapters and connects the interfaces to their existing owners.
-A missing Runtime Adapter returns `runtime_adapter_unavailable` before creating Engine execution state, a Session Binding, or a Channel consumer.
+A missing Runtime Adapter returns `runtime_adapter_unavailable` before creating Engine execution state or a Session Binding.
+It does not start a fallback execution path.
 
 ### 3.2 Public Resource Interfaces
 
@@ -238,10 +239,10 @@ Each fact has one owner:
 
 | Component | Owns | Does not own |
 |---|---|---|
-| Agent resource implementation | Agent persistence, desired configuration including Runtime credentials and `InitShell`, Runtime lifecycle, Workspace and Runtime provisioning | Turn input, transcript, Runtime-native conversation mapping |
+| Agent resource implementation | Agent persistence, desired configuration including Runtime credentials and `InitShell`, Runtime lifecycle, Workspace and Runtime provisioning | Turn input, transcript, Runtime-native conversation mapping, Channel Event Worker lifecycle |
 | Agent Engine | Admission, per-Conversation serialization, dispatch, active Turn, pending interaction, event ordering, normalized result | Durable Agent or Conversation state, files, Channel behavior |
 | Runtime Adapter | Runtime credential serialization, `InitShell` execution, native conversation mapping, direct Runtime protocol, Runtime event translation, file exposure to Runtime | Channel subscription, transcript, Agent persistence |
-| Channel Adapter | Ingress, identity, binding, host-side Channel credentials, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
+| Channel Adapter | Ingress, identity, binding and Channel Event Worker lifecycle, host-side Channel credentials, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
 | Session HTTP Adapter | HTTP validation, Session Binding, SSE and error mapping | IM Room, Message, Participant, transcript |
 
 The Agent resource implementation and conversation execution engine must use one internal Agent-scoped coordinator so Stop, Runtime-affecting Update, Recreate, and Delete cannot replace resources used by an active Turn.
@@ -387,6 +388,22 @@ Stop preserves the Runtime conversation store, and Start reopens admission only 
 Recreate and Delete remove Runtime-owned conversation mappings before a replacement Runtime becomes ready or deletion completes.
 A strict caller receives `conversation_not_resumable` when its mapping is gone.
 
+### 6.5 Channel Event Worker Lifecycle
+
+The Channel layer is the sole owner of Channel Event Worker lifecycle.
+The composition root starts each Channel Adapter once, and the Adapter reconciles enabled bindings by stable Binding identity.
+Binding creation, update, and deletion start, reconfigure, and stop exactly one Worker through idempotent operations.
+A Worker listens for incoming Channel events, targets an Agent ID, and calls `Conversations(agentID)`; it does not bind to a Runtime ID or native Session ID.
+
+The Agent resource implementation, Agent Engine, and Runtime Adapters neither control Channel Event Workers nor access IM message persistence.
+As each Channel migrates, the current `LifecycleObserver` and `BindingActivator -> codexBridgeMgr` control chain is removed from the Agent resource path.
+Binding changes invoke the owning Channel layer directly.
+
+Agent Stop, Runtime-affecting Update, Recreate, and Runtime restart leave bindings, Workers, and saved transcripts unchanged.
+While an Agent is unavailable, its Worker continues normal ingress and acknowledgment and handles `agent_unavailable` according to Channel behavior.
+Agent deletion is coordinated at the application and Binding boundary: referenced bindings are deleted or deactivated, the Channel Adapter stops their Workers, and saved transcripts remain owned by the Channel.
+`AgentInterface.Delete` itself remains Channel-neutral.
+
 ## 7. Incremental Implementation
 
 ### Phase 0: Review Contract
@@ -408,12 +425,14 @@ A strict caller receives `conversation_not_resumable` when its mapping is gone.
 ### Phase 2: Built-in IM
 
 - Move built-in IM execution behind Agent Engine.
+- Move the built-in IM Event Worker under Binding-driven Channel ownership and remove its Agent lifecycle callbacks to `codexBridgeMgr`.
 - Preserve Channel routing, hidden context, files, interactions, Work, Stop, `/new`, transcript, and rendering.
 - Run Team, Task, Scheduled Task, Notification, and Work regression coverage.
 
 ### Phase 3: Feishu and Additional Runtimes
 
 - Move the supported Feishu text path behind Agent Engine.
+- Move the Feishu Event Worker under Binding-driven Channel ownership and remove its Agent lifecycle callbacks to `codexBridgeMgr`.
 - Preserve current mention, Thread, reaction, rendering, and `skip_user_input` behavior.
 - Add OpenClaw only after its direct protocol exists.
 - Design remote transport and new Channel file support separately when required.
@@ -431,6 +450,8 @@ A later phase must not be required to validate an earlier phase.
 - Conversation keys remain opaque and caller-owned.
 - Every Run carries a caller-generated opaque Turn ID, and Cancel targets one Turn with its Conversation Key and Turn ID.
 - Engine persists no Agent, Conversation, transcript, file, or delivery state.
+- Agent resource implementations, Agent Engine, and Runtime Adapters have no Channel Event Worker dependency and do not access IM message persistence.
+- Channel Event Workers are keyed by stable Binding identity, not Runtime ID or native Session ID.
 - Runtime-native conversation mapping has one owner.
 - Runtime credential file layouts and initialization remain owned by each Runtime Adapter.
 - Missing Runtime Adapters fail explicitly with no fallback path.
@@ -442,6 +463,9 @@ A later phase must not be required to validate an earlier phase.
 - Different Conversations can run concurrently while one Conversation remains serialized.
 - Built-in IM preserves Room, Thread, Mention, file, Activity, Stop, Work, interaction, and `/new` behavior.
 - Feishu preserves its currently supported text behavior without claiming file support.
+- Binding creation, update, and deletion reconcile exactly one Channel Event Worker through idempotent operations.
+- Agent Stop, Recreate, and Runtime restart neither restart Channel Event Workers nor delete bindings or transcripts.
+- Agent API deletion removes or deactivates referenced bindings, stops their Event Workers, and preserves saved transcripts.
 - Codex conversations continue after Stop followed by Start.
 - Lifecycle changes close admission, cancel queued Turns, drain running Turns, and never replace a Runtime still used by an active Turn.
 - A lifecycle drain timeout leaves the current Runtime unchanged and returns a failed lifecycle operation.
@@ -459,7 +483,9 @@ A later phase must not be required to validate an earlier phase.
 - Tests cover one Turn, configured concurrency, busy admission, queue exhaustion, sink failure, and cancellation behavior.
 - Tests cover no MCP, local MCP, remote MCP, text input, and file input.
 - Anonymous tests verify that IM entity counts do not change, Session Binding scope is Agent-specific, and `initializing` recovery preserves its Conversation Key.
-- Channel tests verify deduplication, replay, superseding, and rendering.
+- Channel tests verify deduplication, replay, superseding, rendering, Binding-driven Event Worker lifecycle, and idempotent reconciliation.
+- Lifecycle tests verify that Agent Stop, Recreate, and Runtime restart do not start or stop Channel Event Workers.
+- Agent deletion tests verify Binding cleanup, Event Worker shutdown, and transcript retention.
 - Lifecycle tests verify admission closure, queued cancellation, active Turn drain, drain timeout, lifecycle failure, and Runtime pinning.
 - Runtime tests verify mapping creation and persistence before dispatch, strict continuation, Reset, Stop and Start, Recreate, and Delete semantics.
 - Runtime Adapter tests verify credential serialization, `InitShell` ordering, reruns, failure handling, and secret redaction.
