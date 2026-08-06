@@ -111,7 +111,7 @@ flowchart TB
     Registry --> Codex["Codex Runtime Adapter"]
     Registry --> OpenClaw["未来 OpenClaw Runtime Adapter"]
 
-    Session --> Named["Named Session Store"]
+    Session --> Binding["Session Binding Store"]
     IM --> IMStore["IM 和 Attachment Store"]
     Feishu --> FeishuState["飞书 Binding 和远端 Transcript"]
     Codex --> CodexStore["Codex Conversation Store"]
@@ -119,7 +119,7 @@ flowchart TB
 
 Agent Engine 不 Import IM、Participant、Channel、Team 或具体 Runtime Package。
 Composition Root 注册 Runtime Adapter，并把接口连接到现有 Owner。
-缺少 Runtime Adapter 时，在创建 Engine Execution State、Named Session 或 Channel Consumer 前返回 `runtime_adapter_unavailable`。
+缺少 Runtime Adapter 时，在创建 Engine Execution State、Session Binding 或 Channel Consumer 前返回 `runtime_adapter_unavailable`。
 
 ### 3.2 公共 Resource Interface
 
@@ -174,7 +174,7 @@ Engine 只校验其非空且长度有界，并原样传递给 Runtime Adapter。
 |---|---|
 | 内置 IM | Agent Participant、Room 和可选 Thread Root |
 | 飞书 | App Binding、Chat 和可选 Thread Root |
-| Session API | Named Session Store 保存的随机内部 Key |
+| Session API | Session Binding Store 保存的随机内部 Key |
 
 Engine 同时只允许 `(agentID, ConversationKey)` 存在一个 Turn 或 Reset。
 不同 Conversation Key 可以并发执行。
@@ -225,8 +225,10 @@ Sink 不是 Event Bus、Transcript Store 或 Channel Renderer。
 它的 Sequence Number 只对当前 Run 调用内的 Event 排序。
 
 `Run` 只返回一个 `TurnResult`，没有第二套裸 Runtime Error。
-`Dispatched=false` 表示 Engine 在 Runtime 分派前拒绝 Turn。
-Runtime 分派后，成功、失败、取消和超时都返回 `Dispatched=true`。
+`Dispatched=false` 表示原生 Turn 尚未提交。
+这包括 Engine 拒绝 Admission，以及创建、解析或持久化必要的 Runtime 原生 Conversation Mapping 失败。
+`Dispatched=true` 表示 Continuation Policy 已成功满足，必要的 Mapping 已经持久化或解析，并且原生 Turn 已提交。
+提交后，成功、失败、取消和超时都保持 `Dispatched=true`。
 
 稳定失败类别包括无效请求、Agent 不可用、Runtime Adapter 不可用、Conversation Busy、Admission 已满、Runtime Mapping 缺失、File 不可用、不支持 Interaction 和 Runtime 失败。
 
@@ -240,10 +242,10 @@ Runtime 分派后，成功、失败、取消和超时都返回 `Dispatched=true`
 | Agent Engine | Admission、每 Conversation 串行化、Dispatch、Active Turn、Pending Interaction、Event 顺序、规范化 Result | 持久化 Agent 或 Conversation State、File、Channel 行为 |
 | Runtime Adapter | Runtime Credential 序列化、`InitShell` 执行、原生 Conversation Mapping、直接 Runtime 协议、Runtime Event 转换、向 Runtime 暴露 File | Channel Subscription、Transcript、Agent 持久化 |
 | Channel Adapter | Ingress、Identity、Binding、Host 侧 Channel Credential、Deduplication、Hidden Context、File Authorization、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
-| Session HTTP Adapter | HTTP Validation、Named Session Binding、SSE 和 Error Mapping | IM Room、Message、Participant、Transcript |
+| Session HTTP Adapter | HTTP Validation、Session Binding、SSE 和 Error Mapping | IM Room、Message、Participant、Transcript |
 
-Agent Resource 实现和 Conversation Execution Engine 必须协调生命周期变更，确保 Restart、Recreate、Delete 或破坏性 Workspace 变更不会替换活动 Turn 正在使用的资源。
-该协调属于实现职责，不作为公共 Target 或 Lease 抽象暴露。
+Agent Resource 实现和 Conversation Execution Engine 必须使用一个内部的 Agent 级 Coordinator，确保 Stop、影响 Runtime 的 Update、Recreate 和 Delete 不会替换活动 Turn 正在使用的资源。
+Coordinator 保持为实现细节，不进入公共 Interface。
 
 ## 5. 主要流程
 
@@ -259,19 +261,22 @@ POST /api/v1/agents/{agent}/sessions/{session_id}/responses
 
 ```text
 Session HTTP Adapter
-  -> 加载或创建 Named Session Binding
+  -> 加载或创建 Session Binding
   -> 生成 TurnID
   -> Conversations(agentID).Run
   -> Runtime Adapter
   -> 把 Engine Event 映射为现有 SSE
 ```
 
-Named Session Store 只包含外部 Session ID、Agent ID、不透明 Conversation Key，以及 `initializing` 或 `ready` 状态。
+Session Binding Store 以 `(agentID, externalSessionID)` 作为唯一 Key，只包含这些 ID、不透明 Conversation Key，以及 `initializing` 或 `ready` 状态。
 它不保存 Prompt、Output、File、Runtime Handle 或 Interaction。
 
 `initializing` Session 使用 `create_or_resume`。
 第一个 `Dispatched=true` 的 Result 返回后，它变为 `ready`。
+Mapping 失败时 Result 的 `Dispatched=false`，因此它保持 `initializing`。
 `ready` Session 使用 `require_existing`。
+进程重启后，`initializing` Binding 使用相同的 Conversation Key 重试 `create_or_resume`。
+该恢复不承诺 Turn 的 Exactly-once 执行。
 
 Route 保留当前 Request Input、`stream`、Body Limit、Timeout、SSE、Error Envelope、`409 session_busy` 和空 `room_id` Response Metadata。
 它不创建 Room、User、Participant、IM Message、Participant Work 或 Hidden Channel Context。
@@ -303,7 +308,7 @@ Credential Layout 和初始化机制是该 Adapter 的内部实现。
 获得 Admission 后，Engine 为 Agent 已就绪的 Runtime 选择注册的 Adapter。
 所选 Adapter：
 
-1. 根据 `ContinuationPolicy` 解析或创建原生 Conversation Mapping。
+1. 根据 `ContinuationPolicy` 解析或创建并持久化原生 Conversation Mapping。
 2. 执行有序 Input。
 3. 把原生 Progress 转成 Engine Event。
 4. 在公开 Text 发出前解码合格的 CSGClaw Structured Output。
@@ -323,7 +328,7 @@ Agent Engine 没有持久化 Conversation Store。
 Agent Resource 实现拥有期望的 Runtime Credential，每个 Runtime Adapter 拥有自己物化出的 Credential File。
 Runtime Adapter 拥有原生 Conversation Mapping。
 Channel Adapter 拥有 Transcript 和 Source Delivery State。
-Named Session Store 只拥有外部 Session Binding。
+Session Binding Store 只拥有外部 Session ID 和 Conversation Key 之间的关联。
 
 Engine 进程重启会中断排队中和运行中的 Turn。
 它不会删除 Runtime 原生 Mapping。
@@ -365,8 +370,21 @@ Engine 使用 `(agentID, ConversationKey, TurnID)` 索引排队中和运行中�
 Sink 失败时，Engine 在可能时请求 Runtime Cancel，并等待 Runtime 真实终态后才释放 Admission。
 Runtime 不支持 Cancel 时，Engine 继续监督到终态。
 
-Restart 等待活动 Turn，并保留 Runtime Conversation Store。
-Recreate 和 Delete 删除 Runtime 所有的 State，不承诺继续 Conversation。
+Run Admission 和生命周期变更通过同一个 Agent 级 Coordinator 串行化。
+Run 只有在原子地确认 Agent Ready，并使用选定的内部 Runtime Handle 登记 Active Turn 后才能分派。
+
+Stop、影响 Runtime 的 Update、Recreate 和 Delete 首先把 Agent 标记为不可用，并关闭新 Admission。
+新的 Run 返回 `TurnFailed`、`Dispatched=false` 和 `agent_unavailable`。
+排队中的 Turn 返回 `TurnCanceled`、`Dispatched=false` 和 `agent_unavailable`。
+运行中的 Turn 在 Runtime State 变更前可以执行到终态。
+
+配置的 Drain Timeout 限制等待时间。
+超时后，生命周期操作失败，不替换或删除当前 Runtime，并且只在该 Runtime 仍然 Ready 时重新开放 Admission。
+Agent 持久化和 Runtime Adapter 调用在 Coordinator 临界区之外执行，期间 Admission 保持关闭。
+生命周期调用失败时，只有确认原 Runtime 仍然 Ready 才重新开放 Admission；否则 Agent 保持不可用，并在 Status 中记录观察到的失败。
+
+Stop 保留 Runtime Conversation Store，Start 只在 Runtime Ready 后重新开放 Admission。
+Recreate 和 Delete 在替代 Runtime Ready 或删除完成前，删除 Runtime 所有的 Conversation Mapping。
 Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 
 ## 7. 增量实现
@@ -382,7 +400,7 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - 使用明确的 Storage 和 Runtime Dependency 实现 `AgentInterface`；按需重构或替换当前 Agent Service，不让它成为 Contract 的依赖。
 - 实现有界 Admission 和每 Conversation 串行化。
 - 实现 Codex Runtime Adapter。
-- 增加 Named Session Store。
+- 增加 Session Binding Store。
 - 让现有匿名 Session API 通过 Agent Engine 执行。
 - 保留公共 API，同时删除匿名 IM 持久化。
 - 在创建 State 前拒绝不受支持的 Runtime Adapter。
@@ -424,7 +442,10 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - 不同 Conversation 可以并发，一个 Conversation 内保持串行。
 - 内置 IM 保留 Room、Thread、Mention、File、Activity、Stop、Work、Interaction 和 `/new` 行为。
 - 飞书保留当前支持的 Text 行为，不声称支持 File。
-- Codex Conversation 在 Restart 后可以继续。
+- Codex Conversation 在 Stop 后再次 Start 时可以继续。
+- 生命周期变更关闭 Admission、取消排队中的 Turn、Drain 运行中的 Turn，并且不会替换活动 Turn 正在使用的 Runtime。
+- Lifecycle Drain Timeout 保持当前 Runtime 不变，并返回失败的生命周期操作。
+- Session Binding 按 `(agentID, externalSessionID)` 唯一，Mapping 失败后保持 `initializing`，进程重启后使用相同的 Conversation Key 重试。
 - Create、影响 Runtime 的 Update 和 Recreate 在运行幂等 `InitShell` 并启动 Runtime 前先物化 Credential。
 - Credential 或 `InitShell` 失败时 Agent 不会 Ready，Secret Value 不进入 Log 或公开 Result。
 - Create、Update、Get 和 List Result 省略 Runtime Credential Value。
@@ -437,9 +458,10 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - Contract Test 覆盖 Run、Cancel、Reset、Resolve、Event 顺序、终态 Result 和稳定 Error。
 - 测试覆盖单 Turn、配置并发、Busy Admission、Queue Exhaustion、Sink Failure 和 Cancel 行为。
 - 测试覆盖无 MCP、本地 MCP、远程 MCP、Text Input 和 File Input。
-- 匿名测试验证 IM Entity 数量不变。
+- 匿名测试验证 IM Entity 数量不变、Session Binding Scope 按 Agent 隔离，并且 `initializing` 恢复保留原 Conversation Key。
 - Channel 测试验证 Deduplication、Replay、Superseding 和 Rendering。
-- Runtime 测试验证 Mapping 创建、严格续接、Reset、Restart、Recreate 和 Delete 语义。
+- Lifecycle 测试验证 Admission 关闭、Queued Turn 取消、Active Turn Drain、Drain Timeout、Lifecycle Failure 和 Runtime Pinning。
+- Runtime 测试验证分派前完成 Mapping 创建和持久化、严格续接、Reset、Stop 和 Start、Recreate 和 Delete 语义。
 - Runtime Adapter 测试验证 Credential 序列化、`InitShell` 顺序、重跑、失败处理和 Secret Redaction。
 - Agent Contract 测试验证所有返回的 Agent Value 都省略 Runtime Credential。
 - 现有 Agent、Session API、内置 IM、飞书、Team、Task、Scheduled Task、Notification 和 Work 回归测试通过。

@@ -111,7 +111,7 @@ flowchart TB
     Registry --> Codex["Codex Runtime Adapter"]
     Registry --> OpenClaw["Future OpenClaw Runtime Adapter"]
 
-    Session --> Named["Named Session Store"]
+    Session --> Binding["Session Binding Store"]
     IM --> IMStore["IM and Attachment Store"]
     Feishu --> FeishuState["Feishu Binding and Remote Transcript"]
     Codex --> CodexStore["Codex Conversation Store"]
@@ -119,7 +119,7 @@ flowchart TB
 
 Agent Engine does not import IM, Participant, Channel, Team, or concrete Runtime packages.
 The composition root registers Runtime Adapters and connects the interfaces to their existing owners.
-A missing Runtime Adapter returns `runtime_adapter_unavailable` before creating Engine execution state, a Named Session, or a Channel consumer.
+A missing Runtime Adapter returns `runtime_adapter_unavailable` before creating Engine execution state, a Session Binding, or a Channel consumer.
 
 ### 3.2 Public Resource Interfaces
 
@@ -174,7 +174,7 @@ Each Adapter owns collision-free key construction:
 |---|---|
 | Built-in IM | Agent Participant, Room, and optional Thread root |
 | Feishu | App Binding, Chat, and optional Thread root |
-| Session API | Random internal key stored by the Named Session Store |
+| Session API | Random internal key stored by the Session Binding Store |
 
 Engine permits at most one Turn or Reset for `(agentID, ConversationKey)` at a time.
 Different Conversation keys may execute concurrently.
@@ -225,8 +225,10 @@ The sink is not an event bus, transcript store, or Channel renderer.
 Its sequence number orders events only within the current Run call.
 
 `Run` returns exactly one `TurnResult` and no second raw Runtime error.
-`Dispatched=false` means Engine rejected the Turn before Runtime dispatch.
-After Runtime dispatch, success, failure, cancellation, and timeout all return `Dispatched=true`.
+`Dispatched=false` means the native Turn was not submitted.
+This includes Engine admission rejection and failure to create, resolve, or persist a required Runtime-native conversation mapping.
+`Dispatched=true` means the Continuation Policy succeeded, the required mapping was durably established or resolved, and the native Turn was submitted.
+After submission, success, failure, cancellation, and timeout all retain `Dispatched=true`.
 
 Stable failure categories include invalid request, unavailable Agent, unavailable Runtime Adapter, busy Conversation, exhausted admission, missing Runtime mapping, unavailable file, unsupported interaction, and Runtime failure.
 
@@ -240,10 +242,10 @@ Each fact has one owner:
 | Agent Engine | Admission, per-Conversation serialization, dispatch, active Turn, pending interaction, event ordering, normalized result | Durable Agent or Conversation state, files, Channel behavior |
 | Runtime Adapter | Runtime credential serialization, `InitShell` execution, native conversation mapping, direct Runtime protocol, Runtime event translation, file exposure to Runtime | Channel subscription, transcript, Agent persistence |
 | Channel Adapter | Ingress, identity, binding, host-side Channel credentials, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
-| Session HTTP Adapter | HTTP validation, Named Session binding, SSE and error mapping | IM Room, Message, Participant, transcript |
+| Session HTTP Adapter | HTTP validation, Session Binding, SSE and error mapping | IM Room, Message, Participant, transcript |
 
-The Agent resource implementation and conversation execution engine must coordinate lifecycle changes so Restart, Recreate, Delete, or destructive Workspace changes do not replace resources used by an active Turn.
-This coordination is an implementation responsibility and is not exposed as a public target or lease abstraction.
+The Agent resource implementation and conversation execution engine must use one internal Agent-scoped coordinator so Stop, Runtime-affecting Update, Recreate, and Delete cannot replace resources used by an active Turn.
+The coordinator remains an implementation detail and is not part of the public interfaces.
 
 ## 5. Primary Flows
 
@@ -259,19 +261,22 @@ The target flow is:
 
 ```text
 Session HTTP Adapter
-  -> load or create Named Session binding
+  -> load or create Session Binding
   -> generate TurnID
   -> Conversations(agentID).Run
   -> Runtime Adapter
   -> map Engine events to existing SSE
 ```
 
-The Named Session Store contains only external Session ID, Agent ID, opaque Conversation Key, and `initializing` or `ready` state.
+The Session Binding Store is uniquely keyed by `(agentID, externalSessionID)` and contains only those IDs, an opaque Conversation Key, and `initializing` or `ready` state.
 It stores no prompt, output, file, Runtime handle, or interaction.
 
 An `initializing` Session uses `create_or_resume`.
 It becomes `ready` after the first result with `Dispatched=true`.
+A mapping failure leaves it `initializing` because that result has `Dispatched=false`.
 A `ready` Session uses `require_existing`.
+After a process restart, an `initializing` binding retries `create_or_resume` with the same Conversation Key.
+This recovery does not promise exactly-once Turn execution.
 
 The route preserves current request input, `stream`, body limit, timeout, SSE, error envelope, `409 session_busy`, and empty `room_id` response metadata.
 It creates no Room, User, Participant, IM Message, Participant Work, or hidden Channel context.
@@ -303,7 +308,7 @@ Credential layout and initialization mechanics remain private to that Adapter.
 Engine selects the registered Adapter for the Agent's ready Runtime after admission.
 The selected Adapter:
 
-1. Resolves or creates the native conversation mapping according to `ContinuationPolicy`.
+1. Resolves or creates and persists the native conversation mapping according to `ContinuationPolicy`.
 2. Executes the ordered input.
 3. Converts native progress into Engine events.
 4. Decodes eligible CSGClaw Structured Output before public text is emitted.
@@ -323,7 +328,7 @@ Agent Engine has no durable Conversation store.
 The Agent resource implementation owns desired Runtime credentials, while each Runtime Adapter owns its materialized credential files.
 Runtime Adapters own native conversation mappings.
 Channel Adapters own transcripts and source delivery state.
-The Named Session Store owns only external Session binding.
+The Session Binding Store owns only the association between an external Session ID and a Conversation Key.
 
 An Engine process restart interrupts queued and running Turns.
 It does not delete Runtime-native mappings.
@@ -365,8 +370,21 @@ Engine indexes queued and running Turns by `(agentID, ConversationKey, TurnID)` 
 If a sink fails, Engine requests Runtime cancellation when possible and waits for a true Runtime terminal state before releasing admission.
 If cancellation is unsupported, Engine continues supervising the Runtime until termination.
 
-Restart waits for active Turns and preserves the Runtime conversation store.
-Recreate and Delete remove Runtime-owned state and do not promise continuation.
+Run admission and lifecycle changes serialize through one Agent-scoped coordinator.
+Run may dispatch only after it atomically confirms that the Agent is ready and registers the active Turn with the selected internal Runtime handle.
+
+Stop, Runtime-affecting Update, Recreate, and Delete first mark the Agent unavailable and close new admission.
+New Runs return `TurnFailed` with `Dispatched=false` and `agent_unavailable`.
+Queued Turns complete as `TurnCanceled` with `Dispatched=false` and `agent_unavailable`.
+Running Turns are allowed to reach a terminal result before Runtime state changes.
+
+A configured drain timeout bounds that wait.
+If it expires, the lifecycle operation fails without replacing or deleting the current Runtime and reopens admission only when that Runtime remains ready.
+Agent persistence and Runtime Adapter calls occur outside the coordinator critical section while admission remains closed.
+If a lifecycle call fails, admission reopens only after the previous Runtime is confirmed ready; otherwise the Agent remains unavailable with the observed failure in status.
+
+Stop preserves the Runtime conversation store, and Start reopens admission only after the Runtime is ready.
+Recreate and Delete remove Runtime-owned conversation mappings before a replacement Runtime becomes ready or deletion completes.
 A strict caller receives `conversation_not_resumable` when its mapping is gone.
 
 ## 7. Incremental Implementation
@@ -382,7 +400,7 @@ A strict caller receives `conversation_not_resumable` when its mapping is gone.
 - Implement `AgentInterface` with explicit storage and Runtime dependencies; refactor or replace the current Agent Service as needed without making it a dependency of the contract.
 - Implement bounded admission and per-Conversation serialization.
 - Implement the Codex Runtime Adapter.
-- Add the Named Session Store.
+- Add the Session Binding Store.
 - Route the existing anonymous Session API through Agent Engine.
 - Preserve the public API while removing anonymous IM persistence.
 - Reject unsupported Runtime Adapters before creating state.
@@ -424,7 +442,10 @@ A later phase must not be required to validate an earlier phase.
 - Different Conversations can run concurrently while one Conversation remains serialized.
 - Built-in IM preserves Room, Thread, Mention, file, Activity, Stop, Work, interaction, and `/new` behavior.
 - Feishu preserves its currently supported text behavior without claiming file support.
-- Codex conversations continue after Restart.
+- Codex conversations continue after Stop followed by Start.
+- Lifecycle changes close admission, cancel queued Turns, drain running Turns, and never replace a Runtime still used by an active Turn.
+- A lifecycle drain timeout leaves the current Runtime unchanged and returns a failed lifecycle operation.
+- Session Bindings are unique by `(agentID, externalSessionID)`, remain `initializing` after mapping failure, and retry the same Conversation Key after process restart.
 - Create, Runtime-affecting Update, and Recreate materialize credentials before running an idempotent `InitShell` and starting the Runtime.
 - Credential or `InitShell` failure leaves the Agent not ready, and secret values enter neither logs nor public results.
 - Create, Update, Get, and List results omit Runtime credential values.
@@ -437,9 +458,10 @@ A later phase must not be required to validate an earlier phase.
 - Contract tests cover Run, Cancel, Reset, Resolve, event ordering, terminal results, and stable errors.
 - Tests cover one Turn, configured concurrency, busy admission, queue exhaustion, sink failure, and cancellation behavior.
 - Tests cover no MCP, local MCP, remote MCP, text input, and file input.
-- Anonymous tests verify that IM entity counts do not change.
+- Anonymous tests verify that IM entity counts do not change, Session Binding scope is Agent-specific, and `initializing` recovery preserves its Conversation Key.
 - Channel tests verify deduplication, replay, superseding, and rendering.
-- Runtime tests verify mapping creation, strict continuation, Reset, Restart, Recreate, and Delete semantics.
+- Lifecycle tests verify admission closure, queued cancellation, active Turn drain, drain timeout, lifecycle failure, and Runtime pinning.
+- Runtime tests verify mapping creation and persistence before dispatch, strict continuation, Reset, Stop and Start, Recreate, and Delete semantics.
 - Runtime Adapter tests verify credential serialization, `InitShell` ordering, reruns, failure handling, and secret redaction.
 - Agent contract tests verify that all returned Agent values omit Runtime credentials.
 - Existing Agent, Session API, built-in IM, Feishu, Team, Task, Scheduled Task, Notification, and Work regressions pass.

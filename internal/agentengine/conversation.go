@@ -29,7 +29,10 @@ type ConversationInterface interface {
 // Channel-neutral turns. The adapter owns native conversation mapping and
 // persistence.
 type ConversationRuntime interface {
-	// Run executes one already-admitted turn and reports one terminal result.
+	// Run resolves the requested continuation, executes one already-admitted
+	// turn, and reports one terminal result. Dispatched is true only after any
+	// required native conversation mapping is durably established or resolved
+	// and the turn is submitted to the native Runtime.
 	Run(ctx context.Context, request RuntimeTurnRequest, sink EventSink) TurnResult
 
 	// Cancel requests cancellation of one dispatched Runtime turn.
@@ -331,6 +334,9 @@ type TurnError struct {
 
 // TurnResult is the sole outcome before and after Runtime dispatch.
 type TurnResult struct {
+	// Dispatched reports whether the turn was submitted to the native Runtime.
+	// A required conversation mapping must be durably established or resolved
+	// first. Admission or mapping failures therefore leave Dispatched false.
 	Dispatched bool
 	Status     TurnStatus
 	Output     []OutputItem
