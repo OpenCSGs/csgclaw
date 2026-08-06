@@ -137,6 +137,9 @@ The review surface is:
 Its implementation owns Agent persistence and Runtime lifecycle through explicit storage and Runtime dependencies.
 The current Agent Service may be refactored or replaced incrementally when this contract is implemented; it is not a dependency of the contract.
 Conversation execution keeps no duplicate Agent records and coordinates active Turns with lifecycle changes.
+Phase 1 is an explicit transition: the Conversation implementation may reach the current Agent Service only through one private Adapter wired by the composition root.
+That Adapter resolves the Agent's current availability and Runtime for execution without adding `ExecutionTarget` or another public interface.
+It is removed in Phase 2 when the new `AgentInterface` implementation becomes the Agent state and Runtime lifecycle owner.
 
 `AgentSpec` contains the complete desired state: name, description, instructions, role, Runtime, model, Skills, and MCP servers.
 `RuntimeSpec.Credentials` is a map of adapter-defined credential names to secret string values.
@@ -245,8 +248,9 @@ Each fact has one owner:
 | Channel Adapter | Ingress, identity, binding and Channel Event Worker lifecycle, host-side Channel credentials, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
 | Session HTTP Adapter | HTTP validation, Session Binding, SSE and error mapping | IM Room, Message, Participant, transcript |
 
-The Agent resource implementation and conversation execution engine must use one internal Agent-scoped coordinator so Stop, Runtime-affecting Update, Recreate, and Delete cannot replace resources used by an active Turn.
-The coordinator remains an implementation detail and is not part of the public interfaces.
+During Phase 1, the current Agent Service and conversation execution must share one Agent Lifecycle Gate so Stop, Runtime-affecting Update, Recreate, and Delete cannot replace resources used by an active Turn.
+After Phase 2, the new Agent resource implementation and conversation execution share the same Gate.
+The Gate remains an implementation detail and is not part of the public interfaces.
 
 ## 5. Primary Flows
 
@@ -371,7 +375,12 @@ Engine indexes queued and running Turns by `(agentID, ConversationKey, TurnID)` 
 If a sink fails, Engine requests Runtime cancellation when possible and waits for a true Runtime terminal state before releasing admission.
 If cancellation is unsupported, Engine continues supervising the Runtime until termination.
 
-Run admission and lifecycle changes serialize through one Agent-scoped coordinator.
+The Agent Lifecycle Gate is a process-local concurrency primitive for one Agent, not a service or public interface.
+It records whether admission is open and which Turns are active while Engine continues to own the queue.
+Phase 1 extends the existing `internal/agent.agentLifecycleGate`, which currently serializes Agent lifecycle operations, instead of introducing a second coordinator.
+If its expanded responsibility later warrants a different internal name, it may be renamed without changing this public contract.
+
+Run admission and lifecycle changes serialize through the same Gate.
 Run may dispatch only after it atomically confirms that the Agent is ready and registers the active Turn with the selected internal Runtime handle.
 
 Stop, Runtime-affecting Update, Recreate, and Delete first mark the Agent unavailable and close new admission.
@@ -381,7 +390,7 @@ Running Turns are allowed to reach a terminal result before Runtime state change
 
 A configured drain timeout bounds that wait.
 If it expires, the lifecycle operation fails without replacing or deleting the current Runtime and reopens admission only when that Runtime remains ready.
-Agent persistence and Runtime Adapter calls occur outside the coordinator critical section while admission remains closed.
+Agent persistence and Runtime Adapter calls occur outside the Gate critical section while admission remains closed.
 If a lifecycle call fails, admission reopens only after the previous Runtime is confirmed ready; otherwise the Agent remains unavailable with the observed failure in status.
 
 Stop preserves the Runtime conversation store, and Start reopens admission only after the Runtime is ready.
@@ -412,24 +421,37 @@ Agent deletion is coordinated at the application and Binding boundary: reference
 - Review Agent lifecycle, conversation execution, input, event, output, interaction, and error shapes.
 - Do not wire the package into existing behavior.
 
-### Phase 1: Engine, Codex, and Anonymous Session
+### Phase 1: Conversations, Codex, and Anonymous Session
 
-- Implement `AgentInterface` with explicit storage and Runtime dependencies; refactor or replace the current Agent Service as needed without making it a dependency of the contract.
+- Implement `Conversations(agentID)` without implementing or migrating the `Agents()` control plane.
+- Keep existing Agent CRUD and lifecycle APIs on the current Agent Service.
+- Isolate all Conversation access to that Service behind one private Adapter; do not add `ExecutionTarget` or another public contract.
+- Extend the existing `internal/agent.agentLifecycleGate` and make the current Agent Service and Conversation execution share it before routing any Session Turn through Engine.
 - Implement bounded admission and per-Conversation serialization.
 - Implement the Codex Runtime Adapter.
 - Add the Session Binding Store.
 - Route the existing anonymous Session API through Agent Engine.
 - Preserve the public API while removing anonymous IM persistence.
 - Reject unsupported Runtime Adapters before creating state.
+- Treat the private Adapter as transitional and remove it in Phase 2.
 
-### Phase 2: Built-in IM
+### Phase 2: Agents Control Plane
+
+- Implement `AgentInterface` with explicit storage and Runtime dependencies.
+- Reuse existing Agent stores, data formats, and extracted low-level Runtime code without making the broad current Agent Service a permanent backend.
+- Route existing Agent CRUD and lifecycle APIs through `Agents()` so all mutations use the Agent Lifecycle Gate.
+- Replace the Phase 1 private Adapter so `Conversations()` obtains Agent availability and Runtime selection from the new Agent implementation.
+- Migrate read-only internal callers later through narrow interfaces when they do not affect lifecycle correctness.
+- Preserve the public Agent API while making the new implementation the only Agent persistence and Runtime lifecycle owner.
+
+### Phase 3: Built-in IM
 
 - Move built-in IM execution behind Agent Engine.
 - Move the built-in IM Event Worker under Binding-driven Channel ownership and remove its Agent lifecycle callbacks to `codexBridgeMgr`.
 - Preserve Channel routing, hidden context, files, interactions, Work, Stop, `/new`, transcript, and rendering.
 - Run Team, Task, Scheduled Task, Notification, and Work regression coverage.
 
-### Phase 3: Feishu and Additional Runtimes
+### Phase 4: Feishu and Additional Runtimes
 
 - Move the supported Feishu text path behind Agent Engine.
 - Move the Feishu Event Worker under Binding-driven Channel ownership and remove its Agent lifecycle callbacks to `codexBridgeMgr`.
@@ -453,6 +475,7 @@ A later phase must not be required to validate an earlier phase.
 - Agent resource implementations, Agent Engine, and Runtime Adapters have no Channel Event Worker dependency and do not access IM message persistence.
 - Channel Event Workers are keyed by stable Binding identity, not Runtime ID or native Session ID.
 - Runtime-native conversation mapping has one owner.
+- After Phase 2, the `AgentInterface` implementation is the only Agent persistence and Runtime lifecycle owner, and `Conversations()` no longer depends on the current `internal/agent.Service`.
 - Runtime credential file layouts and initialization remain owned by each Runtime Adapter.
 - Missing Runtime Adapters fail explicitly with no fallback path.
 - The Go contract and both language documents remain synchronized.
@@ -460,6 +483,7 @@ A later phase must not be required to validate an earlier phase.
 ### 8.2 Behavior
 
 - Anonymous Sessions create no IM entities and preserve their public API contract.
+- During Phase 1, current Agent Service lifecycle operations and Session Turns use the same Agent Lifecycle Gate.
 - Different Conversations can run concurrently while one Conversation remains serialized.
 - Built-in IM preserves Room, Thread, Mention, file, Activity, Stop, Work, interaction, and `/new` behavior.
 - Feishu preserves its currently supported text behavior without claiming file support.
@@ -487,6 +511,8 @@ A later phase must not be required to validate an earlier phase.
 - Lifecycle tests verify that Agent Stop, Recreate, and Runtime restart do not start or stop Channel Event Workers.
 - Agent deletion tests verify Binding cleanup, Event Worker shutdown, and transcript retention.
 - Lifecycle tests verify admission closure, queued cancellation, active Turn drain, drain timeout, lifecycle failure, and Runtime pinning.
+- Phase 1 race tests cover Session Run against current Agent Service Stop, Runtime-affecting Update, Recreate, and Delete through the shared Gate.
+- Phase 2 tests verify that Agent APIs use `Agents()` and that the temporary private Adapter has been removed.
 - Runtime tests verify mapping creation and persistence before dispatch, strict continuation, Reset, Stop and Start, Recreate, and Delete semantics.
 - Runtime Adapter tests verify credential serialization, `InitShell` ordering, reruns, failure handling, and secret redaction.
 - Agent contract tests verify that all returned Agent values omit Runtime credentials.
