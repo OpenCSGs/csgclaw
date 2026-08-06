@@ -15,8 +15,8 @@ type ConversationInterface interface {
 	// TurnResult is the only outcome before and after Runtime dispatch.
 	Run(ctx context.Context, request TurnRequest, sink EventSink) TurnResult
 
-	// Cancel idempotently cancels one queued or running execution.
-	Cancel(ctx context.Context, key ConversationKey) error
+	// Cancel idempotently cancels one queued or running turn.
+	Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error
 
 	// Reset serializes with turns for the same ConversationKey.
 	Reset(ctx context.Context, key ConversationKey) error
@@ -33,7 +33,7 @@ type ConversationRuntime interface {
 	Run(ctx context.Context, request RuntimeTurnRequest, sink EventSink) TurnResult
 
 	// Cancel requests cancellation of one dispatched Runtime turn.
-	Cancel(ctx context.Context, key ConversationKey) error
+	Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error
 
 	// Reset atomically replaces the native conversation mapping.
 	Reset(ctx context.Context, key ConversationKey) error
@@ -50,6 +50,9 @@ type EventSink interface {
 
 // ConversationKey is an opaque, caller-owned conversation identity.
 type ConversationKey string
+
+// TurnID is an opaque, caller-generated identity for one Run request.
+type TurnID string
 
 // InteractionID identifies one interaction awaited by a running turn.
 type InteractionID string
@@ -118,6 +121,7 @@ type InputFile struct {
 // TurnRequest contains conversation identity and caller-normalized input.
 // File sources have already been authorized and resolved outside Engine.
 type TurnRequest struct {
+	ID              TurnID
 	ConversationKey ConversationKey
 	Continuation    ContinuationPolicy
 	Admission       ConversationAdmission
@@ -128,6 +132,7 @@ type TurnRequest struct {
 // RuntimeTurnRequest contains only state needed by an already-selected Runtime
 // after admission.
 type RuntimeTurnRequest struct {
+	ID              TurnID
 	ConversationKey ConversationKey
 	Continuation    ContinuationPolicy
 	Interaction     InteractionPolicy

@@ -143,6 +143,11 @@ Updating an Agent replaces its desired specification as one resource update.
 Engine validates only that it is non-empty and length-bounded.
 It never parses Room, Thread, Channel, Binding, or Session fields from the key.
 
+`TurnID` is an opaque caller-generated identity for one `Run` request.
+The Channel Adapter or Session HTTP Adapter generates a random ID after ingress validation and deduplication, but before calling `Run`.
+Engine validates only that it is non-empty and length-bounded, and passes it unchanged to the Runtime Adapter.
+It is not derived from `ConversationKey` or a source Message ID because those identify different lifecycles.
+
 Each Adapter owns collision-free key construction:
 
 | Caller | Key source |
@@ -153,8 +158,13 @@ Each Adapter owns collision-free key construction:
 
 Engine permits at most one Turn or Reset for `(agentID, ConversationKey)` at a time.
 Different Conversation keys may execute concurrently.
-Because only one Turn can be active, Cancel identifies it with the Agent-scoped `ConversationKey`.
+Waiting admission may leave one Turn running while later Turns are queued for the same Conversation.
+Cancel therefore uses the Agent-scoped `ConversationKey` and `TurnID` to identify exactly one queued or running Turn.
 Resolve additionally carries `InteractionID` to identify one pending interaction.
+
+`TurnID` lives only for the Turn lifecycle.
+It is not a Conversation key, Runtime-native conversation mapping, transcript identity, or durable Engine resource.
+`Reset` remains scoped to `ConversationKey`, and `Resolve` remains scoped to `ConversationKey` plus `InteractionID`.
 
 `ContinuationPolicy` makes Runtime mapping behavior explicit:
 
@@ -230,6 +240,7 @@ The target flow is:
 ```text
 Session HTTP Adapter
   -> load or create Named Session binding
+  -> generate TurnID
   -> Conversations(agentID).Run
   -> Runtime Adapter
   -> map Engine events to existing SSE
@@ -250,7 +261,7 @@ It creates no Room, User, Participant, IM Message, Participant Work, or hidden C
 ```text
 IM persists user Message
   -> Channel Adapter applies routing and deduplication
-  -> build ConversationKey and ordered Input
+  -> build ConversationKey, generate TurnID, and order Input
   -> Conversations(agentID).Run
   -> Runtime Adapter
   -> Channel Adapter renders Activity and final Message
@@ -324,6 +335,7 @@ Detached secret answers also must not be inserted into model continuation.
 Server configuration owns global, per-Agent, queue-length, and queue-timeout limits.
 Engine owns the only per-Conversation execution queue.
 Channel Adapters may retain source-ingress buffering for subscription, deduplication, and acknowledgment, but must not add a second normalized Turn queue.
+Engine indexes queued and running Turns by `(agentID, ConversationKey, TurnID)` while Runtime-native conversation mappings remain keyed by Conversation identity.
 
 If a sink fails, Engine requests Runtime cancellation when possible and waits for a true Runtime terminal state before releasing admission.
 If cancellation is unsupported, Engine continues supervising the Runtime until termination.
@@ -373,6 +385,7 @@ A later phase must not be required to validate an earlier phase.
 - `Interface` exposes `Agents()` and Agent-scoped `Conversations(agentID)`.
 - Conversation requests do not repeat Agent ID.
 - Conversation keys remain opaque and caller-owned.
+- Every Run carries a caller-generated opaque Turn ID, and Cancel targets one Turn with its Conversation Key and Turn ID.
 - Engine persists no Agent, Conversation, transcript, file, or delivery state.
 - Runtime-native conversation mapping has one owner.
 - Missing Runtime Adapters fail explicitly with no fallback path.

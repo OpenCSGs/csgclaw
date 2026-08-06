@@ -143,6 +143,11 @@ Composition Root 注册 Runtime Adapter，并把接口连接到现有 Owner。
 Engine 只校验其非空且长度有界。
 它不会解析 Key 中的 Room、Thread、Channel、Binding 或 Session 字段。
 
+`TurnID` 是调用方为一次 `Run` Request 生成的不透明 Identity。
+Channel Adapter 或 Session HTTP Adapter 在完成 Ingress Validation 和 Deduplication 后、调用 `Run` 前生成随机 ID。
+Engine 只校验其非空且长度有界，并原样传递给 Runtime Adapter。
+它不从 `ConversationKey` 或 Source Message ID 派生，因为这些值标识不同的生命周期。
+
 每个 Adapter 负责构造无碰撞 Key：
 
 | 调用方 | Key 来源 |
@@ -153,8 +158,13 @@ Engine 只校验其非空且长度有界。
 
 Engine 同时只允许 `(agentID, ConversationKey)` 存在一个 Turn 或 Reset。
 不同 Conversation Key 可以并发执行。
-由于只能有一个活动 Turn，Cancel 使用按 Agent 限定的 `ConversationKey` 标识它。
+等待 Admission 时，同一个 Conversation 可以有一个正在运行的 Turn 和后续排队的 Turn。
+因此 Cancel 使用按 Agent 限定的 `ConversationKey` 和 `TurnID` 精确标识一个排队中或运行中的 Turn。
 Resolve 额外携带 `InteractionID` 来标识一个 Pending Interaction。
+
+`TurnID` 只存在于该 Turn 的生命周期内。
+它不是 Conversation Key、Runtime 原生 Conversation Mapping、Transcript Identity 或持久化 Engine Resource。
+`Reset` 仍按 `ConversationKey` 限定，`Resolve` 仍按 `ConversationKey` 和 `InteractionID` 限定。
 
 `ContinuationPolicy` 明确 Runtime Mapping 行为：
 
@@ -230,6 +240,7 @@ POST /api/v1/agents/{agent}/sessions/{session_id}/responses
 ```text
 Session HTTP Adapter
   -> 加载或创建 Named Session Binding
+  -> 生成 TurnID
   -> Conversations(agentID).Run
   -> Runtime Adapter
   -> 把 Engine Event 映射为现有 SSE
@@ -250,7 +261,7 @@ Route 保留当前 Request Input、`stream`、Body Limit、Timeout、SSE、Error
 ```text
 IM 持久化用户 Message
   -> Channel Adapter 执行 Routing 和 Deduplication
-  -> 构造 ConversationKey 和有序 Input
+  -> 构造 ConversationKey、生成 TurnID，并排列 Input
   -> Conversations(agentID).Run
   -> Runtime Adapter
   -> Channel Adapter 渲染 Activity 和最终 Message
@@ -324,6 +335,7 @@ Detached Secret Answer 也不能插入模型续接。
 Server Config 是全局、每 Agent、Queue Length 和 Queue Timeout Limit 的 Owner。
 Engine 拥有唯一的每 Conversation 执行队列。
 Channel Adapter 可以为 Subscription、Deduplication 和 Ack 保留 Source Ingress Buffer，但不能增加第二套规范化 Turn Queue。
+Engine 使用 `(agentID, ConversationKey, TurnID)` 索引排队中和运行中的 Turn，Runtime 原生 Conversation Mapping 仍按 Conversation Identity 建立索引。
 
 Sink 失败时，Engine 在可能时请求 Runtime Cancel，并等待 Runtime 真实终态后才释放 Admission。
 Runtime 不支持 Cancel 时，Engine 继续监督到终态。
@@ -373,6 +385,7 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - `Interface` 暴露 `Agents()` 和按 Agent 限定的 `Conversations(agentID)`。
 - Conversation Request 不重复携带 Agent ID。
 - Conversation Key 保持不透明并由调用方拥有。
+- 每次 Run 都携带调用方生成的不透明 Turn ID，Cancel 使用 Conversation Key 和 Turn ID 定位一个 Turn。
 - Engine 不持久化 Agent、Conversation、Transcript、File 或 Delivery State。
 - Runtime 原生 Conversation Mapping 只有一个 Owner。
 - 缺少 Runtime Adapter 时明确失败，不启动 Fallback Path。
