@@ -1,6 +1,7 @@
 package modelprovider
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -157,7 +158,7 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 		"model":             modelID,
 		"input":             "ping",
 		"store":             false,
-		"stream":            false,
+		"stream":            true,
 		"max_output_tokens": 16,
 	}
 	body, err := json.Marshal(payload)
@@ -169,6 +170,7 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 		return fmt.Errorf("build responses probe request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
 	if apiKey = strings.TrimSpace(apiKey); apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
@@ -196,13 +198,47 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 	}
 
 	var probe openAIResponsesProbeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&probe); err != nil {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
+	if mediaType == "text/event-stream" {
+		probe, err = decodeOpenAIResponsesProbeStream(resp.Body)
+	} else {
+		err = json.NewDecoder(resp.Body).Decode(&probe)
+	}
+	if err != nil {
 		return fmt.Errorf("decode responses probe from %s: %w", baseURL, err)
 	}
 	if strings.TrimSpace(probe.Object) != "response" {
 		return fmt.Errorf("responses probe from %s returned object %q, want response", baseURL, probe.Object)
 	}
 	return nil
+}
+
+func decodeOpenAIResponsesProbeStream(r io.Reader) (openAIResponsesProbeResponse, error) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+		var event struct {
+			Type     string                       `json:"type"`
+			Response openAIResponsesProbeResponse `json:"response"`
+		}
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			return openAIResponsesProbeResponse{}, err
+		}
+		if strings.HasPrefix(strings.TrimSpace(event.Type), "response.") && strings.TrimSpace(event.Response.Object) == "response" {
+			return event.Response, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return openAIResponsesProbeResponse{}, err
+	}
+	return openAIResponsesProbeResponse{}, fmt.Errorf("stream returned no response event")
 }
 
 func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client, baseURL, apiKey, modelID string, headers map[string]string) error {

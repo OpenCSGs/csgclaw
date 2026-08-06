@@ -102,11 +102,26 @@ func TestCheckResponsesAPIWithClientPostsMinimalResponsesRequest(t *testing.T) {
 	if gotPayload["store"] != false {
 		t.Fatalf("store = %#v, want false", gotPayload["store"])
 	}
-	if gotPayload["stream"] != false {
-		t.Fatalf("stream = %#v, want false", gotPayload["stream"])
+	if gotPayload["stream"] != true {
+		t.Fatalf("stream = %#v, want true", gotPayload["stream"])
 	}
 	if gotPayload["max_output_tokens"] != float64(16) {
 		t.Fatalf("max_output_tokens = %#v, want 16", gotPayload["max_output_tokens"])
+	}
+}
+
+func TestCheckResponsesAPIWithClientAcceptsStreamingResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Accept"); got != "text/event-stream" {
+			t.Fatalf("Accept = %q, want text/event-stream", got)
+		}
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		_, _ = w.Write([]byte("event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-test\",\"object\":\"response\",\"status\":\"in_progress\"}}\n\n"))
+	}))
+	defer srv.Close()
+
+	if err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL+"/v1", "sk-test", "gpt-test", nil); err != nil {
+		t.Fatalf("CheckResponsesAPIWithClient() error = %v", err)
 	}
 }
 
