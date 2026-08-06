@@ -5,8 +5,9 @@ import (
 	"time"
 )
 
-// AgentInterface is the collection-scoped facade for Agent resources.
-// The backing Agent Service owns persistence and Runtime lifecycle.
+// AgentInterface is the collection-scoped API for Agent resources.
+// Its implementation owns Agent persistence and Runtime lifecycle; the
+// current internal/agent.Service is not part of this contract.
 type AgentInterface interface {
 	// Create creates an Agent from its desired configuration.
 	Create(ctx context.Context, spec AgentSpec) (Agent, error)

@@ -130,9 +130,10 @@ The review surface is:
 | `Conversations(agentID)` | Run, Cancel, Reset, Resolve | Conversation execution scoped to one Agent |
 | `ConversationRuntime` | Run, Cancel, Reset, Resolve | Runtime-specific direct execution behind Engine |
 
-`AgentInterface` is a collection-scoped facade, not an Agent store.
-Its implementation delegates Agent persistence, `Get`, `List`, and Runtime lifecycle to the existing Agent Service.
-Agent Engine adds only the coordination required between lifecycle changes and active Turns; it does not copy or persist Agent records.
+`AgentInterface` is the collection-scoped API for Agent resources, not an adapter around the current `internal/agent.Service`.
+Its implementation owns Agent persistence and Runtime lifecycle through explicit storage and Runtime dependencies.
+The current Agent Service may be refactored or replaced incrementally when this contract is implemented; it is not a dependency of the contract.
+Conversation execution keeps no duplicate Agent records and coordinates active Turns with lifecycle changes.
 
 `AgentSpec` contains the complete desired state: name, description, instructions, role, Runtime, model, Skills, and MCP servers.
 `AgentStatus` contains observed lifecycle state and the current Runtime ID.
@@ -220,13 +221,13 @@ Each fact has one owner:
 
 | Component | Owns | Does not own |
 |---|---|---|
-| Agent Service | Agent persistence, desired configuration, Runtime lifecycle, Workspace and Runtime provisioning | Turn input, transcript, Runtime-native conversation mapping |
+| Agent resource implementation | Agent persistence, desired configuration, Runtime lifecycle, Workspace and Runtime provisioning | Turn input, transcript, Runtime-native conversation mapping |
 | Agent Engine | Admission, per-Conversation serialization, dispatch, active Turn, pending interaction, event ordering, normalized result | Durable Agent or Conversation state, files, Channel behavior |
 | Runtime Adapter | Native conversation mapping, direct Runtime protocol, Runtime event translation, file exposure to Runtime | Channel subscription, transcript, Agent persistence |
 | Channel Adapter | Ingress, identity, binding, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
 | Session HTTP Adapter | HTTP validation, Named Session binding, SSE and error mapping | IM Room, Message, Participant, transcript |
 
-The Agent Service and Agent Engine must coordinate lifecycle changes so Restart, Recreate, Delete, or destructive Workspace changes do not replace resources used by an active Turn.
+The Agent resource implementation and conversation execution engine must coordinate lifecycle changes so Restart, Recreate, Delete, or destructive Workspace changes do not replace resources used by an active Turn.
 This coordination is an implementation responsibility and is not exposed as a public target or lease abstraction.
 
 ## 5. Primary Flows
@@ -358,6 +359,7 @@ A strict caller receives `conversation_not_resumable` when its mapping is gone.
 
 ### Phase 1: Engine, Codex, and Anonymous Session
 
+- Implement `AgentInterface` with explicit storage and Runtime dependencies; refactor or replace the current Agent Service as needed without making it a dependency of the contract.
 - Implement bounded admission and per-Conversation serialization.
 - Implement the Codex Runtime Adapter.
 - Add the Named Session Store.

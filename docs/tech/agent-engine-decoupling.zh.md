@@ -130,9 +130,10 @@ Composition Root 注册 Runtime Adapter，并把接口连接到现有 Owner。
 | `Conversations(agentID)` | Run、Cancel、Reset、Resolve | 限定到一个 Agent 的 Conversation 执行 |
 | `ConversationRuntime` | Run、Cancel、Reset、Resolve | Engine 后面的 Runtime 特有直接执行 |
 
-`AgentInterface` 是 Collection-scoped Facade，不是 Agent Store。
-它的实现把 Agent 持久化、`Get`、`List` 和 Runtime 生命周期委托给现有 Agent Service。
-Agent Engine 只增加生命周期变更和 Active Turn 之间所需的协调；它不复制或持久化 Agent Record。
+`AgentInterface` 是 Agent Resource 的 Collection-scoped API，不是当前 `internal/agent.Service` 的 Adapter。
+它的实现通过明确的 Storage 和 Runtime Dependency 拥有 Agent 持久化及 Runtime 生命周期。
+实现该 Contract 时，可以渐进重构或替换当前 Agent Service；当前 Service 不是 Contract 的依赖。
+Conversation Execution 不保存重复的 Agent Record，并协调 Active Turn 和生命周期变更。
 
 `AgentSpec` 包含完整期望状态：Name、Description、Instructions、Role、Runtime、Model、Skills 和 MCP Server。
 `AgentStatus` 包含观察到的生命周期状态和当前 Runtime ID。
@@ -220,13 +221,13 @@ Runtime 分派后，成功、失败、取消和超时都返回 `Dispatched=true`
 
 | 组件 | 负责 | 不负责 |
 |---|---|---|
-| Agent Service | Agent 持久化、期望配置、Runtime 生命周期、Workspace 和 Runtime Provision | Turn Input、Transcript、Runtime 原生 Conversation Mapping |
+| Agent Resource 实现 | Agent 持久化、期望配置、Runtime 生命周期、Workspace 和 Runtime Provision | Turn Input、Transcript、Runtime 原生 Conversation Mapping |
 | Agent Engine | Admission、每 Conversation 串行化、Dispatch、Active Turn、Pending Interaction、Event 顺序、规范化 Result | 持久化 Agent 或 Conversation State、File、Channel 行为 |
 | Runtime Adapter | 原生 Conversation Mapping、直接 Runtime 协议、Runtime Event 转换、向 Runtime 暴露 File | Channel Subscription、Transcript、Agent 持久化 |
 | Channel Adapter | Ingress、Identity、Binding、Deduplication、Hidden Context、File Authorization、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
 | Session HTTP Adapter | HTTP Validation、Named Session Binding、SSE 和 Error Mapping | IM Room、Message、Participant、Transcript |
 
-Agent Service 和 Agent Engine 必须协调生命周期变更，确保 Restart、Recreate、Delete 或破坏性 Workspace 变更不会替换活动 Turn 正在使用的资源。
+Agent Resource 实现和 Conversation Execution Engine 必须协调生命周期变更，确保 Restart、Recreate、Delete 或破坏性 Workspace 变更不会替换活动 Turn 正在使用的资源。
 该协调属于实现职责，不作为公共 Target 或 Lease 抽象暴露。
 
 ## 5. 主要流程
@@ -358,6 +359,7 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 
 ### 阶段 1：Engine、Codex 和匿名 Session
 
+- 使用明确的 Storage 和 Runtime Dependency 实现 `AgentInterface`；按需重构或替换当前 Agent Service，不让它成为 Contract 的依赖。
 - 实现有界 Admission 和每 Conversation 串行化。
 - 实现 Codex Runtime Adapter。
 - 增加 Named Session Store。
