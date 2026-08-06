@@ -130,6 +130,10 @@ Composition Root 注册 Runtime Adapter，并把接口连接到现有 Owner。
 | `Conversations(agentID)` | Run、Cancel、Reset、Resolve | 限定到一个 Agent 的 Conversation 执行 |
 | `ConversationRuntime` | Run、Cancel、Reset、Resolve | Engine 后面的 Runtime 特有直接执行 |
 
+`AgentInterface` 是 Collection-scoped Facade，不是 Agent Store。
+它的实现把 Agent 持久化、`Get`、`List` 和 Runtime 生命周期委托给现有 Agent Service。
+Agent Engine 只增加生命周期变更和 Active Turn 之间所需的协调；它不复制或持久化 Agent Record。
+
 `AgentSpec` 包含完整期望状态：Name、Description、Instructions、Role、Runtime、Model、Skills 和 MCP Server。
 `AgentStatus` 包含观察到的生命周期状态和当前 Runtime ID。
 更新 Agent 时，把完整期望 Specification 作为一个 Resource Update 替换。

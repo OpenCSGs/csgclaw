@@ -130,6 +130,10 @@ The review surface is:
 | `Conversations(agentID)` | Run, Cancel, Reset, Resolve | Conversation execution scoped to one Agent |
 | `ConversationRuntime` | Run, Cancel, Reset, Resolve | Runtime-specific direct execution behind Engine |
 
+`AgentInterface` is a collection-scoped facade, not an Agent store.
+Its implementation delegates Agent persistence, `Get`, `List`, and Runtime lifecycle to the existing Agent Service.
+Agent Engine adds only the coordination required between lifecycle changes and active Turns; it does not copy or persist Agent records.
+
 `AgentSpec` contains the complete desired state: name, description, instructions, role, Runtime, model, Skills, and MCP servers.
 `AgentStatus` contains observed lifecycle state and the current Runtime ID.
 Updating an Agent replaces its desired specification as one resource update.
