@@ -34,6 +34,7 @@ Channel Adapter 或 Session API -> Agent Engine -> Runtime Adapter
 - 让匿名 Session 独立于 IM Room 和 Message。
 - 保留内置 IM 的协作行为。
 - 把 Runtime 特有协议隐藏在 `ConversationRuntime` 后面。
+- 让每个 Runtime Adapter 物化自己的 Credential，并初始化自己的执行环境。
 - 支持 Text、File、实时进度、Interaction 和 CSGClaw Structured Output。
 - 复用当前 State Owner，不创建 Engine Database。
 - 支持按小步、可评审的阶段实现。
@@ -47,7 +48,8 @@ Channel Adapter 或 Session API -> Agent Engine -> Runtime Adapter
 - 实现远程 Agent Engine 或 Engine HTTP 协议。
 - 实现完整 OpenAI Responses API 或 `previous_response_id` Chain。
 - 增加 Files API 或新的飞书文件下载支持。
-- 让 Agent Engine 拥有 Transcript、Attachment、Credential 或 Runtime 原生 Conversation Mapping。
+- 让 Conversation Execution 拥有 Transcript、Attachment、Runtime Credential File 或 Runtime 原生 Conversation Mapping。
+- 统一不同 Runtime Adapter 的 Credential File Format 或 Path。
 - 增加兼容、Fallback 或双执行路径。
 - 在 OpenClaw 暴露合适的直接协议前声称支持 Direct OpenClaw。
 
@@ -136,6 +138,19 @@ Composition Root 注册 Runtime Adapter，并把接口连接到现有 Owner。
 Conversation Execution 不保存重复的 Agent Record，并协调 Active Turn 和生命周期变更。
 
 `AgentSpec` 包含完整期望状态：Name、Description、Instructions、Role、Runtime、Model、Skills 和 MCP Server。
+`RuntimeSpec.Credentials` 是 Adapter 定义的 Credential Name 到 Secret String Value 的 Map。
+`RuntimeSpec.InitShell` 是准备 Runtime 环境的幂等 Shell Program。
+Create 和 Update 把这两个 Field 作为完整 Runtime 期望状态的一部分进行替换。
+Go Name 遵循 Kubernetes Go API Field Convention；序列化形式使用 `credentials` 和 `initShell`。
+`Credentials` 在 Create 和 Update 中是 Write-only；Create、Update、Get 和 List 返回的所有 `Agent` 都省略其 Value。
+
+Runtime Adapter 校验 Credential Name，选择 File Format 和 Path，把 Value 写入自己的 Runtime-local State，然后在报告 Runtime Ready 前，在同一个执行环境中运行 `InitShell`。
+`InitShell` 可以准备 Workspace 或初始化 Adapter 自己拥有的 Channel 环境，但其权限不能高于 Runtime 本身。
+Update、Recreate 或 Provisioning Retry 后可能再次运行 `InitShell`，因此它必须幂等。
+Credential 物化或 `InitShell` 执行失败时，Agent 不能进入 Ready。
+Credential Value 不能进入 Log、Status Message、Event、Transcript 或 `InitShell` 本身。
+Host Feishu Adapter 负责 Delivery 时，Codex Adapter 不接收 Feishu Credential；这两个 Field 不改变 Channel Ownership。
+
 `AgentStatus` 包含观察到的生命周期状态和当前 Runtime ID。
 更新 Agent 时，把完整期望 Specification 作为一个 Resource Update 替换。
 
@@ -221,10 +236,10 @@ Runtime 分派后，成功、失败、取消和超时都返回 `Dispatched=true`
 
 | 组件 | 负责 | 不负责 |
 |---|---|---|
-| Agent Resource 实现 | Agent 持久化、期望配置、Runtime 生命周期、Workspace 和 Runtime Provision | Turn Input、Transcript、Runtime 原生 Conversation Mapping |
+| Agent Resource 实现 | Agent 持久化、包含 Runtime Credential 和 `InitShell` 的期望配置、Runtime 生命周期、Workspace 和 Runtime Provision | Turn Input、Transcript、Runtime 原生 Conversation Mapping |
 | Agent Engine | Admission、每 Conversation 串行化、Dispatch、Active Turn、Pending Interaction、Event 顺序、规范化 Result | 持久化 Agent 或 Conversation State、File、Channel 行为 |
-| Runtime Adapter | 原生 Conversation Mapping、直接 Runtime 协议、Runtime Event 转换、向 Runtime 暴露 File | Channel Subscription、Transcript、Agent 持久化 |
-| Channel Adapter | Ingress、Identity、Binding、Deduplication、Hidden Context、File Authorization、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
+| Runtime Adapter | Runtime Credential 序列化、`InitShell` 执行、原生 Conversation Mapping、直接 Runtime 协议、Runtime Event 转换、向 Runtime 暴露 File | Channel Subscription、Transcript、Agent 持久化 |
+| Channel Adapter | Ingress、Identity、Binding、Host 侧 Channel Credential、Deduplication、Hidden Context、File Authorization、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
 | Session HTTP Adapter | HTTP Validation、Named Session Binding、SSE 和 Error Mapping | IM Room、Message、Participant、Transcript |
 
 Agent Resource 实现和 Conversation Execution Engine 必须协调生命周期变更，确保 Restart、Recreate、Delete 或破坏性 Workspace 变更不会替换活动 Turn 正在使用的资源。
@@ -281,6 +296,10 @@ Runtime Adapter 原子替换原生 Conversation Mapping。
 
 ### 5.3 Runtime Adapter
 
+Create、影响 Runtime 的 Update 或 Recreate 期间，Agent Resource 实现根据 `RuntimeSpec.Adapter` 选择已注册的 Adapter。
+Adapter 物化 `Credentials`、运行 `InitShell`，并且仅在两个步骤都成功后启动 Runtime。
+Credential Layout 和初始化机制是该 Adapter 的内部实现。
+
 获得 Admission 后，Engine 为 Agent 已就绪的 Runtime 选择注册的 Adapter。
 所选 Adapter：
 
@@ -301,6 +320,7 @@ Reset 为同一个 `ConversationKey` 替换该 Mapping。
 ### 6.1 持久化
 
 Agent Engine 没有持久化 Conversation Store。
+Agent Resource 实现拥有期望的 Runtime Credential，每个 Runtime Adapter 拥有自己物化出的 Credential File。
 Runtime Adapter 拥有原生 Conversation Mapping。
 Channel Adapter 拥有 Transcript 和 Source Delivery State。
 Named Session Store 只拥有外部 Session Binding。
@@ -394,6 +414,7 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - 每次 Run 都携带调用方生成的不透明 Turn ID，Cancel 使用 Conversation Key 和 Turn ID 定位一个 Turn。
 - Engine 不持久化 Agent、Conversation、Transcript、File 或 Delivery State。
 - Runtime 原生 Conversation Mapping 只有一个 Owner。
+- Runtime Credential File Layout 和初始化由各 Runtime Adapter 负责。
 - 缺少 Runtime Adapter 时明确失败，不启动 Fallback Path。
 - Go Contract 和两种语言文档保持同步。
 
@@ -404,6 +425,9 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - 内置 IM 保留 Room、Thread、Mention、File、Activity、Stop、Work、Interaction 和 `/new` 行为。
 - 飞书保留当前支持的 Text 行为，不声称支持 File。
 - Codex Conversation 在 Restart 后可以继续。
+- Create、影响 Runtime 的 Update 和 Recreate 在运行幂等 `InitShell` 并启动 Runtime 前先物化 Credential。
+- Credential 或 `InitShell` 失败时 Agent 不会 Ready，Secret Value 不进入 Log 或公开 Result。
+- Create、Update、Get 和 List Result 省略 Runtime Credential Value。
 - Recreate 和 Delete 如实报告严格续接 Mapping 缺失。
 - CSGClaw Structured Output 不泄漏原始控制行。
 - Secret Answer 不进入 Log 或 Transcript。
@@ -416,4 +440,6 @@ Mapping 丢失时，严格调用方收到 `conversation_not_resumable`。
 - 匿名测试验证 IM Entity 数量不变。
 - Channel 测试验证 Deduplication、Replay、Superseding 和 Rendering。
 - Runtime 测试验证 Mapping 创建、严格续接、Reset、Restart、Recreate 和 Delete 语义。
+- Runtime Adapter 测试验证 Credential 序列化、`InitShell` 顺序、重跑、失败处理和 Secret Redaction。
+- Agent Contract 测试验证所有返回的 Agent Value 都省略 Runtime Credential。
 - 现有 Agent、Session API、内置 IM、飞书、Team、Task、Scheduled Task、Notification 和 Work 回归测试通过。

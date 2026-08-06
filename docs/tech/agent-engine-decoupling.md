@@ -34,6 +34,7 @@ The design must:
 - Keep anonymous sessions independent from IM Rooms and Messages.
 - Preserve built-in IM collaboration behavior.
 - Keep Runtime-specific protocols behind `ConversationRuntime`.
+- Let each Runtime Adapter materialize its credentials and initialize its execution environment.
 - Support text, files, live progress, interactions, and CSGClaw Structured Output.
 - Reuse current storage owners instead of creating an Engine database.
 - Allow implementation in small, reviewable phases.
@@ -47,7 +48,8 @@ This proposal does not:
 - Implement a remote Agent Engine or Engine HTTP protocol.
 - Implement the complete OpenAI Responses API or a `previous_response_id` chain.
 - Add a Files API or new Feishu file-download support.
-- Make Agent Engine own transcripts, attachments, credentials, or Runtime-native conversation mappings.
+- Make conversation execution own transcripts, attachments, Runtime credential files, or Runtime-native conversation mappings.
+- Standardize credential file formats or paths across Runtime Adapters.
 - Add compatibility, fallback, or dual execution paths.
 - Claim direct OpenClaw support before OpenClaw exposes a suitable direct protocol.
 
@@ -136,6 +138,19 @@ The current Agent Service may be refactored or replaced incrementally when this 
 Conversation execution keeps no duplicate Agent records and coordinates active Turns with lifecycle changes.
 
 `AgentSpec` contains the complete desired state: name, description, instructions, role, Runtime, model, Skills, and MCP servers.
+`RuntimeSpec.Credentials` is a map of adapter-defined credential names to secret string values.
+`RuntimeSpec.InitShell` is an idempotent shell program for preparing the Runtime environment.
+Create and Update replace both fields as part of the complete desired Runtime state.
+The Go names follow the Kubernetes Go API field convention; a serialized form uses `credentials` and `initShell`.
+`Credentials` is write-only on Create and Update; every returned `Agent`, including Create, Update, Get, and List results, omits its values.
+
+The Runtime Adapter validates credential names, selects file formats and paths, writes the values into its Runtime-local state, and then runs `InitShell` in the same execution environment before reporting the Runtime ready.
+`InitShell` may prepare the Workspace or initialize an Adapter-owned Channel environment, but it receives no more privilege than the Runtime itself.
+`InitShell` may run again after Update, Recreate, or a provisioning retry, so it must be idempotent.
+Failure to materialize credentials or complete `InitShell` prevents the Agent from becoming ready.
+Credential values must not enter logs, status messages, events, transcripts, or `InitShell` itself.
+The Codex Adapter does not receive Feishu credentials when the host Feishu Adapter owns delivery; these fields do not change Channel ownership.
+
 `AgentStatus` contains observed lifecycle state and the current Runtime ID.
 Updating an Agent replaces its desired specification as one resource update.
 
@@ -221,10 +236,10 @@ Each fact has one owner:
 
 | Component | Owns | Does not own |
 |---|---|---|
-| Agent resource implementation | Agent persistence, desired configuration, Runtime lifecycle, Workspace and Runtime provisioning | Turn input, transcript, Runtime-native conversation mapping |
+| Agent resource implementation | Agent persistence, desired configuration including Runtime credentials and `InitShell`, Runtime lifecycle, Workspace and Runtime provisioning | Turn input, transcript, Runtime-native conversation mapping |
 | Agent Engine | Admission, per-Conversation serialization, dispatch, active Turn, pending interaction, event ordering, normalized result | Durable Agent or Conversation state, files, Channel behavior |
-| Runtime Adapter | Native conversation mapping, direct Runtime protocol, Runtime event translation, file exposure to Runtime | Channel subscription, transcript, Agent persistence |
-| Channel Adapter | Ingress, identity, binding, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
+| Runtime Adapter | Runtime credential serialization, `InitShell` execution, native conversation mapping, direct Runtime protocol, Runtime event translation, file exposure to Runtime | Channel subscription, transcript, Agent persistence |
+| Channel Adapter | Ingress, identity, binding, host-side Channel credentials, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
 | Session HTTP Adapter | HTTP validation, Named Session binding, SSE and error mapping | IM Room, Message, Participant, transcript |
 
 The Agent resource implementation and conversation execution engine must coordinate lifecycle changes so Restart, Recreate, Delete, or destructive Workspace changes do not replace resources used by an active Turn.
@@ -281,6 +296,10 @@ The Runtime Adapter atomically replaces its native conversation mapping.
 
 ### 5.3 Runtime Adapter
 
+During Create, a Runtime-affecting Update, or Recreate, the Agent resource implementation selects the registered Adapter from `RuntimeSpec.Adapter`.
+The Adapter materializes `Credentials`, runs `InitShell`, and starts the Runtime only after both steps succeed.
+Credential layout and initialization mechanics remain private to that Adapter.
+
 Engine selects the registered Adapter for the Agent's ready Runtime after admission.
 The selected Adapter:
 
@@ -301,6 +320,7 @@ It must not fabricate direct execution through an IM or Feishu event.
 ### 6.1 Persistence
 
 Agent Engine has no durable Conversation store.
+The Agent resource implementation owns desired Runtime credentials, while each Runtime Adapter owns its materialized credential files.
 Runtime Adapters own native conversation mappings.
 Channel Adapters own transcripts and source delivery state.
 The Named Session Store owns only external Session binding.
@@ -394,6 +414,7 @@ A later phase must not be required to validate an earlier phase.
 - Every Run carries a caller-generated opaque Turn ID, and Cancel targets one Turn with its Conversation Key and Turn ID.
 - Engine persists no Agent, Conversation, transcript, file, or delivery state.
 - Runtime-native conversation mapping has one owner.
+- Runtime credential file layouts and initialization remain owned by each Runtime Adapter.
 - Missing Runtime Adapters fail explicitly with no fallback path.
 - The Go contract and both language documents remain synchronized.
 
@@ -404,6 +425,9 @@ A later phase must not be required to validate an earlier phase.
 - Built-in IM preserves Room, Thread, Mention, file, Activity, Stop, Work, interaction, and `/new` behavior.
 - Feishu preserves its currently supported text behavior without claiming file support.
 - Codex conversations continue after Restart.
+- Create, Runtime-affecting Update, and Recreate materialize credentials before running an idempotent `InitShell` and starting the Runtime.
+- Credential or `InitShell` failure leaves the Agent not ready, and secret values enter neither logs nor public results.
+- Create, Update, Get, and List results omit Runtime credential values.
 - Recreate and Delete report missing strict-continuation mappings honestly.
 - CSGClaw Structured Output never leaks raw control lines.
 - Secret answers enter neither logs nor transcripts.
@@ -416,4 +440,6 @@ A later phase must not be required to validate an earlier phase.
 - Anonymous tests verify that IM entity counts do not change.
 - Channel tests verify deduplication, replay, superseding, and rendering.
 - Runtime tests verify mapping creation, strict continuation, Reset, Restart, Recreate, and Delete semantics.
+- Runtime Adapter tests verify credential serialization, `InitShell` ordering, reruns, failure handling, and secret redaction.
+- Agent contract tests verify that all returned Agent values omit Runtime credentials.
 - Existing Agent, Session API, built-in IM, Feishu, Team, Task, Scheduled Task, Notification, and Work regressions pass.

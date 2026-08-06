@@ -31,12 +31,14 @@ type AgentInterface interface {
 	Stop(ctx context.Context, agentID string) (Agent, error)
 
 	// Recreate rebuilds the Runtime from the Agent's current desired state.
-	// That state includes instructions, model, runtime options, Skills, and MCP.
+	// That state includes instructions, model, Runtime credentials, InitShell,
+	// Runtime options, Skills, and MCP.
 	Recreate(ctx context.Context, agentID string) (Agent, error)
 }
 
 // Agent is the resource for one executable agent.
-// Spec is desired state; Status is the latest observed state.
+// Spec is desired state with Runtime credentials omitted; Status is the latest
+// observed state.
 type Agent struct {
 	ID        string
 	Spec      AgentSpec
@@ -69,12 +71,22 @@ const (
 )
 
 // RuntimeSpec selects a registered Runtime Adapter and its desired execution
-// environment. Adapter-specific options remain opaque to Agent Engine.
+// environment. Credential names and Options remain adapter-specific.
 type RuntimeSpec struct {
 	Adapter   string
 	Sandboxed bool
 	Image     string
-	Options   map[string]any
+
+	// Credentials contains adapter-specific secrets to materialize in the
+	// Runtime environment. It is write-only on Create and Update: returned Agent
+	// values omit it, and its values must not be logged.
+	Credentials map[string]string
+
+	// InitShell is an idempotent shell program run in the Runtime environment
+	// after credentials are materialized and before the Runtime starts.
+	InitShell string
+
+	Options map[string]any
 }
 
 // ModelSpec selects model behavior without embedding provider credentials.
