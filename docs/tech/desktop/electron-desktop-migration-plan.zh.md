@@ -47,6 +47,7 @@ csgclaw _desktop-serve
 - Sandbox API 使用独立的动态端口监听宿主机 IPv4 接口，并强制校验 Host、server access token 和空 Origin。
 - Electron 通过 stdin 发送启动信息，Go 通过 stdout 返回就绪信息。
 - Electron 退出或监督重启 sidecar 时通知 Go 先停止运行中的 Agent，再优雅关闭 HTTP 服务。
+- Electron 解析到的系统代理通过 CLIProxy 专用环境变量传给 sidecar，仅供 Codex 和 Claude Code 模型 Provider 使用；OpenCSG、CSGHub Lite 和自定义 Provider 不继承该自动代理。
 - Go 自升级在桌面版中关闭，由 Electron 统一更新完整应用。
 
 ### 2.2 启动流程

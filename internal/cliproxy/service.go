@@ -36,6 +36,11 @@ const (
 
 	configDirEnv = "CSGCLAW_CLIPROXY_CONFIG_DIR"
 	authDirEnv   = "CSGCLAW_CLIPROXY_AUTH_DIR"
+	// systemProxyURLEnv carries the Electron-resolved system proxy only to the
+	// embedded CLIProxy used by the Codex and Claude Code model providers. It
+	// intentionally does not use HTTP_PROXY/HTTPS_PROXY, which would route all
+	// Go sidecar traffic, including OpenCSG and custom providers, through it.
+	systemProxyURLEnv = "CSGCLAW_CLIPROXY_SYSTEM_PROXY_URL"
 
 	embeddedCLIProxySkipGinLogKey = "__gin_skip_request_logging__"
 
@@ -428,7 +433,7 @@ func configDir() (string, error) {
 }
 
 func configuredProxyURL() string {
-	for _, name := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"} {
+	for _, name := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", systemProxyURLEnv} {
 		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 			return value
 		}

@@ -1,37 +1,17 @@
-const SYSTEM_PROXY_URLS = {
-  HTTP_PROXY: "http://api.openai.com/",
-  HTTPS_PROXY: "https://api.openai.com/",
-} as const;
-const LOOPBACK_PROXY_BYPASS = ["localhost", "127.0.0.1", "::1"];
+const SYSTEM_PROXY_PROBE_URL = "https://api.openai.com/";
+export const CLIPROXY_SYSTEM_PROXY_ENV = "CSGCLAW_CLIPROXY_SYSTEM_PROXY_URL";
 
 export type SystemProxyResolver = (url: string) => Promise<string>;
 
-export async function resolveSystemProxyEnvironment(
+export async function resolveSystemCLIProxyEnvironment(
   resolveProxy: SystemProxyResolver,
 ): Promise<NodeJS.ProcessEnv> {
   try {
-    const [httpRules, httpsRules] = await Promise.all([
-      resolveProxy(SYSTEM_PROXY_URLS.HTTP_PROXY),
-      resolveProxy(SYSTEM_PROXY_URLS.HTTPS_PROXY),
-    ]);
-    const httpProxy = firstProxyURL(httpRules);
-    const httpsProxy = firstProxyURL(httpsRules);
-    if (!httpProxy && !httpsProxy) {
+    const proxyURL = firstProxyURL(await resolveProxy(SYSTEM_PROXY_PROBE_URL));
+    if (!proxyURL) {
       return {};
     }
-
-    const env: NodeJS.ProcessEnv = {
-      NO_PROXY: LOOPBACK_PROXY_BYPASS.join(","),
-      no_proxy: LOOPBACK_PROXY_BYPASS.join(","),
-    };
-    setProxyPair(env, "HTTP_PROXY", "http_proxy", httpProxy);
-    setProxyPair(env, "HTTPS_PROXY", "https_proxy", httpsProxy);
-
-    const allProxy = commonSocksProxy(httpProxy, httpsProxy);
-    if (allProxy) {
-      setProxyPair(env, "ALL_PROXY", "all_proxy", allProxy);
-    }
-    return env;
+    return { [CLIPROXY_SYSTEM_PROXY_ENV]: proxyURL };
   } catch {
     return {};
   }
@@ -77,27 +57,4 @@ function proxyScheme(type: string): string {
     default:
       return "http";
   }
-}
-
-function setProxyPair(
-  env: NodeJS.ProcessEnv,
-  upperKey: string,
-  lowerKey: string,
-  value: string | undefined,
-): void {
-  if (!value) {
-    return;
-  }
-  env[upperKey] = value;
-  env[lowerKey] = value;
-}
-
-function commonSocksProxy(
-  httpProxy: string | undefined,
-  httpsProxy: string | undefined,
-): string | undefined {
-  if (!httpProxy || httpProxy !== httpsProxy || !httpProxy.startsWith("socks")) {
-    return undefined;
-  }
-  return httpProxy;
 }

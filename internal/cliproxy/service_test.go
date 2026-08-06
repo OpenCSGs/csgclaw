@@ -332,6 +332,7 @@ func TestManagedRetryRecoversStreamingTransientBeforeFirstByte(t *testing.T) {
 
 func TestBuildConfigUsesStandardProxyEnvironmentForCLIProxyAPI(t *testing.T) {
 	clearStandardProxyEnv(t)
+	t.Setenv(systemProxyURLEnv, "")
 	t.Setenv(configDirEnv, t.TempDir())
 	t.Setenv(authDirEnv, filepath.Join(t.TempDir(), "auth"))
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:7890")
@@ -352,6 +353,31 @@ func TestBuildConfigUsesStandardProxyEnvironmentForCLIProxyAPI(t *testing.T) {
 	}
 	if text := string(content); !strings.Contains(text, `proxy-url: "http://127.0.0.1:7890"`) {
 		t.Fatalf("generated config missing proxy-url:\n%s", text)
+	}
+}
+
+func TestBuildConfigUsesScopedDesktopSystemProxyForCLIProxyAPI(t *testing.T) {
+	clearStandardProxyEnv(t)
+	t.Setenv(systemProxyURLEnv, "http://127.0.0.1:7890")
+	t.Setenv(configDirEnv, t.TempDir())
+	t.Setenv(authDirEnv, filepath.Join(t.TempDir(), "auth"))
+
+	cfg, cfgPath, _, err := buildConfig()
+	if err != nil {
+		t.Fatalf("buildConfig returned error: %v", err)
+	}
+	if cfg.ProxyURL != "http://127.0.0.1:7890" {
+		t.Fatalf("ProxyURL = %q, want scoped desktop system proxy", cfg.ProxyURL)
+	}
+	if err := writeConfigFile(cfgPath, cfg); err != nil {
+		t.Fatalf("writeConfigFile returned error: %v", err)
+	}
+	content, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if text := string(content); !strings.Contains(text, `proxy-url: "http://127.0.0.1:7890"`) {
+		t.Fatalf("generated config missing scoped proxy-url:\n%s", text)
 	}
 }
 

@@ -1,22 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { firstProxyURL, resolveSystemProxyEnvironment } from "./systemProxy";
+import {
+  CLIPROXY_SYSTEM_PROXY_ENV,
+  firstProxyURL,
+  resolveSystemCLIProxyEnvironment,
+} from "./systemProxy";
 
-test("maps Electron system proxy rules to sidecar environment variables", async () => {
-  const env = await resolveSystemProxyEnvironment(async () => "PROXY 127.0.0.1:7890");
+test("scopes the Electron system proxy to embedded CLIProxy", async () => {
+  const env = await resolveSystemCLIProxyEnvironment(async () => "PROXY 127.0.0.1:7890");
 
   assert.deepEqual(env, {
-    HTTP_PROXY: "http://127.0.0.1:7890",
-    HTTPS_PROXY: "http://127.0.0.1:7890",
-    NO_PROXY: "localhost,127.0.0.1,::1",
-    http_proxy: "http://127.0.0.1:7890",
-    https_proxy: "http://127.0.0.1:7890",
-    no_proxy: "localhost,127.0.0.1,::1",
+    [CLIPROXY_SYSTEM_PROXY_ENV]: "http://127.0.0.1:7890",
   });
 });
 
 test("keeps direct system proxy rules unset", async () => {
-  assert.deepEqual(await resolveSystemProxyEnvironment(async () => "DIRECT"), {});
+  assert.deepEqual(await resolveSystemCLIProxyEnvironment(async () => "DIRECT"), {});
 });
 
 test("uses the first supported proxy rule", () => {

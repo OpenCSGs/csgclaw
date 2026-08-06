@@ -77,7 +77,7 @@ test("keeps the inherited environment when login shell discovery fails", async (
   );
 });
 
-test("uses the system proxy without importing shell proxy settings", async () => {
+test("scopes the system proxy to embedded CLIProxy without importing shell proxy settings", async () => {
   const env = await resolveSidecarEnvironment({
     baseEnvironment: { PATH: "/usr/bin:/bin" },
     homeDirectory: "/Users/test",
@@ -93,13 +93,33 @@ test("uses the system proxy without importing shell proxy settings", async () =>
     resolveSystemProxy: async () => "PROXY 127.0.0.1:7890",
   });
 
-  assert.equal(env.HTTP_PROXY, "http://127.0.0.1:7890");
-  assert.equal(env.HTTPS_PROXY, "http://127.0.0.1:7890");
-  assert.equal(env.http_proxy, "http://127.0.0.1:7890");
-  assert.equal(env.https_proxy, "http://127.0.0.1:7890");
-  assert.equal(env.NO_PROXY, "localhost,127.0.0.1,::1");
-  assert.equal(env.no_proxy, "localhost,127.0.0.1,::1");
+  assert.equal(env.CSGCLAW_CLIPROXY_SYSTEM_PROXY_URL, "http://127.0.0.1:7890");
+  assert.equal(env.HTTP_PROXY, undefined);
+  assert.equal(env.HTTPS_PROXY, undefined);
+  assert.equal(env.http_proxy, undefined);
+  assert.equal(env.https_proxy, undefined);
+  assert.equal(env.NO_PROXY, undefined);
+  assert.equal(env.no_proxy, undefined);
   assert.equal(env.UNRELATED_SECRET, undefined);
+});
+
+test("scopes an inherited standard proxy to embedded CLIProxy", async () => {
+  const env = await resolveSidecarEnvironment({
+    baseEnvironment: {
+      PATH: "/usr/bin:/bin",
+      HTTPS_PROXY: "http://127.0.0.1:7891",
+      HTTP_PROXY: "http://127.0.0.1:7892",
+    },
+    homeDirectory: "/home/test",
+    loginShell: "/bin/bash",
+    platform: DesktopPlatform.Linux,
+    runCommand: async () => "PATH=/usr/bin:/bin\0",
+    resolveSystemProxy: async () => "PROXY 127.0.0.1:7890",
+  });
+
+  assert.equal(env.CSGCLAW_CLIPROXY_SYSTEM_PROXY_URL, "http://127.0.0.1:7891");
+  assert.equal(env.HTTPS_PROXY, undefined);
+  assert.equal(env.HTTP_PROXY, undefined);
 });
 
 test("uses an interactive non-login shell for Linux terminal configuration", async () => {
