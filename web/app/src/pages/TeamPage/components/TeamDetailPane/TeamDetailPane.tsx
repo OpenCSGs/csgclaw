@@ -3,7 +3,17 @@ import type { ReactNode } from "react";
 import { AgentAvatarContent, RoomAvatar } from "@/components/business";
 import { ListChecks, Trash2, UserPlus, Users } from "lucide-react";
 import { TaskSubtaskIndicator } from "@/components/business";
-import { Button } from "@/components/ui";
+import {
+  Button,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from "@/components/ui";
 import { isAgentRunning } from "@/models/agents";
 import type { AgentLike } from "@/models/agents";
 import type { IMUser, TranslateFn, UsersById } from "@/models/conversations";
@@ -56,6 +66,17 @@ export function TeamDetailPane({
   onSelectTask = () => {},
 }: TeamDetailPaneProps) {
   const [activeTab, setActiveTab] = useState<ActiveTeamTab>("members");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  async function handleDeleteTeam(): Promise<void> {
+    if (!team) {
+      return;
+    }
+    const deleted = await onDeleteTeam(team);
+    if (deleted !== false) {
+      setDeleteDialogOpen(false);
+    }
+  }
 
   if (!team) {
     return (
@@ -107,13 +128,58 @@ export function TeamDetailPane({
             variant="outlineDanger"
             size="md"
             disabled={teamActionBusy}
-            onClick={() => void onDeleteTeam(team)}
+            onClick={() => setDeleteDialogOpen(true)}
           >
             <Trash2 size={16} aria-hidden="true" />
             {t("teamDelete")}
           </Button>
         </div>
       </header>
+
+      <DialogRoot
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!teamActionBusy) {
+            setDeleteDialogOpen(open);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <div>
+              <DialogTitle>{t("teamDelete")}</DialogTitle>
+              <DialogDescription>{t("teamDeleteConfirm", { title: displayTeam(team) })}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" disabled={teamActionBusy} />
+          </DialogHeader>
+          {teamActionError ? (
+            <DialogBody>
+              <div className="form-error" role="alert">
+                {teamActionError}
+              </div>
+            </DialogBody>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="secondaryGray"
+              size="md"
+              disabled={teamActionBusy}
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              size="md"
+              loading={teamActionBusy}
+              loadingLabel={t("teamSaving")}
+              onClick={() => void handleDeleteTeam()}
+            >
+              {t("teamDelete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
 
       {teamActionError ? (
         <div className={classNames("form-error", styles.contentWidth, styles.teamDetailActionError)} role="alert">

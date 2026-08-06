@@ -30,7 +30,7 @@ import {
 import { createUserRequest } from "@/api/im";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
-import { createTeamRequest, fetchTeams } from "@/api/tasks";
+import { createTeamRequest, deleteTeamRequest, fetchTeams } from "@/api/tasks";
 import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
@@ -39,6 +39,7 @@ import type { IMConversation, IMData, TranslateFn } from "@/models/conversations
 import type { MCPServer } from "@/models/mcp";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
+import type { WorkspaceTeam } from "@/models/tasks";
 import type { ApiError } from "@/api/client";
 import { AGENT_AVATAR_OPTIONS } from "@/shared/avatarOptions";
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
@@ -60,6 +61,7 @@ vi.mock("@/api/tasks", async () => {
   return {
     ...actual,
     createTeamRequest: vi.fn(),
+    deleteTeamRequest: vi.fn(),
     fetchTeams: vi.fn(async () => []),
   };
 });
@@ -307,6 +309,7 @@ describe("useAgentController", () => {
     vi.mocked(deleteFeishuParticipantRequest).mockReset();
     vi.mocked(finalizeFeishuRegistrationRequest).mockReset();
     vi.mocked(createTeamRequest).mockReset();
+    vi.mocked(deleteTeamRequest).mockReset();
     vi.mocked(fetchTeams).mockReset();
     vi.mocked(runAgentActionRequest).mockReset();
     vi.mocked(startFeishuRegistrationRequest).mockReset();
@@ -378,6 +381,7 @@ describe("useAgentController", () => {
       title: "Untitled Team",
       updated_at: "2026-06-10T00:00:00Z",
     });
+    vi.mocked(deleteTeamRequest).mockResolvedValue(undefined);
     vi.mocked(fetchTeams).mockResolvedValue([]);
     vi.mocked(runAgentActionRequest).mockResolvedValue({
       ...oldAgent,
@@ -1681,6 +1685,34 @@ describe("useAgentController", () => {
       member_agent_ids: ["u-manager"],
       title: "teamNewFallbackTitle",
     });
+  });
+
+  it("deletes teams after in-app confirmation without opening a native browser dialog", async () => {
+    const team: WorkspaceTeam = {
+      id: "team-1",
+      title: "Windows team",
+      lead_agent_id: "u-manager",
+      member_agent_ids: ["u-manager"],
+      status: "active",
+      created_at: "2026-08-01T00:00:00Z",
+      updated_at: "2026-08-01T00:00:00Z",
+    };
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    try {
+      const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+      let deleted = false;
+
+      await act(async () => {
+        deleted = await result.current.deleteTeam(team);
+      });
+
+      expect(deleted).toBe(true);
+      expect(deleteTeamRequest).toHaveBeenCalledWith("team-1");
+      expect(confirmSpy).not.toHaveBeenCalled();
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 
   it("starts Feishu connection by storing the pending registration and opening Feishu", async () => {

@@ -2183,10 +2183,6 @@ export function useAgentController({
     if (!teamID || teamActionBusy) {
       return false;
     }
-    const teamTitle = item ? displayTeam(item) : teamID;
-    if (!window.confirm(t("teamDeleteConfirm", { title: teamTitle }))) {
-      return false;
-    }
     setTeamActionBusy(true);
     setTeamActionError("");
     try {
