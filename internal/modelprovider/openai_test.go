@@ -140,6 +140,28 @@ func TestCheckResponsesAPIWithClientClassifiesUnsupportedEndpoint(t *testing.T) 
 	}
 }
 
+func TestCheckChatCompletionsAPIWithClientAcceptsStreamingResponse(t *testing.T) {
+	var gotPayload map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Accept"); got != "text/event-stream" {
+			t.Fatalf("Accept = %q, want text/event-stream", got)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
+			t.Fatalf("Decode() error = %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"pong\"},\"finish_reason\":null}]}\n\n"))
+	}))
+	defer srv.Close()
+
+	if err := CheckChatCompletionsAPIWithClient(context.Background(), srv.Client(), srv.URL+"/v1", "sk-test", "gpt-test", nil); err != nil {
+		t.Fatalf("CheckChatCompletionsAPIWithClient() error = %v", err)
+	}
+	if gotPayload["stream"] != true {
+		t.Fatalf("stream = %#v, want true", gotPayload["stream"])
+	}
+}
+
 func TestCheckResponsesOrChatCompletionsAPIWithClientFallsBackToChat(t *testing.T) {
 	var chatPayload map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -164,6 +186,9 @@ func TestCheckResponsesOrChatCompletionsAPIWithClientFallsBackToChat(t *testing.
 	}
 	if chatPayload["model"] != "gpt-test" {
 		t.Fatalf("chat model = %#v, want gpt-test", chatPayload["model"])
+	}
+	if chatPayload["stream"] != true {
+		t.Fatalf("chat stream = %#v, want true", chatPayload["stream"])
 	}
 	messages, ok := chatPayload["messages"].([]any)
 	if !ok || len(messages) != 1 {

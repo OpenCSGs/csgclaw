@@ -259,7 +259,7 @@ func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client,
 		"messages": []map[string]string{
 			{"role": "user", "content": "ping"},
 		},
-		"stream":     false,
+		"stream":     true,
 		"max_tokens": 16,
 	}
 	body, err := json.Marshal(payload)
@@ -271,6 +271,7 @@ func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client,
 		return fmt.Errorf("build chat completions probe request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
 	if apiKey = strings.TrimSpace(apiKey); apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
@@ -297,11 +298,42 @@ func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client,
 	}
 
 	var probe openAIChatCompletionsProbeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&probe); err != nil {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
+	if mediaType == "text/event-stream" {
+		probe, err = decodeOpenAIChatCompletionsProbeStream(resp.Body)
+	} else {
+		err = json.NewDecoder(resp.Body).Decode(&probe)
+	}
+	if err != nil {
 		return fmt.Errorf("decode chat completions probe from %s: %w", baseURL, err)
 	}
 	if len(probe.Choices) == 0 {
 		return fmt.Errorf("chat completions probe from %s returned no choices", baseURL)
 	}
 	return nil
+}
+
+func decodeOpenAIChatCompletionsProbeStream(r io.Reader) (openAIChatCompletionsProbeResponse, error) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+		var probe openAIChatCompletionsProbeResponse
+		if err := json.Unmarshal([]byte(data), &probe); err != nil {
+			return openAIChatCompletionsProbeResponse{}, err
+		}
+		if len(probe.Choices) > 0 {
+			return probe, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return openAIChatCompletionsProbeResponse{}, err
+	}
+	return openAIChatCompletionsProbeResponse{}, fmt.Errorf("stream returned no chat completion chunk")
 }
