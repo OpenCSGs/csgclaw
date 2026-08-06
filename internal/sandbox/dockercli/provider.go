@@ -37,6 +37,23 @@ func (Provider) Name() string {
 	return providerName
 }
 
+// CheckAvailability verifies both that the Docker CLI can run and that its
+// configured engine is reachable. Unlike construction-time path checks, this
+// catches Docker Desktop being installed but stopped.
+func (p Provider) CheckAvailability(ctx context.Context) error {
+	if strings.TrimSpace(p.path) == "" {
+		return fmt.Errorf("docker path is required")
+	}
+	if p.runner == nil {
+		return fmt.Errorf("docker command runner is required")
+	}
+	result, err := p.runner.Run(ctx, CommandRequest{
+		Path: p.path,
+		Args: []string{"info", "--format", "{{.ServerVersion}}"},
+	})
+	return wrapRunError("docker info", result, err)
+}
+
 func (p Provider) Open(_ context.Context, _ string) (sandbox.Runtime, error) {
 	return &Runtime{
 		path:   p.path,
@@ -50,6 +67,7 @@ type Runtime struct {
 }
 
 var _ sandbox.Provider = Provider{}
+var _ sandbox.AvailabilityChecker = Provider{}
 var _ sandbox.Runtime = (*Runtime)(nil)
 
 func (r *Runtime) Create(ctx context.Context, spec sandbox.CreateSpec) (sandbox.Instance, error) {

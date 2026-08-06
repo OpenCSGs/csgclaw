@@ -48,6 +48,13 @@ const (
 
 const agentListRuntimeProbeConcurrency = 4
 
+const stopRunningSandboxAgentsConcurrency = 4
+
+var (
+	stopRunningSandboxAgentsTimeout    = 3 * time.Second
+	sandboxShutdownAvailabilityTimeout = time.Second
+)
+
 var localIPv4Resolver = localIPv4
 
 var osRemoveAll = os.RemoveAll
@@ -2130,27 +2137,90 @@ func (s *Service) StopRunningSandboxAgents(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	s.mu.RLock()
 	agents := sortedAgentsFromMap(s.agents)
 	s.mu.RUnlock()
 
-	var stopErr error
+	candidates := agents[:0]
 	for _, a := range agents {
-		if err := ctx.Err(); err != nil {
-			return errors.Join(stopErr, err)
+		if isGatewayRuntimeKind(strings.TrimSpace(a.RuntimeKind)) {
+			candidates = append(candidates, a)
 		}
-		if !isGatewayRuntimeKind(strings.TrimSpace(a.RuntimeKind)) {
-			continue
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(ctx, stopRunningSandboxAgentsTimeout)
+	defer cancel()
+	if err := s.checkSandboxProviderForShutdown(shutdownCtx); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
 		}
-		live := s.hydrateAgentStatus(ctx, a)
-		if !isRuntimeRunning(live) {
-			continue
+		slog.Info("sandbox provider unavailable during shutdown; skipping sandbox agent stops",
+			"provider", s.sandboxProviderName(),
+			"agent_count", len(candidates),
+			"error", err,
+		)
+		return nil
+	}
+
+	workers := min(stopRunningSandboxAgentsConcurrency, len(candidates))
+	jobs := make(chan Agent)
+	results := make(chan error, len(candidates))
+	for range workers {
+		go func() {
+			for a := range jobs {
+				live := s.hydrateAgentStatus(shutdownCtx, a)
+				if !isRuntimeRunning(live) {
+					results <- nil
+					continue
+				}
+				_, err := s.Stop(shutdownCtx, live.ID)
+				if err != nil {
+					err = fmt.Errorf("%s: %w", live.Name, err)
+				}
+				results <- err
+			}
+		}()
+	}
+	go func() {
+		defer close(jobs)
+		for _, a := range candidates {
+			select {
+			case jobs <- a:
+			case <-shutdownCtx.Done():
+				return
+			}
 		}
-		if _, err := s.Stop(ctx, live.ID); err != nil {
-			stopErr = errors.Join(stopErr, fmt.Errorf("%s: %w", live.Name, err))
+	}()
+
+	var stopErr error
+	for range candidates {
+		select {
+		case err := <-results:
+			stopErr = errors.Join(stopErr, err)
+		case <-shutdownCtx.Done():
+			return errors.Join(stopErr, fmt.Errorf("stop running sandbox agents: %w", shutdownCtx.Err()))
 		}
 	}
 	return stopErr
+}
+
+func (s *Service) checkSandboxProviderForShutdown(ctx context.Context) error {
+	if s == nil || s.sandbox == nil {
+		return nil
+	}
+	checker, ok := s.sandbox.(sandbox.AvailabilityChecker)
+	if !ok {
+		return nil
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, sandboxShutdownAvailabilityTimeout)
+	defer cancel()
+	return checker.CheckAvailability(probeCtx)
 }
 
 func (s *Service) startupAgentCandidates() []Agent {

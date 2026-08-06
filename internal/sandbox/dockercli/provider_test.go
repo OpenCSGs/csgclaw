@@ -16,8 +16,21 @@ import (
 
 func TestProviderImplementsSandboxProvider(t *testing.T) {
 	var _ sandbox.Provider = NewProvider()
+	var _ sandbox.AvailabilityChecker = NewProvider()
 	if got, want := NewProvider().Name(), "docker"; got != want {
 		t.Fatalf("Name() = %q, want %q", got, want)
+	}
+}
+
+func TestCheckAvailabilityBuildsDockerInfoArgs(t *testing.T) {
+	runner := &fakeRunner{results: []fakeResult{{result: CommandResult{Stdout: []byte("28.0.0\n")}}}}
+	provider := NewProvider(WithPath("/usr/local/bin/docker"), WithRunner(runner))
+
+	if err := provider.CheckAvailability(context.Background()); err != nil {
+		t.Fatalf("CheckAvailability() error = %v", err)
+	}
+	if got, want := runner.requests[0].Args, []string{"info", "--format", "{{.ServerVersion}}"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("CheckAvailability() args = %#v, want %#v", got, want)
 	}
 }
 

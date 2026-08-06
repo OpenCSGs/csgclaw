@@ -78,10 +78,15 @@ type fakeRuntime struct {
 }
 
 type fakeProvider struct {
-	open func(context.Context, string) (sandbox.Runtime, error)
+	name              string
+	open              func(context.Context, string) (sandbox.Runtime, error)
+	checkAvailability func(context.Context) error
 }
 
 func (f fakeProvider) Name() string {
+	if f.name != "" {
+		return f.name
+	}
 	return "fake"
 }
 
@@ -94,6 +99,13 @@ func (f fakeProvider) Open(ctx context.Context, homeDir string) (sandbox.Runtime
 
 func (fakeProvider) ListImages(context.Context, string) ([]string, error) {
 	return []string{}, nil
+}
+
+func (f fakeProvider) CheckAvailability(ctx context.Context) error {
+	if f.checkAvailability != nil {
+		return f.checkAvailability(ctx)
+	}
+	return nil
 }
 
 func (f *fakeRuntime) Create(context.Context, sandbox.CreateSpec) (sandbox.Instance, error) {
@@ -9268,6 +9280,152 @@ func TestStopRunningSandboxAgentsStopsOnlyLiveSandboxRuntimes(t *testing.T) {
 	alice, ok := svc.Agent("u-alice")
 	if !ok || alice.Status != string(agentruntime.StateStopped) {
 		t.Fatalf("Agent(u-alice) = %+v, %v, want stopped", alice, ok)
+	}
+}
+
+func TestStopRunningSandboxAgentsSkipsAllStopsWhenProviderIsUnavailable(t *testing.T) {
+	checks := 0
+	stops := 0
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithSandboxProvider(fakeProvider{
+			name: config.DockerProvider,
+			checkAvailability: func(context.Context) error {
+				checks++
+				return fmt.Errorf("%w: docker engine stopped", sandbox.ErrUnavailable)
+			},
+		}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			stop: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+				stops++
+				return agentruntime.StateStopped, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	for _, id := range []string{"agent-alice", "agent-bob"} {
+		svc.agents[id] = Agent{
+			ID:          id,
+			Name:        strings.TrimPrefix(id, "agent-"),
+			RuntimeID:   "rt-" + id,
+			RuntimeKind: RuntimeKindPicoClawSandbox,
+			Status:      string(agentruntime.StateRunning),
+		}
+	}
+
+	if err := svc.StopRunningSandboxAgents(context.Background()); err != nil {
+		t.Fatalf("StopRunningSandboxAgents() error = %v", err)
+	}
+	if checks != 1 {
+		t.Fatalf("availability checks = %d, want 1", checks)
+	}
+	if stops != 0 {
+		t.Fatalf("stop calls = %d, want 0", stops)
+	}
+}
+
+func TestStopRunningSandboxAgentsStopsAgentsConcurrently(t *testing.T) {
+	started := make(chan string, 2)
+	release := make(chan struct{})
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithSandboxProvider(fakeProvider{name: config.DockerProvider}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			stop: func(ctx context.Context, handle agentruntime.Handle) (agentruntime.State, error) {
+				started <- handle.RuntimeID
+				select {
+				case <-release:
+					return agentruntime.StateStopped, nil
+				case <-ctx.Done():
+					return agentruntime.StateUnknown, ctx.Err()
+				}
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	for _, id := range []string{"agent-alice", "agent-bob"} {
+		svc.agents[id] = Agent{
+			ID:          id,
+			Name:        strings.TrimPrefix(id, "agent-"),
+			RuntimeID:   "rt-" + id,
+			RuntimeKind: RuntimeKindPicoClawSandbox,
+			Status:      string(agentruntime.StateRunning),
+		}
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- svc.StopRunningSandboxAgents(context.Background())
+	}()
+	for range 2 {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("sandbox agent stops did not start concurrently")
+		}
+	}
+	close(release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("StopRunningSandboxAgents() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StopRunningSandboxAgents() did not finish")
+	}
+}
+
+func TestStopRunningSandboxAgentsHonorsTotalTimeout(t *testing.T) {
+	originalTimeout := stopRunningSandboxAgentsTimeout
+	stopRunningSandboxAgentsTimeout = 25 * time.Millisecond
+	t.Cleanup(func() {
+		stopRunningSandboxAgentsTimeout = originalTimeout
+	})
+
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithSandboxProvider(fakeProvider{name: config.DockerProvider}),
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindPicoClawSandbox,
+			stop: func(ctx context.Context, _ agentruntime.Handle) (agentruntime.State, error) {
+				<-ctx.Done()
+				return agentruntime.StateUnknown, ctx.Err()
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["agent-alice"] = Agent{
+		ID:          "agent-alice",
+		Name:        "alice",
+		RuntimeID:   "rt-agent-alice",
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		Status:      string(agentruntime.StateRunning),
+	}
+
+	startedAt := time.Now()
+	err = svc.StopRunningSandboxAgents(context.Background())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("StopRunningSandboxAgents() error = %v, want deadline exceeded", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > time.Second {
+		t.Fatalf("StopRunningSandboxAgents() elapsed = %s, want bounded shutdown", elapsed)
 	}
 }
 

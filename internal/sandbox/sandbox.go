@@ -46,6 +46,14 @@ type Provider interface {
 	ListImages(ctx context.Context, homeDir string) ([]string, error)
 }
 
+// AvailabilityChecker is an optional provider capability for verifying that
+// the provider control plane can accept lifecycle operations. Callers should
+// bound checks with a short context deadline because an unavailable daemon must
+// not delay application shutdown.
+type AvailabilityChecker interface {
+	CheckAvailability(ctx context.Context) error
+}
+
 // Runtime manages sandbox instances under one sandbox home.
 type Runtime interface {
 	// Create creates and starts an instance from spec.

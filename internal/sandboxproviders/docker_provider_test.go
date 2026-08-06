@@ -98,6 +98,9 @@ func TestDockerServiceOptionWiresProvider(t *testing.T) {
 	if got.Name() != config.DockerProvider {
 		t.Fatalf("sandbox provider name = %q, want %q", got.Name(), config.DockerProvider)
 	}
+	if _, ok := got.(sandbox.AvailabilityChecker); !ok {
+		t.Fatalf("sandbox provider = %T, want shutdown availability checker", got)
+	}
 }
 
 func TestDockerProviderDefersCLIAvailabilityUntilOpen(t *testing.T) {

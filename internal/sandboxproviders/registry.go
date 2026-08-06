@@ -81,6 +81,17 @@ func (p deferredAvailabilityProvider) ListImages(ctx context.Context, homeDir st
 	return p.provider.ListImages(ctx, homeDir)
 }
 
+func (p deferredAvailabilityProvider) CheckAvailability(ctx context.Context) error {
+	if err := Availability(p.cfg); err != nil {
+		return err
+	}
+	checker, ok := p.provider.(sandbox.AvailabilityChecker)
+	if !ok {
+		return nil
+	}
+	return checker.CheckAvailability(ctx)
+}
+
 // ServiceOptions resolves the configured sandbox provider against the set of
 // providers compiled into the current binary.
 func ServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {

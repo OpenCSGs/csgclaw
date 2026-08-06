@@ -15,6 +15,7 @@ import {
 } from "../shared/desktopBridge.types";
 import { DesktopPlatform } from "../shared/desktopEnvironment";
 import { shouldUseDarkDockIcon } from "../shared/desktopTheme";
+import { DeferredRelaunch } from "./deferredRelaunch";
 import { logDesktopError, logDesktopInfo } from "./desktopLogger";
 import { registerIPCHandlers } from "./ipcHandlers";
 import { desktopIconResourcePath, isMacOSDesktop, windowsAppIconPath } from "./platform";
@@ -26,6 +27,7 @@ export class AppLifecycle {
   private cleanupIPC: (() => void) | null = null;
   private cleanupDockThemeIcon: (() => void) | null = null;
   private desktopThemeSource: DesktopThemeSource = "system";
+  private readonly deferredRelaunch = new DeferredRelaunch();
   private quitting = false;
   private recoveryActive = false;
   private rendererOrigin = "";
@@ -103,6 +105,12 @@ export class AppLifecycle {
   }
 
   show(): void {
+    if (this.quitting) {
+      if (this.deferredRelaunch.request()) {
+        logDesktopInfo("quit-relaunch-requested");
+      }
+      return;
+    }
     this.windowManager?.showAndFocus();
   }
 
@@ -129,6 +137,9 @@ export class AppLifecycle {
     this.tray?.destroy();
     this.tray = null;
     await this.supervisor?.stop("app-quit");
+    if (this.deferredRelaunch.scheduleIfRequested(() => app.relaunch())) {
+      logDesktopInfo("quit-relaunch-scheduled");
+    }
     this.shutdownComplete = true;
     logDesktopInfo("shutdown-complete");
     app.quit();
