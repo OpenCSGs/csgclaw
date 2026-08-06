@@ -935,6 +935,9 @@ func TestAppServerManagerDefaultNoProgressTimeoutIsFastFail(t *testing.T) {
 	if appServerSemanticInactivityTimeout <= appServerFirstTurnNoProgressTimeout {
 		t.Fatalf("semantic timeout = %s, no-progress timeout = %s, want semantic timeout longer than no-progress timeout", appServerSemanticInactivityTimeout, appServerFirstTurnNoProgressTimeout)
 	}
+	if appServerMaximumTurnDuration != 0 {
+		t.Fatalf("maximum turn duration = %s, want disabled so active long-running turns can finish", appServerMaximumTurnDuration)
+	}
 }
 
 func TestAppServerManagerAutoAcceptsCommandApproval(t *testing.T) {

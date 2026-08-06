@@ -29,7 +29,8 @@ var (
 	appServerStopTimeout                = 3 * time.Second
 	appServerSemanticInactivityTimeout  = 10 * time.Minute
 	appServerFirstTurnNoProgressTimeout = 5 * time.Minute
-	appServerMaximumTurnDuration        = 30 * time.Minute
+	// Active turns are bounded by inactivity and caller cancellation, not total elapsed time.
+	appServerMaximumTurnDuration = time.Duration(0)
 )
 
 var appServerCommandContext = codexcli.AppServerCommandContext
