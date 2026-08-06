@@ -171,13 +171,17 @@ describe("agent action visibility", () => {
 
     await user.click(screen.getByRole("button", { name: "More" }));
     expect(screen.getByRole("menuitem", { name: "Save as local template" })).toBeInTheDocument();
-    await user.click(screen.getByRole("menuitem", { name: "Publish template only" }));
+    expect(screen.queryByRole("menuitem", { name: "Publish template only" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Publish and deploy" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Publish to community" }));
+    expect(screen.getByRole("button", { name: "Publish template only" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish and deploy" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Publish template only" }));
 
     expect(onPublish).toHaveBeenCalledWith("official", "Worker", "Agent description");
 
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: "Publish and deploy" }));
+    await user.click(screen.getByRole("menuitem", { name: "Publish to community" }));
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
     expect(onPublish).toHaveBeenCalledWith("official_deploy", "Worker", "Agent description");
   });
@@ -208,11 +212,9 @@ describe("agent action visibility", () => {
       "aria-disabled",
       "true",
     );
-    for (const name of ["Publish template only", "Publish and deploy"]) {
-      const publishCommunity = screen.getByRole("menuitem", { name });
-      expect(publishCommunity).toHaveAttribute("aria-disabled", "true");
-      expect(publishCommunity).toHaveAttribute("title", "Sign in to OpenCSG before publishing a template.");
-    }
+    const publishCommunity = screen.getByRole("menuitem", { name: "Publish to community" });
+    expect(publishCommunity).toHaveAttribute("aria-disabled", "true");
+    expect(publishCommunity).toHaveAttribute("title", "Sign in to OpenCSG before publishing a template.");
   });
 
   it("rejects an invalid template name before publishing", async () => {
@@ -239,12 +241,18 @@ describe("agent action visibility", () => {
     await user.click(screen.getByRole("button", { name: "More" }));
     await user.click(screen.getByRole("menuitem", { name: "Save as local template" }));
     const nameInput = screen.getByRole("textbox", { name: "Template name" });
+    expect(nameInput).toHaveAttribute("maxlength", "24");
     await user.clear(nameInput);
     await user.type(nameInput, "2-invalid");
     await user.click(screen.getByRole("button", { name: "Save as local template" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("Invalid template name");
     expect(onPublish).not.toHaveBeenCalled();
+
+    await user.clear(nameInput);
+    await user.type(nameInput, "review-bot_2");
+    await user.click(screen.getByRole("button", { name: "Save as local template" }));
+    expect(onPublish).toHaveBeenCalledWith("local", "review-bot_2", "Agent description");
   });
 
   it("shows a recreate warning when backend marks an agent restart required", () => {

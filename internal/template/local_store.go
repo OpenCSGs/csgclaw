@@ -31,7 +31,7 @@ var (
 	ErrTemplateNotFound       = errors.New("hub template not found")
 	ErrTemplateIDRequired     = errors.New("hub template id is required")
 	ErrTemplateNameRequired   = errors.New("hub template name is required")
-	ErrTemplateNameInvalid    = errors.New("hub template name must start with an English letter and contain only English letters, numbers, and underscores")
+	ErrTemplateNameInvalid    = errors.New("hub template name must start with an English letter, be at most 24 characters long, and contain only English letters, numbers, underscores, or hyphens")
 	ErrRuntimeKindRequired    = errors.New("hub runtime kind is required")
 	ErrWorkspaceDirRequired   = errors.New("hub workspace directory is required")
 	ErrWorkspacePathUnsafe    = errors.New("hub workspace path is unsafe")

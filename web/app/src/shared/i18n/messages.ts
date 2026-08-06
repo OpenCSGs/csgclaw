@@ -1146,8 +1146,9 @@ export const messages = {
     agentPublishTemplateLocalSubtitle: "填写模板信息并保存到本地模板。",
     agentPublishTemplateCommunitySubtitle: "填写模板信息并发布到社区。",
     agentPublishTemplateName: "模板名称",
-    agentPublishTemplateNameHint: "必须以英文字母开头，仅支持英文字母、数字和下划线。",
-    agentPublishTemplateNameInvalid: "模板名称必须以英文字母开头，且只能包含英文字母、数字和下划线。",
+    agentPublishTemplateNameHint: "必须以英文字母开头，最多 24 个字符，仅支持英文字母、数字、下划线和短横线。",
+    agentPublishTemplateNameInvalid:
+      "模板名称必须以英文字母开头，最多 24 个字符，且只能包含英文字母、数字、下划线和短横线。",
     agentPublishTemplateDescription: "模板描述",
     resourcesPublishCommunityFailed: "发布到社区失败。",
     resourcesPublishCommunityNameExists: "发布失败：社区中已存在同名模板，请修改模板名称后重试。",
@@ -2465,9 +2466,10 @@ export const messages = {
     agentPublishTemplateLocalSubtitle: "Enter template details and save it as a local template.",
     agentPublishTemplateCommunitySubtitle: "Enter template details and publish it to the community.",
     agentPublishTemplateName: "Template name",
-    agentPublishTemplateNameHint: "Start with an English letter; use only English letters, numbers, and underscores.",
+    agentPublishTemplateNameHint:
+      "Start with an English letter; use up to 24 English letters, numbers, underscores, or hyphens.",
     agentPublishTemplateNameInvalid:
-      "Template name must start with an English letter and contain only English letters, numbers, and underscores.",
+      "Template name must start with an English letter, contain at most 24 characters, and use only English letters, numbers, underscores, or hyphens.",
     agentPublishTemplateDescription: "Template description",
     resourcesPublishCommunityFailed: "Failed to publish the template to the community.",
     resourcesPublishCommunityNameExists:

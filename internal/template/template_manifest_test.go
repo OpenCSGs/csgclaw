@@ -68,12 +68,12 @@ func TestValidateImageEnvRejectsSecretDefault(t *testing.T) {
 }
 
 func TestValidatePublishTemplateName(t *testing.T) {
-	for _, name := range []string{"ReviewBot", "review_bot_2", "A1"} {
+	for _, name := range []string{"ReviewBot", "review_bot_2", "review-bot", "A1", "a23456789012345678901234"} {
 		if err := ValidatePublishTemplateName(name); err != nil {
 			t.Errorf("ValidatePublishTemplateName(%q) error = %v", name, err)
 		}
 	}
-	for _, name := range []string{"", "2review", "review-bot", "中文模板", "review bot"} {
+	for _, name := range []string{"", "2review", "中文模板", "review bot", "a234567890123456789012345"} {
 		if err := ValidatePublishTemplateName(name); err == nil {
 			t.Errorf("ValidatePublishTemplateName(%q) error = nil, want rejection", name)
 		}

@@ -12,7 +12,7 @@ import (
 
 const currentAgentFileSchemaVersion = "agentfile/v1"
 
-var publishTemplateNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
+var publishTemplateNamePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,23}$`)
 
 func ValidatePublishTemplateName(name string) error {
 	name = strings.TrimSpace(name)

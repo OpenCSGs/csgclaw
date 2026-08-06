@@ -303,21 +303,24 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     },
     [item.description, item.name],
   );
-  const submitPublishTemplate = useCallback(async () => {
-    const name = publishTemplateName.trim();
-    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) {
-      setPublishTemplateNameError(t("agentPublishTemplateNameInvalid"));
-      return;
-    }
-    if (!publishTarget || !onPublish) {
-      return;
-    }
-    setPublishTemplateNameError("");
-    const published = await onPublish(publishTarget, name, publishTemplateDescription.trim());
-    if (published) {
-      setPublishTarget(null);
-    }
-  }, [onPublish, publishTarget, publishTemplateDescription, publishTemplateName, t]);
+  const submitPublishTemplate = useCallback(
+    async (target = publishTarget) => {
+      const name = publishTemplateName.trim();
+      if (!/^[A-Za-z][A-Za-z0-9_-]{0,23}$/.test(name)) {
+        setPublishTemplateNameError(t("agentPublishTemplateNameInvalid"));
+        return;
+      }
+      if (!target || !onPublish) {
+        return;
+      }
+      setPublishTemplateNameError("");
+      const published = await onPublish(target, name, publishTemplateDescription.trim());
+      if (published) {
+        setPublishTarget(null);
+      }
+    },
+    [onPublish, publishTarget, publishTemplateDescription, publishTemplateName, t],
+  );
   const saveMetadataField = useCallback(
     <K extends keyof AgentMetadataSavePatch>(field: K, value: AgentMetadataSavePatch[K]): boolean => {
       if (skipMetadataAutosaveRef.current[field]) {
@@ -1159,6 +1162,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <span>{t("agentPublishTemplateName")}</span>
               <input
                 value={publishTemplateName}
+                maxLength={24}
                 aria-label={t("agentPublishTemplateName")}
                 aria-invalid={Boolean(publishTemplateNameError)}
                 aria-describedby={publishTemplateNameError ? "agent-publish-template-name-error" : undefined}
@@ -1188,20 +1192,41 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <Button variant="secondaryGray" size="md" disabled={publishBusy} onClick={() => setPublishTarget(null)}>
               {t("cancel")}
             </Button>
-            <Button
-              variant="primary"
-              size="md"
-              loading={publishBusy}
-              loadingLabel={t("agentPublishing")}
-              disabled={publishBusy}
-              onClick={() => void submitPublishTemplate()}
-            >
-              {publishTarget === "official_deploy"
-                ? t("agentPublishCommunityAndDeploy")
-                : publishTarget === "official"
-                  ? t("agentPublishCommunityTemplateOnly")
-                  : t("agentSaveLocalTemplate")}
-            </Button>
+            {publishTarget === "local" ? (
+              <Button
+                variant="primary"
+                size="md"
+                loading={publishBusy}
+                loadingLabel={t("agentPublishing")}
+                disabled={publishBusy}
+                onClick={() => void submitPublishTemplate("local")}
+              >
+                {t("agentSaveLocalTemplate")}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="secondaryGray"
+                  size="md"
+                  loading={publishBusy}
+                  loadingLabel={t("agentPublishing")}
+                  disabled={publishBusy}
+                  onClick={() => void submitPublishTemplate("official")}
+                >
+                  {t("agentPublishCommunityTemplateOnly")}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="md"
+                  loading={publishBusy}
+                  loadingLabel={t("agentPublishing")}
+                  disabled={publishBusy}
+                  onClick={() => void submitPublishTemplate("official_deploy")}
+                >
+                  {t("agentPublishCommunityAndDeploy")}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
@@ -2000,22 +2025,13 @@ function AgentActionsMenu({
               {publishBusy ? t("agentPublishing") : t("agentSaveLocalTemplate")}
             </DropdownMenuItem>
             {canPublishCommunity ? (
-              <>
-                <DropdownMenuItem
-                  disabled={publishBusy || publishDisabled}
-                  title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
-                  onSelect={() => onPublish?.("official")}
-                >
-                  {publishBusy ? t("agentPublishing") : t("agentPublishCommunityTemplateOnly")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={publishBusy || publishDisabled}
-                  title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
-                  onSelect={() => onPublish?.("official_deploy")}
-                >
-                  {publishBusy ? t("agentPublishing") : t("agentPublishCommunityAndDeploy")}
-                </DropdownMenuItem>
-              </>
+              <DropdownMenuItem
+                disabled={publishBusy || publishDisabled}
+                title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
+                onSelect={() => onPublish?.("official")}
+              >
+                {publishBusy ? t("agentPublishing") : t("agentPublishCommunity")}
+              </DropdownMenuItem>
             ) : null}
           </>
         ) : null}

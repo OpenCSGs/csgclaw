@@ -96,7 +96,7 @@ func (c cmd) runPublish(ctx context.Context, run *command.Context, args []string
 	fs := run.NewFlagSet("template publish", run.Program+" template publish --agent <id> [flags]", "Publish an agent as a template.")
 	agentID := fs.String("agent", "", "existing agent id to publish")
 	registry := fs.String("registry", "official", "template registry to publish into")
-	name := fs.String("name", "", "template name (starts with a letter; letters, numbers, and underscores only)")
+	name := fs.String("name", "", "template name (starts with a letter; up to 24 letters, numbers, underscores, or hyphens)")
 	description := fs.String("description", "", "template description")
 	if err := fs.Parse(args); err != nil {
 		return err
