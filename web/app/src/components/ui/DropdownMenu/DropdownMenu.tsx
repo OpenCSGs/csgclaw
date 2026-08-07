@@ -39,16 +39,21 @@ export const DropdownMenuContent = forwardRef<ComponentRef<typeof RadixDropdownM
   },
 );
 
+export type DropdownMenuItemTone = "default" | "warning" | "danger";
+
 export type DropdownMenuItemProps = ComponentPropsWithoutRef<typeof RadixDropdownMenu.Item> & {
   danger?: boolean;
+  tone?: DropdownMenuItemTone;
 };
 
 export const DropdownMenuItem = forwardRef<ComponentRef<typeof RadixDropdownMenu.Item>, DropdownMenuItemProps>(
-  function DropdownMenuItem({ className, danger = false, ...props }, ref) {
+  function DropdownMenuItem({ className, danger = false, tone, ...props }, ref) {
+    const itemTone = tone ?? (danger ? "danger" : "default");
+
     return (
       <RadixDropdownMenu.Item
         ref={ref}
-        className={classNames("csg-dropdown-menu-item", danger && "danger", className)}
+        className={classNames("csg-dropdown-menu-item", itemTone !== "default" && itemTone, className)}
         {...props}
       />
     );

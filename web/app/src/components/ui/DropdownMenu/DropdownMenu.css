@@ -15,7 +15,7 @@
   display: flex;
   min-height: 38px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   padding: 8px 10px;
   border-radius: 8px;
@@ -27,10 +27,18 @@
   user-select: none;
 }
 
+.csg-dropdown-menu-item svg {
+  flex: 0 0 auto;
+}
+
 .csg-dropdown-menu-item:hover,
 .csg-dropdown-menu-item[data-highlighted] {
   background: var(--primary-soft);
   color: var(--text);
+}
+
+.csg-dropdown-menu-item:active {
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
 }
 
 .csg-dropdown-menu-checkbox-item {
@@ -50,20 +58,45 @@
   line-height: 1;
 }
 
+.csg-dropdown-menu-item.warning {
+  color: var(--warning);
+}
+
+.csg-dropdown-menu-item.warning:hover,
+.csg-dropdown-menu-item.warning[data-highlighted] {
+  background: color-mix(in oklab, var(--warning) 12%, transparent);
+  color: color-mix(in oklab, var(--warning) 90%, var(--text));
+}
+
+.csg-dropdown-menu-item.warning:active {
+  background: color-mix(in oklab, var(--warning) 18%, transparent);
+}
+
 .csg-dropdown-menu-item.danger {
   color: var(--danger);
 }
 
 .csg-dropdown-menu-item.danger:hover,
 .csg-dropdown-menu-item.danger[data-highlighted] {
-  background: var(--error-50);
-  color: var(--danger);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  color: color-mix(in oklab, var(--danger) 90%, var(--text));
+}
+
+.csg-dropdown-menu-item.danger:active {
+  background: color-mix(in oklab, var(--danger) 18%, transparent);
 }
 
 .csg-dropdown-menu-item[data-disabled] {
   color: var(--muted);
   opacity: 0.55;
   pointer-events: none;
+}
+
+.csg-dropdown-menu-item[data-disabled]:hover,
+.csg-dropdown-menu-item[data-disabled][data-highlighted],
+.csg-dropdown-menu-item[data-disabled]:active {
+  background: transparent;
+  color: var(--muted);
 }
 
 .csg-dropdown-menu-separator {
