@@ -968,11 +968,13 @@ export function useAgentController({
       return;
     }
     if (window.confirm(t("agentUnsavedChangesWarning"))) {
+      setAgentPageDraft(agentPageSavedDraft);
+      setAgentPageError("");
       agentPageNavigationBlocker.proceed();
     } else {
       agentPageNavigationBlocker.reset();
     }
-  }, [agentPageNavigationBlocker, t]);
+  }, [agentPageNavigationBlocker, agentPageSavedDraft, t]);
 
   useEffect(() => {
     if (!agentPageHasUnsavedChanges) {

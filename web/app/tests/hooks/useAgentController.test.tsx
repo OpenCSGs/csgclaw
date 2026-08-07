@@ -44,15 +44,19 @@ import type { ApiError } from "@/api/client";
 import { AGENT_AVATAR_OPTIONS } from "@/shared/avatarOptions";
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 
+const navigationBlockerMock = vi.hoisted(() => ({
+  current: {
+    proceed: vi.fn(),
+    reset: vi.fn(),
+    state: "unblocked",
+  },
+}));
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
     ...actual,
-    useBlocker: () => ({
-      proceed: vi.fn(),
-      reset: vi.fn(),
-      state: "unblocked",
-    }),
+    useBlocker: () => navigationBlockerMock.current,
   };
 });
 
@@ -316,6 +320,11 @@ describe("useAgentController", () => {
     vi.mocked(startFeishuRegistrationRequest).mockReset();
     vi.mocked(updateAgentRequest).mockReset();
     vi.mocked(patchCsgclawUserRequest).mockReset();
+    navigationBlockerMock.current = {
+      proceed: vi.fn(),
+      reset: vi.fn(),
+      state: "unblocked",
+    };
     window.localStorage.removeItem(feishuRegistrationStorageKey);
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
@@ -455,6 +464,79 @@ describe("useAgentController", () => {
       resolveProfile(profile);
       await Promise.all([pendingAgent, pendingProfile]);
     });
+  });
+
+  it("discards unsaved changes before proceeding to another agent profile", async () => {
+    const workerAgent: AgentLike = {
+      ...oldAgent,
+      agent_profile: {
+        ...oldAgent.agent_profile,
+        model_id: "worker-model",
+      },
+      id: "u-worker",
+      model_id: "worker-model",
+      name: "worker",
+      role: "worker",
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgentProfile).mockReset();
+    vi.mocked(fetchAgent).mockImplementation(async (id) => (id === workerAgent.id ? workerAgent : oldAgent));
+    vi.mocked(fetchAgentProfile).mockImplementation(async (id) =>
+      id === workerAgent.id ? (workerAgent.agent_profile ?? {}) : (oldAgent.agent_profile ?? {}),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const proceed = vi.fn(() => {
+      navigationBlockerMock.current.state = "proceeding";
+    });
+    const reset = vi.fn();
+
+    try {
+      const { result, rerender } = renderHook(
+        ({ activePane }) =>
+          useAgentControllerHarness({
+            activePane,
+            agents: [oldAgent, workerAgent],
+          }).controller,
+        {
+          initialProps: {
+            activePane: { type: WorkspacePaneTypes.agent, id: String(oldAgent.id) } as WorkspacePane,
+          },
+          wrapper: createWrapper(),
+        },
+      );
+
+      await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe("gpt-test"));
+      act(() => {
+        result.current.agentViewProps.onDraftChange?.({
+          ...result.current.agentViewProps.draft!,
+          model_id: "unsaved-model",
+        });
+      });
+      expect(result.current.agentViewProps.hasUnsavedChanges).toBe(true);
+
+      navigationBlockerMock.current = { proceed, reset, state: "blocked" };
+      rerender({ activePane: { type: WorkspacePaneTypes.agent, id: String(oldAgent.id) } });
+
+      await waitFor(() => expect(proceed).toHaveBeenCalledOnce());
+      expect(confirmSpy).toHaveBeenCalledWith("agentUnsavedChangesWarning");
+      expect(reset).not.toHaveBeenCalled();
+      await waitFor(() => expect(result.current.agentViewProps.hasUnsavedChanges).toBe(false));
+      expect(result.current.agentViewProps.draft?.model_id).toBe("gpt-test");
+
+      navigationBlockerMock.current = {
+        proceed: vi.fn(),
+        reset: vi.fn(),
+        state: "unblocked",
+      };
+      rerender({ activePane: { type: WorkspacePaneTypes.agent, id: String(workerAgent.id) } });
+
+      await waitFor(() => expect(result.current.agentViewProps.item?.id).toBe(workerAgent.id));
+      await waitFor(() => expect(result.current.agentViewProps.draft?.model_id).toBe("worker-model"));
+      expect(result.current.agentViewProps.savedDraft?.model_id).toBe("worker-model");
+      expect(result.current.agentViewProps.hasUnsavedChanges).toBe(false);
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 
   it("discovers live models for the selected agent when the provider catalog cache is empty", async () => {
