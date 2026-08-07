@@ -75,10 +75,13 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
     }
   }, [draftRequestKey, queryClient, requestKey]);
 
+  const retryModels = query.refetch;
+
   return {
     models,
     modelBusy: Boolean(requestDraft) && query.isFetching,
     modelError: query.error,
     resetModels,
+    retryModels,
   };
 }

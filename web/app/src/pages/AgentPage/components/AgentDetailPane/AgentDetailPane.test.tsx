@@ -168,3 +168,24 @@ describe("AgentDetailPane metadata editing", () => {
     await waitFor(() => expect(onMetadataSave).not.toHaveBeenCalled());
   });
 });
+
+describe("AgentDetailPane model loading error", () => {
+  it("keeps the model controls aligned and exposes retryable technical details", async () => {
+    const user = userEvent.setup();
+    const onRetryModels = vi.fn();
+    const technicalError = "request models: proxyconnect tcp: connection refused";
+
+    render(<Harness modelBusy={false} modelError={new Error(technicalError)} onRetryModels={onRetryModels} />);
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("modelLoadFailed");
+    expect(alert).toHaveTextContent("profileModelLoadErrorHelp");
+    expect(alert).toHaveTextContent("profileModelCurrentSelectionRetained");
+
+    await user.click(screen.getByText("profileModelErrorDetails"));
+    expect(screen.getByText(technicalError)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "retry" }));
+    expect(onRetryModels).toHaveBeenCalledTimes(1);
+  });
+});

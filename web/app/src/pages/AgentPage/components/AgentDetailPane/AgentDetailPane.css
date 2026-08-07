@@ -1834,6 +1834,10 @@
   padding: 16px;
 }
 
+.agent-detail-pane .agent-model-form-content {
+  container-type: inline-size;
+}
+
 .agent-detail-pane .field {
   margin-top: 0;
   min-width: 0;
@@ -1852,7 +1856,7 @@
 }
 
 .agent-detail-pane .agent-model-config-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: start;
 }
 
@@ -1860,6 +1864,111 @@
   display: grid;
   gap: 8px;
   min-width: 0;
+}
+
+.agent-detail-pane .agent-model-load-error {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  align-items: start;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in oklab, var(--danger) 34%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--danger) 7%, var(--surface));
+  color: var(--text);
+}
+
+.agent-detail-pane .agent-model-load-error-icon {
+  flex: 0 0 auto;
+  color: var(--danger);
+}
+
+.agent-detail-pane .agent-model-load-error-content {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-detail-pane .agent-model-load-error-content strong {
+  font: var(--text-sm-semibold);
+}
+
+.agent-detail-pane .agent-model-load-error-content p,
+.agent-detail-pane .agent-model-load-error-content small {
+  margin: 0;
+  color: var(--muted);
+  font: var(--text-xs-normal);
+  overflow-wrap: anywhere;
+}
+
+.agent-detail-pane .agent-model-load-error-details {
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.agent-detail-pane .agent-model-load-error-details summary {
+  width: fit-content;
+  color: var(--text);
+  font: var(--text-xs-medium);
+  cursor: pointer;
+}
+
+.agent-detail-pane .agent-model-load-error-details summary:focus-visible {
+  border-radius: var(--radius-sm);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.agent-detail-pane .agent-model-load-error-technical {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.agent-detail-pane .agent-model-load-error-technical pre {
+  max-width: 100%;
+  max-height: 144px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-detail-pane .agent-model-load-error-retry {
+  min-width: 0;
+}
+
+@container (max-width: 760px) {
+  .agent-detail-pane .agent-model-config-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 460px) {
+  .agent-detail-pane .agent-model-config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-detail-pane .agent-model-load-error {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .agent-detail-pane .agent-model-load-error-retry {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 
 .agent-detail-pane .agent-model-config-grid .csg-select-trigger,

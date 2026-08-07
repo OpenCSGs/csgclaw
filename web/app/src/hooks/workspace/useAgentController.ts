@@ -736,6 +736,7 @@ export function useAgentController({
     models: agentPageDiscoveredModels,
     modelBusy: agentPageModelProbeBusy,
     modelError: agentPageModelError,
+    retryModels: retryAgentPageModels,
   } = useProfileModelOptions({
     draft: agentPageDraft,
     enabled: Boolean(selectedAgentForPage),
@@ -2423,6 +2424,7 @@ export function useAgentController({
       modelProviders: agentPageModelProviders,
       modelBusy: agentPageModelBusy,
       modelError: agentPageModelError,
+      onRetryModels: retryAgentPageModels,
       saving: agentPageBusy,
       publishBusy: agentPagePublishBusy,
       publishDisabled: !openCSGAuthenticated,
