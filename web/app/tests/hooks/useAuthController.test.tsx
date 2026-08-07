@@ -69,6 +69,14 @@ describe("useAuthController", () => {
     expect(result.current.notice).toBeNull();
   });
 
+  it("uses the localized status failure message when the status request cannot be fetched", async () => {
+    vi.mocked(fetchAuthStatus).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.error).toBe("csghubStatusFailed"));
+  });
+
   it("restores the completed login notice from the callback result", async () => {
     window.history.replaceState({}, "", "/#/settings?auth_result=success");
     vi.mocked(fetchAuthStatus).mockResolvedValue({
@@ -136,6 +144,23 @@ describe("useAuthController", () => {
     });
     expect(window.location.hash).toBe("#/opencsg-login?redirect_url=callback");
     expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBe("1");
+  });
+
+  it("uses the localized login failure message when the login request cannot be fetched", async () => {
+    vi.mocked(fetchAuthStatus).mockResolvedValue({ authenticated: false });
+    vi.mocked(beginAuthLogin).mockRejectedValue(new TypeError("Failed to fetch"));
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+
+    const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
+
+    await act(async () => {
+      await result.current.login();
+    });
+
+    expect(result.current.error).toBe("csghubLoginFailed");
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe("#/settings");
+    expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBeNull();
   });
 
   it("uses the shared selected environment when login is triggered without an override", async () => {

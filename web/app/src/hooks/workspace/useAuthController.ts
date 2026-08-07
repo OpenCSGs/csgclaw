@@ -133,7 +133,7 @@ export function useAuthController(t: TranslateFn): AuthController {
         navigation.close();
         clearPendingAuthLogin();
         setLoginPending(false);
-        setAuthError(errorMessage(err, t("csghubLoginFailed")));
+        setAuthError(authErrorMessage(err, t("csghubLoginFailed")));
       } finally {
         setBusyAction("");
       }
@@ -279,7 +279,7 @@ export function useAuthController(t: TranslateFn): AuthController {
     environment,
     busy: Boolean(busyAction),
     dismissNotice,
-    error: authError || (statusQuery.isError ? errorMessage(statusQuery.error, t("csghubStatusFailed")) : ""),
+    error: authError || (statusQuery.isError ? authErrorMessage(statusQuery.error, t("csghubStatusFailed")) : ""),
     login,
     logout,
     notice: authNotice,
@@ -291,6 +291,10 @@ export function useAuthController(t: TranslateFn): AuthController {
 
 async function fetchNormalizedAuthStatus(): Promise<AuthStatus> {
   return normalizeAuthStatus(await fetchAuthStatus());
+}
+
+function authErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof TypeError ? fallback : errorMessage(error, fallback);
 }
 
 function markPendingAuthLogin() {
