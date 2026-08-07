@@ -32,6 +32,7 @@ var (
 	ErrTemplateIDRequired     = errors.New("hub template id is required")
 	ErrTemplateNameRequired   = errors.New("hub template name is required")
 	ErrTemplateNameInvalid    = errors.New("hub template name must start with an English letter, be at most 24 characters long, and contain only English letters, numbers, underscores, or hyphens")
+	ErrTemplateAlreadyExists  = errors.New("hub template already exists")
 	ErrRuntimeKindRequired    = errors.New("hub runtime kind is required")
 	ErrWorkspaceDirRequired   = errors.New("hub workspace directory is required")
 	ErrWorkspacePathUnsafe    = errors.New("hub workspace path is unsafe")
@@ -153,6 +154,12 @@ func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, err
 	if err := os.MkdirAll(s.templatesRoot(), 0o755); err != nil {
 		return Template{}, fmt.Errorf("create local hub templates dir: %w", err)
 	}
+	targetDir := s.templateRoot(normalized.ID)
+	if _, err := os.Stat(targetDir); err == nil {
+		return Template{}, fmt.Errorf("%w: %s", ErrTemplateAlreadyExists, normalized.Name)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Template{}, fmt.Errorf("stat local hub template %q: %w", normalized.ID, err)
+	}
 
 	tmpDir, err := os.MkdirTemp(s.templatesRoot(), localPublishTempPrefix)
 	if err != nil {
@@ -174,12 +181,8 @@ func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, err
 		}
 	}
 
-	targetDir := s.templateRoot(normalized.ID)
-	if err := os.RemoveAll(targetDir); err != nil {
-		return Template{}, fmt.Errorf("replace local hub template %q: %w", normalized.ID, err)
-	}
 	if err := os.Rename(tmpDir, targetDir); err != nil {
-		return Template{}, fmt.Errorf("replace local hub template %q: %w", normalized.ID, err)
+		return Template{}, fmt.Errorf("publish local hub template %q: %w", normalized.ID, err)
 	}
 	cleanup = false
 

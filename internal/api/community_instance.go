@@ -161,7 +161,7 @@ func createCommunityAgentInstanceOnce(req *http.Request) (bool, error) {
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("create community instance: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
 	}
-	if communityInstanceCode(result.Code) != "0" {
+	if code := communityInstanceCode(result.Code); code != "" && code != "0" {
 		return false, fmt.Errorf("create community instance: %s", message)
 	}
 	if len(result.Data) == 0 || string(result.Data) == "null" {

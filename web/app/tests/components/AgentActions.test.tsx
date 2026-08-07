@@ -32,6 +32,7 @@ const labels: Record<string, string> = {
   agentPublishTemplateName: "Template name",
   agentPublishTemplateNameHint: "Use letters, numbers, and underscores.",
   agentPublishTemplateNameInvalid: "Invalid template name",
+  agentPublishLocalNameExists: "A local template with this name already exists.",
   agentPublishTemplateDescription: "Template description",
   agentProfileSectionNavLabel: "Profile sections",
   agentProfileTab: "Profile",
@@ -278,6 +279,36 @@ describe("agent action visibility", () => {
     await user.type(nameInput, "review-bot_2");
     await user.click(screen.getByRole("button", { name: "Save as local template" }));
     expect(onPublish).toHaveBeenCalledWith("local", "review-bot_2", "Agent description");
+  });
+
+  it("keeps the publish dialog open and shows duplicate local template errors", async () => {
+    const user = userEvent.setup();
+    const onPublish = vi.fn().mockResolvedValue(false);
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        publishError={t("agentPublishLocalNameExists")}
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onPublish={onPublish}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Save as local template" }));
+    await user.click(screen.getByRole("button", { name: "Save as local template" }));
+
+    expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
+    expect(screen.getByText("A local template with this name already exists.")).toBeInTheDocument();
   });
 
   it("shows a recreate warning when backend marks an agent restart required", () => {

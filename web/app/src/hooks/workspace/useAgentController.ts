@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "react-router-dom";
-import { errorMessage } from "@/api/client";
+import { errorMessage, type ApiError } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import {
   batchAddAgentMCPServersRequest,
@@ -480,6 +480,7 @@ export function useAgentController({
   const [agentPageSavedDraft, setAgentPageSavedDraft] = useState<AgentDraft | null>(null);
   const [agentPageBusy, setAgentPageBusy] = useState(false);
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
+  const [agentPagePublishError, setAgentPagePublishError] = useState("");
   const [agentPageError, setAgentPageError] = useState("");
   const [agentSkillAddBusy, setAgentSkillAddBusy] = useState(false);
   const [agentSkillAddError, setAgentSkillAddError] = useState("");
@@ -1649,6 +1650,7 @@ export function useAgentController({
       return false;
     }
     setAgentPagePublishBusy(true);
+    setAgentPagePublishError("");
     setAgentPageError("");
     try {
       const published = await publishAgentTemplateRequest(selectedAgentForPage.id, target, name, description);
@@ -1661,7 +1663,12 @@ export function useAgentController({
       }
       return true;
     } catch (err) {
-      setAgentPageError(errorMessage(err, t("agentActionFailed")));
+      const message =
+        target === "local" && (err as ApiError | null)?.status === 409
+          ? t("agentPublishLocalNameExists")
+          : errorMessage(err, t("agentActionFailed"));
+      setAgentPagePublishError(message);
+      setAgentPageError(message);
       return false;
     } finally {
       setAgentPagePublishBusy(false);
@@ -2429,6 +2436,7 @@ export function useAgentController({
       saving: agentPageBusy,
       publishBusy: agentPagePublishBusy,
       publishDisabled: !openCSGAuthenticated,
+      publishError: agentPagePublishError,
       saveError: agentPageError,
       notice: selectedAgentPageNotice?.message || "",
       noticeTone: selectedAgentPageNotice?.tone || "warning",

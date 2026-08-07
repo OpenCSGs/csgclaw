@@ -116,8 +116,12 @@ export const workspaceQueryKeys = {
     [WORKSPACE_QUERY_SCOPE, "remote-mcp-servers", String(search || "").trim()] as const,
   hubTemplate: (templateID: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-template", templateID || ""] as const,
+  hubWorkspaceScope: (templateID: string | null | undefined) =>
+    [WORKSPACE_QUERY_SCOPE, "hub-workspace", templateID || ""] as const,
   hubWorkspace: (templateID: string | null | undefined, workspacePath: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-workspace", templateID || "", workspacePath || ""] as const,
+  hubWorkspaceFileScope: (templateID: string | null | undefined) =>
+    [WORKSPACE_QUERY_SCOPE, "hub-workspace-file", templateID || ""] as const,
   hubWorkspaceFile: (templateID: string | null | undefined, workspacePath: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-workspace-file", templateID || "", workspacePath || ""] as const,
   officialSkills: (search: string | null | undefined = "") =>

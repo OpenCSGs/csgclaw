@@ -1614,6 +1614,9 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			if !publishingTemplate {
 				status = http.StatusBadRequest
 			}
+			if errors.Is(err, hub.ErrTemplateAlreadyExists) {
+				status = http.StatusConflict
+			}
 			if strings.Contains(strings.ToLower(err.Error()), "not found") {
 				status = http.StatusNotFound
 			}

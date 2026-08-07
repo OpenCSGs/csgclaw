@@ -104,6 +104,35 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLocalStorePublishRejectsDuplicateName(t *testing.T) {
+	store := NewLocalStore(t.TempDir())
+	first, err := store.Publish(context.Background(), PublishSpec{
+		Name:        "review-bot",
+		Description: "original",
+		Role:        TemplateRoleWorker,
+		RuntimeKind: runtime.KindCodex,
+	})
+	if err != nil {
+		t.Fatalf("first Publish() error = %v", err)
+	}
+	_, err = store.Publish(context.Background(), PublishSpec{
+		Name:        "review-bot",
+		Description: "replacement",
+		Role:        TemplateRoleWorker,
+		RuntimeKind: runtime.KindCodex,
+	})
+	if !errors.Is(err, ErrTemplateAlreadyExists) {
+		t.Fatalf("second Publish() error = %v, want ErrTemplateAlreadyExists", err)
+	}
+	got, err := store.Get(context.Background(), first.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got.Description != "original" {
+		t.Fatalf("Description = %q, want original template preserved", got.Description)
+	}
+}
+
 func TestLocalStoreListSkipsInvalidTemplates(t *testing.T) {
 	registryRoot := t.TempDir()
 	store := NewLocalStore(registryRoot)

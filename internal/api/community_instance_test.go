@@ -67,6 +67,28 @@ func TestCreateCommunityAgentInstanceUsesCSGClawType(t *testing.T) {
 	}
 }
 
+func TestCreateCommunityAgentInstanceAcceptsOKResponseWithoutCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"msg":"OK","data":{"id":"instance-1"}}`))
+	}))
+	defer server.Close()
+
+	previousCredentials := loadCommunityInstanceCredentials
+	loadCommunityInstanceCredentials = func() (string, string, bool, error) {
+		return server.URL, "hub-token", true, nil
+	}
+	t.Cleanup(func() { loadCommunityInstanceCredentials = previousCredentials })
+
+	err := createCommunityAgentInstanceRequest(context.Background(), hub.Template{
+		Namespace: "alice",
+		Name:      "ReviewBot",
+	}, auth.Status{UserID: "alice", UserUUID: "uuid-alice"})
+	if err != nil {
+		t.Fatalf("createCommunityAgentInstanceRequest() error = %v", err)
+	}
+}
+
 func TestCreateCommunityAgentInstanceRetriesTemplatePendingCode(t *testing.T) {
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

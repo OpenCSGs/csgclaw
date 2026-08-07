@@ -148,6 +148,7 @@ export type AgentDetailPaneProps = {
   onUpgrade?: AgentActionHandler;
   publishBusy?: boolean;
   publishDisabled?: boolean;
+  publishError?: string;
   locale?: LocaleCode;
   rooms?: IMConversation[];
   saveError?: string;
@@ -207,6 +208,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     saving = false,
     publishBusy = false,
     publishDisabled = false,
+    publishError = "",
     modelProviders = null,
     saveError = "",
     locale = "en",
@@ -267,6 +269,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const [publishTemplateName, setPublishTemplateName] = useState("");
   const [publishTemplateDescription, setPublishTemplateDescription] = useState("");
   const [publishTemplateNameError, setPublishTemplateNameError] = useState("");
+  const [publishAttempted, setPublishAttempted] = useState(false);
   const [isProfileScrolling, setIsProfileScrolling] = useState(false);
   const descriptionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -300,6 +303,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       setPublishTemplateName(String(item.name || "").trim());
       setPublishTemplateDescription(String(item.description || "").trim());
       setPublishTemplateNameError("");
+      setPublishAttempted(false);
     },
     [item.description, item.name],
   );
@@ -314,6 +318,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         return;
       }
       setPublishTemplateNameError("");
+      setPublishAttempted(true);
       const published = await onPublish(target, name, publishTemplateDescription.trim());
       if (published) {
         setPublishTarget(null);
@@ -1169,6 +1174,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 onChange={(event) => {
                   setPublishTemplateName(event.target.value);
                   setPublishTemplateNameError("");
+                  setPublishAttempted(false);
                 }}
               />
               <small>{t("agentPublishTemplateNameHint")}</small>
@@ -1187,6 +1193,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 onChange={(event) => setPublishTemplateDescription(event.target.value)}
               />
             </label>
+            {publishAttempted && publishError ? <div className="form-error">{publishError}</div> : null}
           </DialogBody>
           <DialogFooter>
             <Button variant="secondaryGray" size="md" disabled={publishBusy} onClick={() => setPublishTarget(null)}>

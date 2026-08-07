@@ -4916,6 +4916,15 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	} else if strings.TrimSpace(string(data)) != "published workspace" {
 		t.Fatalf("PLAYBOOK.md = %q, want %q", strings.TrimSpace(string(data)), "published workspace")
 	}
+
+	duplicateReq := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
+		`{"agent_id":"u-alice","registry":"local","name":"ReviewBot_2","description":"Duplicate"}`,
+	))
+	duplicateRec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(duplicateRec, duplicateReq)
+	if duplicateRec.Code != http.StatusConflict {
+		t.Fatalf("duplicate status = %d, want %d; body=%s", duplicateRec.Code, http.StatusConflict, duplicateRec.Body.String())
+	}
 }
 
 func TestHandleHubTemplatesRequiresOpenCSGLoginForOfficialPublish(t *testing.T) {

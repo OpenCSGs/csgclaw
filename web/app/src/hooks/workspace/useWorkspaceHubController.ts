@@ -18,6 +18,28 @@ export type InstallRemoteSkillOptions = {
   replace?: boolean;
 };
 
+export function workspaceHubMutationError(
+  resourceType: "mcp" | "skill" | "template",
+  deleteError: string,
+  publishError: string,
+  skillDeleteError: string,
+): string {
+  if (resourceType === "template") {
+    return deleteError || publishError;
+  }
+  if (resourceType === "skill") {
+    return skillDeleteError;
+  }
+  return "";
+}
+
+export function visibleWorkspaceHubTemplates(
+  templates: readonly HubTemplate[],
+  deletingTemplateID: string,
+): HubTemplate[] {
+  return templates.filter((item) => item.id !== deletingTemplateID && isVisibleInHubTemplateList(item));
+}
+
 export type WorkspaceHubController = {
   hub: Omit<WorkspaceHubSelection, "detailPaneProps"> & {
     deleteBusy: boolean;
@@ -61,6 +83,7 @@ export function useWorkspaceHubController({
   const [resourcesManualError, setResourcesManualError] = useState("");
   const [resourcesDeleteBusy, setResourcesDeleteBusy] = useState(false);
   const [resourcesDeleteError, setResourcesDeleteError] = useState("");
+  const [deletingTemplateID, setDeletingTemplateID] = useState("");
   const [resourcesPublishBusy, setResourcesPublishBusy] = useState(false);
   const [resourcesPublishError, setResourcesPublishError] = useState("");
   const [skillDeleteBusy, setSkillDeleteBusy] = useState(false);
@@ -86,20 +109,36 @@ export function useWorkspaceHubController({
   }, [hubTemplatesQuery.isSuccess, hubTemplatesQuery.dataUpdatedAt]);
 
   const visibleHubTemplates = useMemo(
-    () => hubTemplates.filter((item) => isVisibleInHubTemplateList(item)),
-    [hubTemplates],
+    () => visibleWorkspaceHubTemplates(hubTemplates, deletingTemplateID),
+    [deletingTemplateID, hubTemplates],
   );
 
   const hub = useWorkspaceHubSelection({
     templates: visibleHubTemplates,
     templatesQuery: hubTemplatesQuery,
     loaded: hubLoaded,
-    manualError: resourcesManualError || resourcesDeleteError || resourcesPublishError || skillDeleteError,
+    manualError: resourcesManualError,
     refreshTemplates: refreshHubTemplates,
     t,
   });
   const { setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, setSelectedHubTemplateId } =
     hub;
+  const mutationError = workspaceHubMutationError(
+    hub.selectedHubResourceType,
+    resourcesDeleteError,
+    resourcesPublishError,
+    skillDeleteError,
+  );
+
+  useEffect(() => {
+    if (hub.selectedHubResourceType !== "template") {
+      setResourcesDeleteError("");
+      setResourcesPublishError("");
+    }
+    if (hub.selectedHubResourceType !== "skill") {
+      setSkillDeleteError("");
+    }
+  }, [hub.selectedHubResourceType]);
 
   const deleteHubTemplate = useCallback(
     async (template: HubTemplate | null | undefined): Promise<boolean> => {
@@ -112,19 +151,29 @@ export function useWorkspaceHubController({
       }
       setResourcesDeleteBusy(true);
       setResourcesDeleteError("");
+      setDeletingTemplateID(template.id);
+      setSelectedHubTemplateId("");
       try {
+        await Promise.all([
+          queryClient.cancelQueries({ queryKey: workspaceQueryKeys.hubTemplate(template.id) }),
+          queryClient.cancelQueries({ queryKey: workspaceQueryKeys.hubWorkspaceScope(template.id) }),
+          queryClient.cancelQueries({ queryKey: workspaceQueryKeys.hubWorkspaceFileScope(template.id) }),
+        ]);
         await deleteHubTemplateRequest(template.id);
-        setSelectedHubTemplateId("");
+        queryClient.removeQueries({ queryKey: workspaceQueryKeys.hubTemplate(template.id) });
+        queryClient.removeQueries({ queryKey: workspaceQueryKeys.hubWorkspaceScope(template.id) });
+        queryClient.removeQueries({ queryKey: workspaceQueryKeys.hubWorkspaceFileScope(template.id) });
         await refreshHubTemplates();
         return true;
       } catch (err) {
         setResourcesDeleteError(errorMessage(err, t("resourcesDeleteFailed")));
         return false;
       } finally {
+        setDeletingTemplateID("");
         setResourcesDeleteBusy(false);
       }
     },
-    [refreshHubTemplates, setSelectedHubTemplateId, t],
+    [queryClient, refreshHubTemplates, setSelectedHubTemplateId, t],
   );
 
   const deleteSkill = useCallback(
@@ -245,6 +294,7 @@ export function useWorkspaceHubController({
   return {
     hub: {
       ...hub,
+      error: hub.error || mutationError,
       deleteBusy: resourcesDeleteBusy,
       deleteHubTemplate,
       publishBusy: resourcesPublishBusy,
@@ -259,6 +309,7 @@ export function useWorkspaceHubController({
       uploadSkill,
       detailPaneProps: {
         ...hub.detailPaneProps,
+        error: hub.detailPaneProps.error || mutationError,
         deleteBusy: resourcesDeleteBusy,
         onDeleteTemplate: deleteHubTemplate,
         onPublishTemplate: publishHubTemplate,
