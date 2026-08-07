@@ -16,7 +16,7 @@ import (
 )
 
 const communityAgentInstancePath = "/api/v1/agent/instances"
-const communityInstanceTemplatePendingCode = "error.AGENT-ERR-22"
+const communityInstanceTemplatePendingCode = "AGENT-ERR-22"
 const communityInstanceDeployRetries = 3
 const communityInstanceDeployRetryDelay = time.Second
 
@@ -30,13 +30,12 @@ type communityAgentInstanceRequest struct {
 }
 
 type communityAgentInstanceResponse struct {
-	Code json.RawMessage `json:"code"`
-	Msg  string          `json:"msg"`
+	Code    string `json:"code"`
+	Msg     string `json:"msg"`
+	Context struct {
+		RepoPath string `json:"repo_path"`
+	} `json:"context"`
 	Data json.RawMessage `json:"data"`
-}
-
-type communityInstanceErrorMessage struct {
-	Other string `json:"other"`
 }
 
 var createCommunityAgentInstance = createCommunityAgentInstanceRequest
@@ -144,9 +143,6 @@ func createCommunityAgentInstanceOnce(req *http.Request) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read community instance response: %w", err)
 	}
-	if message, ok := communityInstanceError(responseBody, communityInstanceTemplatePendingCode); ok {
-		return true, fmt.Errorf("create community instance: %s", message)
-	}
 	var result communityAgentInstanceResponse
 	if err := json.Unmarshal(responseBody, &result); err != nil {
 		if resp.StatusCode != http.StatusOK {
@@ -154,42 +150,18 @@ func createCommunityAgentInstanceOnce(req *http.Request) (bool, error) {
 		}
 		return false, fmt.Errorf("decode community instance response: %w", err)
 	}
-	message := strings.TrimSpace(result.Msg)
-	if message == "" {
-		message = "unknown error"
+	if result.Code == communityInstanceTemplatePendingCode {
+		message := strings.TrimSpace(result.Msg)
+		if message == "" {
+			message = communityInstanceTemplatePendingCode
+		}
+		return true, fmt.Errorf("create community instance: %s", message)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("create community instance: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
-	}
-	if code := communityInstanceCode(result.Code); code != "" && code != "0" {
-		return false, fmt.Errorf("create community instance: %s", message)
 	}
 	if len(result.Data) == 0 || string(result.Data) == "null" {
 		return false, fmt.Errorf("create community instance: response data is missing")
 	}
 	return false, nil
-}
-
-func communityInstanceError(body []byte, code string) (string, bool) {
-	var errorsByCode map[string]communityInstanceErrorMessage
-	if json.Unmarshal(body, &errorsByCode) != nil {
-		return "", false
-	}
-	detail, ok := errorsByCode[code]
-	if !ok {
-		return "", false
-	}
-	message := strings.TrimSpace(detail.Other)
-	if message == "" {
-		message = code
-	}
-	return message, true
-}
-
-func communityInstanceCode(raw json.RawMessage) string {
-	var text string
-	if json.Unmarshal(raw, &text) == nil {
-		return strings.TrimSpace(text)
-	}
-	return strings.TrimSpace(string(raw))
 }

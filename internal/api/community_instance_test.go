@@ -31,7 +31,7 @@ func TestCreateCommunityAgentInstanceUsesCSGClawType(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"code":0,"data":{"id":"instance-1"}}`))
+		_, _ = w.Write([]byte(`{"msg":"OK","data":{"id":"instance-1"}}`))
 	}))
 	defer server.Close()
 
@@ -96,10 +96,10 @@ func TestCreateCommunityAgentInstanceRetriesTemplatePendingCode(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if attempts <= communityInstanceDeployRetries {
 			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(`{"error.AGENT-ERR-22":{"other":"csgclaw template not found for repository path alice/ReviewBot"}}`))
+			_, _ = w.Write([]byte(`{"code":"AGENT-ERR-22","msg":"AGENT-ERR-22: csgclaw template not found for repository path alice/ReviewBot","context":{"repo_path":"alice/ReviewBot"}}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"code":0,"data":{"id":"instance-1"}}`))
+		_, _ = w.Write([]byte(`{"msg":"OK","data":{"id":"instance-1"}}`))
 	}))
 	defer server.Close()
 
@@ -132,7 +132,7 @@ func TestCreateCommunityAgentInstanceReturnsLastTemplatePendingError(t *testing.
 		attempts++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"error.AGENT-ERR-22":{"other":"csgclaw template not found for repository path alice/ReviewBot"}}`))
+		_, _ = w.Write([]byte(`{"code":"AGENT-ERR-22","msg":"AGENT-ERR-22: csgclaw template not found for repository path alice/ReviewBot","context":{"repo_path":"alice/ReviewBot"}}`))
 	}))
 	defer server.Close()
 
@@ -165,7 +165,7 @@ func TestCreateCommunityAgentInstanceDoesNotRetryOtherCodes(t *testing.T) {
 		attempts++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error.AGENT-ERR-21":{"other":"invalid request"}}`))
+		_, _ = w.Write([]byte(`{"code":"AGENT-ERR-21","msg":"invalid request","context":{}}`))
 	}))
 	defer server.Close()
 
