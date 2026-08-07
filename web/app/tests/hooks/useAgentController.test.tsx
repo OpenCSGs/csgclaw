@@ -56,7 +56,7 @@ vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
   return {
     ...actual,
-    useBlocker: () => navigationBlockerMock.current,
+    useBlocker: () => ({ ...navigationBlockerMock.current }),
   };
 });
 
@@ -485,9 +485,7 @@ describe("useAgentController", () => {
       id === workerAgent.id ? (workerAgent.agent_profile ?? {}) : (oldAgent.agent_profile ?? {}),
     );
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const proceed = vi.fn(() => {
-      navigationBlockerMock.current.state = "proceeding";
-    });
+    const proceed = vi.fn();
     const reset = vi.fn();
 
     try {
@@ -518,6 +516,7 @@ describe("useAgentController", () => {
       rerender({ activePane: { type: WorkspacePaneTypes.agent, id: String(oldAgent.id) } });
 
       await waitFor(() => expect(proceed).toHaveBeenCalledOnce());
+      expect(confirmSpy).toHaveBeenCalledOnce();
       expect(confirmSpy).toHaveBeenCalledWith("agentUnsavedChangesWarning");
       expect(reset).not.toHaveBeenCalled();
       await waitFor(() => expect(result.current.agentViewProps.hasUnsavedChanges).toBe(false));

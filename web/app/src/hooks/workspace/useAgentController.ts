@@ -493,6 +493,7 @@ export function useAgentController({
   const agentPageNoticeTimersRef = useRef<Record<string, number>>({});
   const agentPageDraftLoadSeqRef = useRef(0);
   const agentPageDraftRequestRef = useRef(0);
+  const agentPageNavigationConfirmedRef = useRef(false);
   const [feishuPendingRegistrations, setFeishuPendingRegistrations] = useState<
     Record<string, FeishuPendingRegistration>
   >(() => loadFeishuPendingRegistrations());
@@ -965,8 +966,13 @@ export function useAgentController({
 
   useEffect(() => {
     if (agentPageNavigationBlocker.state !== "blocked") {
+      agentPageNavigationConfirmedRef.current = false;
       return;
     }
+    if (agentPageNavigationConfirmedRef.current) {
+      return;
+    }
+    agentPageNavigationConfirmedRef.current = true;
     if (window.confirm(t("agentUnsavedChangesWarning"))) {
       setAgentPageDraft(agentPageSavedDraft);
       setAgentPageError("");
