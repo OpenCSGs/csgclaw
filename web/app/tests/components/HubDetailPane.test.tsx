@@ -132,6 +132,7 @@ function renderHubDetailPane(
     selectedTemplate?: HubTemplate;
     onPublishTemplate?: (item: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean> | boolean;
     publishDisabled?: boolean;
+    publishError?: string;
   } = {},
 ) {
   const selectedTemplate = options.selectedTemplate ?? template;
@@ -216,6 +217,7 @@ function renderHubDetailPane(
             onDeleteTemplate: vi.fn(),
             onPublishTemplate: options.onPublishTemplate,
             publishDisabled: options.publishDisabled,
+            publishError: options.publishError,
           },
         }}
       />
@@ -474,6 +476,26 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
 
     expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true);
+  });
+
+  it("shows publishing failures inside the publish choice dialog", async () => {
+    const user = userEvent.setup();
+    const localTemplate = {
+      ...template,
+      id: "local.demo-template",
+      runtime_kind: "codex",
+      source: { name: "local", kind: "local" },
+      workspace: { ...template.workspace, kind: "codex" },
+    };
+    renderHubDetailPane("template", {
+      selectedTemplate: localTemplate,
+      publishError: "Template was published, but deployment failed.",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Publish to community" }));
+
+    expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
+    expect(screen.getByText("Template was published, but deployment failed.")).toBeInTheDocument();
   });
 
   it("requires sign-in before publishing a local template to the community", () => {

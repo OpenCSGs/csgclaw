@@ -1622,7 +1622,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Deploy {
 			if err := createCommunityAgentInstance(r.Context(), item, authStatus); err != nil {
-				http.Error(w, err.Error(), http.StatusBadGateway)
+				http.Error(w, fmt.Sprintf("template published but deployment failed: %v", err), http.StatusBadGateway)
 				return
 			}
 		}

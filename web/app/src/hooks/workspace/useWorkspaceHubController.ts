@@ -41,6 +41,7 @@ export type WorkspaceHubController = {
       onPublishTemplate: (template: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean>;
       publishBusy: boolean;
       publishDisabled: boolean;
+      publishError: string;
       onDeleteSkill: DeleteSkill;
       skillDeleteBusy: boolean;
     };
@@ -174,6 +175,9 @@ export function useWorkspaceHubController({
             ? t("resourcesPublishCommunityNameExists")
             : errorMessage(err, t("resourcesPublishCommunityFailed")),
         );
+        if (deploy) {
+          await refreshHubTemplates();
+        }
         return false;
       } finally {
         setResourcesPublishBusy(false);
@@ -260,6 +264,7 @@ export function useWorkspaceHubController({
         onPublishTemplate: publishHubTemplate,
         publishBusy: resourcesPublishBusy,
         publishDisabled: !openCSGAuthenticated,
+        publishError: resourcesPublishError,
         onDeleteSkill: deleteSkill,
         skillDeleteBusy,
       },

@@ -253,6 +253,7 @@ type HubDetailPaneHub = {
     skillDeleteBusy?: boolean;
     publishBusy?: boolean;
     publishDisabled?: boolean;
+    publishError?: string;
     skills: readonly SkillSummary[];
     skillTree: SkillTree | null;
     skillTreeError: string;
@@ -641,6 +642,7 @@ export function HubDetailPane({
     deleteBusy = false,
     publishBusy = false,
     publishDisabled = false,
+    publishError = "",
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
@@ -1411,6 +1413,7 @@ export function HubDetailPane({
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
+          {publishError ? <div className="form-error">{publishError}</div> : null}
           <DialogFooter>
             <Button
               variant="secondaryGray"
