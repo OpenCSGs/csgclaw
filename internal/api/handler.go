@@ -1667,7 +1667,7 @@ func (h *Handler) filterHubTemplatesForConfiguredProvider(items []hub.Template) 
 }
 
 func (h *Handler) handleHubTemplateByID(w http.ResponseWriter, r *http.Request) {
-	h.handleHubTemplateByResolvedID(w, r, pathValue(r, "id"))
+	h.handleHubTemplateByResolvedID(w, r, hubTemplateIDPathValue(r))
 }
 
 func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.Request, id string) {
@@ -1724,7 +1724,7 @@ func (h *Handler) handleHubTemplateByResolvedID(w http.ResponseWriter, r *http.R
 }
 
 func (h *Handler) handleHubTemplateWorkspaceFileByID(w http.ResponseWriter, r *http.Request) {
-	h.handleHubTemplateWorkspaceFile(w, r, pathValue(r, "id"))
+	h.handleHubTemplateWorkspaceFile(w, r, hubTemplateIDPathValue(r))
 }
 
 func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {

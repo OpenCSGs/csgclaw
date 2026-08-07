@@ -33,7 +33,29 @@ describe("hub API", () => {
 
     await fetchHubTemplate("official.alice/review-bot");
 
-    expect(fetchMock).toHaveBeenCalledWith("api/v1/hub/templates/official.alice%252Freview-bot", expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/hub/templates/official.alice~s~review-bot", expect.any(Object));
+  });
+
+  it("uses the URL-safe namespace separator for namespaced workspace file requests", async () => {
+    const fetchMock = mockFetch();
+
+    await fetchHubWorkspaceFile("Agentic/resume-scorer", "instructions/AGENTS.md");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates/Agentic~s~resume-scorer/workspace/file?path=instructions%2FAGENTS.md",
+      expect.any(Object),
+    );
+  });
+
+  it("escapes literal tildes without confusing them with the namespace separator", async () => {
+    const fetchMock = mockFetch();
+
+    await fetchHubTemplate("team~one/resume~scorer");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates/team~~one~s~resume~~scorer",
+      expect.any(Object),
+    );
   });
 
   it.each([

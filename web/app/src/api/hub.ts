@@ -2,6 +2,8 @@ import { del, get, post, put } from "@/api/client";
 import type { HubTemplate, HubWorkspaceFile, HubWorkspaceListing } from "@/models/hubWorkspace";
 
 const HUB_TEMPLATES_PATH = "/api/v1/hub/templates";
+const HUB_TEMPLATE_ESCAPE = "~";
+const HUB_TEMPLATE_NAMESPACE_SEPARATOR = "~s~";
 
 export type AgentTemplatePublishTarget = "local" | "official" | "official_deploy";
 
@@ -69,6 +71,9 @@ export function deleteHubTemplateRequest(templateID: string): Promise<void> {
 }
 
 function hubTemplatePath(templateID: string): string {
-  const encodedID = encodeURIComponent(String(templateID || "").trim());
-  return `${HUB_TEMPLATES_PATH}/${encodeURIComponent(encodedID)}`;
+  const routeID = String(templateID || "")
+    .trim()
+    .replaceAll(HUB_TEMPLATE_ESCAPE, HUB_TEMPLATE_ESCAPE.repeat(2))
+    .replaceAll("/", HUB_TEMPLATE_NAMESPACE_SEPARATOR);
+  return `${HUB_TEMPLATES_PATH}/${encodeURIComponent(routeID)}`;
 }

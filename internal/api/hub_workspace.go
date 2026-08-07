@@ -47,7 +47,7 @@ func (h *Handler) presentHubTemplateDetail(ctx context.Context, item hub.Templat
 }
 
 func (h *Handler) handleHubTemplateWorkspaceByID(w http.ResponseWriter, r *http.Request) {
-	h.handleHubTemplateWorkspace(w, r, pathValue(r, "id"))
+	h.handleHubTemplateWorkspace(w, r, hubTemplateIDPathValue(r))
 }
 
 func (h *Handler) handleHubTemplateWorkspace(w http.ResponseWriter, r *http.Request, id string) {
