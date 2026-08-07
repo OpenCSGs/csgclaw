@@ -1,4 +1,5 @@
 import {
+  canPublishHubTemplateToCommunity,
   formatHubDate,
   formatHubDateTime,
   formatHubTemplateCount,
@@ -19,6 +20,23 @@ describe("hub workspace helpers", () => {
     expect(isDeletableHubTemplate({ id: "local.gitlab-assistant", source: { kind: "local" } })).toBe(true);
     expect(isDeletableHubTemplate({ id: "builtin.picoclaw-worker", source: { kind: "builtin" } })).toBe(false);
     expect(isDeletableHubTemplate({ id: "official.review-bot", source: { kind: "remote" } })).toBe(false);
+  });
+
+  it("only allows local Codex templates to publish to the community", () => {
+    expect(
+      canPublishHubTemplateToCommunity({
+        id: "local.codex",
+        runtime_kind: "codex",
+        source: { kind: "local" },
+      }),
+    ).toBe(true);
+    expect(
+      canPublishHubTemplateToCommunity({
+        id: "local.openclaw",
+        runtime_kind: "openclaw_sandbox",
+        source: { kind: "local" },
+      }),
+    ).toBe(false);
   });
 
   it("recognizes duplicate community template errors", () => {

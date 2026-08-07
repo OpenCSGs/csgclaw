@@ -56,10 +56,11 @@ export function publishAgentTemplateRequest(
   return post<HubTemplate>(HUB_TEMPLATES_PATH, payload);
 }
 
-export function publishHubTemplateToCommunityRequest(templateID: string): Promise<HubTemplate> {
+export function publishHubTemplateToCommunityRequest(templateID: string, deploy = false): Promise<HubTemplate> {
   return post<HubTemplate>(HUB_TEMPLATES_PATH, {
     template_id: templateID,
     registry: "official",
+    ...(deploy ? { deploy: true } : {}),
   });
 }
 

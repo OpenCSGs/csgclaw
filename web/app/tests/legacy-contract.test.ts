@@ -94,8 +94,10 @@ describe("legacy UI contract", () => {
     expect(source).toContain('className="agent-actions-menu"');
     expect(source).toContain('onSelect={() => onPublish?.("local")}');
     expect(source).toContain('onSelect={() => onPublish?.("official")}');
-    expect(source).toContain('const canPublishLocal = runtimeKind === "codex" || runtimeKind === "openclaw_sandbox";');
-    expect(source).toContain('const canPublishCommunity = runtimeKind === "codex";');
+    expect(source).toContain(
+      'const canPublishLocal = !isManager && (runtimeKind === "codex" || runtimeKind === "openclaw_sandbox");',
+    );
+    expect(source).toContain('const canPublishCommunity = !isManager && runtimeKind === "codex";');
   });
 
   it("keeps thread context hidden and shows the thread affordance as a message hover toolbar", () => {

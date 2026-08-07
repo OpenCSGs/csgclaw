@@ -288,6 +288,7 @@ export function useWorkspaceController() {
     refreshWorkspaceBootstrapConfig,
     refreshWorkspaceManagerProfile,
     rooms,
+    navigatePane,
     selectAgent,
     selectComputer,
     selectConversation,

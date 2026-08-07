@@ -11,7 +11,12 @@ import { tags } from "@lezer/highlight";
 import { CloudDownload, FileCode2, Server, Trash2 } from "lucide-react";
 import { formatRuntimeKindLabel } from "@/models/agents";
 import type { JSONRecord } from "@/models/agents";
-import { formatHubDateTime, hubTemplateFullName, isDeletableHubTemplate } from "@/models/hubWorkspace";
+import {
+  canPublishHubTemplateToCommunity,
+  formatHubDateTime,
+  hubTemplateFullName,
+  isDeletableHubTemplate,
+} from "@/models/hubWorkspace";
 import {
   formatMCPServerDocument,
   mcpServerDescription,
@@ -204,7 +209,7 @@ type HubDetailPaneHub = {
     onCreateMCP?: (payload: MCPServerPayload) => Promise<boolean> | boolean;
     onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
     onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
-    onPublishTemplate?: (item: HubTemplate | null | undefined) => Promise<boolean> | boolean;
+    onPublishTemplate?: (item: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean> | boolean;
     onSelectMCP?: (name: string | null | undefined) => void;
     onUpdateMCP?: (currentName: string, payload: MCPServerPayload) => Promise<boolean> | boolean;
     onRetry: () => void | Promise<void>;
@@ -639,6 +644,7 @@ export function HubDetailPane({
     skillDeleteBusy = false,
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
+  const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate);
   const canDeleteSkill = Boolean(selectedSkill && !isReadonlySkill(selectedSkill));
   const skillEntries = skillTree?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const activeResourceType = useMemo(() => {
@@ -661,6 +667,7 @@ export function HubDetailPane({
   }, [mcpServers.length, selectedResourceType, skills.length, templates.length]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [publishSuccessDialogOpen, setPublishSuccessDialogOpen] = useState(false);
+  const [publishChoiceDialogOpen, setPublishChoiceDialogOpen] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
@@ -795,9 +802,10 @@ export function HubDetailPane({
     }
   }
 
-  async function handlePublishTemplate() {
-    const published = await onPublishTemplate?.(selectedTemplate);
+  async function handlePublishTemplate(deploy = false) {
+    const published = await onPublishTemplate?.(selectedTemplate, deploy);
     if (published) {
+      setPublishChoiceDialogOpen(false);
       setPublishSuccessDialogOpen(true);
     }
   }
@@ -893,14 +901,14 @@ export function HubDetailPane({
                     <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
                       <span>{t("createAgent")}</span>
                     </Button>
-                    {canDeleteTemplate ? (
+                    {canPublishTemplate ? (
                       <Button
                         variant="secondaryGray"
                         size="md"
                         loading={publishBusy}
                         disabled={publishBusy || publishDisabled}
                         title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
-                        onClick={handlePublishTemplate}
+                        onClick={() => setPublishChoiceDialogOpen(true)}
                       >
                         {t("agentPublishCommunity")}
                       </Button>
@@ -1390,6 +1398,47 @@ export function HubDetailPane({
           <DialogFooter className="hub-skill-delete-dialog-actions">
             <Button variant="primary" size="sm" onClick={() => setPublishSuccessDialogOpen(false)}>
               {t("resourcesPublishCommunitySuccessDismiss")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot open={publishChoiceDialogOpen} onOpenChange={setPublishChoiceDialogOpen}>
+        <DialogContent className="agent-publish-dialog">
+          <DialogHeader>
+            <div>
+              <DialogTitle>{t("agentPublishTemplateTitle")}</DialogTitle>
+              <DialogDescription>{t("agentPublishTemplateCommunitySubtitle")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="secondaryGray"
+              size="md"
+              disabled={publishBusy}
+              onClick={() => setPublishChoiceDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="secondaryGray"
+              size="md"
+              loading={publishBusy}
+              loadingLabel={t("agentPublishing")}
+              disabled={publishBusy}
+              onClick={() => void handlePublishTemplate(false)}
+            >
+              {t("agentPublishCommunityTemplateOnly")}
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              loading={publishBusy}
+              loadingLabel={t("agentPublishing")}
+              disabled={publishBusy}
+              onClick={() => void handlePublishTemplate(true)}
+            >
+              {t("agentPublishCommunityAndDeploy")}
             </Button>
           </DialogFooter>
         </DialogContent>

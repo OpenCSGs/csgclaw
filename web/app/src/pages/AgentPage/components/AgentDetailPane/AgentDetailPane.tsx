@@ -285,8 +285,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const profile = agentProfileConfig(item);
   const provider = item.provider || profile?.provider || providerNameForProviderID(profile?.model_provider_id || "");
   const runtimeKind = agentRuntimeKind(item);
-  const canPublishLocal = runtimeKind === "codex" || runtimeKind === "openclaw_sandbox";
-  const canPublishCommunity = runtimeKind === "codex";
+  const canPublishLocal = !isManager && (runtimeKind === "codex" || runtimeKind === "openclaw_sandbox");
+  const canPublishCommunity = !isManager && runtimeKind === "codex";
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
   const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });

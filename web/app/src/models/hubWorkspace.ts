@@ -23,6 +23,16 @@ export function isDeletableHubTemplate(template: HubTemplate | null | undefined)
   );
 }
 
+export function canPublishHubTemplateToCommunity(template: HubTemplate | null | undefined): boolean {
+  if (!isDeletableHubTemplate(template)) {
+    return false;
+  }
+  const runtimeKind = String(template?.runtime_kind || template?.workspace?.kind || "")
+    .trim()
+    .toLowerCase();
+  return runtimeKind === "codex";
+}
+
 export function isVisibleInHubTemplateList(template: HubTemplate | null | undefined): boolean {
   const sourceKind = String(template?.source?.kind ?? "")
     .trim()

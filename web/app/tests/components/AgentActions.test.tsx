@@ -186,6 +186,31 @@ describe("agent action visibility", () => {
     expect(onPublish).toHaveBeenCalledWith("official_deploy", "Worker", "Agent description");
   });
 
+  it("does not show template publishing actions for the manager", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentDetailPane
+        item={{ ...worker, id: "u-manager", name: "manager", role: "manager", runtime_kind: "codex" }}
+        t={t}
+        busyKey=""
+        draft={null}
+        models={[]}
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onPublish={vi.fn()}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.queryByRole("menuitem", { name: "Save as local template" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Publish to community" })).not.toBeInTheDocument();
+  });
+
   it("requires sign-in for Codex community publishing without blocking local templates", async () => {
     const user = userEvent.setup();
     render(

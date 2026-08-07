@@ -133,6 +133,9 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	if got, want := created.Nickname, "ReviewBot_2"; got != want {
 		t.Fatalf("create nickname = %q, want agent.toml name %q", got, want)
 	}
+	if !created.Private {
+		t.Fatal("create private = false, want true")
+	}
 	if got, want := created.Description, "Reviews changes"; got != want {
 		t.Fatalf("create description = %q, want agent.toml description %q", got, want)
 	}

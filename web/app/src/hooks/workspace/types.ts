@@ -270,6 +270,7 @@ export type UseAgentControllerArgs = {
   refreshWorkspaceManagerProfile: () => Promise<AgentProfileLike | null>;
   refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
   rooms: IMConversation[];
+  navigatePane: WorkspaceNavigationController["navigatePane"];
   selectAgent: WorkspaceNavigationController["selectAgent"];
   selectComputer: WorkspaceNavigationController["selectComputer"];
   selectConversation: WorkspaceNavigationController["selectConversation"];

@@ -92,6 +92,20 @@ describe("hub API", () => {
     );
   });
 
+  it("publishes and deploys a local template through the official registry", async () => {
+    const fetchMock = mockFetch();
+
+    await publishHubTemplateToCommunityRequest("local.review-bot", true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates",
+      expect.objectContaining({
+        body: JSON.stringify({ template_id: "local.review-bot", registry: "official", deploy: true }),
+        method: "POST",
+      }),
+    );
+  });
+
   it("uses single-id paths for template delete requests", async () => {
     const fetchMock = mockFetch();
 

@@ -261,6 +261,7 @@ function useAgentControllerHarness(
     refreshWorkspaceBootstrapConfig,
     refreshWorkspaceManagerProfile,
     rooms: data?.rooms ?? [],
+    navigatePane: vi.fn(),
     selectAgent,
     selectComputer: vi.fn(),
     selectConversation,

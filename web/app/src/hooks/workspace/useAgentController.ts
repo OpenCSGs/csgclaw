@@ -446,6 +446,7 @@ export function useAgentController({
   refreshWorkspaceManagerProfile,
   refreshWorkspaceModelProviders = noopRefreshWorkspaceModelProviders,
   rooms,
+  navigatePane,
   selectAgent,
   selectComputer,
   selectConversation,
@@ -1654,8 +1655,10 @@ export function useAgentController({
       await refreshHubTemplates();
       if (published?.id) {
         setSelectedHubTemplateId(published.id);
+        navigatePane({ type: WorkspacePaneTypes.hub, id: published.id, resourceType: "template" }, rooms);
+      } else {
+        selectHub();
       }
-      selectHub();
       return true;
     } catch (err) {
       setAgentPageError(errorMessage(err, t("agentActionFailed")));

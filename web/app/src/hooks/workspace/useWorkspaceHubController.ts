@@ -23,7 +23,7 @@ export type WorkspaceHubController = {
     deleteBusy: boolean;
     deleteHubTemplate: DeleteHubTemplate;
     publishBusy: boolean;
-    publishHubTemplate: (template: HubTemplate | null | undefined) => Promise<boolean>;
+    publishHubTemplate: (template: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean>;
     deleteSkill: DeleteSkill;
     skillDeleteBusy: boolean;
     remoteInstallBusy: string;
@@ -38,7 +38,7 @@ export type WorkspaceHubController = {
     detailPaneProps: WorkspaceHubSelection["detailPaneProps"] & {
       deleteBusy: boolean;
       onDeleteTemplate: DeleteHubTemplate;
-      onPublishTemplate: (template: HubTemplate | null | undefined) => Promise<boolean>;
+      onPublishTemplate: (template: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean>;
       publishBusy: boolean;
       publishDisabled: boolean;
       onDeleteSkill: DeleteSkill;
@@ -155,14 +155,14 @@ export function useWorkspaceHubController({
   );
 
   const publishHubTemplate = useCallback(
-    async (template: HubTemplate | null | undefined): Promise<boolean> => {
+    async (template: HubTemplate | null | undefined, deploy = false): Promise<boolean> => {
       if (!template?.id || !isDeletableHubTemplate(template) || !openCSGAuthenticated) {
         return false;
       }
       setResourcesPublishBusy(true);
       setResourcesPublishError("");
       try {
-        const published = await publishHubTemplateToCommunityRequest(template.id);
+        const published = await publishHubTemplateToCommunityRequest(template.id, deploy);
         await refreshHubTemplates();
         if (published.id) {
           setSelectedHubTemplateId(published.id);
