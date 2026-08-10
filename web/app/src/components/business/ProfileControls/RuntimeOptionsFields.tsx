@@ -16,6 +16,7 @@ export type RuntimeOptionsFieldsProps = {
   schemas?: RuntimeOptionSchema[] | null;
   onDraftChange: (draft: AgentDraft) => void;
   embedded?: boolean;
+  directoryPickerAvailable?: boolean;
 };
 
 function directoryPickerLabel(locale: LocaleCode): string {
@@ -32,6 +33,7 @@ export function RuntimeOptionsFields({
   schemas = [],
   onDraftChange,
   embedded = false,
+  directoryPickerAvailable = true,
 }: RuntimeOptionsFieldsProps) {
   if (!Array.isArray(schemas) || schemas.length === 0) {
     return null;
@@ -65,23 +67,25 @@ export function RuntimeOptionsFields({
           />
           {isDirectory ? (
             <>
-              <Button
-                variant="secondaryGray"
-                size="md"
-                className="runtime-option-action"
-                onClick={async () => {
-                  const pickedPath = await pickLocalDirectoryPath();
-                  if (!pickedPath) {
-                    return;
-                  }
-                  onDraftChange({
-                    ...draft,
-                    runtime_options: setRuntimeOptionValue(draft.runtime_options, path, pickedPath),
-                  });
-                }}
-              >
-                {directoryPickerLabel(locale)}
-              </Button>
+              {directoryPickerAvailable ? (
+                <Button
+                  variant="secondaryGray"
+                  size="md"
+                  className="runtime-option-action"
+                  onClick={async () => {
+                    const pickedPath = await pickLocalDirectoryPath();
+                    if (!pickedPath) {
+                      return;
+                    }
+                    onDraftChange({
+                      ...draft,
+                      runtime_options: setRuntimeOptionValue(draft.runtime_options, path, pickedPath),
+                    });
+                  }}
+                >
+                  {directoryPickerLabel(locale)}
+                </Button>
+              ) : null}
               <Button
                 variant="secondaryGray"
                 size="md"

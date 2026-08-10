@@ -2465,6 +2465,7 @@ export function useAgentController({
       skillsLoading: agentSkillsQuery.isFetching,
       skillsError: agentSkillsError,
       workspaceSupported: Boolean(selectedAgentForPage),
+      directoryPickerAvailable: bootstrapConfig?.directory_picker_available !== false,
       onDraftChange: setAgentPageDraft,
       onSave: saveAgentPage,
       onMetadataSave: saveAgentPageMetadata,

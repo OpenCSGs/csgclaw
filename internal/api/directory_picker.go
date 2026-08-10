@@ -4,12 +4,98 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
+
+func localDirectoryPickerAvailable() bool {
+	return directoryPickerAvailable(runtime.GOOS, exec.LookPath, os.Getenv, connectDisplay)
+}
+
+type displayConnector func(network, address string) bool
+
+func connectDisplay(network, address string) bool {
+	conn, err := net.DialTimeout(network, address, 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+func directoryPickerAvailable(
+	goos string,
+	lookPath func(string) (string, error),
+	getenv func(string) string,
+	connect displayConnector,
+) bool {
+	switch goos {
+	case "darwin":
+		_, err := lookPath("osascript")
+		return err == nil
+	case "linux":
+		if !linuxDisplayAvailable(getenv, connect) {
+			return false
+		}
+		for _, name := range []string{"zenity", "kdialog", "yad"} {
+			if _, err := lookPath(name); err == nil {
+				return true
+			}
+		}
+		return false
+	case "windows":
+		_, err := lookPath("powershell")
+		return err == nil
+	default:
+		return false
+	}
+}
+
+func linuxDisplayAvailable(getenv func(string) string, connect displayConnector) bool {
+	waylandDisplay := strings.TrimSpace(getenv("WAYLAND_DISPLAY"))
+	if waylandDisplay != "" {
+		runtimeDir := strings.TrimSpace(getenv("XDG_RUNTIME_DIR"))
+		if runtimeDir != "" && connect("unix", filepath.Join(runtimeDir, waylandDisplay)) {
+			return true
+		}
+	}
+
+	display := strings.TrimSpace(getenv("DISPLAY"))
+	if display == "" {
+		return false
+	}
+	host, displayNumber, ok := parseX11Display(display)
+	if !ok {
+		return false
+	}
+	if host == "" || host == "unix" {
+		return connect("unix", filepath.Join("/tmp/.X11-unix", "X"+strconv.Itoa(displayNumber)))
+	}
+	return connect("tcp", net.JoinHostPort(host, strconv.Itoa(6000+displayNumber)))
+}
+
+func parseX11Display(display string) (string, int, bool) {
+	separator := strings.LastIndex(display, ":")
+	if separator < 0 || separator == len(display)-1 {
+		return "", 0, false
+	}
+	host := strings.Trim(display[:separator], "[]")
+	numberText := display[separator+1:]
+	if dot := strings.Index(numberText, "."); dot >= 0 {
+		numberText = numberText[:dot]
+	}
+	number, err := strconv.Atoi(numberText)
+	if err != nil || number < 0 {
+		return "", 0, false
+	}
+	return host, number, true
+}
 
 var (
 	errDirectoryPickerUnsupported = errors.New("directory picker is not supported on this host")
@@ -58,7 +144,7 @@ func pickDirectoryLinux(ctx context.Context) (string, error) {
 		{name: "kdialog", args: []string{"--getexistingdirectory", "", "--title", "Select a directory for CSGClaw"}},
 		{name: "yad", args: []string{"--file-selection", "--directory", "--title=Select a directory for CSGClaw"}},
 	}
-	var unsupported bool
+	var failures []error
 	for _, command := range commands {
 		out, err := runDirectoryPickerCommand(ctx, command.name, command.args...)
 		if err == nil {
@@ -68,13 +154,12 @@ func pickDirectoryLinux(ctx context.Context) (string, error) {
 			return "", errDirectorySelectionCanceled
 		}
 		if errors.Is(err, exec.ErrNotFound) {
-			unsupported = true
 			continue
 		}
-		return "", fmt.Errorf("run %s: %w", command.name, err)
+		failures = append(failures, fmt.Errorf("run %s: %w", command.name, err))
 	}
-	if unsupported {
-		return "", errDirectoryPickerUnsupported
+	if len(failures) > 0 {
+		return "", fmt.Errorf("%w: %v", errDirectoryPickerUnsupported, errors.Join(failures...))
 	}
 	return "", errDirectoryPickerUnsupported
 }

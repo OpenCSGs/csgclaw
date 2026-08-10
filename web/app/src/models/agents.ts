@@ -449,6 +449,7 @@ export type ManagerTemplateVariant = {
 
 export type RuntimeBootstrapConfig = {
   advertise_base_url?: string | null;
+  directory_picker_available?: boolean | null;
   default_worker_template?: string | null;
   effective_manager_image?: string | null;
   manager_runtime?: ManagerRuntimeLike | null;

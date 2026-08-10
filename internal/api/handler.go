@@ -142,18 +142,19 @@ type imEventResponse struct {
 }
 
 type bootstrapConfigResponse struct {
-	DefaultManagerTemplate string                                        `json:"default_manager_template"`
-	DefaultWorkerTemplate  string                                        `json:"default_worker_template"`
-	SandboxProvider        string                                        `json:"sandbox_provider"`
-	RuntimeKind            string                                        `json:"runtime_kind"`
-	ManagerRuntime         managerRuntimeResponse                        `json:"manager_runtime"`
-	ShowUpgrade            bool                                          `json:"show_upgrade"`
-	EffectiveManagerImage  string                                        `json:"effective_manager_image"`
-	AdvertiseBaseURL       string                                        `json:"advertise_base_url,omitempty"`
-	SupportedRuntimeKinds  []string                                      `json:"supported_runtime_kinds"`
-	WorkerRuntimeChoices   []workerRuntimeChoiceResponse                 `json:"worker_runtime_choices,omitempty"`
-	RuntimeDefaultImages   map[string]string                             `json:"runtime_default_images,omitempty"`
-	RuntimeOptionSchemas   map[string][]agentruntime.RuntimeOptionSchema `json:"runtime_option_schemas,omitempty"`
+	DefaultManagerTemplate   string                                        `json:"default_manager_template"`
+	DefaultWorkerTemplate    string                                        `json:"default_worker_template"`
+	SandboxProvider          string                                        `json:"sandbox_provider"`
+	RuntimeKind              string                                        `json:"runtime_kind"`
+	ManagerRuntime           managerRuntimeResponse                        `json:"manager_runtime"`
+	ShowUpgrade              bool                                          `json:"show_upgrade"`
+	DirectoryPickerAvailable bool                                          `json:"directory_picker_available"`
+	EffectiveManagerImage    string                                        `json:"effective_manager_image"`
+	AdvertiseBaseURL         string                                        `json:"advertise_base_url,omitempty"`
+	SupportedRuntimeKinds    []string                                      `json:"supported_runtime_kinds"`
+	WorkerRuntimeChoices     []workerRuntimeChoiceResponse                 `json:"worker_runtime_choices,omitempty"`
+	RuntimeDefaultImages     map[string]string                             `json:"runtime_default_images,omitempty"`
+	RuntimeOptionSchemas     map[string][]agentruntime.RuntimeOptionSchema `json:"runtime_option_schemas,omitempty"`
 }
 
 type workerRuntimeChoiceResponse struct {
@@ -522,12 +523,13 @@ func (h *Handler) loadBootstrapConfig() (config.Config, string, error) {
 
 func bootstrapConfigView(ctx context.Context, cfg config.Config, hubSvc *hub.Service, runtimeOptionSchemas map[string][]agentruntime.RuntimeOptionSchema) bootstrapConfigResponse {
 	resp := bootstrapConfigResponse{
-		DefaultManagerTemplate: cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
-		DefaultWorkerTemplate:  cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
-		SandboxProvider:        strings.TrimSpace(cfg.Sandbox.Provider),
-		ShowUpgrade:            cfg.Server.ShowUpgrade,
-		AdvertiseBaseURL:       config.ResolveAdvertiseBaseURL(cfg.Server),
-		ManagerRuntime:         managerRuntimeReadiness(),
+		DefaultManagerTemplate:   cfg.Bootstrap.ResolvedDefaultManagerTemplate(),
+		DefaultWorkerTemplate:    cfg.Bootstrap.ResolvedDefaultWorkerTemplate(),
+		SandboxProvider:          strings.TrimSpace(cfg.Sandbox.Provider),
+		ShowUpgrade:              cfg.Server.ShowUpgrade,
+		DirectoryPickerAvailable: localDirectoryPickerAvailable(),
+		AdvertiseBaseURL:         config.ResolveAdvertiseBaseURL(cfg.Server),
+		ManagerRuntime:           managerRuntimeReadiness(),
 		SupportedRuntimeKinds: []string{
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindPicoClawSandbox).Kind(),
 			agentruntime.RuntimeConfigForKind(agent.RuntimeKindOpenClawSandbox).Kind(),
