@@ -849,7 +849,7 @@ func (s *Service) persistManagerAgent(ctx context.Context, manager Agent, runtim
 	s.agents[ManagerUserID] = manager
 	s.syncRuntimeRecordLocked(manager)
 	if manager.AgentProfile.ProfileComplete {
-		s.profileDefaults = cloneProfile(manager.AgentProfile)
+		s.profileDefaults = profileDefaultsSnapshot(manager.AgentProfile)
 	}
 	s.detectionResults = append([]ProfileDetectionResult(nil), manager.DetectionResults...)
 	err := s.saveLocked()
@@ -2504,7 +2504,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 	s.agents[worker.ID] = worker
 	s.syncRuntimeRecordLocked(worker)
 	if worker.AgentProfile.ProfileComplete {
-		s.profileDefaults = cloneProfile(worker.AgentProfile)
+		s.profileDefaults = profileDefaultsSnapshot(worker.AgentProfile)
 	}
 	if err := s.saveLocked(); err != nil {
 		delete(s.agents, worker.ID)

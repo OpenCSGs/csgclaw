@@ -127,7 +127,7 @@ func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProf
 	}
 	s.agents[key] = current
 	if normalized.ProfileComplete {
-		s.profileDefaults = cloneProfile(normalized)
+		s.profileDefaults = profileDefaultsSnapshot(normalized)
 		s.detectionResults = nil
 	}
 	if err := s.saveLocked(); err != nil {
@@ -480,7 +480,7 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 		}
 	}
 	if runtimeAffectingUpdate && current.ProfileComplete {
-		s.profileDefaults = cloneProfile(current.AgentProfile)
+		s.profileDefaults = profileDefaultsSnapshot(current.AgentProfile)
 		s.detectionResults = nil
 	}
 	current.UpdatedAt = time.Now().UTC()
@@ -1314,6 +1314,8 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 		return AgentProfile{}, err
 	}
 	profile = normalizeProfileForAgentRuntime(profile, nil, spec.Name, spec.Description, spec.RuntimeKind, runtimeOptionsAfterPatch)
+	profile.EnvRestartRequired = false
+	profile.ImageUpgradeRequired = false
 	runtimeProfile := s.hydrateProfileFromCatalog(profile)
 	if !profile.ProfileComplete {
 		detected, _ := s.DetectDefaultProfile(ctx)
@@ -1321,6 +1323,8 @@ func (s *Service) profileForCreateRequest(ctx context.Context, spec *CreateAgent
 			detected.Name = strings.TrimSpace(spec.Name)
 			detected.Description = strings.TrimSpace(spec.Description)
 			det := normalizeProfileForAgentRuntime(detected, nil, spec.Name, spec.Description, spec.RuntimeKind, nil)
+			det.EnvRestartRequired = false
+			det.ImageUpgradeRequired = false
 			return det, nil
 		}
 		return AgentProfile{}, fmt.Errorf("agent profile is incomplete")

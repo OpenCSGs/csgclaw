@@ -536,6 +536,63 @@ func TestProfileForCreateRequestUsesDefaultAPIKeyWithoutReplacingSelectedModel(t
 	}
 }
 
+func TestProfileForCreateRequestClearsInheritedRuntimeLifecycleSignals(t *testing.T) {
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	profile, err := svc.profileForCreateRequest(context.Background(), &CreateAgentSpec{
+		Name:        "alice",
+		RuntimeKind: RuntimeKindCodex,
+		AgentProfile: AgentProfile{
+			Provider:             ProviderAPI,
+			BaseURL:              "https://api.example/v1",
+			APIKey:               "api-key",
+			ModelID:              "gpt-selected",
+			ProfileComplete:      true,
+			EnvRestartRequired:   true,
+			ImageUpgradeRequired: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("profileForCreateRequest() error = %v", err)
+	}
+	if profile.EnvRestartRequired || profile.ImageUpgradeRequired {
+		t.Fatalf("new runtime lifecycle signals = env:%t image:%t, want both false", profile.EnvRestartRequired, profile.ImageUpgradeRequired)
+	}
+}
+
+func TestNormalizeLoadedAgentClearsRestartSignalInheritedAtCreation(t *testing.T) {
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	createdAt := time.Date(2026, time.August, 10, 5, 35, 2, 0, time.UTC)
+
+	got, err := svc.normalizeLoadedAgent(Agent{
+		ID:          "agent-dev",
+		Name:        "dev",
+		RuntimeKind: RuntimeKindCodex,
+		CreatedAt:   createdAt,
+		UpdatedAt:   createdAt,
+		AgentProfile: AgentProfile{
+			Provider:           ProviderAPI,
+			BaseURL:            "https://api.example/v1",
+			APIKey:             "api-key",
+			ModelID:            "gpt-selected",
+			ProfileComplete:    true,
+			EnvRestartRequired: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("normalizeLoadedAgent() error = %v", err)
+	}
+	if got.AgentProfile.EnvRestartRequired {
+		t.Fatal("normalizeLoadedAgent().EnvRestartRequired = true, want false for never-updated runtime")
+	}
+}
+
 func TestListModelsForRequestDoesNotReuseStoredAPIKeyForChangedBaseURL(t *testing.T) {
 	var authHeader string
 	otherUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

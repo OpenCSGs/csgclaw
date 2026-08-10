@@ -100,6 +100,16 @@ type ProfileDetectionResult struct {
 	Error    string `json:"error,omitempty"`
 }
 
+// profileDefaultsSnapshot keeps lifecycle signals out of model defaults. These
+// flags describe whether one existing runtime has applied its profile; carrying
+// them into a newly-created runtime incorrectly makes that runtime look stale.
+func profileDefaultsSnapshot(profile AgentProfile) AgentProfile {
+	out := cloneProfile(profile)
+	out.EnvRestartRequired = false
+	out.ImageUpgradeRequired = false
+	return out
+}
+
 type ProfileModelRequest struct {
 	AgentID  string            `json:"agent_id,omitempty"`
 	Provider string            `json:"provider"`

@@ -410,7 +410,7 @@ func (s *Service) readState() (map[string]Agent, error) {
 	var state persistedState
 	if err := json.Unmarshal(data, &state); err == nil && state.isObject() {
 		if strings.TrimSpace(state.ProfileDefaults.Provider) != "" || strings.TrimSpace(state.ProfileDefaults.ModelID) != "" || strings.TrimSpace(state.ProfileDefaults.BaseURL) != "" {
-			s.profileDefaults = s.catalogReferenceForLoadedProfile(normalizeProfile(state.ProfileDefaults, "", ""))
+			s.profileDefaults = profileDefaultsSnapshot(s.catalogReferenceForLoadedProfile(normalizeProfile(state.ProfileDefaults, "", "")))
 		}
 		s.detectionResults = append([]ProfileDetectionResult(nil), state.DetectionResults...)
 		runtimes := make(map[string]RuntimeRecord, len(state.Runtimes))
@@ -508,7 +508,7 @@ func (s *Service) agentsFromRootState(root rootAgentsState) (map[string]Agent, e
 		strings.TrimSpace(root.ProfileDefaults.ModelProviderID) != "" ||
 		strings.TrimSpace(root.ProfileDefaults.ModelID) != "" ||
 		strings.TrimSpace(root.ProfileDefaults.BaseURL) != "" {
-		s.profileDefaults = s.catalogReferenceForLoadedProfile(normalizeProfile(root.ProfileDefaults, "", ""))
+		s.profileDefaults = profileDefaultsSnapshot(s.catalogReferenceForLoadedProfile(normalizeProfile(root.ProfileDefaults, "", "")))
 	}
 	s.detectionResults = append([]ProfileDetectionResult(nil), root.DetectionResults...)
 	runtimes := make(map[string]RuntimeRecord, len(root.Items))
@@ -697,6 +697,12 @@ func (s *Service) normalizeLoadedAgent(a Agent) (Agent, error) {
 	a.AgentProfile = normalizeProfile(a.AgentProfile, a.Name, a.Description)
 	a.AgentProfile = s.catalogReferenceForLoadedProfile(a.AgentProfile)
 	a.AgentProfile = normalizeProfileForAgentRuntime(a.AgentProfile, a.RuntimeOptions, a.Name, a.Description, a.RuntimeKind, nil)
+	// A runtime cannot need a profile restart before it has ever been updated:
+	// its initial profile was applied as part of creation. Older versions could
+	// inherit this flag from model defaults, so repair that persisted state.
+	if a.AgentProfile.EnvRestartRequired && !a.CreatedAt.IsZero() && a.CreatedAt.Equal(a.UpdatedAt) {
+		a.AgentProfile.EnvRestartRequired = false
+	}
 	a.ProfileComplete = a.AgentProfile.ProfileComplete
 	a.Profile = profileSelector(a.AgentProfile)
 	if a.UpdatedAt.IsZero() {
