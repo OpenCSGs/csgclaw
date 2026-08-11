@@ -321,35 +321,143 @@ func (s *RemoteStore) FetchWorkspace(ctx context.Context, id string) (WorkspaceR
 		return WorkspaceRef{}, err
 	}
 
+	archive, err := s.downloadArchive(ctx, id, branch)
+	if err != nil {
+		return WorkspaceRef{}, err
+	}
 	templateDir, err := mkdirHubWorkspaceTemp("csgclaw-hub-remote-*")
 	if err != nil {
 		return WorkspaceRef{}, fmt.Errorf("create remote hub workspace temp dir: %w", err)
 	}
-	var totalBytes int64
-	legacyLayout := false
-	for index, dir := range []string{localInstructionsDirName, localSkillsDirName, localMCPsDirName, localMemoriesDirName} {
-		err := s.fetchWorkspaceTree(ctx, id, branch, dir, templateDir, &totalBytes)
-		if index == 0 && errors.Is(err, ErrTemplateNotFound) {
-			legacyLayout = true
-			break
-		}
-		if errors.Is(err, ErrTemplateNotFound) && (dir == localSkillsDirName || dir == localMemoriesDirName) {
-			continue
-		}
-		if err != nil {
-			_ = os.RemoveAll(templateDir)
-			return WorkspaceRef{}, err
-		}
-	}
-	if legacyLayout {
-		if err := s.fetchWorkspaceTree(ctx, id, branch, "workspace", templateDir, &totalBytes); err != nil {
-			_ = os.RemoveAll(templateDir)
-			return WorkspaceRef{}, fmt.Errorf("fetch legacy remote hub workspace: %w", err)
-		}
+	if err := extractRemoteTemplateArchive(archive, templateDir, s.maxWorkspace); err != nil {
+		_ = os.RemoveAll(templateDir)
+		return WorkspaceRef{}, err
 	}
 	workspace, err := materializeTemplateDir(templateDir)
 	_ = os.RemoveAll(templateDir)
 	return workspace, err
+}
+
+func (s *RemoteStore) downloadArchive(ctx context.Context, id, branch string) ([]byte, error) {
+	body, status, err := s.requestAccept(ctx, http.MethodGet, s.archiveURL(id, branch), "application/zip", s.maxWorkspace+1)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > s.maxWorkspace {
+		return nil, fmt.Errorf("remote hub template archive exceeds %d bytes", s.maxWorkspace)
+	}
+	if status == http.StatusNotFound {
+		return nil, fmt.Errorf("%w", ErrTemplateNotFound)
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("remote hub archive request failed with status %d: %s", status, truncateRemoteBody(body))
+	}
+	if len(body) == 0 {
+		return nil, fmt.Errorf("remote hub template archive is empty")
+	}
+	return body, nil
+}
+
+func extractRemoteTemplateArchive(archive []byte, dstRoot string, maxBytes int64) error {
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return fmt.Errorf("open remote hub template archive: %w", err)
+	}
+	if len(reader.File) == 0 {
+		return fmt.Errorf("remote hub template archive is empty")
+	}
+	prefix := remoteArchiveRootPrefix(reader.File)
+	var totalBytes int64
+	for _, file := range reader.File {
+		if file == nil {
+			continue
+		}
+		if file.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", ErrWorkspacePathUnsafe, file.Name)
+		}
+		archiveName := strings.TrimSpace(file.Name)
+		if prefix != "" && !strings.HasPrefix(archiveName, prefix) {
+			continue
+		}
+		name := strings.TrimPrefix(archiveName, prefix)
+		name = strings.TrimPrefix(name, "/")
+		if name == "" {
+			continue
+		}
+		rel := filepath.Clean(filepath.FromSlash(name))
+		if err := validateWorkspaceRelativePath(rel); err != nil {
+			return err
+		}
+		target := filepath.Join(dstRoot, rel)
+		if err := ensurePathInsideRoot(dstRoot, target); err != nil {
+			return err
+		}
+		if file.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return fmt.Errorf("create remote hub archive directory %q: %w", rel, err)
+			}
+			continue
+		}
+		if !file.Mode().IsRegular() {
+			continue
+		}
+		if file.UncompressedSize64 > uint64(maxBytes) || totalBytes > maxBytes-int64(file.UncompressedSize64) {
+			return fmt.Errorf("remote hub template archive exceeds %d uncompressed bytes", maxBytes)
+		}
+		totalBytes += int64(file.UncompressedSize64)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return fmt.Errorf("create remote hub archive parent %q: %w", rel, err)
+		}
+		if err := extractRemoteArchiveFile(file, target, maxBytes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func remoteArchiveRootPrefix(files []*zip.File) string {
+	for _, file := range files {
+		if file == nil {
+			continue
+		}
+		name := strings.Trim(strings.TrimSpace(file.Name), "/")
+		if name == remoteManifestFileName {
+			return ""
+		}
+		if strings.HasSuffix(name, "/"+remoteManifestFileName) && strings.Count(name, "/") == 1 {
+			return strings.SplitN(name, "/", 2)[0] + "/"
+		}
+	}
+	return ""
+}
+
+func extractRemoteArchiveFile(file *zip.File, target string, maxBytes int64) error {
+	source, err := file.Open()
+	if err != nil {
+		return fmt.Errorf("open remote hub archive entry %q: %w", file.Name, err)
+	}
+	defer source.Close()
+	mode := file.Mode().Perm()
+	if mode == 0 {
+		mode = 0o644
+	}
+	mode |= 0o200
+	destination, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return fmt.Errorf("create remote hub archive file %q: %w", file.Name, err)
+	}
+	written, copyErr := io.Copy(destination, io.LimitReader(source, maxBytes+1))
+	closeErr := destination.Close()
+	if copyErr != nil {
+		return fmt.Errorf("extract remote hub archive file %q: %w", file.Name, copyErr)
+	}
+	if written > maxBytes {
+		return fmt.Errorf("remote hub template archive entry %q exceeds %d bytes", file.Name, maxBytes)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close remote hub archive file %q: %w", file.Name, closeErr)
+	}
+	return nil
 }
 
 func (s *RemoteStore) ListWorkspace(
@@ -668,6 +776,10 @@ func (s *RemoteStore) treeURL(id, branch, treePath, cursor string) string {
 	return endpoint + "?" + query.Encode()
 }
 
+func (s *RemoteStore) archiveURL(id, branch string) string {
+	return s.templateURL(id) + "/download_archive/refs/" + url.PathEscape(branch)
+}
+
 func (s *RemoteStore) blobURL(id, filePath, branch string) string {
 	query := url.Values{}
 	query.Set("ref", branch)
@@ -843,6 +955,10 @@ func buildRemoteTemplateArchive(spec PublishSpec) ([]byte, error) {
 }
 
 func (s *RemoteStore) request(ctx context.Context, method, endpoint string, maxBody int64) ([]byte, int, error) {
+	return s.requestAccept(ctx, method, endpoint, "application/json", maxBody)
+}
+
+func (s *RemoteStore) requestAccept(ctx context.Context, method, endpoint, accept string, maxBody int64) ([]byte, int, error) {
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("create remote hub request: %w", err)
@@ -850,7 +966,7 @@ func (s *RemoteStore) request(ctx context.Context, method, endpoint string, maxB
 	if s.token != "" {
 		req.Header.Set("Authorization", "Bearer "+s.token)
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {

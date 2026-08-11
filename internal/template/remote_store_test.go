@@ -352,6 +352,16 @@ func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {
 			writeRemoteBlob(t, w, "skills/review.md", []byte("review"))
 		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/blob/mcps/mcp.json":
 			writeRemoteBlob(t, w, "mcps/mcp.json", []byte("{}"))
+		case r.URL.Path == "/api/v1/codes/Agentic/gitlab-assistant/download_archive/refs/main":
+			if got, want := r.Header.Get("Accept"), "application/zip"; got != want {
+				t.Fatalf("Accept = %q, want %q", got, want)
+			}
+			writeRemoteArchive(t, w, "gitlab-assistant-main/", map[string]string{
+				"agent.toml":             remoteTestManifest,
+				"instructions/AGENTS.md": "hello",
+				"skills/review.md":       "review",
+				"mcps/mcp.json":          "{}",
+			})
 		default:
 			http.NotFound(w, r)
 		}
@@ -463,6 +473,13 @@ func TestRemoteStoreFetchWorkspaceSupportsLegacyLayoutAndEmptyMissingTree(t *tes
 			writeRemoteBlob(t, w, "workspace/USER.md", []byte("legacy user\n"))
 		case "/api/v1/codes/Agentic/feishu-assistant/blob/workspace/skills/feishu/SKILL.md":
 			writeRemoteBlob(t, w, "workspace/skills/feishu/SKILL.md", []byte("legacy skill\n"))
+		case "/api/v1/codes/Agentic/feishu-assistant/download_archive/refs/main":
+			writeRemoteArchive(t, w, "", map[string]string{
+				"agent.toml":                       remoteTestManifest,
+				"workspace/AGENTS.md":              "legacy instructions\n",
+				"workspace/USER.md":                "legacy user\n",
+				"workspace/skills/feishu/SKILL.md": "legacy skill\n",
+			})
 		default:
 			http.NotFound(w, r)
 		}
@@ -616,6 +633,24 @@ func writeRemoteBlob(t *testing.T, w http.ResponseWriter, name string, data []by
 		},
 	}); err != nil {
 		t.Fatalf("encode blob response: %v", err)
+	}
+}
+
+func writeRemoteArchive(t *testing.T, w http.ResponseWriter, prefix string, files map[string]string) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/zip")
+	archive := zip.NewWriter(w)
+	for name, content := range files {
+		entry, err := archive.Create(prefix + name)
+		if err != nil {
+			t.Fatalf("create archive entry %q: %v", name, err)
+		}
+		if _, err := io.WriteString(entry, content); err != nil {
+			t.Fatalf("write archive entry %q: %v", name, err)
+		}
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
 	}
 }
 
