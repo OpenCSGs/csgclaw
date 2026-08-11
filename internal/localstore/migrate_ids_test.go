@@ -9,6 +9,22 @@ import (
 	"time"
 )
 
+func TestCreateSiblingBackupExcludesRuntimeLock(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, ".csgclaw")
+	writeFile(t, filepath.Join(root, "config.toml"), "version = 1\n")
+	writeFile(t, filepath.Join(root, runtimeLockFileName), "12345\n")
+
+	backupPath, err := CreateSiblingBackup(root, time.Date(2026, 8, 11, 12, 0, 0, 0, time.Local))
+	if err != nil {
+		t.Fatalf("CreateSiblingBackup() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(backupPath, "config.toml")); err != nil {
+		t.Fatalf("backup missing config.toml: %v", err)
+	}
+	assertMissing(t, filepath.Join(backupPath, runtimeLockFileName))
+}
+
 func TestMigrateStoreCreatesSiblingBackupAndRootState(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, ".csgclaw")

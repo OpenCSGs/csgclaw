@@ -79,6 +79,7 @@ const (
 	legacyAuthDirName           = "auth"
 	cliproxyAuthDirName         = "cliproxy-auth"
 	legacyCSGHubAuthFileName    = "csghub.json"
+	runtimeLockFileName         = "runtime.lock"
 	rootAuthSectionName         = "auth"
 	rootOpenCSGAuthKey          = "opencsg"
 	rootCSGHubAuthKey           = "csghub"
@@ -2293,6 +2294,12 @@ func copyDir(src, dst string) error {
 		if err != nil {
 			return err
 		}
+		if isExcludedBackupEntry(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
 			info, err := d.Info()
@@ -2332,6 +2339,10 @@ func copyDir(src, dst string) error {
 		}
 		return nil
 	})
+}
+
+func isExcludedBackupEntry(rel string) bool {
+	return strings.EqualFold(filepath.Clean(rel), runtimeLockFileName)
 }
 
 func isVolatileBackupEntry(rel string) bool {
