@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AgentCreateProgress, APIKeyField, CLIProxyAuthControl } from "@/components/business/ProfileControls";
+import {
+  AgentCreateProgress,
+  APIKeyField,
+  CLIProxyAuthControl,
+  RuntimeOptionsFields,
+} from "@/components/business/ProfileControls";
+import type { AgentDraft } from "@/models/agents";
 
 const labels: Record<string, string> = {
   agentCreateProgressDone: "Done",
@@ -22,6 +28,27 @@ function t(key: string): string {
 }
 
 describe("ProfileControls", () => {
+  it("keeps the directory action visible when only the renderer picker is available", () => {
+    delete (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
+    delete window.csgclawDesktop;
+    const props = {
+      draft: { runtime_options: {} } as AgentDraft,
+      locale: "en" as const,
+      schemas: [{ key: "workspace", path: "workspace", type: "directory", label: "Workspace" }],
+      onDraftChange: vi.fn(),
+      directoryPickerAvailable: false,
+    };
+    const { rerender } = render(<RuntimeOptionsFields {...props} />);
+
+    expect(screen.queryByRole("button", { name: "Choose directory" })).not.toBeInTheDocument();
+
+    (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker = vi.fn();
+    rerender(<RuntimeOptionsFields {...props} />);
+
+    expect(screen.getByRole("button", { name: "Choose directory" })).toBeInTheDocument();
+    delete (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
+  });
+
   it("shows a stored API key mask until the user enters a replacement", async () => {
     function Harness() {
       const [value, setValue] = useState("");

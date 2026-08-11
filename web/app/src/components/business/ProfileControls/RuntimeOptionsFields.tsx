@@ -8,7 +8,7 @@ import {
 } from "@/models/agents";
 import { Button } from "@/components/ui/Button/Button";
 import type { LocaleCode } from "@/models/conversations";
-import { pickLocalDirectoryPath } from "./runtimeOptionDirectoryPicker";
+import { pickLocalDirectoryPath, rendererDirectoryPickerAvailable } from "./runtimeOptionDirectoryPicker";
 
 export type RuntimeOptionsFieldsProps = {
   draft: AgentDraft;
@@ -38,6 +38,7 @@ export function RuntimeOptionsFields({
   if (!Array.isArray(schemas) || schemas.length === 0) {
     return null;
   }
+  const showDirectoryPicker = directoryPickerAvailable || rendererDirectoryPickerAvailable();
 
   const fields = schemas.map((schema) => {
     const path = String(schema.path ?? "").trim();
@@ -67,7 +68,7 @@ export function RuntimeOptionsFields({
           />
           {isDirectory ? (
             <>
-              {directoryPickerAvailable ? (
+              {showDirectoryPicker ? (
                 <Button
                   variant="secondaryGray"
                   size="md"

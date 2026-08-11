@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { pickHostDirectoryRequest } from "@/api/agents";
-import { pickLocalDirectoryPath } from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
+import {
+  pickLocalDirectoryPath,
+  rendererDirectoryPickerAvailable,
+} from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
 
 vi.mock("@/api/agents", () => ({
   pickHostDirectoryRequest: vi.fn(),
@@ -12,6 +15,21 @@ describe("runtimeOptionDirectoryPicker", () => {
   afterEach(() => {
     pickHostDirectoryRequestMock.mockReset();
     delete (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
+    delete window.csgclawDesktop;
+  });
+
+  it("reports renderer picker availability from the File System Access API", () => {
+    expect(rendererDirectoryPickerAvailable()).toBe(false);
+
+    (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker = vi.fn();
+
+    expect(rendererDirectoryPickerAvailable()).toBe(true);
+  });
+
+  it("reports renderer picker availability in the desktop runtime", () => {
+    window.csgclawDesktop = {} as Window["csgclawDesktop"];
+
+    expect(rendererDirectoryPickerAvailable()).toBe(true);
   });
 
   it("returns the path selected by the host picker", async () => {

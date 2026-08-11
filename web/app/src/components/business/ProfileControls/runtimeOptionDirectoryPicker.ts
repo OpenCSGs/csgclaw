@@ -5,6 +5,7 @@ type DirectoryHandleWithPath = {
 };
 
 type DirectoryPickerWindow = Window & {
+  csgclawDesktop?: unknown;
   showDirectoryPicker?: () => Promise<DirectoryHandleWithPath>;
 };
 
@@ -79,6 +80,14 @@ function pickDirectoryPathFromInput(): Promise<string | null> {
     document.body.appendChild(input);
     input.click();
   });
+}
+
+export function rendererDirectoryPickerAvailable(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const hostWindow = window as DirectoryPickerWindow;
+  return typeof hostWindow.showDirectoryPicker === "function" || Boolean(hostWindow.csgclawDesktop);
 }
 
 export async function pickLocalDirectoryPath(): Promise<string | null> {

@@ -60,8 +60,16 @@ func directoryPickerAvailable(
 func linuxDisplayAvailable(getenv func(string) string, connect displayConnector) bool {
 	waylandDisplay := strings.TrimSpace(getenv("WAYLAND_DISPLAY"))
 	if waylandDisplay != "" {
-		runtimeDir := strings.TrimSpace(getenv("XDG_RUNTIME_DIR"))
-		if runtimeDir != "" && connect("unix", filepath.Join(runtimeDir, waylandDisplay)) {
+		waylandSocket := waylandDisplay
+		if !filepath.IsAbs(waylandSocket) {
+			runtimeDir := strings.TrimSpace(getenv("XDG_RUNTIME_DIR"))
+			if runtimeDir == "" {
+				waylandSocket = ""
+			} else {
+				waylandSocket = filepath.Join(runtimeDir, waylandSocket)
+			}
+		}
+		if waylandSocket != "" && connect("unix", waylandSocket) {
 			return true
 		}
 	}
@@ -70,31 +78,46 @@ func linuxDisplayAvailable(getenv func(string) string, connect displayConnector)
 	if display == "" {
 		return false
 	}
-	host, displayNumber, ok := parseX11Display(display)
+	protocol, host, displayNumber, ok := parseX11Display(display)
 	if !ok {
 		return false
 	}
-	if host == "" || host == "unix" {
+	if protocol == "unix" || (protocol == "" && (host == "" || host == "unix")) {
 		return connect("unix", filepath.Join("/tmp/.X11-unix", "X"+strconv.Itoa(displayNumber)))
+	}
+	if protocol != "" && protocol != "tcp" {
+		return false
+	}
+	if host == "" {
+		return false
 	}
 	return connect("tcp", net.JoinHostPort(host, strconv.Itoa(6000+displayNumber)))
 }
 
-func parseX11Display(display string) (string, int, bool) {
+func parseX11Display(display string) (string, string, int, bool) {
 	separator := strings.LastIndex(display, ":")
 	if separator < 0 || separator == len(display)-1 {
-		return "", 0, false
+		return "", "", 0, false
 	}
-	host := strings.Trim(display[:separator], "[]")
+	hostPart := display[:separator]
+	protocol := ""
+	if slash := strings.Index(hostPart, "/"); slash >= 0 {
+		protocol = strings.ToLower(strings.TrimSpace(hostPart[:slash]))
+		hostPart = hostPart[slash+1:]
+		if protocol == "" {
+			return "", "", 0, false
+		}
+	}
+	host := strings.Trim(hostPart, "[]")
 	numberText := display[separator+1:]
 	if dot := strings.Index(numberText, "."); dot >= 0 {
 		numberText = numberText[:dot]
 	}
 	number, err := strconv.Atoi(numberText)
 	if err != nil || number < 0 {
-		return "", 0, false
+		return "", "", 0, false
 	}
-	return host, number, true
+	return protocol, host, number, true
 }
 
 var (

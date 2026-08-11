@@ -37,7 +37,10 @@ func TestDirectoryPickerAvailable(t *testing.T) {
 	}{
 		{name: "linux x11 with zenity", goos: "linux", commands: []string{"zenity"}, env: map[string]string{"DISPLAY": ":0"}, displays: []string{"unix:/tmp/.X11-unix/X0"}, available: true},
 		{name: "linux remote x11 with yad", goos: "linux", commands: []string{"yad"}, env: map[string]string{"DISPLAY": "localhost:10.0"}, displays: []string{"tcp:localhost:6010"}, available: true},
+		{name: "linux protocol-qualified unix x11", goos: "linux", commands: []string{"zenity"}, env: map[string]string{"DISPLAY": "unix/:0"}, displays: []string{"unix:/tmp/.X11-unix/X0"}, available: true},
+		{name: "linux protocol-qualified tcp x11", goos: "linux", commands: []string{"yad"}, env: map[string]string{"DISPLAY": "tcp/host.example:2"}, displays: []string{"tcp:host.example:6002"}, available: true},
 		{name: "linux wayland with kdialog", goos: "linux", commands: []string{"kdialog"}, env: map[string]string{"WAYLAND_DISPLAY": "wayland-0", "XDG_RUNTIME_DIR": "/run/user/1000"}, displays: []string{"unix:/run/user/1000/wayland-0"}, available: true},
+		{name: "linux wayland with absolute socket", goos: "linux", commands: []string{"kdialog"}, env: map[string]string{"WAYLAND_DISPLAY": "/run/user/1000/custom-wayland"}, displays: []string{"unix:/run/user/1000/custom-wayland"}, available: true},
 		{name: "linux without display", goos: "linux", commands: []string{"zenity"}, available: false},
 		{name: "linux with unreachable display", goos: "linux", commands: []string{"zenity"}, env: map[string]string{"DISPLAY": ":0"}, available: false},
 		{name: "linux wayland without runtime dir", goos: "linux", commands: []string{"kdialog"}, env: map[string]string{"WAYLAND_DISPLAY": "wayland-0"}, available: false},
