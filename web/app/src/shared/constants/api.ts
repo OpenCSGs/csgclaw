@@ -4,6 +4,7 @@ export const ApiEndpoints = {
   imEvents: `${API_BASE_PATH}/events`,
   version: `${API_BASE_PATH}/version`,
   upgradeStatus: `${API_BASE_PATH}/upgrade/status`,
+  upgradeChannel: `${API_BASE_PATH}/upgrade/channel`,
   upgradeApply: `${API_BASE_PATH}/upgrade/apply`,
   agentRuntimes: `${API_BASE_PATH}/agent-runtimes`,
   serverConfig: `${API_BASE_PATH}/server/config`,

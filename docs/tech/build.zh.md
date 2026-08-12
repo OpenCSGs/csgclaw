@@ -112,9 +112,9 @@ PowerShell 和 Docker 打包均读取该文件。正式 release 平台仍维护�
 | `make desktop-oss-publish VERSION=<version>` | 严格检查三平台安装器并发布到 OSS |
 | `make release` | 构建配置的跨平台 release bundle |
 
-发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。GitHub 将 CLI 和原生桌面安装包附加到对应的 GitHub Release，随后把两个 macOS DMG 和 Windows x64 安装器发布到 beta 或 release OSS channel。GitLab 将 CLI release 产物上传到 `https://csgclaw.opencsg.com/releases/<tag>/`，并发布 CSGClaw 产品镜像。其桌面 job 是可选手动构建：成功的安装包作为 GitLab artifact 保留一天，不会上传到公开发布目录。GitLab 的 macOS 和 Windows 桌面 job 需要提供并打上 `csgclaw-macos-arm64`、`csgclaw-macos-amd64`、`csgclaw-windows-amd64` tag 的原生 runner。
+发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。GitHub 将 Server/CLI bundle 和原生桌面安装包附加到对应的 GitHub Release，并把完整 Server/CLI 平台矩阵、两个 macOS DMG、Windows x64 安装器和 Electron 原生更新 feed 发布到 beta 或 release OSS channel。GitLab 保留原有上传到 `https://csgclaw.opencsg.com/releases/<tag>/` 的 SSH 发布链路，并继续发布 CSGClaw 产品镜像。其桌面 job 是可选手动构建：成功的安装包作为 GitLab artifact 保留一天，不会上传到公开发布目录。GitLab 的 macOS 和 Windows 桌面 job 需要提供并打上 `csgclaw-macos-arm64`、`csgclaw-macos-amd64`、`csgclaw-windows-amd64` tag 的原生 runner。
 
-桌面安装包采用如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的命名。签名和公证信息是可选 CI secrets/variables：未配置或配置不完整时，Electron Forge 保持 macOS ad-hoc、Windows 未签名的默认行为。发布 CI 不配置桌面端更新源。
+桌面安装包采用如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的命名。签名和公证信息是可选 CI secrets/variables：未配置或配置不完整时，Electron Forge 保持 macOS ad-hoc、Windows 未签名的默认行为。GitHub Release CI 会把桌面更新源配置到相互隔离的 `channels/<channel>/updates/`；桌面端后台检查并下载，只有下载完成后才提示用户安装。
 
 OSS 桌面发布命令的完整说明见 [Electron Desktop OSS 发布](desktop/electron-desktop-oss-release.zh.md)。`desktop-package` 仍是单平台原子构建，OSS 上传只放在聚合命令中，避免并行 runner 使用不完整产物发布。
 

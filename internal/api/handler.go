@@ -954,6 +954,48 @@ func (h *Handler) handleUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.upgradeManager.Status())
 }
 
+func (h *Handler) handleUpgradeChannel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.upgradeManager == nil {
+		http.Error(w, "upgrade manager is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	var req apitypes.UpdateUpgradeChannelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	channel, err := upgrade.NormalizeChannel(req.Channel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	configPath, err := h.resolveConfigPath()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	cfg.Server.UpgradeChannel = string(channel)
+	if err := cfg.Save(configPath); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	status, err := h.upgradeManager.SetChannel(r.Context(), string(channel))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
 func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -963,7 +1005,8 @@ func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upgrade manager is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	if status := h.upgradeManager.Status(); !status.AutoUpgradeSupported {
+	status := h.upgradeManager.Status()
+	if !status.AutoUpgradeSupported {
 		if status.AutoUpgradeUnsupportedReason == "desktop_managed" {
 			http.Error(w, "desktop updates are managed by Electron", http.StatusConflict)
 			return
@@ -977,7 +1020,7 @@ func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {
 		apply = upgrade.StartApplyHelper
 	}
 	h.upgradeManager.MarkUpgrading()
-	if err := apply(upgrade.ApplyHelperOptions{ConfigPath: h.upgradeConfigPath}); err != nil {
+	if err := apply(upgrade.ApplyHelperOptions{ConfigPath: h.upgradeConfigPath, Channel: status.Channel}); err != nil {
 		h.upgradeManager.MarkUpgradeFailed(err)
 		http.Error(w, fmt.Sprintf("start upgrade helper: %v", err), http.StatusInternalServerError)
 		return

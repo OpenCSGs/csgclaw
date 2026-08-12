@@ -6,6 +6,9 @@ func (h *Handler) getVersion(w http.ResponseWriter, r *http.Request) { h.handleV
 func (h *Handler) getUpgradeStatus(w http.ResponseWriter, r *http.Request) {
 	h.handleUpgradeStatus(w, r)
 }
+func (h *Handler) updateUpgradeChannel(w http.ResponseWriter, r *http.Request) {
+	h.handleUpgradeChannel(w, r)
+}
 func (h *Handler) createUpgradeApply(w http.ResponseWriter, r *http.Request) {
 	h.handleUpgradeApply(w, r)
 }

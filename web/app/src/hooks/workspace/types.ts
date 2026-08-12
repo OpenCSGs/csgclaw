@@ -11,7 +11,7 @@ import type { HubTemplate } from "@/models/hubWorkspace";
 import type { MCPServer } from "@/models/mcp";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
-import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
+import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { ThemeMode } from "@/shared/theme/theme";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
 import type { ConnectorConfigDraft, ConnectorStatus, GitLabConnectorConfigDraft } from "@/models/connectors";
@@ -101,9 +101,12 @@ export type UseWorkspaceHubControllerArgs = {
 export type UpgradeModalControllerProps = {
   appVersion: string;
   onApply: () => Promise<void>;
+  onChannelChange: (channel: UpgradeChannel) => Promise<void>;
   onClose: () => void;
   t: TranslateFn;
   upgradeBusy: boolean;
+  upgradeChannelBusy: boolean;
+  upgradeChannelLocked: boolean;
   upgradeError: string;
   upgradePhase: UpgradePhase;
   upgradeStatus: UpgradeStatus | null;
@@ -120,11 +123,14 @@ export type UseUpgradeControllerArgs = {
 };
 
 export type UpgradeController = {
+  changeUpgradeChannel: (channel: UpgradeChannel) => Promise<void>;
   handleUpgradeStatusChange: (payload: unknown) => void;
   openUpgradeModal: () => void;
   refreshUpgradeStatus: () => Promise<UpgradeStatus | null>;
   showUpgradeModal: boolean;
   upgradeBusy: boolean;
+  upgradeChannelBusy: boolean;
+  upgradeChannelLocked: boolean;
   upgradeError: string;
   upgradeModalProps: UpgradeModalControllerProps | null;
   upgradePhase: UpgradePhase;

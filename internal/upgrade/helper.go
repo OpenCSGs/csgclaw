@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 const upgradeHelperTempPattern = "csgclaw-upgrade-helper-*"
@@ -18,6 +19,7 @@ var (
 
 type ApplyHelperOptions struct {
 	ConfigPath string
+	Channel    string
 }
 
 func StartApplyHelper(opts ApplyHelperOptions) error {
@@ -42,7 +44,11 @@ func StartApplyHelper(opts ApplyHelperOptions) error {
 		return fmt.Errorf("open upgrade helper log %s: %w", artifacts.LogPath, err)
 	}
 
-	cmd := startHelperCommand(exe, commandArgsWithConfig(opts.ConfigPath, "upgrade")...)
+	args := commandArgsWithConfig(opts.ConfigPath, "upgrade")
+	if channel := strings.TrimSpace(opts.Channel); channel != "" {
+		args = append(args, "--channel", channel)
+	}
+	cmd := startHelperCommand(exe, args...)
 	cmd.Stdin = devNull
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile

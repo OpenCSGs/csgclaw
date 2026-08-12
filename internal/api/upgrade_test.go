@@ -2,11 +2,14 @@ package api
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +21,23 @@ import (
 type stubUpgradeChecker struct {
 	result upgrade.CheckResult
 	err    error
+}
+
+type channelStubUpgradeChecker struct {
+	channel upgrade.Channel
+}
+
+func (s *channelStubUpgradeChecker) SetChannel(channel upgrade.Channel) error {
+	s.channel = channel
+	return nil
+}
+
+func (s *channelStubUpgradeChecker) Check(_ context.Context, currentVersion string) (upgrade.CheckResult, error) {
+	latest := "v0.4.6"
+	if s.channel == upgrade.ChannelBeta {
+		latest = "v0.4.7-beta.1"
+	}
+	return upgrade.CheckResult{CurrentVersion: currentVersion, LatestVersion: latest, UpdateAvailable: true}, nil
 }
 
 func (s stubUpgradeChecker) Check(context.Context, string) (upgrade.CheckResult, error) {
@@ -158,6 +178,49 @@ func TestHandleUpgradeStatusMethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestHandleUpgradeChannelPersistsAndRefreshes(t *testing.T) {
+	configPath := t.TempDir() + "/config.toml"
+	if err := os.WriteFile(configPath, []byte(`[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+show_upgrade = true
+upgrade_channel = "release"
+`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+	checker := &channelStubUpgradeChecker{}
+	manager := upgrade.NewManager(checker, "v0.4.6", upgrade.ManagerOptions{})
+	srv := &Handler{}
+	srv.SetUpgradeManager(manager)
+	srv.SetConfigPath(configPath)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/upgrade/channel",
+		bytes.NewBufferString(`{"channel":"beta"}`),
+	)
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var got apitypes.UpgradeStatus
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Channel != "beta" || got.LatestVersion != "v0.4.7-beta.1" {
+		t.Fatalf("status = %+v, want refreshed beta channel", got)
+	}
+	saved, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(config) error = %v", err)
+	}
+	if !strings.Contains(string(saved), `upgrade_channel = "beta"`) {
+		t.Fatalf("config missing beta channel:\n%s", saved)
+	}
+}
+
 func TestHandleUpgradeApply(t *testing.T) {
 	manager := upgrade.NewManager(stubUpgradeChecker{err: errors.New("unused")}, "v0.2.5", upgrade.ManagerOptions{
 		AutoUpgradeSupported: true,
@@ -181,6 +244,9 @@ func TestHandleUpgradeApply(t *testing.T) {
 	}
 	if got.ConfigPath != "/tmp/csgclaw.toml" {
 		t.Fatalf("ApplyHelperOptions.ConfigPath = %q, want %q", got.ConfigPath, "/tmp/csgclaw.toml")
+	}
+	if got.Channel != "release" {
+		t.Fatalf("ApplyHelperOptions.Channel = %q, want release", got.Channel)
 	}
 	if status := manager.Status(); !status.Upgrading {
 		t.Fatalf("manager.Status().Upgrading = false, want true")

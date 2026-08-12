@@ -13,6 +13,23 @@ type fakeChecker struct {
 	check func(context.Context, string) (CheckResult, error)
 }
 
+type channelAwareChecker struct {
+	channel Channel
+}
+
+func (c *channelAwareChecker) SetChannel(channel Channel) error {
+	c.channel = channel
+	return nil
+}
+
+func (c *channelAwareChecker) Check(_ context.Context, currentVersion string) (CheckResult, error) {
+	latest := "v0.4.6"
+	if c.channel == ChannelBeta {
+		latest = "v0.4.7-beta.1"
+	}
+	return CheckResult{CurrentVersion: currentVersion, LatestVersion: latest, UpdateAvailable: true}, nil
+}
+
 func (f fakeChecker) Check(ctx context.Context, currentVersion string) (CheckResult, error) {
 	return f.check(ctx, currentVersion)
 }
@@ -76,6 +93,23 @@ func TestManagerIncludesAutoUpgradeSupport(t *testing.T) {
 	}
 	if got, want := status.AutoUpgradeUnsupportedReason, "not_official_bundle"; got != want {
 		t.Fatalf("AutoUpgradeUnsupportedReason = %q, want %q", got, want)
+	}
+}
+
+func TestManagerSwitchesReleaseChannelAndRefreshes(t *testing.T) {
+	checker := &channelAwareChecker{}
+	manager := NewManager(checker, "v0.4.5", ManagerOptions{Channel: ChannelRelease})
+	manager.Refresh(context.Background())
+
+	status, err := manager.SetChannel(context.Background(), "beta")
+	if err != nil {
+		t.Fatalf("SetChannel() error = %v", err)
+	}
+	if checker.channel != ChannelBeta {
+		t.Fatalf("checker channel = %q, want beta", checker.channel)
+	}
+	if status.Channel != "beta" || status.LatestVersion != "v0.4.7-beta.1" || !status.UpdateAvailable {
+		t.Fatalf("status = %+v, want refreshed beta release", status)
 	}
 }
 

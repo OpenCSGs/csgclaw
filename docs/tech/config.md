@@ -22,6 +22,8 @@ When the sandbox provider is `docker` on Docker Desktop, an empty `advertise_bas
 
 `show_upgrade` controls whether the Web UI shows upgrade actions. The default is `true`; set it to `false` only when the deployment cannot self-upgrade, such as managed Kubernetes environments.
 
+`upgrade_channel` selects the OSS release stream used by server upgrades. It accepts `release` (the default stable stream) or `beta` (preview builds). The Web UI persists this value when the user switches update channels.
+
 String values in `config.toml` can reference environment variables with `${NAME}` or `$NAME`. CSGClaw expands them when loading the config and keeps the placeholder form when it later rewrites the same value. If an environment variable is not set, it expands to an empty string.
 
 ```toml
@@ -31,6 +33,7 @@ advertise_base_url = "http://${IP}:${PORT}"
 access_token = "${ACCESS_TOKEN}"
 no_auth = false
 show_upgrade = true
+upgrade_channel = "release"
 ```
 
 ## Model Provider Examples

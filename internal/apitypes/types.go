@@ -202,6 +202,7 @@ type VersionResponse struct {
 
 type UpgradeStatus struct {
 	CurrentVersion               string     `json:"current_version"`
+	Channel                      string     `json:"channel"`
 	LatestVersion                string     `json:"latest_version,omitempty"`
 	UpdateAvailable              bool       `json:"update_available"`
 	Checking                     bool       `json:"checking"`
@@ -213,6 +214,10 @@ type UpgradeStatus struct {
 	LastError                    string     `json:"last_error,omitempty"`
 	LastErrorKind                string     `json:"last_error_kind,omitempty"`
 	LastErrorLogPath             string     `json:"last_error_log_path,omitempty"`
+}
+
+type UpdateUpgradeChannelRequest struct {
+	Channel string `json:"channel"`
 }
 
 type UpgradeActionResponse struct {

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { normalizeUpgradeStatus, upgradeErrorMessage } from "@/models/upgradeStatus";
-import type { UpgradePhase } from "@/models/upgradeStatus";
-import { applyPlatformUpgrade, subscribePlatformUpgradeStatus } from "@/shared/platform/updatePort";
+import type { UpgradeChannel, UpgradePhase } from "@/models/upgradeStatus";
+import {
+  applyPlatformUpgrade,
+  setPlatformUpgradeChannel,
+  subscribePlatformUpgradeStatus,
+} from "@/shared/platform/updatePort";
+import { getDesktopBridge } from "@/shared/platform/desktopBridge";
 import type { UpgradeController, UseUpgradeControllerArgs } from "./types";
 
 export const UPGRADE_PAGE_RELOAD_DELAY_MS = 600;
@@ -16,10 +21,12 @@ export function useUpgradeController({
   upgradeStatus,
 }: UseUpgradeControllerArgs): UpgradeController {
   const [upgradeBusy, setUpgradeBusy] = useState(false);
+  const [upgradeChannelBusy, setUpgradeChannelBusy] = useState(false);
   const [upgradeError, setUpgradeError] = useState("");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradePhase, setUpgradePhase] = useState<UpgradePhase>("idle");
   const upgradePollTimerRef = useRef<number | null>(null);
+  const upgradeChannelLocked = Boolean(getDesktopBridge() && upgradeStatus?.update_available);
 
   const stopUpgradePoll = useCallback(() => {
     if (upgradePollTimerRef.current) {
@@ -78,7 +85,9 @@ export function useUpgradeController({
             setUpgradeStatusData((current) => ({
               auto_upgrade_supported: current?.auto_upgrade_supported ?? true,
               auto_upgrade_unsupported_reason: current?.auto_upgrade_unsupported_reason ?? "",
+              channel: current?.channel ?? "release",
               current_version: version,
+              downloaded: false,
               latest_version: version,
               last_checked_at: current?.last_checked_at ?? "",
               update_available: false,
@@ -150,7 +159,9 @@ export function useUpgradeController({
         auto_upgrade_supported: current?.auto_upgrade_supported ?? upgradeStatus?.auto_upgrade_supported ?? true,
         auto_upgrade_unsupported_reason:
           current?.auto_upgrade_unsupported_reason ?? upgradeStatus?.auto_upgrade_unsupported_reason ?? "",
+        channel: current?.channel ?? upgradeStatus?.channel ?? "release",
         current_version: current?.current_version || appVersion,
+        downloaded: current?.downloaded ?? upgradeStatus?.downloaded ?? false,
         latest_version: current?.latest_version || upgradeStatus?.latest_version || "",
         update_available: current?.update_available ?? Boolean(upgradeStatus?.update_available),
         checking: current?.checking ?? false,
@@ -187,6 +198,33 @@ export function useUpgradeController({
     upgradeStatus,
   ]);
 
+  const changeUpgradeChannel = useCallback(
+    async (channel: UpgradeChannel) => {
+      if (
+        upgradeChannelBusy ||
+        upgradeChannelLocked ||
+        upgradeBusy ||
+        upgradeStatus?.checking ||
+        upgradeStatus?.upgrading ||
+        channel === (upgradeStatus?.channel ?? "release")
+      ) {
+        return;
+      }
+      setUpgradeChannelBusy(true);
+      setUpgradeError("");
+      try {
+        const next = await setPlatformUpgradeChannel(channel);
+        setUpgradeStatusData(next);
+      } catch (error) {
+        const detail = upgradeErrorDetail(error);
+        setUpgradeError(`${t("upgradeChannelSwitchFailed")}${detail}`);
+      } finally {
+        setUpgradeChannelBusy(false);
+      }
+    },
+    [setUpgradeStatusData, t, upgradeBusy, upgradeChannelBusy, upgradeChannelLocked, upgradeStatus],
+  );
+
   const openUpgradeModal = useCallback(() => {
     if (upgradePhase !== "error") {
       setUpgradeError("");
@@ -214,7 +252,10 @@ export function useUpgradeController({
   }, [stopUpgradePoll]);
 
   return {
+    changeUpgradeChannel,
     upgradeBusy,
+    upgradeChannelBusy,
+    upgradeChannelLocked,
     upgradeError,
     upgradePhase,
     showUpgradeModal,
@@ -228,9 +269,12 @@ export function useUpgradeController({
           appVersion,
           upgradePhase,
           upgradeBusy,
+          upgradeChannelBusy,
+          upgradeChannelLocked,
           upgradeError,
           onClose: () => setShowUpgradeModal(false),
           onApply: applyUpgrade,
+          onChannelChange: changeUpgradeChannel,
         }
       : null,
   };

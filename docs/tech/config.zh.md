@@ -22,6 +22,8 @@
 
 `show_upgrade` 控制 Web UI 是否展示升级操作。默认值是 `true`；仅在当前部署不能自升级时设置为 `false`，例如托管的 Kubernetes 环境。
 
+`upgrade_channel` 选择 Server 升级读取的 OSS 通道，可设为默认正式通道 `release` 或预览通道 `beta`。用户在 Web UI 中切换升级通道时会持久化这个配置。
+
 `config.toml` 中的字符串值可以通过 `${NAME}` 或 `$NAME` 引用环境变量。CSGClaw 读取配置时会展开这些变量；后续重写同一个值时，会尽量保留占位符形式。如果环境变量未设置，会展开为空字符串。
 
 ```toml
@@ -31,6 +33,7 @@ advertise_base_url = "http://${IP}:${PORT}"
 access_token = "${ACCESS_TOKEN}"
 no_auth = false
 show_upgrade = true
+upgrade_channel = "release"
 ```
 
 ## Model Provider 配置示例

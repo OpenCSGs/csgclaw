@@ -29,7 +29,10 @@ export {
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "..");
 const defaultOutputRoot = path.join(repositoryRoot, "desktop", "out", "oss");
-const defaultEnvironmentFile = path.join(repositoryRoot, ".desktop-release-oss.env");
+const defaultEnvironmentFile = path.join(
+  repositoryRoot,
+  ".desktop-release-oss.env",
+);
 const defaultBucket = "opencsg-public-resource";
 const defaultPrefix = "csgclaw-desktop";
 const defaultPublicBaseURL =
@@ -41,9 +44,24 @@ const targetDefinitions = {
   "windows-amd64": { goos: "windows", goarch: "amd64", host: "win32" },
 };
 
+const releasePackageTargets = [
+  { os: "linux", arch: "amd64" },
+  { os: "linux", arch: "arm64" },
+  { os: "darwin", arch: "arm64" },
+  { os: "darwin", arch: "amd64" },
+  { os: "windows", arch: "amd64" },
+];
+
 export function desktopUploadPaths(version, releaseDirectory) {
   return desktopDownloadArtifacts(version).map(({ fileName }) =>
-    path.join(releaseDirectory, fileName));
+    path.join(releaseDirectory, fileName),
+  );
+}
+
+export function releasePackagePaths(version, releaseDirectory) {
+  return releasePackageDefinitions(version)
+    .map((definition) => path.join(releaseDirectory, definition.fileName))
+    .filter((filePath) => fs.existsSync(filePath));
 }
 
 export function generateDownloadsManifest({
@@ -54,6 +72,7 @@ export function generateDownloadsManifest({
   publicBaseURL = defaultPublicBaseURL,
   publishedAt = new Date().toISOString(),
   allowPartial = false,
+  requirePackages = false,
 }) {
   validateReleaseChannel(version, channel);
   const artifacts = [];
@@ -80,26 +99,47 @@ export function generateDownloadsManifest({
   }
 
   if (!allowPartial && missing.length > 0) {
-    throw new Error(`cannot generate complete downloads.json; missing: ${missing.join(", ")}`);
+    throw new Error(
+      `cannot generate complete downloads.json; missing: ${missing.join(", ")}`,
+    );
   }
   if (artifacts.length === 0) {
     throw new Error(`no desktop installers found in ${releaseDirectory}`);
   }
 
   const previous = readExistingManifest(manifestPath, channel);
-  if (previous?.latest && compareReleaseVersions(version, previous.latest) < 0) {
+  if (
+    previous?.latest &&
+    compareReleaseVersions(version, previous.latest) < 0
+  ) {
     throw new Error(
       `refusing to publish ${version} to ${channel}: current latest is newer (${previous.latest}); create a tag newer than or equal to ${previous.latest}`,
     );
   }
+  const packages = collectReleasePackages({
+    version,
+    releaseDirectory,
+    publicBaseURL,
+    requirePackages,
+  });
+  const previousPackages = previous?.versions?.[version]?.packages;
+  const publishedPackages =
+    packages.length > 0
+      ? packages
+      : Array.isArray(previousPackages)
+        ? previousPackages
+        : [];
   const versions = {
     [version]: {
       version,
       published_at: publishedAt,
       artifacts,
+      ...(publishedPackages.length > 0 ? { packages: publishedPackages } : {}),
     },
   };
-  for (const [existingVersion, value] of Object.entries(previous?.versions || {})) {
+  for (const [existingVersion, value] of Object.entries(
+    previous?.versions || {},
+  )) {
     if (existingVersion !== version) {
       versions[existingVersion] = value;
     }
@@ -116,6 +156,63 @@ export function generateDownloadsManifest({
   return manifest;
 }
 
+function releasePackageDefinitions(version) {
+  const tag = releaseTag(version);
+  return releasePackageTargets.flatMap(({ os, arch }) => {
+    const extension = os === "windows" ? "zip" : "tar.gz";
+    return [
+      {
+        kind: "server",
+        os,
+        arch,
+        fileName: `csgclaw_${tag}_${os}_${arch}.${extension}`,
+      },
+      {
+        kind: "cli",
+        os,
+        arch,
+        fileName: `csgclaw-cli_${tag}_${os}_${arch}.${extension}`,
+      },
+    ];
+  });
+}
+
+function collectReleasePackages({
+  version,
+  releaseDirectory,
+  publicBaseURL,
+  requirePackages,
+}) {
+  const packages = [];
+  const missing = [];
+  for (const definition of releasePackageDefinitions(version)) {
+    const filePath = path.join(releaseDirectory, definition.fileName);
+    if (!fs.existsSync(filePath)) {
+      missing.push(definition.fileName);
+      continue;
+    }
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size === 0) {
+      throw new Error(`release package is empty or not a file: ${filePath}`);
+    }
+    packages.push({
+      kind: definition.kind,
+      os: definition.os,
+      arch: definition.arch,
+      name: definition.fileName,
+      url: `${publicBaseURL.replace(/\/+$/, "")}/releases/${encodeURIComponent(version)}/${definition.fileName}`,
+      size_bytes: stat.size,
+      sha256: sha256File(filePath),
+    });
+  }
+  if (requirePackages && missing.length > 0) {
+    throw new Error(
+      `cannot generate complete release package set; missing: ${missing.join(", ")}`,
+    );
+  }
+  return packages;
+}
+
 function sha256File(filePath) {
   const hash = crypto.createHash("sha256");
   hash.update(fs.readFileSync(filePath));
@@ -127,8 +224,14 @@ function readExistingManifest(manifestPath, channel) {
     return null;
   }
   const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  if (parsed.channel !== channel || parsed.schema_version !== 1 || typeof parsed.versions !== "object") {
-    throw new Error(`existing manifest has an incompatible schema: ${manifestPath}`);
+  if (
+    parsed.channel !== channel ||
+    parsed.schema_version !== 1 ||
+    typeof parsed.versions !== "object"
+  ) {
+    throw new Error(
+      `existing manifest has an incompatible schema: ${manifestPath}`,
+    );
   }
   return parsed;
 }
@@ -137,7 +240,11 @@ function parseOptions(args) {
   const options = {};
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
-    if (argument === "--force" || argument === "--allow-partial") {
+    if (
+      argument === "--force" ||
+      argument === "--allow-partial" ||
+      argument === "--require-packages"
+    ) {
       options[argument.slice(2)] = true;
       continue;
     }
@@ -155,9 +262,13 @@ function parseOptions(args) {
 }
 
 function releaseContext(options) {
-  const version = normalizeReleaseVersion(options.version || process.env.VERSION);
+  const version = normalizeReleaseVersion(
+    options.version || process.env.VERSION,
+  );
   const channel = String(
-    options.channel || process.env.DESKTOP_RELEASE_CHANNEL || inferReleaseChannel(version),
+    options.channel ||
+      process.env.DESKTOP_RELEASE_CHANNEL ||
+      inferReleaseChannel(version),
   ).trim();
   validateReleaseChannel(version, channel);
   const outputRoot = path.resolve(options["output-root"] || defaultOutputRoot);
@@ -179,12 +290,17 @@ function defaultTargets() {
   if (process.platform === "win32") {
     return ["windows-amd64"];
   }
-  throw new Error(`desktop installer builds are not supported on ${process.platform}/${process.arch}`);
+  throw new Error(
+    `desktop installer builds are not supported on ${process.platform}/${process.arch}`,
+  );
 }
 
 function requestedTargets(rawTargets) {
   const targets = rawTargets
-    ? String(rawTargets).split(",").map((value) => value.trim()).filter(Boolean)
+    ? String(rawTargets)
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
     : defaultTargets();
   for (const target of targets) {
     const definition = targetDefinitions[target];
@@ -221,7 +337,9 @@ function buildDesktopInstallers(context, options) {
       if (options.force) {
         fs.rmSync(destinationPath, { force: true });
       } else if (fs.existsSync(destinationPath)) {
-        throw new Error(`staged artifact already exists; use --force to rebuild: ${destinationPath}`);
+        throw new Error(
+          `staged artifact already exists; use --force to rebuild: ${destinationPath}`,
+        );
       }
     }
 
@@ -232,6 +350,7 @@ function buildDesktopInstallers(context, options) {
       VERSION: versionTag,
       TARGET_OS: definition.goos,
       TARGET_ARCH: definition.goarch,
+      CSGCLAW_DESKTOP_UPDATE_BASE_URL: `${defaultPublicBaseURL}/channels/${context.channel}/updates`,
     };
     if (
       process.platform === "darwin" &&
@@ -239,10 +358,16 @@ function buildDesktopInstallers(context, options) {
       definition.goos === "darwin" &&
       definition.goarch === "amd64" &&
       !environment.CSGCLAW_MACOS_SIGN_IDENTITY &&
-      !(environment.APPLE_ID && environment.APPLE_PASSWORD && environment.APPLE_TEAM_ID)
+      !(
+        environment.APPLE_ID &&
+        environment.APPLE_PASSWORD &&
+        environment.APPLE_TEAM_ID
+      )
     ) {
       environment.CSGCLAW_MACOS_SKIP_SIGN = "1";
-      console.warn("building the Intel package without a temporary signature; sign and notarize it before public release");
+      console.warn(
+        "building the Intel package without a temporary signature; sign and notarize it before public release",
+      );
     }
 
     if (process.platform !== "win32") {
@@ -259,7 +384,13 @@ function buildDesktopInstallers(context, options) {
     } else {
       runCommand(
         "cmd.exe",
-        ["/d", "/s", "/c", path.join(repositoryRoot, "scripts", "build.cmd"), "desktop-package"],
+        [
+          "/d",
+          "/s",
+          "/c",
+          path.join(repositoryRoot, "scripts", "build.cmd"),
+          "desktop-package",
+        ],
         environment,
       );
     }
@@ -308,7 +439,10 @@ function parseEnvironmentFile(filePath) {
     }
     const key = line.slice(0, separator).trim();
     let value = line.slice(separator + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
       value = value.slice(1, -1);
     }
     values[key] = value;
@@ -317,9 +451,12 @@ function parseEnvironmentFile(filePath) {
 }
 
 async function uploadDesktopRelease(context, options) {
-  const environmentFile = path.resolve(options["env-file"] || defaultEnvironmentFile);
+  const environmentFile = path.resolve(
+    options["env-file"] || defaultEnvironmentFile,
+  );
   const fileEnvironment = parseEnvironmentFile(environmentFile);
-  const setting = (name, fallback = "") => process.env[name] || fileEnvironment[name] || fallback;
+  const setting = (name, fallback = "") =>
+    process.env[name] || fileEnvironment[name] || fallback;
   const accessKeyID = setting("OSS_ACCESS_KEY_ID");
   const accessKeySecret = setting("OSS_ACCESS_KEY_SECRET");
   if (!accessKeyID || !accessKeySecret) {
@@ -331,8 +468,14 @@ async function uploadDesktopRelease(context, options) {
   const bucket = setting("OSS_BUCKET", defaultBucket);
   const prefix = setting("OSS_PREFIX", defaultPrefix).replace(/^\/+|\/+$/g, "");
   const region = setting("OSS_REGION", "cn-beijing");
-  const endpoint = setting("OSS_ENDPOINT", "https://oss-cn-beijing.aliyuncs.com");
-  const publicBaseURL = setting("OSS_PUBLIC_BASE_URL", defaultPublicBaseURL).replace(/\/+$/, "");
+  const endpoint = setting(
+    "OSS_ENDPOINT",
+    "https://oss-cn-beijing.aliyuncs.com",
+  );
+  const publicBaseURL = setting(
+    "OSS_PUBLIC_BASE_URL",
+    defaultPublicBaseURL,
+  ).replace(/\/+$/, "");
   const ossEnvironment = {
     ...process.env,
     OSS_ACCESS_KEY_ID: accessKeyID,
@@ -343,7 +486,9 @@ async function uploadDesktopRelease(context, options) {
 
   runCommand("ossutil", ["version"], ossEnvironment);
   const manifestURL = `${publicBaseURL}/channels/${context.channel}/downloads.json`;
-  const currentResponse = await fetch(`${manifestURL}?current=${Date.now()}`, { cache: "no-store" });
+  const currentResponse = await fetch(`${manifestURL}?current=${Date.now()}`, {
+    cache: "no-store",
+  });
   if (currentResponse.ok) {
     const currentManifest = await currentResponse.json();
     if (
@@ -351,30 +496,102 @@ async function uploadDesktopRelease(context, options) {
       currentManifest.channel !== context.channel ||
       typeof currentManifest.versions !== "object"
     ) {
-      throw new Error(`remote manifest has an incompatible schema: ${manifestURL}`);
+      throw new Error(
+        `remote manifest has an incompatible schema: ${manifestURL}`,
+      );
     }
     fs.mkdirSync(path.dirname(context.manifestPath), { recursive: true });
-    fs.writeFileSync(context.manifestPath, `${JSON.stringify(currentManifest, null, 2)}\n`);
+    fs.writeFileSync(
+      context.manifestPath,
+      `${JSON.stringify(currentManifest, null, 2)}\n`,
+    );
   } else if (currentResponse.status !== 404) {
-    throw new Error(`cannot read current manifest: HTTP ${currentResponse.status} ${manifestURL}`);
+    throw new Error(
+      `cannot read current manifest: HTTP ${currentResponse.status} ${manifestURL}`,
+    );
   }
   generateDownloadsManifest({
     ...context,
     publicBaseURL,
     allowPartial: Boolean(options["allow-partial"]),
+    requirePackages: Boolean(options["require-packages"]),
   });
 
   // GitHub Release also contains macOS ZIP and Linux packages. The website
   // manifest intentionally exposes only the two DMGs and the Windows setup
   // executable, so keep the OSS object set aligned with that public contract.
-  const releaseFiles = desktopUploadPaths(context.version, context.releaseDirectory);
+  const releaseFiles = [
+    ...desktopUploadPaths(context.version, context.releaseDirectory),
+    ...releasePackagePaths(context.version, context.releaseDirectory),
+  ];
   for (const filePath of releaseFiles) {
     const objectPath = `oss://${bucket}/${prefix}/releases/${context.version}/${path.basename(filePath)}`;
     runCommand(
       "ossutil",
-      ["cp", filePath, objectPath, "-u", "--cache-control", "public,max-age=31536000,immutable"],
+      [
+        "cp",
+        filePath,
+        objectPath,
+        "-u",
+        "--cache-control",
+        "public,max-age=31536000,immutable",
+      ],
       ossEnvironment,
     );
+  }
+
+  const updateFiles = desktopUpdateFeedPaths(context.releaseDirectory);
+  for (const filePath of updateFiles.filter(
+    (candidate) => !isUpdateManifest(candidate),
+  )) {
+    const relativePath = normalizedRelativePath(
+      path.join(context.releaseDirectory, "updates"),
+      filePath,
+    );
+    const objectPath = `oss://${bucket}/${prefix}/channels/${context.channel}/updates/${relativePath}`;
+    runCommand(
+      "ossutil",
+      [
+        "cp",
+        filePath,
+        objectPath,
+        "-u",
+        "--cache-control",
+        "public,max-age=31536000,immutable",
+      ],
+      ossEnvironment,
+    );
+  }
+  for (const filePath of updateFiles.filter(isUpdateManifest)) {
+    const relativePath = normalizedRelativePath(
+      path.join(context.releaseDirectory, "updates"),
+      filePath,
+    );
+    const objectPath = `oss://${bucket}/${prefix}/channels/${context.channel}/updates/${relativePath}`;
+    runCommand(
+      "ossutil",
+      ["cp", filePath, objectPath, "-f", "--cache-control", "no-cache"],
+      ossEnvironment,
+    );
+    const legacyRelativePath =
+      legacyMacUpdateManifestRelativePath(relativePath);
+    if (legacyRelativePath) {
+      const legacyObjectPath = `oss://${bucket}/${prefix}/channels/${context.channel}/updates/${legacyRelativePath}`;
+      runCommand(
+        "ossutil",
+        [
+          "cp",
+          filePath,
+          legacyObjectPath,
+          "-f",
+          "--content-type",
+          "application/json",
+          "--cache-control",
+          "no-cache",
+        ],
+        ossEnvironment,
+      );
+    }
   }
 
   const manifestObject = `oss://${bucket}/${prefix}/channels/${context.channel}/downloads.json`;
@@ -393,22 +610,78 @@ async function uploadDesktopRelease(context, options) {
     ossEnvironment,
   );
 
-  const response = await fetch(`${manifestURL}?verify=${Date.now()}`, { cache: "no-store" });
+  const response = await fetch(`${manifestURL}?verify=${Date.now()}`, {
+    cache: "no-store",
+  });
   if (!response.ok) {
-    throw new Error(`uploaded manifest verification failed: HTTP ${response.status} ${manifestURL}`);
+    throw new Error(
+      `uploaded manifest verification failed: HTTP ${response.status} ${manifestURL}`,
+    );
   }
   const uploaded = await response.json();
   if (uploaded.latest !== context.version) {
-    throw new Error(`uploaded manifest latest is ${uploaded.latest}, expected ${context.version}`);
+    throw new Error(
+      `uploaded manifest latest is ${uploaded.latest}, expected ${context.version}`,
+    );
   }
   console.log(`verified ${manifestURL}`);
+}
+
+export function legacyMacUpdateManifestRelativePath(relativePath) {
+  const normalized = String(relativePath)
+    .replaceAll("\\", "/")
+    .replace(/^\/+|\/+$/g, "");
+  const match = /^darwin\/([^/]+)\/RELEASES\.json$/.exec(normalized);
+  return match ? `darwin/${match[1]}` : "";
+}
+
+export function desktopUpdateFeedPaths(releaseDirectory) {
+  const updateRoot = path.join(releaseDirectory, "updates");
+  const requiredManifests = [
+    path.join(updateRoot, "darwin", "arm64", "RELEASES.json"),
+    path.join(updateRoot, "darwin", "x64", "RELEASES.json"),
+    path.join(updateRoot, "win32", "x64", "RELEASES"),
+  ];
+  const missing = requiredManifests.filter(
+    (filePath) => !fs.existsSync(filePath),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `desktop update feed is incomplete; missing: ${missing.join(", ")}`,
+    );
+  }
+  return fs
+    .readdirSync(updateRoot, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath, entry.name));
+}
+
+function isUpdateManifest(filePath) {
+  return (
+    path.basename(filePath) === "RELEASES" ||
+    path.basename(filePath) === "RELEASES.json"
+  );
+}
+
+function normalizedRelativePath(root, filePath) {
+  const relativePath = path.relative(root, filePath);
+  if (
+    !relativePath ||
+    relativePath.startsWith("..") ||
+    path.isAbsolute(relativePath)
+  ) {
+    throw new Error(
+      `desktop update file is outside the update root: ${filePath}`,
+    );
+  }
+  return relativePath.split(path.sep).join("/");
 }
 
 function printHelp() {
   console.log(`Usage:
   node scripts/desktop-oss-release.mjs build --version <semver> [--channel <beta|release>] [--targets <list>] [--release-directory <path>] [--force]
-  node scripts/desktop-oss-release.mjs manifest --version <semver> [--channel <beta|release>] [--release-directory <path>] [--allow-partial]
-  node scripts/desktop-oss-release.mjs upload --version <semver> [--channel <beta|release>] [--release-directory <path>] [--env-file <path>]
+  node scripts/desktop-oss-release.mjs manifest --version <semver> [--channel <beta|release>] [--release-directory <path>] [--allow-partial] [--require-packages]
+  node scripts/desktop-oss-release.mjs upload --version <semver> [--channel <beta|release>] [--release-directory <path>] [--env-file <path>] [--require-packages]
 
 Targets:
   darwin-arm64,darwin-amd64  Build on macOS
@@ -436,8 +709,11 @@ async function main(args) {
         ...context,
         publicBaseURL: options["public-base-url"] || defaultPublicBaseURL,
         allowPartial: Boolean(options["allow-partial"]),
+        requirePackages: Boolean(options["require-packages"]),
       });
-      console.log(`wrote ${context.manifestPath} with ${manifest.versions[context.version].artifacts.length} installers`);
+      console.log(
+        `wrote ${context.manifestPath} with ${manifest.versions[context.version].artifacts.length} installers`,
+      );
       break;
     }
     case "upload":

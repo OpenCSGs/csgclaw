@@ -33,7 +33,7 @@ func TestStartApplyHelperIncludesConfigPath(t *testing.T) {
 	}
 
 	configPath := filepath.Join(t.TempDir(), "csgclaw.toml")
-	if err := StartApplyHelper(ApplyHelperOptions{ConfigPath: configPath}); err != nil {
+	if err := StartApplyHelper(ApplyHelperOptions{ConfigPath: configPath, Channel: "beta"}); err != nil {
 		t.Fatalf("StartApplyHelper() error = %v", err)
 	}
 
@@ -47,7 +47,7 @@ func TestStartApplyHelperIncludesConfigPath(t *testing.T) {
 	} else if gotName != helperPath {
 		t.Fatalf("command name = %q, want %q", gotName, helperPath)
 	}
-	wantArgs := []string{"--config", configPath, "upgrade"}
+	wantArgs := []string{"--config", configPath, "upgrade", "--channel", "beta"}
 	if !reflect.DeepEqual(gotArgs, wantArgs) {
 		t.Fatalf("command args = %#v, want %#v", gotArgs, wantArgs)
 	}

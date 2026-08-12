@@ -32,6 +32,16 @@ type ServerConfig struct {
 	AccessToken      string
 	NoAuth           bool
 	ShowUpgrade      bool
+	UpgradeChannel   string
+}
+
+const DefaultUpgradeChannel = "release"
+
+func resolvedUpgradeChannel(channel string) string {
+	if strings.EqualFold(strings.TrimSpace(channel), "beta") {
+		return "beta"
+	}
+	return DefaultUpgradeChannel
 }
 
 type ModelConfig struct {
@@ -482,7 +492,8 @@ func Load(path string) (Config, error) {
 	modelsCfg := newLLMConfig()
 	cfg := Config{
 		Server: ServerConfig{
-			ShowUpgrade: true,
+			ShowUpgrade:    true,
+			UpgradeChannel: DefaultUpgradeChannel,
 		},
 		Models: modelsCfg,
 		LLM:    newLLMConfig(),
@@ -552,6 +563,13 @@ func Load(path string) (Config, error) {
 					return Config{}, fmt.Errorf("parse server.show_upgrade: %w", err)
 				}
 				cfg.Server.ShowUpgrade = showUpgrade
+			case "upgrade_channel":
+				channel := strings.ToLower(strings.TrimSpace(value))
+				if channel != "release" && channel != "beta" {
+					return Config{}, fmt.Errorf("parse server.upgrade_channel: must be release or beta")
+				}
+				cfg.raw.server.UpgradeChannel = parseRawStringValue(rawValue)
+				cfg.Server.UpgradeChannel = channel
 			}
 		case section == "models":
 			switch key {
@@ -783,9 +801,10 @@ advertise_base_url = %q
 access_token = %q
 no_auth = %t
 show_upgrade = %t
+upgrade_channel = %q
 
 [bootstrap]
-`, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade)
+`, cfg.rawOrResolvedString(cfg.raw.server.ListenAddr, loadedRaw.server.ListenAddr, cfg.Server.ListenAddr), cfg.rawOrResolvedString(cfg.raw.server.AdvertiseBaseURL, loadedRaw.server.AdvertiseBaseURL, cfg.Server.AdvertiseBaseURL), cfg.rawOrResolvedString(cfg.raw.server.AccessToken, loadedRaw.server.AccessToken, cfg.Server.AccessToken), cfg.Server.NoAuth, cfg.Server.ShowUpgrade, resolvedUpgradeChannel(cfg.Server.UpgradeChannel))
 	fmt.Fprintf(&b, "default_manager_template = %q\n", cfg.rawOrResolvedString(cfg.raw.bootstrap.DefaultManagerTemplate, loadedRaw.bootstrap.DefaultManagerTemplate, cfg.Bootstrap.ResolvedDefaultManagerTemplate()))
 	fmt.Fprintf(&b, "default_worker_template = %q\n", cfg.rawOrResolvedString(cfg.raw.bootstrap.DefaultWorkerTemplate, loadedRaw.bootstrap.DefaultWorkerTemplate, cfg.Bootstrap.ResolvedDefaultWorkerTemplate()))
 	sandboxSection := fmt.Sprintf(`

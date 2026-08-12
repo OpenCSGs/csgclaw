@@ -68,6 +68,59 @@ func TestClientCheckUpdateAvailable(t *testing.T) {
 	}
 }
 
+func TestClientCheckReadsOSSDownloadsManifest(t *testing.T) {
+	client := Client{
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.URL.String() != DefaultBetaManifestURL {
+				t.Fatalf("url = %q, want beta manifest", req.URL.String())
+			}
+			return jsonResponse(http.StatusOK, `{
+				"schema_version":1,
+				"channel":"beta",
+				"latest":"0.4.7-beta.2",
+				"versions":{
+					"0.4.7-beta.2":{
+						"version":"0.4.7-beta.2",
+						"packages":[
+							{"kind":"cli","os":"darwin","arch":"arm64","name":"csgclaw-cli_v0.4.7-beta.2_darwin_arm64.tar.gz","url":"https://downloads.example/cli.tar.gz","size_bytes":22,"sha256":"skip"},
+							{"kind":"server","os":"darwin","arch":"arm64","name":"csgclaw_v0.4.7-beta.2_darwin_arm64.tar.gz","url":"https://downloads.example/server.tar.gz","size_bytes":42,"sha256":"abc"}
+						]
+					}
+				}
+			}`), nil
+		}),
+		Channel: ChannelBeta,
+		GOOS:    "darwin",
+		GOARCH:  "arm64",
+	}
+
+	result, err := client.Check(context.Background(), "v0.4.6")
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if !result.UpdateAvailable || result.LatestVersion != "v0.4.7-beta.2" {
+		t.Fatalf("Check() = %+v, want beta update", result)
+	}
+	if result.Asset == nil || result.Asset.Name != "csgclaw_v0.4.7-beta.2_darwin_arm64.tar.gz" {
+		t.Fatalf("Asset = %+v, want Server bundle", result.Asset)
+	}
+	if result.Asset.DownloadURL != "https://downloads.example/server.tar.gz" || result.Asset.Size != 42 {
+		t.Fatalf("Asset = %+v, want OSS metadata", result.Asset)
+	}
+}
+
+func TestManifestURLDefaultsToStableAndValidatesChannels(t *testing.T) {
+	if got := (Client{}).resolvedLatestURL(); got != DefaultReleaseManifestURL {
+		t.Fatalf("default URL = %q, want %q", got, DefaultReleaseManifestURL)
+	}
+	if got := (Client{Channel: ChannelBeta}).resolvedLatestURL(); got != DefaultBetaManifestURL {
+		t.Fatalf("beta URL = %q, want %q", got, DefaultBetaManifestURL)
+	}
+	if _, err := NormalizeChannel("nightly"); err == nil {
+		t.Fatal("NormalizeChannel(nightly) error = nil")
+	}
+}
+
 func TestClientCheckRequiresNameField(t *testing.T) {
 	client := Client{
 		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {

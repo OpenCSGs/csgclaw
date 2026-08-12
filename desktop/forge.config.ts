@@ -55,8 +55,20 @@ const updateConfig = path.resolve(__dirname, ".forge-generated", "desktop-update
 const desktopVersion = normalizeDesktopReleaseVersion(process.env.CSGCLAW_DESKTOP_VERSION);
 const desktopAppVersion = numericDesktopAppVersion(desktopVersion);
 const updateBaseURL = normalizeHTTPSBaseURL(process.env.CSGCLAW_DESKTOP_UPDATE_BASE_URL);
+const updateChannelsBaseURL = normalizeHTTPSBaseURL(
+  process.env.CSGCLAW_DESKTOP_UPDATE_CHANNELS_URL ||
+    "https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels",
+);
 fs.mkdirSync(path.dirname(updateConfig), { recursive: true });
-fs.writeFileSync(updateConfig, `${JSON.stringify({ base_url: updateBaseURL || "" }, null, 2)}\n`, { mode: 0o600 });
+fs.writeFileSync(
+  updateConfig,
+  `${JSON.stringify(
+    { base_url: updateBaseURL || "", channels_base_url: updateChannelsBaseURL || "" },
+    null,
+    2,
+  )}\n`,
+  { mode: 0o600 },
+);
 const requestedMacSignIdentity = process.env.CSGCLAW_MACOS_SIGN_IDENTITY?.trim();
 const hasAppleNotarizationCredentials = Boolean(
   process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID,
@@ -93,6 +105,15 @@ const config: ForgeConfig = {
     appVersion: desktopAppVersion,
     asar: true,
     executableName: "CSGClaw",
+    ...(isMacTarget
+      ? {
+          extendInfo: {
+            NSAppTransportSecurity: {
+              NSAllowsLocalNetworking: true,
+            },
+          },
+        }
+      : {}),
     extraResource: [
       backendResources,
       updateConfig,

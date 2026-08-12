@@ -43,6 +43,7 @@ describe("upgrade status helpers", () => {
       normalizeUpgradeStatus({
         checking: 1,
         current_version: "v0.2.0",
+        downloaded: 1,
         last_checked_at: 123,
         last_error: 404,
         last_error_kind: "network_download",
@@ -57,8 +58,10 @@ describe("upgrade status helpers", () => {
     ).toEqual({
       auto_upgrade_supported: false,
       auto_upgrade_unsupported_reason: "not_official_bundle",
+      channel: "release",
       checking: true,
       current_version: "v0.2.0",
+      downloaded: true,
       last_checked_at: 123,
       last_error: "",
       last_error_kind: "network_download",
@@ -160,8 +163,10 @@ describe("upgrade status helpers", () => {
 const baseUpgradeStatus: UpgradeStatus = {
   auto_upgrade_supported: true,
   auto_upgrade_unsupported_reason: "",
+  channel: "release",
   checking: false,
   current_version: "v0.2.0",
+  downloaded: false,
   last_checked_at: "",
   last_error: "",
   last_error_kind: "",

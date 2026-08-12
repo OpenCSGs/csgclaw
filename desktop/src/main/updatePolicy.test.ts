@@ -1,18 +1,45 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DesktopPlatform } from "../shared/desktopEnvironment";
-import { usesMicrosoftStoreUpdates } from "./updatePolicy";
+import {
+  shouldInstallDesktopVersion,
+  usesMicrosoftStoreUpdates,
+} from "./updatePolicy";
 
 test("Microsoft Store packages use Store-managed updates", () => {
   assert.equal(usesMicrosoftStoreUpdates(DesktopPlatform.Windows, true), true);
 });
 
 test("non-Store Windows packages keep the configured update feed", () => {
-  assert.equal(usesMicrosoftStoreUpdates(DesktopPlatform.Windows, false), false);
-  assert.equal(usesMicrosoftStoreUpdates(DesktopPlatform.Windows, undefined), false);
+  assert.equal(
+    usesMicrosoftStoreUpdates(DesktopPlatform.Windows, false),
+    false,
+  );
+  assert.equal(
+    usesMicrosoftStoreUpdates(DesktopPlatform.Windows, undefined),
+    false,
+  );
 });
 
 test("non-Windows packages do not use Microsoft Store updates", () => {
   assert.equal(usesMicrosoftStoreUpdates(DesktopPlatform.MacOS, true), false);
   assert.equal(usesMicrosoftStoreUpdates(DesktopPlatform.Linux, true), false);
+});
+
+test("ordinary updates only move forward within a channel", () => {
+  assert.equal(shouldInstallDesktopVersion("0.4.6", "0.5.0", false), true);
+  assert.equal(shouldInstallDesktopVersion("0.5.0", "0.4.6", false), false);
+  assert.equal(shouldInstallDesktopVersion("0.5.0", "0.5.0", false), false);
+});
+
+test("channel switches install the target latest regardless of version direction", () => {
+  assert.equal(
+    shouldInstallDesktopVersion("0.5.0-beta.5", "0.4.6", true),
+    true,
+  );
+  assert.equal(
+    shouldInstallDesktopVersion("0.4.6", "0.5.0-beta.5", true),
+    true,
+  );
+  assert.equal(shouldInstallDesktopVersion("0.5.0", "0.5.0", true), false);
 });

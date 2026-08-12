@@ -110,6 +110,9 @@ models = ["minimax-m2.7"]
 	if !cfg.Server.ShowUpgrade {
 		t.Fatal("cfg.Server.ShowUpgrade = false, want true")
 	}
+	if got, want := cfg.Server.UpgradeChannel, DefaultUpgradeChannel; got != want {
+		t.Fatalf("cfg.Server.UpgradeChannel = %q, want %q", got, want)
+	}
 	if got, want := cfg.Sandbox.Provider, DockerProvider; got != want {
 		t.Fatalf("cfg.Sandbox.Provider = %q, want %q", got, want)
 	}
@@ -149,6 +152,43 @@ models = ["minimax-m2.7"]
 	}
 	if cfg.Server.ShowUpgrade {
 		t.Fatal("cfg.Server.ShowUpgrade = true, want false")
+	}
+}
+
+func TestLoadAndSaveServerUpgradeChannel(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+upgrade_channel = "beta"
+
+[models]
+default = "default.minimax-m2.7"
+
+[models.providers.default]
+base_url = "http://127.0.0.1:4000"
+api_key = "sk"
+models = ["minimax-m2.7"]
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := cfg.Server.UpgradeChannel; got != "beta" {
+		t.Fatalf("UpgradeChannel = %q, want beta", got)
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(saved), `upgrade_channel = "beta"`) {
+		t.Fatalf("saved config missing beta upgrade channel:\n%s", saved)
 	}
 }
 
@@ -1137,6 +1177,9 @@ func TestSaveWritesModelsSection(t *testing.T) {
 	if !strings.Contains(content, "show_upgrade = true") {
 		t.Fatalf("saved config missing server show_upgrade:\n%s", content)
 	}
+	if !strings.Contains(content, `upgrade_channel = "release"`) {
+		t.Fatalf("saved config missing default upgrade channel:\n%s", content)
+	}
 	if strings.Contains(content, "[models]") || strings.Contains(content, "[models.providers.default]") {
 		t.Fatalf("saved config should not contain models sections:\n%s", content)
 	}
@@ -1297,6 +1340,7 @@ advertise_base_url = "http://192.168.2.52:18080"
 access_token = "your_access_token"
 no_auth = true
 show_upgrade = true
+upgrade_channel = "release"
 
 [bootstrap]
 default_manager_template = "builtin.manager-codex"

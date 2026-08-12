@@ -187,6 +187,45 @@
   gap: 16px;
 }
 
+.upgradeProgressRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: -8px;
+}
+
+.upgradeProgressTrack {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--gray-200);
+}
+
+.upgradeProgressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-500);
+  transition: width 350ms linear;
+}
+
+.upgradeProgressValue {
+  color: var(--gray-500);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upgradeProgressTrack span {
+    transition: none;
+  }
+}
+
 .settingLine,
 .environmentLine,
 .versionValue {

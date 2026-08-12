@@ -48,8 +48,10 @@ function t(key: string, params: Record<string, string | number> = {}): string {
 const updateAvailableStatus: UpgradeStatus = {
   auto_upgrade_supported: true,
   auto_upgrade_unsupported_reason: "",
+  channel: "release",
   checking: false,
   current_version: "v0.3.0",
+  downloaded: false,
   last_checked_at: "",
   last_error: "",
   last_error_kind: "",

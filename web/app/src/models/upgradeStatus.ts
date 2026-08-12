@@ -1,11 +1,15 @@
 // API returns Version from git describe (e.g. "v0.2.1-5-gabc-dirty") or "dev"; keep the UI label plain.
 import type { TranslateFn } from "@/models/conversations";
 
+export type UpgradeChannel = "release" | "beta";
+
 export type UpgradeStatus = {
   auto_upgrade_supported: boolean;
   auto_upgrade_unsupported_reason: string;
+  channel: UpgradeChannel;
   checking: boolean;
   current_version: string;
+  downloaded: boolean;
   last_checked_at: unknown;
   last_error: string;
   last_error_kind: string;
@@ -52,7 +56,9 @@ export function normalizeUpgradeStatus(status: unknown): UpgradeStatus | null {
     auto_upgrade_supported: source.auto_upgrade_supported !== false,
     auto_upgrade_unsupported_reason:
       typeof source.auto_upgrade_unsupported_reason === "string" ? source.auto_upgrade_unsupported_reason : "",
+    channel: source.channel === "beta" ? "beta" : "release",
     current_version: typeof source.current_version === "string" ? source.current_version : "",
+    downloaded: Boolean(source.downloaded),
     latest_version: typeof source.latest_version === "string" ? source.latest_version : "",
     update_available: Boolean(source.update_available),
     checking: Boolean(source.checking),

@@ -51,6 +51,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	fs := run.NewFlagSet("upgrade", run.Program+" upgrade [flags]", c.Summary())
 	checkOnly := fs.Bool("check", false, "check for updates without downloading or installing")
 	noRestart := fs.Bool("no-restart", false, "install without restarting the local service")
+	channelFlag := fs.String("channel", string(upgrade.ChannelRelease), "release channel: release or beta")
 	fs.Usage = func() {
 		usage(run, fs)
 	}
@@ -71,6 +72,11 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	}
 
 	client := newUpgradeClient(run)
+	channel, err := upgrade.NormalizeChannel(*channelFlag)
+	if err != nil {
+		return fail(err)
+	}
+	client.Channel = channel
 	result, err := client.Check(ctx, appversion.Current())
 	if err != nil {
 		return fail(err)
@@ -164,6 +170,7 @@ func usage(run *command.Context, fs *flag.FlagSet) {
 	fmt.Fprintln(run.Stderr)
 	fmt.Fprintln(run.Stderr, "Examples:")
 	fmt.Fprintf(run.Stderr, "  %s upgrade --check\n", run.Program)
+	fmt.Fprintf(run.Stderr, "  %s upgrade --channel beta --check\n", run.Program)
 	fmt.Fprintf(run.Stderr, "  %s upgrade\n", run.Program)
 	fmt.Fprintf(run.Stderr, "  %s upgrade --no-restart\n", run.Program)
 	fmt.Fprintln(run.Stderr)

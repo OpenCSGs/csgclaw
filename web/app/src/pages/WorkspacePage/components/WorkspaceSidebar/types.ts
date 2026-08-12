@@ -17,7 +17,7 @@ import type { ModelProvider, ModelProviderCatalog } from "@/models/modelProvider
 import type { SkillSummary } from "@/models/skillhub";
 import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
 import type { WorkspaceTask, WorkspaceTeam } from "@/models/tasks";
-import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
+import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { ThemeMode } from "@/shared/theme/theme";
 import type { WorkspaceHubController } from "@/hooks/workspace/useWorkspaceHubController";
 
@@ -77,6 +77,7 @@ export type WorkspaceSidebarProps = {
   onCreateRoom: () => void;
   onExpandSidebar: () => void;
   onOpenUpgrade: () => void;
+  onUpgradeChannelChange: (channel: UpgradeChannel) => Promise<void>;
   onOpenConfigSettings: () => void;
   onOpenSettings: () => void;
   onLogin: (environment?: AuthEnvironmentDraft) => void | Promise<void>;
@@ -118,6 +119,8 @@ export type WorkspaceSidebarProps = {
   threadCount: number;
   threadGroups: { conversation: IMConversation; threads: ThreadView[] }[];
   upgradeBusy: boolean;
+  upgradeChannelBusy: boolean;
+  upgradeChannelLocked: boolean;
   upgradeError: string;
   upgradePhase: UpgradePhase;
   upgradeStatus: UpgradeStatus | null;

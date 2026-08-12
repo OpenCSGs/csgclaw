@@ -3,6 +3,7 @@ import type {
   DesktopBridge,
   DesktopOAuthInput,
   DesktopThemeSource,
+  DesktopUpdateChannel,
   DesktopUpdateStatus,
 } from "../shared/desktopBridge.types";
 
@@ -15,6 +16,7 @@ const DesktopIPC = {
   openOAuth: "csgclaw:desktop:open-oauth",
   restartSidecar: "csgclaw:desktop:restart-sidecar",
   setThemeSource: "csgclaw:desktop:set-theme-source",
+  setUpdateChannel: "csgclaw:desktop:set-update-channel",
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
 
@@ -28,6 +30,8 @@ const bridge: DesktopBridge = Object.freeze({
   restartSidecar: () => ipcRenderer.invoke(DesktopIPC.restartSidecar),
   setThemeSource: (theme: DesktopThemeSource) =>
     ipcRenderer.invoke(DesktopIPC.setThemeSource, theme),
+  setUpdateChannel: (channel: DesktopUpdateChannel) =>
+    ipcRenderer.invoke(DesktopIPC.setUpdateChannel, channel),
   onUpdateStatus: (listener: (status: DesktopUpdateStatus) => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,

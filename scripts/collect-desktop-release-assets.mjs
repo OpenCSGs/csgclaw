@@ -13,14 +13,25 @@ export function collectDesktopReleaseAssets({ version, goos, goarch, makeDirecto
   const files = listFiles(makeDirectory);
   const names = desktopReleaseArtifactNames({ version, goos, goarch });
   const assets = releaseAssetsFor(goos, goarch, files, names, normalizeReleaseVersion(version));
+  const updateAssets = updateAssetsFor(goos, goarch, files, normalizeReleaseVersion(version));
 
   fs.mkdirSync(outputDirectory, { recursive: true });
   for (const asset of assets) {
     const destination = path.join(outputDirectory, asset.name);
     fs.copyFileSync(asset.source, destination, fs.constants.COPYFILE_EXCL);
   }
+  for (const asset of updateAssets) {
+    const destination = path.join(outputDirectory, "updates", asset.platform, asset.arch, asset.name);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(asset.source, destination, fs.constants.COPYFILE_EXCL);
+  }
 
-  return assets.map((asset) => path.join(outputDirectory, asset.name));
+  return [
+    ...assets.map((asset) => path.join(outputDirectory, asset.name)),
+    ...updateAssets.map((asset) =>
+      path.join(outputDirectory, "updates", asset.platform, asset.arch, asset.name),
+    ),
+  ];
 }
 
 function listFiles(directory) {
@@ -68,6 +79,65 @@ function releaseAssetsFor(goos, goarch, files, names, packageVersion) {
   }
 }
 
+function updateAssetsFor(goos, goarch, files, packageVersion) {
+  const electronArch = goarch === "amd64" ? "x64" : goarch;
+  switch (`${goos}/${goarch}`) {
+    case "darwin/arm64":
+    case "darwin/amd64": {
+      const directoryFragment = `/zip/darwin/${electronArch}/`;
+      const archive = optionalAsset(
+        files,
+        (file) =>
+          path.basename(file).endsWith(`-${packageVersion}.zip`) &&
+          normalizedPath(file).includes(directoryFragment),
+      );
+      const manifest = optionalAsset(
+        files,
+        (file) => path.basename(file) === "RELEASES.json" && normalizedPath(file).includes(directoryFragment),
+      );
+      // The ZIP is also a public download, so its presence alone does not mean
+      // this build enabled the native update feed.
+      if (!manifest) {
+        return [];
+      }
+      if (!archive) {
+        throw new Error(`incomplete macOS update feed for ${goos}/${goarch}`);
+      }
+      return [
+        { source: archive, name: path.basename(archive), platform: "darwin", arch: electronArch },
+        { source: manifest, name: "RELEASES.json", platform: "darwin", arch: electronArch },
+      ];
+    }
+    case "windows/amd64": {
+      const directoryFragment = `/squirrel.windows/${electronArch}/`;
+      const manifest = optionalAsset(
+        files,
+        (file) => path.basename(file) === "RELEASES" && normalizedPath(file).includes(directoryFragment),
+      );
+      const packages = files.filter(
+        (file) => file.endsWith(".nupkg") && normalizedPath(file).includes(directoryFragment),
+      );
+      if (!manifest && packages.length === 0) {
+        return [];
+      }
+      if (!manifest || packages.length === 0) {
+        throw new Error(`incomplete Windows update feed for ${goos}/${goarch}`);
+      }
+      return [
+        ...packages.map((file) => ({
+          source: file,
+          name: path.basename(file),
+          platform: "win32",
+          arch: electronArch,
+        })),
+        { source: manifest, name: "RELEASES", platform: "win32", arch: electronArch },
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
 function normalizedPath(file) {
   return `/${file.split(path.sep).join("/")}`;
 }
@@ -78,6 +148,14 @@ function asset(files, matches, name) {
     throw new Error(`expected exactly one source for ${name}, found ${matchesFiles.length}`);
   }
   return { source: matchesFiles[0], name };
+}
+
+function optionalAsset(files, matches) {
+  const matchingFiles = files.filter(matches);
+  if (matchingFiles.length > 1) {
+    throw new Error(`expected at most one update source, found ${matchingFiles.length}`);
+  }
+  return matchingFiles[0];
 }
 
 function main(args) {

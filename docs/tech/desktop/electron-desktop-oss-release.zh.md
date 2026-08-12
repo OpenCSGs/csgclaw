@@ -11,7 +11,7 @@ Desktop OSS 发布。
 一次成功的线上发布会产生两组结果：
 
 1. GitHub Release：保存全部 CLI、服务端 bundle 和桌面安装包；
-2. Desktop OSS：保存官网直接下载的 macOS DMG、Windows EXE 和 channel manifest。
+2. Desktop OSS：保存官网安装器、Server/CLI bundle、Electron 原生更新 feed 和 channel manifest。
 
 地址规则如下：
 
@@ -22,6 +22,7 @@ Desktop OSS 发布。
 | OSS 版本目录 | `https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/releases/<version>/` |
 | beta manifest | [channels/beta/downloads.json](https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels/beta/downloads.json) |
 | release manifest | [channels/release/downloads.json](https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels/release/downloads.json) |
+| Electron 更新 feed | `channels/<channel>/updates/<platform>/<arch>/` |
 
 其中 `<tag>` 带 `v`，例如 `v0.4.6-beta.3`；OSS 的 `<version>` 不带 `v`，例如
 `0.4.6-beta.3`。
@@ -33,8 +34,8 @@ Desktop OSS 发布。
 - [Mac Intel DMG](https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/releases/0.4.6-beta.3/csgclaw-desktop_v0.4.6-beta.3_darwin_amd64.dmg)
 - [Windows x64 EXE](https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/releases/0.4.6-beta.3/csgclaw-desktop_v0.4.6-beta.3_windows_amd64.exe)
 
-官网应读取对应 channel 的 `downloads.json`，而不是自行拼接文件名。manifest 会记录
-`latest`、历史版本、平台、架构、下载 URL 和 SHA-256。
+官网和 Server 升级都应读取对应 channel 的 `downloads.json`，而不是自行拼接文件名。manifest 会记录
+`latest`、历史版本和官网安装器；每个版本新增的 `packages` 字段记录 `server` / `cli`、平台、架构、下载 URL、大小和 SHA-256。Electron 使用同一 channel 下的原生更新 feed，不直接解析 `downloads.json`。
 
 ## 版本与 channel 规则
 
@@ -124,8 +125,8 @@ tag 一经发布即视为不可变。如果 beta 需要继续修复，应递增�
 3. 构建各平台的 `csgclaw` 和 `csgclaw-cli` bundle；
 4. 在各平台 runner 上构建桌面安装包；
 5. 把全部产物附加到 GitHub Release；
-6. 把官网需要的三个安装器上传 OSS；
-7. 最后更新对应 channel 的 `downloads.json`。
+6. 把官网安装器、Server/CLI bundle 和 Electron 更新文件上传 OSS；
+7. 先更新 Electron 的 `RELEASES` / `RELEASES.json`，最后更新对应 channel 的 `downloads.json`。
 
 正式平台 matrix 维护在
 [`scripts/release-platforms.txt`](../../../scripts/release-platforms.txt)，当前包括：
@@ -170,16 +171,28 @@ csgclaw-desktop_v0.4.6-beta.3_windows_amd64.exe
 
 ### OSS 产物
 
-OSS 只接收官网使用的三个安装器：
+OSS 接收官网使用的三个安装器：
 
 - macOS arm64 DMG；
 - macOS amd64 DMG；
 - Windows amd64 Setup EXE。
 
-macOS ZIP、Linux DEB、CLI 和服务端 bundle 只保留在 GitHub Release，不上传 Desktop OSS。
+Linux DEB 仍只保留在 GitHub Release。Server 和 CLI bundle 会按
+`scripts/release-platforms.txt` 的完整矩阵上传到同一个不可变版本目录，并写入
+`downloads.json` 的 `packages` 字段，供 Web/server 升级直接使用 OSS。
 
-OSS 会先写入不可变的 `releases/<version>/` 目录，三个安装器全部成功后才更新
-`channels/<channel>/downloads.json`。这样官网不会读取到只有部分平台的版本。
+Electron 原生更新文件使用独立的 channel 路径：
+
+```text
+channels/<channel>/updates/darwin/arm64/RELEASES.json
+channels/<channel>/updates/darwin/x64/RELEASES.json
+channels/<channel>/updates/win32/x64/RELEASES
+```
+
+对应 ZIP、NUPKG 等不可变文件与 manifest 放在同一目录。桌面端持久化正式版或预览版选择，启动后和运行期间自动检查；发现更新时由 Electron 在后台下载，下载完成后 UI 才提示安装并重启。
+
+OSS 会先写入不可变的 `releases/<version>/` 目录和 Electron 更新包，再更新原生 feed manifest，最后更新
+`channels/<channel>/downloads.json`。这样官网和 Server 不会读取到只有部分平台的版本。
 
 同一版本可以因 CI 重试而重新发布，但不能把 channel 的 `latest` 回滚到更旧版本。
 
@@ -208,8 +221,9 @@ Release workflow 全部成功后：
 3. 确认 macOS、Linux、Windows、CLI 和服务端 bundle 资产齐全；
 4. 在浏览器中打开对应的 beta 或 release manifest；
 5. 确认 `latest` 是本次版本；
-6. 确认 manifest 中三个安装器的下载 URL 和 SHA-256 已生成；
-7. 实际打开或下载至少一个安装器，确认公开地址可用。
+6. 确认 manifest 中三个安装器以及完整 `packages` 矩阵的下载 URL 和 SHA-256 已生成；
+7. 确认当前 channel 的 macOS/Windows 原生更新 manifest 可以访问；
+8. 实际打开或下载至少一个安装器和一个 Server bundle，确认公开地址可用。
 
 ## GitHub Environment
 

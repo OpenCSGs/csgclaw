@@ -11,9 +11,38 @@ import (
 )
 
 const (
-	DefaultLatestReleaseURL = "https://csgclaw.opencsg.com/releases/latest"
-	defaultSiteBaseURL      = "https://csgclaw.opencsg.com"
+	DefaultReleaseManifestURL = "https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels/release/downloads.json"
+	DefaultBetaManifestURL    = "https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels/beta/downloads.json"
+	// DefaultLatestReleaseURL is retained as the stable-channel alias used by
+	// callers that only need the default source.
+	DefaultLatestReleaseURL = DefaultReleaseManifestURL
+	defaultSiteBaseURL      = "https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/"
 )
+
+type Channel string
+
+const (
+	ChannelRelease Channel = "release"
+	ChannelBeta    Channel = "beta"
+)
+
+func NormalizeChannel(raw string) (Channel, error) {
+	switch Channel(strings.ToLower(strings.TrimSpace(raw))) {
+	case "", ChannelRelease:
+		return ChannelRelease, nil
+	case ChannelBeta:
+		return ChannelBeta, nil
+	default:
+		return "", fmt.Errorf("upgrade channel must be release or beta")
+	}
+}
+
+func ManifestURL(channel Channel) string {
+	if channel == ChannelBeta {
+		return DefaultBetaManifestURL
+	}
+	return DefaultReleaseManifestURL
+}
 
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -22,6 +51,7 @@ type HTTPClient interface {
 type Client struct {
 	HTTPClient     HTTPClient
 	LatestURL      string
+	Channel        Channel
 	GOOS           string
 	GOARCH         string
 	ExecutablePath func() (string, error)
@@ -30,6 +60,28 @@ type Client struct {
 type LatestRelease struct {
 	Name   string         `json:"name"`
 	Assets []ReleaseAsset `json:"assets"`
+}
+
+type downloadsManifest struct {
+	SchemaVersion int                                 `json:"schema_version"`
+	Channel       string                              `json:"channel"`
+	Latest        string                              `json:"latest"`
+	Versions      map[string]downloadsManifestVersion `json:"versions"`
+}
+
+type downloadsManifestVersion struct {
+	Version  string                     `json:"version"`
+	Packages []downloadsManifestPackage `json:"packages"`
+}
+
+type downloadsManifestPackage struct {
+	Kind      string `json:"kind"`
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	SizeBytes int64  `json:"size_bytes"`
+	SHA256    string `json:"sha256"`
 }
 
 type ReleaseAsset struct {
@@ -113,18 +165,70 @@ func (c Client) FetchLatest(ctx context.Context) (LatestRelease, error) {
 		return LatestRelease{}, fmt.Errorf("fetch latest release metadata: unexpected status %s", resp.Status)
 	}
 
+	var payload json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return LatestRelease{}, fmt.Errorf("decode latest release metadata: %w", err)
+	}
+
+	var manifest downloadsManifest
+	if err := json.Unmarshal(payload, &manifest); err == nil && strings.TrimSpace(manifest.Latest) != "" {
+		return latestReleaseFromManifest(manifest)
+	}
+
 	var release LatestRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	if err := json.Unmarshal(payload, &release); err != nil {
 		return LatestRelease{}, fmt.Errorf("decode latest release metadata: %w", err)
 	}
 	return release, nil
+}
+
+func latestReleaseFromManifest(manifest downloadsManifest) (LatestRelease, error) {
+	if manifest.SchemaVersion != 1 {
+		return LatestRelease{}, fmt.Errorf("unsupported downloads manifest schema %d", manifest.SchemaVersion)
+	}
+	latest := strings.TrimSpace(manifest.Latest)
+	entry, ok := manifest.Versions[latest]
+	if !ok {
+		return LatestRelease{}, fmt.Errorf("downloads manifest latest version %q is missing", latest)
+	}
+	assets := make([]ReleaseAsset, 0, len(entry.Packages))
+	for _, pkg := range entry.Packages {
+		if pkg.Kind != "server" {
+			continue
+		}
+		assets = append(assets, ReleaseAsset{
+			Name:               pkg.Name,
+			BrowserDownloadURL: pkg.URL,
+			DownloadURL:        pkg.URL,
+			Size:               pkg.SizeBytes,
+			SHA256:             pkg.SHA256,
+		})
+	}
+	version := strings.TrimSpace(entry.Version)
+	if version == "" {
+		version = latest
+	}
+	return LatestRelease{Name: normalizeSemver(version), Assets: assets}, nil
 }
 
 func (c Client) resolvedLatestURL() string {
 	if strings.TrimSpace(c.LatestURL) != "" {
 		return c.LatestURL
 	}
-	return DefaultLatestReleaseURL
+	channel, err := NormalizeChannel(string(c.Channel))
+	if err != nil {
+		channel = ChannelRelease
+	}
+	return ManifestURL(channel)
+}
+
+func (c *Client) SetChannel(channel Channel) error {
+	normalized, err := NormalizeChannel(string(channel))
+	if err != nil {
+		return err
+	}
+	c.Channel = normalized
+	return nil
 }
 
 func (c Client) resolvedGOOS() string {

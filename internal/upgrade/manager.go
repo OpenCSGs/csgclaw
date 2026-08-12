@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ type ManagerOptions struct {
 	CheckInterval                time.Duration
 	Now                          func() time.Time
 	OnStatusChange               func(apitypes.UpgradeStatus)
+	Channel                      Channel
 	AutoUpgradeSupported         bool
 	AutoUpgradeUnsupportedReason string
 }
@@ -30,6 +32,7 @@ type Manager struct {
 	now            func() time.Time
 	onStatusChange func(apitypes.UpgradeStatus)
 	stickyError    string
+	refreshMu      sync.Mutex
 
 	mu     sync.RWMutex
 	status apitypes.UpgradeStatus
@@ -45,6 +48,14 @@ func NewManager(checker Checker, currentVersion string, opts ManagerOptions) *Ma
 		now = func() time.Time { return time.Now().UTC() }
 	}
 
+	channel, err := NormalizeChannel(string(opts.Channel))
+	if err != nil {
+		channel = ChannelRelease
+	}
+	if setter, ok := checker.(interface{ SetChannel(Channel) error }); ok {
+		_ = setter.SetChannel(channel)
+	}
+
 	return &Manager{
 		checker:        checker,
 		currentVersion: currentVersion,
@@ -53,6 +64,7 @@ func NewManager(checker Checker, currentVersion string, opts ManagerOptions) *Ma
 		onStatusChange: opts.OnStatusChange,
 		status: apitypes.UpgradeStatus{
 			CurrentVersion:               currentVersion,
+			Channel:                      string(channel),
 			AutoUpgradeSupported:         opts.AutoUpgradeSupported,
 			AutoUpgradeUnsupportedReason: opts.AutoUpgradeUnsupportedReason,
 		},
@@ -83,6 +95,12 @@ func (m *Manager) Refresh(ctx context.Context) {
 	if m == nil || m.checker == nil {
 		return
 	}
+	m.refreshMu.Lock()
+	defer m.refreshMu.Unlock()
+	m.refresh(ctx)
+}
+
+func (m *Manager) refresh(ctx context.Context) {
 
 	m.mu.Lock()
 	previous := copyStatus(m.status)
@@ -130,6 +148,46 @@ func (m *Manager) Refresh(ctx context.Context) {
 	if notify && callback != nil {
 		callback(updated)
 	}
+}
+
+func (m *Manager) SetChannel(ctx context.Context, rawChannel string) (apitypes.UpgradeStatus, error) {
+	if m == nil || m.checker == nil {
+		return apitypes.UpgradeStatus{}, nil
+	}
+	channel, err := NormalizeChannel(rawChannel)
+	if err != nil {
+		return m.Status(), err
+	}
+	setter, ok := m.checker.(interface{ SetChannel(Channel) error })
+	if !ok {
+		return m.Status(), fmt.Errorf("upgrade checker does not support channels")
+	}
+
+	m.refreshMu.Lock()
+	defer m.refreshMu.Unlock()
+	if err := setter.SetChannel(channel); err != nil {
+		return m.Status(), err
+	}
+
+	m.mu.Lock()
+	previous := copyStatus(m.status)
+	m.status.Channel = string(channel)
+	m.status.LatestVersion = ""
+	m.status.UpdateAvailable = false
+	m.status.LastError = ""
+	m.status.LastErrorKind = ""
+	m.status.LastErrorLogPath = ""
+	m.stickyError = ""
+	updated := copyStatus(m.status)
+	notify := shouldNotifyStatusChange(previous, updated)
+	callback := m.onStatusChange
+	m.mu.Unlock()
+	if notify && callback != nil {
+		callback(updated)
+	}
+
+	m.refresh(ctx)
+	return m.Status(), nil
 }
 
 func (m *Manager) Status() apitypes.UpgradeStatus {
@@ -237,6 +295,7 @@ func copyStatus(status apitypes.UpgradeStatus) apitypes.UpgradeStatus {
 
 func shouldNotifyStatusChange(previous, current apitypes.UpgradeStatus) bool {
 	return previous.CurrentVersion != current.CurrentVersion ||
+		previous.Channel != current.Channel ||
 		previous.LatestVersion != current.LatestVersion ||
 		previous.UpdateAvailable != current.UpdateAvailable ||
 		previous.Upgrading != current.Upgrading ||

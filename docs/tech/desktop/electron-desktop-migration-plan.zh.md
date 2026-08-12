@@ -246,7 +246,7 @@ make desktop-package TARGET_OS=darwin TARGET_ARCH=amd64
 
 正式安装包建议在目标系统构建。跨平台编译成功不代表签名、安装、启动和更新已经通过目标系统验证。
 
-macOS 正式发布需要配置签名和公证账号；Windows 可通过 `CSGCLAW_WINDOWS_SIGN_*` 和证书变量接入签名。CI 仅在完整签名变量组存在时传递这些配置；否则 macOS 保持 ad-hoc 签名、Windows 保持未签名。GitLab 的 macOS/Windows 桌面 job 必须运行在对应原生 runner 上，且为可选手动 job。更新源可通过 `CSGCLAW_DESKTOP_UPDATE_BASE_URL` 设置且必须使用 HTTPS，但当前发布 CI 不设置它。
+macOS 正式发布需要配置签名和公证账号；Windows 可通过 `CSGCLAW_WINDOWS_SIGN_*` 和证书变量接入签名。CI 仅在完整签名变量组存在时传递这些配置；否则 macOS 保持 ad-hoc 签名、Windows 保持未签名。GitLab 的 macOS/Windows 桌面 job 必须运行在对应原生 runner 上，且为可选手动 job。更新源可通过 `CSGCLAW_DESKTOP_UPDATE_BASE_URL` 设置且必须使用 HTTPS；GitHub Release CI 会按 beta/release channel 注入对应的 OSS 更新源，并发布原生更新 feed。
 
 面向中国大陆公司从官网发布 Windows 和 macOS 应用的账号申请、签名、公证及 CI 流程，参见 [Electron 桌面应用签名与发布指南](electron-desktop-signing.zh.md)。
 

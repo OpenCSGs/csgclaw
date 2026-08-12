@@ -1236,8 +1236,15 @@ export const messages = {
     timestampYesterday: "昨天",
     minutesAgo: "{count} 分钟前",
     upgradeAction: "更新并重启",
+    upgradeDownloadAction: "更新",
     upgradeActionBusy: "更新中...",
     upgradeApplyFailed: "启动升级失败，请重试。",
+    upgradeChannel: "升级通道",
+    upgradeChannelRelease: "正式版",
+    upgradeChannelBeta: "预览版",
+    upgradeChannelHint: "切换后会检查所选通道；如果存在更高版本，将下载并自动重启。",
+    upgradeChannelSwitchFailed: "切换升级通道失败，请重试。",
+    upgradeProgressLabel: "正在检查并准备更新",
     upgradeErrorArchiveInvalid: "下载的升级包无效或已损坏，请重试；如果持续失败，请反馈该版本安装包问题。",
     upgradeErrorDetails: "详情：{detail}",
     upgradeErrorDiskSpace: "磁盘空间不足，无法完成升级。请清理临时目录或安装目录所在磁盘后重试。",
@@ -1263,6 +1270,8 @@ export const messages = {
     upgradeStatusLocal: "本地编译，不检查更新",
     upgradeLocalBuild: "本地编译",
     upgradeConfirmBody: "点击更新后会运行 csgclaw upgrade，并在完成后重启本地服务。",
+    upgradeDesktopConfirmBody: "点击更新后会在后台下载新版本，下载完成后应用将自动重启。",
+    upgradeDesktopDownloadedBody: "新版本已经下载完成，点击后应用将立即重启并完成更新。",
     upgradeRestartingBody: "升级 helper 已启动。页面会自动等待服务恢复，期间连接短暂中断是正常现象。",
     upgradeManualRestartBody:
       "升级已经完成，但当前服务不会自动重启。请手动重新执行 csgclaw serve，然后刷新页面进入新版本。",
@@ -2565,8 +2574,16 @@ export const messages = {
     timestampYesterday: "Yesterday",
     minutesAgo: "{count} min ago",
     upgradeAction: "Update & Restart",
+    upgradeDownloadAction: "Update",
     upgradeActionBusy: "Updating...",
     upgradeApplyFailed: "Failed to start the upgrade. Please retry.",
+    upgradeChannel: "Update channel",
+    upgradeChannelRelease: "Stable",
+    upgradeChannelBeta: "Preview",
+    upgradeChannelHint:
+      "Switching checks the selected channel and automatically downloads and restarts when a newer version exists.",
+    upgradeChannelSwitchFailed: "Failed to switch the update channel. Please retry.",
+    upgradeProgressLabel: "Checking and preparing the update",
     upgradeErrorArchiveInvalid:
       "The downloaded upgrade package is invalid or corrupted. Retry the upgrade; if it keeps failing, report the release package.",
     upgradeErrorDetails: "Details: {detail}",
@@ -2596,6 +2613,9 @@ export const messages = {
     upgradeStatusLocal: "Local build, update check skipped",
     upgradeLocalBuild: "Local build",
     upgradeConfirmBody: "Updating runs csgclaw upgrade and restarts the local service when it finishes.",
+    upgradeDesktopConfirmBody:
+      "Updating downloads the new version in the background and restarts the app automatically when ready.",
+    upgradeDesktopDownloadedBody: "The update is ready. Continue to restart the app and finish installing it.",
     upgradeRestartingBody:
       "The upgrade helper has started. This page will wait for the service to come back; a brief disconnect is normal.",
     upgradeManualRestartBody:

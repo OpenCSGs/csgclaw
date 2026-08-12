@@ -15,6 +15,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Get("/version", h.getVersion)
 		r.Route("/upgrade", func(r chi.Router) {
 			r.Get("/status", h.getUpgradeStatus)
+			r.Put("/channel", h.updateUpgradeChannel)
 			r.Post("/apply", h.createUpgradeApply)
 		})
 		r.Route("/agent-runtimes", func(r chi.Router) {

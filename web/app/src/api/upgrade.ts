@@ -1,5 +1,5 @@
-import { get, post } from "@/api/client";
-import type { UpgradeStatus } from "@/models/upgradeStatus";
+import { get, post, put } from "@/api/client";
+import type { UpgradeChannel, UpgradeStatus } from "@/models/upgradeStatus";
 import { ApiEndpoints } from "@/shared/constants/api";
 
 export function fetchUpgradeStatus(): Promise<UpgradeStatus> {
@@ -8,4 +8,8 @@ export function fetchUpgradeStatus(): Promise<UpgradeStatus> {
 
 export function applyUpgradeRequest(): Promise<void> {
   return post(ApiEndpoints.upgradeApply);
+}
+
+export function setUpgradeChannelRequest(channel: UpgradeChannel): Promise<UpgradeStatus> {
+  return put(ApiEndpoints.upgradeChannel, { channel });
 }

@@ -9,11 +9,13 @@ export const DesktopIPC = {
   openOAuth: "csgclaw:desktop:open-oauth",
   restartSidecar: "csgclaw:desktop:restart-sidecar",
   setThemeSource: "csgclaw:desktop:set-theme-source",
+  setUpdateChannel: "csgclaw:desktop:set-update-channel",
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
 
 export type OAuthPurpose = "opencsg-auth" | "github-connector";
 export type DesktopThemeSource = "system" | "light" | "dark";
+export type DesktopUpdateChannel = "release" | "beta";
 
 export type DesktopRuntimeInfo = {
   platform: DesktopPlatform;
@@ -31,6 +33,7 @@ export type DesktopUpdateState =
   | "idle"
   | "checking"
   | "available"
+  | "downloading"
   | "not-available"
   | "downloaded"
   | "error"
@@ -38,6 +41,7 @@ export type DesktopUpdateState =
 
 export type DesktopUpdateStatus = {
   state: DesktopUpdateState;
+  channel: DesktopUpdateChannel;
   currentVersion: string;
   availableVersion?: string;
   message?: string;
@@ -46,9 +50,10 @@ export type DesktopUpdateStatus = {
 export type DesktopBridge = {
   getRuntimeInfo(): Promise<DesktopRuntimeInfo>;
   openOAuth(input: DesktopOAuthInput): Promise<{ opened: boolean }>;
-  checkForUpdates(): Promise<void>;
+  checkForUpdates(): Promise<DesktopUpdateStatus>;
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
+  setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };

@@ -92,6 +92,65 @@ test("uses the same canonical asset name for versions with or without v", () => 
   }
 });
 
+test("stages Forge update feeds without changing the public installer names", async (t) => {
+  for (const fixture of [
+    {
+      name: "macOS",
+      goos: "darwin",
+      goarch: "arm64",
+      files: [
+        "dmg/CSGClaw-0.4.3-arm64.dmg",
+        "zip/darwin/arm64/CSGClaw-darwin-arm64-0.4.3.zip",
+        "zip/darwin/arm64/RELEASES.json",
+      ],
+      feed: ["CSGClaw-darwin-arm64-0.4.3.zip", "RELEASES.json"],
+      platform: "darwin",
+      arch: "arm64",
+    },
+    {
+      name: "Windows",
+      goos: "windows",
+      goarch: "amd64",
+      files: [
+        "squirrel.windows/x64/CSGClaw-Desktop-0.4.3-x64-Setup.exe",
+        "squirrel.windows/x64/csgclaw_desktop-0.4.3-full.nupkg",
+        "squirrel.windows/x64/RELEASES",
+      ],
+      feed: ["RELEASES", "csgclaw_desktop-0.4.3-full.nupkg"],
+      platform: "win32",
+      arch: "x64",
+    },
+  ]) {
+    await t.test(fixture.name, () => {
+      const { makeDirectory, outputDirectory, cleanup } = fixtureDirectories(fixture.files);
+      try {
+        collectDesktopReleaseAssets({ version, ...fixture, makeDirectory, outputDirectory });
+        assert.deepEqual(
+          fs.readdirSync(path.join(outputDirectory, "updates", fixture.platform, fixture.arch)).sort(),
+          fixture.feed,
+        );
+      } finally {
+        cleanup();
+      }
+    });
+  }
+});
+
+test("rejects a partial desktop update feed", () => {
+  const { makeDirectory, outputDirectory, cleanup } = fixtureDirectories([
+    "squirrel.windows/x64/CSGClaw-Desktop-0.4.3-x64-Setup.exe",
+    "squirrel.windows/x64/RELEASES",
+  ]);
+  try {
+    assert.throws(
+      () => collectDesktopReleaseAssets({ version, goos: "windows", goarch: "amd64", makeDirectory, outputDirectory }),
+      /incomplete Windows update feed/,
+    );
+  } finally {
+    cleanup();
+  }
+});
+
 function fixtureDirectories(files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "csgclaw-desktop-assets-"));
   const makeDirectory = path.join(root, "make");

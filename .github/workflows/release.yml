@@ -221,6 +221,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
       COMMIT: ${{ needs.prepare.outputs.commit }}
       BUILD_TIME: ${{ needs.prepare.outputs.build_time }}
+      CSGCLAW_DESKTOP_UPDATE_BASE_URL: https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels/${{ needs.prepare.outputs.release_channel }}/updates
       CI_MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.CSGCLAW_MACOS_CERTIFICATE_P12_BASE64 }}
       CI_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.CSGCLAW_MACOS_CERTIFICATE_PASSWORD }}
       CI_MACOS_SIGN_IDENTITY: ${{ secrets.CSGCLAW_MACOS_SIGN_IDENTITY }}
@@ -363,7 +364,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-dist-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/csgclaw-desktop_*
+          path: dist/
           if-no-files-found: error
 
   merge-and-release:
@@ -389,7 +390,7 @@ jobs:
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
           prerelease: ${{ needs.prepare.outputs.release_channel == 'beta' }}
-          files: dist/*
+          files: dist/csgclaw*
 
   publish-desktop-oss:
     needs: [prepare, merge-and-release]
@@ -417,6 +418,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: desktop-dist-*
+          path: desktop-release
+          merge-multiple: true
+
+      - name: Download Server and CLI release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
           path: desktop-release
           merge-multiple: true
 
@@ -456,4 +464,5 @@ jobs:
           make desktop-oss-publish \
             VERSION="${{ needs.prepare.outputs.version }}" \
             DESKTOP_OSS_CHANNEL="${{ needs.prepare.outputs.release_channel }}" \
-            DESKTOP_OSS_RELEASE_DIR=desktop-release
+            DESKTOP_OSS_RELEASE_DIR=desktop-release \
+            DESKTOP_OSS_REQUIRE_PACKAGES=1

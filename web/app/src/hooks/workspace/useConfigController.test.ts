@@ -60,9 +60,18 @@ describe("useConfigController", () => {
         backendVersion: "0.3.19",
       }),
       openOAuth: vi.fn().mockResolvedValue({ opened: true }),
-      checkForUpdates: vi.fn().mockResolvedValue(undefined),
+      checkForUpdates: vi.fn().mockResolvedValue({
+        state: "idle",
+        channel: "release",
+        currentVersion: "0.3.19",
+      }),
       installDownloadedUpdate: vi.fn().mockResolvedValue(undefined),
       restartSidecar,
+      setUpdateChannel: vi.fn().mockResolvedValue({
+        state: "idle",
+        channel: "release",
+        currentVersion: "0.3.19",
+      }),
       setThemeSource: vi.fn().mockResolvedValue(undefined),
       onUpdateStatus: vi.fn().mockReturnValue(() => undefined),
     };

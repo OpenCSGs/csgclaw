@@ -11,6 +11,7 @@ import {
   type DesktopOAuthInput,
   type OAuthPurpose,
   type DesktopThemeSource,
+  type DesktopUpdateChannel,
 } from "../shared/desktopBridge.types";
 import { parseDesktopThemeSource } from "../shared/desktopTheme";
 import { isSafeHTTPSURL, isTrustedMainFrame } from "./navigationPolicy";
@@ -65,6 +66,7 @@ export function registerIPCHandlers(
   ipcMain.handle(DesktopIPC.checkForUpdates, async (event) => {
     assertSender(event);
     await updater.checkForUpdates();
+    return updater.currentStatus();
   });
   ipcMain.handle(DesktopIPC.installDownloadedUpdate, async (event) => {
     assertSender(event);
@@ -78,6 +80,11 @@ export function registerIPCHandlers(
     assertSender(event);
     setThemeSource(parseDesktopThemeSource(input));
   });
+  ipcMain.handle(DesktopIPC.setUpdateChannel, async (event, input: unknown) => {
+    assertSender(event);
+    await updater.setChannel(parseUpdateChannel(input));
+    return updater.currentStatus();
+  });
 
   return () => {
     ipcMain.removeHandler(DesktopIPC.getRuntimeInfo);
@@ -86,7 +93,15 @@ export function registerIPCHandlers(
     ipcMain.removeHandler(DesktopIPC.installDownloadedUpdate);
     ipcMain.removeHandler(DesktopIPC.restartSidecar);
     ipcMain.removeHandler(DesktopIPC.setThemeSource);
+    ipcMain.removeHandler(DesktopIPC.setUpdateChannel);
   };
+}
+
+function parseUpdateChannel(input: unknown): DesktopUpdateChannel {
+  if (input === "release" || input === "beta") {
+    return input;
+  }
+  throw new Error("Desktop update channel must be release or beta.");
 }
 
 function parseOAuthInput(input: unknown): DesktopOAuthInput {

@@ -19,6 +19,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/participant"
+	internalupgrade "csgclaw/internal/upgrade"
 	appversion "csgclaw/internal/version"
 )
 
@@ -1949,7 +1950,7 @@ func TestExecuteUpgradeCheckPrintsTable(t *testing.T) {
 			if req.Method != http.MethodGet {
 				t.Fatalf("method = %q, want GET", req.Method)
 			}
-			if req.URL.String() != "https://csgclaw.opencsg.com/releases/latest" {
+			if req.URL.String() != internalupgrade.DefaultReleaseManifestURL {
 				t.Fatalf("url = %q, want latest release endpoint", req.URL.String())
 			}
 			return jsonResponse(http.StatusOK, fmt.Sprintf(`{

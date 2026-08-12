@@ -1,6 +1,7 @@
 export type DesktopPlatform = "darwin" | "win32" | "linux";
 export type DesktopOAuthPurpose = "opencsg-auth" | "github-connector";
 export type DesktopThemeSource = "system" | "light" | "dark";
+export type DesktopUpdateChannel = "release" | "beta";
 
 export type DesktopRuntimeInfo = {
   platform: DesktopPlatform;
@@ -10,7 +11,8 @@ export type DesktopRuntimeInfo = {
 };
 
 export type DesktopUpdateStatus = {
-  state: "idle" | "checking" | "available" | "not-available" | "downloaded" | "error" | "unsupported";
+  state: "idle" | "checking" | "available" | "downloading" | "not-available" | "downloaded" | "error" | "unsupported";
+  channel: DesktopUpdateChannel;
   currentVersion: string;
   availableVersion?: string;
   message?: string;
@@ -19,9 +21,10 @@ export type DesktopUpdateStatus = {
 export type DesktopBridge = {
   getRuntimeInfo(): Promise<DesktopRuntimeInfo>;
   openOAuth(input: { purpose: DesktopOAuthPurpose; url: string }): Promise<{ opened: boolean }>;
-  checkForUpdates(): Promise<void>;
+  checkForUpdates(): Promise<DesktopUpdateStatus>;
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;
+  setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
 };
@@ -43,6 +46,7 @@ export function getDesktopBridge(): DesktopBridge | null {
     typeof bridge.checkForUpdates === "function" &&
     typeof bridge.installDownloadedUpdate === "function" &&
     typeof bridge.restartSidecar === "function" &&
+    typeof bridge.setUpdateChannel === "function" &&
     typeof bridge.setThemeSource === "function" &&
     typeof bridge.onUpdateStatus === "function"
     ? bridge

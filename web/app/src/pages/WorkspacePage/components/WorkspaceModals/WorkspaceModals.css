@@ -1411,6 +1411,77 @@
   width: min(520px, 100%);
 }
 
+.upgrade-channel-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.upgrade-channel-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.upgrade-channel-copy strong {
+  color: var(--text);
+  font-size: var(--text-sm-size);
+}
+
+.upgrade-channel-copy span {
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
+}
+
+.upgrade-channel-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.upgrade-channel-switch button {
+  min-width: 68px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 4px);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm-size);
+  cursor: pointer;
+}
+
+.upgrade-channel-switch button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.upgrade-channel-switch button.active {
+  background: var(--primary);
+  color: var(--white);
+  box-shadow: var(--shadow-sm);
+}
+
+.upgrade-channel-switch button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.upgrade-channel-switch button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .upgrade-summary {
   display: grid;
   gap: 10px;

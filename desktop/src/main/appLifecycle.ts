@@ -71,6 +71,7 @@ export class AppLifecycle {
         logDesktopInfo("update-install-shutdown-complete");
       },
     );
+    this.updater.startBackgroundChecks();
     this.cleanupIPC = registerIPCHandlers(
       () => this.windowManager?.window ?? null,
       () => this.rendererOrigin,
@@ -425,6 +426,7 @@ export class AppLifecycle {
   }
 
   private cleanup(): void {
+    this.updater?.stopBackgroundChecks();
     this.cleanupDockThemeIcon?.();
     this.cleanupDockThemeIcon = null;
     this.cleanupIPC?.();

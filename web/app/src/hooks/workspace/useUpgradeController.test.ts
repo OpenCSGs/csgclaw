@@ -2,24 +2,28 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyUpgradeRequest } from "@/api/upgrade";
+import { applyUpgradeRequest, setUpgradeChannelRequest } from "@/api/upgrade";
 import type { TranslateFn } from "@/models/conversations";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
 import { scheduleUpgradePageReload, UPGRADE_PAGE_RELOAD_DELAY_MS, useUpgradeController } from "./useUpgradeController";
 
 vi.mock("@/api/upgrade", () => ({
   applyUpgradeRequest: vi.fn(),
+  setUpgradeChannelRequest: vi.fn(),
 }));
 
 const t: TranslateFn = (key) => key;
 const mockedApplyUpgradeRequest = vi.mocked(applyUpgradeRequest);
+const mockedSetUpgradeChannelRequest = vi.mocked(setUpgradeChannelRequest);
 
 function upgradeStatus(overrides: Partial<UpgradeStatus> = {}): UpgradeStatus {
   return {
     auto_upgrade_supported: true,
     auto_upgrade_unsupported_reason: "",
+    channel: "release",
     checking: false,
     current_version: "v0.3.18",
+    downloaded: false,
     latest_version: "v0.3.19",
     last_checked_at: "",
     last_error: "",
@@ -56,6 +60,8 @@ describe("useUpgradeController", () => {
   beforeEach(() => {
     mockedApplyUpgradeRequest.mockReset();
     mockedApplyUpgradeRequest.mockResolvedValue(undefined);
+    mockedSetUpgradeChannelRequest.mockReset();
+    mockedSetUpgradeChannelRequest.mockResolvedValue(upgradeStatus({ channel: "beta", update_available: false }));
   });
 
   afterEach(() => {
@@ -96,5 +102,27 @@ describe("useUpgradeController", () => {
     expect(refreshWorkspaceAppVersion).toHaveBeenCalledWith({ cacheBust: true });
     expect(setAppVersionData).toHaveBeenCalledWith("v0.3.19");
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), UPGRADE_PAGE_RELOAD_DELAY_MS);
+  });
+
+  it("switches the server update channel and stores the refreshed status", async () => {
+    const setUpgradeStatusData = vi.fn();
+    const stableStatus = upgradeStatus({ update_available: false });
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.3.18",
+        refreshWorkspaceAppVersion: vi.fn(),
+        refreshWorkspaceUpgradeStatus: vi.fn(),
+        setAppVersionData: vi.fn(),
+        setUpgradeStatusData,
+        t,
+        upgradeStatus: stableStatus,
+      }),
+    );
+
+    act(() => result.current.openUpgradeModal());
+    await act(async () => result.current.upgradeModalProps?.onChannelChange("beta"));
+
+    expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledWith("beta");
+    expect(setUpgradeStatusData).toHaveBeenCalledWith(expect.objectContaining({ channel: "beta" }));
   });
 });
