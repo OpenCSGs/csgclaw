@@ -86,8 +86,7 @@ export function rendererDirectoryPickerAvailable(): boolean {
   if (typeof window === "undefined") {
     return false;
   }
-  const hostWindow = window as DirectoryPickerWindow;
-  return typeof hostWindow.showDirectoryPicker === "function" || Boolean(hostWindow.csgclawDesktop);
+  return Boolean(window.csgclawDesktop);
 }
 
 export async function pickLocalDirectoryPath(): Promise<string | null> {

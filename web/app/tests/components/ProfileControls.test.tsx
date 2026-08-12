@@ -28,7 +28,7 @@ function t(key: string): string {
 }
 
 describe("ProfileControls", () => {
-  it("keeps the directory action visible when only the renderer picker is available", () => {
+  it("hides the directory action when only the browser picker is available", () => {
     delete (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
     delete window.csgclawDesktop;
     const props = {
@@ -45,8 +45,25 @@ describe("ProfileControls", () => {
     (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker = vi.fn();
     rerender(<RuntimeOptionsFields {...props} />);
 
-    expect(screen.getByRole("button", { name: "Choose directory" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Choose directory" })).not.toBeInTheDocument();
     delete (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
+  });
+
+  it("keeps the directory action visible in the desktop runtime", () => {
+    window.csgclawDesktop = {} as Window["csgclawDesktop"];
+
+    render(
+      <RuntimeOptionsFields
+        draft={{ runtime_options: {} } as AgentDraft}
+        locale="en"
+        schemas={[{ key: "workspace", path: "workspace", type: "directory", label: "Workspace" }]}
+        onDraftChange={vi.fn()}
+        directoryPickerAvailable={false}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Choose directory" })).toBeInTheDocument();
+    delete window.csgclawDesktop;
   });
 
   it("shows a stored API key mask until the user enters a replacement", async () => {

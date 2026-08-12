@@ -18,12 +18,12 @@ describe("runtimeOptionDirectoryPicker", () => {
     delete window.csgclawDesktop;
   });
 
-  it("reports renderer picker availability from the File System Access API", () => {
+  it("does not report renderer picker availability from the browser File System Access API", () => {
     expect(rendererDirectoryPickerAvailable()).toBe(false);
 
     (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker = vi.fn();
 
-    expect(rendererDirectoryPickerAvailable()).toBe(true);
+    expect(rendererDirectoryPickerAvailable()).toBe(false);
   });
 
   it("reports renderer picker availability in the desktop runtime", () => {
