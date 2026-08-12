@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
-import { Button, Tooltip } from "@/components/ui";
+import { Button, Select, Tooltip } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
@@ -14,6 +14,11 @@ import { githubFeedbackIssueURL } from "@/models/feedback";
 import { formatSidebarVersionLabel, hasUpgradeAttention, isLocalBuildUpgradeStatus } from "@/models/upgradeStatus";
 import { nextSimulatedUpgradeProgress } from "@/models/upgradeProgress";
 import { classNames } from "@/shared/lib/classNames";
+import {
+  DEFAULT_TURN_NOTIFICATION_MODE,
+  normalizeTurnNotificationMode,
+  TurnNotificationModes,
+} from "@/models/turnNotifications";
 import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from "@/shared/storage/authEnvironment";
 import type { ThemeMode } from "@/shared/theme/theme";
 import { OpenCSGConnectionDialog, OpenCSGSwitchDialog } from "./components/OpenCSGConnectionDialog";
@@ -77,6 +82,16 @@ export function SettingsPage() {
   const onLogin = sidebar.onLogin;
   const onLogout = sidebar.onLogout;
   const onAuthEnvironmentChange = sidebar.onAuthEnvironmentChange;
+  const turnNotificationMode = sidebar.turnNotificationMode ?? DEFAULT_TURN_NOTIFICATION_MODE;
+  const turnNotificationPermission = sidebar.turnNotificationPermission ?? "unsupported";
+  const turnNotificationOptions = [
+    { label: sidebar.t("turnNotificationModeOff"), value: TurnNotificationModes.off },
+    { label: sidebar.t("turnNotificationModeAlways"), value: TurnNotificationModes.always },
+    { label: sidebar.t("turnNotificationModeWhenUnfocused"), value: TurnNotificationModes.whenUnfocused },
+  ];
+  const selectedTurnNotificationLabel =
+    turnNotificationOptions.find((option) => option.value === turnNotificationMode)?.label ??
+    sidebar.t("turnNotificationModeWhenUnfocused");
 
   function updateAuthEnvironment(next: AuthEnvironmentDraft) {
     setUncontrolledAuthEnvironmentDraft(next);
@@ -208,6 +223,56 @@ export function SettingsPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          title={sidebar.t("notificationSettings")}
+          description={sidebar.t("settingsNotificationDescription")}
+        >
+          <div className={styles.stack}>
+            <div className={styles.settingLine}>
+              <span className={styles.controlLabel}>{sidebar.t("turnCompletionNotifications")}</span>
+              <Select
+                contentClassName={styles.notificationSelectContent}
+                options={turnNotificationOptions}
+                selectedLabel={selectedTurnNotificationLabel}
+                triggerClassName={styles.notificationSelectTrigger}
+                triggerProps={{ "aria-label": sidebar.t("turnCompletionNotifications") }}
+                value={turnNotificationMode}
+                onValueChange={(value) =>
+                  void sidebar.onTurnNotificationModeChange?.(normalizeTurnNotificationMode(value))
+                }
+              />
+            </div>
+            <div className={styles.settingLine}>
+              <span className={styles.controlLabel}>{sidebar.t("notificationPermission")}</span>
+              <div className={styles.notificationPermissionControls}>
+                <span
+                  className={classNames(
+                    styles.permissionStatus,
+                    turnNotificationPermission === "granted" && styles.permissionGranted,
+                    turnNotificationPermission === "denied" && styles.permissionDenied,
+                  )}
+                >
+                  <span aria-hidden="true" />
+                  {sidebar.t(`notificationPermission${permissionLabelSuffix(turnNotificationPermission)}`)}
+                </span>
+                {turnNotificationPermission === "default" ? (
+                  <Button
+                    className={styles.designButton}
+                    variant="secondaryGray"
+                    size="md"
+                    onClick={() => void sidebar.onRequestTurnNotificationPermission?.()}
+                  >
+                    {sidebar.t("notificationPermissionEnable")}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {turnNotificationPermission === "denied" ? (
+              <p className={styles.notificationPermissionHint}>{sidebar.t("notificationPermissionDeniedHint")}</p>
+            ) : null}
           </div>
         </SettingsRow>
 
@@ -375,6 +440,19 @@ function isMockUpgradePreviewEnabled(): boolean {
   }
   const hashQuery = window.location.hash.split("?")[1] || "";
   return new URLSearchParams(hashQuery).get("mockUpgrade") === "1";
+}
+
+function permissionLabelSuffix(permission: "default" | "denied" | "granted" | "unsupported"): string {
+  switch (permission) {
+    case "granted":
+      return "Granted";
+    case "denied":
+      return "Denied";
+    case "default":
+      return "Default";
+    default:
+      return "Unsupported";
+  }
 }
 
 function SettingsRow({

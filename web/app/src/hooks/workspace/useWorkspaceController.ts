@@ -30,12 +30,15 @@ import { useProfilePreviewController } from "./useProfilePreviewController";
 import { useTaskController } from "./useTaskController";
 import { useWorkspaceRealtime } from "./useWorkspaceRealtime";
 import { useParticipantWorkStatus } from "./useParticipantWorkStatus";
+import { useAgentTurnNotifications } from "./useAgentTurnNotifications";
 import type { CreateTeamPayload } from "@/api/tasks";
 import type { AgentLike } from "@/models/agents";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { MCPServer } from "@/models/mcp";
 import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
+import { TurnNotificationModes } from "@/models/turnNotifications";
+import type { TurnNotificationMode } from "@/models/turnNotifications";
 
 function isBootstrapAdminUser(user: IMUser | null | undefined) {
   return user?.id === "u-admin" || String(user?.name ?? "").toLowerCase() === "admin";
@@ -141,6 +144,8 @@ export function useWorkspaceController() {
   const setLocale = useWorkspaceUiStore((state) => state.setLocale);
   const theme = useWorkspaceUiStore((state) => state.theme);
   const setTheme = useWorkspaceUiStore((state) => state.setTheme);
+  const turnNotificationMode = useWorkspaceUiStore((state) => state.turnNotificationMode);
+  const setTurnNotificationMode = useWorkspaceUiStore((state) => state.setTurnNotificationMode);
   const showToolCalls = useWorkspaceUiStore((state) => state.showToolCalls);
   const setShowToolCalls = useWorkspaceUiStore((state) => state.setShowToolCalls);
   const floatingChatOpen = useWorkspaceUiStore((state) => state.floatingChatOpen);
@@ -373,6 +378,29 @@ export function useWorkspaceController() {
     t,
     theme,
   });
+  const turnNotifications = useAgentTurnNotifications({
+    agents,
+    currentUserID: displayData?.current_user_id ?? "",
+    mode: turnNotificationMode,
+    onSelectConversation: selectConversation,
+    rooms,
+    t,
+    usersById: conversation.usersById,
+  });
+  const {
+    handleRealtimeEvent: handleTurnNotificationEvent,
+    permission: turnNotificationPermission,
+    requestPermission: requestTurnNotificationPermission,
+  } = turnNotifications;
+  const changeTurnNotificationMode = useCallback(
+    async (mode: TurnNotificationMode) => {
+      setTurnNotificationMode(mode);
+      if (mode !== TurnNotificationModes.off && turnNotificationPermission !== "granted") {
+        await requestTurnNotificationPermission();
+      }
+    },
+    [requestTurnNotificationPermission, setTurnNotificationMode, turnNotificationPermission],
+  );
   const floatingChatTargetConversation = managerDirectConversation;
   const floatingChatConversationID = floatingChatTargetConversation?.id ?? "";
   const floatingChatRooms = useMemo(
@@ -450,6 +478,7 @@ export function useWorkspaceController() {
   );
   useWorkspaceRealtime({
     agents,
+    onAgentTurnNotificationEvent: handleTurnNotificationEvent,
     onConversationEvent: conversation.handleRealtimeEvent,
     onFloatingConversationEvent: floatingConversation.handleRealtimeEvent,
     onParticipantWorkEvent: participantWork.handleRealtimeEvent,
@@ -801,6 +830,10 @@ export function useWorkspaceController() {
       onExpandSidebar: () => setIsSidebarCollapsed(false),
       theme,
       onThemeChange: setTheme,
+      turnNotificationMode,
+      turnNotificationPermission,
+      onRequestTurnNotificationPermission: requestTurnNotificationPermission,
+      onTurnNotificationModeChange: changeTurnNotificationMode,
       locale,
       onLocaleChange: setLocale,
       t,

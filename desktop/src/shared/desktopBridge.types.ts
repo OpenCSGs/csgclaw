@@ -8,6 +8,7 @@ export const DesktopIPC = {
   installDownloadedUpdate: "csgclaw:desktop:install-downloaded-update",
   openOAuth: "csgclaw:desktop:open-oauth",
   restartSidecar: "csgclaw:desktop:restart-sidecar",
+  showWindow: "csgclaw:desktop:show-window",
   setThemeSource: "csgclaw:desktop:set-theme-source",
   setUpdateChannel: "csgclaw:desktop:set-update-channel",
   updateStatus: "csgclaw:desktop:update-status",
@@ -53,6 +54,7 @@ export type DesktopBridge = {
   checkForUpdates(): Promise<DesktopUpdateStatus>;
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;
+  showWindow(): Promise<void>;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
   setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;

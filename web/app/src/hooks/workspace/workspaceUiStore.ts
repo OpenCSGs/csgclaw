@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { detectInitialLocale } from "@/shared/i18n";
 import { detectInitialTheme } from "@/shared/theme/theme";
+import { readStoredTurnNotificationMode, writeStoredTurnNotificationMode } from "@/shared/storage/turnNotifications";
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   WorkspacePaneTypes,
@@ -11,6 +12,7 @@ import {
 import type { LocaleCode } from "@/models/conversations";
 import type { CollapsedWorkspaceGroups, WorkspaceTab } from "@/models/routing";
 import type { ThemeMode } from "@/shared/theme/theme";
+import type { TurnNotificationMode } from "@/models/turnNotifications";
 
 type MaybeUpdater<T> = T | ((current: T) => T);
 
@@ -36,6 +38,7 @@ export type WorkspaceUiState = {
   selectedHubWorkspacePath: string;
   showToolCalls: boolean;
   theme: ThemeMode;
+  turnNotificationMode: TurnNotificationMode;
   workspaceTab: WorkspaceTab;
   setActiveConversationId: (activeConversationId: string) => void;
   setCollapsedWorkspaceGroups: (value: MaybeUpdater<CollapsedWorkspaceGroups>) => void;
@@ -50,6 +53,7 @@ export type WorkspaceUiState = {
   setSelectedHubWorkspacePath: (value: MaybeUpdater<string>) => void;
   setShowToolCalls: (value: MaybeUpdater<boolean>) => void;
   setTheme: (theme: ThemeMode) => void;
+  setTurnNotificationMode: (mode: TurnNotificationMode) => void;
   setWorkspaceTab: (workspaceTab: WorkspaceTab) => void;
 };
 
@@ -58,6 +62,7 @@ const initialPane = paneFromLocation();
 export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   locale: detectInitialLocale(),
   theme: detectInitialTheme(),
+  turnNotificationMode: readStoredTurnNotificationMode(),
   showToolCalls: false,
   isSidebarCollapsed: window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true",
   collapsedWorkspaceGroups: readCollapsedWorkspaceGroups(),
@@ -73,6 +78,10 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
 
   setLocale: (locale) => set({ locale }),
   setTheme: (theme) => set({ theme }),
+  setTurnNotificationMode: (turnNotificationMode) => {
+    writeStoredTurnNotificationMode(turnNotificationMode);
+    set({ turnNotificationMode });
+  },
   setFloatingChatOpen: (value) =>
     set((state) => ({
       floatingChatOpen: typeof value === "function" ? value(state.floatingChatOpen) : value,

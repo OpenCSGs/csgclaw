@@ -78,6 +78,7 @@ export class AppLifecycle {
       this.supervisor,
       this.updater,
       () => this.restartSidecar(),
+      () => this.show(),
       (theme) => this.setThemeSource(theme),
     );
 

@@ -2,6 +2,7 @@ export * from "./WorkspaceControllerContext";
 export * from "./types";
 export * from "./useCLIProxyAuthStatuses";
 export * from "./useAgentController";
+export * from "./useAgentTurnNotifications";
 export * from "./useConversationController";
 export * from "./useProfilePreviewController";
 export * from "./useProfileModelOptions";

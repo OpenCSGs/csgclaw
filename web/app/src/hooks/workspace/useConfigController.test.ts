@@ -67,6 +67,7 @@ describe("useConfigController", () => {
       }),
       installDownloadedUpdate: vi.fn().mockResolvedValue(undefined),
       restartSidecar,
+      showWindow: vi.fn().mockResolvedValue(undefined),
       setUpdateChannel: vi.fn().mockResolvedValue({
         state: "idle",
         channel: "release",

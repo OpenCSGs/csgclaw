@@ -15,6 +15,7 @@ const DesktopIPC = {
   installDownloadedUpdate: "csgclaw:desktop:install-downloaded-update",
   openOAuth: "csgclaw:desktop:open-oauth",
   restartSidecar: "csgclaw:desktop:restart-sidecar",
+  showWindow: "csgclaw:desktop:show-window",
   setThemeSource: "csgclaw:desktop:set-theme-source",
   setUpdateChannel: "csgclaw:desktop:set-update-channel",
   updateStatus: "csgclaw:desktop:update-status",
@@ -28,6 +29,7 @@ const bridge: DesktopBridge = Object.freeze({
   installDownloadedUpdate: () =>
     ipcRenderer.invoke(DesktopIPC.installDownloadedUpdate),
   restartSidecar: () => ipcRenderer.invoke(DesktopIPC.restartSidecar),
+  showWindow: () => ipcRenderer.invoke(DesktopIPC.showWindow),
   setThemeSource: (theme: DesktopThemeSource) =>
     ipcRenderer.invoke(DesktopIPC.setThemeSource, theme),
   setUpdateChannel: (channel: DesktopUpdateChannel) =>

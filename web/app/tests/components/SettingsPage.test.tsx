@@ -4,6 +4,7 @@ import type { WorkspaceController } from "@/hooks/workspace";
 import { emptyAuthStatus } from "@/models/auth";
 import type { TranslateFn } from "@/models/conversations";
 import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
+import { TurnNotificationModes } from "@/models/turnNotifications";
 
 const labels: Record<string, string> = {
   settings: "Settings",
@@ -14,9 +15,18 @@ const labels: Record<string, string> = {
   settingsCurrentVersion: "Current version",
   settingsEnvironmentDescription: "Choose a site.",
   settingsFeedbackDescription: "Send feedback.",
+  settingsNotificationDescription: "Notification settings.",
   settingsPageSubtitle: "Manage product settings.",
   settingsParametersDescription: "Configure parameters.",
   settingsVersionDescription: "View the current version and update status.",
+  notificationPermission: "System notification permission",
+  notificationPermissionDefault: "Not yet allowed",
+  notificationPermissionEnable: "Enable notifications",
+  notificationSettings: "Notifications",
+  turnCompletionNotifications: "Turn completion notifications",
+  turnNotificationModeAlways: "Always notify",
+  turnNotificationModeOff: "Off",
+  turnNotificationModeWhenUnfocused: "Only when the app is unfocused",
   upgradeAction: "Update & Restart",
   upgradeDownloadAction: "Update",
   upgradeChannel: "Update channel",
@@ -34,6 +44,7 @@ describe("SettingsPage", () => {
 
   it("opens the upgrade flow when an update is available", () => {
     const onOpenUpgrade = vi.fn();
+    const onRequestTurnNotificationPermission = vi.fn();
     const controller = {
       ready: true,
       sidebarProps: {
@@ -50,9 +61,13 @@ describe("SettingsPage", () => {
         onOpenUpgrade,
         onUpgradeChannelChange: vi.fn(),
         onThemeChange: vi.fn(),
+        onRequestTurnNotificationPermission,
+        onTurnNotificationModeChange: vi.fn(),
         showUpgradeControls: true,
         t,
         theme: "light",
+        turnNotificationMode: TurnNotificationModes.whenUnfocused,
+        turnNotificationPermission: "default",
         upgradeBusy: false,
         upgradeChannelBusy: false,
         upgradeChannelLocked: false,
@@ -83,8 +98,13 @@ describe("SettingsPage", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enable notifications" }));
 
     expect(onOpenUpgrade).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("combobox", { name: "Turn completion notifications" })).toHaveTextContent(
+      "Only when the app is unfocused",
+    );
+    expect(onRequestTurnNotificationPermission).toHaveBeenCalledTimes(1);
   });
 
   it("shows channel selection for a development desktop build and persists preview selection", () => {

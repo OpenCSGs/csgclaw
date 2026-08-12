@@ -26,6 +26,7 @@ export function registerIPCHandlers(
   supervisor: SidecarSupervisor,
   updater: DesktopUpdater,
   restartSidecar: () => Promise<void>,
+  showWindow: () => void,
   setThemeSource: (theme: DesktopThemeSource) => void,
 ): () => void {
   const assertSender = (event: IpcMainInvokeEvent) => {
@@ -76,6 +77,10 @@ export function registerIPCHandlers(
     assertSender(event);
     await restartSidecar();
   });
+  ipcMain.handle(DesktopIPC.showWindow, (event) => {
+    assertSender(event);
+    showWindow();
+  });
   ipcMain.handle(DesktopIPC.setThemeSource, (event, input: unknown) => {
     assertSender(event);
     setThemeSource(parseDesktopThemeSource(input));
@@ -92,6 +97,7 @@ export function registerIPCHandlers(
     ipcMain.removeHandler(DesktopIPC.checkForUpdates);
     ipcMain.removeHandler(DesktopIPC.installDownloadedUpdate);
     ipcMain.removeHandler(DesktopIPC.restartSidecar);
+    ipcMain.removeHandler(DesktopIPC.showWindow);
     ipcMain.removeHandler(DesktopIPC.setThemeSource);
     ipcMain.removeHandler(DesktopIPC.setUpdateChannel);
   };

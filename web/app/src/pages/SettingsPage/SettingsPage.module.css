@@ -226,6 +226,64 @@
   }
 }
 
+.notificationSelectTrigger {
+  width: 240px;
+}
+
+.notificationSelectContent {
+  min-width: 240px;
+}
+
+.notificationPermissionControls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.permissionStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--gray-600);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.permissionStatus > span {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--gray-400);
+}
+
+.permissionGranted {
+  color: var(--success-700);
+}
+
+.permissionGranted > span {
+  background: var(--success-500);
+}
+
+.permissionDenied {
+  color: var(--error-600);
+}
+
+.permissionDenied > span {
+  background: var(--error-500);
+}
+
+.notificationPermissionHint {
+  margin: -8px 0 0;
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+}
+
 .settingLine,
 .environmentLine,
 .versionValue {
@@ -508,6 +566,19 @@
   color: var(--gray-400);
 }
 
+:root[data-theme="dark"] .permissionStatus,
+:root[data-theme="dark"] .notificationPermissionHint {
+  color: var(--gray-400);
+}
+
+:root[data-theme="dark"] .permissionGranted {
+  color: var(--success-400);
+}
+
+:root[data-theme="dark"] .permissionDenied {
+  color: var(--error-400);
+}
+
 :root[data-theme="dark"] .segmented,
 :root[data-theme="dark"] .segmentButton,
 :root[data-theme="dark"] .textSegmentButton,
@@ -606,5 +677,20 @@
 
   .environmentControls {
     width: 100%;
+  }
+
+  .notificationSelectTrigger,
+  .notificationPermissionControls {
+    width: 100%;
+  }
+
+  .notificationPermissionControls {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .notificationPermissionHint {
+    margin-top: -4px;
+    text-align: left;
   }
 }

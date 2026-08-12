@@ -25,6 +25,7 @@ const bootstrapData: IMData = {
 function renderWorkspaceRealtime(
   options: {
     agents?: AgentLike[];
+    onAgentTurnNotificationEvent?: (event: IMServerEvent) => void;
     onRefreshAgentState?: (agentID: string) => Promise<AgentLike | null>;
     queryClient?: QueryClient;
     refreshWorkspaceAgents?: (options?: { silent?: boolean }) => Promise<AgentLike[]>;
@@ -46,6 +47,7 @@ function renderWorkspaceRealtime(
     () =>
       useWorkspaceRealtime({
         agents,
+        onAgentTurnNotificationEvent: options.onAgentTurnNotificationEvent,
         onConversationEvent: vi.fn(),
         onFloatingConversationEvent: vi.fn(),
         onRefreshAgentState: options.onRefreshAgentState ?? vi.fn(async () => null),
@@ -191,5 +193,35 @@ describe("useWorkspaceRealtime", () => {
     });
 
     expect(onRefreshAgentState).toHaveBeenCalledWith("u-worker");
+  });
+
+  it("forwards realtime events to the turn notification controller", () => {
+    let eventHandler: ((payload: IMServerEvent) => void) | null = null;
+    subscribeIMEventsMock.mockImplementation((handler: (payload: IMServerEvent) => void) => {
+      eventHandler = handler;
+      return () => {};
+    });
+    const onAgentTurnNotificationEvent = vi.fn();
+    renderWorkspaceRealtime({ onAgentTurnNotificationEvent });
+    const event: IMServerEvent = {
+      type: "participant.work.updated",
+      work: {
+        expires_at: "2026-08-11T12:00:15Z",
+        kind: "agent_turn",
+        lease_id: "lease-1",
+        participant_id: "pt-worker",
+        reason: "released",
+        registry_epoch: "epoch-1",
+        request_id: "message-1",
+        revision: 2,
+        room_id: "room-1",
+        state: "idle",
+        user_id: "user-worker",
+      },
+    };
+
+    act(() => eventHandler?.(event));
+
+    expect(onAgentTurnNotificationEvent).toHaveBeenCalledWith(event);
   });
 });

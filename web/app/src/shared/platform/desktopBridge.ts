@@ -24,6 +24,7 @@ export type DesktopBridge = {
   checkForUpdates(): Promise<DesktopUpdateStatus>;
   installDownloadedUpdate(): Promise<void>;
   restartSidecar(): Promise<void>;
+  showWindow(): Promise<void>;
   setUpdateChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateStatus>;
   setThemeSource(theme: DesktopThemeSource): Promise<void>;
   onUpdateStatus(listener: (status: DesktopUpdateStatus) => void): () => void;
@@ -46,6 +47,7 @@ export function getDesktopBridge(): DesktopBridge | null {
     typeof bridge.checkForUpdates === "function" &&
     typeof bridge.installDownloadedUpdate === "function" &&
     typeof bridge.restartSidecar === "function" &&
+    typeof bridge.showWindow === "function" &&
     typeof bridge.setUpdateChannel === "function" &&
     typeof bridge.setThemeSource === "function" &&
     typeof bridge.onUpdateStatus === "function"
