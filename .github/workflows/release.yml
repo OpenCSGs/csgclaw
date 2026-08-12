@@ -17,7 +17,7 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   BOXLITE_CLI_VERSION: v0.9.0
@@ -81,9 +81,11 @@ jobs:
       - name: Resolve release metadata
         id: release_meta
         shell: bash
+        env:
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            version="${{ github.event.inputs.version }}"
+            version="${DISPATCH_VERSION}"
           else
             version="${GITHUB_REF_NAME}"
           fi
@@ -222,16 +224,6 @@ jobs:
       COMMIT: ${{ needs.prepare.outputs.commit }}
       BUILD_TIME: ${{ needs.prepare.outputs.build_time }}
       CSGCLAW_DESKTOP_UPDATE_BASE_URL: https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels/${{ needs.prepare.outputs.release_channel }}/updates
-      CI_MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.CSGCLAW_MACOS_CERTIFICATE_P12_BASE64 }}
-      CI_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.CSGCLAW_MACOS_CERTIFICATE_PASSWORD }}
-      CI_MACOS_SIGN_IDENTITY: ${{ secrets.CSGCLAW_MACOS_SIGN_IDENTITY }}
-      CI_APPLE_ID: ${{ secrets.APPLE_ID }}
-      CI_APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-      CI_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      CI_WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.CSGCLAW_WINDOWS_CERTIFICATE_PFX_BASE64 }}
-      CI_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD }}
-      CI_WINDOWS_SIGN_TOOL: ${{ secrets.CSGCLAW_WINDOWS_SIGN_TOOL }}
-      CI_WINDOWS_SIGN_PARAMS: ${{ secrets.CSGCLAW_WINDOWS_SIGN_PARAMS }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -274,21 +266,27 @@ jobs:
       - name: Configure macOS signing
         if: ${{ matrix.goos == 'darwin' }}
         shell: bash
+        env:
+          CI_MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.CSGCLAW_MACOS_CERTIFICATE_P12_BASE64 }}
+          CI_MACOS_CERTIFICATE_PASSWORD: ${{ secrets.CSGCLAW_MACOS_CERTIFICATE_PASSWORD }}
+          EXPECTED_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          requested_identity="${CI_MACOS_SIGN_IDENTITY:-}"
-          requested_apple_id="${CI_APPLE_ID:-}"
-          requested_apple_password="${CI_APPLE_PASSWORD:-}"
-          requested_apple_team_id="${CI_APPLE_TEAM_ID:-}"
-          unset CSGCLAW_MACOS_SIGN_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-
-          if [ -z "${CI_MACOS_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${CI_MACOS_CERTIFICATE_PASSWORD:-}" ] || [ -z "${requested_identity}" ]; then
-            echo "macOS signing is not fully configured; using Forge defaults."
-            exit 0
+          if [ -z "${CI_MACOS_CERTIFICATE_P12_BASE64:-}" ] || [ -z "${CI_MACOS_CERTIFICATE_PASSWORD:-}" ]; then
+            echo "::error::Configure CSGCLAW_MACOS_CERTIFICATE_P12_BASE64 and CSGCLAW_MACOS_CERTIFICATE_PASSWORD."
+            exit 1
+          fi
+          if [ -z "${EXPECTED_APPLE_TEAM_ID:-}" ]; then
+            echo "::error::Configure APPLE_TEAM_ID so the imported signing identity can be validated."
+            exit 1
           fi
 
           certificate_path="${RUNNER_TEMP}/csgclaw-signing.p12"
           keychain_path="${RUNNER_TEMP}/csgclaw-signing.keychain-db"
           keychain_password="$(openssl rand -hex 32)"
+          {
+            echo "CSGCLAW_CI_MACOS_KEYCHAIN=${keychain_path}"
+            echo "CSGCLAW_CI_MACOS_CERTIFICATE_PATH=${certificate_path}"
+          } >> "$GITHUB_ENV"
           node --input-type=module -e 'import fs from "node:fs"; fs.writeFileSync(process.argv[1], Buffer.from(process.env.CI_MACOS_CERTIFICATE_P12_BASE64, "base64"), { mode: 0o600 });' "${certificate_path}"
           security create-keychain -p "${keychain_password}" "${keychain_path}"
           security set-keychain-settings -lut 21600 "${keychain_path}"
@@ -296,22 +294,88 @@ jobs:
           security import "${certificate_path}" -k "${keychain_path}" -P "${CI_MACOS_CERTIFICATE_PASSWORD}" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple: -s -k "${keychain_password}" "${keychain_path}"
           security list-keychains -d user -s "${keychain_path}"
-          {
-            echo "CSGCLAW_CI_MACOS_KEYCHAIN=${keychain_path}"
-            echo "CSGCLAW_MACOS_SIGN_IDENTITY=${requested_identity}"
-          } >> "$GITHUB_ENV"
 
-          if [ -n "${requested_apple_id}" ] && [ -n "${requested_apple_password}" ] && [ -n "${requested_apple_team_id}" ]; then
-            {
-              echo "APPLE_ID=${requested_apple_id}"
-              echo "APPLE_PASSWORD=${requested_apple_password}"
-              echo "APPLE_TEAM_ID=${requested_apple_team_id}"
-            } >> "$GITHUB_ENV"
+          identity_output="$(security find-identity -v -p codesigning "${keychain_path}")"
+          sign_identity="$(
+            printf '%s\n' "${identity_output}" |
+              sed -nE 's/^[[:space:]]*[0-9]+\) [0-9A-Fa-f]+ "(Developer ID Application:.*)"$/\1/p'
+          )"
+          identity_count="$(printf '%s\n' "${sign_identity}" | awk 'NF { count += 1 } END { print count + 0 }')"
+          if [ "${identity_count}" -ne 1 ]; then
+            echo "::error::Expected exactly one valid Developer ID Application identity in the imported P12; found ${identity_count}."
+            printf '%s\n' "${identity_output}"
+            exit 1
           fi
+          case "${sign_identity}" in
+            *"(${EXPECTED_APPLE_TEAM_ID})") ;;
+            *)
+              echo "::error::The imported Developer ID identity does not belong to APPLE_TEAM_ID ${EXPECTED_APPLE_TEAM_ID}."
+              exit 1
+              ;;
+          esac
+
+          echo "CSGCLAW_MACOS_SIGN_IDENTITY=${sign_identity}" >> "$GITHUB_ENV"
+
+      - name: Package macOS desktop artifacts
+        if: ${{ matrix.goos == 'darwin' }}
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
+            echo "::error::Configure APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID for macOS notarization."
+            exit 1
+          fi
+          make desktop-package TARGET_OS="${{ matrix.goos }}" TARGET_ARCH="${{ matrix.goarch }}"
+
+      - name: Notarize and verify macOS disk image
+        if: ${{ matrix.goos == 'darwin' }}
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          app_path="$(find desktop/out -type d -name 'CSGClaw.app' -print -quit)"
+          if [ -z "${app_path}" ]; then
+            echo "::error::No packaged CSGClaw.app was produced."
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "${app_path}"
+          xcrun stapler validate "${app_path}"
+
+          dmg_paths="$(find desktop/out/make -type f -name '*.dmg' -print)"
+          dmg_count="$(printf '%s\n' "${dmg_paths}" | awk 'NF { count += 1 } END { print count + 0 }')"
+          if [ "${dmg_count}" -ne 1 ]; then
+            echo "::error::Expected exactly one macOS DMG; found ${dmg_count}."
+            exit 1
+          fi
+          dmg_path="${dmg_paths}"
+
+          codesign --force --timestamp \
+            --identifier 'com.opencsg.csgclaw.desktop.dmg' \
+            --sign "${CSGCLAW_MACOS_SIGN_IDENTITY}" \
+            "${dmg_path}"
+          xcrun notarytool submit "${dmg_path}" \
+            --apple-id "${APPLE_ID}" \
+            --password "${APPLE_PASSWORD}" \
+            --team-id "${APPLE_TEAM_ID}" \
+            --wait
+          xcrun stapler staple "${dmg_path}"
+          xcrun stapler validate "${dmg_path}"
+          hdiutil verify "${dmg_path}"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "${dmg_path}"
 
       - name: Configure Windows signing
         if: ${{ matrix.goos == 'windows' }}
         shell: pwsh
+        env:
+          CI_WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.CSGCLAW_WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          CI_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD }}
+          CI_WINDOWS_SIGN_TOOL: ${{ secrets.CSGCLAW_WINDOWS_SIGN_TOOL }}
+          CI_WINDOWS_SIGN_PARAMS: ${{ secrets.CSGCLAW_WINDOWS_SIGN_PARAMS }}
         run: |
           Remove-Item Env:CSGCLAW_WINDOWS_CERTIFICATE_FILE -ErrorAction SilentlyContinue
           Remove-Item Env:CSGCLAW_WINDOWS_CERTIFICATE_PASSWORD -ErrorAction SilentlyContinue
@@ -330,8 +394,19 @@ jobs:
             "CSGCLAW_WINDOWS_SIGN_PARAMS=$env:CI_WINDOWS_SIGN_PARAMS" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           }
 
+      - name: Configure Windows remote releases
+        if: ${{ matrix.goos == 'windows' }}
+        shell: bash
+        run: |
+          remote_releases_url="${CSGCLAW_DESKTOP_UPDATE_BASE_URL}/win32/x64"
+          if curl --fail --silent --output /dev/null "${remote_releases_url}/RELEASES"; then
+            echo "CSGCLAW_WINDOWS_REMOTE_RELEASES_URL=${remote_releases_url}" >> "$GITHUB_ENV"
+          else
+            echo "::notice::No previous Windows RELEASES index exists; creating a full initial Squirrel package without delta history."
+          fi
+
       - name: Package Unix desktop artifacts
-        if: ${{ matrix.goos != 'windows' }}
+        if: ${{ matrix.goos == 'linux' }}
         shell: bash
         run: |
           make desktop-package TARGET_OS="${{ matrix.goos }}" TARGET_ARCH="${{ matrix.goarch }}"
@@ -359,6 +434,9 @@ jobs:
           if [ -n "${CSGCLAW_CI_MACOS_KEYCHAIN:-}" ]; then
             security delete-keychain "${CSGCLAW_CI_MACOS_KEYCHAIN}" || true
           fi
+          if [ -n "${CSGCLAW_CI_MACOS_CERTIFICATE_PATH:-}" ]; then
+            rm -f "${CSGCLAW_CI_MACOS_CERTIFICATE_PATH}"
+          fi
 
       - name: Upload desktop artifacts
         uses: actions/upload-artifact@v4
@@ -370,6 +448,8 @@ jobs:
   merge-and-release:
     needs: [prepare, build, desktop-build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download all platform artifacts
         uses: actions/download-artifact@v4

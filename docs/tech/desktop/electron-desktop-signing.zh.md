@@ -4,11 +4,11 @@
 
 ## 1. 推荐方案
 
-| 平台 | 主要发布方式 | 安装包 | 签名与更新 |
-| --- | --- | --- | --- |
-| Windows | Microsoft Store | MSIX | Microsoft 认证后重新签名，并负责安装和更新 |
-| Windows 企业/离线场景 | 官网 | Squirrel `Setup.exe` | 公司 OV 代码签名证书；应用自己更新 |
-| macOS | 官网 | DMG | Apple Developer ID 签名和公证；ZIP 用于应用更新 |
+| 平台                  | 主要发布方式    | 安装包               | 签名与更新                                      |
+| --------------------- | --------------- | -------------------- | ----------------------------------------------- |
+| Windows               | Microsoft Store | MSIX                 | Microsoft 认证后重新签名，并负责安装和更新      |
+| Windows 企业/离线场景 | 官网            | Squirrel `Setup.exe` | 公司 OV 代码签名证书；应用自己更新              |
+| macOS                 | 官网            | DMG                  | Apple Developer ID 签名和公证；ZIP 用于应用更新 |
 
 最短路径是先发布 Windows Microsoft Store 版本和 macOS 官网版本。Windows 官网包可以继续保留，等企业客户或离线分发需要时再购买代码签名证书。
 
@@ -121,6 +121,9 @@ make desktop-package TARGET_OS=darwin TARGET_ARCH=arm64
 make desktop-package TARGET_OS=darwin TARGET_ARCH=amd64
 ```
 
+Forge 可以从当前钥匙串自动发现有效的 `Developer ID Application` 身份；这里仍显式设置
+`CSGCLAW_MACOS_SIGN_IDENTITY`，供后续最终 DMG 签名复用。CI 会在导入 P12 后自动得到这个值，不需要人工配置。
+
 Forge 会签名并公证 APP，然后生成 ZIP 和 DMG。最终 DMG 再完成一次签名、公证和 staple：
 
 ```bash
@@ -180,6 +183,19 @@ PARTNER_CENTER_CLIENT_SECRET
 Microsoft Store Developer CLI 当前是 preview，适合 CSGClaw 这类免费产品自动上传和提交；商店认证由 Microsoft 异步完成。Windows App Certification Kit 需要活动用户会话，安排在 Windows 测试机或自托管 Runner 上运行。
 
 macOS CI 使用 macOS Runner，导入 Developer ID P12 到临时 Keychain，再执行与本地相同的签名、公证和验证命令。
+CI 从导入的 P12 自动识别唯一的 `Developer ID Application` 身份，并校验其 Team ID，因此不需要配置
+`CSGCLAW_MACOS_SIGN_IDENTITY`。GitHub Actions 需要以下 Repository Secrets：
+
+```text
+CSGCLAW_MACOS_CERTIFICATE_P12_BASE64
+CSGCLAW_MACOS_CERTIFICATE_PASSWORD
+APPLE_ID
+APPLE_PASSWORD
+APPLE_TEAM_ID
+```
+
+证书内容和密码仅提供给临时 Keychain 导入步骤；Apple Account 公证凭据仅提供给 macOS 打包与 DMG 公证步骤。
+任何一项缺失都会终止 macOS Release，避免发布临时签名或未公证产物。
 
 ## 6. 发布验收
 

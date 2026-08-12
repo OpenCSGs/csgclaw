@@ -55,6 +55,7 @@ const updateConfig = path.resolve(__dirname, ".forge-generated", "desktop-update
 const desktopVersion = normalizeDesktopReleaseVersion(process.env.CSGCLAW_DESKTOP_VERSION);
 const desktopAppVersion = numericDesktopAppVersion(desktopVersion);
 const updateBaseURL = normalizeHTTPSBaseURL(process.env.CSGCLAW_DESKTOP_UPDATE_BASE_URL);
+const windowsRemoteReleasesURL = normalizeHTTPSBaseURL(process.env.CSGCLAW_WINDOWS_REMOTE_RELEASES_URL);
 const updateChannelsBaseURL = normalizeHTTPSBaseURL(
   process.env.CSGCLAW_DESKTOP_UPDATE_CHANNELS_URL ||
     "https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/channels",
@@ -174,8 +175,8 @@ const config: ForgeConfig = {
             iconUrl: windowsIconURL,
             setupIcon: windowsIcon,
             setupExe: `CSGClaw-Desktop-${desktopVersion}-${targetElectronArch}-Setup.exe`,
-            ...(updateBaseURL
-              ? { remoteReleases: `${updateBaseURL}/${DesktopPlatform.Windows}/${targetElectronArch}` }
+            ...(windowsRemoteReleasesURL
+              ? { remoteReleases: windowsRemoteReleasesURL }
               : {}),
             ...(windowsSign ? { windowsSign } : {}),
             ...(process.env.CSGCLAW_WINDOWS_CERTIFICATE_FILE &&
