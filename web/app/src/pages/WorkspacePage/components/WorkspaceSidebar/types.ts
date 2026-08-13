@@ -77,6 +77,7 @@ export type WorkspaceSidebarProps = {
   onCreateRoom: () => void;
   onExpandSidebar: () => void;
   onOpenUpgrade: () => void;
+  onRefreshUpgradeStatus: () => Promise<UpgradeStatus | null>;
   onUpgradeChannelChange: (channel: UpgradeChannel) => Promise<boolean>;
   onOpenConfigSettings: () => void;
   onOpenSettings: () => void;
@@ -120,6 +121,7 @@ export type WorkspaceSidebarProps = {
   threadGroups: { conversation: IMConversation; threads: ThreadView[] }[];
   upgradeBusy: boolean;
   upgradeChannelBusy: boolean;
+  upgradeChannelError: string;
   upgradeChannelLocked: boolean;
   upgradeError: string;
   upgradePhase: UpgradePhase;

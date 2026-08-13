@@ -40,10 +40,19 @@ export function SettingsPage() {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [switchVersionOpen, setSwitchVersionOpen] = useState(false);
   const sidebar = controller.sidebarProps;
+  const refreshUpgradeStatus = sidebar?.onRefreshUpgradeStatus;
+  const showUpgradeControls = Boolean(sidebar?.showUpgradeControls);
   const progressActive = Boolean(
     sidebar && (sidebar.upgradeChannelBusy || sidebar.upgradeStatus?.checking || sidebar.upgradeStatus?.upgrading),
   );
   const upgradeProgress = useSimulatedUpgradeProgress(progressActive, Boolean(sidebar?.upgradeStatus?.downloaded));
+
+  useEffect(() => {
+    if (!controller.ready || !showUpgradeControls || !refreshUpgradeStatus) {
+      return;
+    }
+    void refreshUpgradeStatus();
+  }, [controller.ready, refreshUpgradeStatus, showUpgradeControls]);
 
   if (!controller.ready || !sidebar) {
     return null;
@@ -75,7 +84,8 @@ export function SettingsPage() {
     sidebar.upgradeStatus?.upgrading,
   );
   const showUpgradeProgress = upgradeProgress.visible;
-  const versionError = sidebar.upgradeError || upgradeErrorMessage(sidebar.upgradeStatus, sidebar.t);
+  const versionError =
+    sidebar.upgradeChannelError || sidebar.upgradeError || upgradeErrorMessage(sidebar.upgradeStatus, sidebar.t);
   const showNewVersionBadge = Boolean(
     sidebar.showUpgradeControls &&
     (mockUpgradeAvailable ||
@@ -298,36 +308,34 @@ export function SettingsPage() {
           }
           description={sidebar.t("settingsVersionDescription")}
         >
-          <div className={styles.stack}>
+          <div className={classNames(styles.stack, styles.versionStack)}>
             <div className={styles.versionValue}>
               <span className={styles.versionLabel}>{sidebar.t("settingsCurrentVersion")}</span>
-              <div className={styles.versionActions}>
-                <div className={styles.versionMeta}>
-                  <strong>{version}</strong>
-                  {showUpgradeAction ? (
-                    <Button
-                      className={styles.designButton}
-                      variant="primary"
-                      size="md"
-                      disabled={sidebar.upgradeBusy || sidebar.upgradeStatus?.upgrading}
-                      onClick={sidebar.onOpenUpgrade}
-                    >
-                      {sidebar.t(sidebar.upgradeStatus?.downloaded ? "upgradeAction" : "upgradeDownloadAction")}
-                    </Button>
-                  ) : null}
-                </div>
-                {showUpgradeChannel ? (
-                  <button
-                    type="button"
-                    className={styles.versionChannelLink}
-                    disabled={upgradeChannelDisabled}
-                    onClick={() => setSwitchVersionOpen(true)}
+              <div className={styles.versionMeta}>
+                <strong>{version}</strong>
+                {showUpgradeAction ? (
+                  <Button
+                    className={styles.designButton}
+                    variant="primary"
+                    size="md"
+                    disabled={sidebar.upgradeBusy || sidebar.upgradeStatus?.upgrading}
+                    onClick={sidebar.onOpenUpgrade}
                   >
-                    {sidebar.t("upgradeChannelSwitch")}
-                  </button>
+                    {sidebar.t(sidebar.upgradeStatus?.downloaded ? "upgradeAction" : "upgradeDownloadAction")}
+                  </Button>
                 ) : null}
               </div>
             </div>
+            {showUpgradeChannel ? (
+              <button
+                type="button"
+                className={styles.versionChannelLink}
+                disabled={upgradeChannelDisabled}
+                onClick={() => setSwitchVersionOpen(true)}
+              >
+                {sidebar.t("upgradeChannelSwitch")}
+              </button>
+            ) : null}
             {showUpgradeChannel && showUpgradeProgress ? (
               <div
                 className={styles.upgradeProgressRow}
@@ -397,7 +405,7 @@ export function SettingsPage() {
       <SwitchVersionDialog
         busy={upgradeChannelDisabled}
         currentChannel={inferredUpgradeChannel}
-        error={sidebar.upgradeError}
+        error={sidebar.upgradeChannelError}
         open={switchVersionOpen}
         t={sidebar.t}
         onConfirm={sidebar.onUpgradeChannelChange}

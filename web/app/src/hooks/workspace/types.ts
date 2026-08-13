@@ -127,6 +127,7 @@ export type UpgradeController = {
   showUpgradeModal: boolean;
   upgradeBusy: boolean;
   upgradeChannelBusy: boolean;
+  upgradeChannelError: string;
   upgradeChannelLocked: boolean;
   upgradeError: string;
   upgradeModalProps: UpgradeModalControllerProps | null;

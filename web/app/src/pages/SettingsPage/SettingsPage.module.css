@@ -188,6 +188,10 @@
   gap: 16px;
 }
 
+.versionStack {
+  gap: 8px;
+}
+
 .upgradeProgressRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 38px;
@@ -293,16 +297,6 @@
   align-items: center;
   gap: 16px;
   width: 100%;
-}
-
-.versionValue {
-  align-items: start;
-}
-
-.versionActions {
-  display: grid;
-  justify-items: stretch;
-  gap: 8px;
 }
 
 .versionMeta {

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { normalizeUpgradeStatus, inferUpgradeChannelFromVersion, upgradeErrorMessage, formatClassifiedUpgradeError } from "@/models/upgradeStatus";
-import type { UpgradeChannel, UpgradePhase } from "@/models/upgradeStatus";
+import {
+  formatClassifiedUpgradeError,
+  inferUpgradeChannelFromVersion,
+  normalizeUpgradeStatus,
+  upgradeErrorMessage,
+} from "@/models/upgradeStatus";
+import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import {
   applyPlatformUpgrade,
   setPlatformUpgradeChannel,
@@ -22,6 +27,7 @@ export function useUpgradeController({
 }: UseUpgradeControllerArgs): UpgradeController {
   const [upgradeBusy, setUpgradeBusy] = useState(false);
   const [upgradeChannelBusy, setUpgradeChannelBusy] = useState(false);
+  const [upgradeChannelError, setUpgradeChannelError] = useState("");
   const [upgradeError, setUpgradeError] = useState("");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradePhase, setUpgradePhase] = useState<UpgradePhase>("idle");
@@ -46,36 +52,57 @@ export function useUpgradeController({
         setUpgradeError(statusMessage);
         return;
       }
+      setUpgradeError("");
       if (next?.manual_restart_required) {
         setUpgradeBusy(false);
         setUpgradePhase("manual_restart");
         setShowUpgradeModal(true);
       } else if (next?.upgrading) {
-        setUpgradeError("");
         setUpgradeBusy(true);
         setUpgradePhase((phase) => (phase === "done" ? phase : "restarting"));
-      } else if (!next?.update_available) {
+      } else {
         setUpgradeBusy(false);
-        setUpgradeError("");
+        setUpgradePhase((phase) => (phase === "done" ? phase : "idle"));
       }
     },
     [setUpgradeStatusData, t],
   );
 
   const refreshUpgradeStatus = useCallback(async () => {
-    const payload = await refreshWorkspaceUpgradeStatus();
-    if (payload?.manual_restart_required) {
-      setUpgradeBusy(false);
-      setUpgradePhase("manual_restart");
-      setShowUpgradeModal(true);
-    } else if (payload?.upgrading) {
-      setUpgradeBusy(true);
-      setUpgradePhase((phase) => (phase === "done" ? phase : "restarting"));
-    } else if (!payload?.update_available) {
-      setUpgradeBusy(false);
+    try {
+      const payload = await refreshWorkspaceUpgradeStatus();
+      if (payload) {
+        handleUpgradeStatusChange(payload);
+        if (!upgradeErrorMessage(payload, t)) {
+          setUpgradeChannelError("");
+        }
+      }
+      return payload;
+    } catch (_) {
+      return null;
     }
-    return payload;
-  }, [refreshWorkspaceUpgradeStatus]);
+  }, [handleUpgradeStatusChange, refreshWorkspaceUpgradeStatus, t]);
+
+  const restoreUpgradeChannel = useCallback(
+    async (channel: UpgradeChannel) => {
+      let restored: UpgradeStatus | null = null;
+      try {
+        restored = await setPlatformUpgradeChannel(channel);
+      } catch (_) {
+        // The desktop updater may already have rolled back before rejecting the switch.
+      }
+      try {
+        restored = (await refreshWorkspaceUpgradeStatus()) ?? restored;
+      } catch (_) {
+        // Keep the best status returned while restoring the previous channel.
+      }
+      if (restored) {
+        handleUpgradeStatusChange(restored);
+      }
+      return restored;
+    },
+    [handleUpgradeStatusChange, refreshWorkspaceUpgradeStatus],
+  );
 
   const startUpgradeReconnectPoll = useCallback(
     (expectedVersion?: string | null) => {
@@ -211,33 +238,54 @@ export function useUpgradeController({
     async (channel: UpgradeChannel) => {
       const currentVersion = upgradeStatus?.current_version || appVersion;
       const inferredChannel = inferUpgradeChannelFromVersion(currentVersion);
+      const retryCurrentChannel = Boolean(
+        channel === inferredChannel && (upgradeChannelError || upgradeError || upgradeErrorMessage(upgradeStatus, t)),
+      );
       if (upgradeChannelBusy || upgradeBusy || upgradeStatus?.checking || upgradeStatus?.upgrading) {
         return false;
       }
-      if (channel === inferredChannel) {
+      if (channel === inferredChannel && !retryCurrentChannel) {
         return true;
       }
       setUpgradeChannelBusy(true);
-      setUpgradeError("");
+      setUpgradeChannelError("");
       try {
         const next = await setPlatformUpgradeChannel(channel);
-        setUpgradeStatusData(next);
+        handleUpgradeStatusChange(next);
         const statusMessage = upgradeErrorMessage(next, t);
         if (statusMessage) {
-          setUpgradeError(`${t("upgradeChannelSwitchFailed")} ${statusMessage}`.trim());
+          const restored = await restoreUpgradeChannel(inferredChannel);
+          if (retryCurrentChannel && restored && !upgradeErrorMessage(restored, t)) {
+            return true;
+          }
+          setUpgradeChannelError(`${t("upgradeChannelSwitchFailed")} ${statusMessage}`.trim());
           return false;
         }
         return true;
       } catch (error) {
         const detail = upgradeErrorDetail(error).trim();
         const classified = formatClassifiedUpgradeError(detail, t);
-        setUpgradeError(`${t("upgradeChannelSwitchFailed")} ${classified}`.trim());
+        const restored = await restoreUpgradeChannel(inferredChannel);
+        if (retryCurrentChannel && restored && !upgradeErrorMessage(restored, t)) {
+          return true;
+        }
+        setUpgradeChannelError(`${t("upgradeChannelSwitchFailed")} ${classified}`.trim());
         return false;
       } finally {
         setUpgradeChannelBusy(false);
       }
     },
-    [appVersion, setUpgradeStatusData, t, upgradeBusy, upgradeChannelBusy, upgradeStatus],
+    [
+      appVersion,
+      handleUpgradeStatusChange,
+      restoreUpgradeChannel,
+      t,
+      upgradeBusy,
+      upgradeChannelBusy,
+      upgradeChannelError,
+      upgradeError,
+      upgradeStatus,
+    ],
   );
 
   const openUpgradeModal = useCallback(() => {
@@ -270,6 +318,7 @@ export function useUpgradeController({
     changeUpgradeChannel,
     upgradeBusy,
     upgradeChannelBusy,
+    upgradeChannelError,
     upgradeChannelLocked,
     upgradeError,
     upgradePhase,

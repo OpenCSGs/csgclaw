@@ -195,14 +195,21 @@ describe("useUpgradeController", () => {
     expect(setUpgradeStatusData).not.toHaveBeenCalled();
   });
 
-  it("returns false and keeps the previous channel when switching fails", async () => {
+  it("returns false, restores the previous channel, and refreshes its available update when switching fails", async () => {
     mockedSetUpgradeChannelRequest.mockRejectedValueOnce(new Error("feed unavailable"));
     const setUpgradeStatusData = vi.fn();
+    const restoredStatus = upgradeStatus({
+      channel: "release",
+      latest_version: "v0.3.19",
+      update_available: true,
+    });
+    mockedSetUpgradeChannelRequest.mockResolvedValueOnce(restoredStatus);
+    const refreshWorkspaceUpgradeStatus = vi.fn().mockResolvedValue(restoredStatus);
     const { result } = renderHook(() =>
       useUpgradeController({
         appVersion: "v0.3.18",
         refreshWorkspaceAppVersion: vi.fn(),
-        refreshWorkspaceUpgradeStatus: vi.fn(),
+        refreshWorkspaceUpgradeStatus,
         setAppVersionData: vi.fn(),
         setUpgradeStatusData,
         t,
@@ -214,20 +221,38 @@ describe("useUpgradeController", () => {
       await expect(result.current.changeUpgradeChannel("beta")).resolves.toBe(false);
     });
 
-    expect(result.current.upgradeError).toContain("upgradeChannelSwitchFailed");
-    expect(result.current.upgradeError).toContain("upgradeErrorUnknown");
-    expect(setUpgradeStatusData).not.toHaveBeenCalled();
+    expect(mockedSetUpgradeChannelRequest).toHaveBeenNthCalledWith(1, "beta");
+    expect(mockedSetUpgradeChannelRequest).toHaveBeenNthCalledWith(2, "release");
+    expect(refreshWorkspaceUpgradeStatus).toHaveBeenCalledTimes(1);
+    expect(setUpgradeStatusData).toHaveBeenLastCalledWith(restoredStatus);
+    expect(result.current.upgradeChannelError).toContain("upgradeChannelSwitchFailed");
+    expect(result.current.upgradeChannelError).toContain("upgradeErrorUnknown");
+    expect(result.current.upgradeError).toBe("");
+    expect(result.current.upgradePhase).toBe("idle");
+
+    await act(async () => {
+      await result.current.refreshUpgradeStatus();
+    });
+
+    expect(result.current.upgradeChannelError).toBe("");
   });
 
   it("explains unsigned or missing desktop update packages when the native updater fails", async () => {
     mockedSetUpgradeChannelRequest.mockRejectedValueOnce(
       new Error("The release channel does not provide a signed macOS auto-update package for 0.4.6. HTTP 404"),
     );
+    const restoredStatus = upgradeStatus({
+      channel: "beta",
+      current_version: "v0.2.1-beta.1",
+      latest_version: "v0.2.1-beta.2",
+      update_available: true,
+    });
+    mockedSetUpgradeChannelRequest.mockResolvedValueOnce(restoredStatus);
     const { result } = renderHook(() =>
       useUpgradeController({
         appVersion: "v0.2.1-beta.1",
         refreshWorkspaceAppVersion: vi.fn(),
-        refreshWorkspaceUpgradeStatus: vi.fn(),
+        refreshWorkspaceUpgradeStatus: vi.fn().mockResolvedValue(restoredStatus),
         setAppVersionData: vi.fn(),
         setUpgradeStatusData: vi.fn(),
         t,
@@ -243,8 +268,9 @@ describe("useUpgradeController", () => {
       await expect(result.current.changeUpgradeChannel("release")).resolves.toBe(false);
     });
 
-    expect(result.current.upgradeError).toContain("upgradeChannelSwitchFailed");
-    expect(result.current.upgradeError).toContain("upgradeErrorMissingUpdatePackage");
+    expect(result.current.upgradeChannelError).toContain("upgradeChannelSwitchFailed");
+    expect(result.current.upgradeChannelError).toContain("upgradeErrorMissingUpdatePackage");
+    expect(result.current.upgradeError).toBe("");
 
     act(() => {
       result.current.handleUpgradeStatusChange({

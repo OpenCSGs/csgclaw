@@ -60,6 +60,42 @@ describe("SettingsPage", () => {
     vi.useRealTimers();
   });
 
+  it("checks the configured update channel when the settings page opens", () => {
+    const onRefreshUpgradeStatus = vi.fn().mockResolvedValue(null);
+    const controller = {
+      ready: true,
+      sidebarProps: {
+        appVersion: "v0.5.0-beta.7",
+        authBusy: false,
+        authError: "",
+        authPending: false,
+        authStatus: emptyAuthStatus(),
+        locale: "en",
+        onLocaleChange: vi.fn(),
+        onLogin: vi.fn(),
+        onLogout: vi.fn(),
+        onOpenConfigSettings: vi.fn(),
+        onOpenUpgrade: vi.fn(),
+        onRefreshUpgradeStatus,
+        onThemeChange: vi.fn(),
+        onUpgradeChannelChange: vi.fn(),
+        showUpgradeControls: true,
+        t,
+        theme: "light",
+        upgradeBusy: false,
+        upgradeChannelBusy: false,
+        upgradeChannelError: "",
+        upgradeError: "",
+        upgradePhase: "idle",
+        upgradeStatus: null,
+      },
+    } as unknown as WorkspaceController;
+
+    renderSettings(controller);
+
+    expect(onRefreshUpgradeStatus).toHaveBeenCalledTimes(1);
+  });
+
   it("opens the upgrade flow when an update is available", () => {
     const onOpenUpgrade = vi.fn();
     const onRequestTurnNotificationPermission = vi.fn();
@@ -88,6 +124,7 @@ describe("SettingsPage", () => {
         turnNotificationPermission: "default",
         upgradeBusy: false,
         upgradeChannelBusy: false,
+        upgradeChannelError: "switch failed",
         upgradeError: "",
         upgradePhase: "idle",
         upgradeStatus: {
@@ -115,6 +152,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enable notifications" }));
 
     expect(onOpenUpgrade).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("switch failed");
     expect(screen.getByRole("combobox", { name: "Turn completion notifications" })).toHaveTextContent(
       "Only when the app is unfocused",
     );

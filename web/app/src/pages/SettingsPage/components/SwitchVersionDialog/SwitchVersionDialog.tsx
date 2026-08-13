@@ -47,7 +47,7 @@ export function SwitchVersionDialog({
   }, [currentChannel, open]);
 
   async function handleConfirm() {
-    if (selected === currentChannel) {
+    if (selected === currentChannel && !error) {
       onOpenChange(false);
       return;
     }
@@ -102,7 +102,7 @@ export function SwitchVersionDialog({
             variant="primary"
             size="md"
             loading={busy}
-            disabled={busy || selected === currentChannel}
+            disabled={busy || (selected === currentChannel && !error)}
             onClick={() => void handleConfirm()}
           >
             {t("confirm")}

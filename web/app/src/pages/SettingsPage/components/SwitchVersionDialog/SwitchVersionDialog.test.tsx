@@ -60,7 +60,13 @@ describe("SwitchVersionDialog", () => {
 
     rerender(
       <TooltipProvider delayDuration={0}>
-        <SwitchVersionDialog currentChannel="beta" open={false} t={t} onConfirm={onConfirm} onOpenChange={onOpenChange} />
+        <SwitchVersionDialog
+          currentChannel="beta"
+          open={false}
+          t={t}
+          onConfirm={onConfirm}
+          onOpenChange={onOpenChange}
+        />
       </TooltipProvider>,
     );
     rerender(
@@ -91,5 +97,26 @@ describe("SwitchVersionDialog", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(screen.getByText("upgradeChannelSwitchFailed network down")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "upgradeChannelBeta" })).toBeChecked();
+  });
+
+  it("allows the current channel to be checked again after a failed switch", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn().mockResolvedValue(true);
+    const onOpenChange = vi.fn();
+
+    renderDialog({
+      currentChannel: "beta",
+      error: "upgradeChannelSwitchFailed",
+      onConfirm,
+      onOpenChange,
+    });
+
+    expect(screen.getByRole("radio", { name: "upgradeChannelBeta" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "confirm" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "confirm" }));
+
+    expect(onConfirm).toHaveBeenCalledWith("beta");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
