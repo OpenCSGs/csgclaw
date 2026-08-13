@@ -2,8 +2,66 @@ import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { emptyGitLabConnectorStatus } from "@/models/connectors";
 import { ConversationComposer } from "./ConversationComposer";
 import { ConversationWorkingActions, type ConversationWorkingParticipant } from "./types";
+
+function defaultTranslate(key: string, params?: Record<string, unknown>) {
+  if (key === "composerAddContent") return "添加内容";
+  if (key === "composerAdd") return "添加";
+  if (key === "composerConnectors") return "连接器";
+  if (key === "addAttachment") return "添加附件";
+  if (key === "connectorGitHub") return "GitHub";
+  if (key === "connectorGitLab") return "GitLab";
+  if (key === "connectorNotConnected") return "未连接";
+  if (key === "connectorConnect") return "连接";
+  if (key === "connectorEdit") return "编辑";
+  if (key === "connectorDisconnect") return "断开";
+  if (key === "connectorSave") return "保存";
+  if (key === "connectorGitLabBaseURL") return "GitLab 地址";
+  if (key === "connectorGitLabToken") return "Personal Access Token";
+  if (key === "connectorGitLabSaveSuccess") return "GitLab 连接配置已保存。";
+  if (key === "connectorGitLabSaveFailed") return "保存 GitLab 连接器失败。请检查地址和 Token。";
+  if (key === "cancel") return "取消";
+  if (key === "close") return "关闭";
+  if (key === "connectorConnected") return "已连接";
+  if (key === "conversationWorkingOpenActivity") return `查看 ${params?.name} 的活动记录`;
+  return key;
+}
+
+function renderConversationComposer(overrideProps: Partial<React.ComponentProps<typeof ConversationComposer>> = {}) {
+  return render(
+    <ConversationComposer
+      authBusyProvider=""
+      authStatuses={{}}
+      composerDisabled={false}
+      composerError=""
+      draftSegments={[]}
+      draftText=""
+      editorRef={createRef<HTMLDivElement>()}
+      managerProvider=""
+      mentionCandidates={[]}
+      mentionIndex={0}
+      mentionableUsersByName={new Map()}
+      slashCandidates={[]}
+      slashIndex={0}
+      slashPickerLoading={false}
+      slashPickerOpen={false}
+      t={defaultTranslate}
+      gitlabConnectorStatus={emptyGitLabConnectorStatus()}
+      onAddAttachments={vi.fn()}
+      onApplyMention={vi.fn()}
+      onApplySlashCandidate={vi.fn()}
+      onComposerCompositionEnd={vi.fn()}
+      onComposerCompositionStart={vi.fn()}
+      onComposerKeyDown={vi.fn()}
+      onProviderLogin={vi.fn()}
+      onSendMessage={vi.fn()}
+      onSyncComposer={vi.fn()}
+      {...overrideProps}
+    />,
+  );
+}
 
 describe("ConversationComposer working activity", () => {
   it("shows the latest activity instead of a generic working label and opens that activity", async () => {
@@ -151,5 +209,41 @@ describe("ConversationComposer working activity", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent("停止");
     await user.click(stopButton);
     expect(onStop).toHaveBeenCalledWith(participant);
+  });
+});
+
+describe("ConversationComposer GitLab connector feedback", () => {
+  it("shows a success status in the GitLab dialog after saving", async () => {
+    const user = userEvent.setup();
+    const onSaveGitLabConnectorConfig = vi.fn().mockResolvedValue(undefined);
+
+    renderConversationComposer({ onSaveGitLabConnectorConfig });
+
+    await user.click(screen.getByRole("button", { name: "添加内容" }));
+    await user.click(screen.getAllByRole("button", { name: "连接" })[1]);
+    await user.type(screen.getByRole("textbox", { name: "GitLab 地址" }), "https://gitlab.example.com");
+    await user.type(screen.getByLabelText("Personal Access Token"), "glpat-test");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(onSaveGitLabConnectorConfig).toHaveBeenCalledWith({
+      access_token: "glpat-test",
+      base_url: "https://gitlab.example.com",
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("GitLab 连接配置已保存。");
+  });
+
+  it("shows an error status in the GitLab dialog after a failed save", async () => {
+    const user = userEvent.setup();
+    const onSaveGitLabConnectorConfig = vi.fn().mockRejectedValue(new Error("boom"));
+
+    renderConversationComposer({ onSaveGitLabConnectorConfig });
+
+    await user.click(screen.getByRole("button", { name: "添加内容" }));
+    await user.click(screen.getAllByRole("button", { name: "连接" })[1]);
+    await user.type(screen.getByRole("textbox", { name: "GitLab 地址" }), "https://gitlab.example.com");
+    await user.type(screen.getByLabelText("Personal Access Token"), "glpat-test");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("保存 GitLab 连接器失败。请检查地址和 Token。");
   });
 });

@@ -1,9 +1,24 @@
 import { memo, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
-import { ArrowUp, ChevronRight, GitBranch, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
+import { ArrowUp, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
-import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, TextInput, Tooltip } from "@/components/ui";
-import { IconImage } from "@/components/ui/Icons";
+import {
+  Button,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+  PopoverClose,
+  PopoverContent,
+  PopoverRoot,
+  PopoverTrigger,
+  TextInput,
+  Tooltip,
+} from "@/components/ui";
+import { ConnectorGitLabIcon, IconImage } from "@/components/ui/Icons";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
@@ -23,6 +38,7 @@ import {
 import type { ConnectorConfigDraft, ConnectorStatus, GitLabConnectorConfigDraft } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 import { composerActionSuggestions, type SlashPickerCandidate } from "@/models/slashCommands";
+import { classNames } from "@/shared/lib/classNames";
 import { MentionPicker } from "./MentionPicker";
 import { SlashPicker } from "./SlashPicker";
 import { AttachmentDraftStrip } from "./ConversationAttachments";
@@ -564,8 +580,10 @@ function ComposerAddMenu({
   onManage,
   onSaveGitLab,
 }: ComposerAddMenuProps) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const [gitlabFormOpen, setGitLabFormOpen] = useState(false);
   const [gitlabDraft, setGitLabDraft] = useState(() => gitLabConnectorDraftFromStatus(gitlabStatus));
+  const [gitlabFeedback, setGitLabFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const accountLabel = status.account?.login || status.account?.name || "";
   const connectorStateLabel =
     status.connected && accountLabel
@@ -573,6 +591,7 @@ function ComposerAddMenu({
       : status.connected
         ? t("connectorConnected")
         : t("connectorNotConnected");
+  const hasConnectedConnector = status.connected || gitlabStatus.connected;
   const githubBusy = pending || (busyProvider !== "gitlab" && busyAction === "connect");
   const gitlabBusy = busyProvider === "gitlab" && Boolean(busyAction);
 
@@ -590,22 +609,26 @@ function ComposerAddMenu({
 
   function handleOpenGitLabForm() {
     setGitLabDraft(gitLabConnectorDraftFromStatus(gitlabStatus));
+    setGitLabFeedback(null);
+    setPopoverOpen(false);
     setGitLabFormOpen(true);
   }
 
   async function handleSaveGitLab() {
     if (!gitlabDraft.base_url.trim() || (!gitlabStatus.access_token_set && !gitlabDraft.access_token.trim())) return;
+    setGitLabFeedback(null);
     try {
       await onSaveGitLab?.(gitlabDraft);
-      setGitLabFormOpen(false);
+      setGitLabFeedback({ tone: "success", message: t("connectorGitLabSaveSuccess") });
       setGitLabDraft((current) => ({ ...current, access_token: "" }));
     } catch (_) {
-      // The controller owns the localized error shown below the connector list.
+      setGitLabFeedback({ tone: "error", message: error || t("connectorGitLabSaveFailed") });
     }
   }
 
   return (
-    <PopoverRoot>
+    <>
+      <PopoverRoot open={popoverOpen} onOpenChange={setPopoverOpen}>
       <Tooltip content={t("composerAddContent")}>
         <PopoverTrigger asChild>
           <span>
@@ -623,7 +646,12 @@ function ComposerAddMenu({
           </span>
         </PopoverTrigger>
       </Tooltip>
-      <PopoverContent aria-label={t("composerAddContent")} className="composer-add-popover" role="dialog" side="top">
+      <PopoverContent
+        aria-label={t("composerAddContent")}
+        className={classNames("composer-add-popover", hasConnectedConnector ? "is-wide" : "is-compact")}
+        role="dialog"
+        side="top"
+      >
         <section className="composer-add-section" aria-label={t("composerAdd")}>
           <div className="composer-add-section-label">{t("composerAdd")}</div>
           <PopoverClose asChild>
@@ -655,28 +683,30 @@ function ComposerAddMenu({
             {status.connected ? (
               <div className="connector-provider-actions">
                 <span className="connector-connected-state">{t("connectorConnected")}</span>
-                {status.app_manageable ? (
+                <div className="connector-provider-action-buttons">
+                  {status.app_manageable ? (
+                    <Button
+                      aria-busy={busyAction === "manage" ? true : undefined}
+                      className="connector-manage-button"
+                      loading={busyAction === "manage"}
+                      size="sm"
+                      variant="secondaryGray"
+                      onClick={handleManageGitHub}
+                    >
+                      {t("connectorManage")}
+                    </Button>
+                  ) : null}
                   <Button
-                    aria-busy={busyAction === "manage" ? true : undefined}
-                    className="connector-manage-button"
-                    loading={busyAction === "manage"}
+                    aria-busy={busyAction === "disconnect" ? true : undefined}
+                    className="connector-disconnect-button connector-disconnect-button-danger"
+                    loading={busyAction === "disconnect"}
                     size="sm"
-                    variant="secondaryGray"
-                    onClick={handleManageGitHub}
+                    variant="outlineDanger"
+                    onClick={handleDisconnectGitHub}
                   >
-                    {t("connectorManage")}
+                    {t("connectorDisconnect")}
                   </Button>
-                ) : null}
-                <Button
-                  aria-busy={busyAction === "disconnect" ? true : undefined}
-                  className="connector-disconnect-button connector-disconnect-button-danger"
-                  loading={busyAction === "disconnect"}
-                  size="sm"
-                  variant="outlineDanger"
-                  onClick={handleDisconnectGitHub}
-                >
-                  {t("connectorDisconnect")}
-                </Button>
+                </div>
               </div>
             ) : (
               <Button
@@ -694,7 +724,7 @@ function ComposerAddMenu({
           <div className="connector-provider-row">
             <div className="connector-provider-main">
               <span className="connector-provider-icon" aria-hidden="true">
-                <GitBranch size={16} strokeWidth={1.8} />
+                <ConnectorGitLabIcon size={16} />
               </span>
               <div className="connector-provider-copy">
                 <strong>{t("connectorGitLab")}</strong>
@@ -707,18 +737,20 @@ function ComposerAddMenu({
             {gitlabStatus.connected ? (
               <div className="connector-provider-actions">
                 <span className="connector-connected-state">{t("connectorConnected")}</span>
-                <Button size="sm" variant="secondaryGray" onClick={handleOpenGitLabForm}>
-                  {t("connectorEdit")}
-                </Button>
-                <Button
-                  className="connector-disconnect-button connector-disconnect-button-danger"
-                  loading={gitlabBusy && busyAction === "disconnect"}
-                  size="sm"
-                  variant="outlineDanger"
-                  onClick={() => void onDisconnectGitLab?.()}
-                >
-                  {t("connectorDisconnect")}
-                </Button>
+                <div className="connector-provider-action-buttons">
+                  <Button className="connector-manage-button" size="sm" variant="secondaryGray" onClick={handleOpenGitLabForm}>
+                    {t("connectorEdit")}
+                  </Button>
+                  <Button
+                    className="connector-disconnect-button connector-disconnect-button-danger"
+                    loading={gitlabBusy && busyAction === "disconnect"}
+                    size="sm"
+                    variant="outlineDanger"
+                    onClick={() => void onDisconnectGitLab?.()}
+                  >
+                    {t("connectorDisconnect")}
+                  </Button>
+                </div>
               </div>
             ) : (
               <Button
@@ -731,52 +763,6 @@ function ComposerAddMenu({
               </Button>
             )}
           </div>
-          {gitlabFormOpen ? (
-            <div className="connector-gitlab-form">
-              <label>
-                <span>{t("connectorGitLabBaseURL")}</span>
-                <TextInput
-                  aria-label={t("connectorGitLabBaseURL")}
-                  autoComplete="url"
-                  placeholder="https://gitlab.example.com"
-                  value={gitlabDraft.base_url}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    setGitLabDraft((current) => ({ ...current, base_url: value }));
-                  }}
-                />
-              </label>
-              <label>
-                <span>{t("connectorGitLabToken")}</span>
-                <TextInput
-                  aria-label={t("connectorGitLabToken")}
-                  autoComplete="off"
-                  placeholder={gitlabStatus.access_token_set ? t("connectorGitLabTokenKeep") : "glpat-…"}
-                  type="password"
-                  value={gitlabDraft.access_token}
-                  onChange={(event) => {
-                    const value = event.currentTarget.value;
-                    setGitLabDraft((current) => ({ ...current, access_token: value }));
-                  }}
-                />
-              </label>
-              <div className="connector-gitlab-form-actions">
-                <Button size="sm" variant="tertiaryGray" onClick={() => setGitLabFormOpen(false)}>
-                  {t("cancel")}
-                </Button>
-                <Button
-                  loading={gitlabBusy && busyAction === "save"}
-                  size="sm"
-                  disabled={
-                    !gitlabDraft.base_url.trim() || (!gitlabStatus.access_token_set && !gitlabDraft.access_token.trim())
-                  }
-                  onClick={() => void handleSaveGitLab()}
-                >
-                  {t("connectorSave")}
-                </Button>
-              </div>
-            </div>
-          ) : null}
           {pending ? (
             <div className="connector-pending" role="status">
               {t("connectorOAuthPending")}
@@ -785,6 +771,76 @@ function ComposerAddMenu({
           {error ? <div className="form-error connector-form-error">{error}</div> : null}
         </section>
       </PopoverContent>
-    </PopoverRoot>
+      </PopoverRoot>
+      <DialogRoot open={gitlabFormOpen} onOpenChange={setGitLabFormOpen}>
+        <DialogContent className="connector-config-dialog">
+          <DialogHeader className="connector-config-dialog-header">
+            <div className="connector-config-dialog-heading">
+              <DialogTitle>{t("connectorGitLab")}</DialogTitle>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          <DialogBody className="connector-config-dialog-body">
+            <label className="connector-config-field">
+              <span>{t("connectorGitLabBaseURL")}</span>
+              <TextInput
+                aria-label={t("connectorGitLabBaseURL")}
+                autoComplete="url"
+                placeholder="https://gitlab.example.com"
+                value={gitlabDraft.base_url}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setGitLabFeedback(null);
+                  setGitLabDraft((current) => ({ ...current, base_url: value }));
+                }}
+              />
+            </label>
+            <label className="connector-config-field">
+              <span>{t("connectorGitLabToken")}</span>
+              <TextInput
+                aria-label={t("connectorGitLabToken")}
+                autoComplete="off"
+                placeholder={gitlabStatus.access_token_set ? t("connectorGitLabTokenKeep") : "glpat-…"}
+                type="password"
+                value={gitlabDraft.access_token}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setGitLabFeedback(null);
+                  setGitLabDraft((current) => ({ ...current, access_token: value }));
+                }}
+              />
+            </label>
+            {gitlabFeedback ? (
+              <div
+                className={`connector-config-feedback${gitlabFeedback.tone === "success" ? " success" : ""}`}
+                role={gitlabFeedback.tone === "success" ? "status" : "alert"}
+              >
+                {gitlabFeedback.message}
+              </div>
+            ) : null}
+          </DialogBody>
+          <DialogFooter className="connector-config-dialog-actions">
+            <Button
+              size="sm"
+              variant="tertiaryGray"
+              onClick={() => {
+                setGitLabFeedback(null);
+                setGitLabFormOpen(false);
+              }}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              loading={gitlabBusy && busyAction === "save"}
+              size="sm"
+              disabled={!gitlabDraft.base_url.trim() || (!gitlabStatus.access_token_set && !gitlabDraft.access_token.trim())}
+              onClick={() => void handleSaveGitLab()}
+            >
+              {t("connectorSave")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+    </>
   );
 }
