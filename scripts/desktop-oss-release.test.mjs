@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   compareReleaseVersions,
+  desktopPackageUploadPaths,
   desktopUpdateFeedPaths,
   desktopUploadPaths,
   generateDownloadsManifest,
@@ -24,6 +25,7 @@ test("normalizes public desktop versions", () => {
   assert.equal(inferReleaseChannel("0.4.5-beta.1"), "beta");
   assert.equal(inferReleaseChannel("0.4.5"), "release");
   assert.equal(inferReleaseChannel("v0.4.6-beta.1"), "beta");
+  assert.equal(inferReleaseChannel("v0.4.6-alpha.1"), "beta");
   assert.equal(inferReleaseChannel("v0.4.6"), "release");
   assert.throws(
     () => inferReleaseChannel("v0.4.6.beta.1"),
@@ -62,6 +64,41 @@ test("selects only website installers for OSS upload", () => {
       "csgclaw-desktop_v0.4.5-beta.1_darwin_amd64.dmg",
       "csgclaw-desktop_v0.4.5-beta.1_windows_amd64.exe",
     ],
+  );
+});
+
+test("selects only the requested immutable desktop packages for manual upload", () => {
+  assert.deepEqual(
+    desktopPackageUploadPaths(
+      "v0.2.1-alpha.1",
+      "/release",
+      "darwin-arm64",
+    ).map((file) => path.basename(file)),
+    [
+      "csgclaw-desktop_v0.2.1-alpha.1_darwin_arm64.dmg",
+      "csgclaw-desktop_v0.2.1-alpha.1_darwin_arm64.zip",
+    ],
+  );
+  assert.deepEqual(
+    desktopPackageUploadPaths(
+      "v0.2.1-alpha.1",
+      "/release",
+      "linux-arm64",
+    ).map((file) => path.basename(file)),
+    ["csgclaw-desktop_v0.2.1-alpha.1_linux_arm64.deb"],
+  );
+  assert.throws(
+    () => desktopPackageUploadPaths("v0.2.1-alpha.1", "/release", ""),
+    /at least one desktop package target is required/,
+  );
+  assert.throws(
+    () =>
+      desktopPackageUploadPaths(
+        "v0.2.1-alpha.1",
+        "/release",
+        "darwin-riscv64",
+      ),
+    /unsupported target/,
   );
 });
 

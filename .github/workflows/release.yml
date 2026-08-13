@@ -13,8 +13,19 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version, for example v0.1.0"
+        description: "Desktop package version, for example v0.2.1-alpha.1"
         required: true
+      desktop_target:
+        description: "Single desktop target to package"
+        required: true
+        type: choice
+        default: darwin-arm64
+        options:
+          - darwin-arm64
+          - darwin-amd64
+          - windows-amd64
+          - linux-amd64
+          - linux-arm64
 
 permissions:
   contents: read
@@ -46,13 +57,19 @@ jobs:
 
       - name: Build matrix from release-platforms.txt
         id: set-matrix
+        env:
+          RELEASE_EVENT: ${{ github.event_name }}
+          DESKTOP_TARGET: ${{ github.event.inputs.desktop_target }}
         run: |
           python3 <<'PY' >> "$GITHUB_OUTPUT"
           import json
+          import os
           from pathlib import Path
 
           rows = []
           desktop_rows = []
+          release_event = os.environ["RELEASE_EVENT"]
+          requested_desktop_target = os.environ.get("DESKTOP_TARGET", "").strip()
           desktop_runners = {
               ("linux", "amd64"): "ubuntu-24.04",
               ("linux", "arm64"): "ubuntu-24.04-arm",
@@ -70,10 +87,15 @@ jobs:
               goos, goarch = parts
               row = {"goos": goos, "goarch": goarch}
               rows.append(row)
+              target = f"{goos}-{goarch}"
+              if release_event == "workflow_dispatch" and target != requested_desktop_target:
+                  continue
               try:
                   desktop_rows.append({**row, "runner": desktop_runners[(goos, goarch)]})
               except KeyError:
                   raise SystemExit(f"no desktop runner configured for {goos}/{goarch}")
+          if release_event == "workflow_dispatch" and len(desktop_rows) != 1:
+              raise SystemExit(f"unsupported desktop target: {requested_desktop_target!r}")
           print("matrix=" + json.dumps({"include": rows}))
           print("desktop_matrix=" + json.dumps({"include": desktop_rows}))
           PY
@@ -97,6 +119,7 @@ jobs:
           echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
   web:
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -146,6 +169,7 @@ jobs:
           if-no-files-found: error
 
   build:
+    if: ${{ github.event_name == 'push' }}
     needs: [prepare, web]
     runs-on: ubuntu-latest
     strategy:
@@ -446,6 +470,7 @@ jobs:
           if-no-files-found: error
 
   merge-and-release:
+    if: ${{ github.event_name == 'push' }}
     needs: [prepare, build, desktop-build]
     runs-on: ubuntu-latest
     permissions:
@@ -473,6 +498,7 @@ jobs:
           files: dist/csgclaw*
 
   publish-desktop-oss:
+    if: ${{ github.event_name == 'push' }}
     needs: [prepare, merge-and-release]
     concurrency:
       group: desktop-oss-${{ needs.prepare.outputs.release_channel }}
@@ -546,3 +572,65 @@ jobs:
             DESKTOP_OSS_CHANNEL="${{ needs.prepare.outputs.release_channel }}" \
             DESKTOP_OSS_RELEASE_DIR=desktop-release \
             DESKTOP_OSS_REQUIRE_PACKAGES=1
+
+  publish-manual-desktop-packages:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [prepare, desktop-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    environment:
+      name: oss-publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: desktop/package.json
+
+      - name: Download selected desktop package
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-dist-${{ github.event.inputs.desktop_target }}
+          path: desktop-release
+
+      - name: Install ossutil
+        shell: bash
+        run: |
+          archive="${RUNNER_TEMP}/ossutil-${OSSUTIL_VERSION}-linux-amd64.zip"
+          extract_dir="${RUNNER_TEMP}/ossutil"
+          bin_dir="${RUNNER_TEMP}/ossutil-bin"
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "${archive}" \
+            "https://gosspublic.alicdn.com/ossutil/v2/${OSSUTIL_VERSION}/ossutil-${OSSUTIL_VERSION}-linux-amd64.zip"
+          printf '%s  %s\n' "${OSSUTIL_LINUX_AMD64_SHA256}" "${archive}" | sha256sum --check -
+          unzip -q "${archive}" -d "${extract_dir}"
+          install -Dm755 \
+            "${extract_dir}/ossutil-${OSSUTIL_VERSION}-linux-amd64/ossutil" \
+            "${bin_dir}/ossutil"
+          echo "${bin_dir}" >> "${GITHUB_PATH}"
+
+      - name: Validate OSS credentials
+        shell: bash
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+        run: |
+          if [ -z "${OSS_ACCESS_KEY_ID}" ] || [ -z "${OSS_ACCESS_KEY_SECRET}" ]; then
+            echo "::error::Configure OSS_ACCESS_KEY_ID and OSS_ACCESS_KEY_SECRET in the selected GitHub environment."
+            exit 1
+          fi
+
+      - name: Upload selected desktop packages to OSS
+        shell: bash
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+        run: |
+          make desktop-oss-upload-packages \
+            VERSION="${{ needs.prepare.outputs.version }}" \
+            DESKTOP_OSS_TARGETS="${{ github.event.inputs.desktop_target }}" \
+            DESKTOP_OSS_RELEASE_DIR=desktop-release

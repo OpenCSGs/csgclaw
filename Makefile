@@ -53,7 +53,7 @@ SANDBOX_CLI_BIN ?= $(SANDBOX_BUNDLE_TOOLS_DIR)/csgclaw-cli
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package desktop-package-macos-signed desktop-package-oss desktop-oss-manifest desktop-oss-publish desktop-oss-release build build-all build-server build-server-bin build-codex-cli build-sandbox-cli install-sandbox-cli run clean package package-all release
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package desktop-package-macos-signed desktop-package-oss desktop-oss-manifest desktop-oss-publish desktop-oss-upload-packages desktop-oss-release build build-all build-server build-server-bin build-codex-cli build-sandbox-cli install-sandbox-cli run clean package package-all release
 
 help:
 	@printf '%s\n' \
@@ -71,6 +71,7 @@ help:
 		'make desktop-package-oss - build and stage this host desktop OSS artifacts' \
 		'make desktop-oss-manifest - validate the collected macOS/Windows installers and write downloads.json' \
 		'make desktop-oss-publish - validate the complete installer set, then upload artifacts and downloads.json to OSS' \
+		'make desktop-oss-upload-packages - upload selected immutable desktop packages without changing OSS JSON manifests' \
 		'make build-server-bin - build bin/csgclaw, bin/csgclaw-cli, and bundled Codex' \
 		'make build-sandbox-cli - build Linux csgclaw-cli into bin/sandbox-tools' \
 		'make run        - build (no docker images), then run the server' \
@@ -250,6 +251,9 @@ desktop-oss-manifest:
 desktop-oss-publish:
 	@$(NODE) "$(DESKTOP_OSS_RELEASE_SCRIPT)" manifest $(DESKTOP_OSS_COMMON_ARGS)
 	@$(NODE) "$(DESKTOP_OSS_RELEASE_SCRIPT)" upload $(DESKTOP_OSS_COMMON_ARGS) $(if $(strip $(DESKTOP_OSS_ENV_FILE)),--env-file "$(DESKTOP_OSS_ENV_FILE)",)
+
+desktop-oss-upload-packages:
+	@$(NODE) "$(DESKTOP_OSS_RELEASE_SCRIPT)" upload-packages $(DESKTOP_OSS_COMMON_ARGS) --targets "$(DESKTOP_OSS_TARGETS)" $(if $(strip $(DESKTOP_OSS_ENV_FILE)),--env-file "$(DESKTOP_OSS_ENV_FILE)",)
 
 desktop-oss-release: desktop-oss-publish
 

@@ -585,9 +585,10 @@ function loadUpdateChannel(): DesktopUpdateChannel {
       }
     }
   } catch {
-    // Missing or invalid preferences use the stable channel.
+    // Missing or invalid preferences follow the installed build: prerelease
+    // packages start on preview, while stable packages stay on release.
   }
-  return "release";
+  return inferDesktopUpdateChannel(app.getVersion());
 }
 
 function saveUpdateChannel(channel: DesktopUpdateChannel): void {

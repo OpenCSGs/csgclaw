@@ -43,6 +43,7 @@ test("infers the desktop update channel from the running version string", () => 
   assert.equal(inferDesktopUpdateChannel("0.0.1"), "release");
   assert.equal(inferDesktopUpdateChannel("v0.2.0"), "release");
   assert.equal(inferDesktopUpdateChannel("v0.2.0-beta.1"), "beta");
+  assert.equal(inferDesktopUpdateChannel("v0.2.0-alpha.1"), "beta");
   assert.equal(inferDesktopUpdateChannel("0.5.0-beta.2"), "beta");
   assert.equal(inferDesktopUpdateChannel("v0.2.0.1"), "beta");
   assert.equal(inferDesktopUpdateChannel("dev"), "beta");

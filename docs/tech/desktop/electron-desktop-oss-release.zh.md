@@ -58,6 +58,23 @@ beta 版本使用 `v<major>.<minor>.<patch>-beta.<number>`，例如
 tag 一经发布即视为不可变。如果 beta 需要继续修复，应递增序号，例如从
 `v0.4.6-beta.3` 发布 `v0.4.6-beta.4`，不要移动或覆盖旧 tag。
 
+`alpha` 也是合法的预发布版本，例如 `v0.4.6-alpha.1`；它与 `beta` 共用预览版
+channel，不单独创建 alpha channel。全新安装的 alpha/beta 桌面包默认选择预览版
+更新通道，稳定包默认选择正式版通道；已有用户保存的通道选择保持不变。
+
+## 手动构建单个桌面目标
+
+需要先验证单个架构，或只补传一个不可变安装包时，可以在 GitHub Actions 的 Release
+workflow 中点击 **Run workflow**，只填写：
+
+- `version`：例如 `v0.2.1-alpha.1`；
+- `desktop_target`：例如 `darwin-arm64`。
+
+手动运行固定为 desktop-only：不会构建 Server/CLI 平台矩阵，不会创建或修改 GitHub
+Release，只会把所选目标的包上传到 OSS `releases/<version>/`。它不会读取、生成或上传
+`downloads.json`、`RELEASES`、`RELEASES.json`，因此不会把该版本发布成官网或自动更新
+channel 的 `latest`。正式 tag 触发仍执行下文所述的完整发布流程。
+
 ## 通过 GitHub 页面发布 beta
 
 ### 1. 确认准备发布的代码

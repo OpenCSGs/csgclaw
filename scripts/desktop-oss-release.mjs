@@ -58,6 +58,18 @@ export function desktopUploadPaths(version, releaseDirectory) {
   );
 }
 
+export function desktopPackageUploadPaths(
+  version,
+  releaseDirectory,
+  rawTargets,
+) {
+  return selectedReleaseTargets(rawTargets).flatMap(({ os, arch }) =>
+    desktopReleaseArtifactNames({ version, goos: os, goarch: arch }).map(
+      (fileName) => path.join(releaseDirectory, fileName),
+    ),
+  );
+}
+
 export function releasePackagePaths(version, releaseDirectory) {
   return releasePackageDefinitions(version)
     .map((definition) => path.join(releaseDirectory, definition.fileName))
@@ -627,12 +639,98 @@ async function uploadDesktopRelease(context, options) {
   console.log(`verified ${manifestURL}`);
 }
 
+function uploadDesktopPackages(context, options) {
+  const environmentFile = path.resolve(
+    options["env-file"] || defaultEnvironmentFile,
+  );
+  const fileEnvironment = parseEnvironmentFile(environmentFile);
+  const setting = (name, fallback = "") =>
+    process.env[name] || fileEnvironment[name] || fallback;
+  const accessKeyID = setting("OSS_ACCESS_KEY_ID");
+  const accessKeySecret = setting("OSS_ACCESS_KEY_SECRET");
+  if (!accessKeyID || !accessKeySecret) {
+    throw new Error(
+      `OSS credentials are empty; copy .desktop-release-oss.env.example to ${path.basename(environmentFile)} and fill it locally`,
+    );
+  }
+
+  const bucket = setting("OSS_BUCKET", defaultBucket);
+  const prefix = setting("OSS_PREFIX", defaultPrefix).replace(/^\/+|\/+$/g, "");
+  const region = setting("OSS_REGION", "cn-beijing");
+  const endpoint = setting(
+    "OSS_ENDPOINT",
+    "https://oss-cn-beijing.aliyuncs.com",
+  );
+  const ossEnvironment = {
+    ...process.env,
+    OSS_ACCESS_KEY_ID: accessKeyID,
+    OSS_ACCESS_KEY_SECRET: accessKeySecret,
+    OSS_REGION: region,
+    OSS_ENDPOINT: endpoint,
+  };
+  const packageFiles = desktopPackageUploadPaths(
+    context.version,
+    context.releaseDirectory,
+    options.targets,
+  );
+  for (const filePath of packageFiles) {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`desktop package does not exist: ${filePath}`);
+    }
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size === 0) {
+      throw new Error(`desktop package is empty or not a file: ${filePath}`);
+    }
+  }
+
+  runCommand("ossutil", ["version"], ossEnvironment);
+  for (const filePath of packageFiles) {
+    const objectPath = `oss://${bucket}/${prefix}/releases/${context.version}/${path.basename(filePath)}`;
+    runCommand(
+      "ossutil",
+      [
+        "cp",
+        filePath,
+        objectPath,
+        "-u",
+        "--cache-control",
+        "public,max-age=31536000,immutable",
+      ],
+      ossEnvironment,
+    );
+  }
+  console.log(
+    `uploaded ${packageFiles.length} immutable desktop package(s) without changing channel manifests`,
+  );
+}
+
 export function legacyMacUpdateManifestRelativePath(relativePath) {
   const normalized = String(relativePath)
     .replaceAll("\\", "/")
     .replace(/^\/+|\/+$/g, "");
   const match = /^darwin\/([^/]+)\/RELEASES\.json$/.exec(normalized);
   return match ? `darwin/${match[1]}` : "";
+}
+
+function selectedReleaseTargets(rawTargets) {
+  const targets = String(rawTargets || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (targets.length === 0) {
+    throw new Error("at least one desktop package target is required");
+  }
+  const selected = [];
+  for (const target of new Set(targets)) {
+    const definition = releasePackageTargets.find(
+      ({ os, arch }) => `${os}-${arch}` === target,
+    );
+    if (!definition) {
+      throw new Error(`unsupported target: ${target}`);
+    }
+    selected.push(definition);
+  }
+  return selected;
 }
 
 export function desktopUpdateFeedPaths(releaseDirectory) {
@@ -682,6 +780,7 @@ function printHelp() {
   node scripts/desktop-oss-release.mjs build --version <semver> [--channel <beta|release>] [--targets <list>] [--release-directory <path>] [--force]
   node scripts/desktop-oss-release.mjs manifest --version <semver> [--channel <beta|release>] [--release-directory <path>] [--allow-partial] [--require-packages]
   node scripts/desktop-oss-release.mjs upload --version <semver> [--channel <beta|release>] [--release-directory <path>] [--env-file <path>] [--require-packages]
+  node scripts/desktop-oss-release.mjs upload-packages --version <semver> --targets <list> [--release-directory <path>] [--env-file <path>]
 
 Targets:
   darwin-arm64,darwin-amd64  Build on macOS
@@ -718,6 +817,9 @@ async function main(args) {
     }
     case "upload":
       await uploadDesktopRelease(context, options);
+      break;
+    case "upload-packages":
+      uploadDesktopPackages(context, options);
       break;
     default:
       throw new Error(`unknown command: ${command}`);
