@@ -189,10 +189,18 @@ func pickDirectoryLinux(ctx context.Context) (string, error) {
 
 func pickDirectoryWindows(ctx context.Context) (string, error) {
 	script := strings.Join([]string{
+		`[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`,
 		`Add-Type -AssemblyName System.Windows.Forms`,
+		`Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; using System.Windows.Forms; namespace CSGClaw { public sealed class WindowOwner : IWin32Window { [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow(); private WindowOwner(IntPtr handle) { Handle = handle; } public IntPtr Handle { get; private set; } public static WindowOwner Foreground() { IntPtr handle = GetForegroundWindow(); return handle == IntPtr.Zero ? null : new WindowOwner(handle); } } }' -ReferencedAssemblies System.Windows.Forms`,
+		`$owner = [CSGClaw.WindowOwner]::Foreground()`,
 		`$dialog = New-Object System.Windows.Forms.FolderBrowserDialog`,
 		`$dialog.Description = 'Select a directory for CSGClaw'`,
-		`if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {`,
+		`if ($null -ne $owner) {`,
+		`  $result = $dialog.ShowDialog($owner)`,
+		`} else {`,
+		`  $result = $dialog.ShowDialog()`,
+		`}`,
+		`if ($result -eq [System.Windows.Forms.DialogResult]::OK) {`,
 		`  [Console]::Out.Write($dialog.SelectedPath)`,
 		`} else {`,
 		`  exit 1`,

@@ -150,15 +150,15 @@ func TestPickDirectoryWindowsUsesSeparatedSTACommands(t *testing.T) {
 	runDirectoryPickerCommand = func(_ context.Context, name string, args ...string) ([]byte, error) {
 		commandName = name
 		commandArgs = slices.Clone(args)
-		return []byte(`C:\workspace`), nil
+		return []byte(`C:\工作目录`), nil
 	}
 
 	path, err := pickDirectoryWindows(context.Background())
 	if err != nil {
 		t.Fatalf("pickDirectoryWindows() error = %v", err)
 	}
-	if path != `C:\workspace` {
-		t.Fatalf("pickDirectoryWindows() = %q, want %q", path, `C:\workspace`)
+	if path != `C:\工作目录` {
+		t.Fatalf("pickDirectoryWindows() = %q, want %q", path, `C:\工作目录`)
 	}
 	if commandName != "powershell" {
 		t.Fatalf("command name = %q, want powershell", commandName)
@@ -170,7 +170,16 @@ func TestPickDirectoryWindowsUsesSeparatedSTACommands(t *testing.T) {
 		t.Fatalf("command args = %q, want -Command followed by script", commandArgs)
 	}
 	script := commandArgs[len(commandArgs)-1]
-	if !strings.Contains(script, "System.Windows.Forms\n$dialog =") {
+	if !strings.HasPrefix(script, "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n") {
+		t.Fatalf("PowerShell output encoding is not set to UTF-8 first: %q", script)
+	}
+	if !strings.Contains(script, "System.Windows.Forms\nAdd-Type") {
 		t.Fatalf("PowerShell statements are not separated by a newline: %q", script)
+	}
+	if !strings.Contains(script, `WindowOwner : IWin32Window`) {
+		t.Fatalf("PowerShell script does not define a browser window owner: %q", script)
+	}
+	if !strings.Contains(script, `$dialog.ShowDialog($owner)`) {
+		t.Fatalf("PowerShell dialog is not attached to the foreground browser window: %q", script)
 	}
 }
