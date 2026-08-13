@@ -67,9 +67,10 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	siteBaseURL := h.currentOpenCSGEnvironment(r).OpenCSGBaseURL
 	items := make([]remoteSkillSummary, 0, len(list.Items))
 	for _, item := range list.Items {
-		remoteURL, err := skillremote.AgenticHubSkillWebURL(baseURL, item.RemotePath)
+		remoteURL, err := skillremote.AgenticHubSkillWebURL(siteBaseURL, item.RemotePath)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return

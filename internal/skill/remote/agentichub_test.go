@@ -156,12 +156,12 @@ func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
 	}
 }
 
-func TestAgenticHubSkillWebURLPreservesHubBasePath(t *testing.T) {
-	got, err := AgenticHubSkillWebURL("https://hub.example.test/community", "AIWizards/agent-builder")
+func TestAgenticHubSkillWebURLPreservesSiteBasePath(t *testing.T) {
+	got, err := AgenticHubSkillWebURL("https://opencsg.example.test/community", "AIWizards/agent-builder")
 	if err != nil {
 		t.Fatalf("AgenticHubSkillWebURL() error = %v", err)
 	}
-	if want := "https://hub.example.test/community/skills/AIWizards/agent-builder"; got != want {
+	if want := "https://opencsg.example.test/community/skills/AIWizards/agent-builder"; got != want {
 		t.Fatalf("web URL = %q, want %q", got, want)
 	}
 }

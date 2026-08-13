@@ -138,7 +138,7 @@ The server keeps the current Hub catalog ordering and returns normalized Skill s
       "source": "official",
       "remote_path": "AIWizards/agent-builder",
       "remote_ref": "main",
-      "remote_url": "https://hub.opencsg.com/skills/AIWizards/agent-builder"
+      "remote_url": "https://opencsg.com/skills/AIWizards/agent-builder"
     }
   ],
   "page": 1,
@@ -147,6 +147,8 @@ The server keeps the current Hub catalog ordering and returns normalized Skill s
   "next_page": 2
 }
 ```
+
+`remote_path` is the stable remote Skill identity used for installation. `remote_url` is the browser detail URL: signed-out requests use `https://opencsg.com`, while signed-in requests use the current OpenCSG login site. The Hub API base URL is not used as a browser URL.
 
 ### `POST /api/v1/skills:install`
 

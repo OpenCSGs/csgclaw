@@ -371,7 +371,7 @@ describe("WorkspaceTabPanels", () => {
           name: "agent-builder",
           description: "Build agents",
           remotePath: "AIWizards/agent-builder",
-          remoteURL: "https://opencsg-stg.example.test/skills/AIWizards/agent-builder",
+          remoteURL: "https://opencsg.com/skills/AIWizards/agent-builder",
         },
       ],
       skills: [{ name: "agent-builder", description: "Installed skill" }],
@@ -433,7 +433,7 @@ describe("WorkspaceTabPanels", () => {
     expect(screen.queryByText("official")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /agent-builder/ })).toHaveAttribute(
       "href",
-      "https://opencsg-stg.example.test/skills/AIWizards/agent-builder",
+      "https://opencsg.com/skills/AIWizards/agent-builder",
     );
     fireEvent.change(screen.getByRole("searchbox", { name: "Search community skills" }), {
       target: { value: "sa" },

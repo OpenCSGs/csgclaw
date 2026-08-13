@@ -26,10 +26,29 @@ func (h *Handler) currentOpenCSGEnvironment(r *http.Request) auth.Environment {
 		}
 		return env
 	}
-	if openCSGBaseURL := strings.TrimSpace(status.OpenCSGBaseURL); openCSGBaseURL != "" {
+	env = openCSGEnvironmentFromStatus(status)
+	return env
+}
+
+func openCSGEnvironmentFromStatus(status auth.Status) auth.Environment {
+	env := auth.DefaultEnvironment()
+	if !status.Authenticated {
+		return env
+	}
+	if openCSGBaseURL := strings.TrimRight(strings.TrimSpace(status.OpenCSGBaseURL), "/"); openCSGBaseURL != "" {
 		env = auth.EnvironmentForOpenCSGBaseURL(openCSGBaseURL)
-	} else if baseURL := strings.TrimRight(strings.TrimSpace(status.BaseURL), "/"); baseURL != "" {
-		env.CSGHubBaseURL = baseURL
+	} else if csgHubBaseURL := strings.TrimRight(strings.TrimSpace(status.BaseURL), "/"); csgHubBaseURL != "" {
+		// Login records created before OpenCSGBaseURL was persisted only contain
+		// the Hub API URL. Recover the matching public site for known environments.
+		switch csgHubBaseURL {
+		case auth.DefaultCSGHubBaseURL:
+			env = auth.DefaultEnvironment()
+		case auth.StageCSGHubBaseURL:
+			env = auth.EnvironmentForOpenCSGBaseURL(auth.StageOpenCSGBaseURL)
+		default:
+			env = auth.EnvironmentForOpenCSGBaseURL(csgHubBaseURL)
+			env.CSGHubBaseURL = csgHubBaseURL
+		}
 	}
 	if baseURL := strings.TrimRight(strings.TrimSpace(status.AIGatewayBaseURL), "/"); baseURL != "" {
 		env.AIGatewayBaseURL = baseURL

@@ -4444,6 +4444,12 @@ func TestHandleSkillUpload(t *testing.T) {
 }
 
 func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
+	currentStatus := auth.Status{}
+	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return currentStatus, nil
+	})
+	defer restore()
+
 	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/skills" {
 			t.Fatalf("path = %q, want /api/v1/skills", r.URL.Path)
@@ -4535,8 +4541,58 @@ enabled = true
 	if item.Name != "agent-builder" || !item.Readonly || item.RemotePath != "AIWizards/agent-builder" || item.RemoteRef != "dev" || item.Source != "official" {
 		t.Fatalf("item = %+v, want normalized official skill", item)
 	}
-	if want := officialHub.URL + "/skills/AIWizards/agent-builder"; item.RemoteURL != want {
+	if want := auth.DefaultOpenCSGBaseURL + "/skills/AIWizards/agent-builder"; item.RemoteURL != want {
 		t.Fatalf("remote_url = %q, want %q", item.RemoteURL, want)
+	}
+
+	for _, test := range []struct {
+		name   string
+		status auth.Status
+		want   string
+	}{
+		{
+			name:   "legacy production login",
+			status: auth.Status{Authenticated: true, BaseURL: auth.DefaultCSGHubBaseURL},
+			want:   auth.DefaultOpenCSGBaseURL + "/skills/AIWizards/agent-builder",
+		},
+		{
+			name: "stage login",
+			status: auth.Status{
+				Authenticated:  true,
+				OpenCSGBaseURL: auth.StageOpenCSGBaseURL,
+				BaseURL:        auth.StageCSGHubBaseURL,
+			},
+			want: auth.StageOpenCSGBaseURL + "/skills/AIWizards/agent-builder",
+		},
+		{
+			name: "custom login",
+			status: auth.Status{
+				Authenticated:  true,
+				OpenCSGBaseURL: "https://east.example.test",
+				BaseURL:        "https://east.example.test",
+			},
+			want: "https://east.example.test/skills/AIWizards/agent-builder",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			currentStatus = test.status
+			rec := httptest.NewRecorder()
+			srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/skills/remote?page=2&per=16&search=agents", nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+			}
+			var got struct {
+				Items []struct {
+					RemoteURL string `json:"remote_url"`
+				} `json:"items"`
+			}
+			if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if len(got.Items) != 1 || got.Items[0].RemoteURL != test.want {
+				t.Fatalf("items = %+v, want remote_url %q", got.Items, test.want)
+			}
+		})
 	}
 }
 

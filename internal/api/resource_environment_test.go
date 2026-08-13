@@ -90,8 +90,47 @@ func TestCurrentOpenCSGEnvironmentPrefersLoginSiteOverStoredHubURL(t *testing.T)
 	defer restore()
 
 	env := (&Handler{}).currentOpenCSGEnvironment(httptest.NewRequest(http.MethodGet, "/api/v1/hub/templates", nil))
+	if got, want := env.OpenCSGBaseURL, auth.StageOpenCSGBaseURL; got != want {
+		t.Fatalf("OpenCSGBaseURL = %q, want %q", got, want)
+	}
 	if got, want := env.CSGHubBaseURL, auth.StageCSGHubBaseURL; got != want {
 		t.Fatalf("CSGHubBaseURL = %q, want %q", got, want)
+	}
+}
+
+func TestOpenCSGEnvironmentFromStatusRecoversLegacyLoginSite(t *testing.T) {
+	tests := []struct {
+		name       string
+		status     auth.Status
+		wantSite   string
+		wantHubAPI string
+	}{
+		{
+			name:       "production",
+			status:     auth.Status{Authenticated: true, BaseURL: auth.DefaultCSGHubBaseURL},
+			wantSite:   auth.DefaultOpenCSGBaseURL,
+			wantHubAPI: auth.DefaultCSGHubBaseURL,
+		},
+		{
+			name:       "stage",
+			status:     auth.Status{Authenticated: true, BaseURL: auth.StageCSGHubBaseURL},
+			wantSite:   auth.StageOpenCSGBaseURL,
+			wantHubAPI: auth.StageCSGHubBaseURL,
+		},
+		{
+			name:       "custom",
+			status:     auth.Status{Authenticated: true, BaseURL: "https://east.example.test"},
+			wantSite:   "https://east.example.test",
+			wantHubAPI: "https://east.example.test",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := openCSGEnvironmentFromStatus(test.status)
+			if env.OpenCSGBaseURL != test.wantSite || env.CSGHubBaseURL != test.wantHubAPI {
+				t.Fatalf("environment = %+v, want site %q and Hub API %q", env, test.wantSite, test.wantHubAPI)
+			}
+		})
 	}
 }
 

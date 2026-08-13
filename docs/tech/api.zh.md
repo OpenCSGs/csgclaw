@@ -138,7 +138,7 @@ Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘�
       "source": "official",
       "remote_path": "AIWizards/agent-builder",
       "remote_ref": "main",
-      "remote_url": "https://hub.opencsg.com/skills/AIWizards/agent-builder"
+      "remote_url": "https://opencsg.com/skills/AIWizards/agent-builder"
     }
   ],
   "page": 1,
@@ -147,6 +147,8 @@ Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘�
   "next_page": 2
 }
 ```
+
+`remote_path` 是用于安装的稳定远端 Skill 标识。`remote_url` 是浏览器详情地址：未登录时使用 `https://opencsg.com`，登录后使用当前 OpenCSG 登录站点。Hub API 地址不作为网页地址使用。
 
 ### `POST /api/v1/skills:install`
 

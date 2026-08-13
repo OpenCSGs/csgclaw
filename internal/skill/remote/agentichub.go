@@ -185,14 +185,14 @@ func AgenticHubSkillArchiveName(remotePath string) string {
 	return agenticHubSkillName(remotePath) + ".zip"
 }
 
-func AgenticHubSkillWebURL(baseURL, remotePath string) (string, error) {
+func AgenticHubSkillWebURL(siteBaseURL, remotePath string) (string, error) {
 	remotePath, err := cleanAgenticHubPath(remotePath, false)
 	if err != nil {
 		return "", err
 	}
 	parts := []string{"skills"}
 	parts = append(parts, strings.Split(remotePath, "/")...)
-	return buildAgenticHubURL(baseURL, parts, false, nil)
+	return buildAgenticHubURL(siteBaseURL, parts, false, nil)
 }
 
 func IsInvalidAgenticHubRequest(err error) bool {
