@@ -11,7 +11,13 @@ import {
 } from "@/models/authEnvironment";
 import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import { githubFeedbackIssueURL } from "@/models/feedback";
-import { formatSidebarVersionLabel, hasUpgradeAttention, isLocalBuildUpgradeStatus } from "@/models/upgradeStatus";
+import {
+  formatSidebarVersionLabel,
+  hasUpgradeAttention,
+  inferUpgradeChannelFromVersion,
+  isLocalBuildUpgradeStatus,
+  upgradeErrorMessage,
+} from "@/models/upgradeStatus";
 import { nextSimulatedUpgradeProgress } from "@/models/upgradeProgress";
 import { classNames } from "@/shared/lib/classNames";
 import {
@@ -22,6 +28,7 @@ import {
 import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from "@/shared/storage/authEnvironment";
 import type { ThemeMode } from "@/shared/theme/theme";
 import { OpenCSGConnectionDialog, OpenCSGSwitchDialog } from "./components/OpenCSGConnectionDialog";
+import { SwitchVersionDialog } from "./components/SwitchVersionDialog";
 import styles from "./SettingsPage.module.css";
 
 export function SettingsPage() {
@@ -31,6 +38,7 @@ export function SettingsPage() {
   const [connectionDraft, setConnectionDraft] = useState<AuthEnvironmentDraft>(defaultAuthEnvironmentDraft);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
+  const [switchVersionOpen, setSwitchVersionOpen] = useState(false);
   const sidebar = controller.sidebarProps;
   const progressActive = Boolean(
     sidebar && (sidebar.upgradeChannelBusy || sidebar.upgradeStatus?.checking || sidebar.upgradeStatus?.upgrading),
@@ -59,15 +67,15 @@ export function SettingsPage() {
         sidebar.upgradeStatus?.auto_upgrade_supported !== false &&
         hasUpgradeAttention(sidebar.upgradeStatus, sidebar.upgradePhase, sidebar.upgradeBusy)));
   const showUpgradeChannel = sidebar.showUpgradeControls;
-  const upgradeChannel = sidebar.upgradeStatus?.channel ?? "release";
+  const inferredUpgradeChannel = inferUpgradeChannelFromVersion(currentVersion);
   const upgradeChannelDisabled = Boolean(
     sidebar.upgradeChannelBusy ||
-    sidebar.upgradeChannelLocked ||
     sidebar.upgradeBusy ||
     sidebar.upgradeStatus?.checking ||
     sidebar.upgradeStatus?.upgrading,
   );
   const showUpgradeProgress = upgradeProgress.visible;
+  const versionError = sidebar.upgradeError || upgradeErrorMessage(sidebar.upgradeStatus, sidebar.t);
   const showNewVersionBadge = Boolean(
     sidebar.showUpgradeControls &&
     (mockUpgradeAvailable ||
@@ -291,62 +299,54 @@ export function SettingsPage() {
           description={sidebar.t("settingsVersionDescription")}
         >
           <div className={styles.stack}>
-            <div className={classNames(styles.versionValue, showUpgradeAction && styles.versionValueWithAction)}>
+            <div className={styles.versionValue}>
               <span className={styles.versionLabel}>{sidebar.t("settingsCurrentVersion")}</span>
-              <strong>{version}</strong>
-              {showUpgradeAction ? (
-                <Button
-                  className={styles.designButton}
-                  variant="primary"
-                  size="md"
-                  disabled={sidebar.upgradeBusy || sidebar.upgradeStatus?.upgrading}
-                  onClick={sidebar.onOpenUpgrade}
-                >
-                  {sidebar.t(sidebar.upgradeStatus?.downloaded ? "upgradeAction" : "upgradeDownloadAction")}
-                </Button>
-              ) : null}
-            </div>
-            {showUpgradeChannel ? (
-              <>
-                <div className={styles.settingLine}>
-                  <span className={styles.controlLabel}>{sidebar.t("upgradeChannel")}</span>
-                  <div className={styles.segmented} role="group" aria-label={sidebar.t("upgradeChannel")}>
-                    <button
-                      type="button"
-                      className={classNames(styles.textSegmentButton, upgradeChannel === "release" && styles.active)}
-                      aria-pressed={upgradeChannel === "release"}
-                      disabled={upgradeChannelDisabled}
-                      onClick={() => void sidebar.onUpgradeChannelChange("release")}
+              <div className={styles.versionActions}>
+                <div className={styles.versionMeta}>
+                  <strong>{version}</strong>
+                  {showUpgradeAction ? (
+                    <Button
+                      className={styles.designButton}
+                      variant="primary"
+                      size="md"
+                      disabled={sidebar.upgradeBusy || sidebar.upgradeStatus?.upgrading}
+                      onClick={sidebar.onOpenUpgrade}
                     >
-                      {sidebar.t("upgradeChannelRelease")}
-                    </button>
-                    <button
-                      type="button"
-                      className={classNames(styles.textSegmentButton, upgradeChannel === "beta" && styles.active)}
-                      aria-pressed={upgradeChannel === "beta"}
-                      disabled={upgradeChannelDisabled}
-                      onClick={() => void sidebar.onUpgradeChannelChange("beta")}
-                    >
-                      {sidebar.t("upgradeChannelBeta")}
-                    </button>
-                  </div>
+                      {sidebar.t(sidebar.upgradeStatus?.downloaded ? "upgradeAction" : "upgradeDownloadAction")}
+                    </Button>
+                  ) : null}
                 </div>
-                {showUpgradeProgress ? (
-                  <div
-                    className={styles.upgradeProgressRow}
-                    role="progressbar"
-                    aria-label={sidebar.t("upgradeProgressLabel")}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={upgradeProgress.percent}
+                {showUpgradeChannel ? (
+                  <button
+                    type="button"
+                    className={styles.versionChannelLink}
+                    disabled={upgradeChannelDisabled}
+                    onClick={() => setSwitchVersionOpen(true)}
                   >
-                    <div className={styles.upgradeProgressTrack} aria-hidden="true">
-                      <span style={{ width: `${upgradeProgress.percent}%` }}></span>
-                    </div>
-                    <span className={styles.upgradeProgressValue}>{upgradeProgress.percent}%</span>
-                  </div>
+                    {sidebar.t("upgradeChannelSwitch")}
+                  </button>
                 ) : null}
-              </>
+              </div>
+            </div>
+            {showUpgradeChannel && showUpgradeProgress ? (
+              <div
+                className={styles.upgradeProgressRow}
+                role="progressbar"
+                aria-label={sidebar.t("upgradeProgressLabel")}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={upgradeProgress.percent}
+              >
+                <div className={styles.upgradeProgressTrack} aria-hidden="true">
+                  <span style={{ width: `${upgradeProgress.percent}%` }}></span>
+                </div>
+                <span className={styles.upgradeProgressValue}>{upgradeProgress.percent}%</span>
+              </div>
+            ) : null}
+            {versionError ? (
+              <p className={styles.inlineError} role="alert">
+                {versionError}
+              </p>
             ) : null}
           </div>
         </SettingsRow>
@@ -393,6 +393,15 @@ export function SettingsPage() {
         t={sidebar.t}
         onConfirm={() => void handleSwitchEnvironment()}
         onOpenChange={setSwitchOpen}
+      />
+      <SwitchVersionDialog
+        busy={upgradeChannelDisabled}
+        currentChannel={inferredUpgradeChannel}
+        error={sidebar.upgradeError}
+        open={switchVersionOpen}
+        t={sidebar.t}
+        onConfirm={sidebar.onUpgradeChannelChange}
+        onOpenChange={setSwitchVersionOpen}
       />
     </section>
   );

@@ -5,7 +5,7 @@ import {
   upgradeErrorMessage,
   upgradeStatusLabel,
 } from "@/models/upgradeStatus";
-import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
+import type { UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { TranslateFn } from "@/models/conversations";
 import { getDesktopBridge } from "@/shared/platform/desktopBridge";
 import { ModalCloseButton } from "./ModalCloseButton";
@@ -13,12 +13,9 @@ import { ModalCloseButton } from "./ModalCloseButton";
 export type UpgradeModalProps = {
   appVersion?: string;
   onApply: () => void | Promise<void>;
-  onChannelChange: (channel: UpgradeChannel) => void | Promise<void>;
   onClose: () => void;
   t: TranslateFn;
   upgradeBusy?: boolean;
-  upgradeChannelBusy?: boolean;
-  upgradeChannelLocked?: boolean;
   upgradeError?: string;
   upgradePhase: UpgradePhase;
   upgradeStatus?: UpgradeStatus | null;
@@ -30,18 +27,11 @@ export function UpgradeModal({
   appVersion = "",
   upgradePhase,
   upgradeBusy = false,
-  upgradeChannelBusy = false,
-  upgradeChannelLocked = false,
   upgradeError = "",
   onClose,
   onApply,
-  onChannelChange,
 }: UpgradeModalProps) {
   const currentVersion = upgradeStatus?.current_version || appVersion || "dev";
-  const channel = upgradeStatus?.channel ?? "release";
-  const channelDisabled = Boolean(
-    upgradeBusy || upgradeChannelBusy || upgradeChannelLocked || upgradeStatus?.upgrading,
-  );
   const manualUpgradeRequired = Boolean(
     upgradeStatus?.update_available && upgradeStatus.auto_upgrade_supported === false,
   );
@@ -63,26 +53,6 @@ export function UpgradeModal({
             <div className="modal-subtitle">{subtitle}</div>
           </div>
           <ModalCloseButton label={t("close")} onClose={onClose} />
-        </div>
-        <div className="upgrade-channel-card">
-          <div className="upgrade-channel-copy">
-            <strong>{t("upgradeChannel")}</strong>
-            <span>{t("upgradeChannelHint")}</span>
-          </div>
-          <div className="upgrade-channel-switch" role="group" aria-label={t("upgradeChannel")}>
-            {(["release", "beta"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={channel === value ? "active" : ""}
-                aria-pressed={channel === value}
-                disabled={channelDisabled}
-                onClick={() => void onChannelChange(value)}
-              >
-                {t(value === "release" ? "upgradeChannelRelease" : "upgradeChannelBeta")}
-              </button>
-            ))}
-          </div>
         </div>
         <div className="upgrade-summary">
           <div className="upgrade-summary-row">

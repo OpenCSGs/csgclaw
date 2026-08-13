@@ -3,6 +3,13 @@ import type { TranslateFn } from "@/models/conversations";
 
 export type UpgradeChannel = "release" | "beta";
 
+const STABLE_RELEASE_VERSION_PATTERN = /^(?:v)?\d+\.\d+\.\d+$/i;
+
+export function inferUpgradeChannelFromVersion(version: unknown): UpgradeChannel {
+  const raw = typeof version === "string" ? version.trim() : "";
+  return raw.length > 0 && STABLE_RELEASE_VERSION_PATTERN.test(raw) ? "release" : "beta";
+}
+
 export type UpgradeStatus = {
   auto_upgrade_supported: boolean;
   auto_upgrade_unsupported_reason: string;
@@ -71,25 +78,84 @@ export function normalizeUpgradeStatus(status: unknown): UpgradeStatus | null {
   };
 }
 
+export function classifyDesktopUpdateErrorKind(message: string): string {
+  const text = message.trim();
+  if (!text) {
+    return "";
+  }
+  if (
+    /does not provide a signed|HTTP 404|NoSuchKey|specified key does not exist|update feed did not offer|did not offer version/i.test(
+      text,
+    )
+  ) {
+    return "missing_update_package";
+  }
+  if (
+    /code sign|codesign|code signature|not signed|unsigned|improperly signed|Developer ID|notar|Gatekeeper|spctl/i.test(
+      text,
+    )
+  ) {
+    return "signature";
+  }
+  if (
+    /网络连接已中断|net::ERR_|ERR_CONNECTION|ENOTFOUND|ECONNRESET|ETIMEDOUT|timed out|offline|interrupted|Failed to download/i.test(
+      text,
+    )
+  ) {
+    return "network_download";
+  }
+  return "desktop_update";
+}
+
 export function upgradeErrorMessage(status: UpgradeStatus | null | undefined, t: TranslateFn): string {
   if (!status?.last_error && !status?.last_error_kind && !status?.last_error_log_path) {
     return "";
   }
   const detail = status.last_error.trim();
   const logPath = status.last_error_log_path.trim();
-  const kind = status.last_error_kind.trim();
+  let kind = status.last_error_kind.trim();
+  if (kind === "desktop_update") {
+    kind = classifyDesktopUpdateErrorKind(detail) || kind;
+  } else if (!kind) {
+    const classified = classifyDesktopUpdateErrorKind(detail);
+    if (classified && classified !== "desktop_update") {
+      kind = classified;
+    }
+  }
   if (!kind) {
     return [detail, logPath ? t("upgradeErrorLogPath", { path: logPath }) : ""].filter(Boolean).join("\n");
   }
 
   const parts = [upgradeErrorSummary(kind, t)];
-  if (detail) {
+  if (detail && kind !== "signature" && kind !== "missing_update_package") {
     parts.push(t("upgradeErrorDetails", { detail }));
   }
   if (logPath) {
     parts.push(t("upgradeErrorLogPath", { path: logPath }));
   }
   return parts.filter(Boolean).join("\n");
+}
+
+export function formatClassifiedUpgradeError(detail: string, t: TranslateFn): string {
+  return upgradeErrorMessage(
+    {
+      auto_upgrade_supported: true,
+      auto_upgrade_unsupported_reason: "",
+      channel: "release",
+      checking: false,
+      current_version: "",
+      downloaded: false,
+      last_checked_at: "",
+      last_error: detail.trim(),
+      last_error_kind: classifyDesktopUpdateErrorKind(detail) || "desktop_update",
+      last_error_log_path: "",
+      latest_version: "",
+      manual_restart_required: false,
+      update_available: false,
+      upgrading: false,
+    },
+    t,
+  );
 }
 
 function upgradeErrorSummary(kind: string, t: TranslateFn): string {
@@ -105,8 +171,12 @@ function upgradeErrorSummary(kind: string, t: TranslateFn): string {
       return t("upgradeErrorNetworkOrService");
     case "missing_path":
       return t("upgradeErrorLocalInstall");
+    case "missing_update_package":
+      return t("upgradeErrorMissingUpdatePackage");
     case "permission":
       return t("upgradeErrorPermission");
+    case "signature":
+      return t("upgradeErrorSignature");
     default:
       return t("upgradeErrorUnknown");
   }

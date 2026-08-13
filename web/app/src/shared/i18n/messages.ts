@@ -1261,15 +1261,21 @@ export const messages = {
     upgradeChannelRelease: "正式版",
     upgradeChannelBeta: "预览版",
     upgradeChannelHint: "切换后会检查所选通道；如果存在更高版本，将下载并自动重启。",
-    upgradeChannelSwitchFailed: "切换升级通道失败，请重试。",
+    upgradeChannelSwitch: "切换版本通道",
+    upgradeChannelSwitchTitle: "切换版本通道",
+    upgradeChannelSwitchDescription: "选择要使用的版本通道。确认后会检查该通道；如果存在可安装版本，将下载并自动重启。",
+    upgradeChannelSwitchFailed: "切换版本通道失败，请重试。",
     upgradeProgressLabel: "正在检查并准备更新",
     upgradeErrorArchiveInvalid: "下载的升级包无效或已损坏，请重试；如果持续失败，请反馈该版本安装包问题。",
     upgradeErrorDetails: "详情：{detail}",
     upgradeErrorDiskSpace: "磁盘空间不足，无法完成升级。请清理临时目录或安装目录所在磁盘后重试。",
     upgradeErrorLocalInstall: "本地安装目录或升级状态异常，请确认安装是否完整后重试。",
     upgradeErrorLogPath: "日志：{path}",
+    upgradeErrorMissingUpdatePackage:
+      "该版本通道没有可用的已签名自动更新包，无法完成更新。请从官网下载安装包，或改用其他通道。",
     upgradeErrorNetworkOrService: "网络或服务访问失败，请检查网络、代理或稍后重试。",
     upgradeErrorPermission: "本地权限不足，无法准备或安装升级。请检查安装目录、配置/日志目录和系统临时目录的写入权限。",
+    upgradeErrorSignature: "目标版本未完成签名或公证，无法自动更新。请改用已签名的安装包，或继续使用当前版本。",
     upgradeErrorUnknown: "升级失败。请查看详情并重试。",
     upgradeTitle: "发现新版本",
     upgradeSubtitle: "可以直接在界面中完成升级，升级过程会短暂重启本地服务。",
@@ -2618,7 +2624,11 @@ export const messages = {
     upgradeChannelBeta: "Preview",
     upgradeChannelHint:
       "Switching checks the selected channel and automatically downloads and restarts when a newer version exists.",
-    upgradeChannelSwitchFailed: "Failed to switch the update channel. Please retry.",
+    upgradeChannelSwitch: "Switch channel",
+    upgradeChannelSwitchTitle: "Switch channel",
+    upgradeChannelSwitchDescription:
+      "Choose a version channel. Confirming checks that channel and downloads and restarts when an installable version is available.",
+    upgradeChannelSwitchFailed: "Failed to switch the version channel. Please retry.",
     upgradeProgressLabel: "Checking and preparing the update",
     upgradeErrorArchiveInvalid:
       "The downloaded upgrade package is invalid or corrupted. Retry the upgrade; if it keeps failing, report the release package.",
@@ -2628,9 +2638,13 @@ export const messages = {
     upgradeErrorLocalInstall:
       "The local installation directory or upgrade state looks abnormal. Check that the installation is complete, then retry.",
     upgradeErrorLogPath: "Log: {path}",
+    upgradeErrorMissingUpdatePackage:
+      "This channel does not provide a signed auto-update package. Download the installer from the official site, or switch to another channel.",
     upgradeErrorNetworkOrService: "Network or service access failed. Check your network or proxy, or retry later.",
     upgradeErrorPermission:
       "A local permission issue prevented the upgrade. Check write access to the install directory, config/log directory, and system temp directory.",
+    upgradeErrorSignature:
+      "The target version is not signed or notarized, so it cannot be installed automatically. Use a signed installer, or keep the current version.",
     upgradeErrorUnknown: "The upgrade failed. Review the details and retry.",
     upgradeTitle: "New version available",
     upgradeSubtitle: "Upgrade directly from the app. The local service will restart briefly.",

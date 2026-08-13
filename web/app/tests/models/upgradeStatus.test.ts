@@ -1,6 +1,8 @@
 import {
+  classifyDesktopUpdateErrorKind,
   formatSidebarVersionLabel,
   hasUpgradeAttention,
+  inferUpgradeChannelFromVersion,
   isLocalBuildUpgradeStatus,
   isLocalBuildVersion,
   normalizeUpgradeStatus,
@@ -14,6 +16,18 @@ describe("upgrade status helpers", () => {
     expect(formatSidebarVersionLabel("")).toBe("dev");
     expect(formatSidebarVersionLabel("v0.2.1")).toBe("v0.2.1");
     expect(formatSidebarVersionLabel("0.2.1")).toBe("v0.2.1");
+  });
+
+  it("infers the update channel from the running version string", () => {
+    expect(inferUpgradeChannelFromVersion("0.0.1")).toBe("release");
+    expect(inferUpgradeChannelFromVersion("v0.2.0")).toBe("release");
+    expect(inferUpgradeChannelFromVersion("v0.2.0-beta.1")).toBe("beta");
+    expect(inferUpgradeChannelFromVersion("0.5.0-beta.2")).toBe("beta");
+    expect(inferUpgradeChannelFromVersion("v0.2.0.1")).toBe("beta");
+    expect(inferUpgradeChannelFromVersion("v0.2")).toBe("beta");
+    expect(inferUpgradeChannelFromVersion("v0.4.6-dev2g6c80d157dirty")).toBe("beta");
+    expect(inferUpgradeChannelFromVersion("dev")).toBe("beta");
+    expect(inferUpgradeChannelFromVersion("")).toBe("beta");
   });
 
   it("detects local build versions and unsupported local installs", () => {
@@ -129,6 +143,38 @@ describe("upgrade status helpers", () => {
         t,
       ),
     ).toBe("Local install is abnormal.");
+  });
+
+  it("classifies desktop update failures for unsigned packages and missing feeds", () => {
+    const t = (key: string) => key;
+
+    expect(classifyDesktopUpdateErrorKind("The update is improperly signed")).toBe("signature");
+    expect(
+      classifyDesktopUpdateErrorKind(
+        "The release channel does not provide a signed macOS auto-update package for 0.4.6. HTTP 404",
+      ),
+    ).toBe("missing_update_package");
+    expect(classifyDesktopUpdateErrorKind("网络连接已中断。")).toBe("network_download");
+    expect(
+      upgradeErrorMessage(
+        {
+          ...baseUpgradeStatus,
+          last_error: "The update is improperly signed",
+          last_error_kind: "desktop_update",
+        },
+        t,
+      ),
+    ).toBe("upgradeErrorSignature");
+    expect(
+      upgradeErrorMessage(
+        {
+          ...baseUpgradeStatus,
+          last_error: "The release channel does not provide a signed macOS auto-update package for 0.4.6. HTTP 404",
+          last_error_kind: "desktop_update",
+        },
+        t,
+      ),
+    ).toBe("upgradeErrorMissingUpdatePackage");
   });
 
   it("keeps log paths visible for unclassified upgrade errors", () => {

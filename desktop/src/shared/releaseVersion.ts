@@ -1,5 +1,8 @@
+import type { DesktopUpdateChannel } from "./desktopBridge.types";
+
 const semanticVersionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const stableReleaseVersionPattern = /^(?:v)?\d+\.\d+\.\d+$/i;
 const gitDescribePrereleasePattern =
   /^(.*?)(?:-)?(\d+)-g([0-9a-f]+)(-dirty)?$/i;
 
@@ -25,6 +28,15 @@ export function normalizeDesktopReleaseVersion(
     return `${match[1]}.${match[2]}.${match[3]}-${prerelease}`;
   }
   return `${match[1]}.${match[2]}.${match[3]}`;
+}
+
+export function inferDesktopUpdateChannel(
+  version: string | undefined,
+): DesktopUpdateChannel {
+  const raw = (version || "").trim();
+  return raw.length > 0 && stableReleaseVersionPattern.test(raw)
+    ? "release"
+    : "beta";
 }
 
 export function numericDesktopAppVersion(releaseVersion: string): string {

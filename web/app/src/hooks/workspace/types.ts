@@ -101,12 +101,9 @@ export type UseWorkspaceHubControllerArgs = {
 export type UpgradeModalControllerProps = {
   appVersion: string;
   onApply: () => Promise<void>;
-  onChannelChange: (channel: UpgradeChannel) => Promise<void>;
   onClose: () => void;
   t: TranslateFn;
   upgradeBusy: boolean;
-  upgradeChannelBusy: boolean;
-  upgradeChannelLocked: boolean;
   upgradeError: string;
   upgradePhase: UpgradePhase;
   upgradeStatus: UpgradeStatus | null;
@@ -123,7 +120,7 @@ export type UseUpgradeControllerArgs = {
 };
 
 export type UpgradeController = {
-  changeUpgradeChannel: (channel: UpgradeChannel) => Promise<void>;
+  changeUpgradeChannel: (channel: UpgradeChannel) => Promise<boolean>;
   handleUpgradeStatusChange: (payload: unknown) => void;
   openUpgradeModal: () => void;
   refreshUpgradeStatus: () => Promise<UpgradeStatus | null>;

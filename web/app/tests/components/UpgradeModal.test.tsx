@@ -4,6 +4,9 @@ import type { UpgradeStatus } from "@/models/upgradeStatus";
 
 const labels: Record<string, string> = {
   close: "Close",
+  upgradeChannel: "Update channel",
+  upgradeChannelBeta: "Preview",
+  upgradeChannelRelease: "Stable",
   upgradeCurrentVersion: "Current version",
   upgradeLatestVersion: "Latest version",
   upgradeManualUpgradeBody: "Use the official installer or release bundle to upgrade manually.",
@@ -44,7 +47,6 @@ describe("UpgradeModal", () => {
     render(
       <UpgradeModal
         onApply={() => {}}
-        onChannelChange={() => {}}
         onClose={() => {}}
         t={t}
         upgradePhase="idle"
@@ -62,7 +64,6 @@ describe("UpgradeModal", () => {
     render(
       <UpgradeModal
         onApply={() => {}}
-        onChannelChange={() => {}}
         onClose={() => {}}
         t={t}
         upgradePhase="error"
@@ -79,5 +80,28 @@ describe("UpgradeModal", () => {
     expect(screen.getByText(/Network or service issue/)).toBeInTheDocument();
     expect(screen.getByText(/Details: write archive: stream error/)).toBeInTheDocument();
     expect(screen.getByText(/Log: \/tmp\/upgrade-helper.log/)).toBeInTheDocument();
+  });
+
+  it("keeps channel switching out of the confirm-upgrade dialog", () => {
+    render(
+      <UpgradeModal
+        onApply={() => {}}
+        onClose={() => {}}
+        t={t}
+        upgradePhase="idle"
+        upgradeStatus={{
+          ...manualUpgradeStatus,
+          auto_upgrade_supported: true,
+          channel: "beta",
+          current_version: "v0.2.1-beta.1",
+          downloaded: true,
+          latest_version: "v0.5.0-beta.7",
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Update channel")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stable" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
   });
 });

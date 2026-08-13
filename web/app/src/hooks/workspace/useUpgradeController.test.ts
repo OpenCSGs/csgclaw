@@ -119,10 +119,141 @@ describe("useUpgradeController", () => {
       }),
     );
 
-    act(() => result.current.openUpgradeModal());
-    await act(async () => result.current.upgradeModalProps?.onChannelChange("beta"));
+    await act(async () => result.current.changeUpgradeChannel("beta"));
 
     expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledWith("beta");
     expect(setUpgradeStatusData).toHaveBeenCalledWith(expect.objectContaining({ channel: "beta" }));
+  });
+
+  it("still switches channels when an update is already available", async () => {
+    const setUpgradeStatusData = vi.fn();
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.2.0-beta.1",
+        refreshWorkspaceAppVersion: vi.fn(),
+        refreshWorkspaceUpgradeStatus: vi.fn(),
+        setAppVersionData: vi.fn(),
+        setUpgradeStatusData,
+        t,
+        upgradeStatus: upgradeStatus({
+          channel: "beta",
+          current_version: "v0.2.0-beta.1",
+          downloaded: true,
+          latest_version: "v0.2.0-beta.2",
+          update_available: true,
+        }),
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.changeUpgradeChannel("release")).resolves.toBe(true);
+    });
+
+    expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledWith("release");
+  });
+
+  it("still switches when the stored channel already matches but the running version does not", async () => {
+    const setUpgradeStatusData = vi.fn();
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.3.18",
+        refreshWorkspaceAppVersion: vi.fn(),
+        refreshWorkspaceUpgradeStatus: vi.fn(),
+        setAppVersionData: vi.fn(),
+        setUpgradeStatusData,
+        t,
+        upgradeStatus: upgradeStatus({ channel: "beta", update_available: false }),
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.changeUpgradeChannel("beta")).resolves.toBe(true);
+    });
+
+    expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledWith("beta");
+  });
+
+  it("does not call the channel API when the running version already matches the requested channel", async () => {
+    const setUpgradeStatusData = vi.fn();
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.3.18",
+        refreshWorkspaceAppVersion: vi.fn(),
+        refreshWorkspaceUpgradeStatus: vi.fn(),
+        setAppVersionData: vi.fn(),
+        setUpgradeStatusData,
+        t,
+        upgradeStatus: upgradeStatus({ channel: "beta", current_version: "v0.3.18", update_available: false }),
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.changeUpgradeChannel("release")).resolves.toBe(true);
+    });
+
+    expect(mockedSetUpgradeChannelRequest).not.toHaveBeenCalled();
+    expect(setUpgradeStatusData).not.toHaveBeenCalled();
+  });
+
+  it("returns false and keeps the previous channel when switching fails", async () => {
+    mockedSetUpgradeChannelRequest.mockRejectedValueOnce(new Error("feed unavailable"));
+    const setUpgradeStatusData = vi.fn();
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.3.18",
+        refreshWorkspaceAppVersion: vi.fn(),
+        refreshWorkspaceUpgradeStatus: vi.fn(),
+        setAppVersionData: vi.fn(),
+        setUpgradeStatusData,
+        t,
+        upgradeStatus: upgradeStatus({ update_available: false }),
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.changeUpgradeChannel("beta")).resolves.toBe(false);
+    });
+
+    expect(result.current.upgradeError).toContain("upgradeChannelSwitchFailed");
+    expect(result.current.upgradeError).toContain("upgradeErrorUnknown");
+    expect(setUpgradeStatusData).not.toHaveBeenCalled();
+  });
+
+  it("explains unsigned or missing desktop update packages when the native updater fails", async () => {
+    mockedSetUpgradeChannelRequest.mockRejectedValueOnce(
+      new Error("The release channel does not provide a signed macOS auto-update package for 0.4.6. HTTP 404"),
+    );
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.2.1-beta.1",
+        refreshWorkspaceAppVersion: vi.fn(),
+        refreshWorkspaceUpgradeStatus: vi.fn(),
+        setAppVersionData: vi.fn(),
+        setUpgradeStatusData: vi.fn(),
+        t,
+        upgradeStatus: upgradeStatus({
+          channel: "beta",
+          current_version: "v0.2.1-beta.1",
+          update_available: false,
+        }),
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.changeUpgradeChannel("release")).resolves.toBe(false);
+    });
+
+    expect(result.current.upgradeError).toContain("upgradeChannelSwitchFailed");
+    expect(result.current.upgradeError).toContain("upgradeErrorMissingUpdatePackage");
+
+    act(() => {
+      result.current.handleUpgradeStatusChange({
+        last_error: "The update is improperly signed",
+        last_error_kind: "desktop_update",
+      });
+    });
+
+    expect(result.current.upgradePhase).toBe("error");
+    expect(result.current.upgradeError).toContain("upgradeErrorSignature");
   });
 });

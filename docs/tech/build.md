@@ -106,6 +106,7 @@ The installer exposes both host binaries from the same `INSTALL_DIR` and copies 
 | `make package` | Package the current platform |
 | `make package-all` | Build and package the current platform artifacts |
 | `make desktop-package` | Build native desktop installers on macOS/Linux |
+| `make desktop-package-macos-signed VERSION=<version>` | Build, sign, notarize, verify, and locally stage macOS packages. Defaults to both architectures. Use `DESKTOP_MACOS_TARGETS=arm64` or `amd64` for the current chip only, and `DESKTOP_MACOS_FORCE=1` to overwrite an existing local archive. Full commands: [Windows and macOS signing guide](desktop/electron-desktop-signing.zh.md) |
 | `scripts\build.cmd desktop-package` | Build native desktop installers on Windows without `make` |
 | `make desktop-package-oss VERSION=<version>` | Reuse `desktop-package` and stage this host's OSS desktop artifacts |
 | `make desktop-oss-manifest VERSION=<version>` | Validate all three website installers and generate `downloads.json` |
@@ -114,7 +115,7 @@ The installer exposes both host binaries from the same `INSTALL_DIR` and copies 
 
 Release CI uses `.github/workflows/release.yml` and `.gitlab/ci.yml`. GitHub attaches the server/CLI bundles and native desktop installers to the matching GitHub Release. It also publishes the server/CLI bundle matrix, the two macOS DMGs, the Windows x64 installer, and the native Electron update feeds to the beta or release OSS channel. GitLab keeps its existing SSH upload to `https://csgclaw.opencsg.com/releases/<tag>/` and publishes the CSGClaw product image. Its desktop jobs are optional manual builds: successful installers remain GitLab artifacts for one day and are not uploaded to the public release directory. GitLab macOS and Windows desktop jobs require native runners tagged `csgclaw-macos-arm64`, `csgclaw-macos-amd64`, and `csgclaw-windows-amd64`.
 
-Desktop installers use names such as `csgclaw-desktop_v0.4.3_darwin_arm64.dmg`. Signing and notarization values are optional CI secrets/variables: when they are absent or incomplete, Electron Forge keeps its macOS ad-hoc and Windows unsigned defaults. GitHub Release CI configures channel-isolated Electron feeds under `channels/<channel>/updates/`; the desktop checks in the background and only prompts after the native package has downloaded.
+Desktop installers use names such as `csgclaw-desktop_v0.4.3_darwin_arm64.dmg`. The ordinary `desktop-package` target keeps the macOS ad-hoc and Windows unsigned defaults when credentials are absent. The strict local macOS target requires a Developer ID identity plus complete notarization credentials and fails instead of emitting a partial signature. It reuses the same Forge package target and asset collector as CI while leaving the established GitHub workflow unchanged; it writes only under `desktop/out/local/` and never uploads to OSS. GitHub Release CI configures channel-isolated Electron feeds under `channels/<channel>/updates/`; the desktop checks in the background and only prompts after the native package has downloaded.
 
 Local desktop outputs are kept under `desktop/out/`: backend inputs in `input/`, raw Forge artifacts in `make/`, and OSS release files and manifests in `oss/`. The repository-root `dist/` remains the Go release and CI runner staging directory.
 
@@ -123,3 +124,4 @@ Local desktop outputs are kept under `desktop/out/`: backend inputs in `input/`,
 - [Configuration](config.md)
 - [Architecture](architecture.md)
 - [Web development](web/development.md)
+- [Windows and macOS signing guide](desktop/electron-desktop-signing.zh.md)

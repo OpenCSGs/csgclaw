@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import {
   downloadVerifiedArtifact,
   isVerifiedArtifact,
+  missingSignedMacUpdatePackageError,
   officialMacReleaseArchiveURL,
   parseMacChannelUpdate,
   startMacChannelUpdateFeed,
@@ -49,6 +50,13 @@ test("builds the official release archive fallback for macOS", () => {
   assert.equal(
     officialMacReleaseArchiveURL("0.4.6", "x64"),
     "https://github.com/OpenCSGs/csgclaw/releases/download/v0.4.6/csgclaw-desktop_v0.4.6_darwin_amd64.zip",
+  );
+});
+
+test("explains a missing signed macOS auto-update package", () => {
+  assert.match(
+    missingSignedMacUpdatePackageError("release", "0.4.6", new Error("HTTP 404")).message,
+    /does not provide a signed macOS auto-update package for 0.4.6\. HTTP 404/,
   );
 });
 

@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { TooltipProvider } from "@/components/ui";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
 import type { WorkspaceController } from "@/hooks/workspace";
 import { emptyAuthStatus } from "@/models/auth";
@@ -7,6 +9,9 @@ import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
 import { TurnNotificationModes } from "@/models/turnNotifications";
 
 const labels: Record<string, string> = {
+  cancel: "Cancel",
+  close: "Close",
+  confirm: "Confirm",
   settings: "Settings",
   settingsAccountLogin: "Log in",
   settingsAppearanceDescription: "Appearance settings.",
@@ -32,10 +37,23 @@ const labels: Record<string, string> = {
   upgradeChannel: "Update channel",
   upgradeChannelBeta: "Preview",
   upgradeChannelRelease: "Stable",
+  upgradeChannelSwitch: "Switch channel",
+  upgradeChannelSwitchDescription: "Choose a version channel.",
+  upgradeChannelSwitchTitle: "Switch channel",
   upgradeProgressLabel: "Checking and preparing the update",
 };
 
 const t: TranslateFn = (key) => labels[key] ?? key;
+
+function renderSettings(controller: WorkspaceController) {
+  return render(
+    <TooltipProvider delayDuration={0}>
+      <WorkspaceControllerProvider controller={controller}>
+        <SettingsPage />
+      </WorkspaceControllerProvider>
+    </TooltipProvider>,
+  );
+}
 
 describe("SettingsPage", () => {
   afterEach(() => {
@@ -70,7 +88,7 @@ describe("SettingsPage", () => {
         turnNotificationPermission: "default",
         upgradeBusy: false,
         upgradeChannelBusy: false,
-        upgradeChannelLocked: false,
+        upgradeError: "",
         upgradePhase: "idle",
         upgradeStatus: {
           auto_upgrade_supported: true,
@@ -91,11 +109,7 @@ describe("SettingsPage", () => {
       },
     } as unknown as WorkspaceController;
 
-    render(
-      <WorkspaceControllerProvider controller={controller}>
-        <SettingsPage />
-      </WorkspaceControllerProvider>,
-    );
+    renderSettings(controller);
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     fireEvent.click(screen.getByRole("button", { name: "Enable notifications" }));
@@ -105,10 +119,71 @@ describe("SettingsPage", () => {
       "Only when the app is unfocused",
     );
     expect(onRequestTurnNotificationPermission).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Switch channel" })).toBeEnabled();
   });
 
-  it("shows channel selection for a development desktop build and persists preview selection", () => {
-    const onUpgradeChannelChange = vi.fn().mockResolvedValue(undefined);
+  it("keeps version switching available when an update is already downloaded", async () => {
+    const user = userEvent.setup();
+    const onUpgradeChannelChange = vi.fn().mockResolvedValue(true);
+    const controller = {
+      ready: true,
+      sidebarProps: {
+        appVersion: "v0.2.0-beta.1",
+        authBusy: false,
+        authError: "",
+        authPending: false,
+        authStatus: emptyAuthStatus(),
+        locale: "en",
+        onLocaleChange: vi.fn(),
+        onLogin: vi.fn(),
+        onLogout: vi.fn(),
+        onOpenConfigSettings: vi.fn(),
+        onOpenUpgrade: vi.fn(),
+        onThemeChange: vi.fn(),
+        onUpgradeChannelChange,
+        showUpgradeControls: true,
+        t,
+        theme: "dark",
+        upgradeBusy: false,
+        upgradeChannelBusy: false,
+        upgradeError: "",
+        upgradePhase: "idle",
+        upgradeStatus: {
+          auto_upgrade_supported: true,
+          auto_upgrade_unsupported_reason: "",
+          channel: "beta",
+          checking: false,
+          current_version: "v0.2.0-beta.1",
+          downloaded: true,
+          last_checked_at: "",
+          last_error: "",
+          last_error_kind: "",
+          last_error_log_path: "",
+          latest_version: "v0.2.0-beta.2",
+          manual_restart_required: false,
+          update_available: true,
+          upgrading: false,
+        },
+      },
+    } as unknown as WorkspaceController;
+
+    renderSettings(controller);
+
+    const versionLabel = screen.getByText("v0.2.0-beta.1");
+    const switchButton = screen.getByRole("button", { name: "Switch channel" });
+    const updateButton = screen.getByRole("button", { name: "Update & Restart" });
+    expect(switchButton).toBeEnabled();
+    expect(updateButton).toBeInTheDocument();
+    expect(versionLabel.compareDocumentPosition(updateButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(updateButton.compareDocumentPosition(switchButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Update channel")).not.toBeInTheDocument();
+    await user.click(switchButton);
+    expect(screen.getByRole("radio", { name: "Preview" })).toBeChecked();
+  });
+
+  it("opens a version switch dialog inferred from the current version and confirms the other channel", async () => {
+    const user = userEvent.setup();
+    const onUpgradeChannelChange = vi.fn().mockResolvedValue(true);
     const controller = {
       ready: true,
       sidebarProps: {
@@ -130,7 +205,7 @@ describe("SettingsPage", () => {
         theme: "light",
         upgradeBusy: false,
         upgradeChannelBusy: false,
-        upgradeChannelLocked: false,
+        upgradeError: "",
         upgradePhase: "idle",
         upgradeStatus: {
           auto_upgrade_supported: false,
@@ -151,16 +226,18 @@ describe("SettingsPage", () => {
       },
     } as unknown as WorkspaceController;
 
-    render(
-      <WorkspaceControllerProvider controller={controller}>
-        <SettingsPage />
-      </WorkspaceControllerProvider>,
-    );
+    renderSettings(controller);
 
     expect(screen.queryByRole("button", { name: "Update & Restart" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(screen.getByRole("button", { name: "Switch channel" }));
 
-    expect(onUpgradeChannelChange).toHaveBeenCalledWith("beta");
+    expect(screen.getByRole("radio", { name: "Preview" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+
+    await user.click(screen.getByRole("radio", { name: "Stable" }));
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(onUpgradeChannelChange).toHaveBeenCalledWith("release");
   });
 
   it("advances simulated progress while switching channels or downloading", () => {
@@ -186,7 +263,7 @@ describe("SettingsPage", () => {
         theme: "light",
         upgradeBusy: false,
         upgradeChannelBusy: false,
-        upgradeChannelLocked: false,
+        upgradeError: "",
         upgradePhase: "idle",
         upgradeStatus: {
           auto_upgrade_supported: true,
@@ -207,17 +284,60 @@ describe("SettingsPage", () => {
       },
     } as unknown as WorkspaceController;
 
-    render(
-      <WorkspaceControllerProvider controller={controller}>
-        <SettingsPage />
-      </WorkspaceControllerProvider>,
-    );
+    renderSettings(controller);
 
     const progress = screen.getByRole("progressbar", { name: "Checking and preparing the update" });
     expect(progress).toHaveAttribute("aria-valuenow", "3");
     act(() => vi.advanceTimersByTime(1000));
     expect(progress).toHaveAttribute("aria-valuenow", "10");
-    expect(screen.getByRole("button", { name: "Stable" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Switch channel" })).toBeDisabled();
+  });
+
+  it("shows a signed-package hint when an update cannot be applied", () => {
+    const controller = {
+      ready: true,
+      sidebarProps: {
+        appVersion: "0.2.1-beta.1",
+        authBusy: false,
+        authError: "",
+        authPending: false,
+        authStatus: emptyAuthStatus(),
+        locale: "en",
+        onLocaleChange: vi.fn(),
+        onLogin: vi.fn(),
+        onLogout: vi.fn(),
+        onOpenConfigSettings: vi.fn(),
+        onOpenUpgrade: vi.fn(),
+        onThemeChange: vi.fn(),
+        onUpgradeChannelChange: vi.fn(),
+        showUpgradeControls: true,
+        t,
+        theme: "light",
+        upgradeBusy: false,
+        upgradeChannelBusy: false,
+        upgradeError: "",
+        upgradePhase: "error",
+        upgradeStatus: {
+          auto_upgrade_supported: true,
+          auto_upgrade_unsupported_reason: "",
+          channel: "release",
+          checking: false,
+          current_version: "0.2.1-beta.1",
+          downloaded: false,
+          last_checked_at: "",
+          last_error: "The release channel does not provide a signed macOS auto-update package for 0.4.6. HTTP 404",
+          last_error_kind: "missing_update_package",
+          last_error_log_path: "",
+          latest_version: "0.4.6",
+          manual_restart_required: false,
+          update_available: false,
+          upgrading: false,
+        },
+      },
+    } as unknown as WorkspaceController;
+
+    renderSettings(controller);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("upgradeErrorMissingUpdatePackage");
   });
 });

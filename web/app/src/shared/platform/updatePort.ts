@@ -1,5 +1,10 @@
 import { applyUpgradeRequest, fetchUpgradeStatus, setUpgradeChannelRequest } from "@/api/upgrade";
-import { normalizeUpgradeStatus, type UpgradeChannel, type UpgradeStatus } from "@/models/upgradeStatus";
+import {
+  classifyDesktopUpdateErrorKind,
+  normalizeUpgradeStatus,
+  type UpgradeChannel,
+  type UpgradeStatus,
+} from "@/models/upgradeStatus";
 import { getDesktopBridge, type DesktopUpdateStatus } from "./desktopBridge";
 
 export type UpgradeApplyMode = "browser-daemon" | "desktop-app";
@@ -81,7 +86,7 @@ export function desktopUpdateStatus(status: DesktopUpdateStatus): UpgradeStatus 
     downloaded,
     last_checked_at: new Date().toISOString(),
     last_error: error ? status.message || "Desktop update failed." : "",
-    last_error_kind: error ? "desktop_update" : "",
+    last_error_kind: error ? classifyDesktopUpdateErrorKind(status.message || "") || "desktop_update" : "",
     last_error_log_path: "",
     latest_version: status.availableVersion || "",
     manual_restart_required: false,

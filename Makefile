@@ -26,6 +26,11 @@ DESKTOP_DIR ?= desktop
 DESKTOP_PNPM ?= $(CURDIR)/scripts/desktop-pnpm.sh
 DESKTOP_PACKAGE_REPORT ?= summary
 DESKTOP_OSS_RELEASE_SCRIPT ?= $(CURDIR)/scripts/desktop-oss-release.mjs
+DESKTOP_MACOS_PACKAGE_SCRIPT ?= $(CURDIR)/scripts/macos-desktop-package.mjs
+DESKTOP_RELEASE_ENV_FILE ?=
+DESKTOP_MACOS_TARGETS ?=
+DESKTOP_MACOS_RELEASE_DIR ?=
+DESKTOP_MACOS_FORCE ?= 0
 DESKTOP_OSS_CHANNEL ?=
 DESKTOP_OSS_TARGETS ?=
 DESKTOP_OSS_RELEASE_DIR ?=
@@ -48,7 +53,7 @@ SANDBOX_CLI_BIN ?= $(SANDBOX_BUNDLE_TOOLS_DIR)/csgclaw-cli
 
 .DEFAULT_GOAL := build
 
-.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package desktop-package-oss desktop-oss-manifest desktop-oss-publish desktop-oss-release build build-all build-server build-server-bin build-codex-cli build-sandbox-cli install-sandbox-cli run clean package package-all release
+.PHONY: help fmt test check-web-toolchain check-web-layout ensure-web-deps web-install web-dev web-typecheck web-build-assets build-web check-desktop-layout ensure-desktop-deps desktop-dev desktop-backend-bundle desktop-package desktop-package-macos-signed desktop-package-oss desktop-oss-manifest desktop-oss-publish desktop-oss-release build build-all build-server build-server-bin build-codex-cli build-sandbox-cli install-sandbox-cli run clean package package-all release
 
 help:
 	@printf '%s\n' \
@@ -62,6 +67,7 @@ help:
 		'make build-web  - build Web UI app into web/static-dist' \
 		'make desktop-dev - install dependencies when needed, build the local backend, and start Electron Forge' \
 		'make desktop-package - create platform Electron installers/archives (set CSGCLAW_DESKTOP_WINDOWS_CHANNEL=store for MSIX)' \
+		'make desktop-package-macos-signed - build, sign, notarize, staple, verify, and locally stage macOS packages' \
 		'make desktop-package-oss - build and stage this host desktop OSS artifacts' \
 		'make desktop-oss-manifest - validate the collected macOS/Windows installers and write downloads.json' \
 		'make desktop-oss-publish - validate the complete installer set, then upload artifacts and downloads.json to OSS' \
@@ -228,6 +234,9 @@ desktop-package: ensure-desktop-deps desktop-backend-bundle
 	else \
 		run_package && print_artifacts; \
 	fi
+
+desktop-package-macos-signed:
+	@$(NODE) "$(DESKTOP_MACOS_PACKAGE_SCRIPT)" --version "$(VERSION)" $(if $(strip $(DESKTOP_MACOS_TARGETS)),--targets "$(DESKTOP_MACOS_TARGETS)",) $(if $(strip $(DESKTOP_MACOS_RELEASE_DIR)),--release-directory "$(DESKTOP_MACOS_RELEASE_DIR)",) $(if $(strip $(DESKTOP_RELEASE_ENV_FILE)),--env-file "$(DESKTOP_RELEASE_ENV_FILE)",) $(if $(filter 1 true yes,$(DESKTOP_MACOS_FORCE)),--force,)
 
 # These are thin release wrappers. desktop-package remains the single-platform
 # build primitive used by CI; the Node script calls it and then reuses the same

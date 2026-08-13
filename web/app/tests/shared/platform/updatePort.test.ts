@@ -48,4 +48,30 @@ describe("desktop update status", () => {
       upgrading: false,
     });
   });
+
+  it("classifies native updater failures so the settings page can explain them", () => {
+    expect(
+      desktopUpdateStatus({
+        state: "error",
+        channel: "release",
+        currentVersion: "0.2.1-beta.1",
+        availableVersion: "0.4.6",
+        message: "The release channel does not provide a signed macOS auto-update package for 0.4.6. HTTP 404",
+      }),
+    ).toMatchObject({
+      last_error_kind: "missing_update_package",
+      update_available: false,
+      upgrading: false,
+    });
+    expect(
+      desktopUpdateStatus({
+        state: "error",
+        channel: "release",
+        currentVersion: "0.2.1-beta.1",
+        message: "The update is improperly signed",
+      }),
+    ).toMatchObject({
+      last_error_kind: "signature",
+    });
+  });
 });

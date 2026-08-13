@@ -106,6 +106,7 @@ PowerShell 和 Docker 打包均读取该文件。正式 release 平台仍维护�
 | `make package` | 打包当前平台 |
 | `make package-all` | 构建并打包当前平台产物 |
 | `make desktop-package` | 在 macOS/Linux 构建当前平台的桌面安装包 |
+| `make desktop-package-macos-signed VERSION=<version>` | 构建、签名、公证、验证并在本地归档 macOS 安装包；默认双架构。本机只打当前芯片时加 `DESKTOP_MACOS_TARGETS=arm64` 或 `amd64`；覆盖已有归档时加 `DESKTOP_MACOS_FORCE=1`。完整命令见 [Windows 与 macOS 发布指南](desktop/electron-desktop-signing.zh.md) |
 | `scripts\build.cmd desktop-package` | 在 Windows 无需 `make` 构建桌面安装包 |
 | `make desktop-package-oss VERSION=<version>` | 复用 `desktop-package` 构建并归档本机支持的 OSS 桌面产物 |
 | `make desktop-oss-manifest VERSION=<version>` | 收齐三平台安装器后生成 `downloads.json` |
@@ -114,7 +115,7 @@ PowerShell 和 Docker 打包均读取该文件。正式 release 平台仍维护�
 
 发布 CI 使用 `.github/workflows/release.yml` 和 `.gitlab/ci.yml`。GitHub 将 Server/CLI bundle 和原生桌面安装包附加到对应的 GitHub Release，并把完整 Server/CLI 平台矩阵、两个 macOS DMG、Windows x64 安装器和 Electron 原生更新 feed 发布到 beta 或 release OSS channel。GitLab 保留原有上传到 `https://csgclaw.opencsg.com/releases/<tag>/` 的 SSH 发布链路，并继续发布 CSGClaw 产品镜像。其桌面 job 是可选手动构建：成功的安装包作为 GitLab artifact 保留一天，不会上传到公开发布目录。GitLab 的 macOS 和 Windows 桌面 job 需要提供并打上 `csgclaw-macos-arm64`、`csgclaw-macos-amd64`、`csgclaw-windows-amd64` tag 的原生 runner。
 
-桌面安装包采用如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的命名。签名和公证信息是可选 CI secrets/variables：未配置或配置不完整时，Electron Forge 保持 macOS ad-hoc、Windows 未签名的默认行为。GitHub Release CI 会把桌面更新源配置到相互隔离的 `channels/<channel>/updates/`；桌面端后台检查并下载，只有下载完成后才提示用户安装。
+桌面安装包采用如 `csgclaw-desktop_v0.4.3_darwin_arm64.dmg` 的命名。普通 `desktop-package` 在凭据缺失时仍保持 macOS ad-hoc、Windows 未签名的默认行为；严格本地 macOS target 在 Developer ID 或公证凭据不完整时会直接失败，不会产出半签名包。它复用 CI 已使用的 Forge 打包 target 和产物收集器，但不修改现有 GitHub workflow；只写入 `desktop/out/local/`，绝不上传 OSS。GitHub Release CI 会把桌面更新源配置到相互隔离的 `channels/<channel>/updates/`；桌面端后台检查并下载，只有下载完成后才提示用户安装。
 
 OSS 桌面发布命令的完整说明见 [Electron Desktop OSS 发布](desktop/electron-desktop-oss-release.zh.md)。`desktop-package` 仍是单平台原子构建，OSS 上传只放在聚合命令中，避免并行 runner 使用不完整产物发布。
 
@@ -125,3 +126,4 @@ OSS 桌面发布命令的完整说明见 [Electron Desktop OSS 发布](desktop/e
 - [配置](config.zh.md)
 - [架构](architecture.md)
 - [Web 开发](web/development.zh.md)
+- [Windows 与 macOS 发布指南](desktop/electron-desktop-signing.zh.md)

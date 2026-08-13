@@ -34,6 +34,7 @@ mkdir -p "$BACKEND_ROOT" "$TEMP_ROOT/release"
     BUILD_TIME="${BUILD_TIME:-unknown}" \
     DIST_DIR="$TEMP_ROOT/release" \
     GOCACHE="${GOCACHE:-$ROOT_DIR/.gocache}" \
+    GOWORK=off \
     INCLUDE_BOXLITE="${INCLUDE_BOXLITE:-0}" \
     BOXLITE_CLI_VERSION="${BOXLITE_CLI_VERSION:-v0.9.0}" \
     BOXLITE_CLI_BASE_URL="${BOXLITE_CLI_BASE_URL:-https://github.com/boxlite-ai/boxlite/releases/download}" \

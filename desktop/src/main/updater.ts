@@ -6,7 +6,7 @@ import type {
   DesktopUpdateStatus,
 } from "../shared/desktopBridge.types";
 import { DesktopPlatform } from "../shared/desktopEnvironment";
-import { compareDesktopReleaseVersions } from "../shared/releaseVersion";
+import { compareDesktopReleaseVersions, inferDesktopUpdateChannel } from "../shared/releaseVersion";
 import {
   desktopInstallerArtifact,
   desktopDownloadsManifestURL,
@@ -20,7 +20,7 @@ import {
   downloadVerifiedArtifact,
   isVerifiedArtifact,
   launchWindowsChannelInstaller,
-  officialMacReleaseArchiveURL,
+  missingSignedMacUpdatePackageError,
   parseMacChannelUpdate,
   startMacChannelUpdateFeed,
   type LocalUpdateFeed,
@@ -93,14 +93,18 @@ export class DesktopUpdater {
   }
 
   async setChannel(channel: DesktopUpdateChannel): Promise<void> {
-    if (channel === this.channel) {
+    const inferredChannel = inferDesktopUpdateChannel(app.getVersion());
+    if (channel === this.channel && inferredChannel === channel) {
       this.publishStatus({ ...this.status });
       return;
     }
-    if (this.checkActive || this.downloaded) {
+    if (this.checkActive || this.installing) {
       throw new Error(
         "Wait for the current desktop update before changing channels.",
       );
+    }
+    if (this.downloaded) {
+      await this.discardPendingUpdate();
     }
     this.channelBeforeSwitch = this.channel;
     this.channel = channel;
@@ -421,15 +425,16 @@ export class DesktopUpdater {
         this.expectedVersion,
       );
     } catch (error) {
-      logDesktopInfo("desktop-channel-switch-mac-feed-fallback", {
+      logDesktopInfo("desktop-channel-switch-mac-feed-missing", {
         channel: this.channel,
         expectedVersion: this.expectedVersion,
         message: error instanceof Error ? error.message : String(error),
       });
-      update = {
-        url: officialMacReleaseArchiveURL(this.expectedVersion, process.arch),
-        name: `CSGClaw v${this.expectedVersion}`,
-      };
+      throw missingSignedMacUpdatePackageError(
+        this.channel,
+        this.expectedVersion,
+        error,
+      );
     }
     await this.closeMacChannelFeed();
     this.macChannelFeed = await startMacChannelUpdateFeed(update);
@@ -473,6 +478,14 @@ export class DesktopUpdater {
     if (this.installWhenDownloaded) {
       await this.installUpdateNow();
     }
+  }
+
+  private async discardPendingUpdate(): Promise<void> {
+    this.downloaded = false;
+    this.windowsChannelInstallerPath = "";
+    this.installWhenDownloaded = false;
+    this.expectedVersion = "";
+    await this.closeMacChannelFeed();
   }
 
   private async closeMacChannelFeed(): Promise<void> {

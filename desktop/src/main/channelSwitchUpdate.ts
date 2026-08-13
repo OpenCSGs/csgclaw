@@ -94,6 +94,18 @@ export function officialMacReleaseArchiveURL(
   return `https://github.com/OpenCSGs/csgclaw/releases/download/${tag}/${fileName}`;
 }
 
+export function missingSignedMacUpdatePackageError(
+  channel: string,
+  version: string,
+  cause: unknown,
+): Error {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  const suffix = detail.trim() ? ` ${detail.trim()}` : "";
+  return new Error(
+    `The ${channel} channel does not provide a signed macOS auto-update package for ${version}.${suffix}`,
+  );
+}
+
 export async function startMacChannelUpdateFeed(
   update: MacChannelUpdate,
 ): Promise<LocalUpdateFeed> {

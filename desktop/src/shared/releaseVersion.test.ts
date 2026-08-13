@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   compareDesktopReleaseVersions,
+  inferDesktopUpdateChannel,
   normalizeDesktopReleaseVersion,
   numericDesktopAppVersion,
 } from "./releaseVersion";
@@ -36,6 +37,16 @@ test("uses the development version for invalid input", () => {
     "0.0.0-development",
   );
   assert.equal(normalizeDesktopReleaseVersion(undefined), "0.0.0-development");
+});
+
+test("infers the desktop update channel from the running version string", () => {
+  assert.equal(inferDesktopUpdateChannel("0.0.1"), "release");
+  assert.equal(inferDesktopUpdateChannel("v0.2.0"), "release");
+  assert.equal(inferDesktopUpdateChannel("v0.2.0-beta.1"), "beta");
+  assert.equal(inferDesktopUpdateChannel("0.5.0-beta.2"), "beta");
+  assert.equal(inferDesktopUpdateChannel("v0.2.0.1"), "beta");
+  assert.equal(inferDesktopUpdateChannel("dev"), "beta");
+  assert.equal(inferDesktopUpdateChannel(""), "beta");
 });
 
 test("uses a numeric system app version for prerelease packages", () => {

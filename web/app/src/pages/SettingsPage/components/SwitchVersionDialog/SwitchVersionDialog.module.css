@@ -1,0 +1,133 @@
+.dialog {
+  width: min(440px, calc(100vw - 40px));
+}
+
+.header {
+  align-items: flex-start;
+}
+
+.copy {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.closeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.closeButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--gray-200) 60%, transparent);
+  color: var(--text);
+}
+
+.closeButton:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.closeButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-strong) 18%, transparent);
+}
+
+.dialog :global(.csg-dialog-description) {
+  max-width: 440px;
+  margin-top: 8px;
+  font-size: var(--text-sm-size);
+  line-height: 1.5;
+}
+
+.body {
+  display: grid;
+  gap: 18px;
+}
+
+.actions {
+  gap: var(--space-2);
+  padding: 16px 22px 22px;
+}
+
+.options {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: var(--gray-50);
+}
+
+.option:focus-within {
+  outline: 2px solid var(--brand-300);
+  outline-offset: 1px;
+}
+
+.option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--brand-600);
+}
+
+.option strong {
+  color: var(--gray-800);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.error {
+  color: var(--error-600);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:root[data-theme="dark"] .option:hover {
+  background: var(--panel-strong);
+}
+
+:root[data-theme="dark"] .option strong {
+  color: var(--gray-100);
+}
+
+:root[data-theme="dark"] .error {
+  color: var(--error-400);
+}

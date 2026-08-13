@@ -1,6 +1,6 @@
 # CSGClaw Windows 与 macOS 发布指南
 
-适用于中国大陆公司通过 Microsoft Store 和官网发布桌面应用。最后核对日期：2026-07-29。
+适用于中国大陆公司通过 Microsoft Store 和官网发布桌面应用。最后核对日期：2026-08-13。
 
 ## 1. 推荐方案
 
@@ -106,50 +106,60 @@ desktop/out/make/squirrel.windows/x64/
 
 ### 4.2 本地构建
 
-```bash
-export VERSION='1.0.0'
-export CSGCLAW_MACOS_SIGN_IDENTITY='Developer ID Application: <公司英文名称> (<TEAM_ID>)'
-export APPLE_ID='<公司Apple Account>'
-export APPLE_PASSWORD='<app-specific password>'
-export APPLE_TEAM_ID='<TEAM_ID>'
-export CSGCLAW_DESKTOP_UPDATE_BASE_URL='https://download.example.com/updates'
-
-# Apple Silicon
-make desktop-package TARGET_OS=darwin TARGET_ARCH=arm64
-
-# Intel
-make desktop-package TARGET_OS=darwin TARGET_ARCH=amd64
-```
-
-Forge 可以从当前钥匙串自动发现有效的 `Developer ID Application` 身份；这里仍显式设置
-`CSGCLAW_MACOS_SIGN_IDENTITY`，供后续最终 DMG 签名复用。CI 会在导入 P12 后自动得到这个值，不需要人工配置。
-
-Forge 会签名并公证 APP，然后生成 ZIP 和 DMG。最终 DMG 再完成一次签名、公证和 staple：
+签名、公证和 OSS 上传凭据统一复用仓库根目录已有的 `.desktop-release-oss.env`。该文件已加入
+`.gitignore`，不要把真实凭据写进 TOML 或提交到仓库：
 
 ```bash
-export CSGCLAW_DMG_PATH='<最终DMG路径>'
-
-codesign --force --timestamp \
-  --identifier 'com.opencsg.csgclaw.desktop.dmg' \
-  --sign "$CSGCLAW_MACOS_SIGN_IDENTITY" \
-  "$CSGCLAW_DMG_PATH"
-
-xcrun notarytool submit "$CSGCLAW_DMG_PATH" \
-  --apple-id "$APPLE_ID" \
-  --password "$APPLE_PASSWORD" \
-  --team-id "$APPLE_TEAM_ID" \
-  --wait
-
-xcrun stapler staple "$CSGCLAW_DMG_PATH"
-xcrun stapler validate "$CSGCLAW_DMG_PATH"
-hdiutil verify "$CSGCLAW_DMG_PATH"
+cp .desktop-release-oss.env.example .desktop-release-oss.env
+chmod 600 .desktop-release-oss.env
 ```
 
-DMG 用于官网首次安装；ZIP 和 `RELEASES.json` 用于应用自动更新。DMG 的 SHA-256 和文件大小在 staple 完成后计算。
+本地有两种证书方式：
 
-## 5. 未来 CI 方案
+1. 推荐把 P12 放在仓库外，在 `.desktop-release-oss.env` 设置
+   `CSGCLAW_MACOS_CERTIFICATE_P12_FILE` 和 `CSGCLAW_MACOS_CERTIFICATE_PASSWORD`；
+2. 证书和私钥已经装入登录钥匙串时，把 P12 两项留空。脚本会按 `APPLE_TEAM_ID` 自动选择唯一的
+   `Developer ID Application`；有多个匹配项时再设置 `CSGCLAW_MACOS_SIGN_IDENTITY`。
 
-当前仓库只实现本地 MSIX 构建，远程 GitHub CI 留作下一阶段。
+`APPLE_PASSWORD` 必须是 app-specific password。环境变量会覆盖文件里的同名配置，CI 因而可以继续使用
+GitHub Secrets；现有 GitHub workflow 不读取或依赖这个本地文件。
+
+在 `csgclaw` 仓库根目录执行。默认同时构建 Apple Silicon 和 Intel，并按 GitHub Release 文件名归档，不上传 OSS：
+
+```bash
+# 正式版；默认同时构建 arm64 和 amd64
+make desktop-package-macos-signed VERSION=v0.1.0
+
+# Beta
+make desktop-package-macos-signed VERSION=v0.1.0-beta.1
+```
+
+本机只验证当前芯片时，用 `DESKTOP_MACOS_TARGETS` 只打一个架构，可少两轮 Apple 公证。Apple Silicon 用 `arm64`，Intel Mac 用 `amd64`。本地归档目录已有文件时必须加 `DESKTOP_MACOS_FORCE=1`，否则脚本会拒绝覆盖。
+
+Apple Silicon 本机完整命令：
+
+```bash
+# 正式版
+make desktop-package-macos-signed VERSION=v0.1.0 DESKTOP_MACOS_TARGETS=arm64 DESKTOP_MACOS_FORCE=1
+
+# Beta
+make desktop-package-macos-signed VERSION=v0.1.0-beta.1 DESKTOP_MACOS_TARGETS=arm64 DESKTOP_MACOS_FORCE=1
+```
+
+对外发版仍应打双架构。首次构建且归档目录为空时可以去掉 `DESKTOP_MACOS_FORCE=1`。
+
+严格本地 target 复用 GitHub Actions 已使用的 `desktop-package` 和产物收集器，并按线上相同顺序完成
+`.app` Developer ID 签名和公证、DMG 签名和二次公证、staple；随后使用 `codesign`、`spctl`、
+`stapler`、`hdiutil` 验证，并解开 ZIP 再次验证自动更新包中的 `.app`。现有 GitHub workflow
+保持不变。脚本会先校验 Developer ID 和 Apple 公证凭据，再开始耗时构建；任一本地步骤失败都不会报告成功。
+
+归档结果位于 `desktop/out/local/releases/<version>/`，本地 target 不包含任何 OSS 上传步骤。DMG 用于官网首次安装；ZIP 和
+`RELEASES.json` 用于应用自动更新。仅在本地生成这些文件不会改变线上更新源；需要测试自动发现升级时，
+还要把目标版本 ZIP 和 manifest 放入对应 beta/release 测试 feed，或通过现有 OSS 发布流程上传。
+
+## 5. CI 方案
+
+当前 GitHub Release 已自动构建官网桌面包；Microsoft Store MSIX 仍只提供本地构建，商店自动提交留作下一阶段。
 
 首次发布仍在 Partner Center 完成公司验证、产品创建、商店资料和年龄分级。以后每周 1～2 次发版可以在 Windows Runner 自动完成：
 
@@ -182,9 +192,9 @@ PARTNER_CENTER_CLIENT_SECRET
 
 Microsoft Store Developer CLI 当前是 preview，适合 CSGClaw 这类免费产品自动上传和提交；商店认证由 Microsoft 异步完成。Windows App Certification Kit 需要活动用户会话，安排在 Windows 测试机或自托管 Runner 上运行。
 
-macOS CI 使用 macOS Runner，导入 Developer ID P12 到临时 Keychain，再执行与本地相同的签名、公证和验证命令。
-CI 从导入的 P12 自动识别唯一的 `Developer ID Application` 身份，并校验其 Team ID，因此不需要配置
-`CSGCLAW_MACOS_SIGN_IDENTITY`。GitHub Actions 需要以下 Repository Secrets：
+macOS CI 保持现有 GitHub Actions 内联流程不变：把 Developer ID P12 导入临时 Keychain，自动识别
+唯一的 `Developer ID Application` 并校验 Team ID，构建后再删除临时 Keychain。GitHub Actions
+继续使用以下 Repository Secrets：
 
 ```text
 CSGCLAW_MACOS_CERTIFICATE_P12_BASE64
