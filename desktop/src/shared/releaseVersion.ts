@@ -2,7 +2,8 @@ import type { DesktopUpdateChannel } from "./desktopBridge.types";
 
 const semanticVersionPattern =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-const stableReleaseVersionPattern = /^(?:v)?\d+\.\d+\.\d+$/i;
+const stableReleaseVersionPattern =
+  /^(?:v)?(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
 const gitDescribePrereleasePattern =
   /^(.*?)(?:-)?(\d+)-g([0-9a-f]+)(-dirty)?$/i;
 

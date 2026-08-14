@@ -58,6 +58,13 @@ export function SwitchVersionDialog({
     }
   }
 
+  const confirmLabel =
+    selected === currentChannel
+      ? error
+        ? t("upgradeChannelRetryCurrent")
+        : t("upgradeChannelCurrentActive")
+      : t(selected === "release" ? "upgradeChannelInstallRelease" : "upgradeChannelInstallBeta");
+
   return (
     <DialogRoot open={open} onOpenChange={onOpenChange}>
       <DialogContent className={styles.dialog}>
@@ -105,7 +112,7 @@ export function SwitchVersionDialog({
             disabled={busy || (selected === currentChannel && !error)}
             onClick={() => void handleConfirm()}
           >
-            {t("confirm")}
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -42,6 +42,7 @@ export type DesktopUpdateState =
 
 export type DesktopUpdateStatus = {
   state: DesktopUpdateState;
+  /** Installed channel derived from currentVersion, never a pending switch target. */
   channel: DesktopUpdateChannel;
   currentVersion: string;
   availableVersion?: string;

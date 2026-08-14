@@ -1,5 +1,6 @@
 import {
   classifyDesktopUpdateErrorKind,
+  formatClassifiedUpgradeError,
   formatSidebarVersionLabel,
   hasUpgradeAttention,
   inferUpgradeChannelFromVersion,
@@ -21,13 +22,16 @@ describe("upgrade status helpers", () => {
   it("infers the update channel from the running version string", () => {
     expect(inferUpgradeChannelFromVersion("0.0.1")).toBe("release");
     expect(inferUpgradeChannelFromVersion("v0.2.0")).toBe("release");
+    expect(inferUpgradeChannelFromVersion("V0.2.0")).toBe("beta");
     expect(inferUpgradeChannelFromVersion("v0.2.0-beta.1")).toBe("beta");
+    expect(inferUpgradeChannelFromVersion("v0.2.0-alf")).toBe("beta");
     expect(inferUpgradeChannelFromVersion("0.5.0-beta.2")).toBe("beta");
     expect(inferUpgradeChannelFromVersion("v0.2.0.1")).toBe("beta");
     expect(inferUpgradeChannelFromVersion("v0.2")).toBe("beta");
     expect(inferUpgradeChannelFromVersion("v0.4.6-dev2g6c80d157dirty")).toBe("beta");
     expect(inferUpgradeChannelFromVersion("dev")).toBe("beta");
     expect(inferUpgradeChannelFromVersion("")).toBe("beta");
+    expect(inferUpgradeChannelFromVersion("v01.0.0")).toBe("beta");
   });
 
   it("detects local build versions and unsupported local installs", () => {
@@ -155,6 +159,13 @@ describe("upgrade status helpers", () => {
       ),
     ).toBe("missing_update_package");
     expect(classifyDesktopUpdateErrorKind("网络连接已中断。")).toBe("network_download");
+    expect(classifyDesktopUpdateErrorKind("current installation is not an official csgclaw bundle")).toBe(
+      "local_build",
+    );
+    expect(formatClassifiedUpgradeError("preview feed unavailable", t)).toBe("preview feed unavailable");
+    expect(formatClassifiedUpgradeError("current installation is not an official csgclaw bundle", t)).toBe(
+      "upgradeLocalBuildUnsupported",
+    );
     expect(
       upgradeErrorMessage(
         {

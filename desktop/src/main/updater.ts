@@ -6,7 +6,10 @@ import type {
   DesktopUpdateStatus,
 } from "../shared/desktopBridge.types";
 import { DesktopPlatform } from "../shared/desktopEnvironment";
-import { compareDesktopReleaseVersions, inferDesktopUpdateChannel } from "../shared/releaseVersion";
+import {
+  compareDesktopReleaseVersions,
+  inferDesktopUpdateChannel,
+} from "../shared/releaseVersion";
 import {
   desktopInstallerArtifact,
   desktopDownloadsManifestURL,
@@ -33,17 +36,16 @@ import {
 
 const STARTUP_CHECK_DELAY_MS = 5_000;
 const PERIODIC_CHECK_INTERVAL_MS = 60 * 60 * 1000;
-const UPDATE_PREFERENCES_FILE = "desktop-update-preferences.json";
 
 export class DesktopUpdater {
-  private channel: DesktopUpdateChannel;
+  private readonly channel: DesktopUpdateChannel;
+  private targetChannel: DesktopUpdateChannel | null = null;
   private checkActive = false;
   private downloaded = false;
   private expectedVersion = "";
   private installWhenDownloaded = false;
   private installing = false;
   private channelSwitchActive = false;
-  private channelBeforeSwitch: DesktopUpdateChannel | null = null;
   private macChannelFeed: LocalUpdateFeed | null = null;
   private windowsChannelInstallerPath = "";
   private periodicTimer: ReturnType<typeof setInterval> | null = null;
@@ -54,7 +56,7 @@ export class DesktopUpdater {
     private readonly publishStatus: (status: DesktopUpdateStatus) => void,
     private readonly beforeInstall: () => Promise<void>,
   ) {
-    this.channel = loadUpdateChannel();
+    this.channel = inferDesktopUpdateChannel(app.getVersion());
     this.status = {
       state: "idle",
       channel: this.channel,
@@ -93,9 +95,15 @@ export class DesktopUpdater {
   }
 
   async setChannel(channel: DesktopUpdateChannel): Promise<void> {
-    const inferredChannel = inferDesktopUpdateChannel(app.getVersion());
-    if (channel === this.channel && inferredChannel === channel) {
-      this.publishStatus({ ...this.status });
+    if (channel === this.channel) {
+      this.targetChannel = null;
+      this.channelSwitchActive = false;
+      this.installWhenDownloaded = false;
+      this.updateStatus({
+        state: "idle",
+        channel: this.channel,
+        currentVersion: app.getVersion(),
+      });
       return;
     }
     if (this.checkActive || this.installing) {
@@ -106,14 +114,13 @@ export class DesktopUpdater {
     if (this.downloaded) {
       await this.discardPendingUpdate();
     }
-    this.channelBeforeSwitch = this.channel;
-    this.channel = channel;
+    this.targetChannel = channel;
     this.expectedVersion = "";
     this.channelSwitchActive = true;
     this.installWhenDownloaded = true;
     this.updateStatus({
       state: "idle",
-      channel,
+      channel: this.channel,
       currentVersion: app.getVersion(),
     });
     await this.checkForUpdates();
@@ -148,8 +155,9 @@ export class DesktopUpdater {
       });
       return;
     }
-    const updateURL = resolveUpdateURL(this.channel);
-    const manifestURL = resolveManifestURL(this.channel);
+    const updateChannel = this.effectiveUpdateChannel();
+    const updateURL = resolveUpdateURL(updateChannel);
+    const manifestURL = resolveManifestURL(updateChannel);
     if (!app.isPackaged || !updateURL || !manifestURL) {
       const channel = this.failChannelSwitch();
       this.updateStatus({
@@ -169,7 +177,7 @@ export class DesktopUpdater {
       currentVersion: app.getVersion(),
     });
     try {
-      const manifest = await fetchDownloadsManifest(manifestURL, this.channel);
+      const manifest = await fetchDownloadsManifest(manifestURL, updateChannel);
       this.expectedVersion = manifest.latest;
       if (
         !shouldInstallDesktopVersion(
@@ -180,10 +188,7 @@ export class DesktopUpdater {
       ) {
         this.checkActive = false;
         this.installWhenDownloaded = false;
-        if (this.channelSwitchActive) {
-          saveUpdateChannel(this.channel);
-          this.channelBeforeSwitch = null;
-        }
+        this.targetChannel = null;
         this.channelSwitchActive = false;
         this.updateStatus({
           state: "not-available",
@@ -365,14 +370,9 @@ export class DesktopUpdater {
       throw new Error("No desktop update has been downloaded.");
     }
     this.installing = true;
-    const channelBeforeSwitch = this.channelBeforeSwitch;
+    const wasChannelSwitch = this.channelSwitchActive;
     try {
       await this.beforeInstall();
-      if (channelBeforeSwitch) {
-        saveUpdateChannel(this.channel);
-        this.channelBeforeSwitch = null;
-        this.channelSwitchActive = false;
-      }
       if (this.windowsChannelInstallerPath) {
         const updateExePath = path.resolve(
           path.dirname(process.execPath),
@@ -392,11 +392,9 @@ export class DesktopUpdater {
     } catch (error) {
       this.installing = false;
       this.installWhenDownloaded = false;
-      if (channelBeforeSwitch) {
-        this.channel = channelBeforeSwitch;
-        this.channelBeforeSwitch = null;
+      if (wasChannelSwitch) {
+        this.targetChannel = null;
         this.channelSwitchActive = false;
-        saveUpdateChannel(channelBeforeSwitch);
       }
       this.updateStatus({
         state: "error",
@@ -410,6 +408,7 @@ export class DesktopUpdater {
   }
 
   private async checkMacChannelSwitch(updateURL: string): Promise<void> {
+    const targetChannel = this.effectiveUpdateChannel();
     let update;
     try {
       const requestURL = new URL(updateURL);
@@ -426,12 +425,12 @@ export class DesktopUpdater {
       );
     } catch (error) {
       logDesktopInfo("desktop-channel-switch-mac-feed-missing", {
-        channel: this.channel,
+        channel: targetChannel,
         expectedVersion: this.expectedVersion,
         message: error instanceof Error ? error.message : String(error),
       });
       throw missingSignedMacUpdatePackageError(
-        this.channel,
+        targetChannel,
         this.expectedVersion,
         error,
       );
@@ -445,6 +444,7 @@ export class DesktopUpdater {
   private async downloadWindowsChannelSwitch(
     manifest: DesktopDownloadsManifest,
   ): Promise<void> {
+    const targetChannel = this.effectiveUpdateChannel();
     const artifact = desktopInstallerArtifact(
       manifest,
       process.platform,
@@ -452,7 +452,7 @@ export class DesktopUpdater {
     );
     if (!artifact) {
       throw new Error(
-        `The ${this.channel} channel does not provide a Windows installer for ${process.arch}.`,
+        `The ${targetChannel} channel does not provide a Windows installer for ${process.arch}.`,
       );
     }
     const installerDirectory = path.join(
@@ -461,7 +461,7 @@ export class DesktopUpdater {
     );
     const installerPath = path.join(
       installerDirectory,
-      `CSGClaw-${this.channel}-${this.expectedVersion}-${process.arch}.exe`,
+      `CSGClaw-${targetChannel}-${this.expectedVersion}-${process.arch}.exe`,
     );
     if (!(await isVerifiedArtifact(installerPath, artifact))) {
       await downloadVerifiedArtifact(net.fetch, artifact, installerPath);
@@ -495,12 +495,13 @@ export class DesktopUpdater {
   }
 
   private failChannelSwitch(): DesktopUpdateChannel {
-    if (this.channelBeforeSwitch) {
-      this.channel = this.channelBeforeSwitch;
-      this.channelBeforeSwitch = null;
-    }
+    this.targetChannel = null;
     this.channelSwitchActive = false;
     return this.channel;
+  }
+
+  private effectiveUpdateChannel(): DesktopUpdateChannel {
+    return this.targetChannel ?? this.channel;
   }
 }
 
@@ -567,34 +568,4 @@ function readChannelsBaseURL(): string {
     // Fall back to the official public channel root.
   }
   return DEFAULT_UPDATE_CHANNELS_BASE_URL;
-}
-
-function updatePreferencesPath(): string {
-  return path.join(app.getPath("userData"), UPDATE_PREFERENCES_FILE);
-}
-
-function loadUpdateChannel(): DesktopUpdateChannel {
-  try {
-    const source = JSON.parse(
-      fs.readFileSync(updatePreferencesPath(), "utf8"),
-    ) as unknown;
-    if (source && typeof source === "object" && !Array.isArray(source)) {
-      const channel = (source as Record<string, unknown>).channel;
-      if (channel === "release" || channel === "beta") {
-        return channel;
-      }
-    }
-  } catch {
-    // Missing or invalid preferences follow the installed build: prerelease
-    // packages start on preview, while stable packages stay on release.
-  }
-  return inferDesktopUpdateChannel(app.getVersion());
-}
-
-function saveUpdateChannel(channel: DesktopUpdateChannel): void {
-  const filePath = updatePreferencesPath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify({ channel }, null, 2)}\n`, {
-    mode: 0o600,
-  });
 }

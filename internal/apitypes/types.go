@@ -200,6 +200,8 @@ type VersionResponse struct {
 	Version string `json:"version"`
 }
 
+// UpgradeStatus reports the installed channel derived from CurrentVersion. A
+// pending one-shot switch target is intentionally not part of the public status.
 type UpgradeStatus struct {
 	CurrentVersion               string     `json:"current_version"`
 	Channel                      string     `json:"channel"`
@@ -216,6 +218,7 @@ type UpgradeStatus struct {
 	LastErrorLogPath             string     `json:"last_error_log_path,omitempty"`
 }
 
+// UpdateUpgradeChannelRequest identifies the target of a one-shot switch.
 type UpdateUpgradeChannelRequest struct {
 	Channel string `json:"channel"`
 }

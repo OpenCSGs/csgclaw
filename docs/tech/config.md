@@ -22,7 +22,7 @@ When the sandbox provider is `docker` on Docker Desktop, an empty `advertise_bas
 
 `show_upgrade` controls whether the Web UI shows upgrade actions. The default is `true`; set it to `false` only when the deployment cannot self-upgrade, such as managed Kubernetes environments.
 
-`upgrade_channel` selects the OSS release stream used by server upgrades. It accepts `release` (the default stable stream) or `beta` (preview builds). The Web UI persists this value when the user switches update channels.
+The server derives its active update channel from the running version. Plain versions such as `v0.5.0` use the `release` channel; prerelease, development, local, and otherwise non-plain versions use `beta`. A version-channel switch from the Web UI is a one-shot installation and is not persisted in `config.toml`.
 
 String values in `config.toml` can reference environment variables with `${NAME}` or `$NAME`. CSGClaw expands them when loading the config and keeps the placeholder form when it later rewrites the same value. If an environment variable is not set, it expands to an empty string.
 
@@ -33,7 +33,6 @@ advertise_base_url = "http://${IP}:${PORT}"
 access_token = "${ACCESS_TOKEN}"
 no_auth = false
 show_upgrade = true
-upgrade_channel = "release"
 ```
 
 ## Model Provider Examples

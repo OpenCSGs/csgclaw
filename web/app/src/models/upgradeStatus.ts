@@ -3,7 +3,7 @@ import type { TranslateFn } from "@/models/conversations";
 
 export type UpgradeChannel = "release" | "beta";
 
-const STABLE_RELEASE_VERSION_PATTERN = /^(?:v)?\d+\.\d+\.\d+$/i;
+const STABLE_RELEASE_VERSION_PATTERN = /^(?:v)?(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
 
 export function inferUpgradeChannelFromVersion(version: unknown): UpgradeChannel {
   const raw = typeof version === "string" ? version.trim() : "";
@@ -13,6 +13,7 @@ export function inferUpgradeChannelFromVersion(version: unknown): UpgradeChannel
 export type UpgradeStatus = {
   auto_upgrade_supported: boolean;
   auto_upgrade_unsupported_reason: string;
+  /** Installed channel derived from current_version, never a pending switch target. */
   channel: UpgradeChannel;
   checking: boolean;
   current_version: string;
@@ -104,6 +105,9 @@ export function classifyDesktopUpdateErrorKind(message: string): string {
   ) {
     return "network_download";
   }
+  if (/not an official csgclaw bundle|local[_ ]build|本地开发构建/i.test(text)) {
+    return "local_build";
+  }
   return "desktop_update";
 }
 
@@ -127,7 +131,7 @@ export function upgradeErrorMessage(status: UpgradeStatus | null | undefined, t:
   }
 
   const parts = [upgradeErrorSummary(kind, t)];
-  if (detail && kind !== "signature" && kind !== "missing_update_package") {
+  if (detail && kind !== "signature" && kind !== "missing_update_package" && kind !== "local_build") {
     parts.push(t("upgradeErrorDetails", { detail }));
   }
   if (logPath) {
@@ -137,6 +141,14 @@ export function upgradeErrorMessage(status: UpgradeStatus | null | undefined, t:
 }
 
 export function formatClassifiedUpgradeError(detail: string, t: TranslateFn): string {
+  const normalizedDetail = detail.trim();
+  const kind = classifyDesktopUpdateErrorKind(normalizedDetail);
+  if (!normalizedDetail) {
+    return t("upgradeErrorUnknown");
+  }
+  if (kind === "desktop_update") {
+    return normalizedDetail;
+  }
   return upgradeErrorMessage(
     {
       auto_upgrade_supported: true,
@@ -146,8 +158,8 @@ export function formatClassifiedUpgradeError(detail: string, t: TranslateFn): st
       current_version: "",
       downloaded: false,
       last_checked_at: "",
-      last_error: detail.trim(),
-      last_error_kind: classifyDesktopUpdateErrorKind(detail) || "desktop_update",
+      last_error: normalizedDetail,
+      last_error_kind: kind,
       last_error_log_path: "",
       latest_version: "",
       manual_restart_required: false,
@@ -177,6 +189,8 @@ function upgradeErrorSummary(kind: string, t: TranslateFn): string {
       return t("upgradeErrorPermission");
     case "signature":
       return t("upgradeErrorSignature");
+    case "local_build":
+      return t("upgradeLocalBuildUnsupported");
     default:
       return t("upgradeErrorUnknown");
   }

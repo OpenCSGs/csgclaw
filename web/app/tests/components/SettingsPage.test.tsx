@@ -36,10 +36,16 @@ const labels: Record<string, string> = {
   upgradeDownloadAction: "Update",
   upgradeChannel: "Update channel",
   upgradeChannelBeta: "Preview",
+  upgradeChannelCurrentActive: "Current Channel Is Active",
+  upgradeChannelInstallBeta: "Switch to Preview and Install",
+  upgradeChannelInstallRelease: "Switch to Stable and Install",
   upgradeChannelRelease: "Stable",
+  upgradeChannelRetryCurrent: "Check Current Channel Again",
   upgradeChannelSwitch: "Switch channel",
   upgradeChannelSwitchDescription: "Choose a version channel.",
   upgradeChannelSwitchTitle: "Switch channel",
+  upgradeLocalBuildUnsupported:
+    "This is a local development build. In-app upgrades and channel switching are unavailable.",
   upgradeProgressLabel: "Checking and preparing the update",
 };
 
@@ -124,8 +130,8 @@ describe("SettingsPage", () => {
         turnNotificationPermission: "default",
         upgradeBusy: false,
         upgradeChannelBusy: false,
-        upgradeChannelError: "switch failed",
-        upgradeError: "",
+        upgradeChannelError: "",
+        upgradeError: "switch failed",
         upgradePhase: "idle",
         upgradeStatus: {
           auto_upgrade_supported: true,
@@ -225,7 +231,7 @@ describe("SettingsPage", () => {
     const controller = {
       ready: true,
       sidebarProps: {
-        appVersion: "v0.4.6-dev2g6c80d157dirty",
+        appVersion: "v0.5.0-beta.6",
         authBusy: false,
         authError: "",
         authPending: false,
@@ -246,11 +252,11 @@ describe("SettingsPage", () => {
         upgradeError: "",
         upgradePhase: "idle",
         upgradeStatus: {
-          auto_upgrade_supported: false,
-          auto_upgrade_unsupported_reason: "desktop_update_unsupported",
-          channel: "release",
+          auto_upgrade_supported: true,
+          auto_upgrade_unsupported_reason: "",
+          channel: "beta",
           checking: false,
-          current_version: "v0.4.6-dev2g6c80d157dirty",
+          current_version: "v0.5.0-beta.6",
           downloaded: false,
           last_checked_at: "",
           last_error: "",
@@ -270,12 +276,83 @@ describe("SettingsPage", () => {
     await user.click(screen.getByRole("button", { name: "Switch channel" }));
 
     expect(screen.getByRole("radio", { name: "Preview" })).toBeChecked();
-    expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Current Channel Is Active" })).toBeDisabled();
 
     await user.click(screen.getByRole("radio", { name: "Stable" }));
-    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(screen.getByRole("button", { name: "Switch to Stable and Install" }));
 
     expect(onUpgradeChannelChange).toHaveBeenCalledWith("release");
+  });
+
+  it("allows opening channel switching without showing a local-build warning in advance", async () => {
+    const user = userEvent.setup();
+    const onUpgradeChannelChange = vi.fn().mockResolvedValue(false);
+    const controller = {
+      ready: true,
+      sidebarProps: {
+        appVersion: "v0.5.0-beta.6-5-ge6a80cb1-dirty+local",
+        authBusy: false,
+        authError: "",
+        authPending: false,
+        authStatus: emptyAuthStatus(),
+        locale: "en",
+        onLocaleChange: vi.fn(),
+        onLogin: vi.fn(),
+        onLogout: vi.fn(),
+        onOpenConfigSettings: vi.fn(),
+        onOpenUpgrade: vi.fn(),
+        onThemeChange: vi.fn(),
+        onUpgradeChannelChange,
+        showUpgradeControls: true,
+        t,
+        theme: "light",
+        upgradeBusy: false,
+        upgradeChannelBusy: false,
+        upgradeChannelError:
+          "This is a local development build. In-app upgrades and channel switching are unavailable.",
+        upgradeError: "",
+        upgradePhase: "idle",
+        upgradeStatus: {
+          auto_upgrade_supported: false,
+          auto_upgrade_unsupported_reason: "local_build",
+          channel: "beta",
+          checking: false,
+          current_version: "v0.5.0-beta.6-5-ge6a80cb1-dirty+local",
+          downloaded: false,
+          last_checked_at: "",
+          last_error: "",
+          last_error_kind: "",
+          last_error_log_path: "",
+          latest_version: "v0.5.0-beta.10",
+          manual_restart_required: false,
+          update_available: false,
+          upgrading: false,
+        },
+      },
+    } as unknown as WorkspaceController;
+
+    renderSettings(controller);
+
+    expect(screen.getByRole("button", { name: "Switch channel" })).toBeEnabled();
+    expect(
+      screen.queryByText("This is a local development build. In-app upgrades and channel switching are unavailable."),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Switch channel" }));
+
+    expect(screen.getByRole("dialog", { name: "Switch channel" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Preview" })).toBeChecked();
+    expect(
+      screen.queryByText("This is a local development build. In-app upgrades and channel switching are unavailable."),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Stable" }));
+    await user.click(screen.getByRole("button", { name: "Switch to Stable and Install" }));
+
+    expect(onUpgradeChannelChange).toHaveBeenCalledWith("release");
+    expect(screen.getByRole("dialog", { name: "Switch channel" })).toHaveTextContent(
+      "This is a local development build. In-app upgrades and channel switching are unavailable.",
+    );
   });
 
   it("advances simulated progress while switching channels or downloading", () => {

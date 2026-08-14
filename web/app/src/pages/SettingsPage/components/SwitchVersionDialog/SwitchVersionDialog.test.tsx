@@ -31,11 +31,11 @@ describe("SwitchVersionDialog", () => {
     });
 
     expect(screen.getByRole("radio", { name: "upgradeChannelRelease" })).toBeChecked();
-    expect(screen.getByRole("button", { name: "confirm" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "upgradeChannelCurrentActive" })).toBeDisabled();
 
     await user.click(screen.getByRole("radio", { name: "upgradeChannelBeta" }));
-    expect(screen.getByRole("button", { name: "confirm" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "confirm" }));
+    expect(screen.getByRole("button", { name: "upgradeChannelInstallBeta" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "upgradeChannelInstallBeta" }));
 
     expect(onConfirm).toHaveBeenCalledWith("beta");
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -54,6 +54,7 @@ describe("SwitchVersionDialog", () => {
 
     expect(screen.getByRole("radio", { name: "upgradeChannelBeta" })).toBeChecked();
     await user.click(screen.getByRole("radio", { name: "upgradeChannelRelease" }));
+    expect(screen.getByRole("button", { name: "upgradeChannelInstallRelease" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "cancel" }));
     expect(onConfirm).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -91,7 +92,7 @@ describe("SwitchVersionDialog", () => {
     });
 
     await user.click(screen.getByRole("radio", { name: "upgradeChannelBeta" }));
-    await user.click(screen.getByRole("button", { name: "confirm" }));
+    await user.click(screen.getByRole("button", { name: "upgradeChannelInstallBeta" }));
 
     expect(onConfirm).toHaveBeenCalledWith("beta");
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -112,9 +113,9 @@ describe("SwitchVersionDialog", () => {
     });
 
     expect(screen.getByRole("radio", { name: "upgradeChannelBeta" })).toBeChecked();
-    expect(screen.getByRole("button", { name: "confirm" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "upgradeChannelRetryCurrent" })).toBeEnabled();
 
-    await user.click(screen.getByRole("button", { name: "confirm" }));
+    await user.click(screen.getByRole("button", { name: "upgradeChannelRetryCurrent" }));
 
     expect(onConfirm).toHaveBeenCalledWith("beta");
     expect(onOpenChange).toHaveBeenCalledWith(false);

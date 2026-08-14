@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -178,21 +177,27 @@ func TestHandleUpgradeStatusMethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestHandleUpgradeChannelPersistsAndRefreshes(t *testing.T) {
+func TestHandleUpgradeChannelStartsOneShotSwitchWithoutPersisting(t *testing.T) {
 	configPath := t.TempDir() + "/config.toml"
-	if err := os.WriteFile(configPath, []byte(`[server]
+	initialConfig := []byte(`[server]
 listen_addr = "127.0.0.1:18080"
 access_token = "secret"
 show_upgrade = true
 upgrade_channel = "release"
-`), 0o600); err != nil {
+`)
+	if err := os.WriteFile(configPath, initialConfig, 0o600); err != nil {
 		t.Fatalf("WriteFile(config) error = %v", err)
 	}
 	checker := &channelStubUpgradeChecker{}
-	manager := upgrade.NewManager(checker, "v0.4.6", upgrade.ManagerOptions{})
+	manager := upgrade.NewManager(checker, "v0.4.6", upgrade.ManagerOptions{AutoUpgradeSupported: true})
 	srv := &Handler{}
 	srv.SetUpgradeManager(manager)
-	srv.SetConfigPath(configPath)
+	srv.SetUpgradeConfigPath(configPath)
+	var applyOpts upgrade.ApplyHelperOptions
+	srv.SetUpgradeApplyFunc(func(opts upgrade.ApplyHelperOptions) error {
+		applyOpts = opts
+		return nil
+	})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(
@@ -202,22 +207,25 @@ upgrade_channel = "release"
 	)
 	srv.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
 	}
 	var got apitypes.UpgradeStatus
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if got.Channel != "beta" || got.LatestVersion != "v0.4.7-beta.1" {
-		t.Fatalf("status = %+v, want refreshed beta channel", got)
+	if got.Channel != "release" || got.LatestVersion != "v0.4.7-beta.1" || !got.Upgrading {
+		t.Fatalf("status = %+v, want installed release channel with beta switch in progress", got)
+	}
+	if applyOpts.ConfigPath != configPath || applyOpts.Channel != "beta" || !applyOpts.SwitchChannel {
+		t.Fatalf("apply options = %+v, want one-shot beta channel switch", applyOpts)
 	}
 	saved, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("ReadFile(config) error = %v", err)
 	}
-	if !strings.Contains(string(saved), `upgrade_channel = "beta"`) {
-		t.Fatalf("config missing beta channel:\n%s", saved)
+	if !bytes.Equal(saved, initialConfig) {
+		t.Fatalf("config was unexpectedly rewritten:\n%s", saved)
 	}
 }
 

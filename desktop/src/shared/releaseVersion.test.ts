@@ -42,12 +42,15 @@ test("uses the development version for invalid input", () => {
 test("infers the desktop update channel from the running version string", () => {
   assert.equal(inferDesktopUpdateChannel("0.0.1"), "release");
   assert.equal(inferDesktopUpdateChannel("v0.2.0"), "release");
+  assert.equal(inferDesktopUpdateChannel("V0.2.0"), "beta");
   assert.equal(inferDesktopUpdateChannel("v0.2.0-beta.1"), "beta");
   assert.equal(inferDesktopUpdateChannel("v0.2.0-alpha.1"), "beta");
+  assert.equal(inferDesktopUpdateChannel("v0.2.0-alf"), "beta");
   assert.equal(inferDesktopUpdateChannel("0.5.0-beta.2"), "beta");
   assert.equal(inferDesktopUpdateChannel("v0.2.0.1"), "beta");
   assert.equal(inferDesktopUpdateChannel("dev"), "beta");
   assert.equal(inferDesktopUpdateChannel(""), "beta");
+  assert.equal(inferDesktopUpdateChannel("v01.0.0"), "beta");
 });
 
 test("uses a numeric system app version for prerelease packages", () => {

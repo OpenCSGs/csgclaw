@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { errorMessage as apiErrorMessage } from "@/api/client";
 import {
   formatClassifiedUpgradeError,
   inferUpgradeChannelFromVersion,
+  isLocalBuildUpgradeStatus,
   normalizeUpgradeStatus,
   upgradeErrorMessage,
 } from "@/models/upgradeStatus";
-import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
+import type { UpgradeChannel, UpgradePhase } from "@/models/upgradeStatus";
 import {
   applyPlatformUpgrade,
   setPlatformUpgradeChannel,
@@ -83,27 +85,6 @@ export function useUpgradeController({
     }
   }, [handleUpgradeStatusChange, refreshWorkspaceUpgradeStatus, t]);
 
-  const restoreUpgradeChannel = useCallback(
-    async (channel: UpgradeChannel) => {
-      let restored: UpgradeStatus | null = null;
-      try {
-        restored = await setPlatformUpgradeChannel(channel);
-      } catch (_) {
-        // The desktop updater may already have rolled back before rejecting the switch.
-      }
-      try {
-        restored = (await refreshWorkspaceUpgradeStatus()) ?? restored;
-      } catch (_) {
-        // Keep the best status returned while restoring the previous channel.
-      }
-      if (restored) {
-        handleUpgradeStatusChange(restored);
-      }
-      return restored;
-    },
-    [handleUpgradeStatusChange, refreshWorkspaceUpgradeStatus],
-  );
-
   const startUpgradeReconnectPoll = useCallback(
     (expectedVersion?: string | null) => {
       stopUpgradePoll();
@@ -121,7 +102,7 @@ export function useUpgradeController({
             setUpgradeStatusData((current) => ({
               auto_upgrade_supported: current?.auto_upgrade_supported ?? true,
               auto_upgrade_unsupported_reason: current?.auto_upgrade_unsupported_reason ?? "",
-              channel: current?.channel ?? "release",
+              channel: inferUpgradeChannelFromVersion(version),
               current_version: version,
               downloaded: false,
               latest_version: version,
@@ -238,6 +219,10 @@ export function useUpgradeController({
     async (channel: UpgradeChannel) => {
       const currentVersion = upgradeStatus?.current_version || appVersion;
       const inferredChannel = inferUpgradeChannelFromVersion(currentVersion);
+      if (isLocalBuildUpgradeStatus(upgradeStatus, currentVersion)) {
+        setUpgradeChannelError(t("upgradeLocalBuildUnsupported"));
+        return false;
+      }
       const retryCurrentChannel = Boolean(
         channel === inferredChannel && (upgradeChannelError || upgradeError || upgradeErrorMessage(upgradeStatus, t)),
       );
@@ -254,21 +239,16 @@ export function useUpgradeController({
         handleUpgradeStatusChange(next);
         const statusMessage = upgradeErrorMessage(next, t);
         if (statusMessage) {
-          const restored = await restoreUpgradeChannel(inferredChannel);
-          if (retryCurrentChannel && restored && !upgradeErrorMessage(restored, t)) {
-            return true;
-          }
           setUpgradeChannelError(`${t("upgradeChannelSwitchFailed")} ${statusMessage}`.trim());
           return false;
+        }
+        if (!getDesktopBridge() && channel !== inferredChannel && next.upgrading) {
+          startUpgradeReconnectPoll(next.latest_version);
         }
         return true;
       } catch (error) {
         const detail = upgradeErrorDetail(error).trim();
         const classified = formatClassifiedUpgradeError(detail, t);
-        const restored = await restoreUpgradeChannel(inferredChannel);
-        if (retryCurrentChannel && restored && !upgradeErrorMessage(restored, t)) {
-          return true;
-        }
         setUpgradeChannelError(`${t("upgradeChannelSwitchFailed")} ${classified}`.trim());
         return false;
       } finally {
@@ -278,7 +258,7 @@ export function useUpgradeController({
     [
       appVersion,
       handleUpgradeStatusChange,
-      restoreUpgradeChannel,
+      startUpgradeReconnectPoll,
       t,
       upgradeBusy,
       upgradeChannelBusy,
@@ -342,7 +322,7 @@ export function useUpgradeController({
 }
 
 function upgradeErrorDetail(err: unknown): string {
-  const message = err instanceof Error ? err.message : "";
+  const message = apiErrorMessage(err).trim();
   return message && message !== "upgrade apply failed" ? ` ${message}` : "";
 }
 

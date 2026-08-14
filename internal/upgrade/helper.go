@@ -18,8 +18,9 @@ var (
 )
 
 type ApplyHelperOptions struct {
-	ConfigPath string
-	Channel    string
+	ConfigPath    string
+	Channel       string
+	SwitchChannel bool
 }
 
 func StartApplyHelper(opts ApplyHelperOptions) error {
@@ -47,6 +48,9 @@ func StartApplyHelper(opts ApplyHelperOptions) error {
 	args := commandArgsWithConfig(opts.ConfigPath, "upgrade")
 	if channel := strings.TrimSpace(opts.Channel); channel != "" {
 		args = append(args, "--channel", channel)
+	}
+	if opts.SwitchChannel {
+		args = append(args, "--switch-channel")
 	}
 	cmd := startHelperCommand(exe, args...)
 	cmd.Stdin = devNull

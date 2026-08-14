@@ -51,7 +51,8 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	fs := run.NewFlagSet("upgrade", run.Program+" upgrade [flags]", c.Summary())
 	checkOnly := fs.Bool("check", false, "check for updates without downloading or installing")
 	noRestart := fs.Bool("no-restart", false, "install without restarting the local service")
-	channelFlag := fs.String("channel", string(upgrade.ChannelRelease), "release channel: release or beta")
+	channelFlag := fs.String("channel", string(upgrade.InferChannelFromVersion(appversion.Current())), "release channel: release or beta (defaults to the running version channel)")
+	switchChannel := fs.Bool("switch-channel", false, "install the latest target-channel version even when it is older")
 	fs.Usage = func() {
 		usage(run, fs)
 	}
@@ -77,7 +78,12 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		return fail(err)
 	}
 	client.Channel = channel
-	result, err := client.Check(ctx, appversion.Current())
+	var result upgrade.CheckResult
+	if *switchChannel {
+		result, err = client.CheckChannelSwitch(ctx, appversion.Current())
+	} else {
+		result, err = client.Check(ctx, appversion.Current())
+	}
 	if err != nil {
 		return fail(err)
 	}

@@ -965,27 +965,45 @@ func (h *Handler) handleUpgradeChannel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	configPath, err := h.resolveConfigPath()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	cfg.Server.UpgradeChannel = string(channel)
-	if err := cfg.Save(configPath); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	currentStatus := h.upgradeManager.Status()
+	installedChannel := upgrade.InferChannelFromVersion(currentStatus.CurrentVersion)
+	if channel != installedChannel && !currentStatus.AutoUpgradeSupported {
+		if currentStatus.AutoUpgradeUnsupportedReason == "desktop_managed" {
+			http.Error(w, "desktop updates are managed by Electron", http.StatusConflict)
+			return
+		}
+		http.Error(w, "current installation is not an official csgclaw bundle; please upgrade manually", http.StatusConflict)
 		return
 	}
 	status, err := h.upgradeManager.SetChannel(r.Context(), string(channel))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	writeJSON(w, http.StatusOK, status)
+	if channel == installedChannel {
+		writeJSON(w, http.StatusOK, status)
+		return
+	}
+	if !status.UpdateAvailable {
+		http.Error(w, "target channel does not provide a different installable version", http.StatusConflict)
+		return
+	}
+
+	apply := h.upgradeApply
+	if apply == nil {
+		apply = upgrade.StartApplyHelper
+	}
+	status = h.upgradeManager.MarkUpgrading()
+	if err := apply(upgrade.ApplyHelperOptions{
+		ConfigPath:    h.upgradeConfigPath,
+		Channel:       string(channel),
+		SwitchChannel: true,
+	}); err != nil {
+		h.upgradeManager.MarkUpgradeFailed(err)
+		http.Error(w, fmt.Sprintf("start channel switch helper: %v", err), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, status)
 }
 
 func (h *Handler) handleUpgradeApply(w http.ResponseWriter, r *http.Request) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -18,6 +19,8 @@ const (
 	DefaultLatestReleaseURL = DefaultReleaseManifestURL
 	defaultSiteBaseURL      = "https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/"
 )
+
+var stableReleaseVersionPattern = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 
 type Channel string
 
@@ -35,6 +38,16 @@ func NormalizeChannel(raw string) (Channel, error) {
 	default:
 		return "", fmt.Errorf("upgrade channel must be release or beta")
 	}
+}
+
+// InferChannelFromVersion treats only a plain three-part semantic version as
+// stable. Prereleases, development builds, local builds, and malformed
+// versions all follow the preview channel.
+func InferChannelFromVersion(version string) Channel {
+	if stableReleaseVersionPattern.MatchString(strings.TrimSpace(version)) {
+		return ChannelRelease
+	}
+	return ChannelBeta
 }
 
 func ManifestURL(channel Channel) string {
@@ -100,6 +113,17 @@ type CheckResult struct {
 }
 
 func (c Client) Check(ctx context.Context, currentVersion string) (CheckResult, error) {
+	return c.check(ctx, currentVersion, false)
+}
+
+// CheckChannelSwitch resolves the latest package in a target channel even
+// when it is older than the running version. A channel switch is a one-shot
+// installation request, so any different target version is installable.
+func (c Client) CheckChannelSwitch(ctx context.Context, currentVersion string) (CheckResult, error) {
+	return c.check(ctx, currentVersion, true)
+}
+
+func (c Client) check(ctx context.Context, currentVersion string, channelSwitch bool) (CheckResult, error) {
 	currentVersion = strings.TrimSpace(currentVersion)
 	if isLocalBuildVersion(currentVersion) {
 		release, err := c.FetchLatest(ctx)
@@ -132,7 +156,8 @@ func (c Client) Check(ctx context.Context, currentVersion string) (CheckResult, 
 		CurrentVersion: normalizeSemver(currentVersion),
 		LatestVersion:  normalizeSemver(latestVersion),
 	}
-	if compareSemver(result.CurrentVersion, result.LatestVersion) >= 0 {
+	comparison := compareSemver(result.CurrentVersion, result.LatestVersion)
+	if (!channelSwitch && comparison >= 0) || (channelSwitch && comparison == 0) {
 		return result, nil
 	}
 	result.UpdateAvailable = true

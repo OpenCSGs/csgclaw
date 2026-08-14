@@ -637,10 +637,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	apiURL := serveAPIBaseURL(cfg.Server, serveOpts)
 	imURL := imOpenURL(apiURL)
 	currentVersion := appversion.Current()
-	upgradeChannel, err := upgrade.NormalizeChannel(cfg.Server.UpgradeChannel)
-	if err != nil {
-		return err
-	}
+	upgradeChannel := upgrade.InferChannelFromVersion(currentVersion)
 	upgradeClient := &upgrade.Client{
 		HTTPClient: http.DefaultClient,
 		Channel:    upgradeChannel,
@@ -653,7 +650,6 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		upgradeSupport.Reason = "desktop_managed"
 	}
 	upgradeManager := upgrade.NewManager(upgradeClient, currentVersion, upgrade.ManagerOptions{
-		Channel:                      upgradeChannel,
 		AutoUpgradeSupported:         upgradeSupport.Supported,
 		AutoUpgradeUnsupportedReason: upgradeSupport.Reason,
 		OnStatusChange: func(status apitypes.UpgradeStatus) {

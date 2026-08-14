@@ -17,6 +17,10 @@ type channelAwareChecker struct {
 	channel Channel
 }
 
+type failingChannelChecker struct {
+	channel Channel
+}
+
 func (c *channelAwareChecker) SetChannel(channel Channel) error {
 	c.channel = channel
 	return nil
@@ -28,6 +32,18 @@ func (c *channelAwareChecker) Check(_ context.Context, currentVersion string) (C
 		latest = "v0.4.7-beta.1"
 	}
 	return CheckResult{CurrentVersion: currentVersion, LatestVersion: latest, UpdateAvailable: true}, nil
+}
+
+func (c *failingChannelChecker) SetChannel(channel Channel) error {
+	c.channel = channel
+	return nil
+}
+
+func (c *failingChannelChecker) Check(_ context.Context, _ string) (CheckResult, error) {
+	if c.channel == ChannelBeta {
+		return CheckResult{}, errors.New("preview feed unavailable")
+	}
+	return CheckResult{CurrentVersion: "v0.4.5", LatestVersion: "v0.4.6", UpdateAvailable: true}, nil
 }
 
 func (f fakeChecker) Check(ctx context.Context, currentVersion string) (CheckResult, error) {
@@ -98,18 +114,34 @@ func TestManagerIncludesAutoUpgradeSupport(t *testing.T) {
 
 func TestManagerSwitchesReleaseChannelAndRefreshes(t *testing.T) {
 	checker := &channelAwareChecker{}
-	manager := NewManager(checker, "v0.4.5", ManagerOptions{Channel: ChannelRelease})
+	manager := NewManager(checker, "v0.4.5", ManagerOptions{})
 	manager.Refresh(context.Background())
 
 	status, err := manager.SetChannel(context.Background(), "beta")
 	if err != nil {
 		t.Fatalf("SetChannel() error = %v", err)
 	}
-	if checker.channel != ChannelBeta {
-		t.Fatalf("checker channel = %q, want beta", checker.channel)
+	if checker.channel != ChannelRelease {
+		t.Fatalf("checker channel = %q, want restored release", checker.channel)
 	}
-	if status.Channel != "beta" || status.LatestVersion != "v0.4.7-beta.1" || !status.UpdateAvailable {
-		t.Fatalf("status = %+v, want refreshed beta release", status)
+	if status.Channel != "release" || status.LatestVersion != "v0.4.7-beta.1" || !status.UpdateAvailable {
+		t.Fatalf("status = %+v, want installed release channel with refreshed beta target", status)
+	}
+}
+
+func TestManagerDiscardsFailedChannelSwitchTarget(t *testing.T) {
+	checker := &failingChannelChecker{}
+	manager := NewManager(checker, "v0.4.5", ManagerOptions{})
+
+	status, err := manager.SetChannel(context.Background(), "beta")
+	if err == nil {
+		t.Fatal("SetChannel() error = nil, want preview feed error")
+	}
+	if checker.channel != ChannelRelease {
+		t.Fatalf("checker channel = %q, want restored release", checker.channel)
+	}
+	if status.Channel != "release" || status.LastError == "" || status.UpdateAvailable {
+		t.Fatalf("status = %+v, want failed target discarded while installed channel stays release", status)
 	}
 }
 

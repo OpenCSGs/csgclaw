@@ -61,7 +61,7 @@ describe("useUpgradeController", () => {
     mockedApplyUpgradeRequest.mockReset();
     mockedApplyUpgradeRequest.mockResolvedValue(undefined);
     mockedSetUpgradeChannelRequest.mockReset();
-    mockedSetUpgradeChannelRequest.mockResolvedValue(upgradeStatus({ channel: "beta", update_available: false }));
+    mockedSetUpgradeChannelRequest.mockResolvedValue(upgradeStatus({ channel: "release", update_available: false }));
   });
 
   afterEach(() => {
@@ -104,7 +104,7 @@ describe("useUpgradeController", () => {
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), UPGRADE_PAGE_RELOAD_DELAY_MS);
   });
 
-  it("switches the server update channel and stores the refreshed status", async () => {
+  it("requests a one-shot server channel switch while keeping the installed channel", async () => {
     const setUpgradeStatusData = vi.fn();
     const stableStatus = upgradeStatus({ update_available: false });
     const { result } = renderHook(() =>
@@ -122,7 +122,47 @@ describe("useUpgradeController", () => {
     await act(async () => result.current.changeUpgradeChannel("beta"));
 
     expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledWith("beta");
-    expect(setUpgradeStatusData).toHaveBeenCalledWith(expect.objectContaining({ channel: "beta" }));
+    expect(setUpgradeStatusData).toHaveBeenCalledWith(expect.objectContaining({ channel: "release" }));
+  });
+
+  it("polls for the restarted server after a one-shot channel switch starts", async () => {
+    vi.useFakeTimers();
+    mockedSetUpgradeChannelRequest.mockResolvedValueOnce(
+      upgradeStatus({
+        channel: "release",
+        latest_version: "v0.4.0-beta.1",
+        upgrading: true,
+      }),
+    );
+    const refreshWorkspaceAppVersion = vi.fn().mockResolvedValue("v0.4.0-beta.1");
+    const setAppVersionData = vi.fn();
+    const setUpgradeStatusData = vi.fn();
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.3.18",
+        refreshWorkspaceAppVersion,
+        refreshWorkspaceUpgradeStatus: vi.fn(),
+        setAppVersionData,
+        setUpgradeStatusData,
+        t,
+        upgradeStatus: upgradeStatus({ update_available: false }),
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.changeUpgradeChannel("beta")).resolves.toBe(true);
+    });
+
+    expect(refreshWorkspaceAppVersion).toHaveBeenCalledWith({ cacheBust: true });
+    expect(setAppVersionData).toHaveBeenCalledWith("v0.4.0-beta.1");
+    const updater = setUpgradeStatusData.mock.calls.at(-1)?.[0];
+    expect(updater(upgradeStatus({ channel: "release" }))).toEqual(
+      expect.objectContaining({
+        channel: "beta",
+        current_version: "v0.4.0-beta.1",
+      }),
+    );
+    expect(result.current.upgradePhase).toBe("done");
   });
 
   it("still switches channels when an update is already available", async () => {
@@ -152,7 +192,7 @@ describe("useUpgradeController", () => {
     expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledWith("release");
   });
 
-  it("still switches when the stored channel already matches but the running version does not", async () => {
+  it("uses the running version instead of a stale status channel", async () => {
     const setUpgradeStatusData = vi.fn();
     const { result } = renderHook(() =>
       useUpgradeController({
@@ -195,16 +235,10 @@ describe("useUpgradeController", () => {
     expect(setUpgradeStatusData).not.toHaveBeenCalled();
   });
 
-  it("returns false, restores the previous channel, and refreshes its available update when switching fails", async () => {
-    mockedSetUpgradeChannelRequest.mockRejectedValueOnce(new Error("feed unavailable"));
+  it("shows the message from a plain API error without issuing a second channel request", async () => {
+    mockedSetUpgradeChannelRequest.mockRejectedValueOnce({ status: 502, message: "preview feed unavailable" });
     const setUpgradeStatusData = vi.fn();
-    const restoredStatus = upgradeStatus({
-      channel: "release",
-      latest_version: "v0.3.19",
-      update_available: true,
-    });
-    mockedSetUpgradeChannelRequest.mockResolvedValueOnce(restoredStatus);
-    const refreshWorkspaceUpgradeStatus = vi.fn().mockResolvedValue(restoredStatus);
+    const refreshWorkspaceUpgradeStatus = vi.fn().mockResolvedValue(upgradeStatus({ update_available: false }));
     const { result } = renderHook(() =>
       useUpgradeController({
         appVersion: "v0.3.18",
@@ -221,12 +255,13 @@ describe("useUpgradeController", () => {
       await expect(result.current.changeUpgradeChannel("beta")).resolves.toBe(false);
     });
 
-    expect(mockedSetUpgradeChannelRequest).toHaveBeenNthCalledWith(1, "beta");
-    expect(mockedSetUpgradeChannelRequest).toHaveBeenNthCalledWith(2, "release");
-    expect(refreshWorkspaceUpgradeStatus).toHaveBeenCalledTimes(1);
-    expect(setUpgradeStatusData).toHaveBeenLastCalledWith(restoredStatus);
+    expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledTimes(1);
+    expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledWith("beta");
+    expect(refreshWorkspaceUpgradeStatus).not.toHaveBeenCalled();
+    expect(setUpgradeStatusData).not.toHaveBeenCalled();
     expect(result.current.upgradeChannelError).toContain("upgradeChannelSwitchFailed");
-    expect(result.current.upgradeChannelError).toContain("upgradeErrorUnknown");
+    expect(result.current.upgradeChannelError).toContain("preview feed unavailable");
+    expect(result.current.upgradeChannelError).not.toContain("upgradeErrorUnknown");
     expect(result.current.upgradeError).toBe("");
     expect(result.current.upgradePhase).toBe("idle");
 
@@ -235,6 +270,33 @@ describe("useUpgradeController", () => {
     });
 
     expect(result.current.upgradeChannelError).toBe("");
+  });
+
+  it("blocks channel installation for a local development build", async () => {
+    const { result } = renderHook(() =>
+      useUpgradeController({
+        appVersion: "v0.5.0-beta.6-5-ge6a80cb1-dirty+local",
+        refreshWorkspaceAppVersion: vi.fn(),
+        refreshWorkspaceUpgradeStatus: vi.fn(),
+        setAppVersionData: vi.fn(),
+        setUpgradeStatusData: vi.fn(),
+        t,
+        upgradeStatus: upgradeStatus({
+          auto_upgrade_supported: false,
+          auto_upgrade_unsupported_reason: "local_build",
+          channel: "beta",
+          current_version: "v0.5.0-beta.6-5-ge6a80cb1-dirty+local",
+          update_available: false,
+        }),
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current.changeUpgradeChannel("release")).resolves.toBe(false);
+    });
+
+    expect(mockedSetUpgradeChannelRequest).not.toHaveBeenCalled();
+    expect(result.current.upgradeChannelError).toBe("upgradeLocalBuildUnsupported");
   });
 
   it("explains unsigned or missing desktop update packages when the native updater fails", async () => {
@@ -247,7 +309,6 @@ describe("useUpgradeController", () => {
       latest_version: "v0.2.1-beta.2",
       update_available: true,
     });
-    mockedSetUpgradeChannelRequest.mockResolvedValueOnce(restoredStatus);
     const { result } = renderHook(() =>
       useUpgradeController({
         appVersion: "v0.2.1-beta.1",
@@ -271,6 +332,7 @@ describe("useUpgradeController", () => {
     expect(result.current.upgradeChannelError).toContain("upgradeChannelSwitchFailed");
     expect(result.current.upgradeChannelError).toContain("upgradeErrorMissingUpdatePackage");
     expect(result.current.upgradeError).toBe("");
+    expect(mockedSetUpgradeChannelRequest).toHaveBeenCalledTimes(1);
 
     act(() => {
       result.current.handleUpgradeStatusChange({

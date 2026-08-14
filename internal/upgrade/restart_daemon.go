@@ -2,10 +2,22 @@ package upgrade
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	appbootstrap "csgclaw/internal/app"
+)
+
+const (
+	// HTTP shutdown and the embedded CLI proxy can each use up to five
+	// seconds. Keep a margin so a healthy graceful shutdown is not mistaken
+	// for a hung daemon.
+	daemonShutdownTimeout      = 15 * time.Second
+	daemonShutdownPollInterval = 50 * time.Millisecond
 )
 
 // RestartDaemon stops a running daemon (via server.pid) and starts serve --daemon again.
@@ -38,6 +50,9 @@ func RestartDaemon(ctx context.Context, exePath string, opts RestartOptions) (Re
 
 	if err := stopDaemonWithExecutable(ctx, exePath); err != nil {
 		return RestartResult{}, fmt.Errorf("stop running daemon: %w", err)
+	}
+	if err := waitForDaemonShutdown(ctx); err != nil {
+		return RestartResult{}, fmt.Errorf("wait for running daemon to stop: %w", err)
 	}
 
 	if err := startDaemonWithExecutable(ctx, exePath, opts); err != nil {
@@ -85,6 +100,9 @@ func StopDaemonFromExecutable(ctx context.Context) (RestartResult, error) {
 	if err := stopDaemonWithExecutable(ctx, exePath); err != nil {
 		return RestartResult{}, fmt.Errorf("stop running daemon: %w", err)
 	}
+	if err := waitForDaemonShutdown(ctx); err != nil {
+		return RestartResult{}, fmt.Errorf("wait for running daemon to stop: %w", err)
+	}
 	return result, nil
 }
 
@@ -118,6 +136,36 @@ func StartInstalledDaemon(ctx context.Context, installed InstalledBundle, opts R
 
 func stopDaemonWithExecutable(ctx context.Context, exePath string) error {
 	return runUpgradeCommand(ctx, exePath, "stop")
+}
+
+// waitForDaemonShutdown waits until the old daemon has released the application
+// instance lock. The stop command only sends SIGTERM, so returning from it does
+// not mean the daemon has finished its graceful shutdown yet.
+func waitForDaemonShutdown(ctx context.Context) error {
+	waitCtx, cancel := context.WithTimeout(ctx, daemonShutdownTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(daemonShutdownPollInterval)
+	defer ticker.Stop()
+
+	for {
+		instanceLock, err := appbootstrap.AcquireInstanceLock()
+		if err == nil {
+			if releaseErr := instanceLock.Release(); releaseErr != nil {
+				return fmt.Errorf("release daemon runtime lock probe: %w", releaseErr)
+			}
+			return nil
+		}
+		if !errors.Is(err, appbootstrap.ErrAlreadyRunning) {
+			return fmt.Errorf("check daemon runtime lock: %w", err)
+		}
+
+		select {
+		case <-waitCtx.Done():
+			return fmt.Errorf("runtime lock was not released within %s: %w", daemonShutdownTimeout, waitCtx.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 func daemonLifecycleExecutable() (string, error) {

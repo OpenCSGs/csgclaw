@@ -121,6 +121,59 @@ func TestManifestURLDefaultsToStableAndValidatesChannels(t *testing.T) {
 	}
 }
 
+func TestInferChannelFromVersion(t *testing.T) {
+	tests := []struct {
+		version string
+		want    Channel
+	}{
+		{version: "0.1.0", want: ChannelRelease},
+		{version: "v0.1.0", want: ChannelRelease},
+		{version: "V0.1.0", want: ChannelBeta},
+		{version: "0.1.0-beta.1", want: ChannelBeta},
+		{version: "0.1.0-alf", want: ChannelBeta},
+		{version: "0.1.0+local", want: ChannelBeta},
+		{version: "v0.1.0-dirty", want: ChannelBeta},
+		{version: "dev", want: ChannelBeta},
+		{version: "", want: ChannelBeta},
+		{version: "01.0.0", want: ChannelBeta},
+	}
+	for _, tt := range tests {
+		if got := InferChannelFromVersion(tt.version); got != tt.want {
+			t.Fatalf("InferChannelFromVersion(%q) = %q, want %q", tt.version, got, tt.want)
+		}
+	}
+}
+
+func TestClientCheckChannelSwitchAllowsOlderTarget(t *testing.T) {
+	client := Client{
+		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(http.StatusOK, `{
+				"name":"v0.4.5",
+				"assets":[{"name":"csgclaw_v0.4.5_darwin_arm64.tar.gz","browser_download_url":"https://downloads.example/server.tar.gz"}]
+			}`), nil
+		}),
+		LatestURL: "https://example.test/releases/latest",
+		GOOS:      "darwin",
+		GOARCH:    "arm64",
+	}
+
+	regular, err := client.Check(context.Background(), "v0.4.6-beta.1")
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if regular.UpdateAvailable {
+		t.Fatal("Check().UpdateAvailable = true, want false for older target")
+	}
+
+	switchResult, err := client.CheckChannelSwitch(context.Background(), "v0.4.6-beta.1")
+	if err != nil {
+		t.Fatalf("CheckChannelSwitch() error = %v", err)
+	}
+	if !switchResult.UpdateAvailable || switchResult.Asset == nil {
+		t.Fatalf("CheckChannelSwitch() = %+v, want installable older target", switchResult)
+	}
+}
+
 func TestClientCheckRequiresNameField(t *testing.T) {
 	client := Client{
 		HTTPClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {

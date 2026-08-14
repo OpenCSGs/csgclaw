@@ -20,7 +20,6 @@ type ManagerOptions struct {
 	CheckInterval                time.Duration
 	Now                          func() time.Time
 	OnStatusChange               func(apitypes.UpgradeStatus)
-	Channel                      Channel
 	AutoUpgradeSupported         bool
 	AutoUpgradeUnsupportedReason string
 }
@@ -48,10 +47,7 @@ func NewManager(checker Checker, currentVersion string, opts ManagerOptions) *Ma
 		now = func() time.Time { return time.Now().UTC() }
 	}
 
-	channel, err := NormalizeChannel(string(opts.Channel))
-	if err != nil {
-		channel = ChannelRelease
-	}
+	channel := InferChannelFromVersion(currentVersion)
 	if setter, ok := checker.(interface{ SetChannel(Channel) error }); ok {
 		_ = setter.SetChannel(channel)
 	}
@@ -101,6 +97,10 @@ func (m *Manager) Refresh(ctx context.Context) {
 }
 
 func (m *Manager) refresh(ctx context.Context) {
+	_ = m.refreshWith(ctx, m.checker.Check)
+}
+
+func (m *Manager) refreshWith(ctx context.Context, check func(context.Context, string) (CheckResult, error)) error {
 
 	m.mu.Lock()
 	previous := copyStatus(m.status)
@@ -108,7 +108,7 @@ func (m *Manager) refresh(ctx context.Context) {
 	m.status.CurrentVersion = m.currentVersion
 	m.mu.Unlock()
 
-	result, err := m.checker.Check(ctx, m.currentVersion)
+	result, err := check(ctx, m.currentVersion)
 	checkedAt := m.now().UTC()
 
 	m.mu.Lock()
@@ -131,7 +131,7 @@ func (m *Manager) refresh(ctx context.Context) {
 		if notify && callback != nil {
 			callback(updated)
 		}
-		return
+		return err
 	}
 
 	m.status.LatestVersion = result.LatestVersion
@@ -148,6 +148,7 @@ func (m *Manager) refresh(ctx context.Context) {
 	if notify && callback != nil {
 		callback(updated)
 	}
+	return nil
 }
 
 func (m *Manager) SetChannel(ctx context.Context, rawChannel string) (apitypes.UpgradeStatus, error) {
@@ -165,13 +166,15 @@ func (m *Manager) SetChannel(ctx context.Context, rawChannel string) (apitypes.U
 
 	m.refreshMu.Lock()
 	defer m.refreshMu.Unlock()
+	installedChannel := InferChannelFromVersion(m.currentVersion)
 	if err := setter.SetChannel(channel); err != nil {
 		return m.Status(), err
 	}
+	defer func() { _ = setter.SetChannel(installedChannel) }()
 
 	m.mu.Lock()
 	previous := copyStatus(m.status)
-	m.status.Channel = string(channel)
+	m.status.Channel = string(installedChannel)
 	m.status.LatestVersion = ""
 	m.status.UpdateAvailable = false
 	m.status.LastError = ""
@@ -186,7 +189,17 @@ func (m *Manager) SetChannel(ctx context.Context, rawChannel string) (apitypes.U
 		callback(updated)
 	}
 
-	m.refresh(ctx)
+	check := m.checker.Check
+	if channel != installedChannel {
+		if switcher, ok := m.checker.(interface {
+			CheckChannelSwitch(context.Context, string) (CheckResult, error)
+		}); ok {
+			check = switcher.CheckChannelSwitch
+		}
+	}
+	if err := m.refreshWith(ctx, check); err != nil {
+		return m.Status(), err
+	}
 	return m.Status(), nil
 }
 

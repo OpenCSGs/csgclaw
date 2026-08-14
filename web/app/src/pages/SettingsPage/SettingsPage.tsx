@@ -84,8 +84,7 @@ export function SettingsPage() {
     sidebar.upgradeStatus?.upgrading,
   );
   const showUpgradeProgress = upgradeProgress.visible;
-  const versionError =
-    sidebar.upgradeChannelError || sidebar.upgradeError || upgradeErrorMessage(sidebar.upgradeStatus, sidebar.t);
+  const versionError = sidebar.upgradeError || upgradeErrorMessage(sidebar.upgradeStatus, sidebar.t);
   const showNewVersionBadge = Boolean(
     sidebar.showUpgradeControls &&
     (mockUpgradeAvailable ||
