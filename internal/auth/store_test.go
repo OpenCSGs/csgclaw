@@ -264,6 +264,57 @@ func TestEnsureAIGatewayCredentialsFetchesAndCachesBuiltinAPIKey(t *testing.T) {
 	}
 }
 
+func TestRefreshAIGatewayCredentialsReplacesCachedBuiltinAPIKey(t *testing.T) {
+	t.Setenv("CSGHUB_AIGATEWAY_BASE_URL", "https://gateway.example.test")
+	t.Setenv("CSGHUB_AIGATEWAY_URL", "")
+
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
+			t.Fatalf("Authorization = %q, want access token", got)
+		}
+		writeJSON(t, w, map[string]any{
+			"msg": "OK",
+			"data": map[string]any{
+				"token": "gk_refreshed",
+			},
+		})
+	}))
+	defer hub.Close()
+
+	store := newTestStore(t)
+	if err := store.Save(Record{
+		Tokens: Tokens{AccessToken: "access-token"},
+		Account: Account{
+			UserID:   "alice",
+			UserUUID: "user-1",
+			BaseURL:  hub.URL,
+		},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := store.SaveCSGHubProviderCredentials(CSGHubProviderCredentials{
+		AIGatewayBaseURL:       "https://gateway.example.test/v1",
+		AIGatewayBuiltinAPIKey: "gk_stale",
+	}); err != nil {
+		t.Fatalf("SaveCSGHubProviderCredentials() error = %v", err)
+	}
+
+	baseURL, apiKey, ok, err := store.RefreshAIGatewayCredentials(context.Background(), hub.Client())
+	if err != nil {
+		t.Fatalf("RefreshAIGatewayCredentials() error = %v", err)
+	}
+	if !ok || baseURL != "https://gateway.example.test/v1" || apiKey != "gk_refreshed" {
+		t.Fatalf("RefreshAIGatewayCredentials() = %q, %q, %v", baseURL, apiKey, ok)
+	}
+	credentials, found, err := store.LoadCSGHubProviderCredentials()
+	if err != nil || !found {
+		t.Fatalf("LoadCSGHubProviderCredentials() = %+v, %v, %v", credentials, found, err)
+	}
+	if credentials.AIGatewayBuiltinAPIKey != "gk_refreshed" {
+		t.Fatalf("stored AIGatewayBuiltinAPIKey = %q, want refreshed key", credentials.AIGatewayBuiltinAPIKey)
+	}
+}
+
 func TestDefaultStorePersistsOpenCSGAuthInRootState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

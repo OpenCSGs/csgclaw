@@ -197,6 +197,108 @@ func TestChatCompletionsUsesCSGHubAIGatewayAuthStore(t *testing.T) {
 	}
 }
 
+func TestResponsesRefreshesOpenCSGAIGatewayKeyAfterUnauthorized(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var upstreamAuth []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("path = %q, want /v1/responses", r.URL.Path)
+		}
+		upstreamAuth = append(upstreamAuth, r.Header.Get("Authorization"))
+		if r.Header.Get("Authorization") == "Bearer gk_stale" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"code":"AUTH-ERR-5","msg":"Invalid authorization header"}`))
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer gk_refreshed" {
+			t.Fatalf("Authorization = %q, want refreshed key", r.Header.Get("Authorization"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp-1","object":"response","status":"completed","output":[]}`))
+	}))
+	defer upstream.Close()
+	t.Setenv("CSGHUB_AIGATEWAY_BASE_URL", upstream.URL)
+
+	var refreshRequests int
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		refreshRequests++
+		if r.URL.Path != "/api/v1/namespaces/user-1/apikeys/builtin" {
+			t.Fatalf("hub path = %q, want builtin api key path", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer access-token" {
+			t.Fatalf("hub Authorization = %q, want access token", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"msg":"OK","data":{"token":"gk_refreshed"}}`))
+	}))
+	defer hub.Close()
+
+	store, err := auth.DefaultStore()
+	if err != nil {
+		t.Fatalf("DefaultStore() error = %v", err)
+	}
+	if err := store.Save(auth.Record{
+		Tokens: auth.Tokens{AccessToken: "access-token"},
+		Account: auth.Account{
+			BaseURL:  hub.URL,
+			UserID:   "alice",
+			UserUUID: "user-1",
+		},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if err := store.SaveCSGHubProviderCredentials(auth.CSGHubProviderCredentials{
+		AIGatewayBaseURL:       upstream.URL + "/v1",
+		AIGatewayBuiltinAPIKey: "gk_stale",
+	}); err != nil {
+		t.Fatalf("SaveCSGHubProviderCredentials() error = %v", err)
+	}
+
+	agentSvc := mustSeededAgentService(t, config.LLMConfig{}, []agent.Agent{
+		{
+			ID:          agent.ManagerUserID,
+			Name:        agent.ManagerName,
+			Role:        agent.RoleManager,
+			RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+			AgentProfile: agent.AgentProfile{
+				Name:            agent.ManagerName,
+				Provider:        agent.ProviderCSGHub,
+				ModelID:         "qwen-test",
+				ProfileComplete: true,
+			},
+			ProfileComplete: true,
+			CreatedAt:       time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+		},
+	})
+
+	resp, err := NewService(config.ModelConfig{}, agentSvc).Responses(
+		context.Background(),
+		agent.ManagerUserID,
+		[]byte(`{"model":"client-model","input":"hello"}`),
+	)
+	if err != nil {
+		t.Fatalf("Responses() error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got, want := strings.Join(upstreamAuth, ","), "Bearer gk_stale,Bearer gk_refreshed"; got != want {
+		t.Fatalf("upstream Authorization sequence = %q, want %q", got, want)
+	}
+	if refreshRequests != 1 {
+		t.Fatalf("refresh requests = %d, want 1", refreshRequests)
+	}
+	credentials, found, err := store.LoadCSGHubProviderCredentials()
+	if err != nil || !found {
+		t.Fatalf("LoadCSGHubProviderCredentials() = %+v, %v, %v", credentials, found, err)
+	}
+	if credentials.AIGatewayBuiltinAPIKey != "gk_refreshed" {
+		t.Fatalf("stored AIGatewayBuiltinAPIKey = %q, want refreshed key", credentials.AIGatewayBuiltinAPIKey)
+	}
+}
+
 func TestNewServiceDoesNotImposeFixedUpstreamTimeout(t *testing.T) {
 	svc := NewService(config.ModelConfig{}, nil)
 	if svc.client == nil {

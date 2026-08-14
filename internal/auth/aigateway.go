@@ -26,7 +26,24 @@ func (s Store) EnsureAIGatewayCredentials(ctx context.Context, client *http.Clie
 			return baseURL, apiKey, baseURL != "", nil
 		}
 	}
+	return s.refreshAIGatewayCredentials(ctx, client, baseURL)
+}
 
+// RefreshAIGatewayCredentials fetches the current built-in API key from
+// OpenCSG even when a previously cached key is available.
+func (s Store) RefreshAIGatewayCredentials(ctx context.Context, client *http.Client) (baseURL, apiKey string, ok bool, err error) {
+	baseURL = AIGatewayBaseURL("")
+	credentials, found, err := s.LoadCSGHubProviderCredentials()
+	if err != nil {
+		return "", "", false, err
+	}
+	if found && credentials.AIGatewayBaseURL != "" {
+		baseURL = credentials.AIGatewayBaseURL
+	}
+	return s.refreshAIGatewayCredentials(ctx, client, baseURL)
+}
+
+func (s Store) refreshAIGatewayCredentials(ctx context.Context, client *http.Client, baseURL string) (string, string, bool, error) {
 	record, found, err := s.Load()
 	if err != nil {
 		return "", "", false, err
@@ -47,7 +64,7 @@ func (s Store) EnsureAIGatewayCredentials(ctx context.Context, client *http.Clie
 		return baseURL, "", false, fmt.Errorf("csghub user uuid is required to fetch aigateway api key")
 	}
 
-	apiKey, err = fetchBuiltinAPIKey(ctx, client, record.Account.BaseURL, record.Tokens.AccessToken, record.Account.UserID, record.Account.UserUUID)
+	apiKey, err := fetchBuiltinAPIKey(ctx, client, record.Account.BaseURL, record.Tokens.AccessToken, record.Account.UserID, record.Account.UserUUID)
 	if err != nil {
 		return baseURL, "", false, err
 	}

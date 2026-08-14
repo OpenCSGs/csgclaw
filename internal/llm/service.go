@@ -29,6 +29,7 @@ type Service struct {
 	defaults                      config.ModelConfig
 	agents                        *agent.Service
 	client                        *http.Client
+	openCSGCredentialRefreshMu    sync.Mutex
 	responsesCapabilityMu         sync.Mutex
 	responsesUnsupported          map[string]struct{}
 	responsesReasoningUnsupported map[string]struct{}
@@ -242,6 +243,10 @@ func (s *Service) resolveProfile(botID string) (agent.AgentProfile, error) {
 }
 
 func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProfile, body []byte) (*UpstreamResponse, error) {
+	return s.forwardRemoteChatWithAuthRefresh(ctx, profile, body, true)
+}
+
+func (s *Service) forwardRemoteChatWithAuthRefresh(ctx context.Context, profile agent.AgentProfile, body []byte, allowAuthRefresh bool) (*UpstreamResponse, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
@@ -270,6 +275,12 @@ func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProf
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send upstream request: %v", err)}
 	}
+	if allowAuthRefresh && resp.StatusCode == http.StatusUnauthorized && profile.Provider == agent.ProviderCSGHub {
+		if _, _, refreshed := s.refreshOpenCSGAIGatewayCredentials(ctx, apiKey); refreshed {
+			_ = resp.Body.Close()
+			return s.forwardRemoteChatWithAuthRefresh(ctx, profile, body, false)
+		}
+	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return compactUpstreamErrorStream(resp)
 	}
@@ -290,6 +301,10 @@ func (s *Service) forwardRemoteChat(ctx context.Context, profile agent.AgentProf
 }
 
 func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.AgentProfile, body []byte) (*UpstreamResponse, error) {
+	return s.forwardRemoteResponsesWithAuthRefresh(ctx, profile, body, true)
+}
+
+func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, profile agent.AgentProfile, body []byte, allowAuthRefresh bool) (*UpstreamResponse, error) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("decode request: %v", err)}
@@ -311,7 +326,7 @@ func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.Agen
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
 	}
 	if s.responsesAPIUnsupportedCached(profile, baseURL) {
-		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
+		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, allowAuthRefresh)
 	}
 	upstreamURL := strings.TrimRight(baseURL, "/") + "/responses"
 	sendResponses := func(encoded []byte) (*http.Response, error) {
@@ -329,6 +344,12 @@ func (s *Service) forwardRemoteResponses(ctx context.Context, profile agent.Agen
 	if err != nil {
 		return nil, err
 	}
+	if allowAuthRefresh && resp.StatusCode == http.StatusUnauthorized && profile.Provider == agent.ProviderCSGHub {
+		if _, _, refreshed := s.refreshOpenCSGAIGatewayCredentials(ctx, apiKey); refreshed {
+			_ = resp.Body.Close()
+			return s.forwardRemoteResponsesWithAuthRefresh(ctx, profile, body, false)
+		}
+	}
 	return s.handleRemoteResponsesResult(ctx, profile, payload, baseURL, apiKey, resp, true, sendResponses)
 }
 
@@ -338,11 +359,11 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 	if responsesAPIUnsupportedStatus(resp.StatusCode) {
 		_ = resp.Body.Close()
 		s.markResponsesAPIUnsupported(profile, baseURL)
-		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
+		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)
 	}
 	if responsesAPITransientFallbackStatus(profile, resp.StatusCode) && !responsesPayloadHasToolSemantics(payload) {
 		_ = resp.Body.Close()
-		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey)
+		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		body, err := readAndCloseUpstreamBody(resp)
@@ -374,7 +395,7 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 	}, nil
 }
 
-func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.AgentProfile, responsesPayload map[string]any, baseURL, apiKey string) (*UpstreamResponse, error) {
+func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.AgentProfile, responsesPayload map[string]any, baseURL, apiKey string, allowAuthRefresh bool) (*UpstreamResponse, error) {
 	chatPayload, err := responsesPayloadToChatPayload(responsesPayload)
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: err.Error()}
@@ -394,6 +415,12 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("send chat fallback request: %v", err)}
+	}
+	if allowAuthRefresh && resp.StatusCode == http.StatusUnauthorized && profile.Provider == agent.ProviderCSGHub {
+		if refreshedBaseURL, refreshedAPIKey, refreshed := s.refreshOpenCSGAIGatewayCredentials(ctx, apiKey); refreshed {
+			_ = resp.Body.Close()
+			return s.forwardResponsesViaChat(ctx, profile, responsesPayload, refreshedBaseURL, refreshedAPIKey, false)
+		}
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return compactUpstreamErrorStream(resp)
@@ -1402,6 +1429,31 @@ func csghubAIGatewayTarget(ctx context.Context, client *http.Client) (string, st
 		return "", "", &HTTPError{Status: http.StatusUnauthorized, Message: "csghub login is required"}
 	}
 	return baseURL, apiKey, nil
+}
+
+func (s *Service) refreshOpenCSGAIGatewayCredentials(ctx context.Context, rejectedAPIKey string) (string, string, bool) {
+	s.openCSGCredentialRefreshMu.Lock()
+	defer s.openCSGCredentialRefreshMu.Unlock()
+
+	store, err := auth.DefaultStore()
+	if err != nil {
+		slog.Warn("resolve OpenCSG auth store after unauthorized response", "error", err)
+		return "", "", false
+	}
+	baseURL, apiKey, ok, err := store.AIGatewayCredentials()
+	if err != nil {
+		slog.Warn("read OpenCSG AI Gateway credentials after unauthorized response", "error", err)
+		return "", "", false
+	}
+	if ok && apiKey != "" && apiKey != rejectedAPIKey {
+		return baseURL, apiKey, true
+	}
+	baseURL, apiKey, ok, err = store.RefreshAIGatewayCredentials(ctx, s.client)
+	if err != nil {
+		slog.Warn("refresh OpenCSG AI Gateway credentials after unauthorized response", "error", err)
+		return "", "", false
+	}
+	return baseURL, apiKey, ok && apiKey != rejectedAPIKey
 }
 
 func ensureCLIProxyAuthenticated(ctx context.Context, provider string) error {
