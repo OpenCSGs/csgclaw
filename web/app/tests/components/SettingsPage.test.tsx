@@ -454,5 +454,6 @@ describe("SettingsPage", () => {
     renderSettings(controller);
 
     expect(screen.getByRole("alert")).toHaveTextContent("upgradeErrorMissingUpdatePackage");
+    expect(screen.queryByRole("button", { name: "Update" })).not.toBeInTheDocument();
   });
 });

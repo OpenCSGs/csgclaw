@@ -224,7 +224,6 @@ export function hasUpgradeAttention(
     status?.manual_restart_required ||
     busy ||
     phase === "manual_restart" ||
-    phase === "done" ||
-    phase === "error",
+    phase === "done",
   );
 }

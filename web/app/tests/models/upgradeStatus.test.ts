@@ -212,7 +212,8 @@ describe("upgrade status helpers", () => {
     expect(hasUpgradeAttention({ ...baseUpgradeStatus, last_error: "boom" }, "idle")).toBe(false);
     expect(hasUpgradeAttention(baseUpgradeStatus, "manual_restart")).toBe(true);
     expect(hasUpgradeAttention(baseUpgradeStatus, "done")).toBe(true);
-    expect(hasUpgradeAttention(baseUpgradeStatus, "error")).toBe(true);
+    expect(hasUpgradeAttention(baseUpgradeStatus, "error")).toBe(false);
+    expect(hasUpgradeAttention({ ...baseUpgradeStatus, update_available: true }, "error")).toBe(true);
     expect(hasUpgradeAttention(baseUpgradeStatus, "idle", true)).toBe(true);
   });
 });

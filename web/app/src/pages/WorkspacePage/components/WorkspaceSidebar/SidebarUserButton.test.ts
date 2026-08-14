@@ -52,4 +52,18 @@ describe("shouldShowUpgradeAlertDot", () => {
       }),
     ).toBe(false);
   });
+
+  it("hides the settings red dot when a channel check fails without an available update", () => {
+    expect(
+      shouldShowUpgradeAlertDot({
+        controlsAvailable: true,
+        phase: "error",
+        status: upgradeStatus({
+          last_error: "The release channel does not provide a signed update package",
+          last_error_kind: "missing_update_package",
+          update_available: false,
+        }),
+      }),
+    ).toBe(false);
+  });
 });
