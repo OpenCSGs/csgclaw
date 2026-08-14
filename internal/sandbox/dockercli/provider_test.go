@@ -285,6 +285,18 @@ func TestUnavailableErrorsMapToSandboxUnavailable(t *testing.T) {
 	}
 }
 
+func TestIsUnavailableRecognizesDockerDesktopDaemonErrors(t *testing.T) {
+	tests := []string{
+		"failed to connect to the docker API at unix:///Users/example/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/example/.docker/run/docker.sock: connect: no such file or directory",
+		"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
+	}
+	for _, stderr := range tests {
+		if !isUnavailable(stderr) {
+			t.Errorf("isUnavailable(%q) = false, want true", stderr)
+		}
+	}
+}
+
 func TestNilHandles(t *testing.T) {
 	ctx := context.Background()
 	rt := (*Runtime)(nil)

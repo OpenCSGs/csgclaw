@@ -330,14 +330,34 @@ export function isAgentRuntimeStartupPending(item: AgentLike | null | undefined)
   return item?.runtime?.startup_pending === true;
 }
 
-// A missing expiry preserves backward compatibility with older API responses.
-// New responses always include expires_at for an observed availability state.
-export function isAgentGatewayDegraded(item: AgentLike | null | undefined, now = Date.now()): boolean {
-  if (agentRuntimeAvailabilityState(item) !== "degraded") {
-    return false;
+// expires_at schedules the next server probe; it does not invalidate the last
+// observed result. Keep a degraded result visible until the server explicitly
+// reports a newer ready state, otherwise the UI flashes online between probes.
+export function isAgentGatewayDegraded(item: AgentLike | null | undefined, _now = Date.now()): boolean {
+  return agentRuntimeAvailabilityState(item) === "degraded";
+}
+
+export function isAgentGatewayAvailabilityUnknown(item: AgentLike | null | undefined, _now = Date.now()): boolean {
+  return agentSandboxEnabled(item) && agentRuntimeAvailabilityState(item) === "unknown";
+}
+
+export function agentGatewayUnavailableLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
+  const reason = String(item?.runtime?.availability?.reason || "")
+    .trim()
+    .toLowerCase();
+  switch (reason) {
+    case "control_plane_unavailable":
+      return t("agentRuntimeDockerUnavailable");
+    case "probe_timed_out":
+      return t("agentRuntimeCheckTimedOut");
+    case "runtime_not_found":
+      return t("agentRuntimeNotFound");
+    case "runtime_busy":
+      return t("agentRuntimeBusy");
+    case "readiness_failed":
+    default:
+      return t("agentRuntimeServiceUnavailable");
   }
-  const expiresAt = agentRuntimeAvailabilityExpiresAt(item);
-  return expiresAt == null || now < expiresAt;
 }
 
 export function agentRuntimeSandboxID(item: AgentLike | null | undefined): string {
@@ -960,6 +980,16 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
     return t("agentStatusDone");
   }
   return t("agentStatusUnknown");
+}
+
+export function agentAvailabilityStatusLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
+  if (isAgentGatewayDegraded(item)) {
+    return t("offline");
+  }
+  if (isAgentGatewayAvailabilityUnknown(item)) {
+    return t("agentStatusChecking");
+  }
+  return agentStatusLabel(isAgentRuntimeStartupPending(item) ? "starting" : agentRuntimeState(item), t);
 }
 
 export function agentOfflineReasonLabel(status: unknown, t: TranslateFn): string {
@@ -1824,6 +1854,10 @@ export function isAgentLifecycleRunning(item: AgentLike | null | undefined): boo
 // should use isAgentLifecycleRunning to make that choice explicit.
 export function isAgentRunning(item: AgentLike | null | undefined): boolean {
   return isAgentLifecycleRunning(item);
+}
+
+export function isAgentAvailable(item: AgentLike | null | undefined): boolean {
+  return isAgentLifecycleRunning(item) && !isAgentGatewayDegraded(item) && !isAgentGatewayAvailabilityUnknown(item);
 }
 
 export function isAgentRuntimeUnavailable(item: AgentLike | null | undefined): boolean {

@@ -742,7 +742,11 @@ func (s *Service) ListModelsForRequest(ctx context.Context, req ProfileModelRequ
 		}
 		return sortModelIDs(models), nil
 	}
-	return ListModelsForProfile(ctx, profile)
+	models, err := ListModelsForProfile(ctx, profile)
+	if err != nil {
+		return nil, err
+	}
+	return sortModelIDs(models), nil
 }
 
 func runtimeConfigChangeForAgent(previousProfile, currentProfile AgentProfile, previousOptions, currentOptions map[string]any) agentruntime.RuntimeConfigChange {

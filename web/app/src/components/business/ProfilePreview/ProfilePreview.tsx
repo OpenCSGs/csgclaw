@@ -1,14 +1,13 @@
 import {
   agentModelID,
+  agentAvailabilityStatusLabel,
   agentProfileConfig,
   agentRuntimeKind,
-  agentRuntimeState,
-  agentStatusLabel,
   formatProviderLabel,
   formatRuntimeKindLabel,
+  isAgentAvailable,
   isAgentIncomplete,
   isAgentRestartNeeded,
-  isAgentRunning,
   isAgentUpgradeNeeded,
 } from "@/models/agents";
 import { providerNameForProviderID } from "@/models/modelProviders";
@@ -53,7 +52,7 @@ function isBootstrapAdminUser(user: IMUser | null | undefined): boolean {
 export function ProfilePreviewContent({ agent, user, t, onOpenAgent, onOpenDM }: ProfilePreviewContentProps) {
   const localAdminPreview = !agent && isBootstrapAdminUser(user);
   const showAgentMetadataFields = Boolean(agent || localAdminPreview);
-  const running = agent ? isAgentRunning(agent) : false;
+  const running = agent ? isAgentAvailable(agent) : false;
   const incomplete = agent ? isAgentIncomplete(agent) : false;
   const restartNeeded = agent ? isAgentRestartNeeded(agent) : false;
   const upgradeNeeded = agent ? isAgentUpgradeNeeded(agent) : false;
@@ -64,7 +63,7 @@ export function ProfilePreviewContent({ agent, user, t, onOpenAgent, onOpenDM }:
   const previewModel = agent ? agentModelWithReasoning(agent, t) : localizeRole(user?.role || "admin", t);
   const displayName = agent?.name || user?.name || "";
   const displayRole = agent ? agent.role || "worker" : user?.role || "";
-  const statusLabel = agent ? agentStatusLabel(agentRuntimeState(agent), t) : t("online");
+  const statusLabel = agent ? agentAvailabilityStatusLabel(agent, t) : t("online");
 
   return (
     <>

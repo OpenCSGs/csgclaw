@@ -29,6 +29,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/mcp"
+	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 	codexruntime "csgclaw/internal/runtime/codex"
@@ -54,6 +55,72 @@ type fakeCompatRuntime struct {
 type fakeReadinessCompatRuntime struct {
 	fakeCompatRuntime
 	readiness func(context.Context, agentruntime.Handle) error
+}
+
+type fakeSandboxAvailabilityProvider struct {
+	name string
+	err  error
+}
+
+func TestWriteAgentOperationErrorSanitizesWrappedUpstreamError(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	err := fmt.Errorf("validate Codex provider Responses API: %w", &modelprovider.ResponsesAPIStatusError{
+		Operation:  "responses",
+		BaseURL:    "https://aigateway.example/v1",
+		Status:     "503 Service Unavailable",
+		StatusCode: http.StatusServiceUnavailable,
+		Body:       `{"error":{"code":"model_unavailable","message":"model gpt-test has no upstream"}}`,
+	})
+
+	writeAgentOperationError(recorder, err, http.StatusBadRequest)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", recorder.Code)
+	}
+	want := "当前模型暂时不可用，请稍后重试或更换模型。\n"
+	if recorder.Body.String() != want {
+		t.Fatalf("body = %q, want %q", recorder.Body.String(), want)
+	}
+	if strings.Contains(recorder.Body.String(), "aigateway") || strings.Contains(recorder.Body.String(), "gpt-test") {
+		t.Fatalf("body exposes upstream diagnostics: %q", recorder.Body.String())
+	}
+}
+
+func TestWriteAgentOperationErrorOnlyUsesNotFoundForAPIResources(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{name: "agent resource", err: errors.New(`agent "agent-missing" not found`), wantStatus: http.StatusNotFound},
+		{name: "missing bundled cli", err: errors.New("bundled Codex CLI not found next to executable"), wantStatus: http.StatusBadRequest},
+		{name: "missing docker executable", err: errors.New("docker executable not found"), wantStatus: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			writeAgentOperationError(recorder, tt.err, http.StatusBadRequest)
+			if recorder.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func (p fakeSandboxAvailabilityProvider) Name() string {
+	return p.name
+}
+
+func (p fakeSandboxAvailabilityProvider) Open(context.Context, string) (sandbox.Runtime, error) {
+	return nil, nil
+}
+
+func (p fakeSandboxAvailabilityProvider) ListImages(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+func (p fakeSandboxAvailabilityProvider) CheckAvailability(context.Context) error {
+	return p.err
 }
 
 func (f fakeReadinessCompatRuntime) CheckReadiness(ctx context.Context, h agentruntime.Handle) error {
@@ -524,6 +591,56 @@ func TestBootstrapConfigViewReportsUnavailableSandboxRuntimeChoices(t *testing.T
 		if !strings.Contains(strings.ToLower(choice.Message), "boxlite") {
 			t.Fatalf("sandbox choice %q Message = %q, want boxlite warning", choice.Name, choice.Message)
 		}
+	}
+}
+
+func TestBootstrapConfigViewReportsStoppedDockerRuntimeChoices(t *testing.T) {
+	origAvailability := sandboxProviderAvailability
+	origProvider := sandboxProviderForRuntime
+	sandboxProviderAvailability = func(config.SandboxConfig) error {
+		return nil
+	}
+	sandboxProviderForRuntime = func(config.SandboxConfig) (sandbox.Provider, error) {
+		return fakeSandboxAvailabilityProvider{
+			name: config.DockerProvider,
+			err:  fmt.Errorf("%w: docker engine stopped", sandbox.ErrUnavailable),
+		}, nil
+	}
+	t.Cleanup(func() {
+		sandboxProviderAvailability = origAvailability
+		sandboxProviderForRuntime = origProvider
+	})
+
+	got := bootstrapConfigView(context.Background(), config.Config{
+		Sandbox: config.SandboxConfig{Provider: config.DockerProvider},
+	}, nil, nil)
+
+	for _, choice := range got.WorkerRuntimeChoices {
+		if !choice.SandboxEnabled {
+			continue
+		}
+		if choice.Installed {
+			t.Fatalf("sandbox choice %q Installed = true, want false: %+v", choice.Name, choice)
+		}
+		if !strings.Contains(choice.Message, "Docker 未启动或无法连接") {
+			t.Fatalf("sandbox choice %q Message = %q, want Docker startup guidance", choice.Name, choice.Message)
+		}
+		if strings.Contains(strings.ToLower(choice.Message), "gateway") {
+			t.Fatalf("sandbox choice %q Message = %q, should not mention gateway", choice.Name, choice.Message)
+		}
+	}
+}
+
+func TestFriendlySandboxRuntimeMessageReportsDockerTimeout(t *testing.T) {
+	got := friendlySandboxRuntimeMessage(
+		config.SandboxConfig{Provider: config.DockerProvider},
+		fmt.Errorf("docker command canceled: %w", context.DeadlineExceeded),
+	)
+	if !strings.Contains(got, "Docker 服务检测超时") {
+		t.Fatalf("friendlySandboxRuntimeMessage() = %q, want Docker timeout guidance", got)
+	}
+	if strings.Contains(strings.ToLower(got), "deadline exceeded") {
+		t.Fatalf("friendlySandboxRuntimeMessage() leaks implementation detail: %q", got)
 	}
 }
 

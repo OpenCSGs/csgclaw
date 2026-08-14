@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -67,6 +68,36 @@ func TestListOpenAIModelsWithClientDoesNotAddPageSizeForOtherHosts(t *testing.T)
 	}
 }
 
+func TestListOpenAIModelsWithClientFiltersByTextGenerationTask(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(`{"data":[
+				{"id":"deepseek-v4-pro","task":"text-generation","availability":{"is_available":true}},
+				{"id":"qwen3-vl","task":"text-generation,image-text-to-text"},
+				{"id":"image-capable-chat","task":"text-generation,image-text-to-text"},
+				{"id":"claude-sonnet-4-6","task":"text-generation,image-text-to-text","availability":{"is_available":false}},
+				{"id":"doubao-seedream-4-0-250828","task":"text-to-image"},
+				{"id":"qwen3-asr","task":"speech-to-text"},
+				{"id":"Qwen_Qwen3-Embedding-0.6B","task":""},
+				{"id":"legacy-model"}
+			]}`)),
+			Request: req,
+		}, nil
+	})}
+
+	models, err := ListOpenAIModelsWithClient(context.Background(), client, "https://aigateway.example/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("ListOpenAIModelsWithClient() error = %v", err)
+	}
+	want := "deepseek-v4-pro,qwen3-vl,image-capable-chat"
+	if got := strings.Join(models, ","); got != want {
+		t.Fatalf("models = %q, want %q", got, want)
+	}
+}
+
 func TestCheckResponsesAPIWithClientPostsMinimalResponsesRequest(t *testing.T) {
 	var gotAuth string
 	var gotPayload map[string]any
@@ -105,8 +136,11 @@ func TestCheckResponsesAPIWithClientPostsMinimalResponsesRequest(t *testing.T) {
 	if gotPayload["stream"] != true {
 		t.Fatalf("stream = %#v, want true", gotPayload["stream"])
 	}
-	if gotPayload["max_output_tokens"] != float64(16) {
-		t.Fatalf("max_output_tokens = %#v, want 16", gotPayload["max_output_tokens"])
+	if gotPayload["input"] != "Reply with exactly: OK" {
+		t.Fatalf("input = %#v, want constrained probe prompt", gotPayload["input"])
+	}
+	if gotPayload["max_output_tokens"] != float64(128) {
+		t.Fatalf("max_output_tokens = %#v, want 128", gotPayload["max_output_tokens"])
 	}
 }
 
@@ -116,11 +150,50 @@ func TestCheckResponsesAPIWithClientAcceptsStreamingResponse(t *testing.T) {
 			t.Fatalf("Accept = %q, want text/event-stream", got)
 		}
 		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-		_, _ = w.Write([]byte("event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-test\",\"object\":\"response\",\"status\":\"in_progress\"}}\n\n"))
+		_, _ = w.Write([]byte("event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-test\",\"object\":\"response\",\"status\":\"in_progress\"}}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-test\",\"object\":\"response\",\"status\":\"completed\"}}\n\n"))
 	}))
 	defer srv.Close()
 
 	if err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL+"/v1", "sk-test", "gpt-test", nil); err != nil {
+		t.Fatalf("CheckResponsesAPIWithClient() error = %v", err)
+	}
+}
+
+func TestCheckResponsesAPIWithClientRejectsCreatedWithoutCompletion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"object\":\"response\",\"status\":\"in_progress\"}}\n\n"))
+	}))
+	defer srv.Close()
+
+	err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil)
+	if err == nil || !strings.Contains(err.Error(), "before response.completed") {
+		t.Fatalf("error = %v, want incomplete stream rejection", err)
+	}
+}
+
+func TestCheckResponsesAPIWithClientMapsFailedEvent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"object\":\"response\",\"status\":\"failed\",\"error\":{\"code\":\"model_unavailable\",\"message\":\"internal route detail\"}}}\n\n"))
+	}))
+	defer srv.Close()
+
+	err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil)
+	status, code, message, ok := UserFacingUpstreamError(err)
+	if !ok || status != http.StatusServiceUnavailable || code != "model_unavailable" {
+		t.Fatalf("mapped error = (%d, %q, %q, %t), source=%v", status, code, message, ok, err)
+	}
+}
+
+func TestCheckResponsesAPIWithClientAcceptsMultilineSSEData(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.completed\ndata: {\"type\":\"response.completed\",\ndata: \"response\":{\"id\":\"resp-test\",\"object\":\"response\",\"status\":\"completed\"}}\n\n"))
+	}))
+	defer srv.Close()
+
+	if err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil); err != nil {
 		t.Fatalf("CheckResponsesAPIWithClient() error = %v", err)
 	}
 }
@@ -140,6 +213,104 @@ func TestCheckResponsesAPIWithClientClassifiesUnsupportedEndpoint(t *testing.T) 
 	}
 }
 
+func TestCheckResponsesAPIWithClientReturnsFriendlyWrappedUpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":{"code":"model_unavailable","message":"model gpt-test has no available upstream endpoint"}}`))
+	}))
+	defer srv.Close()
+
+	err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil)
+	status, code, message, ok := UserFacingUpstreamError(err)
+	if !ok {
+		t.Fatalf("UserFacingUpstreamError(%v) ok = false, want true", err)
+	}
+	if status != http.StatusServiceUnavailable || code != "model_unavailable" {
+		t.Fatalf("UserFacingUpstreamError() = (%d, %q), want (503, model_unavailable)", status, code)
+	}
+	if message != "当前模型暂时不可用，请稍后重试或更换模型。" {
+		t.Fatalf("UserFacingUpstreamError() message = %q", message)
+	}
+	if !strings.Contains(err.Error(), "no available upstream endpoint") {
+		t.Fatalf("diagnostic error = %q, want original detail retained for server-side diagnostics", err)
+	}
+}
+
+func TestCheckChatCompletionsAPIWithClientReturnsTypedUpstreamError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"code":"rate_limit_exceeded","message":"internal quota detail"}}`))
+	}))
+	defer srv.Close()
+
+	err := CheckChatCompletionsAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil)
+	status, code, message, ok := UserFacingUpstreamError(err)
+	if !ok || status != http.StatusTooManyRequests || code != "rate_limit_exceeded" {
+		t.Fatalf("UserFacingUpstreamError(%v) = (%d, %q, %t)", err, status, code, ok)
+	}
+	if message != "当前请求较多或使用额度已达上限，请稍后再试。" {
+		t.Fatalf("UserFacingUpstreamError() message = %q", message)
+	}
+}
+
+func TestUserFacingUpstreamErrorSanitizesTransportAndDecodeFailures(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "timeout",
+			err:        &UpstreamRequestError{Operation: "request responses", BaseURL: "https://private.example/v1", Err: context.DeadlineExceeded},
+			wantStatus: http.StatusGatewayTimeout,
+			wantCode:   "upstream_timeout",
+		},
+		{
+			name:       "invalid response",
+			err:        &UpstreamRequestError{Operation: "decode responses", BaseURL: "https://private.example/v1", Err: errors.New("invalid byte at offset 42")},
+			wantStatus: http.StatusBadGateway,
+			wantCode:   "upstream_unavailable",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, code, message, ok := UserFacingUpstreamError(fmt.Errorf("validate provider: %w", tt.err))
+			if !ok || status != tt.wantStatus || code != tt.wantCode {
+				t.Fatalf("UserFacingUpstreamError() = (%d, %q, %t)", status, code, ok)
+			}
+			if strings.Contains(message, "private.example") || strings.Contains(message, "offset") {
+				t.Fatalf("message exposes diagnostics: %q", message)
+			}
+		})
+	}
+}
+
+func TestFriendlyUpstreamErrorMappings(t *testing.T) {
+	tests := []struct {
+		code       string
+		wantStatus int
+		wantText   string
+	}{
+		{code: "invalid_api_key", wantStatus: http.StatusUnauthorized, wantText: "认证失败"},
+		{code: "authentication_error", wantStatus: http.StatusUnauthorized, wantText: "认证失败"},
+		{code: "permission_denied", wantStatus: http.StatusForbidden, wantText: "没有执行此操作的权限"},
+		{code: "context_length_exceeded", wantStatus: http.StatusBadRequest, wantText: "超过当前模型的上下文长度"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.code, func(t *testing.T) {
+			status := UpstreamStatusForErrorCode(tt.code)
+			if status != tt.wantStatus {
+				t.Fatalf("UpstreamStatusForErrorCode(%q) = %d, want %d", tt.code, status, tt.wantStatus)
+			}
+			if message := FriendlyUpstreamErrorMessage(status, tt.code); !strings.Contains(message, tt.wantText) {
+				t.Fatalf("FriendlyUpstreamErrorMessage(%q) = %q, want text %q", tt.code, message, tt.wantText)
+			}
+		})
+	}
+}
+
 func TestCheckChatCompletionsAPIWithClientAcceptsStreamingResponse(t *testing.T) {
 	var gotPayload map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -150,7 +321,7 @@ func TestCheckChatCompletionsAPIWithClientAcceptsStreamingResponse(t *testing.T)
 			t.Fatalf("Decode() error = %v", err)
 		}
 		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"pong\"},\"finish_reason\":null}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"pong\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-test\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
 	}))
 	defer srv.Close()
 
@@ -159,6 +330,18 @@ func TestCheckChatCompletionsAPIWithClientAcceptsStreamingResponse(t *testing.T)
 	}
 	if gotPayload["stream"] != true {
 		t.Fatalf("stream = %#v, want true", gotPayload["stream"])
+	}
+}
+
+func TestCheckChatCompletionsAPIWithClientAcceptsMultilineSSEData(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"id\":\"chatcmpl-test\",\ndata: \"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
+	}))
+	defer srv.Close()
+
+	if err := CheckChatCompletionsAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil); err != nil {
+		t.Fatalf("CheckChatCompletionsAPIWithClient() error = %v", err)
 	}
 }
 

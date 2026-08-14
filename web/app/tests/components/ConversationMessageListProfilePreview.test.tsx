@@ -1,6 +1,7 @@
 import { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ConversationMessageList } from "@/components/business/ConversationPane";
+import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
 
 const t: TranslateFn = (key) => key;
@@ -26,9 +27,11 @@ const conversation: IMConversation = {
 
 function renderMessageList({
   agents = [{ id: agentUser.id, name: agentUser.name, role: "worker" }],
-  onOpenAgentDetail = vi.fn(),
-  onPreviewUser = vi.fn(),
+}: {
+  agents?: AgentLike[];
 } = {}) {
+  const onOpenAgentDetail = vi.fn<(agent: AgentLike, anchor: HTMLElement) => void>();
+  const onPreviewUser = vi.fn<(user: IMUser, anchor: HTMLElement) => void>();
   render(
     <ConversationMessageList
       agents={agents}
@@ -70,5 +73,25 @@ describe("ConversationMessageList profile preview", () => {
     fireEvent.click(avatar);
     expect(onOpenAgentDetail).not.toHaveBeenCalled();
     expect(onPreviewUser).toHaveBeenCalledWith(agentUser, avatar);
+  });
+
+  it("grays an agent message avatar when runtime availability is degraded", () => {
+    renderMessageList({
+      agents: [
+        {
+          id: agentUser.id,
+          name: agentUser.name,
+          role: "worker",
+          status: "running",
+          runtime: {
+            state: "running",
+            availability: { state: "degraded", reason: "control_plane_unavailable" },
+          },
+        },
+      ],
+    });
+
+    const avatar = screen.getByRole("button", { name: "profilePreview Builder" });
+    expect(avatar.querySelector(".message-avatar-status")).not.toHaveClass("online");
   });
 });

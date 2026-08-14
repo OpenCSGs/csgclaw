@@ -1,16 +1,16 @@
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import {
   agentProfileConfig,
+  agentAvailabilityStatusLabel,
+  agentGatewayUnavailableLabel,
   isAgentGatewayDegraded,
-  isAgentRuntimeStartupPending,
-  agentRuntimeState,
-  agentStatusLabel,
+  isAgentAvailable,
   agentModelID,
   formatProviderLabel,
   isAgentIncomplete,
+  isAgentLifecycleRunning,
   isAgentRestartNeeded,
   isAgentUpgradeNeeded,
-  isAgentRunning,
   isNotificationBotAgent,
 } from "@/models/agents";
 import { AgentIcon, PlayIcon, StopIcon, TrashIcon, WrenchIcon } from "@/components/ui/Icons";
@@ -132,9 +132,10 @@ export function AgentRow({
 }: AgentRowProps) {
   const isManager = item.role === "manager" || item.id === "u-manager";
   const isNotification = isNotificationBotAgent(item);
-  const running = isAgentRunning(item);
-  const startupPending = isAgentRuntimeStartupPending(item);
+  const running = isAgentAvailable(item);
+  const lifecycleRunning = isAgentLifecycleRunning(item);
   const gatewayDegraded = isAgentGatewayDegraded(item);
+  const statusLabel = agentAvailabilityStatusLabel(item, t);
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const upgradeNeeded = isAgentUpgradeNeeded(item);
@@ -149,9 +150,7 @@ export function AgentRow({
       <div className="agent-row-main">
         <div className="agent-row-top">
           <span className="agent-name truncate">{item.name}</span>
-          <span className={`agent-status ${running ? "running" : ""}`}>
-            {agentStatusLabel(startupPending ? "starting" : agentRuntimeState(item), t)}
-          </span>
+          <span className={`agent-status ${running ? "running" : ""}`}>{statusLabel}</span>
         </div>
         <div className="agent-meta truncate">
           {formatProviderLabel(provider)} · {agentModelID(item)}
@@ -160,7 +159,7 @@ export function AgentRow({
           <span className={`agent-badge ${incomplete ? "warn" : "ready"}`}>
             {incomplete ? t("profileIncompleteBadge") : t("profileCompleteBadge")}
           </span>
-          {gatewayDegraded ? <span className="agent-badge warn">{t("agentGatewayUnavailable")}</span> : null}
+          {gatewayDegraded ? <span className="agent-badge warn">{agentGatewayUnavailableLabel(item, t)}</span> : null}
           {upgradeNeeded ? <span className="agent-badge warn">{t("profileUpgradeRequired")}</span> : null}
           {restartNeeded ? <span className="agent-badge warn">{t("profileRestartRequired")}</span> : null}
         </div>
@@ -175,15 +174,15 @@ export function AgentRow({
         </Tooltip>
         {SHOW_AGENT_LIFECYCLE_ACTIONS ? (
           <>
-            <Tooltip content={running ? t("agentStop") : t("agentStart")}>
+            <Tooltip content={lifecycleRunning ? t("agentStop") : t("agentStart")}>
               <span>
                 <Button
                   className="agent-icon-button"
-                  aria-label={running ? t("agentStop") : t("agentStart")}
+                  aria-label={lifecycleRunning ? t("agentStop") : t("agentStart")}
                   disabled={busyKey.startsWith(busyPrefix) || incomplete}
-                  onClick={() => (running ? onStop(item) : onStart(item))}
+                  onClick={() => (lifecycleRunning ? onStop(item) : onStart(item))}
                 >
-                  <span aria-hidden="true">{running ? <StopIcon /> : <PlayIcon />}</span>
+                  <span aria-hidden="true">{lifecycleRunning ? <StopIcon /> : <PlayIcon />}</span>
                 </Button>
               </span>
             </Tooltip>

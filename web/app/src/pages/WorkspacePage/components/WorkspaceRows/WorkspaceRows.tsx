@@ -4,9 +4,9 @@ import {
   formatProviderLabel,
   hasConnectedAgentChannel,
   isAgentIncomplete,
+  isAgentAvailable,
   isAgentRestartNeeded,
   isAgentUpgradeNeeded,
-  isAgentRunning,
   notificationBotMetaLabel,
 } from "@/models/agents";
 import { providerNameForProviderID } from "@/models/modelProviders";
@@ -254,7 +254,7 @@ export function WorkspaceAgentRow({
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const upgradeNeeded = isAgentUpgradeNeeded(item);
-  const running = isAgentRunning(item);
+  const running = isAgentAvailable(item);
   const feishuConnected = hasConnectedAgentChannel(item, "feishu");
   const profile = agentProfileConfig(item);
   const provider = item.provider || profile?.provider || providerNameForProviderID(profile?.model_provider_id || "");
@@ -342,7 +342,7 @@ export function WorkspaceConversationRow({
   const isDirect = isDirectConversation(conversation);
   const displayUser = isDirect ? resolveConversationUser(conversation, currentUserID, usersById) : null;
   const directAgent = isDirect && displayUser ? resolveAgentForUser(agents, displayUser) : null;
-  const directAgentRunning = isAgentRunning(directAgent);
+  const directAgentRunning = isAgentAvailable(directAgent);
   const directAvatar = displayUser?.avatar || directAgent?.avatar || "";
   const directAvatarFallback = directAgent
     ? avatarFallbackText(displayUser?.avatar || directAgent.avatar, directAgent.name, directAgent.id)

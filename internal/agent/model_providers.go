@@ -524,6 +524,9 @@ func conciseProviderError(err error) string {
 	if err == nil {
 		return ""
 	}
+	if _, _, message, ok := modelprovider.UserFacingUpstreamError(err); ok {
+		return message
+	}
 	msg := strings.TrimSpace(err.Error())
 	if msg == "" {
 		return "check failed"

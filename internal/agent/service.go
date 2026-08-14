@@ -192,12 +192,13 @@ type Service struct {
 	// first reads the current set before issuing its update, so it must share
 	// the same lock as direct PUT/PATCH-style updates to avoid stale snapshots
 	// overwriting a concurrent edit.
-	mcpServersMu    sync.Mutex
-	runtimes        map[string]sandbox.Runtime
-	agents          map[string]Agent
-	runtimeRecords  map[string]RuntimeRecord
-	runtimeRegistry map[string]agentruntime.Runtime
-	availability    map[string]RuntimeAvailability
+	mcpServersMu       sync.Mutex
+	runtimes           map[string]sandbox.Runtime
+	agents             map[string]Agent
+	runtimeRecords     map[string]RuntimeRecord
+	runtimeRegistry    map[string]agentruntime.Runtime
+	availability       map[string]RuntimeAvailability
+	availabilityProbes map[string]struct{}
 	// configuredAgentStartupPending is an ephemeral boot orchestration marker.
 	// It is deliberately separate from both persisted lifecycle state and
 	// runtime readiness: callers use it only to keep a roster fresh while the
@@ -427,6 +428,7 @@ func NewServiceWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, mana
 		runtimeRecords:         make(map[string]RuntimeRecord),
 		runtimeRegistry:        make(map[string]agentruntime.Runtime),
 		availability:           make(map[string]RuntimeAvailability),
+		availabilityProbes:     make(map[string]struct{}),
 		profileDefaults:        profileFromConfigModel("", "", model),
 		connectorCapabilityKey: connectorCapabilityKey,
 	}

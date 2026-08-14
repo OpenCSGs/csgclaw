@@ -15,7 +15,11 @@ import (
 
 type openAIModelsResponse struct {
 	Data []struct {
-		ID string `json:"id"`
+		ID           string `json:"id"`
+		Task         any    `json:"task"`
+		Availability *struct {
+			IsAvailable *bool `json:"is_available"`
+		} `json:"availability"`
 	} `json:"data"`
 }
 
@@ -31,12 +35,14 @@ type openAIChatCompletionsProbeResponse struct {
 			Role    string `json:"role"`
 			Content any    `json:"content"`
 		} `json:"message"`
+		FinishReason any `json:"finish_reason"`
 	} `json:"choices"`
 }
 
 var ErrResponsesAPIUnsupported = errors.New("responses API unsupported")
 
 type ResponsesAPIStatusError struct {
+	Operation  string
 	BaseURL    string
 	Status     string
 	StatusCode int
@@ -44,7 +50,11 @@ type ResponsesAPIStatusError struct {
 }
 
 func (e *ResponsesAPIStatusError) Error() string {
-	msg := fmt.Sprintf("request responses from %s: status %s", e.BaseURL, e.Status)
+	operation := strings.TrimSpace(e.Operation)
+	if operation == "" {
+		operation = "responses"
+	}
+	msg := fmt.Sprintf("request %s from %s: status %s", operation, e.BaseURL, e.Status)
 	if strings.TrimSpace(e.Body) != "" {
 		msg += ": " + strings.TrimSpace(e.Body)
 	}
@@ -52,7 +62,15 @@ func (e *ResponsesAPIStatusError) Error() string {
 }
 
 func (e *ResponsesAPIStatusError) Is(target error) bool {
-	return target == ErrResponsesAPIUnsupported && (e.StatusCode == http.StatusNotFound || e.StatusCode == http.StatusMethodNotAllowed)
+	return target == ErrResponsesAPIUnsupported && strings.TrimSpace(e.Operation) != "chat completions" && (e.StatusCode == http.StatusNotFound || e.StatusCode == http.StatusMethodNotAllowed)
+}
+
+func (e *ResponsesAPIStatusError) Code() string {
+	return UpstreamErrorCode([]byte(e.Body))
+}
+
+func (e *ResponsesAPIStatusError) UserMessage() string {
+	return FriendlyUpstreamErrorMessage(e.StatusCode, e.Code())
 }
 
 func ListOpenAIModels(ctx context.Context, baseURL, apiKey string) ([]string, error) {
@@ -70,23 +88,43 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 
 	resp, err := requestOpenAIModels(ctx, client, baseURL+"/models", apiKey, headers)
 	if err != nil {
-		return nil, fmt.Errorf("request models from %s: %w", baseURL, err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("request models from %s: status %s", baseURL, resp.Status)
+		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, &ResponsesAPIStatusError{
+			Operation:  "models",
+			BaseURL:    baseURL,
+			Status:     resp.Status,
+			StatusCode: resp.StatusCode,
+			Body:       strings.TrimSpace(string(errBody)),
+		}
 	}
 
 	var payload openAIModelsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("decode models response from %s: %w", baseURL, err)
+		return nil, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: err}
 	}
 
 	models := make([]string, 0, len(payload.Data))
 	seen := make(map[string]struct{}, len(payload.Data))
+	hasTaskMetadata := false
+	for _, item := range payload.Data {
+		if taskPresent(item.Task) {
+			hasTaskMetadata = true
+			break
+		}
+	}
 	for _, item := range payload.Data {
 		id := strings.TrimSpace(item.ID)
 		if id == "" {
+			continue
+		}
+		if item.Availability != nil && item.Availability.IsAvailable != nil && !*item.Availability.IsAvailable {
+			continue
+		}
+		if hasTaskMetadata && !taskSupportsTextGeneration(item.Task) {
 			continue
 		}
 		if _, ok := seen[id]; ok {
@@ -96,9 +134,40 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 		models = append(models, id)
 	}
 	if len(models) == 0 {
-		return nil, fmt.Errorf("no models returned from %s", baseURL)
+		return nil, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
 	return models, nil
+}
+
+func taskPresent(task any) bool {
+	switch value := task.(type) {
+	case string:
+		return strings.TrimSpace(value) != ""
+	case []any:
+		return len(value) > 0
+	default:
+		return task != nil
+	}
+}
+
+func taskSupportsTextGeneration(task any) bool {
+	values := make([]string, 0, 2)
+	switch value := task.(type) {
+	case string:
+		values = strings.Split(value, ",")
+	case []any:
+		for _, entry := range value {
+			if text, ok := entry.(string); ok {
+				values = append(values, text)
+			}
+		}
+	}
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), "text-generation") {
+			return true
+		}
+	}
+	return false
 }
 
 func requestOpenAIModels(ctx context.Context, client *http.Client, modelsURL, apiKey string, headers map[string]string) (*http.Response, error) {
@@ -116,7 +185,11 @@ func requestOpenAIModels(ctx context.Context, client *http.Client, modelsURL, ap
 		}
 		req.Header.Set(key, value)
 	}
-	return client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, &UpstreamRequestError{Operation: "request models", BaseURL: modelsURL, Err: err}
+	}
+	return resp, nil
 }
 
 func CheckResponsesAPI(ctx context.Context, baseURL, apiKey, modelID string, headers map[string]string) error {
@@ -156,10 +229,10 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 
 	payload := map[string]any{
 		"model":             modelID,
-		"input":             "ping",
+		"input":             "Reply with exactly: OK",
 		"store":             false,
 		"stream":            true,
-		"max_output_tokens": 16,
+		"max_output_tokens": 128,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -184,12 +257,13 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("request responses from %s: %w", baseURL, err)
+		return &UpstreamRequestError{Operation: "request responses", BaseURL: baseURL, Err: err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return &ResponsesAPIStatusError{
+			Operation:  "responses",
 			BaseURL:    baseURL,
 			Status:     resp.Status,
 			StatusCode: resp.StatusCode,
@@ -205,40 +279,55 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 		err = json.NewDecoder(resp.Body).Decode(&probe)
 	}
 	if err != nil {
-		return fmt.Errorf("decode responses probe from %s: %w", baseURL, err)
+		return &UpstreamRequestError{Operation: "decode responses probe", BaseURL: baseURL, Err: err}
 	}
 	if strings.TrimSpace(probe.Object) != "response" {
-		return fmt.Errorf("responses probe from %s returned object %q, want response", baseURL, probe.Object)
+		return &UpstreamRequestError{Operation: "decode responses probe", BaseURL: baseURL, Err: fmt.Errorf("returned object %q, want response", probe.Object)}
+	}
+	if strings.TrimSpace(probe.Status) != "completed" {
+		return &UpstreamRequestError{Operation: "decode responses probe", BaseURL: baseURL, Err: fmt.Errorf("returned status %q, want completed", probe.Status)}
 	}
 	return nil
 }
 
 func decodeOpenAIResponsesProbeStream(r io.Reader) (openAIResponsesProbeResponse, error) {
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+	var completed openAIResponsesProbeResponse
+	found, err := scanOpenAIProbeSSE(r, func(sseEventType string, data string) (bool, error) {
 		if data == "" || data == "[DONE]" {
-			continue
+			return false, nil
 		}
 		var event struct {
 			Type     string                       `json:"type"`
 			Response openAIResponsesProbeResponse `json:"response"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			return openAIResponsesProbeResponse{}, err
+			return false, err
 		}
-		if strings.HasPrefix(strings.TrimSpace(event.Type), "response.") && strings.TrimSpace(event.Response.Object) == "response" {
-			return event.Response, nil
+		eventType := strings.TrimSpace(event.Type)
+		if eventType == "" {
+			eventType = strings.TrimSpace(sseEventType)
 		}
-	}
-	if err := scanner.Err(); err != nil {
+		switch eventType {
+		case "response.completed":
+			if strings.TrimSpace(event.Response.Object) != "response" || strings.TrimSpace(event.Response.Status) != "completed" {
+				return false, fmt.Errorf("response.completed event contains an incomplete response")
+			}
+			completed = event.Response
+			return true, nil
+		case "response.failed", "error":
+			code := UpstreamErrorCode([]byte(data))
+			status := UpstreamStatusForErrorCode(code)
+			return false, &ResponsesAPIStatusError{Operation: "responses", Status: http.StatusText(status), StatusCode: status, Body: data}
+		}
+		return false, nil
+	})
+	if err != nil {
 		return openAIResponsesProbeResponse{}, err
 	}
-	return openAIResponsesProbeResponse{}, fmt.Errorf("stream returned no response event")
+	if found {
+		return completed, nil
+	}
+	return openAIResponsesProbeResponse{}, fmt.Errorf("stream ended before response.completed")
 }
 
 func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client, baseURL, apiKey, modelID string, headers map[string]string) error {
@@ -285,16 +374,18 @@ func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client,
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("request chat completions from %s: %w", baseURL, err)
+		return &UpstreamRequestError{Operation: "request chat completions", BaseURL: baseURL, Err: err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		msg := fmt.Sprintf("request chat completions from %s: status %s", baseURL, resp.Status)
-		if text := strings.TrimSpace(string(errBody)); text != "" {
-			msg += ": " + text
+		return &ResponsesAPIStatusError{
+			Operation:  "chat completions",
+			BaseURL:    baseURL,
+			Status:     resp.Status,
+			StatusCode: resp.StatusCode,
+			Body:       strings.TrimSpace(string(errBody)),
 		}
-		return errors.New(msg)
 	}
 
 	var probe openAIChatCompletionsProbeResponse
@@ -305,35 +396,86 @@ func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client,
 		err = json.NewDecoder(resp.Body).Decode(&probe)
 	}
 	if err != nil {
-		return fmt.Errorf("decode chat completions probe from %s: %w", baseURL, err)
+		return &UpstreamRequestError{Operation: "decode chat completions probe", BaseURL: baseURL, Err: err}
 	}
 	if len(probe.Choices) == 0 {
-		return fmt.Errorf("chat completions probe from %s returned no choices", baseURL)
+		return &UpstreamRequestError{Operation: "decode chat completions probe", BaseURL: baseURL, Err: errors.New("returned no choices")}
 	}
 	return nil
 }
 
 func decodeOpenAIChatCompletionsProbeStream(r io.Reader) (openAIChatCompletionsProbeResponse, error) {
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if !strings.HasPrefix(line, "data:") {
-			continue
+	var last openAIChatCompletionsProbeResponse
+	sawChoices := false
+	found, err := scanOpenAIProbeSSE(r, func(_ string, data string) (bool, error) {
+		if data == "" {
+			return false, nil
 		}
-		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "" || data == "[DONE]" {
-			continue
+		if data == "[DONE]" {
+			if sawChoices {
+				return true, nil
+			}
+			return false, fmt.Errorf("stream completed without chat choices")
+		}
+		if code := UpstreamErrorCode([]byte(data)); code != "" {
+			status := UpstreamStatusForErrorCode(code)
+			return false, &ResponsesAPIStatusError{Operation: "chat completions", Status: http.StatusText(status), StatusCode: status, Body: data}
 		}
 		var probe openAIChatCompletionsProbeResponse
 		if err := json.Unmarshal([]byte(data), &probe); err != nil {
-			return openAIChatCompletionsProbeResponse{}, err
+			return false, err
 		}
 		if len(probe.Choices) > 0 {
-			return probe, nil
+			last = probe
+			sawChoices = true
+			for _, choice := range probe.Choices {
+				if choice.FinishReason != nil {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	})
+	if err != nil {
+		return openAIChatCompletionsProbeResponse{}, err
+	}
+	if found {
+		return last, nil
+	}
+	return openAIChatCompletionsProbeResponse{}, fmt.Errorf("stream ended before chat completion finished")
+}
+
+func scanOpenAIProbeSSE(r io.Reader, visit func(eventType, data string) (bool, error)) (bool, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	eventType := ""
+	dataLines := make([]string, 0, 2)
+	flush := func() (bool, error) {
+		if eventType == "" && len(dataLines) == 0 {
+			return false, nil
+		}
+		done, err := visit(eventType, strings.Join(dataLines, "\n"))
+		eventType = ""
+		dataLines = dataLines[:0]
+		return done, err
+	}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			if done, err := flush(); done || err != nil {
+				return done, err
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "event:") {
+			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		}
+		if strings.HasPrefix(line, "data:") {
+			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return openAIChatCompletionsProbeResponse{}, err
+		return false, err
 	}
-	return openAIChatCompletionsProbeResponse{}, fmt.Errorf("stream returned no chat completion chunk")
+	return flush()
 }

@@ -5,6 +5,7 @@ import { ProfilePreviewPopover } from "@/pages/WorkspacePage/components/ProfileP
 const labels: Record<string, string> = {
   agentDelete: "Delete",
   agentStatusUnknown: "Unknown",
+  agentStatusChecking: "Checking",
   close: "Close",
   offline: "Offline",
   online: "Online",
@@ -123,6 +124,66 @@ describe("ProfilePreviewPopover", () => {
     expect(screen.getByRole("button", { name: "Open" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "DM" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
+  it("shows an unavailable running agent as offline", () => {
+    render(
+      <ProfilePreviewPopover
+        previewRef={createRef<HTMLElement>()}
+        agent={{
+          id: "agent-1",
+          name: "Builder",
+          role: "worker",
+          status: "running",
+          runtime_kind: "openclaw_sandbox",
+          runtime: {
+            kind: "openclaw_sandbox",
+            state: "running",
+            availability: { state: "degraded", reason: "control_plane_unavailable" },
+          },
+        }}
+        user={{ id: "u-builder" }}
+        anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
+        t={t}
+        onClose={vi.fn()}
+        onOpenAgent={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    const presence = screen.getByText("Offline").closest(".preview-presence");
+    expect(presence).toBeInTheDocument();
+    expect(presence).not.toHaveClass("online");
+  });
+
+  it("shows unknown sandbox availability as checking", () => {
+    render(
+      <ProfilePreviewPopover
+        previewRef={createRef<HTMLElement>()}
+        agent={{
+          id: "agent-1",
+          name: "Builder",
+          role: "worker",
+          status: "running",
+          runtime_kind: "openclaw_sandbox",
+          runtime: {
+            kind: "openclaw_sandbox",
+            state: "running",
+            availability: { state: "unknown" },
+          },
+        }}
+        user={{ id: "u-builder" }}
+        anchorRect={{ top: 20, right: 80, bottom: 60, left: 40 }}
+        t={t}
+        onClose={vi.fn()}
+        onOpenAgent={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    const presence = screen.getByText("Checking").closest(".preview-presence");
+    expect(presence).toBeInTheDocument();
+    expect(presence).not.toHaveClass("online");
   });
 
   it("uses agent-style metadata fields for local admin users", () => {

@@ -5948,7 +5948,7 @@ func TestListContextDoesNotReuseGatewayAvailabilityForReplacedBox(t *testing.T) 
 	}
 }
 
-func TestRuntimeAvailabilityExpiresToUnknown(t *testing.T) {
+func TestRuntimeAvailabilityExpiryKeepsLastObservationVisible(t *testing.T) {
 	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -5967,8 +5967,11 @@ func TestRuntimeAvailabilityExpiresToUnknown(t *testing.T) {
 	})
 
 	got := svc.withRuntimeAvailability(agent)
-	if got.Availability == nil || got.Availability.State != RuntimeAvailabilityUnknown {
-		t.Fatalf("withRuntimeAvailability().Availability = %#v, want expired unknown", got.Availability)
+	if got.Availability == nil || got.Availability.State != RuntimeAvailabilityDegraded {
+		t.Fatalf("withRuntimeAvailability().Availability = %#v, want stale degraded observation", got.Availability)
+	}
+	if !svc.shouldRefreshRuntimeAvailability(agent, time.Now()) {
+		t.Fatal("shouldRefreshRuntimeAvailability() = false, want refresh for expired observation")
 	}
 }
 
@@ -5979,7 +5982,7 @@ func TestListContextRefreshesExpiredGatewayAvailability(t *testing.T) {
 		RuntimeAvailabilityUnknown,
 	} {
 		t.Run(string(availabilityState), func(t *testing.T) {
-			readinessChecks := 0
+			readinessChecked := make(chan struct{}, 1)
 			svc, err := NewService(
 				config.ModelConfig{},
 				config.ServerConfig{},
@@ -5993,7 +5996,7 @@ func TestListContextRefreshesExpiredGatewayAvailability(t *testing.T) {
 						},
 					},
 					readiness: func(context.Context, agentruntime.Handle) error {
-						readinessChecks++
+						readinessChecked <- struct{}{}
 						return fmt.Errorf("gateway connection refused")
 					},
 				}),
@@ -6015,20 +6018,80 @@ func TestListContextRefreshesExpiredGatewayAvailability(t *testing.T) {
 				CheckedAt: time.Now().Add(-runtimeAvailabilityMaxAge - time.Second),
 			})
 
+			started := time.Now()
 			got := svc.ListContext(context.Background())
-			if readinessChecks != 1 {
-				t.Fatalf("readiness checks = %d, want 1 for expired %s availability", readinessChecks, availabilityState)
+			if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+				t.Fatalf("ListContext() blocked for readiness refresh: %v", elapsed)
 			}
 			if len(got) != 1 || got[0].Availability == nil {
 				t.Fatalf("ListContext() = %#v, want one observed agent", got)
 			}
-			if got[0].Availability.State != RuntimeAvailabilityDegraded || got[0].Availability.Reason != "readiness_failed" {
-				t.Fatalf("ListContext().Availability = %#v, want refreshed degraded readiness failure", got[0].Availability)
+			if got[0].Availability.State != availabilityState {
+				t.Fatalf("ListContext().Availability = %#v, want stale %s while refresh runs", got[0].Availability, availabilityState)
 			}
-			if !got[0].Availability.ExpiresAt.After(time.Now()) {
-				t.Fatalf("ListContext().Availability.ExpiresAt = %v, want refreshed future expiry", got[0].Availability.ExpiresAt)
+			select {
+			case <-readinessChecked:
+			case <-time.After(time.Second):
+				t.Fatal("background readiness refresh did not run")
+			}
+			deadline := time.Now().Add(time.Second)
+			for {
+				refreshed := svc.withRuntimeAvailability(agent).Availability
+				if refreshed != nil && refreshed.State == RuntimeAvailabilityDegraded && refreshed.Reason == "readiness_failed" {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("background availability = %#v, want refreshed degraded readiness failure", refreshed)
+				}
+				time.Sleep(time.Millisecond)
 			}
 		})
+	}
+}
+
+func TestListContextRefreshesMissingGatewayAvailability(t *testing.T) {
+	readinessChecked := make(chan struct{}, 1)
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeReadinessAgentRuntime{
+			fakeAgentRuntime: fakeAgentRuntime{
+				kind: RuntimeKindPicoClawSandbox,
+				info: func(context.Context, agentruntime.Handle) (agentruntime.Info, error) {
+					return agentruntime.Info{HandleID: "box-alice", State: agentruntime.StateRunning}, nil
+				},
+			},
+			readiness: func(context.Context, agentruntime.Handle) error {
+				readinessChecked <- struct{}{}
+				return fmt.Errorf("docker readiness: %w", sandbox.ErrUnavailable)
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["agent-alice"] = Agent{
+		ID:          "agent-alice",
+		Name:        "alice",
+		Role:        RoleWorker,
+		RuntimeKind: RuntimeKindPicoClawSandbox,
+		BoxID:       "box-alice",
+		Status:      string(agentruntime.StateRunning),
+	}
+
+	got := svc.ListContext(context.Background())
+	if len(got) != 1 || got[0].Availability == nil {
+		t.Fatalf("ListContext() = %#v, want one observed agent", got)
+	}
+	if got[0].Availability.State != RuntimeAvailabilityUnknown {
+		t.Fatalf("ListContext().Availability = %#v, want unknown while refresh runs", got[0].Availability)
+	}
+	select {
+	case <-readinessChecked:
+	case <-time.After(time.Second):
+		t.Fatal("background readiness refresh did not run")
 	}
 }
 

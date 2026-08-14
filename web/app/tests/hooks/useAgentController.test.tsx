@@ -204,6 +204,7 @@ function useAgentControllerHarness(
     modelProviders?: ModelProviderCatalog | null;
     modelProvidersLoaded?: boolean;
     bootstrapConfig?: RuntimeBootstrapConfig | null;
+    refreshedBootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshMCPServers?: () => Promise<unknown>;
     t?: TranslateFn;
   } = {},
@@ -212,7 +213,7 @@ function useAgentControllerHarness(
   const agentsPropRef = useRef<AgentLike[] | null>(options.agents ?? null);
   const refreshWorkspaceAgentsRef = useRef(vi.fn(async () => options.agents ?? [oldAgent]));
   const refreshWorkspaceBootstrapRef = useRef(vi.fn(async () => null));
-  const refreshWorkspaceBootstrapConfigRef = useRef(vi.fn(async () => null));
+  const refreshWorkspaceBootstrapConfigRef = useRef(vi.fn(async () => options.refreshedBootstrapConfig ?? null));
   const refreshWorkspaceManagerProfileRef = useRef(vi.fn(async () => null));
   const refreshWorkspaceAgents = refreshWorkspaceAgentsRef.current;
   const refreshWorkspaceBootstrap = refreshWorkspaceBootstrapRef.current;
@@ -1185,6 +1186,43 @@ describe("useAgentController", () => {
         name: "测试工程师",
       }),
     );
+  });
+
+  it("refreshes bootstrap config before opening the worker create modal", async () => {
+    const staleConfig: RuntimeBootstrapConfig = {
+      worker_runtime_choices: [
+        { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
+        {
+          name: "openclaw",
+          sandbox_enabled: true,
+          installed: false,
+          label: "OpenClaw",
+          message: "Docker 未启动或无法连接，请先启动 Docker Desktop 后重试。",
+        },
+      ],
+    };
+    const refreshedConfig: RuntimeBootstrapConfig = {
+      worker_runtime_choices: [
+        { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
+        { name: "openclaw", sandbox_enabled: true, installed: true, label: "OpenClaw" },
+      ],
+    };
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          bootstrapConfig: staleConfig,
+          refreshedBootstrapConfig: refreshedConfig,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.controller.computerViewProps.onCreateAgent();
+    });
+
+    await waitFor(() => expect(result.current.controller.agentProfileModalProps).not.toBeNull());
+    expect(result.current.refreshWorkspaceBootstrapConfig).toHaveBeenCalled();
+    expect(result.current.controller.agentProfileModalProps?.bootstrapConfig).toBe(refreshedConfig);
   });
 
   it("initializes the profile modal MCP editor from the dedicated desired server map", async () => {

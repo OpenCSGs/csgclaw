@@ -10,8 +10,11 @@ import {
   defaultWorkerImageForRuntime,
   agentDraftWithRuntimeFieldsFromAgent,
   agentDeleteConfirmationMessage,
+  agentAvailabilityStatusLabel,
+  agentGatewayUnavailableLabel,
   agentRuntimePollSettled,
   isAgentGatewayDegraded,
+  isAgentGatewayAvailabilityUnknown,
   isAgentRuntimeStartupPending,
   agentStatusLabel,
   agentDraftMissingRequiredEnv,
@@ -27,9 +30,12 @@ import {
   formatProviderLabel,
   hasConnectedAgentChannel,
   isAgentIncomplete,
+  isAgentAvailable,
+  isAgentLifecycleRunning,
   agentPageLLMProfileChanged,
   agentProfilePageSaveDisabled,
   isAgentProfileDraftComplete,
+  isAgentRunning,
   mergeAgentIntoList,
   isNotificationBotAgent,
   mapToEnvRows,
@@ -977,13 +983,67 @@ describe("agent model helpers", () => {
     expect(isAgentRuntimeStartupPending({ runtime: { startup_pending: false } })).toBe(false);
   });
 
-  it("expires a gateway degradation observation", () => {
+  it("keeps the last degraded observation visible until the server reports readiness", () => {
     const degradedGateway = {
       status: "running",
       runtime: { state: "running", availability: { state: "degraded", expires_at: "2026-07-30T04:30:00Z" } },
     };
     expect(isAgentGatewayDegraded(degradedGateway, Date.parse("2026-07-30T04:29:59Z"))).toBe(true);
-    expect(isAgentGatewayDegraded(degradedGateway, Date.parse("2026-07-30T04:30:00Z"))).toBe(false);
+    expect(isAgentGatewayDegraded(degradedGateway, Date.parse("2026-07-30T04:30:00Z"))).toBe(true);
+    expect(isAgentGatewayDegraded(degradedGateway, Date.parse("2026-07-30T04:35:00Z"))).toBe(true);
+  });
+
+  it("does not show a degraded gateway runtime as online", () => {
+    const degradedGateway = {
+      status: "running",
+      runtime: {
+        state: "running",
+        availability: {
+          state: "degraded",
+          reason: "control_plane_unavailable",
+          expires_at: "2099-01-01T00:00:00Z",
+        },
+      },
+    };
+    expect(isAgentRunning(degradedGateway)).toBe(true);
+    expect(isAgentAvailable(degradedGateway)).toBe(false);
+    expect(agentAvailabilityStatusLabel(degradedGateway, (key) => key)).toBe("offline");
+    expect(agentGatewayUnavailableLabel(degradedGateway, (key) => key)).toBe("agentRuntimeDockerUnavailable");
+  });
+
+  it("uses user-facing runtime failure labels instead of gateway terminology", () => {
+    const degradedRuntime = (reason: string) => ({
+      runtime: { availability: { state: "degraded", reason } },
+    });
+    const t = (key: string) => key;
+
+    expect(agentGatewayUnavailableLabel(degradedRuntime("readiness_failed"), t)).toBe("agentRuntimeServiceUnavailable");
+    expect(agentGatewayUnavailableLabel(degradedRuntime("probe_timed_out"), t)).toBe("agentRuntimeCheckTimedOut");
+    expect(agentGatewayUnavailableLabel(degradedRuntime("runtime_not_found"), t)).toBe("agentRuntimeNotFound");
+    expect(agentGatewayUnavailableLabel(degradedRuntime("runtime_busy"), t)).toBe("agentRuntimeBusy");
+    expect(agentGatewayUnavailableLabel(degradedRuntime("unexpected_reason"), t)).toBe(
+      "agentRuntimeServiceUnavailable",
+    );
+  });
+
+  it("does not show an unknown sandbox availability gap as online", () => {
+    const checkingGateway = {
+      status: "running",
+      runtime_kind: "openclaw_sandbox",
+      runtime: {
+        kind: "openclaw_sandbox",
+        state: "running",
+        availability: {
+          state: "unknown",
+          expires_at: "2099-01-01T00:00:00Z",
+        },
+      },
+    };
+    expect(isAgentGatewayAvailabilityUnknown(checkingGateway)).toBe(true);
+    expect(isAgentRunning(checkingGateway)).toBe(true);
+    expect(isAgentAvailable(checkingGateway)).toBe(false);
+    expect(isAgentLifecycleRunning(checkingGateway)).toBe(true);
+    expect(agentAvailabilityStatusLabel(checkingGateway, (key) => key)).toBe("agentStatusChecking");
   });
 
   it("waits for manager runtime only when profile save may bootstrap sandbox", () => {

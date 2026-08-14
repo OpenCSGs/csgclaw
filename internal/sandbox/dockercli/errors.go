@@ -74,9 +74,12 @@ func isNotFound(stderr string) bool {
 func isUnavailable(stderr string) bool {
 	text := strings.ToLower(stderr)
 	return strings.Contains(text, "cannot connect to the docker daemon") ||
+		strings.Contains(text, "failed to connect to the docker api") ||
 		strings.Contains(text, "docker daemon is not running") ||
 		strings.Contains(text, "is the docker daemon running") ||
+		strings.Contains(text, "check if the path is correct and if the daemon is running") ||
 		strings.Contains(text, "error during connect") && strings.Contains(text, "docker") ||
 		strings.Contains(text, "docker_engine") && strings.Contains(text, "cannot find the file") ||
-		strings.Contains(text, "docker_engine") && strings.Contains(text, "the system cannot find the file specified")
+		strings.Contains(text, "docker_engine") && strings.Contains(text, "the system cannot find the file specified") ||
+		strings.Contains(text, "docker.sock") && strings.Contains(text, "no such file or directory")
 }

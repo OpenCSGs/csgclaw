@@ -4,7 +4,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 import { IconImage } from "@/components/ui/Icons";
-import { isAgentRunning, resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
+import { isAgentAvailable, resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import {
   formatEventMessage,
   formatMessageTimestampParts,
@@ -115,7 +115,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
         const own = localIdentitiesMatch(message.sender_id, currentUserID);
         const isAdmin = user?.role === "admin";
         const messageAgent = resolveMessageAgent(agents, user, message.sender_id);
-        const messageAgentRunning = isAgentRunning(messageAgent);
+        const messageAgentRunning = isAgentAvailable(messageAgent);
         const messageAvatar = user.avatar || messageAgent?.avatar;
         const messageAvatarFallback = messageAgent
           ? resolveAgentAvatarFallback(messageAgent, usersById)

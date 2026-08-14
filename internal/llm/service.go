@@ -21,6 +21,7 @@ import (
 	"csgclaw/internal/codexmodel"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelprovider"
 
 	"github.com/gorilla/websocket"
 )
@@ -391,8 +392,114 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 	return &UpstreamResponse{
 		StatusCode: resp.StatusCode,
 		Header:     resp.Header.Clone(),
-		Body:       resp.Body,
+		Body:       sanitizeResponsesEventStream(resp.Body, resp.Header.Get("Content-Type")),
 	}, nil
+}
+
+func sanitizeResponsesEventStream(body io.ReadCloser, contentType string) io.ReadCloser {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if mediaType != "text/event-stream" {
+		return body
+	}
+	reader, writer := io.Pipe()
+	go func() {
+		defer body.Close()
+		err := rewriteResponsesEventStream(writer, body)
+		_ = writer.CloseWithError(err)
+	}()
+	return reader
+}
+
+const maxResponsesSSEEventBytes = 8 * 1024 * 1024
+
+func rewriteResponsesEventStream(w io.Writer, r io.Reader) error {
+	reader := bufio.NewReader(r)
+	block := make([]string, 0, 4)
+	blockBytes := 0
+	flush := func() error {
+		if len(block) == 0 {
+			return nil
+		}
+		eventType := ""
+		dataLines := make([]string, 0, len(block))
+		for _, line := range block {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "event:") {
+				eventType = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+			}
+			if strings.HasPrefix(trimmed, "data:") {
+				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(trimmed, "data:")))
+			}
+		}
+		data := strings.Join(dataLines, "\n")
+		if data != "" {
+			var payload map[string]any
+			if json.Unmarshal([]byte(data), &payload) == nil {
+				if payloadType := strings.TrimSpace(stringValue(payload["type"])); payloadType != "" {
+					eventType = payloadType
+				}
+			}
+		}
+		if eventType == "response.failed" || eventType == "error" {
+			code := modelprovider.UpstreamErrorCode([]byte(data))
+			if code == "" {
+				code = "upstream_unavailable"
+			}
+			message := modelprovider.FriendlyUpstreamErrorMessage(modelprovider.UpstreamStatusForErrorCode(code), code)
+			return writeSSE(w, "error", map[string]any{"type": "error", "code": code, "message": message, "param": nil})
+		}
+		for _, line := range block {
+			if _, err := fmt.Fprintln(w, line); err != nil {
+				return err
+			}
+		}
+		_, err := fmt.Fprintln(w)
+		return err
+	}
+	for {
+		rawLine, readErr := readResponsesSSELine(reader, maxResponsesSSEEventBytes)
+		line := rawLine
+		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		if rawLine != "" {
+			if strings.TrimSpace(line) == "" {
+				if err := flush(); err != nil {
+					return err
+				}
+				block = block[:0]
+				blockBytes = 0
+			} else {
+				blockBytes += len(rawLine)
+				if blockBytes > maxResponsesSSEEventBytes {
+					return fmt.Errorf("responses SSE event exceeds %d bytes", maxResponsesSSEEventBytes)
+				}
+				block = append(block, line)
+			}
+		}
+		if readErr != nil {
+			if !errors.Is(readErr, io.EOF) {
+				return readErr
+			}
+			break
+		}
+	}
+	return flush()
+}
+
+func readResponsesSSELine(reader *bufio.Reader, maxBytes int) (string, error) {
+	if maxBytes <= 0 {
+		return "", fmt.Errorf("responses SSE line limit must be positive")
+	}
+	var line strings.Builder
+	for {
+		fragment, err := reader.ReadSlice('\n')
+		if line.Len()+len(fragment) > maxBytes {
+			return "", fmt.Errorf("responses SSE line exceeds %d bytes", maxBytes)
+		}
+		_, _ = line.Write(fragment)
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return line.String(), err
+		}
+	}
 }
 
 func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.AgentProfile, responsesPayload map[string]any, baseURL, apiKey string, allowAuthRefresh bool) (*UpstreamResponse, error) {
@@ -482,8 +589,7 @@ func readAndCloseUpstreamBody(resp *http.Response) ([]byte, error) {
 }
 
 func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte) (*UpstreamResponse, error) {
-	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
-	body, contentType = compactUpstreamErrorResponse(resp.Header, body, contentType)
+	body, contentType := compactUpstreamErrorResponse(resp.StatusCode, body)
 	header := resp.Header.Clone()
 	header.Del("Content-Length")
 	header.Set("Content-Type", contentType)
@@ -494,48 +600,9 @@ func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte) (*Upst
 	}, nil
 }
 
-func compactUpstreamErrorResponse(header http.Header, body []byte, contentType string) ([]byte, string) {
-	if msg := extractUpstreamErrorMessage(body); msg != "" {
-		return []byte(msg), "text/plain; charset=utf-8"
-	}
-	if strings.TrimSpace(contentType) == "" {
-		if ct := strings.TrimSpace(header.Get("Content-Type")); ct != "" {
-			contentType = ct
-		} else {
-			contentType = "text/plain; charset=utf-8"
-		}
-	}
-	return body, contentType
-}
-
-func extractUpstreamErrorMessage(body []byte) string {
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return ""
-	}
-	value, ok := payload["error"]
-	if !ok {
-		value = payload
-	}
-	errObj, ok := value.(map[string]any)
-	if !ok {
-		return ""
-	}
-	message := strings.TrimSpace(stringValue(errObj["message"]))
-	if message == "" {
-		return ""
-	}
-	parts := make([]string, 0, 2)
-	if typ := strings.TrimSpace(stringValue(errObj["type"])); typ != "" {
-		parts = append(parts, "type="+typ)
-	}
-	if code := strings.TrimSpace(stringValue(errObj["code"])); code != "" {
-		parts = append(parts, "code="+code)
-	}
-	if len(parts) == 0 {
-		return message
-	}
-	return message + " (" + strings.Join(parts, ", ") + ")"
+func compactUpstreamErrorResponse(status int, body []byte) ([]byte, string) {
+	code := modelprovider.UpstreamErrorCode(body)
+	return []byte(modelprovider.FriendlyUpstreamErrorMessage(status, code)), "text/plain; charset=utf-8"
 }
 
 func responsesAPIUnsupportedStatus(status int) bool {
@@ -1000,6 +1067,10 @@ func writeChatCompletionStreamAsResponse(w io.Writer, r io.Reader, fallbackModel
 				return err
 			}
 			continue
+		}
+		if code := modelprovider.UpstreamErrorCode([]byte(data)); code != "" {
+			message := modelprovider.FriendlyUpstreamErrorMessage(modelprovider.UpstreamStatusForErrorCode(code), code)
+			return writeSSE(w, "error", map[string]any{"type": "error", "code": code, "message": message, "param": nil})
 		}
 		var chunk struct {
 			ID      string       `json:"id"`

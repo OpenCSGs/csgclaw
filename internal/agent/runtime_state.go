@@ -29,9 +29,9 @@ const (
 	RuntimeAvailabilityDegraded      RuntimeAvailabilityState = "degraded"
 	RuntimeAvailabilityNotApplicable RuntimeAvailabilityState = "not_applicable"
 
-	// runtimeAvailabilityMaxAge bounds how long a transient readiness failure
-	// may influence the roster or gateway-warning UI without a new probe.
-	runtimeAvailabilityMaxAge = 30 * time.Second
+	// runtimeAvailabilityMaxAge bounds how long a transient readiness result may
+	// influence the roster or gateway-warning UI without a new probe.
+	runtimeAvailabilityMaxAge = 5 * time.Second
 )
 
 var runtimeAvailabilityProbeTimeout = 2 * time.Second
@@ -383,10 +383,6 @@ func (s *Service) withRuntimeAvailability(a Agent) Agent {
 		a.Availability = &RuntimeAvailability{State: RuntimeAvailabilityUnknown}
 		return a
 	}
-	if !availability.ExpiresAt.IsZero() && time.Now().After(availability.ExpiresAt) {
-		a.Availability = &RuntimeAvailability{State: RuntimeAvailabilityUnknown}
-		return a
-	}
 	a.Availability = cloneRuntimeAvailability(&availability)
 	return a
 }
@@ -413,6 +409,10 @@ func (s *Service) recordRuntimeAvailability(a Agent, availability RuntimeAvailab
 		availability.ExpiresAt = availability.ExpiresAt.UTC()
 	}
 	s.mu.Lock()
+	if current, _, exists := s.agentByIDLocked(agentID); exists && strings.TrimSpace(current.BoxID) != availability.handleID {
+		s.mu.Unlock()
+		return availability
+	}
 	s.availability[agentID] = availability
 	s.mu.Unlock()
 	return availability
@@ -479,11 +479,45 @@ func (s *Service) refreshRuntimeAvailabilityWithTimeout(ctx context.Context, a A
 	return s.refreshRuntimeAvailability(probeCtx, a)
 }
 
-func (s *Service) refreshExpiredRuntimeAvailability(ctx context.Context, a Agent) Agent {
-	if !s.hasExpiredRuntimeAvailability(a, time.Now()) {
+func (s *Service) refreshExpiredRuntimeAvailability(_ context.Context, a Agent) Agent {
+	if !s.shouldRefreshRuntimeAvailability(a, time.Now()) {
 		return a
 	}
-	return s.refreshRuntimeAvailabilityWithTimeout(ctx, a)
+	runtimeImpl, err := s.runtimeForKind(strings.TrimSpace(a.RuntimeKind))
+	if err != nil {
+		return a
+	}
+	if _, ok := runtimeImpl.(agentruntime.ReadinessChecker); !ok {
+		return a
+	}
+	s.scheduleRuntimeAvailabilityRefresh(a)
+	return a
+}
+
+func (s *Service) scheduleRuntimeAvailabilityRefresh(a Agent) {
+	if s == nil {
+		return
+	}
+	agentID := canonicalAgentID(a.ID)
+	s.mu.Lock()
+	if s.availabilityProbes == nil {
+		s.availabilityProbes = make(map[string]struct{})
+	}
+	if _, running := s.availabilityProbes[agentID]; running {
+		s.mu.Unlock()
+		return
+	}
+	s.availabilityProbes[agentID] = struct{}{}
+	s.mu.Unlock()
+
+	go func() {
+		defer func() {
+			s.mu.Lock()
+			delete(s.availabilityProbes, agentID)
+			s.mu.Unlock()
+		}()
+		_ = s.refreshRuntimeAvailabilityWithTimeout(context.Background(), a)
+	}()
 }
 
 // primeUnknownGatewayRuntimeAvailability seeds the ephemeral readiness cache
@@ -523,7 +557,7 @@ func (s *Service) primeUnknownGatewayRuntimeAvailability(ctx context.Context, ag
 	group.Wait()
 }
 
-func (s *Service) hasExpiredRuntimeAvailability(a Agent, now time.Time) bool {
+func (s *Service) shouldRefreshRuntimeAvailability(a Agent, now time.Time) bool {
 	if s == nil ||
 		!isGatewayRuntimeKind(strings.TrimSpace(a.RuntimeKind)) ||
 		!strings.EqualFold(strings.TrimSpace(a.Status), string(agentruntime.StateRunning)) {
@@ -533,7 +567,7 @@ func (s *Service) hasExpiredRuntimeAvailability(a Agent, now time.Time) bool {
 	availability, ok := s.availability[canonicalAgentID(a.ID)]
 	s.mu.RUnlock()
 	if !ok || availability.handleID != strings.TrimSpace(a.BoxID) {
-		return false
+		return true
 	}
 	switch availability.State {
 	case RuntimeAvailabilityReady, RuntimeAvailabilityDegraded, RuntimeAvailabilityUnknown:

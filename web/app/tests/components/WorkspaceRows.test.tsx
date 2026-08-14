@@ -19,6 +19,29 @@ const t: TranslateFn = (key, params = {}) => {
 };
 
 describe("WorkspaceRows", () => {
+  it("grays the agent presence dot when runtime availability is degraded", () => {
+    const { container } = render(
+      <WorkspaceAgentRow
+        active={false}
+        item={{
+          id: "u-dev",
+          name: "dev",
+          status: "running",
+          runtime: {
+            state: "running",
+            availability: { state: "degraded", reason: "control_plane_unavailable" },
+          },
+        }}
+        onSelect={() => {}}
+        t={t}
+      />,
+    );
+
+    const statusDot = container.querySelector('span[class*="statusDot"]');
+    expect(statusDot).toBeInTheDocument();
+    expect(statusDot?.className).not.toContain("online");
+  });
+
   it("renders a Feishu badge on connected agent rows", () => {
     render(
       <WorkspaceAgentRow

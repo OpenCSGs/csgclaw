@@ -88,6 +88,31 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
+  it("shows a degraded gateway runtime as unavailable instead of online", () => {
+    render(
+      <Harness
+        item={{
+          ...agent,
+          status: "running",
+          runtime: {
+            kind: "openclaw_sandbox",
+            name: "openclaw",
+            state: "running",
+            availability: {
+              state: "degraded",
+              reason: "control_plane_unavailable",
+              expires_at: "2099-01-01T00:00:00Z",
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("offline")).toHaveLength(1);
+    expect(screen.getAllByText("agentRuntimeDockerUnavailable")).toHaveLength(1);
+    expect(screen.queryByText("online")).not.toBeInTheDocument();
+  });
+
   it("reverts name edits on Escape without saving on blur", async () => {
     const user = userEvent.setup();
     const onMetadataSave = vi.fn();
