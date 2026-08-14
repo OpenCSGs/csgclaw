@@ -409,7 +409,8 @@ func (s *Service) recordRuntimeAvailability(a Agent, availability RuntimeAvailab
 		availability.ExpiresAt = availability.ExpiresAt.UTC()
 	}
 	s.mu.Lock()
-	if current, _, exists := s.agentByIDLocked(agentID); exists && strings.TrimSpace(current.BoxID) != availability.handleID {
+	current, _, exists := s.agentByIDLocked(agentID)
+	if !exists || strings.TrimSpace(current.BoxID) != availability.handleID {
 		s.mu.Unlock()
 		return availability
 	}

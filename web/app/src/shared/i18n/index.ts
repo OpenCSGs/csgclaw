@@ -78,3 +78,20 @@ export function localizeError(raw: unknown, t: TranslateFn): string {
   }
   return cleaned;
 }
+
+export function localizeAPIError(error: unknown, t: TranslateFn, fallback = ""): string {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = String((error as { code?: unknown }).code || "").trim();
+    if (code) {
+      const key = `errors.${code}`;
+      const localized = t(key);
+      if (localized !== key) {
+        return localized;
+      }
+    }
+  }
+  if (error && typeof error === "object" && "message" in error) {
+    return localizeError((error as { message?: unknown }).message, t) || fallback;
+  }
+  return localizeError(error, t) || fallback;
+}

@@ -92,7 +92,7 @@ func TestListOpenAIModelsWithClientFiltersByTextGenerationTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListOpenAIModelsWithClient() error = %v", err)
 	}
-	want := "deepseek-v4-pro,qwen3-vl,image-capable-chat"
+	want := "deepseek-v4-pro,qwen3-vl,image-capable-chat,Qwen_Qwen3-Embedding-0.6B,legacy-model"
 	if got := strings.Join(models, ","); got != want {
 		t.Fatalf("models = %q, want %q", got, want)
 	}
@@ -229,7 +229,7 @@ func TestCheckResponsesAPIWithClientReturnsFriendlyWrappedUpstreamError(t *testi
 	if status != http.StatusServiceUnavailable || code != "model_unavailable" {
 		t.Fatalf("UserFacingUpstreamError() = (%d, %q), want (503, model_unavailable)", status, code)
 	}
-	if message != "当前模型暂时不可用，请稍后重试或更换模型。" {
+	if message != "The selected model is temporarily unavailable. Try again later or choose another model." {
 		t.Fatalf("UserFacingUpstreamError() message = %q", message)
 	}
 	if !strings.Contains(err.Error(), "no available upstream endpoint") {
@@ -249,7 +249,7 @@ func TestCheckChatCompletionsAPIWithClientReturnsTypedUpstreamError(t *testing.T
 	if !ok || status != http.StatusTooManyRequests || code != "rate_limit_exceeded" {
 		t.Fatalf("UserFacingUpstreamError(%v) = (%d, %q, %t)", err, status, code, ok)
 	}
-	if message != "当前请求较多或使用额度已达上限，请稍后再试。" {
+	if message != "The model service is busy or its quota has been reached. Please try again later." {
 		t.Fatalf("UserFacingUpstreamError() message = %q", message)
 	}
 }
@@ -293,10 +293,10 @@ func TestFriendlyUpstreamErrorMappings(t *testing.T) {
 		wantStatus int
 		wantText   string
 	}{
-		{code: "invalid_api_key", wantStatus: http.StatusUnauthorized, wantText: "认证失败"},
-		{code: "authentication_error", wantStatus: http.StatusUnauthorized, wantText: "认证失败"},
-		{code: "permission_denied", wantStatus: http.StatusForbidden, wantText: "没有执行此操作的权限"},
-		{code: "context_length_exceeded", wantStatus: http.StatusBadRequest, wantText: "超过当前模型的上下文长度"},
+		{code: "invalid_api_key", wantStatus: http.StatusUnauthorized, wantText: "authentication failed"},
+		{code: "authentication_error", wantStatus: http.StatusUnauthorized, wantText: "authentication failed"},
+		{code: "permission_denied", wantStatus: http.StatusForbidden, wantText: "does not have permission"},
+		{code: "context_length_exceeded", wantStatus: http.StatusBadRequest, wantText: "exceeds this model's context length"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.code, func(t *testing.T) {
@@ -308,6 +308,14 @@ func TestFriendlyUpstreamErrorMappings(t *testing.T) {
 				t.Fatalf("FriendlyUpstreamErrorMessage(%q) = %q, want text %q", tt.code, message, tt.wantText)
 			}
 		})
+	}
+}
+
+func TestUserFacingUpstreamErrorAddsFallbackCode(t *testing.T) {
+	err := &ResponsesAPIStatusError{StatusCode: http.StatusTooManyRequests, Status: "429 Too Many Requests"}
+	status, code, _, ok := UserFacingUpstreamError(err)
+	if !ok || status != http.StatusTooManyRequests || code != "rate_limit_exceeded" {
+		t.Fatalf("UserFacingUpstreamError() = (%d, %q, %t), want (429, rate_limit_exceeded, true)", status, code, ok)
 	}
 }
 

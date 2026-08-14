@@ -47,6 +47,7 @@ export const WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS = 1_500;
 export const WORKSPACE_AGENTS_SETTLE_POLL_INTERVAL_MS = 5_000;
 export const WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS = 120_000;
 const WORKSPACE_AGENTS_AVAILABILITY_MIN_REFETCH_MS = 1_000;
+const WORKSPACE_AGENTS_UNKNOWN_REFETCH_MS = 1_000;
 
 export function workspaceAgentsStartupRefetchInterval(
   items: AgentLike[] | undefined,
@@ -74,6 +75,9 @@ export function workspaceAgentsAvailabilityRefetchInterval(
       continue;
     }
     const expiresAt = agentRuntimeAvailabilityExpiresAt(item);
+    if (availabilityState === "unknown" && expiresAt == null) {
+      return WORKSPACE_AGENTS_UNKNOWN_REFETCH_MS;
+    }
     if (expiresAt == null || (earliestExpiry != null && expiresAt >= earliestExpiry)) {
       continue;
     }

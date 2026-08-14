@@ -155,6 +155,7 @@ type workerRuntimeChoiceResponse struct {
 	SandboxEnabled bool   `json:"sandbox_enabled"`
 	Installed      bool   `json:"installed"`
 	Message        string `json:"message,omitempty"`
+	MessageCode    string `json:"message_code,omitempty"`
 }
 
 type managerRuntimeResponse struct {
@@ -581,9 +582,11 @@ func codexInstallGuidance(_ string) string {
 func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntimeChoiceResponse {
 	sandboxInstalled := true
 	sandboxMessage := ""
+	sandboxMessageCode := ""
 	if err := sandboxRuntimeAvailability(ctx, cfg.Sandbox); err != nil {
 		sandboxInstalled = false
 		sandboxMessage = friendlySandboxRuntimeMessage(cfg.Sandbox, err)
+		sandboxMessageCode = sandboxRuntimeMessageCode(cfg.Sandbox, err)
 	}
 	choices := []workerRuntimeChoiceResponse{
 		{
@@ -598,6 +601,7 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 			SandboxEnabled: true,
 			Installed:      sandboxInstalled,
 			Message:        sandboxMessage,
+			MessageCode:    sandboxMessageCode,
 		},
 		{
 			Name:           agent.RuntimeNamePicoClaw,
@@ -605,6 +609,7 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 			SandboxEnabled: true,
 			Installed:      sandboxInstalled,
 			Message:        sandboxMessage,
+			MessageCode:    sandboxMessageCode,
 		},
 	}
 	if _, err := locateCodexCLI(); err != nil {
@@ -615,6 +620,19 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 		return choices[:1]
 	}
 	return choices
+}
+
+func sandboxRuntimeMessageCode(cfg config.SandboxConfig, err error) string {
+	if !strings.EqualFold(strings.TrimSpace(cfg.Resolved().Provider), config.DockerProvider) {
+		return ""
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return "docker_availability_timeout"
+	}
+	if sandbox.IsUnavailable(err) {
+		return "docker_unavailable"
+	}
+	return ""
 }
 
 func sandboxRuntimeAvailability(ctx context.Context, cfg config.SandboxConfig) error {
@@ -637,10 +655,10 @@ func sandboxRuntimeAvailability(ctx context.Context, cfg config.SandboxConfig) e
 func friendlySandboxRuntimeMessage(cfg config.SandboxConfig, err error) string {
 	if strings.EqualFold(strings.TrimSpace(cfg.Resolved().Provider), config.DockerProvider) {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			return "Docker 服务检测超时，请确认 Docker 服务（Docker Desktop 或 Docker Engine）已启动后重试。"
+			return "Docker availability check timed out. Make sure Docker Desktop or Docker Engine is running."
 		}
 		if sandbox.IsUnavailable(err) {
-			return "Docker 未启动或无法连接，请先启动 Docker 服务（Docker Desktop 或 Docker Engine）后重试。"
+			return "Docker is not running or cannot be reached. Start Docker Desktop or Docker Engine and try again."
 		}
 	}
 	return err.Error()
@@ -1553,8 +1571,13 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 }
 
 func writeAgentOperationError(w http.ResponseWriter, err error, defaultStatus int) {
-	if status, _, message, ok := modelprovider.UserFacingUpstreamError(err); ok {
-		http.Error(w, message, status)
+	if status, code, message, ok := modelprovider.UserFacingUpstreamError(err); ok {
+		writeJSON(w, status, map[string]any{
+			"error": map[string]any{
+				"code":    code,
+				"message": message,
+			},
+		})
 		return
 	}
 	status := defaultStatus

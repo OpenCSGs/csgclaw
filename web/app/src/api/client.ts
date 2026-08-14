@@ -1,6 +1,7 @@
 export type ApiError = {
   status: number;
   message: string;
+  code?: string;
 };
 
 export type ApiRequestOptions = Omit<RequestInit, "body"> & {
@@ -33,8 +34,7 @@ export async function request<T>(path: string, options: ApiRequestOptions = {}):
   });
 
   if (!response.ok) {
-    const message = (await readResponseText(response)) || response.statusText;
-    throw { status: response.status, message } satisfies ApiError;
+    throw await apiErrorFromResponse(response);
   }
 
   if (response.status === 204) {
@@ -71,8 +71,7 @@ export async function requestText(path: string, options: ApiRequestOptions = {})
   });
 
   if (!response.ok) {
-    const message = (await readResponseText(response)) || response.statusText;
-    throw { status: response.status, message } satisfies ApiError;
+    throw await apiErrorFromResponse(response);
   }
 
   if (response.status === 204) {
@@ -132,4 +131,19 @@ export async function readResponseText(response: Response | null | undefined): P
   } catch (_) {
     return "";
   }
+}
+
+async function apiErrorFromResponse(response: Response): Promise<ApiError> {
+  const raw = (await readResponseText(response)) || response.statusText;
+  try {
+    const payload = JSON.parse(raw) as { error?: { code?: unknown; message?: unknown } };
+    const code = typeof payload?.error?.code === "string" ? payload.error.code.trim() : "";
+    const message = typeof payload?.error?.message === "string" ? payload.error.message.trim() : "";
+    if (code || message) {
+      return { status: response.status, code: code || undefined, message: message || code };
+    }
+  } catch {
+    // Preserve legacy text error responses.
+  }
+  return { status: response.status, message: raw };
 }

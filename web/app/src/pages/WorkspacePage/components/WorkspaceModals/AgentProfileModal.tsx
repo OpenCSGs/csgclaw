@@ -182,10 +182,15 @@ export function AgentProfileModal({
     return choiceSandboxEnabled === sandboxEnabled && choiceRuntimeName === selectedRuntimeName;
   });
   const selectedRuntimeUnavailable = isWorkerCreate && selectedRuntimeChoice?.installed === false;
+  const runtimeMessageKey = String(selectedRuntimeChoice?.message_code || "").trim();
+  const localizedRuntimeMessage = runtimeMessageKey ? t(`errors.${runtimeMessageKey}`) : "";
   const selectedRuntimeUnavailableMessage = selectedRuntimeUnavailable
     ? sandboxEnabled
       ? t("runtimeSandboxUnavailable", {
-          reason: selectedRuntimeChoice?.message || t("runtimeSandboxUnavailableReason"),
+          reason:
+            (localizedRuntimeMessage !== `errors.${runtimeMessageKey}` ? localizedRuntimeMessage : "") ||
+            selectedRuntimeChoice?.message ||
+            t("runtimeSandboxUnavailableReason"),
         })
       : selectedRuntimeChoice?.message || t("runtimeCodexNotInstalled")
     : "";

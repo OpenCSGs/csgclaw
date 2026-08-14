@@ -955,7 +955,7 @@ func TestResponsesLLMAPICodexReturnsCompactResponsesErrorOnTransientFailure(t *t
 	if err != nil {
 		t.Fatalf("ReadAll() error = %v", err)
 	}
-	want := "模型服务暂时出现异常，请稍后重试。"
+	want := "The model service encountered a temporary error. Please try again later."
 	if string(body) != want {
 		t.Fatalf("body = %q, want %q", string(body), want)
 	}
@@ -1501,31 +1501,31 @@ func TestCompactUpstreamErrorResponseUsesFriendlyMessages(t *testing.T) {
 			name:   "standard insufficient balance",
 			status: http.StatusPaymentRequired,
 			body:   `{"error":{"code":"insufficient_balance","message":"**Insufficient balance** stack detail","type":"insufficient_balance"}}`,
-			want:   "模型服务余额不足，请充值或联系管理员后重试。",
+			want:   "The model service balance is insufficient. Add funds or contact an administrator.",
 		},
 		{
 			name:   "errorx insufficient balance",
 			status: http.StatusPaymentRequired,
 			body:   `{"code":"ACT-ERR-0","msg":"internal account detail","context":{}}`,
-			want:   "模型服务余额不足，请充值或联系管理员后重试。",
+			want:   "The model service balance is insufficient. Add funds or contact an administrator.",
 		},
 		{
 			name:   "string validation error",
 			status: http.StatusBadRequest,
 			body:   `{"error":"Model cannot be empty: parser stack"}`,
-			want:   "请求内容或模型配置有误，请检查后重试。",
+			want:   "The request or model configuration is invalid. Check it and try again.",
 		},
 		{
 			name:   "plain upstream failure",
 			status: http.StatusInternalServerError,
 			body:   "proxy initialization failed: connection stack",
-			want:   "模型服务暂时不可用，请稍后重试。",
+			want:   "The model service is temporarily unavailable. Please try again later.",
 		},
 		{
 			name:   "unsupported model",
 			status: http.StatusBadRequest,
 			body:   `{"error":{"code":"unsupported_model","message":"adapter missing"}}`,
-			want:   "当前模型不支持这项功能，请调整请求或更换模型。",
+			want:   "The selected model does not support this feature. Adjust the request or choose another model.",
 		},
 	}
 
@@ -1549,7 +1549,7 @@ func TestRewriteResponsesEventStreamMapsFailedEventToSafeError(t *testing.T) {
 		t.Fatalf("rewriteResponsesEventStream() error = %v", err)
 	}
 	got := output.String()
-	if !strings.Contains(got, "event: error") || !strings.Contains(got, `"code":"model_unavailable"`) || !strings.Contains(got, "当前模型暂时不可用") {
+	if !strings.Contains(got, "event: error") || !strings.Contains(got, `"code":"model_unavailable"`) || !strings.Contains(got, "temporarily unavailable") {
 		t.Fatalf("output = %q, want safe error event", got)
 	}
 	if strings.Contains(got, "secret-name") || strings.Contains(got, "no route") {
@@ -1564,7 +1564,7 @@ func TestRewriteResponsesEventStreamJoinsMultilineData(t *testing.T) {
 		t.Fatalf("rewriteResponsesEventStream() error = %v", err)
 	}
 	got := output.String()
-	if !strings.Contains(got, `"code":"rate_limit_exceeded"`) || !strings.Contains(got, "当前请求较多") {
+	if !strings.Contains(got, `"code":"rate_limit_exceeded"`) || !strings.Contains(got, "quota has been reached") {
 		t.Fatalf("output = %q, want safe multiline rate-limit error", got)
 	}
 	if strings.Contains(got, "account detail") {
@@ -1619,7 +1619,7 @@ func TestWriteChatCompletionStreamAsResponseMapsUpstreamError(t *testing.T) {
 		t.Fatalf("writeChatCompletionStreamAsResponse() error = %v", err)
 	}
 	got := output.String()
-	if !strings.Contains(got, "event: error") || !strings.Contains(got, `"code":"rate_limit_exceeded"`) || !strings.Contains(got, "当前请求较多") {
+	if !strings.Contains(got, "event: error") || !strings.Contains(got, `"code":"rate_limit_exceeded"`) || !strings.Contains(got, "quota has been reached") {
 		t.Fatalf("output = %q, want safe rate-limit event", got)
 	}
 	if strings.Contains(got, "account detail") {

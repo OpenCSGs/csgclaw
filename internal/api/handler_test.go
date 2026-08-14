@@ -77,12 +77,21 @@ func TestWriteAgentOperationErrorSanitizesWrappedUpstreamError(t *testing.T) {
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", recorder.Code)
 	}
-	want := "当前模型暂时不可用，请稍后重试或更换模型。\n"
-	if recorder.Body.String() != want {
-		t.Fatalf("body = %q, want %q", recorder.Body.String(), want)
+	rawBody := recorder.Body.String()
+	var payload struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
 	}
-	if strings.Contains(recorder.Body.String(), "aigateway") || strings.Contains(recorder.Body.String(), "gpt-test") {
-		t.Fatalf("body exposes upstream diagnostics: %q", recorder.Body.String())
+	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if payload.Error.Code != "model_unavailable" || !strings.Contains(payload.Error.Message, "temporarily unavailable") {
+		t.Fatalf("body = %#v, want structured model_unavailable error", payload)
+	}
+	if strings.Contains(rawBody, "aigateway") || strings.Contains(rawBody, "gpt-test") {
+		t.Fatalf("body exposes upstream diagnostics: %q", rawBody)
 	}
 }
 
@@ -622,8 +631,11 @@ func TestBootstrapConfigViewReportsStoppedDockerRuntimeChoices(t *testing.T) {
 		if choice.Installed {
 			t.Fatalf("sandbox choice %q Installed = true, want false: %+v", choice.Name, choice)
 		}
-		if !strings.Contains(choice.Message, "Docker 未启动或无法连接") {
+		if !strings.Contains(choice.Message, "Docker is not running") {
 			t.Fatalf("sandbox choice %q Message = %q, want Docker startup guidance", choice.Name, choice.Message)
+		}
+		if choice.MessageCode != "docker_unavailable" {
+			t.Fatalf("sandbox choice %q MessageCode = %q, want docker_unavailable", choice.Name, choice.MessageCode)
 		}
 		if strings.Contains(strings.ToLower(choice.Message), "gateway") {
 			t.Fatalf("sandbox choice %q Message = %q, should not mention gateway", choice.Name, choice.Message)
@@ -636,7 +648,7 @@ func TestFriendlySandboxRuntimeMessageReportsDockerTimeout(t *testing.T) {
 		config.SandboxConfig{Provider: config.DockerProvider},
 		fmt.Errorf("docker command canceled: %w", context.DeadlineExceeded),
 	)
-	if !strings.Contains(got, "Docker 服务检测超时") {
+	if !strings.Contains(got, "Docker availability check timed out") {
 		t.Fatalf("friendlySandboxRuntimeMessage() = %q, want Docker timeout guidance", got)
 	}
 	if strings.Contains(strings.ToLower(got), "deadline exceeded") {

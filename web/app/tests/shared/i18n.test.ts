@@ -1,4 +1,4 @@
-import { createTranslator, localizeTemplateSourceTag } from "@/shared/i18n";
+import { createTranslator, localizeAPIError, localizeTemplateSourceTag } from "@/shared/i18n";
 
 describe("i18n messages", () => {
   it("keeps the human profile subtitle concise", () => {
@@ -31,5 +31,17 @@ describe("i18n messages", () => {
   it("localizes personal Hub source tags", () => {
     expect(localizeTemplateSourceTag("personal", "zh")).toBe("个人");
     expect(localizeTemplateSourceTag("personal", "en")).toBe("personal");
+  });
+
+  it("localizes structured API errors by stable code", () => {
+    expect(
+      localizeAPIError(
+        { status: 503, code: "model_unavailable", message: "The selected model is unavailable." },
+        createTranslator("zh"),
+      ),
+    ).toContain("当前模型暂时不可用");
+    expect(
+      localizeAPIError({ status: 503, code: "model_unavailable", message: "服务不可用" }, createTranslator("en")),
+    ).toContain("temporarily unavailable");
   });
 });

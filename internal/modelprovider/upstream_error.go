@@ -33,15 +33,38 @@ func UserFacingUpstreamError(err error) (status int, code, message string, ok bo
 			return 0, "", "", false
 		}
 		if errors.Is(requestErr, context.DeadlineExceeded) {
-			return http.StatusGatewayTimeout, "upstream_timeout", "连接模型服务超时，请稍后重试。", true
+			return http.StatusGatewayTimeout, "upstream_timeout", "The model service request timed out. Please try again.", true
 		}
-		return http.StatusBadGateway, "upstream_unavailable", "无法连接模型服务，请检查服务配置或稍后重试。", true
+		return http.StatusBadGateway, "upstream_unavailable", "The model service is unavailable. Check its configuration or try again later.", true
 	}
 	status = statusErr.StatusCode
 	if status < 400 || status > 599 {
 		status = http.StatusBadGateway
 	}
-	return status, statusErr.Code(), statusErr.UserMessage(), true
+	code = statusErr.Code()
+	if code == "" {
+		code = fallbackUpstreamErrorCode(status)
+	}
+	return status, code, FriendlyUpstreamErrorMessage(status, code), true
+}
+
+func fallbackUpstreamErrorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return "invalid_request_error"
+	case http.StatusUnauthorized:
+		return "authentication_error"
+	case http.StatusPaymentRequired:
+		return "insufficient_balance"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusTooManyRequests:
+		return "rate_limit_exceeded"
+	default:
+		return "upstream_unavailable"
+	}
 }
 
 // UpstreamErrorCode extracts the stable provider error code without exposing
@@ -95,62 +118,62 @@ func UpstreamStatusForErrorCode(code string) int {
 func FriendlyUpstreamErrorMessage(status int, code string) string {
 	switch strings.ToLower(strings.TrimSpace(code)) {
 	case "insufficient_balance", "act-err-0":
-		return "模型服务余额不足，请充值或联系管理员后重试。"
+		return "The model service balance is insufficient. Add funds or contact an administrator."
 	case "rate_limit_exceeded":
-		return "当前请求较多或使用额度已达上限，请稍后再试。"
+		return "The model service is busy or its quota has been reached. Please try again later."
 	case "invalid_api_key", "authentication_error", "unauthorized":
-		return "模型服务认证失败，请检查密钥配置或联系管理员。"
+		return "Model service authentication failed. Check the credentials or contact an administrator."
 	case "model_not_found", "cluster_not_found":
-		return "当前选择的模型不存在，请更换模型或检查模型配置。"
+		return "The selected model does not exist. Choose another model or check the configuration."
 	case "model_not_running", "model_unavailable", "required_upstream_unavailable", "response_route_unavailable":
-		return "当前模型暂时不可用，请稍后重试或更换模型。"
+		return "The selected model is temporarily unavailable. Try again later or choose another model."
 	case "model_price_not_configured":
-		return "当前模型尚未完成服务配置，请联系管理员或更换模型。"
+		return "The selected model is not fully configured. Contact an administrator or choose another model."
 	case "unsupported_feature", "unsupported_model":
-		return "当前模型不支持这项功能，请调整请求或更换模型。"
+		return "The selected model does not support this feature. Adjust the request or choose another model."
 	case "model_task_mismatch":
-		return "当前模型的任务类型不适用于 Agent 对话，请选择文本生成或代码模型。"
+		return "This model task is not suitable for Agent conversations. Choose a text-generation or code model."
 	case "invalid_response_id", "response_id_forbidden":
-		return "无法继续之前的对话，请新建对话后重试。"
+		return "The previous conversation cannot be continued. Start a new conversation and try again."
 	case "content_policy_violation":
-		return "请求内容未通过安全检查，请修改内容后重试。"
+		return "The request did not pass the safety check. Change the content and try again."
 	case "insufficient_permissions", "permission_denied", "forbidden":
-		return "当前账号没有执行此操作的权限，请联系管理员。"
+		return "This account does not have permission for this operation. Contact an administrator."
 	case "context_length_exceeded":
-		return "对话内容超过当前模型的上下文长度，请缩短对话或新建对话后重试。"
+		return "The conversation exceeds this model's context length. Shorten it or start a new conversation."
 	case "not_found":
-		return "请求的资源不存在或已失效，请确认后重试。"
+		return "The requested resource does not exist or has expired. Check it and try again."
 	case "video_not_ready":
-		return "视频仍在生成中，请稍后再试。"
+		return "The video is still being generated. Please try again later."
 	case "video_generation_failed":
-		return "视频生成失败，请调整内容后重试。"
+		return "Video generation failed. Adjust the content and try again."
 	case "video_generation_cancelled":
-		return "视频生成任务已取消，请重新发起。"
+		return "Video generation was cancelled. Start a new request."
 	case "invalid_request_error":
-		return "请求内容或模型配置有误，请检查后重试。"
+		return "The request or model configuration is invalid. Check it and try again."
 	case "upstream_response_invalid", "internal_server_error", "internal_error", "moderation_error":
-		return "模型服务暂时出现异常，请稍后重试。"
+		return "The model service encountered a temporary error. Please try again later."
 	}
 
 	switch status {
 	case http.StatusBadRequest:
-		return "请求内容或模型配置有误，请检查后重试。"
+		return "The request or model configuration is invalid. Check it and try again."
 	case http.StatusUnauthorized:
-		return "模型服务认证失败，请检查密钥配置或联系管理员。"
+		return "Model service authentication failed. Check the credentials or contact an administrator."
 	case http.StatusPaymentRequired:
-		return "模型服务余额不足，请充值或联系管理员后重试。"
+		return "The model service balance is insufficient. Add funds or contact an administrator."
 	case http.StatusForbidden:
-		return "当前账号无权使用该模型，请联系管理员或更换模型。"
+		return "This account cannot use the selected model. Contact an administrator or choose another model."
 	case http.StatusNotFound:
-		return "当前模型或请求的资源不存在，请检查配置后重试。"
+		return "The selected model or requested resource does not exist. Check the configuration and try again."
 	case http.StatusTooManyRequests:
-		return "当前请求较多或使用额度已达上限，请稍后再试。"
+		return "The model service is busy or its quota has been reached. Please try again later."
 	default:
 		if status >= http.StatusInternalServerError {
-			return "模型服务暂时不可用，请稍后重试。"
+			return "The model service is temporarily unavailable. Please try again later."
 		}
 	}
-	return "模型请求失败，请稍后重试。"
+	return "The model request failed. Please try again later."
 }
 
 func stringValue(value any) string {

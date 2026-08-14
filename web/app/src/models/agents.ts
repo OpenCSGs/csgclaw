@@ -500,6 +500,7 @@ export type RuntimeChoiceLike = {
   sandbox_enabled?: boolean | null;
   installed?: boolean | null;
   message?: string | null;
+  message_code?: string | null;
 };
 
 export type DraftProfileOptions = {

@@ -24,6 +24,7 @@ import { errorMessage } from "@/api/client";
 import { fetchAgentInstructionsDocument, updateAgentEffectiveInstructions } from "@/api/agents";
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
+import { localizeAPIError } from "@/shared/i18n";
 import {
   EnvKeyValueEditor,
   FieldHelpTooltip,
@@ -1584,7 +1585,7 @@ function AgentModelPanel({
                   <details className="agent-model-load-error-details">
                     <summary>{t("profileModelErrorDetails")}</summary>
                     <div className="agent-model-load-error-technical">
-                      <pre>{errorMessage(modelError, t("modelLoadFailed"))}</pre>
+                      <pre>{localizeAPIError(modelError, t, errorMessage(modelError, t("modelLoadFailed")))}</pre>
                     </div>
                   </details>
                 </div>

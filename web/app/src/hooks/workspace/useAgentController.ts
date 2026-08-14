@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "react-router-dom";
-import { errorMessage, type ApiError } from "@/api/client";
+import { errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import {
   batchAddAgentMCPServersRequest,
@@ -46,6 +46,7 @@ import {
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
 import { FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
+import { localizeAPIError } from "@/shared/i18n";
 import { LAST_CREATED_AGENT_MODEL_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   applyTemplateToDraft,
@@ -468,6 +469,10 @@ export function useAgentController({
   setSelectedHubTemplateId,
   t,
 }: UseAgentControllerArgs) {
+  const errorMessage = useCallback(
+    (error: unknown, fallback = "") => localizeAPIError(error, t, apiErrorMessage(error, fallback) || fallback),
+    [t],
+  );
   const queryClient = useQueryClient();
   const [cliproxyAuthBusy, setCLIProxyAuthBusy] = useState("");
   const [agentsError, setAgentsError] = useState("");
@@ -852,7 +857,7 @@ export function useAgentController({
         setAgentPageError(errorMessage(err, t("agentActionFailed")));
       }
     },
-    [agentDraftFromItem, resetAgentPageModels, setAgentsData, t],
+    [agentDraftFromItem, errorMessage, resetAgentPageModels, setAgentsData, t],
   );
   const { cliproxyAuthStatuses, setCLIProxyAuthStatus } = useCLIProxyAuthStatuses(
     [
@@ -2039,7 +2044,15 @@ export function useAgentController({
         releaseAgentAction(agentID, busyKey);
       }
     },
-    [claimAgentAction, isAgentActionBusy, releaseAgentAction, showAgentPageNotice, t, updateFeishuPendingRegistrations],
+    [
+      claimAgentAction,
+      errorMessage,
+      isAgentActionBusy,
+      releaseAgentAction,
+      showAgentPageNotice,
+      t,
+      updateFeishuPendingRegistrations,
+    ],
   );
 
   useEffect(() => {
@@ -2289,7 +2302,7 @@ export function useAgentController({
         setAgentSkillAddBusy(false);
       }
     },
-    [agentSkillAddBusy, queryClient, agentDetailAgentID, t],
+    [agentSkillAddBusy, errorMessage, queryClient, agentDetailAgentID, t],
   );
 
   const deleteAgentSkill = useCallback(
@@ -2315,7 +2328,7 @@ export function useAgentController({
         setAgentSkillDeleteBusy(false);
       }
     },
-    [agentSkillDeleteBusy, queryClient, agentDetailAgentID, t],
+    [agentSkillDeleteBusy, errorMessage, queryClient, agentDetailAgentID, t],
   );
 
   const installAgentMCPServers = useCallback(
@@ -2347,7 +2360,7 @@ export function useAgentController({
         setAgentMCPAddBusy(false);
       }
     },
-    [agentMCPAddBusy, queryClient, agentDetailAgentID, t],
+    [agentMCPAddBusy, errorMessage, queryClient, agentDetailAgentID, t],
   );
 
   const deleteAgentMCPServer = useCallback(
@@ -2380,7 +2393,7 @@ export function useAgentController({
         setAgentMCPDeleteBusy(false);
       }
     },
-    [agentMCPDeleteBusy, queryClient, agentDetailAgentID, t],
+    [agentMCPDeleteBusy, errorMessage, queryClient, agentDetailAgentID, t],
   );
 
   function directConversationForUser(

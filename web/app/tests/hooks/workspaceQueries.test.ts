@@ -97,6 +97,14 @@ describe("workspaceAgentsAvailabilityRefetchInterval", () => {
     ).toBe(false);
   });
 
+  it("keeps polling a pending unknown observation without an expiry", () => {
+    expect(
+      workspaceAgentsAvailabilityRefetchInterval([
+        { ...runningGateway, runtime: { availability: { state: "unknown" } } },
+      ]),
+    ).toBe(1_000);
+  });
+
   it("combines availability expiry with startup polling without increasing the poll interval", () => {
     const startingGateway = { ...runningGateway, status: "stopped" };
     expect(workspaceAgentsRefetchInterval([startingGateway], 1_000, Date.parse("2026-07-30T04:29:59Z"))).toBe(1_000);

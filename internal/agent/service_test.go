@@ -5961,6 +5961,7 @@ func TestRuntimeAvailabilityExpiryKeepsLastObservationVisible(t *testing.T) {
 		BoxID:       "box-alice",
 		Status:      string(sandbox.StateRunning),
 	}
+	svc.agents[agent.ID] = agent
 	svc.recordRuntimeAvailability(agent, RuntimeAvailability{
 		State:     RuntimeAvailabilityDegraded,
 		CheckedAt: time.Now().Add(-runtimeAvailabilityMaxAge - time.Second),
@@ -5972,6 +5973,18 @@ func TestRuntimeAvailabilityExpiryKeepsLastObservationVisible(t *testing.T) {
 	}
 	if !svc.shouldRefreshRuntimeAvailability(agent, time.Now()) {
 		t.Fatal("shouldRefreshRuntimeAvailability() = false, want refresh for expired observation")
+	}
+}
+
+func TestRecordRuntimeAvailabilityDiscardsObservationAfterAgentDeletion(t *testing.T) {
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	agent := Agent{ID: "agent-deleted", BoxID: "box-deleted"}
+	svc.recordRuntimeAvailability(agent, RuntimeAvailability{State: RuntimeAvailabilityReady})
+	if _, ok := svc.availability[canonicalAgentID(agent.ID)]; ok {
+		t.Fatal("recordRuntimeAvailability() restored an observation for a deleted agent")
 	}
 }
 

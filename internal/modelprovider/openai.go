@@ -109,13 +109,6 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 
 	models := make([]string, 0, len(payload.Data))
 	seen := make(map[string]struct{}, len(payload.Data))
-	hasTaskMetadata := false
-	for _, item := range payload.Data {
-		if taskPresent(item.Task) {
-			hasTaskMetadata = true
-			break
-		}
-	}
 	for _, item := range payload.Data {
 		id := strings.TrimSpace(item.ID)
 		if id == "" {
@@ -124,7 +117,7 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 		if item.Availability != nil && item.Availability.IsAvailable != nil && !*item.Availability.IsAvailable {
 			continue
 		}
-		if hasTaskMetadata && !taskSupportsTextGeneration(item.Task) {
+		if taskPresent(item.Task) && !taskSupportsTextGeneration(item.Task) {
 			continue
 		}
 		if _, ok := seen[id]; ok {
