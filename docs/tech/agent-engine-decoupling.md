@@ -4,7 +4,7 @@ Chinese version: [agent-engine-decoupling.zh.md](agent-engine-decoupling.zh.md)
 
 ## Status
 
-Status: **Architecture proposal; Phase 2 Engine and Mock Client baseline complete, with production Channel Adapter integration remaining in Phase 3**.
+Status: **Architecture proposal; Phase 2 Engine and Mock Client baseline complete; Phase 3 built-in IM Adapter integration in progress**.
 
 The contract and Phase 1 in-process Conversation implementation are in [`internal/agentengine`](../../internal/agentengine).
 Phase 1 connects the anonymous Session API to the existing Codex Runtime and removes anonymous Session dependence on IM entities.
@@ -13,6 +13,13 @@ It does not introduce or switch a production Channel Adapter.
 Phase 3 integrates them with an atomic switch, and Phase 4 then refactors the internal Engine components.
 That package is the source of truth for exact Go types and method signatures.
 This document explains the intended ownership, behavior, and incremental implementation plan.
+
+`internal/channel/csgclaw` now contains the runtime-neutral core for Phase 3,
+including binding-scoped workers, conversation key/input conversion, the
+attachment resolver boundary, and transcript rendering. These components are
+not wired into the composition root yet; the production built-in IM path still
+uses `internal/channelbridge/codexbridge`. The current implementation therefore
+does not mean Phase 3 is complete and does not change existing channel behavior.
 
 ## 1. Scope
 

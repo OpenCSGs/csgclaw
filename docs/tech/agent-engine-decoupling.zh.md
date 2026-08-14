@@ -4,7 +4,7 @@
 
 ## 状态
 
-状态：**架构提案；阶段 2 的 Engine 与 Mock Client 基线已完成，生产 Channel Adapter 融合留在阶段 3**。
+状态：**架构提案；阶段 2 的 Engine 与 Mock Client 基线已完成；阶段 3 内置 IM Adapter 融合开发中**。
 
 Contract 和阶段 1 的进程内 Conversation 实现位于 [`internal/agentengine`](../../internal/agentengine)。
 阶段 1 已把匿名 Session API 接入现有 Codex Runtime，并移除匿名 Session 对 IM Entity 的依赖。
@@ -13,6 +13,11 @@ Contract 和阶段 1 的进程内 Conversation 实现位于 [`internal/agentengi
 阶段 3 负责两侧融合与原子切换，阶段 4 再重构 Engine 内部组件。
 该 Package 是精确 Go Type 和 Method Signature 的 Source of Truth。
 本文档说明期望的 Owner、行为和增量实现计划。
+
+`internal/channel/csgclaw` 已包含阶段 3 的 Runtime-neutral Core，包括 Binding-scoped Worker、
+Conversation Key/Input 转换、Attachment Resolver Boundary 和 Transcript Renderer。
+这些组件尚未接入 Composition Root；生产内置 IM Path 仍使用 `internal/channelbridge/codexbridge`。
+因此当前实现不代表阶段 3 已完成，也不改变现有 Channel 行为。
 
 ## 1. 范围
 
