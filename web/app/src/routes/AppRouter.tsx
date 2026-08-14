@@ -3,23 +3,40 @@ import type { ComponentType, ReactElement } from "react";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
 import { WorkspacePage } from "@/pages/WorkspacePage/WorkspacePage";
+import { loadRouteModule } from "./loadRouteModule";
 
-const AgentPage = lazy(() => import("@/pages/AgentPage").then((module) => ({ default: module.AgentPage })));
-const ComputerPage = lazy(() => import("@/pages/ComputerPage").then((module) => ({ default: module.ComputerPage })));
+const AgentPage = lazy(() =>
+  loadRouteModule(() => import("@/pages/AgentPage").then((module) => ({ default: module.AgentPage }))),
+);
+const ComputerPage = lazy(() =>
+  loadRouteModule(() => import("@/pages/ComputerPage").then((module) => ({ default: module.ComputerPage }))),
+);
 const ConversationPage = lazy(() =>
-  import("@/pages/ConversationPage").then((module) => ({ default: module.ConversationPage })),
+  loadRouteModule(() => import("@/pages/ConversationPage").then((module) => ({ default: module.ConversationPage }))),
 );
-const HubPage = lazy(() => import("@/pages/HubPage").then((module) => ({ default: module.HubPage })));
-const HumanPage = lazy(() => import("@/pages/HumanPage").then((module) => ({ default: module.HumanPage })));
+const HubPage = lazy(() =>
+  loadRouteModule(() => import("@/pages/HubPage").then((module) => ({ default: module.HubPage }))),
+);
+const HumanPage = lazy(() =>
+  loadRouteModule(() => import("@/pages/HumanPage").then((module) => ({ default: module.HumanPage }))),
+);
 const ModelProviderPage = lazy(() =>
-  import("@/pages/ModelProviderPage/ModelProviderPage").then((module) => ({ default: module.ModelProviderPage })),
+  loadRouteModule(() =>
+    import("@/pages/ModelProviderPage/ModelProviderPage").then((module) => ({ default: module.ModelProviderPage })),
+  ),
 );
-const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const SettingsPage = lazy(() =>
+  loadRouteModule(() => import("@/pages/SettingsPage").then((module) => ({ default: module.SettingsPage }))),
+);
 const SessionDemoPage = lazy(() =>
-  import("@/pages/SessionDemoPage").then((module) => ({ default: module.SessionDemoPage })),
+  loadRouteModule(() => import("@/pages/SessionDemoPage").then((module) => ({ default: module.SessionDemoPage }))),
 );
-const TeamPage = lazy(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage })));
-const TasksPage = lazy(() => import("@/pages/TasksPage").then((module) => ({ default: module.TasksPage })));
+const TeamPage = lazy(() =>
+  loadRouteModule(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage }))),
+);
+const TasksPage = lazy(() =>
+  loadRouteModule(() => import("@/pages/TasksPage").then((module) => ({ default: module.TasksPage }))),
+);
 
 function routeElement(Page: ComponentType): ReactElement {
   return (

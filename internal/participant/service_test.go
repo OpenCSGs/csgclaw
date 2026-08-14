@@ -670,6 +670,37 @@ func TestDeleteParticipantDoesNotDeleteAgentByDefault(t *testing.T) {
 	}
 }
 
+func TestDeleteNotificationParticipantRemovesLocalUserAndDirectRoom(t *testing.T) {
+	imSvc := im.NewService()
+	svc := NewService(NewMemoryStore(nil), WithIMService(imSvc))
+	created, err := svc.Create(context.Background(), CreateRequest{
+		ID:      "alerts",
+		Channel: ChannelCSGClaw,
+		Type:    TypeNotification,
+		Name:    "Alerts",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	roomIDs := imSvc.RoomIDsForMember(created.ChannelUserRef)
+	if len(roomIDs) != 1 {
+		t.Fatalf("notification direct rooms = %v, want one", roomIDs)
+	}
+
+	if _, ok, err := svc.Delete(context.Background(), ChannelCSGClaw, created.ID, DeleteOptions{}); err != nil || !ok {
+		t.Fatalf("Delete() ok=%v error=%v, want ok", ok, err)
+	}
+	if _, ok := svc.Get(ChannelCSGClaw, created.ID); ok {
+		t.Fatalf("participant %s still exists after delete", created.ID)
+	}
+	if _, ok := imSvc.User(created.ChannelUserRef); ok {
+		t.Fatalf("local user %s still exists after notification participant delete", created.ChannelUserRef)
+	}
+	if _, ok := imSvc.Room(roomIDs[0]); ok {
+		t.Fatalf("direct room %s still exists after notification participant delete", roomIDs[0])
+	}
+}
+
 func TestDeleteParticipantRejectsAgentCleanupWhenStillReferenced(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
 	svc := NewService(NewMemoryStore(nil), WithAgentService(agentSvc), WithIMService(im.NewService()))

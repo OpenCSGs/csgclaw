@@ -478,7 +478,11 @@ func (s *Service) Delete(ctx context.Context, channel, id string, opts DeleteOpt
 		if err := s.agents.Delete(ctx, deleted.AgentID); err != nil {
 			return deleted, true, err
 		}
-		if err := s.deleteUnreferencedCSGClawAgentUser(deleted); err != nil {
+		if err := s.deleteUnreferencedCSGClawParticipantUser(deleted); err != nil {
+			return deleted, true, err
+		}
+	} else if deleted.Type == TypeNotification {
+		if err := s.deleteUnreferencedCSGClawParticipantUser(deleted); err != nil {
 			return deleted, true, err
 		}
 	}
@@ -514,7 +518,7 @@ func (s *Service) DeleteAgent(ctx context.Context, agentID string) ([]apitypes.P
 		deleted = append(deleted, item)
 	}
 	for _, item := range deleted {
-		if err := s.deleteUnreferencedCSGClawAgentUser(item); err != nil {
+		if err := s.deleteUnreferencedCSGClawParticipantUser(item); err != nil {
 			return deleted, err
 		}
 	}
@@ -548,7 +552,7 @@ func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participa
 			continue
 		}
 		deleted = append(deleted, removed)
-		if err := s.deleteUnreferencedCSGClawAgentUser(removed); err != nil {
+		if err := s.deleteUnreferencedCSGClawParticipantUser(removed); err != nil {
 			return deleted, err
 		}
 	}
@@ -587,11 +591,13 @@ func participantLookupIDs(id string) []string {
 	return []string{typed, id}
 }
 
-func (s *Service) deleteUnreferencedCSGClawAgentUser(deleted apitypes.Participant) error {
+func (s *Service) deleteUnreferencedCSGClawParticipantUser(deleted apitypes.Participant) error {
 	if s == nil || s.store == nil || s.im == nil {
 		return nil
 	}
-	if deleted.Channel != ChannelCSGClaw || deleted.Type != TypeAgent || deleted.ChannelUserKind != ChannelUserKindLocalUserID {
+	if deleted.Channel != ChannelCSGClaw ||
+		(deleted.Type != TypeAgent && deleted.Type != TypeNotification) ||
+		deleted.ChannelUserKind != ChannelUserKindLocalUserID {
 		return nil
 	}
 	userID := strings.TrimSpace(deleted.ChannelUserRef)
