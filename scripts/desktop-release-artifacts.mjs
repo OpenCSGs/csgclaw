@@ -38,6 +38,18 @@ export function normalizeReleaseVersion(rawVersion) {
   return parseReleaseVersion(rawVersion).normalized;
 }
 
+export function validateManualAlphaVersion(rawVersion) {
+  const requested = String(rawVersion || "").trim();
+  const manualAlphaPattern =
+    /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-alpha\.(0|[1-9]\d*)$/;
+  if (!manualAlphaPattern.test(requested)) {
+    throw new Error(
+      `manual workflow version must match vMAJOR.MINOR.PATCH-alpha.NUMBER (for example v0.2.1-alpha.1); beta and stable releases must be published by pushing a tag, got: ${rawVersion || "<empty>"}`,
+    );
+  }
+  return normalizeReleaseVersion(requested);
+}
+
 export function compareReleaseVersions(leftVersion, rightVersion) {
   const left = parseReleaseVersion(leftVersion);
   const right = parseReleaseVersion(rightVersion);
@@ -134,10 +146,22 @@ export function desktopDownloadArtifacts(version) {
 
 function main(args) {
   const [command, version] = args;
-  if (command !== "channel" || !version || args.length !== 2) {
-    throw new Error("usage: desktop-release-artifacts.mjs channel <version>");
+  if (!version || args.length !== 2) {
+    throw new Error(
+      "usage: desktop-release-artifacts.mjs <channel|validate-manual-alpha> <version>",
+    );
   }
-  process.stdout.write(`${inferReleaseChannel(version)}\n`);
+  if (command === "channel") {
+    process.stdout.write(`${inferReleaseChannel(version)}\n`);
+    return;
+  }
+  if (command === "validate-manual-alpha") {
+    validateManualAlphaVersion(version);
+    return;
+  }
+  throw new Error(
+    "usage: desktop-release-artifacts.mjs <channel|validate-manual-alpha> <version>",
+  );
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

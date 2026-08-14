@@ -70,6 +70,18 @@ export function desktopPackageUploadPaths(
   );
 }
 
+export function desktopPackageDownloadURLs(
+  version,
+  rawTargets,
+  publicBaseURL = defaultPublicBaseURL,
+) {
+  const normalizedVersion = normalizeReleaseVersion(version);
+  return desktopPackageUploadPaths(normalizedVersion, ".", rawTargets).map(
+    (filePath) =>
+      `${publicBaseURL.replace(/\/+$/, "")}/releases/${encodeURIComponent(normalizedVersion)}/${path.basename(filePath)}`,
+  );
+}
+
 export function releasePackagePaths(version, releaseDirectory) {
   return releasePackageDefinitions(version)
     .map((definition) => path.join(releaseDirectory, definition.fileName))
@@ -661,6 +673,10 @@ function uploadDesktopPackages(context, options) {
     "OSS_ENDPOINT",
     "https://oss-cn-beijing.aliyuncs.com",
   );
+  const publicBaseURL = setting(
+    "OSS_PUBLIC_BASE_URL",
+    defaultPublicBaseURL,
+  ).replace(/\/+$/, "");
   const ossEnvironment = {
     ...process.env,
     OSS_ACCESS_KEY_ID: accessKeyID,
@@ -672,6 +688,11 @@ function uploadDesktopPackages(context, options) {
     context.version,
     context.releaseDirectory,
     options.targets,
+  );
+  const downloadURLs = desktopPackageDownloadURLs(
+    context.version,
+    options.targets,
+    publicBaseURL,
   );
   for (const filePath of packageFiles) {
     if (!fs.existsSync(filePath)) {
@@ -702,6 +723,25 @@ function uploadDesktopPackages(context, options) {
   console.log(
     `uploaded ${packageFiles.length} immutable desktop package(s) without changing channel manifests`,
   );
+  console.log("download URLs:");
+  for (const downloadURL of downloadURLs) {
+    console.log(downloadURL);
+  }
+
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (summaryPath) {
+    fs.appendFileSync(
+      summaryPath,
+      [
+        `## Desktop package downloads (${releaseTag(context.version)})`,
+        "",
+        ...downloadURLs.map((downloadURL) => `- <${downloadURL}>`),
+        "",
+        "> These immutable packages do not update beta or release channel manifests.",
+        "",
+      ].join("\n"),
+    );
+  }
 }
 
 export function legacyMacUpdateManifestRelativePath(relativePath) {

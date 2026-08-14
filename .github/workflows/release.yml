@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Desktop package version, for example v0.2.1-alpha.1"
+        description: "Alpha only (for example v0.2.1-alpha.1); beta/stable releases must use tags"
         required: true
       desktop_target:
         description: "Single desktop target to package"
@@ -54,6 +54,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: desktop/package.json
+
+      - name: Validate manual alpha version
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          if ! validation_error="$(node scripts/desktop-release-artifacts.mjs validate-manual-alpha "${DISPATCH_VERSION}" 2>&1)"; then
+            echo "::error title=Invalid manual release version::${validation_error}"
+            exit 1
+          fi
 
       - name: Build matrix from release-platforms.txt
         id: set-matrix

@@ -1,14 +1,37 @@
 # CSGClaw GitHub Release 与 Desktop OSS 线上发布
 
-本文面向 CSGClaw 维护者，说明如何通过 GitHub 页面发布 beta 和正式版本。
+本文面向 CSGClaw 维护者，说明如何通过 GitHub 页面发布 alpha、beta 和正式版本。
 
-正常发布不需要在维护者电脑上手工打包、生成 manifest 或上传 OSS。在 GitHub Releases
-页面创建版本后，Release workflow 会在线完成构建、打包、GitHub Release 资产上传和
-Desktop OSS 发布。
+发布不需要在维护者电脑上手工打包或上传 OSS。
+
+## 最简发布流程
+
+先按使用场景选择版本类型：
+
+- **Alpha**：快速验证单个平台桌面包，适合给测试发独立包或复用 CI 的 macOS/Windows
+  签名环境；不算完整发布。
+- **Beta（预览版）**：迭代中的全平台测试或试用版本。
+- **正式版**：迭代完成且验证通过后的正式发布，仅限有发布权限的维护者执行。
+
+发布前确认目标代码已经合入 upstream `main`，然后按下表操作：
+
+| 类型 | 版本号示例 | GitHub 入口 | 操作 |
+|---|---|---|---|
+| Alpha | `v0.2.1-alpha.1` | [Actions → Release](https://github.com/OpenCSGs/csgclaw/actions/workflows/release.yml) → **Run workflow** | 分支选 `main`，填写版本号和一个 `desktop_target` 后运行 |
+| Beta | `v0.2.1-beta.1` | [Releases → Draft a new release](https://github.com/OpenCSGs/csgclaw/releases/new) | 从 `main` 创建同名 tag，勾选 **This is a pre-release** 后发布 |
+| 正式版 | `v0.2.1` | [Releases → Draft a new release](https://github.com/OpenCSGs/csgclaw/releases/new) | 从 `main` 创建同名 tag，不勾选 pre-release，保持 **Set as the latest release** 后发布 |
+
+Alpha 手动流程只发布所选平台的桌面包，不创建 GitHub Release，也不更新 beta/release
+manifest 或自动更新 feed。成功后可在该 Actions run 的 **Summary → Desktop package
+downloads** 直接打开 OSS 下载链接。手动入口只接受 `vX.Y.Z-alpha.N`；填写 beta 或正式
+版本号会在 `prepare` 阶段报错并中断。
+
+Beta 和正式版走 tag 触发的完整流程，自动构建全部平台、创建 GitHub Release，并分别更新
+beta 或 release OSS channel。
 
 ## 发布结果与地址
 
-一次成功的线上发布会产生两组结果：
+一次成功的 beta 或正式版完整发布会产生两组结果：
 
 1. GitHub Release：保存全部 CLI、服务端 bundle 和桌面安装包；
 2. Desktop OSS：保存官网安装器、Server/CLI bundle、Electron 原生更新 feed 和 channel manifest。
@@ -39,12 +62,13 @@ Desktop OSS 发布。
 
 ## 版本与 channel 规则
 
-项目当前使用 beta 和正式 release 两种版本：
+项目约定使用以下三种发布方式：
 
-| Tag 示例 | GitHub 类型 | OSS manifest |
+| 版本示例 | 触发方式 | 发布结果 |
 |---|---|---|
-| `v0.4.6-beta.3` | Pre-release | `channels/beta/downloads.json` |
-| `v0.4.6` | 正式 Release | `channels/release/downloads.json` |
+| `v0.4.6-alpha.1` | 手动 Run workflow | 单个桌面目标的 OSS 不可变包，不更新 manifest |
+| `v0.4.6-beta.3` | 创建 Pre-release tag | 完整发布并更新 `channels/beta/downloads.json` |
+| `v0.4.6` | 创建正式 Release tag | 完整发布并更新 `channels/release/downloads.json` |
 
 beta 版本使用 `v<major>.<minor>.<patch>-beta.<number>`，例如
 `v0.4.6-beta.1`。正式版本去掉 `-beta.<number>`，例如 `v0.4.6`。
@@ -58,22 +82,26 @@ beta 版本使用 `v<major>.<minor>.<patch>-beta.<number>`，例如
 tag 一经发布即视为不可变。如果 beta 需要继续修复，应递增序号，例如从
 `v0.4.6-beta.3` 发布 `v0.4.6-beta.4`，不要移动或覆盖旧 tag。
 
-`alpha` 也是合法的预发布版本，例如 `v0.4.6-alpha.1`；它与 `beta` 共用预览版
-channel，不单独创建 alpha channel。全新安装的 alpha/beta 桌面包默认选择预览版
-更新通道，稳定包默认选择正式版通道；已有用户保存的通道选择保持不变。
+Alpha 版本使用 `v<major>.<minor>.<patch>-alpha.<number>`，例如
+`v0.4.6-alpha.1`。Alpha 不单独创建 channel；手动发布也不会更新 beta channel 的
+`latest`。全新安装的 alpha/beta 桌面包默认选择预览版更新通道，稳定包默认选择正式版
+通道；已有用户保存的通道选择保持不变。
 
-## 手动构建单个桌面目标
+## 手动发布 alpha 单个桌面目标
 
 需要先验证单个架构，或只补传一个不可变安装包时，可以在 GitHub Actions 的 Release
 workflow 中点击 **Run workflow**，只填写：
 
-- `version`：例如 `v0.2.1-alpha.1`；
+- `version`：必须是 `vX.Y.Z-alpha.N`，例如 `v0.2.1-alpha.1`；
 - `desktop_target`：例如 `darwin-arm64`。
+
+Beta 或正式版本号不能从这里发布；校验失败时 workflow 会在 `prepare` 阶段中断。
 
 手动运行固定为 desktop-only：不会构建 Server/CLI 平台矩阵，不会创建或修改 GitHub
 Release，只会把所选目标的包上传到 OSS `releases/<version>/`。它不会读取、生成或上传
 `downloads.json`、`RELEASES`、`RELEASES.json`，因此不会把该版本发布成官网或自动更新
-channel 的 `latest`。正式 tag 触发仍执行下文所述的完整发布流程。
+channel 的 `latest`。上传成功后，完整 HTTPS 下载地址会同时打印在上传 step 日志和该 run
+的 **Summary → Desktop package downloads** 中。
 
 ## 通过 GitHub 页面发布 beta
 
@@ -229,7 +257,7 @@ OSS 发布 jobs 会继续执行。
 如果失败原因必须通过修改源码、workflow 或依赖解决，则不要只重跑旧版本。应先合并修复，
 再创建更高的 beta 序号或新的正式版本。
 
-## 发布验收
+## Beta/正式版发布验收
 
 Release workflow 全部成功后：
 
@@ -249,5 +277,5 @@ Release workflow 全部成功后：
 - `OSS_ACCESS_KEY_ID`
 - `OSS_ACCESS_KEY_SECRET`
 
-beta 和 release 共用同一个 Environment，通过不同的 manifest 地址分流。相同 channel 的
-OSS 发布会依次排队，beta 与正式 release 互不阻塞。
+Alpha 手动上传、beta 和 release 共用同一个 Environment。Beta 与 release 通过不同的
+manifest 地址分流；相同 channel 的完整 OSS 发布会依次排队，两个 channel 互不阻塞。

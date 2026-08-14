@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   compareReleaseVersions,
+  desktopPackageDownloadURLs,
   desktopPackageUploadPaths,
   desktopUpdateFeedPaths,
   desktopUploadPaths,
@@ -17,6 +18,7 @@ import {
   releaseTag,
   validateReleaseChannel,
 } from "./desktop-oss-release.mjs";
+import { validateManualAlphaVersion } from "./desktop-release-artifacts.mjs";
 
 test("normalizes public desktop versions", () => {
   assert.equal(normalizeReleaseVersion("v0.4.5-beta.1"), "0.4.5-beta.1");
@@ -35,6 +37,22 @@ test("normalizes public desktop versions", () => {
     () => inferReleaseChannel("v0.4.6-beta.01"),
     /invalid release version/,
   );
+});
+
+test("manual workflow accepts only numbered alpha versions with a v prefix", () => {
+  assert.equal(validateManualAlphaVersion("v0.2.1-alpha.1"), "0.2.1-alpha.1");
+  for (const version of [
+    "0.2.1-alpha.1",
+    "v0.2.1-alpha",
+    "v0.2.1-alpha.01",
+    "v0.2.1-beta.1",
+    "v0.2.1",
+  ]) {
+    assert.throws(
+      () => validateManualAlphaVersion(version),
+      /manual workflow version must match/,
+    );
+  }
 });
 
 test("orders public desktop versions using SemVer precedence", () => {
@@ -99,6 +117,16 @@ test("selects only the requested immutable desktop packages for manual upload", 
         "darwin-riscv64",
       ),
     /unsupported target/,
+  );
+});
+
+test("builds public download URLs for manually uploaded desktop packages", () => {
+  assert.deepEqual(
+    desktopPackageDownloadURLs("v0.2.1-alpha.1", "darwin-arm64"),
+    [
+      "https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/releases/0.2.1-alpha.1/csgclaw-desktop_v0.2.1-alpha.1_darwin_arm64.dmg",
+      "https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/csgclaw-desktop/releases/0.2.1-alpha.1/csgclaw-desktop_v0.2.1-alpha.1_darwin_arm64.zip",
+    ],
   );
 });
 
