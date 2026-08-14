@@ -72,7 +72,10 @@ function workEvent(overrides: Partial<NonNullable<IMServerEvent["work"]>> = {}):
   };
 }
 
-function renderNotifications(mode: TurnNotificationMode = TurnNotificationModes.whenUnfocused) {
+function renderNotifications(
+  mode: TurnNotificationMode = TurnNotificationModes.whenUnfocused,
+  options: { isDirect?: boolean; roomTitle?: string } = {},
+) {
   const onSelectConversation = vi.fn();
   const users = [
     { id: "user-admin", name: "Admin" },
@@ -87,6 +90,7 @@ function renderNotifications(mode: TurnNotificationMode = TurnNotificationModes.
       rooms: [
         {
           id: "room-1",
+          is_direct: options.isDirect,
           members: ["user-admin", "user-worker"],
           messages: [
             {
@@ -95,7 +99,7 @@ function renderNotifications(mode: TurnNotificationMode = TurnNotificationModes.
               sender_id: "user-worker",
             },
           ],
-          title: "Research room",
+          title: options.roomTitle ?? "Research room",
         },
       ],
       t,
@@ -263,5 +267,35 @@ describe("useAgentTurnNotifications", () => {
     });
 
     expect(result.current.permission).toBe("granted");
+  });
+
+  it("omits the duplicated agent name from a direct-chat notification body", () => {
+    const { result } = renderNotifications(TurnNotificationModes.always, {
+      isDirect: true,
+      roomTitle: "Research Agent",
+    });
+
+    act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", revision: 2, state: "idle" })));
+
+    expect(notificationRecords).toHaveLength(1);
+    expect(notificationRecords[0]).toMatchObject({
+      body: "The report is ready.",
+      title: "Research Agent finished replying",
+    });
+  });
+
+  it("keeps the room name in a group-chat notification body", () => {
+    const { result } = renderNotifications(TurnNotificationModes.always, {
+      isDirect: false,
+      roomTitle: "11",
+    });
+
+    act(() => result.current.handleRealtimeEvent(workEvent({ reason: "released", revision: 2, state: "idle" })));
+
+    expect(notificationRecords).toHaveLength(1);
+    expect(notificationRecords[0]).toMatchObject({
+      body: "11: The report is ready.",
+      title: "Research Agent finished replying",
+    });
   });
 });

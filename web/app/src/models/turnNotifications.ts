@@ -1,4 +1,5 @@
-import type { IMServerEvent } from "@/models/conversations";
+import { isDirectConversation, normalizeComparable } from "@/models/conversations";
+import type { IMServerEvent, TranslateFn } from "@/models/conversations";
 
 export const TurnNotificationModes = {
   off: "off",
@@ -36,4 +37,33 @@ export function isCompletedAgentTurnEvent(event: IMServerEvent | null | undefine
     event.work.state === "idle" &&
     event.work.reason === "released",
   );
+}
+
+export function resolveTurnNotificationRoomLabel(
+  agentName: string,
+  roomTitle: string,
+  room?: { is_direct?: boolean | null } | null,
+): string {
+  const title = roomTitle.trim();
+  if (!title || isDirectConversation(room) || normalizeComparable(title) === normalizeComparable(agentName)) {
+    return "";
+  }
+  return title;
+}
+
+export function formatTurnNotificationBody(
+  t: TranslateFn,
+  input: {
+    agentName: string;
+    preview: string;
+    room?: { is_direct?: boolean | null } | null;
+    roomTitle: string;
+  },
+): string {
+  const preview = input.preview.trim();
+  const roomLabel = resolveTurnNotificationRoomLabel(input.agentName, input.roomTitle, input.room);
+  if (preview) {
+    return roomLabel ? t("turnNotificationBody", { message: preview, room: roomLabel }) : preview;
+  }
+  return roomLabel ? t("turnNotificationRoomBody", { room: roomLabel }) : t("turnNotificationDefaultBody");
 }

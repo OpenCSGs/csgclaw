@@ -10,6 +10,7 @@ import {
 } from "@/models/conversations";
 import type { IMConversation, IMMessage, IMServerEvent, TranslateFn, UsersById } from "@/models/conversations";
 import {
+  formatTurnNotificationBody,
   isCompletedAgentTurnEvent,
   shouldShowTurnNotification,
   TurnNotificationModes,
@@ -155,13 +156,12 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
     const message = input.message ?? latestVisibleAgentMessage(room, input.participantIdentities);
     const preview = truncateNotificationPreview(formatMessagePreviewText(message?.content));
     const roomTitle = String(room?.title || "").trim();
-    const body = preview
-      ? roomTitle
-        ? current.t("turnNotificationBody", { message: preview, room: roomTitle })
-        : preview
-      : roomTitle
-        ? current.t("turnNotificationRoomBody", { room: roomTitle })
-        : current.t("turnNotificationDefaultBody");
+    const body = formatTurnNotificationBody(current.t, {
+      agentName,
+      preview,
+      room,
+      roomTitle,
+    });
 
     try {
       const notification = new window.Notification(current.t("turnNotificationTitle", { agent: agentName }), {
