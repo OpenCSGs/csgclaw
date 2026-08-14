@@ -1152,11 +1152,11 @@ func TestClientRestartIfRunningRemovesStalePID(t *testing.T) {
 		t.Fatalf("WriteFile(%q) error = %v", pidPath, err)
 	}
 
-	originalFindProcess := findProcessByPID
-	findProcessByPID = func(int) (*os.Process, error) {
-		return &os.Process{Pid: 424242}, nil
+	originalProcessRunning := processRunningByPID
+	processRunningByPID = func(int) (bool, bool, error) {
+		return false, true, nil
 	}
-	t.Cleanup(func() { findProcessByPID = originalFindProcess })
+	t.Cleanup(func() { processRunningByPID = originalProcessRunning })
 
 	originalExec := execCommandContext
 	execCommandContext = func(context.Context, string, ...string) *exec.Cmd {

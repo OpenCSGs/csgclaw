@@ -8,16 +8,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"csgclaw/internal/config"
 )
 
 var (
-	readPIDFileData    = os.ReadFile
-	removePIDFilePath  = os.Remove
-	findProcessByPID   = os.FindProcess
-	execCommandContext = exec.CommandContext
+	readPIDFileData     = os.ReadFile
+	removePIDFilePath   = os.Remove
+	findProcessByPID    = os.FindProcess
+	processRunningByPID = processRunning
+	execCommandContext  = exec.CommandContext
 )
 
 type RestartOptions struct {
@@ -74,21 +74,11 @@ func daemonRunning(pidPath string) (running bool, stale bool, err error) {
 		}
 		return false, false, err
 	}
-	proc, err := findProcessByPID(pid)
+	running, stale, err = processRunningByPID(pid)
 	if err != nil {
-		return false, false, fmt.Errorf("find process %d: %w", pid, err)
+		return false, false, fmt.Errorf("check process %d: %w", pid, err)
 	}
-	err = proc.Signal(syscall.Signal(0))
-	switch {
-	case err == nil:
-		return true, false, nil
-	case errors.Is(err, syscall.ESRCH), errors.Is(err, os.ErrProcessDone):
-		return false, true, nil
-	case errors.Is(err, syscall.EPERM):
-		return true, false, nil
-	default:
-		return false, false, fmt.Errorf("signal process %d: %w", pid, err)
-	}
+	return running, stale, nil
 }
 
 func readUpgradePID(path string) (int, error) {

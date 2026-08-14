@@ -1881,6 +1881,56 @@ func TestValidateModelConfigAllowsDynamicProfileSetupWhenIncomplete(t *testing.T
 	}
 }
 
+func TestStopCommandUsesPlatformProcessControl(t *testing.T) {
+	originalStop := stopServerProcessByPID
+	t.Cleanup(func() { stopServerProcessByPID = originalStop })
+
+	const pid = 4321
+	var stoppedPID int
+	stopServerProcessByPID = func(got int) error {
+		stoppedPID = got
+		return nil
+	}
+
+	pidPath := filepath.Join(t.TempDir(), "server.pid")
+	if err := os.WriteFile(pidPath, []byte("4321\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", pidPath, err)
+	}
+	var stdout bytes.Buffer
+	err := (stopCmd{}).Run(context.Background(), &command.Context{
+		Program: "csgclaw",
+		Stdout:  &stdout,
+		Stderr:  &bytes.Buffer{},
+	}, []string{"--pid", pidPath}, command.GlobalOptions{Output: "json"})
+	if err != nil {
+		t.Fatalf("stopCmd.Run() error = %v", err)
+	}
+	if stoppedPID != pid {
+		t.Fatalf("stopServerProcessByPID pid = %d, want %d", stoppedPID, pid)
+	}
+	if got := stdout.String(); !strings.Contains(got, `"status": "signaled"`) || !strings.Contains(got, `"pid": 4321`) {
+		t.Fatalf("stop output = %q, want signaled status and pid", got)
+	}
+}
+
+func TestStopCommandRemovesStalePIDFile(t *testing.T) {
+	originalStop := stopServerProcessByPID
+	t.Cleanup(func() { stopServerProcessByPID = originalStop })
+	stopServerProcessByPID = func(int) error { return os.ErrProcessDone }
+
+	pidPath := filepath.Join(t.TempDir(), "server.pid")
+	if err := os.WriteFile(pidPath, []byte("4321\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", pidPath, err)
+	}
+	err := (stopCmd{}).Run(context.Background(), testContext(), []string{"--pid", pidPath}, command.GlobalOptions{Output: "json"})
+	if err != nil {
+		t.Fatalf("stopCmd.Run() error = %v", err)
+	}
+	if _, err := os.Stat(pidPath); !os.IsNotExist(err) {
+		t.Fatalf("pid file still exists, stat error = %v", err)
+	}
+}
+
 func testContext() *command.Context {
 	return &command.Context{
 		Program: "csgclaw",

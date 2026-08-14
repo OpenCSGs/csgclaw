@@ -101,9 +101,10 @@ var (
 		}
 		return svc.StopRunningSandboxAgents(ctx)
 	}
-	NewCodexBridgeManager = newCodexBridgeManager
-	OpenBrowser           = openBrowser
-	WaitForHealthy        = waitForHealthy
+	NewCodexBridgeManager  = newCodexBridgeManager
+	OpenBrowser            = openBrowser
+	WaitForHealthy         = waitForHealthy
+	stopServerProcessByPID = stopServerProcess
 )
 
 type serveCmd struct{}
@@ -240,11 +241,7 @@ func (c stopCmd) Run(_ context.Context, run *command.Context, args []string, glo
 	if err != nil {
 		return err
 	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("find process %d: %w", pid, err)
-	}
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
+	if err := stopServerProcessByPID(pid); err != nil {
 		if errors.Is(err, os.ErrProcessDone) {
 			removePIDFile(*pidPath)
 			return command.RenderAction(globals.Output, run.Stdout, command.ActionResult{
@@ -256,7 +253,7 @@ func (c stopCmd) Run(_ context.Context, run *command.Context, args []string, glo
 				Message: fmt.Sprintf("removed stale pid file %s", *pidPath),
 			})
 		}
-		return fmt.Errorf("signal process %d: %w", pid, err)
+		return fmt.Errorf("stop process %d: %w", pid, err)
 	}
 	return command.RenderAction(globals.Output, run.Stdout, command.ActionResult{
 		Command: "stop",
@@ -264,7 +261,7 @@ func (c stopCmd) Run(_ context.Context, run *command.Context, args []string, glo
 		Status:  "signaled",
 		PID:     pid,
 		PIDPath: *pidPath,
-		Message: fmt.Sprintf("sent SIGTERM to server process %d", pid),
+		Message: fmt.Sprintf("requested server process %d to stop", pid),
 	})
 }
 
