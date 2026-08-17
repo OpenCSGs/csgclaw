@@ -70,20 +70,27 @@ func fallbackUpstreamErrorCode(status int) string {
 // UpstreamErrorCode extracts the stable provider error code without exposing
 // the provider's diagnostic message to callers.
 func UpstreamErrorCode(body []byte) string {
+	code, _ := UpstreamError(body)
+	return code
+}
+
+// UpstreamError reports whether a payload contains an upstream error even
+// when the provider omits its optional error code.
+func UpstreamError(body []byte) (code string, ok bool) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return ""
+		return "", false
 	}
 	if response, ok := payload["response"].(map[string]any); ok {
-		if code := errorCodeFromValue(response["error"]); code != "" {
-			return code
+		if value, exists := response["error"]; exists && value != nil {
+			return errorCodeFromValue(value), true
 		}
 	}
-	value, ok := payload["error"]
-	if !ok {
-		return strings.TrimSpace(stringValue(payload["code"]))
+	if value, exists := payload["error"]; exists && value != nil {
+		return errorCodeFromValue(value), true
 	}
-	return errorCodeFromValue(value)
+	code = strings.TrimSpace(stringValue(payload["code"]))
+	return code, code != ""
 }
 
 func errorCodeFromValue(value any) string {

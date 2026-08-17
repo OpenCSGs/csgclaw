@@ -319,6 +319,21 @@ func TestUserFacingUpstreamErrorAddsFallbackCode(t *testing.T) {
 	}
 }
 
+func TestUpstreamErrorDetectsErrorObjectWithoutCode(t *testing.T) {
+	tests := []string{
+		`{"error":{"message":"route unavailable"}}`,
+		`{"error":{"code":null,"message":"route unavailable"}}`,
+	}
+	for _, body := range tests {
+		if code, ok := UpstreamError([]byte(body)); !ok || code != "" {
+			t.Fatalf("UpstreamError(%s) = (%q, %t), want empty code and true", body, code, ok)
+		}
+	}
+	if code, ok := UpstreamError([]byte(`{"error":null,"choices":[]}`)); ok || code != "" {
+		t.Fatalf("UpstreamError(error=null) = (%q, %t), want empty code and false", code, ok)
+	}
+}
+
 func TestCheckChatCompletionsAPIWithClientAcceptsStreamingResponse(t *testing.T) {
 	var gotPayload map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

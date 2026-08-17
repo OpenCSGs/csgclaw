@@ -410,7 +410,10 @@ func decodeOpenAIChatCompletionsProbeStream(r io.Reader) (openAIChatCompletionsP
 			}
 			return false, fmt.Errorf("stream completed without chat choices")
 		}
-		if code := UpstreamErrorCode([]byte(data)); code != "" {
+		if code, isUpstreamError := UpstreamError([]byte(data)); isUpstreamError {
+			if code == "" {
+				code = "upstream_unavailable"
+			}
 			status := UpstreamStatusForErrorCode(code)
 			return false, &ResponsesAPIStatusError{Operation: "chat completions", Status: http.StatusText(status), StatusCode: status, Body: data}
 		}

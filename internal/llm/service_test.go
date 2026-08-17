@@ -1626,3 +1626,34 @@ func TestWriteChatCompletionStreamAsResponseMapsUpstreamError(t *testing.T) {
 		t.Fatalf("output leaks upstream details: %q", got)
 	}
 }
+
+func TestWriteChatCompletionStreamAsResponseMapsUpstreamErrorWithoutCode(t *testing.T) {
+	tests := []struct {
+		name   string
+		prefix string
+		error  string
+	}{
+		{name: "missing code", error: `{"message":"route unavailable"}`},
+		{
+			name:   "null code after partial output",
+			prefix: "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n",
+			error:  `{"code":null,"message":"route unavailable"}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := tt.prefix + "data: {\"error\":" + tt.error + "}\n\n"
+			var output strings.Builder
+			if err := writeChatCompletionStreamAsResponse(&output, strings.NewReader(input), "gpt-test"); err != nil {
+				t.Fatalf("writeChatCompletionStreamAsResponse() error = %v", err)
+			}
+			got := output.String()
+			if !strings.Contains(got, "event: error") || !strings.Contains(got, `"code":"upstream_unavailable"`) {
+				t.Fatalf("output = %q, want fallback upstream error event", got)
+			}
+			if strings.Contains(got, "response.completed") || strings.Contains(got, "route unavailable") {
+				t.Fatalf("output = %q, must not complete or expose upstream details", got)
+			}
+		})
+	}
+}

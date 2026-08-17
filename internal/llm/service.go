@@ -1068,7 +1068,10 @@ func writeChatCompletionStreamAsResponse(w io.Writer, r io.Reader, fallbackModel
 			}
 			continue
 		}
-		if code := modelprovider.UpstreamErrorCode([]byte(data)); code != "" {
+		if code, isUpstreamError := modelprovider.UpstreamError([]byte(data)); isUpstreamError {
+			if code == "" {
+				code = "upstream_unavailable"
+			}
 			message := modelprovider.FriendlyUpstreamErrorMessage(modelprovider.UpstreamStatusForErrorCode(code), code)
 			return writeSSE(w, "error", map[string]any{"type": "error", "code": code, "message": message, "param": nil})
 		}
