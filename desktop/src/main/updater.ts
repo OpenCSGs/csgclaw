@@ -30,12 +30,16 @@ import {
 } from "./channelSwitchUpdate";
 import { logDesktopInfo } from "./desktopLogger";
 import {
+  isSquirrelUpdateLockError,
   shouldInstallDesktopVersion,
+  squirrelFirstRunUpdateDelay,
   usesMicrosoftStoreUpdates,
 } from "./updatePolicy";
 
 const STARTUP_CHECK_DELAY_MS = 5_000;
 const PERIODIC_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const SQUIRREL_LOCK_RETRY_INTERVAL_MS = 30_000;
+const SQUIRREL_LOCK_RETRY_WINDOW_MS = 15 * 60 * 1000;
 
 export class DesktopUpdater {
   private readonly channel: DesktopUpdateChannel;
@@ -48,6 +52,10 @@ export class DesktopUpdater {
   private channelSwitchActive = false;
   private macChannelFeed: LocalUpdateFeed | null = null;
   private windowsChannelInstallerPath = "";
+  private readonly updateChecksReadyAt: number;
+  private updateChecksReady: Promise<void> | null = null;
+  private readonly squirrelLockRetryUntil: number;
+  private squirrelLockRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private periodicTimer: ReturnType<typeof setInterval> | null = null;
   private startupTimer: ReturnType<typeof setTimeout> | null = null;
   private status: DesktopUpdateStatus;
@@ -57,6 +65,15 @@ export class DesktopUpdater {
     private readonly beforeInstall: () => Promise<void>,
   ) {
     this.channel = inferDesktopUpdateChannel(app.getVersion());
+    const startedAt = Date.now();
+    const firstRunDelay = squirrelFirstRunUpdateDelay(
+      process.platform,
+      process.argv,
+    );
+    this.updateChecksReadyAt = startedAt + firstRunDelay;
+    this.squirrelLockRetryUntil = firstRunDelay
+      ? startedAt + SQUIRREL_LOCK_RETRY_WINDOW_MS
+      : 0;
     this.status = {
       state: "idle",
       channel: this.channel,
@@ -91,6 +108,10 @@ export class DesktopUpdater {
     if (this.periodicTimer !== null) {
       clearInterval(this.periodicTimer);
       this.periodicTimer = null;
+    }
+    if (this.squirrelLockRetryTimer !== null) {
+      clearTimeout(this.squirrelLockRetryTimer);
+      this.squirrelLockRetryTimer = null;
     }
   }
 
@@ -134,6 +155,10 @@ export class DesktopUpdater {
     if (this.checkActive) {
       return;
     }
+    if (this.squirrelLockRetryTimer !== null) {
+      this.publishStatus({ ...this.status });
+      return;
+    }
     if (usesMicrosoftStoreUpdates(process.platform, process.windowsStore)) {
       const channel = this.failChannelSwitch();
       this.updateStatus({
@@ -155,18 +180,34 @@ export class DesktopUpdater {
       });
       return;
     }
-    const updateChannel = this.effectiveUpdateChannel();
-    const updateURL = resolveUpdateURL(updateChannel);
-    const manifestURL = resolveManifestURL(updateChannel);
-    if (!app.isPackaged || !updateURL || !manifestURL) {
+    if (!app.isPackaged) {
       const channel = this.failChannelSwitch();
       this.updateStatus({
         state: "unsupported",
         channel,
         currentVersion: app.getVersion(),
-        message: app.isPackaged
-          ? "Desktop update feed or downloads manifest is not configured."
-          : "Updates are disabled in development.",
+        message: "Updates are disabled in development.",
+      });
+      return;
+    }
+    await this.waitForUpdateChecksReady();
+    if (this.downloaded) {
+      this.publishStatus({ ...this.status });
+      return;
+    }
+    if (this.checkActive) {
+      return;
+    }
+    const updateChannel = this.effectiveUpdateChannel();
+    const updateURL = resolveUpdateURL(updateChannel);
+    const manifestURL = resolveManifestURL(updateChannel);
+    if (!updateURL || !manifestURL) {
+      const channel = this.failChannelSwitch();
+      this.updateStatus({
+        state: "unsupported",
+        channel,
+        currentVersion: app.getVersion(),
+        message: "Desktop update feed or downloads manifest is not configured.",
       });
       return;
     }
@@ -220,6 +261,16 @@ export class DesktopUpdater {
       autoUpdater.checkForUpdates();
     } catch (error) {
       this.checkActive = false;
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.scheduleSquirrelLockRetry(message)) {
+        this.updateStatus({
+          state: "checking",
+          channel: this.channel,
+          currentVersion: app.getVersion(),
+          availableVersion: this.expectedVersion || undefined,
+        });
+        return;
+      }
       this.installWhenDownloaded = false;
       const channel = this.failChannelSwitch();
       await this.closeMacChannelFeed();
@@ -227,7 +278,7 @@ export class DesktopUpdater {
         state: "error",
         channel,
         currentVersion: app.getVersion(),
-        message: error instanceof Error ? error.message : String(error),
+        message,
       });
       throw error;
     }
@@ -338,6 +389,15 @@ export class DesktopUpdater {
     );
     autoUpdater.on("error", (error) => {
       this.checkActive = false;
+      if (this.scheduleSquirrelLockRetry(error.message)) {
+        this.updateStatus({
+          state: "checking",
+          channel: this.channel,
+          currentVersion: app.getVersion(),
+          availableVersion: this.expectedVersion || undefined,
+        });
+        return;
+      }
       this.installWhenDownloaded = false;
       const channel = this.failChannelSwitch();
       void this.closeMacChannelFeed();
@@ -383,8 +443,12 @@ export class DesktopUpdater {
           this.windowsChannelInstallerPath,
           updateExePath,
           path.basename(process.execPath),
-          process.pid,
+          path.join(app.getPath("logs"), "channel-installer.log"),
         );
+        logDesktopInfo("desktop-channel-switch-windows-installer-launched", {
+          availableVersion: this.expectedVersion,
+          channel: this.effectiveUpdateChannel(),
+        });
         app.quit();
         return;
       }
@@ -502,6 +566,50 @@ export class DesktopUpdater {
 
   private effectiveUpdateChannel(): DesktopUpdateChannel {
     return this.targetChannel ?? this.channel;
+  }
+
+  private async waitForUpdateChecksReady(): Promise<void> {
+    const delayMs = this.updateChecksReadyAt - Date.now();
+    if (delayMs <= 0) {
+      return;
+    }
+    if (this.updateChecksReady === null) {
+      logDesktopInfo("desktop-update-check-delayed", {
+        delayMs,
+        reason: "squirrel-firstrun",
+      });
+      this.updateChecksReady = new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, delayMs);
+        timer.unref();
+      });
+    }
+    await this.updateChecksReady;
+  }
+
+  private scheduleSquirrelLockRetry(message: string): boolean {
+    if (
+      !isSquirrelUpdateLockError(message) ||
+      this.squirrelLockRetryUntil <= Date.now()
+    ) {
+      return false;
+    }
+    if (this.squirrelLockRetryTimer !== null) {
+      return true;
+    }
+    const delayMs = Math.min(
+      SQUIRREL_LOCK_RETRY_INTERVAL_MS,
+      this.squirrelLockRetryUntil - Date.now(),
+    );
+    logDesktopInfo("desktop-update-squirrel-lock-retry-scheduled", {
+      delayMs,
+      retryUntil: new Date(this.squirrelLockRetryUntil).toISOString(),
+    });
+    this.squirrelLockRetryTimer = setTimeout(() => {
+      this.squirrelLockRetryTimer = null;
+      void this.checkForUpdates().catch(() => undefined);
+    }, delayMs);
+    this.squirrelLockRetryTimer.unref();
+    return true;
   }
 }
 

@@ -24,7 +24,7 @@ New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
 try {
-    foreach ($name in @("main.log", "main.previous.log", "backend.log")) {
+    foreach ($name in @("main.log", "main.previous.log", "backend.log", "channel-installer.log")) {
         $source = Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File -Filter $name -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
@@ -33,6 +33,14 @@ try {
         }
         Copy-Item -LiteralPath $source.FullName -Destination (Join-Path $stagingDirectory $name) -Force
         $collectedPaths.Add($source.FullName)
+    }
+
+    $squirrelLog = Join-Path $env:LOCALAPPDATA "SquirrelTemp\SquirrelSetup.log"
+    if (Test-Path -LiteralPath $squirrelLog -PathType Leaf) {
+        Copy-Item -LiteralPath $squirrelLog `
+            -Destination (Join-Path $stagingDirectory "squirrel-setup.log") `
+            -Force
+        $collectedPaths.Add($squirrelLog)
     }
 
     Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File -ErrorAction SilentlyContinue |
@@ -63,6 +71,18 @@ try {
             Select-Object Id, StartTime, Path |
             Format-List |
             Out-File -LiteralPath (Join-Path $stagingDirectory "process-status.txt") -Encoding UTF8
+    }
+
+    $installationDirectory = Join-Path $env:LOCALAPPDATA "csgclaw_desktop"
+    if (Test-Path -LiteralPath $installationDirectory -PathType Container) {
+        Get-ChildItem -LiteralPath $installationDirectory -Force -ErrorAction SilentlyContinue |
+            Select-Object Name, FullName, Length, LastWriteTime, Attributes |
+            Format-List |
+            Out-File -LiteralPath (Join-Path $stagingDirectory "installation-status.txt") -Encoding UTF8
+    }
+    else {
+        "CSGClaw Squirrel installation directory was not found: $installationDirectory" |
+            Set-Content -LiteralPath (Join-Path $stagingDirectory "installation-status.txt") -Encoding UTF8
     }
 
     try {

@@ -252,37 +252,33 @@ export async function launchWindowsChannelInstaller(
   installerPath: string,
   updateExePath: string,
   executableName: string,
-  parentPid: number,
+  logPath: string,
 ): Promise<void> {
+  // Run the full installer immediately after graceful app shutdown starts.
+  // Squirrel terminates any remaining package processes, replaces the app
+  // root, and returns only after releasing its update lock. Relaunching after
+  // that point prevents the target version (including older stable builds)
+  // from checking for updates while the installer still owns the lock.
   const command = [
-    `$installer = ${powerShellLiteral(installerPath)}`,
-    `$updater = ${powerShellLiteral(updateExePath)}`,
-    `$executable = ${powerShellLiteral(executableName)}`,
-    `Wait-Process -Id ${parentPid} -ErrorAction SilentlyContinue`,
-    "$result = Start-Process -FilePath $installer -ArgumentList '--silent' -Wait -PassThru",
-    "Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue",
-    "if ($result.ExitCode -ne 0) { exit $result.ExitCode }",
-    "if (-not (Test-Path -LiteralPath $updater)) { exit 1 }",
-    "Start-Process -FilePath $updater -ArgumentList @('--processStart', $executable)",
-  ].join("; ");
-  const encodedCommand = Buffer.from(command, "utf16le").toString("base64");
-  const child = spawn(
-    "powershell.exe",
-    [
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-WindowStyle",
-      "Hidden",
-      "-EncodedCommand",
-      encodedCommand,
-    ],
-    {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
+    `> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo installer-started`,
+    `start "" /wait "%CSGCLAW_CHANNEL_INSTALLER%" --silent`,
+    `if errorlevel 1 (>> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo installer-failed) else (>> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo installer-finished)`,
+    `if not exist "%CSGCLAW_CHANNEL_UPDATER%" (>> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo updater-missing & exit /b 1)`,
+    `start "" "%CSGCLAW_CHANNEL_UPDATER%" --processStart "%CSGCLAW_CHANNEL_EXECUTABLE%"`,
+    `>> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo relaunch-requested`,
+  ].join(" & ");
+  const child = spawn("cmd.exe", ["/d", "/s", "/c", command], {
+    detached: true,
+    env: {
+      ...process.env,
+      CSGCLAW_CHANNEL_EXECUTABLE: executableName,
+      CSGCLAW_CHANNEL_INSTALLER: installerPath,
+      CSGCLAW_CHANNEL_INSTALL_LOG: logPath,
+      CSGCLAW_CHANNEL_UPDATER: updateExePath,
     },
-  );
+    stdio: "ignore",
+    windowsHide: true,
+  });
   await new Promise<void>((resolve, reject) => {
     child.once("error", reject);
     child.once("spawn", () => {
@@ -291,8 +287,4 @@ export async function launchWindowsChannelInstaller(
     });
   });
   child.unref();
-}
-
-function powerShellLiteral(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
 }

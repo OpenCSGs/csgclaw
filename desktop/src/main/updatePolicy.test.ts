@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DesktopPlatform } from "../shared/desktopEnvironment";
 import {
+  SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS,
+  isSquirrelUpdateLockError,
   shouldInstallDesktopVersion,
+  squirrelFirstRunUpdateDelay,
   usesMicrosoftStoreUpdates,
 } from "./updatePolicy";
 
@@ -42,4 +45,35 @@ test("channel switches install the target latest regardless of version direction
     true,
   );
   assert.equal(shouldInstallDesktopVersion("0.5.0", "0.5.0", true), false);
+});
+
+test("Squirrel first-run defers update checks until the installer releases its lock", () => {
+  assert.equal(
+    squirrelFirstRunUpdateDelay(DesktopPlatform.Windows, [
+      "CSGClaw.exe",
+      "--squirrel-firstrun",
+    ]),
+    SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS,
+  );
+  assert.equal(
+    squirrelFirstRunUpdateDelay(DesktopPlatform.Windows, ["CSGClaw.exe"]),
+    0,
+  );
+  assert.equal(
+    squirrelFirstRunUpdateDelay(DesktopPlatform.MacOS, [
+      "CSGClaw",
+      "--squirrel-firstrun",
+    ]),
+    0,
+  );
+});
+
+test("recognizes the Squirrel global update lock error", () => {
+  assert.equal(
+    isSquirrelUpdateLockError(
+      "System.Exception: Couldn't acquire lock, is another instance running",
+    ),
+    true,
+  );
+  assert.equal(isSquirrelUpdateLockError("Desktop update feed failed"), false);
 });
