@@ -904,6 +904,37 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.noticeTone).toBe("success");
   });
 
+  it("exposes the billing URL when recreating the selected worker fails for insufficient balance", async () => {
+    const worker: AgentLike = {
+      ...oldAgent,
+      id: "agent-dev",
+      name: "dev",
+      role: "worker",
+      runtime_kind: "codex",
+    };
+    vi.mocked(runAgentActionRequest).mockRejectedValueOnce({
+      status: 402,
+      code: "insufficient_balance",
+      message: "Insufficient balance",
+      billingURL: "https://opencsg-stg.com/settings/billing",
+    } satisfies ApiError);
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "agent-dev" },
+          agents: [worker],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.agentViewProps.onRecreate(worker);
+    });
+
+    expect(result.current.agentViewProps.saveError).toBe("Insufficient balance");
+    expect(result.current.agentViewProps.saveBillingURL).toBe("https://opencsg-stg.com/settings/billing");
+  });
+
   it("recreates the manager directly from a chat action card and keeps card busy feedback", async () => {
     const recreatedManager: AgentLike = {
       ...oldAgent,

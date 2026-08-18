@@ -457,6 +457,8 @@ describe("agent action visibility", () => {
       "href",
       "https://opencsg-stg.com/settings/billing",
     );
+    expect(screen.getByRole("link", { name: "Recharge account" })).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("link", { name: "Recharge account" })).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("keeps the agent name compact until entering edit mode", async () => {

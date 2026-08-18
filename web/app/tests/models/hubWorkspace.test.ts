@@ -4,6 +4,7 @@ import {
   formatHubDateTime,
   formatHubTemplateCount,
   isDeletableHubTemplate,
+  isHubTemplateAccountEmailMissing,
   isHubTemplateNameConflict,
   isVisibleInHubTemplateList,
 } from "@/models/hubWorkspace";
@@ -49,6 +50,18 @@ describe("hub workspace helpers", () => {
     ).toBe(true);
     expect(isHubTemplateNameConflict(new Error("The space name already exists."))).toBe(true);
     expect(isHubTemplateNameConflict(new Error("network unavailable"))).toBe(false);
+  });
+
+  it("recognizes a missing OpenCSG account email during community publishing", () => {
+    expect(
+      isHubTemplateAccountEmailMissing({
+        status: 502,
+        message:
+          'remote hub request failed with status 500: {"code":"USER-ERR-18","msg":"USER-ERR-18: User email is empty"}',
+      }),
+    ).toBe(true);
+    expect(isHubTemplateAccountEmailMissing({ code: "USER-ERR-18", message: "publish failed" })).toBe(true);
+    expect(isHubTemplateAccountEmailMissing(new Error("network unavailable"))).toBe(false);
   });
 
   it("shows worker templates and official remote templates in hub lists", () => {

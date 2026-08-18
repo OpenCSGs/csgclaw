@@ -62,6 +62,17 @@ export function isHubTemplateNameConflict(error: unknown): boolean {
   return normalized.includes("space_err_1") || normalized.includes("space name already exists");
 }
 
+export function isHubTemplateAccountEmailMissing(error: unknown): boolean {
+  const code =
+    error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? String((error as { message?: unknown }).message ?? "")
+      : String(error ?? "");
+  const normalized = `${code} ${message}`.toLowerCase();
+  return normalized.includes("user-err-18") || normalized.includes("user email is empty");
+}
+
 export type HubTemplate = AgentTemplateLike & {
   namespace?: string;
   source?: HubTemplateSource | null;

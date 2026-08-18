@@ -3,7 +3,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
 import { deleteSkillRequest, installRemoteSkillRequest, uploadSkillArchive } from "@/api/skills";
-import { isDeletableHubTemplate, isHubTemplateNameConflict, isVisibleInHubTemplateList } from "@/models/hubWorkspace";
+import {
+  isDeletableHubTemplate,
+  isHubTemplateAccountEmailMissing,
+  isHubTemplateNameConflict,
+  isVisibleInHubTemplateList,
+} from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
@@ -220,9 +225,11 @@ export function useWorkspaceHubController({
         return true;
       } catch (err) {
         setResourcesPublishError(
-          isHubTemplateNameConflict(err)
-            ? t("resourcesPublishCommunityNameExists")
-            : errorMessage(err, t("resourcesPublishCommunityFailed")),
+          isHubTemplateAccountEmailMissing(err)
+            ? t("resourcesPublishCommunityEmailRequired")
+            : isHubTemplateNameConflict(err)
+              ? t("resourcesPublishCommunityNameExists")
+              : errorMessage(err, t("resourcesPublishCommunityFailed")),
         );
         if (deploy) {
           await refreshHubTemplates();

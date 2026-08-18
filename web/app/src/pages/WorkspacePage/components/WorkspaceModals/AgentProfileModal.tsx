@@ -774,7 +774,7 @@ export function AgentProfileModal({
             {agentBillingURL ? (
               <>
                 {" "}
-                <a className="agent-billing-action" href={agentBillingURL}>
+                <a className="agent-billing-action" href={agentBillingURL} target="_blank" rel="noopener noreferrer">
                   {t("rechargeAccount")}
                 </a>
               </>

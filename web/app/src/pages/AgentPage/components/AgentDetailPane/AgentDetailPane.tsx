@@ -763,7 +763,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             {saveBillingURL ? (
               <>
                 {" "}
-                <a className="agent-billing-action" href={saveBillingURL}>
+                <a className="agent-billing-action" href={saveBillingURL} target="_blank" rel="noopener noreferrer">
                   {t("rechargeAccount")}
                 </a>
               </>

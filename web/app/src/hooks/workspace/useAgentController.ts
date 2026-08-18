@@ -29,6 +29,7 @@ import {
 import type { AgentUpdatePayload, FeishuRegistration, FetchAgentsOptions } from "@/api/agents";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { publishAgentTemplateRequest, type AgentTemplatePublishTarget } from "@/api/hub";
+import { isHubTemplateAccountEmailMissing, isHubTemplateNameConflict } from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
@@ -946,9 +947,9 @@ export function useAgentController({
     setAgentsError("");
   }
 
-  function setAgentOperationError(item: AgentLike | null | undefined, message: string): void {
+  function setAgentOperationError(item: AgentLike | null | undefined, message: string, billingURL = ""): void {
     if (agentOperationUsesPageError(item)) {
-      setAgentPageSaveError(message);
+      setAgentPageSaveError(message, billingURL);
       return;
     }
     setAgentsError(message);
@@ -1123,12 +1124,15 @@ export function useAgentController({
     await refreshWorkspaceBootstrapConfig();
   }
 
-  async function rebuildManagerFromBrowser(): Promise<string> {
+  async function rebuildManagerFromBrowser(): Promise<{ billingURL: string; message: string } | null> {
     try {
       await requestManagerRebuild();
-      return "";
+      return null;
     } catch (err) {
-      return errorMessage(err, t("agentActionFailed"));
+      return {
+        billingURL: apiErrorBillingURL(err),
+        message: errorMessage(err, t("agentActionFailed")),
+      };
     }
   }
 
@@ -1150,7 +1154,7 @@ export function useAgentController({
     try {
       const rebuildError = await rebuildManagerFromBrowser();
       if (rebuildError) {
-        setMessageActionFeedback({ key, message: rebuildError, tone: "error" });
+        setMessageActionFeedback({ key, message: rebuildError.message, tone: "error" });
       } else {
         setMessageActionFeedback({ key, message: t("managerRecreateSucceeded"), tone: "success" });
       }
@@ -1732,9 +1736,13 @@ export function useAgentController({
       return true;
     } catch (err) {
       const message =
-        target === "local" && (err as ApiError | null)?.status === 409
-          ? t("agentPublishLocalNameExists")
-          : errorMessage(err, t("agentActionFailed"));
+        target !== "local" && isHubTemplateAccountEmailMissing(err)
+          ? t("resourcesPublishCommunityEmailRequired")
+          : target !== "local" && isHubTemplateNameConflict(err)
+            ? t("resourcesPublishCommunityNameExists")
+            : target === "local" && (err as ApiError | null)?.status === 409
+              ? t("agentPublishLocalNameExists")
+              : errorMessage(err, t("agentActionFailed"));
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);
       return false;
@@ -1934,7 +1942,7 @@ export function useAgentController({
         const rebuildError = await rebuildManagerFromBrowser();
         if (rebuildError) {
           clearAgentPageNotice(item.id);
-          setAgentOperationError(item, rebuildError);
+          setAgentOperationError(item, rebuildError.message, rebuildError.billingURL);
         } else {
           showAgentPageNotice(t("managerRecreateSucceeded"), "success", 5000, item.id);
         }
@@ -1978,7 +1986,7 @@ export function useAgentController({
       if (showRecreateNotice) {
         clearAgentPageNotice(item.id);
       }
-      setAgentOperationError(item, errorMessage(err, t("agentActionFailed")));
+      setAgentOperationError(item, errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
     } finally {
       releaseAgentAction(item.id, busyKey);
     }

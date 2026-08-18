@@ -1185,6 +1185,7 @@ export const messages = {
     agentPublishLocalNameExists: "保存失败：本地已存在同名模板，请修改模板名称后重试。",
     agentPublishTemplateDescription: "模板描述",
     resourcesPublishCommunityFailed: "发布到社区失败。",
+    resourcesPublishCommunityEmailRequired: "发布失败：当前 OpenCSG 账号未设置邮箱，请完善账号资料后重试。",
     resourcesPublishCommunityNameExists: "发布失败：社区中已存在同名模板，请修改模板名称后重试。",
     resourcesPublishCommunitySuccessTitle: "发布成功",
     resourcesPublishCommunitySuccessMessage: "模板已成功发布到社区。",
@@ -2599,6 +2600,8 @@ export const messages = {
       "Saving failed: a local template with the same name already exists. Choose a different name and try again.",
     agentPublishTemplateDescription: "Template description",
     resourcesPublishCommunityFailed: "Failed to publish the template to the community.",
+    resourcesPublishCommunityEmailRequired:
+      "Publishing failed because the current OpenCSG account has no email address. Complete the account profile and try again.",
     resourcesPublishCommunityNameExists:
       "Publishing failed: a template with the same name already exists in the community. Choose a different name and try again.",
     resourcesPublishCommunitySuccessTitle: "Published successfully",
@@ -2764,7 +2767,8 @@ export const messages = {
       upstream_timeout: "The model service request timed out. Please try again.",
       upstream_unavailable: "The model service is unavailable. Check its configuration or try again later.",
       insufficient_balance: "The model service balance is insufficient. Add funds or contact an administrator.",
-      payment_required: "Payment is required to use the model service. Check the account billing status or contact an administrator.",
+      payment_required:
+        "Payment is required to use the model service. Check the account billing status or contact an administrator.",
       "act-err-0": "The model service balance is insufficient. Add funds or contact an administrator.",
       rate_limit_exceeded: "The model service is busy or its quota has been reached. Please try again later.",
       invalid_api_key: "Model service authentication failed. Check the credentials or contact an administrator.",
