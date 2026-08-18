@@ -338,6 +338,20 @@ func TestRestartRequiredReturnsTrueWhenLocalWorkspaceDirChanges(t *testing.T) {
 	}
 }
 
+func TestRestartRequiredReturnsTrueWhenExecutionModeChanges(t *testing.T) {
+	rt := &Runtime{}
+	got, err := rt.RestartRequired(agentruntime.RuntimeConfigChange{
+		Previous: agentruntime.RuntimeConfigSnapshot{Options: map[string]any{"execution_mode": ExecutionModeStandard}},
+		Current:  agentruntime.RuntimeConfigSnapshot{Options: map[string]any{"execution_mode": ExecutionModeReadOnly}},
+	})
+	if err != nil {
+		t.Fatalf("RestartRequired() error = %v", err)
+	}
+	if !got {
+		t.Fatal("RestartRequired() = false, want true when execution_mode changes")
+	}
+}
+
 func TestRestartRequiredReturnsTrueWhenProfileChanges(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -518,23 +532,55 @@ func TestDecodeRuntimeOptionsRejectsNonStringLocalWorkspaceDir(t *testing.T) {
 	}
 }
 
+func TestDecodeRuntimeOptionsExecutionMode(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     map[string]any
+		want    string
+		wantErr bool
+	}{
+		{name: "missing defaults standard", raw: nil, want: ExecutionModeStandard},
+		{name: "empty defaults standard", raw: map[string]any{"execution_mode": "  "}, want: ExecutionModeStandard},
+		{name: "read only", raw: map[string]any{"execution_mode": " read_only "}, want: ExecutionModeReadOnly},
+		{name: "invalid", raw: map[string]any{"execution_mode": "dangerous"}, wantErr: true},
+		{name: "non string", raw: map[string]any{"execution_mode": true}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := DecodeRuntimeOptions(tt.raw)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("DecodeRuntimeOptions() error = nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DecodeRuntimeOptions() error = %v", err)
+			}
+			if got.ExecutionMode != tt.want {
+				t.Fatalf("ExecutionMode = %q, want %q", got.ExecutionMode, tt.want)
+			}
+		})
+	}
+}
+
 func TestRuntimeOptionsSchemaIncludesLocalWorkspaceDir(t *testing.T) {
 	rt := newTestCodexRuntime(t.TempDir(), func(h agentruntime.Handle) (AgentRef, error) {
 		return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID}, nil
 	})
 
 	got := rt.RuntimeOptionsSchema()
-	if len(got) != 1 {
-		t.Fatalf("RuntimeOptionsSchema() len = %d, want 1", len(got))
+	if len(got) != 2 {
+		t.Fatalf("RuntimeOptionsSchema() len = %d, want 2", len(got))
 	}
-	if got[0].Path != "local_workspace_dir" {
-		t.Fatalf("RuntimeOptionsSchema()[0].Path = %q, want local_workspace_dir", got[0].Path)
+	if got[0].Path != executionModeOptionKey || got[0].Type != "select" || got[0].DefaultValue != ExecutionModeStandard {
+		t.Fatalf("RuntimeOptionsSchema()[0] = %#v, want execution mode select", got[0])
 	}
-	if got[0].Type != "directory" {
-		t.Fatalf("RuntimeOptionsSchema()[0].Type = %q, want directory", got[0].Type)
+	if !slices.Equal(got[0].Options, []string{ExecutionModeStandard, ExecutionModeReadOnly}) {
+		t.Fatalf("RuntimeOptionsSchema()[0].Options = %q", got[0].Options)
 	}
-	if got[0].LabelZh != "本地工作目录" {
-		t.Fatalf("RuntimeOptionsSchema()[0].LabelZh = %q, want 本地工作目录", got[0].LabelZh)
+	if got[1].Path != "local_workspace_dir" || got[1].Type != "directory" || got[1].LabelZh != "本地工作目录" {
+		t.Fatalf("RuntimeOptionsSchema()[1] = %#v, want local workspace directory", got[1])
 	}
 }
 
@@ -903,6 +949,31 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 		if got, ok := envMap[key]; ok {
 			t.Fatalf("%s = %q, want omitted from runtime env", key, got)
 		}
+	}
+}
+
+func TestBuildSessionEnvReadOnlyOmitsHostAndProfileEnvironment(t *testing.T) {
+	t.Setenv("HOST_SECRET", "do-not-inherit")
+	t.Setenv("PATH", "/usr/bin")
+	env := buildSessionEnv(SessionSpec{
+		HomeDir:       "/runtime-home",
+		CodexHomeDir:  "/runtime-codex-home",
+		ExecutionMode: ExecutionModeReadOnly,
+		Profile: agentruntime.Profile{
+			APIKey: "runtime-key",
+			Env:    map[string]string{"PROFILE_SECRET": "do-not-inherit"},
+		},
+	})
+	envMap := make(map[string]string, len(env))
+	for _, entry := range env {
+		key, value, _ := strings.Cut(entry, "=")
+		envMap[key] = value
+	}
+	if envMap["HOST_SECRET"] != "" || envMap["PROFILE_SECRET"] != "" {
+		t.Fatalf("read-only env leaked secrets: %#v", envMap)
+	}
+	if envMap["HOME"] != "/runtime-home" || envMap["CODEX_HOME"] != "/runtime-codex-home" || envMap["OPENAI_API_KEY"] != "runtime-key" {
+		t.Fatalf("read-only env missing runtime keys: %#v", envMap)
 	}
 }
 
@@ -1674,6 +1745,31 @@ func TestRuntimeCreateWritesConfigWithoutAuth(t *testing.T) {
 			t.Fatalf("runtime config unexpectedly contains %q:\n%s", unwanted, configText)
 		}
 	}
+
+	var parsed map[string]any
+	if err := toml.Unmarshal(configRaw, &parsed); err != nil {
+		t.Fatalf("runtime config is invalid TOML: %v\n%s", err, configText)
+	}
+	if got := parsed["sandbox_mode"]; got != "workspace-write" {
+		t.Fatalf("root sandbox_mode = %#v, want workspace-write\n%s", got, configText)
+	}
+	features, ok := parsed["features"].(map[string]any)
+	if !ok || features["multi_agent"] != false || features["default_mode_request_user_input"] != true {
+		t.Fatalf("root features = %#v, want managed multi-agent and user-input values\n%s", parsed["features"], configText)
+	}
+	providers, ok := parsed["model_providers"].(map[string]any)
+	if !ok {
+		t.Fatalf("model_providers = %#v, want object\n%s", parsed["model_providers"], configText)
+	}
+	proxy, ok := providers["proxy"].(map[string]any)
+	if !ok {
+		t.Fatalf("model_providers.proxy = %#v, want object\n%s", providers["proxy"], configText)
+	}
+	for _, key := range []string{"approval_policy", "sandbox_mode", "features", "memories"} {
+		if _, exists := proxy[key]; exists {
+			t.Fatalf("model_providers.proxy unexpectedly captured root key %q: %#v\n%s", key, proxy[key], configText)
+		}
+	}
 }
 
 func TestRuntimeCreateCopiesHostCodexSkills(t *testing.T) {
@@ -2345,7 +2441,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		t.Fatalf("runtime config should strip inherited skills.config blocks:\n%s", configText)
 	}
 	for _, want := range []string{
-		`approval_policy = "manual"`,
+		`approval_policy = "on-request"`,
 		`[model_providers.preserved]`,
 		`base_url = "https://preserved.example/v1"`,
 		csgclawProviderBeginMarker,
@@ -2373,6 +2469,14 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		if strings.Contains(configText, unwanted) {
 			t.Fatalf("runtime config still contains stale host directive %q:\n%s", unwanted, configText)
 		}
+	}
+
+	var parsed map[string]any
+	if err := toml.Unmarshal(configRaw, &parsed); err != nil {
+		t.Fatalf("runtime config is invalid TOML: %v\n%s", err, configText)
+	}
+	if got := parsed["approval_policy"]; got != "on-request" {
+		t.Fatalf("root approval_policy = %#v, want on-request\n%s", got, configText)
 	}
 }
 
@@ -2448,7 +2552,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 }
 
 func TestBuildSandboxConfigBlockUsesUnelevatedWindowsSandbox(t *testing.T) {
-	config := buildSandboxConfigBlock()
+	config := buildSandboxConfigBlock(ExecutionModeStandard)
 	for _, want := range []string{
 		`sandbox_mode = "workspace-write"`,
 		`sandbox_workspace_write.network_access = true`,
@@ -2462,6 +2566,103 @@ func TestBuildSandboxConfigBlockUsesUnelevatedWindowsSandbox(t *testing.T) {
 	}
 	if config := buildWindowsSandboxConfigBlock(); !strings.Contains(config, `sandbox = "unelevated"`) {
 		t.Fatalf("Windows sandbox config does not select restricted-token mode:\n%s", config)
+	}
+}
+
+func TestConfigureCodexHomeConfigReadOnlyModePinsSafeRootSettings(t *testing.T) {
+	config := configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(
+		"approval_policy = \"on-request\"\nfeatures.shell_tool = true\nfeatures.unified_exec = true\n",
+		agentruntime.Profile{},
+		map[string]any{
+			"remote": map[string]any{
+				"url":                         "http://127.0.0.1:42002/mcp",
+				"default_tools_approval_mode": "auto",
+			},
+			"local": map[string]any{"command": "filesystem-mcp"},
+		},
+		"/tmp/workspace",
+		false,
+		ExecutionModeReadOnly,
+	)
+	var parsed map[string]any
+	if err := toml.Unmarshal([]byte(config), &parsed); err != nil {
+		t.Fatalf("config is invalid TOML: %v\n%s", err, config)
+	}
+	if parsed["approval_policy"] != "never" || parsed["default_permissions"] != readOnlyPermissionsProfile || parsed["web_search"] != "disabled" {
+		t.Fatalf("root read-only settings = %#v", parsed)
+	}
+	if _, exists := parsed["sandbox_mode"]; exists {
+		t.Fatalf("read-only config combines permission profile with sandbox_mode: %#v", parsed["sandbox_mode"])
+	}
+	permissions, ok := parsed["permissions"].(map[string]any)
+	if !ok {
+		t.Fatalf("permissions = %#v", parsed["permissions"])
+	}
+	profile, ok := permissions[readOnlyPermissionsProfile].(map[string]any)
+	if !ok {
+		t.Fatalf("read-only permission profile = %#v", permissions[readOnlyPermissionsProfile])
+	}
+	filesystem, ok := profile["filesystem"].(map[string]any)
+	if !ok || filesystem[":root"] != "deny" {
+		t.Fatalf("read-only filesystem policy = %#v", profile["filesystem"])
+	}
+	if _, ok := parsed["projects"]; ok {
+		t.Fatalf("read-only config persists project trust override: %#v", parsed["projects"])
+	}
+	features, ok := parsed["features"].(map[string]any)
+	if !ok || features["shell_tool"] != false || features["unified_exec"] != false || features["hooks"] != false {
+		t.Fatalf("read-only features = %#v", parsed["features"])
+	}
+	servers, ok := parsed["mcp_servers"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcp_servers = %#v", parsed["mcp_servers"])
+	}
+	if _, exists := servers["local"]; exists {
+		t.Fatalf("read-only config retained stdio MCP: %#v", servers["local"])
+	}
+	remote, ok := servers["remote"].(map[string]any)
+	if !ok || remote["default_tools_approval_mode"] != "writes" {
+		t.Fatalf("remote MCP policy = %#v", servers["remote"])
+	}
+}
+
+func TestConfigureCodexHomeConfigExecutionModeRoundTripPreservesProjectTable(t *testing.T) {
+	existing := strings.Join([]string{
+		`[projects."/tmp/workspace"]`,
+		`trust_level = "trusted"`,
+		`custom_setting = "preserve-me"`,
+		``,
+	}, "\n")
+	readOnly := configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(
+		existing,
+		agentruntime.Profile{},
+		nil,
+		"/tmp/workspace",
+		false,
+		ExecutionModeReadOnly,
+	)
+	standard := configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(
+		readOnly,
+		agentruntime.Profile{},
+		nil,
+		"/tmp/workspace",
+		false,
+		ExecutionModeStandard,
+	)
+
+	for name, config := range map[string]string{"read_only": readOnly, "standard": standard} {
+		var parsed map[string]any
+		if err := toml.Unmarshal([]byte(config), &parsed); err != nil {
+			t.Fatalf("%s config is invalid TOML: %v\n%s", name, err, config)
+		}
+		projects, ok := parsed["projects"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s projects = %#v", name, parsed["projects"])
+		}
+		workspace, ok := projects["/tmp/workspace"].(map[string]any)
+		if !ok || workspace["trust_level"] != "trusted" || workspace["custom_setting"] != "preserve-me" {
+			t.Fatalf("%s workspace project = %#v", name, projects["/tmp/workspace"])
+		}
 	}
 }
 
@@ -2528,7 +2729,7 @@ func TestConfigureCodexHomeConfigIncompleteProfileSkipsProvider(t *testing.T) {
 		t.Fatalf("config should skip provider block for incomplete profile:\n%s", config)
 	}
 	for _, want := range []string{
-		`approval_policy = "manual"`,
+		`approval_policy = "on-request"`,
 		csgclawSandboxBeginMarker,
 		csgclawMultiAgentBeginMarker,
 		csgclawMemoryFeatureBeginMarker,
@@ -2584,7 +2785,7 @@ func TestConfigureCodexHomeConfigRendersMCPServers(t *testing.T) {
 		`startup_timeout_sec = 75`,
 		`http_headers = { "X-MCP-Trace" = "trace-id" }`,
 		csgclawMCPEndMarker,
-		`approval_policy = "manual"`,
+		`approval_policy = "on-request"`,
 	} {
 		if !strings.Contains(config, want) {
 			t.Fatalf("config missing %q:\n%s", want, config)

@@ -2108,7 +2108,7 @@ func TestAppServerEventAdapterProtocolDetectionAndSubagentFilter(t *testing.T) {
 func withAppServerHelperCommand(t *testing.T, mode string) {
 	t.Helper()
 	original := appServerCommandContext
-	appServerCommandContext = func(ctx context.Context, _ string) (*exec.Cmd, error) {
+	appServerCommandContext = func(ctx context.Context, _ string, _ []string) (*exec.Cmd, error) {
 		args := []string{"-test.run=TestAppServerManagerHelperProcess", "--", mode}
 		return exec.CommandContext(ctx, os.Args[0], args...), nil
 	}
@@ -2191,6 +2191,69 @@ func TestAppServerParamsOmitReasoningForModelDefault(t *testing.T) {
 	turn := appServerTurnStartParams(spec, "thread-1", "hello")
 	if effort, ok := turn["effort"]; ok {
 		t.Fatalf("turn effort = %v, want omitted", effort)
+	}
+}
+
+func TestAppServerReadOnlyParamsAndOverrides(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.ExecutionMode = ExecutionModeReadOnly
+
+	thread := appServerThreadStartParams(spec)
+	if thread["approvalPolicy"] != "never" || thread["permissions"] != readOnlyPermissionsProfile {
+		t.Fatalf("thread params = %#v", thread)
+	}
+	resume := appServerThreadResumeParams(spec, "thread-1")
+	if resume["approvalPolicy"] != "never" || resume["permissions"] != readOnlyPermissionsProfile {
+		t.Fatalf("resume params = %#v", resume)
+	}
+	turn := appServerTurnStartParams(spec, "thread-1", "hello")
+	if turn["approvalPolicy"] != "never" || turn["permissions"] != readOnlyPermissionsProfile {
+		t.Fatalf("turn params = %#v", turn)
+	}
+	overrides := appServerOverrides(spec)
+	joined := strings.Join(overrides, " ")
+	for _, want := range []string{"--strict-config", "--disable shell_tool", "--disable unified_exec", `approval_policy="never"`, `default_permissions="csgclaw-read-only"`} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("overrides missing %q: %q", want, overrides)
+		}
+	}
+	if strings.Contains(joined, "tools.view_image") {
+		t.Fatalf("overrides contain unsupported tools.view_image setting: %q", overrides)
+	}
+	projectOverride := fmt.Sprintf(`projects={%s={trust_level="untrusted"}}`, tomlQuotedKey(spec.WorkspaceDir))
+	if !strings.Contains(joined, projectOverride) {
+		t.Fatalf("overrides missing project trust override %q: %q", projectOverride, overrides)
+	}
+}
+
+func TestAppServerReadOnlyDeclinesMutationApprovals(t *testing.T) {
+	manager := newAppServerManager(testAppServerManagerDeps())
+	live := &liveSession{spec: SessionSpec{ExecutionMode: ExecutionModeReadOnly}}
+	for _, method := range []string{"item/commandExecution/requestApproval", "item/fileChange/requestApproval"} {
+		got, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: method})
+		if err != nil {
+			t.Fatalf("%s error = %v", method, err)
+		}
+		decision, _ := got.(map[string]any)
+		if decision["decision"] != "decline" {
+			t.Fatalf("%s decision = %#v", method, got)
+		}
+	}
+	got, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/permissions/requestApproval"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	permissionResponse, _ := got.(map[string]any)
+	permissions, ok := permissionResponse["permissions"].(map[string]any)
+	if !ok || len(permissions) != 0 || permissionResponse["scope"] != "turn" {
+		t.Fatalf("permission response = %#v", got)
+	}
+	got, err = manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "mcpServer/elicitation/request"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response, _ := got.(map[string]any); response["action"] != "decline" {
+		t.Fatalf("elicitation response = %#v", got)
 	}
 }
 

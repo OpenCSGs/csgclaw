@@ -64,15 +64,23 @@ func (s *liveSession) sessionIDs() []string {
 func buildSessionEnv(spec SessionSpec) []string {
 	spec.Profile = spec.Profile.Normalized()
 	envMap := make(map[string]string)
-	for _, entry := range os.Environ() {
-		key, value, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
+	if spec.ExecutionMode == ExecutionModeReadOnly {
+		for _, key := range []string{"LANG", "LC_ALL", "PATH", "SSL_CERT_DIR", "SSL_CERT_FILE", "TMPDIR"} {
+			if value := os.Getenv(key); value != "" {
+				envMap[key] = value
+			}
 		}
-		if shouldOmitInheritedSessionEnvKey(key) {
-			continue
+	} else {
+		for _, entry := range os.Environ() {
+			key, value, ok := strings.Cut(entry, "=")
+			if !ok {
+				continue
+			}
+			if shouldOmitInheritedSessionEnvKey(key) {
+				continue
+			}
+			envMap[key] = value
 		}
-		envMap[key] = value
 	}
 	if homeDir := strings.TrimSpace(spec.HomeDir); homeDir != "" {
 		envMap["HOME"] = homeDir
@@ -81,15 +89,17 @@ func buildSessionEnv(spec SessionSpec) []string {
 	if apiKey := spec.Profile.APIKey; apiKey != "" {
 		envMap["OPENAI_API_KEY"] = apiKey
 	}
-	for key, value := range spec.Profile.Env {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
+	if spec.ExecutionMode != ExecutionModeReadOnly {
+		for key, value := range spec.Profile.Env {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			if isReservedSessionEnvKey(key) {
+				continue
+			}
+			envMap[key] = value
 		}
-		if isReservedSessionEnvKey(key) {
-			continue
-		}
-		envMap[key] = value
 	}
 	keys := make([]string, 0, len(envMap))
 	for key := range envMap {

@@ -8,27 +8,51 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
-const localWorkspaceDirOptionKey = "local_workspace_dir"
+const (
+	localWorkspaceDirOptionKey = "local_workspace_dir"
+	executionModeOptionKey     = "execution_mode"
+	ExecutionModeStandard      = "standard"
+	ExecutionModeReadOnly      = "read_only"
+)
 
 type RuntimeOptions struct {
 	LocalWorkspaceDir string `json:"local_workspace_dir"`
+	ExecutionMode     string `json:"execution_mode"`
 }
 
 func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
 	if len(raw) == 0 {
-		return RuntimeOptions{}, nil
+		return RuntimeOptions{ExecutionMode: ExecutionModeStandard}, nil
 	}
-	opts := RuntimeOptions{}
-	value, ok := raw[localWorkspaceDirOptionKey]
-	if !ok || value == nil {
-		return opts, nil
+	opts := RuntimeOptions{ExecutionMode: ExecutionModeStandard}
+	if value, ok := raw[localWorkspaceDirOptionKey]; ok && value != nil {
+		text, ok := value.(string)
+		if !ok {
+			return RuntimeOptions{}, fmt.Errorf("%s must be a string", localWorkspaceDirOptionKey)
+		}
+		opts.LocalWorkspaceDir = strings.TrimSpace(text)
 	}
-	text, ok := value.(string)
-	if !ok {
-		return RuntimeOptions{}, fmt.Errorf("%s must be a string", localWorkspaceDirOptionKey)
+	if value, ok := raw[executionModeOptionKey]; ok && value != nil {
+		text, ok := value.(string)
+		if !ok {
+			return RuntimeOptions{}, fmt.Errorf("%s must be a string", executionModeOptionKey)
+		}
+		mode := strings.ToLower(strings.TrimSpace(text))
+		if mode != "" {
+			switch mode {
+			case ExecutionModeStandard, ExecutionModeReadOnly:
+				opts.ExecutionMode = mode
+			default:
+				return RuntimeOptions{}, fmt.Errorf("%s must be %q or %q", executionModeOptionKey, ExecutionModeStandard, ExecutionModeReadOnly)
+			}
+		}
 	}
-	opts.LocalWorkspaceDir = strings.TrimSpace(text)
 	return opts, nil
+}
+
+func IsReadOnlyExecutionMode(raw map[string]any) bool {
+	opts, err := DecodeRuntimeOptions(raw)
+	return err == nil && opts.ExecutionMode == ExecutionModeReadOnly
 }
 
 func ResolveWorkspaceDir(agentHome string, raw map[string]any) (string, error) {
@@ -48,6 +72,19 @@ func ResolveWorkspaceDir(agentHome string, raw map[string]any) (string, error) {
 
 func (r *Runtime) RuntimeOptionsSchema() []agentruntime.RuntimeOptionSchema {
 	return []agentruntime.RuntimeOptionSchema{
+		{
+			Key:           executionModeOptionKey,
+			Path:          executionModeOptionKey,
+			Label:         "Execution Mode",
+			LabelZh:       "运行模式",
+			LabelEn:       "Execution Mode",
+			Description:   "Standard mode can act on data; read-only mode can only analyze provided content and approved read-only data sources.",
+			DescriptionZh: "标准模式可操作数据；只读模式仅可分析已提供内容并查询允许的只读数据源。",
+			DescriptionEn: "Standard mode can act on data; read-only mode can only analyze provided content and approved read-only data sources.",
+			Type:          "select",
+			Options:       []string{ExecutionModeStandard, ExecutionModeReadOnly},
+			DefaultValue:  ExecutionModeStandard,
+		},
 		{
 			Key:           localWorkspaceDirOptionKey,
 			Path:          localWorkspaceDirOptionKey,
