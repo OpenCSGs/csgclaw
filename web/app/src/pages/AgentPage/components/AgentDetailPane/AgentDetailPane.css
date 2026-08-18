@@ -2539,3 +2539,28 @@
   font-size: 12px;
   font-weight: 500;
 }
+
+.agent-detail-pane .agent-billing-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-left: 8px;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--error-700) 72%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--error-600);
+  color: var(--white);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.agent-detail-pane .agent-billing-action:hover {
+  background: var(--error-700);
+}
+
+.agent-detail-pane .agent-billing-action:focus-visible {
+  outline: none;
+  box-shadow: var(--error-focus-ring);
+}

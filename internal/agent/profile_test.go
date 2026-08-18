@@ -37,6 +37,41 @@ func TestDetectDefaultProfileUsesCSGHubLiteWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestEffectiveAgentProfileForUpdateResolvesProviderReference(t *testing.T) {
+	svc, err := NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:   "u-alice",
+		Name: "alice",
+		AgentProfile: AgentProfile{
+			Provider:        ProviderAPI,
+			ModelProviderID: ModelProviderIDOpenCSG,
+			ModelID:         "old-model",
+			ProfileComplete: true,
+		},
+	}
+
+	partial := AgentProfile{Provider: ProviderAPI, ModelID: "new-model"}
+	got, err := svc.EffectiveAgentProfileForUpdate("u-alice", UpdateRequest{AgentProfile: &partial})
+	if err != nil {
+		t.Fatalf("EffectiveAgentProfileForUpdate(partial) error = %v", err)
+	}
+	if got.ModelProviderID != ModelProviderIDOpenCSG {
+		t.Fatalf("partial update model provider = %q, want %q", got.ModelProviderID, ModelProviderIDOpenCSG)
+	}
+
+	selector := ModelProviderIDOpenCSG + ".selector-model"
+	got, err = svc.EffectiveAgentProfileForUpdate("u-alice", UpdateRequest{Profile: &selector})
+	if err != nil {
+		t.Fatalf("EffectiveAgentProfileForUpdate(selector) error = %v", err)
+	}
+	if got.ModelProviderID != ModelProviderIDOpenCSG || got.ModelID != "selector-model" {
+		t.Fatalf("selector update profile = %+v, want OpenCSG selector-model", got)
+	}
+}
+
 func TestLoadMigratesInlineAPIProfileToCatalogProviderReference(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	agentState := []Agent{{

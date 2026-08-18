@@ -1063,6 +1063,38 @@ describe("useAgentController", () => {
     expect(payload).not.toHaveProperty("name");
   });
 
+  it("exposes the billing URL when saving the Agent page fails for insufficient balance", async () => {
+    vi.mocked(updateAgentRequest).mockRejectedValueOnce({
+      status: 402,
+      code: "insufficient_balance",
+      message: "Insufficient balance",
+      billingURL: "https://opencsg-stg.com/settings/billing",
+    } satisfies ApiError);
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.agentViewProps.draft).not.toBeNull());
+    act(() => {
+      result.current.agentViewProps.onDraftChange?.({
+        ...result.current.agentViewProps.draft!,
+        description: "updated manager profile",
+      });
+    });
+
+    await act(async () => {
+      await result.current.agentViewProps.onSave?.();
+    });
+
+    expect(result.current.agentViewProps.saveError).toBe("Insufficient balance");
+    expect(result.current.agentViewProps.saveBillingURL).toBe("https://opencsg-stg.com/settings/billing");
+
+    await act(async () => {
+      await result.current.agentViewProps.onPublish?.("official", "manager", "manager template");
+    });
+
+    expect(result.current.agentViewProps.saveError).toBe("agentPublishLoginRequired");
+    expect(result.current.agentViewProps.saveBillingURL).toBe("");
+  });
+
   it("does not wait for bootstrap or skill refresh after saving only the selected agent model", async () => {
     const aiGatewayAgent: AgentLike = {
       agent_profile: {

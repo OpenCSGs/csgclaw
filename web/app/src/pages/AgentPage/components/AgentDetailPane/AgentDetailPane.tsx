@@ -158,6 +158,7 @@ export type AgentDetailPaneProps = {
   publishError?: string;
   locale?: LocaleCode;
   saveError?: string;
+  saveBillingURL?: string;
   savedDraft?: AgentDraft | null;
   saving?: boolean;
   skillAddBusy?: boolean;
@@ -219,6 +220,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     publishError = "",
     modelProviders = null,
     saveError = "",
+    saveBillingURL = "",
     locale = "en",
     notifierWebhookPublicOrigin = "",
     skills = [],
@@ -755,7 +757,19 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </div>
         </header>
         {error ? <div className="form-error">{error}</div> : null}
-        {saveError ? <div className="form-error">{saveError}</div> : null}
+        {saveError ? (
+          <div className="form-error">
+            {saveError}
+            {saveBillingURL ? (
+              <>
+                {" "}
+                <a className="agent-billing-action" href={saveBillingURL}>
+                  {t("rechargeAccount")}
+                </a>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         {notice ? (
           <div className={`form-warning ${noticeTone === "warning" ? "" : noticeTone}`.trim()} role="status">
             {notice}

@@ -1153,9 +1153,15 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
+		billingProfile, _ := h.svc.EffectiveAgentProfileForUpdate(id, req)
 		updated, err := h.svc.Update(r.Context(), id, req)
 		if err != nil {
-			writeAgentOperationError(w, err, http.StatusBadRequest)
+			writeAgentOperationErrorWithBillingURL(
+				w,
+				err,
+				http.StatusBadRequest,
+				llm.OpenCSGBillingURL(billingProfile),
+			)
 			return
 		}
 		h.publishUpdatedAgentUser(updated)
@@ -1264,9 +1270,15 @@ func (h *Handler) handleAgentProfile(w http.ResponseWriter, r *http.Request, id 
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
+		billingProfile, _ := h.svc.EffectiveAgentProfileForUpdate(id, agent.UpdateRequest{AgentProfile: &req})
 		profile, err := h.svc.UpdateAgentProfile(id, req)
 		if err != nil {
-			writeAgentOperationError(w, err, http.StatusBadRequest)
+			writeAgentOperationErrorWithBillingURL(
+				w,
+				err,
+				http.StatusBadRequest,
+				llm.OpenCSGBillingURL(billingProfile),
+			)
 			return
 		}
 		writeJSON(w, http.StatusOK, profileResponseFromAgentView(profile))

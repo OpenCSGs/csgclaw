@@ -500,6 +500,11 @@ export function useAgentController({
   const [agentPagePublishBusy, setAgentPagePublishBusy] = useState(false);
   const [agentPagePublishError, setAgentPagePublishError] = useState("");
   const [agentPageError, setAgentPageError] = useState("");
+  const [agentPageBillingURL, setAgentPageBillingURL] = useState("");
+  function setAgentPageSaveError(message: string, billingURL = ""): void {
+    setAgentPageError(message);
+    setAgentPageBillingURL(billingURL);
+  }
   const [agentSkillAddBusy, setAgentSkillAddBusy] = useState(false);
   const [agentSkillAddError, setAgentSkillAddError] = useState("");
   const [agentSkillDeleteBusy, setAgentSkillDeleteBusy] = useState(false);
@@ -835,7 +840,7 @@ export function useAgentController({
       }
       const requestID = agentPageDraftRequestRef.current + 1;
       agentPageDraftRequestRef.current = requestID;
-      setAgentPageError("");
+      setAgentPageSaveError("");
       resetAgentPageModels();
       const fallbackDraft = ensureNotifierPullSubscriptionDraft(agentToDraft(item));
       setAgentPageDraft(fallbackDraft);
@@ -855,7 +860,7 @@ export function useAgentController({
         if (agentPageDraftLoadSeqRef.current !== loadSeq || agentPageDraftRequestRef.current !== requestID) {
           return;
         }
-        setAgentPageError(errorMessage(err, t("agentActionFailed")));
+        setAgentPageSaveError(errorMessage(err, t("agentActionFailed")));
       }
     },
     [agentDraftFromItem, errorMessage, resetAgentPageModels, setAgentsData, t],
@@ -935,7 +940,7 @@ export function useAgentController({
 
   function clearAgentOperationError(item: AgentLike | null | undefined): void {
     if (agentOperationUsesPageError(item)) {
-      setAgentPageError("");
+      setAgentPageSaveError("");
       return;
     }
     setAgentsError("");
@@ -943,7 +948,7 @@ export function useAgentController({
 
   function setAgentOperationError(item: AgentLike | null | undefined, message: string): void {
     if (agentOperationUsesPageError(item)) {
-      setAgentPageError(message);
+      setAgentPageSaveError(message);
       return;
     }
     setAgentsError(message);
@@ -1026,7 +1031,7 @@ export function useAgentController({
     agentPageNavigationConfirmedRef.current = true;
     if (window.confirm(t("agentUnsavedChangesWarning"))) {
       setAgentPageDraft(agentPageSavedDraft);
-      setAgentPageError("");
+      setAgentPageSaveError("");
       agentPageNavigationBlocker.proceed();
     } else {
       agentPageNavigationBlocker.reset();
@@ -1058,12 +1063,12 @@ export function useAgentController({
       agentPageDraftLoadSeqRef.current += 1;
       setAgentPageDraft(null);
       setAgentPageSavedDraft(null);
-      setAgentPageError("");
+      setAgentPageSaveError("");
       setAgentPagePublishBusy(false);
       return;
     }
     if (agentPageHasUnsavedChanges) {
-      setAgentPageError("");
+      setAgentPageSaveError("");
       return;
     }
     const loadSeq = agentPageDraftLoadSeqRef.current + 1;
@@ -1525,7 +1530,7 @@ export function useAgentController({
     if (patch.name !== undefined && !isManagerDraft) {
       const name = String(patch.name ?? "");
       if (!name.trim()) {
-        setAgentPageError(t("profileSaveIncompleteError"));
+        setAgentPageSaveError(t("profileSaveIncompleteError"));
         return;
       }
       if (name !== String(agentPageSavedDraft?.name ?? "")) {
@@ -1542,7 +1547,7 @@ export function useAgentController({
       return;
     }
     setAgentPageBusy(true);
-    setAgentPageError("");
+    setAgentPageSaveError("");
     try {
       const saved = await updateAgentRequest(agentID, payload);
       setAgentsData((current) => mergeAgentIntoList(current, saved));
@@ -1567,7 +1572,7 @@ export function useAgentController({
         };
       });
     } catch (err) {
-      setAgentPageError(errorMessage(err, t("agentActionFailed")));
+      setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
     } finally {
       setAgentPageBusy(false);
     }
@@ -1579,12 +1584,12 @@ export function useAgentController({
       return;
     }
     setAgentPageBusy(true);
-    setAgentPageError("");
+    setAgentPageSaveError("");
     try {
       const draft = ensureNotifierPullSubscriptionDraft(draftToSave);
       if (isNotifierRuntimeDraftOnAgentPage(draftToSave, selectedAgentForPage)) {
         if (!notifierFormIsComplete(draftToSave, selectedAgentForPage)) {
-          setAgentPageError(t("profileSaveIncompleteError"));
+          setAgentPageSaveError(t("profileSaveIncompleteError"));
           return;
         }
         const runtimeOptions = draftRuntimeOptionsForSave(draft, { mergeNotifier: true });
@@ -1650,7 +1655,7 @@ export function useAgentController({
       }
       const llmProfileChanged = agentPageLLMProfileChanged(draftToSave, agentPageSavedDraft);
       if (llmProfileChanged && !isAgentProfileDraftComplete(draftToSave)) {
-        setAgentPageError(t("profileSaveIncompleteError"));
+        setAgentPageSaveError(t("profileSaveIncompleteError"));
         return;
       }
       debugAgentPageSavePayload("full", payload);
@@ -1687,11 +1692,11 @@ export function useAgentController({
         !isAgentProfileMarkedComplete(saved) &&
         !isAgentProfileMarkedComplete(savedDraft)
       ) {
-        setAgentPageError(t("profileSaveIncompleteError"));
+        setAgentPageSaveError(t("profileSaveIncompleteError"));
         showAgentPageNotice(t("profileSetupIncompleteAfterSave"), "warning", 5000, saved.id);
       }
     } catch (err) {
-      setAgentPageError(errorMessage(err, t("agentActionFailed")));
+      setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
     } finally {
       setAgentPageBusy(false);
     }
@@ -1706,7 +1711,7 @@ export function useAgentController({
       return false;
     }
     if (target !== "local" && !openCSGAuthenticated) {
-      setAgentPageError(t("agentPublishLoginRequired"));
+      setAgentPageSaveError(t("agentPublishLoginRequired"));
       return false;
     }
     if (target !== "local" && agentRuntimeKind(selectedAgentForPage) !== "codex") {
@@ -1714,7 +1719,7 @@ export function useAgentController({
     }
     setAgentPagePublishBusy(true);
     setAgentPagePublishError("");
-    setAgentPageError("");
+    setAgentPageSaveError("");
     try {
       const published = await publishAgentTemplateRequest(selectedAgentForPage.id, target, name, description);
       await refreshHubTemplates();
@@ -1731,7 +1736,7 @@ export function useAgentController({
           ? t("agentPublishLocalNameExists")
           : errorMessage(err, t("agentActionFailed"));
       setAgentPagePublishError(message);
-      setAgentPageError(message);
+      setAgentPageSaveError(message);
       return false;
     } finally {
       setAgentPagePublishBusy(false);
@@ -2012,7 +2017,7 @@ export function useAgentController({
       }
       feishuAutoFinalizeActiveRef.current.add(registrationID);
       if (!background) {
-        setAgentPageError("");
+        setAgentPageSaveError("");
       }
       try {
         const result = await finalizeFeishuRegistrationRequest(registrationID);
@@ -2043,7 +2048,7 @@ export function useAgentController({
           });
         }
         if (!background) {
-          setAgentPageError(errorMessage(err, t("feishuConnectFailed")));
+          setAgentPageSaveError(errorMessage(err, t("feishuConnectFailed")));
         }
       } finally {
         feishuAutoFinalizeActiveRef.current.delete(registrationID);
@@ -2104,7 +2109,7 @@ export function useAgentController({
     if (!claimAgentAction(agentID, busyKey)) {
       return;
     }
-    setAgentPageError("");
+    setAgentPageSaveError("");
     try {
       const registration = await startFeishuRegistrationRequest(agentID);
       const pending = normalizeFeishuPendingRegistration(registration, agentID);
@@ -2121,7 +2126,7 @@ export function useAgentController({
       }
       showAgentPageNotice(t("feishuConnectStarted"), "info", 5000, agentID);
     } catch (err) {
-      setAgentPageError(errorMessage(err, t("feishuConnectFailed")));
+      setAgentPageSaveError(errorMessage(err, t("feishuConnectFailed")));
     } finally {
       releaseAgentAction(agentID, busyKey);
     }
@@ -2146,7 +2151,7 @@ export function useAgentController({
     if (!claimAgentAction(agentID, busyKey)) {
       return;
     }
-    setAgentPageError("");
+    setAgentPageSaveError("");
     try {
       await deleteFeishuParticipantRequest(participantID);
       updateFeishuPendingRegistrations((current) => {
@@ -2157,7 +2162,7 @@ export function useAgentController({
       await refreshAgentStateRef.current(agentID);
       showAgentPageNotice(t("feishuDisconnectConfigured"), "success", 5000, agentID);
     } catch (err) {
-      setAgentPageError(errorMessage(err, t("feishuDisconnectFailed")));
+      setAgentPageSaveError(errorMessage(err, t("feishuDisconnectFailed")));
     } finally {
       releaseAgentAction(agentID, busyKey);
     }
@@ -2514,6 +2519,7 @@ export function useAgentController({
       publishDisabled: !openCSGAuthenticated,
       publishError: agentPagePublishError,
       saveError: agentPageError,
+      saveBillingURL: agentPageBillingURL,
       notice: selectedAgentPageNotice?.message || "",
       noticeTone: selectedAgentPageNotice?.tone || "warning",
       feishuConnectBusy: selectedAgentActionBusy.includes(`:${FEISHU_CHANNEL_ACTION}:`) ? selectedAgentActionBusy : "",

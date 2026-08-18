@@ -73,6 +73,56 @@ func (s *Service) ProfileDefaultsView() AgentProfileView {
 	return profileView(s.profileDefaults, s.detectionResults)
 }
 
+// EffectiveAgentProfileForUpdate returns the model profile that Update will
+// validate after applying its field mask, catalog selector, and inherited
+// provider-reference rules.
+func (s *Service) EffectiveAgentProfileForUpdate(id string, req UpdateRequest) (AgentProfile, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return AgentProfile{}, fmt.Errorf("agent id is required")
+	}
+	if s == nil {
+		return AgentProfile{}, fmt.Errorf("agent service is required")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	current, _, ok := s.agentByIDLocked(id)
+	if !ok {
+		return AgentProfile{}, fmt.Errorf("agent %q not found", id)
+	}
+	profile := cloneProfile(current.AgentProfile)
+	fieldMask := normalizeUpdateFieldMask(req.FieldMask)
+	_, profileRequested := fieldMask["agent_profile"]
+	if len(fieldMask) == 0 {
+		profileRequested = req.AgentProfile != nil
+	}
+	if profileRequested && req.AgentProfile != nil {
+		profile = cloneProfile(*req.AgentProfile)
+		if strings.TrimSpace(profile.APIKey) == "" {
+			profile.APIKey = current.AgentProfile.APIKey
+		}
+		profile = s.inheritModelProviderReference(profile, current)
+		return profile, nil
+	}
+	if len(fieldMask) == 0 {
+		selector := strings.TrimSpace(current.Profile)
+		if req.Profile != nil {
+			selector = strings.TrimSpace(*req.Profile)
+		}
+		if selected, found := CatalogProviderModelConfig(s.llm, selector); found {
+			selected.Name = current.AgentProfile.Name
+			selected.Description = current.AgentProfile.Description
+			selected.ReasoningEffort = current.AgentProfile.ReasoningEffort
+			selected.EnableFastMode = current.AgentProfile.EnableFastMode
+			selected.RequestOptions = current.AgentProfile.RequestOptions
+			selected.Env = current.AgentProfile.Env
+			return selected, nil
+		}
+	}
+	return profile, nil
+}
+
 func (s *Service) UpdateAgentProfile(id string, profile AgentProfile) (AgentProfileView, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {

@@ -78,6 +78,7 @@ const labels: Record<string, string> = {
   profileNotifierSection: "Notifications",
   profileUpgradeRequired: "Upgrade required",
   profileRuntimeKind: "Runtime",
+  rechargeAccount: "Recharge account",
   profileRuntimeSection: "Runtime environment",
   close: "Close",
   profileMCPServers: "MCP Servers",
@@ -419,6 +420,43 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("menuitem", { name: "Recreate" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Upgrade" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+  });
+
+  it("shows the recharge action beside an Agent page save error", () => {
+    render(
+      <AgentDetailPane
+        item={worker}
+        t={t}
+        activeRoom={null}
+        busyKey=""
+        error=""
+        draft={null}
+        models={[]}
+        modelBusy={false}
+        saving={false}
+        publishBusy={false}
+        saveError="Insufficient balance"
+        saveBillingURL="https://opencsg-stg.com/settings/billing"
+        authStatuses={{}}
+        authBusyProvider=""
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onDraftChange={vi.fn()}
+        onSave={vi.fn()}
+        onPublish={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onRecreate={vi.fn()}
+        onDelete={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Recharge account" })).toHaveAttribute(
+      "href",
+      "https://opencsg-stg.com/settings/billing",
+    );
   });
 
   it("keeps the agent name compact until entering edit mode", async () => {
