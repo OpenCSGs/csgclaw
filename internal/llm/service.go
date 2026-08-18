@@ -283,7 +283,7 @@ func (s *Service) forwardRemoteChatWithAuthRefresh(ctx context.Context, profile 
 		}
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return compactUpstreamErrorStream(resp, openCSGBillingURL(profile))
+		return compactUpstreamErrorStream(resp, OpenCSGBillingURL(profile))
 	}
 	header := resp.Header.Clone()
 	header.Del("Content-Length")
@@ -387,7 +387,7 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 				return s.handleRemoteResponsesResult(ctx, profile, payload, baseURL, apiKey, retryResp, false, sendResponses)
 			}
 		}
-		return compactUpstreamErrorStreamFromBody(resp, body, openCSGBillingURL(profile))
+		return compactUpstreamErrorStreamFromBody(resp, body, OpenCSGBillingURL(profile))
 	}
 	return &UpstreamResponse{
 		StatusCode: resp.StatusCode,
@@ -530,7 +530,7 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 		}
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return compactUpstreamErrorStream(resp, openCSGBillingURL(profile))
+		return compactUpstreamErrorStream(resp, OpenCSGBillingURL(profile))
 	}
 	if payloadBool(chatPayload["stream"]) {
 		return streamChatCompletionAsResponse(resp, strings.TrimSpace(profile.ModelID)), nil
@@ -610,7 +610,9 @@ func compactUpstreamErrorResponse(status int, body []byte, billingURL string) ([
 	}
 	normalizedCode := strings.ToLower(strings.TrimSpace(code))
 	if (normalizedCode == "insufficient_balance" || normalizedCode == "act-err-0") && strings.TrimSpace(billingURL) != "" {
-		errorPayload["billing_url"] = strings.TrimSpace(billingURL)
+		billingURL = strings.TrimSpace(billingURL)
+		errorPayload["billing_url"] = billingURL
+		errorPayload["message"] = fmt.Sprintf("%s\n\n👉 [Recharge your account](%s) to continue.", message, billingURL)
 	}
 	payload, err := json.Marshal(map[string]any{
 		"error": errorPayload,
@@ -621,9 +623,13 @@ func compactUpstreamErrorResponse(status int, body []byte, billingURL string) ([
 	return payload, "application/json; charset=utf-8"
 }
 
-func openCSGBillingURL(profile agent.AgentProfile) string {
+// OpenCSGBillingURL returns the billing page for an OpenCSG-backed profile and
+// the site used by the authenticated desktop session.
+func OpenCSGBillingURL(profile agent.AgentProfile) string {
 	provider := strings.ToLower(strings.TrimSpace(profile.Provider))
-	if provider != agent.ProviderCSGHub && provider != agent.ProviderOpenCSG {
+	modelProviderID := agent.NormalizeModelProviderID(profile.ModelProviderID)
+	if modelProviderID != agent.ModelProviderIDOpenCSG &&
+		(modelProviderID != "" || (provider != agent.ProviderCSGHub && provider != agent.ProviderOpenCSG)) {
 		return ""
 	}
 	store, err := auth.DefaultStore()

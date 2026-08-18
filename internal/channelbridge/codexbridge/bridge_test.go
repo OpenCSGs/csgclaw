@@ -2753,4 +2753,12 @@ func TestWorkerReturnsPromptError(t *testing.T) {
 	waitFor(t, func() bool {
 		return slices.Equal(client.sentTexts(), []string{"Runtime error: boom"})
 	})
+	records := client.sentRecords()
+	if len(records) != 1 {
+		t.Fatalf("sent records = %d, want 1", len(records))
+	}
+	namespace, ok := records[0].Metadata[runtimebridge.CSGClawMetadataKey].(map[string]any)
+	if !ok || namespace[runtimebridge.RuntimeErrorMetaKey] != true {
+		t.Fatalf("runtime error metadata = %#v, want true", records[0].Metadata)
+	}
 }

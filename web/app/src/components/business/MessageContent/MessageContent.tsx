@@ -43,7 +43,7 @@ export function MessageContent({
     () => (activity || slashCommandText ? null : parseStructuredMessage(content)),
     [activity, content, slashCommandText],
   );
-  const displayContent = useMemo(() => localizeRuntimeError(content, t), [content, t]);
+  const displayContent = useMemo(() => localizeRuntimeError(content, message, t), [content, message, t]);
   const markup = useMemo(
     () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : renderMarkdown(displayContent)),
     [activity, displayContent, resolvedQuestion, slashCommandText, structured],
@@ -121,13 +121,17 @@ export function MessageContent({
   );
 }
 
-function localizeRuntimeError(content: string | null | undefined, t: MessageContentProps["t"]): string {
+function localizeRuntimeError(
+  content: string | null | undefined,
+  message: MessageContentProps["message"],
+  t: MessageContentProps["t"],
+): string {
   const value = String(content ?? "");
   if (!t) {
     return value;
   }
   const normalized = value.trim().toLowerCase();
-  if (!normalized.startsWith("runtime error:") && !normalized.includes("unexpected status 402")) {
+  if (!normalized.startsWith("runtime error:") || !isTrustedRuntimeError(message)) {
     return value;
   }
   const localized = localizeError(value, t);
@@ -135,18 +139,42 @@ function localizeRuntimeError(content: string | null | undefined, t: MessageCont
   return billingURL ? `${localized}\n\n👉 [${t("rechargeAccount")}](${billingURL})` : localized;
 }
 
+function isTrustedRuntimeError(message: MessageContentProps["message"]): boolean {
+  const metadata = message?.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return false;
+  }
+  const namespace = (metadata as Record<string, unknown>).csgclaw;
+  return (
+    Boolean(namespace) &&
+    typeof namespace === "object" &&
+    !Array.isArray(namespace) &&
+    (namespace as Record<string, unknown>).runtime_error === true
+  );
+}
+
 function runtimeErrorBillingURL(value: string): string {
-  const match = value.match(/"billing_url"\s*:\s*("(?:\\.|[^"\\])*")/i);
-  if (!match) {
+  const jsonMatch = value.match(/"billing_url"\s*:\s*("(?:\\.|[^"\\])*")/i);
+  if (jsonMatch) {
+    try {
+      return safeBillingURL(JSON.parse(jsonMatch[1]));
+    } catch (_) {
+      return "";
+    }
+  }
+  const markdownMatch = value.match(/\[Recharge your account\]\(([^)\s]+)\)/i);
+  return markdownMatch ? safeBillingURL(markdownMatch[1]) : "";
+}
+
+function safeBillingURL(candidate: unknown): string {
+  if (typeof candidate !== "string") {
     return "";
   }
   try {
-    const candidate = JSON.parse(match[1]);
     const parsed = new URL(candidate);
-    if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || parsed.username || parsed.password) {
-      return "";
-    }
-    return parsed.toString();
+    return (parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password
+      ? parsed.toString()
+      : "";
   } catch (_) {
     return "";
   }

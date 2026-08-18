@@ -48,10 +48,11 @@ function questionMessage(status: "pending" | "answered") {
 describe("MessageContent question transcripts", () => {
   it("localizes a Codex-wrapped insufficient balance runtime error", () => {
     const content =
-      'Runtime error: unexpected status 402 Payment Required. {"error":{"code":"insufficient_balance","message":"The model service balance is insufficient. Add funds or contact an administrator.","billing_url":"https://opencsg-stg.com/settings/billing"}}, url: http://127.0.0.1:49229/api/v1/agents/agent-manager/llm/responses, request id: secret';
+      "Runtime error: unexpected status 402 Payment Required. The model service balance is insufficient. Add funds or contact an administrator.\n\n👉 [Recharge your account](https://opencsg-stg.com/settings/billing) to continue., url: http://127.0.0.1:49229/api/v1/agents/agent-manager/llm/responses, request id: secret";
     render(
       <MessageContent
         content={content}
+        message={{ id: "runtime-error-1", metadata: { csgclaw: { runtime_error: true } } }}
         t={(key) => {
           if (key === "errors.insufficient_balance") return "模型服务余额不足，请充值或联系管理员后重试。";
           if (key === "rechargeAccount") return "前往充值";
@@ -67,6 +68,21 @@ describe("MessageContent question transcripts", () => {
     );
     expect(screen.queryByText(/127\.0\.0\.1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/request id/i)).not.toBeInTheDocument();
+  });
+
+  it("does not localize human-authored text that quotes a runtime error", () => {
+    const content =
+      "Runtime error: unexpected status 402 Payment Required. The model service balance is insufficient.\n\n👉 [Recharge your account](https://example.com/settings/billing) to continue.";
+    render(
+      <MessageContent
+        content={content}
+        message={{ id: "human-message-1", metadata: { codex: { delivery_kind: "final" } } }}
+        t={(key) => key}
+      />,
+    );
+
+    expect(screen.getByText(/unexpected status 402 Payment Required/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "rechargeAccount" })).not.toBeInTheDocument();
   });
 
   it("uses structured metadata for a pending interactive question", () => {

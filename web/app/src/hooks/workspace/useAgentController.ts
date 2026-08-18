@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "react-router-dom";
-import { errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
+import { apiErrorBillingURL, errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import {
   batchAddAgentMCPServersRequest,
@@ -485,6 +485,7 @@ export function useAgentController({
   const [agentModalBootstrapConfig, setAgentModalBootstrapConfig] = useState<RuntimeBootstrapConfig | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentError, setAgentError] = useState("");
+  const [agentBillingURL, setAgentBillingURL] = useState("");
   const [agentProgress, setAgentProgress] = useState<AgentCreateProgressState | null>(null);
   const [agentActionBusyByAgent, setAgentActionBusyByAgent] = useState<AgentActionBusyState>({});
   const agentActionBusyByAgentRef = useRef<AgentActionBusyState>({});
@@ -1284,6 +1285,7 @@ export function useAgentController({
     setEditingAgent(null);
     setAgentModalBootstrapConfig(null);
     setAgentError("");
+    setAgentBillingURL("");
     setAgentProgress(null);
     resetAgentModels();
     const draft = ensureNotifierPullSubscriptionDraft(
@@ -1304,6 +1306,7 @@ export function useAgentController({
     setAgentCreateMode("template");
     setEditingAgent(null);
     setAgentError("");
+    setAgentBillingURL("");
     setAgentProgress(null);
     resetAgentModels();
     const refreshedBootstrapConfig = await refreshWorkspaceBootstrapConfig();
@@ -1415,6 +1418,7 @@ export function useAgentController({
     setEditingAgent(null);
     setAgentModalBootstrapConfig(bootstrapConfig);
     setAgentError("");
+    setAgentBillingURL("");
     setAgentProgress(null);
     resetAgentModels();
     try {
@@ -1740,6 +1744,7 @@ export function useAgentController({
     }
     setAgentBusy(true);
     setAgentError("");
+    setAgentBillingURL("");
     const isCreate = agentModalMode === "create";
     const editingAgentID = String(editingAgent?.id ?? "").trim();
     if (!isCreate && !editingAgentID) {
@@ -1897,6 +1902,7 @@ export function useAgentController({
     } catch (err) {
       setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
       setAgentError(errorMessage(err, t("agentActionFailed")));
+      setAgentBillingURL(apiErrorBillingURL(err));
     } finally {
       setAgentBusy(false);
     }
@@ -2593,6 +2599,7 @@ export function useAgentController({
             notifierWebhookPublicOrigin,
             onProviderLogin: loginCLIProxyProvider,
             agentError,
+            agentBillingURL,
             agentProgress,
             agentBusy,
             onClose: () => setShowAgentModal(false),

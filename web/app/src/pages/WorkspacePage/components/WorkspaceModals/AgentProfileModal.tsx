@@ -59,6 +59,7 @@ export type AgentProfileModalProps = {
   agentCreateMode?: AgentCreateMode;
   agentDraft: AgentDraft;
   agentError?: string;
+  agentBillingURL?: string;
   agentModelBusy?: boolean;
   agentModalMode: AgentModalMode;
   agentModelOptions?: ModelProviderOption[];
@@ -102,6 +103,7 @@ export function AgentProfileModal({
   agentModelBusy = false,
   notifierWebhookPublicOrigin = "",
   agentError = "",
+  agentBillingURL = "",
   agentProgress = null,
   agentBusy = false,
   locale,
@@ -766,7 +768,19 @@ export function AgentProfileModal({
             </>
           ) : null}
         </div>
-        {agentError ? <div className="form-error">{agentError}</div> : null}
+        {agentError ? (
+          <div className="form-error">
+            {agentError}
+            {agentBillingURL ? (
+              <>
+                {" "}
+                <a className="agent-billing-action" href={agentBillingURL}>
+                  {t("rechargeAccount")}
+                </a>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <AgentCreateProgress progress={agentProgress} t={t} />
         <div className="modal-actions">
           <Button variant="secondaryGray" size="md" onClick={onClose}>

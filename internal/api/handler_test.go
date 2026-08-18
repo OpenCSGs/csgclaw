@@ -95,6 +95,35 @@ func TestWriteAgentOperationErrorSanitizesWrappedUpstreamError(t *testing.T) {
 	}
 }
 
+func TestWriteAgentOperationErrorIncludesBillingURLForInsufficientBalance(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	err := &modelprovider.ResponsesAPIStatusError{
+		Status:     "402 Payment Required",
+		StatusCode: http.StatusPaymentRequired,
+		Body:       `{"error":{"code":"insufficient_balance","message":"Insufficient balance"}}`,
+	}
+
+	writeAgentOperationErrorWithBillingURL(
+		recorder,
+		err,
+		http.StatusBadRequest,
+		"https://opencsg-stg.com/settings/billing",
+	)
+
+	var payload struct {
+		Error struct {
+			Code       string `json:"code"`
+			BillingURL string `json:"billing_url"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if payload.Error.Code != "insufficient_balance" || payload.Error.BillingURL != "https://opencsg-stg.com/settings/billing" {
+		t.Fatalf("error = %+v, want insufficient balance with billing URL", payload.Error)
+	}
+}
+
 func TestWriteAgentOperationErrorOnlyUsesNotFoundForAPIResources(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -2196,12 +2225,15 @@ func TestHandleAgentStartStartsExistingBox(t *testing.T) {
 	if startCalls != 1 {
 		t.Fatalf("startBox() calls = %d, want 1", startCalls)
 	}
-	var got agent.Agent
+	var got agentResponse
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if got.Status != "running" || got.BoxID != "box-new" {
 		t.Fatalf("agent = %+v, want running box-new", got)
+	}
+	if got.Runtime.SandboxProvider != "fake" {
+		t.Fatalf("runtime sandbox provider = %q, want fake", got.Runtime.SandboxProvider)
 	}
 }
 

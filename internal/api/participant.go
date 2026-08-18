@@ -10,6 +10,7 @@ import (
 	"csgclaw/internal/agent"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
+	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
 )
 
@@ -58,7 +59,11 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 		req.AgentHubService = hubSvc
 		created, err := h.participant.Create(r.Context(), req)
 		if err != nil {
-			http.Error(w, err.Error(), participantCreateStatus(err))
+			billingURL := ""
+			if req.AgentBinding.Agent != nil {
+				billingURL = llm.OpenCSGBillingURL(req.AgentBinding.Agent.AgentProfile)
+			}
+			writeAgentOperationErrorWithBillingURL(w, err, participantCreateStatus(err), billingURL)
 			return
 		}
 		presented := h.presentParticipant(created)

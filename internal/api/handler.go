@@ -1289,7 +1289,7 @@ func (h *Handler) handleAgentRecreate(w http.ResponseWriter, r *http.Request, id
 		writeAgentOperationError(w, err, http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, presentAgent(recreated))
+	writeJSON(w, http.StatusOK, h.presentAgentResponse(recreated))
 }
 
 func (h *Handler) handleAgentUpgrade(w http.ResponseWriter, r *http.Request, id string) {
@@ -1306,7 +1306,7 @@ func (h *Handler) handleAgentUpgrade(w http.ResponseWriter, r *http.Request, id 
 		writeAgentOperationError(w, err, http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, presentAgent(recreated))
+	writeJSON(w, http.StatusOK, h.presentAgentResponse(recreated))
 }
 
 func (h *Handler) handleAgentProfileModels(w http.ResponseWriter, r *http.Request) {
@@ -1360,7 +1360,7 @@ func (h *Handler) handleAgentStart(w http.ResponseWriter, r *http.Request, id st
 		writeAgentOperationError(w, err, http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, presentAgent(started))
+	writeJSON(w, http.StatusOK, h.presentAgentResponse(started))
 }
 
 func (h *Handler) handleAgentStartByID(w http.ResponseWriter, r *http.Request) {
@@ -1390,7 +1390,7 @@ func (h *Handler) handleAgentStop(w http.ResponseWriter, r *http.Request, id str
 		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, http.StatusOK, presentAgent(stopped))
+	writeJSON(w, http.StatusOK, h.presentAgentResponse(stopped))
 }
 
 func (h *Handler) handleAgentStopByID(w http.ResponseWriter, r *http.Request) {
@@ -1429,7 +1429,7 @@ func (h *Handler) handleAgentApplyBindings(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, http.StatusOK, presentAgent(activated))
+	writeJSON(w, http.StatusOK, h.presentAgentResponse(activated))
 }
 
 type applyAgentBindingsRequest struct {
@@ -1564,19 +1564,28 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 	createReq.HubService = hubSvc
 	created, err := h.svc.Create(r.Context(), createReq)
 	if err != nil {
-		writeAgentOperationError(w, err, http.StatusBadRequest)
+		writeAgentOperationErrorWithBillingURL(w, err, http.StatusBadRequest, llm.OpenCSGBillingURL(createReq.Spec.AgentProfile))
 		return
 	}
 	writeJSON(w, http.StatusCreated, h.presentAgentResponse(created))
 }
 
 func writeAgentOperationError(w http.ResponseWriter, err error, defaultStatus int) {
+	writeAgentOperationErrorWithBillingURL(w, err, defaultStatus, "")
+}
+
+func writeAgentOperationErrorWithBillingURL(w http.ResponseWriter, err error, defaultStatus int, billingURL string) {
 	if status, code, message, ok := modelprovider.UserFacingUpstreamError(err); ok {
+		errorPayload := map[string]any{
+			"code":    code,
+			"message": message,
+		}
+		normalizedCode := strings.ToLower(strings.TrimSpace(code))
+		if (normalizedCode == "insufficient_balance" || normalizedCode == "act-err-0") && strings.TrimSpace(billingURL) != "" {
+			errorPayload["billing_url"] = strings.TrimSpace(billingURL)
+		}
 		writeJSON(w, status, map[string]any{
-			"error": map[string]any{
-				"code":    code,
-				"message": message,
-			},
+			"error": errorPayload,
 		})
 		return
 	}

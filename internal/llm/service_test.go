@@ -1592,6 +1592,7 @@ func TestCompactInsufficientBalanceResponseIncludesConfiguredBillingURL(t *testi
 			var payload struct {
 				Error struct {
 					BillingURL string `json:"billing_url"`
+					Message    string `json:"message"`
 				} `json:"error"`
 			}
 			if err := json.Unmarshal(body, &payload); err != nil {
@@ -1599,6 +1600,9 @@ func TestCompactInsufficientBalanceResponseIncludesConfiguredBillingURL(t *testi
 			}
 			if got, want := payload.Error.BillingURL, "https://opencsg-stg.com/settings/billing"; got != want {
 				t.Fatalf("billing_url = %q, want %q", got, want)
+			}
+			if !strings.Contains(payload.Error.Message, "[Recharge your account](https://opencsg-stg.com/settings/billing)") {
+				t.Fatalf("message = %q, want SDK-preserved billing link", payload.Error.Message)
 			}
 		})
 	}
@@ -1620,10 +1624,13 @@ func TestOpenCSGBillingURLUsesAuthenticatedLoginSite(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
-	if got, want := openCSGBillingURL(agent.AgentProfile{Provider: agent.ProviderCSGHub}), "https://opencsg-stg.com/settings/billing"; got != want {
+	if got, want := OpenCSGBillingURL(agent.AgentProfile{Provider: agent.ProviderCSGHub}), "https://opencsg-stg.com/settings/billing"; got != want {
 		t.Fatalf("billing URL = %q, want %q", got, want)
 	}
-	if got := openCSGBillingURL(agent.AgentProfile{Provider: agent.ProviderAPI}); got != "" {
+	if got, want := OpenCSGBillingURL(agent.AgentProfile{ModelProviderID: agent.ModelProviderIDOpenCSG}), "https://opencsg-stg.com/settings/billing"; got != want {
+		t.Fatalf("model provider billing URL = %q, want %q", got, want)
+	}
+	if got := OpenCSGBillingURL(agent.AgentProfile{Provider: agent.ProviderAPI}); got != "" {
 		t.Fatalf("custom provider billing URL = %q, want empty", got)
 	}
 }

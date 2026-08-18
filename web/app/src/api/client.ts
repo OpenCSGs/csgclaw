@@ -2,6 +2,7 @@ export type ApiError = {
   status: number;
   message: string;
   code?: string;
+  billingURL?: string;
 };
 
 export type ApiRequestOptions = Omit<RequestInit, "body"> & {
@@ -122,6 +123,24 @@ export function errorMessage(error: unknown, fallback = ""): string {
   return fallback;
 }
 
+export function apiErrorBillingURL(error: unknown): string {
+  if (!error || typeof error !== "object" || !("billingURL" in error)) {
+    return "";
+  }
+  const value = (error as { billingURL?: unknown }).billingURL;
+  if (typeof value !== "string") {
+    return "";
+  }
+  try {
+    const parsed = new URL(value);
+    return (parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password
+      ? parsed.toString()
+      : "";
+  } catch (_) {
+    return "";
+  }
+}
+
 export async function readResponseText(response: Response | null | undefined): Promise<string> {
   if (!response) {
     return "";
@@ -136,11 +155,20 @@ export async function readResponseText(response: Response | null | undefined): P
 async function apiErrorFromResponse(response: Response): Promise<ApiError> {
   const raw = (await readResponseText(response)) || response.statusText;
   try {
-    const payload = JSON.parse(raw) as { error?: { code?: unknown; message?: unknown } };
+    const payload = JSON.parse(raw) as { error?: { billing_url?: unknown; code?: unknown; message?: unknown } };
     const code = typeof payload?.error?.code === "string" ? payload.error.code.trim() : "";
     const message = typeof payload?.error?.message === "string" ? payload.error.message.trim() : "";
+    const billingURL = typeof payload?.error?.billing_url === "string" ? payload.error.billing_url.trim() : "";
     if (code || message) {
-      return { status: response.status, code: code || undefined, message: message || code };
+      const error: ApiError = {
+        status: response.status,
+        code: code || undefined,
+        message: message || code,
+      };
+      if (billingURL) {
+        error.billingURL = billingURL;
+      }
+      return error;
     }
   } catch {
     // Preserve legacy text error responses.

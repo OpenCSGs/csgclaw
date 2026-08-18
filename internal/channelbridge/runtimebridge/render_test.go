@@ -145,6 +145,22 @@ func TestTurnRendererUsesCurrentTimestampForZeroReceivedAt(t *testing.T) {
 	}
 }
 
+func TestTurnRendererIdentifiesOnlyItsPromptErrorMessage(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewTurnRenderer()
+	if renderer.IsPromptErrorMessage("Runtime error: boom") {
+		t.Fatal("ordinary model text was identified as a prompt error")
+	}
+	renderer.SetPromptError("boom")
+	if !renderer.IsPromptErrorMessage("Runtime error: boom") {
+		t.Fatal("generated prompt error was not identified")
+	}
+	if renderer.IsPromptErrorMessage("Runtime error: another failure") {
+		t.Fatal("unrelated runtime error text was identified as the renderer prompt error")
+	}
+}
+
 func TestTurnRendererRendersGenericActionActivity(t *testing.T) {
 	t.Parallel()
 

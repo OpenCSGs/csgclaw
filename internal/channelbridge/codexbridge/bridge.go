@@ -1133,17 +1133,21 @@ func (w *worker) flushTurnMessages(ctx context.Context, roomID, threadRootID str
 	if len(messages) == 0 && includeEmptyCompletion {
 		messages = []string{turnCompleteText}
 	}
-	return w.flushMessages(ctx, roomID, threadRootID, messages, metadata)
+	return w.flushMessages(ctx, roomID, threadRootID, messages, metadata, renderer)
 }
 
-func (w *worker) flushMessages(ctx context.Context, roomID, threadRootID string, messages []string, metadata map[string]any) (string, error) {
+func (w *worker) flushMessages(ctx context.Context, roomID, threadRootID string, messages []string, metadata map[string]any, renderer *runtimebridge.TurnRenderer) (string, error) {
 	var firstSentMessageID string
 	for _, text := range messages {
+		messageMetadata := metadata
+		if renderer.IsPromptErrorMessage(text) {
+			messageMetadata = runtimeErrorMessageMetadata(metadata)
+		}
 		req := SendMessageRequest{
 			RoomID:       roomID,
 			Text:         text,
 			ThreadRootID: strings.TrimSpace(threadRootID),
-			Metadata:     metadata,
+			Metadata:     messageMetadata,
 		}
 		messageID, err := w.sendMessageRequest(ctx, req)
 		if err != nil {
@@ -1154,6 +1158,20 @@ func (w *worker) flushMessages(ctx context.Context, roomID, threadRootID string,
 		}
 	}
 	return firstSentMessageID, nil
+}
+
+func runtimeErrorMessageMetadata(metadata map[string]any) map[string]any {
+	out := mergeMessageMetadata(metadata)
+	if out == nil {
+		out = make(map[string]any)
+	}
+	namespace := map[string]any{}
+	if existing, ok := out[runtimebridge.CSGClawMetadataKey].(map[string]any); ok {
+		namespace = cloneStringAnyMap(existing)
+	}
+	namespace[runtimebridge.RuntimeErrorMetaKey] = true
+	out[runtimebridge.CSGClawMetadataKey] = namespace
+	return out
 }
 
 func (w *worker) startProcessingReaction(ctx context.Context, evt BotEvent) func(context.Context) {
