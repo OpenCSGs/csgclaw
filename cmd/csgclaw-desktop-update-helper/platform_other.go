@@ -19,8 +19,8 @@ func platformDependencies() coordinatorDependencies {
 		runInstaller: func(string, io.Writer) (int, error) {
 			return -1, unsupported()
 		},
-		startExecutable: func(string) error {
-			return unsupported()
+		relaunchApplication: func(string) (relaunchResult, error) {
+			return relaunchResult{}, unsupported()
 		},
 		sleep: time.Sleep,
 	}

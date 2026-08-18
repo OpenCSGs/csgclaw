@@ -124,11 +124,14 @@ parent-exited
 installer-started
 installer-exited code="0"
 relaunch-started
-relaunch-requested
+relaunch-existing-window-detected
+relaunch-window-activation foreground="true"
 coordinator-finished code="0"
 ```
 
-如果日志停在 `coordinator-ready`，检查 `process-status.txt` 中 helper 是否在 60 秒后按超时退出；如果停在 `installer-started`，结合 `Squirrel-*.log` 判断安装器阶段。
+安装器未主动启动新应用时，helper 会记录 `relaunch-requested`，等待窗口出现后再记录 `relaunch-window-activation`。如果 Windows 拒绝 helper 抢占前台，`foreground="false" flashed="true"` 表示 helper 已尝试恢复和置前窗口，并通过持续闪烁任务栏提醒用户。
+
+如果日志停在 `coordinator-ready`，检查 `process-status.txt` 中 helper 是否在 60 秒后按超时退出；如果停在 `installer-started`，结合 `Squirrel-*.log` 判断安装器阶段；如果出现 `relaunch-window-not-detected`，说明启动请求已发出，但 15 秒内没有找到目标应用窗口。
 
 查找并查看最新 `backend.log` 的最后 300 行：
 

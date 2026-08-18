@@ -48,9 +48,16 @@ func TestRunCoordinatorWaitsThenInstallsAndRelaunches(t *testing.T) {
 			events = append(events, "run-installer")
 			return 0, nil
 		},
-		startExecutable: func(path string) error {
+		relaunchApplication: func(path string) (relaunchResult, error) {
 			events = append(events, "start-root")
-			return nil
+			return relaunchResult{
+				startedApplication:   true,
+				windowDetected:       true,
+				windowProcessID:      9123,
+				windowRestored:       true,
+				windowBroughtToFront: true,
+				windowForeground:     true,
+			}, nil
 		},
 		sleep: func(time.Duration) {
 			events = append(events, "post-exit-delay")
@@ -82,6 +89,7 @@ func TestRunCoordinatorWaitsThenInstallsAndRelaunches(t *testing.T) {
 		"parent-exited",
 		"installer-exited",
 		"relaunch-requested",
+		"relaunch-window-activation",
 	} {
 		if !strings.Contains(log.String(), event) {
 			t.Fatalf("log does not contain %q:\n%s", event, log.String())
@@ -102,9 +110,9 @@ func TestRunCoordinatorRelaunchesAfterInstallerFailure(t *testing.T) {
 		runInstaller: func(path string, output io.Writer) (int, error) {
 			return 23, errors.New("installer failed")
 		},
-		startExecutable: func(path string) error {
+		relaunchApplication: func(path string) (relaunchResult, error) {
 			events = append(events, "start-root")
-			return nil
+			return relaunchResult{startedApplication: true}, nil
 		},
 		sleep: func(time.Duration) {},
 	}
@@ -123,6 +131,55 @@ func TestRunCoordinatorRelaunchesAfterInstallerFailure(t *testing.T) {
 	}
 	if !reflect.DeepEqual(events, []string{"wait-parent", "start-root", "close-parent"}) {
 		t.Fatalf("events = %#v", events)
+	}
+}
+
+func TestRunCoordinatorActivatesExistingWindowWithoutStartingAnotherInstance(t *testing.T) {
+	options := coordinatorTestOptions(t)
+	var log bytes.Buffer
+	dependencies := coordinatorDependencies{
+		openParent: func(pid uint32) (parentProcess, error) {
+			return &fakeParentProcess{
+				readyFilePath: options.readyFilePath,
+				events:        &[]string{},
+			}, nil
+		},
+		runInstaller: func(path string, output io.Writer) (int, error) {
+			return 0, nil
+		},
+		relaunchApplication: func(path string) (relaunchResult, error) {
+			return relaunchResult{
+				foundExistingWindow:  true,
+				windowDetected:       true,
+				windowProcessID:      9123,
+				windowRestored:       true,
+				windowBroughtToFront: true,
+				windowFlashed:        true,
+			}, nil
+		},
+		sleep: func(time.Duration) {},
+	}
+
+	exitCode := runCoordinator(
+		options,
+		dependencies,
+		&eventLogger{writer: &log, now: time.Now},
+	)
+	if exitCode != 0 {
+		t.Fatalf("runCoordinator() exit code = %d, want 0", exitCode)
+	}
+	for _, event := range []string{
+		"relaunch-existing-window-detected",
+		"relaunch-window-activation",
+		`foreground="false"`,
+		`flashed="true"`,
+	} {
+		if !strings.Contains(log.String(), event) {
+			t.Fatalf("log does not contain %q:\n%s", event, log.String())
+		}
+	}
+	if strings.Contains(log.String(), "relaunch-requested") {
+		t.Fatalf("log unexpectedly records a duplicate relaunch:\n%s", log.String())
 	}
 }
 

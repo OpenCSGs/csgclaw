@@ -40,11 +40,23 @@ type parentProcess interface {
 	Close() error
 }
 
+type relaunchResult struct {
+	startedApplication   bool
+	foundExistingWindow  bool
+	windowDetected       bool
+	windowProcessID      uint32
+	windowRestored       bool
+	windowBroughtToFront bool
+	windowForeground     bool
+	windowFlashed        bool
+	windowLookupError    string
+}
+
 type coordinatorDependencies struct {
-	openParent      func(pid uint32) (parentProcess, error)
-	runInstaller    func(path string, output io.Writer) (int, error)
-	startExecutable func(path string) error
-	sleep           func(duration time.Duration)
+	openParent          func(pid uint32) (parentProcess, error)
+	runInstaller        func(path string, output io.Writer) (int, error)
+	relaunchApplication func(path string) (relaunchResult, error)
+	sleep               func(duration time.Duration)
 }
 
 type eventLogger struct {
@@ -175,11 +187,45 @@ func runCoordinator(
 	}
 
 	logger.Event("relaunch-started")
-	if err := dependencies.startExecutable(options.rootExecutablePath); err != nil {
+	relaunch, err := dependencies.relaunchApplication(options.rootExecutablePath)
+	if err != nil {
 		logger.Event("relaunch-failed", "error", err)
 		return exitRelaunchFailed
 	}
-	logger.Event("relaunch-requested")
+	if relaunch.startedApplication {
+		logger.Event("relaunch-requested")
+	}
+	if relaunch.windowLookupError != "" {
+		logger.Event(
+			"relaunch-window-detection-failed",
+			"error",
+			relaunch.windowLookupError,
+		)
+	}
+	if relaunch.foundExistingWindow {
+		logger.Event(
+			"relaunch-existing-window-detected",
+			"process-id",
+			relaunch.windowProcessID,
+		)
+	}
+	if relaunch.windowDetected {
+		logger.Event(
+			"relaunch-window-activation",
+			"process-id",
+			relaunch.windowProcessID,
+			"restored",
+			relaunch.windowRestored,
+			"brought-to-front",
+			relaunch.windowBroughtToFront,
+			"foreground",
+			relaunch.windowForeground,
+			"flashed",
+			relaunch.windowFlashed,
+		)
+	} else {
+		logger.Event("relaunch-window-not-detected")
+	}
 	if installerErr != nil || installerExitCode != 0 {
 		return exitInstallerFailed
 	}
