@@ -855,7 +855,7 @@ func (r *Runtime) gatewayStoppedError(ctx context.Context, box sandbox.Instance,
 	if err != nil {
 		return nil
 	}
-	if info.State != sandbox.StateStopped && info.State != sandbox.StateExited {
+	if info.State != sandbox.StateStopped && info.State != sandbox.StateExited && info.State != sandbox.StateDead {
 		return nil
 	}
 	if lastErr != nil {
@@ -877,10 +877,18 @@ func stateFromSandboxState(state sandbox.State) agentruntime.State {
 		return agentruntime.StateCreated
 	case sandbox.StateRunning:
 		return agentruntime.StateRunning
+	case sandbox.StatePaused:
+		return agentruntime.StatePaused
+	case sandbox.StateRestarting:
+		return agentruntime.StateRestarting
+	case sandbox.StateRemoving:
+		return agentruntime.StateRemoving
 	case sandbox.StateStopped:
 		return agentruntime.StateStopped
 	case sandbox.StateExited:
 		return agentruntime.StateExited
+	case sandbox.StateDead:
+		return agentruntime.StateDead
 	default:
 		return agentruntime.StateUnknown
 	}

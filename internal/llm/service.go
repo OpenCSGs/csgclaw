@@ -283,7 +283,7 @@ func (s *Service) forwardRemoteChatWithAuthRefresh(ctx context.Context, profile 
 		}
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return compactUpstreamErrorStream(resp)
+		return compactUpstreamErrorStream(resp, openCSGBillingURL(profile))
 	}
 	header := resp.Header.Clone()
 	header.Del("Content-Length")
@@ -387,7 +387,7 @@ func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent
 				return s.handleRemoteResponsesResult(ctx, profile, payload, baseURL, apiKey, retryResp, false, sendResponses)
 			}
 		}
-		return compactUpstreamErrorStreamFromBody(resp, body)
+		return compactUpstreamErrorStreamFromBody(resp, body, openCSGBillingURL(profile))
 	}
 	return &UpstreamResponse{
 		StatusCode: resp.StatusCode,
@@ -530,7 +530,7 @@ func (s *Service) forwardResponsesViaChat(ctx context.Context, profile agent.Age
 		}
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return compactUpstreamErrorStream(resp)
+		return compactUpstreamErrorStream(resp, openCSGBillingURL(profile))
 	}
 	if payloadBool(chatPayload["stream"]) {
 		return streamChatCompletionAsResponse(resp, strings.TrimSpace(profile.ModelID)), nil
@@ -572,7 +572,7 @@ func newProfileJSONRequest(ctx context.Context, url string, body []byte, apiKey 
 	return req, nil
 }
 
-func compactUpstreamErrorStream(resp *http.Response) (*UpstreamResponse, error) {
+func compactUpstreamErrorStream(resp *http.Response, billingURL string) (*UpstreamResponse, error) {
 	if resp == nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: "upstream response is nil"}
 	}
@@ -580,7 +580,7 @@ func compactUpstreamErrorStream(resp *http.Response) (*UpstreamResponse, error) 
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadGateway, Message: fmt.Sprintf("read upstream error response: %v", err)}
 	}
-	return compactUpstreamErrorStreamFromBody(resp, body)
+	return compactUpstreamErrorStreamFromBody(resp, body, billingURL)
 }
 
 func readAndCloseUpstreamBody(resp *http.Response) ([]byte, error) {
@@ -588,8 +588,8 @@ func readAndCloseUpstreamBody(resp *http.Response) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 }
 
-func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte) (*UpstreamResponse, error) {
-	body, contentType := compactUpstreamErrorResponse(resp.StatusCode, body)
+func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte, billingURL string) (*UpstreamResponse, error) {
+	body, contentType := compactUpstreamErrorResponse(resp.StatusCode, body, billingURL)
 	header := resp.Header.Clone()
 	header.Del("Content-Length")
 	header.Set("Content-Type", contentType)
@@ -600,9 +600,46 @@ func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte) (*Upst
 	}, nil
 }
 
-func compactUpstreamErrorResponse(status int, body []byte) ([]byte, string) {
-	code := modelprovider.UpstreamErrorCode(body)
-	return []byte(modelprovider.FriendlyUpstreamErrorMessage(status, code)), "text/plain; charset=utf-8"
+func compactUpstreamErrorResponse(status int, body []byte, billingURL string) ([]byte, string) {
+	code := modelprovider.UpstreamErrorCodeForResponse(status, body)
+	message := modelprovider.FriendlyUpstreamErrorMessage(status, code)
+	errorPayload := map[string]string{
+		"code":    code,
+		"type":    code,
+		"message": message,
+	}
+	normalizedCode := strings.ToLower(strings.TrimSpace(code))
+	if (normalizedCode == "insufficient_balance" || normalizedCode == "act-err-0") && strings.TrimSpace(billingURL) != "" {
+		errorPayload["billing_url"] = strings.TrimSpace(billingURL)
+	}
+	payload, err := json.Marshal(map[string]any{
+		"error": errorPayload,
+	})
+	if err != nil {
+		return []byte(message), "text/plain; charset=utf-8"
+	}
+	return payload, "application/json; charset=utf-8"
+}
+
+func openCSGBillingURL(profile agent.AgentProfile) string {
+	provider := strings.ToLower(strings.TrimSpace(profile.Provider))
+	if provider != agent.ProviderCSGHub && provider != agent.ProviderOpenCSG {
+		return ""
+	}
+	store, err := auth.DefaultStore()
+	if err != nil {
+		return ""
+	}
+	status, err := store.Status()
+	if err != nil || !status.Authenticated {
+		return ""
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(status.OpenCSGBaseURL), "/")
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.Host == "" || parsed.User != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return ""
+	}
+	return baseURL + "/settings/billing"
 }
 
 func responsesAPIUnsupportedStatus(status int) bool {

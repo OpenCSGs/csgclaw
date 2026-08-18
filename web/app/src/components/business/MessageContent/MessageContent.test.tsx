@@ -46,6 +46,29 @@ function questionMessage(status: "pending" | "answered") {
 }
 
 describe("MessageContent question transcripts", () => {
+  it("localizes a Codex-wrapped insufficient balance runtime error", () => {
+    const content =
+      'Runtime error: unexpected status 402 Payment Required. {"error":{"code":"insufficient_balance","message":"The model service balance is insufficient. Add funds or contact an administrator.","billing_url":"https://opencsg-stg.com/settings/billing"}}, url: http://127.0.0.1:49229/api/v1/agents/agent-manager/llm/responses, request id: secret';
+    render(
+      <MessageContent
+        content={content}
+        t={(key) => {
+          if (key === "errors.insufficient_balance") return "模型服务余额不足，请充值或联系管理员后重试。";
+          if (key === "rechargeAccount") return "前往充值";
+          return key;
+        }}
+      />,
+    );
+
+    expect(screen.getByText("模型服务余额不足，请充值或联系管理员后重试。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "前往充值" })).toHaveAttribute(
+      "href",
+      "https://opencsg-stg.com/settings/billing",
+    );
+    expect(screen.queryByText(/127\.0\.0\.1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/request id/i)).not.toBeInTheDocument();
+  });
+
   it("uses structured metadata for a pending interactive question", () => {
     const message = questionMessage("pending");
     render(<MessageContent content={message.content} message={message} t={(key) => key} />);

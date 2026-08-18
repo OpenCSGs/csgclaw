@@ -955,9 +955,18 @@ func TestResponsesLLMAPICodexReturnsCompactResponsesErrorOnTransientFailure(t *t
 	if err != nil {
 		t.Fatalf("ReadAll() error = %v", err)
 	}
+	var payload struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode body %q: %v", body, err)
+	}
 	want := "The model service encountered a temporary error. Please try again later."
-	if string(body) != want {
-		t.Fatalf("body = %q, want %q", string(body), want)
+	if payload.Error.Code != "internal_server_error" || payload.Error.Message != want {
+		t.Fatalf("error = %+v, want code internal_server_error and message %q", payload.Error, want)
 	}
 }
 
@@ -1495,50 +1504,127 @@ func TestCompactUpstreamErrorResponseUsesFriendlyMessages(t *testing.T) {
 		name   string
 		status int
 		body   string
+		code   string
 		want   string
 	}{
 		{
 			name:   "standard insufficient balance",
 			status: http.StatusPaymentRequired,
 			body:   `{"error":{"code":"insufficient_balance","message":"**Insufficient balance** stack detail","type":"insufficient_balance"}}`,
+			code:   "insufficient_balance",
 			want:   "The model service balance is insufficient. Add funds or contact an administrator.",
+		},
+		{
+			name:   "insufficient balance without code",
+			status: http.StatusPaymentRequired,
+			body:   `{"error":{"code":null,"message":"Insufficient balance"}}`,
+			code:   "insufficient_balance",
+			want:   "The model service balance is insufficient. Add funds or contact an administrator.",
+		},
+		{
+			name:   "generic payment required without code",
+			status: http.StatusPaymentRequired,
+			body:   `{"error":{"code":null,"message":"Subscription renewal required"}}`,
+			code:   "payment_required",
+			want:   "Payment is required to use the model service. Check the account billing status or contact an administrator.",
 		},
 		{
 			name:   "errorx insufficient balance",
 			status: http.StatusPaymentRequired,
 			body:   `{"code":"ACT-ERR-0","msg":"internal account detail","context":{}}`,
+			code:   "ACT-ERR-0",
 			want:   "The model service balance is insufficient. Add funds or contact an administrator.",
 		},
 		{
 			name:   "string validation error",
 			status: http.StatusBadRequest,
 			body:   `{"error":"Model cannot be empty: parser stack"}`,
+			code:   "invalid_request_error",
 			want:   "The request or model configuration is invalid. Check it and try again.",
 		},
 		{
 			name:   "plain upstream failure",
 			status: http.StatusInternalServerError,
 			body:   "proxy initialization failed: connection stack",
+			code:   "upstream_unavailable",
 			want:   "The model service is temporarily unavailable. Please try again later.",
 		},
 		{
 			name:   "unsupported model",
 			status: http.StatusBadRequest,
 			body:   `{"error":{"code":"unsupported_model","message":"adapter missing"}}`,
+			code:   "unsupported_model",
 			want:   "The selected model does not support this feature. Adjust the request or choose another model.",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, contentType := compactUpstreamErrorResponse(tt.status, []byte(tt.body))
-			if string(got) != tt.want {
-				t.Fatalf("body = %q, want %q", got, tt.want)
+			got, contentType := compactUpstreamErrorResponse(tt.status, []byte(tt.body), "")
+			var payload struct {
+				Error struct {
+					Code    string `json:"code"`
+					Type    string `json:"type"`
+					Message string `json:"message"`
+				} `json:"error"`
 			}
-			if contentType != "text/plain; charset=utf-8" {
+			if err := json.Unmarshal(got, &payload); err != nil {
+				t.Fatalf("decode body %q: %v", got, err)
+			}
+			if payload.Error.Code != tt.code || payload.Error.Type != tt.code || payload.Error.Message != tt.want {
+				t.Fatalf("error = %+v, want code/type %q and message %q", payload.Error, tt.code, tt.want)
+			}
+			if contentType != "application/json; charset=utf-8" {
 				t.Fatalf("content type = %q", contentType)
 			}
 		})
+	}
+}
+
+func TestCompactInsufficientBalanceResponseIncludesConfiguredBillingURL(t *testing.T) {
+	for _, code := range []string{"insufficient_balance", "INSUFFICIENT_BALANCE", "act-err-0", "ACT-ERR-0"} {
+		t.Run(code, func(t *testing.T) {
+			body, _ := compactUpstreamErrorResponse(
+				http.StatusPaymentRequired,
+				[]byte(`{"error":{"code":"`+code+`"}}`),
+				"https://opencsg-stg.com/settings/billing",
+			)
+			var payload struct {
+				Error struct {
+					BillingURL string `json:"billing_url"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if got, want := payload.Error.BillingURL, "https://opencsg-stg.com/settings/billing"; got != want {
+				t.Fatalf("billing_url = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestOpenCSGBillingURLUsesAuthenticatedLoginSite(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	store, err := auth.DefaultStore()
+	if err != nil {
+		t.Fatalf("DefaultStore() error = %v", err)
+	}
+	if err := store.Save(auth.Record{
+		Tokens: auth.Tokens{AccessToken: "access-token"},
+		Account: auth.Account{
+			UserID:         "alice",
+			OpenCSGBaseURL: "https://opencsg-stg.com/",
+			BaseURL:        "https://opencsg-stg.com",
+		},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	if got, want := openCSGBillingURL(agent.AgentProfile{Provider: agent.ProviderCSGHub}), "https://opencsg-stg.com/settings/billing"; got != want {
+		t.Fatalf("billing URL = %q, want %q", got, want)
+	}
+	if got := openCSGBillingURL(agent.AgentProfile{Provider: agent.ProviderAPI}); got != "" {
+		t.Fatalf("custom provider billing URL = %q, want empty", got)
 	}
 }
 

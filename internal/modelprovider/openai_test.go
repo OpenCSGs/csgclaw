@@ -18,6 +18,25 @@ func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
 }
 
+func TestUpstreamErrorCodeForPaymentRequiredResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "explicit code", body: `{"error":{"code":"insufficient_balance"}}`, want: "insufficient_balance"},
+		{name: "message identifies balance", body: `{"error":{"code":null,"message":"Insufficient balance"}}`, want: "insufficient_balance"},
+		{name: "generic payment", body: `{"error":{"code":null,"message":"Subscription renewal required"}}`, want: "payment_required"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := UpstreamErrorCodeForResponse(http.StatusPaymentRequired, []byte(tt.body)); got != tt.want {
+				t.Fatalf("code = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestListOpenAIModelsWithClientDoesNotAddPageSizeForOpenCSG(t *testing.T) {
 	var gotURL string
 	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

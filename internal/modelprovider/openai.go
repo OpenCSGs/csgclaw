@@ -66,7 +66,7 @@ func (e *ResponsesAPIStatusError) Is(target error) bool {
 }
 
 func (e *ResponsesAPIStatusError) Code() string {
-	return UpstreamErrorCode([]byte(e.Body))
+	return UpstreamErrorCodeForResponse(e.StatusCode, []byte(e.Body))
 }
 
 func (e *ResponsesAPIStatusError) UserMessage() string {

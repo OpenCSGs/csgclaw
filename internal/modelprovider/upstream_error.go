@@ -41,21 +41,20 @@ func UserFacingUpstreamError(err error) (status int, code, message string, ok bo
 	if status < 400 || status > 599 {
 		status = http.StatusBadGateway
 	}
-	code = statusErr.Code()
-	if code == "" {
-		code = fallbackUpstreamErrorCode(status)
-	}
+	code = UpstreamErrorCodeForResponse(status, []byte(statusErr.Body))
 	return status, code, FriendlyUpstreamErrorMessage(status, code), true
 }
 
-func fallbackUpstreamErrorCode(status int) string {
+// FallbackUpstreamErrorCode returns a stable OpenAI-style error code when an
+// upstream response omits error.code.
+func FallbackUpstreamErrorCode(status int) string {
 	switch status {
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
 		return "invalid_request_error"
 	case http.StatusUnauthorized:
 		return "authentication_error"
 	case http.StatusPaymentRequired:
-		return "insufficient_balance"
+		return "payment_required"
 	case http.StatusForbidden:
 		return "forbidden"
 	case http.StatusNotFound:
@@ -65,6 +64,23 @@ func fallbackUpstreamErrorCode(status int) string {
 	default:
 		return "upstream_unavailable"
 	}
+}
+
+// UpstreamErrorCodeForResponse uses an explicit provider code first and only
+// infers insufficient_balance when the response body actually says so.
+func UpstreamErrorCodeForResponse(status int, body []byte) string {
+	if code := UpstreamErrorCode(body); code != "" {
+		return code
+	}
+	if status == http.StatusPaymentRequired && bodyIndicatesInsufficientBalance(body) {
+		return "insufficient_balance"
+	}
+	return FallbackUpstreamErrorCode(status)
+}
+
+func bodyIndicatesInsufficientBalance(body []byte) bool {
+	value := strings.ToLower(strings.TrimSpace(string(body)))
+	return strings.Contains(value, "insufficient balance") || strings.Contains(value, "余额不足")
 }
 
 // UpstreamErrorCode extracts the stable provider error code without exposing
@@ -126,6 +142,8 @@ func FriendlyUpstreamErrorMessage(status int, code string) string {
 	switch strings.ToLower(strings.TrimSpace(code)) {
 	case "insufficient_balance", "act-err-0":
 		return "The model service balance is insufficient. Add funds or contact an administrator."
+	case "payment_required":
+		return "Payment is required to use the model service. Check the account billing status or contact an administrator."
 	case "rate_limit_exceeded":
 		return "The model service is busy or its quota has been reached. Please try again later."
 	case "invalid_api_key", "authentication_error", "unauthorized":
@@ -168,7 +186,7 @@ func FriendlyUpstreamErrorMessage(status int, code string) string {
 	case http.StatusUnauthorized:
 		return "Model service authentication failed. Check the credentials or contact an administrator."
 	case http.StatusPaymentRequired:
-		return "The model service balance is insufficient. Add funds or contact an administrator."
+		return "Payment is required to use the model service. Check the account billing status or contact an administrator."
 	case http.StatusForbidden:
 		return "This account cannot use the selected model. Contact an administrator or choose another model."
 	case http.StatusNotFound:

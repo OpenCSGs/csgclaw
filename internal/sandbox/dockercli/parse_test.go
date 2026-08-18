@@ -37,3 +37,30 @@ func TestParseInspectEmptyArrayNotFound(t *testing.T) {
 		t.Fatalf("error = %v, want not found", err)
 	}
 }
+
+func TestParseInspectPreservesDockerLifecycleState(t *testing.T) {
+	tests := []struct {
+		status string
+		want   sandbox.State
+	}{
+		{status: "created", want: sandbox.StateCreated},
+		{status: "running", want: sandbox.StateRunning},
+		{status: "paused", want: sandbox.StatePaused},
+		{status: "restarting", want: sandbox.StateRestarting},
+		{status: "removing", want: sandbox.StateRemoving},
+		{status: "exited", want: sandbox.StateExited},
+		{status: "dead", want: sandbox.StateDead},
+	}
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			data := []byte(`[{"Id":"abc123","Name":"/agent-one","State":{"Status":"` + tt.status + `"}}]`)
+			info, err := parseInspect(data)
+			if err != nil {
+				t.Fatalf("parseInspect() error = %v", err)
+			}
+			if info.State != tt.want {
+				t.Fatalf("State = %q, want %q", info.State, tt.want)
+			}
+		})
+	}
+}

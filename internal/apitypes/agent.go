@@ -38,15 +38,16 @@ func runtimeSelectionForKind(kind string) (string, bool) {
 }
 
 type AgentRuntime struct {
-	Kind           string               `json:"-"`
-	Name           string               `json:"name,omitempty"`
-	SandboxEnabled bool                 `json:"sandbox_enabled,omitempty"`
-	State          string               `json:"state,omitempty"`
-	Availability   *RuntimeAvailability `json:"availability,omitempty"`
-	StartupPending bool                 `json:"startup_pending,omitempty"`
-	SandboxID      string               `json:"sandbox_id,omitempty"`
-	Options        map[string]any       `json:"options,omitempty"`
-	OptionSchemas  []map[string]any     `json:"option_schemas,omitempty"`
+	Kind            string               `json:"-"`
+	Name            string               `json:"name,omitempty"`
+	SandboxEnabled  bool                 `json:"sandbox_enabled,omitempty"`
+	SandboxProvider string               `json:"sandbox_provider,omitempty"`
+	State           string               `json:"state,omitempty"`
+	Availability    *RuntimeAvailability `json:"availability,omitempty"`
+	StartupPending  bool                 `json:"startup_pending,omitempty"`
+	SandboxID       string               `json:"sandbox_id,omitempty"`
+	Options         map[string]any       `json:"options,omitempty"`
+	OptionSchemas   []map[string]any     `json:"option_schemas,omitempty"`
 }
 
 // RuntimeAvailability is the latest transient application-readiness

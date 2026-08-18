@@ -130,6 +130,11 @@ func (s *Service) sandboxProviderName() string {
 	return strings.TrimSpace(s.sandbox.Name())
 }
 
+// SandboxProviderName returns the configured provider backing sandboxed agent runtimes.
+func (s *Service) SandboxProviderName() string {
+	return s.sandboxProviderName()
+}
+
 func (s *Service) setGatewayWorkPhase(p uint32) {
 	if s == nil {
 		return

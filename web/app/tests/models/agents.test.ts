@@ -13,6 +13,7 @@ import {
   agentAvailabilityStatusLabel,
   agentGatewayUnavailableLabel,
   agentRuntimePollSettled,
+  agentRuntimeStatusDetailLabel,
   isAgentGatewayDegraded,
   isAgentGatewayAvailabilityUnknown,
   isAgentRuntimeStartupPending,
@@ -970,12 +971,34 @@ describe("agent model helpers", () => {
     ).toBe(false);
   });
 
-  it("maps profile_incomplete status to offline label", () => {
+  it("keeps lifecycle status offline and provides a separate container detail", () => {
     const t = (key: string) => key;
+    const dockerAgent = (status: string) => ({ status, runtime: { state: status, sandbox_provider: "docker" } });
     expect(agentStatusLabel("profile_incomplete", t)).toBe("offline");
     expect(agentStatusLabel("exited", t)).toBe("offline");
+    expect(agentRuntimeStatusDetailLabel(dockerAgent("created"), t)).toBe("agentContainerCreated");
+    expect(agentRuntimeStatusDetailLabel(dockerAgent("paused"), t)).toBe("agentContainerPaused");
+    expect(agentRuntimeStatusDetailLabel(dockerAgent("restarting"), t)).toBe("agentContainerRestarting");
+    expect(agentRuntimeStatusDetailLabel(dockerAgent("removing"), t)).toBe("agentContainerRemoving");
+    expect(agentRuntimeStatusDetailLabel(dockerAgent("exited"), t)).toBe("agentContainerStopped");
+    expect(agentRuntimeStatusDetailLabel(dockerAgent("dead"), t)).toBe("agentContainerDead");
+    expect(agentRuntimeStatusDetailLabel({ status: "stopped", runtime: { sandbox_provider: "boxlite" } }, t)).toBe("");
+    expect(agentRuntimeStatusDetailLabel({ status: "stopped", runtime_kind: "codex" }, t)).toBe("");
     expect(agentStatusLabel("running", t)).toBe("online");
     expect(agentStatusLabel("starting", t)).toBe("agentStatusStarting");
+  });
+
+  it.each(["created", "paused", "restarting", "removing", "stopped", "exited", "dead", "unknown"])(
+    "treats %s lifecycle status as offline",
+    (status) => {
+      expect(isAgentLifecycleRunning({ status })).toBe(false);
+    },
+  );
+
+  it("shows the agent as offline whenever its container is not running", () => {
+    const t = (key: string) => key;
+    expect(agentAvailabilityStatusLabel({ status: "exited" }, t)).toBe("offline");
+    expect(agentAvailabilityStatusLabel({ status: "created", runtime: { startup_pending: true } }, t)).toBe("offline");
   });
 
   it("reads the server-owned configured runtime startup marker", () => {

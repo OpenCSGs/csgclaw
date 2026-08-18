@@ -41,6 +41,7 @@ import {
   agentSandboxEnabled,
   agentAvailabilityStatusLabel,
   agentGatewayUnavailableLabel,
+  agentRuntimeStatusDetailLabel,
   agentRuntimeKind,
   isAgentGatewayDegraded,
   isAgentAvailable,
@@ -288,6 +289,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const lifecycleRunning = isAgentLifecycleRunning(item);
   const gatewayDegraded = isAgentGatewayDegraded(item);
   const statusLabel = agentAvailabilityStatusLabel(item, t);
+  const runtimeStatusDetail = agentRuntimeStatusDetailLabel(item, t);
   const draftBelongsToItem = Boolean(draft) && String(draft?.agent_id ?? "").trim() === String(item?.id ?? "").trim();
   const incomplete = isAgentIncomplete(item, draftBelongsToItem ? draft : undefined);
   const restartNeeded = isAgentRestartNeeded(item);
@@ -632,6 +634,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               )}
               <span className={`agent-status-dot ${running ? "online" : ""}`} aria-hidden="true"></span>
               <span className={`status-pill ${running ? "online" : ""}`}>{statusLabel}</span>
+              {runtimeStatusDetail ? (
+                <span className="status-pill profile-state-pill warn">{runtimeStatusDetail}</span>
+              ) : null}
               {gatewayDegraded ? (
                 <span className="status-pill profile-state-pill warn">{agentGatewayUnavailableLabel(item, t)}</span>
               ) : null}

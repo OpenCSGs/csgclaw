@@ -101,12 +101,16 @@ type Info struct {
 type State string
 
 const (
-	StateUnknown State = "unknown"
-	StateCreated State = "created"
-	StateRunning State = "running"
-	StateStopped State = "stopped"
-	StateExited  State = "exited"
-	StateFailed  State = "failed"
+	StateUnknown    State = "unknown"
+	StateCreated    State = "created"
+	StateRunning    State = "running"
+	StatePaused     State = "paused"
+	StateRestarting State = "restarting"
+	StateRemoving   State = "removing"
+	StateStopped    State = "stopped"
+	StateExited     State = "exited"
+	StateDead       State = "dead"
+	StateFailed     State = "failed"
 )
 
 type Profile struct {

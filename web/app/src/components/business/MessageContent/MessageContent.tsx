@@ -12,6 +12,7 @@ import { mentionMarkupPattern, escapeHTML } from "./mentions";
 import { hasAgentActivityMetadata, parseAgentActivity } from "@/models/agentActivity";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
+import { localizeError } from "@/shared/i18n";
 import "./MessageContent.css";
 
 export function MessageContent({
@@ -42,9 +43,10 @@ export function MessageContent({
     () => (activity || slashCommandText ? null : parseStructuredMessage(content)),
     [activity, content, slashCommandText],
   );
+  const displayContent = useMemo(() => localizeRuntimeError(content, t), [content, t]);
   const markup = useMemo(
-    () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : renderMarkdown(content)),
-    [activity, content, resolvedQuestion, slashCommandText, structured],
+    () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : renderMarkdown(displayContent)),
+    [activity, displayContent, resolvedQuestion, slashCommandText, structured],
   );
 
   useEffect(() => {
@@ -117,6 +119,37 @@ export function MessageContent({
   ) : (
     <div ref={containerRef} className="message-content" dangerouslySetInnerHTML={{ __html: markup }} />
   );
+}
+
+function localizeRuntimeError(content: string | null | undefined, t: MessageContentProps["t"]): string {
+  const value = String(content ?? "");
+  if (!t) {
+    return value;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!normalized.startsWith("runtime error:") && !normalized.includes("unexpected status 402")) {
+    return value;
+  }
+  const localized = localizeError(value, t);
+  const billingURL = runtimeErrorBillingURL(value);
+  return billingURL ? `${localized}\n\n👉 [${t("rechargeAccount")}](${billingURL})` : localized;
+}
+
+function runtimeErrorBillingURL(value: string): string {
+  const match = value.match(/"billing_url"\s*:\s*("(?:\\.|[^"\\])*")/i);
+  if (!match) {
+    return "";
+  }
+  try {
+    const candidate = JSON.parse(match[1]);
+    const parsed = new URL(candidate);
+    if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || parsed.username || parsed.password) {
+      return "";
+    }
+    return parsed.toString();
+  } catch (_) {
+    return "";
+  }
 }
 
 function isBlankTurnPlaceholder(content: string | null | undefined): boolean {

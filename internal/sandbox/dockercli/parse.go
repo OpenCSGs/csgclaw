@@ -65,12 +65,16 @@ func mapState(status string) sandbox.State {
 		return sandbox.StateCreated
 	case "running":
 		return sandbox.StateRunning
-	case "paused", "restarting":
-		return sandbox.StateUnknown
+	case "paused":
+		return sandbox.StatePaused
+	case "restarting":
+		return sandbox.StateRestarting
 	case "removing":
-		return sandbox.StateUnknown
-	case "exited", "dead":
+		return sandbox.StateRemoving
+	case "exited":
 		return sandbox.StateExited
+	case "dead":
+		return sandbox.StateDead
 	default:
 		return sandbox.StateUnknown
 	}

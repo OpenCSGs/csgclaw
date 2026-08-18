@@ -130,6 +130,18 @@ func TestCreateGatewayBoxForceRemovesDockerBoxWhenReadinessFails(t *testing.T) {
 	}
 }
 
+func TestGatewayStoppedErrorTreatsDeadContainerAsTerminal(t *testing.T) {
+	deps := testGatewayDeps(func() string { return "docker" }, nil)
+	deps.BoxInfo = func(context.Context, sandbox.Instance) (sandbox.Info, error) {
+		return sandbox.Info{ID: "box-1", State: sandbox.StateDead}, nil
+	}
+	rt := New(deps)
+	err := rt.gatewayStoppedError(context.Background(), testSandboxBox{}, errors.New("exec failed"))
+	if err == nil || !strings.Contains(err.Error(), "sandbox dead before ready") {
+		t.Fatalf("gatewayStoppedError() = %v, want dead container terminal error", err)
+	}
+}
+
 func TestGatewayCreateSpecUsesAgentIDSandboxName(t *testing.T) {
 	rt := New(testGatewayDeps(func() string { return "docker" }, func(context.Context, sandbox.Instance, string, []string, io.Writer) (int, error) {
 		return 0, nil

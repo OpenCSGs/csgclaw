@@ -247,6 +247,19 @@
   gap: 8px;
 }
 
+.agent-row-statuses {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.agent-runtime-status-detail {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .agent-name {
   font-weight: 700;
   font-size: 13px;

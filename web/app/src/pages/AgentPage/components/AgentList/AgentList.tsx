@@ -3,6 +3,7 @@ import {
   agentProfileConfig,
   agentAvailabilityStatusLabel,
   agentGatewayUnavailableLabel,
+  agentRuntimeStatusDetailLabel,
   isAgentGatewayDegraded,
   isAgentAvailable,
   agentModelID,
@@ -136,6 +137,7 @@ export function AgentRow({
   const lifecycleRunning = isAgentLifecycleRunning(item);
   const gatewayDegraded = isAgentGatewayDegraded(item);
   const statusLabel = agentAvailabilityStatusLabel(item, t);
+  const runtimeStatusDetail = agentRuntimeStatusDetailLabel(item, t);
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const upgradeNeeded = isAgentUpgradeNeeded(item);
@@ -150,7 +152,10 @@ export function AgentRow({
       <div className="agent-row-main">
         <div className="agent-row-top">
           <span className="agent-name truncate">{item.name}</span>
-          <span className={`agent-status ${running ? "running" : ""}`}>{statusLabel}</span>
+          <span className="agent-row-statuses">
+            <span className={`agent-status ${running ? "running" : ""}`}>{statusLabel}</span>
+            {runtimeStatusDetail ? <span className="agent-runtime-status-detail">{runtimeStatusDetail}</span> : null}
+          </span>
         </div>
         <div className="agent-meta truncate">
           {formatProviderLabel(provider)} · {agentModelID(item)}

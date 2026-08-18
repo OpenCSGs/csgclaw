@@ -99,6 +99,7 @@ export type AgentRuntimeLike = {
   kind?: RuntimeKind | null;
   name?: RuntimeName | null;
   sandbox_enabled?: boolean | null;
+  sandbox_provider?: string | null;
   state?: string | null;
   availability?: AgentRuntimeAvailabilityLike | null;
   startup_pending?: boolean | null;
@@ -965,7 +966,7 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
   if (normalized === "starting") {
     return t("agentStatusStarting");
   }
-  if (normalized === "offline" || normalized === "stopped" || normalized === "exited") {
+  if (["created", "paused", "restarting", "removing", "offline", "stopped", "exited", "dead"].includes(normalized)) {
     return t("offline");
   }
   if (normalized === "profile_incomplete") {
@@ -983,14 +984,41 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
   return t("agentStatusUnknown");
 }
 
+export function agentRuntimeStatusDetailLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
+  if (String(item?.runtime?.sandbox_provider || "").trim().toLowerCase() !== "docker") {
+    return "";
+  }
+  const status = agentRuntimeState(item).toLowerCase();
+  switch (status) {
+    case "created":
+      return t("agentContainerCreated");
+    case "paused":
+      return t("agentContainerPaused");
+    case "restarting":
+      return t("agentContainerRestarting");
+    case "removing":
+      return t("agentContainerRemoving");
+    case "exited":
+    case "stopped":
+      return t("agentContainerStopped");
+    case "dead":
+      return t("agentContainerDead");
+    default:
+      return "";
+  }
+}
+
 export function agentAvailabilityStatusLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
+  if (!isAgentLifecycleRunning(item)) {
+    return t("offline");
+  }
   if (isAgentGatewayDegraded(item)) {
     return t("offline");
   }
   if (isAgentGatewayAvailabilityUnknown(item)) {
     return t("agentStatusChecking");
   }
-  return agentStatusLabel(isAgentRuntimeStartupPending(item) ? "starting" : agentRuntimeState(item), t);
+  return agentStatusLabel(agentRuntimeState(item), t);
 }
 
 export function agentOfflineReasonLabel(status: unknown, t: TranslateFn): string {

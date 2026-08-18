@@ -2972,6 +2972,9 @@ func (h *Handler) backfillAgentLocalUser(resp *agentResponse) {
 
 func (h *Handler) presentAgentResponse(item agent.Agent) agentResponse {
 	resp := presentAgent(item)
+	if resp.Runtime.SandboxEnabled && h != nil && h.svc != nil {
+		resp.Runtime.SandboxProvider = h.svc.SandboxProviderName()
+	}
 	if item.ID != agent.ManagerUserID && item.Role != agent.RoleManager {
 		resp.RuntimeOptionSchemas = h.runtimeOptionSchemasForKind(item.RuntimeKind)
 	}
