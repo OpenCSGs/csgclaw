@@ -433,19 +433,22 @@ export class DesktopUpdater {
     const wasChannelSwitch = this.channelSwitchActive;
     try {
       await this.beforeInstall();
-      if (this.windowsChannelInstallerPath) {
-        const updateExePath = path.resolve(
+      if (
+        process.platform === DesktopPlatform.Windows &&
+        this.windowsChannelInstallerPath
+      ) {
+        const rootExecutablePath = path.resolve(
           path.dirname(process.execPath),
           "..",
-          "Update.exe",
+          path.basename(process.execPath),
         );
         await launchWindowsChannelInstaller(
           this.windowsChannelInstallerPath,
-          updateExePath,
-          path.basename(process.execPath),
+          rootExecutablePath,
           path.join(app.getPath("logs"), "channel-installer.log"),
+          process.pid,
         );
-        logDesktopInfo("desktop-channel-switch-windows-installer-launched", {
+        logDesktopInfo("desktop-channel-switch-windows-coordinator-ready", {
           availableVersion: this.expectedVersion,
           channel: this.effectiveUpdateChannel(),
         });

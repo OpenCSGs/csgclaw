@@ -19,12 +19,20 @@ $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $stagingDirectory = Join-Path ([IO.Path]::GetTempPath()) "csgclaw-diagnostics-$timestamp-$PID"
 $archivePath = Join-Path $OutputDirectory "csgclaw-diagnostics-$timestamp.zip"
 $collectedPaths = [Collections.Generic.List[string]]::new()
+$installationDirectory = Join-Path $env:LOCALAPPDATA "csgclaw_desktop"
 
 New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
 try {
-    foreach ($name in @("main.log", "main.previous.log", "backend.log", "channel-installer.log")) {
+    foreach ($name in @(
+        "main.log",
+        "main.previous.log",
+        "backend.log",
+        "channel-installer.log",
+        "channel-installer.cmd",
+        "channel-installer.ready"
+    )) {
         $source = Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File -Filter $name -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
@@ -41,6 +49,16 @@ try {
             -Destination (Join-Path $stagingDirectory "squirrel-setup.log") `
             -Force
         $collectedPaths.Add($squirrelLog)
+    }
+
+    if (Test-Path -LiteralPath $installationDirectory -PathType Container) {
+        Get-ChildItem -LiteralPath $installationDirectory -File -Filter "Squirrel-*.log" -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName `
+                    -Destination (Join-Path $stagingDirectory $_.Name) `
+                    -Force
+                $collectedPaths.Add($_.FullName)
+            }
     }
 
     Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File -ErrorAction SilentlyContinue |
@@ -73,7 +91,6 @@ try {
             Out-File -LiteralPath (Join-Path $stagingDirectory "process-status.txt") -Encoding UTF8
     }
 
-    $installationDirectory = Join-Path $env:LOCALAPPDATA "csgclaw_desktop"
     if (Test-Path -LiteralPath $installationDirectory -PathType Container) {
         Get-ChildItem -LiteralPath $installationDirectory -Force -ErrorAction SilentlyContinue |
             Select-Object Name, FullName, Length, LastWriteTime, Attributes |

@@ -11,6 +11,7 @@ import {
   officialMacReleaseArchiveURL,
   parseMacChannelUpdate,
   startMacChannelUpdateFeed,
+  windowsChannelInstallerCoordinatorScript,
 } from "./channelSwitchUpdate";
 
 test("selects the target latest release from a static macOS feed", () => {
@@ -55,7 +56,11 @@ test("builds the official release archive fallback for macOS", () => {
 
 test("explains a missing signed macOS auto-update package", () => {
   assert.match(
-    missingSignedMacUpdatePackageError("release", "0.4.6", new Error("HTTP 404")).message,
+    missingSignedMacUpdatePackageError(
+      "release",
+      "0.4.6",
+      new Error("HTTP 404"),
+    ).message,
     /does not provide a signed macOS auto-update package for 0.4.6\. HTTP 404/,
   );
 });
@@ -112,4 +117,22 @@ test("downloads and verifies a complete channel installer", async () => {
   } finally {
     await fs.promises.rm(directory, { recursive: true, force: true });
   }
+});
+
+test("coordinates a Windows channel install after the parent exits", () => {
+  const script = windowsChannelInstallerCoordinatorScript();
+  const readyIndex = script.indexOf("coordinator-ready");
+  const parentWaitIndex = script.indexOf(":wait_for_parent");
+  const installerIndex = script.indexOf(
+    '"%CSGCLAW_CHANNEL_INSTALLER%" --silent',
+  );
+  const relaunchIndex = script.indexOf(
+    'start "" "%CSGCLAW_CHANNEL_ROOT_EXECUTABLE%"',
+  );
+
+  assert.ok(readyIndex >= 0);
+  assert.ok(parentWaitIndex > readyIndex);
+  assert.ok(installerIndex > parentWaitIndex);
+  assert.ok(relaunchIndex > installerIndex);
+  assert.match(script, /installer-exited code=%installerExit%/);
 });

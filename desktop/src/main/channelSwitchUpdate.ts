@@ -248,43 +248,186 @@ export async function isVerifiedArtifact(
   }
 }
 
-export async function launchWindowsChannelInstaller(
-  installerPath: string,
-  updateExePath: string,
-  executableName: string,
+const WINDOWS_COORDINATOR_READY = "coordinator-ready";
+const WINDOWS_COORDINATOR_READY_TIMEOUT_MS = 5_000;
+
+export function windowsChannelInstallerCoordinatorScript(): string {
+  return [
+    "@echo off",
+    "setlocal EnableExtensions DisableDelayedExpansion",
+    "echo coordinator-started parent-pid=%CSGCLAW_CHANNEL_PARENT_PID%",
+    `> "%CSGCLAW_CHANNEL_READY_FILE%" echo ${WINDOWS_COORDINATOR_READY}`,
+    `echo ${WINDOWS_COORDINATOR_READY}`,
+    ":wait_for_parent",
+    '"%SystemRoot%\\System32\\tasklist.exe" /FI "PID eq %CSGCLAW_CHANNEL_PARENT_PID%" /NH 2>NUL | "%SystemRoot%\\System32\\findstr.exe" /C:"%CSGCLAW_CHANNEL_PARENT_PID%" >NUL',
+    "if errorlevel 1 goto parent_exited",
+    '"%SystemRoot%\\System32\\ping.exe" 127.0.0.1 -n 2 >NUL',
+    "goto wait_for_parent",
+    ":parent_exited",
+    "echo parent-exited",
+    "echo installer-started",
+    '"%CSGCLAW_CHANNEL_INSTALLER%" --silent',
+    'set "installerExit=%ERRORLEVEL%"',
+    "echo installer-exited code=%installerExit%",
+    'if not exist "%CSGCLAW_CHANNEL_ROOT_EXECUTABLE%" goto relaunch_missing',
+    "echo relaunch-started",
+    'start "" "%CSGCLAW_CHANNEL_ROOT_EXECUTABLE%"',
+    "if errorlevel 1 goto relaunch_failed",
+    "echo relaunch-requested",
+    "exit /b %installerExit%",
+    ":relaunch_failed",
+    "echo relaunch-failed code=%ERRORLEVEL%",
+    "exit /b 1",
+    ":relaunch_missing",
+    "echo relaunch-missing",
+    "exit /b 1",
+    "",
+  ].join("\r\n");
+}
+
+async function waitForWindowsCoordinatorReady(
+  readyFilePath: string,
+  child: ReturnType<typeof spawn>,
   logPath: string,
 ): Promise<void> {
-  // Run the full installer immediately after graceful app shutdown starts.
-  // Squirrel terminates any remaining package processes, replaces the app
-  // root, and returns only after releasing its update lock. Relaunching after
-  // that point prevents the target version (including older stable builds)
-  // from checking for updates while the installer still owns the lock.
-  const command = [
-    `> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo installer-started`,
-    `start "" /wait "%CSGCLAW_CHANNEL_INSTALLER%" --silent`,
-    `if errorlevel 1 (>> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo installer-failed) else (>> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo installer-finished)`,
-    `if not exist "%CSGCLAW_CHANNEL_UPDATER%" (>> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo updater-missing & exit /b 1)`,
-    `start "" "%CSGCLAW_CHANNEL_UPDATER%" --processStart "%CSGCLAW_CHANNEL_EXECUTABLE%"`,
-    `>> "%CSGCLAW_CHANNEL_INSTALL_LOG%" echo relaunch-requested`,
-  ].join(" & ");
-  const child = spawn("cmd.exe", ["/d", "/s", "/c", command], {
-    detached: true,
-    env: {
-      ...process.env,
-      CSGCLAW_CHANNEL_EXECUTABLE: executableName,
-      CSGCLAW_CHANNEL_INSTALLER: installerPath,
-      CSGCLAW_CHANNEL_INSTALL_LOG: logPath,
-      CSGCLAW_CHANNEL_UPDATER: updateExePath,
-    },
-    stdio: "ignore",
-    windowsHide: true,
-  });
   await new Promise<void>((resolve, reject) => {
-    child.once("error", reject);
-    child.once("spawn", () => {
-      child.off("error", reject);
+    const deadline = Date.now() + WINDOWS_COORDINATOR_READY_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+
+    const cleanup = (): void => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      child.off("error", fail);
+      child.off("exit", exited);
+    };
+    const succeed = (): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
       resolve();
-    });
+    };
+    const fail = (error: Error): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const exited = (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ): void => {
+      fail(
+        new Error(
+          `Windows update coordinator exited before it became ready (code=${code ?? "none"}, signal=${signal ?? "none"}). See ${logPath}.`,
+        ),
+      );
+    };
+    const poll = async (): Promise<void> => {
+      try {
+        const marker = await fs.promises.readFile(readyFilePath, "utf8");
+        if (marker.trim() === WINDOWS_COORDINATOR_READY) {
+          succeed();
+          return;
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          fail(error instanceof Error ? error : new Error(String(error)));
+          return;
+        }
+      }
+      if (settled) {
+        return;
+      }
+      if (Date.now() >= deadline) {
+        fail(
+          new Error(
+            `Windows update coordinator did not become ready within ${WINDOWS_COORDINATOR_READY_TIMEOUT_MS / 1_000} seconds. See ${logPath}.`,
+          ),
+        );
+        return;
+      }
+      timer = setTimeout(() => {
+        void poll();
+      }, 50);
+    };
+
+    child.once("error", fail);
+    child.once("exit", exited);
+    void poll();
   });
+}
+
+export async function launchWindowsChannelInstaller(
+  installerPath: string,
+  rootExecutablePath: string,
+  logPath: string,
+  parentProcessId: number,
+): Promise<void> {
+  // Keep the coordinator independent from the Electron process so it can wait
+  // for the current app to exit before running the full Squirrel installer.
+  // The ready-file handshake proves that cmd.exe parsed and started the batch
+  // file; merely observing ChildProcess's spawn event does not prove that.
+  const coordinatorDirectory = path.dirname(installerPath);
+  const coordinatorPath = path.join(
+    coordinatorDirectory,
+    "channel-installer.cmd",
+  );
+  const readyFilePath = path.join(
+    coordinatorDirectory,
+    "channel-installer.ready",
+  );
+  await fs.promises.mkdir(coordinatorDirectory, { recursive: true });
+  await fs.promises.mkdir(path.dirname(logPath), { recursive: true });
+  await Promise.all([
+    fs.promises.writeFile(
+      coordinatorPath,
+      windowsChannelInstallerCoordinatorScript(),
+      { encoding: "utf8", mode: 0o600 },
+    ),
+    fs.promises.writeFile(logPath, "", { encoding: "utf8", mode: 0o600 }),
+    fs.promises.rm(readyFilePath, { force: true }),
+  ]);
+
+  const logDescriptor = fs.openSync(logPath, "a");
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(
+      process.env.ComSpec || "cmd.exe",
+      ["/d", "/q", "/s", "/c", 'call "%CSGCLAW_CHANNEL_COORDINATOR%"'],
+      {
+        detached: true,
+        env: {
+          ...process.env,
+          CSGCLAW_CHANNEL_COORDINATOR: coordinatorPath,
+          CSGCLAW_CHANNEL_INSTALLER: installerPath,
+          CSGCLAW_CHANNEL_PARENT_PID: String(parentProcessId),
+          CSGCLAW_CHANNEL_READY_FILE: readyFilePath,
+          CSGCLAW_CHANNEL_ROOT_EXECUTABLE: rootExecutablePath,
+        },
+        stdio: ["ignore", logDescriptor, logDescriptor],
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+      },
+    );
+  } finally {
+    fs.closeSync(logDescriptor);
+  }
+
+  try {
+    await waitForWindowsCoordinatorReady(readyFilePath, child, logPath);
+  } catch (error) {
+    try {
+      child.kill();
+    } catch {
+      // Preserve the coordinator readiness error if the process already exited.
+    }
+    throw error;
+  }
   child.unref();
 }
