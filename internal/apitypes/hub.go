@@ -33,9 +33,25 @@ type HubTemplate struct {
 	Version     string               `json:"version,omitempty"`
 	Image       string               `json:"image,omitempty"`
 	ImageEnv    []ImageEnvContract   `json:"image_env,omitempty"`
+	Metadata    *HubTemplateMetadata `json:"metadata,omitempty"`
 	Source      HubTemplateSource    `json:"source"`
 	UpdatedAt   time.Time            `json:"updated_at,omitempty"`
 	Workspace   HubTemplateWorkspace `json:"workspace,omitempty"`
+}
+
+type HubTemplateMetadata struct {
+	SensitiveCheck *HubTemplateSensitiveCheck `json:"sensitive_check,omitempty"`
+}
+
+type HubTemplateSensitiveCheck struct {
+	Status         string                                   `json:"status"`
+	FailureDetails []HubTemplateSensitiveCheckFailureDetail `json:"failure_details,omitempty"`
+}
+
+type HubTemplateSensitiveCheckFailureDetail struct {
+	Path    string `json:"path,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type HubTemplateSource struct {

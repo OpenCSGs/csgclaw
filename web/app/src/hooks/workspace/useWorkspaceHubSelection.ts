@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import { fetchHubWorkspace, fetchHubWorkspaceFile, updateHubWorkspaceFile } from "@/api/hub";
 import { hasSkillName, isOfficialSkill, isPersonalSkill } from "@/models/skillhub";
-import type { HubWorkspaceFile } from "@/models/hubWorkspace";
+import { mergeHubTemplateDetail, type HubWorkspaceFile } from "@/models/hubWorkspace";
 import { flattenWorkspaceDirectoryListings } from "@/models/workspace";
 import type { WorkspaceDirectoryListings } from "@/models/workspace";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
@@ -153,8 +153,10 @@ export function useWorkspaceHubSelection({
     await officialSkillsQuery.fetchNextPage();
   }, [officialSkillsQuery, remoteSkillsEnabled]);
 
-  const selectedHubTemplateView =
-    hubTemplateDetailQuery.data?.id === selectedHubTemplateId ? hubTemplateDetailQuery.data : selectedHubTemplate;
+  const selectedHubTemplateView = mergeHubTemplateDetail(
+    hubTemplateDetailQuery.data?.id === selectedHubTemplateId ? hubTemplateDetailQuery.data : null,
+    selectedHubTemplate,
+  );
   const workspaceListings = useMemo(
     () => (workspaceListingsState.templateID === selectedHubTemplateId ? workspaceListingsState.listings : {}),
     [selectedHubTemplateId, workspaceListingsState],

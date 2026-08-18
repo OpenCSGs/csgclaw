@@ -386,6 +386,35 @@
   padding-bottom: 10px;
 }
 
+.hub-template-review-alert {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning-600) 45%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--warning-50) 78%, var(--surface) 22%);
+  color: var(--warning-800);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.hub-template-review-alert.exception {
+  border-color: color-mix(in srgb, var(--error-600) 45%, var(--line));
+  background: color-mix(in srgb, var(--error-50) 78%, var(--surface) 22%);
+  color: var(--error-700);
+}
+
+.hub-template-review-alert ul {
+  margin: 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}
+
+.hub-publish-partial-message {
+  white-space: pre-line;
+}
+
 .hub-inspector-hero-row {
   display: flex;
   align-items: flex-start;

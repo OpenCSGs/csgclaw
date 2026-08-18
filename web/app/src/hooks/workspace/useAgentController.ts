@@ -29,7 +29,13 @@ import {
 import type { AgentUpdatePayload, FeishuRegistration, FetchAgentsOptions } from "@/api/agents";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { publishAgentTemplateRequest, type AgentTemplatePublishTarget } from "@/api/hub";
-import { isHubTemplateAccountEmailMissing, isHubTemplateNameConflict } from "@/models/hubWorkspace";
+import {
+  isHubTemplateAccountEmailMissing,
+  isHubTemplateDeployReviewPendingError,
+  isHubTemplateDeploySensitiveCheckError,
+  isHubTemplateNameConflict,
+  isHubTemplateSensitiveInformationError,
+} from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
@@ -1735,14 +1741,28 @@ export function useAgentController({
       }
       return true;
     } catch (err) {
-      const message =
-        target !== "local" && isHubTemplateAccountEmailMissing(err)
-          ? t("resourcesPublishCommunityEmailRequired")
-          : target !== "local" && isHubTemplateNameConflict(err)
-            ? t("resourcesPublishCommunityNameExists")
-            : target === "local" && (err as ApiError | null)?.status === 409
-              ? t("agentPublishLocalNameExists")
-              : errorMessage(err, t("agentActionFailed"));
+      const deploySensitiveCheckFailed = isHubTemplateDeploySensitiveCheckError(err);
+      const deployReviewPending = isHubTemplateDeployReviewPendingError(err);
+      const publishedTemplateID = String((err as ApiError | null)?.publishedTemplateId ?? "").trim();
+      if (target === "official_deploy" && publishedTemplateID && (deploySensitiveCheckFailed || deployReviewPending)) {
+        await refreshHubTemplates();
+        setSelectedHubTemplateId(publishedTemplateID);
+        navigatePane({ type: WorkspacePaneTypes.hub, id: publishedTemplateID, resourceType: "template" }, rooms);
+        return true;
+      }
+      const message = deploySensitiveCheckFailed
+        ? t("agentDeploySensitiveCheckFailed")
+        : deployReviewPending
+          ? t("agentDeploySensitiveCheckPending")
+          : isHubTemplateSensitiveInformationError(err)
+            ? t("agentPublishSensitiveInformation")
+            : target !== "local" && isHubTemplateAccountEmailMissing(err)
+              ? t("resourcesPublishCommunityEmailRequired")
+              : target !== "local" && isHubTemplateNameConflict(err)
+                ? t("resourcesPublishCommunityNameExists")
+                : target === "local" && (err as ApiError | null)?.status === 409
+                  ? t("agentPublishLocalNameExists")
+                  : errorMessage(err, t("agentActionFailed"));
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);
       return false;

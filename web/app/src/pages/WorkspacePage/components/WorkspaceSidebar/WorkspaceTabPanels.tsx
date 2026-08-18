@@ -4,7 +4,7 @@ import { FileCode2, Plus } from "lucide-react";
 import { RoomAvatar } from "@/components/business";
 import { ModelsIcon, SidebarMcpIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
-import { hubTemplateFullName } from "@/models/hubWorkspace";
+import { hubTemplateFullName, hubTemplateReviewState } from "@/models/hubWorkspace";
 import { modelProviderAvatarPath, providerStatusTone, type ModelProvider } from "@/models/modelProviders";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { displayTeam, resolveTeamAvatarMembers, teamMemberIDs } from "@/models/tasks";
@@ -830,34 +830,47 @@ export function WorkspaceTabPanels({
         ) : resourcesLoaded && resourcesTemplates.length > 0 && !visibleTemplates.length ? (
           <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
         ) : (
-          renderedTemplates.map((item) => (
-            <button
-              key={item.id}
-              className={classNames(
-                rowStyles.row,
-                styles.hubTemplateRow,
-                resourcesPaneActive &&
-                  selectedHubTemplateId === item.id &&
-                  selectedHubResourceType === "template" &&
-                  rowStyles.active,
-              )}
-              onClick={() => onSelectHubTemplate(item)}
-            >
-              <span className={rowStyles.icon}>
-                <ModelsIcon />
-              </span>
-              <span className={rowStyles.main}>
-                <span className={classNames(rowStyles.title, "truncate")}>{hubTemplateFullName(item)}</span>
-                <span className={classNames(rowStyles.meta, "truncate")}>
-                  {item.description || item.source?.name || item.id}
+          renderedTemplates.map((item) => {
+            const review = hubTemplateReviewState(item);
+            const reviewLabel =
+              review?.kind === "pending" ? t("resourcesTemplateReviewPending") : t("resourcesTemplateReviewFailed");
+            return (
+              <button
+                key={item.id}
+                className={classNames(
+                  rowStyles.row,
+                  styles.hubTemplateRow,
+                  resourcesPaneActive &&
+                    selectedHubTemplateId === item.id &&
+                    selectedHubResourceType === "template" &&
+                    rowStyles.active,
+                )}
+                onClick={() => onSelectHubTemplate(item)}
+              >
+                <span className={rowStyles.icon}>
+                  <ModelsIcon />
                 </span>
-              </span>
-              <span className={styles.templateSourceBadge}>
-                <span className={styles.templateSourceBadgeDot} aria-hidden="true"></span>
-                {localizeTemplateSourceTag(item.source?.name, locale)}
-              </span>
-            </button>
-          ))
+                <span className={rowStyles.main}>
+                  <span className={classNames(rowStyles.title, "truncate")}>{hubTemplateFullName(item)}</span>
+                  <span
+                    className={classNames(
+                      rowStyles.meta,
+                      "truncate",
+                      review && styles[`templateReviewText_${review.kind}`],
+                    )}
+                  >
+                    {review ? reviewLabel : item.description || item.source?.name || item.id}
+                  </span>
+                </span>
+                <span className={styles.templateBadgeColumn}>
+                  <span className={styles.templateSourceBadge}>
+                    <span className={styles.templateSourceBadgeDot} aria-hidden="true"></span>
+                    {localizeTemplateSourceTag(item.source?.name, locale)}
+                  </span>
+                </span>
+              </button>
+            );
+          })
         )}
       </WorkspaceGroup>
     );

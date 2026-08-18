@@ -25,9 +25,25 @@ type Template struct {
 	Version      string
 	Image        string
 	ImageEnv     []apitypes.ImageEnvContract
+	Metadata     *TemplateMetadata
 	WorkspaceRef WorkspaceRef
 	Source       RegistryRef
 	UpdatedAt    time.Time
+}
+
+type TemplateMetadata struct {
+	SensitiveCheck *TemplateSensitiveCheck
+}
+
+type TemplateSensitiveCheck struct {
+	Status         string
+	FailureDetails []TemplateSensitiveCheckFailure
+}
+
+type TemplateSensitiveCheckFailure struct {
+	Path    string
+	Status  string
+	Message string
 }
 
 type RegistryRef struct {

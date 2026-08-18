@@ -229,17 +229,14 @@ Current platform expectations:
 
 ## Hub Configuration
 
-CSGClaw can read agent templates from one or more hub registries. Registry configuration is additive: built-in, local, and remote registries can coexist in the same `config.toml`.
+CSGClaw reads templates from the built-in, local, and official registries. Only built-in and local registries are configurable in `config.toml`; the official remote registry is managed by the application.
 
-When `[hub]` is omitted, CSGClaw enables three registries by default: `builtin` (read-only), `local` (writable publish target at `~/.csgclaw/hub`), and `official` (official remote at `https://hub.opencsg.com`). If your `config.toml` lists only some registries, missing defaults are merged in automatically so removing `builtin` does not break startup. In the Web UI, the official remote is resolved from the current OpenCSG login environment at request time: production uses `https://hub.opencsg.com`, and staging uses `https://opencsg-stg.com`.
+When `[hub]` is omitted, CSGClaw enables `builtin` (read-only), `local` (writable publish target at `~/.csgclaw/hub`), and the application-managed `official` remote. The official remote is always resolved from the current OpenCSG login environment at request time: production uses `https://hub.opencsg.com`, and staging uses `https://opencsg-stg.com`.
 
 ```toml
 [hub]
 default_registry = "builtin"
 default_publish_registry = "local"
-default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.openclaw-worker"
-
 [[hub.registries]]
 name = "builtin"
 kind = "builtin"
@@ -250,32 +247,22 @@ name = "local"
 kind = "local"
 path = "~/.csgclaw/hub"
 enabled = true
-
-[[hub.registries]]
-name = "team"
-kind = "remote"
-url = "https://hub.example.com"
-token = "${CSGCLAW_HUB_TOKEN}"
-enabled = true
 ```
 
 Field behavior:
 
 - `default_registry` selects the default source registry when a command needs one registry context.
 - `default_publish_registry` selects the default publish target when a command does not pass a registry explicitly.
-- `default_manager_template` selects the default manager template when a flow needs a manager template implicitly.
-- `default_worker_template` selects the default worker template when a flow needs a worker template implicitly.
 - `name` is the registry identifier used by CLI and API flows.
-- `kind` is `builtin`, `local`, or `remote`.
+- `kind` is `builtin` or `local` in `config.toml`.
 - `path` is used by `local` registries.
-- `url` and `token` are used by `remote` registries.
 - `enabled` controls whether the registry participates in hub operations. If omitted, it defaults to `true`.
 
-The built-in registry is read-only. Use a writable `local` or `remote` registry as the publish target. The Web UI publishes to the `official` registry for the currently signed-in OpenCSG site and disables that flow when no OpenCSG account is signed in. Remote template discovery combines the legacy `Agentic` organization catalog with the CSGClaw agent template catalog. Remote template IDs use `<namespace>/<name>` and resolve through the `official` remote registry.
+The built-in registry is read-only; `local` is the configurable writable target. The Web UI publishes to the application-managed `official` registry for the currently signed-in OpenCSG site and disables that flow when no OpenCSG account is signed in. Remote entries in `[[hub.registries]]` are ignored and removed the next time CSGClaw saves `config.toml`.
 
 When signed in, the current login site and access token select and authorize the official registry, even when managed environment variables are present. Without an interactive login, `CSGHUB_API_BASE_URL` selects the official registry and `CSGHUB_USER_TOKEN` authorizes private template reads; when the base URL is omitted, CSGClaw falls back to the production registry. `TEMPLATE_ID` should contain the template repository path in `<namespace>/<name>` form.
 
-The old template Hub URL `https://csgclaw.opencsg.com` is no longer rewritten automatically; configure the desired remote explicitly or rely on the login-environment-derived official registry.
+The old template Hub URL `https://csgclaw.opencsg.com` and custom remote registry URLs in `config.toml` are no longer used. The official registry follows the login environment.
 
 ## Skill registry configuration
 

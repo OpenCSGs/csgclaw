@@ -1957,6 +1957,58 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 	}
 }
 
+func TestHandleAgentProfileResolvesAgentName(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{{
+		ID:   "u-alice",
+		Name: "Alice",
+		Role: agent.RoleWorker,
+		AgentProfile: agent.AgentProfile{
+			Name:            "Alice",
+			Provider:        agent.ProviderCodex,
+			ModelID:         "old-model",
+			ProfileComplete: false,
+		},
+	}})
+	srv := &Handler{svc: svc}
+
+	t.Run("get", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/alice/profile", nil)
+		rec := httptest.NewRecorder()
+
+		srv.Routes().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+		var got apitypes.AgentProfile
+		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if got.ModelID != "old-model" {
+			t.Fatalf("profile = %+v, want old-model", got)
+		}
+	})
+
+	t.Run("put", func(t *testing.T) {
+		body := `{}`
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/agents/ALICE/profile", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		srv.Routes().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+		}
+		profile, err := svc.AgentProfileView("u-alice")
+		if err != nil {
+			t.Fatalf("AgentProfileView() error = %v", err)
+		}
+		if profile.ModelID != "" {
+			t.Fatalf("model id = %q, want empty", profile.ModelID)
+		}
+	})
+}
+
 func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 	svc := mustNewSeededServiceWithOptions(t, []agent.Agent{
 		{
@@ -3491,6 +3543,23 @@ func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 	}
 	if got[0].Source.Name == "" || got[0].Source.Kind == "" {
 		t.Fatalf("template source = %+v, want populated source", got[0].Source)
+	}
+}
+
+func TestPresentHubTemplateIncludesSensitiveCheckMetadata(t *testing.T) {
+	presented := presentHubTemplate(hub.Template{Metadata: &hub.TemplateMetadata{
+		SensitiveCheck: &hub.TemplateSensitiveCheck{
+			Status: "Exception",
+			FailureDetails: []hub.TemplateSensitiveCheckFailure{{
+				Path: "file/path", Status: "Fail", Message: "checker result",
+			}},
+		},
+	}})
+	if presented.Metadata == nil || presented.Metadata.SensitiveCheck == nil {
+		t.Fatal("sensitive check metadata is nil")
+	}
+	if got := presented.Metadata.SensitiveCheck.FailureDetails[0].Message; got != "checker result" {
+		t.Fatalf("failure message = %q, want checker result", got)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,8 +18,12 @@ import (
 
 const communityAgentInstancePath = "/api/v1/agent/instances"
 const communityInstanceTemplatePendingCode = "AGENT-ERR-22"
+const communityInstanceSensitiveCheckCode = "AGENT-ERR-23"
 const communityInstanceDeployRetries = 3
-const communityInstanceDeployRetryDelay = time.Second
+const communityInstanceDeployRetryDelay = 3 * time.Second
+
+var errCommunityInstanceSensitiveCheck = errors.New("community template has not passed the sensitive-content check")
+var errCommunityInstanceTemplatePending = errors.New("community template is not ready for deployment")
 
 type communityAgentInstanceRequest struct {
 	Name        string         `json:"name"`
@@ -33,7 +38,8 @@ type communityAgentInstanceResponse struct {
 	Code    string `json:"code"`
 	Msg     string `json:"msg"`
 	Context struct {
-		RepoPath string `json:"repo_path"`
+		RepoPath             string `json:"repo_path"`
+		SensitiveCheckStatus string `json:"sensitive_check_status"`
 	} `json:"context"`
 	Data json.RawMessage `json:"data"`
 }
@@ -155,7 +161,15 @@ func createCommunityAgentInstanceOnce(req *http.Request) (bool, error) {
 		if message == "" {
 			message = communityInstanceTemplatePendingCode
 		}
-		return true, fmt.Errorf("create community instance: %s", message)
+		return true, fmt.Errorf("%w: %s", errCommunityInstanceTemplatePending, message)
+	}
+	if result.Code == communityInstanceSensitiveCheckCode {
+		message := strings.TrimSpace(result.Msg)
+		if message == "" {
+			message = communityInstanceSensitiveCheckCode
+		}
+		retryable := !strings.EqualFold(strings.TrimSpace(result.Context.SensitiveCheckStatus), "fail")
+		return retryable, fmt.Errorf("%w: %s", errCommunityInstanceSensitiveCheck, message)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("create community instance: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
@@ -164,4 +178,14 @@ func createCommunityAgentInstanceOnce(req *http.Request) (bool, error) {
 		return false, fmt.Errorf("create community instance: response data is missing")
 	}
 	return false, nil
+}
+
+func communityInstanceUpstreamMessage(err error) string {
+	message := err.Error()
+	for _, sentinel := range []error{errCommunityInstanceTemplatePending, errCommunityInstanceSensitiveCheck} {
+		if errors.Is(err, sentinel) {
+			return strings.TrimPrefix(message, sentinel.Error()+": ")
+		}
+	}
+	return message
 }

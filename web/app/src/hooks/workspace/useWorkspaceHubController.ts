@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { errorMessage } from "@/api/client";
+import { errorMessage, type ApiError } from "@/api/client";
 import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
 import { deleteSkillRequest, installRemoteSkillRequest, uploadSkillArchive } from "@/api/skills";
 import {
   isDeletableHubTemplate,
   isHubTemplateAccountEmailMissing,
+  isHubTemplateDeployReviewPendingError,
+  isHubTemplateDeploySensitiveCheckError,
   isHubTemplateNameConflict,
+  isHubTemplateSensitiveInformationError,
   isVisibleInHubTemplateList,
 } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
@@ -19,6 +22,7 @@ import type { UseWorkspaceHubControllerArgs } from "./types";
 type WorkspaceHubSelection = ReturnType<typeof useWorkspaceHubSelection>;
 type DeleteHubTemplate = (template: HubTemplate | null | undefined) => Promise<boolean>;
 type DeleteSkill = (skill: SkillSummary | null | undefined) => Promise<boolean>;
+export type PublishHubTemplateResult = { status: "success" } | { status: "partial"; message: string } | null;
 export type InstallRemoteSkillOptions = {
   replace?: boolean;
 };
@@ -50,7 +54,10 @@ export type WorkspaceHubController = {
     deleteBusy: boolean;
     deleteHubTemplate: DeleteHubTemplate;
     publishBusy: boolean;
-    publishHubTemplate: (template: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean>;
+    publishHubTemplate: (
+      template: HubTemplate | null | undefined,
+      deploy?: boolean,
+    ) => Promise<PublishHubTemplateResult>;
     deleteSkill: DeleteSkill;
     skillDeleteBusy: boolean;
     remoteInstallBusy: string;
@@ -65,7 +72,10 @@ export type WorkspaceHubController = {
     detailPaneProps: WorkspaceHubSelection["detailPaneProps"] & {
       deleteBusy: boolean;
       onDeleteTemplate: DeleteHubTemplate;
-      onPublishTemplate: (template: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean>;
+      onPublishTemplate: (
+        template: HubTemplate | null | undefined,
+        deploy?: boolean,
+      ) => Promise<PublishHubTemplateResult>;
       publishBusy: boolean;
       publishDisabled: boolean;
       publishError: string;
@@ -210,9 +220,9 @@ export function useWorkspaceHubController({
   );
 
   const publishHubTemplate = useCallback(
-    async (template: HubTemplate | null | undefined, deploy = false): Promise<boolean> => {
+    async (template: HubTemplate | null | undefined, deploy = false): Promise<PublishHubTemplateResult> => {
       if (!template?.id || !isDeletableHubTemplate(template) || !openCSGAuthenticated) {
-        return false;
+        return null;
       }
       setResourcesPublishBusy(true);
       setResourcesPublishError("");
@@ -222,24 +232,41 @@ export function useWorkspaceHubController({
         if (published.id) {
           setSelectedHubTemplateId(published.id);
         }
-        return true;
+        return { status: "success" };
       } catch (err) {
-        setResourcesPublishError(
-          isHubTemplateAccountEmailMissing(err)
-            ? t("resourcesPublishCommunityEmailRequired")
-            : isHubTemplateNameConflict(err)
-              ? t("resourcesPublishCommunityNameExists")
-              : errorMessage(err, t("resourcesPublishCommunityFailed")),
-        );
+        const deploySensitiveCheckFailed = isHubTemplateDeploySensitiveCheckError(err);
+        const deployReviewPending = isHubTemplateDeployReviewPendingError(err);
+        const message =
+          deploySensitiveCheckFailed || deployReviewPending
+            ? errorMessage(
+                err,
+                deployReviewPending ? t("agentDeploySensitiveCheckPending") : t("agentDeploySensitiveCheckFailed"),
+              )
+            : isHubTemplateSensitiveInformationError(err)
+              ? t("agentPublishSensitiveInformation")
+              : isHubTemplateAccountEmailMissing(err)
+                ? t("resourcesPublishCommunityEmailRequired")
+                : isHubTemplateNameConflict(err)
+                  ? t("resourcesPublishCommunityNameExists")
+                  : errorMessage(err, t("resourcesPublishCommunityFailed"));
         if (deploy) {
           await refreshHubTemplates();
+          if (deploySensitiveCheckFailed || deployReviewPending) {
+            const apiError = err as ApiError;
+            const publishedTemplateID = apiError.publishedTemplateId ?? "";
+            setSelectedHubResourceType("template");
+            if (publishedTemplateID) setSelectedHubTemplateId(publishedTemplateID);
+            setResourcesPublishError("");
+            return { status: "partial", message };
+          }
         }
-        return false;
+        setResourcesPublishError(message);
+        return null;
       } finally {
         setResourcesPublishBusy(false);
       }
     },
-    [openCSGAuthenticated, refreshHubTemplates, setSelectedHubTemplateId, t],
+    [openCSGAuthenticated, refreshHubTemplates, setSelectedHubResourceType, setSelectedHubTemplateId, t],
   );
 
   const uploadSkill = useCallback(

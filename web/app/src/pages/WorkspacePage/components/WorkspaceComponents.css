@@ -546,6 +546,10 @@
   margin-top: 14px;
 }
 
+.agent-publish-dialog .form-error {
+  white-space: pre-line;
+}
+
 .span-2 {
   grid-column: 1 / -1;
 }

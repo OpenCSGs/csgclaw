@@ -66,7 +66,19 @@ type remoteAgentTemplate struct {
 }
 
 type remoteAgentTemplateMetadata struct {
-	RepoPath string `json:"repo_path"`
+	RepoPath       string                        `json:"repo_path"`
+	SensitiveCheck *remoteTemplateSensitiveCheck `json:"sensitive_check"`
+}
+
+type remoteTemplateSensitiveCheck struct {
+	Status         string                                `json:"status"`
+	FailureDetails []remoteTemplateSensitiveCheckFailure `json:"failure_details"`
+}
+
+type remoteTemplateSensitiveCheckFailure struct {
+	Path    string `json:"path"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 type remoteCodeResponse struct {
@@ -95,12 +107,13 @@ type remoteCreateCodeRequest struct {
 }
 
 type remoteCodeRepository struct {
-	Name          string    `json:"name"`
-	Nickname      string    `json:"nickname"`
-	Description   string    `json:"description"`
-	Path          string    `json:"path"`
-	DefaultBranch string    `json:"default_branch"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	Name          string            `json:"name"`
+	Nickname      string            `json:"nickname"`
+	Description   string            `json:"description"`
+	Path          string            `json:"path"`
+	DefaultBranch string            `json:"default_branch"`
+	UpdatedAt     time.Time         `json:"updated_at"`
+	Metadata      *TemplateMetadata `json:"-"`
 }
 
 type remoteTreeResponse struct {
@@ -150,7 +163,7 @@ func NewAuthenticatedRemoteStore(baseURL, token, username string) *RemoteStore {
 
 func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 	repositories := make([]remoteCodeRepository, 0)
-	seen := make(map[string]struct{})
+	seen := make(map[string]int)
 	var listErrs []error
 	var organizationTemplates remoteCodeListResponse
 	if err := s.getJSON(ctx, s.templatesURL(), &organizationTemplates); err != nil {
@@ -173,6 +186,7 @@ func (s *RemoteStore) List(ctx context.Context) ([]Template, error) {
 			Description: strings.TrimSpace(item.Description),
 			Path:        strings.TrimSpace(item.Metadata.RepoPath),
 			UpdatedAt:   item.UpdatedAt,
+			Metadata:    remoteTemplateMetadata(item.Metadata),
 		}})
 	}
 	if len(repositories) == 0 && len(listErrs) > 0 {
@@ -212,7 +226,7 @@ func (s *RemoteStore) listAgentTemplates(ctx context.Context) ([]remoteAgentTemp
 
 func appendRemoteTemplateRepositories(
 	repositories []remoteCodeRepository,
-	seen map[string]struct{},
+	seen map[string]int,
 	items []remoteCodeRepository,
 ) []remoteCodeRepository {
 	for _, repository := range items {
@@ -221,10 +235,13 @@ func appendRemoteTemplateRepositories(
 			slog.Warn("skip invalid remote hub template path", "path", repository.Path, "error", err)
 			continue
 		}
-		if _, ok := seen[id]; ok {
+		if index, ok := seen[id]; ok {
+			if repository.Metadata != nil {
+				repositories[index].Metadata = repository.Metadata
+			}
 			continue
 		}
-		seen[id] = struct{}{}
+		seen[id] = len(repositories)
 		repositories = append(repositories, repository)
 	}
 	return repositories
@@ -246,11 +263,15 @@ func (s *RemoteStore) Get(ctx context.Context, id string) (Template, error) {
 func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository remoteCodeRepository) (Template, error) {
 	branch := strings.TrimSpace(repository.DefaultBranch)
 	if branch == "" {
+		metadata := repository.Metadata
 		var payload remoteCodeResponse
 		if err := s.getJSON(ctx, s.templateURL(id), &payload); err != nil {
 			return Template{}, err
 		}
 		repository = payload.Data
+		if repository.Metadata == nil {
+			repository.Metadata = metadata
+		}
 		branch = strings.TrimSpace(repository.DefaultBranch)
 	}
 	if branch == "" {
@@ -290,9 +311,25 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		Version:      strings.TrimSpace(manifest.Version),
 		Image:        manifestImageRef(manifest.Image),
 		ImageEnv:     manifestImageEnv(manifest.Image),
+		Metadata:     repository.Metadata,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir},
 		UpdatedAt:    updatedAt,
 	}, nil
+}
+
+func remoteTemplateMetadata(metadata remoteAgentTemplateMetadata) *TemplateMetadata {
+	if metadata.SensitiveCheck == nil {
+		return nil
+	}
+	details := make([]TemplateSensitiveCheckFailure, 0, len(metadata.SensitiveCheck.FailureDetails))
+	for _, detail := range metadata.SensitiveCheck.FailureDetails {
+		details = append(details, TemplateSensitiveCheckFailure{
+			Path: strings.TrimSpace(detail.Path), Status: strings.TrimSpace(detail.Status), Message: strings.TrimSpace(detail.Message),
+		})
+	}
+	return &TemplateMetadata{SensitiveCheck: &TemplateSensitiveCheck{
+		Status: strings.TrimSpace(metadata.SensitiveCheck.Status), FailureDetails: details,
+	}}
 }
 
 func (s *RemoteStore) fetchManifest(ctx context.Context, id, branch string) (templateManifest, error) {
@@ -840,6 +877,9 @@ func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out 
 		return fmt.Errorf("remote hub response exceeds %d bytes", s.maxJSON)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if isRemoteSensitiveInformationError(data) {
+			return fmt.Errorf("%w", ErrTemplateSensitiveInfo)
+		}
 		return fmt.Errorf("remote hub request failed with status %d: %s", resp.StatusCode, truncateRemoteBody(data))
 	}
 	if out == nil {
@@ -849,6 +889,22 @@ func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out 
 		return fmt.Errorf("decode remote hub response: %w", err)
 	}
 	return nil
+}
+
+func isRemoteSensitiveInformationError(data []byte) bool {
+	var payload struct {
+		Code string `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.Unmarshal(data, &payload); err == nil {
+		if strings.EqualFold(strings.TrimSpace(payload.Code), "SENSITIVE-ERR-0") {
+			return true
+		}
+		if strings.Contains(strings.ToLower(payload.Msg), "sensitive information is not allowed") {
+			return true
+		}
+	}
+	return strings.Contains(strings.ToUpper(string(data)), "SENSITIVE-ERR-0")
 }
 
 func (s *RemoteStore) uploadArchive(ctx context.Context, upload remoteUploadURL, archive []byte) error {

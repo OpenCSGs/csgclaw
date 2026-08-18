@@ -37,6 +37,43 @@ secret = true
 description = "GitLab personal access token"
 `
 
+func TestRemoteTemplateMetadataPreservesSensitiveCheck(t *testing.T) {
+	t.Parallel()
+
+	got := remoteTemplateMetadata(remoteAgentTemplateMetadata{SensitiveCheck: &remoteTemplateSensitiveCheck{
+		Status: " Exception ",
+		FailureDetails: []remoteTemplateSensitiveCheckFailure{{
+			Path: " secrets.txt ", Status: " Fail ", Message: " checker result ",
+		}},
+	}})
+	if got == nil || got.SensitiveCheck == nil {
+		t.Fatal("sensitive check metadata is nil")
+	}
+	if got.SensitiveCheck.Status != "Exception" {
+		t.Fatalf("status = %q, want Exception", got.SensitiveCheck.Status)
+	}
+	if len(got.SensitiveCheck.FailureDetails) != 1 || got.SensitiveCheck.FailureDetails[0].Message != "checker result" {
+		t.Fatalf("failure details = %#v", got.SensitiveCheck.FailureDetails)
+	}
+}
+
+func TestRemoteStorePostJSONRecognizesSensitiveInformationError(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"code":"SENSITIVE-ERR-0","msg":"SENSITIVE-ERR-0: The sensitive information is not allowed."}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	store := NewRemoteStore(srv.URL, "token")
+	err := store.postJSON(context.Background(), srv.URL, map[string]string{"description": "blocked"}, nil)
+	if !errors.Is(err, ErrTemplateSensitiveInfo) {
+		t.Fatalf("postJSON() error = %v, want ErrTemplateSensitiveInfo", err)
+	}
+}
+
 func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	t.Parallel()
 
@@ -200,6 +237,12 @@ func TestRemoteStoreListMergesOrganizationAndAgentTemplatesByNamespacePath(t *te
 					"metadata": map[string]any{
 						"repo_path":    "alice/personal-bot",
 						"runtime_kind": "codex",
+						"sensitive_check": map[string]any{
+							"status": "Fail",
+							"failure_details": []map[string]any{{
+								"path": "README.md", "status": "Fail", "message": "checker result",
+							}},
+						},
 						"agent_file": map[string]any{
 							"name": "personal-bot", "role": "worker", "runtime_kind": "codex",
 						},
@@ -236,6 +279,31 @@ func TestRemoteStoreListMergesOrganizationAndAgentTemplatesByNamespacePath(t *te
 	}
 	if got, want := items[1].ID, "alice/personal-bot"; got != want {
 		t.Fatalf("List()[1].ID = %q, want %q", got, want)
+	}
+	if got := items[1].Metadata; got == nil || got.SensitiveCheck == nil {
+		t.Fatalf("List()[1].Metadata = %#v, want sensitive check from OpenCSG templates response", got)
+	} else if got.SensitiveCheck.Status != "Fail" || got.SensitiveCheck.FailureDetails[0].Message != "checker result" {
+		t.Fatalf("List()[1].Metadata.SensitiveCheck = %#v", got.SensitiveCheck)
+	}
+}
+
+func TestAppendRemoteTemplateRepositoriesPreservesMetadataFromDuplicate(t *testing.T) {
+	t.Parallel()
+
+	seen := make(map[string]int)
+	repositories := appendRemoteTemplateRepositories(nil, seen, []remoteCodeRepository{{Path: "alice/review-bot"}})
+	metadata := &TemplateMetadata{SensitiveCheck: &TemplateSensitiveCheck{
+		Status: "Fail",
+		FailureDetails: []TemplateSensitiveCheckFailure{{
+			Path: "README.md", Status: "Fail", Message: "sensitive content",
+		}},
+	}}
+	repositories = appendRemoteTemplateRepositories(repositories, seen, []remoteCodeRepository{{
+		Path: "alice/review-bot", Metadata: metadata,
+	}})
+
+	if got := repositories[0].Metadata; got != metadata {
+		t.Fatalf("duplicate metadata = %#v, want %#v", got, metadata)
 	}
 }
 

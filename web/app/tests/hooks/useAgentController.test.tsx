@@ -28,6 +28,7 @@ import {
   updateAgentRequest,
 } from "@/api/agents";
 import { createUserRequest } from "@/api/im";
+import { publishAgentTemplateRequest } from "@/api/hub";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
@@ -125,6 +126,14 @@ vi.mock("@/api/im", async () => {
   };
 });
 
+vi.mock("@/api/hub", async () => {
+  const actual = await vi.importActual<typeof import("@/api/hub")>("@/api/hub");
+  return {
+    ...actual,
+    publishAgentTemplateRequest: vi.fn(),
+  };
+});
+
 const oldImage = "registry.example/opencsghq/picoclaw:2026.5.27";
 const actionImage = "registry.example/opencsghq/picoclaw:2026.6.1";
 const latestImage = "registry.example/opencsghq/picoclaw:2026.6.8";
@@ -203,6 +212,7 @@ function useAgentControllerHarness(
     managerProfile?: AgentProfileLike | null;
     modelProviders?: ModelProviderCatalog | null;
     modelProvidersLoaded?: boolean;
+    openCSGAuthenticated?: boolean;
     bootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshedBootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshMCPServers?: () => Promise<unknown>;
@@ -223,6 +233,9 @@ function useAgentControllerHarness(
   const selectAgent = selectAgentRef.current;
   const selectConversationRef = useRef(vi.fn());
   const selectConversation = selectConversationRef.current;
+  const refreshHubTemplatesRef = useRef(vi.fn(async () => undefined));
+  const navigatePaneRef = useRef(vi.fn());
+  const setSelectedHubTemplateIdRef = useRef(vi.fn());
   const [data, setData] = useState<IMData | null>(() => options.data ?? null);
 
   useEffect(() => {
@@ -260,14 +273,15 @@ function useAgentControllerHarness(
     managerProfile: options.managerProfile ?? null,
     modelProviders: options.modelProviders ?? null,
     modelProvidersLoaded: options.modelProvidersLoaded ?? false,
+    openCSGAuthenticated: options.openCSGAuthenticated ?? false,
     refreshMCPServers: options.refreshMCPServers ?? vi.fn(async () => null),
-    refreshHubTemplates: vi.fn(async () => undefined),
+    refreshHubTemplates: refreshHubTemplatesRef.current,
     refreshWorkspaceAgents,
     refreshWorkspaceBootstrap,
     refreshWorkspaceBootstrapConfig,
     refreshWorkspaceManagerProfile,
     rooms: data?.rooms ?? [],
-    navigatePane: vi.fn(),
+    navigatePane: navigatePaneRef.current,
     selectAgent,
     selectComputer: vi.fn(),
     selectConversation,
@@ -276,7 +290,7 @@ function useAgentControllerHarness(
     setBootstrapData: (value) => {
       setData((current) => (typeof value === "function" ? value(current) : value));
     },
-    setSelectedHubTemplateId: vi.fn(),
+    setSelectedHubTemplateId: setSelectedHubTemplateIdRef.current,
     t: options.t ?? t,
   });
 
@@ -286,6 +300,9 @@ function useAgentControllerHarness(
     refreshWorkspaceBootstrap,
     refreshWorkspaceBootstrapConfig,
     refreshWorkspaceManagerProfile,
+    refreshHubTemplates: refreshHubTemplatesRef.current,
+    navigatePane: navigatePaneRef.current,
+    setSelectedHubTemplateId: setSelectedHubTemplateIdRef.current,
     selectAgent,
     selectConversation,
   };
@@ -323,6 +340,7 @@ describe("useAgentController", () => {
     vi.mocked(startFeishuRegistrationRequest).mockReset();
     vi.mocked(updateAgentRequest).mockReset();
     vi.mocked(patchCsgclawUserRequest).mockReset();
+    vi.mocked(publishAgentTemplateRequest).mockReset();
     navigationBlockerMock.current = {
       proceed: vi.fn(),
       reset: vi.fn(),
@@ -1124,6 +1142,49 @@ describe("useAgentController", () => {
 
     expect(result.current.agentViewProps.saveError).toBe("agentPublishLoginRequired");
     expect(result.current.agentViewProps.saveBillingURL).toBe("");
+  });
+
+  it("opens the published template when community deployment is waiting for review", async () => {
+    const worker: AgentLike = {
+      ...oldAgent,
+      id: "u-worker",
+      name: "reviewer",
+      role: "worker",
+      runtime_kind: "codex",
+    };
+    vi.mocked(publishAgentTemplateRequest).mockRejectedValueOnce({
+      status: 409,
+      code: "AGENT-ERR-22",
+      message: "sensitive-content review is still pending",
+      publishedTemplateId: "alice/reviewer",
+    } satisfies ApiError);
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
+          agents: [worker],
+          openCSGAuthenticated: true,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    let published = false;
+    await act(async () => {
+      published =
+        (await result.current.controller.agentViewProps.onPublish?.(
+          "official_deploy",
+          "reviewer",
+          "Reviews changes",
+        )) ?? false;
+    });
+
+    expect(published).toBe(true);
+    expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
+    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("alice/reviewer");
+    expect(result.current.navigatePane).toHaveBeenCalledWith(
+      { type: WorkspacePaneTypes.hub, id: "alice/reviewer", resourceType: "template" },
+      [],
+    );
   });
 
   it("does not wait for bootstrap or skill refresh after saving only the selected agent model", async () => {

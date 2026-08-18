@@ -15,6 +15,7 @@ import {
   canPublishHubTemplateToCommunity,
   formatHubDateTime,
   hubTemplateFullName,
+  hubTemplateReviewState,
   isDeletableHubTemplate,
 } from "@/models/hubWorkspace";
 import {
@@ -209,7 +210,14 @@ type HubDetailPaneHub = {
     onCreateMCP?: (payload: MCPServerPayload) => Promise<boolean> | boolean;
     onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
     onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
-    onPublishTemplate?: (item: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean> | boolean;
+    onPublishTemplate?: (
+      item: HubTemplate | null | undefined,
+      deploy?: boolean,
+    ) =>
+      | Promise<{ status: "success" } | { status: "partial"; message: string } | null>
+      | { status: "success" }
+      | { status: "partial"; message: string }
+      | null;
     onSelectMCP?: (name: string | null | undefined) => void;
     onUpdateMCP?: (currentName: string, payload: MCPServerPayload) => Promise<boolean> | boolean;
     onRetry: () => void | Promise<void>;
@@ -647,6 +655,7 @@ export function HubDetailPane({
   } = hub?.detailPaneProps ?? EMPTY_HUB_DETAIL_PROPS;
   const canDeleteTemplate = isDeletableHubTemplate(selectedTemplate);
   const canPublishTemplate = canPublishHubTemplateToCommunity(selectedTemplate);
+  const templateReview = hubTemplateReviewState(selectedTemplate);
   const canDeleteSkill = Boolean(selectedSkill && !isReadonlySkill(selectedSkill));
   const skillEntries = skillTree?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const activeResourceType = useMemo(() => {
@@ -669,6 +678,7 @@ export function HubDetailPane({
   }, [mcpServers.length, selectedResourceType, skills.length, templates.length]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
   const [publishSuccessDialogOpen, setPublishSuccessDialogOpen] = useState(false);
+  const [publishPartialMessage, setPublishPartialMessage] = useState("");
   const [publishChoiceDialogOpen, setPublishChoiceDialogOpen] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
@@ -805,8 +815,13 @@ export function HubDetailPane({
   }
 
   async function handlePublishTemplate(deploy = false) {
-    const published = await onPublishTemplate?.(selectedTemplate, deploy);
-    if (published) {
+    const result = await onPublishTemplate?.(selectedTemplate, deploy);
+    if (result?.status === "success") {
+      setPublishPartialMessage("");
+      setPublishChoiceDialogOpen(false);
+      setPublishSuccessDialogOpen(true);
+    } else if (result?.status === "partial") {
+      setPublishPartialMessage(result.message);
       setPublishChoiceDialogOpen(false);
       setPublishSuccessDialogOpen(true);
     }
@@ -928,6 +943,22 @@ export function HubDetailPane({
                     ) : null}
                   </div>
                 </div>
+                {templateReview ? (
+                  <div className={`hub-template-review-alert ${templateReview.kind}`} role="status">
+                    <strong>
+                      {templateReview.kind === "pending"
+                        ? t("resourcesTemplateReviewPending")
+                        : t("resourcesTemplateReviewFailed")}
+                    </strong>
+                    {templateReview.messages.length ? (
+                      <ul>
+                        {templateReview.messages.map((message, index) => (
+                          <li key={`${index}-${message}`}>{message}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
 
               <nav className="hub-template-section-nav" aria-label={t("agentProfileSectionNavLabel")}>
@@ -1392,8 +1423,14 @@ export function HubDetailPane({
         <DialogContent className="hub-skill-delete-dialog">
           <DialogHeader className="hub-skill-delete-dialog-header">
             <div className="hub-skill-delete-dialog-copy">
-              <DialogTitle>{t("resourcesPublishCommunitySuccessTitle")}</DialogTitle>
-              <DialogDescription>{t("resourcesPublishCommunitySuccessMessage")}</DialogDescription>
+              <DialogTitle>
+                {publishPartialMessage
+                  ? t("resourcesPublishCommunityDeployFailedTitle")
+                  : t("resourcesPublishCommunitySuccessTitle")}
+              </DialogTitle>
+              <DialogDescription className={publishPartialMessage ? "hub-publish-partial-message" : undefined}>
+                {publishPartialMessage ? publishPartialMessage : t("resourcesPublishCommunitySuccessMessage")}
+              </DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>

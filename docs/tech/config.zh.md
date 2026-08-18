@@ -229,17 +229,14 @@ docker_cli_path = "/usr/local/bin/docker"
 
 ## Hub 配置
 
-CSGClaw 可以从一个或多个 hub registry 读取 agent 模板。registry 配置是可叠加的：内置、本地和远端 registry 可以同时存在于同一个 `config.toml` 中。
+CSGClaw 从内置、本地和官方 registry 读取 agent 模板。`config.toml` 只允许配置内置和本地 registry；官方远端 registry 由应用管理。
 
-即使省略 `[hub]`，CSGClaw 也会默认启用三个 registry：`builtin`（内置只读）、`local`（本地发布）和 `official`（官方远端 `https://hub.opencsg.com`）。你在 `config.toml` 里只写了部分 registry 时，缺失的默认项会自动合并进来，因此删掉 `builtin` 也不会导致启动失败。Web UI 会在请求时根据当前 OpenCSG 登录环境解析官方远端：生产环境使用 `https://hub.opencsg.com`，stg 环境使用 `https://opencsg-stg.com`。
+即使省略 `[hub]`，CSGClaw 也会启用 `builtin`（内置只读）、`local`（本地发布）和应用管理的 `official` 远端。官方远端始终在请求时根据当前 OpenCSG 登录环境解析：生产环境使用 `https://hub.opencsg.com`，stg 环境使用 `https://opencsg-stg.com`。
 
 ```toml
 [hub]
 default_registry = "builtin"
 default_publish_registry = "local"
-default_manager_template = "builtin.manager-codex"
-default_worker_template = "builtin.openclaw-worker"
-
 [[hub.registries]]
 name = "builtin"
 kind = "builtin"
@@ -250,32 +247,22 @@ name = "local"
 kind = "local"
 path = "~/.csgclaw/hub"
 enabled = true
-
-[[hub.registries]]
-name = "team"
-kind = "remote"
-url = "https://hub.example.com"
-token = "${CSGCLAW_HUB_TOKEN}"
-enabled = true
 ```
 
 字段说明：
 
 - `default_registry`：当某个命令需要一个默认读取源 registry 时，使用这个值。
 - `default_publish_registry`：当发布命令没有显式传入 registry 时，使用这个值作为默认发布目标。
-- `default_manager_template`：当某个流程需要隐式选择 manager 模板时，使用这个值。
-- `default_worker_template`：当某个流程需要隐式选择 worker 模板时，使用这个值。
 - `name`：registry 标识符，供 CLI 和 API 使用。
-- `kind`：可选值为 `builtin`、`local` 或 `remote`。
+- `kind`：在 `config.toml` 中可选值为 `builtin` 或 `local`。
 - `path`：用于 `local` registry。
-- `url` 和 `token`：用于 `remote` registry。
 - `enabled`：控制该 registry 是否参与 hub 相关操作；如果省略，默认值为 `true`。
 
-内置 `builtin` registry 是只读的。发布模板时应选择可写的 `local` 或 `remote` registry。Web UI 会发布到当前 OpenCSG 登录站点对应的 `official` registry；未登录 OpenCSG 时不能执行该发布流程。远端模板列表会合并旧的 `Agentic` 组织目录和 CSGClaw Agent 模板目录。远端模板 ID 使用 `<namespace>/<name>` 格式，并通过 `official` remote registry 解析。
+内置 `builtin` registry 是只读的；`local` 是可配置的写入目标。Web UI 会发布到应用管理、与当前 OpenCSG 登录站点对应的 `official` registry。`config.toml` 中的 remote registry 条目会被忽略，并在 CSGClaw 下次保存配置时移除。
 
 已登录时，始终优先使用当前登录站点及其 access token 选择并访问 official registry，即使环境变量已经存在。未登录时，`CSGHUB_API_BASE_URL` 用于选择 official registry，`CSGHUB_USER_TOKEN` 用于鉴权并读取私有模板；未设置 base URL 时回退到生产 registry。`TEMPLATE_ID` 应使用 `<namespace>/<name>` 格式的模板仓库路径。
 
-旧模板 Hub 地址 `https://csgclaw.opencsg.com` 不再自动重写；请显式配置需要的远端，或使用由登录环境自动推导的 official registry。
+旧模板 Hub 地址 `https://csgclaw.opencsg.com` 和 `config.toml` 中的自定义远端地址不再使用；official registry 始终跟随登录环境。
 
 ## Skill 注册表配置
 

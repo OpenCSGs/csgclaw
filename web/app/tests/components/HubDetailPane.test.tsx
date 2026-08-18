@@ -55,6 +55,7 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesMCPRemoteServersSearchPlaceholder: "Search remote MCP servers",
     resourcesRefresh: "Refresh templates",
     resourcesPublishCommunitySuccessTitle: "Published successfully",
+    resourcesPublishCommunityDeployFailedTitle: "Template published, but deployment failed",
     resourcesPublishCommunitySuccessMessage: "The template has been published to the community.",
     resourcesPublishCommunitySuccessDismiss: "OK",
     resourcesSkillsEmpty: "No skills",
@@ -130,7 +131,10 @@ function renderHubDetailPane(
   selectedResourceType: "mcp" | "skill" | "template" = "template",
   options: {
     selectedTemplate?: HubTemplate;
-    onPublishTemplate?: (item: HubTemplate | null | undefined, deploy?: boolean) => Promise<boolean> | boolean;
+    onPublishTemplate?: (
+      item: HubTemplate | null | undefined,
+      deploy?: boolean,
+    ) => Promise<{ status: "success" } | { status: "partial"; message: string } | null>;
     publishDisabled?: boolean;
     publishError?: string;
   } = {},
@@ -416,7 +420,7 @@ function renderMCPCreateDialog() {
 describe("HubDetailPane", () => {
   it("publishes a local template to the community", async () => {
     const user = userEvent.setup();
-    const onPublishTemplate = vi.fn().mockResolvedValue(true);
+    const onPublishTemplate = vi.fn().mockResolvedValue({ status: "success" });
     const localTemplate = {
       ...template,
       id: "local.demo-template",
@@ -451,7 +455,7 @@ describe("HubDetailPane", () => {
     };
     renderHubDetailPane("template", {
       selectedTemplate: localTemplate,
-      onPublishTemplate: vi.fn().mockResolvedValue(false),
+      onPublishTemplate: vi.fn().mockResolvedValue(null),
     });
 
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
@@ -462,7 +466,7 @@ describe("HubDetailPane", () => {
 
   it("publishes and deploys a local template when selected", async () => {
     const user = userEvent.setup();
-    const onPublishTemplate = vi.fn().mockResolvedValue(true);
+    const onPublishTemplate = vi.fn().mockResolvedValue({ status: "success" });
     const localTemplate = {
       ...template,
       id: "local.demo-template",
@@ -476,6 +480,30 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
 
     expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true);
+  });
+
+  it("closes the publish form and shows deployment details after partial success", async () => {
+    const user = userEvent.setup();
+    const localTemplate = {
+      ...template,
+      id: "local.demo-template",
+      runtime_kind: "codex",
+      source: { name: "local", kind: "local" },
+      workspace: { ...template.workspace, kind: "codex" },
+    };
+    renderHubDetailPane("template", {
+      selectedTemplate: localTemplate,
+      onPublishTemplate: vi.fn().mockResolvedValue({ status: "partial", message: "Review failed\nUnsafe content" }),
+    });
+
+    await user.click(screen.getByRole("button", { name: "Publish to community" }));
+    await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
+
+    expect(screen.queryByRole("dialog", { name: "Publish agent template" })).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Template published, but deployment failed" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Unsafe content/)).toBeInTheDocument();
   });
 
   it("shows publishing failures inside the publish choice dialog", async () => {

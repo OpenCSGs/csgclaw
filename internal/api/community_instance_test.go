@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -154,6 +156,9 @@ func TestCreateCommunityAgentInstanceReturnsLastTemplatePendingError(t *testing.
 	if err == nil || !strings.Contains(err.Error(), "csgclaw template not found for repository path alice/ReviewBot") {
 		t.Fatalf("createCommunityAgentInstanceRequest() error = %v, want final deployment reason", err)
 	}
+	if !errors.Is(err, errCommunityInstanceTemplatePending) {
+		t.Fatalf("error = %v, want errCommunityInstanceTemplatePending", err)
+	}
 	if got, want := attempts, communityInstanceDeployRetries+1; got != want {
 		t.Fatalf("attempts = %d, want %d", got, want)
 	}
@@ -184,5 +189,85 @@ func TestCreateCommunityAgentInstanceDoesNotRetryOtherCodes(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+}
+
+func TestCreateCommunityAgentInstanceDoesNotRetryFailedSensitiveCheck(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"code":"AGENT-ERR-23","msg":"AGENT-ERR-23: Cannot create an agent from this agent template because it has not passed the sensitive-content check.","context":{"sensitive_check_status":"Fail"}}`))
+	}))
+	defer server.Close()
+
+	previousCredentials := loadCommunityInstanceCredentials
+	previousWait := waitForCommunityInstanceRetry
+	loadCommunityInstanceCredentials = func() (string, string, bool, error) {
+		return server.URL, "hub-token", true, nil
+	}
+	waitForCommunityInstanceRetry = func(context.Context) error { return nil }
+	t.Cleanup(func() {
+		loadCommunityInstanceCredentials = previousCredentials
+		waitForCommunityInstanceRetry = previousWait
+	})
+
+	err := createCommunityAgentInstanceRequest(context.Background(), hub.Template{
+		Namespace: "alice",
+		Name:      "ReviewBot",
+	}, auth.Status{UserID: "alice", UserUUID: "uuid-alice"})
+	if !errors.Is(err, errCommunityInstanceSensitiveCheck) {
+		t.Fatalf("error = %v, want errCommunityInstanceSensitiveCheck", err)
+	}
+	if !strings.Contains(err.Error(), "Cannot create an agent from this agent template") {
+		t.Fatalf("error = %v, want upstream deployment reason", err)
+	}
+	if got, want := attempts, 1; got != want {
+		t.Fatalf("attempts = %d, want %d", got, want)
+	}
+}
+
+func TestCreateCommunityAgentInstanceRetriesPendingSensitiveCheck(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		if attempts <= communityInstanceDeployRetries {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"code":"AGENT-ERR-23","msg":"sensitive-content review pending","context":{"sensitive_check_status":"Pending"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"msg":"OK","data":{"id":"instance-1"}}`))
+	}))
+	defer server.Close()
+
+	previousCredentials := loadCommunityInstanceCredentials
+	previousWait := waitForCommunityInstanceRetry
+	loadCommunityInstanceCredentials = func() (string, string, bool, error) {
+		return server.URL, "hub-token", true, nil
+	}
+	waitForCommunityInstanceRetry = func(context.Context) error { return nil }
+	t.Cleanup(func() {
+		loadCommunityInstanceCredentials = previousCredentials
+		waitForCommunityInstanceRetry = previousWait
+	})
+
+	err := createCommunityAgentInstanceRequest(context.Background(), hub.Template{
+		Namespace: "alice",
+		Name:      "ReviewBot",
+	}, auth.Status{UserID: "alice", UserUUID: "uuid-alice"})
+	if err != nil {
+		t.Fatalf("createCommunityAgentInstanceRequest() error = %v", err)
+	}
+	if got, want := attempts, communityInstanceDeployRetries+1; got != want {
+		t.Fatalf("attempts = %d, want %d", got, want)
+	}
+}
+
+func TestCommunityInstanceUpstreamMessageRemovesInternalClassification(t *testing.T) {
+	err := fmt.Errorf("%w: %s", errCommunityInstanceSensitiveCheck, "AGENT-ERR-23: review failed")
+	if got, want := communityInstanceUpstreamMessage(err), "AGENT-ERR-23: review failed"; got != want {
+		t.Fatalf("communityInstanceUpstreamMessage() = %q, want %q", got, want)
 	}
 }

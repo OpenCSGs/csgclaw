@@ -269,6 +269,8 @@ export const messages = {
     resourcesTitle: "Resources",
     resourcesSubtitle: "发现可复用的 Agent 模板，并作为全局入口浏览模板市场。",
     resourcesTemplatesSection: "模板",
+    resourcesTemplateReviewPending: "待审核",
+    resourcesTemplateReviewFailed: "审核未通过",
     resourcesSkillsLabel: "技能",
     resourcesMCPLabel: "MCP",
     resourcesMCPLoading: "正在加载 MCP servers...",
@@ -1185,11 +1187,15 @@ export const messages = {
     agentPublishTemplateNameInvalid:
       "模板名称必须以英文字母开头，最多 24 个字符，且只能包含英文字母、数字、下划线和短横线。",
     agentPublishLocalNameExists: "保存失败：本地已存在同名模板，请修改模板名称后重试。",
+    agentPublishSensitiveInformation: "发布失败：模板名称或描述中包含不允许的敏感信息，请修改后重试。",
+    agentDeploySensitiveCheckFailed: "模板已发布，但未通过敏感内容审核，暂时无法部署。请根据审核原因修改后重新发布。",
+    agentDeploySensitiveCheckPending: "模板已发布，但部署时模板尚未准备完成。请在模板列表中查看最新审核状态。",
     agentPublishTemplateDescription: "模板描述",
     resourcesPublishCommunityFailed: "发布到社区失败。",
     resourcesPublishCommunityEmailRequired: "发布失败：当前 OpenCSG 账号未设置邮箱，请完善账号资料后重试。",
     resourcesPublishCommunityNameExists: "发布失败：社区中已存在同名模板，请修改模板名称后重试。",
     resourcesPublishCommunitySuccessTitle: "发布成功",
+    resourcesPublishCommunityDeployFailedTitle: "模板已发布，但部署失败",
     resourcesPublishCommunitySuccessMessage: "模板已成功发布到社区。",
     resourcesPublishCommunitySuccessDismiss: "知道了",
     agentCreateProgressPreparing: "准备创建",
@@ -1660,6 +1666,8 @@ export const messages = {
     resourcesTitle: "Resources",
     resourcesSubtitle: "Browse reusable agent templates from a global entry point.",
     resourcesTemplatesSection: "Templates",
+    resourcesTemplateReviewPending: "Pending review",
+    resourcesTemplateReviewFailed: "Review failed",
     resourcesSkillsLabel: "Skills",
     resourcesMCPLabel: "MCP",
     resourcesMCPLoading: "Loading MCP servers...",
@@ -2602,6 +2610,12 @@ export const messages = {
       "Template name must start with an English letter, contain at most 24 characters, and use only English letters, numbers, underscores, or hyphens.",
     agentPublishLocalNameExists:
       "Saving failed: a local template with the same name already exists. Choose a different name and try again.",
+    agentPublishSensitiveInformation:
+      "Publishing failed: the template name or description contains sensitive information. Edit it and try again.",
+    agentDeploySensitiveCheckFailed:
+      "The template was published but cannot be deployed because it did not pass the sensitive-content check. Review the failure reason, update it, and publish again.",
+    agentDeploySensitiveCheckPending:
+      "The template was published, but it was not ready when deployment was attempted. Check its latest review status in the template list.",
     agentPublishTemplateDescription: "Template description",
     resourcesPublishCommunityFailed: "Failed to publish the template to the community.",
     resourcesPublishCommunityEmailRequired:
@@ -2609,6 +2623,7 @@ export const messages = {
     resourcesPublishCommunityNameExists:
       "Publishing failed: a template with the same name already exists in the community. Choose a different name and try again.",
     resourcesPublishCommunitySuccessTitle: "Published successfully",
+    resourcesPublishCommunityDeployFailedTitle: "Template published, but deployment failed",
     resourcesPublishCommunitySuccessMessage: "The template has been published to the community.",
     resourcesPublishCommunitySuccessDismiss: "OK",
     agentCreateProgressPreparing: "Preparing",

@@ -1397,7 +1397,7 @@ func TestFormatEffectiveConfigFormatsSectionsWithoutExtraWhitespace(t *testing.T
 			Provider: config.BoxLiteProvider,
 		},
 		Hub: config.HubConfig{
-			DefaultRegistry:        "team",
+			DefaultRegistry:        "builtin",
 			DefaultPublishRegistry: "local",
 			Registries: []config.HubRegistryConfig{
 				{
@@ -1434,7 +1434,7 @@ provider = "boxlite"
 debian_registries_override = []
 
 [hub]
-default_registry = "team"
+default_registry = "builtin"
 default_publish_registry = "local"
 
 [[hub.registries]]
@@ -1447,19 +1447,6 @@ name = "local"
 kind = "local"
 path = "/tmp/hub"
 enabled = false
-
-[[hub.registries]]
-name = "official"
-kind = "remote"
-url = "https://hub.opencsg.com"
-enabled = true
-
-[[hub.registries]]
-name = "team"
-kind = "remote"
-url = "https://hub.example.com"
-token = "hu******et"
-enabled = true
 `
 	if got := formatEffectiveConfig(cfg); got != want {
 		t.Fatalf("formatEffectiveConfig() mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, want)

@@ -3,6 +3,7 @@ export type ApiError = {
   message: string;
   code?: string;
   billingURL?: string;
+  publishedTemplateId?: string;
 };
 
 export type ApiRequestOptions = Omit<RequestInit, "body"> & {
@@ -155,7 +156,14 @@ export async function readResponseText(response: Response | null | undefined): P
 async function apiErrorFromResponse(response: Response): Promise<ApiError> {
   const raw = (await readResponseText(response)) || response.statusText;
   try {
-    const payload = JSON.parse(raw) as { error?: { billing_url?: unknown; code?: unknown; message?: unknown } };
+    const payload = JSON.parse(raw) as {
+      error?: {
+        billing_url?: unknown;
+        code?: unknown;
+        message?: unknown;
+        published_template_id?: unknown;
+      };
+    };
     const code = typeof payload?.error?.code === "string" ? payload.error.code.trim() : "";
     const message = typeof payload?.error?.message === "string" ? payload.error.message.trim() : "";
     const billingURL = typeof payload?.error?.billing_url === "string" ? payload.error.billing_url.trim() : "";
@@ -167,6 +175,10 @@ async function apiErrorFromResponse(response: Response): Promise<ApiError> {
       };
       if (billingURL) {
         error.billingURL = billingURL;
+      }
+      const publishedTemplateId = String(payload?.error?.published_template_id ?? "").trim();
+      if (publishedTemplateId) {
+        error.publishedTemplateId = publishedTemplateId;
       }
       return error;
     }

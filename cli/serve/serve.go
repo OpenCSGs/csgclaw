@@ -1064,6 +1064,9 @@ default_registry = %q
 default_publish_registry = %q
 `, resolvedHub.DefaultRegistry, resolvedHub.DefaultPublishRegistry)
 	for _, registry := range resolvedHub.Registries {
+		if strings.EqualFold(strings.TrimSpace(registry.Kind), config.HubRegistryKindRemote) {
+			continue
+		}
 		content += fmt.Sprintf(`
 [[hub.registries]]
 name = %q
