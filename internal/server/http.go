@@ -53,7 +53,7 @@ type Options struct {
 	Upgrade            *upgrade.Manager
 	ActivityDecider    api.ActivityDecider
 	UserInputResponder api.UserInputResponder
-	AgentEngine        *agentengine.Engine
+	AgentEngine        agentengine.Interface
 	SessionBindings    *agentsession.Store
 	ConfigPath         string
 	AccessToken        string

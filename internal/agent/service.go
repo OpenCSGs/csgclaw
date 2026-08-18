@@ -583,10 +583,29 @@ func (s *Service) ensureCodexManager(ctx context.Context, forceRecreate bool) (A
 	}
 
 	existing, _ := s.Agent(ManagerUserID)
+	managerCredentials, managerInitShell := existing.RuntimeProvision()
 	if err := s.validateMCPServers(ctx, RuntimeKindCodex, mcpServersSnapshotForAgent(managerMCPServers)); err != nil {
 		return Agent{}, err
 	}
 	legacyCleanupKeys := s.legacyManagerSandboxCleanupKeys()
+	runtimeAgent := s.newCodexManagerAgent(managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt, "", agentruntime.StateCreated, string(agentruntime.StateCreated), startProfile, detectionResults)
+	applyManagerMCPServers(&runtimeAgent, managerMCPServers)
+	runtimeAgent.SetRuntimeProvision(managerCredentials, managerInitShell)
+	runtimeProfile := s.runtimeProfileForAgentWithProfile(runtimeAgent, s.hydrateProfileFromCatalog(startProfile))
+	provisionReq := agentruntime.ProvisionRequest{
+		RuntimeID:           runtimeIDForAgentID(ManagerUserID),
+		AgentID:             ManagerUserID,
+		ParticipantID:       ManagerParticipantID,
+		AgentName:           managerDisplayName,
+		Profile:             runtimeProfile,
+		MCPServers:          cloneMCPServers(runtimeAgent.MCPServers),
+		Credentials:         managerCredentials,
+		PreviousCredentials: sortedStringKeys(managerCredentials),
+		InitShell:           managerInitShell,
+	}
+	if err := s.provisionRuntime(ctx, runtimeImpl, RuntimeKindCodex, provisionReq); err != nil {
+		return Agent{}, fmt.Errorf("provision manager runtime: %w", err)
+	}
 	if forceRecreate {
 		// Stop every channel bridge before deleting the Codex runtime. Bridge
 		// workers can otherwise access or restore the session while its runtime
@@ -597,21 +616,6 @@ func (s *Service) ensureCodexManager(ctx context.Context, forceRecreate bool) (A
 				return Agent{}, fmt.Errorf("remove existing manager runtime: %w", err)
 			}
 		}
-	}
-
-	runtimeAgent := s.newCodexManagerAgent(managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt, "", agentruntime.StateCreated, string(agentruntime.StateCreated), startProfile, detectionResults)
-	applyManagerMCPServers(&runtimeAgent, managerMCPServers)
-	runtimeProfile := s.runtimeProfileForAgentWithProfile(runtimeAgent, s.hydrateProfileFromCatalog(startProfile))
-	provisionReq := agentruntime.ProvisionRequest{
-		RuntimeID:     runtimeIDForAgentID(ManagerUserID),
-		AgentID:       ManagerUserID,
-		ParticipantID: ManagerParticipantID,
-		AgentName:     managerDisplayName,
-		Profile:       runtimeProfile,
-		MCPServers:    cloneMCPServers(runtimeAgent.MCPServers),
-	}
-	if err := s.provisionRuntime(ctx, runtimeImpl, RuntimeKindCodex, provisionReq); err != nil {
-		return Agent{}, fmt.Errorf("provision manager runtime: %w", err)
 	}
 	if _, err := s.persistManagerAgent(ctx, runtimeAgent, false); err != nil {
 		return Agent{}, err
@@ -639,6 +643,7 @@ func (s *Service) ensureCodexManager(ctx context.Context, forceRecreate bool) (A
 	}
 	manager := s.newCodexManagerAgent(managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt, info.HandleID, info.State, string(info.State), startProfile, detectionResults)
 	applyManagerMCPServers(&manager, managerMCPServers)
+	manager.SetRuntimeProvision(managerCredentials, managerInitShell)
 	manager.AgentProfile.EnvRestartRequired = false
 	manager.AgentProfile.ImageUpgradeRequired = false
 	if !info.CreatedAt.IsZero() {
@@ -2391,6 +2396,8 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		Profile:              runtimeProfile,
 		RuntimeOptions:       utils.CloneAnyMap(spec.RuntimeOptions),
 		MCPServers:           cloneMCPServers(spec.MCPServers),
+		Credentials:          cloneStringMap(spec.RuntimeCredentials),
+		InitShell:            spec.RuntimeInitShell,
 		WorkspaceOverlay:     strings.TrimSpace(spec.FromTemplate),
 	}); err != nil {
 		return Agent{}, fmt.Errorf("provision worker runtime: %w", err)
@@ -2414,14 +2421,14 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		defer func() {
 			_ = s.closeBox(box)
 		}()
-		return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, agentruntime.Info{
+		return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, spec.RuntimeCredentials, spec.RuntimeInitShell, agentruntime.Info{
 			HandleID:  strings.TrimSpace(info.ID),
 			State:     agentruntime.State(info.State),
 			CreatedAt: info.CreatedAt.UTC(),
 		})
 	}
 	if runtimeKind == RuntimeKindCodex {
-		if err := s.persistStartingWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers); err != nil {
+		if err := s.persistStartingWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, spec.RuntimeCredentials, spec.RuntimeInitShell); err != nil {
 			return Agent{}, err
 		}
 		defer func() {
@@ -2446,10 +2453,10 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		CreatedAt: time.Now().UTC(),
 	}
 
-	return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, info)
+	return s.persistCreatedWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, spec.RuntimeCredentials, spec.RuntimeInitShell, info)
 }
 
-func (s *Service) persistStartingWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, runtimeOptions map[string]any, mcpServers map[string]any) error {
+func (s *Service) persistStartingWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, runtimeOptions map[string]any, mcpServers map[string]any, runtimeCredentials map[string]string, runtimeInitShell string) error {
 	s.mu.Lock()
 
 	if _, _, ok := s.agentByIDLocked(id); ok {
@@ -2461,7 +2468,7 @@ func (s *Service) persistStartingWorker(ctx context.Context, id, name, descripti
 		return fmt.Errorf("agent name %q already exists", name)
 	}
 
-	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, runtimeOptions, mcpServers, agentruntime.Info{
+	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, runtimeOptions, mcpServers, runtimeCredentials, runtimeInitShell, agentruntime.Info{
 		State:     agentruntime.StateCreated,
 		CreatedAt: time.Now().UTC(),
 	})
@@ -2489,7 +2496,7 @@ func (s *Service) removeStartingWorker(ctx context.Context, id string) error {
 	return err
 }
 
-func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, createRuntimeExt map[string]any, mcpServers map[string]any, info agentruntime.Info) (Agent, error) {
+func (s *Service) persistCreatedWorker(ctx context.Context, id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, createRuntimeExt map[string]any, mcpServers map[string]any, runtimeCredentials map[string]string, runtimeInitShell string, info agentruntime.Info) (Agent, error) {
 	s.mu.Lock()
 
 	if existing, _, ok := s.agentByIDLocked(id); ok && !isStartingWorker(existing) {
@@ -2501,7 +2508,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 		return Agent{}, fmt.Errorf("agent name %q already exists", name)
 	}
 
-	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, createRuntimeExt, mcpServers, info)
+	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, createRuntimeExt, mcpServers, runtimeCredentials, runtimeInitShell, info)
 	s.clearRuntimeAvailabilityLocked(worker.ID)
 	s.agents[worker.ID] = worker
 	s.syncRuntimeRecordLocked(worker)
@@ -2522,7 +2529,7 @@ func (s *Service) persistCreatedWorker(ctx context.Context, id, name, descriptio
 	return created, nil
 }
 
-func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, runtimeOptions map[string]any, mcpServers map[string]any, info agentruntime.Info) Agent {
+func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName string, sandboxEnabled bool, profile AgentProfile, runtimeOptions map[string]any, mcpServers map[string]any, runtimeCredentials map[string]string, runtimeInitShell string, info agentruntime.Info) Agent {
 	createdAt := info.CreatedAt.UTC()
 	if info.CreatedAt.IsZero() {
 		createdAt = time.Now().UTC()
@@ -2539,7 +2546,7 @@ func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeK
 	runtimeCfg, _ := agentruntime.RuntimeConfigFromSelection(runtimeKind, runtimeName, sandboxEnabled)
 	resolvedRuntimeKind := runtimeCfg.LegacyKind()
 	resolvedRuntimeName := runtimeCfg.Name
-	return Agent{
+	worker := Agent{
 		ID:              id,
 		Name:            name,
 		RuntimeID:       runtimeIDForAgentID(id),
@@ -2561,6 +2568,8 @@ func newWorkerAgent(id, name, description, instructions, image, avatar, runtimeK
 		ProfileComplete: prof.ProfileComplete,
 		Role:            RoleWorker,
 	}
+	worker.SetRuntimeProvision(runtimeCredentials, runtimeInitShell)
+	return worker
 }
 
 func isStartingWorker(a Agent) bool {
@@ -2605,19 +2614,28 @@ func (s *Service) provisionRuntime(ctx context.Context, rt agentruntime.Runtime,
 }
 
 func (s *Service) provisionRuntimeForAgent(ctx context.Context, rt agentruntime.Runtime, got Agent, workspaceOverlay string) error {
+	credentials, _ := got.RuntimeProvision()
+	return s.provisionRuntimeForAgentWithPrevious(ctx, rt, got, sortedStringKeys(credentials), workspaceOverlay)
+}
+
+func (s *Service) provisionRuntimeForAgentWithPrevious(ctx context.Context, rt agentruntime.Runtime, got Agent, previousCredentials []string, workspaceOverlay string) error {
 	if s == nil || rt == nil {
 		return nil
 	}
+	credentials, initShell := got.RuntimeProvision()
 	return s.provisionRuntime(ctx, rt, strings.TrimSpace(got.RuntimeKind), agentruntime.ProvisionRequest{
-		RuntimeID:        normalizeRuntimeID(got.RuntimeID, got.ID),
-		AgentID:          strings.TrimSpace(got.ID),
-		ParticipantID:    participantIDForAgent(got.Name, got.ID),
-		AgentName:        strings.TrimSpace(got.Name),
-		Instructions:     strings.TrimSpace(got.Instructions),
-		Profile:          s.runtimeProfileForAgent(got),
-		RuntimeOptions:   utils.CloneAnyMap(got.RuntimeOptions),
-		MCPServers:       cloneMCPServers(got.MCPServers),
-		WorkspaceOverlay: strings.TrimSpace(workspaceOverlay),
+		RuntimeID:           normalizeRuntimeID(got.RuntimeID, got.ID),
+		AgentID:             strings.TrimSpace(got.ID),
+		ParticipantID:       participantIDForAgent(got.Name, got.ID),
+		AgentName:           strings.TrimSpace(got.Name),
+		Instructions:        strings.TrimSpace(got.Instructions),
+		Profile:             s.runtimeProfileForAgent(got),
+		RuntimeOptions:      utils.CloneAnyMap(got.RuntimeOptions),
+		MCPServers:          cloneMCPServers(got.MCPServers),
+		Credentials:         credentials,
+		PreviousCredentials: append([]string(nil), previousCredentials...),
+		InitShell:           initShell,
+		WorkspaceOverlay:    strings.TrimSpace(workspaceOverlay),
 	})
 }
 
@@ -2627,6 +2645,15 @@ func participantIDForAgent(agentName, agentID string) string {
 		return ManagerParticipantID
 	}
 	return participantIDFromAgentID(agentID)
+}
+
+func sortedStringKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 func ParticipantIDForAgent(agentName, agentID string) string {

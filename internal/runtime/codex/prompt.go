@@ -8,9 +8,11 @@ const (
 )
 
 type PromptRequest struct {
-	SessionID string
-	Prompt    []PromptContentBlock
-	Meta      map[string]any
+	SessionID           string
+	ClientUserMessageID string
+	Prompt              []PromptContentBlock
+	Meta                map[string]any
+	OnAccepted          func()
 }
 
 type PromptResponse struct {
@@ -20,8 +22,13 @@ type PromptResponse struct {
 
 type PromptContentBlock struct {
 	Text         *PromptTextBlock
+	LocalImage   *PromptLocalImageBlock
 	ResourceLink *PromptResourceLink
 	Resource     *PromptResourceBlock
+}
+
+type PromptLocalImageBlock struct {
+	Path string
 }
 
 type PromptTextBlock struct {
@@ -43,10 +50,16 @@ func TextBlock(text string) PromptContentBlock {
 	}
 }
 
+func LocalImageBlock(path string) PromptContentBlock {
+	return PromptContentBlock{LocalImage: &PromptLocalImageBlock{Path: path}}
+}
+
 func textFromPromptBlock(block PromptContentBlock) string {
 	switch {
 	case block.Text != nil:
 		return block.Text.Text
+	case block.LocalImage != nil:
+		return strings.TrimSpace(block.LocalImage.Path)
 	case block.ResourceLink != nil:
 		return strings.TrimSpace(block.ResourceLink.Name) + " " + strings.TrimSpace(block.ResourceLink.URI)
 	case block.Resource != nil:

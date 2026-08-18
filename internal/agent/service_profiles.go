@@ -311,6 +311,11 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 	if s == nil {
 		return Agent{}, fmt.Errorf("agent service is required")
 	}
+	ctx, release, err := s.acquireAgentLifecycle(ctx, id)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer release()
 	if updateIncludesMCPServers(req) {
 		s.mcpServersMu.Lock()
 		defer s.mcpServersMu.Unlock()
@@ -356,6 +361,9 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 	instructionsUpdated := updateRequested("instructions", req.Instructions != nil)
 	runtimeOptionsUpdated := updateRequested("runtime_options", req.RuntimeOptions != nil)
 	mcpServersUpdated := updateRequested("mcpservers", req.MCPServersSet)
+	runtimeCredentialsUpdated := updateRequested("runtime_credentials", req.RuntimeCredentials != nil)
+	runtimeInitShellUpdated := updateRequested("runtime_init_shell", req.RuntimeInitShell != nil)
+	runtimeProvisionUpdated := runtimeCredentialsUpdated || runtimeInitShellUpdated
 	if mcpServersUpdated && !req.MCPServersSet {
 		s.mu.Unlock()
 		return Agent{}, fmt.Errorf("field_mask includes mcpServers but request is missing mcpServers")
@@ -420,6 +428,22 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 			return Agent{}, fmt.Errorf("field_mask includes profile but request is missing profile")
 		}
 		current.Profile = strings.TrimSpace(*req.Profile)
+	}
+	if runtimeCredentialsUpdated {
+		if req.RuntimeCredentials == nil {
+			s.mu.Unlock()
+			return Agent{}, fmt.Errorf("field_mask includes runtime_credentials but request is missing credentials")
+		}
+		_, initShell := current.RuntimeProvision()
+		current.SetRuntimeProvision(*req.RuntimeCredentials, initShell)
+	}
+	if runtimeInitShellUpdated {
+		if req.RuntimeInitShell == nil {
+			s.mu.Unlock()
+			return Agent{}, fmt.Errorf("field_mask includes runtime_init_shell but request is missing initShell")
+		}
+		credentials, _ := current.RuntimeProvision()
+		current.SetRuntimeProvision(credentials, *req.RuntimeInitShell)
 	}
 	agentProfileUpdated := updateRequested("agent_profile", req.AgentProfile != nil)
 	if !hasFieldMask && !agentProfileUpdated && strings.TrimSpace(current.Profile) != "" {
@@ -532,6 +556,23 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 	if runtimeAffectingUpdate && current.ProfileComplete {
 		s.profileDefaults = profileDefaultsSnapshot(current.AgentProfile)
 		s.detectionResults = nil
+	}
+	if runtimeProvisionUpdated {
+		previousCredentials, _ := previous.RuntimeProvision()
+		runtimeImpl, err := s.runtimeForKind(runtimeKind)
+		if err != nil {
+			s.mu.Unlock()
+			return Agent{}, err
+		}
+		s.mu.Unlock()
+		if err := s.provisionRuntimeForAgentWithPrevious(ctx, runtimeImpl, current, sortedStringKeys(previousCredentials), ""); err != nil {
+			return Agent{}, fmt.Errorf("provision Runtime credentials and initShell: %w", err)
+		}
+		s.mu.Lock()
+		if _, key, ok = s.agentByIDLocked(id); !ok {
+			s.mu.Unlock()
+			return Agent{}, fmt.Errorf("agent %q not found", id)
+		}
 	}
 	current.UpdatedAt = time.Now().UTC()
 	s.agents[key] = current
@@ -1235,12 +1276,6 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 		return recreated, nil
 	}
 
-	deleteHandle := runtimeHandleForAgent(got)
-	deleteErr := runtimeImpl.Delete(ctx, deleteHandle)
-	if deleteErr != nil && !sandbox.IsNotFound(deleteErr) {
-		return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
-	}
-
 	runtimeProfile := s.runtimeProfileForKind(runtimeKind, got.ID, got.Name, got.Description, profile)
 	createSpec := agentruntime.Spec{
 		RuntimeID: normalizeRuntimeID(got.RuntimeID, got.ID),
@@ -1252,18 +1287,38 @@ func (s *Service) recreate(ctx context.Context, id string, imageFor func(context
 	if err := s.refreshGatewayTemplateSkills(got.ID, runtimeKind, recreateTemplateRole(got)); err != nil {
 		return Agent{}, fmt.Errorf("refresh gateway template skills: %w", err)
 	}
-	if err := s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
-		RuntimeID:            createSpec.RuntimeID,
-		AgentID:              createSpec.AgentID,
-		ParticipantID:        participantIDForAgent(createSpec.AgentName, createSpec.AgentID),
-		AgentName:            createSpec.AgentName,
-		Instructions:         strings.TrimSpace(got.Instructions),
-		TemplateInstructions: preservedInstructions,
-		Profile:              runtimeProfile,
-		RuntimeOptions:       utils.CloneAnyMap(got.RuntimeOptions),
-		MCPServers:           cloneMCPServers(got.MCPServers),
-	}); err != nil {
-		return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
+	runtimeCredentials, runtimeInitShell := got.RuntimeProvision()
+	provision := func() error {
+		return s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
+			RuntimeID:            createSpec.RuntimeID,
+			AgentID:              createSpec.AgentID,
+			ParticipantID:        participantIDForAgent(createSpec.AgentName, createSpec.AgentID),
+			AgentName:            createSpec.AgentName,
+			Instructions:         strings.TrimSpace(got.Instructions),
+			TemplateInstructions: preservedInstructions,
+			Profile:              runtimeProfile,
+			RuntimeOptions:       utils.CloneAnyMap(got.RuntimeOptions),
+			MCPServers:           cloneMCPServers(got.MCPServers),
+			Credentials:          runtimeCredentials,
+			PreviousCredentials:  sortedStringKeys(runtimeCredentials),
+			InitShell:            runtimeInitShell,
+		})
+	}
+	provisionBeforeDelete := strings.EqualFold(runtimeKind, RuntimeKindCodex)
+	if provisionBeforeDelete {
+		if err := provision(); err != nil {
+			return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
+		}
+	}
+	deleteHandle := runtimeHandleForAgent(got)
+	deleteErr := runtimeImpl.Delete(ctx, deleteHandle)
+	if deleteErr != nil && !sandbox.IsNotFound(deleteErr) {
+		return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
+	}
+	if !provisionBeforeDelete {
+		if err := provision(); err != nil {
+			return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
+		}
 	}
 	handle, err := runtimeImpl.New(ctx, createSpec)
 	if err != nil {

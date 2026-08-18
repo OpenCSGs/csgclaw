@@ -2952,6 +2952,9 @@ func TestCreateWorkerProvisionsRuntimeBeforeNew(t *testing.T) {
 				if req.WorkspaceOverlay != "" {
 					t.Fatalf("Provision() workspace overlay = %q, want empty", req.WorkspaceOverlay)
 				}
+				if req.Credentials["secrets/token"] != "runtime-secret" || req.InitShell != "test -f secrets/token" {
+					t.Fatalf("Provision() Runtime provisioning = %#v, %q", req.Credentials, req.InitShell)
+				}
 				return nil
 			},
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
@@ -2965,9 +2968,11 @@ func TestCreateWorkerProvisionsRuntimeBeforeNew(t *testing.T) {
 	}
 
 	_, err = svc.CreateWorker(context.Background(), CreateAgentSpec{
-		ID:          "u-alice",
-		Name:        "alice",
-		RuntimeKind: RuntimeKindCodex,
+		ID:                 "u-alice",
+		Name:               "alice",
+		RuntimeKind:        RuntimeKindCodex,
+		RuntimeCredentials: map[string]string{"secrets/token": "runtime-secret"},
+		RuntimeInitShell:   "test -f secrets/token",
 		AgentProfile: AgentProfile{
 			Name:            "alice",
 			Provider:        ProviderAPI,
@@ -3346,7 +3351,7 @@ func TestRecreateWaitsForConcurrentStartOfSameAgent(t *testing.T) {
 	}
 }
 
-func TestRecreateProvisionsRuntimeBeforeNew(t *testing.T) {
+func TestRecreateProvisionsRuntimeBeforeDeleteAndNew(t *testing.T) {
 	var callOrder []string
 	svc, err := NewService(
 		config.ModelConfig{},
@@ -3381,6 +3386,9 @@ func TestRecreateProvisionsRuntimeBeforeNew(t *testing.T) {
 				if req.WorkspaceOverlay != "" {
 					t.Fatalf("Provision() workspace overlay = %q, want empty", req.WorkspaceOverlay)
 				}
+				if req.Credentials["secrets/token"] != "runtime-secret" || req.InitShell != "test -f secrets/token" {
+					t.Fatalf("Provision() Runtime provisioning paths = %#v, initShell = %q", sortedStringKeys(req.Credentials), req.InitShell)
+				}
 				return nil
 			},
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
@@ -3413,13 +3421,66 @@ func TestRecreateProvisionsRuntimeBeforeNew(t *testing.T) {
 		},
 		ProfileComplete: true,
 	}
+	provisionedAgent := svc.agents["u-alice"]
+	provisionedAgent.SetRuntimeProvision(map[string]string{"secrets/token": "runtime-secret"}, "test -f secrets/token")
+	svc.agents["u-alice"] = provisionedAgent
 
 	_, err = svc.Recreate(context.Background(), "u-alice")
 	if err != nil {
 		t.Fatalf("Recreate() error = %v", err)
 	}
-	if got, want := strings.Join(callOrder, ","), "delete,provision,new"; got != want {
+	if got, want := strings.Join(callOrder, ","), "provision,delete,new"; got != want {
 		t.Fatalf("call order = %q, want %q", got, want)
+	}
+}
+
+func TestRecreateGatewayDeletesBeforeProvisionAndNew(t *testing.T) {
+	var callOrder []string
+	statePath := filepath.Join(t.TempDir(), "agents.json")
+	svc, err := NewService(
+		config.ModelConfig{},
+		config.ServerConfig{ListenAddr: "0.0.0.0:18080", AccessToken: "shared-token"},
+		"manager-image:test",
+		statePath,
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindOpenClawSandbox,
+			del: func(context.Context, agentruntime.Handle) error {
+				callOrder = append(callOrder, "delete")
+				return nil
+			},
+			provision: func(context.Context, agentruntime.ProvisionRequest) error {
+				callOrder = append(callOrder, "provision")
+				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				callOrder = append(callOrder, "new")
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "openclaw-new"}, nil
+			},
+			info: func(_ context.Context, handle agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: handle.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.agents["agent-alice"] = Agent{
+		ID: "agent-alice", Name: "alice", Role: RoleWorker,
+		RuntimeID: "rt-agent-alice", RuntimeKind: RuntimeKindOpenClawSandbox,
+		RuntimeName: RuntimeNameOpenClaw, SandboxEnabled: true,
+		Image: "openclaw:test", BoxID: "openclaw-old", Status: string(agentruntime.StateRunning),
+		AgentProfile: AgentProfile{
+			Name: "alice", Provider: ProviderAPI, BaseURL: "https://api.example/v1",
+			APIKey: "api-key", ModelID: "model-a", ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	if _, err := svc.Recreate(context.Background(), "agent-alice"); err != nil {
+		t.Fatalf("Recreate() error = %v", err)
+	}
+	if got, want := strings.Join(callOrder, ","), "delete,provision,new"; got != want {
+		t.Fatalf("gateway call order = %q, want %q", got, want)
 	}
 }
 
@@ -4201,16 +4262,26 @@ func TestEnsureBootstrapManagerPreservesLatestManagerMCPServersDuringStart(t *te
 
 	<-newStarted
 	updateConfig := utils.CloneAnyMap(newMCPServers)
-	if _, err := svc.Update(context.Background(), ManagerUserID, UpdateRequest{
-		MCPServers:    &updateConfig,
-		MCPServersSet: true,
-	}); err != nil {
-		t.Fatalf("Update(manager MCPServers) error = %v", err)
+	updateErrCh := make(chan error, 1)
+	go func() {
+		_, updateErr := svc.Update(context.Background(), ManagerUserID, UpdateRequest{
+			MCPServers:    &updateConfig,
+			MCPServersSet: true,
+		})
+		updateErrCh <- updateErr
+	}()
+	select {
+	case updateErr := <-updateErrCh:
+		t.Fatalf("Update(manager MCPServers) returned before start drained: %v", updateErr)
+	case <-time.After(20 * time.Millisecond):
 	}
 	close(releaseNew)
 
 	if err := <-errCh; err != nil {
 		t.Fatalf("EnsureBootstrapManager() error = %v", err)
+	}
+	if err := <-updateErrCh; err != nil {
+		t.Fatalf("Update(manager MCPServers) error = %v", err)
 	}
 	manager, ok := svc.Agent(ManagerUserID)
 	if !ok {
@@ -4220,11 +4291,8 @@ func TestEnsureBootstrapManagerPreservesLatestManagerMCPServersDuringStart(t *te
 	if manager.MCPServers["old"] != nil {
 		t.Fatalf("manager MCPServers = %#v, want latest config without old server", manager.MCPServers)
 	}
-	if !manager.AgentProfile.EnvRestartRequired {
-		t.Fatal("manager EnvRestartRequired = false, want true after MCP update during start")
-	}
-	if len(reconciledConfigs) < 2 {
-		t.Fatalf("MCP reconcile calls = %d, want update and post-start reconcile", len(reconciledConfigs))
+	if len(reconciledConfigs) < 1 {
+		t.Fatal("MCP reconcile was not called")
 	}
 	if got := reconcileHandles[len(reconcileHandles)-1]; got != "codex-manager-session" {
 		t.Fatalf("last MCP reconcile handle = %q, want codex-manager-session", got)

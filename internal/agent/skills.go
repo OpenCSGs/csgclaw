@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -107,6 +108,115 @@ func (s *Service) DeleteSkill(agentID, skillName string) error {
 		return err
 	}
 	return skilllocal.Delete(targetRoot, skillName)
+}
+
+// Skills returns the installed skill names for one Agent.
+func (s *Service) Skills(agentID string) ([]string, error) {
+	agentID = strings.TrimSpace(agentID)
+	got, ok := s.agentSnapshot(agentID)
+	if !ok {
+		return nil, fmt.Errorf("agent %q not found", agentID)
+	}
+	targetRoot, err := s.agentSkillsRoot(got.ID, got.RuntimeKind)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(targetRoot)
+	if errors.Is(err, os.ErrNotExist) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read agent skills root %q: %w", targetRoot, err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := skilllocal.ResolveDir(targetRoot, entry.Name()); err == nil {
+			names = append(names, entry.Name())
+		}
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+// ReplaceSkills validates and stages the complete desired skill set before an
+// atomic directory replacement under the shared lifecycle gate.
+func (s *Service) ReplaceSkills(ctx context.Context, agentID string, skillNames []string) error {
+	ctx, release, err := s.acquireAgentLifecycle(ctx, agentID)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	got, ok := s.agentSnapshot(agentID)
+	if !ok {
+		return fmt.Errorf("agent %q not found", strings.TrimSpace(agentID))
+	}
+	targetRoot, err := s.agentSkillsRoot(got.ID, got.RuntimeKind)
+	if err != nil {
+		return err
+	}
+	parent := filepath.Dir(targetRoot)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return fmt.Errorf("create agent workspace %q: %w", parent, err)
+	}
+	stageRoot, err := os.MkdirTemp(parent, ".skills-stage-")
+	if err != nil {
+		return fmt.Errorf("create staged skills directory: %w", err)
+	}
+	defer os.RemoveAll(stageRoot)
+
+	globalRoot, err := skilllocal.SkillsRoot()
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(skillNames))
+	for _, rawName := range skillNames {
+		name, err := skilllocal.NormalizeName(rawName)
+		if err != nil {
+			return err
+		}
+		if _, exists := seen[name]; exists {
+			return fmt.Errorf("duplicate skill name %q", name)
+		}
+		seen[name] = struct{}{}
+		srcFS, srcRoot, err := resolveAgentSkillSource(globalRoot, name)
+		if err != nil {
+			if errors.Is(err, skilllocal.ErrSkillInvalid) {
+				return fmt.Errorf("%w: %s", ErrAgentSkillInvalid, name)
+			}
+			return err
+		}
+		if err := copyWorkspaceFS(srcFS, srcRoot, filepath.Join(stageRoot, name), "skill", true); err != nil {
+			return fmt.Errorf("stage skill %q: %w", name, err)
+		}
+	}
+
+	backupRoot := targetRoot + ".replace-backup"
+	if err := os.RemoveAll(backupRoot); err != nil {
+		return fmt.Errorf("remove stale skill backup: %w", err)
+	}
+	targetExists := false
+	if _, err := os.Stat(targetRoot); err == nil {
+		targetExists = true
+		if err := os.Rename(targetRoot, backupRoot); err != nil {
+			return fmt.Errorf("backup current skills: %w", err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stat current skills: %w", err)
+	}
+	if err := os.Rename(stageRoot, targetRoot); err != nil {
+		if targetExists {
+			_ = os.Rename(backupRoot, targetRoot)
+		}
+		return fmt.Errorf("activate staged skills: %w", err)
+	}
+	if err := os.RemoveAll(backupRoot); err != nil {
+		return fmt.Errorf("remove previous skills: %w", err)
+	}
+	return nil
 }
 
 func resolveAgentSkillSource(root, name string) (fs.FS, string, error) {
