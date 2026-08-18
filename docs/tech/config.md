@@ -158,7 +158,7 @@ The Codex `reasoningEffortMap` passes these levels through by name.
 
 CSGClaw runs Workers through the configured sandbox provider. Supported built-in providers are:
 
-- `boxlite`: runs Workers through the local `boxlite` CLI.
+- `boxlite`: deprecated compatibility provider for legacy development environments; runs Workers through the local `boxlite` CLI when explicitly configured.
 - `docker`: runs Workers through the local Docker CLI.
 - `csghub`: runs Workers in the remote CSGHub sandbox. This is currently supported only in [AgenticHub](https://opencsg.com/agentichub).
 
@@ -188,7 +188,7 @@ provider = "boxlite"
 provider = "docker"
 ```
 
-For `provider = "boxlite"`, CSGClaw resolves the bundled sibling `boxlite` binary next to `csgclaw` first, then falls back to `PATH` if that bundle is missing. If neither exists, startup fails with an actionable error instead of silently rewriting the provider.
+For `provider = "boxlite"`, CSGClaw resolves the bundled sibling `boxlite` binary next to `csgclaw` first, then falls back to `PATH` if that bundle is missing. BoxLite is deprecated and no longer the recommended provider, but explicit legacy configurations remain supported for development use. CSGClaw does not silently rewrite them. If BoxLite is unavailable, the server and host-only runtimes still start; the first BoxLite-backed operation returns an actionable error recommending Docker.
 
 For `provider = "docker"`, Docker executable availability is checked when an operation actually opens the provider, such as creating or starting a sandbox Agent or listing local images. The server and a host-only manager can therefore start without Docker installed; the first Docker-backed operation still returns an actionable error.
 

@@ -1547,7 +1547,7 @@ func TestNewAgentServiceRejectsUnsupportedSandboxProvider(t *testing.T) {
 	}
 }
 
-func TestNewAgentServiceExplainsMissingConfiguredBoxLite(t *testing.T) {
+func TestNewAgentServiceAllowsMissingConfiguredBoxLiteAtStartup(t *testing.T) {
 	prevLookPath := sandboxprovidersTestOnlyLookPath(t, func(string) (string, error) {
 		return "", fmt.Errorf("not found")
 	})
@@ -1558,24 +1558,17 @@ func TestNewAgentServiceExplainsMissingConfiguredBoxLite(t *testing.T) {
 	})
 	defer prevStatPath()
 
-	_, err := newAgentService(config.Config{
+	t.Setenv("HOME", t.TempDir())
+
+	svc, err := newAgentService(config.Config{
 		Sandbox: config.SandboxConfig{
 			Provider: config.BoxLiteProvider,
 		},
 	}, nil)
-	if err == nil {
-		t.Fatal("newAgentService() error = nil, want actionable boxlite availability error")
+	if err != nil {
+		t.Fatalf("newAgentService() error = %v, want host-only startup to succeed", err)
 	}
-	for _, want := range []string{
-		`sandbox provider "boxlite" is configured`,
-		`no bundled boxlite binary was found`,
-		`"boxlite" is not available on PATH`,
-		`Switch [sandbox].provider to "docker"`,
-	} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("newAgentService() error = %q, want substring %q", err, want)
-		}
-	}
+	defer svc.Close()
 }
 
 func TestNewAgentServiceAllowsMissingConfiguredDockerAtStartup(t *testing.T) {
