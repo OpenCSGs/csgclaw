@@ -91,7 +91,7 @@ CSGClaw gives you one **Manager** and a set of specialized **Workers**, so inste
 
 **Workers** — role-specific executors (frontend, backend, testing, docs, research…). Specialization keeps context clean and reduces role confusion.
 
-**Sandbox** — Worker execution is isolated by the configured sandbox provider. CSGClaw defaults to **Docker** when the provider is unset, and BoxLite remains available through explicit configuration.
+**Sandbox** — Worker execution is isolated by the configured sandbox provider. CSGClaw defaults to **Docker** when the provider is unset. The deprecated BoxLite provider remains available through explicit configuration for legacy development use.
 
 **Interface** — WebUI out of the box; Feishu, WeChat, Matrix, and other channels available as integrations.
 
@@ -122,7 +122,7 @@ The key isn't that multiple agents exist — it's that **their collaboration is 
 CSGClaw uses PicoClaw as its lightweight default Agent Runtime, keeping the Manager fast to start and cheap to run. The runtime remains pluggable, so deployments can integrate alternatives such as OpenClaw when needed.
 
 **Docker by default, sandbox-agnostic by design.**
-Isolation is non-negotiable. Docker is the default sandbox provider for broad cross-platform availability, while BoxLite remains supported for environments that prefer its lightweight local runtime. Teams can switch sandbox providers explicitly when their environment requires it.
+Isolation is non-negotiable. Docker is the default sandbox provider for broad cross-platform availability. The deprecated BoxLite provider remains supported only for explicitly configured legacy development environments.
 
 **WebUI first, channel-agnostic by design.**
 Many multi-agent systems are tightly coupled to one messaging protocol. CSGClaw ships with a built-in WebUI so you can start immediately, while keeping other channels (Feishu, WeChat, Matrix) as optional integrations — not assumptions.

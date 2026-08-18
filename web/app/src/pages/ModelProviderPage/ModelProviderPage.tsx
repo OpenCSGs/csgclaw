@@ -295,13 +295,9 @@ export function ModelProviderPage() {
               </Button>
             ) : null}
             {showOpenCSGSignIn ? (
-              <Button
-                variant="primary"
-                onClick={() => void controller.sidebarProps?.onLogin?.()}
-                disabled={authBusy || authPending}
-              >
+              <Button variant="primary" onClick={() => void controller.sidebarProps?.onLogin?.()} disabled={authBusy}>
                 <LogIn size={16} aria-hidden="true" />
-                {authPending ? t("csghubLoginPending") : t("csghubSignIn")}
+                {authPending ? t("csghubReauthorize") : t("csghubSignIn")}
               </Button>
             ) : null}
             {!provider.builtin ? (

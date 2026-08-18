@@ -501,6 +501,15 @@ function Invoke-DesktopBackendBundle {
     } -Quiet
     Fetch-CodexCli -Goos $Goos -Goarch $Goarch -OutputDir $binDir
 
+    if ($Goos -eq "windows") {
+        Invoke-GoBuild `
+            -OutputPath (Join-Path $outputRoot "csgclaw-update-helper.exe") `
+            -PackagePath "./cmd/csgclaw-desktop-update-helper" `
+            -Ldflags "-s -w -H=windowsgui" `
+            -Env $targetEnv `
+            -Quiet
+    }
+
     Write-Host "Desktop backend ready: $bundleRoot"
 }
 

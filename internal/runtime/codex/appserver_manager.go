@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -33,7 +34,7 @@ var (
 	appServerMaximumTurnDuration = time.Duration(0)
 )
 
-var appServerCommandContext = codexcli.AppServerCommandContext
+var appServerCommandContext = codexcli.AppServerCommandContextWithOverrides
 
 type appServerManager struct {
 	deps      managerDeps
@@ -98,7 +99,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("open stderr log %s: %w", spec.StderrPath, err)
 	}
 
-	cmd, err := appServerCommandContext(ctx, spec.BinaryPath)
+	cmd, err := appServerCommandContext(ctx, spec.BinaryPath, appServerOverrides(spec))
 	if err != nil {
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("prepare codex app-server command: %w", err)
@@ -169,6 +170,12 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
 		return nil, m.wrapStartupError(spec, "initialize codex app-server", err)
 	}
+	if spec.ExecutionMode == ExecutionModeReadOnly {
+		if err := m.disableSystemSkills(ctx, live); err != nil {
+			_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
+			return nil, m.wrapStartupError(spec, "disable system skills for read-only agent", err)
+		}
+	}
 
 	threadID, err := m.startOrResumeThread(ctx, live, m.persistedThreadID(spec))
 	if err != nil {
@@ -203,6 +210,30 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 
 	cloned := *session
 	return &cloned, nil
+}
+
+func (m *appServerManager) disableSystemSkills(ctx context.Context, live *liveSession) error {
+	if live == nil || live.appClient == nil {
+		return fmt.Errorf("codex app-server session is unavailable")
+	}
+	root := filepath.Join(live.spec.CodexHomeDir, "skills", ".system")
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read system skills: %w", err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(root, entry.Name())
+		if _, err := live.appClient.request(ctx, "skills/config/write", map[string]any{"path": path, "enabled": false}); err != nil {
+			return fmt.Errorf("disable system skill %q: %w", entry.Name(), err)
+		}
+	}
+	return nil
 }
 
 func (m *appServerManager) Stop(ctx context.Context, handle SessionHandle) error {
@@ -610,6 +641,10 @@ func appServerThreadStartParams(spec SessionSpec) map[string]any {
 	if config := appServerReasoningConfig(spec.Profile.ReasoningEffort); len(config) > 0 {
 		params["config"] = config
 	}
+	if spec.ExecutionMode == ExecutionModeReadOnly {
+		params["approvalPolicy"] = "never"
+		params["permissions"] = readOnlyPermissionsProfile
+	}
 	return params
 }
 
@@ -625,6 +660,10 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	if config := appServerReasoningConfig(spec.Profile.ReasoningEffort); len(config) > 0 {
 		params["config"] = config
 	}
+	if spec.ExecutionMode == ExecutionModeReadOnly {
+		params["approvalPolicy"] = "never"
+		params["permissions"] = readOnlyPermissionsProfile
+	}
 	return params
 }
 
@@ -639,16 +678,70 @@ func appServerTurnStartParams(spec SessionSpec, threadID string, prompt string) 
 	if effort := config.NormalizeReasoningEffort(spec.Profile.ReasoningEffort); !config.UsesModelReasoningDefault(effort) {
 		params["effort"] = effort
 	}
+	if spec.ExecutionMode == ExecutionModeReadOnly {
+		params["approvalPolicy"] = "never"
+		params["permissions"] = readOnlyPermissionsProfile
+	}
 	return params
 }
 
+func appServerOverrides(spec SessionSpec) []string {
+	if spec.ExecutionMode != ExecutionModeReadOnly {
+		return nil
+	}
+	overrides := []string{
+		"--strict-config",
+		"--disable", "apps",
+		"--disable", "browser_use",
+		"--disable", "browser_use_external",
+		"--disable", "browser_use_full_cdp_access",
+		"--disable", "computer_use",
+		"--disable", "goals",
+		"--disable", "hooks",
+		"--disable", "image_generation",
+		"--disable", "in_app_browser",
+		"--disable", "memories",
+		"--disable", "multi_agent",
+		"--disable", "remote_plugin",
+		"--disable", "shell_tool",
+		"--disable", "skill_mcp_dependency_install",
+		"--disable", "unified_exec",
+		"--disable", "workspace_dependencies",
+		"--config", `approval_policy="never"`,
+		"--config", `default_permissions="csgclaw-read-only"`,
+		"--config", `web_search="disabled"`,
+		"--config", `shell_environment_policy.inherit="none"`,
+	}
+	if workspaceDir := strings.TrimSpace(spec.WorkspaceDir); workspaceDir != "" {
+		overrides = append(overrides,
+			"--config", fmt.Sprintf(`projects={%s={trust_level="untrusted"}}`, tomlQuotedKey(workspaceDir)),
+		)
+	}
+	return overrides
+}
+
 func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *liveSession, req appServerServerRequest) (any, error) {
+	readOnly := live != nil && live.spec.ExecutionMode == ExecutionModeReadOnly
 	switch strings.TrimSpace(req.Method) {
 	case "item/commandExecution/requestApproval", "execCommandApproval":
+		if readOnly {
+			return map[string]any{"decision": "decline"}, nil
+		}
 		return map[string]any{"decision": "accept"}, nil
 	case "item/fileChange/requestApproval", "applyPatchApproval":
+		if readOnly {
+			return map[string]any{"decision": "decline"}, nil
+		}
 		return map[string]any{"decision": "accept"}, nil
+	case "item/permissions/requestApproval":
+		if readOnly {
+			return map[string]any{"permissions": map[string]any{}, "scope": "turn"}, nil
+		}
+		return nil, fmt.Errorf("permission escalation is not supported")
 	case "mcpServer/elicitation/request":
+		if readOnly {
+			return map[string]any{"action": "decline", "content": nil, "_meta": nil}, nil
+		}
 		return map[string]any{
 			"action":  "accept",
 			"content": nil,

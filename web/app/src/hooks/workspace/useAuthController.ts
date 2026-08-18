@@ -45,6 +45,7 @@ export type AuthNotice = {
 export type AuthController = {
   environment: AuthEnvironmentDraft;
   busy: boolean;
+  loggingOut: boolean;
   dismissNotice: () => void;
   error: string;
   login: (environment?: AuthEnvironmentDraft) => Promise<void>;
@@ -114,6 +115,8 @@ export function useAuthController(t: TranslateFn): AuthController {
       }
       setBusyAction("login");
       setAuthError("");
+      clearPendingAuthLogin();
+      setLoginPending(false);
       const navigation = prepareOAuthNavigation("opencsg-auth");
       try {
         const nextEnvironment = resolveAuthEnvironmentDraft(requestedEnvironment ?? environment);
@@ -278,6 +281,7 @@ export function useAuthController(t: TranslateFn): AuthController {
   return {
     environment,
     busy: Boolean(busyAction),
+    loggingOut: busyAction === "logout",
     dismissNotice,
     error: authError || (statusQuery.isError ? authErrorMessage(statusQuery.error, t("csghubStatusFailed")) : ""),
     login,

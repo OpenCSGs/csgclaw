@@ -429,7 +429,7 @@ OpenClaw、PicoClaw 和 Codex CLI agent 通过顶层 `mcpServers` 字段配置 M
 {
   "description": "updated description",
   "runtime_options": {
-    "sandbox": "default"
+    "execution_mode": "read_only"
   }
 }
 ```
@@ -438,6 +438,9 @@ OpenClaw、PicoClaw 和 Codex CLI agent 通过顶层 `mcpServers` 字段配置 M
 
 - 省略的字段不会修改
 - `runtime_options` 一旦提交就是整体替换
+- Codex Worker 支持 `runtime_options.execution_mode`，取值为 `standard` 或
+  `read_only`；字段省略或为空时默认使用 `standard`
+- 正在运行的 Codex Worker 切换运行模式后会自动重启，使新的命令、沙盒和审批策略生效
 - `mcpServers` 一旦提交就是整个映射替换；传 `null` 可清除 CSGClaw 托管的 server 集合
 - OpenClaw、PicoClaw 或 Codex CLI agent 的 MCP server 变更可能触发该 agent runtime recreate，使原生配置生效
 - `agent_profile.api_key` 如果传空，服务端会保留原有密钥

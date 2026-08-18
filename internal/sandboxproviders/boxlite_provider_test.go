@@ -52,7 +52,7 @@ func TestBoxLiteProviderFactoryUsesDefaultResolvedPath(t *testing.T) {
 	}
 }
 
-func TestBoxLiteProviderFactoryErrorsWhenBundledAndPATHFallbackAreUnavailable(t *testing.T) {
+func TestBoxLiteProviderDefersAvailabilityUntilOpen(t *testing.T) {
 	restore := stubBoxLiteAvailability(t, func(string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}, func(path string) (os.FileInfo, error) {
@@ -60,17 +60,17 @@ func TestBoxLiteProviderFactoryErrorsWhenBundledAndPATHFallbackAreUnavailable(t 
 	})
 	defer restore()
 
-	factory, ok := factories[config.BoxLiteProvider]
-	if !ok {
-		t.Fatalf("boxlite provider factory not registered")
+	provider, err := Provider(config.SandboxConfig{Provider: config.BoxLiteProvider})
+	if err != nil {
+		t.Fatalf("Provider() error = %v, want deferred availability check", err)
 	}
-
-	_, err := factory(config.SandboxConfig{Provider: config.BoxLiteProvider})
+	_, err = provider.Open(t.Context(), t.TempDir())
 	if err == nil {
-		t.Fatal("factory() error = nil, want actionable boxlite availability error")
+		t.Fatal("provider.Open() error = nil, want actionable boxlite availability error")
 	}
 	wants := []string{
 		`sandbox provider "boxlite"`,
+		`is deprecated`,
 		`"docker"`,
 	}
 	if goruntime.GOOS != "windows" {
@@ -78,11 +78,12 @@ func TestBoxLiteProviderFactoryErrorsWhenBundledAndPATHFallbackAreUnavailable(t 
 			`no bundled boxlite binary was found`,
 			`"boxlite" is not available on PATH`,
 			`Switch [sandbox].provider to "docker"`,
+			`legacy development use`,
 		)
 	}
 	for _, want := range wants {
 		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("factory() error = %q, want substring %q", err, want)
+			t.Fatalf("provider.Open() error = %q, want substring %q", err, want)
 		}
 	}
 }

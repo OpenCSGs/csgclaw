@@ -37,10 +37,6 @@ func StatPathForTest(fn func(string) (os.FileInfo, error)) func() {
 func init() {
 	Register(config.BoxLiteProvider, func(cfg config.SandboxConfig) (sandbox.Provider, error) {
 		resolvedPath := boxlitecli.ResolvePath("")
-		if err := Availability(config.SandboxConfig{Provider: config.BoxLiteProvider}); err != nil {
-			return nil, err
-		}
-
 		opts := []boxlitecli.ProviderOption{boxlitecli.WithPath(resolvedPath)}
 		for _, registry := range cfg.EffectiveDebianRegistries() {
 			opts = append(opts, boxlitecli.WithRegistry(registry))
@@ -59,5 +55,5 @@ func ensureBoxLiteAvailable(resolvedPath string) error {
 		return nil
 	}
 
-	return fmt.Errorf("sandbox provider %q is configured, but no bundled boxlite binary was found and %q is not available on PATH\nSwitch [sandbox].provider to %q, or install boxlite separately if your platform later supports it.", config.BoxLiteProvider, resolvedPath, config.DockerProvider)
+	return fmt.Errorf("sandbox provider %q is configured explicitly and is deprecated, but no bundled boxlite binary was found and %q is not available on PATH\nSwitch [sandbox].provider to %q, or install boxlite separately for legacy development use.", config.BoxLiteProvider, resolvedPath, config.DockerProvider)
 }

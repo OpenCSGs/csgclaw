@@ -46,6 +46,9 @@ func TestOnlySetResponsesAPIProbe(probe func(context.Context, string, string, st
 }
 
 func (r *Runtime) ValidateConfig(ctx context.Context, current agentruntime.RuntimeConfigSnapshot) error {
+	if _, err := DecodeRuntimeOptions(current.Options); err != nil {
+		return err
+	}
 	target, ok, err := responsesProbeTarget(ctx, current.Profile)
 	if err != nil {
 		return fmt.Errorf("validate Codex provider Responses API: %w", err)
@@ -64,7 +67,7 @@ func (r *Runtime) ValidateStartConfig(_ context.Context, _ agentruntime.RuntimeC
 }
 
 func (r *Runtime) RestartRequired(change agentruntime.RuntimeConfigChange) (bool, error) {
-	return codexWorkspaceOptionChanged(change.Previous.Options, change.Current.Options) ||
+	return codexRuntimeOptionsChanged(change.Previous.Options, change.Current.Options) ||
 		!reflect.DeepEqual(change.Previous.Profile, change.Current.Profile), nil
 }
 
@@ -131,7 +134,7 @@ func (r *Runtime) ReconcileMCPServers(_ context.Context, h agentruntime.Handle, 
 	if err != nil {
 		return err
 	}
-	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.MCPServers)
+	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.RuntimeOptions, agentRef.MCPServers)
 }
 
 func (r *Runtime) ListMCPServers(_ context.Context, h agentruntime.Handle, _ agentruntime.MCPServersSnapshot) (agentruntime.MCPServersSnapshot, error) {
@@ -255,7 +258,7 @@ func normalizeHeaders(values map[string]string) map[string]string {
 	return out
 }
 
-func codexWorkspaceOptionChanged(previous, current map[string]any) bool {
+func codexRuntimeOptionsChanged(previous, current map[string]any) bool {
 	previousOpts, err := DecodeRuntimeOptions(previous)
 	if err != nil {
 		return true
@@ -264,5 +267,5 @@ func codexWorkspaceOptionChanged(previous, current map[string]any) bool {
 	if err != nil {
 		return true
 	}
-	return previousOpts.LocalWorkspaceDir != currentOpts.LocalWorkspaceDir
+	return previousOpts.LocalWorkspaceDir != currentOpts.LocalWorkspaceDir || previousOpts.ExecutionMode != currentOpts.ExecutionMode
 }

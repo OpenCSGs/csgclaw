@@ -44,6 +44,7 @@ type SidebarUserButtonProps = {
   authEnvironment?: AuthEnvironmentDraft;
   authStatus?: AuthStatus | null;
   authBusy?: boolean;
+  authLoggingOut?: boolean;
   authPending?: boolean;
   authError?: string;
   onLogin?: (environment?: AuthEnvironmentDraft) => void | Promise<void>;
@@ -72,6 +73,7 @@ export function SidebarUserButton({
   authEnvironment,
   authStatus = null,
   authBusy = false,
+  authLoggingOut = false,
   authPending = false,
   authError = "",
   onLogin,
@@ -121,12 +123,18 @@ export function SidebarUserButton({
   const accountUserID = authStatus?.user_id || "";
   const accountUserName = authStatus?.name || "";
   const accountDisplayName = accountUserName || accountUserID || authStatus?.user_uuid || t("csghubSignedIn");
-  const loginLabel = authPending ? t("csghubLoginPending") : authBusy ? t("csghubSigningIn") : t("csghubSignIn");
+  const loginLabel = authLoggingOut
+    ? t("csghubSigningOut")
+    : authBusy
+      ? t("csghubSigningIn")
+      : authPending
+        ? t("csghubReauthorize")
+        : t("csghubSignIn");
   const activeAuthEnvironmentDraft = accountAuthenticated
     ? authEnvironmentDraftFromStatus(authStatus, authEnvironmentDraft)
     : authEnvironmentDraft;
   const authEnvironmentReady = authEnvironmentLoginReady(authEnvironmentDraft);
-  const authActionDisabled = authBusy || authPending || !authEnvironmentReady;
+  const authActionDisabled = authBusy || !authEnvironmentReady;
   const showAuthEnvironmentAdvanced = advancedOpen || authEnvironmentDraft.preset === "custom";
   const authEnvironmentLabel = authEnvironmentDisplayLabel(activeAuthEnvironmentDraft, t("csghubEnvCustom"));
   const showAuthEnvironmentLabel =
@@ -404,6 +412,8 @@ export function SidebarUserButton({
                     size="sm"
                     className={styles.action}
                     disabled={authBusy}
+                    loading={authLoggingOut}
+                    loadingLabel={t("csghubSigningOut")}
                     role="menuitem"
                     onClick={() => onLogout?.()}
                   >
@@ -422,6 +432,8 @@ export function SidebarUserButton({
                   size="sm"
                   className={styles.action}
                   disabled={authActionDisabled}
+                  loading={authBusy}
+                  loadingLabel={loginLabel}
                   role="menuitem"
                   onClick={handleLogin}
                 >

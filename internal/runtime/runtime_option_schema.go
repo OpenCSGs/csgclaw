@@ -13,6 +13,7 @@ type RuntimeOptionSchema struct {
 	Required      bool     `json:"required,omitempty"`
 	Picker        string   `json:"picker,omitempty"`
 	Options       []string `json:"options,omitempty"`
+	DefaultValue  string   `json:"default_value,omitempty"`
 }
 
 type RuntimeOptionSchemaProvider interface {

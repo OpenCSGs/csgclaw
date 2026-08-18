@@ -158,7 +158,7 @@ Codex 的 `reasoningEffortMap` 会按同名值透传这些档位。
 
 CSGClaw 通过配置的 sandbox provider 隔离 Worker 执行环境。当前内置支持的 provider 包括：
 
-- `boxlite`：通过本地 `boxlite` CLI 运行 Worker。
+- `boxlite`：用于旧开发环境兼容的已弃用 provider；仅在显式配置时通过本地 `boxlite` CLI 运行 Worker。
 - `docker`：通过本地 Docker CLI 运行 Worker。
 - `csghub`：在远端 CSGHub sandbox 运行 Worker（目前仅支持在 [AgenticHub](https://opencsg.com/agentichub) 里使用）。
 
@@ -188,7 +188,7 @@ provider = "boxlite"
 provider = "docker"
 ```
 
-对于 `provider = "boxlite"`，CSGClaw 会优先解析与 `csgclaw` 同 bundle 的 `boxlite`，只有 bundle 缺失时才回退到 `PATH`。如果两者都找不到，启动会直接报带操作建议的错误，而不是静默改写 provider。
+对于 `provider = "boxlite"`，CSGClaw 会优先解析与 `csgclaw` 同 bundle 的 `boxlite`，只有 bundle 缺失时才回退到 `PATH`。BoxLite 已弃用且不再是推荐 provider，但为了开发兼容，显式的旧配置仍然有效，CSGClaw 不会静默改写它。即使 BoxLite 不可用，服务和仅使用宿主机 runtime 的 manager 仍可启动；第一次 BoxLite sandbox 操作会返回带操作建议的错误并推荐切换到 Docker。
 
 对于 `provider = "docker"`，Docker 可执行文件会在真正打开 provider 的操作中检查，例如创建或启动 sandbox Agent、列出本地镜像。这样，即使未安装 Docker，服务和仅使用宿主机 runtime 的 manager 也可以正常启动；第一次 Docker sandbox 操作仍会返回带操作建议的错误。
 

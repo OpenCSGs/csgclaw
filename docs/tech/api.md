@@ -437,7 +437,7 @@ Example request body:
 {
   "description": "updated description",
   "runtime_options": {
-    "sandbox": "default"
+    "execution_mode": "read_only"
   }
 }
 ```
@@ -446,6 +446,10 @@ Notes:
 
 - Omitted fields are left unchanged
 - `runtime_options` uses whole-object replacement when submitted
+- Codex worker agents accept `runtime_options.execution_mode` values `standard`
+  and `read_only`; an omitted or blank value defaults to `standard`
+- Changing a running Codex worker's execution mode restarts its runtime so the
+  new command, sandbox, and approval policy takes effect
 - `mcpServers` uses whole-map replacement when submitted; send `null` to clear
   the CSGClaw-managed server set
 - Updating MCP servers on OpenClaw, PicoClaw, or Codex CLI agents may recreate

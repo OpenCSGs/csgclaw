@@ -10,6 +10,7 @@ import {
   compareDesktopReleaseVersions,
   inferDesktopUpdateChannel,
 } from "../shared/releaseVersion";
+import { WINDOWS_UPDATE_HELPER_RESOURCE_NAME } from "../shared/windowsUpdateCoordinator";
 import {
   desktopInstallerArtifact,
   desktopDownloadsManifestURL,
@@ -433,19 +434,26 @@ export class DesktopUpdater {
     const wasChannelSwitch = this.channelSwitchActive;
     try {
       await this.beforeInstall();
-      if (this.windowsChannelInstallerPath) {
-        const updateExePath = path.resolve(
+      if (
+        process.platform === DesktopPlatform.Windows &&
+        this.windowsChannelInstallerPath
+      ) {
+        const rootExecutablePath = path.resolve(
           path.dirname(process.execPath),
           "..",
-          "Update.exe",
-        );
-        await launchWindowsChannelInstaller(
-          this.windowsChannelInstallerPath,
-          updateExePath,
           path.basename(process.execPath),
-          path.join(app.getPath("logs"), "channel-installer.log"),
         );
-        logDesktopInfo("desktop-channel-switch-windows-installer-launched", {
+        await launchWindowsChannelInstaller({
+          helperResourcePath: path.join(
+            process.resourcesPath,
+            WINDOWS_UPDATE_HELPER_RESOURCE_NAME,
+          ),
+          installerPath: this.windowsChannelInstallerPath,
+          logPath: path.join(app.getPath("logs"), "channel-installer.log"),
+          parentProcessId: process.pid,
+          rootExecutablePath,
+        });
+        logDesktopInfo("desktop-channel-switch-windows-coordinator-ready", {
           availableVersion: this.expectedVersion,
           channel: this.effectiveUpdateChannel(),
         });

@@ -63,6 +63,7 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
     agentsError: "",
     appVersion: "0.0.0",
     authBusy: false,
+    authLoggingOut: false,
     authEnvironment: defaultAuthEnvironmentDraft(),
     authError: "",
     authPending: false,

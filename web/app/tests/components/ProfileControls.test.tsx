@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   AgentCreateProgress,
@@ -7,6 +7,7 @@ import {
   CLIProxyAuthControl,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
+import { TooltipProvider } from "@/components/ui";
 import type { AgentDraft } from "@/models/agents";
 
 const labels: Record<string, string> = {
@@ -28,6 +29,51 @@ function t(key: string): string {
 }
 
 describe("ProfileControls", () => {
+  it("renders and updates the execution mode select without confirmation", async () => {
+    const onDraftChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <RuntimeOptionsFields
+          draft={{ runtime_options: {} } as AgentDraft}
+          locale="en"
+          schemas={[
+            {
+              key: "execution_mode",
+              path: "execution_mode",
+              type: "select",
+              label: "Execution Mode",
+              options: ["standard", "read_only"],
+              default_value: "standard",
+            },
+          ]}
+          onDraftChange={onDraftChange}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole("combobox", { name: "Execution Mode" })).toHaveTextContent("Standard mode");
+    expect(screen.getByText(/Can read and modify data/)).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Execution Mode" }));
+    await user.click(screen.getByRole("option", { name: "Read-only mode" }));
+    expect(onDraftChange).toHaveBeenCalledWith(
+      expect.objectContaining({ runtime_options: { execution_mode: "read_only" } }),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await user.hover(screen.getByRole("button", { name: "View execution mode permissions" }));
+    const permissionRows = within(await screen.findByRole("tooltip"))
+      .getAllByRole("row")
+      .slice(1);
+    expect(permissionRows[0]).toHaveTextContent("Read Skill resources or run scripts");
+    for (const row of permissionRows.slice(0, 6)) {
+      expect(row).toHaveTextContent("Blocked");
+    }
+    for (const row of permissionRows.slice(6)) {
+      expect(row).not.toHaveTextContent("Blocked");
+    }
+  });
+
   it("hides the directory action when only the browser picker is available", () => {
     delete (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
     delete window.csgclawDesktop;

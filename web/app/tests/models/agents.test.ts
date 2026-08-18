@@ -517,6 +517,7 @@ describe("agent model helpers", () => {
         required: false,
         picker: "",
         options: [],
+        default_value: "",
       },
     ]);
     expect(

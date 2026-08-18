@@ -407,6 +407,44 @@
   pointer-events: none;
 }
 
+.execution-mode-tooltip {
+  max-width: min(720px, calc(100vw - 24px));
+  white-space: normal;
+}
+
+.execution-mode-help {
+  display: grid;
+  gap: 10px;
+  min-width: min(620px, calc(100vw - 56px));
+}
+
+.execution-mode-help table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.execution-mode-help th,
+.execution-mode-help td {
+  padding: 7px 9px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.execution-mode-help th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.execution-mode-help td.allowed {
+  color: var(--success, #10b981);
+}
+
+.execution-mode-help td.blocked {
+  color: var(--danger, #ef4444);
+}
+
 .notifier-copy-row {
   display: flex;
   align-items: stretch;

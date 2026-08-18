@@ -166,6 +166,8 @@ export function SettingsPage() {
                     variant="secondaryGray"
                     size="md"
                     disabled={sidebar.authBusy}
+                    loading={sidebar.authLoggingOut}
+                    loadingLabel={sidebar.t("csghubSigningOut")}
                     onClick={() => void sidebar.onLogout()}
                   >
                     {sidebar.t("csghubSignOut")}
@@ -176,10 +178,16 @@ export function SettingsPage() {
                   className={styles.designButton}
                   variant="secondaryGray"
                   size="md"
-                  disabled={sidebar.authBusy || sidebar.authPending}
+                  disabled={sidebar.authBusy}
+                  loading={sidebar.authBusy}
+                  loadingLabel={sidebar.authLoggingOut ? sidebar.t("csghubSigningOut") : sidebar.t("csghubSigningIn")}
                   onClick={() => openConnectionDialog()}
                 >
-                  {sidebar.authPending ? sidebar.t("csghubLoginPending") : sidebar.t("settingsAccountLogin")}
+                  {sidebar.authLoggingOut
+                    ? sidebar.t("csghubSigningOut")
+                    : sidebar.authPending
+                      ? sidebar.t("csghubReauthorize")
+                      : sidebar.t("settingsAccountLogin")}
                 </Button>
               )}
             </div>

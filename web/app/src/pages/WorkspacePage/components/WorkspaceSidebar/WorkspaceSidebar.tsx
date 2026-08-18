@@ -68,6 +68,7 @@ export function WorkspaceSidebar({
   activeThreadRootID,
   currentUserID,
   authBusy,
+  authLoggingOut,
   authEnvironment,
   authError,
   authPending,
@@ -468,6 +469,7 @@ export function WorkspaceSidebar({
             authStatus={authStatus}
             authEnvironment={authEnvironment}
             authBusy={authBusy}
+            authLoggingOut={authLoggingOut}
             authPending={authPending}
             authError={authError}
             onLogin={onLogin}

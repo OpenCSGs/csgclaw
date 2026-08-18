@@ -80,7 +80,7 @@ Windows Website/Squirrel 安装包的日志位于 Electron `userData` 目录下�
 .\scripts\collect-desktop-diagnostics.cmd
 ```
 
-脚本会把最新的 `main.log`、`main.previous.log`、`backend.log`、Crashpad dump、当前进程状态以及最近 30 分钟的 Windows Application 事件打包到桌面：
+脚本会把最新的 `main.log`、`main.previous.log`、`backend.log`、Windows 渠道安装协调器日志和 ready 标记、安装目录下的 `Squirrel-*.log`、Crashpad dump、当前进程状态以及最近 30 分钟的 Windows Application 事件打包到桌面：
 
 ```text
 csgclaw-diagnostics-YYYYMMDD-HHMMSS.zip
@@ -113,6 +113,25 @@ Get-Content -LiteralPath $mainLog.FullName -Tail 300
 ```powershell
 Get-Content -LiteralPath $mainLog.FullName -Wait
 ```
+
+Windows 渠道切换由无控制台的原生 helper 协调。`channel-installer.log` 中正常的阶段顺序应为：
+
+```text
+coordinator-started
+parent-handle-opened
+coordinator-ready
+parent-exited
+installer-started
+installer-exited code="0"
+relaunch-started
+relaunch-existing-window-detected
+relaunch-window-activation foreground="true"
+coordinator-finished code="0"
+```
+
+安装器未主动启动新应用时，helper 会记录 `relaunch-requested`，等待窗口出现后再记录 `relaunch-window-activation`。如果 Windows 拒绝 helper 抢占前台，`foreground="false" flashed="true"` 表示 helper 已尝试恢复和置前窗口，并通过持续闪烁任务栏提醒用户。
+
+如果日志停在 `coordinator-ready`，检查 `process-status.txt` 中 helper 是否在 60 秒后按超时退出；如果停在 `installer-started`，结合 `Squirrel-*.log` 判断安装器阶段；如果出现 `relaunch-window-not-detected`，说明启动请求已发出，但 15 秒内没有找到目标应用窗口。
 
 查找并查看最新 `backend.log` 的最后 300 行：
 

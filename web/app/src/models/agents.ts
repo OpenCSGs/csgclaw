@@ -50,6 +50,7 @@ export type RuntimeOptionSchema = {
   required?: boolean | null;
   picker?: string | null;
   options?: string[] | null;
+  default_value?: string | null;
 };
 
 export type EnvKeyValueRow = {
@@ -559,6 +560,7 @@ function normalizeRuntimeOptionSchema(item: unknown): RuntimeOptionSchema | null
     options: Array.isArray(record.options)
       ? record.options.map((option) => String(option ?? "").trim()).filter(Boolean)
       : [],
+    default_value: String(record.default_value ?? "").trim(),
   };
 }
 
@@ -1611,12 +1613,13 @@ export function draftNotifierRuntimeOptionsForSave(
 export function runtimeOptionValueForPath(
   runtimeOptions: JSONRecord | null | undefined,
   path: string | null | undefined,
+  defaultValue = "",
 ): string {
   const key = String(path ?? "").trim();
   if (!key) {
     return "";
   }
-  return String(normalizeRuntimeOptionsRecord(runtimeOptions)[key] ?? "");
+  return String(normalizeRuntimeOptionsRecord(runtimeOptions)[key] ?? defaultValue);
 }
 
 export function setRuntimeOptionValue(

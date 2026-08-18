@@ -19,6 +19,7 @@ const labels: Record<string, string> = {
   agentUpdateSave: "Save",
   csghubLoginPending: "Waiting for sign-in",
   csghubNotSignedIn: "Not signed in",
+  csghubReauthorize: "Authorize again",
   csghubSignIn: "Sign in",
   modelProviderAIGatewayAddress: "AI Gateway address",
   modelProviderCheck: "Check",
@@ -269,6 +270,41 @@ describe("ModelProviderPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
+    expect(onLogin).toHaveBeenCalledWith();
+  });
+
+  it("allows OpenCSG authorization to be started again while a login is pending", async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+    renderModelProviderPage(
+      normalizeModelProviderCatalog({
+        providers: [
+          {
+            id: "opencsg",
+            kind: "csghub",
+            preset: "opencsg",
+            display_name: "OpenCSG",
+            builtin: true,
+            base_url: "https://ai.space.opencsg.com/v1",
+            models: [],
+            status: "unknown",
+          },
+        ],
+      }),
+      "opencsg",
+      {
+        sidebarProps: {
+          authBusy: false,
+          authPending: true,
+          authStatus: { authenticated: false },
+          onLogin,
+        },
+      },
+    );
+
+    const retryButton = await screen.findByRole("button", { name: "Authorize again" });
+    expect(retryButton).toBeEnabled();
+    await user.click(retryButton);
     expect(onLogin).toHaveBeenCalledWith();
   });
 

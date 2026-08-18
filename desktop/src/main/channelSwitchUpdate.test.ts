@@ -11,6 +11,7 @@ import {
   officialMacReleaseArchiveURL,
   parseMacChannelUpdate,
   startMacChannelUpdateFeed,
+  windowsUpdateCoordinatorArguments,
 } from "./channelSwitchUpdate";
 
 test("selects the target latest release from a static macOS feed", () => {
@@ -55,7 +56,11 @@ test("builds the official release archive fallback for macOS", () => {
 
 test("explains a missing signed macOS auto-update package", () => {
   assert.match(
-    missingSignedMacUpdatePackageError("release", "0.4.6", new Error("HTTP 404")).message,
+    missingSignedMacUpdatePackageError(
+      "release",
+      "0.4.6",
+      new Error("HTTP 404"),
+    ).message,
     /does not provide a signed macOS auto-update package for 0.4.6\. HTTP 404/,
   );
 });
@@ -112,4 +117,28 @@ test("downloads and verifies a complete channel installer", async () => {
   } finally {
     await fs.promises.rm(directory, { recursive: true, force: true });
   }
+});
+
+test("passes explicit inputs to the native Windows update coordinator", () => {
+  assert.deepEqual(
+    windowsUpdateCoordinatorArguments({
+      parentProcessId: 9040,
+      installerPath: "C:\\updates\\Setup.exe",
+      rootExecutablePath: "C:\\csgclaw_desktop\\CSGClaw.exe",
+      readyFilePath: "C:\\updates\\coordinator.ready",
+      logPath: "C:\\logs\\channel-installer.log",
+    }),
+    [
+      "--parent-pid",
+      "9040",
+      "--installer",
+      "C:\\updates\\Setup.exe",
+      "--root-executable",
+      "C:\\csgclaw_desktop\\CSGClaw.exe",
+      "--ready-file",
+      "C:\\updates\\coordinator.ready",
+      "--log-file",
+      "C:\\logs\\channel-installer.log",
+    ],
+  );
 });

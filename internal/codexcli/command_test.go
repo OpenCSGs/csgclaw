@@ -19,3 +19,15 @@ func TestAppServerCommandContextUsesBundledNativeBinary(t *testing.T) {
 		t.Fatalf("command args = %q, want %q", got, want)
 	}
 }
+
+func TestAppServerCommandContextWithOverrides(t *testing.T) {
+	binaryPath := "/opt/csgclaw/bin/codex"
+	cmd, err := AppServerCommandContextWithOverrides(context.Background(), binaryPath, []string{"--disable", "shell_tool"})
+	if err != nil {
+		t.Fatalf("AppServerCommandContextWithOverrides() error = %v", err)
+	}
+	want := []string{binaryPath, "app-server", "--disable", "plugins", "--disable", "shell_tool", "--listen", "stdio://"}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatalf("command args = %q, want %q", cmd.Args, want)
+	}
+}

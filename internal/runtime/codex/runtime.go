@@ -39,6 +39,11 @@ const (
 	codexModelProviderName = "codex"
 )
 
+const readOnlyRuntimeInstructions = `CSGClaw has placed this Agent in read-only mode.
+You may answer questions, analyze content already present in the conversation, load the main SKILL.md instructions for assigned Skills, and use only available read-only data tools.
+You must not claim to read local files, inspect environment variables, run commands, execute Skill scripts, modify files or external data, or request elevated permissions.
+If the user asks for a mutating or environment-changing operation, explain in the user's language that the Agent is read-only and that they can switch to Standard mode under Agent Profile > Runtime Environment > Execution Mode. Offer a read-only analysis or plan when useful.`
+
 var (
 	runtimeDirRemoveInitialDelay = 100 * time.Millisecond
 	runtimeDirRemoveMaxDelay     = 1 * time.Second
@@ -69,6 +74,7 @@ type SessionSpec struct {
 	CodexHomeDir         string
 	StderrPath           string
 	Profile              agentruntime.Profile
+	ExecutionMode        string
 	ConversationSessions map[string]string
 }
 
@@ -598,6 +604,11 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	spec.HomeDir = r.hostSessionHomeDir(dirs.Home)
 	spec.CodexHomeDir = dirs.CodexHome
 	spec.StderrPath = dirs.StderrLog
+	runtimeOptions, err := DecodeRuntimeOptions(agentRef.RuntimeOptions)
+	if err != nil {
+		return nil, err
+	}
+	spec.ExecutionMode = runtimeOptions.ExecutionMode
 	manager := r.sessionManager()
 	tracker, tracksSessions := manager.(interface{ hasSession(string) bool })
 	if !tracksSessions || !tracker.hasSession(runtimeID) {
@@ -611,10 +622,10 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.MCPServers); err != nil {
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, agentRef.MCPServers); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
+	if err := r.seedCodexHomeSkillsForExecutionMode(spec.CodexHomeDir, spec.ExecutionMode); err != nil {
 		return nil, err
 	}
 	if err := r.seedCodexHomeWorkspaceSkills(spec.AgentID, spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
@@ -698,18 +709,24 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		CodexHomeDir:         dirs.CodexHome,
 		StderrPath:           dirs.StderrLog,
 		Profile:              agentRef.Profile.Normalized(),
+		ExecutionMode:        ExecutionModeStandard,
 		ConversationSessions: cloneConversationSessions(sessionMeta.ConversationSessions),
 	}
+	runtimeOptions, err := DecodeRuntimeOptions(agentRef.RuntimeOptions)
+	if err != nil {
+		return nil, err
+	}
+	spec.ExecutionMode = runtimeOptions.ExecutionMode
 	if err := r.mkdirAll(spec.WorkspaceDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create codex workspace dir %s: %w", spec.WorkspaceDir, err)
 	}
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.MCPServers); err != nil {
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, agentRef.MCPServers); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeSkills(spec.CodexHomeDir); err != nil {
+	if err := r.seedCodexHomeSkillsForExecutionMode(spec.CodexHomeDir, spec.ExecutionMode); err != nil {
 		return nil, err
 	}
 	if err := r.seedCodexHomeWorkspaceSkills(spec.AgentID, spec.WorkspaceDir, spec.CodexHomeDir); err != nil {
@@ -787,7 +804,7 @@ func (r *Runtime) seedCodexHomeAuth(runtimeCodexHome string, profile agentruntim
 	return nil
 }
 
-func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, profile agentruntime.Profile, mcpServers map[string]any) error {
+func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, profile agentruntime.Profile, runtimeOptions, mcpServers map[string]any) error {
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
 	if runtimeCodexHome == "" {
 		return fmt.Errorf("codex home dir is required")
@@ -797,6 +814,10 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 	}
 	configPath := filepath.Join(runtimeCodexHome, configFileName)
 	profile = profile.Normalized()
+	options, err := DecodeRuntimeOptions(runtimeOptions)
+	if err != nil {
+		return err
+	}
 	configRaw, err := r.readFile(configPath)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read runtime codex config %s: %w", configPath, err)
@@ -816,7 +837,7 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 		}
 	}
 
-	rendered := configureCodexHomeConfigWithWorkspace(string(configRaw), profile, mcpServers, workspaceDir)
+	rendered := configureCodexHomeConfigWithWorkspaceForExecutionMode(string(configRaw), profile, mcpServers, workspaceDir, options.ExecutionMode)
 	if err := r.writeFile(configPath, []byte(rendered), 0o600); err != nil {
 		return fmt.Errorf("write runtime codex config %s: %w", configPath, err)
 	}
@@ -824,12 +845,25 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 }
 
 func (r *Runtime) seedCodexHomeSkills(runtimeCodexHome string) error {
+	return r.seedCodexHomeSkillsForExecutionMode(runtimeCodexHome, ExecutionModeStandard)
+}
+
+func (r *Runtime) seedCodexHomeSkillsForExecutionMode(runtimeCodexHome, executionMode string) error {
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
 	if runtimeCodexHome == "" {
 		return fmt.Errorf("codex home dir is required")
 	}
 
 	targetRoot := filepath.Join(runtimeCodexHome, "skills")
+	if executionMode == ExecutionModeReadOnly {
+		if err := r.removeAll(targetRoot); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("reset read-only runtime codex skills %s: %w", targetRoot, err)
+		}
+		if err := r.mkdirAll(targetRoot, 0o755); err != nil {
+			return fmt.Errorf("create read-only runtime codex skills %s: %w", targetRoot, err)
+		}
+		return nil
+	}
 	previousHostSkills, err := r.readHostSkillsManifest(runtimeCodexHome)
 	if err != nil {
 		return err
@@ -1202,7 +1236,11 @@ func (r *Runtime) refreshCodexHomeAgentsFile(h agentruntime.Handle, codexHomeDir
 		return err
 	}
 	path := filepath.Join(codexHomeDir, "AGENTS.md")
-	block := agent.RenderRuntimeAgentsInstructionsBlock(agentRef.ID, agentRef.Instructions)
+	instructions := agentRef.Instructions
+	if IsReadOnlyExecutionMode(agentRef.RuntimeOptions) {
+		instructions = strings.TrimSpace(instructions + "\n\n" + readOnlyRuntimeInstructions)
+	}
+	block := agent.RenderRuntimeAgentsInstructionsBlock(agentRef.ID, instructions)
 	current, err := r.readFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read codex home AGENTS.md %s: %w", path, err)

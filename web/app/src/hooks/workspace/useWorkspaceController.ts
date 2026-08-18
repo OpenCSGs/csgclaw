@@ -915,6 +915,7 @@ export function useWorkspaceController() {
       authStatus: auth.status,
       authEnvironment: auth.environment,
       authBusy: auth.busy,
+      authLoggingOut: auth.loggingOut,
       authPending: auth.pending,
       authError: auth.error,
       onLogin: auth.login,

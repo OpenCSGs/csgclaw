@@ -17,7 +17,7 @@ func Availability(cfg config.SandboxConfig) error {
 	switch strings.TrimSpace(cfg.Provider) {
 	case config.BoxLiteProvider:
 		if goruntime.GOOS == "windows" {
-			return fmt.Errorf("sandbox provider %q is not supported on Windows; switch [sandbox].provider to %q", config.BoxLiteProvider, config.DockerProvider)
+			return fmt.Errorf("sandbox provider %q is deprecated and is not supported on Windows; switch [sandbox].provider to %q", config.BoxLiteProvider, config.DockerProvider)
 		}
 		return ensureBoxLiteAvailable(boxlitecli.ResolvePath(""))
 	case config.DockerProvider:

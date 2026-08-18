@@ -60,6 +60,20 @@ fi
 test -f "$BACKEND_ROOT/csgclaw/.csgclaw-bundle.json"
 if [ "$GOOS_TARGET" = "windows" ]; then
   test -f "$BACKEND_ROOT/csgclaw/bin/codex.exe"
+  (
+    cd "$ROOT_DIR"
+    env \
+      CGO_ENABLED=0 \
+      GOOS="$GOOS_TARGET" \
+      GOARCH="$GOARCH_TARGET" \
+      GOCACHE="${GOCACHE:-$ROOT_DIR/.gocache}" \
+      GOWORK=off \
+      go build \
+        -ldflags "-s -w -H=windowsgui" \
+        -o "$OUTPUT_ROOT/csgclaw-update-helper.exe" \
+        ./cmd/csgclaw-desktop-update-helper
+  )
+  test -f "$OUTPUT_ROOT/csgclaw-update-helper.exe"
 else
   test -f "$BACKEND_ROOT/csgclaw/bin/codex"
 fi

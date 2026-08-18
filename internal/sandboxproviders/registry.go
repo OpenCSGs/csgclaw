@@ -46,7 +46,7 @@ func Provider(cfg config.SandboxConfig) (sandbox.Provider, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cfg.Provider != config.DockerProvider {
+	if cfg.Provider != config.DockerProvider && cfg.Provider != config.BoxLiteProvider {
 		return provider, nil
 	}
 	return deferredAvailabilityProvider{
@@ -55,9 +55,10 @@ func Provider(cfg config.SandboxConfig) (sandbox.Provider, error) {
 	}, nil
 }
 
-// deferredAvailabilityProvider keeps host-only runtimes usable when Docker is
-// not installed. Availability is checked at the first operation that actually
-// needs Docker instead of while the Agent service is starting.
+// deferredAvailabilityProvider keeps host-only runtimes usable when the
+// configured local sandbox CLI is not installed. Availability is checked at
+// the first operation that actually needs the sandbox instead of while the
+// Agent service is starting.
 type deferredAvailabilityProvider struct {
 	cfg      config.SandboxConfig
 	provider sandbox.Provider

@@ -19,12 +19,20 @@ $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $stagingDirectory = Join-Path ([IO.Path]::GetTempPath()) "csgclaw-diagnostics-$timestamp-$PID"
 $archivePath = Join-Path $OutputDirectory "csgclaw-diagnostics-$timestamp.zip"
 $collectedPaths = [Collections.Generic.List[string]]::new()
+$installationDirectory = Join-Path $env:LOCALAPPDATA "csgclaw_desktop"
 
 New-Item -ItemType Directory -Path $stagingDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
 try {
-    foreach ($name in @("main.log", "main.previous.log", "backend.log", "channel-installer.log")) {
+    foreach ($name in @(
+        "main.log",
+        "main.previous.log",
+        "backend.log",
+        "channel-installer.log",
+        "channel-installer.cmd",
+        "channel-installer.ready"
+    )) {
         $source = Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File -Filter $name -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
@@ -35,12 +43,32 @@ try {
         $collectedPaths.Add($source.FullName)
     }
 
+    $nativeReadyMarker = Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File -Filter "channel-installer-*.ready" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if ($null -ne $nativeReadyMarker) {
+        Copy-Item -LiteralPath $nativeReadyMarker.FullName `
+            -Destination (Join-Path $stagingDirectory $nativeReadyMarker.Name) `
+            -Force
+        $collectedPaths.Add($nativeReadyMarker.FullName)
+    }
+
     $squirrelLog = Join-Path $env:LOCALAPPDATA "SquirrelTemp\SquirrelSetup.log"
     if (Test-Path -LiteralPath $squirrelLog -PathType Leaf) {
         Copy-Item -LiteralPath $squirrelLog `
             -Destination (Join-Path $stagingDirectory "squirrel-setup.log") `
             -Force
         $collectedPaths.Add($squirrelLog)
+    }
+
+    if (Test-Path -LiteralPath $installationDirectory -PathType Container) {
+        Get-ChildItem -LiteralPath $installationDirectory -File -Filter "Squirrel-*.log" -ErrorAction SilentlyContinue |
+            ForEach-Object {
+                Copy-Item -LiteralPath $_.FullName `
+                    -Destination (Join-Path $stagingDirectory $_.Name) `
+                    -Force
+                $collectedPaths.Add($_.FullName)
+            }
     }
 
     Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File -ErrorAction SilentlyContinue |
@@ -61,19 +89,32 @@ try {
             Set-Content -LiteralPath (Join-Path $stagingDirectory "collected-paths.txt") -Encoding UTF8
     }
 
-    $processes = @(Get-Process -Name "CSGClaw" -ErrorAction SilentlyContinue)
+    $processes = @(
+        Get-Process -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.ProcessName -eq "CSGClaw" -or
+                $_.ProcessName -like "csgclaw-update-helper-*"
+            }
+    )
     if ($processes.Count -eq 0) {
-        "No running CSGClaw process was found." |
+        "No running CSGClaw or desktop update helper process was found." |
             Set-Content -LiteralPath (Join-Path $stagingDirectory "process-status.txt") -Encoding UTF8
     }
     else {
         $processes |
-            Select-Object Id, StartTime, Path |
+            Select-Object Id, ProcessName, StartTime, Path |
             Format-List |
             Out-File -LiteralPath (Join-Path $stagingDirectory "process-status.txt") -Encoding UTF8
     }
 
-    $installationDirectory = Join-Path $env:LOCALAPPDATA "csgclaw_desktop"
+    $desktopUpdatesDirectory = Join-Path $UserDataDirectory "desktop-updates"
+    if (Test-Path -LiteralPath $desktopUpdatesDirectory -PathType Container) {
+        Get-ChildItem -LiteralPath $desktopUpdatesDirectory -Force -ErrorAction SilentlyContinue |
+            Select-Object Name, FullName, Length, LastWriteTime, Attributes |
+            Format-List |
+            Out-File -LiteralPath (Join-Path $stagingDirectory "update-coordinator-status.txt") -Encoding UTF8
+    }
+
     if (Test-Path -LiteralPath $installationDirectory -PathType Container) {
         Get-ChildItem -LiteralPath $installationDirectory -Force -ErrorAction SilentlyContinue |
             Select-Object Name, FullName, Length, LastWriteTime, Attributes |
