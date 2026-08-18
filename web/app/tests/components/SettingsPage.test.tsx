@@ -14,6 +14,8 @@ const labels: Record<string, string> = {
   confirm: "Confirm",
   settings: "Settings",
   settingsAccountLogin: "Log in",
+  csghubReauthorize: "Authorize again",
+  csghubSigningOut: "Signing out...",
   settingsAppearanceDescription: "Appearance settings.",
   settingsCommunityAccount: "Community account",
   settingsCommunityAccountDescription: "Manage your community account.",
@@ -100,6 +102,83 @@ describe("SettingsPage", () => {
     renderSettings(controller);
 
     expect(onRefreshUpgradeStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows OpenCSG authorization to be started again while a login is pending", async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+    const controller = {
+      ready: true,
+      sidebarProps: {
+        appVersion: "v0.5.0-beta.7",
+        authBusy: false,
+        authError: "",
+        authPending: true,
+        authStatus: emptyAuthStatus(),
+        locale: "en",
+        onLocaleChange: vi.fn(),
+        onLogin,
+        onLogout: vi.fn(),
+        onOpenConfigSettings: vi.fn(),
+        onOpenUpgrade: vi.fn(),
+        onThemeChange: vi.fn(),
+        onUpgradeChannelChange: vi.fn(),
+        showUpgradeControls: false,
+        t,
+        theme: "light",
+        upgradeBusy: false,
+        upgradeChannelBusy: false,
+        upgradeChannelError: "",
+        upgradeError: "",
+        upgradePhase: "idle",
+        upgradeStatus: null,
+      },
+    } as unknown as WorkspaceController;
+
+    renderSettings(controller);
+
+    const retryButton = screen.getByRole("button", { name: "Authorize again" });
+    expect(retryButton).toBeEnabled();
+    await user.click(retryButton);
+    await user.click(screen.getByRole("button", { name: "csghubConnectContinue" }));
+    expect(onLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a loading state visible while logout cleanup is still running", () => {
+    const controller = {
+      ready: true,
+      sidebarProps: {
+        appVersion: "v0.5.0-beta.7",
+        authBusy: true,
+        authError: "",
+        authLoggingOut: true,
+        authPending: false,
+        authStatus: emptyAuthStatus(),
+        locale: "en",
+        onLocaleChange: vi.fn(),
+        onLogin: vi.fn(),
+        onLogout: vi.fn(),
+        onOpenConfigSettings: vi.fn(),
+        onOpenUpgrade: vi.fn(),
+        onThemeChange: vi.fn(),
+        onUpgradeChannelChange: vi.fn(),
+        showUpgradeControls: false,
+        t,
+        theme: "light",
+        upgradeBusy: false,
+        upgradeChannelBusy: false,
+        upgradeChannelError: "",
+        upgradeError: "",
+        upgradePhase: "idle",
+        upgradeStatus: null,
+      },
+    } as unknown as WorkspaceController;
+
+    renderSettings(controller);
+
+    const logoutProgress = screen.getByRole("button", { name: "Signing out..." });
+    expect(logoutProgress).toBeDisabled();
+    expect(logoutProgress).toHaveAttribute("aria-busy", "true");
   });
 
   it("opens the upgrade flow when an update is available", () => {

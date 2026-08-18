@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SidebarUserButton } from "@/pages/WorkspacePage/components/WorkspaceSidebar/SidebarUserButton";
+import { emptyAuthStatus } from "@/models/auth";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
 
 const labels: Record<string, string> = {
@@ -33,8 +34,10 @@ const labels: Record<string, string> = {
   csghubEnvCustom: "Custom environment",
   csghubLoginEnvironment: "Environment",
   csghubOpenCSGBaseURL: "OpenCSG site URL",
+  csghubReauthorize: "Authorize again",
   csghubSignIn: "Sign in",
   csghubSigningIn: "Signing in...",
+  csghubSigningOut: "Signing out...",
   csghubSignedIn: "Signed in",
   csghubSignOut: "Sign out",
   csghubSwitchEnvironment: "Switch environment",
@@ -343,6 +346,35 @@ describe("SidebarUserButton", () => {
     expect(screen.queryByDisplayValue("https://opencsg.com")).not.toBeInTheDocument();
   });
 
+  it("allows OpenCSG authorization to be started again while a login is pending", async () => {
+    const user = userEvent.setup();
+    const onLogin = vi.fn();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        authPending
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        onLogin={onLogin}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const retryButton = screen.getByRole("menuitem", { name: "Authorize again" });
+
+    expect(retryButton).toBeEnabled();
+    await user.click(retryButton);
+    expect(onLogin).toHaveBeenCalledTimes(1);
+  });
+
   it("passes the selected OpenCSG stg environment to sign-in", async () => {
     const user = userEvent.setup();
     const onLogin = vi.fn();
@@ -471,5 +503,33 @@ describe("SidebarUserButton", () => {
     expect(screen.queryByDisplayValue("https://hub.example.test")).not.toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows logout progress while the OpenCSG account is disconnecting", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SidebarUserButton
+        appVersion="v0.3.0"
+        authBusy
+        authLoggingOut
+        authStatus={{ ...emptyAuthStatus(), authenticated: true, user_id: "alice", user_uuid: "user-1" }}
+        showUpgradeControls={false}
+        locale="en"
+        onOpenUpgrade={() => {}}
+        onOpenConfigSettings={() => {}}
+        onLocaleChange={() => {}}
+        onThemeChange={() => {}}
+        onLogout={() => {}}
+        t={t}
+        theme="light"
+        upgradeStatus={updateAvailableStatus}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const logoutProgress = screen.getByRole("menuitem", { name: "Signing out..." });
+    expect(logoutProgress).toBeDisabled();
+    expect(logoutProgress).toHaveAttribute("aria-busy", "true");
   });
 });

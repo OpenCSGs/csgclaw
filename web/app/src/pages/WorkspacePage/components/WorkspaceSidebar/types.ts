@@ -53,6 +53,7 @@ export type WorkspaceSidebarProps = {
   currentUserID: string;
   currentWorkspaceLabel: string;
   authBusy: boolean;
+  authLoggingOut: boolean;
   authEnvironment: AuthEnvironmentDraft;
   authError: string;
   authPending: boolean;

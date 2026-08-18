@@ -77,6 +77,40 @@ describe("useAuthController", () => {
     await waitFor(() => expect(result.current.error).toBe("csghubStatusFailed"));
   });
 
+  it("exposes logout progress until logout cleanup completes", async () => {
+    vi.mocked(fetchAuthStatus).mockResolvedValue({
+      authenticated: true,
+      user_id: "alice",
+      user_uuid: "user-1",
+    });
+    let resolveLogout!: (value: unknown) => void;
+    vi.mocked(logoutAuth).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveLogout = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.status.authenticated).toBe(true));
+
+    let logoutPromise!: Promise<void>;
+    act(() => {
+      logoutPromise = result.current.logout();
+    });
+
+    await waitFor(() => expect(result.current.loggingOut).toBe(true));
+    expect(result.current.busy).toBe(true);
+
+    await act(async () => {
+      resolveLogout({ authenticated: false });
+      await logoutPromise;
+    });
+
+    expect(result.current.loggingOut).toBe(false);
+    expect(result.current.busy).toBe(false);
+  });
+
   it("restores the completed login notice from the callback result", async () => {
     window.history.replaceState({}, "", "/#/settings?auth_result=success");
     vi.mocked(fetchAuthStatus).mockResolvedValue({
@@ -143,6 +177,45 @@ describe("useAuthController", () => {
       ai_gateway_base_url: "https://ai.space.opencsg.com/v1",
     });
     expect(window.location.hash).toBe("#/opencsg-login?redirect_url=callback");
+    expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBe("1");
+  });
+
+  it("ends the previous pending attempt before starting authorization again", async () => {
+    vi.mocked(fetchAuthStatus).mockResolvedValue({ authenticated: false });
+    vi.mocked(beginAuthLogin).mockResolvedValueOnce({ login_url: "#/opencsg-login?attempt=first" });
+
+    const { result } = renderHook(() => useAuthController(t), { wrapper: createWrapper() });
+
+    await act(async () => {
+      await result.current.login();
+    });
+    expect(result.current.pending).toBe(true);
+    expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBe("1");
+
+    let resolveRetry!: (value: unknown) => void;
+    vi.mocked(beginAuthLogin).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRetry = resolve;
+        }),
+    );
+
+    let retryPromise!: Promise<void>;
+    act(() => {
+      retryPromise = result.current.login();
+    });
+
+    await waitFor(() => expect(result.current.pending).toBe(false));
+    expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBeNull();
+
+    await act(async () => {
+      resolveRetry({ login_url: "#/opencsg-login?attempt=retry" });
+      await retryPromise;
+    });
+
+    expect(beginAuthLogin).toHaveBeenCalledTimes(2);
+    expect(result.current.pending).toBe(true);
+    expect(window.location.hash).toBe("#/opencsg-login?attempt=retry");
     expect(window.sessionStorage.getItem(loginPendingStorageKey)).toBe("1");
   });
 
