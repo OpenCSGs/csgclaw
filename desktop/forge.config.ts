@@ -19,6 +19,7 @@ import {
   normalizeDesktopReleaseVersion,
   numericDesktopAppVersion,
 } from "./src/shared/releaseVersion";
+import { WINDOWS_UPDATE_HELPER_RESOURCE_NAME } from "./src/shared/windowsUpdateCoordinator";
 
 const targetGoOS = process.env.CSGCLAW_DESKTOP_GOOS || goOSForDesktopPlatform(process.platform);
 const targetGoArch = process.env.CSGCLAW_DESKTOP_GOARCH || goArchForDesktopArch(process.arch);
@@ -40,6 +41,13 @@ const macDockDarkIcon = path.join(iconDirectory, "csgclaw-dock-dark.png");
 const markLightIcon = path.join(iconDirectory, "csgclaw-mark-light.svg");
 const markDarkIcon = path.join(iconDirectory, "csgclaw-mark-dark.svg");
 const windowsIcon = path.join(iconDirectory, "csgclaw.ico");
+const windowsUpdateHelper = path.resolve(
+  __dirname,
+  "out",
+  "input",
+  `${targetGoOS}-${targetGoArch}`,
+  WINDOWS_UPDATE_HELPER_RESOURCE_NAME,
+);
 const linuxIcon = path.join(iconDirectory, "csgclaw.png");
 const windowsIconURL =
   "https://raw.githubusercontent.com/OpenCSGs/csgclaw/main/desktop/resources/icons/csgclaw.ico";
@@ -124,7 +132,7 @@ const config: ForgeConfig = {
       markLightIcon,
       markDarkIcon,
       ...(isMacTarget ? [macDockLightIcon, macDockDarkIcon] : []),
-      ...(isWindowsTarget ? [windowsIcon] : []),
+      ...(isWindowsTarget ? [windowsIcon, windowsUpdateHelper] : []),
     ],
     icon: appIcon,
     name: "CSGClaw",

@@ -11,7 +11,7 @@ import {
   officialMacReleaseArchiveURL,
   parseMacChannelUpdate,
   startMacChannelUpdateFeed,
-  windowsChannelInstallerCoordinatorScript,
+  windowsUpdateCoordinatorArguments,
 } from "./channelSwitchUpdate";
 
 test("selects the target latest release from a static macOS feed", () => {
@@ -119,20 +119,26 @@ test("downloads and verifies a complete channel installer", async () => {
   }
 });
 
-test("coordinates a Windows channel install after the parent exits", () => {
-  const script = windowsChannelInstallerCoordinatorScript();
-  const readyIndex = script.indexOf("coordinator-ready");
-  const parentWaitIndex = script.indexOf(":wait_for_parent");
-  const installerIndex = script.indexOf(
-    '"%CSGCLAW_CHANNEL_INSTALLER%" --silent',
+test("passes explicit inputs to the native Windows update coordinator", () => {
+  assert.deepEqual(
+    windowsUpdateCoordinatorArguments({
+      parentProcessId: 9040,
+      installerPath: "C:\\updates\\Setup.exe",
+      rootExecutablePath: "C:\\csgclaw_desktop\\CSGClaw.exe",
+      readyFilePath: "C:\\updates\\coordinator.ready",
+      logPath: "C:\\logs\\channel-installer.log",
+    }),
+    [
+      "--parent-pid",
+      "9040",
+      "--installer",
+      "C:\\updates\\Setup.exe",
+      "--root-executable",
+      "C:\\csgclaw_desktop\\CSGClaw.exe",
+      "--ready-file",
+      "C:\\updates\\coordinator.ready",
+      "--log-file",
+      "C:\\logs\\channel-installer.log",
+    ],
   );
-  const relaunchIndex = script.indexOf(
-    'start "" "%CSGCLAW_CHANNEL_ROOT_EXECUTABLE%"',
-  );
-
-  assert.ok(readyIndex >= 0);
-  assert.ok(parentWaitIndex > readyIndex);
-  assert.ok(installerIndex > parentWaitIndex);
-  assert.ok(relaunchIndex > installerIndex);
-  assert.match(script, /installer-exited code=%installerExit%/);
 });

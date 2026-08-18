@@ -43,6 +43,16 @@ try {
         $collectedPaths.Add($source.FullName)
     }
 
+    $nativeReadyMarker = Get-ChildItem -LiteralPath $UserDataDirectory -Recurse -File -Filter "channel-installer-*.ready" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if ($null -ne $nativeReadyMarker) {
+        Copy-Item -LiteralPath $nativeReadyMarker.FullName `
+            -Destination (Join-Path $stagingDirectory $nativeReadyMarker.Name) `
+            -Force
+        $collectedPaths.Add($nativeReadyMarker.FullName)
+    }
+
     $squirrelLog = Join-Path $env:LOCALAPPDATA "SquirrelTemp\SquirrelSetup.log"
     if (Test-Path -LiteralPath $squirrelLog -PathType Leaf) {
         Copy-Item -LiteralPath $squirrelLog `
@@ -79,16 +89,30 @@ try {
             Set-Content -LiteralPath (Join-Path $stagingDirectory "collected-paths.txt") -Encoding UTF8
     }
 
-    $processes = @(Get-Process -Name "CSGClaw" -ErrorAction SilentlyContinue)
+    $processes = @(
+        Get-Process -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.ProcessName -eq "CSGClaw" -or
+                $_.ProcessName -like "csgclaw-update-helper-*"
+            }
+    )
     if ($processes.Count -eq 0) {
-        "No running CSGClaw process was found." |
+        "No running CSGClaw or desktop update helper process was found." |
             Set-Content -LiteralPath (Join-Path $stagingDirectory "process-status.txt") -Encoding UTF8
     }
     else {
         $processes |
-            Select-Object Id, StartTime, Path |
+            Select-Object Id, ProcessName, StartTime, Path |
             Format-List |
             Out-File -LiteralPath (Join-Path $stagingDirectory "process-status.txt") -Encoding UTF8
+    }
+
+    $desktopUpdatesDirectory = Join-Path $UserDataDirectory "desktop-updates"
+    if (Test-Path -LiteralPath $desktopUpdatesDirectory -PathType Container) {
+        Get-ChildItem -LiteralPath $desktopUpdatesDirectory -Force -ErrorAction SilentlyContinue |
+            Select-Object Name, FullName, Length, LastWriteTime, Attributes |
+            Format-List |
+            Out-File -LiteralPath (Join-Path $stagingDirectory "update-coordinator-status.txt") -Encoding UTF8
     }
 
     if (Test-Path -LiteralPath $installationDirectory -PathType Container) {

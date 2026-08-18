@@ -249,40 +249,35 @@ export async function isVerifiedArtifact(
 }
 
 const WINDOWS_COORDINATOR_READY = "coordinator-ready";
-const WINDOWS_COORDINATOR_READY_TIMEOUT_MS = 5_000;
+// Leave enough time for endpoint protection to inspect the newly staged,
+// signed helper before it opens the parent handle and reports readiness.
+const WINDOWS_COORDINATOR_READY_TIMEOUT_MS = 10_000;
+const WINDOWS_COORDINATOR_HELPER_PREFIX = "csgclaw-update-helper-";
+const WINDOWS_COORDINATOR_READY_PREFIX = "channel-installer-";
 
-export function windowsChannelInstallerCoordinatorScript(): string {
+export type WindowsUpdateCoordinatorInputs = {
+  parentProcessId: number;
+  installerPath: string;
+  rootExecutablePath: string;
+  readyFilePath: string;
+  logPath: string;
+};
+
+export function windowsUpdateCoordinatorArguments(
+  inputs: WindowsUpdateCoordinatorInputs,
+): string[] {
   return [
-    "@echo off",
-    "setlocal EnableExtensions DisableDelayedExpansion",
-    "echo coordinator-started parent-pid=%CSGCLAW_CHANNEL_PARENT_PID%",
-    `> "%CSGCLAW_CHANNEL_READY_FILE%" echo ${WINDOWS_COORDINATOR_READY}`,
-    `echo ${WINDOWS_COORDINATOR_READY}`,
-    ":wait_for_parent",
-    '"%SystemRoot%\\System32\\tasklist.exe" /FI "PID eq %CSGCLAW_CHANNEL_PARENT_PID%" /NH 2>NUL | "%SystemRoot%\\System32\\findstr.exe" /C:"%CSGCLAW_CHANNEL_PARENT_PID%" >NUL',
-    "if errorlevel 1 goto parent_exited",
-    '"%SystemRoot%\\System32\\ping.exe" 127.0.0.1 -n 2 >NUL',
-    "goto wait_for_parent",
-    ":parent_exited",
-    "echo parent-exited",
-    "echo installer-started",
-    '"%CSGCLAW_CHANNEL_INSTALLER%" --silent',
-    'set "installerExit=%ERRORLEVEL%"',
-    "echo installer-exited code=%installerExit%",
-    'if not exist "%CSGCLAW_CHANNEL_ROOT_EXECUTABLE%" goto relaunch_missing',
-    "echo relaunch-started",
-    'start "" "%CSGCLAW_CHANNEL_ROOT_EXECUTABLE%"',
-    "if errorlevel 1 goto relaunch_failed",
-    "echo relaunch-requested",
-    "exit /b %installerExit%",
-    ":relaunch_failed",
-    "echo relaunch-failed code=%ERRORLEVEL%",
-    "exit /b 1",
-    ":relaunch_missing",
-    "echo relaunch-missing",
-    "exit /b 1",
-    "",
-  ].join("\r\n");
+    "--parent-pid",
+    String(inputs.parentProcessId),
+    "--installer",
+    inputs.installerPath,
+    "--root-executable",
+    inputs.rootExecutablePath,
+    "--ready-file",
+    inputs.readyFilePath,
+    "--log-file",
+    inputs.logPath,
+  ];
 }
 
 async function waitForWindowsCoordinatorReady(
@@ -364,63 +359,63 @@ async function waitForWindowsCoordinatorReady(
 }
 
 export async function launchWindowsChannelInstaller(
-  installerPath: string,
-  rootExecutablePath: string,
-  logPath: string,
-  parentProcessId: number,
+  options: Omit<WindowsUpdateCoordinatorInputs, "readyFilePath"> & {
+    helperResourcePath: string;
+  },
 ): Promise<void> {
-  // Keep the coordinator independent from the Electron process so it can wait
-  // for the current app to exit before running the full Squirrel installer.
-  // The ready-file handshake proves that cmd.exe parsed and started the batch
-  // file; merely observing ChildProcess's spawn event does not prove that.
-  const coordinatorDirectory = path.dirname(installerPath);
-  const coordinatorPath = path.join(
+  // Stage the signed, no-console Windows helper outside the installed app
+  // directory. It opens a handle to this exact Electron process before
+  // signaling readiness, then uses the Windows wait API rather than parsing
+  // tasklist output. The full installer can therefore replace the old app
+  // directory without locking the helper executable that coordinates it.
+  const coordinatorDirectory = path.dirname(options.installerPath);
+  await fs.promises.mkdir(coordinatorDirectory, { recursive: true });
+  await fs.promises.mkdir(path.dirname(options.logPath), { recursive: true });
+  await removeStaleWindowsCoordinatorArtifacts(coordinatorDirectory);
+
+  const attemptId = crypto.randomUUID();
+  const helperPath = path.join(
     coordinatorDirectory,
-    "channel-installer.cmd",
+    `${WINDOWS_COORDINATOR_HELPER_PREFIX}${attemptId}.exe`,
   );
   const readyFilePath = path.join(
     coordinatorDirectory,
-    "channel-installer.ready",
+    `${WINDOWS_COORDINATOR_READY_PREFIX}${attemptId}.ready`,
   );
-  await fs.promises.mkdir(coordinatorDirectory, { recursive: true });
-  await fs.promises.mkdir(path.dirname(logPath), { recursive: true });
-  await Promise.all([
-    fs.promises.writeFile(
-      coordinatorPath,
-      windowsChannelInstallerCoordinatorScript(),
-      { encoding: "utf8", mode: 0o600 },
-    ),
-    fs.promises.writeFile(logPath, "", { encoding: "utf8", mode: 0o600 }),
-    fs.promises.rm(readyFilePath, { force: true }),
-  ]);
-
-  const logDescriptor = fs.openSync(logPath, "a");
-  let child: ReturnType<typeof spawn>;
+  const partialHelperPath = `${helperPath}.part`;
   try {
-    child = spawn(
-      process.env.ComSpec || "cmd.exe",
-      ["/d", "/q", "/s", "/c", 'call "%CSGCLAW_CHANNEL_COORDINATOR%"'],
-      {
-        detached: true,
-        env: {
-          ...process.env,
-          CSGCLAW_CHANNEL_COORDINATOR: coordinatorPath,
-          CSGCLAW_CHANNEL_INSTALLER: installerPath,
-          CSGCLAW_CHANNEL_PARENT_PID: String(parentProcessId),
-          CSGCLAW_CHANNEL_READY_FILE: readyFilePath,
-          CSGCLAW_CHANNEL_ROOT_EXECUTABLE: rootExecutablePath,
-        },
-        stdio: ["ignore", logDescriptor, logDescriptor],
-        windowsHide: true,
-        windowsVerbatimArguments: true,
-      },
+    await fs.promises.copyFile(options.helperResourcePath, partialHelperPath);
+    await fs.promises.rename(partialHelperPath, helperPath);
+  } catch (error) {
+    await fs.promises.rm(partialHelperPath, { force: true });
+    throw new Error(
+      `Could not stage the Windows update coordinator: ${error instanceof Error ? error.message : String(error)}`,
     );
-  } finally {
-    fs.closeSync(logDescriptor);
   }
+  await fs.promises.writeFile(options.logPath, "", {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+
+  const child = spawn(
+    helperPath,
+    windowsUpdateCoordinatorArguments({
+      installerPath: options.installerPath,
+      logPath: options.logPath,
+      parentProcessId: options.parentProcessId,
+      readyFilePath,
+      rootExecutablePath: options.rootExecutablePath,
+    }),
+    {
+      cwd: coordinatorDirectory,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  );
 
   try {
-    await waitForWindowsCoordinatorReady(readyFilePath, child, logPath);
+    await waitForWindowsCoordinatorReady(readyFilePath, child, options.logPath);
   } catch (error) {
     try {
       child.kill();
@@ -430,4 +425,32 @@ export async function launchWindowsChannelInstaller(
     throw error;
   }
   child.unref();
+}
+
+async function removeStaleWindowsCoordinatorArtifacts(
+  directory: string,
+): Promise<void> {
+  const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+  await Promise.all(
+    entries
+      .filter(
+        (entry) =>
+          entry.isFile() &&
+          (entry.name === "channel-installer.cmd" ||
+            entry.name === "channel-installer.ready" ||
+            entry.name.startsWith(WINDOWS_COORDINATOR_HELPER_PREFIX) ||
+            (entry.name.startsWith(WINDOWS_COORDINATOR_READY_PREFIX) &&
+              entry.name.endsWith(".ready"))),
+      )
+      .map(async (entry) => {
+        try {
+          await fs.promises.rm(path.join(directory, entry.name), {
+            force: true,
+          });
+        } catch {
+          // A still-running helper is locked on Windows. A unique filename lets
+          // the new attempt proceed while preserving that process for diagnosis.
+        }
+      }),
+  );
 }
