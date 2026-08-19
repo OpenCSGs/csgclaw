@@ -235,7 +235,7 @@
   grid-column: 1 / -1;
 }
 
-.create-model-provider-modal .field input,
+.create-model-provider-modal .field input:not([type="checkbox"], [type="radio"]),
 .create-model-provider-modal .field textarea,
 .create-model-provider-modal .field select {
   min-height: 44px;
@@ -361,7 +361,7 @@
   line-height: 1;
 }
 
-.create-room-modal .field input {
+.create-room-modal .field input:not([type="checkbox"], [type="radio"]) {
   height: 44px;
 }
 
@@ -1319,7 +1319,7 @@
   white-space: nowrap;
 }
 
-.profile-section .field input,
+.profile-section .field input:not([type="checkbox"], [type="radio"]),
 .profile-section .field select {
   min-height: 38px;
   padding: 9px 11px;
@@ -1582,7 +1582,12 @@
 .selection-item > input[type="checkbox"] {
   width: 16px;
   height: 16px;
+  inline-size: 16px;
+  block-size: 16px;
   min-height: 16px;
+  min-block-size: 16px;
+  max-block-size: 16px;
+  align-self: center;
   margin: 0;
   accent-color: var(--primary);
 }
@@ -1971,10 +1976,10 @@
   width: 100%;
 }
 
-.modal-card .field input,
+.modal-card .field input:not([type="checkbox"], [type="radio"]),
 .modal-card .field textarea,
 .modal-card .field select,
-.profile-section .field input,
+.profile-section .field input:not([type="checkbox"], [type="radio"]),
 .profile-section .field textarea,
 .profile-section .field select,
 .env-row input {
@@ -1996,9 +2001,9 @@
     color 160ms ease;
 }
 
-.modal-card .field input,
+.modal-card .field input:not([type="checkbox"], [type="radio"]),
 .modal-card .field select,
-.profile-section .field input,
+.profile-section .field input:not([type="checkbox"], [type="radio"]),
 .profile-section .field select,
 .env-row input {
   height: 44px;
@@ -2020,28 +2025,28 @@
   line-height: 20px;
 }
 
-.modal-card .field input::placeholder,
+.modal-card .field input:not([type="checkbox"], [type="radio"])::placeholder,
 .modal-card .field textarea::placeholder,
-.profile-section .field input::placeholder,
+.profile-section .field input:not([type="checkbox"], [type="radio"])::placeholder,
 .profile-section .field textarea::placeholder,
 .env-row input::placeholder {
   color: var(--input-text-placeholder);
 }
 
-.modal-card .field input:hover,
+.modal-card .field input:not([type="checkbox"], [type="radio"]):hover,
 .modal-card .field textarea:hover,
 .modal-card .field select:hover,
-.profile-section .field input:hover,
+.profile-section .field input:not([type="checkbox"], [type="radio"]):hover,
 .profile-section .field textarea:hover,
 .profile-section .field select:hover,
 .env-row input:hover {
   border-color: var(--input-border-hover);
 }
 
-.modal-card .field input:focus,
+.modal-card .field input:not([type="checkbox"], [type="radio"]):focus,
 .modal-card .field textarea:focus,
 .modal-card .field select:focus,
-.profile-section .field input:focus,
+.profile-section .field input:not([type="checkbox"], [type="radio"]):focus,
 .profile-section .field textarea:focus,
 .profile-section .field select:focus,
 .env-row input:focus {
@@ -2049,10 +2054,10 @@
   box-shadow: var(--input-shadow-focus);
 }
 
-.modal-card .field input:disabled,
+.modal-card .field input:not([type="checkbox"], [type="radio"]):disabled,
 .modal-card .field textarea:disabled,
 .modal-card .field select:disabled,
-.profile-section .field input:disabled,
+.profile-section .field input:not([type="checkbox"], [type="radio"]):disabled,
 .profile-section .field textarea:disabled,
 .profile-section .field select:disabled,
 .env-row input:disabled {
@@ -2158,10 +2163,10 @@
   background: #6384f8;
 }
 
-:root[data-theme="dark"] .modal-card .field input:hover,
+:root[data-theme="dark"] .modal-card .field input:not([type="checkbox"], [type="radio"]):hover,
 :root[data-theme="dark"] .modal-card .field textarea:hover,
 :root[data-theme="dark"] .modal-card .field select:hover,
-:root[data-theme="dark"] .profile-section .field input:hover,
+:root[data-theme="dark"] .profile-section .field input:not([type="checkbox"], [type="radio"]):hover,
 :root[data-theme="dark"] .profile-section .field textarea:hover,
 :root[data-theme="dark"] .profile-section .field select:hover,
 :root[data-theme="dark"] .env-row input:hover {

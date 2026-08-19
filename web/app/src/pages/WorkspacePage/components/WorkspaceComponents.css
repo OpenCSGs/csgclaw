@@ -522,7 +522,7 @@
   line-height: 1;
 }
 
-.field input,
+.field input:not([type="checkbox"], [type="radio"]),
 .field textarea,
 .field select {
   width: 100%;
@@ -1744,7 +1744,7 @@
 
 .workspace-tab:focus-visible,
 .composer-send-button:focus-visible,
-.field input:focus,
+.field input:not([type="checkbox"], [type="radio"]):focus,
 .field textarea:focus,
 .field select:focus,
 .composer-editor:focus,
@@ -1754,7 +1754,7 @@
   box-shadow: var(--focus-ring);
 }
 
-.field input:focus,
+.field input:not([type="checkbox"], [type="radio"]):focus,
 .field textarea:focus,
 .field select:focus {
   border-color: var(--input-border-focus);
@@ -2556,7 +2556,7 @@ button[disabled],
 }
 
 .composer-editor:focus,
-.field input:focus,
+.field input:not([type="checkbox"], [type="radio"]):focus,
 .field textarea:focus,
 .field select:focus,
 .secondary-button:focus-visible,
@@ -2604,10 +2604,10 @@ button[disabled],
   letter-spacing: 0;
 }
 
-.field input,
+.field input:not([type="checkbox"], [type="radio"]),
 .field textarea,
 .field select,
-.profile-section .field input,
+.profile-section .field input:not([type="checkbox"], [type="radio"]),
 .profile-section .field textarea,
 .profile-section .field select,
 .env-row input {
@@ -2618,10 +2618,10 @@ button[disabled],
   box-shadow: var(--input-shadow);
 }
 
-:root[data-theme="dark"] .field input,
+:root[data-theme="dark"] .field input:not([type="checkbox"], [type="radio"]),
 :root[data-theme="dark"] .field textarea,
 :root[data-theme="dark"] .field select,
-:root[data-theme="dark"] .profile-section .field input,
+:root[data-theme="dark"] .profile-section .field input:not([type="checkbox"], [type="radio"]),
 :root[data-theme="dark"] .profile-section .field textarea,
 :root[data-theme="dark"] .profile-section .field select,
 :root[data-theme="dark"] .env-row input {
@@ -2631,10 +2631,10 @@ button[disabled],
   box-shadow: var(--input-shadow);
 }
 
-.field input:hover,
+.field input:not([type="checkbox"], [type="radio"]):hover,
 .field textarea:hover,
 .field select:hover,
-.profile-section .field input:hover,
+.profile-section .field input:not([type="checkbox"], [type="radio"]):hover,
 .profile-section .field textarea:hover,
 .profile-section .field select:hover,
 .env-row input:hover {
@@ -2944,10 +2944,10 @@ select,
   color: #ffffff;
 }
 
-:root[data-theme="dark"] .modal-card .field input,
+:root[data-theme="dark"] .modal-card .field input:not([type="checkbox"], [type="radio"]),
 :root[data-theme="dark"] .modal-card .field textarea,
 :root[data-theme="dark"] .modal-card .field select,
-:root[data-theme="dark"] .profile-section .field input,
+:root[data-theme="dark"] .profile-section .field input:not([type="checkbox"], [type="radio"]),
 :root[data-theme="dark"] .profile-section .field textarea,
 :root[data-theme="dark"] .profile-section .field select,
 :root[data-theme="dark"] .env-row input,
@@ -2958,9 +2958,9 @@ select,
   box-shadow: none;
 }
 
-:root[data-theme="dark"] .modal-card .field input::placeholder,
+:root[data-theme="dark"] .modal-card .field input:not([type="checkbox"], [type="radio"])::placeholder,
 :root[data-theme="dark"] .modal-card .field textarea::placeholder,
-:root[data-theme="dark"] .profile-section .field input::placeholder,
+:root[data-theme="dark"] .profile-section .field input:not([type="checkbox"], [type="radio"])::placeholder,
 :root[data-theme="dark"] .profile-section .field textarea::placeholder,
 :root[data-theme="dark"] .env-row input::placeholder,
 :root[data-theme="dark"] .composer-editor:empty::before {
