@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
@@ -83,7 +84,7 @@ type Handler struct {
 	notificationDeliver        notification.Fanouter
 	activityDecider            ActivityDecider
 	userInputResponder         UserInputResponder
-	agentEngine                sessionConversationEngine
+	agentEngine                agentengine.Interface
 	sessionBindings            *agentsession.Store
 	localDirectoryPicker       func(context.Context) (string, error)
 	feishuRegistrationStateDir string
@@ -91,7 +92,7 @@ type Handler struct {
 	participantActivityTurnsMu sync.Mutex
 	participantActivityTurns   map[string]participantActivityTurn
 	sessionTurnsMu             sync.Mutex
-	sessionTurns               map[string]*agentSessionTurn
+	sessionTurns               map[string]map[agentengine.TurnID]agentSessionTurn
 }
 
 const (
@@ -829,7 +830,7 @@ func (h *Handler) SetUserInputResponder(responder UserInputResponder) {
 	}
 }
 
-func (h *Handler) SetAgentEngine(engine sessionConversationEngine, bindings *agentsession.Store) {
+func (h *Handler) SetAgentEngine(engine agentengine.Interface, bindings *agentsession.Store) {
 	if h != nil {
 		h.agentEngine = engine
 		h.sessionBindings = bindings

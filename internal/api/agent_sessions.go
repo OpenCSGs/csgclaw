@@ -14,9 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
-	agentruntime "csgclaw/internal/runtime"
 )
 
 const agentSessionResponseBodyLimit = 1024 * 1024
@@ -81,14 +79,11 @@ type agentSessionError struct {
 	Code    string  `json:"code"`
 }
 
-type sessionConversationEngine interface {
-	Conversations(agentID string) agentengine.ConversationInterface
-}
-
 type agentSessionTurn struct {
-	requestContext context.Context
-	cancel         context.CancelFunc
-	done           chan struct{}
+	agentID         string
+	conversationKey agentengine.ConversationKey
+	turnID          agentengine.TurnID
+	cancel          context.CancelFunc
 }
 
 func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Request) {
@@ -112,22 +107,14 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		writeAgentSessionError(w, http.StatusNotFound, "agent_not_found", err.Error(), "agent")
 		return
 	}
-	if !strings.EqualFold(strings.TrimSpace(selected.RuntimeKind), agent.RuntimeKindCodex) {
-		writeAgentSessionError(w, http.StatusServiceUnavailable, "runtime_adapter_unavailable", fmt.Sprintf("runtime adapter %q is unavailable", selected.RuntimeKind), "agent")
-		return
-	}
 	if h.agentEngine == nil || h.sessionBindings == nil {
 		writeAgentSessionError(w, http.StatusServiceUnavailable, "session_service_unavailable", "session conversation service is not configured", nil)
 		return
 	}
-
-	turnKey := selected.ID + "\x00" + sessionID
-	turn, ok := h.beginSessionTurn(r.Context(), turnKey)
-	if !ok {
-		writeAgentSessionError(w, http.StatusConflict, "session_busy", "another response is already running for this session", "session_id")
+	if !strings.EqualFold(strings.TrimSpace(selected.Spec.Runtime.Adapter), "codex") {
+		writeAgentSessionError(w, http.StatusServiceUnavailable, "runtime_adapter_unavailable", fmt.Sprintf("runtime adapter %q is unavailable", selected.Spec.Runtime.Adapter), "agent")
 		return
 	}
-	defer h.endSessionTurn(turnKey, turn)
 
 	binding, err := h.sessionBindings.GetOrCreate(selected.ID, sessionID)
 	if err != nil {
@@ -151,6 +138,17 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 			"agent_id":   selected.ID,
 		},
 	}
+	turnKey := selected.ID + "\x00" + sessionID
+	runCtx, cancel := context.WithTimeout(r.Context(), agentSessionResponseTimeout)
+	defer cancel()
+	turn := agentSessionTurn{
+		agentID:         selected.ID,
+		conversationKey: agentengine.ConversationKey(binding.ConversationKey),
+		turnID:          agentengine.TurnID(responseID),
+		cancel:          cancel,
+	}
+	h.addSessionTurn(turnKey, turn)
+	defer h.removeSessionTurn(turnKey, turn.turnID)
 
 	var eventStream *agentSessionEventStream
 	var sink agentengine.EventSink
@@ -175,18 +173,18 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		})
 	}
 
-	runCtx, cancel := context.WithTimeout(turn.requestContext, agentSessionResponseTimeout)
-	defer cancel()
 	result := h.agentEngine.Conversations(selected.ID).Run(runCtx, agentengine.TurnRequest{
 		ID:              agentengine.TurnID(responseID),
 		ConversationKey: agentengine.ConversationKey(binding.ConversationKey),
+		Admission:       agentengine.AdmissionRejectIfBusy,
+		Interaction:     agentengine.InteractionReject,
 		Input: []agentengine.InputPart{{
 			Kind: agentengine.InputPartText,
 			Text: prompt,
 		}},
 	}, sink)
 	if result.Status != agentengine.TurnSucceeded {
-		if errors.Is(turn.requestContext.Err(), context.Canceled) {
+		if errors.Is(r.Context().Err(), context.Canceled) {
 			return
 		}
 		if eventStream != nil {
@@ -235,7 +233,7 @@ func (h *Handler) cancelAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := h.cancelSessionTurn(r.Context(), selected.ID+"\x00"+sessionID); err != nil {
+	if err := h.cancelSessionTurns(r.Context(), selected.ID+"\x00"+sessionID); err != nil {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -243,80 +241,61 @@ func (h *Handler) cancelAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 
 var errSessionAgentUnavailable = errors.New("agent is unavailable")
 
-func (h *Handler) resolveSessionAgent(selector string) (agent.Agent, error) {
-	if selector == "" || h.svc == nil {
-		return agent.Agent{}, fmt.Errorf("agent not found")
+func (h *Handler) resolveSessionAgent(selector string) (agentengine.Agent, error) {
+	if selector == "" || h.agentEngine == nil {
+		return agentengine.Agent{}, fmt.Errorf("agent not found")
 	}
-	selected, ok := h.svc.Agent(selector)
-	if !ok {
-		selected, ok = h.svc.AgentByName(selector)
+	selected, err := h.agentEngine.Agents().Get(context.Background(), selector)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			return agentengine.Agent{}, err
+		}
+		return agentengine.Agent{}, fmt.Errorf("%w: %v", errSessionAgentUnavailable, err)
 	}
-	if !ok {
-		return agent.Agent{}, fmt.Errorf("agent %q not found", selector)
-	}
-	if !strings.EqualFold(strings.TrimSpace(selected.Status), string(agentruntime.StateRunning)) || strings.TrimSpace(selected.RuntimeID) == "" {
-		return agent.Agent{}, fmt.Errorf("%w: agent %q is not running", errSessionAgentUnavailable, selected.ID)
+	if selected.Status.State != agentengine.AgentStateRunning || strings.TrimSpace(selected.Status.RuntimeID) == "" {
+		return agentengine.Agent{}, fmt.Errorf("%w: agent %q is not running", errSessionAgentUnavailable, selected.ID)
 	}
 	return selected, nil
 }
 
-func (h *Handler) beginSessionTurn(ctx context.Context, key string) (*agentSessionTurn, bool) {
-	for {
-		if ctx.Err() != nil {
-			return nil, false
-		}
-		h.sessionTurnsMu.Lock()
-		if h.sessionTurns == nil {
-			h.sessionTurns = make(map[string]*agentSessionTurn)
-		}
-		current := h.sessionTurns[key]
-		if current == nil {
-			turnCtx, cancel := context.WithCancel(ctx)
-			turn := &agentSessionTurn{requestContext: turnCtx, cancel: cancel, done: make(chan struct{})}
-			h.sessionTurns[key] = turn
-			h.sessionTurnsMu.Unlock()
-			return turn, true
-		}
-		if current.requestContext.Err() == nil {
-			h.sessionTurnsMu.Unlock()
-			return nil, false
-		}
-		done := current.done
-		h.sessionTurnsMu.Unlock()
-
-		select {
-		case <-done:
-		case <-ctx.Done():
-			return nil, false
-		}
+func (h *Handler) addSessionTurn(key string, turn agentSessionTurn) {
+	h.sessionTurnsMu.Lock()
+	defer h.sessionTurnsMu.Unlock()
+	if h.sessionTurns == nil {
+		h.sessionTurns = make(map[string]map[agentengine.TurnID]agentSessionTurn)
 	}
+	if h.sessionTurns[key] == nil {
+		h.sessionTurns[key] = make(map[agentengine.TurnID]agentSessionTurn)
+	}
+	h.sessionTurns[key][turn.turnID] = turn
 }
 
-func (h *Handler) cancelSessionTurn(ctx context.Context, key string) error {
+func (h *Handler) cancelSessionTurns(ctx context.Context, key string) error {
 	h.sessionTurnsMu.Lock()
-	current := h.sessionTurns[key]
-	if current == nil {
-		h.sessionTurnsMu.Unlock()
-		return nil
+	indexed := h.sessionTurns[key]
+	turns := make([]agentSessionTurn, 0, len(indexed))
+	for _, turn := range indexed {
+		turns = append(turns, turn)
 	}
-	current.cancel()
-	done := current.done
 	h.sessionTurnsMu.Unlock()
-
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	for _, turn := range turns {
+		if turn.cancel != nil {
+			turn.cancel()
+		}
+		if err := h.agentEngine.Conversations(turn.agentID).Cancel(ctx, turn.conversationKey, turn.turnID); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (h *Handler) endSessionTurn(key string, turn *agentSessionTurn) {
+func (h *Handler) removeSessionTurn(key string, turnID agentengine.TurnID) {
 	h.sessionTurnsMu.Lock()
-	if h.sessionTurns[key] == turn {
+	if indexed := h.sessionTurns[key]; indexed != nil {
+		delete(indexed, turnID)
+	}
+	if len(h.sessionTurns[key]) == 0 {
 		delete(h.sessionTurns, key)
-		turn.cancel()
-		close(turn.done)
 	}
 	h.sessionTurnsMu.Unlock()
 }
@@ -788,4 +767,4 @@ func newAgentSessionAPIID(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, time.Now().UTC().UnixNano())
 }
 
-var _ sessionConversationEngine = (*agentengine.Engine)(nil)
+var _ agentengine.Interface = (*agentengine.Engine)(nil)

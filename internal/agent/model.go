@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -46,6 +47,34 @@ type Agent struct {
 	// lifecycle state is durable, while readiness may change between probes.
 	Availability   *RuntimeAvailability `json:"-"`
 	StartupPending bool                 `json:"-"`
+
+	runtimeCredentials runtimeCredentials
+	runtimeInitShell   string
+}
+
+type runtimeCredentials map[string]string
+
+func (runtimeCredentials) String() string { return "[redacted]" }
+
+// String deliberately renders only non-secret identity and lifecycle fields.
+func (a Agent) String() string {
+	return fmt.Sprintf("Agent{ID:%q Name:%q RuntimeKind:%q RuntimeID:%q Status:%q}", a.ID, a.Name, a.RuntimeKind, a.RuntimeID, a.Status)
+}
+
+// RuntimeProvision returns a defensive copy of Runtime-owned provisioning
+// state that is intentionally excluded from Agent JSON responses.
+func (a Agent) RuntimeProvision() (map[string]string, string) {
+	return cloneStringMap(map[string]string(a.runtimeCredentials)), a.runtimeInitShell
+}
+
+// SetRuntimeProvision replaces Runtime-owned provisioning state without
+// exposing credential values through the Agent JSON representation.
+func (a *Agent) SetRuntimeProvision(credentials map[string]string, initShell string) {
+	if a == nil {
+		return
+	}
+	a.runtimeCredentials = runtimeCredentials(cloneStringMap(credentials))
+	a.runtimeInitShell = initShell
 }
 
 // AgentMetadata is the persisted identity and capability metadata for an agent.
@@ -191,26 +220,28 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 }
 
 type CreateAgentSpec struct {
-	ID                   string         `json:"id,omitempty"`
-	Name                 string         `json:"name"`
-	Description          string         `json:"description,omitempty"`
-	Instructions         string         `json:"instructions,omitempty"`
-	Image                string         `json:"image,omitempty"`
-	Avatar               string         `json:"-"`
-	RuntimeKind          string         `json:"-"`
-	RuntimeName          string         `json:"runtime_name,omitempty"`
-	SandboxEnabled       bool           `json:"sandbox_enabled,omitempty"`
-	FromTemplate         string         `json:"from_template,omitempty"`
-	TemplateInstructions string         `json:"-"`
-	Role                 string         `json:"role,omitempty"`
-	Status               string         `json:"status,omitempty"`
-	CreatedAt            time.Time      `json:"created_at,omitempty"`
-	UpdatedAt            time.Time      `json:"updated_at,omitempty"`
-	Profile              string         `json:"profile,omitempty"`
-	RuntimeOptions       map[string]any `json:"runtime_options,omitempty"`
-	MCPServers           map[string]any `json:"mcpServers,omitempty"`
-	MCPServersSet        bool           `json:"-"`
-	AgentProfile         AgentProfile   `json:"agent_profile,omitempty"`
+	ID                   string            `json:"id,omitempty"`
+	Name                 string            `json:"name"`
+	Description          string            `json:"description,omitempty"`
+	Instructions         string            `json:"instructions,omitempty"`
+	Image                string            `json:"image,omitempty"`
+	Avatar               string            `json:"-"`
+	RuntimeKind          string            `json:"-"`
+	RuntimeName          string            `json:"runtime_name,omitempty"`
+	SandboxEnabled       bool              `json:"sandbox_enabled,omitempty"`
+	FromTemplate         string            `json:"from_template,omitempty"`
+	TemplateInstructions string            `json:"-"`
+	Role                 string            `json:"role,omitempty"`
+	Status               string            `json:"status,omitempty"`
+	CreatedAt            time.Time         `json:"created_at,omitempty"`
+	UpdatedAt            time.Time         `json:"updated_at,omitempty"`
+	Profile              string            `json:"profile,omitempty"`
+	RuntimeOptions       map[string]any    `json:"runtime_options,omitempty"`
+	MCPServers           map[string]any    `json:"mcpServers,omitempty"`
+	MCPServersSet        bool              `json:"-"`
+	RuntimeCredentials   map[string]string `json:"-"`
+	RuntimeInitShell     string            `json:"-"`
+	AgentProfile         AgentProfile      `json:"agent_profile,omitempty"`
 }
 
 func (s CreateAgentSpec) RuntimeConfig() agentruntime.RuntimeConfig {
@@ -404,21 +435,23 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 }
 
 type UpdateRequest struct {
-	Name                      *string         `json:"name,omitempty"`
-	Description               *string         `json:"description,omitempty"`
-	Instructions              *string         `json:"instructions,omitempty"`
-	Image                     *string         `json:"image,omitempty"`
-	Avatar                    *string         `json:"-"`
-	Profile                   *string         `json:"profile,omitempty"`
-	RuntimeKind               string          `json:"-"`
-	RuntimeName               string          `json:"-"`
-	SandboxEnabled            *bool           `json:"-"`
-	RuntimeSelectionRequested bool            `json:"-"`
-	RuntimeOptions            *map[string]any `json:"runtime_options,omitempty"`
-	MCPServers                *map[string]any `json:"mcpServers,omitempty"`
-	MCPServersSet             bool            `json:"-"`
-	AgentProfile              *AgentProfile   `json:"agent_profile,omitempty"`
-	FieldMask                 []string        `json:"field_mask,omitempty"`
+	Name                      *string            `json:"name,omitempty"`
+	Description               *string            `json:"description,omitempty"`
+	Instructions              *string            `json:"instructions,omitempty"`
+	Image                     *string            `json:"image,omitempty"`
+	Avatar                    *string            `json:"-"`
+	Profile                   *string            `json:"profile,omitempty"`
+	RuntimeKind               string             `json:"-"`
+	RuntimeName               string             `json:"-"`
+	SandboxEnabled            *bool              `json:"-"`
+	RuntimeSelectionRequested bool               `json:"-"`
+	RuntimeOptions            *map[string]any    `json:"runtime_options,omitempty"`
+	MCPServers                *map[string]any    `json:"mcpServers,omitempty"`
+	MCPServersSet             bool               `json:"-"`
+	RuntimeCredentials        *map[string]string `json:"-"`
+	RuntimeInitShell          *string            `json:"-"`
+	AgentProfile              *AgentProfile      `json:"agent_profile,omitempty"`
+	FieldMask                 []string           `json:"field_mask,omitempty"`
 }
 
 func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
@@ -641,6 +674,7 @@ func cloneAgent(src *Agent) *Agent {
 	dst.DetectionResults = append([]ProfileDetectionResult(nil), src.DetectionResults...)
 	dst.RuntimeOptions = utils.CloneAnyMap(src.RuntimeOptions)
 	dst.MCPServers = cloneMCPServers(src.MCPServers)
+	dst.runtimeCredentials = runtimeCredentials(cloneStringMap(map[string]string(src.runtimeCredentials)))
 	dst.Availability = cloneRuntimeAvailability(src.Availability)
 	return &dst
 }

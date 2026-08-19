@@ -3,22 +3,12 @@ package agentengine
 import "context"
 
 // ConversationInterface executes conversations for the Agent selected by
-// Conversations. Phase 1 intentionally exposes only the operation used by the
-// Session API.
+// Conversations.
 type ConversationInterface interface {
 	Run(ctx context.Context, request TurnRequest, sink EventSink) TurnResult
-
-	// Run cancellation is intentionally context-based. Enable Cancel only when
-	// an independent caller must address and cancel an active turn by
-	// ConversationKey and TurnID; do not add it while callers can cancel their
-	// own Run context.
-	// Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error
-
-	// Later phases can enable these operations when a migrated caller needs
-	// them. They stay visible here instead of being implemented as misleading
-	// no-op methods.
-	// Reset(ctx context.Context, key ConversationKey) error
-	// Resolve(ctx context.Context, resolution InteractionResolution) error
+	Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error
+	Reset(ctx context.Context, key ConversationKey) error
+	Resolve(ctx context.Context, resolution InteractionResolution) error
 }
 
 // EventSink receives ordered progress for one turn.
@@ -39,6 +29,34 @@ type ConversationKey string
 // TurnID is an opaque, caller-generated identity for one Run request.
 type TurnID string
 
+// AdmissionPolicy controls how Run behaves when the Conversation already has
+// an active Turn or atomic control operation.
+type AdmissionPolicy string
+
+const (
+	AdmissionRejectIfBusy AdmissionPolicy = "reject_if_busy"
+	AdmissionWait         AdmissionPolicy = "wait"
+	AdmissionSupersede    AdmissionPolicy = "supersede"
+)
+
+// ContinuationPolicy controls whether a missing Runtime-native conversation may
+// be created.
+type ContinuationPolicy string
+
+const (
+	ContinuationCreateOrResume  ContinuationPolicy = "create_or_resume"
+	ContinuationRequireExisting ContinuationPolicy = "require_existing"
+)
+
+// InteractionPolicy controls how blocking Runtime interactions are handled.
+type InteractionPolicy string
+
+const (
+	InteractionResolve       InteractionPolicy = "resolve"
+	InteractionReject        InteractionPolicy = "reject"
+	InteractionSkipUserInput InteractionPolicy = "skip_user_input"
+)
+
 // InputPartKind identifies one normalized turn input.
 type InputPartKind string
 
@@ -48,8 +66,6 @@ const (
 )
 
 // InputPart is text or a caller-authorized file.
-// Text parts set Text and leave File nil.
-// File parts set File and leave Text empty.
 type InputPart struct {
 	Kind InputPartKind
 	Text string
@@ -57,8 +73,8 @@ type InputPart struct {
 }
 
 // InputFile is a caller-authorized file source.
-// The Engine treats SourcePath as opaque; the Runtime Adapter decides how to
-// mount, copy, or expose it.
+// Engine validates only this neutral shape. Runtime Adapters own file access,
+// copying, and Runtime-specific input conversion.
 type InputFile struct {
 	ID         string
 	SourcePath string
@@ -69,40 +85,43 @@ type InputFile struct {
 }
 
 // TurnRequest contains conversation identity and caller-normalized input.
-// File sources have already been authorized and resolved outside Engine.
 type TurnRequest struct {
 	ID              TurnID
 	ConversationKey ConversationKey
 	Input           []InputPart
-
-	// Deferred until a caller needs them:
-	// Continuation ContinuationPolicy
-	// Admission    ConversationAdmission
-	// Interaction  InteractionPolicy
+	Admission       AdmissionPolicy
+	Continuation    ContinuationPolicy
+	Interaction     InteractionPolicy
 }
 
 // TurnEventKind identifies progress emitted during a turn.
 type TurnEventKind string
 
 const (
-	TurnEventTextDelta      TurnEventKind = "text_delta"
-	TurnEventToolCallStart  TurnEventKind = "tool_call_start"
-	TurnEventToolCallUpdate TurnEventKind = "tool_call_update"
+	TurnEventTextDelta          TurnEventKind = "text_delta"
+	TurnEventThoughtDelta       TurnEventKind = "thought_delta"
+	TurnEventToolCallStart      TurnEventKind = "tool_call_start"
+	TurnEventToolCallUpdate     TurnEventKind = "tool_call_update"
+	TurnEventActivityUpdate     TurnEventKind = "activity_update"
+	TurnEventInteractionRequest TurnEventKind = "interaction_request"
+	TurnEventOutputItem         TurnEventKind = "output_item"
 )
 
-// TurnEvent contains either a text delta or a tool activity.
+// TurnEvent is the replay-safe envelope for one normalized Runtime event.
+// Sequence starts at one and increases monotonically for each TurnID.
 type TurnEvent struct {
-	Kind TurnEventKind
-	Text string
-	Tool *ToolActivity
-
-	// Deferred until Channel migration:
-	// Thought     string
-	// Interaction *InteractionRequest
-	// Output      *OutputItem
+	TurnID      TurnID
+	Sequence    uint64
+	Kind        TurnEventKind
+	Text        string
+	Thought     string
+	Tool        *ToolActivity
+	Activity    *ActivityUpdate
+	Interaction *InteractionRequest
+	Output      *OutputItem
 }
 
-// ToolActivity contains the fields required by the Session SSE renderer.
+// ToolActivity contains normalized tool progress.
 type ToolActivity struct {
 	ID            string
 	Kind          string
@@ -111,6 +130,60 @@ type ToolActivity struct {
 	InputSummary  string
 	OutputSummary string
 	Payload       any
+}
+
+// ActivityUpdate carries Runtime-neutral progress not represented by a tool.
+type ActivityUpdate struct {
+	ID      string
+	Kind    string
+	Title   string
+	Status  string
+	Payload any
+}
+
+// InteractionKind identifies a blocking Runtime request.
+type InteractionKind string
+
+const (
+	InteractionPermission InteractionKind = "permission"
+	InteractionUserInput  InteractionKind = "user_input"
+)
+
+// InteractionRequest is one pending interaction addressable through Resolve.
+type InteractionRequest struct {
+	ID      string
+	Kind    InteractionKind
+	Title   string
+	Payload any
+}
+
+// InteractionResolution resolves exactly one pending interaction.
+type InteractionResolution struct {
+	ConversationKey ConversationKey
+	InteractionID   string
+	OptionID        string
+	Answers         map[string]InteractionAnswer
+	ResponderID     string
+}
+
+// InteractionAnswer is a normalized answer for one Runtime question.
+type InteractionAnswer struct {
+	Values  []string
+	Skipped bool
+}
+
+// OutputItemKind identifies a detached, non-blocking output record.
+type OutputItemKind string
+
+const (
+	OutputItemRequestUserInput OutputItemKind = "request_user_input"
+	OutputItemResourceLink     OutputItemKind = "resource_link"
+)
+
+// OutputItem contains an already validated Runtime output record.
+type OutputItem struct {
+	Kind    OutputItemKind
+	Payload any
 }
 
 // TurnStatus is the terminal state of one turn.
@@ -122,21 +195,24 @@ const (
 	TurnCanceled  TurnStatus = "canceled"
 )
 
-// ErrorCode is a stable failure category used by callers for transport
-// mapping.
+// ErrorCode is a stable failure category used by callers for transport mapping.
 type ErrorCode string
 
 const (
-	ErrorInvalidRequest            ErrorCode = "invalid_request"
-	ErrorAgentUnavailable          ErrorCode = "agent_unavailable"
-	ErrorRuntimeAdapterUnavailable ErrorCode = "runtime_adapter_unavailable"
-	ErrorConversationBusy          ErrorCode = "conversation_busy"
-	ErrorFileUnavailable           ErrorCode = "file_unavailable"
-	ErrorInteractionUnsupported    ErrorCode = "interaction_unsupported"
-	ErrorRuntimeFailed             ErrorCode = "runtime_failed"
+	ErrorInvalidRequest              ErrorCode = "invalid_request"
+	ErrorAgentUnavailable            ErrorCode = "agent_unavailable"
+	ErrorRuntimeAdapterUnavailable   ErrorCode = "runtime_adapter_unavailable"
+	ErrorConversationBusy            ErrorCode = "conversation_busy"
+	ErrorConversationNotResumable    ErrorCode = "conversation_not_resumable"
+	ErrorFileUnavailable             ErrorCode = "file_unavailable"
+	ErrorInteractionNotFound         ErrorCode = "interaction_not_found"
+	ErrorInteractionUnsupported      ErrorCode = "interaction_unsupported"
+	ErrorCanceled                    ErrorCode = "canceled"
+	ErrorRuntimeFailed               ErrorCode = "runtime_failed"
+	ErrorUnsupportedRuntimeProvision ErrorCode = "unsupported_runtime_provisioning"
 )
 
-// TurnError is the normalized failure carried by TurnResult.
+// TurnError is a normalized failure returned by Engine operations.
 type TurnError struct {
 	Code    ErrorCode
 	Message string
@@ -149,12 +225,26 @@ func (e *TurnError) Error() string {
 	return e.Message
 }
 
+// ErrorCodeOf returns the stable Engine code carried by err.
+func ErrorCodeOf(err error) ErrorCode {
+	for err != nil {
+		if turnErr, ok := err.(*TurnError); ok {
+			return turnErr.Code
+		}
+		type unwrapper interface{ Unwrap() error }
+		next, ok := err.(unwrapper)
+		if !ok {
+			break
+		}
+		err = next.Unwrap()
+	}
+	return ""
+}
+
 // TurnResult is the terminal outcome of one turn.
 type TurnResult struct {
-	Status TurnStatus
-	Output string
-	Error  *TurnError
-
-	// Deferred until strict continuation is implemented:
-	// Dispatched bool
+	Status     TurnStatus
+	Output     string
+	Dispatched bool
+	Error      *TurnError
 }
