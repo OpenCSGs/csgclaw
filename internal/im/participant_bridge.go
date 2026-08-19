@@ -20,6 +20,7 @@ const maxPendingParticipantEventsPerParticipant = 64
 type ParticipantEvent struct {
 	MessageID     string                    `json:"message_id"`
 	RoomID        string                    `json:"room_id"`
+	Locale        string                    `json:"locale,omitempty"`
 	Channel       string                    `json:"channel,omitempty"`
 	ChatID        string                    `json:"chat_id,omitempty"`
 	ChatType      string                    `json:"chat_type"`
@@ -363,6 +364,7 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 	return ParticipantEvent{
 		MessageID:    message.ID,
 		RoomID:       room.ID,
+		Locale:       room.Locale,
 		Channel:      "csgclaw",
 		ChatID:       room.ID,
 		ChatType:     chatType,

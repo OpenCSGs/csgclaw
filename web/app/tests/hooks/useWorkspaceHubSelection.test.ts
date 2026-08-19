@@ -10,9 +10,11 @@ describe("resolveHubTemplateSelection", () => {
     expect(resolveHubTemplateSelection(templates, "")).toBe("template-1");
   });
 
-  it("preserves a direct-detail selection that is not listed yet", () => {
-    expect(resolveHubTemplateSelection(templates, "pending-template")).toBe("pending-template");
-    expect(resolveHubTemplateSelection([], "pending-template")).toBe("pending-template");
+  it("preserves a direct-detail selection only while it can still resolve", () => {
+    expect(resolveHubTemplateSelection(templates, "pending-template", true)).toBe("pending-template");
+    expect(resolveHubTemplateSelection([], "pending-template", true)).toBe("pending-template");
+    expect(resolveHubTemplateSelection(templates, "missing-template")).toBe("template-1");
+    expect(resolveHubTemplateSelection([], "missing-template")).toBe("");
   });
 });
 

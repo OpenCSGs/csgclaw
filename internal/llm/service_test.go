@@ -984,6 +984,15 @@ func TestUpstreamErrorBodyForLogRedactsAndTruncates(t *testing.T) {
 	if !strings.HasSuffix(got, "... [truncated]") {
 		t.Fatalf("upstreamErrorBodyForLog() = %q, want truncation marker", got)
 	}
+
+	truncatedJSON := []byte(`{"api_key":"sk-truncated-secret","cookie":"session=private","message":"` + strings.Repeat("x", maxUpstreamErrorLogBytes) + `"}`)
+	got = upstreamErrorBodyForLog(truncatedJSON)
+	if strings.Contains(got, "sk-truncated-secret") || strings.Contains(got, "session=private") {
+		t.Fatalf("upstreamErrorBodyForLog() leaked a secret from truncated JSON: %q", got)
+	}
+	if !strings.Contains(got, `"api_key":[redacted]`) || !strings.Contains(got, `"cookie":[redacted]`) {
+		t.Fatalf("upstreamErrorBodyForLog() = %q, want truncated JSON fields redacted", got)
+	}
 }
 
 func TestUpstreamRequestIDUsesKnownHeaders(t *testing.T) {

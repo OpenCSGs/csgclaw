@@ -75,6 +75,7 @@ type DeleteChatFunc func(context.Context, AppConfig, string) error
 type SendMessageRequest struct {
 	ChatID           string
 	Content          string
+	Markdown         bool
 	UUID             string
 	ThreadRootID     string
 	MentionID        string
@@ -1063,7 +1064,12 @@ func defaultSendMessage(ctx context.Context, app AppConfig, req SendMessageReque
 		}
 	}
 
+	messageType := "text"
 	content, err := feishuTextMessageContent(req.Content, mentionID, mentionOpenID)
+	if req.Markdown {
+		messageType = "interactive"
+		content, err = feishuMarkdownMessageContent(req.Content)
+	}
 	if err != nil {
 		return SendMessageResponse{}, fmt.Errorf("encode feishu message content: %w", err)
 	}
@@ -1073,7 +1079,7 @@ func defaultSendMessage(ctx context.Context, app AppConfig, req SendMessageReque
 		replyReq := larkim.NewReplyMessageReqBuilder().
 			MessageId(threadRootID).
 			Body(larkim.NewReplyMessageReqBodyBuilder().
-				MsgType("text").
+				MsgType(messageType).
 				Content(string(content)).
 				ReplyInThread(true).
 				Uuid(req.UUID).
@@ -1100,7 +1106,7 @@ func defaultSendMessage(ctx context.Context, app AppConfig, req SendMessageReque
 		ReceiveIdType("chat_id").
 		Body(larkim.NewCreateMessageReqBodyBuilder().
 			ReceiveId(req.ChatID).
-			MsgType("text").
+			MsgType(messageType).
 			Content(string(content)).
 			Uuid(req.UUID).
 			Build()).
@@ -1231,6 +1237,17 @@ func feishuTextMessageContent(content, mentionID, mentionOpenID string) (string,
 	return string(data), nil
 }
 
+func feishuMarkdownMessageContent(content string) (string, error) {
+	data, err := json.Marshal(map[string]any{
+		"config":   map[string]bool{"wide_screen_mode": true},
+		"elements": []map[string]string{{"tag": "markdown", "content": strings.TrimSpace(content)}},
+	})
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
 // fetchBotInfo calls the Feishu bot info API to retrieve bot identity fields.
 func fetchBotInfo(ctx context.Context, app AppConfig) (BotInfo, error) {
 	client := lark.NewClient(app.AppID, app.AppSecret)
@@ -1317,6 +1334,7 @@ func (s *Service) SendMessage(req im.CreateMessageRequest) (im.Message, error) {
 	sent, err := s.sendMessage(context.Background(), app, SendMessageRequest{
 		ChatID:           roomID,
 		Content:          content,
+		Markdown:         isRuntimeErrorMetadata(req.Metadata),
 		UUID:             fallbackID,
 		ThreadRootID:     threadRootID,
 		MentionID:        mentionID,
@@ -1372,6 +1390,11 @@ func (s *Service) SendMessage(req im.CreateMessageRequest) (im.Message, error) {
 		})
 	}
 	return message, nil
+}
+
+func isRuntimeErrorMetadata(metadata map[string]any) bool {
+	namespace, ok := metadata["csgclaw"].(map[string]any)
+	return ok && namespace["runtime_error"] == true
 }
 
 func (s *Service) UpdateMessage(req UpdateMessageRequest) (im.Message, error) {

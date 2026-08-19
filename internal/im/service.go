@@ -138,6 +138,7 @@ type UpdateUserRequest struct {
 	Description *string
 	Role        *string
 	Avatar      *string
+	Locale      *string
 }
 
 type AddAgentToConversationRequest struct {
@@ -234,6 +235,7 @@ type persistedRoom struct {
 	Title           string            `json:"title"`
 	Subtitle        string            `json:"subtitle"`
 	Description     string            `json:"description,omitempty"`
+	Locale          string            `json:"locale,omitempty"`
 	SessionID       string            `json:"session_id,omitempty"`
 	SessionAgentID  string            `json:"session_agent_id,omitempty"`
 	IsDirect        bool              `json:"is_direct,omitempty"`
@@ -445,6 +447,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			Title:           room.Title,
 			Subtitle:        room.Subtitle,
 			Description:     room.Description,
+			Locale:          room.Locale,
 			SessionID:       room.SessionID,
 			SessionAgentID:  room.SessionAgentID,
 			IsDirect:        room.IsDirect,
@@ -615,6 +618,7 @@ func persistedRoomFromRoom(room Room) persistedRoom {
 		Title:           room.Title,
 		Subtitle:        room.Subtitle,
 		Description:     room.Description,
+		Locale:          room.Locale,
 		SessionID:       room.SessionID,
 		SessionAgentID:  room.SessionAgentID,
 		IsDirect:        room.IsDirect,
@@ -1907,6 +1911,9 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 	if req.Avatar != nil {
 		user.Avatar = strings.TrimSpace(*req.Avatar)
 	}
+	if req.Locale != nil {
+		user.Locale = messagePresentationLocale(*req.Locale)
+	}
 	user = normalizeUser(user)
 	if user.ID == adminUserID && strings.TrimSpace(user.Description) == "" {
 		user.Description = DefaultAdminDescription
@@ -1951,6 +1958,9 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 	room, ok := s.rooms[roomID]
 	if !ok {
 		return Message{}, fmt.Errorf("room not found")
+	}
+	if locale := messagePresentationLocale(req.Locale); strings.TrimSpace(req.Locale) != "" {
+		room.Locale = locale
 	}
 	relatesTo, err := s.normalizeMessageRelationLocked(*room, req.RelatesTo)
 	if err != nil {
@@ -2194,6 +2204,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		Title:       title,
 		Subtitle:    formatRoomSubtitle(len(members)),
 		Description: description,
+		Locale:      messagePresentationLocale(req.Locale),
 		IsDirect:    false,
 		Members:     members,
 		Messages: []Message{

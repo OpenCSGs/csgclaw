@@ -136,6 +136,46 @@ export type HubTemplateReviewState = {
   messages: string[];
 };
 
+export function upsertHubTemplateReviewState(
+  templates: readonly HubTemplate[] | undefined,
+  templateID: string,
+  status: "Pending" | "Fail",
+  message = "",
+): HubTemplate[] {
+  const id = templateID.trim();
+  if (!id) return [...(templates ?? [])];
+  const separator = id.indexOf("/");
+  const namespace = separator > 0 ? id.slice(0, separator) : "";
+  const name = separator >= 0 ? id.slice(separator + 1) : id;
+  const sensitiveCheck = {
+    status,
+    failure_details: message.trim() ? [{ message: message.trim() }] : [],
+  };
+  const current = templates ?? [];
+  const existingIndex = current.findIndex((template) => template.id === id);
+  if (existingIndex < 0) {
+    return [
+      ...current,
+      {
+        id,
+        name,
+        namespace: namespace || undefined,
+        role: "worker",
+        source: { kind: HUB_REGISTRY_KIND_REMOTE, name: OFFICIAL_HUB_REGISTRY_NAME },
+        metadata: { sensitive_check: sensitiveCheck },
+      },
+    ];
+  }
+  return current.map((template, index) =>
+    index === existingIndex
+      ? {
+          ...template,
+          metadata: { ...template.metadata, sensitive_check: sensitiveCheck },
+        }
+      : template,
+  );
+}
+
 export function hubTemplateReviewState(template: HubTemplate | null | undefined): HubTemplateReviewState | null {
   const check = template?.metadata?.sensitive_check;
   const status = String(check?.status ?? "")

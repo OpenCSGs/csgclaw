@@ -187,6 +187,18 @@ export function useWorkspaceController() {
     refreshWorkspaceHubTemplates,
   } = useWorkspaceData();
   const t = useMemo(() => createTranslator(locale), [locale]);
+
+  useEffect(() => {
+    const currentUserID = String(data?.current_user_id ?? "").trim();
+    if (!currentUserID) return;
+    const currentUser = data?.users.find((user) => user.id === currentUserID);
+    if (currentUser?.locale === locale) return;
+    void patchCsgclawUserRequest(currentUserID, { locale })
+      .then((updated) => {
+        setBootstrapData((current) => upsertUserInData(current, updated));
+      })
+      .catch(() => undefined);
+  }, [data?.current_user_id, data?.users, locale, setBootstrapData]);
   const displayData = useMemo(() => withLocalIdentity(data, t("localIdentityFallback")), [data, t]);
   const activePane = useMemo(() => paneFromLocation(location.pathname), [location.pathname]);
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);

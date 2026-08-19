@@ -37,6 +37,7 @@ export type IMUser = {
   description?: string | null;
   id: string;
   is_online?: boolean | null;
+  locale?: string | null;
   name?: string | null;
   participants?: IMParticipantLike[] | null;
   role?: string | null;
@@ -116,6 +117,7 @@ export type IMConversation = {
   description?: string | null;
   id: string;
   is_direct?: boolean | null;
+  locale?: string | null;
   members: string[];
   messages: IMMessage[];
   notify_all_agents?: boolean | null;

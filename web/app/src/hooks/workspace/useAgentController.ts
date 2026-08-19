@@ -35,7 +35,9 @@ import {
   isHubTemplateDeploySensitiveCheckError,
   isHubTemplateNameConflict,
   isHubTemplateSensitiveInformationError,
+  upsertHubTemplateReviewState,
 } from "@/models/hubWorkspace";
+import type { HubTemplate } from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
@@ -1746,6 +1748,14 @@ export function useAgentController({
       const publishedTemplateID = String((err as ApiError | null)?.publishedTemplateId ?? "").trim();
       if (target === "official_deploy" && publishedTemplateID && (deploySensitiveCheckFailed || deployReviewPending)) {
         await refreshHubTemplates();
+        queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
+          upsertHubTemplateReviewState(
+            templates,
+            publishedTemplateID,
+            deployReviewPending ? "Pending" : "Fail",
+            deployReviewPending ? "" : t("agentDeploySensitiveCheckFailed"),
+          ),
+        );
         setSelectedHubTemplateId(publishedTemplateID);
         navigatePane({ type: WorkspacePaneTypes.hub, id: publishedTemplateID, resourceType: "template" }, rooms);
         return true;

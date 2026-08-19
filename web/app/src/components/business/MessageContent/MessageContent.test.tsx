@@ -46,7 +46,7 @@ function questionMessage(status: "pending" | "answered") {
 }
 
 describe("MessageContent question transcripts", () => {
-  it("localizes a Codex-wrapped insufficient balance runtime error", () => {
+  it("renders backend-provided runtime error content without client-side rewriting", () => {
     const content =
       "Runtime error: unexpected status 402 Payment Required. The model service balance is insufficient. Add funds or contact an administrator.\n\n👉 [Recharge your account](https://opencsg-stg.com/settings/billing) to continue., url: http://127.0.0.1:49229/api/v1/agents/agent-manager/llm/responses, request id: secret";
     render(
@@ -61,13 +61,12 @@ describe("MessageContent question transcripts", () => {
       />,
     );
 
-    expect(screen.getByText("模型服务余额不足，请充值或联系管理员后重试。")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "前往充值" })).toHaveAttribute(
+    expect(screen.getByText(/unexpected status 402 Payment Required/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Recharge your account" })).toHaveAttribute(
       "href",
       "https://opencsg-stg.com/settings/billing",
     );
-    expect(screen.queryByText(/127\.0\.0\.1/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/request id/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/127\.0\.0\.1/)).toBeInTheDocument();
   });
 
   it("does not localize human-authored text that quotes a runtime error", () => {
@@ -85,7 +84,7 @@ describe("MessageContent question transcripts", () => {
     expect(screen.queryByRole("link", { name: "rechargeAccount" })).not.toBeInTheDocument();
   });
 
-  it("replaces an unknown 503 runtime error with an actionable message", () => {
+  it("does not parse legacy runtime status strings", () => {
     render(
       <MessageContent
         content="Runtime error: unexpected status 503 Service Unavailable: Unknown error, url: http://127.0.0.1:54212/api/v1/agents/agent-1/llm/responses"
@@ -94,8 +93,7 @@ describe("MessageContent question transcripts", () => {
       />,
     );
 
-    expect(screen.getByText("模型服务暂时不可用，请稍后重试。")).toBeInTheDocument();
-    expect(screen.queryByText(/Unknown error|127\.0\.0\.1/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Unknown error|127\.0\.0\.1/).length).toBeGreaterThan(0);
   });
 
   it("uses structured metadata for a pending interactive question", () => {

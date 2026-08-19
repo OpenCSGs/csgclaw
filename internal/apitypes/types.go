@@ -32,6 +32,7 @@ type User struct {
 	ID           string        `json:"id"`
 	Name         string        `json:"name"`
 	Description  string        `json:"description,omitempty"`
+	Locale       string        `json:"locale,omitempty"`
 	Role         string        `json:"role"`
 	Avatar       string        `json:"avatar"`
 	IsOnline     bool          `json:"is_online"`
@@ -53,6 +54,7 @@ type UpdateUserRequest struct {
 	Description *string `json:"description,omitempty"`
 	Role        *string `json:"role,omitempty"`
 	Avatar      *string `json:"avatar,omitempty"`
+	Locale      *string `json:"locale,omitempty"`
 }
 
 type Mention struct {
@@ -99,6 +101,7 @@ type CreateMessageRequest struct {
 	RoomID      string                    `json:"room_id"`
 	SenderID    string                    `json:"sender_id"`
 	Content     string                    `json:"content"`
+	Locale      string                    `json:"locale,omitempty"`
 	MentionID   string                    `json:"mention_id,omitempty"`
 	Metadata    map[string]any            `json:"metadata,omitempty"`
 	RelatesTo   *MessageRelation          `json:"relates_to,omitempty"`
@@ -167,6 +170,7 @@ type Room struct {
 	Title           string        `json:"title"`
 	Subtitle        string        `json:"subtitle"`
 	Description     string        `json:"description,omitempty"`
+	Locale          string        `json:"locale,omitempty"`
 	SessionID       string        `json:"session_id,omitempty"`
 	SessionAgentID  string        `json:"session_agent_id,omitempty"`
 	IsDirect        bool          `json:"is_direct,omitempty"`

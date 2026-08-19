@@ -410,6 +410,7 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent) error {
 		return w.handleConversationReset(ctx, evt)
 	} else if err != nil {
 		renderer := runtimebridge.NewTurnRenderer()
+		renderer.SetLocale(evt.Locale)
 		renderer.SetPromptError(err.Error())
 		cleanupProcessingReaction(ctx)
 		_, err := w.flushTurn(ctx, evt.RoomID, "", renderer, codexFinalDeliveryMetadata(evt.MessageID))
@@ -418,6 +419,7 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent) error {
 	sessionID, err := w.sessionID(ctx, evt)
 	if err != nil {
 		renderer := runtimebridge.NewTurnRenderer()
+		renderer.SetLocale(evt.Locale)
 		renderer.SetPromptError(err.Error())
 		cleanupProcessingReaction(ctx)
 		_, err := w.flushTurn(ctx, evt.RoomID, "", renderer, codexFinalDeliveryMetadata(evt.MessageID))
@@ -444,6 +446,7 @@ func (w *worker) handleEvent(ctx context.Context, evt BotEvent) error {
 		"has_thread_context", evt.ThreadContext != nil,
 	)
 	renderer := runtimebridge.NewTurnRenderer()
+	renderer.SetLocale(evt.Locale)
 	var pendingCommentary strings.Builder
 	turnRootID := strings.TrimSpace(evt.ThreadRootID)
 	var generatedRootID string
@@ -1141,7 +1144,7 @@ func (w *worker) flushMessages(ctx context.Context, roomID, threadRootID string,
 	for _, text := range messages {
 		messageMetadata := metadata
 		if renderer.IsPromptErrorMessage(text) {
-			messageMetadata = runtimeErrorMessageMetadata(metadata)
+			messageMetadata = runtimeErrorMessageMetadata(metadata, renderer.PromptError().Code)
 		}
 		req := SendMessageRequest{
 			RoomID:       roomID,
@@ -1160,7 +1163,7 @@ func (w *worker) flushMessages(ctx context.Context, roomID, threadRootID string,
 	return firstSentMessageID, nil
 }
 
-func runtimeErrorMessageMetadata(metadata map[string]any) map[string]any {
+func runtimeErrorMessageMetadata(metadata map[string]any, code string) map[string]any {
 	out := mergeMessageMetadata(metadata)
 	if out == nil {
 		out = make(map[string]any)
@@ -1170,6 +1173,8 @@ func runtimeErrorMessageMetadata(metadata map[string]any) map[string]any {
 		namespace = cloneStringAnyMap(existing)
 	}
 	namespace[runtimebridge.RuntimeErrorMetaKey] = true
+	namespace["error_code"] = strings.TrimSpace(code)
+	namespace["presentation_version"] = 2
 	out[runtimebridge.CSGClawMetadataKey] = namespace
 	return out
 }

@@ -30,8 +30,15 @@ export function templateWorkspaceFilesStateNeedsReset(state: TemplateWorkspaceFi
   return Boolean(state.templateID || Object.keys(state.files).length);
 }
 
-export function resolveHubTemplateSelection(templates: readonly HubTemplate[], current: string): string {
-  return current || templates[0]?.id || "";
+export function resolveHubTemplateSelection(
+  templates: readonly HubTemplate[],
+  current: string,
+  preserveMissing = false,
+): string {
+  if (templates.some((item) => item.id === current) || (current && preserveMissing)) {
+    return current;
+  }
+  return templates[0]?.id || "";
 }
 
 export function useWorkspaceHubSelection({
@@ -102,6 +109,7 @@ export function useWorkspaceHubSelection({
     files: {},
     templateID: "",
   });
+  const hubTemplateDetailQuery = useWorkspaceHubTemplateQuery(selectedHubTemplateId);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -113,10 +121,27 @@ export function useWorkspaceHubSelection({
   useEffect(() => {
     if (!resourcesTemplates.length) {
       setSelectedHubWorkspacePath("");
-      return;
     }
-    setSelectedHubTemplateId((current) => resolveHubTemplateSelection(resourcesTemplates, current));
-  }, [resourcesTemplates, setSelectedHubTemplateId, setSelectedHubWorkspacePath]);
+    setSelectedHubTemplateId((current) =>
+      resolveHubTemplateSelection(
+        resourcesTemplates,
+        current,
+        !loaded ||
+          Boolean(templatesQuery?.isFetching) ||
+          (current === selectedHubTemplateId &&
+            (hubTemplateDetailQuery.isFetching || hubTemplateDetailQuery.data?.id === current)),
+      ),
+    );
+  }, [
+    hubTemplateDetailQuery.data?.id,
+    hubTemplateDetailQuery.isFetching,
+    loaded,
+    resourcesTemplates,
+    selectedHubTemplateId,
+    setSelectedHubTemplateId,
+    setSelectedHubWorkspacePath,
+    templatesQuery?.isFetching,
+  ]);
 
   useEffect(() => {
     setSelectedHubWorkspacePath("");
@@ -140,7 +165,6 @@ export function useWorkspaceHubSelection({
     }
   }, [selectedHubSkillName, setSelectedHubSkillPath]);
 
-  const hubTemplateDetailQuery = useWorkspaceHubTemplateQuery(selectedHubTemplateId);
   const hubWorkspaceQuery = useWorkspaceHubWorkspaceQuery(selectedHubTemplateId);
   const hubWorkspaceFileQuery = useWorkspaceHubWorkspaceFileQuery(selectedHubTemplateId, selectedHubWorkspacePath);
   const skillTreeQuery = useWorkspaceSkillTreeQuery(selectedHubSkillName);

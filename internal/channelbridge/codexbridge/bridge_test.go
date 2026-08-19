@@ -2751,7 +2751,7 @@ func TestWorkerReturnsPromptError(t *testing.T) {
 	defer svc.Close()
 
 	waitFor(t, func() bool {
-		return slices.Equal(client.sentTexts(), []string{"Runtime error: boom"})
+		return slices.Equal(client.sentTexts(), []string{"处理消息时发生错误，请稍后重试。"})
 	})
 	records := client.sentRecords()
 	if len(records) != 1 {

@@ -15,6 +15,7 @@ type BotEvent struct {
 	ParticipantID string              `json:"participant_id,omitempty"`
 	MessageID     string              `json:"message_id"`
 	RoomID        string              `json:"room_id"`
+	Locale        string              `json:"locale,omitempty"`
 	ChatType      string              `json:"chat_type"`
 	Text          string              `json:"text"`
 	Attachments   []MessageAttachment `json:"attachments,omitempty"`

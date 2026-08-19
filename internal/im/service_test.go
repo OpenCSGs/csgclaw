@@ -412,7 +412,7 @@ func arrayOfMaps(value any) []map[string]any {
 
 func TestParticipantEventIncludesSenderDescription(t *testing.T) {
 	evt := messageEventForParticipant(
-		Room{ID: "room-1", Members: []string{"admin", "u-dev"}},
+		Room{ID: "room-1", Locale: "en", Members: []string{"admin", "u-dev"}},
 		User{
 			ID:          "admin",
 			Name:        "Admin",
@@ -428,6 +428,9 @@ func TestParticipantEventIncludesSenderDescription(t *testing.T) {
 
 	if evt.Sender.Description != "Agents can @admin to ask clarifying questions." {
 		t.Fatalf("sender description = %q, want human prompt in participant event", evt.Sender.Description)
+	}
+	if evt.Locale != "en" {
+		t.Fatalf("locale = %q, want en", evt.Locale)
 	}
 }
 
@@ -532,6 +535,9 @@ func TestCreateRoomStoresStructuredEvent(t *testing.T) {
 	}
 	if room.IsDirect {
 		t.Fatalf("CreateRoom() room.IsDirect = %v, want false", room.IsDirect)
+	}
+	if room.Locale != "en" {
+		t.Fatalf("CreateRoom() locale = %q, want en", room.Locale)
 	}
 	got := room.Messages[0]
 	if got.Kind != MessageKindEvent || got.Event == nil || got.Event.Key != "room_created" || got.Event.ActorID != "user-admin" || got.Event.Title != "Ops" {

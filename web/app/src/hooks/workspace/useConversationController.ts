@@ -929,6 +929,7 @@ export function useConversationController({
           room_id: roomID,
           sender_id: senderID,
           content,
+          locale,
           attachments,
         },
         {
@@ -1083,6 +1084,7 @@ export function useConversationController({
         room_id: activeConversation.id,
         sender_id: data.current_user_id,
         content: text,
+        locale,
         attachments: activeThreadAttachmentDrafts.map((draft) => draft.file),
         relates_to: {
           rel_type: THREAD_RELATION_TYPE,

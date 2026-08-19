@@ -12,7 +12,6 @@ import { mentionMarkupPattern, escapeHTML } from "./mentions";
 import { hasAgentActivityMetadata, parseAgentActivity } from "@/models/agentActivity";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
-import { localizeRuntimeError as localizeRuntimeErrorText } from "@/shared/i18n";
 import "./MessageContent.css";
 
 export function MessageContent({
@@ -43,7 +42,7 @@ export function MessageContent({
     () => (activity || slashCommandText ? null : parseStructuredMessage(content)),
     [activity, content, slashCommandText],
   );
-  const displayContent = useMemo(() => localizeRuntimeError(content, message, t), [content, message, t]);
+  const displayContent = String(content ?? "");
   const markup = useMemo(
     () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : renderMarkdown(displayContent)),
     [activity, displayContent, resolvedQuestion, slashCommandText, structured],
@@ -118,36 +117,6 @@ export function MessageContent({
     />
   ) : (
     <div ref={containerRef} className="message-content" dangerouslySetInnerHTML={{ __html: markup }} />
-  );
-}
-
-function localizeRuntimeError(
-  content: string | null | undefined,
-  message: MessageContentProps["message"],
-  t: MessageContentProps["t"],
-): string {
-  const value = String(content ?? "");
-  if (!t) {
-    return value;
-  }
-  const normalized = value.trim().toLowerCase();
-  if (!normalized.startsWith("runtime error:") || !isTrustedRuntimeError(message)) {
-    return value;
-  }
-  return localizeRuntimeErrorText(value, t);
-}
-
-function isTrustedRuntimeError(message: MessageContentProps["message"]): boolean {
-  const metadata = message?.metadata;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
-    return false;
-  }
-  const namespace = (metadata as Record<string, unknown>).csgclaw;
-  return (
-    Boolean(namespace) &&
-    typeof namespace === "object" &&
-    !Array.isArray(namespace) &&
-    (namespace as Record<string, unknown>).runtime_error === true
   );
 }
 

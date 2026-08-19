@@ -79,55 +79,6 @@ export function localizeError(raw: unknown, t: TranslateFn): string {
   return cleaned;
 }
 
-export function localizeRuntimeError(raw: unknown, t: TranslateFn): string {
-  const value = String(raw ?? "").trim();
-  if (!value.toLowerCase().startsWith("runtime error:")) {
-    return value;
-  }
-  const localized = localizeError(value, t);
-  const message = localized === value ? localizeRuntimeHTTPStatus(value, t) : localized;
-  const billingURL = runtimeErrorBillingURL(value);
-  return billingURL ? `${message}\n\n👉 [${t("rechargeAccount")}](${billingURL})` : message;
-}
-
-function localizeRuntimeHTTPStatus(value: string, t: TranslateFn): string {
-  const match = value.match(/unexpected status\s+(\d{3})\b/i);
-  const status = Number(match?.[1] ?? 0);
-  if (status === 400 || status === 422) return t("errors.invalid_request_error");
-  if (status === 401) return t("errors.authentication_error");
-  if (status === 402) return t("errors.payment_required");
-  if (status === 403) return t("errors.forbidden");
-  if (status === 404) return t("errors.not_found");
-  if (status === 429) return t("errors.rate_limit_exceeded");
-  if (status >= 500 && status <= 599) return t("errors.upstream_unavailable");
-  return t("errors.upstream_unavailable");
-}
-
-function runtimeErrorBillingURL(value: string): string {
-  const jsonMatch = value.match(/"billing_url"\s*:\s*("(?:\\.|[^"\\])*")/i);
-  if (jsonMatch) {
-    try {
-      return safeRuntimeErrorURL(JSON.parse(jsonMatch[1]));
-    } catch (_) {
-      return "";
-    }
-  }
-  const markdownMatch = value.match(/\[Recharge your account\]\(([^)\s]+)\)/i);
-  return markdownMatch ? safeRuntimeErrorURL(markdownMatch[1]) : "";
-}
-
-function safeRuntimeErrorURL(candidate: unknown): string {
-  if (typeof candidate !== "string") return "";
-  try {
-    const parsed = new URL(candidate);
-    return (parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password
-      ? parsed.toString()
-      : "";
-  } catch (_) {
-    return "";
-  }
-}
-
 export function localizeAPIError(error: unknown, t: TranslateFn, fallback = ""): string {
   if (error && typeof error === "object" && "code" in error) {
     const code = String((error as { code?: unknown }).code || "").trim();

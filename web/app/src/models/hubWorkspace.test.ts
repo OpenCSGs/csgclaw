@@ -5,6 +5,7 @@ import {
   isHubTemplateDeployReviewPendingError,
   isHubTemplateSensitiveInformationError,
   mergeHubTemplateDetail,
+  upsertHubTemplateReviewState,
   type HubTemplate,
 } from "./hubWorkspace";
 
@@ -51,6 +52,36 @@ describe("mergeHubTemplateDetail", () => {
   it("keeps sensitive-check metadata from the list when detail omits it", () => {
     const summary = templateWithStatus("Fail", ["checker result"]);
     expect(mergeHubTemplateDetail({ ...summary, metadata: null }, summary)?.metadata).toEqual(summary.metadata);
+  });
+});
+
+describe("upsertHubTemplateReviewState", () => {
+  it("creates a selectable pending template when the refreshed catalog does not contain it yet", () => {
+    const templates = upsertHubTemplateReviewState([], "Agentic/reviewer", "Pending");
+
+    expect(templates[0]).toMatchObject({
+      id: "Agentic/reviewer",
+      namespace: "Agentic",
+      name: "reviewer",
+      role: "worker",
+      source: { kind: "remote", name: "official" },
+    });
+    expect(hubTemplateReviewState(templates[0])).toEqual({ kind: "pending", messages: [] });
+    expect(mergeHubTemplateDetail({ id: "Agentic/reviewer", name: "reviewer" }, templates[0])).toMatchObject({
+      metadata: { sensitive_check: { status: "Pending" } },
+    });
+  });
+
+  it("adds failed review metadata without discarding catalog fields", () => {
+    const templates = upsertHubTemplateReviewState(
+      [{ id: "Agentic/reviewer", name: "Reviewer", description: "catalog description" }],
+      "Agentic/reviewer",
+      "Fail",
+      "review failed",
+    );
+
+    expect(templates[0]).toMatchObject({ name: "Reviewer", description: "catalog description" });
+    expect(hubTemplateReviewState(templates[0])).toEqual({ kind: "exception", messages: ["review failed"] });
   });
 });
 

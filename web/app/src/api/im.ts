@@ -11,6 +11,7 @@ import type {
 export type SendMessagePayload = {
   attachments?: File[];
   content: string;
+  locale?: string;
   relates_to?: MessageRelation | null;
   room_id: string;
   sender_id: string;

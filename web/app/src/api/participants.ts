@@ -10,7 +10,7 @@ export type ParticipantResponse = {
 
 export function patchCsgclawUserRequest(
   userID: string,
-  payload: { avatar?: string; description?: string },
+  payload: { avatar?: string; description?: string; locale?: string },
 ): Promise<IMUser> {
   return patch<IMUser>(`api/v1/channels/csgclaw/users/${encodeURIComponent(userID)}`, payload);
 }

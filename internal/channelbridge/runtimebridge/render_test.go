@@ -149,15 +149,62 @@ func TestTurnRendererIdentifiesOnlyItsPromptErrorMessage(t *testing.T) {
 	t.Parallel()
 
 	renderer := NewTurnRenderer()
-	if renderer.IsPromptErrorMessage("Runtime error: boom") {
+	if renderer.IsPromptErrorMessage("处理消息时发生错误，请稍后重试。") {
 		t.Fatal("ordinary model text was identified as a prompt error")
 	}
 	renderer.SetPromptError("boom")
-	if !renderer.IsPromptErrorMessage("Runtime error: boom") {
+	if !renderer.IsPromptErrorMessage("处理消息时发生错误，请稍后重试。") {
 		t.Fatal("generated prompt error was not identified")
 	}
-	if renderer.IsPromptErrorMessage("Runtime error: another failure") {
+	if renderer.IsPromptErrorMessage("another failure") {
 		t.Fatal("unrelated runtime error text was identified as the renderer prompt error")
+	}
+}
+
+func TestTurnRendererLocalizesAndRedactsPromptError(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewTurnRenderer()
+	renderer.SetLocale("en")
+	renderer.SetPromptError("unexpected status 402 Payment Required, url: http://127.0.0.1/private, request id: secret")
+	messages := renderer.FinalMessages()
+	if len(messages) != 1 || messages[0] != "The model service balance is insufficient. Add funds or contact an administrator." {
+		t.Fatalf("FinalMessages() = %#v", messages)
+	}
+	if got := renderer.PromptError().Code; got != "insufficient_balance" {
+		t.Fatalf("PromptError().Code = %q", got)
+	}
+}
+
+func TestTurnRendererDoesNotMisclassifyLocalRuntimeErrorAsUpstreamFailure(t *testing.T) {
+	t.Parallel()
+
+	renderer := NewTurnRenderer()
+	renderer.SetLocale("en")
+	renderer.SetPromptError("Runtime error: sandbox process exited unexpectedly: session not found")
+	if got := renderer.PromptError(); got.Code != "internal_error" || got.Message != "An error occurred while processing the message. Try again later." {
+		t.Fatalf("PromptError() = %#v, want safe generic runtime error", got)
+	}
+}
+
+func TestPromptErrorHTTPMappingRequiresParsedUnexpectedStatus(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		error string
+		code  string
+	}{
+		{error: "authentication failed", code: "internal_error"},
+		{error: "resource not found", code: "internal_error"},
+		{error: "unexpected status 401 Unauthorized", code: "authentication_error"},
+		{error: "unexpected status 503 Service Unavailable", code: "upstream_unavailable"},
+	}
+	for _, test := range tests {
+		renderer := NewTurnRenderer()
+		renderer.SetPromptError(test.error)
+		if got := renderer.PromptError().Code; got != test.code {
+			t.Errorf("PromptError(%q).Code = %q, want %q", test.error, got, test.code)
+		}
 	}
 }
 

@@ -181,6 +181,7 @@ func (c *FeishuClient) SendMessage(ctx context.Context, botID string, req SendMe
 		RoomID:    roomID,
 		SenderID:  senderID,
 		Content:   text,
+		Metadata:  req.Metadata,
 		RelatesTo: relatesTo,
 	})
 	if err != nil {

@@ -614,7 +614,10 @@ func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte, billin
 
 const maxUpstreamErrorLogBytes = 4096
 
-var upstreamLogSecretPattern = regexp.MustCompile(`(?i)(bearer\s+)[^\s"']+|((?:api[_-]?key|token|secret|password|authorization)\s*[=:]\s*)[^\s,;}]+`)
+var (
+	upstreamLogBearerPattern = regexp.MustCompile(`(?i)(bearer\s+)[^\s"']+`)
+	upstreamLogSecretPattern = regexp.MustCompile(`(?i)((?:"?(?:api[_-]?key|token|secret|password|authorization|cookie)"?\s*[=:]\s*))(?:"[^"]*"|'[^']*'|[^\s,;}]+)`)
+)
 
 func upstreamRequestID(header http.Header) string {
 	for _, key := range []string{"X-Request-ID", "X-Correlation-ID", "Request-ID"} {
@@ -637,7 +640,7 @@ func upstreamErrorBodyForLog(body []byte) string {
 			value = string(encoded)
 		}
 	}
-	value = upstreamLogSecretPattern.ReplaceAllString(value, "${1}${2}[redacted]")
+	value = redactUpstreamLogText(value)
 	value = strings.Join(strings.Fields(value), " ")
 	if truncated {
 		value += " ... [truncated]"
@@ -664,10 +667,15 @@ func redactUpstreamLogValue(value any) any {
 		}
 		return out
 	case string:
-		return upstreamLogSecretPattern.ReplaceAllString(typed, "${1}${2}[redacted]")
+		return redactUpstreamLogText(typed)
 	default:
 		return value
 	}
+}
+
+func redactUpstreamLogText(value string) string {
+	value = upstreamLogBearerPattern.ReplaceAllString(value, "${1}[redacted]")
+	return upstreamLogSecretPattern.ReplaceAllString(value, "${1}[redacted]")
 }
 
 func isUpstreamLogSecretKey(key string) bool {

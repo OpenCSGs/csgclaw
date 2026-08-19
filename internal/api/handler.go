@@ -747,6 +747,7 @@ type createMessageRequest struct {
 	RoomID      string                       `json:"room_id"`
 	SenderID    string                       `json:"sender_id"`
 	Content     string                       `json:"content"`
+	Locale      string                       `json:"locale,omitempty"`
 	MentionID   string                       `json:"mention_id,omitempty"`
 	Metadata    map[string]any               `json:"metadata,omitempty"`
 	RelatesTo   *im.MessageRelation          `json:"relates_to,omitempty"`
@@ -2530,6 +2531,7 @@ func (h *Handler) updateCsgclawUser(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		Role:        req.Role,
 		Avatar:      req.Avatar,
+		Locale:      req.Locale,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -3471,6 +3473,7 @@ func (r createMessageRequest) toServiceRequest() (im.CreateMessageRequest, error
 		RoomID:      roomID,
 		SenderID:    r.SenderID,
 		Content:     r.Content,
+		Locale:      r.Locale,
 		MentionID:   r.MentionID,
 		Metadata:    r.Metadata,
 		RelatesTo:   r.RelatesTo,

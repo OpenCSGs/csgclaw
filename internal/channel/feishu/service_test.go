@@ -504,6 +504,31 @@ func TestFeishuSendMessageUsesSenderAppAndStoresLocalMessage(t *testing.T) {
 	}
 }
 
+func TestFeishuRuntimeErrorUsesMarkdownCard(t *testing.T) {
+	var gotReq SendMessageRequest
+	svc := NewServiceWithSendMessage(
+		map[string]AppConfig{"agent-manager": {AppID: "cli_manager", AppSecret: "manager-secret"}},
+		func(_ context.Context, _ AppConfig, req SendMessageRequest) (SendMessageResponse, error) {
+			gotReq = req
+			return SendMessageResponse{MessageID: "om_error", SenderOpenID: "ou_manager"}, nil
+		},
+	)
+	svc.rooms["oc_alpha"] = &im.Room{ID: "oc_alpha", Members: []string{"u-manager"}}
+
+	_, err := svc.SendMessage(im.CreateMessageRequest{
+		RoomID:   "oc_alpha",
+		SenderID: "u-manager",
+		Content:  "模型服务暂时不可用，请稍后重试。",
+		Metadata: map[string]any{"csgclaw": map[string]any{"runtime_error": true}},
+	})
+	if err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	if !gotReq.Markdown {
+		t.Fatal("runtime error was not sent as a Markdown card")
+	}
+}
+
 func TestFeishuUpdateMessageUsesSenderAppAndUpdatesLocalMessage(t *testing.T) {
 	var gotApp AppConfig
 	var gotReq UpdateMessageRequest

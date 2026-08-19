@@ -17,7 +17,6 @@ import {
 } from "@/models/turnNotifications";
 import type { TurnNotificationMode } from "@/models/turnNotifications";
 import { getDesktopBridge } from "@/shared/platform/desktopBridge";
-import { localizeRuntimeError } from "@/shared/i18n";
 
 export type SystemNotificationPermission = NotificationPermission | "unsupported";
 
@@ -156,9 +155,7 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
     const agentName = String(input.agent.name || input.agent.user_name || input.agent.id || "Agent").trim();
     const message = input.message ?? latestVisibleAgentMessage(room, input.participantIdentities);
     const rawPreview = formatMessagePreviewText(message?.content);
-    const preview = truncateNotificationPreview(
-      isTrustedRuntimeError(message) ? localizeRuntimeError(rawPreview, current.t) : rawPreview,
-    );
+    const preview = truncateNotificationPreview(rawPreview);
     const roomTitle = String(room?.title || "").trim();
     const body = formatTurnNotificationBody(current.t, {
       agentName,
@@ -196,12 +193,6 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
   }
 
   return { handleRealtimeEvent, permission, requestPermission };
-}
-
-function isTrustedRuntimeError(message: IMMessage | null | undefined): boolean {
-  const metadata = asRecord(message?.metadata);
-  const csgclaw = asRecord(metadata?.csgclaw);
-  return csgclaw?.runtime_error === true;
 }
 
 function resolveEventAgent(

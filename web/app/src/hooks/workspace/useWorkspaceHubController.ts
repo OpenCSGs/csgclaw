@@ -11,6 +11,7 @@ import {
   isHubTemplateNameConflict,
   isHubTemplateSensitiveInformationError,
   isVisibleInHubTemplateList,
+  upsertHubTemplateReviewState,
 } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { isReadonlySkill } from "@/models/skillhub";
@@ -255,7 +256,17 @@ export function useWorkspaceHubController({
             const apiError = err as ApiError;
             const publishedTemplateID = apiError.publishedTemplateId ?? "";
             setSelectedHubResourceType("template");
-            if (publishedTemplateID) setSelectedHubTemplateId(publishedTemplateID);
+            if (publishedTemplateID) {
+              queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
+                upsertHubTemplateReviewState(
+                  templates,
+                  publishedTemplateID,
+                  deployReviewPending ? "Pending" : "Fail",
+                  deployReviewPending ? "" : message,
+                ),
+              );
+              setSelectedHubTemplateId(publishedTemplateID);
+            }
             setResourcesPublishError("");
             return { status: "partial", message };
           }
@@ -266,7 +277,7 @@ export function useWorkspaceHubController({
         setResourcesPublishBusy(false);
       }
     },
-    [openCSGAuthenticated, refreshHubTemplates, setSelectedHubResourceType, setSelectedHubTemplateId, t],
+    [openCSGAuthenticated, queryClient, refreshHubTemplates, setSelectedHubResourceType, setSelectedHubTemplateId, t],
   );
 
   const uploadSkill = useCallback(

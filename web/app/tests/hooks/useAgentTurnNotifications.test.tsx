@@ -226,8 +226,7 @@ describe("useAgentTurnNotifications", () => {
     act(() =>
       result.current.handleRealtimeEvent({
         message: {
-          content:
-            "Runtime error: unexpected status 503 Service Unavailable: Unknown error, url: http://127.0.0.1:54212/api/v1/agents/agent-1/llm/responses",
+          content: "The model service is temporarily unavailable. Try again later.",
           id: "reply-runtime-error",
           metadata: { csgclaw: { runtime_error: true } },
           sender_id: "user-worker",
@@ -238,7 +237,9 @@ describe("useAgentTurnNotifications", () => {
     );
 
     expect(notificationRecords).toHaveLength(1);
-    expect(notificationRecords[0]?.body).toBe("Research room: The model service is temporarily unavailable.");
+    expect(notificationRecords[0]?.body).toBe(
+      "Research room: The model service is temporarily unavailable. Try again later.",
+    );
     expect(notificationRecords[0]?.body).not.toMatch(/Unknown error|127\.0\.0\.1/);
   });
 
