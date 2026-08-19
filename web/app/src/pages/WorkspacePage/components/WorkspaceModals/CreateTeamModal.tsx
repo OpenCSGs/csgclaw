@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui";
+import { Button, Checkbox } from "@/components/ui";
 import { toggleSelection } from "@/shared/lib/collections";
 import type { AgentLike } from "@/models/agents";
 import { requiredFieldLabel } from "@/components/business/ProfileControls";
@@ -70,12 +70,12 @@ export function CreateTeamModal({
           <div className={`selection-list${editing ? " team-members-dialog-list" : ""}`}>
             {candidates.length ? (
               <>
-                <label className="selection-item selection-all-item">
-                  <input
-                    type="checkbox"
+                <label className="selection-item selection-all-item" htmlFor="team-member-all">
+                  <Checkbox
+                    id="team-member-all"
                     checked={allCandidatesSelected}
                     disabled={selectableCandidateIDs.length === 0}
-                    onChange={() => {
+                    onCheckedChange={() => {
                       onTeamMemberIDsChange((current) => {
                         const allSelected = candidateIDs.every(
                           (id) => lockedTeamMemberIDs.includes(id) || current.includes(id),
@@ -94,13 +94,14 @@ export function CreateTeamModal({
                 {candidates.map((item) => {
                   const itemID = item.id || "";
                   const memberLocked = itemID ? lockedTeamMemberIDs.includes(itemID) : false;
+                  const checkboxID = teamMemberCheckboxID(itemID || item.name);
                   return (
-                    <label key={itemID || item.name} className="selection-item">
-                      <input
-                        type="checkbox"
+                    <label key={itemID || item.name} className="selection-item" htmlFor={checkboxID}>
+                      <Checkbox
+                        id={checkboxID}
                         checked={itemID ? memberLocked || teamMemberIDs.includes(itemID) : false}
                         disabled={!itemID || memberLocked}
-                        onChange={() =>
+                        onCheckedChange={() =>
                           itemID ? onTeamMemberIDsChange((current) => toggleSelection(current, itemID)) : undefined
                         }
                       />
@@ -136,4 +137,8 @@ export function CreateTeamModal({
       </div>
     </div>
   );
+}
+
+function teamMemberCheckboxID(value: string | null | undefined): string {
+  return `team-member-${String(value || "unknown").replace(/[^a-zA-Z0-9_-]+/g, "-")}`;
 }

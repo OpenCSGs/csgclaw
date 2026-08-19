@@ -1,0 +1,45 @@
+.csg-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--field);
+  color: var(--on-primary);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.csg-checkbox:hover {
+  border-color: var(--input-border-hover);
+}
+
+.csg-checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 72%, white);
+}
+
+.csg-checkbox[data-state="checked"],
+.csg-checkbox[data-state="indeterminate"] {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.csg-checkbox:disabled {
+  border-color: var(--line);
+  background: var(--panel-soft);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.csg-checkbox-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

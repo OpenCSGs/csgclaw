@@ -1,5 +1,6 @@
 export * from "./AppLayout";
 export * from "./Button";
+export * from "./Checkbox";
 export * from "./Dialog";
 export * from "./DropdownMenu";
 export * from "./FormControls";
