@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -589,15 +590,94 @@ func readAndCloseUpstreamBody(resp *http.Response) ([]byte, error) {
 }
 
 func compactUpstreamErrorStreamFromBody(resp *http.Response, body []byte, billingURL string) (*UpstreamResponse, error) {
+	rawBody := append([]byte(nil), body...)
 	body, contentType := compactUpstreamErrorResponse(resp.StatusCode, body, billingURL)
+	code := modelprovider.UpstreamErrorCodeForResponse(resp.StatusCode, rawBody)
+	slog.Error("model upstream request failed",
+		"status", resp.StatusCode,
+		"code", code,
+		"upstream_request_id", upstreamRequestID(resp.Header),
+		"response_body", upstreamErrorBodyForLog(rawBody),
+	)
 	header := resp.Header.Clone()
 	header.Del("Content-Length")
+	header.Del("Content-Encoding")
+	header.Del("Transfer-Encoding")
+	header.Del("Trailer")
 	header.Set("Content-Type", contentType)
 	return &UpstreamResponse{
 		StatusCode: resp.StatusCode,
 		Header:     header,
 		Body:       io.NopCloser(bytes.NewReader(body)),
 	}, nil
+}
+
+const maxUpstreamErrorLogBytes = 4096
+
+var upstreamLogSecretPattern = regexp.MustCompile(`(?i)(bearer\s+)[^\s"']+|((?:api[_-]?key|token|secret|password|authorization)\s*[=:]\s*)[^\s,;}]+`)
+
+func upstreamRequestID(header http.Header) string {
+	for _, key := range []string{"X-Request-ID", "X-Correlation-ID", "Request-ID"} {
+		if value := strings.TrimSpace(header.Get(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func upstreamErrorBodyForLog(body []byte) string {
+	truncated := len(body) > maxUpstreamErrorLogBytes
+	if truncated {
+		body = body[:maxUpstreamErrorLogBytes]
+	}
+	value := strings.ToValidUTF8(string(body), "?")
+	var payload any
+	if !truncated && json.Unmarshal(body, &payload) == nil {
+		if encoded, err := json.Marshal(redactUpstreamLogValue(payload)); err == nil {
+			value = string(encoded)
+		}
+	}
+	value = upstreamLogSecretPattern.ReplaceAllString(value, "${1}${2}[redacted]")
+	value = strings.Join(strings.Fields(value), " ")
+	if truncated {
+		value += " ... [truncated]"
+	}
+	return value
+}
+
+func redactUpstreamLogValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if isUpstreamLogSecretKey(key) {
+				out[key] = "[redacted]"
+			} else {
+				out[key] = redactUpstreamLogValue(item)
+			}
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for index, item := range typed {
+			out[index] = redactUpstreamLogValue(item)
+		}
+		return out
+	case string:
+		return upstreamLogSecretPattern.ReplaceAllString(typed, "${1}${2}[redacted]")
+	default:
+		return value
+	}
+}
+
+func isUpstreamLogSecretKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	for _, fragment := range []string{"api_key", "apikey", "authorization", "cookie", "password", "secret", "token"} {
+		if strings.Contains(normalized, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func compactUpstreamErrorResponse(status int, body []byte, billingURL string) ([]byte, string) {

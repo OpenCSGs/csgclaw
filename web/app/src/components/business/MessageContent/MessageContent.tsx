@@ -12,7 +12,7 @@ import { mentionMarkupPattern, escapeHTML } from "./mentions";
 import { hasAgentActivityMetadata, parseAgentActivity } from "@/models/agentActivity";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
-import { localizeError } from "@/shared/i18n";
+import { localizeRuntimeError as localizeRuntimeErrorText } from "@/shared/i18n";
 import "./MessageContent.css";
 
 export function MessageContent({
@@ -134,9 +134,7 @@ function localizeRuntimeError(
   if (!normalized.startsWith("runtime error:") || !isTrustedRuntimeError(message)) {
     return value;
   }
-  const localized = localizeError(value, t);
-  const billingURL = runtimeErrorBillingURL(value);
-  return billingURL ? `${localized}\n\n👉 [${t("rechargeAccount")}](${billingURL})` : localized;
+  return localizeRuntimeErrorText(value, t);
 }
 
 function isTrustedRuntimeError(message: MessageContentProps["message"]): boolean {
@@ -151,33 +149,6 @@ function isTrustedRuntimeError(message: MessageContentProps["message"]): boolean
     !Array.isArray(namespace) &&
     (namespace as Record<string, unknown>).runtime_error === true
   );
-}
-
-function runtimeErrorBillingURL(value: string): string {
-  const jsonMatch = value.match(/"billing_url"\s*:\s*("(?:\\.|[^"\\])*")/i);
-  if (jsonMatch) {
-    try {
-      return safeBillingURL(JSON.parse(jsonMatch[1]));
-    } catch (_) {
-      return "";
-    }
-  }
-  const markdownMatch = value.match(/\[Recharge your account\]\(([^)\s]+)\)/i);
-  return markdownMatch ? safeBillingURL(markdownMatch[1]) : "";
-}
-
-function safeBillingURL(candidate: unknown): string {
-  if (typeof candidate !== "string") {
-    return "";
-  }
-  try {
-    const parsed = new URL(candidate);
-    return (parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password
-      ? parsed.toString()
-      : "";
-  } catch (_) {
-    return "";
-  }
 }
 
 function isBlankTurnPlaceholder(content: string | null | undefined): boolean {

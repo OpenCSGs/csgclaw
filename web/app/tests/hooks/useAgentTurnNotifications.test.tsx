@@ -49,6 +49,9 @@ const t: TranslateFn = (key, params = {}) => {
   if (key === "turnNotificationDefaultBody") {
     return "The agent turn has finished.";
   }
+  if (key === "errors.upstream_unavailable") {
+    return "The model service is temporarily unavailable.";
+  }
   return key;
 };
 
@@ -215,6 +218,28 @@ describe("useAgentTurnNotifications", () => {
 
     expect(notificationRecords).toHaveLength(1);
     expect(notificationRecords[0]?.body).toBe("Research room: Fallback reply");
+  });
+
+  it("uses the friendly runtime error in desktop notifications", () => {
+    const { result } = renderNotifications(TurnNotificationModes.always);
+
+    act(() =>
+      result.current.handleRealtimeEvent({
+        message: {
+          content:
+            "Runtime error: unexpected status 503 Service Unavailable: Unknown error, url: http://127.0.0.1:54212/api/v1/agents/agent-1/llm/responses",
+          id: "reply-runtime-error",
+          metadata: { csgclaw: { runtime_error: true } },
+          sender_id: "user-worker",
+        },
+        room_id: "room-1",
+        type: "message.created",
+      }),
+    );
+
+    expect(notificationRecords).toHaveLength(1);
+    expect(notificationRecords[0]?.body).toBe("Research room: The model service is temporarily unavailable.");
+    expect(notificationRecords[0]?.body).not.toMatch(/Unknown error|127\.0\.0\.1/);
   });
 
   it("keeps the visible final reply fallback after observing work and deduplicates the release", () => {

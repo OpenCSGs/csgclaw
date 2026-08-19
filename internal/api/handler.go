@@ -1236,15 +1236,12 @@ func (h *Handler) handleAgentProfileByID(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	selected, ok := h.svc.Agent(selector)
-	if !ok {
-		selected, ok = h.svc.AgentByName(selector)
-	}
+	canonicalID, ok := h.svc.ResolveAgentID(selector)
 	if !ok {
 		http.Error(w, "agent not found", http.StatusNotFound)
 		return
 	}
-	h.handleAgentProfile(w, r, selected.ID)
+	h.handleAgentProfile(w, r, canonicalID)
 }
 
 func (h *Handler) handleAgentRecreateByID(w http.ResponseWriter, r *http.Request) {

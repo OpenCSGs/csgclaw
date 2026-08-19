@@ -85,6 +85,19 @@ describe("MessageContent question transcripts", () => {
     expect(screen.queryByRole("link", { name: "rechargeAccount" })).not.toBeInTheDocument();
   });
 
+  it("replaces an unknown 503 runtime error with an actionable message", () => {
+    render(
+      <MessageContent
+        content="Runtime error: unexpected status 503 Service Unavailable: Unknown error, url: http://127.0.0.1:54212/api/v1/agents/agent-1/llm/responses"
+        message={{ id: "runtime-error-503", metadata: { csgclaw: { runtime_error: true } } }}
+        t={(key) => (key === "errors.upstream_unavailable" ? "模型服务暂时不可用，请稍后重试。" : key)}
+      />,
+    );
+
+    expect(screen.getByText("模型服务暂时不可用，请稍后重试。")).toBeInTheDocument();
+    expect(screen.queryByText(/Unknown error|127\.0\.0\.1/)).not.toBeInTheDocument();
+  });
+
   it("uses structured metadata for a pending interactive question", () => {
     const message = questionMessage("pending");
     render(<MessageContent content={message.content} message={message} t={(key) => key} />);

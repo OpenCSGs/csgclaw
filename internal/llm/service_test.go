@@ -970,6 +970,29 @@ func TestResponsesLLMAPICodexReturnsCompactResponsesErrorOnTransientFailure(t *t
 	}
 }
 
+func TestUpstreamErrorBodyForLogRedactsAndTruncates(t *testing.T) {
+	body := []byte(`{"error":{"message":"failed","api_key":"sk-secret","authorization":"Bearer token-secret"}}`)
+	got := upstreamErrorBodyForLog(body)
+	if strings.Contains(got, "sk-secret") || strings.Contains(got, "token-secret") {
+		t.Fatalf("upstreamErrorBodyForLog() leaked secret: %q", got)
+	}
+	if !strings.Contains(got, "failed") || !strings.Contains(got, "[redacted]") {
+		t.Fatalf("upstreamErrorBodyForLog() = %q, want original error with redaction", got)
+	}
+
+	got = upstreamErrorBodyForLog([]byte(strings.Repeat("x", maxUpstreamErrorLogBytes+1)))
+	if !strings.HasSuffix(got, "... [truncated]") {
+		t.Fatalf("upstreamErrorBodyForLog() = %q, want truncation marker", got)
+	}
+}
+
+func TestUpstreamRequestIDUsesKnownHeaders(t *testing.T) {
+	header := http.Header{"X-Correlation-Id": []string{"corr-123"}}
+	if got, want := upstreamRequestID(header), "corr-123"; got != want {
+		t.Fatalf("upstreamRequestID() = %q, want %q", got, want)
+	}
+}
+
 func TestResponsesLLMAPIFallbackMapsDeveloperRoleToSystem(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

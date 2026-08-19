@@ -30,6 +30,10 @@ export function templateWorkspaceFilesStateNeedsReset(state: TemplateWorkspaceFi
   return Boolean(state.templateID || Object.keys(state.files).length);
 }
 
+export function resolveHubTemplateSelection(templates: readonly HubTemplate[], current: string): string {
+  return current || templates[0]?.id || "";
+}
+
 export function useWorkspaceHubSelection({
   templates,
   templatesQuery,
@@ -78,7 +82,10 @@ export function useWorkspaceHubSelection({
     );
   }, [officialSkillsQuery.data]);
   const selectedHubTemplate = useMemo(
-    () => resourcesTemplates.find((item) => item.id === selectedHubTemplateId) || resourcesTemplates[0] || null,
+    () =>
+      resourcesTemplates.find((item) => item.id === selectedHubTemplateId) ||
+      (selectedHubTemplateId ? null : resourcesTemplates[0]) ||
+      null,
     [resourcesTemplates, selectedHubTemplateId],
   );
   const selectedHubSkill = useMemo(
@@ -105,13 +112,10 @@ export function useWorkspaceHubSelection({
 
   useEffect(() => {
     if (!resourcesTemplates.length) {
-      setSelectedHubTemplateId("");
       setSelectedHubWorkspacePath("");
       return;
     }
-    setSelectedHubTemplateId((current) =>
-      resourcesTemplates.some((item) => item.id === current) ? current : (resourcesTemplates[0]?.id ?? ""),
-    );
+    setSelectedHubTemplateId((current) => resolveHubTemplateSelection(resourcesTemplates, current));
   }, [resourcesTemplates, setSelectedHubTemplateId, setSelectedHubWorkspacePath]);
 
   useEffect(() => {

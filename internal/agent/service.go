@@ -1545,6 +1545,20 @@ func (s *Service) AgentByName(name string) (Agent, bool) {
 	return s.withConfiguredAgentStartupStatus(s.withRuntimeImageMigrationStatus(ctx, s.hydrateAgentStatus(ctx, a))), true
 }
 
+// ResolveAgentID resolves an ID or unique display name without probing runtime
+// state. It is intended for API routing before an operation performs its own
+// runtime or profile work.
+func (s *Service) ResolveAgentID(selector string) (string, bool) {
+	a, ok := s.agentSnapshot(selector)
+	if !ok {
+		a, ok = s.agentSnapshotByName(selector)
+	}
+	if !ok {
+		return "", false
+	}
+	return strings.TrimSpace(a.ID), true
+}
+
 func (s *Service) AgentMetadata(id string) (AgentMetadata, bool) {
 	a, ok := s.agentSnapshot(id)
 	if !ok {
