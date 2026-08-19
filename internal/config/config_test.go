@@ -601,6 +601,50 @@ enabled = true
 	}
 }
 
+func TestLoadIgnoresLegacyOfficialHubRegistryKind(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	path := filepath.Join(dir, "config.toml")
+	content := `[[hub.registries]]
+name = "official"
+kind = "official"
+path = "https://opencsg.com/"
+enabled = true
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got, want := len(cfg.Hub.Registries), 3; got != want {
+		t.Fatalf("len(cfg.Hub.Registries) = %d, want %d", got, want)
+	}
+	officialRegistry := cfg.Hub.Registries[2]
+	if got, want := officialRegistry.Name, DefaultOfficialHubRegistryName; got != want {
+		t.Fatalf("official registry name = %q, want %q", got, want)
+	}
+	if got, want := officialRegistry.Kind, HubRegistryKindRemote; got != want {
+		t.Fatalf("official registry kind = %q, want %q", got, want)
+	}
+	if got, want := officialRegistry.URL, DefaultOfficialHubRegistryURL; got != want {
+		t.Fatalf("official registry URL = %q, want %q", got, want)
+	}
+
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if saved := string(data); strings.Contains(saved, `kind = "official"`) || strings.Contains(saved, `https://opencsg.com/`) {
+		t.Fatalf("saved config retained legacy official registry:\n%s", saved)
+	}
+}
+
 func TestLoadMissingOfficialHubRegistryAndSaveDoesNotPersistDefault(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

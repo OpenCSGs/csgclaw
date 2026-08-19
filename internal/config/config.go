@@ -121,10 +121,23 @@ func (c HubConfig) Resolved() HubConfig {
 
 	configured := make([]HubRegistryConfig, 0, len(c.Registries))
 	for _, registry := range c.Registries {
-		configured = append(configured, normalizeHubRegistry(registry))
+		registry = normalizeHubRegistry(registry)
+		if !isSupportedHubRegistryKind(registry.Kind) {
+			continue
+		}
+		configured = append(configured, registry)
 	}
 	c.Registries = mergeHubRegistries(defaultHubRegistries(), configured)
 	return c
+}
+
+func isSupportedHubRegistryKind(kind string) bool {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case HubRegistryKindBuiltin, HubRegistryKindLocal, HubRegistryKindRemote:
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeHubRegistry(registry HubRegistryConfig) HubRegistryConfig {
@@ -1270,6 +1283,10 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	}
 	resolvedHub := c.Hub.Resolved()
 	for _, rawRegistry := range c.raw.hub.Registries {
+		rawKind := parseRawStringValue(rawRegistry.Kind)
+		if rawKind != "" && !isSupportedHubRegistryKind(rawKind) {
+			continue
+		}
 		registry, ok := findResolvedHubRegistry(resolvedHub.Registries, parseRawStringValue(rawRegistry.Name))
 		if !ok {
 			continue
