@@ -747,7 +747,7 @@ export function WorkspaceTabPanels({
             visibleTeams.map((team) => {
               const memberIDs = teamMemberIDs(team);
               const memberCount = memberIDs.length;
-              const avatarMembers = resolveTeamAvatarMembers(team, agentItems);
+              const avatarMembers = resolveTeamAvatarMembers(team, agentItems, usersById);
               return (
                 <button
                   key={team.id}

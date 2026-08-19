@@ -1,4 +1,6 @@
-import type { AgentLike } from "@/models/agents";
+import { resolveAgentAvatarSource, type AgentLike, type AvatarLikeUser } from "@/models/agents";
+import { localIdentitiesMatch } from "@/models/conversations";
+import { normalizeAvatarPath } from "@/shared/avatar";
 
 export type WorkspaceTask = {
   id: string;
@@ -315,16 +317,29 @@ export function teamMemberIDs(team: WorkspaceTeam): string[] {
   return Array.from(ids);
 }
 
-export function resolveTeamAvatarMembers(team: WorkspaceTeam, agents: readonly AgentLike[]) {
-  return teamMemberIDs(team).map((memberID) => {
-    const agent = agents.find((item) => item.id === memberID);
+export function resolveTeamAvatarMembers(
+  team: WorkspaceTeam,
+  agents: readonly AgentLike[],
+  usersById?: Map<string, AvatarLikeUser> | null,
+) {
+  const members = teamMemberIDs(team).map((memberID) => {
+    const agent = agents.find((item) => localIdentitiesMatch(item.id, memberID));
+    const avatar = resolveAgentAvatarSource(agent, usersById) || agent?.avatar || "";
     return {
       id: memberID,
       name: agent?.name || memberID,
-      avatar: agent?.avatar || "",
+      avatar,
       accent_hex: undefined,
     };
   });
+  const membersWithAvatar = members
+    .filter((member) => Boolean(normalizeAvatarPath(member.avatar)))
+    .sort(
+      (left, right) =>
+        Number(localIdentitiesMatch(right.id, team.lead_agent_id)) -
+        Number(localIdentitiesMatch(left.id, team.lead_agent_id)),
+    );
+  return membersWithAvatar.length ? membersWithAvatar : members;
 }
 
 type TranslateFn = (key: string) => string;

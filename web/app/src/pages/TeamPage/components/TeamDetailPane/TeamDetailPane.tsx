@@ -14,8 +14,9 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui";
-import { isAgentRunning } from "@/models/agents";
+import { isAgentRunning, resolveAgentAvatarSource } from "@/models/agents";
 import type { AgentLike } from "@/models/agents";
+import { localIdentitiesMatch } from "@/models/conversations";
 import type { IMUser, TranslateFn, UsersById } from "@/models/conversations";
 import {
   displayTeam,
@@ -91,7 +92,7 @@ export function TeamDetailPane({
 
   const memberIDs = teamMemberIDs(team);
   const members = memberIDs.map((memberID) => memberDisplay(memberID, agents, usersById, team.lead_agent_id));
-  const avatarMembers = resolveTeamAvatarMembers(team, agents);
+  const avatarMembers = resolveTeamAvatarMembers(team, agents, usersById instanceof Map ? usersById : null);
   const parentTasks = rootTasks(tasks);
   const locale = document.documentElement.lang || "en";
 
@@ -348,6 +349,7 @@ function DetailField({ label, value }: DetailFieldProps) {
 
 type TeamMemberDisplay = {
   agent: AgentLike | null;
+  avatar: string;
   id: string;
   initials: string;
   leader: boolean;
@@ -361,8 +363,8 @@ function MemberRowContent({ member, t }: { member: TeamMemberDisplay; t: Transla
       <span className={classNames(styles.teamMemberAvatar, member.agent && styles.agent)}>
         {member.agent ? (
           <AgentAvatarContent
-            avatar={member.agent.avatar}
-            fallback={avatarFallbackText(member.agent.avatar, member.agent.name, member.agent.id)}
+            avatar={member.avatar}
+            fallback={avatarFallbackText(member.avatar, member.agent.name, member.agent.id)}
           />
         ) : (
           member.initials
@@ -388,14 +390,16 @@ function memberDisplay(
   usersById: UsersLookup,
   leadAgentID: string,
 ): TeamMemberDisplay {
-  const agent = agents.find((item) => item.id === memberID) ?? null;
+  const agent = agents.find((item) => localIdentitiesMatch(item.id, memberID)) ?? null;
   const user = lookupUser(usersById, memberID);
   const name = agent?.name || user?.name || memberID;
+  const usersMap = usersById instanceof Map ? usersById : null;
   return {
     id: memberID,
     agent,
+    avatar: agent ? resolveAgentAvatarSource(agent, usersMap) || agent.avatar || "" : user?.avatar || "",
     initials: initialsForName(name),
-    leader: memberID === leadAgentID,
+    leader: localIdentitiesMatch(memberID, leadAgentID),
     name,
     running: agent ? isAgentRunning(agent) : false,
   };
