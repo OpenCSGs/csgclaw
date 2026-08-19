@@ -1,3 +1,5 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="32" y="32" width="960" height="960" rx="218" fill="#FFFFFF"/>
+  <g transform="translate(61.44 61.44) scale(0.88)">
+    <rect x="32" y="32" width="960" height="960" rx="218" fill="#FFFFFF"/>
+  </g>
 </svg>
