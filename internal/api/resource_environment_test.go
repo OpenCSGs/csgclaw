@@ -44,7 +44,7 @@ func TestSkillConfigForEnvironmentKeepsConfiguredRegistry(t *testing.T) {
 func TestApplyOpenCSGEnvironmentToHubConfigUsesLoginHubURL(t *testing.T) {
 	cfg := applyOpenCSGEnvironmentToHubConfig(config.HubConfig{}, auth.Environment{
 		CSGHubBaseURL: auth.StageCSGHubBaseURL,
-	}, false)
+	})
 	resolved := cfg.Resolved()
 	var official config.HubRegistryConfig
 	for _, registry := range resolved.Registries {
@@ -58,14 +58,14 @@ func TestApplyOpenCSGEnvironmentToHubConfigUsesLoginHubURL(t *testing.T) {
 	}
 }
 
-func TestApplyOpenCSGEnvironmentToHubConfigPreservesExplicitOfficialURL(t *testing.T) {
+func TestApplyOpenCSGEnvironmentToHubConfigIgnoresConfiguredOfficialURL(t *testing.T) {
 	cfg := applyOpenCSGEnvironmentToHubConfig(config.HubConfig{
 		Registries: []config.HubRegistryConfig{
 			{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, URL: "https://hub.example.test", Enabled: true},
 		},
 	}, auth.Environment{
 		CSGHubBaseURL: auth.StageCSGHubBaseURL,
-	}, true)
+	})
 	resolved := cfg.Resolved()
 	var official config.HubRegistryConfig
 	for _, registry := range resolved.Registries {
@@ -74,7 +74,7 @@ func TestApplyOpenCSGEnvironmentToHubConfigPreservesExplicitOfficialURL(t *testi
 			break
 		}
 	}
-	if got, want := official.URL, "https://hub.example.test"; got != want {
+	if got, want := official.URL, auth.StageCSGHubBaseURL; got != want {
 		t.Fatalf("official URL = %q, want %q", got, want)
 	}
 }
@@ -164,6 +164,20 @@ func TestCurrentOpenCSGEnvironmentPrefersLoginOverManagedHubURL(t *testing.T) {
 	}
 }
 
+func TestHubRegistryMatchesAuthenticatedEnvironmentUsesResolvedHubURL(t *testing.T) {
+	status := auth.Status{
+		Authenticated:  true,
+		OpenCSGBaseURL: auth.StageOpenCSGBaseURL,
+		// Some login records contain the public site here rather than the Hub API.
+		BaseURL: auth.StageOpenCSGBaseURL,
+	}
+	registry := config.HubRegistryConfig{URL: auth.StageCSGHubBaseURL}
+
+	if !hubRegistryMatchesAuthenticatedEnvironment(registry, status) {
+		t.Fatalf("registry %q did not match resolved Hub URL for status %+v", registry.URL, status)
+	}
+}
+
 func TestHubServiceUsesManagedCredentialsWithoutLogin(t *testing.T) {
 	hubServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.Header.Get("Authorization"), "Bearer managed-token"; got != want {
@@ -228,7 +242,7 @@ func TestHubServiceUsesManagedTokenWithoutBaseURLEnvironment(t *testing.T) {
 	}
 }
 
-func TestOfficialHubBaseURLForRequestPreservesExplicitOfficialRegistry(t *testing.T) {
+func TestOfficialHubBaseURLForRequestIgnoresConfiguredOfficialRegistry(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte(`
 [hub]
@@ -257,7 +271,7 @@ enabled = true
 	defer restore()
 
 	got := (&Handler{}).officialHubBaseURLForRequest(httptest.NewRequest(http.MethodGet, "/api/v1/server/config", nil), cfg)
-	if want := "https://hub.example.test"; got != want {
+	if want := auth.StageCSGHubBaseURL; got != want {
 		t.Fatalf("officialHubBaseURLForRequest() = %q, want %q", got, want)
 	}
 }

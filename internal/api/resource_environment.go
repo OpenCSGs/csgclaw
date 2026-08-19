@@ -56,11 +56,8 @@ func openCSGEnvironmentFromStatus(status auth.Status) auth.Environment {
 	return env
 }
 
-func applyOpenCSGEnvironmentToHubConfig(cfg config.HubConfig, env auth.Environment, preserveOfficial bool) config.HubConfig {
+func applyOpenCSGEnvironmentToHubConfig(cfg config.HubConfig, env auth.Environment) config.HubConfig {
 	cfg = cfg.Resolved()
-	if preserveOfficial {
-		return cfg
-	}
 	hubURL := strings.TrimRight(strings.TrimSpace(env.CSGHubBaseURL), "/")
 	if hubURL == "" {
 		hubURL = config.DefaultOfficialHubRegistryURL
@@ -83,7 +80,7 @@ func (h *Handler) hubServiceForRequest(r *http.Request) (*hub.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r), cfg.HasExplicitOfficialHubRegistry())
+	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r))
 	username := ""
 	managedBaseURL := trustedCSGHubAPIBaseURL()
 	managedToken := strings.TrimSpace(os.Getenv("CSGHUB_USER_TOKEN"))
@@ -99,10 +96,7 @@ func (h *Handler) hubServiceForRequest(r *http.Request) (*hub.Service, error) {
 		for i, registry := range hubCfg.Registries {
 			if strings.TrimSpace(registry.Name) == config.DefaultOfficialHubRegistryName &&
 				strings.TrimSpace(registry.Kind) == config.HubRegistryKindRemote &&
-				strings.EqualFold(
-					strings.TrimRight(strings.TrimSpace(registry.URL), "/"),
-					strings.TrimRight(strings.TrimSpace(status.BaseURL), "/"),
-				) {
+				hubRegistryMatchesAuthenticatedEnvironment(registry, status) {
 				registry.Token = strings.TrimSpace(token)
 				username = strings.TrimSpace(status.UserID)
 				hubCfg.Registries[i] = registry
@@ -127,6 +121,12 @@ func (h *Handler) hubServiceForRequest(r *http.Request) (*hub.Service, error) {
 		}
 		return hub.DefaultStoreFactory(registry)
 	})
+}
+
+func hubRegistryMatchesAuthenticatedEnvironment(registry config.HubRegistryConfig, status auth.Status) bool {
+	registryURL := strings.TrimRight(strings.TrimSpace(registry.URL), "/")
+	hubURL := strings.TrimRight(strings.TrimSpace(openCSGEnvironmentFromStatus(status).CSGHubBaseURL), "/")
+	return registryURL != "" && hubURL != "" && strings.EqualFold(registryURL, hubURL)
 }
 
 func trustedCSGHubAPIBaseURL() string {

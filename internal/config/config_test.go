@@ -555,7 +555,7 @@ models = ["minimax-m2.7"]
 	}
 }
 
-func TestLoadLegacyOfficialHubRegistryURLAndSavePreservesIt(t *testing.T) {
+func TestLoadIgnoresConfiguredOfficialHubRegistryURL(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	path := filepath.Join(dir, "config.toml")
@@ -581,7 +581,7 @@ enabled = true
 		t.Fatalf("Load() error = %v", err)
 	}
 	officialRegistry := cfg.Hub.Registries[2]
-	if got, want := officialRegistry.URL, "https://csgclaw.opencsg.com"; got != want {
+	if got, want := officialRegistry.URL, DefaultOfficialHubRegistryURL; got != want {
 		t.Fatalf("official registry URL = %q, want %q", got, want)
 	}
 	if cfg.NeedsMigrationRewrite() {
@@ -596,8 +596,8 @@ enabled = true
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	saved := string(data)
-	if !strings.Contains(saved, `url = "https://csgclaw.opencsg.com"`) {
-		t.Fatalf("saved config missing preserved official URL:\n%s", saved)
+	if strings.Contains(saved, `name = "official"`) || strings.Contains(saved, `https://csgclaw.opencsg.com`) {
+		t.Fatalf("saved config retained ignored official registry:\n%s", saved)
 	}
 }
 
@@ -645,6 +645,35 @@ enabled = true
 	}
 }
 
+func TestLoadTreatsPersistedDefaultOfficialRegistryAsManaged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := `[[hub.registries]]
+name = "official"
+kind = "remote"
+url = "https://hub.opencsg.com"
+enabled = true
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if saved := string(data); strings.Contains(saved, `name = "official"`) {
+		t.Fatalf("saved config retained managed official registry:\n%s", saved)
+	}
+}
+
 func TestLoadMissingOfficialHubRegistryAndSaveDoesNotPersistDefault(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
@@ -681,9 +710,6 @@ enabled = true
 	}
 	if got, want := len(cfg.Hub.Registries), 3; got != want {
 		t.Fatalf("len(cfg.Hub.Registries) = %d, want %d", got, want)
-	}
-	if cfg.HasExplicitOfficialHubRegistry() {
-		t.Fatal("HasExplicitOfficialHubRegistry() = true, want false")
 	}
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save() error = %v", err)

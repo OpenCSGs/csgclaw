@@ -232,28 +232,8 @@ func hasRemoteHubRegistryURLRewrite(registries []rawHubRegistryConfig) bool {
 	return false
 }
 
-func shouldWriteHubRegistry(registry HubRegistryConfig, rawRegistry, loadedRegistry rawHubRegistryConfig) bool {
-	if strings.TrimSpace(registry.Name) != DefaultOfficialHubRegistryName ||
-		strings.TrimSpace(registry.Kind) != HubRegistryKindRemote {
-		return true
-	}
-	if rawRegistry.Name != "" || loadedRegistry.Name != "" {
-		return true
-	}
-	defaultRegistry := defaultOfficialRemoteHubRegistry()
-	return strings.TrimRight(strings.TrimSpace(registry.URL), "/") != defaultRegistry.URL ||
-		strings.TrimSpace(registry.Token) != "" ||
-		registry.Enabled != defaultRegistry.Enabled
-}
-
-func (c Config) HasExplicitOfficialHubRegistry() bool {
-	for _, registry := range c.raw.hub.Registries {
-		if parseRawStringValue(registry.Name) == DefaultOfficialHubRegistryName &&
-			parseRawStringValue(registry.Kind) == HubRegistryKindRemote {
-			return true
-		}
-	}
-	return false
+func shouldWriteHubRegistry(registry HubRegistryConfig, _, _ rawHubRegistryConfig) bool {
+	return strings.TrimSpace(registry.Name) != DefaultOfficialHubRegistryName
 }
 
 func (c SandboxConfig) Resolved() SandboxConfig {
@@ -744,6 +724,19 @@ func Load(path string) (Config, error) {
 	if err := cfg.Sandbox.Validate(); err != nil {
 		return Config{}, err
 	}
+	configuredRegistries := cfg.Hub.Registries[:0]
+	configuredRawRegistries := cfg.raw.hub.Registries[:0]
+	for i, registry := range cfg.Hub.Registries {
+		if strings.TrimSpace(registry.Name) == DefaultOfficialHubRegistryName {
+			continue
+		}
+		configuredRegistries = append(configuredRegistries, registry)
+		if i < len(cfg.raw.hub.Registries) {
+			configuredRawRegistries = append(configuredRawRegistries, cfg.raw.hub.Registries[i])
+		}
+	}
+	cfg.Hub.Registries = configuredRegistries
+	cfg.raw.hub.Registries = configuredRawRegistries
 	for i := range cfg.Hub.Registries {
 		if i >= len(cfg.raw.hub.Registries) || !cfg.raw.hub.Registries[i].EnabledSet {
 			cfg.Hub.Registries[i].Enabled = true
@@ -1283,6 +1276,9 @@ func (c Config) resolvedRawValues() *rawConfigValues {
 	}
 	resolvedHub := c.Hub.Resolved()
 	for _, rawRegistry := range c.raw.hub.Registries {
+		if parseRawStringValue(rawRegistry.Name) == DefaultOfficialHubRegistryName {
+			continue
+		}
 		rawKind := parseRawStringValue(rawRegistry.Kind)
 		if rawKind != "" && !isSupportedHubRegistryKind(rawKind) {
 			continue

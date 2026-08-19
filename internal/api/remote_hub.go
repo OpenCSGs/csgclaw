@@ -22,7 +22,7 @@ func (h *Handler) remoteHubRegistryForRequest(r *http.Request) (config.HubRegist
 }
 
 func (h *Handler) officialHubRegistryForRequest(r *http.Request, cfg config.Config) config.HubRegistryConfig {
-	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r), cfg.HasExplicitOfficialHubRegistry())
+	hubCfg := applyOpenCSGEnvironmentToHubConfig(cfg.Hub, h.currentOpenCSGEnvironment(r))
 	for _, registry := range hubCfg.Resolved().Registries {
 		if strings.TrimSpace(registry.Name) == config.DefaultOfficialHubRegistryName &&
 			strings.TrimSpace(registry.Kind) == config.HubRegistryKindRemote {
