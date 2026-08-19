@@ -115,8 +115,8 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 			t.Fatalf("events = %+v", events)
 		}
 		for index, event := range events {
-			if event.Sequence != uint64(index+1) {
-				t.Fatalf("event %d sequence = %d", index, event.Sequence)
+			if event.TurnID != "turn-1" || event.Sequence != uint64(index+1) {
+				t.Fatalf("event %d envelope = %+v", index, event)
 			}
 		}
 		if events[0].Thought != "thinking" || events[1].Tool == nil || events[2].Activity == nil || events[3].Output == nil || events[4].Text != "answer" {
@@ -174,6 +174,164 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		close(release)
 		if (<-firstDone).Status != agentengine.TurnSucceeded || (<-secondDone).Status != agentengine.TurnSucceeded {
 			t.Fatal("different conversations did not complete")
+		}
+	})
+
+	t.Run("turn retries are idempotent", func(t *testing.T) {
+		var executions int
+		behavior := func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+			executions++
+			if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "answer"}); err != nil {
+				return contractFailure(agentengine.ErrorRuntimeFailed, err)
+			}
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "answer", Dispatched: true}
+		}
+		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, behavior)
+		request := contractTurn("turn-1", "conversation-1")
+		var firstEvents []agentengine.TurnEvent
+		first := client.Conversations("agent-a").Run(context.Background(), request, agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
+			firstEvents = append(firstEvents, event)
+			return nil
+		}))
+		var retriedEvents []agentengine.TurnEvent
+		retried := client.Conversations("agent-a").Run(context.Background(), request, agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
+			retriedEvents = append(retriedEvents, event)
+			return nil
+		}))
+		if executions != 1 {
+			t.Fatalf("Runtime executions = %d, want 1", executions)
+		}
+		if first.Status != agentengine.TurnSucceeded || retried != first {
+			t.Fatalf("first = %+v, retried = %+v", first, retried)
+		}
+		if len(retriedEvents) != len(firstEvents) {
+			t.Fatalf("first events = %+v, retried events = %+v", firstEvents, retriedEvents)
+		}
+		for index := range firstEvents {
+			if retriedEvents[index].Sequence != firstEvents[index].Sequence || retriedEvents[index].Kind != firstEvents[index].Kind {
+				t.Fatalf("event %d first = %+v, retried = %+v", index, firstEvents[index], retriedEvents[index])
+			}
+		}
+		conflict := request
+		conflict.Input = []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: "different"}}
+		if result := client.Conversations("agent-a").Run(context.Background(), conflict, nil); result.Error == nil || result.Error.Code != agentengine.ErrorInvalidRequest || executions != 1 {
+			t.Fatalf("conflicting retry = %+v, executions = %d", result, executions)
+		}
+	})
+
+	t.Run("in-flight turn retries coalesce", func(t *testing.T) {
+		started := make(chan struct{})
+		release := make(chan struct{})
+		var executions int
+		behavior := func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+			executions++
+			close(started)
+			if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "answer"}); err != nil {
+				return contractFailure(agentengine.ErrorRuntimeFailed, err)
+			}
+			<-release
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "answer", Dispatched: true}
+		}
+		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, behavior)
+		request := contractTurn("turn-1", "conversation-1")
+		firstDone := make(chan agentengine.TurnResult, 1)
+		secondDone := make(chan agentengine.TurnResult, 1)
+		go func() { firstDone <- client.Conversations("agent-a").Run(context.Background(), request, nil) }()
+		<-started
+		go func() { secondDone <- client.Conversations("agent-a").Run(context.Background(), request, nil) }()
+		select {
+		case result := <-secondDone:
+			t.Fatalf("retry returned before the original Turn completed: %+v", result)
+		case <-time.After(20 * time.Millisecond):
+		}
+		close(release)
+		first := <-firstDone
+		second := <-secondDone
+		if executions != 1 || first.Status != agentengine.TurnSucceeded || second.Status != agentengine.TurnSucceeded || second.Output != first.Output {
+			t.Fatalf("executions = %d, first = %+v, second = %+v", executions, first, second)
+		}
+	})
+
+	t.Run("admission wait serializes turns", func(t *testing.T) {
+		started := make(chan agentengine.TurnID, 2)
+		releaseFirst := make(chan struct{})
+		behavior := func(_ context.Context, _ string, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+			started <- request.ID
+			if request.ID == "turn-1" {
+				<-releaseFirst
+			}
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true}
+		}
+		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, behavior)
+		conversations := client.Conversations("agent-a")
+		firstDone := make(chan agentengine.TurnResult, 1)
+		go func() {
+			firstDone <- conversations.Run(context.Background(), contractTurn("turn-1", "conversation-1"), nil)
+		}()
+		if id := <-started; id != "turn-1" {
+			t.Fatalf("first started Turn = %q", id)
+		}
+		waitRequest := contractTurn("turn-2", "conversation-1")
+		waitRequest.Admission = agentengine.AdmissionWait
+		secondDone := make(chan agentengine.TurnResult, 1)
+		go func() { secondDone <- conversations.Run(context.Background(), waitRequest, nil) }()
+		select {
+		case id := <-started:
+			t.Fatalf("waiting Turn started early: %q", id)
+		case <-time.After(20 * time.Millisecond):
+		}
+		close(releaseFirst)
+		if result := <-firstDone; result.Status != agentengine.TurnSucceeded {
+			t.Fatalf("first Run() = %+v", result)
+		}
+		if id := <-started; id != "turn-2" {
+			t.Fatalf("second started Turn = %q", id)
+		}
+		if result := <-secondDone; result.Status != agentengine.TurnSucceeded {
+			t.Fatalf("second Run() = %+v", result)
+		}
+	})
+
+	t.Run("admission supersede cancels before replacement", func(t *testing.T) {
+		firstStarted := make(chan struct{})
+		cleanupStarted := make(chan struct{})
+		releaseCleanup := make(chan struct{})
+		secondStarted := make(chan struct{})
+		behavior := func(ctx context.Context, _ string, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+			if request.ID == "turn-1" {
+				close(firstStarted)
+				<-ctx.Done()
+				close(cleanupStarted)
+				<-releaseCleanup
+				return agentengine.TurnResult{Status: agentengine.TurnCanceled, Dispatched: true, Error: &agentengine.TurnError{Code: agentengine.ErrorCanceled, Message: ctx.Err().Error()}}
+			}
+			close(secondStarted)
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true}
+		}
+		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, behavior)
+		conversations := client.Conversations("agent-a")
+		firstDone := make(chan agentengine.TurnResult, 1)
+		go func() {
+			firstDone <- conversations.Run(context.Background(), contractTurn("turn-1", "conversation-1"), nil)
+		}()
+		<-firstStarted
+		replacement := contractTurn("turn-2", "conversation-1")
+		replacement.Admission = agentengine.AdmissionSupersede
+		secondDone := make(chan agentengine.TurnResult, 1)
+		go func() { secondDone <- conversations.Run(context.Background(), replacement, nil) }()
+		<-cleanupStarted
+		select {
+		case <-secondStarted:
+			t.Fatal("replacement started before superseded Turn cleanup")
+		case <-time.After(20 * time.Millisecond):
+		}
+		close(releaseCleanup)
+		if result := <-firstDone; result.Status != agentengine.TurnCanceled {
+			t.Fatalf("superseded Run() = %+v", result)
+		}
+		<-secondStarted
+		if result := <-secondDone; result.Status != agentengine.TurnSucceeded {
+			t.Fatalf("replacement Run() = %+v", result)
 		}
 	})
 
@@ -327,6 +485,69 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		}
 	})
 
+	t.Run("reset atomically cancels an active turn", func(t *testing.T) {
+		started := make(chan struct{})
+		cleanupStarted := make(chan struct{})
+		releaseCleanup := make(chan struct{})
+		forceRelease := make(chan struct{})
+		behavior := func(ctx context.Context, _ string, _ agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+			close(started)
+			select {
+			case <-ctx.Done():
+				close(cleanupStarted)
+				<-releaseCleanup
+				return agentengine.TurnResult{Status: agentengine.TurnCanceled, Dispatched: true, Error: &agentengine.TurnError{Code: agentengine.ErrorCanceled, Message: ctx.Err().Error()}}
+			case <-forceRelease:
+				return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true}
+			}
+		}
+		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, behavior)
+		conversations := client.Conversations("agent-a")
+		runDone := make(chan agentengine.TurnResult, 1)
+		go func() {
+			runDone <- conversations.Run(context.Background(), contractTurn("turn-1", "conversation-1"), nil)
+		}()
+		<-started
+		resetDone := make(chan error, 1)
+		go func() { resetDone <- conversations.Reset(context.Background(), "conversation-1") }()
+		select {
+		case <-cleanupStarted:
+		case err := <-resetDone:
+			close(forceRelease)
+			<-runDone
+			t.Fatalf("Reset returned before canceling the active Turn: %v", err)
+		case <-time.After(time.Second):
+			close(forceRelease)
+			<-runDone
+			t.Fatal("Reset did not cancel the active Turn")
+		}
+		if result := conversations.Run(context.Background(), contractTurn("turn-blocked", "conversation-1"), nil); result.Error == nil || result.Error.Code != agentengine.ErrorConversationBusy || result.Dispatched {
+			close(releaseCleanup)
+			<-runDone
+			<-resetDone
+			t.Fatalf("Run during Reset = %+v", result)
+		}
+		select {
+		case err := <-resetDone:
+			close(releaseCleanup)
+			<-runDone
+			t.Fatalf("Reset returned before Turn cleanup: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
+		close(releaseCleanup)
+		if result := <-runDone; result.Status != agentengine.TurnCanceled {
+			t.Fatalf("Run() = %+v", result)
+		}
+		if err := <-resetDone; err != nil {
+			t.Fatal(err)
+		}
+		strict := contractTurn("turn-2", "conversation-1")
+		strict.Continuation = agentengine.ContinuationRequireExisting
+		if result := conversations.Run(context.Background(), strict, nil); result.Error == nil || result.Error.Code != agentengine.ErrorConversationNotResumable || result.Dispatched {
+			t.Fatalf("strict Run() = %+v", result)
+		}
+	})
+
 	t.Run("interaction resolution", func(t *testing.T) {
 		resolved := make(chan struct{})
 		behavior := func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
@@ -432,6 +653,11 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		invalidContinuation.Continuation = agentengine.ContinuationPolicy("future")
 		if result := client.Conversations("agent-running").Run(context.Background(), invalidContinuation, nil); result.Error == nil || result.Error.Code != agentengine.ErrorInvalidRequest || result.Dispatched {
 			t.Fatalf("invalid continuation Run() = %+v", result)
+		}
+		invalidAdmission := contractTurn("turn-invalid-admission", "conversation-invalid-admission")
+		invalidAdmission.Admission = agentengine.AdmissionPolicy("future")
+		if result := client.Conversations("agent-running").Run(context.Background(), invalidAdmission, nil); result.Error == nil || result.Error.Code != agentengine.ErrorInvalidRequest || result.Dispatched {
+			t.Fatalf("invalid admission Run() = %+v", result)
 		}
 		invalidInteraction := contractTurn("turn-invalid-interaction", "conversation-invalid-interaction")
 		invalidInteraction.Interaction = agentengine.InteractionPolicy("future")

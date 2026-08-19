@@ -29,6 +29,16 @@ type ConversationKey string
 // TurnID is an opaque, caller-generated identity for one Run request.
 type TurnID string
 
+// AdmissionPolicy controls how Run behaves when the Conversation already has
+// an active Turn or atomic control operation.
+type AdmissionPolicy string
+
+const (
+	AdmissionRejectIfBusy AdmissionPolicy = "reject_if_busy"
+	AdmissionWait         AdmissionPolicy = "wait"
+	AdmissionSupersede    AdmissionPolicy = "supersede"
+)
+
 // ContinuationPolicy controls whether a missing Runtime-native conversation may
 // be created.
 type ContinuationPolicy string
@@ -79,6 +89,7 @@ type TurnRequest struct {
 	ID              TurnID
 	ConversationKey ConversationKey
 	Input           []InputPart
+	Admission       AdmissionPolicy
 	Continuation    ContinuationPolicy
 	Interaction     InteractionPolicy
 }
@@ -96,9 +107,10 @@ const (
 	TurnEventOutputItem         TurnEventKind = "output_item"
 )
 
-// TurnEvent contains one normalized Runtime event. Sequence starts at one and
-// increases monotonically for each Run.
+// TurnEvent is the replay-safe envelope for one normalized Runtime event.
+// Sequence starts at one and increases monotonically for each TurnID.
 type TurnEvent struct {
+	TurnID      TurnID
 	Sequence    uint64
 	Kind        TurnEventKind
 	Text        string

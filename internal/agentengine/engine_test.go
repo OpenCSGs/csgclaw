@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -825,6 +826,133 @@ func TestConversationResetRemovesStrictContinuationMapping(t *testing.T) {
 	}, nil)
 	if strict.Error == nil || strict.Error.Code != ErrorConversationNotResumable || strict.Dispatched {
 		t.Fatalf("strict result = %+v", strict)
+	}
+}
+
+type directConversationResolver struct {
+	runtime conversationRuntimeAdapter
+}
+
+func (r directConversationResolver) conversationRuntime(context.Context, string) (conversationRuntimeAdapter, func(), *TurnError) {
+	return r.runtime, func() {}, nil
+}
+
+type interactionClaimRuntime struct {
+	finishRun chan struct{}
+	resolve   func(context.Context, InteractionRequest, InteractionResolution) *TurnError
+}
+
+func (r *interactionClaimRuntime) Run(ctx context.Context, _ TurnRequest, sink EventSink) TurnResult {
+	if err := sink.Emit(ctx, TurnEvent{
+		Kind:        TurnEventInteractionRequest,
+		Interaction: &InteractionRequest{ID: "question-1", Kind: InteractionUserInput},
+	}); err != nil {
+		return TurnResult{Status: TurnFailed, Dispatched: true, Error: &TurnError{Code: ErrorRuntimeFailed, Message: err.Error()}}
+	}
+	<-r.finishRun
+	return TurnResult{Status: TurnSucceeded, Dispatched: true}
+}
+
+func (*interactionClaimRuntime) Reset(context.Context, ConversationKey) *TurnError {
+	return nil
+}
+
+func (r *interactionClaimRuntime) Resolve(ctx context.Context, request InteractionRequest, resolution InteractionResolution) *TurnError {
+	return r.resolve(ctx, request, resolution)
+}
+
+func TestConversationResolveClaimsInteractionBeforeRuntimeCall(t *testing.T) {
+	resolveStarted := make(chan struct{})
+	releaseResolve := make(chan struct{})
+	var resolveCalls atomic.Int32
+	runtimeAdapter := &interactionClaimRuntime{
+		finishRun: make(chan struct{}),
+		resolve: func(context.Context, InteractionRequest, InteractionResolution) *TurnError {
+			if resolveCalls.Add(1) == 1 {
+				close(resolveStarted)
+				<-releaseResolve
+			}
+			return nil
+		},
+	}
+	engine := &Engine{runtimes: directConversationResolver{runtime: runtimeAdapter}}
+	interactionReady := make(chan struct{})
+	runDone := make(chan TurnResult, 1)
+	go func() {
+		runDone <- engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+			ID: "turn-1", ConversationKey: "conversation-1", Interaction: InteractionResolve, Input: textInput("hello"),
+		}, EventSinkFunc(func(_ context.Context, event TurnEvent) error {
+			if event.Interaction != nil {
+				close(interactionReady)
+			}
+			return nil
+		}))
+	}()
+	<-interactionReady
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- engine.Conversations("agent-a").Resolve(context.Background(), InteractionResolution{
+			ConversationKey: "conversation-1", InteractionID: "question-1", ResponderID: "feishu:user-1",
+		})
+	}()
+	<-resolveStarted
+	second := engine.Conversations("agent-a").Resolve(context.Background(), InteractionResolution{
+		ConversationKey: "conversation-1", InteractionID: "question-1", ResponderID: "feishu:user-1",
+	})
+	if ErrorCodeOf(second) != ErrorInteractionNotFound {
+		t.Fatalf("duplicate Resolve error = %v", second)
+	}
+	if calls := resolveCalls.Load(); calls != 1 {
+		t.Fatalf("Runtime Resolve calls = %d, want 1", calls)
+	}
+	close(releaseResolve)
+	if err := <-firstDone; err != nil {
+		t.Fatal(err)
+	}
+	close(runtimeAdapter.finishRun)
+	if result := <-runDone; result.Status != TurnSucceeded {
+		t.Fatalf("Run() = %+v", result)
+	}
+}
+
+func TestConversationResolveRestoresClaimAfterRuntimeFailure(t *testing.T) {
+	var resolveCalls atomic.Int32
+	runtimeAdapter := &interactionClaimRuntime{
+		finishRun: make(chan struct{}),
+		resolve: func(context.Context, InteractionRequest, InteractionResolution) *TurnError {
+			if resolveCalls.Add(1) == 1 {
+				return &TurnError{Code: ErrorRuntimeFailed, Message: "temporary failure"}
+			}
+			return nil
+		},
+	}
+	engine := &Engine{runtimes: directConversationResolver{runtime: runtimeAdapter}}
+	interactionReady := make(chan struct{})
+	runDone := make(chan TurnResult, 1)
+	go func() {
+		runDone <- engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+			ID: "turn-1", ConversationKey: "conversation-1", Interaction: InteractionResolve, Input: textInput("hello"),
+		}, EventSinkFunc(func(_ context.Context, event TurnEvent) error {
+			if event.Interaction != nil {
+				close(interactionReady)
+			}
+			return nil
+		}))
+	}()
+	<-interactionReady
+	resolution := InteractionResolution{ConversationKey: "conversation-1", InteractionID: "question-1", ResponderID: "feishu:user-1"}
+	if err := engine.Conversations("agent-a").Resolve(context.Background(), resolution); ErrorCodeOf(err) != ErrorRuntimeFailed {
+		t.Fatalf("first Resolve error = %v", err)
+	}
+	if err := engine.Conversations("agent-a").Resolve(context.Background(), resolution); err != nil {
+		t.Fatalf("retried Resolve error = %v", err)
+	}
+	if calls := resolveCalls.Load(); calls != 2 {
+		t.Fatalf("Runtime Resolve calls = %d, want 2", calls)
+	}
+	close(runtimeAdapter.finishRun)
+	if result := <-runDone; result.Status != TurnSucceeded {
+		t.Fatalf("Run() = %+v", result)
 	}
 }
 

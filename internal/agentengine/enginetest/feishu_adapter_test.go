@@ -17,13 +17,14 @@ type feishuAdapterHarness struct {
 	credentials feishu.AgentCredentialProvider
 }
 
-func (h feishuAdapterHarness) Ingress(ctx context.Context, agentID string, key agentengine.ConversationKey, text string) agentengine.TurnResult {
+func (h feishuAdapterHarness) Ingress(ctx context.Context, agentID string, key agentengine.ConversationKey, eventID, text string) agentengine.TurnResult {
 	_, app, ok := h.credentials.BotConfigForAgent(agentID)
 	if !ok || strings.TrimSpace(app.AppID) == "" || strings.TrimSpace(app.AppSecret) == "" {
 		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: "Feishu binding is unavailable"}}
 	}
 	return h.engine.Conversations(agentID).Run(ctx, agentengine.TurnRequest{
-		ID: "feishu-turn", ConversationKey: key,
+		ID: agentengine.TurnID(eventID), ConversationKey: key,
+		Admission: agentengine.AdmissionSupersede, Interaction: agentengine.InteractionSkipUserInput,
 		Input: []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: text}},
 	}, nil)
 }
@@ -48,12 +49,16 @@ func TestFeishuAdapterHarnessUsesEngineWithoutLeakingChannelSecrets(t *testing.T
 		engine:      client,
 		credentials: feishuCredentialStub{app: feishu.AppConfig{AppID: appID, AppSecret: appSecret}},
 	}
-	result := harness.Ingress(context.Background(), seed.ID, "chat-1", "hello from Feishu")
+	result := harness.Ingress(context.Background(), seed.ID, "chat-1", "event-1", "hello from Feishu")
 	if result.Status != agentengine.TurnSucceeded {
 		t.Fatalf("result = %+v", result)
 	}
+	retried := harness.Ingress(context.Background(), seed.ID, "chat-1", "event-1", "hello from Feishu")
+	if retried.Status != agentengine.TurnSucceeded || retried.Output != result.Output {
+		t.Fatalf("retried result = %+v", retried)
+	}
 	calls := client.Calls()
-	if len(calls) != 1 || calls[0].AgentID != seed.ID || calls[0].Request.ConversationKey != "chat-1" {
+	if len(calls) != 1 || calls[0].AgentID != seed.ID || calls[0].Request.ConversationKey != "chat-1" || calls[0].Request.ID != "event-1" || calls[0].Request.Admission != agentengine.AdmissionSupersede {
 		t.Fatalf("Engine calls = %+v", calls)
 	}
 	agentItem, err := client.Agents().Get(context.Background(), seed.ID)

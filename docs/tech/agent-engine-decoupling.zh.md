@@ -260,9 +260,12 @@ Engine 只校验其非空且长度有界。
 它不会解析 Key 中的 Room、Thread、Channel、Binding 或 Session 字段。
 
 `TurnID` 是调用方为一次 `Run` Request 生成的不透明 Identity。
-Channel Adapter 或 Session HTTP Adapter 在完成 Ingress Validation 和 Deduplication 后、调用 `Run` 前生成随机 ID。
+Channel Adapter 在完成 Ingress Validation 后生成该值，并让同一个 Source Event 的重试保持稳定；Session HTTP Adapter 则为其 Request 生成一个 Response ID。
 Engine 只校验其非空且长度有界，并原样传递给 Runtime Adapter。
-它不从 `ConversationKey` 或 Source Message ID 派生，因为这些值标识不同的生命周期。
+它与 `ConversationKey` 保持不同；Channel Adapter 可以把限定 Scope 的 Source Event ID 规范化为 `TurnID`，因为该 Event 在 Delivery Retry 间标识同一个逻辑 Turn。
+在一个 Engine 进程内，`(agentID, ConversationKey, TurnID)` 是幂等 Identity。
+进行中的重试加入原 Turn，已完成且已分派的重试回放有界的进程内 Progress Event 并返回缓存 Result，不会再次提交 Runtime Turn。
+使用相同 Identity 但不同的规范化 Input 或 Policy 会返回 `invalid_request`。
 
 每个 Adapter 负责构造无碰撞 Key：
 
@@ -272,16 +275,17 @@ Engine 只校验其非空且长度有界，并原样传递给 Runtime Adapter。
 | 飞书 | App Binding、Chat 和可选 Thread Root |
 | Session API | Session Binding Store 保存的随机内部 Key |
 
-Engine 同时只允许 `(agentID, ConversationKey)` 存在一个 Turn 或 Reset。
+Engine 同时只允许 `(agentID, ConversationKey)` 存在一个 Turn 或原子 Control Operation。
 不同 Conversation Key 可以并发执行。
-重叠 Run 立即返回 `conversation_busy`。
-阶段 2 不实现 Admission 配置或 Queue。
-未来的等待队列和更宽泛的并发限制可以放在现有 Execution Lease 之前，而不改变 Turn Owner。
+`AdmissionPolicy` 为不同的重叠 Turn 选择 `reject_if_busy`、`wait` 或 `supersede`。
+`reject_if_busy` 立即返回 `conversation_busy`，并继续作为匿名 Session API 的默认策略。
+`wait` 等待当前 Turn 或 Control Operation 完成后再竞争 Admission。
+`supersede` 关闭 Admission、取消当前 Turn、等待 Runtime 真实清理完成，并且不留新 Run 插入的窗口直接准入替代 Turn。
 因此 Cancel 使用按 Agent 限定的 `ConversationKey` 和 `TurnID` 精确标识一个运行中的 Turn。
 Resolve 额外携带 `InteractionID` 来标识一个 Pending Interaction。
 
-`TurnID` 只存在于该 Turn 的生命周期内。
-它不是 Conversation Key、Runtime 原生 Conversation Mapping、Transcript Identity 或持久化 Engine Resource。
+Turn 生命周期结束后，`TurnID` 只在有界的进程内幂等窗口中保留。
+它不是 Conversation Key、Runtime 原生 Conversation Mapping、Transcript Identity 或持久化 Engine Resource，因此进程重启后仍依赖 Source 侧去重。
 `Reset` 仍按 `ConversationKey` 限定，`Resolve` 仍按 `ConversationKey` 和 `InteractionID` 限定。
 
 `ContinuationPolicy` 明确 Runtime Mapping 行为：
@@ -309,7 +313,7 @@ File Part 包含一个调用方已授权的 `InputFile`。
 阶段 1 的 Session HTTP Adapter 创建一个 Text Part，私有 Codex Runtime Adapter 则在调用当前 Runtime API 前按顺序合并 Text Part。
 File Part 保留公共 Type，但在后续阶段实现 File Execution 前，会在 Runtime Dispatch 前返回 `file_unavailable`。
 
-Event Sink 接收一次 `Run` 调用内有序且非终态的进度：
+Event Sink 接收一个逻辑 Turn 的有序进度：
 
 - Text Delta。
 - Thought Delta。
@@ -318,7 +322,8 @@ Event Sink 接收一次 `Run` 调用内有序且非终态的进度：
 - 已验证的 Output Item。
 
 Sink 不是 Event Bus、Transcript Store 或 Channel Renderer。
-它的 Sequence Number 只对当前 Run 调用内的 Event 排序。
+每个 Event 都携带 `TurnID` 和单调递增的 `Sequence`。
+Adapter 可以使用 `(TurnID, Sequence)` 对重试后回放的 Envelope 去重。
 
 `Run` 只返回一个 `TurnResult`，没有第二套裸 Runtime Error。
 `Dispatched=false` 表示原生 Turn 尚未提交。
@@ -389,7 +394,7 @@ Channel Adapter 保留 Mention、Thread Context、Skill、Participant Work、Sto
 Engine 不单独建模该 Context。
 
 `/new` 使用同一个 `ConversationKey` 调用 `Reset`。
-Runtime Adapter 原子替换原生 Conversation Mapping。
+Engine 在同一个 Conversation Gate 内关闭 Admission、取消并 Drain 活动 Turn、调用 Runtime Adapter 删除原生 Mapping，然后才重新开放 Admission。
 
 ### 5.3 Runtime Adapter
 
@@ -417,14 +422,15 @@ Reset 为同一个 `ConversationKey` 替换该 Mapping。
 ### 6.1 持久化
 
 Agent Engine 没有持久化 Conversation Store。
+它只保留有界的进程内已分派 Turn Progress Event 和 Result Cache，用于重试幂等。
 Agent Resource 实现拥有期望的 Runtime Credential，每个 Runtime Adapter 拥有自己物化出的 Credential File。
 Runtime Adapter 拥有原生 Conversation Mapping。
 Channel Adapter 拥有 Transcript 和 Source Delivery State。
 Session Binding Store 只拥有外部 Session ID 和 Conversation Key 之间的关联。
 
-Engine 进程重启会中断排队中和运行中的 Turn。
+Engine 进程重启会中断等待中和运行中的 Turn，并清空进程内幂等 Cache。
 它不会删除 Runtime 原生 Mapping。
-设计不承诺 Replay、Exactly-once Execution 或 In-flight Side Effect 恢复。
+设计不承诺跨重启 Replay、Exactly-once Execution 或 In-flight Side Effect 恢复。
 
 ### 6.2 文件
 
@@ -448,14 +454,17 @@ Runtime Adapter 决定如何 Mount、Copy 或暴露 File，并保留 Path、Syml
 Blocking Runtime Permission 或 User Input 保持同一个 Turn 打开，并使用 `Resolve`。
 Detached `request_user_input` 完成当前 Turn，并在用户回答后创建后续 Turn。
 Detached Input 不调用 `Resolve`。
+Engine 在调用 Runtime Adapter 前原子 Claim Pending Interaction，因此重复 Action 只有第一个能够进入 Runtime Resolution。
+Runtime Resolution 失败时，只要同一个 Turn 仍处于 Active，就把 Claim 恢复为 Pending；成功时则消费该 Interaction。
+Channel Adapter 授权操作用户，Engine 只把 `ResponderID` 当作不透明的审计 Identity，绝不使用它做授权。
 
 Secret Interaction Answer 不能进入 Log 或 Transcript。
 Detached Secret Answer 也不能插入模型续接。
 
 ### 6.4 并发和生命周期
 
-阶段 2 没有可配置 Admission Limit 或规范化 Turn Queue。
-Engine 使用 `(agentID, ConversationKey, TurnID)` 索引唯一的 Active Turn，Runtime 原生 Conversation Mapping 仍按 Conversation Identity 建立索引。
+Engine 在获取 Agent Execution Lease 前应用 Request 的 `AdmissionPolicy`。
+等待和 Supersede 保持为进程内状态，Runtime 原生 Conversation Mapping 仍按 Conversation Identity 建立索引。
 Channel Adapter 可以为 Subscription、Deduplication 和 Ack 保留 Source Ingress Buffer。
 
 Sink 失败时，Engine 在可能时请求 Runtime Cancel，并等待 Runtime 真实终态后才释放 Admission。
@@ -517,7 +526,7 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 
 - 实现完整 `agentengine.Interface`，并提供实现同一 Contract 的并发安全、有状态 `enginetest.MemoryClient`。
 - Interface 不是不可修改的冻结协议；实现中发现遗漏或错误时，可以通过共同 Review 调整，并在同一次变更中同步真实 Engine、Mock Client、Contract Test 和受影响的 Adapter 调用代码。
-- 实现 `Agents()`、`Run`、`Cancel`、`Reset`、`Resolve`、快速失败串行化、File Input、Interaction、Structured Output、Event 顺序、`Dispatched` 和稳定 Error。
+- 实现 `Agents()`、`Run`、`Cancel`、原子 `Reset`、Claimed `Resolve`、显式 Admission Policy、Turn 重试幂等、TurnID Event Envelope、File Input、Interaction、Structured Output、`Dispatched` 和稳定 Error。
 - Agent Engine Facade 优先包装现有 Agent Service、Codex Session、Broker、Structured Output 和 Runtime Provision 代码，不把内部重构作为完成 Engine 的前置条件。
 - Agent Engine 通过共享 Lifecycle Gate 协调 Agent Mutation、Admission、Active Turn、Drain 和固定 Runtime Handle。
 - 把匿名 Session API 迁移到 `agentengine.Interface`，同时保留其 HTTP Contract 和零 IM Entity 创建。
@@ -598,8 +607,8 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 
 ### 8.4 目标验证
 
-- Contract Test 覆盖 Run、Cancel、Reset、Resolve、Event 顺序、终态 Result 和稳定 Error。
-- 测试覆盖单 Turn、不同 Conversation 并发、快速失败 Busy Admission、Sink Failure 和 Cancel 行为。
+- Contract Test 覆盖 Run、Cancel、原子 Reset、Claimed Resolve、Event Envelope、终态 Result 和稳定 Error。
+- 测试覆盖 Turn 重试幂等、不同 Conversation 并发、Reject、Wait、Supersede、Sink Failure 和 Cancel 行为。
 - 测试覆盖无 MCP、本地 MCP、远程 MCP、Text Input 和 File Input。
 - 匿名测试验证 IM Entity 数量不变，并且 Session Binding Scope 按 Agent 隔离。
 - Channel 测试验证 Deduplication、Replay、Superseding、Rendering、Binding 驱动的 Event Worker 生命周期和幂等协调。

@@ -124,30 +124,25 @@ func TestMemoryClientCancelResetAndResolve(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(client.Resolutions()) != 1 {
-		t.Fatalf("resolutions = %+v", client.Resolutions())
+	resolutions := client.Resolutions()
+	if len(resolutions) != 1 || resolutions[0].Value.ResponderID != "tester" {
+		t.Fatalf("resolutions = %+v", resolutions)
 	}
-	if err := client.Conversations("agent-a").Reset(context.Background(), "conversation-1"); !hasCode(err, agentengine.ErrorConversationBusy) {
-		t.Fatalf("Reset(active) error = %v", err)
-	}
-	cancelDone := make(chan error, 1)
+	resetDone := make(chan error, 1)
 	go func() {
-		cancelDone <- client.Conversations("agent-a").Cancel(context.Background(), "conversation-1", "turn-1")
+		resetDone <- client.Conversations("agent-a").Reset(context.Background(), "conversation-1")
 	}()
 	<-cleanup
 	select {
-	case err := <-cancelDone:
-		t.Fatalf("Cancel returned before cleanup: %v", err)
+	case err := <-resetDone:
+		t.Fatalf("Reset returned before cleanup: %v", err)
 	case <-time.After(20 * time.Millisecond):
 	}
 	close(releaseCleanup)
-	if err := <-cancelDone; err != nil {
-		t.Fatal(err)
-	}
 	if (<-done).Status != agentengine.TurnCanceled {
 		t.Fatal("turn was not canceled")
 	}
-	if err := client.Conversations("agent-a").Reset(context.Background(), "conversation-1"); err != nil {
+	if err := <-resetDone; err != nil {
 		t.Fatal(err)
 	}
 	strict := turnRequest("turn-2", "conversation-1")

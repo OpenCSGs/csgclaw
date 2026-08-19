@@ -260,9 +260,12 @@ Engine validates only that it is non-empty and length-bounded.
 It never parses Room, Thread, Channel, Binding, or Session fields from the key.
 
 `TurnID` is an opaque caller-generated identity for one `Run` request.
-The Channel Adapter or Session HTTP Adapter generates a random ID after ingress validation and deduplication, but before calling `Run`.
+The Channel Adapter generates it after ingress validation and keeps it stable for retries of the same source event, while the Session HTTP Adapter generates one response ID for its request.
 Engine validates only that it is non-empty and length-bounded, and passes it unchanged to the Runtime Adapter.
-It is not derived from `ConversationKey` or a source Message ID because those identify different lifecycles.
+It remains distinct from `ConversationKey`; a Channel Adapter may normalize a scoped source event ID into `TurnID` because that event identifies the same logical Turn across delivery retries.
+Within one Engine process, `(agentID, ConversationKey, TurnID)` is the idempotency identity.
+An in-flight retry joins the original Turn, and a completed dispatched retry replays the bounded process-local progress events and returns the cached result without submitting another Runtime Turn.
+Reusing the same identity with different normalized input or policies returns `invalid_request`.
 
 Each Adapter owns collision-free key construction:
 
@@ -272,16 +275,17 @@ Each Adapter owns collision-free key construction:
 | Feishu | App Binding, Chat, and optional Thread root |
 | Session API | Random internal key stored by the Session Binding Store |
 
-Engine permits at most one Turn or Reset for `(agentID, ConversationKey)` at a time.
+Engine permits at most one Turn or atomic control operation for `(agentID, ConversationKey)` at a time.
 Different Conversation keys may execute concurrently.
-An overlapping Run fails immediately with `conversation_busy`.
-Phase 2 does not implement admission configuration or queues.
-Future wait queues and broader concurrency limits can be added before the existing execution lease without changing Turn ownership.
+`AdmissionPolicy` selects `reject_if_busy`, `wait`, or `supersede` for a different overlapping Turn.
+`reject_if_busy` fails immediately with `conversation_busy` and remains the default for the anonymous Session API.
+`wait` waits for the current Turn or control operation before competing for admission.
+`supersede` closes admission, cancels the current Turn, waits for true Runtime cleanup, and admits the replacement without an intervening Run.
 Cancel therefore uses the Agent-scoped `ConversationKey` and `TurnID` to identify exactly one running Turn.
 Resolve additionally carries `InteractionID` to identify one pending interaction.
 
-`TurnID` lives only for the Turn lifecycle.
-It is not a Conversation key, Runtime-native conversation mapping, transcript identity, or durable Engine resource.
+`TurnID` is retained only in a bounded process-local idempotency window after the Turn lifecycle.
+It is not a Conversation key, Runtime-native conversation mapping, transcript identity, or durable Engine resource, so a process restart still requires source-side deduplication.
 `Reset` remains scoped to `ConversationKey`, and `Resolve` remains scoped to `ConversationKey` plus `InteractionID`.
 
 `ContinuationPolicy` makes Runtime mapping behavior explicit:
@@ -309,7 +313,7 @@ Incremental implementation does not narrow this contract to a string.
 The Phase 1 Session HTTP Adapter creates one text part, and the private Codex Runtime Adapter joins ordered text parts before calling the current Runtime API.
 A file part retains its public type but returns `file_unavailable` before Runtime dispatch until a later phase implements file execution.
 
-The Event Sink receives ordered, non-terminal progress for one `Run` call:
+The Event Sink receives ordered progress for a logical Turn:
 
 - Text delta.
 - Thought delta.
@@ -318,7 +322,8 @@ The Event Sink receives ordered, non-terminal progress for one `Run` call:
 - Validated output item.
 
 The sink is not an event bus, transcript store, or Channel renderer.
-Its sequence number orders events only within the current Run call.
+Every event carries `TurnID` and monotonic `Sequence`.
+The tuple `(TurnID, Sequence)` lets an Adapter deduplicate replayed envelopes after a retry.
 
 `Run` returns exactly one `TurnResult` and no second raw Runtime error.
 `Dispatched=false` means the native Turn was not submitted.
@@ -389,7 +394,7 @@ It may merge the current hidden Channel or new-Thread context into normalized te
 Engine does not model that context separately.
 
 `/new` calls `Reset` with the same `ConversationKey`.
-The Runtime Adapter atomically replaces its native conversation mapping.
+Engine closes admission in the same Conversation gate, cancels and drains any active Turn, calls the Runtime Adapter to remove its native mapping, and only then reopens admission.
 
 ### 5.3 Runtime Adapter
 
@@ -417,14 +422,15 @@ It must not fabricate direct execution through an IM or Feishu event.
 ### 6.1 Persistence
 
 Agent Engine has no durable Conversation store.
+It retains only a bounded process-local cache of dispatched Turn progress events and results for retry idempotency.
 The Agent resource implementation owns desired Runtime credentials, while each Runtime Adapter owns its materialized credential files.
 Runtime Adapters own native conversation mappings.
 Channel Adapters own transcripts and source delivery state.
 The Session Binding Store owns only the association between an external Session ID and a Conversation Key.
 
-An Engine process restart interrupts queued and running Turns.
+An Engine process restart interrupts waiting and running Turns and clears the process-local idempotency cache.
 It does not delete Runtime-native mappings.
-The design does not promise replay, exactly-once execution, or recovery of in-flight side effects.
+The design does not promise cross-restart replay, exactly-once execution, or recovery of in-flight side effects.
 
 ### 6.2 Files
 
@@ -448,14 +454,17 @@ Raw control lines never reach public text or Channel renderers.
 A blocking Runtime Permission or User Input keeps the same Turn open and uses `Resolve`.
 A detached `request_user_input` completes the current Turn and creates a later Turn after the user answers.
 Detached input does not call `Resolve`.
+Engine atomically claims a pending interaction before calling the Runtime Adapter, so only the first duplicate action can enter Runtime resolution.
+A failed Runtime resolution restores the claim to pending while the same Turn remains active; a successful resolution consumes it.
+The Channel Adapter authorizes the acting user, while Engine treats `ResponderID` as opaque audit identity and never uses it for authorization.
 
 Secret interaction answers must not enter logs or transcripts.
 Detached secret answers also must not be inserted into model continuation.
 
 ### 6.4 Concurrency and Lifecycle
 
-Phase 2 has no configurable admission limits or normalized Turn queue.
-Engine indexes the one active Turn by `(agentID, ConversationKey, TurnID)` while Runtime-native conversation mappings remain keyed by Conversation identity.
+Engine applies the request's `AdmissionPolicy` before acquiring the Agent execution lease.
+Waiting and superseding remain process-local, while Runtime-native conversation mappings remain keyed by Conversation identity.
 Channel Adapters may retain source-ingress buffering for subscription, deduplication, and acknowledgment.
 
 If a sink fails, Engine requests Runtime cancellation when possible and waits for a true Runtime terminal state before releasing admission.
@@ -517,7 +526,7 @@ Starting in Phase 2, the Agent Engine interface is the only boundary between Eng
 
 - Implement the complete `agentengine.Interface` and provide the concurrency-safe, stateful `enginetest.MemoryClient` implementing the same contract.
 - The interface is not an immutable protocol; when implementation exposes an omission or mistake, it may change through joint review, with the real Engine, Mock Client, contract tests, and affected Adapter call sites updated in the same change.
-- Implement `Agents()`, `Run`, `Cancel`, `Reset`, `Resolve`, fail-fast serialization, file input, interactions, Structured Output, event ordering, `Dispatched`, and stable errors.
+- Implement `Agents()`, `Run`, `Cancel`, atomic `Reset`, claimed `Resolve`, explicit admission policies, Turn retry idempotency, TurnID event envelopes, file input, interactions, Structured Output, `Dispatched`, and stable errors.
 - Let the Agent Engine Facade first wrap the existing Agent Service, Codex Session, brokers, Structured Output, and Runtime provisioning code instead of making internal refactoring a prerequisite for a complete Engine.
 - Coordinate Agent mutation, admission, active Turns, drain, and pinned Runtime handles through one shared Lifecycle Gate.
 - Migrate the anonymous Session API to `agentengine.Interface` while preserving its HTTP contract and zero IM entity creation.
@@ -598,8 +607,8 @@ The two Phase 2 sides can be developed and verified independently, Phase 3 owns 
 
 ### 8.4 Target Verification
 
-- Contract tests cover Run, Cancel, Reset, Resolve, event ordering, terminal results, and stable errors.
-- Tests cover one Turn, different-Conversation concurrency, fail-fast busy admission, sink failure, and cancellation behavior.
+- Contract tests cover Run, Cancel, atomic Reset, claimed Resolve, event envelopes, terminal results, and stable errors.
+- Tests cover Turn retry idempotency, different-Conversation concurrency, reject, wait, supersede, sink failure, and cancellation behavior.
 - Tests cover no MCP, local MCP, remote MCP, text input, and file input.
 - Anonymous tests verify that IM entity counts do not change and Session Binding scope is Agent-specific.
 - Channel tests verify deduplication, replay, superseding, rendering, Binding-driven Event Worker lifecycle, and idempotent reconciliation.

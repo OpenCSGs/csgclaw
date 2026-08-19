@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -36,14 +37,17 @@ type Resolution struct {
 type MemoryClient struct {
 	mu sync.Mutex
 
-	agents        map[string]agentengine.Agent
-	provisions    map[string]memoryProvision
-	conversations map[memoryConversation]string
-	active        map[memoryConversation]*memoryTurn
-	behavior      TurnBehavior
-	calls         []TurnCall
-	resolutions   []Resolution
-	nextAgentID   atomic.Uint64
+	agents         map[string]agentengine.Agent
+	provisions     map[string]memoryProvision
+	conversations  map[memoryConversation]string
+	active         map[memoryConversation]*memoryTurn
+	controls       map[memoryConversation]*memoryControl
+	completed      map[memoryTurnIdentity]memoryCompletedTurn
+	completedOrder []memoryTurnIdentity
+	behavior       TurnBehavior
+	calls          []TurnCall
+	resolutions    []Resolution
+	nextAgentID    atomic.Uint64
 }
 
 type memoryProvision struct {
@@ -57,11 +61,38 @@ type memoryConversation struct {
 }
 
 type memoryTurn struct {
-	id           agentengine.TurnID
+	request      agentengine.TurnRequest
+	ctx          context.Context
 	cancel       context.CancelFunc
 	done         chan struct{}
-	interactions map[string]agentengine.InteractionRequest
+	interactions map[string]*memoryInteraction
+	sequence     uint64
+	events       []agentengine.TurnEvent
+	result       agentengine.TurnResult
+	callIndex    int
 }
+
+type memoryControl struct {
+	done chan struct{}
+}
+
+type memoryTurnIdentity struct {
+	memoryConversation
+	id agentengine.TurnID
+}
+
+type memoryCompletedTurn struct {
+	request agentengine.TurnRequest
+	events  []agentengine.TurnEvent
+	result  agentengine.TurnResult
+}
+
+type memoryInteraction struct {
+	request   agentengine.InteractionRequest
+	resolving bool
+}
+
+const maxMemoryCompletedTurns = 1024
 
 var errMemoryInteractionRejected = errors.New("memory interaction rejected")
 
@@ -72,6 +103,8 @@ func NewMemoryClient(agents ...agentengine.Agent) *MemoryClient {
 		provisions:    make(map[string]memoryProvision),
 		conversations: make(map[memoryConversation]string),
 		active:        make(map[memoryConversation]*memoryTurn),
+		controls:      make(map[memoryConversation]*memoryControl),
+		completed:     make(map[memoryTurnIdentity]memoryCompletedTurn),
 	}
 	for _, item := range agents {
 		client.provisions[item.ID] = memoryProvision{credentials: cloneStringMap(item.Spec.Runtime.Credentials), initShell: item.Spec.Runtime.InitShell}
@@ -276,6 +309,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	}
 	request.ID = agentengine.TurnID(strings.TrimSpace(string(request.ID)))
 	request.ConversationKey = agentengine.ConversationKey(strings.TrimSpace(string(request.ConversationKey)))
+	request.Admission = agentengine.AdmissionPolicy(strings.TrimSpace(strings.ToLower(string(request.Admission))))
 	request.Continuation = agentengine.ContinuationPolicy(strings.TrimSpace(strings.ToLower(string(request.Continuation))))
 	request.Interaction = agentengine.InteractionPolicy(strings.TrimSpace(strings.ToLower(string(request.Interaction))))
 	if c.agentID == "" || request.ID == "" || request.ConversationKey == "" || len(request.Input) == 0 {
@@ -301,6 +335,12 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	if request.Interaction == "" {
 		request.Interaction = agentengine.InteractionResolve
 	}
+	if request.Admission == "" {
+		request.Admission = agentengine.AdmissionRejectIfBusy
+	}
+	if request.Admission != agentengine.AdmissionRejectIfBusy && request.Admission != agentengine.AdmissionWait && request.Admission != agentengine.AdmissionSupersede {
+		return failed(agentengine.ErrorInvalidRequest, fmt.Sprintf("unsupported admission policy %q", request.Admission))
+	}
 	if request.Continuation != agentengine.ContinuationCreateOrResume && request.Continuation != agentengine.ContinuationRequireExisting {
 		return failed(agentengine.ErrorInvalidRequest, fmt.Sprintf("unsupported continuation policy %q", request.Continuation))
 	}
@@ -311,41 +351,51 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 		return agentengine.TurnResult{Status: agentengine.TurnCanceled, Error: &agentengine.TurnError{Code: agentengine.ErrorCanceled, Message: err.Error()}}
 	}
 	key := memoryConversation{agentID: c.agentID, key: request.ConversationKey}
-	runCtx, cancel := context.WithCancel(ctx)
-	turn := &memoryTurn{id: request.ID, cancel: cancel, done: make(chan struct{}), interactions: make(map[string]agentengine.InteractionRequest)}
+	turn, completed, existing, admissionResult := c.admit(ctx, key, request)
+	if completed != nil {
+		return replayMemoryEvents(ctx, sink, completed.events, completed.result)
+	}
+	if existing != nil {
+		if err := waitMemory(ctx, existing.done); err != nil {
+			return memoryContextResult(ctx, err)
+		}
+		return replayMemoryEvents(ctx, sink, existing.events, existing.result)
+	}
+	if admissionResult != nil {
+		return *admissionResult
+	}
 
 	c.client.mu.Lock()
 	agentItem, exists := c.client.agents[c.agentID]
 	if !exists || agentItem.Status.State != agentengine.AgentStateRunning {
 		c.client.mu.Unlock()
-		cancel()
-		return failed(agentengine.ErrorAgentUnavailable, "agent is unavailable")
+		result := failed(agentengine.ErrorAgentUnavailable, "agent is unavailable")
+		turn.cancel()
+		c.completeMemoryTurn(key, turn, result)
+		return result
 	}
 	if !strings.EqualFold(strings.TrimSpace(agentItem.Spec.Runtime.Adapter), "codex") {
 		c.client.mu.Unlock()
-		cancel()
-		return failed(agentengine.ErrorRuntimeAdapterUnavailable, fmt.Sprintf("runtime adapter %q is unavailable", agentItem.Spec.Runtime.Adapter))
-	}
-	if c.client.active[key] != nil {
-		c.client.mu.Unlock()
-		cancel()
-		return failed(agentengine.ErrorConversationBusy, "conversation already has an active turn")
+		result := failed(agentengine.ErrorRuntimeAdapterUnavailable, fmt.Sprintf("runtime adapter %q is unavailable", agentItem.Spec.Runtime.Adapter))
+		turn.cancel()
+		c.completeMemoryTurn(key, turn, result)
+		return result
 	}
 	if request.Continuation == agentengine.ContinuationRequireExisting && c.client.conversations[key] == "" {
 		c.client.mu.Unlock()
-		cancel()
-		return failed(agentengine.ErrorConversationNotResumable, "conversation has no Runtime-native mapping")
+		result := failed(agentengine.ErrorConversationNotResumable, "conversation has no Runtime-native mapping")
+		turn.cancel()
+		c.completeMemoryTurn(key, turn, result)
+		return result
 	}
 	if c.client.conversations[key] == "" {
 		c.client.conversations[key] = "memory-conversation"
 	}
-	c.client.active[key] = turn
 	behavior := c.client.behavior
-	callIndex := len(c.client.calls)
+	turn.callIndex = len(c.client.calls)
 	c.client.calls = append(c.client.calls, TurnCall{AgentID: c.agentID, Request: cloneRequest(request)})
 	c.client.mu.Unlock()
 
-	sequence := uint64(0)
 	var policyMu sync.Mutex
 	var policyResult *agentengine.TurnResult
 	recordingSink := agentengine.EventSinkFunc(func(eventCtx context.Context, event agentengine.TurnEvent) error {
@@ -357,7 +407,7 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 				policyMu.Lock()
 				policyResult = &result
 				policyMu.Unlock()
-				cancel()
+				turn.cancel()
 				return errMemoryInteractionRejected
 			case agentengine.InteractionSkipUserInput:
 				c.client.mu.Lock()
@@ -369,47 +419,35 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 				c.client.mu.Unlock()
 				return nil
 			default:
-				c.client.mu.Lock()
-				turn.interactions[event.Interaction.ID] = *event.Interaction
-				c.client.mu.Unlock()
+				// The common recorder below atomically publishes the pending interaction.
 			}
 		}
-		sequence++
-		event.Sequence = sequence
-		c.client.mu.Lock()
-		c.client.calls[callIndex].Events = append(c.client.calls[callIndex].Events, event)
-		c.client.mu.Unlock()
-		if sink != nil {
-			return sink.Emit(eventCtx, event)
-		}
-		return nil
+		return c.recordMemoryEvent(eventCtx, turn, sink, event)
 	})
 
 	result := agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true}
 	if behavior != nil {
-		result = behavior(runCtx, c.agentID, cloneRequest(request), recordingSink)
+		result = behavior(turn.ctx, c.agentID, cloneRequest(request), recordingSink)
 	}
-	if runCtx.Err() != nil && result.Status == agentengine.TurnSucceeded {
-		result = agentengine.TurnResult{Status: agentengine.TurnCanceled, Dispatched: result.Dispatched, Error: &agentengine.TurnError{Code: agentengine.ErrorCanceled, Message: runCtx.Err().Error()}}
+	if turn.ctx.Err() != nil && result.Status == agentengine.TurnSucceeded {
+		result = agentengine.TurnResult{Status: agentengine.TurnCanceled, Dispatched: result.Dispatched, Error: &agentengine.TurnError{Code: agentengine.ErrorCanceled, Message: turn.ctx.Err().Error()}}
 	}
 	policyMu.Lock()
 	if policyResult != nil {
 		result = *policyResult
 	}
 	policyMu.Unlock()
-	cancel()
-	c.client.mu.Lock()
-	c.client.calls[callIndex].Result = result
-	delete(c.client.active, key)
-	c.client.mu.Unlock()
-	close(turn.done)
+	turn.cancel()
+	c.completeMemoryTurn(key, turn, result)
 	return result
 }
 
 func (c *memoryConversations) Cancel(ctx context.Context, key agentengine.ConversationKey, turnID agentengine.TurnID) error {
+	key = agentengine.ConversationKey(strings.TrimSpace(string(key)))
+	turnID = agentengine.TurnID(strings.TrimSpace(string(turnID)))
 	c.client.mu.Lock()
 	turn := c.client.active[memoryConversation{agentID: c.agentID, key: key}]
-	if turn == nil || turn.id != turnID {
+	if turn == nil || turn.request.ID != turnID {
 		c.client.mu.Unlock()
 		return nil
 	}
@@ -424,31 +462,278 @@ func (c *memoryConversations) Cancel(ctx context.Context, key agentengine.Conver
 	}
 }
 
-func (c *memoryConversations) Reset(_ context.Context, key agentengine.ConversationKey) error {
-	identity := memoryConversation{agentID: c.agentID, key: key}
-	c.client.mu.Lock()
-	defer c.client.mu.Unlock()
-	if c.client.active[identity] != nil {
-		return &agentengine.TurnError{Code: agentengine.ErrorConversationBusy, Message: "conversation already has an active turn"}
+func (c *memoryConversations) Reset(ctx context.Context, key agentengine.ConversationKey) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
+	key = agentengine.ConversationKey(strings.TrimSpace(string(key)))
+	if c.agentID == "" || key == "" {
+		return &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent ID and conversation key are required"}
+	}
+	identity := memoryConversation{agentID: c.agentID, key: key}
+	control, active, ok := c.beginMemoryControl(identity)
+	if !ok {
+		return &agentengine.TurnError{Code: agentengine.ErrorConversationBusy, Message: "conversation already has a control operation"}
+	}
+	defer c.endMemoryControl(identity, control)
+	if active != nil {
+		if err := waitMemory(ctx, active.done); err != nil {
+			return err
+		}
+	}
+	c.client.mu.Lock()
 	delete(c.client.conversations, identity)
+	c.client.mu.Unlock()
 	return nil
 }
 
 func (c *memoryConversations) Resolve(_ context.Context, resolution agentengine.InteractionResolution) error {
+	resolution.ConversationKey = agentengine.ConversationKey(strings.TrimSpace(string(resolution.ConversationKey)))
+	resolution.InteractionID = strings.TrimSpace(resolution.InteractionID)
+	resolution.ResponderID = strings.TrimSpace(resolution.ResponderID)
 	identity := memoryConversation{agentID: c.agentID, key: resolution.ConversationKey}
 	c.client.mu.Lock()
-	defer c.client.mu.Unlock()
 	turn := c.client.active[identity]
 	if turn == nil {
+		c.client.mu.Unlock()
 		return &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "pending interaction was not found"}
 	}
-	if _, ok := turn.interactions[resolution.InteractionID]; !ok {
+	pending := turn.interactions[resolution.InteractionID]
+	if pending == nil || pending.resolving {
+		c.client.mu.Unlock()
 		return &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "pending interaction was not found"}
 	}
+	pending.resolving = true
 	delete(turn.interactions, resolution.InteractionID)
 	c.client.resolutions = append(c.client.resolutions, Resolution{AgentID: c.agentID, Value: cloneResolution(resolution)})
+	c.client.mu.Unlock()
 	return nil
+}
+
+func (c *memoryConversations) admit(ctx context.Context, identity memoryConversation, request agentengine.TurnRequest) (*memoryTurn, *memoryCompletedTurn, *memoryTurn, *agentengine.TurnResult) {
+	for {
+		c.client.mu.Lock()
+		turnKey := memoryTurnIdentity{memoryConversation: identity, id: request.ID}
+		if completed, ok := c.client.completed[turnKey]; ok {
+			if !sameMemoryRequest(completed.request, request) {
+				c.client.mu.Unlock()
+				result := failed(agentengine.ErrorInvalidRequest, "turn ID was already used with a different request")
+				return nil, nil, nil, &result
+			}
+			copy := cloneMemoryCompleted(completed)
+			c.client.mu.Unlock()
+			return nil, &copy, nil, nil
+		}
+		if current := c.client.active[identity]; current != nil && current.request.ID == request.ID {
+			if !sameMemoryRequest(current.request, request) {
+				c.client.mu.Unlock()
+				result := failed(agentengine.ErrorInvalidRequest, "turn ID is active with a different request")
+				return nil, nil, nil, &result
+			}
+			c.client.mu.Unlock()
+			return nil, nil, current, nil
+		}
+		control := c.client.controls[identity]
+		current := c.client.active[identity]
+		if control == nil && current == nil {
+			turn := newMemoryTurn(ctx, request)
+			c.client.active[identity] = turn
+			c.client.mu.Unlock()
+			return turn, nil, nil, nil
+		}
+		switch request.Admission {
+		case agentengine.AdmissionRejectIfBusy:
+			c.client.mu.Unlock()
+			result := failed(agentengine.ErrorConversationBusy, "conversation already has an active turn or control operation")
+			return nil, nil, nil, &result
+		case agentengine.AdmissionWait:
+			done := memoryControlDone(control, current)
+			c.client.mu.Unlock()
+			if err := waitMemory(ctx, done); err != nil {
+				result := memoryContextResult(ctx, err)
+				return nil, nil, nil, &result
+			}
+		case agentengine.AdmissionSupersede:
+			if control != nil {
+				done := control.done
+				c.client.mu.Unlock()
+				if err := waitMemory(ctx, done); err != nil {
+					result := memoryContextResult(ctx, err)
+					return nil, nil, nil, &result
+				}
+				continue
+			}
+			owned := &memoryControl{done: make(chan struct{})}
+			c.client.controls[identity] = owned
+			current.cancel()
+			done := current.done
+			c.client.mu.Unlock()
+			if err := waitMemory(ctx, done); err != nil {
+				c.endMemoryControl(identity, owned)
+				result := memoryContextResult(ctx, err)
+				return nil, nil, nil, &result
+			}
+			turn := newMemoryTurn(ctx, request)
+			if !c.promoteMemoryControl(identity, owned, turn) {
+				turn.cancel()
+				result := failed(agentengine.ErrorConversationBusy, "conversation admission changed while superseding")
+				return nil, nil, nil, &result
+			}
+			return turn, nil, nil, nil
+		}
+	}
+}
+
+func newMemoryTurn(ctx context.Context, request agentengine.TurnRequest) *memoryTurn {
+	runCtx, cancel := context.WithCancel(ctx)
+	return &memoryTurn{
+		request:      cloneRequest(request),
+		ctx:          runCtx,
+		cancel:       cancel,
+		done:         make(chan struct{}),
+		interactions: make(map[string]*memoryInteraction),
+		callIndex:    -1,
+	}
+}
+
+func (c *memoryConversations) beginMemoryControl(identity memoryConversation) (*memoryControl, *memoryTurn, bool) {
+	c.client.mu.Lock()
+	defer c.client.mu.Unlock()
+	if c.client.controls[identity] != nil {
+		return nil, nil, false
+	}
+	control := &memoryControl{done: make(chan struct{})}
+	c.client.controls[identity] = control
+	active := c.client.active[identity]
+	if active != nil {
+		active.cancel()
+	}
+	return control, active, true
+}
+
+func (c *memoryConversations) promoteMemoryControl(identity memoryConversation, control *memoryControl, turn *memoryTurn) bool {
+	c.client.mu.Lock()
+	defer c.client.mu.Unlock()
+	if c.client.controls[identity] != control || c.client.active[identity] != nil {
+		return false
+	}
+	c.client.active[identity] = turn
+	delete(c.client.controls, identity)
+	close(control.done)
+	return true
+}
+
+func (c *memoryConversations) endMemoryControl(identity memoryConversation, control *memoryControl) {
+	c.client.mu.Lock()
+	if c.client.controls[identity] == control {
+		delete(c.client.controls, identity)
+		close(control.done)
+	}
+	c.client.mu.Unlock()
+}
+
+func (c *memoryConversations) recordMemoryEvent(ctx context.Context, turn *memoryTurn, sink agentengine.EventSink, event agentengine.TurnEvent) error {
+	c.client.mu.Lock()
+	turn.sequence++
+	event.TurnID = turn.request.ID
+	event.Sequence = turn.sequence
+	if event.Interaction != nil {
+		interaction := *event.Interaction
+		interaction.ID = strings.TrimSpace(interaction.ID)
+		if interaction.ID != "" {
+			turn.interactions[interaction.ID] = &memoryInteraction{request: interaction}
+			event.Interaction = &interaction
+		}
+	}
+	turn.events = append(turn.events, cloneEvent(event))
+	if turn.callIndex >= 0 {
+		c.client.calls[turn.callIndex].Events = append(c.client.calls[turn.callIndex].Events, cloneEvent(event))
+	}
+	c.client.mu.Unlock()
+	if sink == nil {
+		return nil
+	}
+	return sink.Emit(ctx, cloneEvent(event))
+}
+
+func (c *memoryConversations) completeMemoryTurn(identity memoryConversation, turn *memoryTurn, result agentengine.TurnResult) {
+	c.client.mu.Lock()
+	defer c.client.mu.Unlock()
+	turn.result = cloneMemoryResult(result)
+	if turn.callIndex >= 0 {
+		c.client.calls[turn.callIndex].Result = cloneMemoryResult(result)
+	}
+	if c.client.active[identity] == turn {
+		delete(c.client.active, identity)
+	}
+	if result.Dispatched {
+		key := memoryTurnIdentity{memoryConversation: identity, id: turn.request.ID}
+		c.client.completed[key] = memoryCompletedTurn{request: cloneRequest(turn.request), events: cloneEvents(turn.events), result: cloneMemoryResult(result)}
+		c.client.completedOrder = append(c.client.completedOrder, key)
+		if len(c.client.completedOrder) > maxMemoryCompletedTurns {
+			oldest := c.client.completedOrder[0]
+			c.client.completedOrder = c.client.completedOrder[1:]
+			delete(c.client.completed, oldest)
+		}
+	}
+	close(turn.done)
+}
+
+func replayMemoryEvents(ctx context.Context, sink agentengine.EventSink, events []agentengine.TurnEvent, result agentengine.TurnResult) agentengine.TurnResult {
+	for _, event := range events {
+		if sink != nil {
+			if err := sink.Emit(ctx, cloneEvent(event)); err != nil {
+				failedResult := failed(agentengine.ErrorRuntimeFailed, err.Error())
+				failedResult.Dispatched = result.Dispatched
+				return failedResult
+			}
+		}
+	}
+	return cloneMemoryResult(result)
+}
+
+func waitMemory(ctx context.Context, done <-chan struct{}) error {
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func memoryControlDone(control *memoryControl, turn *memoryTurn) <-chan struct{} {
+	if control != nil {
+		return control.done
+	}
+	return turn.done
+}
+
+func memoryContextResult(ctx context.Context, err error) agentengine.TurnResult {
+	if err == nil {
+		err = ctx.Err()
+	}
+	return agentengine.TurnResult{Status: agentengine.TurnCanceled, Error: &agentengine.TurnError{Code: agentengine.ErrorCanceled, Message: err.Error()}}
+}
+
+func sameMemoryRequest(left, right agentengine.TurnRequest) bool {
+	left.Admission = ""
+	right.Admission = ""
+	return reflect.DeepEqual(left, right)
+}
+
+func cloneMemoryCompleted(input memoryCompletedTurn) memoryCompletedTurn {
+	input.request = cloneRequest(input.request)
+	input.events = cloneEvents(input.events)
+	input.result = cloneMemoryResult(input.result)
+	return input
+}
+
+func cloneMemoryResult(input agentengine.TurnResult) agentengine.TurnResult {
+	if input.Error != nil {
+		errorCopy := *input.Error
+		input.Error = &errorCopy
+	}
+	return input
 }
 
 func validateSpec(spec agentengine.AgentSpec) error {
@@ -518,16 +803,24 @@ func cloneResolution(input agentengine.InteractionResolution) agentengine.Intera
 
 func cloneCall(input TurnCall) TurnCall {
 	input.Request = cloneRequest(input.Request)
-	events := make([]agentengine.TurnEvent, len(input.Events))
-	for index, event := range input.Events {
-		event.Tool = cloneTool(event.Tool)
-		event.Activity = cloneActivity(event.Activity)
-		event.Interaction = cloneInteraction(event.Interaction)
-		event.Output = cloneOutput(event.Output)
-		events[index] = event
-	}
-	input.Events = events
+	input.Events = cloneEvents(input.Events)
 	return input
+}
+
+func cloneEvents(input []agentengine.TurnEvent) []agentengine.TurnEvent {
+	output := make([]agentengine.TurnEvent, len(input))
+	for index, event := range input {
+		output[index] = cloneEvent(event)
+	}
+	return output
+}
+
+func cloneEvent(event agentengine.TurnEvent) agentengine.TurnEvent {
+	event.Tool = cloneTool(event.Tool)
+	event.Activity = cloneActivity(event.Activity)
+	event.Interaction = cloneInteraction(event.Interaction)
+	event.Output = cloneOutput(event.Output)
+	return event
 }
 
 func cloneTool(input *agentengine.ToolActivity) *agentengine.ToolActivity {

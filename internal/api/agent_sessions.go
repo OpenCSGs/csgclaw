@@ -176,6 +176,7 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 	result := h.agentEngine.Conversations(selected.ID).Run(runCtx, agentengine.TurnRequest{
 		ID:              agentengine.TurnID(responseID),
 		ConversationKey: agentengine.ConversationKey(binding.ConversationKey),
+		Admission:       agentengine.AdmissionRejectIfBusy,
 		Interaction:     agentengine.InteractionReject,
 		Input: []agentengine.InputPart{{
 			Kind: agentengine.InputPartText,
