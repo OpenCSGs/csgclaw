@@ -805,7 +805,7 @@
   grid-template-columns: auto 1fr auto;
   gap: var(--space-3);
   align-items: center;
-  padding: var(--space-3) 14px;
+  padding: var(--space-3) 16px;
   border: 1px solid var(--line);
 }
 
@@ -1589,6 +1589,7 @@
   max-block-size: 16px;
   align-self: center;
   margin: 0;
+  border-radius: 4px;
   accent-color: var(--primary);
 }
 
