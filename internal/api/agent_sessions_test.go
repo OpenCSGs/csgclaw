@@ -16,29 +16,48 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/enginetest"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 )
 
 type fakeSessionEngine struct {
-	run func(context.Context, string, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult
+	run       func(context.Context, string, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult
+	beforeRun func(context.Context)
+	client    *enginetest.MemoryClient
+}
+
+func (e *fakeSessionEngine) Agents() agentengine.AgentInterface {
+	return e.client.Agents()
 }
 
 func (e *fakeSessionEngine) Conversations(agentID string) agentengine.ConversationInterface {
-	return fakeSessionConversations{engine: e, agentID: agentID}
+	return fakeSessionConversations{engine: e, delegate: e.client.Conversations(agentID)}
 }
 
 type fakeSessionConversations struct {
-	engine  *fakeSessionEngine
-	agentID string
+	engine   *fakeSessionEngine
+	delegate agentengine.ConversationInterface
 }
 
 func (c fakeSessionConversations) Run(ctx context.Context, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
-	if c.engine.run != nil {
-		return c.engine.run(ctx, c.agentID, request, sink)
+	if c.engine.beforeRun != nil {
+		c.engine.beforeRun(ctx)
 	}
-	return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "final answer"}
+	return c.delegate.Run(ctx, request, sink)
+}
+
+func (c fakeSessionConversations) Cancel(ctx context.Context, key agentengine.ConversationKey, turnID agentengine.TurnID) error {
+	return c.delegate.Cancel(ctx, key, turnID)
+}
+
+func (c fakeSessionConversations) Reset(ctx context.Context, key agentengine.ConversationKey) error {
+	return c.delegate.Reset(ctx, key)
+}
+
+func (c fakeSessionConversations) Resolve(ctx context.Context, resolution agentengine.InteractionResolution) error {
+	return c.delegate.Resolve(ctx, resolution)
 }
 
 func TestAgentSessionResponsesUsesEngineWithoutCreatingIMEntities(t *testing.T) {
@@ -144,7 +163,7 @@ func TestAgentSessionResponsesRejectsOverlapAndScopesBusyByAgent(t *testing.T) {
 	}
 }
 
-func TestAgentSessionResponsesWaitsForCanceledTurnCleanup(t *testing.T) {
+func TestAgentSessionResponsesRejectsOverlapUntilCanceledTurnCleanup(t *testing.T) {
 	started := make(chan struct{})
 	cleanupStarted := make(chan struct{})
 	releaseCleanup := make(chan struct{})
@@ -186,15 +205,9 @@ func TestAgentSessionResponsesWaitsForCanceledTurnCleanup(t *testing.T) {
 		strings.NewReader(`{"input":"second"}`),
 	)
 	secondRecorder := httptest.NewRecorder()
-	secondDone := make(chan struct{})
-	go func() {
-		router.ServeHTTP(secondRecorder, secondRequest)
-		close(secondDone)
-	}()
-	select {
-	case <-secondDone:
-		t.Fatalf("follow-up returned during cleanup: status=%d body=%s", secondRecorder.Code, secondRecorder.Body.String())
-	case <-time.After(20 * time.Millisecond):
+	router.ServeHTTP(secondRecorder, secondRequest)
+	if secondRecorder.Code != http.StatusConflict || !strings.Contains(secondRecorder.Body.String(), "session_busy") {
+		t.Fatalf("overlap status=%d body=%s", secondRecorder.Code, secondRecorder.Body.String())
 	}
 
 	close(releaseCleanup)
@@ -203,13 +216,9 @@ func TestAgentSessionResponsesWaitsForCanceledTurnCleanup(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("canceled response did not finish cleanup")
 	}
-	select {
-	case <-secondDone:
-	case <-time.After(2 * time.Second):
-		t.Fatal("follow-up response did not run after cleanup")
-	}
-	if secondRecorder.Code != http.StatusOK || !strings.Contains(secondRecorder.Body.String(), "second finished") {
-		t.Fatalf("follow-up status=%d body=%s", secondRecorder.Code, secondRecorder.Body.String())
+	retry := performAgentSessionRequest(t, handler, "agent-alpha", "cancel-cleanup", map[string]any{"input": "second"})
+	if retry.Code != http.StatusOK || !strings.Contains(retry.Body.String(), "second finished") {
+		t.Fatalf("retry status=%d body=%s", retry.Code, retry.Body.String())
 	}
 }
 
@@ -267,6 +276,44 @@ func TestAgentSessionResponsesCancelEndpointWaitsForRuntimeCleanup(t *testing.T)
 	case <-responseDone:
 	case <-time.After(2 * time.Second):
 		t.Fatal("canceled response did not return")
+	}
+}
+
+func TestAgentSessionCancelBeforeEngineRegistrationPreventsDispatch(t *testing.T) {
+	beforeRun := make(chan struct{})
+	releaseRun := make(chan struct{})
+	engine := &fakeSessionEngine{}
+	engine.beforeRun = func(context.Context) {
+		close(beforeRun)
+		<-releaseRun
+	}
+	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionCodexAgent("agent-alpha", "Alpha")}, engine, "")
+	router := handler.Routes()
+
+	responseDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		responseDone <- performAgentSessionRequest(t, handler, "agent-alpha", "pre-registration-cancel", map[string]any{"input": "must not run"})
+	}()
+	<-beforeRun
+
+	cancelRequest := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/agents/agent-alpha/sessions/pre-registration-cancel/responses/cancel",
+		nil,
+	)
+	cancelRecorder := httptest.NewRecorder()
+	router.ServeHTTP(cancelRecorder, cancelRequest)
+	if cancelRecorder.Code != http.StatusNoContent {
+		t.Fatalf("cancel status=%d body=%s", cancelRecorder.Code, cancelRecorder.Body.String())
+	}
+	close(releaseRun)
+	select {
+	case <-responseDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled response did not return")
+	}
+	if calls := engine.client.Calls(); len(calls) != 0 {
+		t.Fatalf("pre-registration cancellation dispatched Engine calls: %+v", calls)
 	}
 }
 
@@ -450,7 +497,7 @@ func sessionTurnText(request agentengine.TurnRequest) string {
 func newAgentSessionTestHandler(
 	t *testing.T,
 	agents []agent.Agent,
-	engine sessionConversationEngine,
+	engine *fakeSessionEngine,
 	bindingPath string,
 ) (*Handler, *im.Service, *agentsession.Store, string) {
 	t.Helper()
@@ -471,6 +518,17 @@ func newAgentSessionTestHandler(
 	if err != nil {
 		t.Fatal(err)
 	}
+	seeded, err := agentengine.New(agentSvc).Agents().List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine.client = enginetest.NewMemoryClient(seeded...)
+	engine.client.SetTurnBehavior(func(ctx context.Context, agentID string, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		if engine.run != nil {
+			return engine.run(ctx, agentID, request, sink)
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "final answer", Dispatched: true}
+	})
 	if bindingPath == "" {
 		bindingPath = filepath.Join(root, "session-bindings")
 	}

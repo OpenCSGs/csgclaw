@@ -66,30 +66,32 @@ type legacyWorker struct {
 }
 
 type persistedAgent struct {
-	ID               string                   `json:"id"`
-	Name             string                   `json:"name"`
-	Description      string                   `json:"description,omitempty"`
-	Instructions     string                   `json:"instructions,omitempty"`
-	RuntimeID        string                   `json:"runtime_id,omitempty"`
-	RuntimeKind      string                   `json:"runtime_kind,omitempty"`
-	Image            string                   `json:"image,omitempty"`
-	Avatar           string                   `json:"avatar,omitempty"`
-	BoxID            string                   `json:"box_id,omitempty"`
-	Runtime          *RuntimeRecord           `json:"runtime,omitempty"`
-	RuntimeOptions   map[string]any           `json:"-"`
-	MCPServers       map[string]any           `json:"-"`
-	Role             string                   `json:"role"`
-	Status           string                   `json:"status,omitempty"`
-	CreatedAt        time.Time                `json:"created_at"`
-	UpdatedAt        time.Time                `json:"updated_at,omitempty"`
-	Profile          AgentProfile             `json:"model_config,omitempty"`
-	ProfileSelector  string                   `json:"-"`
-	Provider         string                   `json:"provider,omitempty"`
-	ModelID          string                   `json:"model_id,omitempty"`
-	ReasoningEffort  string                   `json:"reasoning_effort,omitempty"`
-	AgentProfile     AgentProfile             `json:"agent_profile,omitempty"`
-	ProfileComplete  bool                     `json:"profile_complete"`
-	DetectionResults []ProfileDetectionResult `json:"detection_results,omitempty"`
+	ID                 string                   `json:"id"`
+	Name               string                   `json:"name"`
+	Description        string                   `json:"description,omitempty"`
+	Instructions       string                   `json:"instructions,omitempty"`
+	RuntimeID          string                   `json:"runtime_id,omitempty"`
+	RuntimeKind        string                   `json:"runtime_kind,omitempty"`
+	Image              string                   `json:"image,omitempty"`
+	Avatar             string                   `json:"avatar,omitempty"`
+	BoxID              string                   `json:"box_id,omitempty"`
+	Runtime            *RuntimeRecord           `json:"runtime,omitempty"`
+	RuntimeOptions     map[string]any           `json:"-"`
+	MCPServers         map[string]any           `json:"-"`
+	RuntimeCredentials map[string]string        `json:"-"`
+	RuntimeInitShell   string                   `json:"-"`
+	Role               string                   `json:"role"`
+	Status             string                   `json:"status,omitempty"`
+	CreatedAt          time.Time                `json:"created_at"`
+	UpdatedAt          time.Time                `json:"updated_at,omitempty"`
+	Profile            AgentProfile             `json:"model_config,omitempty"`
+	ProfileSelector    string                   `json:"-"`
+	Provider           string                   `json:"provider,omitempty"`
+	ModelID            string                   `json:"model_id,omitempty"`
+	ReasoningEffort    string                   `json:"reasoning_effort,omitempty"`
+	AgentProfile       AgentProfile             `json:"agent_profile,omitempty"`
+	ProfileComplete    bool                     `json:"profile_complete"`
+	DetectionResults   []ProfileDetectionResult `json:"detection_results,omitempty"`
 }
 
 func (a persistedAgent) MarshalJSON() ([]byte, error) {
@@ -136,6 +138,12 @@ func (a persistedAgent) MarshalJSON() ([]byte, error) {
 	if a.MCPServers != nil {
 		out["mcpServers"] = a.MCPServers
 	}
+	if a.RuntimeCredentials != nil {
+		out["runtime_credentials"] = a.RuntimeCredentials
+	}
+	if a.RuntimeInitShell != "" {
+		out["runtime_init_shell"] = a.RuntimeInitShell
+	}
 	if len(a.DetectionResults) > 0 {
 		out["detection_results"] = a.DetectionResults
 	}
@@ -146,10 +154,12 @@ func (a *persistedAgent) UnmarshalJSON(data []byte) error {
 	type persistedAgentAlias persistedAgent
 	type persistedAgentJSON struct {
 		persistedAgentAlias
-		ModelConfig    json.RawMessage `json:"model_config"`
-		Profile        json.RawMessage `json:"profile"`
-		RuntimeOptions map[string]any  `json:"runtime_options"`
-		MCPServers     map[string]any  `json:"mcpServers"`
+		ModelConfig        json.RawMessage   `json:"model_config"`
+		Profile            json.RawMessage   `json:"profile"`
+		RuntimeOptions     map[string]any    `json:"runtime_options"`
+		MCPServers         map[string]any    `json:"mcpServers"`
+		RuntimeCredentials map[string]string `json:"runtime_credentials"`
+		RuntimeInitShell   string            `json:"runtime_init_shell"`
 	}
 	var decoded persistedAgentJSON
 	if err := json.Unmarshal(data, &decoded); err != nil {
@@ -158,6 +168,8 @@ func (a *persistedAgent) UnmarshalJSON(data []byte) error {
 	*a = persistedAgent(decoded.persistedAgentAlias)
 	a.RuntimeOptions = utils.CloneAnyMap(decoded.RuntimeOptions)
 	a.MCPServers = cloneMCPServers(decoded.MCPServers)
+	a.RuntimeCredentials = cloneStringMap(decoded.RuntimeCredentials)
+	a.RuntimeInitShell = decoded.RuntimeInitShell
 	profilePayload := decoded.ModelConfig
 	if len(profilePayload) == 0 || string(profilePayload) == "null" {
 		profilePayload = decoded.Profile
@@ -211,19 +223,21 @@ func newPersistedAgent(a Agent) persistedAgent {
 		updatedAt = a.CreatedAt.UTC()
 	}
 	return persistedAgent{
-		ID:               a.ID,
-		Name:             a.Name,
-		Description:      a.Description,
-		Instructions:     a.Instructions,
-		Image:            a.Image,
-		Runtime:          compactPersistedRuntime(runtimeRecordForAgent(a), topRX),
-		RuntimeOptions:   topRX,
-		MCPServers:       cloneMCPServers(a.MCPServers),
-		Role:             a.Role,
-		CreatedAt:        a.CreatedAt,
-		UpdatedAt:        updatedAt,
-		Profile:          ap,
-		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
+		ID:                 a.ID,
+		Name:               a.Name,
+		Description:        a.Description,
+		Instructions:       a.Instructions,
+		Image:              a.Image,
+		Runtime:            compactPersistedRuntime(runtimeRecordForAgent(a), topRX),
+		RuntimeOptions:     topRX,
+		MCPServers:         cloneMCPServers(a.MCPServers),
+		RuntimeCredentials: cloneStringMap(map[string]string(a.runtimeCredentials)),
+		RuntimeInitShell:   a.runtimeInitShell,
+		Role:               a.Role,
+		CreatedAt:          a.CreatedAt,
+		UpdatedAt:          updatedAt,
+		Profile:            ap,
+		DetectionResults:   append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
 }
 
@@ -301,6 +315,7 @@ func (a persistedAgent) toAgent() Agent {
 		ProfileComplete:  a.ProfileComplete,
 		DetectionResults: append([]ProfileDetectionResult(nil), a.DetectionResults...),
 	}
+	ag.SetRuntimeProvision(a.RuntimeCredentials, a.RuntimeInitShell)
 	return ag
 }
 

@@ -77,13 +77,13 @@ type RuntimeSpec struct {
 	Sandboxed bool
 	Image     string
 
-	// Credentials contains adapter-specific secrets to materialize in the
-	// Runtime environment. It is write-only on Create and Update: returned Agent
-	// values omit it, and its values must not be logged.
+	// Credentials maps Runtime-workspace-relative file paths to complete secret
+	// file contents. It is write-only on Create and Update: returned Agent values
+	// omit it, and its values must not be logged.
 	Credentials map[string]string
 
-	// InitShell is an idempotent shell program run in the Runtime environment
-	// after credentials are materialized and before the Runtime starts.
+	// InitShell is an idempotent shell program run with the Runtime workspace as
+	// its working directory after credentials are materialized.
 	InitShell string
 
 	Options map[string]any

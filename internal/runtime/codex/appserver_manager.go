@@ -308,7 +308,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		sessionID = strings.TrimSpace(live.session.SessionID)
 		req.SessionID = sessionID
 	}
-	promptText, err := appServerPromptText(req)
+	promptInput, err := appServerPromptInput(req)
 	if err != nil {
 		if m.deps.EventSink != nil {
 			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, err))
@@ -325,12 +325,12 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	}
 	defer live.removeAppServerTurnWaiter(sessionID, waiter)
 
-	params := appServerTurnStartParams(live.spec, sessionID, promptText)
+	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	turnStartAt := time.Now()
 	live.appClient.logDebug("codex app-server turn start request",
 		"runtime_id", runtimeID,
 		"thread_id", sessionID,
-		"prompt_bytes", len(promptText),
+		"prompt_blocks", len(promptInput),
 	)
 	raw, err := live.appClient.request(ctx, "turn/start", params)
 	if err != nil {
@@ -354,6 +354,9 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
+	if req.OnAccepted != nil {
+		req.OnAccepted()
+	}
 	live.trackAppServerTurn(sessionID, waiter.currentTurnID())
 	live.appClient.logDebug("codex app-server turn start accepted",
 		"runtime_id", runtimeID,
@@ -469,6 +472,28 @@ func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHand
 		return "", err
 	}
 	return threadID, nil
+}
+
+func (m *appServerManager) ExistingSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, bool, error) {
+	live, err := m.ensureLiveSession(ctx, handle)
+	if err != nil {
+		return "", false, err
+	}
+	conversationKey = strings.TrimSpace(conversationKey)
+	if conversationKey == "" {
+		return "", false, fmt.Errorf("conversation key is required")
+	}
+	live.mu.Lock()
+	threadID := strings.TrimSpace(live.conversationSessions[conversationKey])
+	live.mu.Unlock()
+	if threadID == "" {
+		return "", false, nil
+	}
+	resolved, err := m.EnsureSession(ctx, handle, conversationKey)
+	if err != nil {
+		return "", false, err
+	}
+	return resolved, true, nil
 }
 
 func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle SessionHandle, conversationKey string) error {
@@ -668,12 +693,17 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 }
 
 func appServerTurnStartParams(spec SessionSpec, threadID string, prompt string) map[string]any {
+	return appServerTurnStartParamsWithInput(spec, threadID, []map[string]any{{"type": "text", "text": prompt}}, "")
+}
+
+func appServerTurnStartParamsWithInput(spec SessionSpec, threadID string, input []map[string]any, clientUserMessageID string) map[string]any {
 	spec.Profile = spec.Profile.Normalized()
 	params := map[string]any{
 		"threadId": strings.TrimSpace(threadID),
-		"input": []map[string]any{
-			{"type": "text", "text": prompt},
-		},
+		"input":    input,
+	}
+	if clientUserMessageID = strings.TrimSpace(clientUserMessageID); clientUserMessageID != "" {
+		params["clientUserMessageId"] = clientUserMessageID
 	}
 	if effort := config.NormalizeReasoningEffort(spec.Profile.ReasoningEffort); !config.UsesModelReasoningDefault(effort) {
 		params["effort"] = effort
@@ -932,6 +962,37 @@ func appServerPromptText(req PromptRequest) (string, error) {
 		return "", fmt.Errorf("prompt text is required")
 	}
 	return text, nil
+}
+
+func appServerPromptInput(req PromptRequest) ([]map[string]any, error) {
+	if len(req.Prompt) == 0 {
+		return nil, fmt.Errorf("prompt input is required")
+	}
+	input := make([]map[string]any, 0, len(req.Prompt))
+	for _, block := range req.Prompt {
+		switch {
+		case block.Text != nil:
+			if strings.TrimSpace(block.Text.Text) == "" {
+				return nil, fmt.Errorf("prompt text is required")
+			}
+			input = append(input, map[string]any{"type": "text", "text": block.Text.Text})
+		case block.LocalImage != nil:
+			path := strings.TrimSpace(block.LocalImage.Path)
+			if path == "" {
+				return nil, fmt.Errorf("local image path is required")
+			}
+			input = append(input, map[string]any{"type": "localImage", "path": path})
+		case block.ResourceLink != nil || block.Resource != nil:
+			text := strings.TrimSpace(textFromPromptBlock(block))
+			if text == "" {
+				return nil, fmt.Errorf("prompt resource is empty")
+			}
+			input = append(input, map[string]any{"type": "text", "text": text})
+		default:
+			return nil, fmt.Errorf("unsupported prompt content block for codex app-server")
+		}
+	}
+	return input, nil
 }
 
 func (m *appServerManager) persistedThreadID(spec SessionSpec) string {

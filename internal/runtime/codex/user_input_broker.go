@@ -305,6 +305,20 @@ func (b *MemoryUserInputBroker) Bind(requestID, channel, roomID, threadRootID, r
 }
 
 func (b *MemoryUserInputBroker) Respond(ctx context.Context, req activity.UserInputResponseRequest) (activity.UserInputSnapshot, error) {
+	return b.respond(ctx, req, true)
+}
+
+// RespondDirect resolves an Engine-owned interaction without requiring an IM
+// channel binding. It retains the same question and answer validation.
+func (b *MemoryUserInputBroker) RespondDirect(ctx context.Context, requestID, responderID string, response activity.RequestUserInputResponse) (activity.UserInputSnapshot, error) {
+	return b.respond(ctx, activity.UserInputResponseRequest{
+		ActivityID:  requestID,
+		ResponderID: responderID,
+		Response:    response,
+	}, false)
+}
+
+func (b *MemoryUserInputBroker) respond(ctx context.Context, req activity.UserInputResponseRequest, requireBinding bool) (activity.UserInputSnapshot, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -312,7 +326,7 @@ func (b *MemoryUserInputBroker) Respond(ctx context.Context, req activity.UserIn
 	req.Channel = strings.TrimSpace(req.Channel)
 	req.RoomID = strings.TrimSpace(req.RoomID)
 	req.ResponderID = strings.TrimSpace(req.ResponderID)
-	if req.ActivityID == "" || req.Channel == "" || req.RoomID == "" || req.ResponderID == "" {
+	if req.ActivityID == "" || req.ResponderID == "" || (requireBinding && (req.Channel == "" || req.RoomID == "")) {
 		return activity.UserInputSnapshot{}, ErrUserInputInvalidResponse
 	}
 
@@ -333,9 +347,9 @@ func (b *MemoryUserInputBroker) Respond(ctx context.Context, req activity.UserIn
 		b.mu.Unlock()
 		return activity.UserInputSnapshot{}, ErrUserInputNotFound
 	}
-	if pending.state.snapshot.Channel == "" ||
+	if requireBinding && (pending.state.snapshot.Channel == "" ||
 		pending.state.snapshot.Channel != req.Channel ||
-		pending.state.snapshot.RoomID != req.RoomID {
+		pending.state.snapshot.RoomID != req.RoomID) {
 		b.mu.Unlock()
 		return activity.UserInputSnapshot{}, ErrUserInputNotFound
 	}

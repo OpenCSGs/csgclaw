@@ -2257,6 +2257,23 @@ func TestAppServerReadOnlyDeclinesMutationApprovals(t *testing.T) {
 	}
 }
 
+func TestAppServerTurnStartPreservesNativeBlocksAndClientMessageID(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	input := []map[string]any{
+		{"type": "text", "text": "before"},
+		{"type": "localImage", "path": "/runtime/image.png"},
+		{"type": "text", "text": "after"},
+	}
+	params := appServerTurnStartParamsWithInput(spec, "thread-1", input, "caller-turn")
+	if got := params["clientUserMessageId"]; got != "caller-turn" {
+		t.Fatalf("clientUserMessageId = %v", got)
+	}
+	gotInput, ok := params["input"].([]map[string]any)
+	if !ok || len(gotInput) != 3 || gotInput[1]["type"] != "localImage" || gotInput[1]["path"] != "/runtime/image.png" {
+		t.Fatalf("input = %#v", params["input"])
+	}
+}
+
 func waitForAppServerPending(t *testing.T, client *appServerClient, want int) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
