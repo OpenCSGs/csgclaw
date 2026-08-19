@@ -7857,10 +7857,11 @@ func TestCreateWorkerFromTemplateAppliesDefaultsAndOverlaysWorkspace(t *testing.
 
 func TestResolveCodexTemplateCreateSpecSeparatesBaseFromProfileInstructions(t *testing.T) {
 	hubSvc := mustNewLocalTemplateHubService(t, "codex-worker", hub.Template{
-		ID:          "codex-worker",
-		Name:        "codex-worker",
-		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: RuntimeNameCodex,
+		ID:             "codex-worker",
+		Name:           "codex-worker",
+		Role:           hub.TemplateRoleWorker,
+		RuntimeKind:    RuntimeNameCodex,
+		RuntimeOptions: map[string]any{"execution_mode": "read_only"},
 	})
 	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:1", "", WithHubService(hubSvc))
 	if err != nil {
@@ -7881,11 +7882,31 @@ func TestResolveCodexTemplateCreateSpecSeparatesBaseFromProfileInstructions(t *t
 	if resolved.Instructions != "" {
 		t.Fatalf("Instructions = %q, want empty for Codex template creation", resolved.Instructions)
 	}
+	if got, want := resolved.RuntimeOptions["execution_mode"], "read_only"; got != want {
+		t.Fatalf("RuntimeOptions[execution_mode] = %v, want %q", got, want)
+	}
 	if !strings.Contains(resolved.TemplateInstructions, "# Agent Instructions") {
 		t.Fatalf("TemplateInstructions = %q, want template base document", resolved.TemplateInstructions)
 	}
 	if _, err := os.Stat(filepath.Join(resolved.FromTemplate, "AGENTS.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("workspace AGENTS.md stat error = %v, want template instructions separated from overlay", err)
+	}
+}
+
+func TestApplyTemplateDefaultsMergesExplicitRuntimeOptions(t *testing.T) {
+	item := hub.Template{RuntimeOptions: map[string]any{"execution_mode": "read_only"}}
+	got := applyTemplateDefaults(CreateAgentSpec{
+		RuntimeOptions: map[string]any{"local_workspace_dir": "/tmp/project"},
+	}, item)
+	if got.RuntimeOptions["execution_mode"] != "read_only" || got.RuntimeOptions["local_workspace_dir"] != "/tmp/project" {
+		t.Fatalf("merged RuntimeOptions = %#v", got.RuntimeOptions)
+	}
+
+	overridden := applyTemplateDefaults(CreateAgentSpec{
+		RuntimeOptions: map[string]any{"execution_mode": "standard"},
+	}, item)
+	if overridden.RuntimeOptions["execution_mode"] != "standard" {
+		t.Fatalf("explicit execution_mode = %v, want standard", overridden.RuntimeOptions["execution_mode"])
 	}
 }
 
@@ -9074,6 +9095,7 @@ func TestHubPublishSpecUsesCodexHomeAssets(t *testing.T) {
 	}
 	svc.agents["u-alice"] = Agent{
 		ID: "u-alice", Name: "alice", Role: RoleWorker, RuntimeKind: RuntimeKindCodex,
+		RuntimeOptions: map[string]any{"execution_mode": "read_only", "local_workspace_dir": "/private/project"},
 		MCPServers: map[string]any{"remote": map[string]any{
 			"url": "https://mcp.example.test", "headers": map[string]any{"Authorization": "secret"},
 		}},
@@ -9101,6 +9123,12 @@ func TestHubPublishSpecUsesCodexHomeAssets(t *testing.T) {
 	}
 	if got, want := spec.WorkspaceRef.SkillsPath, layout.SkillsRoot; got != want {
 		t.Fatalf("SkillsPath = %q, want %q", got, want)
+	}
+	if got, want := spec.RuntimeOptions["execution_mode"], "read_only"; got != want {
+		t.Fatalf("RuntimeOptions[execution_mode] = %v, want %q", got, want)
+	}
+	if _, exists := spec.RuntimeOptions["local_workspace_dir"]; exists {
+		t.Fatalf("published runtime options leaked local_workspace_dir: %#v", spec.RuntimeOptions)
 	}
 	remote := spec.MCPServers["remote"].(map[string]any)
 	if _, ok := remote["headers"]; ok {
@@ -11288,14 +11316,15 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 
 	store := hub.NewLocalStore(registryRoot)
 	if _, err := store.Publish(context.Background(), hub.PublishSpec{
-		ID:           id,
-		Name:         item.Name,
-		Description:  item.Description,
-		Role:         item.Role,
-		RuntimeKind:  item.RuntimeKind,
-		Version:      item.Version,
-		Image:        item.Image,
-		WorkspaceRef: hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot},
+		ID:             id,
+		Name:           item.Name,
+		Description:    item.Description,
+		Role:           item.Role,
+		RuntimeKind:    item.RuntimeKind,
+		Version:        item.Version,
+		Image:          item.Image,
+		RuntimeOptions: item.RuntimeOptions,
+		WorkspaceRef:   hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot},
 		MCPServers: map[string]any{
 			"template-docs": map[string]any{"command": "npx", "args": []any{"-y", "template-docs"}},
 		},

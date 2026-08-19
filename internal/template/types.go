@@ -16,19 +16,20 @@ const (
 )
 
 type Template struct {
-	ID           string
-	Namespace    string
-	Name         string
-	Description  string
-	Role         string
-	RuntimeKind  string
-	Version      string
-	Image        string
-	ImageEnv     []apitypes.ImageEnvContract
-	Metadata     *TemplateMetadata
-	WorkspaceRef WorkspaceRef
-	Source       RegistryRef
-	UpdatedAt    time.Time
+	ID             string
+	Namespace      string
+	Name           string
+	Description    string
+	Role           string
+	RuntimeKind    string
+	Version        string
+	Image          string
+	ImageEnv       []apitypes.ImageEnvContract
+	RuntimeOptions map[string]any
+	Metadata       *TemplateMetadata
+	WorkspaceRef   WorkspaceRef
+	Source         RegistryRef
+	UpdatedAt      time.Time
 }
 
 type TemplateMetadata struct {
@@ -61,15 +62,16 @@ type WorkspaceRef struct {
 }
 
 type PublishSpec struct {
-	Registry     string
-	ID           string
-	Name         string
-	Description  string
-	Role         string
-	RuntimeKind  string
-	Version      string
-	Image        string
-	WorkspaceRef WorkspaceRef
-	MCPServers   map[string]any
-	UpdatedAt    time.Time
+	Registry       string
+	ID             string
+	Name           string
+	Description    string
+	Role           string
+	RuntimeKind    string
+	Version        string
+	Image          string
+	RuntimeOptions map[string]any
+	WorkspaceRef   WorkspaceRef
+	MCPServers     map[string]any
+	UpdatedAt      time.Time
 }

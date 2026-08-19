@@ -3519,10 +3519,11 @@ func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 
 func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 	hubSvc := mustNewLocalTemplateHubService(t, "review-bot", hub.Template{
-		ID:          "review-bot",
-		Name:        "review-bot",
-		Role:        hub.TemplateRoleWorker,
-		RuntimeKind: agent.RuntimeKindCodex,
+		ID:             "review-bot",
+		Name:           "review-bot",
+		Role:           hub.TemplateRoleWorker,
+		RuntimeKind:    agent.RuntimeKindCodex,
+		RuntimeOptions: map[string]any{"execution_mode": "read_only"},
 	})
 	srv := &Handler{}
 	srv.SetHubService(hubSvc)
@@ -3543,6 +3544,16 @@ func TestHandleHubTemplatesListsAggregatedTemplates(t *testing.T) {
 	}
 	if got[0].Source.Name == "" || got[0].Source.Kind == "" {
 		t.Fatalf("template source = %+v, want populated source", got[0].Source)
+	}
+	var published apitypes.HubTemplate
+	for _, item := range got {
+		if item.Name == "review-bot" && item.Source.Kind == hub.RegistryKindLocal {
+			published = item
+			break
+		}
+	}
+	if mode := published.RuntimeOptions["execution_mode"]; mode != "read_only" {
+		t.Fatalf("template RuntimeOptions[execution_mode] = %v, want read_only", mode)
 	}
 }
 
@@ -5345,15 +5356,16 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 
 	store := hub.NewLocalStore(registryRoot)
 	if _, err := store.Publish(context.Background(), hub.PublishSpec{
-		ID:           id,
-		Name:         item.Name,
-		Description:  item.Description,
-		Role:         item.Role,
-		RuntimeKind:  item.RuntimeKind,
-		Version:      item.Version,
-		Image:        item.Image,
-		WorkspaceRef: hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot},
-		UpdatedAt:    time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
+		ID:             id,
+		Name:           item.Name,
+		Description:    item.Description,
+		Role:           item.Role,
+		RuntimeKind:    item.RuntimeKind,
+		Version:        item.Version,
+		Image:          item.Image,
+		RuntimeOptions: item.RuntimeOptions,
+		WorkspaceRef:   hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot},
+		UpdatedAt:      time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
@@ -5376,14 +5388,15 @@ func mustNewLocalTemplateHubServiceWithoutWorkspace(t *testing.T, id string, ite
 	registryRoot := t.TempDir()
 	store := hub.NewLocalStore(registryRoot)
 	if _, err := store.Publish(context.Background(), hub.PublishSpec{
-		ID:          id,
-		Name:        item.Name,
-		Description: item.Description,
-		Role:        item.Role,
-		RuntimeKind: item.RuntimeKind,
-		Version:     item.Version,
-		Image:       item.Image,
-		UpdatedAt:   time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
+		ID:             id,
+		Name:           item.Name,
+		Description:    item.Description,
+		Role:           item.Role,
+		RuntimeKind:    item.RuntimeKind,
+		Version:        item.Version,
+		Image:          item.Image,
+		RuntimeOptions: item.RuntimeOptions,
+		UpdatedAt:      time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}

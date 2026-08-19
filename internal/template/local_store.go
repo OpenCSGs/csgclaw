@@ -92,17 +92,22 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 	if err != nil {
 		return Template{}, fmt.Errorf("validate local hub manifest %q: %w", id, err)
 	}
+	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.Role, manifest.RuntimeOptions)
+	if err != nil {
+		return Template{}, fmt.Errorf("validate local hub manifest %q runtime options: %w", id, err)
+	}
 	return Template{
-		ID:           id,
-		Name:         manifest.Name,
-		Description:  manifest.Description,
-		Role:         normalizeTemplateRole(manifest.Role),
-		RuntimeKind:  normalizeTemplateRuntimeKind(manifest.RuntimeKind),
-		Version:      strings.TrimSpace(manifest.Version),
-		Image:        manifestImageRef(manifest.Image),
-		ImageEnv:     manifestImageEnv(manifest.Image),
-		WorkspaceRef: s.workspaceRef(id),
-		UpdatedAt:    updatedAt,
+		ID:             id,
+		Name:           manifest.Name,
+		Description:    manifest.Description,
+		Role:           normalizeTemplateRole(manifest.Role),
+		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
+		Version:        strings.TrimSpace(manifest.Version),
+		Image:          manifestImageRef(manifest.Image),
+		ImageEnv:       manifestImageEnv(manifest.Image),
+		RuntimeOptions: runtimeOptions,
+		WorkspaceRef:   s.workspaceRef(id),
+		UpdatedAt:      updatedAt,
 	}, nil
 }
 
@@ -264,7 +269,8 @@ func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 		Image: templateImageSection{
 			Ref: spec.Image,
 		},
-		UpdatedAt: spec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		RuntimeOptions: cloneTemplateRuntimeOptions(spec.RuntimeOptions),
+		UpdatedAt:      spec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	data, err := toml.Marshal(manifest)
 	if err != nil {
@@ -298,6 +304,11 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 	spec.Version = strings.TrimSpace(spec.Version)
 	spec.Image = strings.TrimSpace(spec.Image)
 	spec.Description = strings.TrimSpace(spec.Description)
+	runtimeOptions, err := normalizeTemplateRuntimeOptions(spec.RuntimeKind, spec.Role, spec.RuntimeOptions)
+	if err != nil {
+		return PublishSpec{}, err
+	}
+	spec.RuntimeOptions = runtimeOptions
 	if spec.RuntimeKind == "" {
 		return PublishSpec{}, ErrRuntimeKindRequired
 	}

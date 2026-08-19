@@ -658,6 +658,18 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
 
 发布时始终生成 `AGENTS.md` 和 `mcp.json`，其他 instruction 和 memory 文件可选。根据模板创建 Agent 时，instruction 文件和 memories 会叠加到运行时 workspace，skills 会安装到 `skills/`，`mcp.json` 中的 MCP server 会自动应用；如果创建请求显式传入 `mcpServers`，则以请求内容为准。
 
+Codex Worker 模板可在 `agent.toml` 中保存运行模式：
+
+```toml
+[runtime_options]
+execution_mode = "read_only"
+```
+
+发布时只保存适合模板复用的运行时选项。
+Codex Worker 目前仅保存 `execution_mode`，不会保存 `local_workspace_dir` 等本机选项。
+创建请求显式提供的运行时选项优先于模板值。
+缺少 `execution_mode` 时默认为 `standard`。
+
 ### `GET /api/v1/hub/templates`
 
 列出可读 registry 中的全部模板。
@@ -669,6 +681,7 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
 - `description`
 - `runtime_kind`
 - `image`
+- `runtime_options`
 - `updated_at`
 - `source.name`
 - `source.kind`

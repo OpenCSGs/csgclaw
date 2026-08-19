@@ -420,7 +420,7 @@ describe("ConversationComposer connectors", () => {
     const actions = connectedState.closest(".connector-provider-actions");
     expect(actions?.children[0]).toHaveTextContent("Connected");
     expect(actions?.children[1]).toHaveTextContent("Manage");
-    expect(actions?.children[2]).toHaveTextContent("Disconnect");
+    expect(actions?.children[1]).toHaveTextContent("Disconnect");
     const manageButton = screen.getByRole("button", { name: "Manage" });
     expect(manageButton).toHaveClass("connector-manage-button");
     expect(manageButton).toHaveClass("btn-secondary-gray");

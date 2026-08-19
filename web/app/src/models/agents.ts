@@ -458,6 +458,7 @@ export type AgentTemplateLike = {
   name?: string | null;
   role?: string | null;
   runtime_kind?: string | null;
+  runtime_options?: JSONRecord | null;
 };
 
 export type AgentProfileModelsResponse = {
@@ -987,7 +988,11 @@ export function agentStatusLabel(status: unknown, t: TranslateFn): string {
 }
 
 export function agentRuntimeStatusDetailLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
-  if (String(item?.runtime?.sandbox_provider || "").trim().toLowerCase() !== "docker") {
+  if (
+    String(item?.runtime?.sandbox_provider || "")
+      .trim()
+      .toLowerCase() !== "docker"
+  ) {
     return "";
   }
   const status = agentRuntimeState(item).toLowerCase();
@@ -1530,6 +1535,7 @@ export function applyTemplateToDraft(
     template.runtime_kind || draft.runtime_kind || bootstrapConfig?.runtime_kind,
   );
   const runtimeSelection = resolveRuntimeSelection({ runtime_kind: runtimeKind });
+  const templateRuntimeOptions = normalizeRuntimeOptionsRecord(template.runtime_options);
   return {
     ...draft,
     from_template: template.id || "",
@@ -1542,6 +1548,10 @@ export function applyTemplateToDraft(
       template.image || runtimeImageForKind(runtimeKind, bootstrapConfig, fallbackImage || draft.default_image || ""),
     description: template.description || draft.description || "",
     envRows: mapImageEnvToRows(template.image_env),
+    runtime_options: {
+      ...normalizeRuntimeOptionsRecord(draft.runtime_options),
+      ...templateRuntimeOptions,
+    },
   };
 }
 

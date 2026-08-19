@@ -678,6 +678,18 @@ Templates use the following layout:
 
 `AGENTS.md` and `mcp.json` are always emitted when publishing. Other instruction and memory files are optional. During agent creation, instruction files and memories are overlaid onto the runtime workspace, skills are installed under `skills/`, and MCP servers from `mcp.json` are applied unless the create request explicitly supplies `mcpServers`.
 
+Codex worker templates may persist their execution mode in `agent.toml`:
+
+```toml
+[runtime_options]
+execution_mode = "read_only"
+```
+
+Only template-safe runtime options are published.
+For Codex workers this currently means `execution_mode`; machine-local options such as `local_workspace_dir` are not published.
+Explicit runtime options in an agent create request override template values.
+Missing `execution_mode` defaults to `standard`.
+
 ### `GET /api/v1/hub/templates`
 
 Lists all templates from readable registries.
@@ -689,6 +701,7 @@ Response fields:
 - `description`
 - `runtime_kind`
 - `image`
+- `runtime_options`
 - `updated_at`
 - `source.name`
 - `source.kind`

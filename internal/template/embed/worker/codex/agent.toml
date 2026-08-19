@@ -4,3 +4,6 @@ role = "worker"
 runtime_kind = "codex"
 updated_at = "2026-07-09T00:00:00Z"
 version = "0.1.0"
+
+[runtime_options]
+execution_mode = "standard"

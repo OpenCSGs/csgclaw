@@ -301,19 +301,24 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		name = strings.TrimSpace(repository.Name)
 	}
 	namespace := strings.SplitN(id, "/", 2)[0]
+	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.Role, manifest.RuntimeOptions)
+	if err != nil {
+		return Template{}, fmt.Errorf("validate remote hub manifest %q runtime options: %w", id, err)
+	}
 	return Template{
-		ID:           remoteTemplateName(id),
-		Namespace:    namespace,
-		Name:         name,
-		Description:  description,
-		Role:         normalizeTemplateRole(manifest.Role),
-		RuntimeKind:  normalizeTemplateRuntimeKind(manifest.RuntimeKind),
-		Version:      strings.TrimSpace(manifest.Version),
-		Image:        manifestImageRef(manifest.Image),
-		ImageEnv:     manifestImageEnv(manifest.Image),
-		Metadata:     repository.Metadata,
-		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir},
-		UpdatedAt:    updatedAt,
+		ID:             remoteTemplateName(id),
+		Namespace:      namespace,
+		Name:           name,
+		Description:    description,
+		Role:           normalizeTemplateRole(manifest.Role),
+		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
+		Version:        strings.TrimSpace(manifest.Version),
+		Image:          manifestImageRef(manifest.Image),
+		ImageEnv:       manifestImageEnv(manifest.Image),
+		RuntimeOptions: runtimeOptions,
+		Metadata:       repository.Metadata,
+		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir},
+		UpdatedAt:      updatedAt,
 	}, nil
 }
 
@@ -757,16 +762,17 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 		id = path.Join(s.username, normalized.Name)
 	}
 	return Template{
-		ID:           id,
-		Namespace:    s.username,
-		Name:         normalized.Name,
-		Description:  normalized.Description,
-		Role:         normalized.Role,
-		RuntimeKind:  normalized.RuntimeKind,
-		Version:      normalized.Version,
-		Image:        normalized.Image,
-		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir},
-		UpdatedAt:    normalized.UpdatedAt,
+		ID:             id,
+		Namespace:      s.username,
+		Name:           normalized.Name,
+		Description:    normalized.Description,
+		Role:           normalized.Role,
+		RuntimeKind:    normalized.RuntimeKind,
+		Version:        normalized.Version,
+		Image:          normalized.Image,
+		RuntimeOptions: cloneTemplateRuntimeOptions(normalized.RuntimeOptions),
+		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir},
+		UpdatedAt:      normalized.UpdatedAt,
 	}, nil
 }
 

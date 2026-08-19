@@ -288,6 +288,30 @@ describe("agent model helpers", () => {
     });
   });
 
+  it("inherits template execution mode while preserving explicit local runtime options", () => {
+    const draft = applyTemplateToDraft(
+      {
+        ...agentToDraft({
+          runtime_kind: "codex",
+          role: "worker",
+          runtime_options: { local_workspace_dir: "/tmp/project" },
+        }),
+      },
+      {
+        id: "custom/read-only-worker",
+        runtime_kind: "codex",
+        role: "worker",
+        runtime_options: { execution_mode: "read_only" },
+      },
+      null,
+    );
+
+    expect(draft?.runtime_options).toEqual({
+      execution_mode: "read_only",
+      local_workspace_dir: "/tmp/project",
+    });
+  });
+
   it("resolves CSGClaw DM identity from participant channel user before runtime agent id", () => {
     expect(
       resolveAgentChannelUserID({

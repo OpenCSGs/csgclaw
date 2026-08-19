@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,13 +28,14 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	store := NewLocalStore(registryRoot)
 	publishedAt := time.Date(2026, 5, 12, 8, 30, 0, 0, time.UTC)
 	published, err := store.Publish(context.Background(), PublishSpec{
-		Name:         "frontend-alice",
-		Description:  "Frontend worker with UI and styling skills",
-		Role:         TemplateRoleWorker,
-		RuntimeKind:  runtime.KindCodex,
-		Image:        "worker:latest",
-		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
-		UpdatedAt:    publishedAt,
+		Name:           "frontend-alice",
+		Description:    "Frontend worker with UI and styling skills",
+		Role:           TemplateRoleWorker,
+		RuntimeKind:    runtime.KindCodex,
+		Image:          "worker:latest",
+		RuntimeOptions: map[string]any{"execution_mode": "read_only"},
+		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
+		UpdatedAt:      publishedAt,
 	})
 	if err != nil {
 		t.Fatalf("Publish() error = %v", err)
@@ -46,6 +48,9 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 	if got, want := published.Role, TemplateRoleWorker; got != want {
 		t.Fatalf("Publish().Role = %q, want %q", got, want)
+	}
+	if got, want := published.RuntimeOptions["execution_mode"], "read_only"; got != want {
+		t.Fatalf("Publish().RuntimeOptions[execution_mode] = %v, want %q", got, want)
 	}
 	if got, want := published.UpdatedAt, publishedAt; !got.Equal(want) {
 		t.Fatalf("Publish().UpdatedAt = %v, want %v", got, want)
@@ -74,6 +79,16 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 	if got.Image != "worker:latest" {
 		t.Fatalf("Get().Image = %q, want %q", got.Image, "worker:latest")
+	}
+	if gotMode, want := got.RuntimeOptions["execution_mode"], "read_only"; gotMode != want {
+		t.Fatalf("Get().RuntimeOptions[execution_mode] = %v, want %q", gotMode, want)
+	}
+	manifestData, err := os.ReadFile(filepath.Join(registryRoot, localTemplatesDirName, "frontend-alice", localManifestFileName))
+	if err != nil {
+		t.Fatalf("ReadFile(agent.toml) error = %v", err)
+	}
+	if !strings.Contains(string(manifestData), "[runtime_options]") || !strings.Contains(string(manifestData), "execution_mode = 'read_only'") {
+		t.Fatalf("agent.toml missing read-only runtime options:\n%s", manifestData)
 	}
 
 	workspace, err := store.FetchWorkspace(context.Background(), "frontend-alice")

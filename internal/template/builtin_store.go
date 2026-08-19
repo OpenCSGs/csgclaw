@@ -54,17 +54,22 @@ func (s *BuiltinStore) Get(_ context.Context, id string) (Template, error) {
 	if err != nil {
 		return Template{}, fmt.Errorf("validate builtin hub manifest %q: %w", id, err)
 	}
+	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.Role, manifest.RuntimeOptions)
+	if err != nil {
+		return Template{}, fmt.Errorf("validate builtin hub manifest %q runtime options: %w", id, err)
+	}
 	return Template{
-		ID:           id,
-		Name:         manifest.Name,
-		Description:  manifest.Description,
-		Role:         normalizeTemplateRole(manifest.Role),
-		RuntimeKind:  normalizeTemplateRuntimeKind(manifest.RuntimeKind),
-		Version:      strings.TrimSpace(manifest.Version),
-		Image:        manifestImageRef(manifest.Image),
-		ImageEnv:     manifestImageEnv(manifest.Image),
-		WorkspaceRef: s.workspaceRef(id),
-		UpdatedAt:    updatedAt,
+		ID:             id,
+		Name:           manifest.Name,
+		Description:    manifest.Description,
+		Role:           normalizeTemplateRole(manifest.Role),
+		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
+		Version:        strings.TrimSpace(manifest.Version),
+		Image:          manifestImageRef(manifest.Image),
+		ImageEnv:       manifestImageEnv(manifest.Image),
+		RuntimeOptions: runtimeOptions,
+		WorkspaceRef:   s.workspaceRef(id),
+		UpdatedAt:      updatedAt,
 	}, nil
 }
 

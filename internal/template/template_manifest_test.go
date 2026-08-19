@@ -79,3 +79,32 @@ func TestValidatePublishTemplateName(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeTemplateRuntimeOptions(t *testing.T) {
+	got, err := normalizeTemplateRuntimeOptions(runtime.KindCodex, TemplateRoleWorker, map[string]any{
+		"execution_mode": " READ_ONLY ",
+	})
+	if err != nil {
+		t.Fatalf("normalizeTemplateRuntimeOptions() error = %v", err)
+	}
+	if got["execution_mode"] != "read_only" {
+		t.Fatalf("execution_mode = %v, want read_only", got["execution_mode"])
+	}
+
+	for name, test := range map[string]struct {
+		runtimeKind string
+		role        string
+		options     map[string]any
+	}{
+		"manager":        {runtimeKind: runtime.KindCodex, role: TemplateRoleManager, options: map[string]any{"execution_mode": "read_only"}},
+		"non codex":      {runtimeKind: runtime.NameOpenClaw, role: TemplateRoleWorker, options: map[string]any{"execution_mode": "read_only"}},
+		"unknown option": {runtimeKind: runtime.KindCodex, role: TemplateRoleWorker, options: map[string]any{"local_workspace_dir": "/tmp/project"}},
+		"invalid mode":   {runtimeKind: runtime.KindCodex, role: TemplateRoleWorker, options: map[string]any{"execution_mode": "unsafe"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := normalizeTemplateRuntimeOptions(test.runtimeKind, test.role, test.options); err == nil {
+				t.Fatal("normalizeTemplateRuntimeOptions() error = nil, want rejection")
+			}
+		})
+	}
+}

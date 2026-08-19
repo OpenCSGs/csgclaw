@@ -138,11 +138,12 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	store := NewRemoteStore(srv.URL, "access-token")
 	store.username = "alice"
 	item, err := store.Publish(context.Background(), PublishSpec{
-		ID:          "legacy-internal-id",
-		Name:        "ReviewBot_2",
-		Description: "Reviews changes",
-		Role:        TemplateRoleWorker,
-		RuntimeKind: "codex",
+		ID:             "legacy-internal-id",
+		Name:           "ReviewBot_2",
+		Description:    "Reviews changes",
+		Role:           TemplateRoleWorker,
+		RuntimeKind:    "codex",
+		RuntimeOptions: map[string]any{"execution_mode": "read_only"},
 		WorkspaceRef: WorkspaceRef{
 			Kind:             WorkspaceKindDir,
 			Path:             workspace,
@@ -154,6 +155,9 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	}
 	if got, want := item.ID, "alice/ReviewBot_2"; got != want {
 		t.Fatalf("Publish().ID = %q, want %q", got, want)
+	}
+	if got, want := item.RuntimeOptions["execution_mode"], "read_only"; got != want {
+		t.Fatalf("Publish().RuntimeOptions[execution_mode] = %v, want %q", got, want)
 	}
 	if got, want := created.CodeFile, "package-uuid"; got != want {
 		t.Fatalf("create code_file = %q, want %q", got, want)
@@ -202,6 +206,9 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 			}
 			if !strings.Contains(string(manifest), `description = 'Reviews changes'`) {
 				t.Errorf("agent.toml missing template description: %s", manifest)
+			}
+			if !strings.Contains(string(manifest), "[runtime_options]") || !strings.Contains(string(manifest), "execution_mode = 'read_only'") {
+				t.Errorf("agent.toml missing read-only runtime options: %s", manifest)
 			}
 		}
 	}

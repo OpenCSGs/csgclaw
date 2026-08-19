@@ -237,13 +237,18 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 	if err != nil {
 		return hub.PublishSpec{}, err
 	}
+	runtimeOptions, err := templateSafeRuntimeOptions(got)
+	if err != nil {
+		return hub.PublishSpec{}, err
+	}
 	return hub.PublishSpec{
-		ID:          got.Name,
-		Name:        got.Name,
-		Description: got.Description,
-		Role:        got.Role,
-		RuntimeKind: got.RuntimeConfig().Kind(),
-		Image:       got.Image,
+		ID:             got.Name,
+		Name:           got.Name,
+		Description:    got.Description,
+		Role:           got.Role,
+		RuntimeKind:    got.RuntimeConfig().Kind(),
+		Image:          got.Image,
+		RuntimeOptions: runtimeOptions,
 		WorkspaceRef: hub.WorkspaceRef{
 			Kind:             hub.WorkspaceKindDir,
 			Path:             layout.WorkspaceRoot,
@@ -1243,6 +1248,13 @@ func applyTemplateDefaults(spec CreateAgentSpec, item hub.Template) CreateAgentS
 	}
 	if strings.TrimSpace(spec.RuntimeKind) == "" {
 		spec.RuntimeKind = item.RuntimeKind
+	}
+	if len(item.RuntimeOptions) > 0 {
+		options := utils.CloneAnyMap(item.RuntimeOptions)
+		for key, value := range spec.RuntimeOptions {
+			options[key] = value
+		}
+		spec.RuntimeOptions = options
 	}
 	return spec
 }

@@ -251,17 +251,18 @@ func (s *Service) PublishTemplate(ctx context.Context, id, registry string) (Tem
 		}
 	}
 	return s.Publish(ctx, PublishSpec{
-		Registry:     registry,
-		ID:           item.Name,
-		Name:         item.Name,
-		Description:  item.Description,
-		Role:         item.Role,
-		RuntimeKind:  item.RuntimeKind,
-		Version:      item.Version,
-		Image:        item.Image,
-		WorkspaceRef: workspace,
-		MCPServers:   mcpServers,
-		UpdatedAt:    item.UpdatedAt,
+		Registry:       registry,
+		ID:             item.Name,
+		Name:           item.Name,
+		Description:    item.Description,
+		Role:           item.Role,
+		RuntimeKind:    item.RuntimeKind,
+		Version:        item.Version,
+		Image:          item.Image,
+		RuntimeOptions: cloneTemplateRuntimeOptions(item.RuntimeOptions),
+		WorkspaceRef:   workspace,
+		MCPServers:     mcpServers,
+		UpdatedAt:      item.UpdatedAt,
 	})
 }
 

@@ -24,19 +24,20 @@ type ImageEnvContract struct {
 }
 
 type HubTemplate struct {
-	ID          string               `json:"id"`
-	Namespace   string               `json:"namespace,omitempty"`
-	Name        string               `json:"name"`
-	Description string               `json:"description,omitempty"`
-	Role        string               `json:"role,omitempty"`
-	RuntimeKind string               `json:"runtime_kind,omitempty"`
-	Version     string               `json:"version,omitempty"`
-	Image       string               `json:"image,omitempty"`
-	ImageEnv    []ImageEnvContract   `json:"image_env,omitempty"`
-	Metadata    *HubTemplateMetadata `json:"metadata,omitempty"`
-	Source      HubTemplateSource    `json:"source"`
-	UpdatedAt   time.Time            `json:"updated_at,omitempty"`
-	Workspace   HubTemplateWorkspace `json:"workspace,omitempty"`
+	ID             string               `json:"id"`
+	Namespace      string               `json:"namespace,omitempty"`
+	Name           string               `json:"name"`
+	Description    string               `json:"description,omitempty"`
+	Role           string               `json:"role,omitempty"`
+	RuntimeKind    string               `json:"runtime_kind,omitempty"`
+	Version        string               `json:"version,omitempty"`
+	Image          string               `json:"image,omitempty"`
+	ImageEnv       []ImageEnvContract   `json:"image_env,omitempty"`
+	RuntimeOptions map[string]any       `json:"runtime_options,omitempty"`
+	Metadata       *HubTemplateMetadata `json:"metadata,omitempty"`
+	Source         HubTemplateSource    `json:"source"`
+	UpdatedAt      time.Time            `json:"updated_at,omitempty"`
+	Workspace      HubTemplateWorkspace `json:"workspace,omitempty"`
 }
 
 type HubTemplateMetadata struct {

@@ -629,148 +629,153 @@ function ComposerAddMenu({
   return (
     <>
       <PopoverRoot open={popoverOpen} onOpenChange={setPopoverOpen}>
-      <Tooltip content={t("composerAddContent")}>
-        <PopoverTrigger asChild>
-          <span>
-            <Button
-              aria-haspopup="dialog"
-              aria-label={t("composerAddContent")}
-              className="composer-add-button"
-              disabled={disabled}
-              iconOnly
-              size="lg"
-              variant="tertiaryGray"
-            >
-              <Plus aria-hidden="true" size={24} strokeWidth={1.8} />
-            </Button>
-          </span>
-        </PopoverTrigger>
-      </Tooltip>
-      <PopoverContent
-        aria-label={t("composerAddContent")}
-        className={classNames("composer-add-popover", hasConnectedConnector ? "is-wide" : "is-compact")}
-        role="dialog"
-        side="top"
-      >
-        <section className="composer-add-section" aria-label={t("composerAdd")}>
-          <div className="composer-add-section-label">{t("composerAdd")}</div>
-          <PopoverClose asChild>
-            <button
-              type="button"
-              className="composer-add-menu-item"
-              aria-label={t("addAttachment")}
-              title={t("addAttachment")}
-              onClick={onAddFiles}
-            >
-              <Paperclip aria-hidden="true" size={19} />
-              <span>{t("addAttachment")}</span>
-            </button>
-          </PopoverClose>
-        </section>
-        <div className="composer-add-separator" />
-        <section className="composer-add-section" aria-label={t("composerConnectors")}>
-          <div className="composer-add-section-label">{t("composerConnectors")}</div>
-          <div className="connector-provider-row">
-            <div className="connector-provider-main">
-              <span className="connector-provider-icon" aria-hidden="true">
-                {IconImage("github")}
-              </span>
-              <div className="connector-provider-copy">
-                <strong>{t("connectorGitHub")}</strong>
-                <span>{connectorStateLabel}</span>
+        <Tooltip content={t("composerAddContent")}>
+          <PopoverTrigger asChild>
+            <span>
+              <Button
+                aria-haspopup="dialog"
+                aria-label={t("composerAddContent")}
+                className="composer-add-button"
+                disabled={disabled}
+                iconOnly
+                size="lg"
+                variant="tertiaryGray"
+              >
+                <Plus aria-hidden="true" size={24} strokeWidth={1.8} />
+              </Button>
+            </span>
+          </PopoverTrigger>
+        </Tooltip>
+        <PopoverContent
+          aria-label={t("composerAddContent")}
+          className={classNames("composer-add-popover", hasConnectedConnector ? "is-wide" : "is-compact")}
+          role="dialog"
+          side="top"
+        >
+          <section className="composer-add-section" aria-label={t("composerAdd")}>
+            <div className="composer-add-section-label">{t("composerAdd")}</div>
+            <PopoverClose asChild>
+              <button
+                type="button"
+                className="composer-add-menu-item"
+                aria-label={t("addAttachment")}
+                title={t("addAttachment")}
+                onClick={onAddFiles}
+              >
+                <Paperclip aria-hidden="true" size={19} />
+                <span>{t("addAttachment")}</span>
+              </button>
+            </PopoverClose>
+          </section>
+          <div className="composer-add-separator" />
+          <section className="composer-add-section" aria-label={t("composerConnectors")}>
+            <div className="composer-add-section-label">{t("composerConnectors")}</div>
+            <div className="connector-provider-row">
+              <div className="connector-provider-main">
+                <span className="connector-provider-icon" aria-hidden="true">
+                  {IconImage("github")}
+                </span>
+                <div className="connector-provider-copy">
+                  <strong>{t("connectorGitHub")}</strong>
+                  <span>{connectorStateLabel}</span>
+                </div>
               </div>
-            </div>
-            {status.connected ? (
-              <div className="connector-provider-actions">
-                <span className="connector-connected-state">{t("connectorConnected")}</span>
-                <div className="connector-provider-action-buttons">
-                  {status.app_manageable ? (
+              {status.connected ? (
+                <div className="connector-provider-actions">
+                  <span className="connector-connected-state">{t("connectorConnected")}</span>
+                  <div className="connector-provider-action-buttons">
+                    {status.app_manageable ? (
+                      <Button
+                        aria-busy={busyAction === "manage" ? true : undefined}
+                        className="connector-manage-button"
+                        loading={busyAction === "manage"}
+                        size="sm"
+                        variant="secondaryGray"
+                        onClick={handleManageGitHub}
+                      >
+                        {t("connectorManage")}
+                      </Button>
+                    ) : null}
                     <Button
-                      aria-busy={busyAction === "manage" ? true : undefined}
+                      aria-busy={busyAction === "disconnect" ? true : undefined}
+                      className="connector-disconnect-button connector-disconnect-button-danger"
+                      loading={busyAction === "disconnect"}
+                      size="sm"
+                      variant="outlineDanger"
+                      onClick={handleDisconnectGitHub}
+                    >
+                      {t("connectorDisconnect")}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  aria-busy={githubBusy ? true : undefined}
+                  className="connector-connect-button"
+                  loading={githubBusy}
+                  size="sm"
+                  variant="tertiaryGray"
+                  onClick={handleConnectGitHub}
+                >
+                  {t("connectorConnect")}
+                </Button>
+              )}
+            </div>
+            <div className="connector-provider-row">
+              <div className="connector-provider-main">
+                <span className="connector-provider-icon" aria-hidden="true">
+                  <ConnectorGitLabIcon size={16} />
+                </span>
+                <div className="connector-provider-copy">
+                  <strong>{t("connectorGitLab")}</strong>
+                  <span>
+                    {gitlabStatus.account?.login ||
+                      (gitlabStatus.connected ? t("connectorConnected") : t("connectorNotConnected"))}
+                  </span>
+                </div>
+              </div>
+              {gitlabStatus.connected ? (
+                <div className="connector-provider-actions">
+                  <span className="connector-connected-state">{t("connectorConnected")}</span>
+                  <div className="connector-provider-action-buttons">
+                    <Button
                       className="connector-manage-button"
-                      loading={busyAction === "manage"}
                       size="sm"
                       variant="secondaryGray"
-                      onClick={handleManageGitHub}
+                      onClick={handleOpenGitLabForm}
                     >
-                      {t("connectorManage")}
+                      {t("connectorEdit")}
                     </Button>
-                  ) : null}
-                  <Button
-                    aria-busy={busyAction === "disconnect" ? true : undefined}
-                    className="connector-disconnect-button connector-disconnect-button-danger"
-                    loading={busyAction === "disconnect"}
-                    size="sm"
-                    variant="outlineDanger"
-                    onClick={handleDisconnectGitHub}
-                  >
-                    {t("connectorDisconnect")}
-                  </Button>
+                    <Button
+                      className="connector-disconnect-button connector-disconnect-button-danger"
+                      loading={gitlabBusy && busyAction === "disconnect"}
+                      size="sm"
+                      variant="outlineDanger"
+                      onClick={() => void onDisconnectGitLab?.()}
+                    >
+                      {t("connectorDisconnect")}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <Button
-                aria-busy={githubBusy ? true : undefined}
-                className="connector-connect-button"
-                loading={githubBusy}
-                size="sm"
-                variant="tertiaryGray"
-                onClick={handleConnectGitHub}
-              >
-                {t("connectorConnect")}
-              </Button>
-            )}
-          </div>
-          <div className="connector-provider-row">
-            <div className="connector-provider-main">
-              <span className="connector-provider-icon" aria-hidden="true">
-                <ConnectorGitLabIcon size={16} />
-              </span>
-              <div className="connector-provider-copy">
-                <strong>{t("connectorGitLab")}</strong>
-                <span>
-                  {gitlabStatus.account?.login ||
-                    (gitlabStatus.connected ? t("connectorConnected") : t("connectorNotConnected"))}
-                </span>
-              </div>
+              ) : (
+                <Button
+                  className="connector-connect-button"
+                  size="sm"
+                  variant="tertiaryGray"
+                  onClick={handleOpenGitLabForm}
+                >
+                  {t("connectorConnect")}
+                </Button>
+              )}
             </div>
-            {gitlabStatus.connected ? (
-              <div className="connector-provider-actions">
-                <span className="connector-connected-state">{t("connectorConnected")}</span>
-                <div className="connector-provider-action-buttons">
-                  <Button className="connector-manage-button" size="sm" variant="secondaryGray" onClick={handleOpenGitLabForm}>
-                    {t("connectorEdit")}
-                  </Button>
-                  <Button
-                    className="connector-disconnect-button connector-disconnect-button-danger"
-                    loading={gitlabBusy && busyAction === "disconnect"}
-                    size="sm"
-                    variant="outlineDanger"
-                    onClick={() => void onDisconnectGitLab?.()}
-                  >
-                    {t("connectorDisconnect")}
-                  </Button>
-                </div>
+            {pending ? (
+              <div className="connector-pending" role="status">
+                {t("connectorOAuthPending")}
               </div>
-            ) : (
-              <Button
-                className="connector-connect-button"
-                size="sm"
-                variant="tertiaryGray"
-                onClick={handleOpenGitLabForm}
-              >
-                {t("connectorConnect")}
-              </Button>
-            )}
-          </div>
-          {pending ? (
-            <div className="connector-pending" role="status">
-              {t("connectorOAuthPending")}
-            </div>
-          ) : null}
-          {error ? <div className="form-error connector-form-error">{error}</div> : null}
-        </section>
-      </PopoverContent>
+            ) : null}
+            {error ? <div className="form-error connector-form-error">{error}</div> : null}
+          </section>
+        </PopoverContent>
       </PopoverRoot>
       <DialogRoot open={gitlabFormOpen} onOpenChange={setGitLabFormOpen}>
         <DialogContent className="connector-config-dialog">
@@ -833,7 +838,9 @@ function ComposerAddMenu({
             <Button
               loading={gitlabBusy && busyAction === "save"}
               size="sm"
-              disabled={!gitlabDraft.base_url.trim() || (!gitlabStatus.access_token_set && !gitlabDraft.access_token.trim())}
+              disabled={
+                !gitlabDraft.base_url.trim() || (!gitlabStatus.access_token_set && !gitlabDraft.access_token.trim())
+              }
               onClick={() => void handleSaveGitLab()}
             >
               {t("connectorSave")}

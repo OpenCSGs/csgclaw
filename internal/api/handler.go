@@ -1910,16 +1910,17 @@ func presentHubTemplates(items []hub.Template) []apitypes.HubTemplate {
 
 func presentHubTemplate(item hub.Template) apitypes.HubTemplate {
 	presented := apitypes.HubTemplate{
-		ID:          item.ID,
-		Namespace:   item.Namespace,
-		Name:        item.Name,
-		Description: item.Description,
-		Role:        item.Role,
-		RuntimeKind: bootstrapRuntimeKind(item.RuntimeKind),
-		Version:     item.Version,
-		Image:       item.Image,
-		ImageEnv:    append([]apitypes.ImageEnvContract(nil), item.ImageEnv...),
-		UpdatedAt:   item.UpdatedAt,
+		ID:             item.ID,
+		Namespace:      item.Namespace,
+		Name:           item.Name,
+		Description:    item.Description,
+		Role:           item.Role,
+		RuntimeKind:    bootstrapRuntimeKind(item.RuntimeKind),
+		Version:        item.Version,
+		Image:          item.Image,
+		ImageEnv:       append([]apitypes.ImageEnvContract(nil), item.ImageEnv...),
+		RuntimeOptions: utils.CloneAnyMap(item.RuntimeOptions),
+		UpdatedAt:      item.UpdatedAt,
 		Source: apitypes.HubTemplateSource{
 			Name: item.Source.Name,
 			Kind: item.Source.Kind,

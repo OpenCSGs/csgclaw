@@ -52,10 +52,7 @@ describe("hub API", () => {
 
     await fetchHubTemplate("team~one/resume~scorer");
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "api/v1/hub/templates/team~~one~s~resume~~scorer",
-      expect.any(Object),
-    );
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/hub/templates/team~~one~s~resume~~scorer", expect.any(Object));
   });
 
   it.each([

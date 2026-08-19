@@ -26,14 +26,15 @@ func ValidatePublishTemplateName(name string) error {
 }
 
 type templateManifest struct {
-	SchemaVersion string               `toml:"schema_version,omitempty"`
-	Name          string               `toml:"name"`
-	Description   string               `toml:"description,omitempty"`
-	Role          string               `toml:"role"`
-	RuntimeKind   string               `toml:"runtime_kind"`
-	Version       string               `toml:"version,omitempty"`
-	Image         templateImageSection `toml:"image"`
-	UpdatedAt     string               `toml:"updated_at,omitempty"`
+	SchemaVersion  string               `toml:"schema_version,omitempty"`
+	Name           string               `toml:"name"`
+	Description    string               `toml:"description,omitempty"`
+	Role           string               `toml:"role"`
+	RuntimeKind    string               `toml:"runtime_kind"`
+	Version        string               `toml:"version,omitempty"`
+	Image          templateImageSection `toml:"image"`
+	RuntimeOptions map[string]any       `toml:"runtime_options,omitempty"`
+	UpdatedAt      string               `toml:"updated_at,omitempty"`
 }
 
 type templateImageSection struct {
@@ -164,10 +165,53 @@ func validateManifest(manifest templateManifest) error {
 	if err := validateImageEnvContracts(manifest.Image.Env); err != nil {
 		return err
 	}
+	if _, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.Role, manifest.RuntimeOptions); err != nil {
+		return err
+	}
 	if _, err := parseManifestUpdatedAt(manifest.UpdatedAt); err != nil {
 		return err
 	}
 	return nil
+}
+
+func normalizeTemplateRuntimeOptions(runtimeKind, role string, raw map[string]any) (map[string]any, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	runtimeKind = normalizeTemplateRuntimeKind(runtimeKind)
+	role = normalizeTemplateRole(role)
+	if runtimeKind != runtime.KindCodex || role != TemplateRoleWorker {
+		return nil, fmt.Errorf("runtime_options are supported only for Codex worker templates")
+	}
+	if len(raw) != 1 {
+		return nil, fmt.Errorf("runtime_options supports only execution_mode")
+	}
+	value, ok := raw["execution_mode"]
+	if !ok {
+		return nil, fmt.Errorf("runtime_options supports only execution_mode")
+	}
+	mode, ok := value.(string)
+	if !ok {
+		return nil, fmt.Errorf("runtime_options.execution_mode must be a string")
+	}
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "standard", "read_only":
+		return map[string]any{"execution_mode": mode}, nil
+	default:
+		return nil, fmt.Errorf("runtime_options.execution_mode must be %q or %q", "standard", "read_only")
+	}
+}
+
+func cloneTemplateRuntimeOptions(raw map[string]any) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(raw))
+	for key, value := range raw {
+		out[key] = value
+	}
+	return out
 }
 
 func requiresTemplateImage(runtimeKind string) bool {
