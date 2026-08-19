@@ -478,7 +478,7 @@
 }
 
 .composer-editor:focus,
-.field input:focus,
+.field input:not([type="checkbox"], [type="radio"]):focus,
 .field textarea:focus,
 .field select:focus {
   border-color: rgba(43, 109, 246, 0.44);
