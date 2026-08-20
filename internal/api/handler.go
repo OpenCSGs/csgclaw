@@ -1175,11 +1175,7 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 			err = h.svc.Delete(r.Context(), id)
 		}
 		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, "agent not found", http.StatusNotFound)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAgentOperationError(w, err, http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -1411,11 +1407,7 @@ func (h *Handler) handleAgentStop(w http.ResponseWriter, r *http.Request, id str
 	}
 	stopped, err := h.svc.Stop(r.Context(), id)
 	if err != nil {
-		status := http.StatusBadRequest
-		if strings.Contains(err.Error(), "not found") {
-			status = http.StatusNotFound
-		}
-		http.Error(w, err.Error(), status)
+		writeAgentOperationError(w, err, http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, http.StatusOK, h.presentAgentResponse(stopped))
@@ -1603,6 +1595,24 @@ func writeAgentOperationError(w http.ResponseWriter, err error, defaultStatus in
 }
 
 func writeAgentOperationErrorWithBillingURL(w http.ResponseWriter, err error, defaultStatus int, billingURL string) {
+	if errors.Is(err, agent.ErrHomeCleanup) {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": map[string]any{
+				"code":    "agent_home_cleanup_failed",
+				"message": "agent local files are still in use",
+			},
+		})
+		return
+	}
+	if sandbox.IsUnavailable(err) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": map[string]any{
+				"code":    "docker_unavailable",
+				"message": "Docker is not running or cannot be reached",
+			},
+		})
+		return
+	}
 	if status, code, message, ok := modelprovider.UserFacingUpstreamError(err); ok {
 		errorPayload := map[string]any{
 			"code":    code,

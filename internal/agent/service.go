@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"csgclaw/internal/assets"
@@ -58,6 +59,11 @@ var (
 var localIPv4Resolver = localIPv4
 
 var osRemoveAll = os.RemoveAll
+
+// ErrHomeCleanup is returned when an agent's local runtime files cannot be
+// removed after its runtime has been stopped. Callers may expose a stable,
+// path-free message while retaining the wrapped error for local diagnostics.
+var ErrHomeCleanup = errors.New("agent home cleanup failed")
 var locateCodexCLI = func() (string, error) {
 	return codexcli.BundledPath()
 }
@@ -1848,8 +1854,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := removeAll(agentHome); err != nil {
-		return fmt.Errorf("remove agent home: %w", err)
+	if err := removeAgentHome(agentHome); err != nil {
+		return fmt.Errorf("%w: %v", ErrHomeCleanup, err)
 	}
 
 	s.mu.Lock()
@@ -2038,6 +2044,21 @@ func sandboxNameForAgentID(agentID string) string {
 
 func removeAll(path string) error {
 	return osRemoveAll(path)
+}
+
+func removeAgentHome(path string) error {
+	const attempts = 3
+	var err error
+	for attempt := range attempts {
+		err = removeAll(path)
+		if err == nil || !errors.Is(err, syscall.ENOTEMPTY) {
+			return err
+		}
+		if attempt+1 < attempts {
+			time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
+		}
+	}
+	return err
 }
 
 func (s *Service) List() []Agent {

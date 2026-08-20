@@ -285,15 +285,45 @@ func TestUnavailableErrorsMapToSandboxUnavailable(t *testing.T) {
 	}
 }
 
+func TestUnavailableClassificationWinsOverSocketNotFound(t *testing.T) {
+	runner := &fakeRunner{
+		results: []fakeResult{{
+			result: CommandResult{
+				Stderr:   []byte("failed to connect to the docker API at unix:///var/run/docker.sock: socket not found\n"),
+				ExitCode: 1,
+			},
+			err: &exec.ExitError{},
+		}},
+	}
+	rt, err := NewProvider(WithRunner(runner)).Open(context.Background(), "/tmp/x")
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	_, err = rt.Get(context.Background(), "existing-container")
+	if !sandbox.IsUnavailable(err) || sandbox.IsNotFound(err) {
+		t.Fatalf("Get() error = %v, want unavailable and not not-found", err)
+	}
+}
+
 func TestIsUnavailableRecognizesDockerDesktopDaemonErrors(t *testing.T) {
 	tests := []string{
 		"failed to connect to the docker API at unix:///Users/example/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/example/.docker/run/docker.sock: connect: no such file or directory",
 		"Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
+		"dial unix /var/run/docker.sock: connect: connection refused",
+		"permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock",
+		"open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.",
 	}
 	for _, stderr := range tests {
 		if !isUnavailable(stderr) {
 			t.Errorf("isUnavailable(%q) = false, want true", stderr)
 		}
+	}
+}
+
+func TestMissingDockerExecutableMapsToSandboxUnavailable(t *testing.T) {
+	err := wrapRunError("docker inspect", CommandResult{}, exec.ErrNotFound)
+	if !sandbox.IsUnavailable(err) {
+		t.Fatalf("wrapRunError() error = %v, want sandbox unavailable", err)
 	}
 }
 

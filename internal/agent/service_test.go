@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -6738,6 +6739,44 @@ func TestDeleteReturnsAgentHomeRemovalError(t *testing.T) {
 	}
 	if removeCalls != 1 {
 		t.Fatalf("osRemoveAll() calls = %d, want 1", removeCalls)
+	}
+}
+
+func TestDeleteRetriesAgentHomeRemovalWhenDirectoryIsNotEmpty(t *testing.T) {
+	SetTestHooks(func(_ *Service, _ string) (sandbox.Runtime, error) { return nil, nil }, nil)
+	defer ResetTestHooks()
+
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{ID: "u-alice", Name: "alice", Role: RoleWorker}
+	agentHome, err := agentHomeDir("alice")
+	if err != nil {
+		t.Fatalf("agentHomeDir() error = %v", err)
+	}
+	if err := os.MkdirAll(agentHome, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(agentHome) error = %v", err)
+	}
+
+	origRemoveAll := osRemoveAll
+	removeCalls := 0
+	osRemoveAll = func(path string) error {
+		removeCalls++
+		if path == agentHome && removeCalls < 3 {
+			return &os.PathError{Op: "unlinkat", Path: filepath.Join(agentHome, "boxlite", "images"), Err: syscall.ENOTEMPTY}
+		}
+		return os.RemoveAll(path)
+	}
+	defer func() { osRemoveAll = origRemoveAll }()
+
+	if err := svc.Delete(context.Background(), "u-alice"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if removeCalls != 3 {
+		t.Fatalf("osRemoveAll() calls = %d, want 3", removeCalls)
 	}
 }
 

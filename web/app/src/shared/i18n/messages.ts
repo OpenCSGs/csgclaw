@@ -1341,6 +1341,7 @@ export const messages = {
       worker: "worker（对话代理）",
     },
     errors: {
+      agent_home_cleanup_failed: "智能体运行文件仍被占用。请启动 Docker 并等待其运行正常后重新删除；若 Docker 已启动，请重启 CSGClaw 后再试。",
       docker_availability_timeout: "Docker 服务检测超时，请确认 Docker 服务已启动后重试。",
       docker_unavailable: "Docker 未启动或无法连接，请先启动 Docker 服务后重试。",
       upstream_timeout: "连接模型服务超时，请稍后重试。",
@@ -2781,6 +2782,8 @@ export const messages = {
       worker: "worker",
     },
     errors: {
+      agent_home_cleanup_failed:
+        "The agent runtime files are still in use. Start Docker and wait until it is ready, then delete the agent again. If Docker is already running, restart CSGClaw and retry.",
       docker_availability_timeout: "Docker availability check timed out. Make sure Docker is running.",
       docker_unavailable: "Docker is not running or cannot be reached. Start Docker and try again.",
       upstream_timeout: "The model service request timed out. Please try again.",

@@ -95,6 +95,46 @@ func TestWriteAgentOperationErrorSanitizesWrappedUpstreamError(t *testing.T) {
 	}
 }
 
+func TestWriteAgentOperationErrorSanitizesSandboxUnavailable(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	err := fmt.Errorf("remove agent box: docker inspect: %w: platform-specific connection details", sandbox.ErrUnavailable)
+
+	writeAgentOperationError(recorder, err, http.StatusBadRequest)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	var payload struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if payload.Error.Code != "docker_unavailable" {
+		t.Fatalf("error = %+v, want docker_unavailable", payload.Error)
+	}
+	if strings.Contains(payload.Error.Message, "platform-specific") {
+		t.Fatalf("message exposes platform diagnostics: %q", payload.Error.Message)
+	}
+}
+
+func TestWriteAgentOperationErrorSanitizesAgentHomeCleanupFailure(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	err := fmt.Errorf("%w: unlinkat /Users/example/.csgclaw/agents/agent-1/boxlite/images: directory not empty", agent.ErrHomeCleanup)
+
+	writeAgentOperationError(recorder, err, http.StatusBadRequest)
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusConflict)
+	}
+	if strings.Contains(recorder.Body.String(), "/Users/example") || !strings.Contains(recorder.Body.String(), "agent_home_cleanup_failed") {
+		t.Fatalf("body = %q, want sanitized cleanup error", recorder.Body.String())
+	}
+}
+
 func TestWriteAgentOperationErrorIncludesBillingURLForInsufficientBalance(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	err := &modelprovider.ResponsesAPIStatusError{

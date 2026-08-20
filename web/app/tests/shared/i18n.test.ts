@@ -44,4 +44,30 @@ describe("i18n messages", () => {
       localizeAPIError({ status: 503, code: "model_unavailable", message: "服务不可用" }, createTranslator("en")),
     ).toContain("temporarily unavailable");
   });
+
+  it("localizes unavailable Docker errors without exposing platform diagnostics", () => {
+    const error = {
+      status: 503,
+      code: "docker_unavailable",
+      message: "open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified",
+    };
+
+    expect(localizeAPIError(error, createTranslator("zh"))).toBe("Docker 未启动或无法连接，请先启动 Docker 服务后重试。");
+    expect(localizeAPIError(error, createTranslator("en"))).toBe(
+      "Docker is not running or cannot be reached. Start Docker and try again.",
+    );
+  });
+
+  it("localizes agent cleanup errors without exposing local paths", () => {
+    const error = {
+      status: 409,
+      code: "agent_home_cleanup_failed",
+      message: "unlinkat /Users/example/.csgclaw/agents/agent-1: directory not empty",
+    };
+
+    expect(localizeAPIError(error, createTranslator("zh"))).toBe(
+      "智能体运行文件仍被占用。请启动 Docker 并等待其运行正常后重新删除；若 Docker 已启动，请重启 CSGClaw 后再试。",
+    );
+    expect(localizeAPIError(error, createTranslator("en"))).not.toContain("/Users/example");
+  });
 });
