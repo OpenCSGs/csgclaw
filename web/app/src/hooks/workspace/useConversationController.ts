@@ -104,6 +104,10 @@ type ComposerSendState = {
   status: "failed" | "idle" | "sending";
 };
 type ComposerSendStatesByKey = Record<string, ComposerSendState>;
+type PendingClientMessage = {
+  fingerprint: string;
+  id: string;
+};
 type RemovedAttachment = {
   draft: AttachmentDraft;
   index: number;
@@ -119,6 +123,17 @@ const idleComposerSendState: ComposerSendState = {
   progress: 0,
   status: "idle",
 };
+
+function newClientMessageID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `client-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function messageFingerprint(content: string, attachments: readonly AttachmentDraft[]): string {
+  return JSON.stringify([content, attachments.map(({ file }) => [file.name, file.size, file.lastModified, file.type])]);
+}
 
 type OpenCreateRoomOptions = {
   description?: string;
@@ -307,6 +322,8 @@ export function useConversationController({
   const [attachmentErrorsByConversationId, setAttachmentErrorsByConversationId] = useState<ComposerErrorsByKey>({});
   const editorRef = useRef<HTMLDivElement | null>(null);
   const sendAbortControllersRef = useRef<Record<string, AbortController>>({});
+  const sendLocksRef = useRef<Record<string, boolean>>({});
+  const pendingClientMessagesRef = useRef<Record<string, PendingClientMessage>>({});
   const composerIsComposingRef = useRef(false);
   const composerJustEndedCompositionRef = useRef(false);
   const messageListRef = useRef<HTMLElement | null>(null);
@@ -913,9 +930,17 @@ export function useConversationController({
     const roomID = activeConversation.id;
     const senderID = data.current_user_id;
     const attachments = attachmentDrafts.map((draft) => draft.file);
-    setComposerError("", roomID);
     const serializedDraft = serializeComposerSegments(draftSegments);
     const content = normalizeSlashShorthandForPayload(serializedDraft);
+    const fingerprint = messageFingerprint(content, attachmentDrafts);
+    if (sendLocksRef.current[roomID]) {
+      return;
+    }
+    sendLocksRef.current[roomID] = true;
+    const pending = pendingClientMessagesRef.current[roomID];
+    const clientMessage = pending?.fingerprint === fingerprint ? pending : { fingerprint, id: newClientMessageID() };
+    pendingClientMessagesRef.current[roomID] = clientMessage;
+    setComposerError("", roomID);
     const abortController = new AbortController();
     sendAbortControllersRef.current[roomID]?.abort();
     sendAbortControllersRef.current[roomID] = abortController;
@@ -929,6 +954,7 @@ export function useConversationController({
           room_id: roomID,
           sender_id: senderID,
           content,
+          client_message_id: clientMessage.id,
           locale,
           attachments,
         },
@@ -948,6 +974,7 @@ export function useConversationController({
       setBootstrapData((current) => appendMessageToData(current, roomID, created));
       messageListAutoScroll.follow("smooth");
       clearComposer(roomID);
+      delete pendingClientMessagesRef.current[roomID];
       setComposerSendStatesByConversationId((current) => ({
         ...current,
         [roomID]: idleComposerSendState,
@@ -960,6 +987,7 @@ export function useConversationController({
         [roomID]: { error: message, progress: current[roomID]?.progress ?? 0, status: "failed" },
       }));
     } finally {
+      delete sendLocksRef.current[roomID];
       if (sendAbortControllersRef.current[roomID] === abortController) {
         delete sendAbortControllersRef.current[roomID];
       }
@@ -1078,12 +1106,22 @@ export function useConversationController({
       return;
     }
 
+    const threadSendKey = `thread:${activeThreadDraftKey}`;
+    if (sendLocksRef.current[threadSendKey]) {
+      return;
+    }
+    sendLocksRef.current[threadSendKey] = true;
+    const fingerprint = messageFingerprint(text, activeThreadAttachmentDrafts);
+    const pending = pendingClientMessagesRef.current[threadSendKey];
+    const clientMessage = pending?.fingerprint === fingerprint ? pending : { fingerprint, id: newClientMessageID() };
+    pendingClientMessagesRef.current[threadSendKey] = clientMessage;
     setThreadError("");
     try {
       const created = await sendMessageRequest({
         room_id: activeConversation.id,
         sender_id: data.current_user_id,
         content: text,
+        client_message_id: clientMessage.id,
         locale,
         attachments: activeThreadAttachmentDrafts.map((draft) => draft.file),
         relates_to: {
@@ -1093,11 +1131,14 @@ export function useConversationController({
       });
       setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, []));
       setThreadAttachmentDraftsByKey((current) => updateAttachmentDrafts(current, activeThreadDraftKey, []));
+      delete pendingClientMessagesRef.current[threadSendKey];
       setActiveThreadView((current) => appendReplyToThreadView(current, created) ?? null);
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       await refreshThreadView(activeConversation.id, activeThreadRootID);
     } catch (err) {
       setThreadError(errorMessage(err, t("sendFailed")));
+    } finally {
+      delete sendLocksRef.current[threadSendKey];
     }
   }
 

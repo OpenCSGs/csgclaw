@@ -6199,6 +6199,41 @@ func TestHandleMessagesPostCreatesMessage(t *testing.T) {
 	}
 }
 
+func TestHandleMessagesPostDeduplicatesClientMessageID(t *testing.T) {
+	srv := &Handler{
+		im: im.NewServiceFromBootstrap(im.Bootstrap{
+			CurrentUserID: "u-admin",
+			Users:         []im.User{{ID: "u-admin", Name: "admin"}},
+			Rooms:         []im.Room{{ID: "room-1", Title: "Room One", Members: []string{"u-admin"}}},
+		}),
+	}
+	body := `{"room_id":"room-1","sender_id":"u-admin","content":"send once","client_message_id":"client-1"}`
+	var ids []string
+	for range 2 {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+		}
+		var got im.Message
+		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		ids = append(ids, got.ID)
+	}
+	if ids[0] != ids[1] {
+		t.Fatalf("message ids = %v, want the same id for duplicate requests", ids)
+	}
+	messages, err := srv.im.ListMessages("room-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("messages = %d, want one idempotent message", len(messages))
+	}
+}
+
 func TestHandleMessagesPostNormalizesCanonicalSlashCommand(t *testing.T) {
 	srv := &Handler{
 		im: im.NewServiceFromBootstrap(im.Bootstrap{

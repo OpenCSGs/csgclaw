@@ -110,6 +110,51 @@ func TestCreateMessagePersistsUserIDsAndMentionNames(t *testing.T) {
 	}
 }
 
+func TestCreateMessageOnceDeduplicatesClientMessageID(t *testing.T) {
+	svc := NewService()
+	room, err := svc.CreateRoom(CreateRoomRequest{
+		Title:     "Idempotency",
+		CreatorID: "user-admin",
+	})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+	before, err := svc.ListMessages(room.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(before) error = %v", err)
+	}
+	req := CreateMessageRequest{
+		RoomID:          room.ID,
+		SenderID:        "user-admin",
+		Content:         "send once",
+		ClientMessageID: "client-message-1",
+	}
+	first, created, err := svc.CreateMessageOnce(req)
+	if err != nil {
+		t.Fatalf("CreateMessageOnce(first) error = %v", err)
+	}
+	if !created {
+		t.Fatal("CreateMessageOnce(first) created = false, want true")
+	}
+	second, created, err := svc.CreateMessageOnce(req)
+	if err != nil {
+		t.Fatalf("CreateMessageOnce(second) error = %v", err)
+	}
+	if created {
+		t.Fatal("CreateMessageOnce(second) created = true, want false")
+	}
+	if second.ID != first.ID {
+		t.Fatalf("duplicate message id = %q, want %q", second.ID, first.ID)
+	}
+	messages, err := svc.ListMessages(room.ID)
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(messages) != len(before)+1 {
+		t.Fatalf("messages = %d, want %d after one idempotent message", len(messages), len(before)+1)
+	}
+}
+
 func TestUpdateRoomPersistsNotifyAllAgentsAndPublishesEvent(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "im", "state.json")
 	bus := NewBus()

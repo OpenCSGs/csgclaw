@@ -63,17 +63,18 @@ type Mention struct {
 }
 
 type Message struct {
-	ID          string              `json:"id"`
-	SenderID    string              `json:"sender_id"`
-	Kind        string              `json:"kind,omitempty"`
-	Content     string              `json:"content"`
-	Event       *EventPayload       `json:"event,omitempty"`
-	Metadata    map[string]any      `json:"metadata,omitempty"`
-	CreatedAt   time.Time           `json:"created_at"`
-	Mentions    []Mention           `json:"mentions"`
-	RelatesTo   *MessageRelation    `json:"relates_to,omitempty"`
-	Thread      *ThreadSummary      `json:"thread,omitempty"`
-	Attachments []MessageAttachment `json:"attachments,omitempty"`
+	ID              string              `json:"id"`
+	ClientMessageID string              `json:"client_message_id,omitempty"`
+	SenderID        string              `json:"sender_id"`
+	Kind            string              `json:"kind,omitempty"`
+	Content         string              `json:"content"`
+	Event           *EventPayload       `json:"event,omitempty"`
+	Metadata        map[string]any      `json:"metadata,omitempty"`
+	CreatedAt       time.Time           `json:"created_at"`
+	Mentions        []Mention           `json:"mentions"`
+	RelatesTo       *MessageRelation    `json:"relates_to,omitempty"`
+	Thread          *ThreadSummary      `json:"thread,omitempty"`
+	Attachments     []MessageAttachment `json:"attachments,omitempty"`
 }
 
 type MessageAttachment struct {
@@ -98,14 +99,15 @@ type MessageAttachmentUpload struct {
 }
 
 type CreateMessageRequest struct {
-	RoomID      string                    `json:"room_id"`
-	SenderID    string                    `json:"sender_id"`
-	Content     string                    `json:"content"`
-	Locale      string                    `json:"locale,omitempty"`
-	MentionID   string                    `json:"mention_id,omitempty"`
-	Metadata    map[string]any            `json:"metadata,omitempty"`
-	RelatesTo   *MessageRelation          `json:"relates_to,omitempty"`
-	Attachments []MessageAttachmentUpload `json:"attachments,omitempty"`
+	RoomID          string                    `json:"room_id"`
+	ClientMessageID string                    `json:"client_message_id,omitempty"`
+	SenderID        string                    `json:"sender_id"`
+	Content         string                    `json:"content"`
+	Locale          string                    `json:"locale,omitempty"`
+	MentionID       string                    `json:"mention_id,omitempty"`
+	Metadata        map[string]any            `json:"metadata,omitempty"`
+	RelatesTo       *MessageRelation          `json:"relates_to,omitempty"`
+	Attachments     []MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type MessageRelation struct {

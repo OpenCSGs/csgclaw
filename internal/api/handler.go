@@ -744,14 +744,15 @@ func bootstrapRuntimeKind(runtime string) string {
 }
 
 type createMessageRequest struct {
-	RoomID      string                       `json:"room_id"`
-	SenderID    string                       `json:"sender_id"`
-	Content     string                       `json:"content"`
-	Locale      string                       `json:"locale,omitempty"`
-	MentionID   string                       `json:"mention_id,omitempty"`
-	Metadata    map[string]any               `json:"metadata,omitempty"`
-	RelatesTo   *im.MessageRelation          `json:"relates_to,omitempty"`
-	Attachments []im.MessageAttachmentUpload `json:"attachments,omitempty"`
+	RoomID          string                       `json:"room_id"`
+	ClientMessageID string                       `json:"client_message_id,omitempty"`
+	SenderID        string                       `json:"sender_id"`
+	Content         string                       `json:"content"`
+	Locale          string                       `json:"locale,omitempty"`
+	MentionID       string                       `json:"mention_id,omitempty"`
+	Metadata        map[string]any               `json:"metadata,omitempty"`
+	RelatesTo       *im.MessageRelation          `json:"relates_to,omitempty"`
+	Attachments     []im.MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type addRoomMembersRequest struct {
@@ -2703,14 +2704,16 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	serviceReq = h.resolveCSGClawParticipantMessageRequest(serviceReq)
 
-	message, err := channel.SendMessage(serviceReq)
+	message, created, err := channel.SendMessageOnce(serviceReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.publishMessageCreated(serviceReq.RoomID, message.SenderID, message)
-	h.publishThreadUpdated(serviceReq.RoomID, message)
-	h.handleTeamRoomCommand(r.Context(), serviceReq.RoomID, message.SenderID, message.Content)
+	if created {
+		h.publishMessageCreated(serviceReq.RoomID, message.SenderID, message)
+		h.publishThreadUpdated(serviceReq.RoomID, message)
+		h.handleTeamRoomCommand(r.Context(), serviceReq.RoomID, message.SenderID, message.Content)
+	}
 	writeJSON(w, http.StatusCreated, message)
 }
 
@@ -3471,14 +3474,15 @@ func (r createMessageRequest) toServiceRequest() (im.CreateMessageRequest, error
 	}
 
 	return im.CreateMessageRequest{
-		RoomID:      roomID,
-		SenderID:    r.SenderID,
-		Content:     r.Content,
-		Locale:      r.Locale,
-		MentionID:   r.MentionID,
-		Metadata:    r.Metadata,
-		RelatesTo:   r.RelatesTo,
-		Attachments: r.Attachments,
+		RoomID:          roomID,
+		ClientMessageID: strings.TrimSpace(r.ClientMessageID),
+		SenderID:        r.SenderID,
+		Content:         r.Content,
+		Locale:          r.Locale,
+		MentionID:       r.MentionID,
+		Metadata:        r.Metadata,
+		RelatesTo:       r.RelatesTo,
+		Attachments:     r.Attachments,
 	}, nil
 }
 

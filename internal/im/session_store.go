@@ -23,18 +23,19 @@ const (
 
 // sessionMessageLine is the on-disk jsonl shape. blob_ref points at spillover payload.
 type sessionMessageLine struct {
-	ID          string              `json:"id"`
-	SenderID    string              `json:"sender_id"`
-	Kind        string              `json:"kind,omitempty"`
-	Content     string              `json:"content"`
-	Event       *EventPayload       `json:"event,omitempty"`
-	Metadata    map[string]any      `json:"metadata,omitempty"`
-	CreatedAt   string              `json:"created_at"`
-	Mentions    []Mention           `json:"mentions"`
-	RelatesTo   *MessageRelation    `json:"relates_to,omitempty"`
-	Thread      *ThreadSummary      `json:"thread,omitempty"`
-	Attachments []MessageAttachment `json:"attachments,omitempty"`
-	BlobRef     string              `json:"blob_ref,omitempty"`
+	ID              string              `json:"id"`
+	ClientMessageID string              `json:"client_message_id,omitempty"`
+	SenderID        string              `json:"sender_id"`
+	Kind            string              `json:"kind,omitempty"`
+	Content         string              `json:"content"`
+	Event           *EventPayload       `json:"event,omitempty"`
+	Metadata        map[string]any      `json:"metadata,omitempty"`
+	CreatedAt       string              `json:"created_at"`
+	Mentions        []Mention           `json:"mentions"`
+	RelatesTo       *MessageRelation    `json:"relates_to,omitempty"`
+	Thread          *ThreadSummary      `json:"thread,omitempty"`
+	Attachments     []MessageAttachment `json:"attachments,omitempty"`
+	BlobRef         string              `json:"blob_ref,omitempty"`
 }
 
 type sessionMessageBlob struct {
@@ -46,17 +47,18 @@ type sessionMessageBlob struct {
 
 func messageToSessionLine(message Message) sessionMessageLine {
 	return sessionMessageLine{
-		ID:          message.ID,
-		SenderID:    message.SenderID,
-		Kind:        message.Kind,
-		Content:     message.Content,
-		Event:       message.Event,
-		Metadata:    message.Metadata,
-		CreatedAt:   message.CreatedAt.UTC().Format(timeRFC3339Nano),
-		Mentions:    message.Mentions,
-		RelatesTo:   message.RelatesTo,
-		Thread:      message.Thread,
-		Attachments: message.Attachments,
+		ID:              message.ID,
+		ClientMessageID: message.ClientMessageID,
+		SenderID:        message.SenderID,
+		Kind:            message.Kind,
+		Content:         message.Content,
+		Event:           message.Event,
+		Metadata:        message.Metadata,
+		CreatedAt:       message.CreatedAt.UTC().Format(timeRFC3339Nano),
+		Mentions:        message.Mentions,
+		RelatesTo:       message.RelatesTo,
+		Thread:          message.Thread,
+		Attachments:     message.Attachments,
 	}
 }
 
@@ -66,17 +68,18 @@ func sessionLineToMessage(line sessionMessageLine) (Message, error) {
 		return Message{}, err
 	}
 	return Message{
-		ID:          line.ID,
-		SenderID:    line.SenderID,
-		Kind:        line.Kind,
-		Content:     line.Content,
-		Event:       line.Event,
-		Metadata:    line.Metadata,
-		CreatedAt:   createdAt,
-		Mentions:    line.Mentions,
-		RelatesTo:   line.RelatesTo,
-		Thread:      line.Thread,
-		Attachments: cloneMessageAttachments(line.Attachments),
+		ID:              line.ID,
+		ClientMessageID: line.ClientMessageID,
+		SenderID:        line.SenderID,
+		Kind:            line.Kind,
+		Content:         line.Content,
+		Event:           line.Event,
+		Metadata:        line.Metadata,
+		CreatedAt:       createdAt,
+		Mentions:        line.Mentions,
+		RelatesTo:       line.RelatesTo,
+		Thread:          line.Thread,
+		Attachments:     cloneMessageAttachments(line.Attachments),
 	}, nil
 }
 

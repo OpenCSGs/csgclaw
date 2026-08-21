@@ -1929,17 +1929,25 @@ func (s *Service) UpdateUser(req UpdateUserRequest) (User, bool, error) {
 }
 
 func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
+	message, _, err := s.CreateMessageOnce(req)
+	return message, err
+}
+
+// CreateMessageOnce creates a message or returns the message previously created
+// for the same sender and client-generated idempotency key.
+func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, error) {
 	content := strings.TrimSpace(req.Content)
 	roomID := strings.TrimSpace(req.RoomID)
 	senderID := strings.TrimSpace(req.SenderID)
+	clientMessageID := strings.TrimSpace(req.ClientMessageID)
 	if roomID == "" {
-		return Message{}, fmt.Errorf("room_id is required")
+		return Message{}, false, fmt.Errorf("room_id is required")
 	}
 	if senderID == "" {
-		return Message{}, fmt.Errorf("sender_id is required")
+		return Message{}, false, fmt.Errorf("sender_id is required")
 	}
 	if content == "" && len(req.Attachments) == 0 {
-		return Message{}, fmt.Errorf("content is required")
+		return Message{}, false, fmt.Errorf("content is required")
 	}
 
 	s.mu.Lock()
@@ -1947,42 +1955,50 @@ func (s *Service) CreateMessage(req CreateMessageRequest) (Message, error) {
 
 	senderUserID := s.resolveUserIDLocked(senderID)
 	if _, ok := s.users[senderUserID]; !ok {
-		return Message{}, fmt.Errorf("sender not found")
+		return Message{}, false, fmt.Errorf("sender not found")
 	}
 	senderID = senderUserID
 	content, err := s.contentWithMentionPrefixLocked(content, req.MentionID, false)
 	if err != nil {
-		return Message{}, err
+		return Message{}, false, err
 	}
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return Message{}, fmt.Errorf("room not found")
+		return Message{}, false, fmt.Errorf("room not found")
+	}
+	if clientMessageID != "" {
+		for _, existing := range room.Messages {
+			if existing.SenderID == senderID && existing.ClientMessageID == clientMessageID {
+				return s.presentMessageLocked(*room, existing, ""), false, nil
+			}
+		}
 	}
 	if locale := messagePresentationLocale(req.Locale); strings.TrimSpace(req.Locale) != "" {
 		room.Locale = locale
 	}
 	relatesTo, err := s.normalizeMessageRelationLocked(*room, req.RelatesTo)
 	if err != nil {
-		return Message{}, err
+		return Message{}, false, err
 	}
 	if relatesTo != nil && relatesTo.RelType == RelationTypeThread {
 		s.ensureThreadStateLocked(room, relatesTo.EventID)
 	}
 
 	message := s.newMessage("", senderID, MessageKindMessage, content)
+	message.ClientMessageID = clientMessageID
 	message.Metadata = utils.CloneAnyMap(req.Metadata)
 	message.RelatesTo = relatesTo
 	attachments, err := s.storeMessageAttachmentsLocked(roomID, message.ID, senderID, req.Attachments)
 	if err != nil {
-		return Message{}, err
+		return Message{}, false, err
 	}
 	message.Attachments = attachments
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
-		return Message{}, err
+		return Message{}, false, err
 	}
-	return s.presentMessageLocked(*room, message, ""), nil
+	return s.presentMessageLocked(*room, message, ""), true, nil
 }
 
 func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {

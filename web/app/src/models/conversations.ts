@@ -101,6 +101,7 @@ export type ThreadState = {
 
 export type IMMessage = {
   attachments?: MessageAttachment[] | null;
+  client_message_id?: string;
   id?: string;
   content: string;
   created_at?: string;

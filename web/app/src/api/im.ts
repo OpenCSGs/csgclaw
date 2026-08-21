@@ -10,6 +10,7 @@ import type {
 
 export type SendMessagePayload = {
   attachments?: File[];
+  client_message_id?: string;
   content: string;
   locale?: string;
   relates_to?: MessageRelation | null;

@@ -65,9 +65,14 @@ func (s *Service) ListMessagesWithOptions(roomID string, opts im.ListMessagesOpt
 }
 
 func (s *Service) SendMessage(req apitypes.CreateMessageRequest) (im.Message, error) {
+	message, _, err := s.SendMessageOnce(req)
+	return message, err
+}
+
+func (s *Service) SendMessageOnce(req apitypes.CreateMessageRequest) (im.Message, bool, error) {
 	content, err := normalizeSlashContent(req.Content)
 	if err != nil {
-		return im.Message{}, err
+		return im.Message{}, false, err
 	}
 	req.Content = content
 	req.SenderID = botIDToUserID(req.SenderID)
@@ -75,7 +80,7 @@ func (s *Service) SendMessage(req apitypes.CreateMessageRequest) (im.Message, er
 	if req.RelatesTo != nil {
 		req.RelatesTo.EventID = botIDToUserID(req.RelatesTo.EventID)
 	}
-	return s.im.CreateMessage(req)
+	return s.im.CreateMessageOnce(req)
 }
 
 func normalizeSlashContent(content string) (string, error) {
