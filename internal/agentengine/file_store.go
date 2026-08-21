@@ -36,10 +36,8 @@ type FileCreateRequest struct {
 // FileStore owns process-local immutable snapshots indexed by Agent and FileID.
 // It is reusable by the real Engine and contract-compatible test clients.
 type FileStore struct {
-	mu            sync.RWMutex
-	byAgent       map[string]map[string]storedFile
-	bytesByAgent  map[string]int64
-	maxAgentBytes int64
+	mu      sync.RWMutex
+	byAgent map[string]map[string]storedFile
 }
 
 type storedFile struct {
@@ -50,7 +48,7 @@ type storedFile struct {
 
 // NewFileStore creates an empty process-local Artifact Store.
 func NewFileStore() *FileStore {
-	return &FileStore{byAgent: make(map[string]map[string]storedFile), bytesByAgent: make(map[string]int64), maxAgentBytes: maxAgentFileBytes}
+	return &FileStore{byAgent: make(map[string]map[string]storedFile)}
 }
 
 // Scope returns file operations for one Agent.
@@ -135,17 +133,6 @@ func (s *FileStore) put(agentID string, file storedFile) *TurnError {
 	if s.byAgent == nil {
 		s.byAgent = make(map[string]map[string]storedFile)
 	}
-	if s.bytesByAgent == nil {
-		s.bytesByAgent = make(map[string]int64)
-	}
-	limit := s.maxAgentBytes
-	if limit <= 0 {
-		limit = maxAgentFileBytes
-	}
-	if file.file.SizeBytes > limit-s.bytesByAgent[agentID] {
-		s.mu.Unlock()
-		return &TurnError{Code: ErrorFileUnavailable, Message: fmt.Sprintf("Agent file storage exceeds %d bytes", limit)}
-	}
 	files := s.byAgent[agentID]
 	if files == nil {
 		files = make(map[string]storedFile)
@@ -154,21 +141,6 @@ func (s *FileStore) put(agentID string, file storedFile) *TurnError {
 	if _, exists := files[file.file.ID]; exists {
 		s.mu.Unlock()
 		return &TurnError{Code: ErrorFileUnavailable, Message: "file ID collision"}
-	}
-	s.bytesByAgent[agentID] += file.file.SizeBytes
-	size := file.file.SizeBytes
-	if !file.file.snapshot.setOnRemove(func() { s.releaseBytes(agentID, size) }) {
-		remaining := s.bytesByAgent[agentID] - size
-		if remaining > 0 {
-			s.bytesByAgent[agentID] = remaining
-		} else {
-			delete(s.bytesByAgent, agentID)
-		}
-		if len(files) == 0 {
-			delete(s.byAgent, agentID)
-		}
-		s.mu.Unlock()
-		return &TurnError{Code: ErrorFileUnavailable, Message: "file content is unavailable"}
 	}
 	files[file.file.ID] = file
 	s.mu.Unlock()
@@ -260,17 +232,6 @@ func (s *FileStore) DeleteAgent(agentID string) {
 	for _, file := range files {
 		file.file.cleanup()
 	}
-}
-
-func (s *FileStore) releaseBytes(agentID string, size int64) {
-	s.mu.Lock()
-	remaining := s.bytesByAgent[agentID] - size
-	if remaining > 0 {
-		s.bytesByAgent[agentID] = remaining
-	} else {
-		delete(s.bytesByAgent, agentID)
-	}
-	s.mu.Unlock()
 }
 
 type unavailableFiles struct{}

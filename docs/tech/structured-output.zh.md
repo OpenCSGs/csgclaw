@@ -310,7 +310,6 @@ Runtime Adapter 通过受 workspace 根目录约束的文件访问打开相对�
 Agent Engine 分配与内容 SHA-256 无关的随机 opaque File ID，并且只在 Turn 成功时通过 `TurnResult.Files` 返回 JSON-safe Metadata。
 可见名称必须是有效 UTF-8 basename，不含路径成分或控制字符，并且最多为 255 bytes。
 Channel Adapter 调用 `Engine.Conversations(agentID).Files().Get(fileID)` 获取权威 Metadata 和同一个快照上的独立 Reader，不再访问 Runtime workspace。
-单文件限制为 25 MiB，每个 Agent 最多保留 256 MiB 物理快照。
 它只能上传成功 `TurnResult` 中的文件，并且不得下载 `resource_link`。
 
 直接使用 OpenAI Responses 的 Adapter 应把原生生成文件引用和工具输出转换成同一个 Engine `OutputFile` Contract，而不是要求模型输出 CSGClaw 控制记录。

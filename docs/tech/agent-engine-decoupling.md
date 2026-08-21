@@ -466,7 +466,6 @@ A direct Responses Adapter should consume native generated-file references and t
 The Runtime Adapter opens the resolved local path through workspace-rooted access, rejects escapes and non-regular final symlinks, and registers one immutable snapshot with authoritative name, MIME type, size, and SHA-256 metadata.
 Engine assigns an opaque random ID independent from SHA-256 and returns metadata in a successful `TurnResult.Files` without exposing the host path.
 Channel Adapters call `Conversations(agentID).Files().Get(fileID)` to receive authoritative metadata and an independent snapshot stream, and Turn replay preserves both ID and content.
-Each file is limited to 25 MiB and each Agent may retain at most 256 MiB of physical snapshots, including deleted snapshots held by active leases.
 `Get` verifies the immutable snapshot in place and returns a leased descriptor; Delete immediately revokes new access and removes bytes after the final active lease closes.
 They may upload only files from a successful `TurnResult`.
 They never download `resource_link`; ordinary HTTP(S) resource links remain Markdown links.

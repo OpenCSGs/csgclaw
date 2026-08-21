@@ -283,11 +283,6 @@ func (a *codexRuntimeAdapter) authorizeOutputFile(ctx context.Context, request a
 		_ = root.Close()
 		return nil, a.runtimeFileUnavailable("open_source", err)
 	}
-	if info.Size() > maxFileSizeBytes {
-		_ = source.Close()
-		_ = root.Close()
-		return nil, &TurnError{Code: ErrorFileUnavailable, Message: fmt.Sprintf("Runtime output file exceeds %d bytes", maxFileSizeBytes)}
-	}
 	name := strings.TrimSpace(request.Name)
 	if name == "" {
 		name = filepath.Base(relativePath)

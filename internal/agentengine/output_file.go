@@ -17,11 +17,7 @@ import (
 	"unicode/utf8"
 )
 
-const (
-	maxOutputFileNameBytes = 255
-	maxFileSizeBytes       = 25 * 1024 * 1024
-	maxAgentFileBytes      = 256 * 1024 * 1024
-)
+const maxOutputFileNameBytes = 255
 
 type invalidOutputFileError struct {
 	message string
@@ -70,9 +66,6 @@ func newOutputFile(ctx context.Context, metadata OutputFileMetadata, source io.R
 	}
 	if metadata.SizeBytes < 0 {
 		return nil, invalidOutputFile("output file size must be non-negative")
-	}
-	if metadata.SizeBytes > maxFileSizeBytes {
-		return nil, invalidOutputFile(fmt.Sprintf("output file exceeds %d bytes", maxFileSizeBytes))
 	}
 	expectedHash := strings.ToLower(strings.TrimSpace(metadata.SHA256))
 	if expectedHash != "" {
@@ -155,16 +148,15 @@ func newOutputFileID() (string, error) {
 }
 
 type outputFileSnapshot struct {
-	mu       sync.Mutex
-	path     string
-	removed  bool
-	leases   int
-	onRemove func()
+	mu      sync.Mutex
+	path    string
+	removed bool
+	leases  int
 }
 
 func createOutputFileSnapshot(ctx context.Context, source io.Reader, expectedSize int64) (*outputFileSnapshot, string, error) {
-	if expectedSize < 0 || expectedSize > maxFileSizeBytes {
-		return nil, "", invalidOutputFile(fmt.Sprintf("output file must contain at most %d bytes", maxFileSizeBytes))
+	if expectedSize < 0 {
+		return nil, "", invalidOutputFile("output file size must be non-negative")
 	}
 	snapshot, err := os.CreateTemp("", "csgclaw-output-")
 	if err != nil {
@@ -175,18 +167,13 @@ func createOutputFileSnapshot(ctx context.Context, source io.Reader, expectedSiz
 		_ = snapshot.Close()
 		_ = os.Remove(path)
 	}
-	limit := expectedSize + 1
-	if limit <= 0 {
-		cleanup()
-		return nil, "", fmt.Errorf("output file size is too large")
-	}
 	hash := sha256.New()
-	written, err := io.Copy(io.MultiWriter(snapshot, hash), io.LimitReader(contextReader{ctx: ctx, reader: source}, limit))
+	written, extra, err := copyExactOutputFile(ctx, io.MultiWriter(snapshot, hash), source, expectedSize)
 	if err != nil {
 		cleanup()
 		return nil, "", fmt.Errorf("snapshot output file: %w", err)
 	}
-	if written != expectedSize {
+	if written != expectedSize || extra {
 		cleanup()
 		return nil, "", fmt.Errorf("output file size changed: got %d, want %d", written, expectedSize)
 	}
@@ -215,9 +202,9 @@ func (s *outputFileSnapshot) cleanup() {
 	}
 	s.mu.Lock()
 	s.removed = true
-	path, onRemove := s.takeRemovalLocked()
+	path := s.takeRemovalLocked()
 	s.mu.Unlock()
-	removeOutputFileSnapshot(path, onRemove)
+	removeOutputFileSnapshot(path)
 }
 
 func (s *outputFileSnapshot) retain() (func(), bool) {
@@ -231,19 +218,6 @@ func (s *outputFileSnapshot) retain() (func(), bool) {
 	}
 	s.leases++
 	return s.release, true
-}
-
-func (s *outputFileSnapshot) setOnRemove(onRemove func()) bool {
-	if s == nil || onRemove == nil {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.removed || s.path == "" || s.onRemove != nil {
-		return false
-	}
-	s.onRemove = onRemove
-	return true
 }
 
 func (s *outputFileSnapshot) openVerified(ctx context.Context, expectedSize int64, expectedHash string) (io.ReadCloser, error) {
@@ -272,12 +246,12 @@ func (s *outputFileSnapshot) openVerified(ctx context.Context, expectedSize int6
 		return nil, fmt.Errorf("output file snapshot metadata changed")
 	}
 	hash := sha256.New()
-	written, err := io.Copy(hash, io.LimitReader(contextReader{ctx: ctx, reader: source}, expectedSize+1))
+	written, extra, err := copyExactOutputFile(ctx, hash, source, expectedSize)
 	if err != nil {
 		closeWithRelease()
 		return nil, fmt.Errorf("read output file snapshot: %w", err)
 	}
-	if written != expectedSize || hex.EncodeToString(hash.Sum(nil)) != expectedHash {
+	if written != expectedSize || extra || hex.EncodeToString(hash.Sum(nil)) != expectedHash {
 		closeWithRelease()
 		return nil, fmt.Errorf("output file snapshot content changed")
 	}
@@ -296,31 +270,39 @@ func (s *outputFileSnapshot) release() {
 	if s.leases > 0 {
 		s.leases--
 	}
-	path, onRemove := s.takeRemovalLocked()
+	path := s.takeRemovalLocked()
 	s.mu.Unlock()
-	removeOutputFileSnapshot(path, onRemove)
+	removeOutputFileSnapshot(path)
 }
 
-func (s *outputFileSnapshot) takeRemovalLocked() (string, func()) {
+func (s *outputFileSnapshot) takeRemovalLocked() string {
 	if !s.removed || s.leases != 0 || s.path == "" {
-		return "", nil
+		return ""
 	}
 	path := s.path
 	s.path = ""
-	onRemove := s.onRemove
-	s.onRemove = nil
-	return path, onRemove
+	return path
 }
 
-func removeOutputFileSnapshot(path string, onRemove func()) {
+func removeOutputFileSnapshot(path string) {
 	if path == "" {
 		return
 	}
 	_ = os.Chmod(path, 0o600)
 	_ = os.Remove(path)
-	if onRemove != nil {
-		onRemove()
+}
+
+func copyExactOutputFile(ctx context.Context, destination io.Writer, source io.Reader, expectedSize int64) (int64, bool, error) {
+	reader := contextReader{ctx: ctx, reader: source}
+	written, err := io.CopyN(destination, reader, expectedSize)
+	if err != nil {
+		return written, false, err
 	}
+	extra, err := io.ReadAll(io.LimitReader(reader, 1))
+	if err != nil {
+		return written, false, err
+	}
+	return written, len(extra) != 0, nil
 }
 
 type leasedOutputFile struct {

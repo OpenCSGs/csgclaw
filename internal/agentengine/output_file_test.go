@@ -116,12 +116,6 @@ func TestFileStoreGetLeaseSurvivesDelete(t *testing.T) {
 	if readErr != nil || closeErr != nil || !bytes.Equal(got, content) {
 		t.Fatalf("leased content = %q, read=%v close=%v", got, readErr, closeErr)
 	}
-	store.mu.RLock()
-	remaining := store.bytesByAgent["agent-a"]
-	store.mu.RUnlock()
-	if remaining != 0 {
-		t.Fatalf("remaining bytes = %d, want 0", remaining)
-	}
 }
 
 func TestFileStoreConcurrentGetAndDelete(t *testing.T) {
@@ -196,27 +190,20 @@ func TestFileStoreResolvedInputSurvivesDelete(t *testing.T) {
 	}
 }
 
-func TestFileStoreEnforcesFileAndAgentLimits(t *testing.T) {
-	store := NewFileStore()
-	store.maxAgentBytes = 8
-	files := store.Scope("agent-a")
-	content := []byte("12345678")
-	first, err := files.Create(context.Background(), outputFileTestRequest("first.txt", content), bytes.NewReader(content))
+func TestFileStoreAcceptsFileAboveFormerSizeLimit(t *testing.T) {
+	const size = int64(25*1024*1024 + 1)
+	files := NewFileStore().Scope("agent-a")
+	created, err := files.Create(context.Background(), FileCreateRequest{
+		Name: "large.bin", MIMEType: "application/octet-stream", SizeBytes: size,
+	}, io.LimitReader(zeroReader{}, size))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := files.Create(context.Background(), outputFileTestRequest("second.txt", []byte("x")), strings.NewReader("x")); ErrorCodeOf(err) != ErrorFileUnavailable {
-		t.Fatalf("aggregate quota error = %v", err)
+	if created.SizeBytes != size {
+		t.Fatalf("SizeBytes = %d, want %d", created.SizeBytes, size)
 	}
-	if err := files.Delete(context.Background(), first.ID); err != nil {
+	if err := files.Delete(context.Background(), created.ID); err != nil {
 		t.Fatal(err)
-	}
-	if _, err := files.Create(context.Background(), outputFileTestRequest("second.txt", []byte("x")), strings.NewReader("x")); err != nil {
-		t.Fatalf("Create after quota release error = %v", err)
-	}
-	tooLarge := FileCreateRequest{Name: "large.bin", MIMEType: "application/octet-stream", SizeBytes: maxFileSizeBytes + 1}
-	if _, err := files.Create(context.Background(), tooLarge, strings.NewReader("")); ErrorCodeOf(err) != ErrorInvalidRequest {
-		t.Fatalf("per-file quota error = %v", err)
 	}
 }
 
@@ -252,6 +239,15 @@ func TestFileStoreNormalizesStorageAndContentErrors(t *testing.T) {
 
 type errorReader struct {
 	err error
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(buffer []byte) (int, error) {
+	for index := range buffer {
+		buffer[index] = 0
+	}
+	return len(buffer), nil
 }
 
 func (r errorReader) Read([]byte) (int, error) {

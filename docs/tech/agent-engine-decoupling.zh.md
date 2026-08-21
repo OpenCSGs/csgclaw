@@ -466,7 +466,6 @@ Codex app-server Adapter 只在 Engine 创建的 Thread 上暴露接收 workspac
 Runtime Adapter 通过受 workspace 根目录约束的文件访问打开解析后的本地路径，拒绝越界路径和最终为 symlink 的非普通文件，并注册包含权威名称、MIME type、大小与 SHA-256 元数据的唯一不可变快照。
 Engine 分配与 SHA-256 无关的随机 opaque ID，并在成功的 `TurnResult.Files` 中返回 Metadata，但不暴露宿主路径。
 Channel Adapter 调用 `Conversations(agentID).Files().Get(fileID)` 获取权威 Metadata 和独立快照流，Turn Replay 会保留相同 ID 和内容。
-单文件限制为 25 MiB，每个 Agent 最多保留 256 MiB 物理快照，包括仍被 Active Lease 持有的已删除快照。
 `Get` 会原地校验不可变快照并返回 Leased Descriptor；Delete 会立即撤销新访问，并在最后一个 Active Lease 关闭后删除实际字节。
 它只能上传成功 `TurnResult` 中的文件。
 Channel Adapter 不得下载 `resource_link`；普通 HTTP(S) 资源链接始终只是 Markdown 链接。

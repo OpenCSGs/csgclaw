@@ -310,7 +310,6 @@ The Runtime Adapter opens the workspace-relative path through rooted access, rej
 Agent Engine assigns an opaque random file ID independent from the content SHA-256 and returns JSON-safe metadata in `TurnResult.Files` only when the Turn succeeds.
 The visible name must be a valid UTF-8 basename with no path components or control characters and at most 255 bytes.
 Channel Adapters call `Engine.Conversations(agentID).Files().Get(fileID)` to receive authoritative metadata and an independent reader over the same snapshot without accessing the Runtime workspace.
-Files are limited to 25 MiB each and 256 MiB of retained physical snapshots per Agent.
 They may upload only files from a successful `TurnResult` and must never download a `resource_link`.
 
 A direct OpenAI Responses adapter should translate native generated-file references and tool outputs into the same Engine `OutputFile` contract instead of asking the model to print a CSGClaw control record.
