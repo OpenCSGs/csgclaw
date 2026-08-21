@@ -461,7 +461,7 @@ Previous file bytes are not resent merely to continue a Runtime-native conversat
 
 For output, each Runtime Adapter consumes a typed native file reference and resolves it before crossing the Engine boundary.
 The Codex app-server Adapter exposes `csgclaw_publish_file` only on Engine-created threads as a typed dynamic tool with a workspace-relative path; legacy bridge threads do not advertise an unsupported delivery capability.
-Because the current app-server protocol cannot attach dynamic tools during cold `thread/resume`, a restored Engine mapping is honestly non-resumable for strict continuation, while create-or-resume replaces it with a new file-capable thread.
+Because the current app-server protocol cannot attach dynamic tools during cold `thread/resume`, a restored Engine mapping resumes the same native thread to preserve conversation context but does not advertise file publication until the protocol supports reattachment.
 A direct Responses Adapter should consume native generated-file references and tool outputs.
 The Runtime Adapter opens the resolved local path through workspace-rooted access, rejects escapes and non-regular final symlinks, and registers one immutable snapshot with authoritative name, MIME type, size, and SHA-256 metadata.
 Engine assigns an opaque random ID independent from SHA-256 and returns metadata in a successful `TurnResult.Files` without exposing the host path.

@@ -183,7 +183,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		}
 	}
 
-	threadID, err := m.startOrResumeThread(ctx, live, m.persistedThreadID(spec), false)
+	threadID, _, err := m.startOrResumeThread(ctx, live, m.persistedThreadID(spec), false)
 	if err != nil {
 		_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
 		return nil, m.wrapStartupError(spec, "initialize codex app-server thread", err)
@@ -420,7 +420,7 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 	}
 
 	live.mu.Lock()
-	if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] && live.filePublishingThreads[threadID] == publishFiles {
+	if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] {
 		live.mu.Unlock()
 		return threadID, nil
 	}
@@ -433,14 +433,14 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		defer live.conversationPersistMu.Unlock()
 
 		live.mu.Lock()
-		if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] && live.filePublishingThreads[threadID] == publishFiles {
+		if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] {
 			live.mu.Unlock()
 			return threadID, nil
 		}
 		restoredThreadID = strings.TrimSpace(live.conversationSessions[conversationKey])
 		live.mu.Unlock()
 
-		threadID, err := m.startOrResumeThread(ctx, live, restoredThreadID, publishFiles)
+		threadID, filePublishing, err := m.startOrResumeThread(ctx, live, restoredThreadID, publishFiles)
 		if err != nil {
 			return "", err
 		}
@@ -450,7 +450,7 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 		previousFilePublishing := live.filePublishingThreads[previous]
 		live.conversationSessions[conversationKey] = threadID
 		live.loadedConversations[conversationKey] = true
-		live.filePublishingThreads[threadID] = publishFiles
+		live.filePublishingThreads[threadID] = filePublishing
 		conversations := cloneConversationSessions(live.conversationSessions)
 		live.mu.Unlock()
 		if err := m.persistConversationSessions(live, conversations); err != nil {
@@ -512,12 +512,16 @@ func (m *appServerManager) ExistingEngineSession(ctx context.Context, handle Ses
 	conversationKey = strings.TrimSpace(conversationKey)
 	live.mu.Lock()
 	threadID := strings.TrimSpace(live.conversationSessions[conversationKey])
-	available := threadID != "" && live.loadedConversations[conversationKey] && live.filePublishingThreads[threadID]
+	available := threadID != ""
 	live.mu.Unlock()
 	if !available {
 		return "", false, nil
 	}
-	return threadID, true, nil
+	resolved, err := m.ensureSession(ctx, handle, conversationKey, true)
+	if err != nil {
+		return "", false, err
+	}
+	return resolved, true, nil
 }
 
 func (m *appServerManager) ExistingSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, bool, error) {
@@ -660,21 +664,22 @@ func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSe
 	return nil
 }
 
-func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string, publishFiles bool) (string, error) {
+func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string, publishFiles bool) (string, bool, error) {
 	threadID = strings.TrimSpace(threadID)
-	if threadID != "" && !publishFiles {
+	if threadID != "" {
 		resumed, err := m.resumeThread(ctx, live, threadID)
 		if err == nil {
 			if strings.TrimSpace(resumed) != "" {
-				return resumed, nil
+				return resumed, false, nil
 			}
-			return threadID, nil
+			return threadID, false, nil
 		}
 		if live.appClient != nil {
 			live.appClient.logDebug("codex app-server thread resume failed; starting a new thread", "thread_id", threadID, "error", err)
 		}
 	}
-	return m.startThread(ctx, live, publishFiles)
+	started, err := m.startThread(ctx, live, publishFiles)
+	return started, publishFiles && err == nil, err
 }
 
 func (m *appServerManager) startThread(ctx context.Context, live *liveSession, publishFiles bool) (string, error) {

@@ -150,8 +150,8 @@ func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerReplacesColdEngineMappingWithFileCapableThread(t *testing.T) {
-	withAppServerHelperCommand(t, "engine-conversation-thread")
+func TestAppServerManagerPreservesColdEngineConversationContext(t *testing.T) {
+	withAppServerHelperCommand(t, "resume-success")
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.ConversationSessions = map[string]string{"conversation-1": "cold-thread"}
 	var persisted map[string]string
@@ -165,18 +165,22 @@ func TestAppServerManagerReplacesColdEngineMappingWithFileCapableThread(t *testi
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
-	if _, ok, err := manager.ExistingEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "conversation-1"); err != nil || ok {
-		t.Fatalf("cold ExistingEngineSession ok=%v err=%v", ok, err)
-	}
 	threadID, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "conversation-1")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("cold EnsureEngineSession error=%v", err)
 	}
-	if threadID != "engine-thread" || persisted["conversation-1"] != threadID {
-		t.Fatalf("Engine thread=%q persisted=%v", threadID, persisted)
+	if threadID != "resumed-thread" || persisted["conversation-1"] != threadID {
+		t.Fatalf("resumed Engine thread=%q persisted=%v", threadID, persisted)
 	}
 	if got, ok, err := manager.ExistingEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "conversation-1"); err != nil || !ok || got != threadID {
 		t.Fatalf("loaded ExistingEngineSession=%q ok=%v err=%v", got, ok, err)
+	}
+	live := manager.liveSession(spec.RuntimeID)
+	live.mu.Lock()
+	filePublishing := live.filePublishingThreads[threadID]
+	live.mu.Unlock()
+	if filePublishing {
+		t.Fatal("cold resumed thread was incorrectly marked file-capable")
 	}
 }
 
@@ -2543,29 +2547,6 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 			}
 			return rpcResult(msg["id"], map[string]any{"threadId": fmt.Sprintf("conversation-thread-%d", index)}), true
-		})
-	case "engine-conversation-thread":
-		threadStarts := 0
-		runAppServerHelper(t, func(_ int, msg map[string]any) (map[string]any, bool) {
-			if msg["method"] != "thread/start" {
-				if msg["method"] == "thread/resume" {
-					t.Fatalf("Engine conversation unexpectedly resumed cold thread")
-				}
-				return nil, false
-			}
-			threadStarts++
-			params, _ := msg["params"].(map[string]any)
-			tools, _ := params["dynamicTools"].([]any)
-			if threadStarts == 1 {
-				if len(tools) != 0 {
-					t.Fatalf("primary dynamicTools = %#v", params["dynamicTools"])
-				}
-				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
-			}
-			if len(tools) != 1 {
-				t.Fatalf("Engine dynamicTools = %#v", params["dynamicTools"])
-			}
-			return rpcResult(msg["id"], map[string]any{"threadId": "engine-thread"}), true
 		})
 	case "conversation-thread-notification-before-result":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
