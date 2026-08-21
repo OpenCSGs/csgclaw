@@ -24,10 +24,10 @@ CSGClaw needs one runtime-neutral execution path for anonymous sessions, built-i
 Channel Adapter or Session API -> Agent Engine -> Runtime Adapter
 ```
 
-The design has two public resource interfaces:
+The design has two top-level public resource interfaces:
 
 - `Agents()` manages persisted Agent resources and Runtime lifecycle.
-- `Conversations(agentID)` executes conversations for one selected Agent.
+- `Conversations(agentID)` executes conversations and manages immutable files for one selected Agent.
 
 The interface follows the Kubernetes client style by selecting a resource scope first and then exposing focused operations.
 It does not introduce a Kubernetes controller, API server, object metadata model, or reconciliation framework.
@@ -217,15 +217,30 @@ The review surface is:
 | Resource | Operations | Purpose |
 |---|---|---|
 | `Agents()` | Create, Get, List, Update, Delete, Start, Stop, Recreate | Desired Agent configuration and Runtime lifecycle |
-| `Conversations(agentID)` | Run, Cancel, Reset, Resolve | Conversation execution scoped to one Agent |
+| `Conversations(agentID)` | Files, Run, Cancel, Reset, Resolve | Conversation execution scoped to one Agent |
+| `Conversations(agentID).Files()` | Create, Get, Delete | Immutable files scoped by the selected Agent |
 | `ConversationRuntime` | Run, Cancel, Reset, Resolve | Runtime-specific direct execution behind Engine |
+
+The public contract is transport-ready without defining a remote Engine protocol in this phase:
+
+| Engine operation | HTTP mapping |
+|---|---|
+| `Agents().Create/Get/List/Update/Delete` | Agent collection and resource POST, GET, PUT, DELETE |
+| `Agents().Start/Stop/Recreate` | Agent action POST endpoints |
+| `Conversations(agentID).Run` | Turn POST with JSON request and JSON or SSE result stream |
+| `Cancel/Reset/Resolve` | Conversation action POST endpoints with typed JSON bodies |
+| `Conversations(agentID).Files().Create` | File metadata plus streaming HTTP request body |
+| `Conversations(agentID).Files().Get/Delete` | Content GET with metadata headers, and DELETE |
+
+`context.Context`, `io.Reader`, `io.ReadCloser`, and `EventSink` belong to the Go client and server adapter boundary.
+Every request, resource, event, result, and error value crossing that boundary has a stable JSON representation and contains no Runtime path or process-local capability.
 
 `AgentInterface` is the collection-scoped API for Agent resources, and callers cannot depend on the current `internal/agent.Service`.
 The Phase 2 Engine Facade may wrap the current Agent Service through a private backend so it can first reuse the already verified Agent persistence and Runtime lifecycle code.
 That wrapper is only an internal Engine implementation; it does not enter the public contract or prevent Phase 4 from separating the broad Service into explicit storage, lifecycle, and Runtime components.
 Conversation execution keeps no duplicate Agent records and coordinates active Turns with lifecycle changes.
 The Phase 1 Conversation implementation may reach the current Agent Service only through the private Adapter wired by the composition root.
-Phase 2 extends this boundary so the complete Engine implements `Agents()` and `Conversations()` through one private Facade instead of first rewriting the existing Agent components.
+Phase 2 extends this boundary so the complete Engine implements `Agents()` and `Conversations(agentID)`, including its nested `Files()` resource, without first rewriting the existing Agent components.
 Phase 4 then replaces the transitional Facade and consolidates the internal owners of Agent state and Runtime lifecycle while preserving external behavior.
 If the internal refactor genuinely requires a public interface change, the change remains subject to joint review and must update every implementation, the Mock Client, and the contract tests together.
 
@@ -307,7 +322,7 @@ Feishu keeps its current `skip_user_input` behavior.
 
 `TurnRequest.Input` is one ordered list of `InputPart` values.
 A text part contains `Text`.
-A file part contains one caller-authorized `InputFile`.
+A file part contains one Agent-scoped `InputFile` reference with only a FileID.
 There is no parallel file list and no Engine file-preparation step.
 Incremental implementation does not narrow this contract to a string.
 The Phase 1 Session HTTP Adapter creates one text part, and the private Codex Runtime Adapter joins ordered text parts before calling the current Runtime API.
@@ -319,13 +334,14 @@ The Event Sink receives ordered progress for a logical Turn:
 - Thought delta.
 - Activity update.
 - Interaction request.
-- Validated output item.
+- Validated non-file output item.
 
 The sink is not an event bus, transcript store, or Channel renderer.
 Every event carries `TurnID` and monotonic `Sequence`.
 The tuple `(TurnID, Sequence)` lets an Adapter deduplicate replayed envelopes after a retry.
 
 `Run` returns exactly one `TurnResult` and no second raw Runtime error.
+A successful result contains JSON-safe immutable file metadata in `Files`; failed or canceled results contain no deliverable files.
 `Dispatched=false` means the native Turn was not submitted.
 This includes Engine admission rejection and failure to create, resolve, or persist a required Runtime-native conversation mapping.
 `Dispatched=true` means the Continuation Policy succeeded, the required mapping was durably established or resolved, and the native Turn was submitted.
@@ -340,9 +356,9 @@ Each fact has one owner:
 | Component | Owns | Does not own |
 |---|---|---|
 | Agent resource implementation | Agent persistence, desired configuration including Runtime credentials and `InitShell`, Runtime lifecycle, Workspace and Runtime provisioning | Turn input, transcript, Runtime-native conversation mapping, Channel Event Worker lifecycle |
-| Agent Engine | Admission, per-Conversation serialization, dispatch, active Turn, pending interaction, event ordering, normalized result | Durable Agent or Conversation state, files, Channel behavior |
-| Runtime Adapter | Runtime credential serialization, `InitShell` execution, native conversation mapping, direct Runtime protocol, Runtime event translation, file exposure to Runtime | Channel subscription, transcript, Agent persistence |
-| Channel Adapter | Ingress, identity, binding and Channel Event Worker lifecycle, host-side Channel credentials, deduplication, hidden context, file authorization, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
+| Agent Engine | Admission, per-Conversation serialization, dispatch, active Turn, pending interaction, event ordering, normalized result, process-local immutable Artifact Store | Durable Agent or Conversation state, external file transport, Channel behavior |
+| Runtime Adapter | Runtime credential serialization, `InitShell` execution, native conversation mapping, direct Runtime protocol, Runtime event translation, input-file exposure, output-file authorization | Channel subscription, transcript, Agent persistence |
+| Channel Adapter | Ingress, identity, binding and Channel Event Worker lifecycle, host-side Channel credentials, deduplication, hidden context, input-file authorization, authorized output-file delivery, transcript, rendering, acknowledgment | Runtime-native mapping, Engine admission |
 | Session HTTP Adapter | HTTP validation, Session Binding, SSE and error mapping | IM Room, Message, Participant, transcript |
 
 The minimal Phase 1 Session implementation has no lifecycle coordination.
@@ -434,21 +450,26 @@ The design does not promise cross-restart replay, exactly-once execution, or rec
 
 ### 6.2 Files
 
-Built-in IM continues to own attachment metadata, blobs, download tokens, and garbage collection.
-Before calling Engine, the trusted caller authorizes the file and resolves an `InputFile` containing ID, source path, name, media type, size, and hash.
-
-Engine validates the Input shape but treats `SourcePath` as opaque.
-It does not call IM APIs, read file bytes, write Workspace files, manage blobs, or mount sandboxes.
-The Runtime Adapter decides how to mount, copy, or expose the file and preserves path, symlink, size, and hash checks.
-The caller keeps the resolved source valid until `Run` returns.
+Built-in IM continues to own its durable attachment metadata, blobs, download tokens, and garbage collection.
+Before calling `Run`, a caller uploads content through `Conversations(agentID).Files().Create` and receives immutable metadata with an opaque FileID.
+`InputFile` carries only that FileID, so callers and Engine do not need a shared filesystem or `SourcePath`.
+Engine resolves the ID within the selected Agent scope and the Runtime Adapter copies the immutable snapshot into its execution environment.
 
 Files are included only when newly uploaded or explicitly referenced.
 Previous file bytes are not resent merely to continue a Runtime-native conversation.
 
+For output, each Runtime Adapter consumes a typed native file reference and resolves it before crossing the Engine boundary.
+The Codex app-server Adapter exposes `csgclaw_publish_file` as a typed dynamic tool with a workspace-relative path; a direct Responses Adapter should consume native generated-file references and tool outputs.
+The Runtime Adapter opens the resolved local path through workspace-rooted access, rejects escapes and non-regular final symlinks, and registers one immutable snapshot with authoritative name, MIME type, size, and SHA-256 metadata.
+Engine assigns an opaque random ID independent from SHA-256 and returns metadata in a successful `TurnResult.Files` without exposing the host path.
+Channel Adapters call `Conversations(agentID).Files().Get(fileID)` to receive authoritative metadata and an independent snapshot stream, and Turn replay preserves both ID and content.
+They may upload only files from a successful `TurnResult`.
+They never download `resource_link`; ordinary HTTP(S) resource links remain Markdown links.
+
 ### 6.3 Structured Output and Interactions
 
-One shared decoder owns the `::csgclaw-output::` grammar.
-It validates `resource_link` and detached `request_user_input` payloads before they cross the Engine boundary.
+One shared decoder owns the `::csgclaw-output::` grammar for `resource_link` and detached `request_user_input` only.
+Runtime file output uses typed native Runtime events and never relies on parsing assistant text or command stdout.
 Raw control lines never reach public text or Channel renderers.
 
 A blocking Runtime Permission or User Input keeps the same Turn open and uses `Resolve`.
@@ -526,11 +547,11 @@ Starting in Phase 2, the Agent Engine interface is the only boundary between Eng
 
 - Implement the complete `agentengine.Interface` and provide the concurrency-safe, stateful `enginetest.MemoryClient` implementing the same contract.
 - The interface is not an immutable protocol; when implementation exposes an omission or mistake, it may change through joint review, with the real Engine, Mock Client, contract tests, and affected Adapter call sites updated in the same change.
-- Implement `Agents()`, `Run`, `Cancel`, atomic `Reset`, claimed `Resolve`, explicit admission policies, Turn retry idempotency, TurnID event envelopes, file input, interactions, Structured Output, `Dispatched`, and stable errors.
+- Implement `Agents()`, `Run`, `Cancel`, atomic `Reset`, claimed `Resolve`, explicit admission policies, Turn retry idempotency, TurnID event envelopes, file input, authorized Runtime file output, interactions, Structured Output, `Dispatched`, and stable errors.
 - Let the Agent Engine Facade first wrap the existing Agent Service, Codex Session, brokers, Structured Output, and Runtime provisioning code instead of making internal refactoring a prerequisite for a complete Engine.
 - Coordinate Agent mutation, admission, active Turns, drain, and pinned Runtime handles through one shared Lifecycle Gate.
 - Migrate the anonymous Session API to `agentengine.Interface` while preserving its HTTP contract and zero IM entity creation.
-- Prove a test-only Feishu ingress harness through `MemoryClient`, with Feishu credentials remaining exclusively in the current Channel binding owner.
+- Prove test-only Feishu ingress and output-delivery harnesses through `MemoryClient`, including Feishu image upload, file upload, and message OpenAPI calls, with Feishu credentials remaining exclusively in the current Channel binding owner.
 - Keep production Channel Adapter implementation, integration, and atomic switching in Phase 3.
 - Materialize Codex `RuntimeSpec.Credentials` as workspace-relative files and run `RuntimeSpec.InitShell` after the files are available.
 
@@ -572,17 +593,20 @@ The two Phase 2 sides can be developed and verified independently, Phase 3 owns 
 ### 8.2 Target Architecture
 
 - `internal/agentengine` imports no IM, Participant, Channel, Team, or concrete Runtime package.
-- `Interface` exposes `Agents()` and Agent-scoped `Conversations(agentID)`.
+- `Interface` exposes `Agents()` and Agent-scoped `Conversations(agentID)`; files are a nested Conversation resource selected with `Conversations(agentID).Files()`.
 - Conversation requests do not repeat Agent ID.
 - Conversation keys remain opaque and caller-owned.
 - Every Run carries a caller-generated opaque Turn ID, and Cancel targets one Turn with its Conversation Key and Turn ID.
-- Engine persists no Agent, Conversation, transcript, file, or delivery state.
+- Engine durably persists no Agent, Conversation, transcript, file, or delivery state; its Artifact Store is process-local and bounded by explicit deletion or Turn-cache eviction.
 - Agent resource implementations, Agent Engine, and Runtime Adapters have no Channel Event Worker dependency and do not access IM message persistence.
 - Channel Event Workers are keyed by stable Binding identity, not Runtime ID or native Session ID.
 - Runtime-native conversation mapping has one owner.
 - After Phase 2, external callers depend only on `AgentInterface`, and `Conversations()` accesses Agent availability and Runtime selection only through the internal Engine Facade.
 - After Phase 4, the `AgentInterface` implementation is the only Agent persistence and Runtime lifecycle owner, and Engine internals no longer depend on the broad `internal/agent.Service`.
 - Runtime credential file layouts and initialization remain owned by each Runtime Adapter.
+- Runtime file output crosses Engine only in successful `TurnResult.Files` as metadata for an immutable snapshot with opaque ID, MIME type, size, SHA-256, and no host path.
+- Input file parts contain only Agent-scoped FileIDs; public request and response types contain no local source paths or Reader capabilities.
+- Public resource and event values use stable JSON field names, while `Files.Create` and `Files.Get` map to HTTP request and response bodies.
 - Missing Runtime Adapters fail explicitly with no fallback path.
 - The Go contract and both language documents remain synchronized.
 
@@ -603,13 +627,15 @@ The two Phase 2 sides can be developed and verified independently, Phase 3 owns 
 - Create, Update, Get, and List results omit Runtime credential values.
 - Recreate and Delete report missing strict-continuation mappings honestly.
 - CSGClaw Structured Output never leaks raw control lines.
+- Ordinary `resource_link` output is never downloaded or promoted to an uploadable file.
 - Secret answers enter neither logs nor transcripts.
 
 ### 8.4 Target Verification
 
 - Contract tests cover Run, Cancel, atomic Reset, claimed Resolve, event envelopes, terminal results, and stable errors.
 - Tests cover Turn retry idempotency, different-Conversation concurrency, reject, wait, supersede, sink failure, and cancellation behavior.
-- Tests cover no MCP, local MCP, remote MCP, text input, and file input.
+- Tests cover no MCP, local MCP, remote MCP, text input, file input, authorized Runtime file output, and workspace-escape rejection.
+- A Feishu OpenAPI end-to-end harness verifies image upload, file upload, message delivery, failed-Turn non-delivery, and the no-download rule for `resource_link`.
 - Anonymous tests verify that IM entity counts do not change and Session Binding scope is Agent-specific.
 - Channel tests verify deduplication, replay, superseding, rendering, Binding-driven Event Worker lifecycle, and idempotent reconciliation.
 - Lifecycle tests verify that Agent Stop, Recreate, and Runtime restart do not start or stop Channel Event Workers.

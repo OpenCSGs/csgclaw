@@ -301,6 +301,21 @@ CSGClaw 会在 Markdown 链接旁渲染第一个使用绝对 HTTP(S) `src` 的�
 ::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}
 ```
 
+## 文件输出
+
+Runtime 本地文件投递明确不使用该行式协议编码。
+Codex app-server Adapter 注册 typed dynamic tool `csgclaw_publish_file`，参数为 `path`、可选 `name` 和可选 `mimeType`。
+该工具产生可靠的 Runtime File Event，而不是需要再次解析的文本。
+Runtime Adapter 通过受 workspace 根目录约束的文件访问打开相对路径，拒绝越界路径和最终为 symlink 的非普通文件，并在 Turn 完成前把唯一不可变快照注册到 Agent-scoped Engine Artifact Store。
+Agent Engine 分配与内容 SHA-256 无关的随机 opaque File ID，并且只在 Turn 成功时通过 `TurnResult.Files` 返回 JSON-safe Metadata。
+可见名称必须是有效 UTF-8 basename，不含路径成分或控制字符，并且最多为 255 bytes。
+Channel Adapter 调用 `Engine.Conversations(agentID).Files().Get(fileID)` 获取权威 Metadata 和同一个快照上的独立 Reader，不再访问 Runtime workspace。
+它只能上传成功 `TurnResult` 中的文件，并且不得下载 `resource_link`。
+
+直接使用 OpenAI Responses 的 Adapter 应把原生生成文件引用和工具输出转换成同一个 Engine `OutputFile` Contract，而不是要求模型输出 CSGClaw 控制记录。
+Responses Output Text 可以携带 File Annotation，OpenAI 托管的 Container File 则继续通过 Container ID 和 File ID 寻址。
+参见 [Responses API Reference](https://developers.openai.com/api/reference/cli/resources/beta/subresources/responses) 和 [Container Files API](https://developers.openai.com/api/reference/resources/containers/subresources/files)。
+
 ## 限制与兼容性
 
 - 每条控制记录最大为 256 KiB。

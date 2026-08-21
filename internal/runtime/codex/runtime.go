@@ -122,6 +122,7 @@ const (
 	SessionEventUserInputRequest   = activity.RuntimeEventUserInputRequest
 	SessionEventUserInputResolved  = activity.RuntimeEventUserInputResolved
 	SessionEventStructuredOutput   = activity.RuntimeEventStructuredOutput
+	SessionEventFileOutput         = activity.RuntimeEventFileOutput
 	SessionEventPromptCompleted    = activity.RuntimeEventPromptCompleted
 	SessionEventPromptFailed       = activity.RuntimeEventPromptFailed
 )

@@ -65,6 +65,16 @@ func TestDecodeStructuredCommandOutputAcceptsAssistantLineBreakVariant(t *testin
 	}
 }
 
+func TestDecodeStructuredCommandOutputDoesNotTreatFileTextAsProtocol(t *testing.T) {
+	t.Parallel()
+
+	record := `::csgclaw-output::runtime_file {"type":"runtime_file","path":"reports/result.pdf"}`
+	cleaned, artifact, errs := decodeStructuredCommandOutput(record)
+	if cleaned != record || !structuredOutputArtifactEmpty(artifact) || len(errs) != 0 {
+		t.Fatalf("cleaned=%q artifact=%+v errors=%v", cleaned, artifact, errs)
+	}
+}
+
 func TestDecodeStructuredCommandOutputRejectsMalformedDuplicateAndUnsafeRecords(t *testing.T) {
 	t.Parallel()
 

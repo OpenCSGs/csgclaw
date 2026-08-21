@@ -1,8 +1,10 @@
 package enginetest
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -87,12 +89,13 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 	})
 
 	t.Run("run events result and recording", func(t *testing.T) {
+		var publishedFile agentengine.OutputFile
 		behavior := func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 			events := []agentengine.TurnEvent{
 				{Kind: agentengine.TurnEventThoughtDelta, Thought: "thinking"},
 				{Kind: agentengine.TurnEventToolCallStart, Tool: &agentengine.ToolActivity{ID: "tool-1", Kind: "exec_command", InputSummary: "pwd"}},
 				{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{ID: "plan-1", Kind: "plan_update", Status: "running"}},
-				{Kind: agentengine.TurnEventOutputItem, Output: &agentengine.OutputItem{Kind: agentengine.OutputItemResourceLink, Payload: activity.ResourceLink{Name: "report", URI: "file:///report"}}},
+				{Kind: agentengine.TurnEventOutputItem, Output: &agentengine.OutputItem{Kind: agentengine.OutputItemResourceLink, Payload: activity.ResourceLink{Name: "report", URI: "https://example.com/report"}}},
 				{Kind: agentengine.TurnEventTextDelta, Text: "answer"},
 			}
 			for _, event := range events {
@@ -100,15 +103,16 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 					return contractFailure(agentengine.ErrorRuntimeFailed, err)
 				}
 			}
-			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "answer", Dispatched: true}
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "answer", Files: []agentengine.OutputFile{publishedFile}, Dispatched: true}
 		}
 		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, behavior)
+		publishedFile = contractCreateFile(t, client, "agent-a")
 		var events []agentengine.TurnEvent
 		result := client.Conversations("agent-a").Run(context.Background(), contractTurn("turn-1", "conversation-1"), agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
 			events = append(events, event)
 			return nil
 		}))
-		if result.Status != agentengine.TurnSucceeded || result.Output != "answer" || !result.Dispatched || result.Error != nil {
+		if result.Status != agentengine.TurnSucceeded || result.Output != "answer" || len(result.Files) != 1 || !result.Dispatched || result.Error != nil {
 			t.Fatalf("Run() = %+v", result)
 		}
 		if len(events) != 5 {
@@ -121,6 +125,16 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		}
 		if events[0].Thought != "thinking" || events[1].Tool == nil || events[2].Activity == nil || events[3].Output == nil || events[4].Text != "answer" {
 			t.Fatalf("normalized events = %+v", events)
+		}
+		file := result.Files[0]
+		download, err := client.Conversations("agent-a").Files().Get(context.Background(), file.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, readErr := io.ReadAll(download.Content)
+		closeErr := download.Content.Close()
+		if download.Metadata != file.OutputFileMetadata || readErr != nil || closeErr != nil || string(content) != "contract-output" {
+			t.Fatalf("file = %+v content = %q, read=%v close=%v", download.Metadata, content, readErr, closeErr)
 		}
 	})
 
@@ -144,6 +158,55 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		managerUpdate.Spec.Role = agentengine.AgentRoleWorker
 		if _, err := client.Agents().Update(context.Background(), manager.ID, managerUpdate.Spec); agentengine.ErrorCodeOf(err) != agentengine.ErrorInvalidRequest {
 			t.Fatalf("manager-to-worker Update error = %v", err)
+		}
+	})
+
+	t.Run("file resources and file input", func(t *testing.T) {
+		client := factory(t, []agentengine.Agent{
+			contractAgent("agent-a", agentengine.AgentStateRunning, "codex"),
+			contractAgent("agent-b", agentengine.AgentStateRunning, "codex"),
+		}, nil)
+		content := []byte("contract file input")
+		created, err := client.Conversations("agent-a").Files().Create(context.Background(), agentengine.FileCreateRequest{
+			Name: "input.txt", MIMEType: "text/plain", SizeBytes: int64(len(content)),
+		}, bytes.NewReader(content))
+		if err != nil || created.ID == "" || created.Name != "input.txt" || created.SizeBytes != int64(len(content)) || len(created.SHA256) != 64 {
+			t.Fatalf("Create file = %+v, %v", created, err)
+		}
+		if _, err := client.Conversations("agent-b").Files().Get(context.Background(), created.ID); agentengine.ErrorCodeOf(err) != agentengine.ErrorFileNotFound {
+			t.Fatalf("cross-Agent Get error = %v", err)
+		}
+		download, err := client.Conversations("agent-a").Files().Get(context.Background(), created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, readErr := io.ReadAll(download.Content)
+		closeErr := download.Content.Close()
+		if download.Metadata != created.OutputFileMetadata || readErr != nil || closeErr != nil || !bytes.Equal(got, content) {
+			t.Fatalf("file = %+v content = %q, read=%v close=%v", download.Metadata, got, readErr, closeErr)
+		}
+		request := contractTurn("turn-file-input", "conversation-file-input")
+		request.Input = []agentengine.InputPart{{Kind: agentengine.InputPartFile, File: &agentengine.InputFile{ID: created.ID}}}
+		if result := client.Conversations("agent-a").Run(context.Background(), request, nil); result.Status != agentengine.TurnSucceeded {
+			t.Fatalf("file input Run = %+v", result)
+		}
+		if err := client.Conversations("agent-a").Files().Delete(context.Background(), created.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.Conversations("agent-a").Files().Get(context.Background(), created.ID); agentengine.ErrorCodeOf(err) != agentengine.ErrorFileNotFound {
+			t.Fatalf("Get deleted error = %v", err)
+		}
+		owned, err := client.Conversations("agent-a").Files().Create(context.Background(), agentengine.FileCreateRequest{
+			Name: "owned.txt", MIMEType: "text/plain", SizeBytes: int64(len(content)),
+		}, bytes.NewReader(content))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := client.Agents().Delete(context.Background(), "agent-a"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := client.Conversations("agent-a").Files().Get(context.Background(), owned.ID); agentengine.ErrorCodeOf(err) != agentengine.ErrorFileNotFound {
+			t.Fatalf("Get deleted-Agent file error = %v", err)
 		}
 	})
 
@@ -179,14 +242,16 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 
 	t.Run("turn retries are idempotent", func(t *testing.T) {
 		var executions int
+		var publishedFile agentengine.OutputFile
 		behavior := func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 			executions++
 			if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "answer"}); err != nil {
 				return contractFailure(agentengine.ErrorRuntimeFailed, err)
 			}
-			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "answer", Dispatched: true}
+			return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "answer", Files: []agentengine.OutputFile{publishedFile}, Dispatched: true}
 		}
 		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, behavior)
+		publishedFile = contractCreateFile(t, client, "agent-a")
 		request := contractTurn("turn-1", "conversation-1")
 		var firstEvents []agentengine.TurnEvent
 		first := client.Conversations("agent-a").Run(context.Background(), request, agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
@@ -201,7 +266,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		if executions != 1 {
 			t.Fatalf("Runtime executions = %d, want 1", executions)
 		}
-		if first.Status != agentengine.TurnSucceeded || retried != first {
+		if first.Status != agentengine.TurnSucceeded || retried.Status != first.Status || retried.Output != first.Output || len(first.Files) != 1 || len(retried.Files) != 1 || retried.Files[0].ID != first.Files[0].ID || retried.Dispatched != first.Dispatched || agentengine.ErrorCodeOf(retried.Error) != agentengine.ErrorCodeOf(first.Error) {
 			t.Fatalf("first = %+v, retried = %+v", first, retried)
 		}
 		if len(retriedEvents) != len(firstEvents) {
@@ -646,7 +711,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		}
 		invalidFile := contractTurn("turn-invalid-file", "conversation-invalid-file")
 		invalidFile.Input = []agentengine.InputPart{{Kind: agentengine.InputPartFile, File: &agentengine.InputFile{ID: "file"}}}
-		if result := client.Conversations("agent-running").Run(context.Background(), invalidFile, nil); result.Error == nil || result.Error.Code != agentengine.ErrorInvalidRequest || result.Dispatched {
+		if result := client.Conversations("agent-running").Run(context.Background(), invalidFile, nil); result.Error == nil || result.Error.Code != agentengine.ErrorFileNotFound || result.Dispatched {
 			t.Fatalf("invalid file Run() = %+v", result)
 		}
 		invalidContinuation := contractTurn("turn-invalid-continuation", "conversation-invalid-continuation")
@@ -710,4 +775,16 @@ func contractTurn(id agentengine.TurnID, key agentengine.ConversationKey) agente
 
 func contractFailure(code agentengine.ErrorCode, err error) agentengine.TurnResult {
 	return agentengine.TurnResult{Status: agentengine.TurnFailed, Dispatched: true, Error: &agentengine.TurnError{Code: code, Message: err.Error()}}
+}
+
+func contractCreateFile(t testing.TB, client agentengine.Interface, agentID string) agentengine.OutputFile {
+	t.Helper()
+	content := []byte("contract-output")
+	file, err := client.Conversations(agentID).Files().Create(context.Background(), agentengine.FileCreateRequest{
+		Name: "contract.txt", MIMEType: "text/plain", SizeBytes: int64(len(content)),
+	}, bytes.NewReader(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return file
 }

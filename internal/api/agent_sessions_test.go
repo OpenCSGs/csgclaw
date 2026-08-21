@@ -41,6 +41,10 @@ type fakeSessionConversations struct {
 	delegate agentengine.ConversationInterface
 }
 
+func (c fakeSessionConversations) Files() agentengine.FileInterface {
+	return c.delegate.Files()
+}
+
 func (c fakeSessionConversations) Run(ctx context.Context, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 	if c.engine.beforeRun != nil {
 		c.engine.beforeRun(ctx)

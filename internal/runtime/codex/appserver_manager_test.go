@@ -333,6 +333,40 @@ func TestAppServerManagerPromptCompletesTurn(t *testing.T) {
 	}
 }
 
+func TestAppServerManagerPublishFileDynamicToolEndToEnd(t *testing.T) {
+	withAppServerHelperCommand(t, "prompt-publish-file")
+	dir := t.TempDir()
+	spec := testAppServerSessionSpec(dir)
+	sink := &recordingSink{}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+	session, err := manager.Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: session.SessionID,
+		Prompt:    []PromptContentBlock{TextBlock("publish the report")},
+	})
+	if err != nil {
+		t.Fatalf("Prompt() error = %v", err)
+	}
+	if resp.StopReason != StopReasonEndTurn {
+		t.Fatalf("StopReason = %q, want %q", resp.StopReason, StopReasonEndTurn)
+	}
+
+	waitForRuntime(t, func() bool { return len(sink.snapshot()) >= 3 })
+	events := sink.snapshot()
+	if len(events) != 3 || events[0].Kind != SessionEventFileOutput || events[1].Kind != SessionEventTextDelta || events[2].Kind != SessionEventPromptCompleted {
+		t.Fatalf("events = %#v, want file output, text, and prompt completion", events)
+	}
+	file, ok := events[0].Payload.(activity.RuntimeFile)
+	if !ok || file.Path != filepath.Join("reports", "result.pdf") || file.Name != "result.pdf" || file.MIMEType != "application/pdf" {
+		t.Fatalf("file output = %#v", events[0])
+	}
+}
+
 func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -2226,6 +2260,97 @@ func TestAppServerReadOnlyParamsAndOverrides(t *testing.T) {
 	}
 }
 
+func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	params := appServerThreadStartParams(spec)
+	tools, ok := params["dynamicTools"].([]map[string]any)
+	if !ok || len(tools) != 1 {
+		t.Fatalf("dynamicTools = %#v, want one typed tool", params["dynamicTools"])
+	}
+	tool := tools[0]
+	if tool["name"] != "csgclaw_publish_file" || strings.TrimSpace(fmt.Sprint(tool["description"])) == "" {
+		t.Fatalf("publish file tool = %#v", tool)
+	}
+	schema, _ := tool["inputSchema"].(map[string]any)
+	properties, _ := schema["properties"].(map[string]any)
+	required, _ := schema["required"].([]string)
+	if schema["type"] != "object" || properties["path"] == nil || properties["name"] == nil || properties["mimeType"] == nil || len(required) != 1 || required[0] != "path" || schema["additionalProperties"] != false {
+		t.Fatalf("publish file input schema = %#v", schema)
+	}
+}
+
+func TestAppServerPublishFileDynamicToolEmitsTypedFileEvent(t *testing.T) {
+	sink := &recordingSink{}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+	live := &liveSession{spec: testAppServerSessionSpec(t.TempDir())}
+	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
+		Method: "item/tool/call",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "thread-1",
+			"turnId":   "turn-1",
+			"callId":   "call-1",
+			"tool":     "csgclaw_publish_file",
+			"arguments": map[string]any{
+				"path": "reports/result.pdf", "mimeType": "application/pdf",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _ := response.(map[string]any)
+	items, _ := result["contentItems"].([]map[string]any)
+	if result["success"] != true || len(items) != 1 || items[0]["type"] != "inputText" {
+		t.Fatalf("dynamic tool response = %#v", response)
+	}
+	events := sink.snapshot()
+	if len(events) != 1 || events[0].Kind != activity.RuntimeEventFileOutput || events[0].RuntimeID != "runtime-1" || events[0].SessionID != "thread-1" || events[0].TurnID != "turn-1" || events[0].ToolCallID != "call-1" {
+		t.Fatalf("file events = %#v", events)
+	}
+	file, ok := events[0].Payload.(activity.RuntimeFile)
+	if !ok || file.Path != filepath.Join("reports", "result.pdf") || file.Name != "result.pdf" || file.MIMEType != "application/pdf" {
+		t.Fatalf("file event payload = %#v", events[0].Payload)
+	}
+}
+
+func TestAppServerPublishFileDynamicToolRejectsUnsafeArguments(t *testing.T) {
+	tests := []struct {
+		name      string
+		arguments map[string]any
+	}{
+		{name: "absolute path", arguments: map[string]any{"path": "/etc/passwd"}},
+		{name: "path traversal", arguments: map[string]any{"path": "../secret.txt"}},
+		{name: "nested delivery name", arguments: map[string]any{"path": "report.txt", "name": "nested/report.txt"}},
+		{name: "dot delivery name", arguments: map[string]any{"path": "report.txt", "name": ".."}},
+		{name: "control character", arguments: map[string]any{"path": "report.txt", "name": "line\nbreak.txt"}},
+		{name: "oversized name", arguments: map[string]any{"path": "report.txt", "name": strings.Repeat("a", 256)}},
+		{name: "invalid MIME type", arguments: map[string]any{"path": "report.txt", "mimeType": "not a mime"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			sink := &recordingSink{}
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+			response, err := manager.handleAppServerServerRequest("runtime-1", &liveSession{}, appServerServerRequest{
+				Method: "item/tool/call",
+				Params: mustJSONRaw(t, map[string]any{
+					"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": appServerPublishFileToolName,
+					"arguments": test.arguments,
+				}),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, _ := response.(map[string]any)
+			if result["success"] != false {
+				t.Fatalf("response = %#v, want typed failure", response)
+			}
+			if events := sink.snapshot(); len(events) != 0 {
+				t.Fatalf("unsafe file events = %#v", events)
+			}
+		})
+	}
+}
+
 func TestAppServerReadOnlyDeclinesMutationApprovals(t *testing.T) {
 	manager := newAppServerManager(testAppServerManagerDeps())
 	live := &liveSession{spec: SessionSpec{ExecutionMode: ExecutionModeReadOnly}}
@@ -2393,6 +2518,47 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-1", "type": "agentMessage", "text": "done"}})
 				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-1", "status": "completed"}})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-1"}), true
+			default:
+				return nil, false
+			}
+		})
+	case "prompt-publish-file":
+		awaitingTool := false
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			if awaitingTool {
+				assertServerRequestResponse(t, msg, 9010, func(result map[string]any) {
+					if result["success"] != true {
+						t.Fatalf("publish file result = %#v", result)
+					}
+					items, _ := result["contentItems"].([]any)
+					if len(items) != 1 {
+						t.Fatalf("publish file contentItems = %#v", result["contentItems"])
+					}
+				})
+				awaitingTool = false
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "message-1", "type": "agentMessage", "text": "published"}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-publish", "status": "completed"}})
+				return nil, false
+			}
+			switch msg["method"] {
+			case "thread/start":
+				params, _ := msg["params"].(map[string]any)
+				tools, _ := params["dynamicTools"].([]any)
+				if len(tools) != 1 {
+					t.Fatalf("thread/start dynamicTools = %#v", params["dynamicTools"])
+				}
+				tool, _ := tools[0].(map[string]any)
+				if tool["name"] != appServerPublishFileToolName {
+					t.Fatalf("thread/start publish tool = %#v", tool)
+				}
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				awaitingTool = true
+				writeRPCServerRequest(t, 9010, "item/tool/call", map[string]any{
+					"threadId": "main-thread", "turnId": "turn-publish", "callId": "call-publish", "tool": appServerPublishFileToolName,
+					"arguments": map[string]any{"path": "reports/result.pdf", "name": "result.pdf", "mimeType": "application/pdf"},
+				})
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-publish"}), true
 			default:
 				return nil, false
 			}

@@ -26,6 +26,7 @@ type conversationRuntimeAdapter interface {
 type Engine struct {
 	agents   AgentInterface
 	runtimes conversationRuntimeResolver
+	files    *FileStore
 
 	mu             sync.Mutex
 	active         map[conversationIdentity]*activeTurn
@@ -89,6 +90,13 @@ func (e *Engine) Conversations(agentID string) ConversationInterface {
 	return &conversations{engine: e, agentID: strings.TrimSpace(agentID)}
 }
 
+func (c *conversations) Files() FileInterface {
+	if c == nil || c.engine == nil || c.engine.files == nil {
+		return unavailableFiles{}
+	}
+	return c.engine.files.Scope(c.agentID)
+}
+
 type conversations struct {
 	engine  *Engine
 	agentID string
@@ -133,6 +141,13 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if admissionResult != nil {
 		return *admissionResult
 	}
+	runtimeRequest, inputErr := c.engine.resolveInputFiles(c.agentID, request)
+	if inputErr != nil {
+		result := TurnResult{Status: TurnFailed, Error: inputErr}
+		turn.cancel()
+		c.engine.complete(identity, turn, result)
+		return result
+	}
 
 	runtimeAdapter, releaseRuntime, resolveErr := c.engine.runtimes.conversationRuntime(turn.ctx, c.agentID)
 	if resolveErr != nil {
@@ -149,11 +164,34 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	orderedSink := EventSinkFunc(func(eventCtx context.Context, event TurnEvent) error {
 		return c.engine.recordAndEmit(eventCtx, turn, sink, event)
 	})
-	result := runtimeAdapter.Run(turn.ctx, request, orderedSink)
+	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)
+	if result.Status != TurnSucceeded {
+		result.Files = nil
+		result.files = nil
+	} else if len(result.files) > 0 {
+		result.Files = c.engine.files.registerTurnFiles(c.agentID, request.ConversationKey, request.ID, result.files)
+		result.files = nil
+	}
 	turn.cancel()
 	releaseRuntime()
 	c.engine.complete(identity, turn, result)
 	return result
+}
+
+func (e *Engine) resolveInputFiles(agentID string, request TurnRequest) (TurnRequest, *TurnError) {
+	resolved := cloneTurnRequest(request)
+	for index := range resolved.Input {
+		part := &resolved.Input[index]
+		if part.Kind != InputPartFile {
+			continue
+		}
+		file, err := e.files.resolve(agentID, part.File.ID)
+		if err != nil {
+			return TurnRequest{}, err
+		}
+		part.File.file = file
+	}
+	return resolved, nil
 }
 
 func (c *conversations) Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error {
@@ -352,6 +390,9 @@ func (e *Engine) ensureState() {
 	if e.completed == nil {
 		e.completed = make(map[turnIdentity]completedTurn)
 	}
+	if e.files == nil {
+		e.files = NewFileStore()
+	}
 }
 
 func (e *Engine) setRuntime(identity conversationIdentity, turn *activeTurn, runtimeAdapter conversationRuntimeAdapter) {
@@ -433,6 +474,7 @@ func (e *Engine) complete(identity conversationIdentity, turn *activeTurn, resul
 			oldest := e.completedOrder[0]
 			e.completedOrder = e.completedOrder[1:]
 			delete(e.completed, oldest)
+			e.files.deleteTurn(oldest.agentID, oldest.key, oldest.id)
 		}
 	}
 	close(turn.done)
@@ -531,11 +573,24 @@ func cloneTurnEvent(input TurnEvent) TurnEvent {
 }
 
 func cloneTurnResult(input TurnResult) TurnResult {
+	input.Files = cloneOutputFiles(input.Files)
+	input.files = nil
 	if input.Error != nil {
 		errorCopy := *input.Error
 		input.Error = &errorCopy
 	}
 	return input
+}
+
+func cloneOutputFiles(input []OutputFile) []OutputFile {
+	if input == nil {
+		return nil
+	}
+	output := make([]OutputFile, len(input))
+	for index, file := range input {
+		output[index] = file.metadata()
+	}
+	return output
 }
 
 func normalizedAdmission(policy AdmissionPolicy) AdmissionPolicy {
@@ -570,8 +625,8 @@ func validateInput(input []InputPart) *TurnError {
 			if part.File == nil || strings.TrimSpace(part.Text) != "" {
 				return &TurnError{Code: ErrorInvalidRequest, Message: "file input must include only a file"}
 			}
-			if strings.TrimSpace(part.File.ID) == "" || strings.TrimSpace(part.File.SourcePath) == "" || strings.TrimSpace(part.File.Name) == "" || strings.TrimSpace(part.File.MediaType) == "" || part.File.SizeBytes < 0 || len(strings.TrimSpace(part.File.SHA256)) != 64 {
-				return &TurnError{Code: ErrorInvalidRequest, Message: "file ID, source path, name, media type, non-negative size, and SHA-256 are required"}
+			if strings.TrimSpace(part.File.ID) == "" {
+				return &TurnError{Code: ErrorInvalidRequest, Message: "file ID is required"}
 			}
 		default:
 			return &TurnError{Code: ErrorInvalidRequest, Message: fmt.Sprintf("unsupported input kind %q", part.Kind)}

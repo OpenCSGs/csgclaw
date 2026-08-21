@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/codexcli"
@@ -22,8 +25,10 @@ import (
 )
 
 const (
-	appServerTurnInterruptTimeout = 5 * time.Second
-	appServerTrackedTurnLimit     = 256
+	appServerTurnInterruptTimeout      = 5 * time.Second
+	appServerTrackedTurnLimit          = 256
+	appServerPublishFileToolName       = "csgclaw_publish_file"
+	appServerMaxPublishedFileNameBytes = 255
 )
 
 var (
@@ -657,6 +662,7 @@ func appServerThreadStartParams(spec SessionSpec) map[string]any {
 	spec.Profile = spec.Profile.Normalized()
 	params := map[string]any{
 		"cwd":                    spec.WorkspaceDir,
+		"dynamicTools":           []map[string]any{appServerPublishFileToolSpec()},
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
 	}
@@ -671,6 +677,32 @@ func appServerThreadStartParams(spec SessionSpec) map[string]any {
 		params["permissions"] = readOnlyPermissionsProfile
 	}
 	return params
+}
+
+func appServerPublishFileToolSpec() map[string]any {
+	return map[string]any{
+		"name":        appServerPublishFileToolName,
+		"description": "Publish an existing file from the current Runtime workspace to the user. Call this only after the file is complete. The path must be relative to the workspace; do not pass a URL or an absolute path.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"path": map[string]any{
+					"type":        "string",
+					"description": "Workspace-relative path of the completed file.",
+				},
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Optional UTF-8 delivery filename with at most 255 bytes, no directory components, and no control characters.",
+				},
+				"mimeType": map[string]any{
+					"type":        "string",
+					"description": "Optional expected MIME type. The Runtime Adapter validates or derives it from the file.",
+				},
+			},
+			"required":             []string{"path"},
+			"additionalProperties": false,
+		},
+	}
 }
 
 func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]any {
@@ -779,8 +811,96 @@ func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *
 		}, nil
 	case "item/tool/requestUserInput":
 		return m.handleAppServerUserInputRequest(runtimeID, live, req)
+	case "item/tool/call":
+		return m.handleAppServerDynamicToolCall(runtimeID, live, req)
 	default:
 		return nil, fmt.Errorf("unhandled server request: %s", strings.TrimSpace(req.Method))
+	}
+}
+
+type appServerDynamicToolCallParams struct {
+	ThreadID  string                   `json:"threadId"`
+	TurnID    string                   `json:"turnId"`
+	CallID    string                   `json:"callId"`
+	Tool      string                   `json:"tool"`
+	Arguments appServerPublishFileArgs `json:"arguments"`
+}
+
+type appServerPublishFileArgs struct {
+	Path     string `json:"path"`
+	Name     string `json:"name"`
+	MIMEType string `json:"mimeType"`
+}
+
+func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, _ *liveSession, req appServerServerRequest) (any, error) {
+	var params appServerDynamicToolCallParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, fmt.Errorf("decode dynamic tool call: %w", err)
+	}
+	params.ThreadID = strings.TrimSpace(params.ThreadID)
+	params.TurnID = strings.TrimSpace(params.TurnID)
+	params.CallID = strings.TrimSpace(params.CallID)
+	params.Tool = strings.TrimSpace(params.Tool)
+	if params.ThreadID == "" || params.TurnID == "" || params.CallID == "" {
+		return nil, fmt.Errorf("dynamic tool thread ID, turn ID, and call ID are required")
+	}
+	if params.Tool != appServerPublishFileToolName {
+		return nil, fmt.Errorf("unsupported dynamic tool %q", params.Tool)
+	}
+	file, err := normalizeAppServerPublishFileArgs(params.Arguments)
+	if err != nil {
+		return appServerDynamicToolResponse(false, err.Error()), nil
+	}
+	if m == nil || m.deps.EventSink == nil {
+		return appServerDynamicToolResponse(false, "file delivery is unavailable"), nil
+	}
+	m.publishAppServerEvent(SessionEvent{
+		RuntimeID:  runtimeID,
+		SessionID:  params.ThreadID,
+		TurnID:     params.TurnID,
+		Kind:       SessionEventFileOutput,
+		ToolCallID: params.CallID,
+		ToolKind:   appServerPublishFileToolName,
+		ToolTitle:  "Publish file",
+		ToolStatus: "completed",
+		Payload:    file,
+	})
+	return appServerDynamicToolResponse(true, "File publication requested."), nil
+}
+
+func normalizeAppServerPublishFileArgs(args appServerPublishFileArgs) (activity.RuntimeFile, error) {
+	path := strings.TrimSpace(args.Path)
+	cleaned := filepath.Clean(path)
+	if path == "" || cleaned == "." || filepath.IsAbs(cleaned) || filepath.VolumeName(cleaned) != "" || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return activity.RuntimeFile{}, fmt.Errorf("path must stay within the Runtime workspace")
+	}
+	name := strings.TrimSpace(args.Name)
+	if name == "" {
+		name = filepath.Base(cleaned)
+	}
+	if !utf8.ValidString(name) || len([]byte(name)) > appServerMaxPublishedFileNameBytes || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsAny(name, "/\\\x00") {
+		return activity.RuntimeFile{}, fmt.Errorf("name must be a valid UTF-8 basename with 1 to %d bytes", appServerMaxPublishedFileNameBytes)
+	}
+	for _, character := range name {
+		if unicode.IsControl(character) {
+			return activity.RuntimeFile{}, fmt.Errorf("name must not contain control characters")
+		}
+	}
+	mediaType := strings.TrimSpace(args.MIMEType)
+	if mediaType != "" {
+		parsed, _, err := mime.ParseMediaType(mediaType)
+		if err != nil || strings.TrimSpace(parsed) == "" {
+			return activity.RuntimeFile{}, fmt.Errorf("mimeType is invalid")
+		}
+		mediaType = strings.ToLower(parsed)
+	}
+	return activity.RuntimeFile{Path: cleaned, Name: name, MIMEType: mediaType}, nil
+}
+
+func appServerDynamicToolResponse(success bool, message string) map[string]any {
+	return map[string]any{
+		"contentItems": []map[string]any{{"type": "inputText", "text": strings.TrimSpace(message)}},
+		"success":      success,
 	}
 }
 
