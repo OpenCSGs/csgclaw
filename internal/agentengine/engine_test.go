@@ -86,7 +86,7 @@ func (f *fakeConversationRuntime) Provision(ctx context.Context, request runtime
 	}
 	return nil
 }
-func (f *fakeConversationRuntime) EnsureSession(_ context.Context, _, conversationKey string) (string, error) {
+func (f *fakeConversationRuntime) EnsureEngineSession(_ context.Context, _, conversationKey string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.conversationKey = conversationKey
@@ -96,7 +96,7 @@ func (f *fakeConversationRuntime) EnsureSession(_ context.Context, _, conversati
 	f.conversations[conversationKey] = "codex-thread"
 	return "codex-thread", nil
 }
-func (f *fakeConversationRuntime) ExistingSession(_ context.Context, _, conversationKey string) (string, bool, error) {
+func (f *fakeConversationRuntime) ExistingEngineSession(_ context.Context, _, conversationKey string) (string, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sessionID := f.conversations[conversationKey]
@@ -316,6 +316,79 @@ func TestConversationRunRejectsRuntimeOutputOutsideWorkspace(t *testing.T) {
 		ID: "turn-output", ConversationKey: "conversation-output", Input: textInput("read outside")}, nil)
 	if result.Status != TurnFailed || result.Error == nil || result.Error.Code != ErrorFileUnavailable || !result.Dispatched {
 		t.Fatalf("Run() = %+v", result)
+	}
+	if strings.Contains(result.Error.Message, workspace) || strings.Contains(result.Error.Message, outside) {
+		t.Fatalf("public error leaked workspace path: %q", result.Error.Message)
+	}
+}
+
+func TestConversationRunCleansOutputSnapshotWhenLaterEventFails(t *testing.T) {
+	snapshotDir := t.TempDir()
+	t.Setenv("TMPDIR", snapshotDir)
+	workspace := t.TempDir()
+	content := []byte("temporary output")
+	if err := os.WriteFile(filepath.Join(workspace, "result.txt"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeImpl := &fakeConversationRuntime{workspace: workspace}
+	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		runtimeImpl.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventFileOutput,
+			Payload: activity.RuntimeFile{Path: "result.txt", MIMEType: "text/plain"},
+		})
+		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptFailed, Error: "later failure"})
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+		ID: "turn-output", ConversationKey: "conversation-output", Input: textInput("create then fail"),
+	}, nil)
+	if result.Status != TurnFailed || result.Error == nil {
+		t.Fatalf("Run() = %+v", result)
+	}
+	paths, err := filepath.Glob(filepath.Join(snapshotDir, "csgclaw-output-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 0 {
+		t.Fatalf("failed Turn retained snapshots: %v", paths)
+	}
+}
+
+func TestConversationRunRejectsMismatchedRuntimeOutputMIMEAndCleansSnapshot(t *testing.T) {
+	snapshotDir := t.TempDir()
+	t.Setenv("TMPDIR", snapshotDir)
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "not-image.png"), []byte("plain text"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeImpl := &fakeConversationRuntime{workspace: workspace}
+	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		runtimeImpl.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventFileOutput,
+			Payload: activity.RuntimeFile{Path: "not-image.png", MIMEType: "image/png"},
+		})
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+		ID: "turn-output", ConversationKey: "conversation-output", Input: textInput("publish image"),
+	}, nil)
+	if result.Status != TurnFailed || result.Error == nil || result.Error.Code != ErrorFileUnavailable {
+		t.Fatalf("Run() = %+v", result)
+	}
+	paths, err := filepath.Glob(filepath.Join(snapshotDir, "csgclaw-output-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 0 {
+		t.Fatalf("MIME rejection retained snapshots: %v", paths)
 	}
 }
 
@@ -820,6 +893,49 @@ func TestConversationRunRejectsSameConversationOverlap(t *testing.T) {
 	close(release)
 	if result := <-firstDone; result.Status != TurnSucceeded {
 		t.Fatalf("first result = %+v", result)
+	}
+}
+
+func TestConversationRunRejectsMissingSupersedeFileWithoutCancelingActiveTurn(t *testing.T) {
+	runtimeImpl := &fakeConversationRuntime{}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var canceled atomic.Bool
+	runtimeImpl.prompt = func(ctx context.Context, runtimeID, sessionID, _ string) error {
+		close(started)
+		select {
+		case <-ctx.Done():
+			canceled.Store(true)
+			return ctx.Err()
+		case <-release:
+			runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
+			return nil
+		}
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	firstDone := make(chan TurnResult, 1)
+	go func() {
+		firstDone <- engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+			ID: "turn-active", ConversationKey: "conversation-1", Input: textInput("active"),
+		}, nil)
+	}()
+	<-started
+	invalid := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+		ID: "turn-invalid", ConversationKey: "conversation-1", Admission: AdmissionSupersede,
+		Input: []InputPart{{Kind: InputPartFile, File: &InputFile{ID: "missing-file"}}},
+	}, nil)
+	if invalid.Error == nil || invalid.Error.Code != ErrorFileNotFound || invalid.Dispatched {
+		t.Fatalf("invalid supersede result = %+v", invalid)
+	}
+	if canceled.Load() {
+		t.Fatal("invalid supersede canceled the active turn")
+	}
+	close(release)
+	if result := <-firstDone; result.Status != TurnSucceeded {
+		t.Fatalf("active result = %+v", result)
 	}
 }
 

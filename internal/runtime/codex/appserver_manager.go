@@ -146,6 +146,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		appClient:             appClient,
 		conversationSessions:  conversationSessions,
 		loadedConversations:   make(map[string]bool),
+		filePublishingThreads: make(map[string]bool),
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
 		turnThreads:           make(map[string]string),
 		commandOutputs:        make(map[string]*appServerCommandOutputState),
@@ -182,7 +183,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		}
 	}
 
-	threadID, err := m.startOrResumeThread(ctx, live, m.persistedThreadID(spec))
+	threadID, err := m.startOrResumeThread(ctx, live, m.persistedThreadID(spec), false)
 	if err != nil {
 		_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
 		return nil, m.wrapStartupError(spec, "initialize codex app-server thread", err)
@@ -400,6 +401,14 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 }
 
 func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, error) {
+	return m.ensureSession(ctx, handle, conversationKey, false)
+}
+
+func (m *appServerManager) EnsureEngineSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, error) {
+	return m.ensureSession(ctx, handle, conversationKey, true)
+}
+
+func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHandle, conversationKey string, publishFiles bool) (string, error) {
 	live, err := m.ensureLiveSession(ctx, handle)
 	if err != nil {
 		return "", err
@@ -411,7 +420,7 @@ func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHand
 	}
 
 	live.mu.Lock()
-	if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] {
+	if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] && live.filePublishingThreads[threadID] == publishFiles {
 		live.mu.Unlock()
 		return threadID, nil
 	}
@@ -424,34 +433,39 @@ func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHand
 		defer live.conversationPersistMu.Unlock()
 
 		live.mu.Lock()
-		if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] {
+		if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] && live.filePublishingThreads[threadID] == publishFiles {
 			live.mu.Unlock()
 			return threadID, nil
 		}
 		restoredThreadID = strings.TrimSpace(live.conversationSessions[conversationKey])
 		live.mu.Unlock()
 
-		threadID, err := m.startOrResumeThread(ctx, live, restoredThreadID)
+		threadID, err := m.startOrResumeThread(ctx, live, restoredThreadID, publishFiles)
 		if err != nil {
 			return "", err
 		}
 		live.mu.Lock()
 		previous := live.conversationSessions[conversationKey]
+		previousLoaded := live.loadedConversations[conversationKey]
+		previousFilePublishing := live.filePublishingThreads[previous]
 		live.conversationSessions[conversationKey] = threadID
 		live.loadedConversations[conversationKey] = true
+		live.filePublishingThreads[threadID] = publishFiles
 		conversations := cloneConversationSessions(live.conversationSessions)
 		live.mu.Unlock()
 		if err := m.persistConversationSessions(live, conversations); err != nil {
 			live.mu.Lock()
 			live.conversationSessions[conversationKey] = previous
-			delete(live.loadedConversations, conversationKey)
+			live.loadedConversations[conversationKey] = previousLoaded
+			live.filePublishingThreads[previous] = previousFilePublishing
+			delete(live.filePublishingThreads, threadID)
 			live.mu.Unlock()
 			return "", err
 		}
 		return threadID, nil
 	}
 
-	threadID, err := m.startThread(ctx, live)
+	threadID, err := m.startThread(ctx, live, publishFiles)
 	if err != nil {
 		return "", err
 	}
@@ -459,24 +473,51 @@ func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHand
 	live.conversationPersistMu.Lock()
 	defer live.conversationPersistMu.Unlock()
 	live.mu.Lock()
-	if existing := strings.TrimSpace(live.conversationSessions[conversationKey]); existing != "" {
+	existing := strings.TrimSpace(live.conversationSessions[conversationKey])
+	if existing != "" && live.loadedConversations[conversationKey] && live.filePublishingThreads[existing] == publishFiles {
 		live.mu.Unlock()
 		return existing, nil
 	}
+	previousLoaded := live.loadedConversations[conversationKey]
+	previousFilePublishing := live.filePublishingThreads[existing]
 	live.conversationSessions[conversationKey] = threadID
 	live.loadedConversations[conversationKey] = true
+	live.filePublishingThreads[threadID] = publishFiles
 	conversations := cloneConversationSessions(live.conversationSessions)
 	live.mu.Unlock()
 	if err := m.persistConversationSessions(live, conversations); err != nil {
 		live.mu.Lock()
 		if live.conversationSessions[conversationKey] == threadID {
-			delete(live.conversationSessions, conversationKey)
-			delete(live.loadedConversations, conversationKey)
+			if existing == "" {
+				delete(live.conversationSessions, conversationKey)
+				delete(live.loadedConversations, conversationKey)
+			} else {
+				live.conversationSessions[conversationKey] = existing
+				live.loadedConversations[conversationKey] = previousLoaded
+				live.filePublishingThreads[existing] = previousFilePublishing
+			}
+			delete(live.filePublishingThreads, threadID)
 		}
 		live.mu.Unlock()
 		return "", err
 	}
 	return threadID, nil
+}
+
+func (m *appServerManager) ExistingEngineSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, bool, error) {
+	live, err := m.ensureLiveSession(ctx, handle)
+	if err != nil {
+		return "", false, err
+	}
+	conversationKey = strings.TrimSpace(conversationKey)
+	live.mu.Lock()
+	threadID := strings.TrimSpace(live.conversationSessions[conversationKey])
+	available := threadID != "" && live.loadedConversations[conversationKey] && live.filePublishingThreads[threadID]
+	live.mu.Unlock()
+	if !available {
+		return "", false, nil
+	}
+	return threadID, true, nil
 }
 
 func (m *appServerManager) ExistingSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, bool, error) {
@@ -523,6 +564,8 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 	delete(live.conversationSessions, conversationKey)
 	wasLoaded := live.loadedConversations[conversationKey]
 	delete(live.loadedConversations, conversationKey)
+	wasFilePublishing := live.filePublishingThreads[sessionID]
+	delete(live.filePublishingThreads, sessionID)
 	conversations := cloneConversationSessions(live.conversationSessions)
 	live.mu.Unlock()
 	if err := m.persistConversationSessions(live, conversations); err != nil {
@@ -530,6 +573,7 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 		if sessionID != "" {
 			live.conversationSessions[conversationKey] = sessionID
 			live.loadedConversations[conversationKey] = wasLoaded
+			live.filePublishingThreads[sessionID] = wasFilePublishing
 		}
 		live.mu.Unlock()
 		return err
@@ -616,9 +660,9 @@ func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSe
 	return nil
 }
 
-func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string) (string, error) {
+func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string, publishFiles bool) (string, error) {
 	threadID = strings.TrimSpace(threadID)
-	if threadID != "" {
+	if threadID != "" && !publishFiles {
 		resumed, err := m.resumeThread(ctx, live, threadID)
 		if err == nil {
 			if strings.TrimSpace(resumed) != "" {
@@ -630,11 +674,11 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 			live.appClient.logDebug("codex app-server thread resume failed; starting a new thread", "thread_id", threadID, "error", err)
 		}
 	}
-	return m.startThread(ctx, live)
+	return m.startThread(ctx, live, publishFiles)
 }
 
-func (m *appServerManager) startThread(ctx context.Context, live *liveSession) (string, error) {
-	params := appServerThreadStartParams(live.spec)
+func (m *appServerManager) startThread(ctx context.Context, live *liveSession, publishFiles bool) (string, error) {
+	params := appServerThreadStartParams(live.spec, publishFiles)
 	raw, err := live.appClient.request(ctx, "thread/start", params)
 	if err != nil {
 		return "", err
@@ -658,13 +702,15 @@ func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, 
 	return resumed, nil
 }
 
-func appServerThreadStartParams(spec SessionSpec) map[string]any {
+func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]any {
 	spec.Profile = spec.Profile.Normalized()
 	params := map[string]any{
 		"cwd":                    spec.WorkspaceDir,
-		"dynamicTools":           []map[string]any{appServerPublishFileToolSpec()},
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
+	}
+	if publishFiles {
+		params["dynamicTools"] = []map[string]any{appServerPublishFileToolSpec()}
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -832,7 +878,7 @@ type appServerPublishFileArgs struct {
 	MIMEType string `json:"mimeType"`
 }
 
-func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, _ *liveSession, req appServerServerRequest) (any, error) {
+func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live *liveSession, req appServerServerRequest) (any, error) {
 	var params appServerDynamicToolCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return nil, fmt.Errorf("decode dynamic tool call: %w", err)
@@ -846,6 +892,9 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, _ *l
 	}
 	if params.Tool != appServerPublishFileToolName {
 		return nil, fmt.Errorf("unsupported dynamic tool %q", params.Tool)
+	}
+	if live == nil || !live.appServerPublishesFilesForThread(params.ThreadID) {
+		return nil, fmt.Errorf("dynamic file tool references unknown or unsupported thread %q", params.ThreadID)
 	}
 	file, err := normalizeAppServerPublishFileArgs(params.Arguments)
 	if err != nil {

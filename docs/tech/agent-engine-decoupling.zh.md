@@ -454,15 +454,20 @@ Engine 进程重启会中断等待中和运行中的 Turn，并清空进程内�
 调用 `Run` 前，调用方通过 `Conversations(agentID).Files().Create` 上传内容，并获得带 opaque FileID 的不可变 Metadata。
 `InputFile` 只携带该 FileID，因此调用方和 Engine 不需要共享文件系统或 `SourcePath`。
 Engine 在选定 Agent Scope 内解析 ID，Runtime Adapter 再把不可变快照复制到执行环境。
+解析会在 Admission 前取得 Lease，因此无效的 Supersede Request 不会取消 Active Turn，并发 Delete 也不能使已准入的 Input 失效。
 
 只有新上传或明确再次引用时才把 File 加入 Input。
 不能仅为继续 Runtime 原生 Conversation 而重发之前的 File Byte。
 
 对于输出，每个 Runtime Adapter 消费 typed 原生文件引用，并在跨过 Engine 边界前完成解析。
-Codex app-server Adapter 把 `csgclaw_publish_file` 暴露为接收 workspace 相对路径的 typed dynamic tool；直接使用 Responses 的 Adapter 应消费原生生成文件引用和工具输出。
+Codex app-server Adapter 只在 Engine 创建的 Thread 上暴露接收 workspace 相对路径的 typed dynamic tool `csgclaw_publish_file`；Legacy Bridge Thread 不发布无法投递的能力。
+当前 app-server Protocol 不能在 cold `thread/resume` 时附加 Dynamic Tool，因此恢复出的 Engine Mapping 对严格续接会如实报告不可续接，create-or-resume 则用新的 file-capable Thread 替换它。
+直接使用 Responses 的 Adapter 应消费原生生成文件引用和工具输出。
 Runtime Adapter 通过受 workspace 根目录约束的文件访问打开解析后的本地路径，拒绝越界路径和最终为 symlink 的非普通文件，并注册包含权威名称、MIME type、大小与 SHA-256 元数据的唯一不可变快照。
 Engine 分配与 SHA-256 无关的随机 opaque ID，并在成功的 `TurnResult.Files` 中返回 Metadata，但不暴露宿主路径。
 Channel Adapter 调用 `Conversations(agentID).Files().Get(fileID)` 获取权威 Metadata 和独立快照流，Turn Replay 会保留相同 ID 和内容。
+单文件限制为 25 MiB，每个 Agent 最多保留 256 MiB 物理快照，包括仍被 Active Lease 持有的已删除快照。
+`Get` 会原地校验不可变快照并返回 Leased Descriptor；Delete 会立即撤销新访问，并在最后一个 Active Lease 关闭后删除实际字节。
 它只能上传成功 `TurnResult` 中的文件。
 Channel Adapter 不得下载 `resource_link`；普通 HTTP(S) 资源链接始终只是 Markdown 链接。
 

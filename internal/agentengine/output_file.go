@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -13,11 +12,28 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
 
-const maxOutputFileNameBytes = 255
+const (
+	maxOutputFileNameBytes = 255
+	maxFileSizeBytes       = 25 * 1024 * 1024
+	maxAgentFileBytes      = 256 * 1024 * 1024
+)
+
+type invalidOutputFileError struct {
+	message string
+}
+
+func (e *invalidOutputFileError) Error() string {
+	return e.message
+}
+
+func invalidOutputFile(message string) error {
+	return &invalidOutputFileError{message: message}
+}
 
 // OutputFileMetadata describes one Runtime file authorized for delivery by a
 // Channel Adapter. It deliberately contains no host or Runtime path.
@@ -42,7 +58,7 @@ func newOutputFile(ctx context.Context, metadata OutputFileMetadata, source io.R
 		ctx = context.Background()
 	}
 	if source == nil {
-		return nil, fmt.Errorf("output file source is required")
+		return nil, invalidOutputFile("output file source is required")
 	}
 	name, err := normalizeOutputFileName(metadata.Name)
 	if err != nil {
@@ -50,16 +66,19 @@ func newOutputFile(ctx context.Context, metadata OutputFileMetadata, source io.R
 	}
 	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(metadata.MediaType))
 	if err != nil || strings.TrimSpace(mediaType) == "" {
-		return nil, fmt.Errorf("output file media type is invalid")
+		return nil, invalidOutputFile("output file media type is invalid")
 	}
 	if metadata.SizeBytes < 0 {
-		return nil, fmt.Errorf("output file size must be non-negative")
+		return nil, invalidOutputFile("output file size must be non-negative")
+	}
+	if metadata.SizeBytes > maxFileSizeBytes {
+		return nil, invalidOutputFile(fmt.Sprintf("output file exceeds %d bytes", maxFileSizeBytes))
 	}
 	expectedHash := strings.ToLower(strings.TrimSpace(metadata.SHA256))
 	if expectedHash != "" {
 		digest, err := hex.DecodeString(expectedHash)
 		if err != nil || len(digest) != sha256.Size {
-			return nil, fmt.Errorf("output file SHA-256 is invalid")
+			return nil, invalidOutputFile("output file SHA-256 is invalid")
 		}
 	}
 
@@ -69,7 +88,7 @@ func newOutputFile(ctx context.Context, metadata OutputFileMetadata, source io.R
 	}
 	if expectedHash != "" && actualHash != expectedHash {
 		snapshot.cleanup()
-		return nil, fmt.Errorf("output file SHA-256 does not match")
+		return nil, invalidOutputFile("output file SHA-256 does not match")
 	}
 	id, err := newOutputFileID()
 	if err != nil {
@@ -109,20 +128,19 @@ func (f *OutputFile) cleanup() {
 		return
 	}
 	f.snapshot.cleanup()
-	f.snapshot = nil
 }
 
 func normalizeOutputFileName(value string) (string, error) {
 	name := strings.TrimSpace(value)
 	if name == "" || !utf8.ValidString(name) || len([]byte(name)) > maxOutputFileNameBytes {
-		return "", fmt.Errorf("output file name must be valid UTF-8 with 1 to %d bytes", maxOutputFileNameBytes)
+		return "", invalidOutputFile(fmt.Sprintf("output file name must be valid UTF-8 with 1 to %d bytes", maxOutputFileNameBytes))
 	}
 	if name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsAny(name, "/\\\x00") {
-		return "", fmt.Errorf("output file name must be a basename without path components")
+		return "", invalidOutputFile("output file name must be a basename without path components")
 	}
 	for _, character := range name {
 		if unicode.IsControl(character) {
-			return "", fmt.Errorf("output file name must not contain control characters")
+			return "", invalidOutputFile("output file name must not contain control characters")
 		}
 	}
 	return name, nil
@@ -137,10 +155,17 @@ func newOutputFileID() (string, error) {
 }
 
 type outputFileSnapshot struct {
-	path string
+	mu       sync.Mutex
+	path     string
+	removed  bool
+	leases   int
+	onRemove func()
 }
 
 func createOutputFileSnapshot(ctx context.Context, source io.Reader, expectedSize int64) (*outputFileSnapshot, string, error) {
+	if expectedSize < 0 || expectedSize > maxFileSizeBytes {
+		return nil, "", invalidOutputFile(fmt.Sprintf("output file must contain at most %d bytes", maxFileSizeBytes))
+	}
 	snapshot, err := os.CreateTemp("", "csgclaw-output-")
 	if err != nil {
 		return nil, "", fmt.Errorf("create output file snapshot: %w", err)
@@ -188,79 +213,132 @@ func (s *outputFileSnapshot) cleanup() {
 	if s == nil {
 		return
 	}
-	if s.path != "" {
-		_ = os.Chmod(s.path, 0o600)
-		_ = os.Remove(s.path)
-		s.path = ""
+	s.mu.Lock()
+	s.removed = true
+	path, onRemove := s.takeRemovalLocked()
+	s.mu.Unlock()
+	removeOutputFileSnapshot(path, onRemove)
+}
+
+func (s *outputFileSnapshot) retain() (func(), bool) {
+	if s == nil {
+		return nil, false
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.removed || s.path == "" {
+		return nil, false
+	}
+	s.leases++
+	return s.release, true
+}
+
+func (s *outputFileSnapshot) setOnRemove(onRemove func()) bool {
+	if s == nil || onRemove == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.removed || s.path == "" || s.onRemove != nil {
+		return false
+	}
+	s.onRemove = onRemove
+	return true
 }
 
 func (s *outputFileSnapshot) openVerified(ctx context.Context, expectedSize int64, expectedHash string) (io.ReadCloser, error) {
+	if s == nil {
+		return nil, fmt.Errorf("output file is unavailable")
+	}
+	s.mu.Lock()
+	if s.path == "" {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("output file is unavailable")
+	}
 	source, err := os.Open(s.path)
 	if err != nil {
+		s.mu.Unlock()
 		return nil, fmt.Errorf("open output file snapshot: %w", err)
 	}
-	defer source.Close()
+	s.leases++
+	s.mu.Unlock()
+	closeWithRelease := func() {
+		_ = source.Close()
+		s.release()
+	}
 	info, err := source.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() != expectedSize {
+		closeWithRelease()
 		return nil, fmt.Errorf("output file snapshot metadata changed")
 	}
-	delivery, err := os.CreateTemp("", "csgclaw-delivery-")
-	if err != nil {
-		return nil, fmt.Errorf("create output file delivery reader: %w", err)
-	}
-	deliveryPath := delivery.Name()
-	cleanup := func() {
-		_ = delivery.Close()
-		_ = os.Remove(deliveryPath)
-	}
 	hash := sha256.New()
-	written, err := io.Copy(io.MultiWriter(delivery, hash), io.LimitReader(contextReader{ctx: ctx, reader: source}, expectedSize+1))
+	written, err := io.Copy(hash, io.LimitReader(contextReader{ctx: ctx, reader: source}, expectedSize+1))
 	if err != nil {
-		cleanup()
+		closeWithRelease()
 		return nil, fmt.Errorf("read output file snapshot: %w", err)
 	}
 	if written != expectedSize || hex.EncodeToString(hash.Sum(nil)) != expectedHash {
-		cleanup()
+		closeWithRelease()
 		return nil, fmt.Errorf("output file snapshot content changed")
 	}
-	if err := delivery.Chmod(0o400); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("protect output file delivery reader: %w", err)
-	}
-	if _, err := delivery.Seek(0, io.SeekStart); err != nil {
-		cleanup()
+	if _, err := source.Seek(0, io.SeekStart); err != nil {
+		closeWithRelease()
 		return nil, fmt.Errorf("rewind output file delivery reader: %w", err)
 	}
-	result := &temporaryOutputFile{File: delivery, path: deliveryPath, snapshot: s}
-	if err := os.Remove(deliveryPath); err == nil {
-		result.path = ""
-	}
-	return result, nil
+	return &leasedOutputFile{File: source, snapshot: s}, nil
 }
 
-type temporaryOutputFile struct {
+func (s *outputFileSnapshot) release() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	if s.leases > 0 {
+		s.leases--
+	}
+	path, onRemove := s.takeRemovalLocked()
+	s.mu.Unlock()
+	removeOutputFileSnapshot(path, onRemove)
+}
+
+func (s *outputFileSnapshot) takeRemovalLocked() (string, func()) {
+	if !s.removed || s.leases != 0 || s.path == "" {
+		return "", nil
+	}
+	path := s.path
+	s.path = ""
+	onRemove := s.onRemove
+	s.onRemove = nil
+	return path, onRemove
+}
+
+func removeOutputFileSnapshot(path string, onRemove func()) {
+	if path == "" {
+		return
+	}
+	_ = os.Chmod(path, 0o600)
+	_ = os.Remove(path)
+	if onRemove != nil {
+		onRemove()
+	}
+}
+
+type leasedOutputFile struct {
 	*os.File
-	path     string
 	snapshot *outputFileSnapshot
 }
 
-func (f *temporaryOutputFile) Close() error {
+func (f *leasedOutputFile) Close() error {
 	if f == nil || f.File == nil {
 		return nil
 	}
 	closeErr := f.File.Close()
-	var removeErr error
-	if f.path != "" {
-		_ = os.Chmod(f.path, 0o600)
-		removeErr = os.Remove(f.path)
-		if errors.Is(removeErr, os.ErrNotExist) {
-			removeErr = nil
-		}
-	}
 	f.File = nil
+	if f.snapshot != nil {
+		f.snapshot.release()
+	}
 	f.snapshot = nil
-	return errors.Join(closeErr, removeErr)
+	return closeErr
 }
 
 type contextReader struct {

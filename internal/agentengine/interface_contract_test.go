@@ -112,7 +112,7 @@ func (*contractRuntime) ReconcileMCPServers(context.Context, runtime.Handle, run
 	return nil
 }
 
-func (r *contractRuntime) EnsureSession(_ context.Context, _ string, conversationKey string) (string, error) {
+func (r *contractRuntime) EnsureEngineSession(_ context.Context, _ string, conversationKey string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if sessionID := r.conversations[conversationKey]; sessionID != "" {
@@ -124,7 +124,7 @@ func (r *contractRuntime) EnsureSession(_ context.Context, _ string, conversatio
 	return sessionID, nil
 }
 
-func (r *contractRuntime) ExistingSession(_ context.Context, _ string, conversationKey string) (string, bool, error) {
+func (r *contractRuntime) ExistingEngineSession(_ context.Context, _ string, conversationKey string) (string, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	sessionID := r.conversations[conversationKey]

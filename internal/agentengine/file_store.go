@@ -2,6 +2,7 @@ package agentengine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -35,8 +36,10 @@ type FileCreateRequest struct {
 // FileStore owns process-local immutable snapshots indexed by Agent and FileID.
 // It is reusable by the real Engine and contract-compatible test clients.
 type FileStore struct {
-	mu      sync.RWMutex
-	byAgent map[string]map[string]storedFile
+	mu            sync.RWMutex
+	byAgent       map[string]map[string]storedFile
+	bytesByAgent  map[string]int64
+	maxAgentBytes int64
 }
 
 type storedFile struct {
@@ -47,7 +50,7 @@ type storedFile struct {
 
 // NewFileStore creates an empty process-local Artifact Store.
 func NewFileStore() *FileStore {
-	return &FileStore{byAgent: make(map[string]map[string]storedFile)}
+	return &FileStore{byAgent: make(map[string]map[string]storedFile), bytesByAgent: make(map[string]int64), maxAgentBytes: maxAgentFileBytes}
 }
 
 // Scope returns file operations for one Agent.
@@ -68,20 +71,45 @@ func (f *agentFiles) Create(ctx context.Context, request FileCreateRequest, cont
 		Name: request.Name, MediaType: request.MIMEType, SizeBytes: request.SizeBytes, SHA256: request.SHA256,
 	}, content)
 	if err != nil {
-		return OutputFile{}, &TurnError{Code: ErrorInvalidRequest, Message: err.Error()}
+		var invalid *invalidOutputFileError
+		if errors.As(err, &invalid) {
+			return OutputFile{}, &TurnError{Code: ErrorInvalidRequest, Message: invalid.Error()}
+		}
+		if ctx != nil && ctx.Err() != nil {
+			return OutputFile{}, &TurnError{Code: ErrorCanceled, Message: "file upload was canceled"}
+		}
+		return OutputFile{}, &TurnError{Code: ErrorFileUnavailable, Message: "file content could not be stored"}
 	}
-	f.store.put(f.agentID, storedFile{file: file})
+	if storeErr := f.store.put(f.agentID, storedFile{file: file}); storeErr != nil {
+		file.cleanup()
+		return OutputFile{}, storeErr
+	}
 	return file.metadata(), nil
 }
 
 func (f *agentFiles) Get(ctx context.Context, fileID string) (FileContent, error) {
-	file, err := f.stored(fileID)
-	if err != nil {
-		return FileContent{}, err
+	fileID = strings.TrimSpace(fileID)
+	if f == nil || f.store == nil || f.agentID == "" || fileID == "" {
+		return FileContent{}, &TurnError{Code: ErrorInvalidRequest, Message: "agent ID and file ID are required"}
+	}
+	f.store.mu.RLock()
+	file, ok := f.store.byAgent[f.agentID][fileID]
+	if !ok {
+		f.store.mu.RUnlock()
+		return FileContent{}, &TurnError{Code: ErrorFileNotFound, Message: fmt.Sprintf("file %q was not found", fileID)}
+	}
+	release, retained := file.file.snapshot.retain()
+	f.store.mu.RUnlock()
+	if !retained {
+		return FileContent{}, &TurnError{Code: ErrorFileUnavailable, Message: "file content is unavailable"}
 	}
 	content, err := file.file.open(ctx)
+	release()
 	if err != nil {
-		return FileContent{}, err
+		if ctx != nil && ctx.Err() != nil {
+			return FileContent{}, &TurnError{Code: ErrorCanceled, Message: "file download was canceled"}
+		}
+		return FileContent{}, &TurnError{Code: ErrorFileUnavailable, Message: "file content is unavailable"}
 	}
 	return FileContent{Metadata: file.file.OutputFileMetadata, Content: content}, nil
 }
@@ -99,34 +127,52 @@ func (f *agentFiles) Delete(_ context.Context, fileID string) error {
 	return nil
 }
 
-func (f *agentFiles) stored(fileID string) (storedFile, error) {
-	fileID = strings.TrimSpace(fileID)
-	if f == nil || f.store == nil || f.agentID == "" || fileID == "" {
-		return storedFile{}, &TurnError{Code: ErrorInvalidRequest, Message: "agent ID and file ID are required"}
+func (s *FileStore) put(agentID string, file storedFile) *TurnError {
+	if file.file == nil || file.file.snapshot == nil {
+		return &TurnError{Code: ErrorFileUnavailable, Message: "file content is unavailable"}
 	}
-	file, ok := f.store.get(f.agentID, fileID)
-	if !ok {
-		return storedFile{}, &TurnError{Code: ErrorFileNotFound, Message: fmt.Sprintf("file %q was not found", fileID)}
-	}
-	return file, nil
-}
-
-func (s *FileStore) put(agentID string, file storedFile) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	if s.byAgent == nil {
+		s.byAgent = make(map[string]map[string]storedFile)
+	}
+	if s.bytesByAgent == nil {
+		s.bytesByAgent = make(map[string]int64)
+	}
+	limit := s.maxAgentBytes
+	if limit <= 0 {
+		limit = maxAgentFileBytes
+	}
+	if file.file.SizeBytes > limit-s.bytesByAgent[agentID] {
+		s.mu.Unlock()
+		return &TurnError{Code: ErrorFileUnavailable, Message: fmt.Sprintf("Agent file storage exceeds %d bytes", limit)}
+	}
 	files := s.byAgent[agentID]
 	if files == nil {
 		files = make(map[string]storedFile)
 		s.byAgent[agentID] = files
 	}
+	if _, exists := files[file.file.ID]; exists {
+		s.mu.Unlock()
+		return &TurnError{Code: ErrorFileUnavailable, Message: "file ID collision"}
+	}
+	s.bytesByAgent[agentID] += file.file.SizeBytes
+	size := file.file.SizeBytes
+	if !file.file.snapshot.setOnRemove(func() { s.releaseBytes(agentID, size) }) {
+		remaining := s.bytesByAgent[agentID] - size
+		if remaining > 0 {
+			s.bytesByAgent[agentID] = remaining
+		} else {
+			delete(s.bytesByAgent, agentID)
+		}
+		if len(files) == 0 {
+			delete(s.byAgent, agentID)
+		}
+		s.mu.Unlock()
+		return &TurnError{Code: ErrorFileUnavailable, Message: "file content is unavailable"}
+	}
 	files[file.file.ID] = file
-}
-
-func (s *FileStore) get(agentID, fileID string) (storedFile, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	file, ok := s.byAgent[agentID][fileID]
-	return file, ok
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *FileStore) delete(agentID, fileID string) (storedFile, bool) {
@@ -144,24 +190,46 @@ func (s *FileStore) delete(agentID, fileID string) (storedFile, bool) {
 	return file, true
 }
 
-func (s *FileStore) registerTurnFiles(agentID string, conversationKey ConversationKey, turnID TurnID, files []*OutputFile) []OutputFile {
+func (s *FileStore) registerTurnFiles(agentID string, conversationKey ConversationKey, turnID TurnID, files []*OutputFile) ([]OutputFile, *TurnError) {
 	result := make([]OutputFile, 0, len(files))
+	registered := make([]string, 0, len(files))
 	for _, file := range files {
 		if file == nil || file.snapshot == nil {
 			continue
 		}
-		s.put(agentID, storedFile{file: file, conversationKey: conversationKey, turnID: turnID})
+		if err := s.put(agentID, storedFile{file: file, conversationKey: conversationKey, turnID: turnID}); err != nil {
+			for _, fileID := range registered {
+				stored, ok := s.delete(agentID, fileID)
+				if ok {
+					stored.file.cleanup()
+				}
+			}
+			for _, pending := range files {
+				pending.cleanup()
+			}
+			return nil, err
+		}
+		registered = append(registered, file.ID)
 		result = append(result, file.metadata())
 	}
-	return result
+	return result, nil
 }
 
-func (s *FileStore) resolve(agentID, fileID string) (*OutputFile, *TurnError) {
-	file, ok := s.get(strings.TrimSpace(agentID), strings.TrimSpace(fileID))
+func (s *FileStore) resolve(agentID, fileID string) (*OutputFile, func(), *TurnError) {
+	agentID = strings.TrimSpace(agentID)
+	fileID = strings.TrimSpace(fileID)
+	s.mu.RLock()
+	file, ok := s.byAgent[agentID][fileID]
 	if !ok {
-		return nil, &TurnError{Code: ErrorFileNotFound, Message: fmt.Sprintf("file %q was not found", fileID)}
+		s.mu.RUnlock()
+		return nil, nil, &TurnError{Code: ErrorFileNotFound, Message: fmt.Sprintf("file %q was not found", fileID)}
 	}
-	return file.file, nil
+	release, retained := file.file.snapshot.retain()
+	s.mu.RUnlock()
+	if !retained {
+		return nil, nil, &TurnError{Code: ErrorFileUnavailable, Message: "file content is unavailable"}
+	}
+	return file.file, release, nil
 }
 
 func (s *FileStore) deleteTurn(agentID string, conversationKey ConversationKey, turnID TurnID) {
@@ -192,6 +260,17 @@ func (s *FileStore) DeleteAgent(agentID string) {
 	for _, file := range files {
 		file.file.cleanup()
 	}
+}
+
+func (s *FileStore) releaseBytes(agentID string, size int64) {
+	s.mu.Lock()
+	remaining := s.bytesByAgent[agentID] - size
+	if remaining > 0 {
+		s.bytesByAgent[agentID] = remaining
+	} else {
+		delete(s.bytesByAgent, agentID)
+	}
+	s.mu.Unlock()
 }
 
 type unavailableFiles struct{}

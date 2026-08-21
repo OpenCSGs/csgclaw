@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"os"
@@ -61,8 +62,8 @@ func (a agentServiceAdapter) conversationRuntime(ctx context.Context, agentID st
 }
 
 type codexConversationRuntime interface {
-	EnsureSession(ctx context.Context, runtimeID, conversationKey string) (string, error)
-	ExistingSession(ctx context.Context, runtimeID, conversationKey string) (string, bool, error)
+	EnsureEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, error)
+	ExistingEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, bool, error)
 	PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []codex.PromptContentBlock, accepted func()) error
 	SubscribeSession(runtimeID, sessionID string) (<-chan activity.RuntimeEvent, func())
 	ResetConversation(ctx context.Context, runtimeID, conversationKey string) error
@@ -113,6 +114,12 @@ func (a *codexRuntimeAdapter) Run(ctx context.Context, request TurnRequest, sink
 	eventStreamClosed := false
 	var output strings.Builder
 	var files []*OutputFile
+	filesOwned := true
+	defer func() {
+		if filesOwned {
+			cleanupOutputFiles(files)
+		}
+	}()
 	stopPrompt := func(result TurnResult) TurnResult {
 		cancel()
 		if !promptReturned {
@@ -129,6 +136,7 @@ func (a *codexRuntimeAdapter) Run(ctx context.Context, request TurnRequest, sink
 				result.Dispatched = dispatched
 				return result
 			}
+			filesOwned = false
 			return TurnResult{Status: TurnSucceeded, Output: output.String(), Dispatched: dispatched, files: files}
 		}
 		select {
@@ -167,7 +175,7 @@ func (a *codexRuntimeAdapter) Run(ctx context.Context, request TurnRequest, sink
 
 func (a *codexRuntimeAdapter) session(ctx context.Context, request TurnRequest) (string, *TurnError) {
 	if request.Continuation == ContinuationRequireExisting {
-		sessionID, ok, err := a.runtime.ExistingSession(ctx, a.runtimeID, string(request.ConversationKey))
+		sessionID, ok, err := a.runtime.ExistingEngineSession(ctx, a.runtimeID, string(request.ConversationKey))
 		if err != nil {
 			return "", &TurnError{Code: ErrorRuntimeFailed, Message: err.Error()}
 		}
@@ -176,7 +184,7 @@ func (a *codexRuntimeAdapter) session(ctx context.Context, request TurnRequest) 
 		}
 		return sessionID, nil
 	}
-	sessionID, err := a.runtime.EnsureSession(ctx, a.runtimeID, string(request.ConversationKey))
+	sessionID, err := a.runtime.EnsureEngineSession(ctx, a.runtimeID, string(request.ConversationKey))
 	if err != nil {
 		return "", &TurnError{Code: ErrorRuntimeFailed, Message: fmt.Sprintf("ensure Codex conversation: %v", err)}
 	}
@@ -259,7 +267,7 @@ func (a *codexRuntimeAdapter) handleEvent(ctx context.Context, request TurnReque
 func (a *codexRuntimeAdapter) authorizeOutputFile(ctx context.Context, request activity.RuntimeFile) (*OutputFile, *TurnError) {
 	workspace, err := a.runtime.WorkspaceDir(a.runtimeID)
 	if err != nil {
-		return nil, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+		return nil, a.runtimeFileUnavailable("resolve_workspace", err)
 	}
 	workspace = strings.TrimSpace(workspace)
 	relativePath, err := cleanRuntimeOutputPath(request.Path)
@@ -268,42 +276,55 @@ func (a *codexRuntimeAdapter) authorizeOutputFile(ctx context.Context, request a
 	}
 	root, err := os.OpenRoot(workspace)
 	if err != nil {
-		return nil, &TurnError{Code: ErrorFileUnavailable, Message: fmt.Sprintf("open Runtime workspace: %v", err)}
+		return nil, a.runtimeFileUnavailable("open_workspace", err)
 	}
 	source, info, err := openRuntimeOutputSource(root, relativePath)
 	if err != nil {
 		_ = root.Close()
-		return nil, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+		return nil, a.runtimeFileUnavailable("open_source", err)
 	}
-	prefix := make([]byte, 512)
-	prefixBytes, readErr := io.ReadFull(contextReader{ctx: ctx, reader: source}, prefix)
-	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+	if info.Size() > maxFileSizeBytes {
 		_ = source.Close()
 		_ = root.Close()
-		return nil, &TurnError{Code: ErrorFileUnavailable, Message: fmt.Sprintf("read Runtime output file: %v", readErr)}
-	}
-	prefix = prefix[:prefixBytes]
-	if _, err := source.Seek(0, io.SeekStart); err != nil {
-		_ = source.Close()
-		_ = root.Close()
-		return nil, &TurnError{Code: ErrorFileUnavailable, Message: fmt.Sprintf("rewind Runtime output file: %v", err)}
+		return nil, &TurnError{Code: ErrorFileUnavailable, Message: fmt.Sprintf("Runtime output file exceeds %d bytes", maxFileSizeBytes)}
 	}
 	name := strings.TrimSpace(request.Name)
 	if name == "" {
 		name = filepath.Base(relativePath)
 	}
-	mediaType, err := runtimeOutputMediaType(request.MIMEType, name, prefix)
-	if err != nil {
-		return nil, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
-	}
-	file, snapshotErr := newOutputFile(ctx, OutputFileMetadata{Name: name, MediaType: mediaType, SizeBytes: info.Size()}, source)
+	file, snapshotErr := newOutputFile(ctx, OutputFileMetadata{Name: name, MediaType: "application/octet-stream", SizeBytes: info.Size()}, source)
 	closeErr := source.Close()
 	rootCloseErr := root.Close()
 	if snapshotErr != nil || closeErr != nil || rootCloseErr != nil {
-		err := errors.Join(snapshotErr, closeErr, rootCloseErr)
-		return nil, &TurnError{Code: ErrorFileUnavailable, Message: fmt.Sprintf("snapshot Runtime output file: %v", err)}
+		if file != nil {
+			file.cleanup()
+		}
+		return nil, a.runtimeFileUnavailable("snapshot_source", errors.Join(snapshotErr, closeErr, rootCloseErr))
 	}
+	download, err := file.open(ctx)
+	if err != nil {
+		file.cleanup()
+		return nil, a.runtimeFileUnavailable("verify_snapshot", err)
+	}
+	prefix := make([]byte, 512)
+	prefixBytes, readErr := io.ReadFull(contextReader{ctx: ctx, reader: download}, prefix)
+	downloadCloseErr := download.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) || downloadCloseErr != nil {
+		file.cleanup()
+		return nil, a.runtimeFileUnavailable("read_snapshot_prefix", errors.Join(readErr, downloadCloseErr))
+	}
+	mediaType, err := runtimeOutputMediaType(request.MIMEType, name, prefix[:prefixBytes])
+	if err != nil {
+		file.cleanup()
+		return nil, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+	}
+	file.MediaType = mediaType
 	return file, nil
+}
+
+func (a *codexRuntimeAdapter) runtimeFileUnavailable(stage string, err error) *TurnError {
+	slog.Warn("Runtime output file unavailable", "runtime_id", strings.TrimSpace(a.runtimeID), "stage", stage, "error", err)
+	return &TurnError{Code: ErrorFileUnavailable, Message: "Runtime output file is unavailable"}
 }
 
 func cleanRuntimeOutputPath(path string) (string, error) {
@@ -477,21 +498,21 @@ func (a *codexRuntimeAdapter) prepareInput(ctx context.Context, turnID TurnID, i
 		var err error
 		workspace, err = a.runtime.WorkspaceDir(a.runtimeID)
 		if err != nil {
-			return nil, cleanup, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, cleanup, a.runtimeInputFileUnavailable("resolve_workspace", err)
 		}
 		workspaceRoot, err = os.OpenRoot(workspace)
 		if err != nil {
-			return nil, cleanup, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, cleanup, a.runtimeInputFileUnavailable("open_workspace", err)
 		}
 		inputRoot := filepath.Join(".csgclaw", "engine-inputs")
 		if err := workspaceRoot.MkdirAll(inputRoot, 0o700); err != nil {
 			_ = workspaceRoot.Close()
-			return nil, cleanup, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, cleanup, a.runtimeInputFileUnavailable("prepare_input_root", err)
 		}
 		turnDir, err = makeRootTempDir(workspaceRoot, inputRoot, safeInputName(string(turnID))+"-")
 		if err != nil {
 			_ = workspaceRoot.Close()
-			return nil, cleanup, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, cleanup, a.runtimeInputFileUnavailable("prepare_turn_directory", err)
 		}
 		var cleanupOnce sync.Once
 		cleanup = func() {
@@ -510,7 +531,7 @@ func (a *codexRuntimeAdapter) prepareInput(ctx context.Context, turnID TurnID, i
 		path, err := copyVerifiedInput(ctx, workspaceRoot, workspace, turnDir, index, *part.File)
 		if err != nil {
 			cleanup()
-			return nil, func() {}, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, func() {}, a.runtimeInputFileUnavailable("copy_input", err)
 		}
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(part.File.file.MediaType)), "image/") {
 			blocks = append(blocks, codex.LocalImageBlock(path))
@@ -519,6 +540,11 @@ func (a *codexRuntimeAdapter) prepareInput(ctx context.Context, turnID TurnID, i
 		}
 	}
 	return blocks, cleanup, nil
+}
+
+func (a *codexRuntimeAdapter) runtimeInputFileUnavailable(stage string, err error) *TurnError {
+	slog.Warn("Runtime input file unavailable", "runtime_id", strings.TrimSpace(a.runtimeID), "stage", stage, "error", err)
+	return &TurnError{Code: ErrorFileUnavailable, Message: "Runtime input file is unavailable"}
 }
 
 func copyVerifiedInput(ctx context.Context, root *os.Root, workspace, turnDir string, index int, input InputFile) (string, error) {

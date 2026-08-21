@@ -933,6 +933,16 @@ func (s *liveSession) appServerTracksThread(threadID string) bool {
 	return ok
 }
 
+func (s *liveSession) appServerPublishesFilesForThread(threadID string) bool {
+	threadID = strings.TrimSpace(threadID)
+	if s == nil || threadID == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.filePublishingThreads[threadID]
+}
+
 func (m *appServerManager) appServerPrimaryThreadID(live *liveSession) string {
 	if live == nil || live.session == nil {
 		return ""

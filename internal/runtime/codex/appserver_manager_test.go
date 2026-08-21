@@ -150,6 +150,36 @@ func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
 	}
 }
 
+func TestAppServerManagerReplacesColdEngineMappingWithFileCapableThread(t *testing.T) {
+	withAppServerHelperCommand(t, "engine-conversation-thread")
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.ConversationSessions = map[string]string{"conversation-1": "cold-thread"}
+	var persisted map[string]string
+	deps := testAppServerManagerDeps()
+	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string) error {
+		persisted = cloneConversationSessions(conversations)
+		return nil
+	}
+	manager := newAppServerManager(deps)
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+	if _, ok, err := manager.ExistingEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "conversation-1"); err != nil || ok {
+		t.Fatalf("cold ExistingEngineSession ok=%v err=%v", ok, err)
+	}
+	threadID, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "conversation-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if threadID != "engine-thread" || persisted["conversation-1"] != threadID {
+		t.Fatalf("Engine thread=%q persisted=%v", threadID, persisted)
+	}
+	if got, ok, err := manager.ExistingEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "conversation-1"); err != nil || !ok || got != threadID {
+		t.Fatalf("loaded ExistingEngineSession=%q ok=%v err=%v", got, ok, err)
+	}
+}
+
 func TestAppServerManagerSerializesConversationPersistence(t *testing.T) {
 	withAppServerHelperCommand(t, "conversation-thread")
 	dir := t.TempDir()
@@ -339,14 +369,18 @@ func TestAppServerManagerPublishFileDynamicToolEndToEnd(t *testing.T) {
 	spec := testAppServerSessionSpec(dir)
 	sink := &recordingSink{}
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
-	session, err := manager.Start(context.Background(), spec)
+	_, err := manager.Start(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
 	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+	engineThread, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "engine-files")
+	if err != nil {
+		t.Fatalf("EnsureEngineSession() error = %v", err)
+	}
 
 	resp, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
-		SessionID: session.SessionID,
+		SessionID: engineThread,
 		Prompt:    []PromptContentBlock{TextBlock("publish the report")},
 	})
 	if err != nil {
@@ -2205,7 +2239,7 @@ func TestAppServerParamsMapOffToCodexNone(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.Profile.ReasoningEffort = "off"
 
-	threadConfig := appServerThreadStartParams(spec)["config"].(map[string]any)
+	threadConfig := appServerThreadStartParams(spec, false)["config"].(map[string]any)
 	if got, want := threadConfig["model_reasoning_effort"], "none"; got != want {
 		t.Fatalf("model_reasoning_effort = %v, want %v", got, want)
 	}
@@ -2219,7 +2253,7 @@ func TestAppServerParamsOmitReasoningForModelDefault(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.Profile.ReasoningEffort = "auto"
 
-	if config, ok := appServerThreadStartParams(spec)["config"]; ok {
+	if config, ok := appServerThreadStartParams(spec, false)["config"]; ok {
 		t.Fatalf("thread config = %v, want omitted", config)
 	}
 	turn := appServerTurnStartParams(spec, "thread-1", "hello")
@@ -2232,7 +2266,7 @@ func TestAppServerReadOnlyParamsAndOverrides(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.ExecutionMode = ExecutionModeReadOnly
 
-	thread := appServerThreadStartParams(spec)
+	thread := appServerThreadStartParams(spec, false)
 	if thread["approvalPolicy"] != "never" || thread["permissions"] != readOnlyPermissionsProfile {
 		t.Fatalf("thread params = %#v", thread)
 	}
@@ -2262,7 +2296,7 @@ func TestAppServerReadOnlyParamsAndOverrides(t *testing.T) {
 
 func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
-	params := appServerThreadStartParams(spec)
+	params := appServerThreadStartParams(spec, true)
 	tools, ok := params["dynamicTools"].([]map[string]any)
 	if !ok || len(tools) != 1 {
 		t.Fatalf("dynamicTools = %#v, want one typed tool", params["dynamicTools"])
@@ -2279,10 +2313,17 @@ func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
 	}
 }
 
+func TestAppServerThreadStartOmitsPublishFileToolForLegacyThread(t *testing.T) {
+	params := appServerThreadStartParams(testAppServerSessionSpec(t.TempDir()), false)
+	if tools, ok := params["dynamicTools"]; ok {
+		t.Fatalf("legacy dynamicTools = %#v, want omitted", tools)
+	}
+}
+
 func TestAppServerPublishFileDynamicToolEmitsTypedFileEvent(t *testing.T) {
 	sink := &recordingSink{}
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
-	live := &liveSession{spec: testAppServerSessionSpec(t.TempDir())}
+	live := &liveSession{spec: testAppServerSessionSpec(t.TempDir()), filePublishingThreads: map[string]bool{"thread-1": true}}
 	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
 		Method: "item/tool/call",
 		Params: mustJSONRaw(t, map[string]any{
@@ -2330,7 +2371,7 @@ func TestAppServerPublishFileDynamicToolRejectsUnsafeArguments(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			sink := &recordingSink{}
 			manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
-			response, err := manager.handleAppServerServerRequest("runtime-1", &liveSession{}, appServerServerRequest{
+			response, err := manager.handleAppServerServerRequest("runtime-1", &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}}, appServerServerRequest{
 				Method: "item/tool/call",
 				Params: mustJSONRaw(t, map[string]any{
 					"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": appServerPublishFileToolName,
@@ -2348,6 +2389,21 @@ func TestAppServerPublishFileDynamicToolRejectsUnsafeArguments(t *testing.T) {
 				t.Fatalf("unsafe file events = %#v", events)
 			}
 		})
+	}
+}
+
+func TestAppServerPublishFileDynamicToolRejectsUnownedThread(t *testing.T) {
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
+	live := &liveSession{filePublishingThreads: map[string]bool{"owned-thread": true}}
+	_, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
+		Method: "item/tool/call",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "other-thread", "turnId": "turn-1", "callId": "call-1", "tool": appServerPublishFileToolName,
+			"arguments": map[string]any{"path": "report.txt"},
+		}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "unknown or unsupported thread") {
+		t.Fatalf("unowned dynamic tool error = %v", err)
 	}
 }
 
@@ -2488,6 +2544,29 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 			}
 			return rpcResult(msg["id"], map[string]any{"threadId": fmt.Sprintf("conversation-thread-%d", index)}), true
 		})
+	case "engine-conversation-thread":
+		threadStarts := 0
+		runAppServerHelper(t, func(_ int, msg map[string]any) (map[string]any, bool) {
+			if msg["method"] != "thread/start" {
+				if msg["method"] == "thread/resume" {
+					t.Fatalf("Engine conversation unexpectedly resumed cold thread")
+				}
+				return nil, false
+			}
+			threadStarts++
+			params, _ := msg["params"].(map[string]any)
+			tools, _ := params["dynamicTools"].([]any)
+			if threadStarts == 1 {
+				if len(tools) != 0 {
+					t.Fatalf("primary dynamicTools = %#v", params["dynamicTools"])
+				}
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			}
+			if len(tools) != 1 {
+				t.Fatalf("Engine dynamicTools = %#v", params["dynamicTools"])
+			}
+			return rpcResult(msg["id"], map[string]any{"threadId": "engine-thread"}), true
+		})
 	case "conversation-thread-notification-before-result":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			if msg["method"] != "thread/start" {
@@ -2524,6 +2603,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 		})
 	case "prompt-publish-file":
 		awaitingTool := false
+		threadStarts := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			if awaitingTool {
 				assertServerRequestResponse(t, msg, 9010, func(result map[string]any) {
@@ -2536,14 +2616,21 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 					}
 				})
 				awaitingTool = false
-				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "message-1", "type": "agentMessage", "text": "published"}})
-				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-publish", "status": "completed"}})
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "engine-thread", "item": map[string]any{"id": "message-1", "type": "agentMessage", "text": "published"}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "engine-thread", "turn": map[string]any{"id": "turn-publish", "status": "completed"}})
 				return nil, false
 			}
 			switch msg["method"] {
 			case "thread/start":
 				params, _ := msg["params"].(map[string]any)
 				tools, _ := params["dynamicTools"].([]any)
+				if threadStarts == 0 {
+					threadStarts++
+					if len(tools) != 0 {
+						t.Fatalf("primary thread dynamicTools = %#v, want none", params["dynamicTools"])
+					}
+					return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+				}
 				if len(tools) != 1 {
 					t.Fatalf("thread/start dynamicTools = %#v", params["dynamicTools"])
 				}
@@ -2551,11 +2638,11 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				if tool["name"] != appServerPublishFileToolName {
 					t.Fatalf("thread/start publish tool = %#v", tool)
 				}
-				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+				return rpcResult(msg["id"], map[string]any{"threadId": "engine-thread"}), true
 			case "turn/start":
 				awaitingTool = true
 				writeRPCServerRequest(t, 9010, "item/tool/call", map[string]any{
-					"threadId": "main-thread", "turnId": "turn-publish", "callId": "call-publish", "tool": appServerPublishFileToolName,
+					"threadId": "engine-thread", "turnId": "turn-publish", "callId": "call-publish", "tool": appServerPublishFileToolName,
 					"arguments": map[string]any{"path": "reports/result.pdf", "name": "result.pdf", "mimeType": "application/pdf"},
 				})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-publish"}), true

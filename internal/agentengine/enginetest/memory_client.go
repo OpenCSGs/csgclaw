@@ -333,8 +333,12 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 			return failed(agentengine.ErrorInvalidRequest, "file ID is required")
 		}
 		if part.Kind == agentengine.InputPartFile {
-			if _, err := c.client.files.Scope(c.agentID).Get(ctx, part.File.ID); err != nil {
+			download, err := c.client.files.Scope(c.agentID).Get(ctx, part.File.ID)
+			if err != nil {
 				return failed(agentengine.ErrorFileNotFound, err.Error())
+			}
+			if err := download.Content.Close(); err != nil {
+				return failed(agentengine.ErrorFileUnavailable, "file content is unavailable")
 			}
 		}
 		if part.Kind != agentengine.InputPartText && part.Kind != agentengine.InputPartFile {

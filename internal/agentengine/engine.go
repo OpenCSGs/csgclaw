@@ -131,6 +131,19 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	}
 
 	identity := conversationIdentity{agentID: c.agentID, key: request.ConversationKey}
+	if replay, existing, preflightResult := c.engine.preflightTurn(identity, request); replay != nil {
+		return replayCompleted(ctx, sink, *replay)
+	} else if existing != nil {
+		return awaitActiveTurn(ctx, sink, existing)
+	} else if preflightResult != nil {
+		return *preflightResult
+	}
+	runtimeRequest, releaseInputs, inputErr := c.engine.resolveInputFiles(c.agentID, request)
+	if inputErr != nil {
+		return TurnResult{Status: TurnFailed, Error: inputErr}
+	}
+	defer releaseInputs()
+
 	turn, replay, existing, admissionResult := c.engine.admit(ctx, identity, request)
 	if replay != nil {
 		return replayCompleted(ctx, sink, *replay)
@@ -141,14 +154,6 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if admissionResult != nil {
 		return *admissionResult
 	}
-	runtimeRequest, inputErr := c.engine.resolveInputFiles(c.agentID, request)
-	if inputErr != nil {
-		result := TurnResult{Status: TurnFailed, Error: inputErr}
-		turn.cancel()
-		c.engine.complete(identity, turn, result)
-		return result
-	}
-
 	runtimeAdapter, releaseRuntime, resolveErr := c.engine.runtimes.conversationRuntime(turn.ctx, c.agentID)
 	if resolveErr != nil {
 		result := TurnResult{Status: TurnFailed, Error: resolveErr}
@@ -166,10 +171,19 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	})
 	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)
 	if result.Status != TurnSucceeded {
+		cleanupOutputFiles(result.files)
 		result.Files = nil
 		result.files = nil
 	} else if len(result.files) > 0 {
-		result.Files = c.engine.files.registerTurnFiles(c.agentID, request.ConversationKey, request.ID, result.files)
+		files, fileErr := c.engine.files.registerTurnFiles(c.agentID, request.ConversationKey, request.ID, result.files)
+		if fileErr != nil {
+			result.Status = TurnFailed
+			result.Output = ""
+			result.Files = nil
+			result.Error = fileErr
+		} else {
+			result.Files = files
+		}
 		result.files = nil
 	}
 	turn.cancel()
@@ -178,20 +192,57 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	return result
 }
 
-func (e *Engine) resolveInputFiles(agentID string, request TurnRequest) (TurnRequest, *TurnError) {
+func (e *Engine) preflightTurn(identity conversationIdentity, request TurnRequest) (*completedTurn, *activeTurn, *TurnResult) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.ensureState()
+	turnKey := turnIdentity{conversationIdentity: identity, id: request.ID}
+	if completed, ok := e.completed[turnKey]; ok {
+		if !sameTurnRequest(completed.request, request) {
+			result := failedResult(ErrorInvalidRequest, "turn ID was already used with a different request")
+			return nil, nil, &result
+		}
+		copy := cloneCompletedTurn(completed)
+		return &copy, nil, nil
+	}
+	if current := e.active[identity]; current != nil && current.request.ID == request.ID {
+		if !sameTurnRequest(current.request, request) {
+			result := failedResult(ErrorInvalidRequest, "turn ID is active with a different request")
+			return nil, nil, &result
+		}
+		return nil, current, nil
+	}
+	return nil, nil, nil
+}
+
+func (e *Engine) resolveInputFiles(agentID string, request TurnRequest) (TurnRequest, func(), *TurnError) {
 	resolved := cloneTurnRequest(request)
+	var releases []func()
+	release := func() {
+		for _, releaseFile := range releases {
+			releaseFile()
+		}
+	}
 	for index := range resolved.Input {
 		part := &resolved.Input[index]
 		if part.Kind != InputPartFile {
 			continue
 		}
-		file, err := e.files.resolve(agentID, part.File.ID)
+		file, releaseFile, err := e.files.resolve(agentID, part.File.ID)
 		if err != nil {
-			return TurnRequest{}, err
+			release()
+			return TurnRequest{}, func() {}, err
 		}
+		releases = append(releases, releaseFile)
 		part.File.file = file
 	}
-	return resolved, nil
+	return resolved, release, nil
+}
+
+func cleanupOutputFiles(files []*OutputFile) {
+	for _, file := range files {
+		file.cleanup()
+	}
 }
 
 func (c *conversations) Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error {

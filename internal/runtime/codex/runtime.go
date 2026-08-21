@@ -247,6 +247,16 @@ func (r *Runtime) EnsureSession(ctx context.Context, runtimeID, conversationKey 
 	return ensurer.EnsureSession(ctx, SessionHandle{RuntimeID: runtimeID}, conversationKey)
 }
 
+func (r *Runtime) EnsureEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, error) {
+	ensurer, ok := r.SessionManager().(interface {
+		EnsureEngineSession(context.Context, SessionHandle, string) (string, error)
+	})
+	if !ok {
+		return "", fmt.Errorf("codex session manager does not support Engine conversation sessions")
+	}
+	return ensurer.EnsureEngineSession(ctx, SessionHandle{RuntimeID: runtimeID}, conversationKey)
+}
+
 func (r *Runtime) ExistingSession(ctx context.Context, runtimeID, conversationKey string) (string, bool, error) {
 	resolver, ok := r.SessionManager().(interface {
 		ExistingSession(context.Context, SessionHandle, string) (string, bool, error)
@@ -255,6 +265,16 @@ func (r *Runtime) ExistingSession(ctx context.Context, runtimeID, conversationKe
 		return "", false, fmt.Errorf("codex session manager does not support strict conversation lookup")
 	}
 	return resolver.ExistingSession(ctx, SessionHandle{RuntimeID: runtimeID}, conversationKey)
+}
+
+func (r *Runtime) ExistingEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, bool, error) {
+	resolver, ok := r.SessionManager().(interface {
+		ExistingEngineSession(context.Context, SessionHandle, string) (string, bool, error)
+	})
+	if !ok {
+		return "", false, fmt.Errorf("codex session manager does not support strict Engine conversation lookup")
+	}
+	return resolver.ExistingEngineSession(ctx, SessionHandle{RuntimeID: runtimeID}, conversationKey)
 }
 
 func (r *Runtime) Prompt(ctx context.Context, runtimeID, sessionID, prompt string) error {
