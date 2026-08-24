@@ -950,12 +950,15 @@ export function HubDetailPane({
                         ? t("resourcesTemplateReviewPending")
                         : t("resourcesTemplateReviewFailed")}
                     </strong>
-                    {templateReview.messages.length ? (
-                      <ul>
-                        {templateReview.messages.map((message, index) => (
-                          <li key={`${index}-${message}`}>{message}</li>
-                        ))}
-                      </ul>
+                    {templateReview.kind === "exception" && templateReview.paths.length ? (
+                      <>
+                        <span>{t("resourcesTemplateReviewFailedFiles")}</span>
+                        <ul>
+                          {templateReview.paths.map((path, index) => (
+                            <li key={`${index}-${path}`}>{path}</li>
+                          ))}
+                        </ul>
+                      </>
                     ) : null}
                   </div>
                 ) : null}

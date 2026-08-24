@@ -133,7 +133,7 @@ export type HubTemplateMetadata = {
 
 export type HubTemplateReviewState = {
   kind: "pending" | "exception";
-  messages: string[];
+  paths: string[];
 };
 
 export function upsertHubTemplateReviewState(
@@ -170,7 +170,14 @@ export function upsertHubTemplateReviewState(
     index === existingIndex
       ? {
           ...template,
-          metadata: { ...template.metadata, sensitive_check: sensitiveCheck },
+          metadata: {
+            ...template.metadata,
+            sensitive_check: (template.metadata?.sensitive_check?.failure_details ?? []).some((detail) =>
+              Boolean(String(detail?.path ?? "").trim()),
+            )
+              ? template.metadata?.sensitive_check
+              : sensitiveCheck,
+          },
         }
       : template,
   );
@@ -184,8 +191,8 @@ export function hubTemplateReviewState(template: HubTemplate | null | undefined)
   if (status !== "pending" && status !== "exception" && status !== "fail") {
     return null;
   }
-  const messages = (check?.failure_details ?? []).map((detail) => String(detail?.message ?? "").trim()).filter(Boolean);
-  return { kind: status === "pending" ? "pending" : "exception", messages };
+  const paths = (check?.failure_details ?? []).map((detail) => String(detail?.path ?? "").trim()).filter(Boolean);
+  return { kind: status === "pending" ? "pending" : "exception", paths };
 }
 
 export function mergeHubTemplateDetail(
