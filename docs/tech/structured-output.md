@@ -301,6 +301,21 @@ A minimal link needs only `type`, `name`, and `uri`:
 ::csgclaw-output::resource_link {"type":"resource_link","name":"docs","uri":"https://example.com/docs"}
 ```
 
+## File output
+
+Runtime-local file delivery is deliberately not encoded in this line protocol.
+The Codex app-server adapter registers the typed dynamic tool `csgclaw_publish_file` only for Engine-created threads, with `path`, optional `name`, and optional `mimeType` arguments.
+The tool produces a reliable Runtime file event rather than text that must be reparsed.
+The Runtime Adapter opens the workspace-relative path through rooted access, rejects escapes and non-regular final symlinks, and registers one immutable snapshot in the Agent-scoped Engine Artifact Store before the Turn completes.
+Agent Engine assigns an opaque random file ID independent from the content SHA-256 and returns JSON-safe metadata in `TurnResult.Files` only when the Turn succeeds.
+The visible name must be a valid UTF-8 basename with no path components or control characters and at most 255 bytes.
+Channel Adapters call `Engine.Conversations(agentID).Files().Get(fileID)` to receive authoritative metadata and an independent reader over the same snapshot without accessing the Runtime workspace.
+They may upload only files from a successful `TurnResult` and must never download a `resource_link`.
+
+A direct OpenAI Responses adapter should translate native generated-file references and tool outputs into the same Engine `OutputFile` contract instead of asking the model to print a CSGClaw control record.
+Responses output text can carry file annotations, while OpenAI-managed container files remain addressable through their container and file IDs.
+See the [Responses API reference](https://developers.openai.com/api/reference/cli/resources/beta/subresources/responses) and [Container Files API](https://developers.openai.com/api/reference/resources/containers/subresources/files).
+
 ## Limits and compatibility
 
 - Each control record is limited to 256 KiB.

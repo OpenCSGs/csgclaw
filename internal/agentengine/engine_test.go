@@ -1,10 +1,12 @@
 package agentengine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,7 +86,7 @@ func (f *fakeConversationRuntime) Provision(ctx context.Context, request runtime
 	}
 	return nil
 }
-func (f *fakeConversationRuntime) EnsureSession(_ context.Context, _, conversationKey string) (string, error) {
+func (f *fakeConversationRuntime) EnsureEngineSession(_ context.Context, _, conversationKey string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.conversationKey = conversationKey
@@ -94,7 +96,7 @@ func (f *fakeConversationRuntime) EnsureSession(_ context.Context, _, conversati
 	f.conversations[conversationKey] = "codex-thread"
 	return "codex-thread", nil
 }
-func (f *fakeConversationRuntime) ExistingSession(_ context.Context, _, conversationKey string) (string, bool, error) {
+func (f *fakeConversationRuntime) ExistingEngineSession(_ context.Context, _, conversationKey string) (string, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sessionID := f.conversations[conversationKey]
@@ -199,6 +201,194 @@ func (f *fakeConversationRuntime) publish(event activity.RuntimeEvent) {
 	f.mu.Unlock()
 	for _, subscriber := range subscribers {
 		subscriber <- event
+	}
+}
+
+func TestConversationRunAuthorizesRuntimeOutputFile(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspace, "reports"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	content := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0}, 64)...)
+	outputPath := filepath.Join(workspace, "reports", "result.png")
+	if err := os.WriteFile(outputPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeImpl := &fakeConversationRuntime{workspace: workspace}
+	promptCalls := 0
+	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		promptCalls++
+		runtimeImpl.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventStructuredOutput,
+			Payload: activity.StructuredOutputArtifact{ResourceLinks: []activity.ResourceLink{{Type: "resource_link", Name: "docs", URI: "https://example.com/docs"}}},
+		})
+		runtimeImpl.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventFileOutput,
+			Payload: activity.RuntimeFile{Path: filepath.Join("reports", "result.png"), Name: "result.png", MIMEType: "image/png"},
+		})
+		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	var outputs []*OutputItem
+	request := TurnRequest{ID: "turn-output", ConversationKey: "conversation-output", Input: textInput("create an image")}
+	result := engine.Conversations("agent-a").Run(context.Background(), request, EventSinkFunc(func(_ context.Context, event TurnEvent) error {
+		if event.Output != nil {
+			outputs = append(outputs, event.Output)
+		}
+		return nil
+	}))
+	if result.Status != TurnSucceeded || !result.Dispatched || len(outputs) != 1 || len(result.Files) != 1 {
+		t.Fatalf("Run() = %+v, outputs = %+v", result, outputs)
+	}
+	if outputs[0].Kind != OutputItemResourceLink {
+		t.Fatalf("first output = %+v, want ordinary resource link", outputs[0])
+	}
+	file := result.Files[0]
+	if file.Name != "result.png" || file.MediaType != "image/png" || file.SizeBytes != int64(len(content)) || len(file.SHA256) != 64 || !strings.HasPrefix(file.ID, "file-") || file.ID == "sha256:"+file.SHA256 {
+		t.Fatalf("OutputFile = %+v", file.OutputFileMetadata)
+	}
+	if err := os.WriteFile(outputPath, bytes.Repeat([]byte{1}, len(content)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		download, err := engine.Conversations("agent-a").Files().Get(context.Background(), file.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, readErr := io.ReadAll(download.Content)
+		closeErr := download.Content.Close()
+		if download.Metadata != file.OutputFileMetadata || readErr != nil || closeErr != nil || !bytes.Equal(got, content) {
+			t.Fatalf("attempt %d authorized file: metadata=%+v bytes=%d read=%v close=%v", attempt, download.Metadata, len(got), readErr, closeErr)
+		}
+	}
+	replacedWorkspace := workspace + "-replaced"
+	if err := os.Rename(workspace, replacedWorkspace); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(replacedWorkspace) })
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(outputPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	download, err := engine.Conversations("agent-a").Files().Get(context.Background(), file.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, readErr := io.ReadAll(download.Content)
+	closeErr := download.Content.Close()
+	if download.Metadata != file.OutputFileMetadata || readErr != nil || closeErr != nil || !bytes.Equal(got, content) {
+		t.Fatalf("replaced workspace metadata=%+v content=%q read=%v close=%v", download.Metadata, got, readErr, closeErr)
+	}
+	replayed := engine.Conversations("agent-a").Run(context.Background(), request, nil)
+	if replayed.Status != TurnSucceeded || len(replayed.Files) != 1 || replayed.Files[0].ID != file.ID || promptCalls != 1 {
+		t.Fatalf("replayed result=%+v promptCalls=%d", replayed, promptCalls)
+	}
+}
+
+func TestConversationRunRejectsRuntimeOutputOutsideWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(workspace, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	runtimeImpl := &fakeConversationRuntime{workspace: workspace}
+	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		runtimeImpl.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventFileOutput,
+			Payload: activity.RuntimeFile{Path: filepath.Join("escape", "secret.txt")},
+		})
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+		ID: "turn-output", ConversationKey: "conversation-output", Input: textInput("read outside")}, nil)
+	if result.Status != TurnFailed || result.Error == nil || result.Error.Code != ErrorFileUnavailable || !result.Dispatched {
+		t.Fatalf("Run() = %+v", result)
+	}
+	if strings.Contains(result.Error.Message, workspace) || strings.Contains(result.Error.Message, outside) {
+		t.Fatalf("public error leaked workspace path: %q", result.Error.Message)
+	}
+}
+
+func TestConversationRunCleansOutputSnapshotWhenLaterEventFails(t *testing.T) {
+	snapshotDir := t.TempDir()
+	t.Setenv("TMPDIR", snapshotDir)
+	workspace := t.TempDir()
+	content := []byte("temporary output")
+	if err := os.WriteFile(filepath.Join(workspace, "result.txt"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeImpl := &fakeConversationRuntime{workspace: workspace}
+	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		runtimeImpl.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventFileOutput,
+			Payload: activity.RuntimeFile{Path: "result.txt", MIMEType: "text/plain"},
+		})
+		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptFailed, Error: "later failure"})
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+		ID: "turn-output", ConversationKey: "conversation-output", Input: textInput("create then fail"),
+	}, nil)
+	if result.Status != TurnFailed || result.Error == nil {
+		t.Fatalf("Run() = %+v", result)
+	}
+	paths, err := filepath.Glob(filepath.Join(snapshotDir, "csgclaw-output-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 0 {
+		t.Fatalf("failed Turn retained snapshots: %v", paths)
+	}
+}
+
+func TestConversationRunRejectsMismatchedRuntimeOutputMIMEAndCleansSnapshot(t *testing.T) {
+	snapshotDir := t.TempDir()
+	t.Setenv("TMPDIR", snapshotDir)
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "not-image.png"), []byte("plain text"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtimeImpl := &fakeConversationRuntime{workspace: workspace}
+	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
+		runtimeImpl.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventFileOutput,
+			Payload: activity.RuntimeFile{Path: "not-image.png", MIMEType: "image/png"},
+		})
+		return nil
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+		ID: "turn-output", ConversationKey: "conversation-output", Input: textInput("publish image"),
+	}, nil)
+	if result.Status != TurnFailed || result.Error == nil || result.Error.Code != ErrorFileUnavailable {
+		t.Fatalf("Run() = %+v", result)
+	}
+	paths, err := filepath.Glob(filepath.Join(snapshotDir, "csgclaw-output-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 0 {
+		t.Fatalf("MIME rejection retained snapshots: %v", paths)
 	}
 }
 
@@ -541,11 +731,7 @@ func TestConversationRunRetainsDispatchedWhenFailureRacesAcceptance(t *testing.T
 }
 
 func TestConversationRunCopiesCodexFileInput(t *testing.T) {
-	sourcePath := filepath.Join(t.TempDir(), "report.txt")
 	content := []byte("report")
-	if err := os.WriteFile(sourcePath, content, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	runtimeImpl := &fakeConversationRuntime{workspace: t.TempDir()}
 	var runtimePath string
 	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, prompt string) error {
@@ -564,16 +750,14 @@ func TestConversationRunCopiesCodexFileInput(t *testing.T) {
 		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
 		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
 	}}, runtimeImpl))
+	file := createEngineTestFile(t, engine, "agent-a", "report.txt", "text/plain", content)
 
 	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
 		ID:              "turn-1",
 		ConversationKey: "conversation-1",
 		Input: []InputPart{{
 			Kind: InputPartFile,
-			File: &InputFile{
-				ID: "file-1", SourcePath: sourcePath, Name: "report.txt", MediaType: "text/plain",
-				SizeBytes: int64(len(content)), SHA256: "845e91831319e89c4d656bdb80c278ac09a7230d61e5dfd2e1b1fbb436ac8917",
-			},
+			File: &InputFile{ID: file.ID},
 		}},
 	}, nil)
 	if result.Status != TurnSucceeded || result.Error != nil || !result.Dispatched {
@@ -590,49 +774,21 @@ func TestConversationRunCopiesCodexFileInput(t *testing.T) {
 	}
 }
 
-func TestConversationRunRejectsUnsafeOrInvalidFileBeforeDispatch(t *testing.T) {
-	sourcePath := filepath.Join(t.TempDir(), "report.txt")
-	if err := os.WriteFile(sourcePath, []byte("report"), 0o600); err != nil {
-		t.Fatal(err)
+func TestConversationRunRejectsUnknownFileBeforeDispatch(t *testing.T) {
+	runtimeImpl := &fakeConversationRuntime{workspace: t.TempDir()}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+		ID: "turn-1", ConversationKey: "conversation-1",
+		Input: []InputPart{{Kind: InputPartFile, File: &InputFile{ID: "missing-file"}}},
+	}, nil)
+	if result.Error == nil || result.Error.Code != ErrorFileNotFound || result.Dispatched {
+		t.Fatalf("result = %+v", result)
 	}
-	symlinkPath := filepath.Join(t.TempDir(), "report-link.txt")
-	if err := os.Symlink(sourcePath, symlinkPath); err != nil {
-		t.Fatal(err)
-	}
-	for _, testCase := range []struct {
-		name string
-		file InputFile
-	}{
-		{
-			name: "symlink",
-			file: InputFile{ID: "file-1", SourcePath: symlinkPath, Name: "report.txt", MediaType: "text/plain", SizeBytes: 6, SHA256: "845e91831319e89c4d656bdb80c278ac09a7230d61e5dfd2e1b1fbb436ac8917"},
-		},
-		{
-			name: "hash mismatch",
-			file: InputFile{ID: "file-1", SourcePath: sourcePath, Name: "report.txt", MediaType: "text/plain", SizeBytes: 6, SHA256: strings.Repeat("0", 64)},
-		},
-		{
-			name: "size mismatch",
-			file: InputFile{ID: "file-1", SourcePath: sourcePath, Name: "report.txt", MediaType: "text/plain", SizeBytes: 7, SHA256: "845e91831319e89c4d656bdb80c278ac09a7230d61e5dfd2e1b1fbb436ac8917"},
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			runtimeImpl := &fakeConversationRuntime{workspace: t.TempDir()}
-			engine := New(newTestAgentService(t, []agent.Agent{{
-				ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
-				RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
-			}}, runtimeImpl))
-			result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
-				ID: "turn-1", ConversationKey: "conversation-1",
-				Input: []InputPart{{Kind: InputPartFile, File: &testCase.file}},
-			}, nil)
-			if result.Error == nil || result.Error.Code != ErrorFileUnavailable || result.Dispatched {
-				t.Fatalf("result = %+v", result)
-			}
-			if runtimeImpl.conversationKey != "" {
-				t.Fatalf("Runtime mapping was touched before file validation: %q", runtimeImpl.conversationKey)
-			}
-		})
+	if runtimeImpl.conversationKey != "" {
+		t.Fatalf("Runtime mapping was touched before file resolution: %q", runtimeImpl.conversationKey)
 	}
 }
 
@@ -649,22 +805,16 @@ func TestConversationRunRejectsRuntimeInputDestinationSymlink(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(workspace, ".csgclaw")); err != nil {
 		t.Fatal(err)
 	}
-	sourcePath := filepath.Join(root, "report.txt")
 	content := []byte("report")
-	if err := os.WriteFile(sourcePath, content, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	runtimeImpl := &fakeConversationRuntime{workspace: workspace}
 	engine := New(newTestAgentService(t, []agent.Agent{{
 		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
 		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
 	}}, runtimeImpl))
+	file := createEngineTestFile(t, engine, "agent-a", "report.txt", "text/plain", content)
 	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
 		ID: "turn-1", ConversationKey: "conversation-1",
-		Input: []InputPart{{Kind: InputPartFile, File: &InputFile{
-			ID: "file-1", SourcePath: sourcePath, Name: "report.txt", MediaType: "text/plain",
-			SizeBytes: int64(len(content)), SHA256: "845e91831319e89c4d656bdb80c278ac09a7230d61e5dfd2e1b1fbb436ac8917",
-		}}},
+		Input: []InputPart{{Kind: InputPartFile, File: &InputFile{ID: file.ID}}},
 	}, nil)
 	if result.Error == nil || result.Error.Code != ErrorFileUnavailable || result.Dispatched {
 		t.Fatalf("Run() = %+v", result)
@@ -676,15 +826,6 @@ func TestConversationRunRejectsRuntimeInputDestinationSymlink(t *testing.T) {
 }
 
 func TestCodexInputPreservesOrderedTextImageAndFileBlocks(t *testing.T) {
-	root := t.TempDir()
-	imagePath := filepath.Join(root, "image.png")
-	filePath := filepath.Join(root, "notes.txt")
-	if err := os.WriteFile(imagePath, []byte("image"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filePath, []byte("notes"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	runtimeImpl := &fakeConversationRuntime{workspace: t.TempDir()}
 	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
 		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
@@ -694,12 +835,14 @@ func TestCodexInputPreservesOrderedTextImageAndFileBlocks(t *testing.T) {
 		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
 		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
 	}}, runtimeImpl))
+	image := createEngineTestFile(t, engine, "agent-a", "image.png", "image/png", []byte("image"))
+	notes := createEngineTestFile(t, engine, "agent-a", "notes.txt", "text/plain", []byte("notes"))
 	result := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
 		ID: "caller-turn", ConversationKey: "conversation-1",
 		Input: []InputPart{
 			{Kind: InputPartText, Text: "before"},
-			{Kind: InputPartFile, File: &InputFile{ID: "image", SourcePath: imagePath, Name: "image.png", MediaType: "image/png", SizeBytes: 5, SHA256: "6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d"}},
-			{Kind: InputPartFile, File: &InputFile{ID: "notes", SourcePath: filePath, Name: "notes.txt", MediaType: "text/plain", SizeBytes: 5, SHA256: "ab5aa97074c454a0632057e704220d9a6678fbf773a0a5806fc09b8173b07309"}},
+			{Kind: InputPartFile, File: &InputFile{ID: image.ID}},
+			{Kind: InputPartFile, File: &InputFile{ID: notes.ID}},
 			{Kind: InputPartText, Text: "after"},
 		},
 	}, nil)
@@ -750,6 +893,49 @@ func TestConversationRunRejectsSameConversationOverlap(t *testing.T) {
 	close(release)
 	if result := <-firstDone; result.Status != TurnSucceeded {
 		t.Fatalf("first result = %+v", result)
+	}
+}
+
+func TestConversationRunRejectsMissingSupersedeFileWithoutCancelingActiveTurn(t *testing.T) {
+	runtimeImpl := &fakeConversationRuntime{}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var canceled atomic.Bool
+	runtimeImpl.prompt = func(ctx context.Context, runtimeID, sessionID, _ string) error {
+		close(started)
+		select {
+		case <-ctx.Done():
+			canceled.Store(true)
+			return ctx.Err()
+		case <-release:
+			runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
+			return nil
+		}
+	}
+	engine := New(newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeID: "runtime-a", Status: string(runtime.StateRunning),
+	}}, runtimeImpl))
+	firstDone := make(chan TurnResult, 1)
+	go func() {
+		firstDone <- engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+			ID: "turn-active", ConversationKey: "conversation-1", Input: textInput("active"),
+		}, nil)
+	}()
+	<-started
+	invalid := engine.Conversations("agent-a").Run(context.Background(), TurnRequest{
+		ID: "turn-invalid", ConversationKey: "conversation-1", Admission: AdmissionSupersede,
+		Input: []InputPart{{Kind: InputPartFile, File: &InputFile{ID: "missing-file"}}},
+	}, nil)
+	if invalid.Error == nil || invalid.Error.Code != ErrorFileNotFound || invalid.Dispatched {
+		t.Fatalf("invalid supersede result = %+v", invalid)
+	}
+	if canceled.Load() {
+		t.Fatal("invalid supersede canceled the active turn")
+	}
+	close(release)
+	if result := <-firstDone; result.Status != TurnSucceeded {
+		t.Fatalf("active result = %+v", result)
 	}
 }
 
@@ -1040,6 +1226,17 @@ func textInput(values ...string) []InputPart {
 		parts = append(parts, InputPart{Kind: InputPartText, Text: value})
 	}
 	return parts
+}
+
+func createEngineTestFile(t testing.TB, engine Interface, agentID, name, mediaType string, content []byte) OutputFile {
+	t.Helper()
+	file, err := engine.Conversations(agentID).Files().Create(context.Background(), FileCreateRequest{
+		Name: name, MIMEType: mediaType, SizeBytes: int64(len(content)),
+	}, bytes.NewReader(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return file
 }
 
 func newTestAgentService(t *testing.T, agents []agent.Agent, runtimeImpl runtime.Runtime) *agent.Service {

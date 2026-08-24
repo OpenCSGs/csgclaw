@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -28,7 +31,8 @@ type agentServiceAdapter struct {
 // New wires the existing Agent Service through private Engine facades.
 func New(service *agent.Service) *Engine {
 	adapter := agentServiceAdapter{service: service}
-	return &Engine{agents: agentFacade{service: service}, runtimes: adapter}
+	files := NewFileStore()
+	return &Engine{agents: agentFacade{service: service, files: files}, runtimes: adapter, files: files}
 }
 
 func (a agentServiceAdapter) conversationRuntime(ctx context.Context, agentID string) (conversationRuntimeAdapter, func(), *TurnError) {
@@ -58,8 +62,8 @@ func (a agentServiceAdapter) conversationRuntime(ctx context.Context, agentID st
 }
 
 type codexConversationRuntime interface {
-	EnsureSession(ctx context.Context, runtimeID, conversationKey string) (string, error)
-	ExistingSession(ctx context.Context, runtimeID, conversationKey string) (string, bool, error)
+	EnsureEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, error)
+	ExistingEngineSession(ctx context.Context, runtimeID, conversationKey string) (string, bool, error)
 	PromptTurn(ctx context.Context, runtimeID, sessionID, turnID string, blocks []codex.PromptContentBlock, accepted func()) error
 	SubscribeSession(runtimeID, sessionID string) (<-chan activity.RuntimeEvent, func())
 	ResetConversation(ctx context.Context, runtimeID, conversationKey string) error
@@ -78,7 +82,7 @@ type codexRuntimeAdapter struct {
 }
 
 func (a *codexRuntimeAdapter) Run(ctx context.Context, request TurnRequest, sink EventSink) TurnResult {
-	blocks, cleanup, inputErr := a.prepareInput(request.ID, request.Input)
+	blocks, cleanup, inputErr := a.prepareInput(ctx, request.ID, request.Input)
 	if inputErr != nil {
 		return TurnResult{Status: TurnFailed, Error: inputErr}
 	}
@@ -109,6 +113,13 @@ func (a *codexRuntimeAdapter) Run(ctx context.Context, request TurnRequest, sink
 	runtimeDone := false
 	eventStreamClosed := false
 	var output strings.Builder
+	var files []*OutputFile
+	filesOwned := true
+	defer func() {
+		if filesOwned {
+			cleanupOutputFiles(files)
+		}
+	}()
 	stopPrompt := func(result TurnResult) TurnResult {
 		cancel()
 		if !promptReturned {
@@ -125,7 +136,8 @@ func (a *codexRuntimeAdapter) Run(ctx context.Context, request TurnRequest, sink
 				result.Dispatched = dispatched
 				return result
 			}
-			return TurnResult{Status: TurnSucceeded, Output: output.String(), Dispatched: dispatched}
+			filesOwned = false
+			return TurnResult{Status: TurnSucceeded, Output: output.String(), Dispatched: dispatched, files: files}
 		}
 		select {
 		case <-accepted:
@@ -151,7 +163,7 @@ func (a *codexRuntimeAdapter) Run(ctx context.Context, request TurnRequest, sink
 			if strings.TrimSpace(event.RuntimeID) != strings.TrimSpace(a.runtimeID) || strings.TrimSpace(event.SessionID) != strings.TrimSpace(sessionID) {
 				continue
 			}
-			if result := a.handleEvent(runCtx, request, sink, event, &output); result != nil {
+			if result := a.handleEvent(runCtx, request, sink, event, &output, &files); result != nil {
 				return stopPrompt(*result)
 			}
 			if event.Kind == activity.RuntimeEventPromptCompleted {
@@ -163,7 +175,7 @@ func (a *codexRuntimeAdapter) Run(ctx context.Context, request TurnRequest, sink
 
 func (a *codexRuntimeAdapter) session(ctx context.Context, request TurnRequest) (string, *TurnError) {
 	if request.Continuation == ContinuationRequireExisting {
-		sessionID, ok, err := a.runtime.ExistingSession(ctx, a.runtimeID, string(request.ConversationKey))
+		sessionID, ok, err := a.runtime.ExistingEngineSession(ctx, a.runtimeID, string(request.ConversationKey))
 		if err != nil {
 			return "", &TurnError{Code: ErrorRuntimeFailed, Message: err.Error()}
 		}
@@ -172,14 +184,14 @@ func (a *codexRuntimeAdapter) session(ctx context.Context, request TurnRequest) 
 		}
 		return sessionID, nil
 	}
-	sessionID, err := a.runtime.EnsureSession(ctx, a.runtimeID, string(request.ConversationKey))
+	sessionID, err := a.runtime.EnsureEngineSession(ctx, a.runtimeID, string(request.ConversationKey))
 	if err != nil {
 		return "", &TurnError{Code: ErrorRuntimeFailed, Message: fmt.Sprintf("ensure Codex conversation: %v", err)}
 	}
 	return sessionID, nil
 }
 
-func (a *codexRuntimeAdapter) handleEvent(ctx context.Context, request TurnRequest, sink EventSink, event activity.RuntimeEvent, output *strings.Builder) *TurnResult {
+func (a *codexRuntimeAdapter) handleEvent(ctx context.Context, request TurnRequest, sink EventSink, event activity.RuntimeEvent, output *strings.Builder, files *[]*OutputFile) *TurnResult {
 	emit := func(turnEvent TurnEvent) *TurnResult {
 		if err := emitTurnEvent(ctx, sink, turnEvent); err != nil {
 			result := resultFromContext(ctx, err)
@@ -216,6 +228,19 @@ func (a *codexRuntimeAdapter) handleEvent(ctx context.Context, request TurnReque
 				return result
 			}
 		}
+	case activity.RuntimeEventFileOutput:
+		runtimeFile, ok := event.Payload.(activity.RuntimeFile)
+		if !ok {
+			result := failedResult(ErrorRuntimeFailed, "Codex returned invalid file output")
+			return &result
+		}
+		file, fileErr := a.authorizeOutputFile(ctx, runtimeFile)
+		if fileErr != nil {
+			result := TurnResult{Status: TurnFailed, Error: fileErr}
+			return &result
+		}
+		*files = append(*files, file)
+		return nil
 	case activity.RuntimeEventTextDelta:
 		phase := runtimeEventPhase(event)
 		if phase != "" && phase != "final_answer" {
@@ -237,6 +262,114 @@ func (a *codexRuntimeAdapter) handleEvent(ctx context.Context, request TurnReque
 		}})
 	}
 	return nil
+}
+
+func (a *codexRuntimeAdapter) authorizeOutputFile(ctx context.Context, request activity.RuntimeFile) (*OutputFile, *TurnError) {
+	workspace, err := a.runtime.WorkspaceDir(a.runtimeID)
+	if err != nil {
+		return nil, a.runtimeFileUnavailable("resolve_workspace", err)
+	}
+	workspace = strings.TrimSpace(workspace)
+	relativePath, err := cleanRuntimeOutputPath(request.Path)
+	if err != nil {
+		return nil, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+	}
+	root, err := os.OpenRoot(workspace)
+	if err != nil {
+		return nil, a.runtimeFileUnavailable("open_workspace", err)
+	}
+	source, info, err := openRuntimeOutputSource(root, relativePath)
+	if err != nil {
+		_ = root.Close()
+		return nil, a.runtimeFileUnavailable("open_source", err)
+	}
+	name := strings.TrimSpace(request.Name)
+	if name == "" {
+		name = filepath.Base(relativePath)
+	}
+	file, snapshotErr := newOutputFile(ctx, OutputFileMetadata{Name: name, MediaType: "application/octet-stream", SizeBytes: info.Size()}, source)
+	closeErr := source.Close()
+	rootCloseErr := root.Close()
+	if snapshotErr != nil || closeErr != nil || rootCloseErr != nil {
+		if file != nil {
+			file.cleanup()
+		}
+		return nil, a.runtimeFileUnavailable("snapshot_source", errors.Join(snapshotErr, closeErr, rootCloseErr))
+	}
+	download, err := file.open(ctx)
+	if err != nil {
+		file.cleanup()
+		return nil, a.runtimeFileUnavailable("verify_snapshot", err)
+	}
+	prefix := make([]byte, 512)
+	prefixBytes, readErr := io.ReadFull(contextReader{ctx: ctx, reader: download}, prefix)
+	downloadCloseErr := download.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) || downloadCloseErr != nil {
+		file.cleanup()
+		return nil, a.runtimeFileUnavailable("read_snapshot_prefix", errors.Join(readErr, downloadCloseErr))
+	}
+	mediaType, err := runtimeOutputMediaType(request.MIMEType, name, prefix[:prefixBytes])
+	if err != nil {
+		file.cleanup()
+		return nil, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+	}
+	file.MediaType = mediaType
+	return file, nil
+}
+
+func (a *codexRuntimeAdapter) runtimeFileUnavailable(stage string, err error) *TurnError {
+	slog.Warn("Runtime output file unavailable", "runtime_id", strings.TrimSpace(a.runtimeID), "stage", stage, "error", err)
+	return &TurnError{Code: ErrorFileUnavailable, Message: "Runtime output file is unavailable"}
+}
+
+func cleanRuntimeOutputPath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	cleaned := filepath.Clean(path)
+	if path == "" || cleaned == "." || filepath.IsAbs(cleaned) || filepath.VolumeName(cleaned) != "" || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("Runtime output path must stay within the Runtime workspace")
+	}
+	return cleaned, nil
+}
+
+func openRuntimeOutputSource(root *os.Root, relativePath string) (*os.File, os.FileInfo, error) {
+	info, err := root.Lstat(relativePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("inspect Runtime output file: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, nil, fmt.Errorf("Runtime output must be a regular non-symlink file")
+	}
+	file, err := root.Open(relativePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open Runtime output file: %w", err)
+	}
+	openedInfo, err := file.Stat()
+	if err != nil || !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+		_ = file.Close()
+		return nil, nil, fmt.Errorf("Runtime output file changed before it could be opened")
+	}
+	return file, openedInfo, nil
+}
+
+func runtimeOutputMediaType(requested, name string, prefix []byte) (string, error) {
+	detected := http.DetectContentType(prefix)
+	mediaType := strings.TrimSpace(requested)
+	if mediaType != "" {
+		parsed, _, err := mime.ParseMediaType(mediaType)
+		if err != nil || strings.TrimSpace(parsed) == "" {
+			return "", fmt.Errorf("Runtime output MIME type is invalid")
+		}
+		mediaType = strings.ToLower(parsed)
+	} else if byExtension := mime.TypeByExtension(filepath.Ext(name)); byExtension != "" {
+		parsed, _, _ := mime.ParseMediaType(byExtension)
+		mediaType = strings.ToLower(parsed)
+	} else {
+		mediaType = strings.ToLower(detected)
+	}
+	if strings.HasPrefix(mediaType, "image/") && !strings.HasPrefix(strings.ToLower(detected), "image/") {
+		return "", fmt.Errorf("Runtime output content does not match image MIME type %q", mediaType)
+	}
+	return mediaType, nil
 }
 
 func (a *codexRuntimeAdapter) handleInteraction(ctx context.Context, policy InteractionPolicy, interaction InteractionRequest, sink EventSink) *TurnResult {
@@ -347,7 +480,7 @@ func runtimeEventPhase(event activity.RuntimeEvent) string {
 
 var safeInputNamePattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
-func (a *codexRuntimeAdapter) prepareInput(turnID TurnID, input []InputPart) ([]codex.PromptContentBlock, func(), *TurnError) {
+func (a *codexRuntimeAdapter) prepareInput(ctx context.Context, turnID TurnID, input []InputPart) ([]codex.PromptContentBlock, func(), *TurnError) {
 	needsFiles := false
 	for _, part := range input {
 		needsFiles = needsFiles || part.Kind == InputPartFile
@@ -360,21 +493,21 @@ func (a *codexRuntimeAdapter) prepareInput(turnID TurnID, input []InputPart) ([]
 		var err error
 		workspace, err = a.runtime.WorkspaceDir(a.runtimeID)
 		if err != nil {
-			return nil, cleanup, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, cleanup, a.runtimeInputFileUnavailable("resolve_workspace", err)
 		}
 		workspaceRoot, err = os.OpenRoot(workspace)
 		if err != nil {
-			return nil, cleanup, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, cleanup, a.runtimeInputFileUnavailable("open_workspace", err)
 		}
 		inputRoot := filepath.Join(".csgclaw", "engine-inputs")
 		if err := workspaceRoot.MkdirAll(inputRoot, 0o700); err != nil {
 			_ = workspaceRoot.Close()
-			return nil, cleanup, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, cleanup, a.runtimeInputFileUnavailable("prepare_input_root", err)
 		}
 		turnDir, err = makeRootTempDir(workspaceRoot, inputRoot, safeInputName(string(turnID))+"-")
 		if err != nil {
 			_ = workspaceRoot.Close()
-			return nil, cleanup, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, cleanup, a.runtimeInputFileUnavailable("prepare_turn_directory", err)
 		}
 		var cleanupOnce sync.Once
 		cleanup = func() {
@@ -390,66 +523,60 @@ func (a *codexRuntimeAdapter) prepareInput(turnID TurnID, input []InputPart) ([]
 			blocks = append(blocks, codex.TextBlock(part.Text))
 			continue
 		}
-		path, err := copyVerifiedInput(workspaceRoot, workspace, turnDir, index, *part.File)
+		path, err := copyVerifiedInput(ctx, workspaceRoot, workspace, turnDir, index, *part.File)
 		if err != nil {
 			cleanup()
-			return nil, func() {}, &TurnError{Code: ErrorFileUnavailable, Message: err.Error()}
+			return nil, func() {}, a.runtimeInputFileUnavailable("copy_input", err)
 		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(part.File.MediaType)), "image/") {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(part.File.file.MediaType)), "image/") {
 			blocks = append(blocks, codex.LocalImageBlock(path))
 		} else {
-			blocks = append(blocks, codex.TextBlock(fmt.Sprintf("Attached file %q is available in the Runtime workspace at %s", part.File.Name, path)))
+			blocks = append(blocks, codex.TextBlock(fmt.Sprintf("Attached file %q is available in the Runtime workspace at %s", part.File.file.Name, path)))
 		}
 	}
 	return blocks, cleanup, nil
 }
 
-func copyVerifiedInput(root *os.Root, workspace, turnDir string, index int, input InputFile) (string, error) {
-	info, err := os.Lstat(input.SourcePath)
-	if err != nil {
-		return "", fmt.Errorf("inspect input file %q: %w", input.Name, err)
+func (a *codexRuntimeAdapter) runtimeInputFileUnavailable(stage string, err error) *TurnError {
+	slog.Warn("Runtime input file unavailable", "runtime_id", strings.TrimSpace(a.runtimeID), "stage", stage, "error", err)
+	return &TurnError{Code: ErrorFileUnavailable, Message: "Runtime input file is unavailable"}
+}
+
+func copyVerifiedInput(ctx context.Context, root *os.Root, workspace, turnDir string, index int, input InputFile) (string, error) {
+	if input.file == nil {
+		return "", fmt.Errorf("input file %q is unresolved", input.ID)
 	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("input file %q must be a regular non-symlink file", input.Name)
-	}
-	source, err := os.Open(input.SourcePath)
+	source, err := input.file.open(ctx)
 	if err != nil {
-		return "", fmt.Errorf("open input file %q: %w", input.Name, err)
+		return "", fmt.Errorf("open input file %q: %w", input.file.Name, err)
 	}
 	defer source.Close()
-	openedInfo, err := source.Stat()
-	if err != nil || !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
-		return "", fmt.Errorf("input file %q changed before it could be copied", input.Name)
-	}
-	if openedInfo.Size() != input.SizeBytes {
-		return "", fmt.Errorf("input file %q size does not match", input.Name)
-	}
-	name := fmt.Sprintf("%03d-%s-%s", index, safeInputName(input.ID), safeInputName(filepath.Base(input.Name)))
+	name := fmt.Sprintf("%03d-%s-%s", index, safeInputName(input.ID), safeInputName(filepath.Base(input.file.Name)))
 	destination := filepath.Join(turnDir, name)
 	suffix, err := randomInputSuffix()
 	if err != nil {
-		return "", fmt.Errorf("create Runtime-local input name %q: %w", input.Name, err)
+		return "", fmt.Errorf("create Runtime-local input name %q: %w", input.file.Name, err)
 	}
 	temporary := destination + ".tmp-" + suffix
 	target, err := root.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("create Runtime-local input %q: %w", input.Name, err)
+		return "", fmt.Errorf("create Runtime-local input %q: %w", input.file.Name, err)
 	}
 	hash := sha256.New()
 	_, copyErr := io.Copy(io.MultiWriter(target, hash), source)
 	closeErr := target.Close()
 	if copyErr != nil || closeErr != nil {
 		_ = root.Remove(temporary)
-		return "", fmt.Errorf("copy input file %q: %v", input.Name, errors.Join(copyErr, closeErr))
+		return "", fmt.Errorf("copy input file %q: %v", input.file.Name, errors.Join(copyErr, closeErr))
 	}
 	actualHash := fmt.Sprintf("%x", hash.Sum(nil))
-	if !strings.EqualFold(actualHash, strings.TrimSpace(input.SHA256)) {
+	if !strings.EqualFold(actualHash, strings.TrimSpace(input.file.SHA256)) {
 		_ = root.Remove(temporary)
-		return "", fmt.Errorf("input file %q SHA-256 does not match", input.Name)
+		return "", fmt.Errorf("input file %q SHA-256 does not match", input.file.Name)
 	}
 	if err := root.Rename(temporary, destination); err != nil {
 		_ = root.Remove(temporary)
-		return "", fmt.Errorf("activate Runtime-local input %q: %w", input.Name, err)
+		return "", fmt.Errorf("activate Runtime-local input %q: %w", input.file.Name, err)
 	}
 	return filepath.Join(workspace, destination), nil
 }

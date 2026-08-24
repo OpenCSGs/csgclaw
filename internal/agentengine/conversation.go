@@ -5,6 +5,7 @@ import "context"
 // ConversationInterface executes conversations for the Agent selected by
 // Conversations.
 type ConversationInterface interface {
+	Files() FileInterface
 	Run(ctx context.Context, request TurnRequest, sink EventSink) TurnResult
 	Cancel(ctx context.Context, key ConversationKey, turnID TurnID) error
 	Reset(ctx context.Context, key ConversationKey) error
@@ -67,31 +68,27 @@ const (
 
 // InputPart is text or a caller-authorized file.
 type InputPart struct {
-	Kind InputPartKind
-	Text string
-	File *InputFile
+	Kind InputPartKind `json:"kind"`
+	Text string        `json:"text,omitempty"`
+	File *InputFile    `json:"file,omitempty"`
 }
 
-// InputFile is a caller-authorized file source.
-// Engine validates only this neutral shape. Runtime Adapters own file access,
-// copying, and Runtime-specific input conversion.
+// InputFile references one immutable Agent-scoped Conversation file resource.
+// Runtime Adapters receive the resolved snapshot only after Engine admission.
 type InputFile struct {
-	ID         string
-	SourcePath string
-	Name       string
-	MediaType  string
-	SizeBytes  int64
-	SHA256     string
+	ID string `json:"id"`
+
+	file *OutputFile
 }
 
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
-	ID              TurnID
-	ConversationKey ConversationKey
-	Input           []InputPart
-	Admission       AdmissionPolicy
-	Continuation    ContinuationPolicy
-	Interaction     InteractionPolicy
+	ID              TurnID             `json:"id"`
+	ConversationKey ConversationKey    `json:"conversation_key"`
+	Input           []InputPart        `json:"input"`
+	Admission       AdmissionPolicy    `json:"admission,omitempty"`
+	Continuation    ContinuationPolicy `json:"continuation,omitempty"`
+	Interaction     InteractionPolicy  `json:"interaction,omitempty"`
 }
 
 // TurnEventKind identifies progress emitted during a turn.
@@ -110,35 +107,36 @@ const (
 // TurnEvent is the replay-safe envelope for one normalized Runtime event.
 // Sequence starts at one and increases monotonically for each TurnID.
 type TurnEvent struct {
-	TurnID      TurnID
-	Sequence    uint64
-	Kind        TurnEventKind
-	Text        string
-	Thought     string
-	Tool        *ToolActivity
-	Activity    *ActivityUpdate
-	Interaction *InteractionRequest
-	Output      *OutputItem
+	TurnID      TurnID              `json:"turn_id"`
+	Sequence    uint64              `json:"sequence"`
+	Kind        TurnEventKind       `json:"kind"`
+	Text        string              `json:"text,omitempty"`
+	Thought     string              `json:"thought,omitempty"`
+	Tool        *ToolActivity       `json:"tool,omitempty"`
+	Activity    *ActivityUpdate     `json:"activity,omitempty"`
+	Interaction *InteractionRequest `json:"interaction,omitempty"`
+	Output      *OutputItem         `json:"output,omitempty"`
 }
 
-// ToolActivity contains normalized tool progress.
+// ToolActivity contains normalized tool progress. Payload must be JSON-compatible.
 type ToolActivity struct {
-	ID            string
-	Kind          string
-	Title         string
-	Status        string
-	InputSummary  string
-	OutputSummary string
-	Payload       any
+	ID            string `json:"id"`
+	Kind          string `json:"kind"`
+	Title         string `json:"title,omitempty"`
+	Status        string `json:"status,omitempty"`
+	InputSummary  string `json:"input_summary,omitempty"`
+	OutputSummary string `json:"output_summary,omitempty"`
+	Payload       any    `json:"payload,omitempty"`
 }
 
 // ActivityUpdate carries Runtime-neutral progress not represented by a tool.
+// Payload must be JSON-compatible.
 type ActivityUpdate struct {
-	ID      string
-	Kind    string
-	Title   string
-	Status  string
-	Payload any
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Title   string `json:"title,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Payload any    `json:"payload,omitempty"`
 }
 
 // InteractionKind identifies a blocking Runtime request.
@@ -150,26 +148,27 @@ const (
 )
 
 // InteractionRequest is one pending interaction addressable through Resolve.
+// Payload must be JSON-compatible.
 type InteractionRequest struct {
-	ID      string
-	Kind    InteractionKind
-	Title   string
-	Payload any
+	ID      string          `json:"id"`
+	Kind    InteractionKind `json:"kind"`
+	Title   string          `json:"title,omitempty"`
+	Payload any             `json:"payload,omitempty"`
 }
 
 // InteractionResolution resolves exactly one pending interaction.
 type InteractionResolution struct {
-	ConversationKey ConversationKey
-	InteractionID   string
-	OptionID        string
-	Answers         map[string]InteractionAnswer
-	ResponderID     string
+	ConversationKey ConversationKey              `json:"conversation_key"`
+	InteractionID   string                       `json:"interaction_id"`
+	OptionID        string                       `json:"option_id,omitempty"`
+	Answers         map[string]InteractionAnswer `json:"answers,omitempty"`
+	ResponderID     string                       `json:"responder_id,omitempty"`
 }
 
 // InteractionAnswer is a normalized answer for one Runtime question.
 type InteractionAnswer struct {
-	Values  []string
-	Skipped bool
+	Values  []string `json:"values,omitempty"`
+	Skipped bool     `json:"skipped,omitempty"`
 }
 
 // OutputItemKind identifies a detached, non-blocking output record.
@@ -180,10 +179,11 @@ const (
 	OutputItemResourceLink     OutputItemKind = "resource_link"
 )
 
-// OutputItem contains an already validated Runtime output record.
+// OutputItem contains an already validated Runtime output record. Payload must
+// be JSON-compatible and is decoded according to Kind by an HTTP client.
 type OutputItem struct {
-	Kind    OutputItemKind
-	Payload any
+	Kind    OutputItemKind `json:"kind"`
+	Payload any            `json:"payload"`
 }
 
 // TurnStatus is the terminal state of one turn.
@@ -205,6 +205,7 @@ const (
 	ErrorConversationBusy            ErrorCode = "conversation_busy"
 	ErrorConversationNotResumable    ErrorCode = "conversation_not_resumable"
 	ErrorFileUnavailable             ErrorCode = "file_unavailable"
+	ErrorFileNotFound                ErrorCode = "file_not_found"
 	ErrorInteractionNotFound         ErrorCode = "interaction_not_found"
 	ErrorInteractionUnsupported      ErrorCode = "interaction_unsupported"
 	ErrorCanceled                    ErrorCode = "canceled"
@@ -214,8 +215,8 @@ const (
 
 // TurnError is a normalized failure returned by Engine operations.
 type TurnError struct {
-	Code    ErrorCode
-	Message string
+	Code    ErrorCode `json:"code"`
+	Message string    `json:"message"`
 }
 
 func (e *TurnError) Error() string {
@@ -229,6 +230,9 @@ func (e *TurnError) Error() string {
 func ErrorCodeOf(err error) ErrorCode {
 	for err != nil {
 		if turnErr, ok := err.(*TurnError); ok {
+			if turnErr == nil {
+				return ""
+			}
 			return turnErr.Code
 		}
 		type unwrapper interface{ Unwrap() error }
@@ -241,10 +245,15 @@ func ErrorCodeOf(err error) ErrorCode {
 	return ""
 }
 
-// TurnResult is the terminal outcome of one turn.
+// TurnResult is the JSON-safe terminal outcome of one turn. Files contains
+// metadata only; callers retrieve metadata and content through
+// Conversations(agentID).Files().Get(fileID).
 type TurnResult struct {
-	Status     TurnStatus
-	Output     string
-	Dispatched bool
-	Error      *TurnError
+	Status     TurnStatus   `json:"status"`
+	Output     string       `json:"output,omitempty"`
+	Files      []OutputFile `json:"files,omitempty"`
+	Dispatched bool         `json:"dispatched"`
+	Error      *TurnError   `json:"error,omitempty"`
+
+	files []*OutputFile
 }

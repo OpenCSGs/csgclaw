@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/codexcli"
@@ -22,8 +25,10 @@ import (
 )
 
 const (
-	appServerTurnInterruptTimeout = 5 * time.Second
-	appServerTrackedTurnLimit     = 256
+	appServerTurnInterruptTimeout      = 5 * time.Second
+	appServerTrackedTurnLimit          = 256
+	appServerPublishFileToolName       = "csgclaw_publish_file"
+	appServerMaxPublishedFileNameBytes = 255
 )
 
 var (
@@ -141,6 +146,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		appClient:             appClient,
 		conversationSessions:  conversationSessions,
 		loadedConversations:   make(map[string]bool),
+		filePublishingThreads: make(map[string]bool),
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
 		turnThreads:           make(map[string]string),
 		commandOutputs:        make(map[string]*appServerCommandOutputState),
@@ -177,7 +183,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		}
 	}
 
-	threadID, err := m.startOrResumeThread(ctx, live, m.persistedThreadID(spec))
+	threadID, _, err := m.startOrResumeThread(ctx, live, m.persistedThreadID(spec), false)
 	if err != nil {
 		_ = m.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID})
 		return nil, m.wrapStartupError(spec, "initialize codex app-server thread", err)
@@ -395,6 +401,14 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 }
 
 func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, error) {
+	return m.ensureSession(ctx, handle, conversationKey, false)
+}
+
+func (m *appServerManager) EnsureEngineSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, error) {
+	return m.ensureSession(ctx, handle, conversationKey, true)
+}
+
+func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHandle, conversationKey string, publishFiles bool) (string, error) {
 	live, err := m.ensureLiveSession(ctx, handle)
 	if err != nil {
 		return "", err
@@ -426,27 +440,32 @@ func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHand
 		restoredThreadID = strings.TrimSpace(live.conversationSessions[conversationKey])
 		live.mu.Unlock()
 
-		threadID, err := m.startOrResumeThread(ctx, live, restoredThreadID)
+		threadID, filePublishing, err := m.startOrResumeThread(ctx, live, restoredThreadID, publishFiles)
 		if err != nil {
 			return "", err
 		}
 		live.mu.Lock()
 		previous := live.conversationSessions[conversationKey]
+		previousLoaded := live.loadedConversations[conversationKey]
+		previousFilePublishing := live.filePublishingThreads[previous]
 		live.conversationSessions[conversationKey] = threadID
 		live.loadedConversations[conversationKey] = true
+		live.filePublishingThreads[threadID] = filePublishing
 		conversations := cloneConversationSessions(live.conversationSessions)
 		live.mu.Unlock()
 		if err := m.persistConversationSessions(live, conversations); err != nil {
 			live.mu.Lock()
 			live.conversationSessions[conversationKey] = previous
-			delete(live.loadedConversations, conversationKey)
+			live.loadedConversations[conversationKey] = previousLoaded
+			live.filePublishingThreads[previous] = previousFilePublishing
+			delete(live.filePublishingThreads, threadID)
 			live.mu.Unlock()
 			return "", err
 		}
 		return threadID, nil
 	}
 
-	threadID, err := m.startThread(ctx, live)
+	threadID, err := m.startThread(ctx, live, publishFiles)
 	if err != nil {
 		return "", err
 	}
@@ -454,24 +473,55 @@ func (m *appServerManager) EnsureSession(ctx context.Context, handle SessionHand
 	live.conversationPersistMu.Lock()
 	defer live.conversationPersistMu.Unlock()
 	live.mu.Lock()
-	if existing := strings.TrimSpace(live.conversationSessions[conversationKey]); existing != "" {
+	existing := strings.TrimSpace(live.conversationSessions[conversationKey])
+	if existing != "" && live.loadedConversations[conversationKey] && live.filePublishingThreads[existing] == publishFiles {
 		live.mu.Unlock()
 		return existing, nil
 	}
+	previousLoaded := live.loadedConversations[conversationKey]
+	previousFilePublishing := live.filePublishingThreads[existing]
 	live.conversationSessions[conversationKey] = threadID
 	live.loadedConversations[conversationKey] = true
+	live.filePublishingThreads[threadID] = publishFiles
 	conversations := cloneConversationSessions(live.conversationSessions)
 	live.mu.Unlock()
 	if err := m.persistConversationSessions(live, conversations); err != nil {
 		live.mu.Lock()
 		if live.conversationSessions[conversationKey] == threadID {
-			delete(live.conversationSessions, conversationKey)
-			delete(live.loadedConversations, conversationKey)
+			if existing == "" {
+				delete(live.conversationSessions, conversationKey)
+				delete(live.loadedConversations, conversationKey)
+			} else {
+				live.conversationSessions[conversationKey] = existing
+				live.loadedConversations[conversationKey] = previousLoaded
+				live.filePublishingThreads[existing] = previousFilePublishing
+			}
+			delete(live.filePublishingThreads, threadID)
 		}
 		live.mu.Unlock()
 		return "", err
 	}
 	return threadID, nil
+}
+
+func (m *appServerManager) ExistingEngineSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, bool, error) {
+	live, err := m.ensureLiveSession(ctx, handle)
+	if err != nil {
+		return "", false, err
+	}
+	conversationKey = strings.TrimSpace(conversationKey)
+	live.mu.Lock()
+	threadID := strings.TrimSpace(live.conversationSessions[conversationKey])
+	available := threadID != ""
+	live.mu.Unlock()
+	if !available {
+		return "", false, nil
+	}
+	resolved, err := m.ensureSession(ctx, handle, conversationKey, true)
+	if err != nil {
+		return "", false, err
+	}
+	return resolved, true, nil
 }
 
 func (m *appServerManager) ExistingSession(ctx context.Context, handle SessionHandle, conversationKey string) (string, bool, error) {
@@ -518,6 +568,8 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 	delete(live.conversationSessions, conversationKey)
 	wasLoaded := live.loadedConversations[conversationKey]
 	delete(live.loadedConversations, conversationKey)
+	wasFilePublishing := live.filePublishingThreads[sessionID]
+	delete(live.filePublishingThreads, sessionID)
 	conversations := cloneConversationSessions(live.conversationSessions)
 	live.mu.Unlock()
 	if err := m.persistConversationSessions(live, conversations); err != nil {
@@ -525,6 +577,7 @@ func (m *appServerManager) ResetConversationHistory(ctx context.Context, handle 
 		if sessionID != "" {
 			live.conversationSessions[conversationKey] = sessionID
 			live.loadedConversations[conversationKey] = wasLoaded
+			live.filePublishingThreads[sessionID] = wasFilePublishing
 		}
 		live.mu.Unlock()
 		return err
@@ -611,25 +664,26 @@ func (m *appServerManager) initializeHandshake(ctx context.Context, live *liveSe
 	return nil
 }
 
-func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string) (string, error) {
+func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSession, threadID string, publishFiles bool) (string, bool, error) {
 	threadID = strings.TrimSpace(threadID)
 	if threadID != "" {
 		resumed, err := m.resumeThread(ctx, live, threadID)
 		if err == nil {
 			if strings.TrimSpace(resumed) != "" {
-				return resumed, nil
+				return resumed, false, nil
 			}
-			return threadID, nil
+			return threadID, false, nil
 		}
 		if live.appClient != nil {
 			live.appClient.logDebug("codex app-server thread resume failed; starting a new thread", "thread_id", threadID, "error", err)
 		}
 	}
-	return m.startThread(ctx, live)
+	started, err := m.startThread(ctx, live, publishFiles)
+	return started, publishFiles && err == nil, err
 }
 
-func (m *appServerManager) startThread(ctx context.Context, live *liveSession) (string, error) {
-	params := appServerThreadStartParams(live.spec)
+func (m *appServerManager) startThread(ctx context.Context, live *liveSession, publishFiles bool) (string, error) {
+	params := appServerThreadStartParams(live.spec, publishFiles)
 	raw, err := live.appClient.request(ctx, "thread/start", params)
 	if err != nil {
 		return "", err
@@ -653,12 +707,15 @@ func (m *appServerManager) resumeThread(ctx context.Context, live *liveSession, 
 	return resumed, nil
 }
 
-func appServerThreadStartParams(spec SessionSpec) map[string]any {
+func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]any {
 	spec.Profile = spec.Profile.Normalized()
 	params := map[string]any{
 		"cwd":                    spec.WorkspaceDir,
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
+	}
+	if publishFiles {
+		params["dynamicTools"] = []map[string]any{appServerPublishFileToolSpec()}
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -671,6 +728,32 @@ func appServerThreadStartParams(spec SessionSpec) map[string]any {
 		params["permissions"] = readOnlyPermissionsProfile
 	}
 	return params
+}
+
+func appServerPublishFileToolSpec() map[string]any {
+	return map[string]any{
+		"name":        appServerPublishFileToolName,
+		"description": "Publish an existing file from the current Runtime workspace to the user. Call this only after the file is complete. The path must be relative to the workspace; do not pass a URL or an absolute path.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"path": map[string]any{
+					"type":        "string",
+					"description": "Workspace-relative path of the completed file.",
+				},
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Optional UTF-8 delivery filename with at most 255 bytes, no directory components, and no control characters.",
+				},
+				"mimeType": map[string]any{
+					"type":        "string",
+					"description": "Optional expected MIME type. The Runtime Adapter validates or derives it from the file.",
+				},
+			},
+			"required":             []string{"path"},
+			"additionalProperties": false,
+		},
+	}
 }
 
 func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]any {
@@ -779,8 +862,99 @@ func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *
 		}, nil
 	case "item/tool/requestUserInput":
 		return m.handleAppServerUserInputRequest(runtimeID, live, req)
+	case "item/tool/call":
+		return m.handleAppServerDynamicToolCall(runtimeID, live, req)
 	default:
 		return nil, fmt.Errorf("unhandled server request: %s", strings.TrimSpace(req.Method))
+	}
+}
+
+type appServerDynamicToolCallParams struct {
+	ThreadID  string                   `json:"threadId"`
+	TurnID    string                   `json:"turnId"`
+	CallID    string                   `json:"callId"`
+	Tool      string                   `json:"tool"`
+	Arguments appServerPublishFileArgs `json:"arguments"`
+}
+
+type appServerPublishFileArgs struct {
+	Path     string `json:"path"`
+	Name     string `json:"name"`
+	MIMEType string `json:"mimeType"`
+}
+
+func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live *liveSession, req appServerServerRequest) (any, error) {
+	var params appServerDynamicToolCallParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		return nil, fmt.Errorf("decode dynamic tool call: %w", err)
+	}
+	params.ThreadID = strings.TrimSpace(params.ThreadID)
+	params.TurnID = strings.TrimSpace(params.TurnID)
+	params.CallID = strings.TrimSpace(params.CallID)
+	params.Tool = strings.TrimSpace(params.Tool)
+	if params.ThreadID == "" || params.TurnID == "" || params.CallID == "" {
+		return nil, fmt.Errorf("dynamic tool thread ID, turn ID, and call ID are required")
+	}
+	if params.Tool != appServerPublishFileToolName {
+		return nil, fmt.Errorf("unsupported dynamic tool %q", params.Tool)
+	}
+	if live == nil || !live.appServerPublishesFilesForThread(params.ThreadID) {
+		return nil, fmt.Errorf("dynamic file tool references unknown or unsupported thread %q", params.ThreadID)
+	}
+	file, err := normalizeAppServerPublishFileArgs(params.Arguments)
+	if err != nil {
+		return appServerDynamicToolResponse(false, err.Error()), nil
+	}
+	if m == nil || m.deps.EventSink == nil {
+		return appServerDynamicToolResponse(false, "file delivery is unavailable"), nil
+	}
+	m.publishAppServerEvent(SessionEvent{
+		RuntimeID:  runtimeID,
+		SessionID:  params.ThreadID,
+		TurnID:     params.TurnID,
+		Kind:       SessionEventFileOutput,
+		ToolCallID: params.CallID,
+		ToolKind:   appServerPublishFileToolName,
+		ToolTitle:  "Publish file",
+		ToolStatus: "completed",
+		Payload:    file,
+	})
+	return appServerDynamicToolResponse(true, "File publication requested."), nil
+}
+
+func normalizeAppServerPublishFileArgs(args appServerPublishFileArgs) (activity.RuntimeFile, error) {
+	path := strings.TrimSpace(args.Path)
+	cleaned := filepath.Clean(path)
+	if path == "" || cleaned == "." || filepath.IsAbs(cleaned) || filepath.VolumeName(cleaned) != "" || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return activity.RuntimeFile{}, fmt.Errorf("path must stay within the Runtime workspace")
+	}
+	name := strings.TrimSpace(args.Name)
+	if name == "" {
+		name = filepath.Base(cleaned)
+	}
+	if !utf8.ValidString(name) || len([]byte(name)) > appServerMaxPublishedFileNameBytes || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsAny(name, "/\\\x00") {
+		return activity.RuntimeFile{}, fmt.Errorf("name must be a valid UTF-8 basename with 1 to %d bytes", appServerMaxPublishedFileNameBytes)
+	}
+	for _, character := range name {
+		if unicode.IsControl(character) {
+			return activity.RuntimeFile{}, fmt.Errorf("name must not contain control characters")
+		}
+	}
+	mediaType := strings.TrimSpace(args.MIMEType)
+	if mediaType != "" {
+		parsed, _, err := mime.ParseMediaType(mediaType)
+		if err != nil || strings.TrimSpace(parsed) == "" {
+			return activity.RuntimeFile{}, fmt.Errorf("mimeType is invalid")
+		}
+		mediaType = strings.ToLower(parsed)
+	}
+	return activity.RuntimeFile{Path: cleaned, Name: name, MIMEType: mediaType}, nil
+}
+
+func appServerDynamicToolResponse(success bool, message string) map[string]any {
+	return map[string]any{
+		"contentItems": []map[string]any{{"type": "inputText", "text": strings.TrimSpace(message)}},
+		"success":      success,
 	}
 }
 

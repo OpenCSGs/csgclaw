@@ -40,6 +40,7 @@ func (unavailableAgents) Recreate(context.Context, string) (Agent, error) {
 
 type agentFacade struct {
 	service *agent.Service
+	files   *FileStore
 }
 
 func (f agentFacade) Create(ctx context.Context, spec AgentSpec) (Agent, error) {
@@ -155,7 +156,17 @@ func (f agentFacade) Update(ctx context.Context, agentID string, spec AgentSpec)
 }
 
 func (f agentFacade) Delete(ctx context.Context, agentID string) error {
-	return f.service.Delete(ctx, agentID)
+	canonicalID := strings.TrimSpace(agentID)
+	if selected, ok := f.service.Agent(canonicalID); ok {
+		canonicalID = selected.ID
+	}
+	if err := f.service.Delete(ctx, agentID); err != nil {
+		return err
+	}
+	if f.files != nil {
+		f.files.DeleteAgent(canonicalID)
+	}
+	return nil
 }
 
 func (f agentFacade) Start(ctx context.Context, agentID string) (Agent, error) {

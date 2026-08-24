@@ -139,6 +139,15 @@ type ResourceLink struct {
 	Icons       []map[string]any `json:"icons,omitempty"`
 }
 
+// RuntimeFile is a typed request from a Runtime to expose one local workspace
+// file. The Runtime Adapter authorizes the path and replaces this record with
+// an Agent Engine OutputFile before it crosses the Engine boundary.
+type RuntimeFile struct {
+	Path     string `json:"path"`
+	Name     string `json:"name,omitempty"`
+	MIMEType string `json:"mimeType,omitempty"`
+}
+
 // StructuredOutputArtifact is the normalized result of decoding CSGClaw
 // control records from one completed runtime output.
 type StructuredOutputArtifact struct {
@@ -207,6 +216,7 @@ const (
 	RuntimeEventUserInputRequest  RuntimeEventKind = "user_input_request"
 	RuntimeEventUserInputResolved RuntimeEventKind = "user_input_resolved"
 	RuntimeEventStructuredOutput  RuntimeEventKind = "structured_output"
+	RuntimeEventFileOutput        RuntimeEventKind = "file_output"
 	RuntimeEventPromptCompleted   RuntimeEventKind = "prompt_completed"
 	RuntimeEventPromptFailed      RuntimeEventKind = "prompt_failed"
 )
@@ -254,7 +264,7 @@ func RuntimeEventRequiresReliableDelivery(event RuntimeEvent) bool {
 	case RuntimeEventTextDelta,
 		RuntimeEventActionRequest, RuntimeEventActionDecision,
 		RuntimeEventUserInputRequest, RuntimeEventUserInputResolved,
-		RuntimeEventStructuredOutput:
+		RuntimeEventStructuredOutput, RuntimeEventFileOutput:
 		return true
 	case RuntimeEventPromptCompleted, RuntimeEventPromptFailed:
 		return true

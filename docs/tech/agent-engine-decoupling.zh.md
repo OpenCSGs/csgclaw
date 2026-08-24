@@ -24,10 +24,10 @@ CSGClaw 需要一条 Runtime 中立的执行路径，供匿名 Session、内置 
 Channel Adapter 或 Session API -> Agent Engine -> Runtime Adapter
 ```
 
-设计提供两个公共 Resource Interface：
+设计提供两个顶层公共 Resource Interface：
 
 - `Agents()` 管理持久化 Agent Resource 和 Runtime 生命周期。
-- `Conversations(agentID)` 为一个已选择的 Agent 执行 Conversation。
+- `Conversations(agentID)` 为一个已选择的 Agent 执行 Conversation 并管理不可变文件。
 
 接口采用 Kubernetes Client 风格，先选择 Resource Scope，再暴露聚焦的操作。
 它不引入 Kubernetes Controller、API Server、Object Metadata Model 或 Reconciliation Framework。
@@ -217,15 +217,30 @@ Runtime Adapter 只管理 Runtime 特有的 Mapping、Protocol Translation、Cre
 | Resource | 操作 | 用途 |
 |---|---|---|
 | `Agents()` | Create、Get、List、Update、Delete、Start、Stop、Recreate | Agent 期望配置和 Runtime 生命周期 |
-| `Conversations(agentID)` | Run、Cancel、Reset、Resolve | 限定到一个 Agent 的 Conversation 执行 |
+| `Conversations(agentID)` | Files、Run、Cancel、Reset、Resolve | 限定到一个 Agent 的 Conversation 执行 |
+| `Conversations(agentID).Files()` | Create、Get、Delete | 由已选择 Agent 限定的不可变文件 |
 | `ConversationRuntime` | Run、Cancel、Reset、Resolve | Engine 后面的 Runtime 特有直接执行 |
+
+公共 Contract 已具备 Transport-ready 形态，但本阶段不定义远程 Engine Protocol：
+
+| Engine Operation | HTTP Mapping |
+|---|---|
+| `Agents().Create/Get/List/Update/Delete` | Agent Collection 与 Resource 的 POST、GET、PUT、DELETE |
+| `Agents().Start/Stop/Recreate` | Agent Action POST Endpoint |
+| `Conversations(agentID).Run` | 使用 JSON Request 和 JSON 或 SSE Result Stream 的 Turn POST |
+| `Cancel/Reset/Resolve` | 使用 typed JSON Body 的 Conversation Action POST Endpoint |
+| `Conversations(agentID).Files().Create` | File Metadata 加 Streaming HTTP Request Body |
+| `Conversations(agentID).Files().Get/Delete` | 带 Metadata Header 的 Content GET 和 DELETE |
+
+`context.Context`、`io.Reader`、`io.ReadCloser` 和 `EventSink` 属于 Go Client 与 Server Adapter 边界。
+跨过该边界的 Request、Resource、Event、Result 和 Error Value 都具有稳定 JSON 表示，并且不包含 Runtime Path 或进程内 Capability。
 
 `AgentInterface` 是 Agent Resource 的 Collection-scoped API，调用方不能依赖当前 `internal/agent.Service`。
 阶段 2 的 Engine Facade 可以通过私有 Backend 包装当前 Agent Service，以优先复用已经验证的 Agent 持久化和 Runtime 生命周期代码。
 该包装只是 Engine 内部实现，不进入公共 Contract，也不阻止阶段 4 把宽泛的 Service 拆成明确的 Storage、Lifecycle 和 Runtime 组件。
 Conversation Execution 不保存重复的 Agent Record，并协调 Active Turn 和生命周期变更。
 阶段 1 的 Conversation 实现只能通过 Composition Root 注入的私有 Adapter 访问当前 Agent Service。
-阶段 2 扩展这个边界，让完整 Engine 通过同一个私有 Facade 实现 `Agents()` 和 `Conversations()`，而不是先重写现有 Agent 组件。
+阶段 2 扩展这个边界，让完整 Engine 在不先重写现有 Agent 组件的前提下实现 `Agents()`、`Conversations(agentID)` 及其嵌套 `Files()` Resource。
 阶段 4 再在保持外部行为的前提下替换临时 Facade，并收敛 Agent State 与 Runtime 生命周期的内部 Owner。
 如果内部重构确实需要调整公共 Interface，该调整继续通过共同 Review 完成，并同步所有实现、Mock Client 和 Contract Test。
 
@@ -307,7 +322,7 @@ Turn 生命周期结束后，`TurnID` 只在有界的进程内幂等窗口中保
 
 `TurnRequest.Input` 是一个有序 `InputPart` List。
 Text Part 包含 `Text`。
-File Part 包含一个调用方已授权的 `InputFile`。
+File Part 包含一个仅携带 FileID 的 Agent-scoped `InputFile` 引用。
 不存在并行 File List，也不存在 Engine File Preparation 步骤。
 增量实现不会把这个 Contract 缩窄为 String。
 阶段 1 的 Session HTTP Adapter 创建一个 Text Part，私有 Codex Runtime Adapter 则在调用当前 Runtime API 前按顺序合并 Text Part。
@@ -319,13 +334,14 @@ Event Sink 接收一个逻辑 Turn 的有序进度：
 - Thought Delta。
 - Activity Update。
 - Interaction Request。
-- 已验证的 Output Item。
+- 已验证的非文件 Output Item。
 
 Sink 不是 Event Bus、Transcript Store 或 Channel Renderer。
 每个 Event 都携带 `TurnID` 和单调递增的 `Sequence`。
 Adapter 可以使用 `(TurnID, Sequence)` 对重试后回放的 Envelope 去重。
 
 `Run` 只返回一个 `TurnResult`，没有第二套裸 Runtime Error。
+成功 Result 通过 `Files` 携带 JSON-safe 不可变文件 Metadata；失败或取消 Result 不包含可投递文件。
 `Dispatched=false` 表示原生 Turn 尚未提交。
 这包括 Engine 拒绝 Admission，以及创建、解析或持久化必要的 Runtime 原生 Conversation Mapping 失败。
 `Dispatched=true` 表示 Continuation Policy 已成功满足，必要的 Mapping 已经持久化或解析，并且原生 Turn 已提交。
@@ -340,9 +356,9 @@ Adapter 可以使用 `(TurnID, Sequence)` 对重试后回放的 Envelope 去重�
 | 组件 | 负责 | 不负责 |
 |---|---|---|
 | Agent Resource 实现 | Agent 持久化、包含 Runtime Credential 和 `InitShell` 的期望配置、Runtime 生命周期、Workspace 和 Runtime Provision | Turn Input、Transcript、Runtime 原生 Conversation Mapping、Channel Event Worker 生命周期 |
-| Agent Engine | Admission、每 Conversation 串行化、Dispatch、Active Turn、Pending Interaction、Event 顺序、规范化 Result | 持久化 Agent 或 Conversation State、File、Channel 行为 |
-| Runtime Adapter | Runtime Credential 序列化、`InitShell` 执行、原生 Conversation Mapping、直接 Runtime 协议、Runtime Event 转换、向 Runtime 暴露 File | Channel Subscription、Transcript、Agent 持久化 |
-| Channel Adapter | Ingress、Identity、Binding 和 Channel Event Worker 生命周期、Host 侧 Channel Credential、Deduplication、Hidden Context、File Authorization、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
+| Agent Engine | Admission、每 Conversation 串行化、Dispatch、Active Turn、Pending Interaction、Event 顺序、规范化 Result、进程内不可变 Artifact Store | 持久化 Agent 或 Conversation State、外部文件传输、Channel 行为 |
+| Runtime Adapter | Runtime Credential 序列化、`InitShell` 执行、原生 Conversation Mapping、直接 Runtime 协议、Runtime Event 转换、Input File 暴露、Output File 授权 | Channel Subscription、Transcript、Agent 持久化 |
+| Channel Adapter | Ingress、Identity、Binding 和 Channel Event Worker 生命周期、Host 侧 Channel Credential、Deduplication、Hidden Context、Input File 授权、已授权 Output File 投递、Transcript、Rendering、Ack | Runtime 原生 Mapping、Engine Admission |
 | Session HTTP Adapter | HTTP Validation、Session Binding、SSE 和 Error Mapping | IM Room、Message、Participant、Transcript |
 
 阶段 1 的最小 Session 实现没有生命周期协调。
@@ -434,21 +450,30 @@ Engine 进程重启会中断等待中和运行中的 Turn，并清空进程内�
 
 ### 6.2 文件
 
-内置 IM 继续拥有 Attachment Metadata、Blob、Download Token 和 GC。
-调用 Engine 前，受信任调用方授权文件，并解析包含 ID、Source Path、Name、Media Type、Size 和 Hash 的 `InputFile`。
-
-Engine 校验 Input Shape，但把 `SourcePath` 视为不透明值。
-它不调用 IM API、不读取 File Byte、不写 Workspace File、不管理 Blob，也不 Mount Sandbox。
-Runtime Adapter 决定如何 Mount、Copy 或暴露 File，并保留 Path、Symlink、Size 和 Hash 校验。
-调用方保证已解析 Source 在 `Run` 返回前持续有效。
+内置 IM 继续拥有其持久化 Attachment Metadata、Blob、Download Token 和 GC。
+调用 `Run` 前，调用方通过 `Conversations(agentID).Files().Create` 上传内容，并获得带 opaque FileID 的不可变 Metadata。
+`InputFile` 只携带该 FileID，因此调用方和 Engine 不需要共享文件系统或 `SourcePath`。
+Engine 在选定 Agent Scope 内解析 ID，Runtime Adapter 再把不可变快照复制到执行环境。
+解析会在 Admission 前取得 Lease，因此无效的 Supersede Request 不会取消 Active Turn，并发 Delete 也不能使已准入的 Input 失效。
 
 只有新上传或明确再次引用时才把 File 加入 Input。
 不能仅为继续 Runtime 原生 Conversation 而重发之前的 File Byte。
 
+对于输出，每个 Runtime Adapter 消费 typed 原生文件引用，并在跨过 Engine 边界前完成解析。
+Codex app-server Adapter 只在 Engine 创建的 Thread 上暴露接收 workspace 相对路径的 typed dynamic tool `csgclaw_publish_file`；Legacy Bridge Thread 不发布无法投递的能力。
+当前 app-server Protocol 不能在 cold `thread/resume` 时附加 Dynamic Tool，因此恢复出的 Engine Mapping 会续接同一个原生 Thread 以保留 Conversation Context，但在协议支持重新附加前不会发布 File Capability。
+直接使用 Responses 的 Adapter 应消费原生生成文件引用和工具输出。
+Runtime Adapter 通过受 workspace 根目录约束的文件访问打开解析后的本地路径，拒绝越界路径和最终为 symlink 的非普通文件，并注册包含权威名称、MIME type、大小与 SHA-256 元数据的唯一不可变快照。
+Engine 分配与 SHA-256 无关的随机 opaque ID，并在成功的 `TurnResult.Files` 中返回 Metadata，但不暴露宿主路径。
+Channel Adapter 调用 `Conversations(agentID).Files().Get(fileID)` 获取权威 Metadata 和独立快照流，Turn Replay 会保留相同 ID 和内容。
+`Get` 会原地校验不可变快照并返回 Leased Descriptor；Delete 会立即撤销新访问，并在最后一个 Active Lease 关闭后删除实际字节。
+它只能上传成功 `TurnResult` 中的文件。
+Channel Adapter 不得下载 `resource_link`；普通 HTTP(S) 资源链接始终只是 Markdown 链接。
+
 ### 6.3 Structured Output 和 Interaction
 
-唯一共享 Decoder 拥有 `::csgclaw-output::` Grammar。
-它在 Payload 跨过 Engine 边界前验证 `resource_link` 和 Detached `request_user_input`。
+唯一共享 Decoder 只拥有 `resource_link` 和 Detached `request_user_input` 的 `::csgclaw-output::` Grammar。
+Runtime File Output 使用 typed 原生 Runtime Event，不依赖解析 Assistant Text 或 Command Stdout。
 原始控制行不能进入公开 Text 或 Channel Renderer。
 
 Blocking Runtime Permission 或 User Input 保持同一个 Turn 打开，并使用 `Resolve`。
@@ -526,11 +551,11 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 
 - 实现完整 `agentengine.Interface`，并提供实现同一 Contract 的并发安全、有状态 `enginetest.MemoryClient`。
 - Interface 不是不可修改的冻结协议；实现中发现遗漏或错误时，可以通过共同 Review 调整，并在同一次变更中同步真实 Engine、Mock Client、Contract Test 和受影响的 Adapter 调用代码。
-- 实现 `Agents()`、`Run`、`Cancel`、原子 `Reset`、Claimed `Resolve`、显式 Admission Policy、Turn 重试幂等、TurnID Event Envelope、File Input、Interaction、Structured Output、`Dispatched` 和稳定 Error。
+- 实现 `Agents()`、`Run`、`Cancel`、原子 `Reset`、Claimed `Resolve`、显式 Admission Policy、Turn 重试幂等、TurnID Event Envelope、File Input、已授权 Runtime File Output、Interaction、Structured Output、`Dispatched` 和稳定 Error。
 - Agent Engine Facade 优先包装现有 Agent Service、Codex Session、Broker、Structured Output 和 Runtime Provision 代码，不把内部重构作为完成 Engine 的前置条件。
 - Agent Engine 通过共享 Lifecycle Gate 协调 Agent Mutation、Admission、Active Turn、Drain 和固定 Runtime Handle。
 - 把匿名 Session API 迁移到 `agentengine.Interface`，同时保留其 HTTP Contract 和零 IM Entity 创建。
-- 通过 `MemoryClient` 证明 Test-only 飞书 Ingress Harness，并让飞书 Credential 只存在于当前 Channel Binding Owner。
+- 通过 `MemoryClient` 证明 Test-only 飞书 Ingress 和 Output Delivery Harness，包括飞书图片上传、文件上传和消息 OpenAPI 调用，并让飞书 Credential 只存在于当前 Channel Binding Owner。
 - 生产 Channel Adapter 的实现、融合和原子切换保留在阶段 3。
 - 将 Codex `RuntimeSpec.Credentials` 物化为 Workspace 相对文件，并在 File 可用后运行 `RuntimeSpec.InitShell`。
 
@@ -572,17 +597,20 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 ### 8.2 目标架构
 
 - `internal/agentengine` 不 Import IM、Participant、Channel、Team 或具体 Runtime Package。
-- `Interface` 暴露 `Agents()` 和按 Agent 限定的 `Conversations(agentID)`。
+- `Interface` 暴露 `Agents()` 和按 Agent 限定的 `Conversations(agentID)`；文件是通过 `Conversations(agentID).Files()` 选择的嵌套 Conversation Resource。
 - Conversation Request 不重复携带 Agent ID。
 - Conversation Key 保持不透明并由调用方拥有。
 - 每次 Run 都携带调用方生成的不透明 Turn ID，Cancel 使用 Conversation Key 和 Turn ID 定位一个 Turn。
-- Engine 不持久化 Agent、Conversation、Transcript、File 或 Delivery State。
+- Engine 不持久化 Agent、Conversation、Transcript、File 或 Delivery State；Artifact Store 仅存在于进程内，并由显式删除或 Turn Cache 淘汰限制生命周期。
 - Agent Resource 实现、Agent Engine 和 Runtime Adapter 不依赖 Channel Event Worker，也不访问 IM Message 持久化。
 - Channel Event Worker 按稳定的 Binding Identity 建立索引，不使用 Runtime ID 或原生 Session ID。
 - Runtime 原生 Conversation Mapping 只有一个 Owner。
 - 阶段 2 完成后，外部调用方只依赖 `AgentInterface`，`Conversations()` 只通过 Engine 内部 Facade 访问 Agent 可用性和 Runtime 选择。
 - 阶段 4 完成后，`AgentInterface` 实现是唯一的 Agent 持久化和 Runtime 生命周期 Owner，并且 Engine 内部不再依赖宽泛的 `internal/agent.Service`。
 - Runtime Credential File Layout 和初始化由各 Runtime Adapter 负责。
+- Runtime File Output 只能通过成功的 `TurnResult.Files` 跨过 Engine，其中 Metadata 指向包含 opaque ID、MIME type、大小和 SHA-256 且不含宿主路径的不可变快照。
+- Input File Part 只包含 Agent-scoped FileID；公共 Request 和 Result 不包含本地 Source Path 或 Reader 能力。
+- 公共 Resource 与 Event Value 使用稳定 JSON Field Name，`Files.Create` 和 `Files.Get` 分别映射 HTTP Request 与 Response Body。
 - 缺少 Runtime Adapter 时明确失败，不启动 Fallback Path。
 - Go Contract 和两种语言文档保持同步。
 
@@ -603,13 +631,15 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 - Create、Update、Get 和 List Result 省略 Runtime Credential Value。
 - Recreate 和 Delete 如实报告严格续接 Mapping 缺失。
 - CSGClaw Structured Output 不泄漏原始控制行。
+- 普通 `resource_link` Output 不得被下载或提升为可上传文件。
 - Secret Answer 不进入 Log 或 Transcript。
 
 ### 8.4 目标验证
 
 - Contract Test 覆盖 Run、Cancel、原子 Reset、Claimed Resolve、Event Envelope、终态 Result 和稳定 Error。
 - 测试覆盖 Turn 重试幂等、不同 Conversation 并发、Reject、Wait、Supersede、Sink Failure 和 Cancel 行为。
-- 测试覆盖无 MCP、本地 MCP、远程 MCP、Text Input 和 File Input。
+- 测试覆盖无 MCP、本地 MCP、远程 MCP、Text Input、File Input、已授权 Runtime File Output 和 Workspace 越界拒绝。
+- 飞书 OpenAPI 端到端 Harness 验证图片上传、文件上传、消息投递、失败 Turn 不投递以及 `resource_link` 不下载规则。
 - 匿名测试验证 IM Entity 数量不变，并且 Session Binding Scope 按 Agent 隔离。
 - Channel 测试验证 Deduplication、Replay、Superseding、Rendering、Binding 驱动的 Event Worker 生命周期和幂等协调。
 - Lifecycle 测试验证 Agent Stop、Recreate 和 Runtime Restart 不启动或停止 Channel Event Worker。

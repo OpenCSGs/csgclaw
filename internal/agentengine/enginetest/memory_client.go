@@ -47,6 +47,7 @@ type MemoryClient struct {
 	behavior       TurnBehavior
 	calls          []TurnCall
 	resolutions    []Resolution
+	files          *agentengine.FileStore
 	nextAgentID    atomic.Uint64
 }
 
@@ -105,6 +106,7 @@ func NewMemoryClient(agents ...agentengine.Agent) *MemoryClient {
 		active:        make(map[memoryConversation]*memoryTurn),
 		controls:      make(map[memoryConversation]*memoryControl),
 		completed:     make(map[memoryTurnIdentity]memoryCompletedTurn),
+		files:         agentengine.NewFileStore(),
 	}
 	for _, item := range agents {
 		client.provisions[item.ID] = memoryProvision{credentials: cloneStringMap(item.Spec.Runtime.Credentials), initShell: item.Spec.Runtime.InitShell}
@@ -239,6 +241,7 @@ func (a *memoryAgents) Delete(ctx context.Context, agentID string) error {
 		}
 	}
 	a.client.mu.Unlock()
+	a.client.files.DeleteAgent(strings.TrimSpace(agentID))
 	return nil
 }
 
@@ -303,6 +306,10 @@ type memoryConversations struct {
 	agentID string
 }
 
+func (c *memoryConversations) Files() agentengine.FileInterface {
+	return c.client.files.Scope(c.agentID)
+}
+
 func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
 	if ctx == nil {
 		ctx = context.Background()
@@ -322,8 +329,17 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 		if part.Kind == agentengine.InputPartFile && (part.File == nil || strings.TrimSpace(part.Text) != "") {
 			return failed(agentengine.ErrorInvalidRequest, "file input must include only a file")
 		}
-		if part.Kind == agentengine.InputPartFile && (strings.TrimSpace(part.File.ID) == "" || strings.TrimSpace(part.File.SourcePath) == "" || strings.TrimSpace(part.File.Name) == "" || strings.TrimSpace(part.File.MediaType) == "" || part.File.SizeBytes < 0 || len(strings.TrimSpace(part.File.SHA256)) != 64) {
-			return failed(agentengine.ErrorInvalidRequest, "file ID, source path, name, media type, non-negative size, and SHA-256 are required")
+		if part.Kind == agentengine.InputPartFile && strings.TrimSpace(part.File.ID) == "" {
+			return failed(agentengine.ErrorInvalidRequest, "file ID is required")
+		}
+		if part.Kind == agentengine.InputPartFile {
+			download, err := c.client.files.Scope(c.agentID).Get(ctx, part.File.ID)
+			if err != nil {
+				return failed(agentengine.ErrorFileNotFound, err.Error())
+			}
+			if err := download.Content.Close(); err != nil {
+				return failed(agentengine.ErrorFileUnavailable, "file content is unavailable")
+			}
 		}
 		if part.Kind != agentengine.InputPartText && part.Kind != agentengine.InputPartFile {
 			return failed(agentengine.ErrorInvalidRequest, "unsupported input kind")
@@ -437,6 +453,9 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 		result = *policyResult
 	}
 	policyMu.Unlock()
+	if result.Status != agentengine.TurnSucceeded {
+		result.Files = nil
+	}
 	turn.cancel()
 	c.completeMemoryTurn(key, turn, result)
 	return result
@@ -729,11 +748,23 @@ func cloneMemoryCompleted(input memoryCompletedTurn) memoryCompletedTurn {
 }
 
 func cloneMemoryResult(input agentengine.TurnResult) agentengine.TurnResult {
+	input.Files = cloneMemoryFiles(input.Files)
 	if input.Error != nil {
 		errorCopy := *input.Error
 		input.Error = &errorCopy
 	}
 	return input
+}
+
+func cloneMemoryFiles(input []agentengine.OutputFile) []agentengine.OutputFile {
+	if input == nil {
+		return nil
+	}
+	output := make([]agentengine.OutputFile, len(input))
+	for index, file := range input {
+		output[index] = file
+	}
+	return output
 }
 
 func validateSpec(spec agentengine.AgentSpec) error {

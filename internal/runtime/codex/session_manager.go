@@ -21,6 +21,7 @@ type liveSession struct {
 	spec                  SessionSpec
 	conversationSessions  map[string]string
 	loadedConversations   map[string]bool
+	filePublishingThreads map[string]bool
 	turnWaiters           map[string]*appServerTurnWaiter
 	turnThreads           map[string]string
 	turnThreadOrder       []string

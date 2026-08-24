@@ -3,7 +3,9 @@ package agentengine_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,6 +37,7 @@ type contractRuntime struct {
 	workspace     string
 	permission    *codex.MemoryPermissionBroker
 	userInput     *codex.MemoryUserInputBroker
+	openFile      func(context.Context, string) (io.ReadCloser, error)
 }
 
 func newContractRuntime(kind, workspace string, behavior enginetest.TurnBehavior) *contractRuntime {
@@ -109,7 +112,7 @@ func (*contractRuntime) ReconcileMCPServers(context.Context, runtime.Handle, run
 	return nil
 }
 
-func (r *contractRuntime) EnsureSession(_ context.Context, _ string, conversationKey string) (string, error) {
+func (r *contractRuntime) EnsureEngineSession(_ context.Context, _ string, conversationKey string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if sessionID := r.conversations[conversationKey]; sessionID != "" {
@@ -121,7 +124,7 @@ func (r *contractRuntime) EnsureSession(_ context.Context, _ string, conversatio
 	return sessionID, nil
 }
 
-func (r *contractRuntime) ExistingSession(_ context.Context, _ string, conversationKey string) (string, bool, error) {
+func (r *contractRuntime) ExistingEngineSession(_ context.Context, _ string, conversationKey string) (string, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	sessionID := r.conversations[conversationKey]
@@ -158,6 +161,31 @@ func (r *contractRuntime) PromptTurn(ctx context.Context, runtimeID, sessionID, 
 		}
 		r.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptFailed, Error: message})
 		return nil
+	}
+	for _, file := range result.Files {
+		if r.openFile == nil {
+			return fmt.Errorf("contract file opener is unavailable")
+		}
+		reader, err := r.openFile(context.Background(), file.ID)
+		if err != nil {
+			return err
+		}
+		content, readErr := io.ReadAll(reader)
+		closeErr := reader.Close()
+		if readErr != nil || closeErr != nil {
+			return errors.Join(readErr, closeErr)
+		}
+		relativePath := filepath.Join("contract-outputs", file.Name)
+		if err := os.MkdirAll(filepath.Join(r.workspace, filepath.Dir(relativePath)), 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(r.workspace, relativePath), content, 0o600); err != nil {
+			return err
+		}
+		r.publish(activity.RuntimeEvent{
+			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventFileOutput,
+			Payload: activity.RuntimeFile{Path: relativePath, Name: file.Name, MIMEType: file.MediaType},
+		})
 	}
 	r.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
 	return nil
@@ -294,8 +322,15 @@ func (r *contractRuntime) setState(runtimeID string, state runtime.State) {
 func newRealContractEngine(t testing.TB, seeded []agentengine.Agent, behavior enginetest.TurnBehavior) agentengine.Interface {
 	t.Helper()
 	root := t.TempDir()
-	codexRuntime := newContractRuntime(runtime.KindCodex, filepath.Join(root, "workspace"), behavior)
-	openClawRuntime := newContractRuntime(runtime.KindOpenClawSandbox, filepath.Join(root, "openclaw-workspace"), behavior)
+	codexWorkspace := filepath.Join(root, "workspace")
+	openClawWorkspace := filepath.Join(root, "openclaw-workspace")
+	for _, workspace := range []string{codexWorkspace, openClawWorkspace} {
+		if err := os.MkdirAll(workspace, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	codexRuntime := newContractRuntime(runtime.KindCodex, codexWorkspace, behavior)
+	openClawRuntime := newContractRuntime(runtime.KindOpenClawSandbox, openClawWorkspace, behavior)
 	stored := make([]agent.Agent, 0, len(seeded))
 	for _, item := range seeded {
 		runtimeKind := strings.TrimSpace(item.Spec.Runtime.Adapter)
@@ -336,5 +371,13 @@ func newRealContractEngine(t testing.TB, seeded []agentengine.Agent, behavior en
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = service.Close() })
-	return agentengine.New(service)
+	engine := agentengine.New(service)
+	codexRuntime.openFile = func(ctx context.Context, fileID string) (io.ReadCloser, error) {
+		download, err := engine.Conversations("agent-a").Files().Get(ctx, fileID)
+		if err != nil {
+			return nil, err
+		}
+		return download.Content, nil
+	}
+	return engine
 }
