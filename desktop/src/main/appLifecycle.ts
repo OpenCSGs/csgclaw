@@ -25,7 +25,7 @@ import { WindowManager } from "./windowManager";
 
 export class AppLifecycle {
   private cleanupIPC: (() => void) | null = null;
-  private cleanupDockThemeIcon: (() => void) | null = null;
+  private cleanupThemeIcons: (() => void) | null = null;
   private desktopThemeSource: DesktopThemeSource = "system";
   private readonly deferredRelaunch = new DeferredRelaunch();
   private quitting = false;
@@ -82,7 +82,7 @@ export class AppLifecycle {
       (theme) => this.setThemeSource(theme),
     );
 
-    this.configureDockThemeIcon();
+    this.configureThemeIcons();
     this.createApplicationMenu();
     this.createTray();
     logDesktopInfo("desktop-shell-ready");
@@ -296,19 +296,21 @@ export class AppLifecycle {
     }
   }
 
-  private configureDockThemeIcon(): void {
-    if (!isMacOSDesktop || !app.dock) {
-      return;
-    }
+  private configureThemeIcons(): void {
     nativeTheme.on("updated", this.handleNativeThemeUpdated);
-    this.cleanupDockThemeIcon = () =>
+    this.cleanupThemeIcons = () =>
       nativeTheme.removeListener("updated", this.handleNativeThemeUpdated);
-    this.updateDockThemeIcon();
+    this.updateThemeIcons();
   }
 
   private readonly handleNativeThemeUpdated = (): void => {
-    this.updateDockThemeIcon();
+    this.updateThemeIcons();
   };
+
+  private updateThemeIcons(): void {
+    this.updateDockThemeIcon();
+    this.updateWindowsTrayIcon();
+  }
 
   private updateDockThemeIcon(): void {
     if (!isMacOSDesktop || !app.dock) {
@@ -333,7 +335,14 @@ export class AppLifecycle {
   private setThemeSource(theme: DesktopThemeSource): void {
     this.desktopThemeSource = theme;
     nativeTheme.themeSource = theme;
-    this.updateDockThemeIcon();
+    this.updateThemeIcons();
+  }
+
+  private updateWindowsTrayIcon(): void {
+    if (process.platform !== DesktopPlatform.Windows || !this.tray) {
+      return;
+    }
+    this.tray.setImage(this.loadWindowsIcon());
   }
 
   private loadMacOSTrayIcon(): Electron.NativeImage {
@@ -428,8 +437,8 @@ export class AppLifecycle {
 
   private cleanup(): void {
     this.updater?.stopBackgroundChecks();
-    this.cleanupDockThemeIcon?.();
-    this.cleanupDockThemeIcon = null;
+    this.cleanupThemeIcons?.();
+    this.cleanupThemeIcons = null;
     this.cleanupIPC?.();
     this.cleanupIPC = null;
   }
