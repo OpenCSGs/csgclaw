@@ -94,6 +94,26 @@ describe("HumanDetailPane", () => {
     expect(onAvatarChange).toHaveBeenCalledWith("avatar/cartoon-2.png");
   });
 
+  it("uses the same initial fallback for an unconfigured human avatar", () => {
+    const localUser = { ...admin, avatar: "", name: "Local User" };
+    const { container } = render(<HumanDetailPane locale="en" t={t} user={localUser} />);
+
+    const editAvatar = screen.getByRole("button", { name: "Edit avatar" });
+    expect(editAvatar).toBeInTheDocument();
+    expect(container.querySelector(".agent-avatar-trigger-fallback")).toHaveTextContent("L");
+    expect(container.querySelector(".agent-avatar-edit-overlay")).toBeInTheDocument();
+
+    fireEvent.click(editAvatar);
+    expect(screen.getByRole("dialog", { name: "Edit avatar" })).toBeInTheDocument();
+  });
+
+  it("preserves a legacy initial avatar as the detail fallback", () => {
+    const localUser = { ...admin, avatar: "A" };
+    const { container } = render(<HumanDetailPane locale="en" t={t} user={localUser} />);
+
+    expect(container.querySelector(".agent-avatar-trigger-fallback")).toHaveTextContent("A");
+  });
+
   it("shows Feishu channel status without bound user detail", () => {
     const { container } = render(<HumanDetailPane locale="en" t={t} user={admin} />);
 

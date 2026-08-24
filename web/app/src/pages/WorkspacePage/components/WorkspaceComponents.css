@@ -698,6 +698,20 @@
   object-fit: cover;
 }
 
+.agent-avatar-trigger-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--avatar-default-bg);
+  color: var(--avatar-default-fg);
+  font-size: 16px;
+  font-weight: var(--avatar-default-weight);
+  line-height: 1;
+}
+
 .agent-avatar-edit-overlay {
   position: absolute;
   inset: 0;
@@ -3511,7 +3525,7 @@ select,
 
 .human-identity-fields {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 10px;
 }
 
@@ -3576,6 +3590,7 @@ select,
 .human-field {
   display: grid;
   gap: 4px;
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -3587,6 +3602,7 @@ select,
   font-size: 14px;
   font-weight: 720;
   line-height: 18px;
+  overflow-wrap: anywhere;
 }
 
 .human-description-field {
@@ -3721,12 +3737,6 @@ select,
 
   .computer-summary-strip {
     grid-template-columns: repeat(2, minmax(0, 170px));
-  }
-}
-
-@media (max-width: 780px) {
-  .human-identity-fields {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 

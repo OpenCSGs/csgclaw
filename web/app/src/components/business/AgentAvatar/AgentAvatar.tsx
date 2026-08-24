@@ -45,6 +45,7 @@ export function AgentAvatarContent({
 
 export function AgentAvatarPicker({
   disabled = false,
+  fallback,
   value,
   t,
   onChange,
@@ -52,6 +53,7 @@ export function AgentAvatarPicker({
   portalContainer = null,
 }: {
   disabled?: boolean;
+  fallback?: ReactNode;
   value?: string | null;
   t: TranslateFn;
   onChange: (value: string) => void;
@@ -292,16 +294,16 @@ export function AgentAvatarPicker({
         >
           {selected ? (
             <img className="agent-avatar-trigger-image" src={selected} alt="" draggable={false} />
+          ) : fallback ? (
+            <span className="agent-avatar-trigger-fallback">{fallback}</span>
           ) : (
             <ImagePlus aria-hidden="true" size={16} strokeWidth={1.8} />
           )}
           {mode === "edit" ? (
             <>
-              {selected ? (
-                <span className="agent-avatar-edit-overlay" aria-hidden="true">
-                  <Edit3 size={20} strokeWidth={1.8} />
-                </span>
-              ) : null}
+              <span className="agent-avatar-edit-overlay" aria-hidden="true">
+                <Edit3 size={20} strokeWidth={1.8} />
+              </span>
               <span className="agent-avatar-edit-tooltip" role="tooltip">
                 {t("editAvatar")}
               </span>

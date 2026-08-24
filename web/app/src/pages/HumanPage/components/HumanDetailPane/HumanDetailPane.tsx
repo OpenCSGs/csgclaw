@@ -1,6 +1,7 @@
 import { Check, CheckCircle2, Edit3, Link2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
+import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import { feishuHumanParticipant } from "@/models/conversations";
 import type { IMUser, LocaleCode, TranslateFn } from "@/models/conversations";
@@ -83,6 +84,7 @@ export function HumanDetailPane({
           <div className="entity-avatar human-detail-avatar agent-header-avatar-picker" aria-busy={avatarBusy}>
             <AgentAvatarPicker
               disabled={avatarBusy}
+              fallback={avatarFallbackText(user.avatar, displayName, user.id)}
               value={user.avatar}
               t={t}
               mode="edit"
