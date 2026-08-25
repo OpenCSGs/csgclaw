@@ -671,10 +671,7 @@ export function useWorkspaceController() {
         ...floatingConversation.conversationViewProps,
         agents: agent.agentItems,
         conversation: floatingChatConversation,
-        onCancelProfilePreviewClose: profilePreview.cancelProfilePreviewClose,
-        onCloseProfilePreview: profilePreview.scheduleProfilePreviewClose,
         onPreviewUser: profilePreview.openParticipantPreview,
-        onShowProfilePreview: profilePreview.showParticipantPreview,
         showInviteAction: false,
         threadDisplay: "dialog" as const,
       }
@@ -966,12 +963,9 @@ export function useWorkspaceController() {
     conversationViewProps: {
       ...conversation.conversationViewProps,
       agents: agent.agentItems,
-      onCancelProfilePreviewClose: profilePreview.cancelProfilePreviewClose,
-      onCloseProfilePreview: profilePreview.scheduleProfilePreviewClose,
       onOpenAgentDetail: openConversationAgentDetailFromAvatar,
       onOpenThread: openConversationThread,
       onPreviewUser: profilePreview.openParticipantPreview,
-      onShowProfilePreview: profilePreview.showParticipantPreview,
       agentDetailPanelProps: conversationAgentDetailPanelProps,
     },
     taskViewProps: task.taskViewProps,

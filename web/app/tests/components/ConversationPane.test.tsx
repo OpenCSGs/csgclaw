@@ -187,11 +187,8 @@ function renderThreadPane({
   onClearRoomMessages = vi.fn(),
   onCloseThread = vi.fn(),
   onDeleteRoom = vi.fn(),
-  onCancelProfilePreviewClose = vi.fn(),
-  onCloseProfilePreview = vi.fn(),
   onOpenAgentDetail = vi.fn(),
   onPreviewUser = vi.fn(),
-  onShowProfilePreview,
   onRemoveMember = vi.fn(),
   replies = [],
   showToolCalls = false,
@@ -220,11 +217,8 @@ function renderThreadPane({
   onCloseThread?: () => void;
   onDeleteRoom?: (id: string) => void;
   onApplyMention?: (user: IMUser) => void;
-  onCancelProfilePreviewClose?: () => void;
-  onCloseProfilePreview?: () => void;
   onOpenAgentDetail?: NonNullable<ConversationPaneProps["onOpenAgentDetail"]>;
   onPreviewUser?: (user: IMUser) => void;
-  onShowProfilePreview?: ConversationPaneProps["onShowProfilePreview"];
   onRemoveMember?: (memberID: string) => void;
   memberActionBusyID?: string;
   memberActionError?: string;
@@ -305,14 +299,11 @@ function renderThreadPane({
         onInviteAction={() => {}}
         onMessageAction={() => {}}
         onNotifyAllAgentsChange={onNotifyAllAgentsChange}
-        onCancelProfilePreviewClose={onCancelProfilePreviewClose}
-        onCloseProfilePreview={onCloseProfilePreview}
         onOpenAgentDetail={onOpenAgentDetail}
         onOpenThread={() => {}}
         onRemoveMember={onRemoveMember}
         onProviderLogin={() => {}}
         onPreviewUser={onPreviewUser}
-        onShowProfilePreview={onShowProfilePreview}
         onSendMessage={() => {}}
         onSendThreadReply={() => {}}
         onSyncComposer={() => {}}
@@ -607,32 +598,22 @@ describe("ConversationPane", () => {
     expect(await screen.findByRole("tooltip")).toHaveTextContent(title);
   });
 
-  it("previews human message avatars on hover without opening details on click", async () => {
+  it("opens human message profile previews only on click", async () => {
     const user = userEvent.setup();
-    const onCancelProfilePreviewClose = vi.fn();
-    const onCloseProfilePreview = vi.fn();
     const onOpenAgentDetail = vi.fn();
     const onPreviewUser = vi.fn();
-    const onShowProfilePreview = vi.fn();
 
     renderThreadPane({
-      onCancelProfilePreviewClose,
-      onCloseProfilePreview,
       onOpenAgentDetail,
       onPreviewUser,
-      onShowProfilePreview,
     });
 
     const avatar = screen.getAllByRole("button", { name: "profilePreview manager" })[0] as HTMLElement;
     await user.hover(avatar);
-
-    expect(onCancelProfilePreviewClose).toHaveBeenCalled();
-    expect(onShowProfilePreview).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
-
-    await user.unhover(avatar);
-    expect(onCloseProfilePreview).toHaveBeenCalled();
+    expect(onPreviewUser).not.toHaveBeenCalled();
 
     await user.click(avatar);
+    expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
     expect(onOpenAgentDetail).not.toHaveBeenCalled();
   });
 
@@ -640,18 +621,16 @@ describe("ConversationPane", () => {
     const user = userEvent.setup();
     const onOpenAgentDetail = vi.fn();
     const onPreviewUser = vi.fn();
-    const onShowProfilePreview = vi.fn();
 
     renderThreadPane({
       agents: [{ id: "u-manager", name: "manager", role: "worker" }],
       onOpenAgentDetail,
       onPreviewUser,
-      onShowProfilePreview,
     });
 
     const avatar = screen.getAllByRole("button", { name: "profilePreview manager" })[0] as HTMLElement;
     await user.hover(avatar);
-    expect(onShowProfilePreview).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+    expect(onPreviewUser).not.toHaveBeenCalled();
 
     onPreviewUser.mockClear();
     await user.click(avatar);

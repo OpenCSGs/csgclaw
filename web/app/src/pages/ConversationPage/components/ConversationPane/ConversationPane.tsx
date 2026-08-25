@@ -122,7 +122,6 @@ export function ConversationPane({
   messageListRef,
   editorRef,
   onPreviewUser,
-  onShowProfilePreview,
   onDeleteRoom,
   onClearRoomMessages = (_id) => {},
   notifyAllAgentsBusy = false,
@@ -186,8 +185,6 @@ export function ConversationPane({
   messageActionBusy,
   messageActionFeedback,
   onMessageAction,
-  onCancelProfilePreviewClose,
-  onCloseProfilePreview,
   onOpenAgentDetail,
   activeThreadRootID,
   activeThreadView,
@@ -325,8 +322,6 @@ export function ConversationPane({
       onSlashQueryChange={onThreadSlashQueryChange}
       onAddAttachments={onAddThreadAttachments}
       onRemoveAttachment={onRemoveThreadAttachment}
-      onCancelProfilePreviewClose={onCancelProfilePreviewClose}
-      onCloseProfilePreview={onCloseProfilePreview}
       onOpenAgentDetail={onOpenAgentDetail}
       threadSlashCandidates={threadSlashCandidates}
       threadSlashIndex={threadSlashIndex}
@@ -337,7 +332,6 @@ export function ConversationPane({
       onSetThreadSlashIndex={onSetThreadSlashIndex}
       mentionableUsers={conversationMembers}
       onPreviewUser={onPreviewUser}
-      onShowProfilePreview={onShowProfilePreview}
       onQuestionSelect={threadQuestionMode.select}
       questionMode={threadQuestionMode}
       onSend={onSendThreadReply}
@@ -419,12 +413,9 @@ export function ConversationPane({
         usersById={usersById}
         visibleMessages={visibleMessages}
         onMessageAction={onMessageAction}
-        onCancelProfilePreviewClose={onCancelProfilePreviewClose}
-        onCloseProfilePreview={onCloseProfilePreview}
         onOpenAgentDetail={onOpenAgentDetail}
         onOpenThread={onOpenThread}
         onPreviewUser={onPreviewUser}
-        onShowProfilePreview={onShowProfilePreview}
         onQuestionSelect={questionMode.select}
       />
 

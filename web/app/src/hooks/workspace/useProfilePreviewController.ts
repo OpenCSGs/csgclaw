@@ -8,12 +8,8 @@ type ProfilePreviewState = {
   anchorEl: HTMLElement;
   anchorRect: ProfilePreviewAnchorRect;
   id: string;
-  mode: "hover" | "manual";
   type: "user" | typeof WorkspacePaneTypes.agent;
 };
-
-export const PROFILE_PREVIEW_OPEN_DELAY_MS = 350;
-export const PROFILE_PREVIEW_CLOSE_DELAY_MS = 180;
 
 export function useProfilePreviewController({
   agentItems,
@@ -25,26 +21,6 @@ export function useProfilePreviewController({
 }: UseProfilePreviewControllerArgs): ProfilePreviewController {
   const [profilePreview, setProfilePreview] = useState<ProfilePreviewState | null>(null);
   const profilePreviewRef = useRef<HTMLElement | null>(null);
-  const profilePreviewOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const profilePreviewCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function clearProfilePreviewOpenTimer() {
-    const timer = profilePreviewOpenTimerRef.current;
-    if (!timer) {
-      return;
-    }
-    clearTimeout(timer);
-    profilePreviewOpenTimerRef.current = null;
-  }
-
-  function clearProfilePreviewCloseTimer() {
-    const timer = profilePreviewCloseTimerRef.current;
-    if (!timer) {
-      return;
-    }
-    clearTimeout(timer);
-    profilePreviewCloseTimerRef.current = null;
-  }
 
   useEffect(() => {
     const activePreview = profilePreview;
@@ -63,13 +39,10 @@ export function useProfilePreviewController({
       ) {
         return;
       }
-      clearProfilePreviewCloseTimer();
       setProfilePreview(null);
     }
 
     function handleViewportChange() {
-      clearProfilePreviewOpenTimer();
-      clearProfilePreviewCloseTimer();
       setProfilePreview(null);
     }
 
@@ -77,8 +50,6 @@ export function useProfilePreviewController({
       if (event.key !== "Escape") {
         return;
       }
-      clearProfilePreviewOpenTimer();
-      clearProfilePreviewCloseTimer();
       setProfilePreview(null);
       activeAnchor.focus();
     }
@@ -94,13 +65,6 @@ export function useProfilePreviewController({
       window.removeEventListener("scroll", handleViewportChange, true);
     };
   }, [profilePreview]);
-
-  useEffect(() => {
-    return () => {
-      clearProfilePreviewOpenTimer();
-      clearProfilePreviewCloseTimer();
-    };
-  }, []);
 
   const previewUser =
     profilePreview?.type === "user"
@@ -127,31 +91,19 @@ export function useProfilePreviewController({
     };
   }
 
-  function openProfilePreview(
-    user: IMUser | null | undefined,
-    anchor: HTMLElement | null | undefined,
-    mode: ProfilePreviewState["mode"],
-  ) {
+  function openProfilePreview(user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) {
     const target = profileTargetForUser(user);
     if (!target || !anchor) {
       return;
     }
-    clearProfilePreviewOpenTimer();
-    clearProfilePreviewCloseTimer();
     const rect = anchor.getBoundingClientRect();
     setProfilePreview((current) => {
-      if (
-        mode === "manual" &&
-        current?.mode === "manual" &&
-        current?.type === target.type &&
-        current?.id === target.id
-      ) {
+      if (current?.type === target.type && current?.id === target.id) {
         return null;
       }
       return {
         type: target.type,
         id: target.id,
-        mode,
         anchorRect: {
           top: rect.top,
           right: rect.right,
@@ -165,39 +117,14 @@ export function useProfilePreviewController({
   }
 
   function openParticipantPreview(user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) {
-    openProfilePreview(user, anchor, "manual");
-  }
-
-  function showParticipantPreview(user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) {
-    clearProfilePreviewOpenTimer();
-    clearProfilePreviewCloseTimer();
-    profilePreviewOpenTimerRef.current = setTimeout(() => {
-      profilePreviewOpenTimerRef.current = null;
-      openProfilePreview(user, anchor, "hover");
-    }, PROFILE_PREVIEW_OPEN_DELAY_MS);
+    openProfilePreview(user, anchor);
   }
 
   function closeProfilePreview() {
-    clearProfilePreviewOpenTimer();
-    clearProfilePreviewCloseTimer();
     setProfilePreview(null);
   }
 
-  function scheduleProfilePreviewClose() {
-    clearProfilePreviewOpenTimer();
-    clearProfilePreviewCloseTimer();
-    profilePreviewCloseTimerRef.current = setTimeout(() => {
-      profilePreviewCloseTimerRef.current = null;
-      setProfilePreview((current) => (current?.mode === "hover" ? null : current));
-    }, PROFILE_PREVIEW_CLOSE_DELAY_MS);
-  }
-
-  function cancelProfilePreviewClose() {
-    clearProfilePreviewCloseTimer();
-  }
-
   return {
-    cancelProfilePreviewClose,
     closeProfilePreview,
     openParticipantPreview,
     profilePreviewProps:
@@ -209,8 +136,6 @@ export function useProfilePreviewController({
             anchorRect: profilePreview.anchorRect,
             t,
             onClose: closeProfilePreview,
-            onMouseEnter: cancelProfilePreviewClose,
-            onMouseLeave: scheduleProfilePreviewClose,
             onOpenAgent: (item) => {
               closeProfilePreview();
               startTransition(() => {
@@ -223,7 +148,5 @@ export function useProfilePreviewController({
             },
           }
         : null,
-    scheduleProfilePreviewClose,
-    showParticipantPreview,
   };
 }

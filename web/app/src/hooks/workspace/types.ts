@@ -189,12 +189,9 @@ export type UseProfilePreviewControllerArgs = {
 };
 
 export type ProfilePreviewController = {
-  cancelProfilePreviewClose: () => void;
   closeProfilePreview: () => void;
   openParticipantPreview: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;
   profilePreviewProps: ProfilePreviewControllerProps | null;
-  scheduleProfilePreviewClose: () => void;
-  showParticipantPreview: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;
 };
 
 export type UseConversationControllerArgs = {

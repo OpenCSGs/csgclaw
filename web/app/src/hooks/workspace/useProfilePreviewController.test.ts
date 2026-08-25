@@ -4,7 +4,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentLike } from "@/models/agents";
 import type { IMUser, TranslateFn } from "@/models/conversations";
-import { PROFILE_PREVIEW_OPEN_DELAY_MS, useProfilePreviewController } from "./useProfilePreviewController";
+import { useProfilePreviewController } from "./useProfilePreviewController";
 
 const t: TranslateFn = (key) => key;
 const user: IMUser = { id: "user-agent", name: "Agent" };
@@ -30,21 +30,7 @@ function setup() {
 describe("useProfilePreviewController", () => {
   afterEach(() => {
     document.body.replaceChildren();
-    vi.useRealTimers();
     vi.restoreAllMocks();
-  });
-
-  it("delays hover previews and cancels them when the pointer leaves", () => {
-    vi.useFakeTimers();
-    const { result, anchor } = setup();
-
-    act(() => result.current.showParticipantPreview(user, anchor));
-    act(() => vi.advanceTimersByTime(PROFILE_PREVIEW_OPEN_DELAY_MS - 1));
-    expect(result.current.profilePreviewProps).toBeNull();
-
-    act(() => result.current.scheduleProfilePreviewClose());
-    act(() => vi.advanceTimersByTime(PROFILE_PREVIEW_OPEN_DELAY_MS));
-    expect(result.current.profilePreviewProps).toBeNull();
   });
 
   it("opens clicked avatars immediately and closes the preview with Escape", () => {

@@ -70,16 +70,13 @@ export type ConversationThreadPanelProps = {
   locale: LocaleCode;
   mentionableUsers?: MentionPickerUser[];
   onApplyThreadSlashCandidate?: (name: string) => void;
-  onCancelProfilePreviewClose?: () => void;
   onClose: () => void;
-  onCloseProfilePreview?: () => void;
   onDismissThreadSlashPicker?: () => void;
   onDraftChange: (segments: ComposerSegment[]) => void;
   onSlashQueryChange?: (query: string | null) => void;
   onAddAttachments?: (files: File[]) => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
-  onShowProfilePreview?: (user: IMUser, anchor: HTMLElement) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   questionMode?: QuestionAnswerMode;
   onRemoveAttachment?: (id: string) => void;
@@ -120,11 +117,8 @@ export function ConversationThreadPanel({
   onApplyThreadSlashCandidate = (_name) => {},
   onDismissThreadSlashPicker = () => {},
   onSetThreadSlashIndex = (_index) => {},
-  onCancelProfilePreviewClose,
-  onCloseProfilePreview,
   onOpenAgentDetail,
   onPreviewUser,
-  onShowProfilePreview,
   onQuestionSelect,
   questionMode,
   onRemoveAttachment = () => {},
@@ -313,11 +307,8 @@ export function ConversationThreadPanel({
               locale={locale}
               theme={theme}
               t={t}
-              onCancelProfilePreviewClose={onCancelProfilePreviewClose}
-              onCloseProfilePreview={onCloseProfilePreview}
               onOpenAgentDetail={onOpenAgentDetail}
               onPreviewUser={onPreviewUser}
-              onShowProfilePreview={onShowProfilePreview}
               onQuestionSelect={onQuestionSelect}
             />
           </div>
@@ -334,11 +325,8 @@ export function ConversationThreadPanel({
                 locale={locale}
                 theme={theme}
                 t={t}
-                onCancelProfilePreviewClose={onCancelProfilePreviewClose}
-                onCloseProfilePreview={onCloseProfilePreview}
                 onOpenAgentDetail={onOpenAgentDetail}
                 onPreviewUser={onPreviewUser}
-                onShowProfilePreview={onShowProfilePreview}
                 onQuestionSelect={onQuestionSelect}
               />
             ))
@@ -541,11 +529,8 @@ type ThreadMessageProps = {
   compact?: boolean;
   locale: LocaleCode;
   message: IMMessage;
-  onCancelProfilePreviewClose?: () => void;
-  onCloseProfilePreview?: () => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
-  onShowProfilePreview?: (user: IMUser, anchor: HTMLElement) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   t: TranslateFn;
   theme: ThemeMode;
@@ -559,10 +544,7 @@ function ThreadMessage({
   locale,
   theme,
   t,
-  onCancelProfilePreviewClose,
-  onCloseProfilePreview,
   onPreviewUser,
-  onShowProfilePreview,
   onQuestionSelect,
   compact = false,
 }: ThreadMessageProps) {
@@ -582,15 +564,9 @@ function ThreadMessage({
           type="button"
           className="thread-message-avatar"
           aria-label={`${t("profilePreview")} ${name}`}
-          onBlur={onCloseProfilePreview}
           onClick={(event) => {
             onPreviewUser(user, event.currentTarget);
           }}
-          onPointerEnter={(event) => {
-            onCancelProfilePreviewClose?.();
-            onShowProfilePreview?.(user, event.currentTarget);
-          }}
-          onPointerLeave={onCloseProfilePreview}
         >
           <AgentAvatarContent avatar={avatar} fallback={fallback} />
         </button>

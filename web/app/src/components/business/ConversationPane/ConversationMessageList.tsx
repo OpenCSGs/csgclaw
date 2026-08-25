@@ -38,13 +38,10 @@ export type ConversationMessageListProps = {
   messageActionBusy: string;
   messageActionFeedback: MessageActionFeedback;
   messageListRef: RefObject<HTMLElement | null>;
-  onCancelProfilePreviewClose?: () => void;
-  onCloseProfilePreview?: () => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
-  onShowProfilePreview?: (user: IMUser, anchor: HTMLElement) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   t: TranslateFn;
   theme: ThemeMode;
@@ -65,12 +62,9 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   theme,
   usersById,
   visibleMessages,
-  onCancelProfilePreviewClose,
-  onCloseProfilePreview,
   onMessageAction,
   onOpenThread,
   onPreviewUser,
-  onShowProfilePreview,
   onQuestionSelect,
 }: ConversationMessageListProps) {
   const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
@@ -135,15 +129,9 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                 type="button"
                 className="avatar avatar-button"
                 aria-label={`${t("profilePreview")} ${user.name}`}
-                onBlur={onCloseProfilePreview}
                 onClick={(event) => {
                   onPreviewUser(user, event.currentTarget);
                 }}
-                onPointerEnter={(event) => {
-                  onCancelProfilePreviewClose?.();
-                  onShowProfilePreview?.(user, event.currentTarget);
-                }}
-                onPointerLeave={onCloseProfilePreview}
               >
                 <AgentAvatarContent avatar={messageAvatar} fallback={messageAvatarFallback} />
                 {messageAgent ? (
