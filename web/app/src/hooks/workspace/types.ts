@@ -282,6 +282,7 @@ export type UseAgentControllerArgs = {
   selectModelProvider?: WorkspaceNavigationController["selectModelProvider"];
   setAgentsData: WorkspaceQuerySetter<AgentLike[]>;
   setBootstrapData: WorkspaceQuerySetter<IMData | null>;
+  setHubPublishError?: (message: string) => void;
   setSelectedHubTemplateId: WorkspaceUiState["setSelectedHubTemplateId"];
   t: TranslateFn;
 };

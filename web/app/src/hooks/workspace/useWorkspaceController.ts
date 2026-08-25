@@ -313,6 +313,7 @@ export function useWorkspaceController() {
     selectModelProvider,
     setAgentsData,
     setBootstrapData,
+    setHubPublishError: hub.setPublishError,
     setSelectedHubTemplateId,
     t,
   });

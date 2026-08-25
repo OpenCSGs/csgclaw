@@ -468,6 +468,7 @@ export function useAgentController({
   selectModelProvider = noopSelectModelProvider,
   setAgentsData,
   setBootstrapData,
+  setHubPublishError = () => undefined,
   setSelectedHubTemplateId,
   t,
 }: UseAgentControllerArgs) {
@@ -1752,6 +1753,8 @@ export function useAgentController({
               deployReviewPending ? "" : message,
             ),
           );
+        } else {
+          setHubPublishError(message);
         }
         setSelectedHubTemplateId(publishedTemplateID);
         navigatePane({ type: WorkspacePaneTypes.hub, id: publishedTemplateID, resourceType: "template" }, rooms);

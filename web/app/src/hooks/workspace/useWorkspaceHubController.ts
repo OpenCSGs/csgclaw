@@ -57,6 +57,7 @@ export type WorkspaceHubController = {
       template: HubTemplate | null | undefined,
       deploy?: boolean,
     ) => Promise<PublishHubTemplateResult>;
+    setPublishError: (message: string) => void;
     deleteSkill: DeleteSkill;
     skillDeleteBusy: boolean;
     remoteInstallBusy: string;
@@ -343,6 +344,7 @@ export function useWorkspaceHubController({
       deleteHubTemplate,
       publishBusy: resourcesPublishBusy,
       publishHubTemplate,
+      setPublishError: setResourcesPublishError,
       deleteSkill,
       installRemoteSkill,
       remoteInstallBusy: resourcesRemoteInstallBusy,
