@@ -8,15 +8,22 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	agentruntime "csgclaw/internal/runtime"
 )
 
 const requiredInstructionsFile = "AGENTS.md"
 
-func materializeTemplateDir(templateRoot string) (WorkspaceRef, error) {
+func materializeTemplateDir(templateRoot, runtimeKind string) (WorkspaceRef, error) {
 	if !templateLayoutExists(templateRoot) && legacyTemplateWorkspaceExists(templateRoot) {
 		return materializeLegacyTemplateWorkspace(templateRoot)
 	}
-	return materializeTemplateFS(os.DirFS(templateRoot), ".")
+	if strings.TrimSpace(runtimeKind) == "" {
+		if _, manifest, err := loadManifestFS(os.DirFS(templateRoot), localManifestFileName, "template"); err == nil {
+			runtimeKind = manifest.RuntimeKind
+		}
+	}
+	return materializeTemplateFS(os.DirFS(templateRoot), ".", runtimeKind)
 }
 
 func materializeLegacyTemplateWorkspace(templateRoot string) (WorkspaceRef, error) {
@@ -31,7 +38,7 @@ func materializeLegacyTemplateWorkspace(templateRoot string) (WorkspaceRef, erro
 	return WorkspaceRef{Kind: WorkspaceKindDir, Path: dstRoot, Temporary: true}, nil
 }
 
-func materializeTemplateFS(srcFS fs.FS, templateRoot string) (WorkspaceRef, error) {
+func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (WorkspaceRef, error) {
 	instructionsRoot := filepath.ToSlash(filepath.Join(templateRoot, localInstructionsDirName))
 	if _, err := fs.Stat(srcFS, instructionsRoot+"/"+requiredInstructionsFile); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -54,6 +61,9 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot string) (WorkspaceRef, erro
 		{localSkillsDirName, localSkillsDirName},
 		{localMemoriesDirName, ""},
 	} {
+		if part.source == localMemoriesDirName && !templateUsesWorkspaceMemory(runtimeKind) {
+			continue
+		}
 		source := filepath.ToSlash(filepath.Join(templateRoot, part.source))
 		if info, statErr := fs.Stat(srcFS, source); statErr == nil && info.IsDir() {
 			target := dstRoot
@@ -98,7 +108,7 @@ func readTemplateMCPServers(srcFS fs.FS, filePath string) (map[string]any, error
 	return raw, nil
 }
 
-func writeTemplateLayout(workspace WorkspaceRef, templateRoot string, mcpServers map[string]any) error {
+func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind string, mcpServers map[string]any) error {
 	workspaceRoot := workspace.Path
 	instructionsRoot := filepath.Join(templateRoot, localInstructionsDirName)
 	if err := os.MkdirAll(instructionsRoot, 0o755); err != nil {
@@ -127,10 +137,16 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot string, mcpServers
 				return err
 			}
 		case "memory":
+			if !templateUsesWorkspaceMemory(runtimeKind) {
+				continue
+			}
 			if err := copyWorkspaceTree(source, filepath.Join(templateRoot, localMemoriesDirName)); err != nil {
 				return err
 			}
 		case "MEMORY.md":
+			if !templateUsesWorkspaceMemory(runtimeKind) {
+				continue
+			}
 			if err := copySingleTemplateFile(source, filepath.Join(templateRoot, localMemoriesDirName, name)); err != nil {
 				return err
 			}
@@ -180,6 +196,10 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot string, mcpServers
 	}
 	data = append(data, '\n')
 	return os.WriteFile(filepath.Join(templateRoot, localMCPsDirName, localMCPFileName), data, 0o644)
+}
+
+func templateUsesWorkspaceMemory(runtimeKind string) bool {
+	return normalizeTemplateRuntimeKind(runtimeKind) != agentruntime.KindCodex
 }
 
 func copySingleTemplateFile(source, target string) error {

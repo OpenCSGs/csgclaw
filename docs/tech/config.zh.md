@@ -127,6 +127,14 @@ bootstrap manager 当前固定使用 `picoclaw_sandbox`；`openclaw_sandbox` 支
 
 当 worker 使用 Codex runtime 时，它的本地状态会统一放在 `~/.csgclaw/agents/<agent-name>/.codex/` 下。workspace 路径是 `~/.csgclaw/agents/<agent-name>/.codex/workspace`，shell home 路径是 `~/.csgclaw/agents/<agent-name>/.codex/home`，而 `auth.json`、`config.toml`、`stderr.log` 以及 runtime metadata 等由 Codex 管理的文件会放在 `~/.csgclaw/agents/<agent-name>/.codex/home` 下。这个路径会和 sandbox provider 的 home（例如 `~/.csgclaw/agents/<agent-name>/boxlite`）分开。
 
+CSGClaw 会为每个 Codex runtime 启用 [Codex 本地 memory](https://learn.chatgpt.com/docs/customization/memories)，包括生成 memory 和在后续会话中复用 memory。
+Memory 按 Agent 隔离存放在 `~/.csgclaw/agents/<agent-name>/.codex/home/memories/`，不会与宿主机 Codex 或其他 Agent 共享。
+可以在 Agent Profile 页面的 Memory Tab 中同时启用或停用 memory 生成与复用；默认启用。
+Memory 文件属于自动生成的 runtime state，必须始终生效的 Agent 规则仍应写在 `AGENTS.md` 或纳入版本管理的文档中。
+重建 Codex Runtime 时会保留持久 Codex 状态，包括 workspace、原生会话历史和 thread 映射、memory 文件及索引、goals、可选认证、plugins、rules、hooks 和 installation ID。
+重建时会替换自动生成的配置和模型目录、进程 metadata、queues、logs、临时文件、locks 和 shell snapshots。
+删除 Agent 时仍会删除完整 Agent home，包括 memory。
+
 对于完整的 Codex worker profile，CSGClaw 会写入 `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml`，其中 OpenAI 兼容代理 provider 始终使用 `wire_api = "responses"`，因为 Codex CLI 的 app-server 路径走的是 Responses API。
 生成的 provider 使用 HTTP Responses，而不是 Responses WebSocket。
 如果上游明确表示不支持 Responses 端点，或内置 CLIProxy 的 Codex/ClaudeCode Responses 后端在纯文本请求上返回 5xx，CSGClaw 会保持 Codex 侧的 Responses 配置不变，并在代理后面回退到上游 chat completions。

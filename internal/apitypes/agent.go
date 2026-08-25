@@ -88,6 +88,7 @@ type Agent struct {
 	Name             string         `json:"name"`
 	Description      string         `json:"description,omitempty"`
 	Instructions     string         `json:"instructions,omitempty"`
+	MemorySupported  bool           `json:"memory_supported,omitempty"`
 	Runtime          AgentRuntime   `json:"runtime,omitempty"`
 	RuntimeID        string         `json:"-"`
 	RuntimeKind      string         `json:"-"`

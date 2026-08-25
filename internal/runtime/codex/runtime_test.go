@@ -567,6 +567,38 @@ func TestDecodeRuntimeOptionsExecutionMode(t *testing.T) {
 	}
 }
 
+func TestDecodeRuntimeOptionsMemoryMode(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     map[string]any
+		want    string
+		wantErr bool
+	}{
+		{name: "missing defaults enabled", raw: nil, want: MemoryModeEnabled},
+		{name: "empty defaults enabled", raw: map[string]any{"memory_mode": "  "}, want: MemoryModeEnabled},
+		{name: "disabled", raw: map[string]any{"memory_mode": " disabled "}, want: MemoryModeDisabled},
+		{name: "invalid", raw: map[string]any{"memory_mode": "automatic"}, wantErr: true},
+		{name: "non string", raw: map[string]any{"memory_mode": true}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := DecodeRuntimeOptions(tt.raw)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("DecodeRuntimeOptions() error = nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("DecodeRuntimeOptions() error = %v", err)
+			}
+			if got.MemoryMode != tt.want {
+				t.Fatalf("MemoryMode = %q, want %q", got.MemoryMode, tt.want)
+			}
+		})
+	}
+}
+
 func TestRuntimeOptionsSchemaIncludesLocalWorkspaceDir(t *testing.T) {
 	rt := newTestCodexRuntime(t.TempDir(), func(h agentruntime.Handle) (AgentRef, error) {
 		return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID}, nil
@@ -891,8 +923,14 @@ func TestRuntimeStopAndDelete(t *testing.T) {
 	if err := rt.Delete(context.Background(), handle); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "agent-alice", ".codex")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("runtime dir still exists, stat err = %v", err)
+	runtimeDir := filepath.Join(root, "agent-alice", ".codex")
+	for _, preservedPath := range []string{filepath.Join(runtimeDir, workspaceDirName), filepath.Join(runtimeDir, sessionFileName)} {
+		if _, err := os.Stat(preservedPath); err != nil {
+			t.Fatalf("preserved recreate state %s stat error = %v", preservedPath, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, homeDirName, configFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("generated runtime config stat error = %v, want not exist", err)
 	}
 }
 
@@ -1046,8 +1084,13 @@ func TestDeleteRetriesTransientRuntimeDirRemovalError(t *testing.T) {
 	if removeCalls != 2 {
 		t.Fatalf("RemoveAll() calls = %d, want 2", removeCalls)
 	}
-	if _, err := os.Stat(runtimeDir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("runtime dir stat error = %v, want not exist", err)
+	for _, preservedPath := range []string{filepath.Join(runtimeDir, workspaceDirName), filepath.Join(runtimeDir, sessionFileName)} {
+		if _, err := os.Stat(preservedPath); err != nil {
+			t.Fatalf("preserved recreate state %s stat error = %v", preservedPath, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, homeDirName, configFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("generated runtime config stat error = %v, want not exist", err)
 	}
 }
 
@@ -1136,6 +1179,122 @@ func TestDeleteStopsUntrackedRuntimeProcessesBeforeRemoval(t *testing.T) {
 	}
 	if got, want := steps, []string{"stop-session", "stop-untracked", "remove"}; !slices.Equal(got, want) {
 		t.Fatalf("Delete() steps = %q, want %q", got, want)
+	}
+}
+
+func TestDeletePreservesDurableStateForRuntimeRecreate(t *testing.T) {
+	root := t.TempDir()
+	agentHome := filepath.Join(root, "agent-manager")
+	runtimeDir := filepath.Join(agentHome, ".codex")
+	preservedFiles := map[string]string{
+		filepath.Join(runtimeDir, workspaceDirName, "project.txt"):                                     "workspace state\n",
+		filepath.Join(runtimeDir, sessionFileName):                                                     `{"conversation_sessions":{"room":"thread"}}`,
+		filepath.Join(runtimeDir, homeDirName, "memories", readableMemoryFileName):                     "# Durable memory\n",
+		filepath.Join(runtimeDir, homeDirName, "memories", "extensions", "ad_hoc", "notes", "keep.md"): "pending update\n",
+		filepath.Join(runtimeDir, homeDirName, "memories_1.sqlite"):                                    "memory db\n",
+		filepath.Join(runtimeDir, homeDirName, "memories_1.sqlite-wal"):                                "memory wal\n",
+		filepath.Join(runtimeDir, homeDirName, "sessions", "rollout.jsonl"):                            "session history\n",
+		filepath.Join(runtimeDir, homeDirName, "state_5.sqlite"):                                       "thread db\n",
+		filepath.Join(runtimeDir, homeDirName, "state_5.sqlite-wal"):                                   "thread wal\n",
+		filepath.Join(runtimeDir, homeDirName, "goals_1.sqlite"):                                       "goals db\n",
+		filepath.Join(runtimeDir, homeDirName, "auth.json"):                                            "auth state\n",
+		filepath.Join(runtimeDir, homeDirName, "plugins", "demo", "plugin.json"):                       "plugin state\n",
+		filepath.Join(runtimeDir, homeDirName, "rules", "default.rules"):                               "rules state\n",
+		filepath.Join(runtimeDir, homeDirName, "hooks.json"):                                           "hooks state\n",
+		filepath.Join(runtimeDir, homeDirName, "installation_id"):                                      "installation state\n",
+	}
+	ephemeralFiles := map[string]string{
+		filepath.Join(runtimeDir, homeDirName, configFileName):                  "features.memories = true\n",
+		filepath.Join(runtimeDir, homeDirName, modelCatalogFileName):            "{}\n",
+		filepath.Join(runtimeDir, homeDirName, "logs_2.sqlite"):                 "logs\n",
+		filepath.Join(runtimeDir, homeDirName, "queue_1.sqlite"):                "queue\n",
+		filepath.Join(runtimeDir, homeDirName, "tmp", "pending"):                "tmp\n",
+		filepath.Join(runtimeDir, homeDirName, "shell_snapshots", "snapshot"):   "snapshot\n",
+		filepath.Join(runtimeDir, homeDirName, "thread-writer-locks", "lock"):   "lock\n",
+		filepath.Join(runtimeDir, homeDirName, "mcp-oauth-locks", "oauth.lock"): "lock\n",
+		filepath.Join(runtimeDir, runtimeFileName):                              `{"runtime_id":"rt-agent-manager","state":"stopped"}`,
+	}
+	writeFiles := func(files map[string]string) {
+		t.Helper()
+		for path, content := range files {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	writeFiles(preservedFiles)
+	writeFiles(ephemeralFiles)
+
+	rt := New(Dependencies{
+		AgentHome: func(string) (string, error) { return agentHome, nil },
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{ID: agent.ManagerUserID, Name: agent.ManagerName, RuntimeID: h.RuntimeID}, nil
+		},
+		Manager: fakeManager{stop: func(context.Context, SessionHandle) error { return os.ErrNotExist }},
+	})
+
+	if err := rt.Delete(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-manager"}); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	for path, want := range preservedFiles {
+		raw, err := os.ReadFile(path)
+		if err != nil || string(raw) != want {
+			t.Fatalf("preserved file %s = %q, %v; want %q", path, raw, err, want)
+		}
+	}
+	for path := range ephemeralFiles {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("ephemeral runtime file %s survived Delete(): %v", path, err)
+		}
+	}
+	matches, err := filepath.Glob(filepath.Join(agentHome, ".csgclaw-codex-state-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary state preservation directories remain: %q", matches)
+	}
+}
+
+func TestDeleteRestoresPreservedStateWhenRuntimeRemovalFails(t *testing.T) {
+	root := t.TempDir()
+	agentHome := filepath.Join(root, "agent-manager")
+	runtimeDir := filepath.Join(agentHome, ".codex")
+	preservedPath := filepath.Join(runtimeDir, workspaceDirName, "project.txt")
+	if err := os.MkdirAll(filepath.Dir(preservedPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(preservedPath, []byte("workspace state\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removeErr := errors.New("permanent removal failure")
+	rt := New(Dependencies{
+		AgentHome: func(string) (string, error) { return agentHome, nil },
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{ID: agent.ManagerUserID, Name: agent.ManagerName, RuntimeID: h.RuntimeID}, nil
+		},
+		Manager:   fakeManager{stop: func(context.Context, SessionHandle) error { return os.ErrNotExist }},
+		RemoveAll: func(string) error { return removeErr },
+	})
+
+	err := rt.Delete(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-manager"})
+	if !errors.Is(err, removeErr) {
+		t.Fatalf("Delete() error = %v, want %v", err, removeErr)
+	}
+	raw, err := os.ReadFile(preservedPath)
+	if err != nil || string(raw) != "workspace state\n" {
+		t.Fatalf("restored workspace state = %q, %v", raw, err)
+	}
+	matches, err := filepath.Glob(filepath.Join(agentHome, ".csgclaw-codex-state-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary state preservation directories remain: %q", matches)
 	}
 }
 
@@ -1396,9 +1555,9 @@ func TestRuntimeCreateKeepsExistingRuntimeAuth(t *testing.T) {
 		`sandbox_workspace_write.network_access = true`,
 		`features.multi_agent = false`,
 		`features.default_mode_request_user_input = true`,
-		`features.memories = false`,
-		`memories.generate_memories = false`,
-		`memories.use_memories = false`,
+		`features.memories = true`,
+		`memories.generate_memories = true`,
+		`memories.use_memories = true`,
 	)
 }
 
@@ -2374,11 +2533,11 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		`[features]`,
 		`multi_agent = true`,
 		`default_mode_request_user_input = false`,
-		`memories = true`,
+		`memories = false`,
 		``,
 		`[memories]`,
-		`generate_memories = true`,
-		`use_memories = true`,
+		`generate_memories = false`,
+		`use_memories = false`,
 		``,
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(hostHome, ".codex", configFileName), []byte(hostConfig), 0o600); err != nil {
@@ -2453,6 +2612,9 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		csgclawUserInputBeginMarker,
 		csgclawMemoryFeatureBeginMarker,
 		csgclawMemoryConfigBeginMarker,
+		`memories = true`,
+		`generate_memories = true`,
+		`use_memories = true`,
 	} {
 		if !strings.Contains(configText, want) {
 			t.Fatalf("runtime config missing %q:\n%s", want, configText)
@@ -2465,9 +2627,9 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		`https://stale.example/v1`,
 		`multi_agent = true`,
 		`default_mode_request_user_input = false`,
-		`memories = true`,
-		`generate_memories = true`,
-		`use_memories = true`,
+		`memories = false`,
+		`generate_memories = false`,
+		`use_memories = false`,
 	} {
 		if strings.Contains(configText, unwanted) {
 			t.Fatalf("runtime config still contains stale host directive %q:\n%s", unwanted, configText)
@@ -2500,13 +2662,13 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		csgclawUserInputBeginMarker,
 		`default_mode_request_user_input = false`,
 		csgclawUserInputEndMarker,
-		`memories = true`,
+		`memories = false`,
 		``,
 		`[memories]`,
 		csgclawMemoryConfigBeginMarker,
-		`generate_memories = true`,
+		`generate_memories = false`,
 		csgclawMemoryConfigEndMarker,
-		`use_memories = true`,
+		`use_memories = false`,
 		``,
 	}, "\n")
 
@@ -2536,8 +2698,8 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		`model = "old-model"`,
 		`multi_agent = true`,
 		`default_mode_request_user_input = false`,
-		`generate_memories = true`,
-		`use_memories = true`,
+		`generate_memories = false`,
+		`use_memories = false`,
 	} {
 		if strings.Contains(first, unwanted) {
 			t.Fatalf("managed config should replace stale directive %q:\n%s", unwanted, first)
@@ -2547,9 +2709,34 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		`sandbox_mode = "workspace-write"`,
 		`sandbox_workspace_write.network_access = true`,
 		`default_mode_request_user_input = true`,
+		`memories = true`,
+		`generate_memories = true`,
+		`use_memories = true`,
 	} {
 		if !strings.Contains(first, expected) {
 			t.Fatalf("managed config should contain sandbox directive %q:\n%s", expected, first)
+		}
+	}
+}
+
+func TestConfigureCodexHomeConfigDisablesMemories(t *testing.T) {
+	config := configureCodexHomeConfigWithWorkspaceForRuntimeOptions(
+		"",
+		agentruntime.Profile{},
+		nil,
+		"",
+		RuntimeOptions{
+			ExecutionMode: ExecutionModeStandard,
+			MemoryMode:    MemoryModeDisabled,
+		},
+	)
+	for _, want := range []string{
+		`features.memories = false`,
+		`memories.generate_memories = false`,
+		`memories.use_memories = false`,
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("disabled memory config missing %q:\n%s", want, config)
 		}
 	}
 }
@@ -3347,6 +3534,60 @@ func TestRuntimeStartKeepsExistingRunningSession(t *testing.T) {
 	}
 	if sessionCalls != 1 {
 		t.Fatalf("Start() manager session restore calls = %d, want 1", sessionCalls)
+	}
+}
+
+func TestRuntimeNewRestoresPersistedConversationMappings(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "agent-alice", ".codex")
+	if err := os.MkdirAll(runtimeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(os.WriteFile, filepath.Join(runtimeDir, sessionFileName), sessionMetadata{
+		RuntimeID:            "rt-u-alice",
+		SessionID:            "main-thread",
+		ConversationSessions: map[string]string{"room-1": "room-thread"},
+	}); err != nil {
+		t.Fatalf("write session metadata: %v", err)
+	}
+
+	var startedSpec SessionSpec
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentID string) (string, error) {
+			return filepath.Join(root, agentID), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID}, nil
+		},
+		Manager: fakeManager{start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+			startedSpec = spec
+			return &Session{
+				RuntimeID:            spec.RuntimeID,
+				AgentID:              spec.AgentID,
+				AgentName:            spec.AgentName,
+				SessionID:            "main-thread",
+				RuntimeDir:           spec.RuntimeDir,
+				WorkspaceDir:         spec.WorkspaceDir,
+				HomeDir:              spec.HomeDir,
+				CodexHomeDir:         spec.CodexHomeDir,
+				StderrPath:           spec.StderrPath,
+				ConversationSessions: cloneConversationSessions(spec.ConversationSessions),
+				CreatedAt:            time.Now().UTC(),
+				StartedAt:            time.Now().UTC(),
+			}, nil
+		}},
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-u-alice",
+		AgentID:   "u-alice",
+		AgentName: "alice",
+	}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if got, want := startedSpec.ConversationSessions["room-1"], "room-thread"; got != want {
+		t.Fatalf("New() conversation mapping = %q, want %q", got, want)
 	}
 }
 

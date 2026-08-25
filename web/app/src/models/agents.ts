@@ -129,6 +129,7 @@ export type AgentLike = AgentProfileLike & {
   from_template?: string | null;
   id?: string | null;
   instructions?: string | null;
+  memory_supported?: boolean | null;
   type?: BotType | null;
   available?: boolean | null;
   avatar?: string | null;

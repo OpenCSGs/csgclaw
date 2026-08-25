@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	templateembed "csgclaw/internal/template/embed"
@@ -81,6 +82,20 @@ func TestOpenClawWorkerTemplateUsesOpenClawBootstrapFiles(t *testing.T) {
 	} {
 		if _, err := fs.Stat(templateembed.FS(), path); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("Stat(%q) error = %v, want fs.ErrNotExist", path, err)
+		}
+	}
+}
+
+func TestCodexWorkerTemplateDoesNotUseWorkspaceMemory(t *testing.T) {
+	path := "worker/codex/instructions/AGENTS.md"
+	data, err := fs.ReadFile(templateembed.FS(), path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", path, err)
+	}
+	text := strings.ToLower(string(data))
+	for _, unwanted := range []string{"workspace memory", "memory/"} {
+		if strings.Contains(text, unwanted) {
+			t.Fatalf("Codex worker instructions still reference %q", unwanted)
 		}
 	}
 }

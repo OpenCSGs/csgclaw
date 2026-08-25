@@ -33,6 +33,22 @@ export function fetchAgentInstructionsDocument(agentID: string): Promise<AgentIn
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/instructions`);
 }
 
+export type AgentMemoryDocument = {
+  enabled: boolean;
+  ready: boolean;
+  name: string;
+  location?: string;
+  content: string;
+};
+
+export function fetchAgentMemoryDocument(agentID: string): Promise<AgentMemoryDocument> {
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}/memory`);
+}
+
+export function updateAgentMemoryEnabled(agentID: string, enabled: boolean): Promise<AgentMemoryDocument> {
+  return put(`api/v1/agents/${encodeURIComponent(agentID)}/memory`, { enabled });
+}
+
 export function updateAgentEffectiveInstructions(
   agentID: string,
   effective: string,

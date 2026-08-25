@@ -21,7 +21,13 @@ import {
 } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
-import { fetchAgentInstructionsDocument, updateAgentEffectiveInstructions } from "@/api/agents";
+import {
+  fetchAgentInstructionsDocument,
+  fetchAgentMemoryDocument,
+  updateAgentEffectiveInstructions,
+  updateAgentMemoryEnabled,
+  type AgentMemoryDocument,
+} from "@/api/agents";
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
 import { localizeAPIError } from "@/shared/i18n";
@@ -101,7 +107,7 @@ type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentMetadataSavePatch = Pick<Partial<AgentDraft>, "description" | "name">;
 type AgentNoticeTone = "info" | "warning" | "success";
-const AGENT_PROFILE_TAB_IDS = ["profile", "channels", "instructions", "skills", "mcp"] as const;
+const AGENT_PROFILE_TAB_IDS = ["profile", "channels", "instructions", "memory", "skills", "mcp"] as const;
 type AgentProfileTabID = (typeof AGENT_PROFILE_TAB_IDS)[number];
 type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
 type RuntimeOptionSchemaList = ReturnType<typeof runtimeOptionSchemasForAgent>;
@@ -147,6 +153,7 @@ export type AgentDetailPaneProps = {
   onRecreate: AgentActionHandler;
   onSave?: () => VoidOrPromise;
   onMetadataSave?: (patch: AgentMetadataSavePatch) => VoidOrPromise;
+  onMemoryChange?: () => VoidOrPromise;
   onStart: AgentActionHandler;
   onStartFeishuConnect?: AgentActionHandler;
   onStop: AgentActionHandler;
@@ -250,6 +257,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onStop,
     onRecreate,
     onMetadataSave,
+    onMemoryChange,
     onStartFeishuConnect,
     onDisconnectFeishu,
     onUpgrade,
@@ -437,6 +445,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         ? [
             { id: "profile" as const, label: t("agentProfileTab") },
             ...(!isNotifierDraft ? [{ id: "instructions" as const, label: t("agentInstructions") }] : []),
+            ...(item.memory_supported ? [{ id: "memory" as const, label: t("agentMemoryTab") }] : []),
             ...(workspaceSupported
               ? [{ id: "skills" as const, label: t("agentProfileSkillsTab"), count: skills.length }]
               : []),
@@ -892,6 +901,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
 
             {visibleActiveProfileTab === "instructions" && !isNotifierDraft ? (
               <AgentInstructionsPanel draft={draft} t={t} updateDraft={updateDraft} />
+            ) : null}
+
+            {visibleActiveProfileTab === "memory" && item.memory_supported ? (
+              <AgentMemoryPanel agentID={String(item.id || "")} onMemoryChange={onMemoryChange} t={t} />
             ) : null}
 
             {visibleActiveProfileTab === "skills" && workspaceSupported ? (
@@ -1648,6 +1661,136 @@ function AgentNotifierPanel({ draft, item, notifierWebhookPublicOrigin, t, updat
         webhookPublicOrigin={notifierWebhookPublicOrigin}
         onPatch={(patch) => updateDraft(patch)}
       />
+    </div>
+  );
+}
+
+type AgentMemoryPanelProps = {
+  agentID: string;
+  onMemoryChange?: () => VoidOrPromise;
+  t: TranslateFn;
+};
+
+function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps) {
+  const [document, setDocument] = useState<AgentMemoryDocument | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  const loadMemory = useCallback(async () => {
+    if (!agentID) return;
+    setLoading(true);
+    setLoadError("");
+    try {
+      setDocument(await fetchAgentMemoryDocument(agentID));
+    } catch (error) {
+      setLoadError(errorMessage(error, t("agentMemoryLoadFailed")));
+    } finally {
+      setLoading(false);
+    }
+  }, [agentID, t]);
+
+  useEffect(() => {
+    setDocument(null);
+    void loadMemory();
+  }, [loadMemory]);
+
+  async function setMemoryEnabled(enabled: boolean) {
+    if (!agentID || updating) return;
+    setUpdating(true);
+    setLoadError("");
+    try {
+      setDocument(await updateAgentMemoryEnabled(agentID, enabled));
+      await onMemoryChange?.();
+    } catch (error) {
+      setLoadError(errorMessage(error, t("agentMemoryUpdateFailed")));
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  return (
+    <div id="agent-profile-memory" className="agent-memory-tab agent-profile-tab-panel agent-profile-scroll-target">
+      <section className="profile-section agent-skills-section agent-memory-settings-section">
+        <div className="agent-memory-section-heading">
+          <div className="profile-section-heading">
+            <div className="profile-section-title">{t("agentMemoryTitle")}</div>
+            <p className="profile-section-description">{t("agentMemoryDescription")}</p>
+          </div>
+          <div className="agent-memory-setting-actions">
+            <span className="agent-memory-status">{document?.enabled ? t("statusEnabled") : t("statusDisabled")}</span>
+            <label className="agent-memory-switch agent-fast-mode-toggle">
+              <input
+                type="checkbox"
+                checked={document?.enabled ?? false}
+                disabled={!document || loading || updating}
+                aria-label={t("agentMemoryEnabled")}
+                onChange={(event) => void setMemoryEnabled(event.currentTarget.checked)}
+              />
+              <span className="sr-only">{t("agentMemoryEnabled")}</span>
+            </label>
+          </div>
+        </div>
+        <p className="agent-memory-toggle-hint">{t("agentMemoryToggleHint")}</p>
+      </section>
+
+      <section className="profile-section agent-skills-section agent-memory-document-section">
+        <div className="agent-memory-section-heading">
+          <div className="profile-section-heading">
+            <div className="profile-section-title">{document?.name || t("agentMemoryDocumentTitle")}</div>
+            <p className="profile-section-description">{t("agentMemoryDocumentDescription")}</p>
+            {document?.location ? <code className="agent-memory-location">{document.location}</code> : null}
+          </div>
+          <div className="agent-skills-summary-actions">
+            <Tooltip content={t("agentMemoryRefresh")}>
+              <span>
+                <Button
+                  className="agent-skill-add-button"
+                  type="button"
+                  variant="secondaryGray"
+                  size="sm"
+                  aria-label={t("agentMemoryRefresh")}
+                  disabled={loading || updating}
+                  onClick={() => void loadMemory()}
+                >
+                  <RefreshCw size={16} strokeWidth={2.2} aria-hidden="true" />
+                </Button>
+              </span>
+            </Tooltip>
+          </div>
+        </div>
+
+        {loadError ? <div className="form-error">{loadError}</div> : null}
+        {loading ? (
+          <div className="agent-skills-summary-empty agent-memory-summary-empty" role="status">
+            <span className="agent-skills-summary-icon" aria-hidden="true">
+              <CircleDashed size={18} strokeWidth={1.8} />
+            </span>
+            <div className="agent-skills-summary-empty-copy">
+              <strong>{t("agentMemoryLoading")}</strong>
+            </div>
+          </div>
+        ) : document?.ready ? (
+          <div className="agent-section-form agent-memory-document-shell">
+            <textarea
+              className="compact-textarea agent-memory-document"
+              value={document.content || ""}
+              readOnly
+              aria-label={t("agentMemoryDocumentLabel")}
+            />
+          </div>
+        ) : (
+          <div className="agent-skills-summary-empty agent-memory-summary-empty">
+            <span className="agent-skills-summary-icon" aria-hidden="true">
+              <FileCode2 size={18} strokeWidth={1.8} />
+            </span>
+            <div className="agent-skills-summary-empty-copy">
+              <strong>{t("agentMemoryEmptyTitle")}</strong>
+              <p>{t("agentMemoryEmptyDescription")}</p>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

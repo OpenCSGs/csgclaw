@@ -9241,7 +9241,7 @@ func TestHubPublishSpecUsesCodexHomeAssets(t *testing.T) {
 	}
 	svc.agents["u-alice"] = Agent{
 		ID: "u-alice", Name: "alice", Role: RoleWorker, RuntimeKind: RuntimeKindCodex,
-		RuntimeOptions: map[string]any{"execution_mode": "read_only", "local_workspace_dir": "/private/project"},
+		RuntimeOptions: map[string]any{"execution_mode": "read_only", "memory_mode": "disabled", "local_workspace_dir": "/private/project"},
 		MCPServers: map[string]any{"remote": map[string]any{
 			"url": "https://mcp.example.test", "headers": map[string]any{"Authorization": "secret"},
 		}},
@@ -9273,12 +9273,32 @@ func TestHubPublishSpecUsesCodexHomeAssets(t *testing.T) {
 	if got, want := spec.RuntimeOptions["execution_mode"], "read_only"; got != want {
 		t.Fatalf("RuntimeOptions[execution_mode] = %v, want %q", got, want)
 	}
+	if got, want := spec.RuntimeOptions["memory_mode"], "disabled"; got != want {
+		t.Fatalf("RuntimeOptions[memory_mode] = %v, want %q", got, want)
+	}
 	if _, exists := spec.RuntimeOptions["local_workspace_dir"]; exists {
 		t.Fatalf("published runtime options leaked local_workspace_dir: %#v", spec.RuntimeOptions)
 	}
 	remote := spec.MCPServers["remote"].(map[string]any)
 	if _, ok := remote["headers"]; ok {
 		t.Fatalf("published MCP config leaked runtime headers: %#v", remote)
+	}
+}
+
+func TestTemplateSafeRuntimeOptionsValidatesMemoryMode(t *testing.T) {
+	for _, runtimeOptions := range []map[string]any{
+		{"memory_mode": "automatic"},
+		{"memory_mode": true},
+	} {
+		_, err := templateSafeRuntimeOptions(Agent{
+			ID:             "u-alice",
+			Role:           RoleWorker,
+			RuntimeKind:    RuntimeKindCodex,
+			RuntimeOptions: runtimeOptions,
+		})
+		if err == nil || !strings.Contains(err.Error(), "runtime_options.memory_mode") {
+			t.Fatalf("templateSafeRuntimeOptions(%#v) error = %v, want memory_mode validation error", runtimeOptions, err)
+		}
 	}
 }
 
@@ -10699,16 +10719,16 @@ func TestEnsureBootstrapStateRecreatesManagerWithLegacyPicoClawBridgeConfig(t *t
 			t.Fatalf("createGatewayBox() got image=%q name=%q botID=%q", image, name, botID)
 		}
 		return &fakeInfoInstance{info: sandbox.Info{
-				ID:        "box-new",
-				Name:      ManagerName,
-				State:     sandbox.StateRunning,
-				CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
-			}}, sandbox.Info{
-				ID:        "box-new",
-				Name:      ManagerName,
-				State:     sandbox.StateRunning,
-				CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
-			}, nil
+			ID:        "box-new",
+			Name:      ManagerName,
+			State:     sandbox.StateRunning,
+			CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+		}}, sandbox.Info{
+			ID:        "box-new",
+			Name:      ManagerName,
+			State:     sandbox.StateRunning,
+			CreatedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+		}, nil
 	}
 
 	managerHome, err := seedSvc.agentHomeDir(ManagerUserID)

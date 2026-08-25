@@ -11,20 +11,24 @@ import (
 const (
 	localWorkspaceDirOptionKey = "local_workspace_dir"
 	executionModeOptionKey     = "execution_mode"
+	memoryModeOptionKey        = "memory_mode"
 	ExecutionModeStandard      = "standard"
 	ExecutionModeReadOnly      = "read_only"
+	MemoryModeEnabled          = "enabled"
+	MemoryModeDisabled         = "disabled"
 )
 
 type RuntimeOptions struct {
 	LocalWorkspaceDir string `json:"local_workspace_dir"`
 	ExecutionMode     string `json:"execution_mode"`
+	MemoryMode        string `json:"memory_mode"`
 }
 
 func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
 	if len(raw) == 0 {
-		return RuntimeOptions{ExecutionMode: ExecutionModeStandard}, nil
+		return defaultRuntimeOptions(), nil
 	}
-	opts := RuntimeOptions{ExecutionMode: ExecutionModeStandard}
+	opts := defaultRuntimeOptions()
 	if value, ok := raw[localWorkspaceDirOptionKey]; ok && value != nil {
 		text, ok := value.(string)
 		if !ok {
@@ -47,7 +51,29 @@ func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
 			}
 		}
 	}
+	if value, ok := raw[memoryModeOptionKey]; ok && value != nil {
+		text, ok := value.(string)
+		if !ok {
+			return RuntimeOptions{}, fmt.Errorf("%s must be a string", memoryModeOptionKey)
+		}
+		mode := strings.ToLower(strings.TrimSpace(text))
+		if mode != "" {
+			switch mode {
+			case MemoryModeEnabled, MemoryModeDisabled:
+				opts.MemoryMode = mode
+			default:
+				return RuntimeOptions{}, fmt.Errorf("%s must be %q or %q", memoryModeOptionKey, MemoryModeEnabled, MemoryModeDisabled)
+			}
+		}
+	}
 	return opts, nil
+}
+
+func defaultRuntimeOptions() RuntimeOptions {
+	return RuntimeOptions{
+		ExecutionMode: ExecutionModeStandard,
+		MemoryMode:    MemoryModeEnabled,
+	}
 }
 
 func IsReadOnlyExecutionMode(raw map[string]any) bool {

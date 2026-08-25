@@ -4,7 +4,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
 import type { Ref } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentDraft, AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import { AgentDetailPane } from "./AgentDetailPane";
@@ -58,6 +58,10 @@ const savedDraft: AgentDraft = {
   runtime_options: {},
   sandbox_enabled: false,
 };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 type HarnessProps = Partial<AgentDetailPaneProps>;
 
@@ -212,5 +216,86 @@ describe("AgentDetailPane model loading error", () => {
 
     await user.click(screen.getByRole("button", { name: "retry" }));
     expect(onRetryModels).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AgentDetailPane memory", () => {
+  it("shows the runtime memory tab, readable document, and enable toggle", async () => {
+    const user = userEvent.setup();
+    const onMemoryChange = vi.fn();
+    const fetchMock = vi.fn<typeof fetch>(async (_input, init) => {
+      const enabled = init?.method === "PUT" ? false : true;
+      return new Response(
+        JSON.stringify({
+          enabled,
+          ready: true,
+          name: "MEMORY.md",
+          location: "$CODEX_HOME/memories/MEMORY.md",
+          content: "# Durable memory\n\nRemember this.\n",
+        }),
+        { headers: { "content-type": "application/json" }, status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Harness item={{ ...agent, memory_supported: true }} onMemoryChange={onMemoryChange} />);
+
+    await user.click(screen.getByRole("button", { name: "agentMemoryTab" }));
+    const document = await screen.findByRole("textbox", { name: "agentMemoryDocumentLabel" });
+    expect(document).toHaveValue("# Durable memory\n\nRemember this.\n");
+    expect(document.closest(".agent-memory-document-shell")).toHaveClass("agent-section-form");
+    const refresh = screen.getByRole("button", { name: "agentMemoryRefresh" });
+    expect(refresh).toHaveClass("agent-skill-add-button");
+    expect(refresh.closest(".agent-memory-section-heading")).toBeInTheDocument();
+    expect(screen.getByText("$CODEX_HOME/memories/MEMORY.md").tagName).toBe("CODE");
+
+    const toggle = screen.getByRole("checkbox", { name: "agentMemoryEnabled" });
+    expect(toggle).toBeChecked();
+    expect(toggle.closest(".agent-memory-setting-actions")).toBeInTheDocument();
+    expect(toggle.closest(".agent-memory-section-heading")).toBeInTheDocument();
+    await user.click(toggle);
+
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    expect(onMemoryChange).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "api/v1/agents/agent-1/memory",
+      expect.objectContaining({ body: JSON.stringify({ enabled: false }), method: "PUT" }),
+    );
+  });
+
+  it("hides the memory tab when the runtime does not expose the capability", () => {
+    render(<Harness item={{ ...agent, memory_supported: false }} />);
+
+    expect(screen.queryByRole("button", { name: "agentMemoryTab" })).not.toBeInTheDocument();
+  });
+
+  it("uses the compact tab empty state before MEMORY.md is generated", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({
+              enabled: true,
+              ready: false,
+              name: "MEMORY.md",
+              location: "$CODEX_HOME/memories/MEMORY.md",
+              content: "",
+            }),
+            {
+              headers: { "content-type": "application/json" },
+              status: 200,
+            },
+          ),
+      ),
+    );
+
+    render(<Harness item={{ ...agent, memory_supported: true }} />);
+
+    await user.click(screen.getByRole("button", { name: "agentMemoryTab" }));
+    const emptyTitle = await screen.findByText("agentMemoryEmptyTitle");
+    expect(emptyTitle.closest(".agent-memory-summary-empty")).toHaveClass("agent-skills-summary-empty");
+    expect(screen.queryByRole("textbox", { name: "agentMemoryDocumentLabel" })).not.toBeInTheDocument();
   });
 });

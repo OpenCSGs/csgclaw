@@ -83,7 +83,8 @@
 
 .agent-profile-scroll-region > .entity-grid,
 .agent-profile-scroll-region > .agent-channels-section,
-.agent-profile-scroll-region > .agent-instructions-section {
+.agent-profile-scroll-region > .agent-instructions-section,
+.agent-profile-scroll-region > .agent-memory-section {
   width: var(--agent-detail-content-width);
 }
 
@@ -2238,6 +2239,115 @@
   .agent-skills-summary-empty .btn {
     grid-column: 2;
     justify-self: start;
+  }
+}
+
+.agent-memory-tab {
+  display: grid;
+  gap: 28px;
+  width: 100%;
+  padding-bottom: 24px;
+}
+
+.agent-memory-section-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  width: min(100%, 820px);
+}
+
+.agent-memory-section-heading .profile-section-heading {
+  min-width: 0;
+}
+
+.agent-memory-setting-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 10px;
+}
+
+.agent-memory-status {
+  color: var(--gray-600);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.agent-memory-switch {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.agent-memory-switch input[type="checkbox"]:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.agent-memory-toggle-hint {
+  width: min(100%, 820px);
+  margin: -12px 0 0;
+  color: var(--gray-500);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.agent-memory-location {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 2px 7px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-memory-document-shell {
+  min-height: 360px;
+}
+
+.agent-memory-document {
+  width: 100%;
+  height: min(52vh, 520px);
+  min-height: 360px;
+  padding: 16px;
+  resize: vertical;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--font-mono);
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.agent-memory-document:focus {
+  outline: none;
+}
+
+.agent-memory-summary-empty {
+  grid-template-columns: 36px minmax(0, 1fr);
+}
+
+:root[data-theme="dark"] .agent-memory-location {
+  background: var(--gray-800);
+  color: var(--gray-300);
+}
+
+@container (max-width: 620px) {
+  .agent-memory-section-heading,
+  .agent-memory-toggle-hint {
+    width: 100%;
   }
 }
 

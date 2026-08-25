@@ -232,30 +232,30 @@ func buildUserInputConfigBlock(inFeaturesTable bool) string {
 	return b.String()
 }
 
-func buildMemoryFeatureConfigBlock(inFeaturesTable bool) string {
+func buildMemoryFeatureConfigBlock(inFeaturesTable, enabled bool) string {
 	var b strings.Builder
 	b.WriteString(csgclawMemoryFeatureBeginMarker)
 	b.WriteString("\n")
 	if inFeaturesTable {
-		b.WriteString("memories = false\n")
+		fmt.Fprintf(&b, "memories = %t\n", enabled)
 	} else {
-		b.WriteString("features.memories = false\n")
+		fmt.Fprintf(&b, "features.memories = %t\n", enabled)
 	}
 	b.WriteString(csgclawMemoryFeatureEndMarker)
 	b.WriteString("\n")
 	return b.String()
 }
 
-func buildMemoryConfigBlock(inMemoriesTable bool) string {
+func buildMemoryConfigBlock(inMemoriesTable, enabled bool) string {
 	var b strings.Builder
 	b.WriteString(csgclawMemoryConfigBeginMarker)
 	b.WriteString("\n")
 	if inMemoriesTable {
-		b.WriteString("generate_memories = false\n")
-		b.WriteString("use_memories = false\n")
+		fmt.Fprintf(&b, "generate_memories = %t\n", enabled)
+		fmt.Fprintf(&b, "use_memories = %t\n", enabled)
 	} else {
-		b.WriteString("memories.generate_memories = false\n")
-		b.WriteString("memories.use_memories = false\n")
+		fmt.Fprintf(&b, "memories.generate_memories = %t\n", enabled)
+		fmt.Fprintf(&b, "memories.use_memories = %t\n", enabled)
 	}
 	b.WriteString(csgclawMemoryConfigEndMarker)
 	b.WriteString("\n")
@@ -389,7 +389,20 @@ func configureCodexHomeConfigWithWorkspace(existing string, profile agentruntime
 }
 
 func configureCodexHomeConfigWithWorkspaceForExecutionMode(existing string, profile agentruntime.Profile, mcpServers map[string]any, workspaceDir, executionMode string) string {
-	return configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(existing, profile, mcpServers, workspaceDir, runtime.GOOS == "windows", executionMode)
+	return configureCodexHomeConfigWithWorkspaceForRuntimeOptions(existing, profile, mcpServers, workspaceDir, RuntimeOptions{
+		ExecutionMode: executionMode,
+		MemoryMode:    MemoryModeEnabled,
+	})
+}
+
+func configureCodexHomeConfigWithWorkspaceForRuntimeOptions(
+	existing string,
+	profile agentruntime.Profile,
+	mcpServers map[string]any,
+	workspaceDir string,
+	options RuntimeOptions,
+) string {
+	return configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(existing, profile, mcpServers, workspaceDir, runtime.GOOS == "windows", options)
 }
 
 func configureCodexHomeConfigWithWorkspaceForPlatform(
@@ -410,6 +423,22 @@ func configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(
 	isWindows bool,
 	executionMode string,
 ) string {
+	return configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(existing, profile, mcpServers, workspaceDir, isWindows, RuntimeOptions{
+		ExecutionMode: executionMode,
+		MemoryMode:    MemoryModeEnabled,
+	})
+}
+
+func configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(
+	existing string,
+	profile agentruntime.Profile,
+	mcpServers map[string]any,
+	workspaceDir string,
+	isWindows bool,
+	options RuntimeOptions,
+) string {
+	executionMode := options.ExecutionMode
+	memoryEnabled := options.MemoryMode != MemoryModeDisabled
 	content := sanitizeCopiedCodexConfigContent(existing)
 	content = strings.TrimLeft(content, "\n")
 
@@ -446,14 +475,14 @@ func configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(
 		}
 	}
 
-	if block := buildMemoryConfigBlock(hasRootMemoriesTable(content)); block != "" {
+	if block := buildMemoryConfigBlock(hasRootMemoriesTable(content), memoryEnabled); block != "" {
 		if hasRootMemoriesTable(content) {
 			content = injectManagedBlockAfterHeader(content, rootMemoriesTableHeaderRe, block)
 		} else {
 			content = hoistManagedBlock(content, block)
 		}
 	}
-	if block := buildMemoryFeatureConfigBlock(hasRootFeaturesTable(content)); block != "" {
+	if block := buildMemoryFeatureConfigBlock(hasRootFeaturesTable(content), memoryEnabled); block != "" {
 		if hasRootFeaturesTable(content) {
 			content = injectManagedBlockAfterHeader(content, rootFeaturesTableHeaderRe, block)
 		} else {

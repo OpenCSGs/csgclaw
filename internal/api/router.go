@@ -34,6 +34,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Get("/logs", h.getAgentLogs)
 				r.Get("/instructions", h.getAgentInstructions)
 				r.Put("/instructions", h.putAgentInstructions)
+				r.Get("/memory", h.getAgentMemory)
+				r.Put("/memory", h.putAgentMemory)
 				r.Get("/workspace", h.handleAgentWorkspace)
 				r.Get("/workspace/file", h.handleAgentWorkspaceFile)
 				r.Get("/skills", h.handleAgentSkills)

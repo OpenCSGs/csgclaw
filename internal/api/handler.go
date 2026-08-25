@@ -205,6 +205,7 @@ type agentResponse struct {
 	RuntimeOptions       map[string]any                     `json:"-"`
 	MCPServers           map[string]any                     `json:"mcpServers,omitempty"`
 	RuntimeOptionSchemas []agentruntime.RuntimeOptionSchema `json:"-"`
+	MemorySupported      bool                               `json:"memory_supported,omitempty"`
 	AgentProfile         agent.AgentProfileView             `json:"-"`
 	ProfileComplete      bool                               `json:"-"`
 	DetectionResults     []agent.ProfileDetectionResult     `json:"-"`
@@ -225,6 +226,7 @@ func (r *agentResponse) UnmarshalJSON(data []byte) error {
 		Name:             apiAgent.Name,
 		Description:      apiAgent.Description,
 		Instructions:     apiAgent.Instructions,
+		MemorySupported:  apiAgent.MemorySupported,
 		Runtime:          apiAgent.Runtime,
 		RuntimeKind:      apiAgent.RuntimeKind,
 		RuntimeName:      apiAgent.RuntimeName,
@@ -3082,6 +3084,9 @@ func (h *Handler) presentAgentResponse(item agent.Agent) agentResponse {
 	}
 	if item.ID != agent.ManagerUserID && item.Role != agent.RoleManager {
 		resp.RuntimeOptionSchemas = h.runtimeOptionSchemasForKind(item.RuntimeKind)
+	}
+	if h != nil && h.svc != nil {
+		resp.MemorySupported = h.svc.SupportsMemory(item.RuntimeKind)
 	}
 	resp.Runtime.OptionSchemas = runtimeOptionSchemasForAPI(resp.RuntimeOptionSchemas)
 	return resp

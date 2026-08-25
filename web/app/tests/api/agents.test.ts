@@ -6,8 +6,10 @@ import {
   batchAddAgentSkillsRequest,
   createManagerAgentRequest,
   deleteAgentSkillRequest,
+  fetchAgentMemoryDocument,
   fetchAgentMCPServers,
   startFeishuRegistrationRequest,
+  updateAgentMemoryEnabled,
 } from "@/api/agents";
 
 function mockFetch(): Mock<typeof fetch> {
@@ -85,6 +87,39 @@ describe("agents API", () => {
       expect.objectContaining({
         body: JSON.stringify({ names: ["context7"] }),
         method: "POST",
+      }),
+    );
+  });
+
+  it("uses the agent memory document path for reads and toggles", async () => {
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            enabled: true,
+            ready: true,
+            name: "MEMORY.md",
+            location: "$CODEX_HOME/memories/MEMORY.md",
+            content: "# Memory\n",
+          }),
+          {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchAgentMemoryDocument("u-manager");
+    await updateAgentMemoryEnabled("u-manager", false);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "api/v1/agents/u-manager/memory", expect.anything());
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "api/v1/agents/u-manager/memory",
+      expect.objectContaining({
+        body: JSON.stringify({ enabled: false }),
+        method: "PUT",
       }),
     );
   });

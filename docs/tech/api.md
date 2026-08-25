@@ -446,16 +446,42 @@ Notes:
 
 - Omitted fields are left unchanged
 - `runtime_options` uses whole-object replacement when submitted
-- Codex worker agents accept `runtime_options.execution_mode` values `standard`
-  and `read_only`; an omitted or blank value defaults to `standard`
-- Changing a running Codex worker's execution mode restarts its runtime so the
-  new command, sandbox, and approval policy takes effect
+- Codex worker agents accept `runtime_options.execution_mode` values `standard` and `read_only`; an omitted or blank value defaults to `standard`
+- Changing a running Codex worker's execution mode restarts its runtime so the new command, sandbox, and approval policy takes effect
 - `mcpServers` uses whole-map replacement when submitted; send `null` to clear
   the CSGClaw-managed server set
 - Updating MCP servers on OpenClaw, PicoClaw, or Codex CLI agents may recreate
   that agent runtime so the native configuration takes effect
 - If `agent_profile.api_key` is sent empty, the server keeps the existing key
 - If `agent_profile.env` changes, `env_restart_required` may become `true` in the response
+
+### Agent memory endpoints
+
+Agent responses set `memory_supported` when the selected Runtime implements the CSGClaw memory capability.
+The Profile page shows the Memory tab only for those agents.
+
+#### `GET /api/v1/agents/{id}/memory`
+
+Returns the Runtime's read-only primary memory document and its enabled state.
+`ready` is `false` until the Runtime has generated the document.
+
+```json
+{
+  "enabled": true,
+  "ready": true,
+  "name": "MEMORY.md",
+  "location": "$CODEX_HOME/memories/MEMORY.md",
+  "content": "# Durable memory\n"
+}
+```
+
+`location` is a Runtime-provided logical file location for display and diagnostics; Codex currently reports `$CODEX_HOME/memories/MEMORY.md`.
+
+#### `PUT /api/v1/agents/{id}/memory`
+
+Accepts `{ "enabled": true }` or `{ "enabled": false }` and returns the same memory document shape.
+The Runtime owns how that setting is represented and whether applying it requires a restart.
+Generated memory content is read-only through this API.
 
 ### Agent MCP server endpoints
 
@@ -673,22 +699,28 @@ Templates use the following layout:
   instructions/AGENTS.md
   skills/<skill>/...
   mcps/mcp.json
-  memories/MEMORY.md
+  memories/MEMORY.md         # optional for non-Codex runtimes
 ```
 
-`AGENTS.md` and `mcp.json` are always emitted when publishing. Other instruction and memory files are optional. During agent creation, instruction files and memories are overlaid onto the runtime workspace, skills are installed under `skills/`, and MCP servers from `mcp.json` are applied unless the create request explicitly supplies `mcpServers`.
+`AGENTS.md` and `mcp.json` are always emitted when publishing.
+Other instruction files are optional.
+Codex templates neither publish nor restore workspace memory files; stable template context belongs in `instructions/`, while Codex-managed memory remains under its isolated `CODEX_HOME/memories/`.
+For non-Codex runtimes, optional template memories are overlaid according to that Runtime's workspace convention.
+During agent creation, skills are installed under `skills/`, and MCP servers from `mcp.json` are applied unless the create request explicitly supplies `mcpServers`.
 
 Codex worker templates may persist their execution mode in `agent.toml`:
 
 ```toml
 [runtime_options]
 execution_mode = "read_only"
+memory_mode = "disabled"
 ```
 
 Only template-safe runtime options are published.
-For Codex workers this currently means `execution_mode`; machine-local options such as `local_workspace_dir` are not published.
+For Codex workers this currently means `execution_mode` and `memory_mode`; machine-local options such as `local_workspace_dir` are not published.
 Explicit runtime options in an agent create request override template values.
 Missing `execution_mode` defaults to `standard`.
+Missing `memory_mode` defaults to `enabled`.
 
 ### `GET /api/v1/hub/templates`
 

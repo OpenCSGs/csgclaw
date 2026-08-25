@@ -9,6 +9,9 @@ const (
 	templateExecutionModeKey      = "execution_mode"
 	templateExecutionModeStandard = "standard"
 	templateExecutionModeReadOnly = "read_only"
+	templateMemoryModeKey         = "memory_mode"
+	templateMemoryModeEnabled     = "enabled"
+	templateMemoryModeDisabled    = "disabled"
 )
 
 func templateSafeRuntimeOptions(item Agent) (map[string]any, error) {
@@ -26,10 +29,25 @@ func templateSafeRuntimeOptions(item Agent) (map[string]any, error) {
 			mode = value
 		}
 	}
-	switch mode {
-	case templateExecutionModeStandard, templateExecutionModeReadOnly:
-		return map[string]any{templateExecutionModeKey: mode}, nil
-	default:
+	if mode != templateExecutionModeStandard && mode != templateExecutionModeReadOnly {
 		return nil, fmt.Errorf("agent %q runtime_options.execution_mode must be %q or %q", item.ID, templateExecutionModeStandard, templateExecutionModeReadOnly)
 	}
+	memoryMode := templateMemoryModeEnabled
+	if raw, ok := item.RuntimeOptions[templateMemoryModeKey]; ok && raw != nil {
+		value, ok := raw.(string)
+		if !ok {
+			return nil, fmt.Errorf("agent %q runtime_options.memory_mode must be a string", item.ID)
+		}
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value != "" {
+			memoryMode = value
+		}
+	}
+	if memoryMode != templateMemoryModeEnabled && memoryMode != templateMemoryModeDisabled {
+		return nil, fmt.Errorf("agent %q runtime_options.memory_mode must be %q or %q", item.ID, templateMemoryModeEnabled, templateMemoryModeDisabled)
+	}
+	return map[string]any{
+		templateExecutionModeKey: mode,
+		templateMemoryModeKey:    memoryMode,
+	}, nil
 }

@@ -438,13 +438,40 @@ OpenClaw、PicoClaw 和 Codex CLI agent 通过顶层 `mcpServers` 字段配置 M
 
 - 省略的字段不会修改
 - `runtime_options` 一旦提交就是整体替换
-- Codex Worker 支持 `runtime_options.execution_mode`，取值为 `standard` 或
-  `read_only`；字段省略或为空时默认使用 `standard`
+- Codex Worker 支持 `runtime_options.execution_mode`，取值为 `standard` 或 `read_only`；字段省略或为空时默认使用 `standard`
 - 正在运行的 Codex Worker 切换运行模式后会自动重启，使新的命令、沙盒和审批策略生效
 - `mcpServers` 一旦提交就是整个映射替换；传 `null` 可清除 CSGClaw 托管的 server 集合
 - OpenClaw、PicoClaw 或 Codex CLI agent 的 MCP server 变更可能触发该 agent runtime recreate，使原生配置生效
 - `agent_profile.api_key` 如果传空，服务端会保留原有密钥
 - 如果 `agent_profile.env` 发生变化，响应中的 `env_restart_required` 可能为 `true`
+
+### Agent memory 接口
+
+当选中的 Runtime 实现 CSGClaw memory capability 时，Agent 响应中的 `memory_supported` 为 `true`。
+Profile 页面只为这些 Agent 展示 Memory Tab。
+
+#### `GET /api/v1/agents/{id}/memory`
+
+返回 Runtime 的只读主记忆文档和启用状态。
+Runtime 尚未生成文档时，`ready` 为 `false`。
+
+```json
+{
+  "enabled": true,
+  "ready": true,
+  "name": "MEMORY.md",
+  "location": "$CODEX_HOME/memories/MEMORY.md",
+  "content": "# Durable memory\n"
+}
+```
+
+`location` 是 Runtime 提供、用于展示和诊断的逻辑文件位置；Codex 当前返回 `$CODEX_HOME/memories/MEMORY.md`。
+
+#### `PUT /api/v1/agents/{id}/memory`
+
+接收 `{ "enabled": true }` 或 `{ "enabled": false }`，并返回相同的 memory document 结构。
+具体配置格式以及应用设置时是否需要重启由 Runtime 自己负责。
+该接口只读展示自动生成的 memory 内容，不提供人工编辑能力。
 
 ### Agent MCP server 接口
 
@@ -653,22 +680,28 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
   instructions/AGENTS.md
   skills/<skill>/...
   mcps/mcp.json
-  memories/MEMORY.md
+  memories/MEMORY.md         # 非 Codex Runtime 可选
 ```
 
-发布时始终生成 `AGENTS.md` 和 `mcp.json`，其他 instruction 和 memory 文件可选。根据模板创建 Agent 时，instruction 文件和 memories 会叠加到运行时 workspace，skills 会安装到 `skills/`，`mcp.json` 中的 MCP server 会自动应用；如果创建请求显式传入 `mcpServers`，则以请求内容为准。
+发布时始终生成 `AGENTS.md` 和 `mcp.json`。
+其他 instruction 文件可选。
+Codex 模板不发布也不恢复 workspace memory 文件；模板必须携带的稳定上下文应放在 `instructions/`，Codex 自动管理的 memory 只保存在隔离的 `CODEX_HOME/memories/`。
+非 Codex Runtime 的可选模板 memories 仍按对应 Runtime 的 workspace 约定叠加。
+根据模板创建 Agent 时，skills 会安装到 `skills/`，`mcp.json` 中的 MCP server 会自动应用；如果创建请求显式传入 `mcpServers`，则以请求内容为准。
 
 Codex Worker 模板可在 `agent.toml` 中保存运行模式：
 
 ```toml
 [runtime_options]
 execution_mode = "read_only"
+memory_mode = "disabled"
 ```
 
 发布时只保存适合模板复用的运行时选项。
-Codex Worker 目前仅保存 `execution_mode`，不会保存 `local_workspace_dir` 等本机选项。
+Codex Worker 目前保存 `execution_mode` 和 `memory_mode`，不会保存 `local_workspace_dir` 等本机选项。
 创建请求显式提供的运行时选项优先于模板值。
 缺少 `execution_mode` 时默认为 `standard`。
+缺少 `memory_mode` 时默认为 `enabled`。
 
 ### `GET /api/v1/hub/templates`
 

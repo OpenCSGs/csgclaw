@@ -127,6 +127,14 @@ Auth is also managed locally:
 
 When a worker uses the Codex runtime, its local state is stored under `~/.csgclaw/agents/<agent-name>/.codex/`. The workspace lives at `~/.csgclaw/agents/<agent-name>/.codex/workspace`, shell home lives at `~/.csgclaw/agents/<agent-name>/.codex/home`, and Codex-managed files such as `auth.json`, `config.toml`, `stderr.log`, and runtime metadata are stored under `~/.csgclaw/agents/<agent-name>/.codex/home`. This path is intentionally separate from the sandbox provider home such as `~/.csgclaw/agents/<agent-name>/boxlite`.
 
+CSGClaw enables [Codex local memories](https://learn.chatgpt.com/docs/customization/memories) for each Codex runtime, including both memory generation and reuse in later sessions.
+Memories are isolated per Agent under `~/.csgclaw/agents/<agent-name>/.codex/home/memories/` and are not shared with the host Codex installation or another Agent.
+Use the Agent Profile page's Memory tab to enable or disable both memory generation and memory reuse; the default is enabled.
+Treat memory files as generated runtime state and keep required Agent rules in `AGENTS.md` or checked-in documentation.
+Recreating a Codex Runtime preserves durable Codex state, including the workspace, native session history and thread mappings, memory files and indexes, goals, optional authentication, plugins, rules, hooks, and the installation ID.
+Recreation replaces generated configuration and model catalogs, process metadata, queues, logs, temporary files, locks, and shell snapshots.
+Deleting the Agent still removes its complete Agent home, including memory.
+
 For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml` with an OpenAI-compatible proxy provider and always sets `wire_api = "responses"` because the Codex CLI app-server path uses the Responses API.
 The generated provider uses HTTP Responses rather than Responses WebSocket.
 If the upstream provider reports the Responses endpoint as unsupported, or the embedded CLIProxy Codex/ClaudeCode Responses backend returns a 5xx for a text-only request, CSGClaw keeps the Codex-side Responses configuration and falls back to upstream chat completions behind the proxy.

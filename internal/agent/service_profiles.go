@@ -324,6 +324,10 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateRequest) (Age
 }
 
 func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Agent, error) {
+	return s.updateWithManagedRuntimeOptions(ctx, id, req, false)
+}
+
+func (s *Service) updateWithManagedRuntimeOptions(ctx context.Context, id string, req UpdateRequest, allowManagerRuntimeOptions bool) (Agent, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
@@ -338,7 +342,7 @@ func (s *Service) update(ctx context.Context, id string, req UpdateRequest) (Age
 		s.mu.Unlock()
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
-	if isManagerAgent(current) {
+	if isManagerAgent(current) && !allowManagerRuntimeOptions {
 		if err := validateManagerUpdateRuntimeConfig(req); err != nil {
 			s.mu.Unlock()
 			return Agent{}, err

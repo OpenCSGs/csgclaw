@@ -348,11 +348,18 @@ func (r *Runtime) New(ctx context.Context, spec agentruntime.Spec) (agentruntime
 		return agentruntime.Handle{}, err
 	}
 	spec.Profile = spec.Profile.Normalized()
+	var conversationSessions map[string]string
+	if sessionMeta, readErr := r.readSessionMetadata(strings.TrimSpace(spec.RuntimeID)); readErr == nil {
+		conversationSessions = cloneConversationSessions(sessionMeta.ConversationSessions)
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return agentruntime.Handle{}, fmt.Errorf("read persisted codex conversations: %w", readErr)
+	}
 	session, err := r.ensureSession(ctx, SessionSpec{
-		RuntimeID: strings.TrimSpace(spec.RuntimeID),
-		AgentID:   strings.TrimSpace(spec.AgentID),
-		AgentName: strings.TrimSpace(spec.AgentName),
-		Profile:   spec.Profile,
+		RuntimeID:            strings.TrimSpace(spec.RuntimeID),
+		AgentID:              strings.TrimSpace(spec.AgentID),
+		AgentName:            strings.TrimSpace(spec.AgentName),
+		Profile:              spec.Profile,
+		ConversationSessions: conversationSessions,
 	})
 	if err != nil {
 		return agentruntime.Handle{}, err
@@ -522,8 +529,20 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 	if err := r.stopUntrackedRuntimeProcesses(ctx, runtimeID, dir); err != nil {
 		return err
 	}
-	if err := r.removeRuntimeDir(ctx, runtimeID, dir); err != nil && !errors.Is(err, os.ErrNotExist) {
+	preservedState, err := preserveRuntimeState(dir)
+	if err != nil {
 		return err
+	}
+	if preservedState != nil {
+		defer preservedState.Cleanup()
+	}
+	removeErr := r.removeRuntimeDir(ctx, runtimeID, dir)
+	if errors.Is(removeErr, os.ErrNotExist) {
+		removeErr = nil
+	}
+	restoreErr := preservedState.Restore()
+	if removeErr != nil || restoreErr != nil {
+		return errors.Join(removeErr, restoreErr)
 	}
 	return nil
 }
@@ -917,7 +936,7 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 		}
 	}
 
-	rendered := configureCodexHomeConfigWithWorkspaceForExecutionMode(string(configRaw), profile, mcpServers, workspaceDir, options.ExecutionMode)
+	rendered := configureCodexHomeConfigWithWorkspaceForRuntimeOptions(string(configRaw), profile, mcpServers, workspaceDir, options)
 	if err := r.writeFile(configPath, []byte(rendered), 0o600); err != nil {
 		return fmt.Errorf("write runtime codex config %s: %w", configPath, err)
 	}

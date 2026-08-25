@@ -398,7 +398,6 @@ func (s *RemoteStore) FetchWorkspace(ctx context.Context, id string) (WorkspaceR
 	if err != nil {
 		return WorkspaceRef{}, err
 	}
-
 	archive, err := s.downloadArchive(ctx, id, branch)
 	if err != nil {
 		return WorkspaceRef{}, err
@@ -411,7 +410,7 @@ func (s *RemoteStore) FetchWorkspace(ctx context.Context, id string) (WorkspaceR
 		_ = os.RemoveAll(templateDir)
 		return WorkspaceRef{}, err
 	}
-	workspace, err := materializeTemplateDir(templateDir)
+	workspace, err := materializeTemplateDir(templateDir, "")
 	_ = os.RemoveAll(templateDir)
 	return workspace, err
 }
@@ -1003,7 +1002,7 @@ func buildRemoteTemplateArchive(spec PublishSpec) ([]byte, error) {
 		return nil, err
 	}
 	if spec.WorkspaceRef.Kind == WorkspaceKindDir {
-		if err := writeTemplateLayout(spec.WorkspaceRef, tmpDir, spec.MCPServers); err != nil {
+		if err := writeTemplateLayout(spec.WorkspaceRef, tmpDir, spec.RuntimeKind, spec.MCPServers); err != nil {
 			return nil, err
 		}
 	}

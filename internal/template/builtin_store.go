@@ -78,13 +78,14 @@ func (s *BuiltinStore) FetchWorkspace(_ context.Context, id string) (WorkspaceRe
 	if err := validateLocalTemplateID(id); err != nil {
 		return WorkspaceRef{}, err
 	}
-	if _, err := s.loadManifest(id); err != nil {
+	manifest, err := s.loadManifest(id)
+	if err != nil {
 		return WorkspaceRef{}, err
 	}
 	if ref := s.workspaceRef(id); strings.TrimSpace(ref.Path) == "" {
 		return WorkspaceRef{}, nil
 	}
-	return materializeTemplateFS(hubtemplates.FS(), s.workspacePath(id))
+	return materializeTemplateFS(hubtemplates.FS(), s.workspacePath(id), manifest.RuntimeKind)
 }
 
 func (s *BuiltinStore) ListWorkspace(_ context.Context, id, workspacePath string) (apitypes.WorkspaceListing, error) {

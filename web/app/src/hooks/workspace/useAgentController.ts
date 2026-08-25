@@ -2575,6 +2575,12 @@ export function useAgentController({
       onDraftChange: setAgentPageDraft,
       onSave: saveAgentPage,
       onMetadataSave: saveAgentPageMetadata,
+      onMemoryChange: async () => {
+        const agentID = String(selectedAgentForPage?.id ?? "").trim();
+        if (agentID) {
+          await refreshAgentState(agentID);
+        }
+      },
       onPublish: publishAgentPage,
       onProviderLogin: loginCLIProxyProvider,
       onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),

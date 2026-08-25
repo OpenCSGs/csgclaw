@@ -595,11 +595,13 @@ func (s *Service) ensureCodexManager(ctx context.Context, forceRecreate bool) (A
 
 	existing, _ := s.Agent(ManagerUserID)
 	managerCredentials, managerInitShell := existing.RuntimeProvision()
+	managerRuntimeOptions := utils.CloneAnyMap(existing.RuntimeOptions)
 	if err := s.validateMCPServers(ctx, RuntimeKindCodex, mcpServersSnapshotForAgent(managerMCPServers)); err != nil {
 		return Agent{}, err
 	}
 	legacyCleanupKeys := s.legacyManagerSandboxCleanupKeys()
 	runtimeAgent := s.newCodexManagerAgent(managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt, "", agentruntime.StateCreated, string(agentruntime.StateCreated), startProfile, detectionResults)
+	runtimeAgent.RuntimeOptions = utils.CloneAnyMap(managerRuntimeOptions)
 	applyManagerMCPServers(&runtimeAgent, managerMCPServers)
 	runtimeAgent.SetRuntimeProvision(managerCredentials, managerInitShell)
 	runtimeProfile := s.runtimeProfileForAgentWithProfile(runtimeAgent, s.hydrateProfileFromCatalog(startProfile))
@@ -609,6 +611,7 @@ func (s *Service) ensureCodexManager(ctx context.Context, forceRecreate bool) (A
 		ParticipantID:       ManagerParticipantID,
 		AgentName:           managerDisplayName,
 		Profile:             runtimeProfile,
+		RuntimeOptions:      utils.CloneAnyMap(managerRuntimeOptions),
 		MCPServers:          cloneMCPServers(runtimeAgent.MCPServers),
 		Credentials:         managerCredentials,
 		PreviousCredentials: sortedStringKeys(managerCredentials),
@@ -653,6 +656,7 @@ func (s *Service) ensureCodexManager(ctx context.Context, forceRecreate bool) (A
 		info.State = agentruntime.StateRunning
 	}
 	manager := s.newCodexManagerAgent(managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt, info.HandleID, info.State, string(info.State), startProfile, detectionResults)
+	manager.RuntimeOptions = utils.CloneAnyMap(managerRuntimeOptions)
 	applyManagerMCPServers(&manager, managerMCPServers)
 	manager.SetRuntimeProvision(managerCredentials, managerInitShell)
 	manager.AgentProfile.EnvRestartRequired = false
@@ -827,7 +831,7 @@ func (s *Service) persistManagerAgent(ctx context.Context, manager Agent, runtim
 	manager.RuntimeName = RuntimeNameCodex
 	manager.SandboxEnabled = false
 	manager.Image = ""
-	manager.RuntimeOptions = nil
+	manager.RuntimeOptions = utils.CloneAnyMap(manager.RuntimeOptions)
 	if strings.TrimSpace(manager.Name) == "" {
 		manager.Name = ManagerName
 	}
@@ -843,6 +847,9 @@ func (s *Service) persistManagerAgent(ctx context.Context, manager Agent, runtim
 
 	s.mu.Lock()
 	if existing, ok := s.agents[ManagerUserID]; ok {
+		if manager.RuntimeOptions == nil {
+			manager.RuntimeOptions = utils.CloneAnyMap(existing.RuntimeOptions)
+		}
 		// A successful runtime start clears requirements already applied to that
 		// runtime, but a concurrent config change must keep its recreate signal.
 		runtimeInputsChangedAfterApply := runtimeApplied && (!reflect.DeepEqual(manager.MCPServers, existing.MCPServers) ||

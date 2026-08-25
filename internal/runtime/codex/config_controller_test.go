@@ -66,3 +66,17 @@ func TestValidateConfigRejectsProviderWithoutUsableResponsesOrChatEndpoint(t *te
 		t.Fatalf("ValidateConfig() error = %v, want unsupported provider rejection", err)
 	}
 }
+
+func TestRestartRequiredWhenMemoryModeChanges(t *testing.T) {
+	rt := &Runtime{}
+	restart, err := rt.RestartRequired(agentruntime.RuntimeConfigChange{
+		Previous: agentruntime.RuntimeConfigSnapshot{Options: map[string]any{memoryModeOptionKey: MemoryModeEnabled}},
+		Current:  agentruntime.RuntimeConfigSnapshot{Options: map[string]any{memoryModeOptionKey: MemoryModeDisabled}},
+	})
+	if err != nil {
+		t.Fatalf("RestartRequired() error = %v", err)
+	}
+	if !restart {
+		t.Fatal("RestartRequired() = false, want true for memory mode change")
+	}
+}

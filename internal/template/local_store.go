@@ -112,15 +112,15 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 }
 
 func (s *LocalStore) FetchWorkspace(_ context.Context, id string) (WorkspaceRef, error) {
-	id = strings.TrimSpace(id)
-	if err := validateLocalTemplateID(id); err != nil {
+	id, manifest, err := s.loadTemplate(id)
+	if err != nil {
 		return WorkspaceRef{}, err
 	}
 	root := s.templateRoot(id)
 	if !templateLayoutExists(root) && !legacyTemplateWorkspaceExists(root) {
 		return WorkspaceRef{}, nil
 	}
-	return materializeTemplateDir(root)
+	return materializeTemplateDir(root, manifest.RuntimeKind)
 }
 
 func (s *LocalStore) ListWorkspace(_ context.Context, id, workspacePath string) (apitypes.WorkspaceListing, error) {
@@ -182,7 +182,7 @@ func (s *LocalStore) Publish(_ context.Context, spec PublishSpec) (Template, err
 		return Template{}, err
 	}
 	if normalized.WorkspaceRef.Kind == WorkspaceKindDir {
-		if err := writeTemplateLayout(normalized.WorkspaceRef, tmpDir, normalized.MCPServers); err != nil {
+		if err := writeTemplateLayout(normalized.WorkspaceRef, tmpDir, normalized.RuntimeKind, normalized.MCPServers); err != nil {
 			return Template{}, err
 		}
 	}

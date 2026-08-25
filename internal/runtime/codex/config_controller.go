@@ -267,5 +267,7 @@ func codexRuntimeOptionsChanged(previous, current map[string]any) bool {
 	if err != nil {
 		return true
 	}
-	return previousOpts.LocalWorkspaceDir != currentOpts.LocalWorkspaceDir || previousOpts.ExecutionMode != currentOpts.ExecutionMode
+	return previousOpts.LocalWorkspaceDir != currentOpts.LocalWorkspaceDir ||
+		previousOpts.ExecutionMode != currentOpts.ExecutionMode ||
+		previousOpts.MemoryMode != currentOpts.MemoryMode
 }
