@@ -294,19 +294,10 @@
 
   width: 100%;
   height: 100%;
-  padding: 14px 16px 20px;
+  padding: var(--space-6) var(--space-8) 28px;
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-
-.agent-detail-side-panel .agent-detail-pane .entity-header {
-  grid-template-columns: 48px minmax(0, 1fr);
-}
-
-.agent-detail-side-panel .agent-detail-pane .entity-toolbar {
-  grid-column: 1 / -1;
-  justify-content: flex-start;
 }
 
 @container agent-detail-drawer (max-width: 1040px) {
