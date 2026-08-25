@@ -54,7 +54,7 @@ function renderMessageList({
 }
 
 describe("ConversationMessageList profile preview", () => {
-  it("does not reopen the compact preview when focus returns from agent details", () => {
+  it("opens the same profile preview for agent avatars", () => {
     const { onOpenAgentDetail, onPreviewUser } = renderMessageList();
     const avatar = screen.getByRole("button", { name: "profilePreview Builder" });
 
@@ -62,8 +62,8 @@ describe("ConversationMessageList profile preview", () => {
     expect(onPreviewUser).not.toHaveBeenCalled();
 
     fireEvent.click(avatar);
-    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: agentUser.id }), avatar);
-    expect(onPreviewUser).not.toHaveBeenCalled();
+    expect(onOpenAgentDetail).not.toHaveBeenCalled();
+    expect(onPreviewUser).toHaveBeenCalledWith(agentUser, avatar);
   });
 
   it("still opens the compact preview when a human avatar is activated", () => {

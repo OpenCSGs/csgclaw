@@ -66,7 +66,6 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   visibleMessages,
   onCancelProfilePreviewClose,
   onCloseProfilePreview,
-  onOpenAgentDetail,
   onMessageAction,
   onOpenThread,
   onPreviewUser,
@@ -136,10 +135,6 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                 aria-label={`${t("profilePreview")} ${user.name}`}
                 onBlur={onCloseProfilePreview}
                 onClick={(event) => {
-                  if (messageAgent && onOpenAgentDetail) {
-                    onOpenAgentDetail(messageAgent, event.currentTarget);
-                    return;
-                  }
                   onPreviewUser(user, event.currentTarget);
                 }}
                 onPointerEnter={(event) => {

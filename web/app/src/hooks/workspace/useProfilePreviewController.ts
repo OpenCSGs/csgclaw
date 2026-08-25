@@ -13,7 +13,8 @@ type ProfilePreviewState = {
   type: "user" | typeof WorkspacePaneTypes.agent;
 };
 
-const PROFILE_PREVIEW_CLOSE_DELAY_MS = 120;
+export const PROFILE_PREVIEW_OPEN_DELAY_MS = 350;
+export const PROFILE_PREVIEW_CLOSE_DELAY_MS = 180;
 
 export function useProfilePreviewController({
   agentItems,
@@ -25,7 +26,17 @@ export function useProfilePreviewController({
 }: UseProfilePreviewControllerArgs): ProfilePreviewController {
   const [profilePreview, setProfilePreview] = useState<ProfilePreviewState | null>(null);
   const profilePreviewRef = useRef<HTMLElement | null>(null);
+  const profilePreviewOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const profilePreviewCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearProfilePreviewOpenTimer() {
+    const timer = profilePreviewOpenTimerRef.current;
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    profilePreviewOpenTimerRef.current = null;
+  }
 
   function clearProfilePreviewCloseTimer() {
     const timer = profilePreviewCloseTimerRef.current;
@@ -58,22 +69,38 @@ export function useProfilePreviewController({
     }
 
     function handleViewportChange() {
+      clearProfilePreviewOpenTimer();
       clearProfilePreviewCloseTimer();
       setProfilePreview(null);
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      clearProfilePreviewOpenTimer();
+      clearProfilePreviewCloseTimer();
+      setProfilePreview(null);
+      activeAnchor.focus();
+    }
+
     document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", handleViewportChange);
     window.addEventListener("scroll", handleViewportChange, true);
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", handleViewportChange);
       window.removeEventListener("scroll", handleViewportChange, true);
     };
   }, [profilePreview]);
 
   useEffect(() => {
-    return () => clearProfilePreviewCloseTimer();
+    return () => {
+      clearProfilePreviewOpenTimer();
+      clearProfilePreviewCloseTimer();
+    };
   }, []);
 
   const previewUser =
@@ -110,6 +137,7 @@ export function useProfilePreviewController({
     if (!target || !anchor) {
       return;
     }
+    clearProfilePreviewOpenTimer();
     clearProfilePreviewCloseTimer();
     const rect = anchor.getBoundingClientRect();
     setProfilePreview((current) => {
@@ -145,6 +173,7 @@ export function useProfilePreviewController({
     if (!item?.id || !anchor) {
       return;
     }
+    clearProfilePreviewOpenTimer();
     clearProfilePreviewCloseTimer();
     const itemID = item.id;
     const rect = anchor.getBoundingClientRect();
@@ -178,7 +207,12 @@ export function useProfilePreviewController({
   }
 
   function showParticipantPreview(user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) {
-    openProfilePreview(user, anchor, "hover");
+    clearProfilePreviewOpenTimer();
+    clearProfilePreviewCloseTimer();
+    profilePreviewOpenTimerRef.current = setTimeout(() => {
+      profilePreviewOpenTimerRef.current = null;
+      openProfilePreview(user, anchor, "hover");
+    }, PROFILE_PREVIEW_OPEN_DELAY_MS);
   }
 
   function openAgentPreview(item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) {
@@ -186,15 +220,22 @@ export function useProfilePreviewController({
   }
 
   function showAgentPreview(item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) {
-    openAgentProfilePreview(item, anchor, "hover");
+    clearProfilePreviewOpenTimer();
+    clearProfilePreviewCloseTimer();
+    profilePreviewOpenTimerRef.current = setTimeout(() => {
+      profilePreviewOpenTimerRef.current = null;
+      openAgentProfilePreview(item, anchor, "hover");
+    }, PROFILE_PREVIEW_OPEN_DELAY_MS);
   }
 
   function closeProfilePreview() {
+    clearProfilePreviewOpenTimer();
     clearProfilePreviewCloseTimer();
     setProfilePreview(null);
   }
 
   function scheduleProfilePreviewClose() {
+    clearProfilePreviewOpenTimer();
     clearProfilePreviewCloseTimer();
     profilePreviewCloseTimerRef.current = setTimeout(() => {
       profilePreviewCloseTimerRef.current = null;

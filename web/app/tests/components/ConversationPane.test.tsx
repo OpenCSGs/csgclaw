@@ -631,7 +631,7 @@ describe("ConversationPane", () => {
     expect(onOpenAgentDetail).not.toHaveBeenCalled();
   });
 
-  it("opens agent details instead of profile details when clicking an agent avatar", async () => {
+  it("opens the profile preview when clicking an agent avatar", async () => {
     const user = userEvent.setup();
     const onOpenAgentDetail = vi.fn();
     const onPreviewUser = vi.fn();
@@ -646,11 +646,13 @@ describe("ConversationPane", () => {
     await user.hover(avatar);
     expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
 
+    onPreviewUser.mockClear();
     await user.click(avatar);
-    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+    expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+    expect(onOpenAgentDetail).not.toHaveBeenCalled();
   });
 
-  it("opens agent details when the message sender id is a channel identity alias", async () => {
+  it("opens the profile preview when the message sender id is a channel identity alias", async () => {
     const user = userEvent.setup();
     const weatherUser: IMUser = {
       avatar: "O",
@@ -664,6 +666,7 @@ describe("ConversationPane", () => {
       ["openclaw-weather", weatherUser],
     ]);
     const onOpenAgentDetail = vi.fn();
+    const onPreviewUser = vi.fn();
 
     renderThreadPane({
       agents: [{ id: "openclaw-weather", name: "OpenClaw weather", role: "worker" }],
@@ -677,15 +680,15 @@ describe("ConversationPane", () => {
         },
       ],
       onOpenAgentDetail,
+      onPreviewUser,
       usersByIdOverride: userAliases,
     });
 
-    await user.click(screen.getByRole("button", { name: "profilePreview openclaw-weather" }));
+    const avatar = screen.getByRole("button", { name: "profilePreview openclaw-weather" });
+    await user.click(avatar);
 
-    expect(onOpenAgentDetail).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "openclaw-weather" }),
-      expect.any(HTMLElement),
-    );
+    expect(onPreviewUser).toHaveBeenCalledWith(weatherUser, avatar);
+    expect(onOpenAgentDetail).not.toHaveBeenCalled();
   });
 
   it("renders agent details as a modal drawer with keyboard dismissal", async () => {

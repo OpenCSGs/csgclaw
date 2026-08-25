@@ -556,7 +556,6 @@ function ThreadMessage({
   t,
   onCancelProfilePreviewClose,
   onCloseProfilePreview,
-  onOpenAgentDetail,
   onPreviewUser,
   onQuestionSelect,
   compact = false,
@@ -579,10 +578,6 @@ function ThreadMessage({
           aria-label={`${t("profilePreview")} ${name}`}
           onBlur={onCloseProfilePreview}
           onClick={(event) => {
-            if (messageAgent && onOpenAgentDetail) {
-              onOpenAgentDetail(messageAgent, event.currentTarget);
-              return;
-            }
             onPreviewUser(user, event.currentTarget);
           }}
           onPointerEnter={(event) => {
