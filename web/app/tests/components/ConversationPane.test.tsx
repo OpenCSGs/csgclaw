@@ -191,6 +191,7 @@ function renderThreadPane({
   onCloseProfilePreview = vi.fn(),
   onOpenAgentDetail = vi.fn(),
   onPreviewUser = vi.fn(),
+  onShowProfilePreview,
   onRemoveMember = vi.fn(),
   replies = [],
   showToolCalls = false,
@@ -223,6 +224,7 @@ function renderThreadPane({
   onCloseProfilePreview?: () => void;
   onOpenAgentDetail?: NonNullable<ConversationPaneProps["onOpenAgentDetail"]>;
   onPreviewUser?: (user: IMUser) => void;
+  onShowProfilePreview?: ConversationPaneProps["onShowProfilePreview"];
   onRemoveMember?: (memberID: string) => void;
   memberActionBusyID?: string;
   memberActionError?: string;
@@ -310,6 +312,7 @@ function renderThreadPane({
         onRemoveMember={onRemoveMember}
         onProviderLogin={() => {}}
         onPreviewUser={onPreviewUser}
+        onShowProfilePreview={onShowProfilePreview}
         onSendMessage={() => {}}
         onSendThreadReply={() => {}}
         onSyncComposer={() => {}}
@@ -610,19 +613,21 @@ describe("ConversationPane", () => {
     const onCloseProfilePreview = vi.fn();
     const onOpenAgentDetail = vi.fn();
     const onPreviewUser = vi.fn();
+    const onShowProfilePreview = vi.fn();
 
     renderThreadPane({
       onCancelProfilePreviewClose,
       onCloseProfilePreview,
       onOpenAgentDetail,
       onPreviewUser,
+      onShowProfilePreview,
     });
 
     const avatar = screen.getAllByRole("button", { name: "profilePreview manager" })[0] as HTMLElement;
     await user.hover(avatar);
 
     expect(onCancelProfilePreviewClose).toHaveBeenCalled();
-    expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+    expect(onShowProfilePreview).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
 
     await user.unhover(avatar);
     expect(onCloseProfilePreview).toHaveBeenCalled();
@@ -635,16 +640,18 @@ describe("ConversationPane", () => {
     const user = userEvent.setup();
     const onOpenAgentDetail = vi.fn();
     const onPreviewUser = vi.fn();
+    const onShowProfilePreview = vi.fn();
 
     renderThreadPane({
       agents: [{ id: "u-manager", name: "manager", role: "worker" }],
       onOpenAgentDetail,
       onPreviewUser,
+      onShowProfilePreview,
     });
 
     const avatar = screen.getAllByRole("button", { name: "profilePreview manager" })[0] as HTMLElement;
     await user.hover(avatar);
-    expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+    expect(onShowProfilePreview).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
 
     onPreviewUser.mockClear();
     await user.click(avatar);

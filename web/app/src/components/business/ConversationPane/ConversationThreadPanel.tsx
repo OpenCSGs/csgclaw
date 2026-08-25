@@ -79,6 +79,7 @@ export type ConversationThreadPanelProps = {
   onAddAttachments?: (files: File[]) => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onShowProfilePreview?: (user: IMUser, anchor: HTMLElement) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   questionMode?: QuestionAnswerMode;
   onRemoveAttachment?: (id: string) => void;
@@ -123,6 +124,7 @@ export function ConversationThreadPanel({
   onCloseProfilePreview,
   onOpenAgentDetail,
   onPreviewUser,
+  onShowProfilePreview,
   onQuestionSelect,
   questionMode,
   onRemoveAttachment = () => {},
@@ -315,6 +317,7 @@ export function ConversationThreadPanel({
               onCloseProfilePreview={onCloseProfilePreview}
               onOpenAgentDetail={onOpenAgentDetail}
               onPreviewUser={onPreviewUser}
+              onShowProfilePreview={onShowProfilePreview}
               onQuestionSelect={onQuestionSelect}
             />
           </div>
@@ -335,6 +338,7 @@ export function ConversationThreadPanel({
                 onCloseProfilePreview={onCloseProfilePreview}
                 onOpenAgentDetail={onOpenAgentDetail}
                 onPreviewUser={onPreviewUser}
+                onShowProfilePreview={onShowProfilePreview}
                 onQuestionSelect={onQuestionSelect}
               />
             ))
@@ -541,6 +545,7 @@ type ThreadMessageProps = {
   onCloseProfilePreview?: () => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onShowProfilePreview?: (user: IMUser, anchor: HTMLElement) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   t: TranslateFn;
   theme: ThemeMode;
@@ -557,6 +562,7 @@ function ThreadMessage({
   onCancelProfilePreviewClose,
   onCloseProfilePreview,
   onPreviewUser,
+  onShowProfilePreview,
   onQuestionSelect,
   compact = false,
 }: ThreadMessageProps) {
@@ -582,7 +588,7 @@ function ThreadMessage({
           }}
           onPointerEnter={(event) => {
             onCancelProfilePreviewClose?.();
-            onPreviewUser(user, event.currentTarget);
+            onShowProfilePreview?.(user, event.currentTarget);
           }}
           onPointerLeave={onCloseProfilePreview}
         >

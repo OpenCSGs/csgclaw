@@ -122,6 +122,7 @@ export function ConversationPane({
   messageListRef,
   editorRef,
   onPreviewUser,
+  onShowProfilePreview,
   onDeleteRoom,
   onClearRoomMessages = (_id) => {},
   notifyAllAgentsBusy = false,
@@ -336,6 +337,7 @@ export function ConversationPane({
       onSetThreadSlashIndex={onSetThreadSlashIndex}
       mentionableUsers={conversationMembers}
       onPreviewUser={onPreviewUser}
+      onShowProfilePreview={onShowProfilePreview}
       onQuestionSelect={threadQuestionMode.select}
       questionMode={threadQuestionMode}
       onSend={onSendThreadReply}
@@ -422,6 +424,7 @@ export function ConversationPane({
         onOpenAgentDetail={onOpenAgentDetail}
         onOpenThread={onOpenThread}
         onPreviewUser={onPreviewUser}
+        onShowProfilePreview={onShowProfilePreview}
         onQuestionSelect={questionMode.select}
       />
 

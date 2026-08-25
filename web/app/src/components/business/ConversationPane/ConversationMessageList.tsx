@@ -44,6 +44,7 @@ export type ConversationMessageListProps = {
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onShowProfilePreview?: (user: IMUser, anchor: HTMLElement) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   t: TranslateFn;
   theme: ThemeMode;
@@ -69,6 +70,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   onMessageAction,
   onOpenThread,
   onPreviewUser,
+  onShowProfilePreview,
   onQuestionSelect,
 }: ConversationMessageListProps) {
   const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
@@ -139,7 +141,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                 }}
                 onPointerEnter={(event) => {
                   onCancelProfilePreviewClose?.();
-                  onPreviewUser(user, event.currentTarget);
+                  onShowProfilePreview?.(user, event.currentTarget);
                 }}
                 onPointerLeave={onCloseProfilePreview}
               >

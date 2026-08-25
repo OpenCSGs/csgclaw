@@ -135,6 +135,7 @@ export type ConversationPaneProps = {
   onCancelProfilePreviewClose?: () => void;
   onCloseProfilePreview?: () => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onShowProfilePreview?: (user: IMUser, anchor: HTMLElement) => void;
   onProviderLogin: (provider: string) => VoidOrPromise;
   onRetrySend?: () => VoidOrPromise;
   onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => VoidOrPromise;

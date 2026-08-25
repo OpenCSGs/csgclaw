@@ -32,6 +32,7 @@ function renderMessageList({
 } = {}) {
   const onOpenAgentDetail = vi.fn<(agent: AgentLike, anchor: HTMLElement) => void>();
   const onPreviewUser = vi.fn<(user: IMUser, anchor: HTMLElement) => void>();
+  const onShowProfilePreview = vi.fn<(user: IMUser, anchor: HTMLElement) => void>();
   render(
     <ConversationMessageList
       agents={agents}
@@ -48,17 +49,22 @@ function renderMessageList({
       onOpenAgentDetail={onOpenAgentDetail}
       onOpenThread={vi.fn()}
       onPreviewUser={onPreviewUser}
+      onShowProfilePreview={onShowProfilePreview}
     />,
   );
-  return { onOpenAgentDetail, onPreviewUser };
+  return { onOpenAgentDetail, onPreviewUser, onShowProfilePreview };
 }
 
 describe("ConversationMessageList profile preview", () => {
   it("opens the same profile preview for agent avatars", () => {
-    const { onOpenAgentDetail, onPreviewUser } = renderMessageList();
+    const { onOpenAgentDetail, onPreviewUser, onShowProfilePreview } = renderMessageList();
     const avatar = screen.getByRole("button", { name: "profilePreview Builder" });
 
     avatar.focus();
+    expect(onPreviewUser).not.toHaveBeenCalled();
+
+    fireEvent.pointerEnter(avatar);
+    expect(onShowProfilePreview).toHaveBeenCalledWith(agentUser, avatar);
     expect(onPreviewUser).not.toHaveBeenCalled();
 
     fireEvent.click(avatar);
