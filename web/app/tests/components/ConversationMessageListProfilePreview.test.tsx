@@ -54,9 +54,9 @@ function renderMessageList({
 }
 
 describe("ConversationMessageList profile preview", () => {
-  it("opens the same profile preview for agent avatars", () => {
+  it("opens the profile drawer for agent avatars", () => {
     const { onOpenAgentDetail, onPreviewUser } = renderMessageList();
-    const avatar = screen.getByRole("button", { name: "profilePreview Builder" });
+    const avatar = screen.getByRole("button", { name: "agentDetailPanel Builder" });
 
     avatar.focus();
     expect(onPreviewUser).not.toHaveBeenCalled();
@@ -65,8 +65,8 @@ describe("ConversationMessageList profile preview", () => {
     expect(onPreviewUser).not.toHaveBeenCalled();
 
     fireEvent.click(avatar);
-    expect(onOpenAgentDetail).not.toHaveBeenCalled();
-    expect(onPreviewUser).toHaveBeenCalledWith(agentUser, avatar);
+    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: agentUser.id }), avatar);
+    expect(onPreviewUser).not.toHaveBeenCalled();
   });
 
   it("still opens the compact preview when a human avatar is activated", () => {
@@ -94,7 +94,7 @@ describe("ConversationMessageList profile preview", () => {
       ],
     });
 
-    const avatar = screen.getByRole("button", { name: "profilePreview Builder" });
+    const avatar = screen.getByRole("button", { name: "agentDetailPanel Builder" });
     expect(avatar.querySelector(".message-avatar-status")).not.toHaveClass("online");
   });
 });

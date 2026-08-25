@@ -62,6 +62,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   theme,
   usersById,
   visibleMessages,
+  onOpenAgentDetail,
   onMessageAction,
   onOpenThread,
   onPreviewUser,
@@ -128,8 +129,12 @@ export const ConversationMessageList = memo(function ConversationMessageList({
               <button
                 type="button"
                 className="avatar avatar-button"
-                aria-label={`${t("profilePreview")} ${user.name}`}
+                aria-label={`${t(messageAgent ? "agentDetailPanel" : "profilePreview")} ${user.name}`}
                 onClick={(event) => {
+                  if (messageAgent && onOpenAgentDetail) {
+                    onOpenAgentDetail(messageAgent, event.currentTarget);
+                    return;
+                  }
                   onPreviewUser(user, event.currentTarget);
                 }}
               >
