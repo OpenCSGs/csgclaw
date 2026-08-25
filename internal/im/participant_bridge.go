@@ -249,6 +249,39 @@ func (b *ParticipantBridge) Ack(participantID, messageID string) {
 	}
 	b.removePendingLocked(participantID, messageID)
 	b.markSeenLocked(participantID, messageID)
+	b.drainPendingLocked(participantID)
+}
+
+// drainPendingLocked refills active subscribers after a consumer acknowledges
+// an event. This matters when a consumer was temporarily backpressured: once
+// the subscriber channel filled, enqueue stored later events in pending, and
+// the acknowledgement is the first reliable signal that capacity is available
+// again without forcing the consumer to replace its subscription.
+func (b *ParticipantBridge) drainPendingLocked(participantID string) {
+	pending := append([]ParticipantEvent(nil), b.pending[participantID]...)
+	if len(pending) == 0 {
+		return
+	}
+	delete(b.pending, participantID)
+	subs := b.subscribers[participantID]
+	for _, evt := range pending {
+		if b.hasSeenOrInflightLocked(participantID, evt.MessageID) {
+			continue
+		}
+		sent := false
+		for ch := range subs {
+			select {
+			case ch <- evt:
+				sent = true
+			default:
+			}
+		}
+		if sent {
+			b.markInflightLocked(participantID, evt)
+			continue
+		}
+		b.addPendingLocked(participantID, evt)
+	}
 }
 
 func (b *ParticipantBridge) Requeue(participantID string, evt ParticipantEvent) {

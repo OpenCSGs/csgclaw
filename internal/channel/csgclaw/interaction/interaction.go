@@ -31,6 +31,25 @@ type eventSubmitter interface {
 	IsCurrent(channel.BindingID, agentengine.ConversationKey, string) bool
 }
 
+type agentProvider interface {
+	Get(context.Context, string) (agentengine.Agent, error)
+}
+
+type sessionResolver interface {
+	ExistingEngineSession(context.Context, string, string) (string, bool, error)
+}
+
+type Option func(*Coordinator)
+
+// WithRuntimeIdentity lets detached requests participate in the same
+// Runtime/session cancellation lifecycle as native Codex interactions.
+func WithRuntimeIdentity(agents agentProvider, sessions sessionResolver) Option {
+	return func(coordinator *Coordinator) {
+		coordinator.agents = agents
+		coordinator.sessions = sessions
+	}
+}
+
 type detachedRequest struct {
 	turn    channel.TurnContext
 	binding channel.Binding
@@ -43,6 +62,8 @@ type Coordinator struct {
 	broker       runtimecodex.UserInputBroker
 	participants participantResolver
 	store        *delivery.IMTranscriptStore
+	agents       agentProvider
+	sessions     sessionResolver
 
 	mu        sync.Mutex
 	submitter eventSubmitter
@@ -53,6 +74,7 @@ func NewCoordinator(
 	broker runtimecodex.UserInputBroker,
 	participants participantResolver,
 	store *delivery.IMTranscriptStore,
+	opts ...Option,
 ) *Coordinator {
 	if broker == nil || participants == nil || store == nil {
 		return nil
@@ -62,6 +84,11 @@ func NewCoordinator(
 		participants: participants,
 		store:        store,
 		requests:     make(map[string]detachedRequest),
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(coordinator)
+		}
 	}
 	broker.AddDetachedHandler(coordinator.handleDetachedResolution)
 	return coordinator
@@ -91,12 +118,13 @@ func (c *Coordinator) Activate(
 	if c == nil || c.broker == nil {
 		return activity.UserInputSnapshot{}, fmt.Errorf("structured user input is not configured")
 	}
-	if ctx != nil {
-		select {
-		case <-ctx.Done():
-			return activity.UserInputSnapshot{}, ctx.Err()
-		default:
-		}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return activity.UserInputSnapshot{}, ctx.Err()
+	default:
 	}
 	questions := make([]activity.UserInputQuestionSnapshot, 0, len(args.Questions))
 	for _, question := range args.Questions {
@@ -120,13 +148,14 @@ func (c *Coordinator) Activate(
 	if args.AutoResolutionMS != nil {
 		autoResolve = time.Duration(*args.AutoResolutionMS) * time.Millisecond
 	}
+	execution, err := c.execution(ctx, turn)
+	if err != nil {
+		return activity.UserInputSnapshot{}, err
+	}
+	execution.ToolCallID = "structured-output-" + strings.TrimSpace(turn.SourceMessageID)
+	execution.ToolKind = "request_user_input"
 	snapshot, err := c.broker.CreateDetached(runtimecodex.PendingUserInputRequest{
-		Execution: activity.ExecutionRef{
-			RuntimeKind: "codex",
-			TurnID:      string(turn.TurnID),
-			ToolCallID:  "structured-output-" + strings.TrimSpace(turn.SourceMessageID),
-			ToolKind:    "request_user_input",
-		},
+		Execution:   execution,
 		Questions:   questions,
 		RequestedAt: time.Now().UTC(),
 		AutoResolve: autoResolve,
@@ -153,6 +182,34 @@ func (c *Coordinator) Activate(
 	}
 	c.mu.Unlock()
 	return snapshot, nil
+}
+
+func (c *Coordinator) execution(ctx context.Context, turn channel.TurnContext) (activity.ExecutionRef, error) {
+	if c.agents == nil || c.sessions == nil {
+		return activity.ExecutionRef{}, fmt.Errorf("structured user input runtime identity is not configured")
+	}
+	selected, err := c.agents.Get(ctx, strings.TrimSpace(turn.AgentID))
+	if err != nil {
+		return activity.ExecutionRef{}, fmt.Errorf("resolve structured user input agent: %w", err)
+	}
+	runtimeID := strings.TrimSpace(selected.Status.RuntimeID)
+	if runtimeID == "" {
+		return activity.ExecutionRef{}, fmt.Errorf("structured user input runtime is unavailable")
+	}
+	sessionID, ok, err := c.sessions.ExistingEngineSession(ctx, runtimeID, strings.TrimSpace(string(turn.ConversationKey)))
+	if err != nil {
+		return activity.ExecutionRef{}, fmt.Errorf("resolve structured user input session: %w", err)
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if !ok || sessionID == "" {
+		return activity.ExecutionRef{}, fmt.Errorf("structured user input session is unavailable")
+	}
+	return activity.ExecutionRef{
+		RuntimeKind: "codex",
+		RuntimeID:   runtimeID,
+		SessionID:   sessionID,
+		TurnID:      string(turn.TurnID),
+	}, nil
 }
 
 func (c *Coordinator) handleDetachedResolution(resolution runtimecodex.DetachedUserInputResolution) {

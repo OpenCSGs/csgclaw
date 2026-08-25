@@ -767,7 +767,6 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	origNewLLMService := NewLLMService
 	origEnsureBootstrapManager := EnsureBootstrapManager
 	origStartConfiguredAgents := StartConfiguredAgents
-	origNewCodexBridgeManager := NewCodexBridgeManager
 	origEnsureCLIProxy := EnsureCLIProxy
 	origShutdownCLIProxy := ShutdownCLIProxy
 	t.Cleanup(func() {
@@ -778,7 +777,6 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		NewLLMService = origNewLLMService
 		EnsureBootstrapManager = origEnsureBootstrapManager
 		StartConfiguredAgents = origStartConfiguredAgents
-		NewCodexBridgeManager = origNewCodexBridgeManager
 		EnsureCLIProxy = origEnsureCLIProxy
 		ShutdownCLIProxy = origShutdownCLIProxy
 	})
@@ -1114,68 +1112,6 @@ func TestServeForegroundPassesConfigPathToServer(t *testing.T) {
 	}
 }
 
-func TestServeForegroundStartsCodexBridgesAfterConfiguredAgents(t *testing.T) {
-	restore := stubServeDependencies(t)
-	defer restore()
-
-	origNewCodexBridgeManager := NewCodexBridgeManager
-	t.Cleanup(func() {
-		NewCodexBridgeManager = origNewCodexBridgeManager
-	})
-
-	startedAgents := make(chan struct{})
-	releaseAgents := make(chan struct{})
-	bridgeStarted := make(chan struct{})
-	bridgeClosed := make(chan struct{})
-
-	StartConfiguredAgents = func(context.Context, *agent.Service) error {
-		close(startedAgents)
-		<-releaseAgents
-		return nil
-	}
-	NewCodexBridgeManager = func(config.Config, *agent.Service, *feishu.Service, worklease.ParticipantWorkReporter) (codexBridgeManager, error) {
-		return &fakeCodexBridgeManager{
-			start: func(context.Context) error {
-				select {
-				case <-startedAgents:
-				default:
-					t.Fatal("codex bridge started before configured agents")
-				}
-				close(bridgeStarted)
-				return nil
-			},
-			close: func() {
-				close(bridgeClosed)
-			},
-		}, nil
-	}
-	RunServer = func(opts server.Options) error {
-		if opts.OnReady == nil {
-			return fmt.Errorf("OnReady is nil")
-		}
-		opts.OnReady(nil, nil)
-		close(releaseAgents)
-		if opts.Context == nil {
-			return fmt.Errorf("Context is nil")
-		}
-		return nil
-	}
-
-	if err := serveForeground(context.Background(), testContext(), config.Config{Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"}}, "json"); err != nil {
-		t.Fatalf("serveForeground() error = %v", err)
-	}
-	select {
-	case <-bridgeStarted:
-	case <-time.After(time.Second):
-		t.Fatal("codex bridge manager did not start")
-	}
-	select {
-	case <-bridgeClosed:
-	case <-time.After(time.Second):
-		t.Fatal("codex bridge manager did not close")
-	}
-}
-
 func TestServeForegroundSharesOneAgentEngineWithFeishuBindings(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
@@ -1222,12 +1158,15 @@ func TestServeForegroundSharesOneAgentEngineWithFeishuBindings(t *testing.T) {
 	}
 }
 
-func TestServeForegroundStartsBuiltInIMAdapterSource(t *testing.T) {
+func TestServeForegroundUsesSingleBuiltInIMAdapterSource(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
 
 	started := make(chan struct{})
 	closed := make(chan struct{})
+	handled := make(chan im.ParticipantEvent, 2)
+	var sourceBridge *im.ParticipantBridge
+	var cancelSubscription func()
 	NewCSGClawAdapterSource = func(
 		engine *agentengine.Engine,
 		_ *agent.Service,
@@ -1240,15 +1179,55 @@ func TestServeForegroundStartsBuiltInIMAdapterSource(t *testing.T) {
 		if engine == nil || workReporter == nil || bridge == nil {
 			t.Fatal("built-in IM adapter dependencies were not assembled")
 		}
+		sourceBridge = bridge
 		return &fakeCSGClawAdapterSource{
 			start: func(context.Context) error {
+				events, cancel := bridge.Subscribe("manager")
+				cancelSubscription = cancel
+				go func() {
+					if event, ok := <-events; ok {
+						handled <- event
+					}
+				}()
 				close(started)
 				return nil
 			},
-			close: func() { close(closed) },
+			close: func() {
+				if cancelSubscription != nil {
+					cancelSubscription()
+				}
+				close(closed)
+			},
 		}, nil
 	}
-	RunServer = func(server.Options) error { return nil }
+	RunServer = func(opts server.Options) error {
+		if opts.ParticipantBridge != sourceBridge {
+			return fmt.Errorf("server and built-in IM adapter use different participant bridges")
+		}
+		if got := opts.ParticipantBridge.SubscriberCount("manager"); got != 1 {
+			return fmt.Errorf("manager participant subscribers = %d, want exactly 1", got)
+		}
+		room := im.Room{ID: "room-1", IsDirect: true, Members: []string{"user-admin", "manager"}}
+		sender := im.User{ID: "user-admin", Name: "admin"}
+		message := im.Message{ID: "message-1", SenderID: sender.ID, Content: "hello"}
+		if ok := opts.ParticipantBridge.EnqueueMessageEvent(room, sender, message, "manager"); !ok {
+			return fmt.Errorf("message was not delivered to built-in IM adapter")
+		}
+		select {
+		case event := <-handled:
+			if event.MessageID != message.ID {
+				return fmt.Errorf("handled message = %q, want %q", event.MessageID, message.ID)
+			}
+		case <-time.After(time.Second):
+			return fmt.Errorf("built-in IM adapter did not handle message")
+		}
+		select {
+		case event := <-handled:
+			return fmt.Errorf("message was handled more than once: %q", event.MessageID)
+		case <-time.After(20 * time.Millisecond):
+		}
+		return nil
+	}
 
 	if err := serveForeground(context.Background(), testContext(), config.Config{
 		Server: config.ServerConfig{ListenAddr: "127.0.0.1:18080"},
@@ -1270,20 +1249,17 @@ func TestServeForegroundStartsBuiltInIMAdapterSource(t *testing.T) {
 func TestChannelBindingActivatorRoutesToChannelOwner(t *testing.T) {
 	t.Parallel()
 
-	target := agent.Agent{ID: "agent-1"}
 	var csgclawCalls, feishuCalls int
-	csgclawManager := &fakeCodexBridgeManager{refresh: func(_ context.Context, got agent.Agent, channel string) error {
+	csgclawSource := &fakeCSGClawAdapterSource{reconcile: func(context.Context) error {
 		csgclawCalls++
-		if got.ID != target.ID || channel != csgclawchannel.ChannelID {
-			t.Fatalf("csgclaw refresh = (%q, %q)", got.ID, channel)
-		}
 		return nil
 	}}
 	feishuManager := &fakeFeishuBindingManager{reconcile: func(context.Context) error {
 		feishuCalls++
 		return nil
 	}}
-	activator := newChannelBindingActivator(csgclawManager, feishuManager)
+	activator := newChannelBindingActivator(csgclawSource, feishuManager)
+	target := agent.Agent{ID: "agent-1"}
 	if err := activator.RefreshAgentChannel(context.Background(), target, " CSGCLAW "); err != nil {
 		t.Fatalf("refresh csgclaw: %v", err)
 	}
@@ -1295,6 +1271,19 @@ func TestChannelBindingActivatorRoutesToChannelOwner(t *testing.T) {
 	}
 	if err := activator.RefreshAgentChannel(context.Background(), target, "unknown"); err == nil {
 		t.Fatal("refresh unknown channel succeeded")
+	}
+	stoppedPolicy, ok := activator.(agent.StoppedAgentBindingActivator)
+	if !ok {
+		t.Fatal("binding activator does not expose stopped-agent refresh policy")
+	}
+	if !stoppedPolicy.CanRefreshStoppedAgentBinding(csgclawchannel.ChannelID) {
+		t.Fatal("csgclaw binding should refresh independently of agent runtime state")
+	}
+	if !stoppedPolicy.CanRefreshStoppedAgentBinding(feishu.ChannelID) {
+		t.Fatal("feishu binding should refresh independently of agent runtime state")
+	}
+	if stoppedPolicy.CanRefreshStoppedAgentBinding("unknown") {
+		t.Fatal("unknown binding should not refresh while the agent is stopped")
 	}
 	feishuOnly := newChannelBindingActivator(nil, feishuManager)
 	if err := feishuOnly.RefreshAgentChannel(context.Background(), target, csgclawchannel.ChannelID); err == nil {
@@ -1789,7 +1778,6 @@ func stubServeDependencies(t *testing.T) func() {
 	origEnsureBootstrapManager := EnsureBootstrapManager
 	origStartConfiguredAgents := StartConfiguredAgents
 	origStopRunningSandboxAgents := StopRunningSandboxAgents
-	origNewCodexBridgeManager := NewCodexBridgeManager
 	origNewFeishuBindingManager := NewFeishuBindingManager
 	origNewCSGClawAdapterSource := NewCSGClawAdapterSource
 	origEnsureCLIProxy := EnsureCLIProxy
@@ -1818,9 +1806,6 @@ func stubServeDependencies(t *testing.T) func() {
 	EnsureBootstrapManager = func(context.Context, *agent.Service) error { return nil }
 	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
 	StopRunningSandboxAgents = func(context.Context, *agent.Service) error { return nil }
-	NewCodexBridgeManager = func(config.Config, *agent.Service, *feishu.Service, worklease.ParticipantWorkReporter) (codexBridgeManager, error) {
-		return nil, nil
-	}
 	NewFeishuBindingManager = func(*feishu.Service, agentengine.Interface) (feishuBindingManager, error) {
 		return nil, nil
 	}
@@ -1855,7 +1840,6 @@ func stubServeDependencies(t *testing.T) func() {
 		EnsureBootstrapManager = origEnsureBootstrapManager
 		StartConfiguredAgents = origStartConfiguredAgents
 		StopRunningSandboxAgents = origStopRunningSandboxAgents
-		NewCodexBridgeManager = origNewCodexBridgeManager
 		NewFeishuBindingManager = origNewFeishuBindingManager
 		NewCSGClawAdapterSource = origNewCSGClawAdapterSource
 		EnsureCLIProxy = origEnsureCLIProxy
@@ -1943,17 +1927,6 @@ func TestAPIBaseURLPrefersAdvertiseBaseURL(t *testing.T) {
 	want := "http://example.test/base"
 	if got != want {
 		t.Fatalf("apiBaseURL() = %q, want %q", got, want)
-	}
-}
-
-func TestCodexBridgeBaseURLUsesLocalListener(t *testing.T) {
-	got := codexBridgeBaseURL(config.ServerConfig{
-		ListenAddr:       "0.0.0.0:19090",
-		AdvertiseBaseURL: "https://public.example.test/csgclaw",
-	})
-	want := "http://127.0.0.1:19090"
-	if got != want {
-		t.Fatalf("codexBridgeBaseURL() = %q, want %q", got, want)
 	}
 }
 
@@ -2095,14 +2068,6 @@ func (b *notifyingBuffer) String() string {
 	return b.buf.String()
 }
 
-type fakeCodexBridgeManager struct {
-	start   func(context.Context) error
-	ensure  func(context.Context, agent.Agent) error
-	stop    func(string)
-	refresh func(context.Context, agent.Agent, string) error
-	close   func()
-}
-
 type fakeFeishuBindingManager struct {
 	start     func(context.Context) error
 	reconcile func(context.Context) error
@@ -2110,13 +2075,21 @@ type fakeFeishuBindingManager struct {
 }
 
 type fakeCSGClawAdapterSource struct {
-	start func(context.Context) error
-	close func()
+	start     func(context.Context) error
+	reconcile func(context.Context) error
+	close     func()
 }
 
 func (s *fakeCSGClawAdapterSource) Start(ctx context.Context) error {
 	if s != nil && s.start != nil {
 		return s.start(ctx)
+	}
+	return nil
+}
+
+func (s *fakeCSGClawAdapterSource) Reconcile(ctx context.Context) error {
+	if s != nil && s.reconcile != nil {
+		return s.reconcile(ctx)
 	}
 	return nil
 }
@@ -2142,39 +2115,6 @@ func (m *fakeFeishuBindingManager) Reconcile(ctx context.Context) error {
 }
 
 func (m *fakeFeishuBindingManager) Close() {
-	if m != nil && m.close != nil {
-		m.close()
-	}
-}
-
-func (m *fakeCodexBridgeManager) Start(ctx context.Context) error {
-	if m != nil && m.start != nil {
-		return m.start(ctx)
-	}
-	return nil
-}
-
-func (m *fakeCodexBridgeManager) EnsureAgent(ctx context.Context, a agent.Agent) error {
-	if m != nil && m.ensure != nil {
-		return m.ensure(ctx, a)
-	}
-	return nil
-}
-
-func (m *fakeCodexBridgeManager) StopAgent(agentID string) {
-	if m != nil && m.stop != nil {
-		m.stop(agentID)
-	}
-}
-
-func (m *fakeCodexBridgeManager) RefreshAgentChannel(ctx context.Context, a agent.Agent, channel string) error {
-	if m != nil && m.refresh != nil {
-		return m.refresh(ctx, a, channel)
-	}
-	return nil
-}
-
-func (m *fakeCodexBridgeManager) Close() {
 	if m != nil && m.close != nil {
 		m.close()
 	}

@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -317,5 +318,79 @@ func TestSourceRetriesEventWhileSubscriptionRemainsActive(t *testing.T) {
 	}
 	if ok := bridge.EnqueueMessageEvent(room, sender, message, "pt-worker"); !ok {
 		t.Fatal("acked retried event should be recognized as handled")
+	}
+}
+
+func TestSourceDrainsBridgePendingAfterRetryBackpressure(t *testing.T) {
+	bridge := im.NewParticipantBridge("")
+	var available atomic.Bool
+	firstAttempt := make(chan struct{})
+	var firstAttemptOnce sync.Once
+	succeeded := make(chan string, 32)
+	workers := &fakeWorkers{
+		ensured: make(chan channel.Binding, 1),
+		submits: make(chan submittedEvent, 128),
+		submit: func(_ channel.Binding, event channelbridge.BotEvent) error {
+			if !available.Load() {
+				firstAttemptOnce.Do(func() { close(firstAttempt) })
+				return errors.New("worker unavailable")
+			}
+			succeeded <- event.MessageID
+			return nil
+		},
+	}
+	source, err := newSource(
+		bridge,
+		nil,
+		fakeParticipants{items: []apitypes.Participant{{
+			ID: "pt-worker", Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent, AgentID: "agent-worker",
+		}}},
+		fakeAgents{items: map[string]agentengine.Agent{
+			"agent-worker": {ID: "agent-worker", Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: "codex"}}},
+		}},
+		workers,
+	)
+	if err != nil {
+		t.Fatalf("newSource() error = %v", err)
+	}
+	source.retryInitial = time.Millisecond
+	source.retryMax = 2 * time.Millisecond
+	if err := source.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer source.Close()
+
+	room := im.Room{ID: "room-1", IsDirect: true, Members: []string{"user-admin", "pt-worker"}}
+	sender := im.User{ID: "user-admin", Name: "admin"}
+	enqueue := func(index int) {
+		message := im.Message{
+			ID:       fmt.Sprintf("message-%02d", index),
+			SenderID: sender.ID,
+			Content:  fmt.Sprintf("message %d", index),
+		}
+		bridge.EnqueueMessageEvent(room, sender, message, "pt-worker")
+	}
+
+	enqueue(0)
+	select {
+	case <-firstAttempt:
+	case <-time.After(time.Second):
+		t.Fatal("source did not reach worker backpressure")
+	}
+	const messageCount = 24 // exceeds the ParticipantBridge subscription buffer
+	for index := 1; index < messageCount; index++ {
+		enqueue(index)
+	}
+	available.Store(true)
+
+	seen := make(map[string]struct{}, messageCount)
+	deadline := time.After(2 * time.Second)
+	for len(seen) < messageCount {
+		select {
+		case messageID := <-succeeded:
+			seen[messageID] = struct{}{}
+		case <-deadline:
+			t.Fatalf("successfully submitted messages = %d, want %d; pending events remained stranded", len(seen), messageCount)
+		}
 	}
 }
