@@ -502,7 +502,6 @@ export function WorkspaceTabPanels({
                 locale={locale}
                 t={t}
                 onSelect={onSelectConversation}
-                onPreviewUser={onPreviewUser}
               />
             ))
           ) : (
@@ -535,7 +534,6 @@ export function WorkspaceTabPanels({
                 locale={locale}
                 t={t}
                 onSelect={onSelectConversation}
-                onPreviewUser={onPreviewUser}
               />
             ))
           ) : (

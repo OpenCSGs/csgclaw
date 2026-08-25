@@ -302,14 +302,12 @@ export function WorkspaceConversationRow({
   locale,
   t,
   onSelect,
-  onPreviewUser,
 }: {
   active: boolean;
   agents?: AgentLike[];
   conversation: IMConversation;
   currentUserID: string;
   locale: LocaleCode;
-  onPreviewUser?: (user: IMUser, anchor: HTMLElement) => void;
   onSelect: (id: string) => void;
   t: TranslateFn;
   usersById: UsersById;
@@ -339,31 +337,7 @@ export function WorkspaceConversationRow({
       )}
       onClick={() => onSelect(conversation.id)}
     >
-      <span
-        className={classNames(styles.icon, isDirect && styles.avatarIcon, isDirect && styles.clickableIcon)}
-        role={isDirect ? "button" : undefined}
-        tabIndex={isDirect ? 0 : undefined}
-        aria-label={isDirect && displayUser ? `${t("profilePreview")} ${displayUser.name}` : undefined}
-        onClick={
-          isDirect && displayUser
-            ? (event) => {
-                event.stopPropagation();
-                onPreviewUser?.(displayUser, event.currentTarget);
-              }
-            : undefined
-        }
-        onKeyDown={
-          isDirect && displayUser
-            ? (event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onPreviewUser?.(displayUser, event.currentTarget);
-                }
-              }
-            : undefined
-        }
-      >
+      <span className={classNames(styles.icon, isDirect && styles.avatarIcon)} aria-hidden="true">
         {isDirect && displayUser ? (
           <AgentAvatarContent avatar={directAvatar} fallback={directAvatarFallback} />
         ) : (
