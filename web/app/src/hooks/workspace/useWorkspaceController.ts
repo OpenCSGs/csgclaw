@@ -908,7 +908,6 @@ export function useWorkspaceController() {
       onSelectAgent: selectAgent,
       onSelectModelProvider: selectModelProvider,
       onSelectHuman: selectHuman,
-      onPreviewAgent: profilePreview.openAgentPreview,
       onSelectComputer: selectComputer,
       appVersion,
       upgradeStatus,

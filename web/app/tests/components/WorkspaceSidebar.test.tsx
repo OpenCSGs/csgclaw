@@ -123,7 +123,6 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
     onOpenUpgrade: vi.fn(),
     onRefreshUpgradeStatus: vi.fn().mockResolvedValue(null),
     onUpgradeChannelChange: vi.fn(),
-    onPreviewAgent: vi.fn(),
     onPreviewUser: vi.fn(),
     onSelectAgent: vi.fn(),
     onSelectComputer: vi.fn(),

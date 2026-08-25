@@ -103,7 +103,6 @@ export function WorkspaceSidebar({
   onSelectNotificationSection,
   onSelectModelProvider,
   onSelectHuman,
-  onPreviewAgent,
   onSelectComputer,
   appVersion,
   upgradeStatus,
@@ -561,7 +560,6 @@ export function WorkspaceSidebar({
               notificationAgentItems={notificationAgentItems}
               onSelectAgent={onSelectAgent}
               onSelectModelProvider={onSelectModelProvider}
-              onPreviewAgent={onPreviewAgent}
               onSelectComputer={onSelectComputer}
               skillUploadOpen={skillUploadOpen}
               onSkillUploadOpenChange={setSkillUploadOpen}

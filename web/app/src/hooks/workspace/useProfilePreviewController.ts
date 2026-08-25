@@ -1,7 +1,6 @@
 import { startTransition, useEffect, useRef, useState } from "react";
 import { agentMatchesUser } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
-import type { AgentLike } from "@/models/agents";
 import type { IMUser } from "@/models/conversations";
 import type { ProfilePreviewAnchorRect, ProfilePreviewController, UseProfilePreviewControllerArgs } from "./types";
 
@@ -165,43 +164,6 @@ export function useProfilePreviewController({
     closeConversationTools();
   }
 
-  function openAgentProfilePreview(
-    item: AgentLike | null | undefined,
-    anchor: HTMLElement | null | undefined,
-    mode: ProfilePreviewState["mode"],
-  ) {
-    if (!item?.id || !anchor) {
-      return;
-    }
-    clearProfilePreviewOpenTimer();
-    clearProfilePreviewCloseTimer();
-    const itemID = item.id;
-    const rect = anchor.getBoundingClientRect();
-    setProfilePreview((current) => {
-      if (
-        mode === "manual" &&
-        current?.mode === "manual" &&
-        current?.type === WorkspacePaneTypes.agent &&
-        current?.id === itemID
-      ) {
-        return null;
-      }
-      return {
-        type: WorkspacePaneTypes.agent,
-        id: itemID,
-        mode,
-        anchorRect: {
-          top: rect.top,
-          right: rect.right,
-          bottom: rect.bottom,
-          left: rect.left,
-        },
-        anchorEl: anchor,
-      };
-    });
-    closeConversationTools();
-  }
-
   function openParticipantPreview(user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) {
     openProfilePreview(user, anchor, "manual");
   }
@@ -212,19 +174,6 @@ export function useProfilePreviewController({
     profilePreviewOpenTimerRef.current = setTimeout(() => {
       profilePreviewOpenTimerRef.current = null;
       openProfilePreview(user, anchor, "hover");
-    }, PROFILE_PREVIEW_OPEN_DELAY_MS);
-  }
-
-  function openAgentPreview(item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) {
-    openAgentProfilePreview(item, anchor, "manual");
-  }
-
-  function showAgentPreview(item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) {
-    clearProfilePreviewOpenTimer();
-    clearProfilePreviewCloseTimer();
-    profilePreviewOpenTimerRef.current = setTimeout(() => {
-      profilePreviewOpenTimerRef.current = null;
-      openAgentProfilePreview(item, anchor, "hover");
     }, PROFILE_PREVIEW_OPEN_DELAY_MS);
   }
 
@@ -250,7 +199,6 @@ export function useProfilePreviewController({
   return {
     cancelProfilePreviewClose,
     closeProfilePreview,
-    openAgentPreview,
     openParticipantPreview,
     profilePreviewProps:
       profilePreview && (previewAgent || previewUser)
@@ -276,7 +224,6 @@ export function useProfilePreviewController({
           }
         : null,
     scheduleProfilePreviewClose,
-    showAgentPreview,
     showParticipantPreview,
   };
 }

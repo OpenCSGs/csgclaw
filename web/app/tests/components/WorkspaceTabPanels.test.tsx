@@ -116,7 +116,6 @@ describe("WorkspaceTabPanels", () => {
         onCreateRoom={() => {}}
         onOpenCreateTask={() => {}}
         onOpenCreateTeam={() => {}}
-        onPreviewAgent={() => {}}
         onPreviewUser={() => {}}
         onSelectAgent={() => {}}
         onSelectComputer={() => {}}
@@ -228,7 +227,6 @@ describe("WorkspaceTabPanels", () => {
         onCreateRoom={() => {}}
         onOpenCreateTask={() => {}}
         onOpenCreateTeam={() => {}}
-        onPreviewAgent={() => {}}
         onPreviewUser={() => {}}
         onSelectAgent={() => {}}
         onSelectComputer={() => {}}
@@ -316,7 +314,6 @@ describe("WorkspaceTabPanels", () => {
         onOpenCreateScheduledTask={onOpenCreateScheduledTask}
         onOpenCreateTask={() => {}}
         onOpenCreateTeam={() => {}}
-        onPreviewAgent={() => {}}
         onPreviewUser={() => {}}
         onSelectAgent={() => {}}
         onSelectComputer={() => {}}
@@ -397,7 +394,6 @@ describe("WorkspaceTabPanels", () => {
         onCreateRoom={() => {}}
         onOpenCreateTask={() => {}}
         onOpenCreateTeam={() => {}}
-        onPreviewAgent={() => {}}
         onPreviewUser={() => {}}
         onSelectAgent={() => {}}
         onSelectComputer={() => {}}

@@ -1,4 +1,6 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 import {
   WorkspaceAgentRow,
   WorkspaceConversationRow,
@@ -19,6 +21,19 @@ const t: TranslateFn = (key, params = {}) => {
 };
 
 describe("WorkspaceRows", () => {
+  it("keeps agent list avatars decorative and selects from the row", async () => {
+    const onSelect = vi.fn();
+    const item = { id: "u-dev", name: "dev" };
+    const user = userEvent.setup();
+
+    render(<WorkspaceAgentRow active={false} item={item} onSelect={onSelect} t={t} />);
+
+    expect(screen.queryByRole("button", { name: "profilePreview dev" })).not.toBeInTheDocument();
+    const row = screen.getByRole("button");
+    await user.click(row);
+    expect(onSelect).toHaveBeenCalledWith(item);
+  });
+
   it("grays the agent presence dot when runtime availability is degraded", () => {
     const { container } = render(
       <WorkspaceAgentRow

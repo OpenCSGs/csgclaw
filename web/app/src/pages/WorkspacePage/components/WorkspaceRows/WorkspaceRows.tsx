@@ -238,19 +238,11 @@ export type WorkspaceAgentRowProps = {
   active: boolean;
   item: AgentLike;
   notification?: boolean;
-  onPreview?: (item: AgentLike, anchor: HTMLElement) => void;
   onSelect: (item: AgentLike) => void;
   t: TranslateFn;
 };
 
-export function WorkspaceAgentRow({
-  item,
-  active,
-  t,
-  onSelect,
-  onPreview,
-  notification = false,
-}: WorkspaceAgentRowProps) {
+export function WorkspaceAgentRow({ item, active, t, onSelect, notification = false }: WorkspaceAgentRowProps) {
   const incomplete = isAgentIncomplete(item);
   const restartNeeded = isAgentRestartNeeded(item);
   const upgradeNeeded = isAgentUpgradeNeeded(item);
@@ -266,23 +258,7 @@ export function WorkspaceAgentRow({
       className={classNames(styles.row, styles.agentRow, active && styles.active, incomplete && styles.warn)}
       onClick={() => onSelect(item)}
     >
-      <span
-        className={classNames(styles.icon, styles.clickableIcon)}
-        role="button"
-        tabIndex={0}
-        aria-label={`${t("profilePreview")} ${item.name}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onPreview?.(item, event.currentTarget);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            event.stopPropagation();
-            onPreview?.(item, event.currentTarget);
-          }
-        }}
-      >
+      <span className={styles.icon} aria-hidden="true">
         <AgentAvatarContent avatar={item.avatar} fallback={avatarFallbackText(item.avatar, item.name, item.id)} />
       </span>
       <span className={styles.main}>

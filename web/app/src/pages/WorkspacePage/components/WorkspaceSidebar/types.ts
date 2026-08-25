@@ -84,7 +84,6 @@ export type WorkspaceSidebarProps = {
   onOpenSettings: () => void;
   onLogin: (environment?: AuthEnvironmentDraft) => void | Promise<void>;
   onLogout: () => void | Promise<void>;
-  onPreviewAgent: (item: AgentLike | null | undefined, anchor: HTMLElement | null | undefined) => void;
   onPreviewUser: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;
   onSelectAgent: (item: AgentLike | null | undefined) => void;
   onSelectComputer: () => void;
