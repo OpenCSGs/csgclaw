@@ -1187,14 +1187,8 @@ export const messages = {
     agentPublishTemplateNameHint: "必须以英文字母开头，最多 24 个字符，仅支持英文字母、数字、下划线和短横线。",
     agentPublishTemplateNameInvalid:
       "模板名称必须以英文字母开头，最多 24 个字符，且只能包含英文字母、数字、下划线和短横线。",
-    agentPublishLocalNameExists: "保存失败：本地已存在同名模板，请修改模板名称后重试。",
-    agentPublishSensitiveInformation: "发布失败：模板名称或描述中包含不允许的敏感信息，请修改后重试。",
-    agentDeploySensitiveCheckFailed: "模板已发布，但未通过敏感内容审核，暂时无法部署。请根据审核原因修改后重新发布。",
-    agentDeploySensitiveCheckPending: "模板已发布，但部署时模板尚未准备完成。请在模板列表中查看最新审核状态。",
     agentPublishTemplateDescription: "模板描述",
     resourcesPublishCommunityFailed: "发布到社区失败。",
-    resourcesPublishCommunityEmailRequired: "发布失败：当前 OpenCSG 账号未设置邮箱，请完善账号资料后重试。",
-    resourcesPublishCommunityNameExists: "发布失败：社区中已存在同名模板，请修改模板名称后重试。",
     resourcesPublishCommunitySuccessTitle: "发布成功",
     resourcesPublishCommunityDeployFailedTitle: "模板已发布，但部署失败",
     resourcesPublishCommunitySuccessMessage: "模板已成功发布到社区。",
@@ -1342,7 +1336,18 @@ export const messages = {
       worker: "worker（对话代理）",
     },
     errors: {
-      agent_home_cleanup_failed: "智能体运行文件仍被占用。请启动 Docker 并等待其运行正常后重新删除；若 Docker 已启动，请重启 CSGClaw 后再试。",
+      "AGENT-ERR-22": "模板已发布，当前仍在审核中。请稍后在模板列表中查看最新状态。",
+      "AGENT-ERR-23": "模板已发布，但未通过敏感内容审核。请根据问题文件修改后重新发布。",
+      "RESOURCE-ERR-1": "模板已成功发布，但社区部署资源暂时不可用，请稍后重试部署。",
+      "SENSITIVE-ERR-0": "发布失败：模板名称或描述中包含不允许的敏感信息，请修改后重试。",
+      SPACE_ERR_1: "发布失败：社区中已存在同名模板，请修改模板名称后重试。",
+      "USER-ERR-18": "发布失败：当前 OpenCSG 账号未设置邮箱，请完善账号资料后重试。",
+      template_already_exists: "保存失败：本地已存在同名模板，请修改模板名称后重试。",
+      template_deploy_failed: "模板已成功发布，但部署失败，请稍后重试。",
+      template_not_found: "未找到要发布的模板，请刷新后重试。",
+      template_publish_failed: "模板发布失败，请稍后重试。",
+      agent_home_cleanup_failed:
+        "智能体运行文件仍被占用。请启动 Docker 并等待其运行正常后重新删除；若 Docker 已启动，请重启 CSGClaw 后再试。",
       docker_availability_timeout: "Docker 服务检测超时，请确认 Docker 服务已启动后重试。",
       docker_unavailable: "Docker 未启动或无法连接，请先启动 Docker 服务后重试。",
       upstream_timeout: "连接模型服务超时，请稍后重试。",
@@ -1670,7 +1675,8 @@ export const messages = {
     resourcesTemplatesSection: "Templates",
     resourcesTemplateReviewPending: "Pending review",
     resourcesTemplateReviewFailed: "Review failed",
-    resourcesTemplateReviewFailedFiles: "Sensitive content was detected in the following files. Update them before publishing again:",
+    resourcesTemplateReviewFailedFiles:
+      "Sensitive content was detected in the following files. Update them before publishing again:",
     resourcesSkillsLabel: "Skills",
     resourcesMCPLabel: "MCP",
     resourcesMCPLoading: "Loading MCP servers...",
@@ -2611,20 +2617,8 @@ export const messages = {
       "Start with an English letter; use up to 24 English letters, numbers, underscores, or hyphens.",
     agentPublishTemplateNameInvalid:
       "Template name must start with an English letter, contain at most 24 characters, and use only English letters, numbers, underscores, or hyphens.",
-    agentPublishLocalNameExists:
-      "Saving failed: a local template with the same name already exists. Choose a different name and try again.",
-    agentPublishSensitiveInformation:
-      "Publishing failed: the template name or description contains sensitive information. Edit it and try again.",
-    agentDeploySensitiveCheckFailed:
-      "The template was published but cannot be deployed because it did not pass the sensitive-content check. Review the failure reason, update it, and publish again.",
-    agentDeploySensitiveCheckPending:
-      "The template was published, but it was not ready when deployment was attempted. Check its latest review status in the template list.",
     agentPublishTemplateDescription: "Template description",
     resourcesPublishCommunityFailed: "Failed to publish the template to the community.",
-    resourcesPublishCommunityEmailRequired:
-      "Publishing failed because the current OpenCSG account has no email address. Complete the account profile and try again.",
-    resourcesPublishCommunityNameExists:
-      "Publishing failed: a template with the same name already exists in the community. Choose a different name and try again.",
     resourcesPublishCommunitySuccessTitle: "Published successfully",
     resourcesPublishCommunityDeployFailedTitle: "Template published, but deployment failed",
     resourcesPublishCommunitySuccessMessage: "The template has been published to the community.",
@@ -2784,6 +2778,22 @@ export const messages = {
       worker: "worker",
     },
     errors: {
+      "AGENT-ERR-22": "The template was published and is still under review. Check the template list again later.",
+      "AGENT-ERR-23":
+        "The template was published but did not pass sensitive-content review. Update the affected files and publish again.",
+      "RESOURCE-ERR-1":
+        "The template was published, but community deployment resources are temporarily unavailable. Try deploying again later.",
+      "SENSITIVE-ERR-0":
+        "Publishing failed because the template name or description contains disallowed sensitive information. Update it and try again.",
+      SPACE_ERR_1:
+        "Publishing failed because a community template with the same name already exists. Choose another name and try again.",
+      "USER-ERR-18":
+        "Publishing failed because the current OpenCSG account has no email address. Complete the account profile and try again.",
+      template_already_exists:
+        "Saving failed because a local template with the same name already exists. Choose another name and try again.",
+      template_deploy_failed: "The template was published, but deployment failed. Try deploying again later.",
+      template_not_found: "The template to publish was not found. Refresh and try again.",
+      template_publish_failed: "Template publishing failed. Try again later.",
       agent_home_cleanup_failed:
         "The agent runtime files are still in use. Start Docker and wait until it is ready, then delete the agent again. If Docker is already running, restart CSGClaw and retry.",
       docker_availability_timeout: "Docker availability check timed out. Make sure Docker is running.",

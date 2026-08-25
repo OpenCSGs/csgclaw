@@ -29,14 +29,7 @@ import {
 import type { AgentUpdatePayload, FeishuRegistration, FetchAgentsOptions } from "@/api/agents";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { publishAgentTemplateRequest, type AgentTemplatePublishTarget } from "@/api/hub";
-import {
-  isHubTemplateAccountEmailMissing,
-  isHubTemplateDeployReviewPendingError,
-  isHubTemplateDeploySensitiveCheckError,
-  isHubTemplateNameConflict,
-  isHubTemplateSensitiveInformationError,
-  upsertHubTemplateReviewState,
-} from "@/models/hubWorkspace";
+import { HubTemplateErrorCodes, hubTemplateErrorCode, upsertHubTemplateReviewState } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { createUserRequest, joinAgentToRoomRequest } from "@/api/im";
 import { fetchSkills } from "@/api/skills";
@@ -1743,9 +1736,11 @@ export function useAgentController({
       }
       return true;
     } catch (err) {
-      const deploySensitiveCheckFailed = isHubTemplateDeploySensitiveCheckError(err);
-      const deployReviewPending = isHubTemplateDeployReviewPendingError(err);
+      const errorCode = hubTemplateErrorCode(err);
+      const deploySensitiveCheckFailed = errorCode === HubTemplateErrorCodes.reviewFailed;
+      const deployReviewPending = errorCode === HubTemplateErrorCodes.reviewPending;
       const publishedTemplateID = String((err as ApiError | null)?.publishedTemplateId ?? "").trim();
+      const message = errorMessage(err, t("agentActionFailed"));
       if (target === "official_deploy" && publishedTemplateID && (deploySensitiveCheckFailed || deployReviewPending)) {
         await refreshHubTemplates();
         queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
@@ -1753,26 +1748,13 @@ export function useAgentController({
             templates,
             publishedTemplateID,
             deployReviewPending ? "Pending" : "Fail",
-            deployReviewPending ? "" : t("agentDeploySensitiveCheckFailed"),
+            deployReviewPending ? "" : message,
           ),
         );
         setSelectedHubTemplateId(publishedTemplateID);
         navigatePane({ type: WorkspacePaneTypes.hub, id: publishedTemplateID, resourceType: "template" }, rooms);
         return true;
       }
-      const message = deploySensitiveCheckFailed
-        ? t("agentDeploySensitiveCheckFailed")
-        : deployReviewPending
-          ? t("agentDeploySensitiveCheckPending")
-          : isHubTemplateSensitiveInformationError(err)
-            ? t("agentPublishSensitiveInformation")
-            : target !== "local" && isHubTemplateAccountEmailMissing(err)
-              ? t("resourcesPublishCommunityEmailRequired")
-              : target !== "local" && isHubTemplateNameConflict(err)
-                ? t("resourcesPublishCommunityNameExists")
-                : target === "local" && (err as ApiError | null)?.status === 409
-                  ? t("agentPublishLocalNameExists")
-                  : errorMessage(err, t("agentActionFailed"));
       setAgentPagePublishError(message);
       setAgentPageSaveError(message);
       return false;

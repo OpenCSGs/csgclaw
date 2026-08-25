@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  HubTemplateErrorCodes,
+  hubTemplateErrorCode,
   hubTemplateReviewState,
-  isHubTemplateDeploySensitiveCheckError,
-  isHubTemplateDeployReviewPendingError,
-  isHubTemplateSensitiveInformationError,
   mergeHubTemplateDetail,
   upsertHubTemplateReviewState,
   type HubTemplate,
@@ -122,36 +121,15 @@ describe("upsertHubTemplateReviewState", () => {
   });
 });
 
-describe("isHubTemplateSensitiveInformationError", () => {
-  it("recognizes the normalized backend error", () => {
-    expect(
-      isHubTemplateSensitiveInformationError({ status: 400, message: "template contains sensitive information" }),
-    ).toBe(true);
+describe("hubTemplateErrorCode", () => {
+  it("reads stable structured publishing and deployment codes", () => {
+    expect(hubTemplateErrorCode({ code: "AGENT-ERR-22", message: "review pending" })).toBe(
+      HubTemplateErrorCodes.reviewPending,
+    );
+    expect(hubTemplateErrorCode({ code: "RESOURCE-ERR-1" })).toBe(HubTemplateErrorCodes.deployResourceUnavailable);
   });
 
-  it("recognizes the upstream error code for compatibility", () => {
-    expect(isHubTemplateSensitiveInformationError({ status: 400, message: '{"code":"SENSITIVE-ERR-0"}' })).toBe(true);
-  });
-});
-
-describe("isHubTemplateDeploySensitiveCheckError", () => {
-  it("recognizes the normalized deployment error", () => {
-    expect(
-      isHubTemplateDeploySensitiveCheckError({
-        status: 409,
-        message:
-          "template published but deployment failed: community template has not passed the sensitive-content check",
-      }),
-    ).toBe(true);
-  });
-
-  it("recognizes the upstream deployment error code", () => {
-    expect(isHubTemplateDeploySensitiveCheckError({ status: 409, message: '{"code":"AGENT-ERR-23"}' })).toBe(true);
-  });
-});
-
-describe("isHubTemplateDeployReviewPendingError", () => {
-  it("recognizes the structured pending-review response", () => {
-    expect(isHubTemplateDeployReviewPendingError({ code: "AGENT-ERR-22", message: "review pending" })).toBe(true);
+  it("does not infer codes from legacy error messages", () => {
+    expect(hubTemplateErrorCode({ message: '{"code":"AGENT-ERR-23"}' })).toBe("");
   });
 });

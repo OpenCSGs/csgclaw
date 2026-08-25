@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { errorMessage, type ApiError } from "@/api/client";
+import { errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
 import { deleteHubTemplateRequest, publishHubTemplateToCommunityRequest } from "@/api/hub";
 import { deleteSkillRequest, installRemoteSkillRequest, uploadSkillArchive } from "@/api/skills";
 import {
+  HubTemplateErrorCodes,
+  hubTemplateErrorCode,
   isDeletableHubTemplate,
-  isHubTemplateAccountEmailMissing,
-  isHubTemplateDeployReviewPendingError,
-  isHubTemplateDeploySensitiveCheckError,
-  isHubTemplateNameConflict,
-  isHubTemplateSensitiveInformationError,
   isVisibleInHubTemplateList,
   upsertHubTemplateReviewState,
 } from "@/models/hubWorkspace";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
+import { localizeAPIError } from "@/shared/i18n";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import { useWorkspaceHubSelection } from "./useWorkspaceHubSelection";
 import type { UseWorkspaceHubControllerArgs } from "./types";
@@ -95,6 +93,10 @@ export function useWorkspaceHubController({
   refreshWorkspaceHubTemplates,
   t,
 }: UseWorkspaceHubControllerArgs): WorkspaceHubController {
+  const errorMessage = useCallback(
+    (error: unknown, fallback = "") => localizeAPIError(error, t, apiErrorMessage(error, fallback) || fallback),
+    [t],
+  );
   const queryClient = useQueryClient();
   const [resourcesManualError, setResourcesManualError] = useState("");
   const [resourcesDeleteBusy, setResourcesDeleteBusy] = useState(false);
@@ -189,7 +191,7 @@ export function useWorkspaceHubController({
         setResourcesDeleteBusy(false);
       }
     },
-    [queryClient, refreshHubTemplates, setSelectedHubTemplateId, t],
+    [errorMessage, queryClient, refreshHubTemplates, setSelectedHubTemplateId, t],
   );
 
   const deleteSkill = useCallback(
@@ -217,7 +219,7 @@ export function useWorkspaceHubController({
         setSkillDeleteBusy(false);
       }
     },
-    [queryClient, setSelectedHubSkillName, setSelectedHubSkillPath, t],
+    [errorMessage, queryClient, setSelectedHubSkillName, setSelectedHubSkillPath, t],
   );
 
   const publishHubTemplate = useCallback(
@@ -235,21 +237,10 @@ export function useWorkspaceHubController({
         }
         return { status: "success" };
       } catch (err) {
-        const deploySensitiveCheckFailed = isHubTemplateDeploySensitiveCheckError(err);
-        const deployReviewPending = isHubTemplateDeployReviewPendingError(err);
-        const message =
-          deploySensitiveCheckFailed || deployReviewPending
-            ? errorMessage(
-                err,
-                deployReviewPending ? t("agentDeploySensitiveCheckPending") : t("agentDeploySensitiveCheckFailed"),
-              )
-            : isHubTemplateSensitiveInformationError(err)
-              ? t("agentPublishSensitiveInformation")
-              : isHubTemplateAccountEmailMissing(err)
-                ? t("resourcesPublishCommunityEmailRequired")
-                : isHubTemplateNameConflict(err)
-                  ? t("resourcesPublishCommunityNameExists")
-                  : errorMessage(err, t("resourcesPublishCommunityFailed"));
+        const errorCode = hubTemplateErrorCode(err);
+        const deploySensitiveCheckFailed = errorCode === HubTemplateErrorCodes.reviewFailed;
+        const deployReviewPending = errorCode === HubTemplateErrorCodes.reviewPending;
+        const message = errorMessage(err, t("resourcesPublishCommunityFailed"));
         if (deploy) {
           await refreshHubTemplates();
           if (deploySensitiveCheckFailed || deployReviewPending) {
@@ -277,7 +268,15 @@ export function useWorkspaceHubController({
         setResourcesPublishBusy(false);
       }
     },
-    [openCSGAuthenticated, queryClient, refreshHubTemplates, setSelectedHubResourceType, setSelectedHubTemplateId, t],
+    [
+      errorMessage,
+      openCSGAuthenticated,
+      queryClient,
+      refreshHubTemplates,
+      setSelectedHubResourceType,
+      setSelectedHubTemplateId,
+      t,
+    ],
   );
 
   const uploadSkill = useCallback(
@@ -301,7 +300,7 @@ export function useWorkspaceHubController({
         setResourcesUploadBusy(false);
       }
     },
-    [queryClient, setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, t],
+    [errorMessage, queryClient, setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, t],
   );
 
   const installRemoteSkill = useCallback(
@@ -333,7 +332,7 @@ export function useWorkspaceHubController({
         setResourcesRemoteInstallBusy("");
       }
     },
-    [queryClient, setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, t],
+    [errorMessage, queryClient, setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, t],
   );
 
   return {

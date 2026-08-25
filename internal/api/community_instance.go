@@ -19,11 +19,13 @@ import (
 const communityAgentInstancePath = "/api/v1/agent/instances"
 const communityInstanceTemplatePendingCode = "AGENT-ERR-22"
 const communityInstanceSensitiveCheckCode = "AGENT-ERR-23"
+const communityInstanceResourceUnavailableCode = "RESOURCE-ERR-1"
 const communityInstanceDeployRetries = 3
 const communityInstanceDeployRetryDelay = 3 * time.Second
 
 var errCommunityInstanceSensitiveCheck = errors.New("community template has not passed the sensitive-content check")
 var errCommunityInstanceTemplatePending = errors.New("community template is not ready for deployment")
+var errCommunityInstanceResourceUnavailable = errors.New("community deployment resource is temporarily unavailable")
 
 type communityAgentInstanceRequest struct {
 	Name        string         `json:"name"`
@@ -168,8 +170,17 @@ func createCommunityAgentInstanceOnce(req *http.Request) (bool, error) {
 		if message == "" {
 			message = communityInstanceSensitiveCheckCode
 		}
-		retryable := !strings.EqualFold(strings.TrimSpace(result.Context.SensitiveCheckStatus), "fail")
-		return retryable, fmt.Errorf("%w: %s", errCommunityInstanceSensitiveCheck, message)
+		if strings.EqualFold(strings.TrimSpace(result.Context.SensitiveCheckStatus), "pending") {
+			return true, fmt.Errorf("%w: %s", errCommunityInstanceTemplatePending, message)
+		}
+		return false, fmt.Errorf("%w: %s", errCommunityInstanceSensitiveCheck, message)
+	}
+	if result.Code == communityInstanceResourceUnavailableCode {
+		message := strings.TrimSpace(result.Msg)
+		if message == "" {
+			message = communityInstanceResourceUnavailableCode
+		}
+		return false, fmt.Errorf("%w: %s", errCommunityInstanceResourceUnavailable, message)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("create community instance: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
@@ -182,7 +193,11 @@ func createCommunityAgentInstanceOnce(req *http.Request) (bool, error) {
 
 func communityInstanceUpstreamMessage(err error) string {
 	message := err.Error()
-	for _, sentinel := range []error{errCommunityInstanceTemplatePending, errCommunityInstanceSensitiveCheck} {
+	for _, sentinel := range []error{
+		errCommunityInstanceTemplatePending,
+		errCommunityInstanceSensitiveCheck,
+		errCommunityInstanceResourceUnavailable,
+	} {
 		if errors.Is(err, sentinel) {
 			return strings.TrimPrefix(message, sentinel.Error()+": ")
 		}

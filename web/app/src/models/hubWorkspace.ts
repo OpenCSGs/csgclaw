@@ -51,62 +51,21 @@ export function isVisibleInHubTemplateList(template: HubTemplate | null | undefi
   );
 }
 
-export function isHubTemplateNameConflict(error: unknown): boolean {
-  const message =
-    error && typeof error === "object" && "message" in error
-      ? String((error as { message?: unknown }).message ?? "")
-      : error instanceof Error
-        ? error.message
-        : String(error ?? "");
-  const normalized = message.toLowerCase();
-  return normalized.includes("space_err_1") || normalized.includes("space name already exists");
-}
+export const HubTemplateErrorCodes = {
+  accountEmailMissing: "USER-ERR-18",
+  communityNameConflict: "SPACE_ERR_1",
+  deployResourceUnavailable: "RESOURCE-ERR-1",
+  reviewFailed: "AGENT-ERR-23",
+  reviewPending: "AGENT-ERR-22",
+  sensitiveInformation: "SENSITIVE-ERR-0",
+  templateAlreadyExists: "template_already_exists",
+} as const;
 
-export function isHubTemplateAccountEmailMissing(error: unknown): boolean {
-  const code =
-    error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
-  const message =
-    error && typeof error === "object" && "message" in error
-      ? String((error as { message?: unknown }).message ?? "")
-      : String(error ?? "");
-  const normalized = `${code} ${message}`.toLowerCase();
-  return normalized.includes("user-err-18") || normalized.includes("user email is empty");
-}
-
-export function isHubTemplateSensitiveInformationError(error: unknown): boolean {
-  const code =
-    error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
-  const message =
-    error && typeof error === "object" && "message" in error
-      ? String((error as { message?: unknown }).message ?? "")
-      : String(error ?? "");
-  const normalized = `${code} ${message}`.toLowerCase();
-  return normalized.includes("sensitive-err-0") || normalized.includes("template contains sensitive information");
-}
-
-export function isHubTemplateDeploySensitiveCheckError(error: unknown): boolean {
-  const code =
-    error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
-  const message =
-    error && typeof error === "object" && "message" in error
-      ? String((error as { message?: unknown }).message ?? "")
-      : String(error ?? "");
-  const normalized = `${code} ${message}`.toLowerCase();
-  return (
-    normalized.includes("agent-err-23") ||
-    normalized.includes("community template has not passed the sensitive-content check")
-  );
-}
-
-export function isHubTemplateDeployReviewPendingError(error: unknown): boolean {
-  const code =
-    error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
-  const message =
-    error && typeof error === "object" && "message" in error
-      ? String((error as { message?: unknown }).message ?? "")
-      : String(error ?? "");
-  const normalized = `${code} ${message}`.toLowerCase();
-  return normalized.includes("agent-err-22") || normalized.includes("sensitive-content review is still pending");
+export function hubTemplateErrorCode(error: unknown): string {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return "";
+  }
+  return String((error as { code?: unknown }).code ?? "").trim();
 }
 
 export type HubTemplate = AgentTemplateLike & {

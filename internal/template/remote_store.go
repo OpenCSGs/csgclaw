@@ -45,6 +45,42 @@ type RemoteStore struct {
 	maxWorkspace   int64
 }
 
+// RemoteAPIError preserves the stable error contract returned by the Hub API.
+type RemoteAPIError struct {
+	StatusCode int
+	Code       string
+	Message    string
+	Cause      error
+}
+
+func (e *RemoteAPIError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Code != "" && e.Message != "" {
+		return fmt.Sprintf("remote hub request failed with status %d: %s: %s", e.StatusCode, e.Code, e.Message)
+	}
+	if e.Code != "" {
+		return fmt.Sprintf("remote hub request failed with status %d: %s", e.StatusCode, e.Code)
+	}
+	return fmt.Sprintf("remote hub request failed with status %d: %s", e.StatusCode, e.Message)
+}
+
+func (e *RemoteAPIError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+func RemoteAPIErrorCode(err error) string {
+	var remoteErr *RemoteAPIError
+	if errors.As(err, &remoteErr) {
+		return strings.TrimSpace(remoteErr.Code)
+	}
+	return ""
+}
+
 type remoteCodeListResponse struct {
 	Data  []remoteCodeRepository `json:"data"`
 	Total int                    `json:"total"`
@@ -883,10 +919,11 @@ func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out 
 		return fmt.Errorf("remote hub response exceeds %d bytes", s.maxJSON)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if isRemoteSensitiveInformationError(data) {
-			return fmt.Errorf("%w", ErrTemplateSensitiveInfo)
+		remoteErr := decodeRemoteAPIError(resp.StatusCode, data)
+		if strings.EqualFold(remoteErr.Code, "SENSITIVE-ERR-0") {
+			remoteErr.Cause = ErrTemplateSensitiveInfo
 		}
-		return fmt.Errorf("remote hub request failed with status %d: %s", resp.StatusCode, truncateRemoteBody(data))
+		return remoteErr
 	}
 	if out == nil {
 		return nil
@@ -897,20 +934,22 @@ func (s *RemoteStore) postJSON(ctx context.Context, endpoint string, input, out 
 	return nil
 }
 
-func isRemoteSensitiveInformationError(data []byte) bool {
+func decodeRemoteAPIError(statusCode int, data []byte) *RemoteAPIError {
 	var payload struct {
 		Code string `json:"code"`
 		Msg  string `json:"msg"`
 	}
 	if err := json.Unmarshal(data, &payload); err == nil {
-		if strings.EqualFold(strings.TrimSpace(payload.Code), "SENSITIVE-ERR-0") {
-			return true
+		remoteErr := &RemoteAPIError{
+			StatusCode: statusCode,
+			Code:       strings.TrimSpace(payload.Code),
+			Message:    strings.TrimSpace(payload.Msg),
 		}
-		if strings.Contains(strings.ToLower(payload.Msg), "sensitive information is not allowed") {
-			return true
+		if remoteErr.Code != "" || remoteErr.Message != "" {
+			return remoteErr
 		}
 	}
-	return strings.Contains(strings.ToUpper(string(data)), "SENSITIVE-ERR-0")
+	return &RemoteAPIError{StatusCode: statusCode, Message: truncateRemoteBody(data)}
 }
 
 func (s *RemoteStore) uploadArchive(ctx context.Context, upload remoteUploadURL, archive []byte) error {

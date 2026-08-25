@@ -72,6 +72,43 @@ func TestRemoteStorePostJSONRecognizesSensitiveInformationError(t *testing.T) {
 	if !errors.Is(err, ErrTemplateSensitiveInfo) {
 		t.Fatalf("postJSON() error = %v, want ErrTemplateSensitiveInfo", err)
 	}
+	if got, want := RemoteAPIErrorCode(err), "SENSITIVE-ERR-0"; got != want {
+		t.Fatalf("RemoteAPIErrorCode() = %q, want %q", got, want)
+	}
+}
+
+func TestRemoteStorePostJSONPreservesStructuredErrorCode(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"code":"USER-ERR-18","msg":"User email is empty"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	store := NewRemoteStore(srv.URL, "token")
+	err := store.postJSON(context.Background(), srv.URL, nil, nil)
+	if got, want := RemoteAPIErrorCode(err), "USER-ERR-18"; got != want {
+		t.Fatalf("RemoteAPIErrorCode() = %q, want %q; error=%v", got, want, err)
+	}
+}
+
+func TestRemoteStorePostJSONPreservesNonstandardJSONErrorBody(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"temporary failure"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	store := NewRemoteStore(srv.URL, "token")
+	err := store.postJSON(context.Background(), srv.URL, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), `{"error":"temporary failure"}`) {
+		t.Fatalf("postJSON() error = %v, want preserved JSON diagnostics", err)
+	}
 }
 
 func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {

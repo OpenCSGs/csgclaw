@@ -3,9 +3,9 @@ import {
   formatHubDate,
   formatHubDateTime,
   formatHubTemplateCount,
+  HubTemplateErrorCodes,
+  hubTemplateErrorCode,
   isDeletableHubTemplate,
-  isHubTemplateAccountEmailMissing,
-  isHubTemplateNameConflict,
   isVisibleInHubTemplateList,
 } from "@/models/hubWorkspace";
 
@@ -40,28 +40,10 @@ describe("hub workspace helpers", () => {
     ).toBe(false);
   });
 
-  it("recognizes duplicate community template errors", () => {
-    expect(
-      isHubTemplateNameConflict({
-        status: 502,
-        message:
-          'remote hub request failed with status 500: {"code":"SPACE_ERR_1","msg":"SPACE_ERR_1: The space name already exists."}',
-      }),
-    ).toBe(true);
-    expect(isHubTemplateNameConflict(new Error("The space name already exists."))).toBe(true);
-    expect(isHubTemplateNameConflict(new Error("network unavailable"))).toBe(false);
-  });
-
-  it("recognizes a missing OpenCSG account email during community publishing", () => {
-    expect(
-      isHubTemplateAccountEmailMissing({
-        status: 502,
-        message:
-          'remote hub request failed with status 500: {"code":"USER-ERR-18","msg":"USER-ERR-18: User email is empty"}',
-      }),
-    ).toBe(true);
-    expect(isHubTemplateAccountEmailMissing({ code: "USER-ERR-18", message: "publish failed" })).toBe(true);
-    expect(isHubTemplateAccountEmailMissing(new Error("network unavailable"))).toBe(false);
+  it("uses structured codes for community publishing errors", () => {
+    expect(hubTemplateErrorCode({ code: "SPACE_ERR_1" })).toBe(HubTemplateErrorCodes.communityNameConflict);
+    expect(hubTemplateErrorCode({ code: "USER-ERR-18" })).toBe(HubTemplateErrorCodes.accountEmailMissing);
+    expect(hubTemplateErrorCode(new Error("The space name already exists."))).toBe("");
   });
 
   it("shows worker templates and official remote templates in hub lists", () => {

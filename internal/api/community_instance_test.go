@@ -228,6 +228,46 @@ func TestCreateCommunityAgentInstanceDoesNotRetryFailedSensitiveCheck(t *testing
 	}
 }
 
+func TestCreateCommunityAgentInstanceTreatsNonPendingSensitiveCheckAsFailed(t *testing.T) {
+	for _, status := range []string{"", "Exception", "Unknown"} {
+		status := status
+		t.Run(status, func(t *testing.T) {
+			attempts := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				attempts++
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				_, _ = fmt.Fprintf(
+					w,
+					`{"code":"AGENT-ERR-23","msg":"sensitive-content review did not pass","context":{"sensitive_check_status":%q}}`,
+					status,
+				)
+			}))
+			defer server.Close()
+
+			previousCredentials := loadCommunityInstanceCredentials
+			loadCommunityInstanceCredentials = func() (string, string, bool, error) {
+				return server.URL, "hub-token", true, nil
+			}
+			t.Cleanup(func() { loadCommunityInstanceCredentials = previousCredentials })
+
+			err := createCommunityAgentInstanceRequest(context.Background(), hub.Template{
+				Namespace: "alice",
+				Name:      "ReviewBot",
+			}, auth.Status{UserID: "alice", UserUUID: "uuid-alice"})
+			if !errors.Is(err, errCommunityInstanceSensitiveCheck) {
+				t.Fatalf("error = %v, want errCommunityInstanceSensitiveCheck", err)
+			}
+			if errors.Is(err, errCommunityInstanceTemplatePending) {
+				t.Fatalf("error = %v, should not classify status %q as pending", err, status)
+			}
+			if got, want := attempts, 1; got != want {
+				t.Fatalf("attempts = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
 func TestCreateCommunityAgentInstanceRetriesPendingSensitiveCheck(t *testing.T) {
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -262,6 +302,65 @@ func TestCreateCommunityAgentInstanceRetriesPendingSensitiveCheck(t *testing.T) 
 	}
 	if got, want := attempts, communityInstanceDeployRetries+1; got != want {
 		t.Fatalf("attempts = %d, want %d", got, want)
+	}
+}
+
+func TestCreateCommunityAgentInstanceReturnsPendingAfterSensitiveCheckRetries(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"code":"AGENT-ERR-23","msg":"sensitive-content review pending","context":{"sensitive_check_status":"Pending"}}`))
+	}))
+	defer server.Close()
+
+	previousCredentials := loadCommunityInstanceCredentials
+	previousWait := waitForCommunityInstanceRetry
+	loadCommunityInstanceCredentials = func() (string, string, bool, error) {
+		return server.URL, "hub-token", true, nil
+	}
+	waitForCommunityInstanceRetry = func(context.Context) error { return nil }
+	t.Cleanup(func() {
+		loadCommunityInstanceCredentials = previousCredentials
+		waitForCommunityInstanceRetry = previousWait
+	})
+
+	err := createCommunityAgentInstanceRequest(context.Background(), hub.Template{
+		Namespace: "alice",
+		Name:      "ReviewBot",
+	}, auth.Status{UserID: "alice", UserUUID: "uuid-alice"})
+	if !errors.Is(err, errCommunityInstanceTemplatePending) {
+		t.Fatalf("error = %v, want errCommunityInstanceTemplatePending", err)
+	}
+	if errors.Is(err, errCommunityInstanceSensitiveCheck) {
+		t.Fatalf("error = %v, should not classify pending review as sensitive-check failure", err)
+	}
+	if got, want := attempts, communityInstanceDeployRetries+1; got != want {
+		t.Fatalf("attempts = %d, want %d", got, want)
+	}
+}
+
+func TestCreateCommunityAgentInstanceClassifiesUnavailableResource(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"code":"RESOURCE-ERR-1","msg":"The resource is temporarily unavailable."}`))
+	}))
+	defer server.Close()
+
+	previousCredentials := loadCommunityInstanceCredentials
+	loadCommunityInstanceCredentials = func() (string, string, bool, error) {
+		return server.URL, "hub-token", true, nil
+	}
+	t.Cleanup(func() { loadCommunityInstanceCredentials = previousCredentials })
+
+	err := createCommunityAgentInstanceRequest(context.Background(), hub.Template{
+		Namespace: "alice",
+		Name:      "ReviewBot",
+	}, auth.Status{UserID: "alice", UserUUID: "uuid-alice"})
+	if !errors.Is(err, errCommunityInstanceResourceUnavailable) {
+		t.Fatalf("error = %v, want errCommunityInstanceResourceUnavailable", err)
 	}
 }
 

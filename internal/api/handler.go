@@ -1775,19 +1775,32 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			status := http.StatusBadGateway
+			code := hub.RemoteAPIErrorCode(err)
 			if !publishingTemplate {
 				status = http.StatusBadRequest
 			}
 			if errors.Is(err, hub.ErrTemplateAlreadyExists) {
 				status = http.StatusConflict
+				if code == "" {
+					code = "template_already_exists"
+				}
 			}
 			if errors.Is(err, hub.ErrTemplateSensitiveInfo) {
 				status = http.StatusBadRequest
+				if code == "" {
+					code = "SENSITIVE-ERR-0"
+				}
 			}
 			if strings.Contains(strings.ToLower(err.Error()), "not found") {
 				status = http.StatusNotFound
+				if code == "" {
+					code = "template_not_found"
+				}
 			}
-			http.Error(w, err.Error(), status)
+			if code == "" {
+				code = "template_publish_failed"
+			}
+			writeHubTemplateError(w, status, code, err.Error(), "")
 			return
 		}
 		if req.Deploy {
@@ -1800,16 +1813,14 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 				} else if errors.Is(err, errCommunityInstanceSensitiveCheck) {
 					status = http.StatusConflict
 					code = communityInstanceSensitiveCheckCode
+				} else if errors.Is(err, errCommunityInstanceResourceUnavailable) {
+					status = http.StatusServiceUnavailable
+					code = communityInstanceResourceUnavailableCode
 				}
-				if code != "" {
-					writeJSON(w, status, map[string]any{"error": map[string]any{
-						"code":                  code,
-						"message":               communityInstanceUpstreamMessage(err),
-						"published_template_id": item.ID,
-					}})
-					return
+				if code == "" {
+					code = "template_deploy_failed"
 				}
-				http.Error(w, fmt.Sprintf("template published but deployment failed: %v", err), status)
+				writeHubTemplateError(w, status, code, communityInstanceUpstreamMessage(err), item.ID)
 				return
 			}
 		}
@@ -1817,6 +1828,17 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func writeHubTemplateError(w http.ResponseWriter, status int, code, message, publishedTemplateID string) {
+	payload := map[string]any{
+		"code":    strings.TrimSpace(code),
+		"message": strings.TrimSpace(message),
+	}
+	if publishedTemplateID = strings.TrimSpace(publishedTemplateID); publishedTemplateID != "" {
+		payload["published_template_id"] = publishedTemplateID
+	}
+	writeJSON(w, status, map[string]any{"error": payload})
 }
 
 func validateAgentTemplatePublishTarget(spec hub.PublishSpec, registry string) error {

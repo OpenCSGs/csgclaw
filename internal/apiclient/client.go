@@ -619,6 +619,16 @@ func ExtractAPIErrorMessage(body []byte) string {
 
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err == nil {
+		if nested, ok := payload["error"].(map[string]any); ok {
+			for _, key := range []string{"message", "code"} {
+				if value, ok := nested[key].(string); ok {
+					value = strings.TrimSpace(value)
+					if value != "" {
+						return value
+					}
+				}
+			}
+		}
 		for _, key := range []string{"error", "message"} {
 			if value, ok := payload[key].(string); ok {
 				value = strings.TrimSpace(value)

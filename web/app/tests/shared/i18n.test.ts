@@ -43,6 +43,18 @@ describe("i18n messages", () => {
     expect(
       localizeAPIError({ status: 503, code: "model_unavailable", message: "服务不可用" }, createTranslator("en")),
     ).toContain("temporarily unavailable");
+    expect(
+      localizeAPIError(
+        { status: 503, code: "RESOURCE-ERR-1", message: "The resource is temporarily unavailable." },
+        createTranslator("zh"),
+      ),
+    ).toBe("模板已成功发布，但社区部署资源暂时不可用，请稍后重试部署。");
+    expect(
+      localizeAPIError(
+        { status: 409, code: "SPACE_ERR_1", message: "The space name already exists." },
+        createTranslator("en"),
+      ),
+    ).toContain("same name already exists");
   });
 
   it("localizes unavailable Docker errors without exposing platform diagnostics", () => {
@@ -52,7 +64,9 @@ describe("i18n messages", () => {
       message: "open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified",
     };
 
-    expect(localizeAPIError(error, createTranslator("zh"))).toBe("Docker 未启动或无法连接，请先启动 Docker 服务后重试。");
+    expect(localizeAPIError(error, createTranslator("zh"))).toBe(
+      "Docker 未启动或无法连接，请先启动 Docker 服务后重试。",
+    );
     expect(localizeAPIError(error, createTranslator("en"))).toBe(
       "Docker is not running or cannot be reached. Start Docker and try again.",
     );

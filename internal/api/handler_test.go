@@ -3614,6 +3614,35 @@ func TestPresentHubTemplateIncludesSensitiveCheckMetadata(t *testing.T) {
 	}
 }
 
+func TestWriteHubTemplateErrorUsesStructuredContract(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeHubTemplateError(
+		recorder,
+		http.StatusServiceUnavailable,
+		communityInstanceResourceUnavailableCode,
+		"The resource is temporarily unavailable.",
+		"alice/reviewer",
+	)
+
+	if got, want := recorder.Code, http.StatusServiceUnavailable; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	var payload struct {
+		Error struct {
+			Code                string `json:"code"`
+			Message             string `json:"message"`
+			PublishedTemplateID string `json:"published_template_id"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Error.Code != communityInstanceResourceUnavailableCode ||
+		payload.Error.PublishedTemplateID != "alice/reviewer" {
+		t.Fatalf("error payload = %+v", payload.Error)
+	}
+}
+
 func TestFilterHubTemplatesForConfiguredProvider(t *testing.T) {
 	items := []hub.Template{
 		{ID: "codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindRemote}},

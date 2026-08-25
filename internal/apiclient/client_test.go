@@ -16,6 +16,20 @@ type recordingHTTPClient struct {
 	requests []string
 }
 
+func TestExtractAPIErrorMessageReadsStructuredError(t *testing.T) {
+	body := []byte(`{"error":{"code":"RESOURCE-ERR-1","message":"The resource is temporarily unavailable."}}`)
+	if got, want := ExtractAPIErrorMessage(body), "The resource is temporarily unavailable."; got != want {
+		t.Fatalf("ExtractAPIErrorMessage() = %q, want %q", got, want)
+	}
+}
+
+func TestExtractAPIErrorMessageFallsBackToStructuredCode(t *testing.T) {
+	body := []byte(`{"error":{"code":"RESOURCE-ERR-1"}}`)
+	if got, want := ExtractAPIErrorMessage(body), "RESOURCE-ERR-1"; got != want {
+		t.Fatalf("ExtractAPIErrorMessage() = %q, want %q", got, want)
+	}
+}
+
 func (c *recordingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	c.requests = append(c.requests, req.Method+" "+req.URL.RequestURI())
 	status := c.status
