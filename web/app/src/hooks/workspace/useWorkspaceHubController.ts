@@ -243,11 +243,11 @@ export function useWorkspaceHubController({
         const message = errorMessage(err, t("resourcesPublishCommunityFailed"));
         if (deploy) {
           await refreshHubTemplates();
-          if (deploySensitiveCheckFailed || deployReviewPending) {
-            const apiError = err as ApiError;
-            const publishedTemplateID = apiError.publishedTemplateId ?? "";
+          const apiError = err as ApiError;
+          const publishedTemplateID = String(apiError.publishedTemplateId ?? "").trim();
+          if (publishedTemplateID) {
             setSelectedHubResourceType("template");
-            if (publishedTemplateID) {
+            if (deploySensitiveCheckFailed || deployReviewPending) {
               queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
                 upsertHubTemplateReviewState(
                   templates,
@@ -256,8 +256,8 @@ export function useWorkspaceHubController({
                   deployReviewPending ? "" : message,
                 ),
               );
-              setSelectedHubTemplateId(publishedTemplateID);
             }
+            setSelectedHubTemplateId(publishedTemplateID);
             setResourcesPublishError("");
             return { status: "partial", message };
           }

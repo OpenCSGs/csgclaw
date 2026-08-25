@@ -1741,16 +1741,18 @@ export function useAgentController({
       const deployReviewPending = errorCode === HubTemplateErrorCodes.reviewPending;
       const publishedTemplateID = String((err as ApiError | null)?.publishedTemplateId ?? "").trim();
       const message = errorMessage(err, t("agentActionFailed"));
-      if (target === "official_deploy" && publishedTemplateID && (deploySensitiveCheckFailed || deployReviewPending)) {
+      if (target === "official_deploy" && publishedTemplateID) {
         await refreshHubTemplates();
-        queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
-          upsertHubTemplateReviewState(
-            templates,
-            publishedTemplateID,
-            deployReviewPending ? "Pending" : "Fail",
-            deployReviewPending ? "" : message,
-          ),
-        );
+        if (deploySensitiveCheckFailed || deployReviewPending) {
+          queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
+            upsertHubTemplateReviewState(
+              templates,
+              publishedTemplateID,
+              deployReviewPending ? "Pending" : "Fail",
+              deployReviewPending ? "" : message,
+            ),
+          );
+        }
         setSelectedHubTemplateId(publishedTemplateID);
         navigatePane({ type: WorkspacePaneTypes.hub, id: publishedTemplateID, resourceType: "template" }, rooms);
         return true;

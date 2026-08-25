@@ -1187,6 +1187,52 @@ describe("useAgentController", () => {
     );
   });
 
+  it.each([
+    ["RESOURCE-ERR-1", "deployment resource is unavailable"],
+    ["template_deploy_failed", "template deployment failed"],
+  ])("opens the published template after partial deployment failure %s", async (code, message) => {
+    const worker: AgentLike = {
+      ...oldAgent,
+      id: "u-worker",
+      name: "reviewer",
+      role: "worker",
+      runtime_kind: "codex",
+    };
+    vi.mocked(publishAgentTemplateRequest).mockRejectedValueOnce({
+      status: 502,
+      code,
+      message,
+      publishedTemplateId: "alice/reviewer",
+    } satisfies ApiError);
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
+          agents: [worker],
+          openCSGAuthenticated: true,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    let published = false;
+    await act(async () => {
+      published =
+        (await result.current.controller.agentViewProps.onPublish?.(
+          "official_deploy",
+          "reviewer",
+          "Reviews changes",
+        )) ?? false;
+    });
+
+    expect(published).toBe(true);
+    expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
+    expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("alice/reviewer");
+    expect(result.current.navigatePane).toHaveBeenCalledWith(
+      { type: WorkspacePaneTypes.hub, id: "alice/reviewer", resourceType: "template" },
+      [],
+    );
+  });
+
   it("does not wait for bootstrap or skill refresh after saving only the selected agent model", async () => {
     const aiGatewayAgent: AgentLike = {
       agent_profile: {
