@@ -544,6 +544,7 @@ function ThreadMessage({
   locale,
   theme,
   t,
+  onOpenAgentDetail,
   onPreviewUser,
   onQuestionSelect,
   compact = false,
@@ -563,8 +564,12 @@ function ThreadMessage({
         <button
           type="button"
           className="thread-message-avatar"
-          aria-label={`${t("profilePreview")} ${name}`}
+          aria-label={`${t(messageAgent ? "agentDetailPanel" : "profilePreview")} ${name}`}
           onClick={(event) => {
+            if (messageAgent && onOpenAgentDetail) {
+              onOpenAgentDetail(messageAgent, event.currentTarget);
+              return;
+            }
             onPreviewUser(user, event.currentTarget);
           }}
         >

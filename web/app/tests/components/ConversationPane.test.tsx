@@ -617,7 +617,7 @@ describe("ConversationPane", () => {
     expect(onOpenAgentDetail).not.toHaveBeenCalled();
   });
 
-  it("opens the profile preview when clicking an agent avatar", async () => {
+  it("opens the profile drawer when clicking an agent avatar", async () => {
     const user = userEvent.setup();
     const onOpenAgentDetail = vi.fn();
     const onPreviewUser = vi.fn();
@@ -628,17 +628,17 @@ describe("ConversationPane", () => {
       onPreviewUser,
     });
 
-    const avatar = screen.getAllByRole("button", { name: "profilePreview manager" })[0] as HTMLElement;
+    const avatar = screen.getAllByRole("button", { name: "agentDetailPanel manager" })[0] as HTMLElement;
     await user.hover(avatar);
     expect(onPreviewUser).not.toHaveBeenCalled();
 
     onPreviewUser.mockClear();
     await user.click(avatar);
-    expect(onPreviewUser).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
-    expect(onOpenAgentDetail).not.toHaveBeenCalled();
+    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "u-manager" }), avatar);
+    expect(onPreviewUser).not.toHaveBeenCalled();
   });
 
-  it("opens the profile preview when the message sender id is a channel identity alias", async () => {
+  it("opens the profile drawer when the message sender id is a channel identity alias", async () => {
     const user = userEvent.setup();
     const weatherUser: IMUser = {
       avatar: "O",
@@ -670,11 +670,11 @@ describe("ConversationPane", () => {
       usersByIdOverride: userAliases,
     });
 
-    const avatar = screen.getByRole("button", { name: "profilePreview openclaw-weather" });
+    const avatar = screen.getByRole("button", { name: "agentDetailPanel openclaw-weather" });
     await user.click(avatar);
 
-    expect(onPreviewUser).toHaveBeenCalledWith(weatherUser, avatar);
-    expect(onOpenAgentDetail).not.toHaveBeenCalled();
+    expect(onOpenAgentDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "openclaw-weather" }), avatar);
+    expect(onPreviewUser).not.toHaveBeenCalled();
   });
 
   it("renders agent details as a modal drawer with keyboard dismissal", async () => {
