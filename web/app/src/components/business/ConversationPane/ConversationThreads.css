@@ -190,7 +190,15 @@
 .csg-dialog-overlay.agent-detail-drawer-backdrop {
   z-index: var(--z-page-overlay);
   background: color-mix(in srgb, var(--gray-900) 24%, transparent);
-  backdrop-filter: blur(2px);
+  will-change: opacity;
+}
+
+.csg-dialog-overlay.agent-detail-drawer-backdrop[data-state="open"] {
+  animation: agent-detail-backdrop-in 180ms ease-out both;
+}
+
+.csg-dialog-overlay.agent-detail-drawer-backdrop[data-state="closed"] {
+  animation: agent-detail-backdrop-out 140ms ease-in both;
 }
 
 .csg-dialog-content.agent-detail-side-panel {
@@ -212,6 +220,43 @@
     var(--shadow);
   outline: none;
   transform: none;
+  contain: layout paint;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.csg-dialog-content.agent-detail-side-panel[data-state="open"] {
+  animation: agent-detail-drawer-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.csg-dialog-content.agent-detail-side-panel[data-state="closed"] {
+  animation: agent-detail-drawer-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes agent-detail-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes agent-detail-backdrop-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes agent-detail-drawer-in {
+  from {
+    opacity: 0.72;
+    transform: translate3d(32px, 0, 0);
+  }
+}
+
+@keyframes agent-detail-drawer-out {
+  to {
+    opacity: 0;
+    transform: translate3d(24px, 0, 0);
+  }
 }
 
 .agent-detail-side-panel-bar {
