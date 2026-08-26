@@ -3,7 +3,6 @@ import { userInfo } from "node:os";
 import path from "node:path";
 import { DesktopPlatform } from "../../shared/desktopEnvironment";
 import {
-  CLIPROXY_SYSTEM_PROXY_ENV,
   resolveSystemCLIProxyEnvironment,
   type SystemProxyResolver,
 } from "./systemProxy";
@@ -18,14 +17,6 @@ const SHELL_ENVIRONMENT_KEYS = [
   "DOCKER_CONFIG",
   "DOCKER_CERT_PATH",
   "DOCKER_TLS_VERIFY",
-] as const;
-const STANDARD_PROXY_ENVIRONMENT_KEYS = [
-  "HTTPS_PROXY",
-  "https_proxy",
-  "HTTP_PROXY",
-  "http_proxy",
-  "ALL_PROXY",
-  "all_proxy",
 ] as const;
 const WINDOWS_ENVIRONMENT_SCRIPT = `
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
@@ -82,22 +73,7 @@ export async function resolveSidecarEnvironment({
 }: ResolveSidecarEnvironmentOptions): Promise<NodeJS.ProcessEnv> {
   // Restore the environment that a newly opened terminal would normally
   // provide, while keeping packaged helper executables ahead of host tools.
-  const inheritedProxyURL = standardProxyEnvironmentValue(
-    baseEnvironment,
-    platform,
-  );
   const env = sanitizeEnvironment(baseEnvironment, platform);
-  if (
-    inheritedProxyURL &&
-    !environmentValue(env, CLIPROXY_SYSTEM_PROXY_ENV, platform)?.trim()
-  ) {
-    setEnvironmentValue(
-      env,
-      CLIPROXY_SYSTEM_PROXY_ENV,
-      inheritedProxyURL,
-      platform,
-    );
-  }
   const currentPath = environmentValue(env, "PATH", platform);
   let discovered: NodeJS.ProcessEnv = {};
 
@@ -234,23 +210,7 @@ function sanitizeEnvironment(
   deleteEnvironmentValue(env, "NODE_OPTIONS", platform);
   deleteEnvironmentValue(env, "CSGCLAW_CODEX_PATH", platform);
   deleteEnvironmentValue(env, "CSGCLAW_CODEX_ACP_PATH", platform);
-  for (const key of STANDARD_PROXY_ENVIRONMENT_KEYS) {
-    deleteEnvironmentValue(env, key, platform);
-  }
   return env;
-}
-
-function standardProxyEnvironmentValue(
-  env: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform,
-): string | undefined {
-  for (const key of STANDARD_PROXY_ENVIRONMENT_KEYS) {
-    const value = environmentValue(env, key, platform)?.trim();
-    if (value) {
-      return value;
-    }
-  }
-  return undefined;
 }
 
 function resolveLoginShell(

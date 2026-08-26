@@ -103,12 +103,14 @@ test("scopes the system proxy to embedded CLIProxy without importing shell proxy
   assert.equal(env.UNRELATED_SECRET, undefined);
 });
 
-test("scopes an inherited standard proxy to embedded CLIProxy", async () => {
+test("preserves explicitly inherited proxy settings for the whole sidecar", async () => {
   const env = await resolveSidecarEnvironment({
     baseEnvironment: {
       PATH: "/usr/bin:/bin",
       HTTPS_PROXY: "http://127.0.0.1:7891",
       HTTP_PROXY: "http://127.0.0.1:7892",
+      ALL_PROXY: "socks5://127.0.0.1:7893",
+      NO_PROXY: "localhost,127.0.0.1,.example.com",
     },
     homeDirectory: "/home/test",
     loginShell: "/bin/bash",
@@ -117,9 +119,11 @@ test("scopes an inherited standard proxy to embedded CLIProxy", async () => {
     resolveSystemProxy: async () => "PROXY 127.0.0.1:7890",
   });
 
-  assert.equal(env.CSGCLAW_CLIPROXY_SYSTEM_PROXY_URL, "http://127.0.0.1:7891");
-  assert.equal(env.HTTPS_PROXY, undefined);
-  assert.equal(env.HTTP_PROXY, undefined);
+  assert.equal(env.CSGCLAW_CLIPROXY_SYSTEM_PROXY_URL, "http://127.0.0.1:7890");
+  assert.equal(env.HTTPS_PROXY, "http://127.0.0.1:7891");
+  assert.equal(env.HTTP_PROXY, "http://127.0.0.1:7892");
+  assert.equal(env.ALL_PROXY, "socks5://127.0.0.1:7893");
+  assert.equal(env.NO_PROXY, "localhost,127.0.0.1,.example.com");
 });
 
 test("uses an interactive non-login shell for Linux terminal configuration", async () => {
