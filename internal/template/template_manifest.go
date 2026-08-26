@@ -139,24 +139,39 @@ func normalizeTemplateRuntimeOptions(runtimeKind string, raw map[string]any) (ma
 	if runtimeKind != runtime.KindCodex {
 		return nil, fmt.Errorf("runtime_options are supported only for Codex worker templates")
 	}
-	if len(raw) != 1 {
-		return nil, fmt.Errorf("runtime_options supports only execution_mode")
+	for key := range raw {
+		if key != "execution_mode" && key != "memory_mode" {
+			return nil, fmt.Errorf("runtime_options supports only execution_mode and memory_mode")
+		}
 	}
-	value, ok := raw["execution_mode"]
-	if !ok {
-		return nil, fmt.Errorf("runtime_options supports only execution_mode")
+	out := make(map[string]any, len(raw))
+	if value, ok := raw["execution_mode"]; ok {
+		mode, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("runtime_options.execution_mode must be a string")
+		}
+		mode = strings.ToLower(strings.TrimSpace(mode))
+		switch mode {
+		case "standard", "read_only":
+			out["execution_mode"] = mode
+		default:
+			return nil, fmt.Errorf("runtime_options.execution_mode must be %q or %q", "standard", "read_only")
+		}
 	}
-	mode, ok := value.(string)
-	if !ok {
-		return nil, fmt.Errorf("runtime_options.execution_mode must be a string")
+	if value, ok := raw["memory_mode"]; ok {
+		mode, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("runtime_options.memory_mode must be a string")
+		}
+		mode = strings.ToLower(strings.TrimSpace(mode))
+		switch mode {
+		case "enabled", "disabled":
+			out["memory_mode"] = mode
+		default:
+			return nil, fmt.Errorf("runtime_options.memory_mode must be %q or %q", "enabled", "disabled")
+		}
 	}
-	mode = strings.ToLower(strings.TrimSpace(mode))
-	switch mode {
-	case "standard", "read_only":
-		return map[string]any{"execution_mode": mode}, nil
-	default:
-		return nil, fmt.Errorf("runtime_options.execution_mode must be %q or %q", "standard", "read_only")
-	}
+	return out, nil
 }
 
 func cloneTemplateRuntimeOptions(raw map[string]any) map[string]any {

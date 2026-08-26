@@ -5256,6 +5256,67 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	}
 }
 
+func TestHandleHubTemplatesPublishesCodexRuntimeOptions(t *testing.T) {
+	created := agent.Agent{
+		ID:          "u-codex-worker",
+		Name:        "codex-worker",
+		Role:        agent.RoleWorker,
+		RuntimeKind: agent.RuntimeKindCodex,
+		RuntimeOptions: map[string]any{
+			"execution_mode": "read_only",
+			"memory_mode":    "disabled",
+		},
+	}
+	svc := mustNewSeededService(t, []agent.Agent{created})
+	publishSpec, err := svc.HubPublishSpec(created.ID)
+	if err != nil {
+		t.Fatalf("HubPublishSpec() error = %v", err)
+	}
+	if err := os.MkdirAll(publishSpec.WorkspaceRef.Path, 0o755); err != nil {
+		t.Fatalf("MkdirAll(workspace) error = %v", err)
+	}
+
+	registryRoot := t.TempDir()
+	hubSvc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry:        "local",
+		DefaultPublishRegistry: "local",
+		Registries: []config.HubRegistryConfig{
+			{Name: "local", Kind: hub.RegistryKindLocal, Path: registryRoot, Enabled: true},
+		},
+	}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+
+	srv := &Handler{svc: svc}
+	srv.SetHubService(hubSvc)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
+		fmt.Sprintf(`{"agent_id":%q,"registry":"local"}`, created.ID),
+	))
+	rec := httptest.NewRecorder()
+
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var got apitypes.HubTemplate
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.RuntimeOptions["execution_mode"] != "read_only" || got.RuntimeOptions["memory_mode"] != "disabled" {
+		t.Fatalf("runtime options = %#v, want execution_mode=read_only and memory_mode=disabled", got.RuntimeOptions)
+	}
+	manifestData, err := os.ReadFile(filepath.Join(registryRoot, "templates", created.Name, "agent.toml"))
+	if err != nil {
+		t.Fatalf("ReadFile(agent.toml) error = %v", err)
+	}
+	manifest := string(manifestData)
+	if !strings.Contains(manifest, "execution_mode = 'read_only'") || !strings.Contains(manifest, "memory_mode = 'disabled'") {
+		t.Fatalf("agent.toml missing Codex runtime options:\n%s", manifest)
+	}
+}
+
 func TestHandleHubTemplatesRequiresOpenCSGLoginForOfficialPublish(t *testing.T) {
 	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
 		return auth.Status{Authenticated: false}, nil

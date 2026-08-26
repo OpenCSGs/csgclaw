@@ -4,7 +4,7 @@
 
 > 注意：表格记录字段精简决策。标记为 ❌ 的字段已经从当前实现中移除；旧清单中残留的这些字段会被忽略。
 >
-> `runtime_options.memory_mode` 是规划字段，当前版本尚未支持。当前 `[runtime_options]` 只允许配置 `execution_mode`。
+> `[runtime_options]` 当前仅适用于 Codex Worker 模板，支持 `execution_mode` 和 `memory_mode`。
 
 | 字段名 | 含义 | 是否必须 | 是否计划保留 |
 |---|---|---|---|
@@ -28,9 +28,9 @@
 | `image.env[].pattern` | 环境变量值的正则表达式约束 | 否，已移除 | ❌ |
 | `image.env[].example` | 环境变量示例值 | 否，已移除 | ❌ |
 | `image.env[].placeholder` | 环境变量输入提示 | 否，已移除 | ❌ |
-| `runtime_options` | Agent 运行时选项。目前只支持 Codex Worker 模板，并且只允许包含 `execution_mode` | 否 | ✅ |
+| `runtime_options` | Agent 运行时选项。目前只支持 Codex Worker 模板，并且只允许包含 `execution_mode` 和 `memory_mode` | 否 | ✅ |
 | `runtime_options.execution_mode` | Codex Worker 的执行模式；`standard` 表示标准模式，`read_only` 表示只读模式 | 否，未设置时按 `standard` 模式运行 | ✅ |
-| `runtime_options.memory_mode` | Agent 记忆模式；`enabled` 表示启用，`disabled` 表示不启用。该字段为规划字段，当前尚未实现 | 否 | ✅ |
+| `runtime_options.memory_mode` | Codex Worker 的记忆模式；`enabled` 表示启用，`disabled` 表示不启用 | 否，未设置时按 `enabled` 模式运行 | ✅ |
 
 ## 当前约束
 
@@ -40,5 +40,5 @@
 - `image.ref` 对沙箱运行时 `picoclaw` 和 `openclaw` 是必填字段。
 - `runtime_options` 当前仅适用于 Codex Worker 模板。
 - `runtime_options.execution_mode` 当前只接受 `standard` 或 `read_only`。
-- `runtime_options.memory_mode` 尚未实现，在当前版本的 `agent.toml` 中配置该字段会导致模板校验失败。
+- `runtime_options.memory_mode` 当前只接受 `enabled` 或 `disabled`。
 - `image.env[].secret = true` 时不能同时设置非空的 `default`。

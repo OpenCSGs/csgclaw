@@ -93,12 +93,16 @@ func TestValidatePublishTemplateName(t *testing.T) {
 func TestNormalizeTemplateRuntimeOptions(t *testing.T) {
 	got, err := normalizeTemplateRuntimeOptions(runtime.KindCodex, map[string]any{
 		"execution_mode": " READ_ONLY ",
+		"memory_mode":    " DISABLED ",
 	})
 	if err != nil {
 		t.Fatalf("normalizeTemplateRuntimeOptions() error = %v", err)
 	}
 	if got["execution_mode"] != "read_only" {
 		t.Fatalf("execution_mode = %v, want read_only", got["execution_mode"])
+	}
+	if got["memory_mode"] != "disabled" {
+		t.Fatalf("memory_mode = %v, want disabled", got["memory_mode"])
 	}
 
 	for name, test := range map[string]struct {
@@ -108,6 +112,8 @@ func TestNormalizeTemplateRuntimeOptions(t *testing.T) {
 		"non codex":      {runtimeKind: runtime.NameOpenClaw, options: map[string]any{"execution_mode": "read_only"}},
 		"unknown option": {runtimeKind: runtime.KindCodex, options: map[string]any{"local_workspace_dir": "/tmp/project"}},
 		"invalid mode":   {runtimeKind: runtime.KindCodex, options: map[string]any{"execution_mode": "unsafe"}},
+		"invalid memory": {runtimeKind: runtime.KindCodex, options: map[string]any{"memory_mode": "sometimes"}},
+		"memory type":    {runtimeKind: runtime.KindCodex, options: map[string]any{"memory_mode": true}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := normalizeTemplateRuntimeOptions(test.runtimeKind, test.options); err == nil {
