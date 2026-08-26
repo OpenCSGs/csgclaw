@@ -111,7 +111,8 @@ Windows 当前默认使用 Docker，请先确保本机 Docker 可以正常运行
 csgclaw serve
 ```
 
-CSGClaw 会尽量自动打开浏览器。如果没有自动打开，请访问终端中显示的地址，例如 `http://127.0.0.1:18080/`。
+默认情况下，CSGClaw 会打印 WebUI 地址，但不会自动打开浏览器。
+如需在启动后自动打开，请使用 `csgclaw serve --browser`。
 
 ### 3. 检查 Agent 配置
 

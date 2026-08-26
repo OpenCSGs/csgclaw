@@ -525,7 +525,7 @@ func TestServeForegroundOpensIMURLWhenBrowserAllowed(t *testing.T) {
 			AdvertiseBaseURL: "http://example.test/base",
 		},
 	}
-	if err := serveForeground(context.Background(), run, cfg, "table"); err != nil {
+	if err := serveForegroundWithConfigPath(context.Background(), run, cfg, "", "table", serveOptions{OpenBrowser: true}); err != nil {
 		t.Fatalf("serveForeground() error = %v", err)
 	}
 	select {
@@ -546,7 +546,7 @@ func TestServeForegroundOpensIMURLWhenBrowserAllowed(t *testing.T) {
 	}
 }
 
-func TestServeRunNoBrowserFlagSuppressesBrowserOpen(t *testing.T) {
+func TestServeRunDoesNotOpenBrowserByDefault(t *testing.T) {
 	restore := stubServeDependencies(t)
 	defer restore()
 
@@ -586,7 +586,7 @@ func TestServeRunNoBrowserFlagSuppressesBrowserOpen(t *testing.T) {
 	}
 
 	run := testContext()
-	if err := NewServeCmd().Run(context.Background(), run, []string{"--no-browser"}, command.GlobalOptions{Config: configPath}); err != nil {
+	if err := NewServeCmd().Run(context.Background(), run, nil, command.GlobalOptions{Config: configPath}); err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 	select {
@@ -601,6 +601,55 @@ func TestServeRunNoBrowserFlagSuppressesBrowserOpen(t *testing.T) {
 	}
 	if got := run.Stdout.(*bytes.Buffer).String(); !strings.Contains(got, "CSGClaw IM is available at: http://example.test/base/") {
 		t.Fatalf("stdout missing IM URL:\n%s", got)
+	}
+}
+
+func TestServeRunBrowserFlagOpensBrowser(t *testing.T) {
+	restore := stubServeDependencies(t)
+	defer restore()
+
+	origRunServer := RunServer
+	t.Cleanup(func() {
+		RunServer = origRunServer
+	})
+	RunServer = func(opts server.Options) error {
+		if opts.OnReady != nil {
+			opts.OnReady(nil, nil)
+		}
+		return nil
+	}
+
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Config{
+		Server: config.ServerConfig{
+			ListenAddr:       "127.0.0.1:18080",
+			AdvertiseBaseURL: "http://example.test/base",
+			AccessToken:      "pc-secret",
+		},
+		Sandbox: config.SandboxConfig{Provider: config.DefaultSandboxProvider},
+	}
+	if err := cfg.Save(configPath); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	openedCh := make(chan string, 1)
+	WaitForHealthy = func(string, time.Duration) error { return nil }
+	OpenBrowser = func(rawURL string) error {
+		openedCh <- rawURL
+		return nil
+	}
+
+	run := testContext()
+	if err := NewServeCmd().Run(context.Background(), run, []string{"--browser"}, command.GlobalOptions{Config: configPath}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	select {
+	case got := <-openedCh:
+		if want := "http://example.test/base/"; got != want {
+			t.Fatalf("OpenBrowser() URL = %q, want %q", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("OpenBrowser was not called with --browser")
 	}
 }
 
@@ -623,7 +672,7 @@ func TestServeForegroundPrintsManualIMURLWhenBrowserNotAllowed(t *testing.T) {
 			AdvertiseBaseURL: "http://example.test/base",
 		},
 	}
-	if err := serveForeground(context.Background(), run, cfg, "table"); err != nil {
+	if err := serveForegroundWithConfigPath(context.Background(), run, cfg, "", "table", serveOptions{OpenBrowser: true}); err != nil {
 		t.Fatalf("serveForeground() error = %v", err)
 	}
 	select {
@@ -668,7 +717,7 @@ func TestServeForegroundWaitsForHealthyBeforeOpeningBrowser(t *testing.T) {
 			AdvertiseBaseURL: "http://example.test/base",
 		},
 	}
-	if err := serveForeground(context.Background(), run, cfg, "table"); err != nil {
+	if err := serveForegroundWithConfigPath(context.Background(), run, cfg, "", "table", serveOptions{OpenBrowser: true}); err != nil {
 		t.Fatalf("serveForeground() error = %v", err)
 	}
 	select {

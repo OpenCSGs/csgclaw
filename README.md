@@ -69,7 +69,8 @@ For most users, the install script above is the simpler option.
 csgclaw serve
 ```
 
-CSGClaw will open the IM workspace in your browser automatically when possible. If it does not, open the printed URL manually (for example `http://127.0.0.1:18080/`).
+CSGClaw prints the IM workspace URL without opening a browser by default.
+Use `csgclaw serve --browser` to open it automatically after startup.
 
 ## Configuration
 

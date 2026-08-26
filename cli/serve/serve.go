@@ -155,7 +155,8 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	fs := run.NewFlagSet("serve", run.Program+" serve [-d|--daemon] [flags]", c.Summary())
 	daemon := fs.Bool("daemon", false, "run server in background")
 	fs.BoolVar(daemon, "d", false, "run server in background")
-	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup")
+	browser := fs.Bool("browser", false, "open the browser after startup")
+	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup (default)")
 	noAuthDetect := fs.Bool("no-auth-detect", false, "disable automatic auth detection during startup")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
 
@@ -216,7 +217,7 @@ func (c serveCmd) Run(ctx context.Context, run *command.Context, args []string, 
 	}
 
 	serveOpts := serveOptions{
-		NoBrowser:    *noBrowser,
+		OpenBrowser:  *browser && !*noBrowser,
 		NoAuthDetect: *noAuthDetect,
 	}
 	if *daemon {
@@ -295,7 +296,8 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	pidPath := fs.String("pid", "", "pid file path")
 	configPathFlag := fs.String("config", globals.Config, "config file path")
 	logLevel := fs.String("log-level", "info", "log level: debug, info, warn, error")
-	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup")
+	browser := fs.Bool("browser", false, "open the browser after startup")
+	noBrowser := fs.Bool("no-browser", false, "do not open the browser after startup (default)")
 	noAuthDetect := fs.Bool("no-auth-detect", false, "disable automatic auth detection during startup")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -360,7 +362,7 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 		return err
 	}
 	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, configPath, globals.Output, serveOptions{
-		NoBrowser:    *noBrowser,
+		OpenBrowser:  *browser && !*noBrowser,
 		NoAuthDetect: *noAuthDetect,
 	})
 }
@@ -387,7 +389,7 @@ func officialInstallGuidance(goos string) (string, string) {
 }
 
 type serveOptions struct {
-	NoBrowser       bool
+	OpenBrowser     bool
 	NoAuthDetect    bool
 	Quiet           bool
 	Distribution    string
@@ -506,8 +508,8 @@ func backgroundServeArgs(configPath, pidPath, logLevel string, opts serveOptions
 	if strings.TrimSpace(logLevel) != "" {
 		args = append(args, "--log-level", logLevel)
 	}
-	if opts.NoBrowser {
-		args = append(args, "--no-browser")
+	if opts.OpenBrowser {
+		args = append(args, "--browser")
 	}
 	if opts.NoAuthDetect {
 		args = append(args, "--no-auth-detect")
@@ -799,7 +801,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 			if serveOpts.OnReady != nil {
 				serveOpts.OnReady()
 			}
-			if !serveOpts.NoBrowser && output != "json" && run != nil {
+			if serveOpts.OpenBrowser && output != "json" && run != nil {
 				waitForHealthy := WaitForHealthy
 				openBrowser := OpenBrowser
 				go func() {

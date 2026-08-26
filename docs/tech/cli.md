@@ -114,7 +114,8 @@ csgclaw serve [-d|--daemon] [flags]
 Flags:
 
 - `--daemon`, `-d`: run in background.
-- `--no-browser`: do not open the browser after startup.
+- `--browser`: open the browser after startup.
+- `--no-browser`: explicitly suppress browser opening; this is the default and overrides `--browser`.
 - `--no-auth-detect`: disable startup auth/model auto-detection so the Manager Profile setup flow remains incomplete for manual testing.
 - `--log-level string`: log level. Supported values: `debug`, `info`, `warn`, `error`. Default `info`.
 - `--log string`: daemon log path. Daemon mode only. Default `~/.csgclaw/server.log`.
@@ -129,12 +130,14 @@ Behavior:
 - With `--no-auth-detect`, startup skips automatic CLI auth import and Manager Profile provider/model detection unless an existing complete Manager Profile is already saved.
 - Codex CLI is included in the CSGClaw bundle and is always launched from the bundle, independent of any Codex installation on the host system.
 - In foreground mode it prints the effective config and IM URL.
+- It does not open a browser unless `--browser` is set.
 - In daemon mode it launches the hidden internal `_serve` entrypoint and waits for `/healthz`.
 
 Examples:
 
 ```bash
 csgclaw serve
+csgclaw serve --browser
 csgclaw serve --no-auth-detect --no-browser
 csgclaw serve --daemon
 csgclaw serve --config /path/to/config.toml

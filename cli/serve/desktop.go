@@ -108,7 +108,6 @@ func (desktopServeCmd) Run(parent context.Context, run *command.Context, args []
 	}
 
 	return serveForegroundWithConfigPath(ctx, run, cfg, configPath, "", serveOptions{
-		NoBrowser:       true,
 		Quiet:           true,
 		Distribution:    "electron",
 		Listener:        rendererListener,

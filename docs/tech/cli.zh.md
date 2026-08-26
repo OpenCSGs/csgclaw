@@ -114,7 +114,8 @@ csgclaw serve [-d|--daemon] [flags]
 参数：
 
 - `--daemon`、`-d`：后台运行。
-- `--no-browser`：启动后不自动打开浏览器。
+- `--browser`：启动后自动打开浏览器。
+- `--no-browser`：明确禁止自动打开浏览器；这是默认行为，并且优先于 `--browser`。
 - `--no-auth-detect`：禁用启动时的 auth/model 自动检测，让 Manager Profile 配置流程保持未完成，便于手动测试。
 - `--log-level string`：日志级别，支持 `debug`、`info`、`warn`、`error`，默认 `info`。
 - `--log string`：后台模式日志路径，仅 daemon 模式有效。默认 `~/.csgclaw/server.log`。
@@ -129,12 +130,14 @@ csgclaw serve [-d|--daemon] [flags]
 - 使用 `--no-auth-detect` 时，启动会跳过 CLI auth 自动导入和 Manager Profile provider/model 自动检测；已保存的完整 Manager Profile 不会被覆盖。
 - Codex CLI 会随 CSGClaw 安装包一起提供，并始终从安装包中启动，不依赖系统中已有的 Codex。
 - 前台模式下会打印生效配置和 IM 访问地址。
+- 只有设置 `--browser` 时才会自动打开浏览器。
 - 后台模式会拉起隐藏的 `_serve` 内部入口，并等待 `/healthz` 健康检查成功。
 
 示例：
 
 ```bash
 csgclaw serve
+csgclaw serve --browser
 csgclaw serve --no-auth-detect --no-browser
 csgclaw serve --daemon
 csgclaw serve --config /path/to/config.toml
