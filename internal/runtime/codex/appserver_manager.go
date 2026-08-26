@@ -823,6 +823,7 @@ func appServerOverrides(spec SessionSpec) []string {
 		"--config", `approval_policy="never"`,
 		"--config", `default_permissions="csgclaw-read-only"`,
 		"--config", `web_search="disabled"`,
+		"--config", `project_doc_max_bytes=0`,
 		"--config", `shell_environment_policy.inherit="none"`,
 	}
 	if workspaceDir := strings.TrimSpace(spec.WorkspaceDir); workspaceDir != "" {

@@ -2759,6 +2759,46 @@ func TestBuildSandboxConfigBlockUsesUnelevatedWindowsSandbox(t *testing.T) {
 	}
 }
 
+func TestWindowsReadOnlyConfigurationSkipsSandboxedProjectDocLoading(t *testing.T) {
+	standardConfig := configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(
+		"",
+		agentruntime.Profile{},
+		nil,
+		`C:\workspace`,
+		true,
+		ExecutionModeStandard,
+	)
+	config := configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(
+		standardConfig,
+		agentruntime.Profile{},
+		nil,
+		`C:\workspace`,
+		true,
+		ExecutionModeReadOnly,
+	)
+	var parsed map[string]any
+	if err := toml.Unmarshal([]byte(config), &parsed); err != nil {
+		t.Fatalf("Windows read-only config is invalid TOML: %v\n%s", err, config)
+	}
+	windowsConfig, ok := parsed["windows"].(map[string]any)
+	if !ok || windowsConfig["sandbox"] != "unelevated" {
+		t.Fatalf("Windows read-only sandbox = %#v, want unelevated\n%s", parsed["windows"], config)
+	}
+	permissions := parsed["permissions"].(map[string]any)
+	profile := permissions[readOnlyPermissionsProfile].(map[string]any)
+	filesystem := profile["filesystem"].(map[string]any)
+	if filesystem[":root"] != "deny" {
+		t.Fatalf("Windows read-only filesystem policy = %#v, want root deny\n%s", filesystem, config)
+	}
+	overrides := strings.Join(appServerOverrides(SessionSpec{
+		ExecutionMode: ExecutionModeReadOnly,
+		WorkspaceDir:  `C:\workspace`,
+	}), " ")
+	if !strings.Contains(overrides, `project_doc_max_bytes=0`) {
+		t.Fatalf("Windows read-only app-server overrides do not disable project docs: %q", overrides)
+	}
+}
+
 func TestConfigureCodexHomeConfigReadOnlyModePinsSafeRootSettings(t *testing.T) {
 	config := configureCodexHomeConfigWithWorkspaceForPlatformAndExecutionMode(
 		"approval_policy = \"on-request\"\nfeatures.shell_tool = true\nfeatures.unified_exec = true\n",

@@ -2284,7 +2284,7 @@ func TestAppServerReadOnlyParamsAndOverrides(t *testing.T) {
 	}
 	overrides := appServerOverrides(spec)
 	joined := strings.Join(overrides, " ")
-	for _, want := range []string{"--strict-config", "--disable shell_tool", "--disable unified_exec", `approval_policy="never"`, `default_permissions="csgclaw-read-only"`} {
+	for _, want := range []string{"--strict-config", "--disable shell_tool", "--disable unified_exec", `approval_policy="never"`, `default_permissions="csgclaw-read-only"`, `project_doc_max_bytes=0`} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("overrides missing %q: %q", want, overrides)
 		}
