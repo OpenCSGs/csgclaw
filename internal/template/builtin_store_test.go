@@ -52,8 +52,19 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if got, want := codexItem.RuntimeKind, runtime.KindCodex; got != want {
 		t.Fatalf("Get(codex-worker).RuntimeKind = %q, want %q", got, want)
 	}
+	if got, want := codexItem.Role, TemplateRoleWorker; got != want {
+		t.Fatalf("Get(codex-worker).Role = %q, want %q", got, want)
+	}
 	if got := codexItem.Image; got != "" {
 		t.Fatalf("Get(codex-worker).Image = %q, want empty", got)
+	}
+
+	managerItem, err := store.Get(context.Background(), "manager-codex")
+	if err != nil {
+		t.Fatalf("Get(manager-codex) error = %v", err)
+	}
+	if got, want := managerItem.Role, TemplateRoleManager; got != want {
+		t.Fatalf("Get(manager-codex).Role = %q, want %q", got, want)
 	}
 
 	workspace, err := store.FetchWorkspace(context.Background(), "openclaw-worker")
@@ -108,7 +119,6 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 	localStore := NewLocalStore(registryRoot)
 	if _, err := localStore.Publish(context.Background(), PublishSpec{
 		Name:         "team-helper",
-		Role:         TemplateRoleWorker,
 		RuntimeKind:  runtime.KindCodex,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 	}); err != nil {

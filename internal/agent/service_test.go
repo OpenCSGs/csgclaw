@@ -8429,7 +8429,7 @@ func TestImageNeedsTemplateVersionUpgradeIgnoresCurrentSharedImageTag(t *testing
 	}
 }
 
-func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromDefaultTemplateVersion(t *testing.T) {
+func TestAgentIgnoresLocalTemplatePublishedFromManagerForManagerUpgrade(t *testing.T) {
 	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	const (
@@ -8488,8 +8488,8 @@ func TestAgentMarksOutdatedManagerImageUpgradeRequiredFromDefaultTemplateVersion
 	if got.AgentProfile.EnvRestartRequired {
 		t.Fatalf("Agent().AgentProfile.EnvRestartRequired = true, want false for image-only upgrade")
 	}
-	if !got.AgentProfile.ImageUpgradeRequired {
-		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = false, want true for outdated manager image")
+	if got.AgentProfile.ImageUpgradeRequired {
+		t.Fatalf("Agent().AgentProfile.ImageUpgradeRequired = true, want false for local worker template")
 	}
 }
 
@@ -8969,7 +8969,7 @@ func TestCreateWorkerRejectsMissingDefaultTemplate(t *testing.T) {
 	}
 }
 
-func TestCreateWorkerRejectsDefaultTemplateRoleMismatch(t *testing.T) {
+func TestCreateWorkerTreatsLocalManagerPublishAsWorkerTemplate(t *testing.T) {
 	t.Cleanup(TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	hubSvc := mustNewLocalTemplateHubService(t, "review-manager", hub.Template{
@@ -8993,12 +8993,12 @@ func TestCreateWorkerRejectsDefaultTemplateRoleMismatch(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	_, err = svc.CreateWorker(context.Background(), CreateAgentSpec{Name: "alice"})
-	if err == nil {
-		t.Fatal("CreateWorker() error = nil, want role mismatch")
+	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{Name: "alice"})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), `default worker template "local.review-manager" points to a manager template`) {
-		t.Fatalf("CreateWorker() error = %v, want worker/manager mismatch", err)
+	if got.Role != RoleWorker || got.Description != "manager template" {
+		t.Fatalf("CreateWorker() = role %q description %q, want worker using published template", got.Role, got.Description)
 	}
 }
 
@@ -9167,9 +9167,6 @@ func TestHubPublishSpecUsesAgentWorkspaceSnapshot(t *testing.T) {
 	}
 	if spec.Description != "review worker" {
 		t.Fatalf("Description = %q, want %q", spec.Description, "review worker")
-	}
-	if spec.Role != hub.TemplateRoleWorker {
-		t.Fatalf("Role = %q, want %q", spec.Role, hub.TemplateRoleWorker)
 	}
 	if spec.RuntimeKind != RuntimeNamePicoClaw {
 		t.Fatalf("RuntimeKind = %q, want %q", spec.RuntimeKind, RuntimeNamePicoClaw)
@@ -11485,7 +11482,6 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 		ID:             id,
 		Name:           item.Name,
 		Description:    item.Description,
-		Role:           item.Role,
 		RuntimeKind:    item.RuntimeKind,
 		Version:        item.Version,
 		Image:          item.Image,
@@ -11527,9 +11523,6 @@ func appendTemplateImageEnvContracts(t *testing.T, manifestPath string, items []
 		fmt.Fprintf(&b, "\n[[image.env]]\nname = %q\nrequired = %t\nsecret = %t\n", item.Name, item.Required, item.Secret)
 		if item.Default != "" {
 			fmt.Fprintf(&b, "default = %q\n", item.Default)
-		}
-		if item.Description != "" {
-			fmt.Fprintf(&b, "description = %q\n", item.Description)
 		}
 	}
 	if err := os.WriteFile(manifestPath, []byte(b.String()), 0o644); err != nil {
@@ -11596,7 +11589,6 @@ func mustNewLocalTemplateHubServiceWithoutWorkspace(t *testing.T, id string, ite
 		ID:          id,
 		Name:        item.Name,
 		Description: item.Description,
-		Role:        item.Role,
 		RuntimeKind: item.RuntimeKind,
 		Version:     item.Version,
 		Image:       item.Image,

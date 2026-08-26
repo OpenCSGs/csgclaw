@@ -1628,7 +1628,7 @@ func TestHandleAgentsListReportsImageUpgradeRequiredByTemplateVersion(t *testing
 	}
 }
 
-func TestHandleManagerGetReportsImageUpgradeRequiredByTemplateVersion(t *testing.T) {
+func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) {
 	tests := []struct {
 		name         string
 		currentImage string
@@ -1637,18 +1637,18 @@ func TestHandleManagerGetReportsImageUpgradeRequiredByTemplateVersion(t *testing
 		wantRequired bool
 	}{
 		{
-			name:         "older manager version requires upgrade",
+			name:         "older local template version is ignored",
 			currentImage: "registry.example/opencsghq/picoclaw-manager:0.1.0",
 			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
 			version:      "0.2.0",
-			wantRequired: true,
+			wantRequired: false,
 		},
 		{
-			name:         "legacy manager base image requires upgrade to template wrapper",
+			name:         "legacy manager base image is ignored",
 			currentImage: "registry.example/opencsghq/picoclaw:2026.5.27",
 			latestImage:  "registry.example/opencsghq/picoclaw-manager:0.2.0",
 			version:      "0.2.0",
-			wantRequired: true,
+			wantRequired: false,
 		},
 		{
 			name:         "newer manager version does not require upgrade",
@@ -5428,7 +5428,6 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 		ID:             id,
 		Name:           item.Name,
 		Description:    item.Description,
-		Role:           item.Role,
 		RuntimeKind:    item.RuntimeKind,
 		Version:        item.Version,
 		Image:          item.Image,
@@ -5460,7 +5459,6 @@ func mustNewLocalTemplateHubServiceWithoutWorkspace(t *testing.T, id string, ite
 		ID:             id,
 		Name:           item.Name,
 		Description:    item.Description,
-		Role:           item.Role,
 		RuntimeKind:    item.RuntimeKind,
 		Version:        item.Version,
 		Image:          item.Image,

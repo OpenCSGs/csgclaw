@@ -255,7 +255,6 @@ func (s *Service) PublishTemplate(ctx context.Context, id, registry string) (Tem
 		ID:             item.Name,
 		Name:           item.Name,
 		Description:    item.Description,
-		Role:           item.Role,
 		RuntimeKind:    item.RuntimeKind,
 		Version:        item.Version,
 		Image:          item.Image,

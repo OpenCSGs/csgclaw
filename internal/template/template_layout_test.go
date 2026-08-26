@@ -24,7 +24,6 @@ func TestLocalStoreCodexTemplateDoesNotRoundTripWorkspaceMemory(t *testing.T) {
 	created, err := store.Publish(context.Background(), PublishSpec{
 		ID:          "codex-with-workspace-memory",
 		Name:        "codex-with-workspace-memory",
-		Role:        TemplateRoleWorker,
 		RuntimeKind: agentruntime.KindCodex,
 		WorkspaceRef: WorkspaceRef{
 			Kind: WorkspaceKindDir,

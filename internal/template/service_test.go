@@ -203,7 +203,7 @@ func TestPublishUsesDefaultPublishRegistry(t *testing.T) {
 		"local":   localStore,
 	})
 
-	item, err := svc.Publish(context.Background(), PublishSpec{Name: "frontend-alice", Role: TemplateRoleWorker})
+	item, err := svc.Publish(context.Background(), PublishSpec{Name: "frontend-alice"})
 	if err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}
@@ -248,7 +248,6 @@ func TestDeleteRemovesLocalTemplate(t *testing.T) {
 	if _, err := store.Publish(context.Background(), PublishSpec{
 		ID:          "review-bot",
 		Name:        "review-bot",
-		Role:        TemplateRoleWorker,
 		RuntimeKind: "picoclaw",
 		Image:       "agent-image:test",
 	}); err != nil {
@@ -300,7 +299,7 @@ func TestPublishRejectsBuiltinRegistry(t *testing.T) {
 		"builtin": stubStore{},
 	})
 
-	_, err := svc.Publish(context.Background(), PublishSpec{Name: "frontend-alice", Role: TemplateRoleWorker})
+	_, err := svc.Publish(context.Background(), PublishSpec{Name: "frontend-alice"})
 	if !errors.Is(err, ErrRegistryNotWritable) {
 		t.Fatalf("Publish() error = %v, want ErrRegistryNotWritable", err)
 	}

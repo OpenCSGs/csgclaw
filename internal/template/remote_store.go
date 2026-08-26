@@ -337,7 +337,7 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		name = strings.TrimSpace(repository.Name)
 	}
 	namespace := strings.SplitN(id, "/", 2)[0]
-	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.Role, manifest.RuntimeOptions)
+	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.RuntimeOptions)
 	if err != nil {
 		return Template{}, fmt.Errorf("validate remote hub manifest %q runtime options: %w", id, err)
 	}
@@ -346,7 +346,7 @@ func (s *RemoteStore) getTemplate(ctx context.Context, id string, repository rem
 		Namespace:      namespace,
 		Name:           name,
 		Description:    description,
-		Role:           normalizeTemplateRole(manifest.Role),
+		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
 		Version:        strings.TrimSpace(manifest.Version),
 		Image:          manifestImageRef(manifest.Image),
@@ -801,7 +801,7 @@ func (s *RemoteStore) Publish(ctx context.Context, spec PublishSpec) (Template, 
 		Namespace:      s.username,
 		Name:           normalized.Name,
 		Description:    normalized.Description,
-		Role:           normalized.Role,
+		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalized.RuntimeKind,
 		Version:        normalized.Version,
 		Image:          normalized.Image,

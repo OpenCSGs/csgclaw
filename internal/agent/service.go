@@ -251,7 +251,6 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 		ID:             got.Name,
 		Name:           got.Name,
 		Description:    got.Description,
-		Role:           got.Role,
 		RuntimeKind:    got.RuntimeConfig().Kind(),
 		Image:          got.Image,
 		RuntimeOptions: runtimeOptions,

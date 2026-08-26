@@ -64,11 +64,6 @@ export type ImageEnvContract = {
   required?: boolean;
   secret?: boolean;
   default?: string | null;
-  description?: string | null;
-  choices?: string[] | null;
-  pattern?: string | null;
-  example?: string | null;
-  placeholder?: string | null;
 };
 
 export type AgentProfileLike = {

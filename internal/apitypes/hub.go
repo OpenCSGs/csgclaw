@@ -12,15 +12,10 @@ type CreateHubTemplateRequest struct {
 }
 
 type ImageEnvContract struct {
-	Name        string   `json:"name"`
-	Required    bool     `json:"required,omitempty"`
-	Secret      bool     `json:"secret,omitempty"`
-	Default     string   `json:"default,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Choices     []string `json:"choices,omitempty"`
-	Pattern     string   `json:"pattern,omitempty"`
-	Example     string   `json:"example,omitempty"`
-	Placeholder string   `json:"placeholder,omitempty"`
+	Name     string `json:"name"`
+	Required bool   `json:"required,omitempty"`
+	Secret   bool   `json:"secret,omitempty"`
+	Default  string `json:"default,omitempty"`
 }
 
 type HubTemplate struct {

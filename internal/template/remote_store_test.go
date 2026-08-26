@@ -21,7 +21,7 @@ import (
 )
 
 const remoteTestManifest = `name = "gitlab-assistant"
-role = "worker"
+role = "manager"
 description = "GitLab assistant"
 runtime_kind = "openclaw"
 version = "2026.6.16.0"
@@ -178,7 +178,6 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 		ID:             "legacy-internal-id",
 		Name:           "ReviewBot_2",
 		Description:    "Reviews changes",
-		Role:           TemplateRoleWorker,
 		RuntimeKind:    "codex",
 		RuntimeOptions: map[string]any{"execution_mode": "read_only"},
 		WorkspaceRef: WorkspaceRef{

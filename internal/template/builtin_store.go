@@ -54,7 +54,14 @@ func (s *BuiltinStore) Get(_ context.Context, id string) (Template, error) {
 	if err != nil {
 		return Template{}, fmt.Errorf("validate builtin hub manifest %q: %w", id, err)
 	}
-	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.Role, manifest.RuntimeOptions)
+	builtin, ok := hubtemplates.LookupBuiltin(id)
+	if !ok {
+		return Template{}, fmt.Errorf("%w: %s", ErrTemplateNotFound, id)
+	}
+	if normalizeTemplateRole(builtin.Role) != TemplateRoleWorker && len(manifest.RuntimeOptions) > 0 {
+		return Template{}, fmt.Errorf("validate builtin hub manifest %q runtime options: runtime_options are supported only for Codex worker templates", id)
+	}
+	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.RuntimeOptions)
 	if err != nil {
 		return Template{}, fmt.Errorf("validate builtin hub manifest %q runtime options: %w", id, err)
 	}
@@ -62,7 +69,7 @@ func (s *BuiltinStore) Get(_ context.Context, id string) (Template, error) {
 		ID:             id,
 		Name:           manifest.Name,
 		Description:    manifest.Description,
-		Role:           normalizeTemplateRole(manifest.Role),
+		Role:           normalizeTemplateRole(builtin.Role),
 		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
 		Version:        strings.TrimSpace(manifest.Version),
 		Image:          manifestImageRef(manifest.Image),

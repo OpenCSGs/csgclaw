@@ -30,7 +30,6 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	published, err := store.Publish(context.Background(), PublishSpec{
 		Name:           "frontend-alice",
 		Description:    "Frontend worker with UI and styling skills",
-		Role:           TemplateRoleWorker,
 		RuntimeKind:    runtime.KindCodex,
 		Image:          "worker:latest",
 		RuntimeOptions: map[string]any{"execution_mode": "read_only"},
@@ -124,7 +123,6 @@ func TestLocalStorePublishRejectsDuplicateName(t *testing.T) {
 	first, err := store.Publish(context.Background(), PublishSpec{
 		Name:        "review-bot",
 		Description: "original",
-		Role:        TemplateRoleWorker,
 		RuntimeKind: runtime.KindCodex,
 	})
 	if err != nil {
@@ -133,7 +131,6 @@ func TestLocalStorePublishRejectsDuplicateName(t *testing.T) {
 	_, err = store.Publish(context.Background(), PublishSpec{
 		Name:        "review-bot",
 		Description: "replacement",
-		Role:        TemplateRoleWorker,
 		RuntimeKind: runtime.KindCodex,
 	})
 	if !errors.Is(err, ErrTemplateAlreadyExists) {
@@ -153,7 +150,6 @@ func TestLocalStoreListSkipsInvalidTemplates(t *testing.T) {
 	store := NewLocalStore(registryRoot)
 	if _, err := store.Publish(context.Background(), PublishSpec{
 		Name:        "valid_codex_worker",
-		Role:        TemplateRoleWorker,
 		RuntimeKind: runtime.KindCodex,
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
@@ -205,7 +201,6 @@ func TestLocalStorePublishUsesRuntimeAwareInstructionAndSkillPaths(t *testing.T)
 	store := NewLocalStore(registryRoot)
 	if _, err := store.Publish(context.Background(), PublishSpec{
 		Name:        "codex-worker",
-		Role:        TemplateRoleWorker,
 		RuntimeKind: runtime.KindCodex,
 		WorkspaceRef: WorkspaceRef{
 			Kind:             WorkspaceKindDir,
@@ -277,7 +272,6 @@ func TestLocalStoreWriteWorkspaceFileUpdatesCanonicalInstructions(t *testing.T) 
 	workspaceRoot := writeWorkspaceFile(t, "workspace", "AGENTS.md", "old instructions")
 	if _, err := store.Publish(context.Background(), PublishSpec{
 		Name:         "editable-worker",
-		Role:         TemplateRoleWorker,
 		RuntimeKind:  runtime.KindCodex,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 	}); err != nil {
@@ -304,7 +298,6 @@ func TestLocalStoreDeleteRemovesTemplate(t *testing.T) {
 	if _, err := store.Publish(context.Background(), PublishSpec{
 		ID:          "frontend-alice",
 		Name:        "frontend-alice",
-		Role:        TemplateRoleWorker,
 		RuntimeKind: "picoclaw",
 		Image:       "worker:latest",
 	}); err != nil {
@@ -326,7 +319,6 @@ func TestLocalStorePublishRejectsUnsafeTemplateID(t *testing.T) {
 	_, err := store.Publish(context.Background(), PublishSpec{
 		ID:           "../escape",
 		Name:         "frontend-alice",
-		Role:         TemplateRoleWorker,
 		RuntimeKind:  runtime.KindCodex,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 	})
@@ -344,7 +336,6 @@ func TestLocalStorePublishAllowsEmptyWorkspace(t *testing.T) {
 
 	published, err := store.Publish(context.Background(), PublishSpec{
 		Name:         "frontend-alice",
-		Role:         TemplateRoleWorker,
 		RuntimeKind:  runtime.KindCodex,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 	})
@@ -368,7 +359,6 @@ func TestLocalStorePublishAllowsMissingWorkspace(t *testing.T) {
 
 	published, err := store.Publish(context.Background(), PublishSpec{
 		Name:        "frontend-alice",
-		Role:        TemplateRoleWorker,
 		RuntimeKind: runtime.KindCodex,
 	})
 	if err != nil {
@@ -401,7 +391,6 @@ func TestLocalStorePublishRequiresImageForGatewayRuntime(t *testing.T) {
 
 	_, err := store.Publish(context.Background(), PublishSpec{
 		Name:         "gateway-worker",
-		Role:         TemplateRoleWorker,
 		RuntimeKind:  runtime.NamePicoClaw,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 	})
@@ -445,7 +434,6 @@ func TestLocalStorePublishRejectsSymlinks(t *testing.T) {
 
 	_, err := store.Publish(context.Background(), PublishSpec{
 		Name:         "frontend-alice",
-		Role:         TemplateRoleWorker,
 		RuntimeKind:  runtime.KindCodex,
 		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
 	})
@@ -463,15 +451,25 @@ func TestLocalStoreGetMissingTemplate(t *testing.T) {
 	}
 }
 
-func TestLocalStorePublishRejectsMissingRole(t *testing.T) {
+func TestLocalStorePublishTreatsTemplateAsWorker(t *testing.T) {
 	store := NewLocalStore(t.TempDir())
 
-	_, err := store.Publish(context.Background(), PublishSpec{
+	got, err := store.Publish(context.Background(), PublishSpec{
 		Name:        "frontend-alice",
 		RuntimeKind: runtime.KindCodex,
 	})
-	if err == nil || err.Error() != `role must be one of "manager" or "worker"` {
-		t.Fatalf("Publish() error = %v, want missing role validation error", err)
+	if err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	if got.Role != TemplateRoleWorker {
+		t.Fatalf("Publish().Role = %q, want %q", got.Role, TemplateRoleWorker)
+	}
+	manifest, err := os.ReadFile(filepath.Join(store.templatesRoot(), "frontend-alice", localManifestFileName))
+	if err != nil {
+		t.Fatalf("ReadFile(agent.toml) error = %v", err)
+	}
+	if strings.Contains(string(manifest), "role =") {
+		t.Fatalf("agent.toml contains removed role field:\n%s", manifest)
 	}
 }
 

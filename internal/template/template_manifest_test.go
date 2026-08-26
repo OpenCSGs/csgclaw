@@ -17,11 +17,13 @@ func TestLoadManifestImageEnv(t *testing.T) {
 	manifest := `
 name = "gitlab-assistant"
 description = "GitLab assistant"
-role = "worker"
+role = "manager"
 runtime_kind = "picoclaw"
 
 [image]
 ref = "picoclaw:test"
+digest = "sha256:legacy"
+platforms = ["linux/amd64"]
 
 [[image.env]]
 name = "GITLAB_TOKEN"
@@ -31,6 +33,11 @@ secret = true
 [[image.env]]
 name = "GITLAB_URL"
 default = "https://gitlab.example.com"
+description = "legacy description"
+choices = ["https://gitlab.example.com"]
+pattern = "^https://"
+example = "https://gitlab.example.com"
+placeholder = "https://gitlab.example.com"
 `
 	if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -43,6 +50,9 @@ default = "https://gitlab.example.com"
 	}
 	if got.RuntimeKind != runtime.NamePicoClaw {
 		t.Fatalf("RuntimeKind = %q, want %q", got.RuntimeKind, runtime.NamePicoClaw)
+	}
+	if got.Role != TemplateRoleWorker {
+		t.Fatalf("Role = %q, want legacy manifest role ignored and worker derived", got.Role)
 	}
 	if got.Image != "picoclaw:test" {
 		t.Fatalf("Image = %q, want picoclaw:test", got.Image)
@@ -81,7 +91,7 @@ func TestValidatePublishTemplateName(t *testing.T) {
 }
 
 func TestNormalizeTemplateRuntimeOptions(t *testing.T) {
-	got, err := normalizeTemplateRuntimeOptions(runtime.KindCodex, TemplateRoleWorker, map[string]any{
+	got, err := normalizeTemplateRuntimeOptions(runtime.KindCodex, map[string]any{
 		"execution_mode": " READ_ONLY ",
 	})
 	if err != nil {
@@ -93,16 +103,14 @@ func TestNormalizeTemplateRuntimeOptions(t *testing.T) {
 
 	for name, test := range map[string]struct {
 		runtimeKind string
-		role        string
 		options     map[string]any
 	}{
-		"manager":        {runtimeKind: runtime.KindCodex, role: TemplateRoleManager, options: map[string]any{"execution_mode": "read_only"}},
-		"non codex":      {runtimeKind: runtime.NameOpenClaw, role: TemplateRoleWorker, options: map[string]any{"execution_mode": "read_only"}},
-		"unknown option": {runtimeKind: runtime.KindCodex, role: TemplateRoleWorker, options: map[string]any{"local_workspace_dir": "/tmp/project"}},
-		"invalid mode":   {runtimeKind: runtime.KindCodex, role: TemplateRoleWorker, options: map[string]any{"execution_mode": "unsafe"}},
+		"non codex":      {runtimeKind: runtime.NameOpenClaw, options: map[string]any{"execution_mode": "read_only"}},
+		"unknown option": {runtimeKind: runtime.KindCodex, options: map[string]any{"local_workspace_dir": "/tmp/project"}},
+		"invalid mode":   {runtimeKind: runtime.KindCodex, options: map[string]any{"execution_mode": "unsafe"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := normalizeTemplateRuntimeOptions(test.runtimeKind, test.role, test.options); err == nil {
+			if _, err := normalizeTemplateRuntimeOptions(test.runtimeKind, test.options); err == nil {
 				t.Fatal("normalizeTemplateRuntimeOptions() error = nil, want rejection")
 			}
 		})

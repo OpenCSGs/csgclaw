@@ -66,7 +66,6 @@ type PublishSpec struct {
 	ID             string
 	Name           string
 	Description    string
-	Role           string
 	RuntimeKind    string
 	Version        string
 	Image          string

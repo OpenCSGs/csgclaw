@@ -1,6 +1,5 @@
 name = "generic-assistant-openclaw"
 description = "通用型助手（OpenClaw版）"
-role = "worker"
 runtime_kind = "openclaw"
 updated_at = "2026-07-22T08:23:15Z"
 version = "0.1.7"

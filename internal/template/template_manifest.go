@@ -29,7 +29,6 @@ type templateManifest struct {
 	SchemaVersion  string               `toml:"schema_version,omitempty"`
 	Name           string               `toml:"name"`
 	Description    string               `toml:"description,omitempty"`
-	Role           string               `toml:"role"`
 	RuntimeKind    string               `toml:"runtime_kind"`
 	Version        string               `toml:"version,omitempty"`
 	Image          templateImageSection `toml:"image"`
@@ -38,22 +37,15 @@ type templateManifest struct {
 }
 
 type templateImageSection struct {
-	Ref       string                 `toml:"ref"`
-	Digest    string                 `toml:"digest,omitempty"`
-	Platforms []string               `toml:"platforms,omitempty"`
-	Env       []templateImageEnvItem `toml:"env"`
+	Ref string                 `toml:"ref"`
+	Env []templateImageEnvItem `toml:"env"`
 }
 
 type templateImageEnvItem struct {
-	Name        string   `toml:"name"`
-	Required    bool     `toml:"required"`
-	Secret      bool     `toml:"secret"`
-	Default     string   `toml:"default,omitempty"`
-	Description string   `toml:"description,omitempty"`
-	Choices     []string `toml:"choices,omitempty"`
-	Pattern     string   `toml:"pattern,omitempty"`
-	Example     string   `toml:"example,omitempty"`
-	Placeholder string   `toml:"placeholder,omitempty"`
+	Name     string `toml:"name"`
+	Required bool   `toml:"required"`
+	Secret   bool   `toml:"secret"`
+	Default  string `toml:"default,omitempty"`
 }
 
 func manifestImageRef(image templateImageSection) string {
@@ -79,17 +71,10 @@ func normalizeImageEnvContracts(raw []templateImageEnvItem) []apitypes.ImageEnvC
 			continue
 		}
 		contract := apitypes.ImageEnvContract{
-			Name:        name,
-			Required:    item.Required,
-			Secret:      item.Secret,
-			Default:     strings.TrimSpace(item.Default),
-			Description: strings.TrimSpace(item.Description),
-			Pattern:     strings.TrimSpace(item.Pattern),
-			Example:     strings.TrimSpace(item.Example),
-			Placeholder: strings.TrimSpace(item.Placeholder),
-		}
-		if len(item.Choices) > 0 {
-			contract.Choices = append([]string(nil), item.Choices...)
+			Name:     name,
+			Required: item.Required,
+			Secret:   item.Secret,
+			Default:  strings.TrimSpace(item.Default),
 		}
 		out = append(out, contract)
 	}
@@ -115,29 +100,6 @@ func validateImageEnvContracts(items []templateImageEnvItem) error {
 		if item.Secret && strings.TrimSpace(item.Default) != "" {
 			return fmt.Errorf("image.env[%d] secret entries cannot set default", index)
 		}
-		if len(item.Choices) == 0 {
-			continue
-		}
-		if strings.TrimSpace(item.Default) != "" {
-			defaultValue := strings.TrimSpace(item.Default)
-			found := false
-			for _, choice := range item.Choices {
-				if choice == defaultValue {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return fmt.Errorf("image.env[%d].default must appear in choices", index)
-			}
-		}
-		pattern := strings.TrimSpace(item.Pattern)
-		if pattern == "" {
-			continue
-		}
-		if _, err := regexp.Compile(pattern); err != nil {
-			return fmt.Errorf("image.env[%d].pattern is invalid: %w", index, err)
-		}
 	}
 	return nil
 }
@@ -146,11 +108,6 @@ func validateManifest(manifest templateManifest) error {
 	manifest.Name = strings.TrimSpace(manifest.Name)
 	if manifest.Name == "" {
 		return ErrTemplateNameRequired
-	}
-	switch normalizeTemplateRole(manifest.Role) {
-	case TemplateRoleManager, TemplateRoleWorker:
-	default:
-		return fmt.Errorf("role must be one of %q or %q", TemplateRoleManager, TemplateRoleWorker)
 	}
 	manifest.RuntimeKind = normalizeTemplateRuntimeKind(manifest.RuntimeKind)
 	switch manifest.RuntimeKind {
@@ -165,7 +122,7 @@ func validateManifest(manifest templateManifest) error {
 	if err := validateImageEnvContracts(manifest.Image.Env); err != nil {
 		return err
 	}
-	if _, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.Role, manifest.RuntimeOptions); err != nil {
+	if _, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.RuntimeOptions); err != nil {
 		return err
 	}
 	if _, err := parseManifestUpdatedAt(manifest.UpdatedAt); err != nil {
@@ -174,13 +131,12 @@ func validateManifest(manifest templateManifest) error {
 	return nil
 }
 
-func normalizeTemplateRuntimeOptions(runtimeKind, role string, raw map[string]any) (map[string]any, error) {
+func normalizeTemplateRuntimeOptions(runtimeKind string, raw map[string]any) (map[string]any, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
 	runtimeKind = normalizeTemplateRuntimeKind(runtimeKind)
-	role = normalizeTemplateRole(role)
-	if runtimeKind != runtime.KindCodex || role != TemplateRoleWorker {
+	if runtimeKind != runtime.KindCodex {
 		return nil, fmt.Errorf("runtime_options are supported only for Codex worker templates")
 	}
 	if len(raw) != 1 {

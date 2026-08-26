@@ -92,7 +92,7 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 	if err != nil {
 		return Template{}, fmt.Errorf("validate local hub manifest %q: %w", id, err)
 	}
-	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.Role, manifest.RuntimeOptions)
+	runtimeOptions, err := normalizeTemplateRuntimeOptions(manifest.RuntimeKind, manifest.RuntimeOptions)
 	if err != nil {
 		return Template{}, fmt.Errorf("validate local hub manifest %q runtime options: %w", id, err)
 	}
@@ -100,7 +100,7 @@ func (s *LocalStore) Get(_ context.Context, id string) (Template, error) {
 		ID:             id,
 		Name:           manifest.Name,
 		Description:    manifest.Description,
-		Role:           normalizeTemplateRole(manifest.Role),
+		Role:           TemplateRoleWorker,
 		RuntimeKind:    normalizeTemplateRuntimeKind(manifest.RuntimeKind),
 		Version:        strings.TrimSpace(manifest.Version),
 		Image:          manifestImageRef(manifest.Image),
@@ -263,7 +263,6 @@ func (s *LocalStore) writeManifest(path string, spec PublishSpec) error {
 	manifest := templateManifest{
 		Name:        spec.Name,
 		Description: spec.Description,
-		Role:        spec.Role,
 		RuntimeKind: normalizeTemplateRuntimeKind(spec.RuntimeKind),
 		Version:     spec.Version,
 		Image: templateImageSection{
@@ -296,15 +295,11 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 	if spec.Name == "" {
 		return PublishSpec{}, ErrTemplateNameRequired
 	}
-	spec.Role = normalizeTemplateRole(spec.Role)
-	if spec.Role == "" {
-		return PublishSpec{}, fmt.Errorf("role must be one of %q or %q", TemplateRoleManager, TemplateRoleWorker)
-	}
 	spec.RuntimeKind = normalizeTemplateRuntimeKind(spec.RuntimeKind)
 	spec.Version = strings.TrimSpace(spec.Version)
 	spec.Image = strings.TrimSpace(spec.Image)
 	spec.Description = strings.TrimSpace(spec.Description)
-	runtimeOptions, err := normalizeTemplateRuntimeOptions(spec.RuntimeKind, spec.Role, spec.RuntimeOptions)
+	runtimeOptions, err := normalizeTemplateRuntimeOptions(spec.RuntimeKind, spec.RuntimeOptions)
 	if err != nil {
 		return PublishSpec{}, err
 	}
