@@ -92,6 +92,19 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
+  it("places a dismiss button on the right side of a notice", async () => {
+    const user = userEvent.setup();
+    const onDismissNotice = vi.fn();
+    render(<Harness notice="Agent deleted" noticeTone="success" onDismissNotice={onDismissNotice} />);
+
+    const notice = screen.getByText("Agent deleted").closest('[role="status"]');
+    const closeButton = screen.getByRole("button", { name: "close" });
+    expect(notice).toContainElement(closeButton);
+
+    await user.click(closeButton);
+    expect(onDismissNotice).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a degraded gateway runtime as unavailable instead of online", () => {
     render(
       <Harness

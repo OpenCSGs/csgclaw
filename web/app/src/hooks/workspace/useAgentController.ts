@@ -2521,9 +2521,8 @@ export function useAgentController({
 
   const selectedAgentAction = selectedAgentForPage?.id ? agentActionBusyByAgent[selectedAgentForPage.id] : undefined;
   const selectedAgentActionBusy = selectedAgentAction?.visible ? selectedAgentAction.busyKey : "";
-  const selectedAgentPageNotice = selectedAgentForPage?.id
-    ? agentPageNotices[selectedAgentForPage.id] || agentPageNotices[GLOBAL_AGENT_PAGE_NOTICE_KEY]
-    : agentPageNotices[GLOBAL_AGENT_PAGE_NOTICE_KEY];
+  const selectedAgentOwnedNotice = selectedAgentForPage?.id ? agentPageNotices[selectedAgentForPage.id] : undefined;
+  const selectedAgentPageNotice = selectedAgentOwnedNotice || agentPageNotices[GLOBAL_AGENT_PAGE_NOTICE_KEY];
 
   return {
     agentActionBusy: selectedAgentActionBusy,
@@ -2581,6 +2580,7 @@ export function useAgentController({
       saveBillingURL: agentPageBillingURL,
       notice: selectedAgentPageNotice?.message || "",
       noticeTone: selectedAgentPageNotice?.tone || "warning",
+      onDismissNotice: () => clearAgentPageNotice(selectedAgentOwnedNotice ? selectedAgentForPage?.id : null),
       feishuConnectBusy: selectedAgentActionBusy.includes(`:${FEISHU_CHANNEL_ACTION}:`) ? selectedAgentActionBusy : "",
       feishuPendingRegistration: selectedFeishuPendingRegistration,
       authStatuses: cliproxyAuthStatuses,

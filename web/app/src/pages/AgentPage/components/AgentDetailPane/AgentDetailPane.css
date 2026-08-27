@@ -89,6 +89,10 @@
 }
 
 .agent-profile-fixed-header > .form-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
   border: 1px solid color-mix(in oklab, var(--warning-700) 30%, var(--line));
   border-radius: var(--radius-xl);
   background: var(--warning-50);
@@ -96,6 +100,33 @@
   padding: var(--space-3) 14px;
   font: var(--text-sm-medium);
   line-height: 1.5;
+}
+
+.agent-notice-close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px -6px -4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: currentColor;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.agent-notice-close:hover {
+  background: color-mix(in oklab, currentColor 10%, transparent);
+  opacity: 1;
+}
+
+.agent-notice-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .agent-profile-fixed-header > .form-warning.success {

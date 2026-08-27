@@ -18,6 +18,7 @@ import {
   Unlink2,
   UploadCloud,
   UserPlus,
+  X,
 } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
@@ -146,6 +147,7 @@ export type AgentDetailPaneProps = {
   onDelete: AgentActionHandler;
   onDraftChange?: (draft: AgentDraft) => void;
   onInvite: AgentActionHandler;
+  onDismissNotice?: () => void;
   onOpenDM: AgentActionHandler;
   onRetryModels?: () => void | Promise<unknown>;
   onProviderLogin?: (provider: string) => VoidOrPromise;
@@ -263,6 +265,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onUpgrade,
     onDelete,
     onInvite,
+    onDismissNotice,
     onOpenDM,
     onAddSkills,
     onDeleteSkill,
@@ -781,7 +784,16 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
         ) : null}
         {notice ? (
           <div className={`form-warning ${noticeTone === "warning" ? "" : noticeTone}`.trim()} role="status">
-            {notice}
+            <span>{notice}</span>
+            <button
+              type="button"
+              className="agent-notice-close"
+              aria-label={t("close")}
+              title={t("close")}
+              onClick={onDismissNotice}
+            >
+              <X size={16} strokeWidth={2.3} aria-hidden="true" />
+            </button>
           </div>
         ) : null}
         {profileTabs.length ? (
