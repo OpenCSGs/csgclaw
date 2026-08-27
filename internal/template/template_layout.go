@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -21,7 +22,7 @@ func materializeTemplateDir(templateRoot, runtimeKind string) (WorkspaceRef, err
 		return materializeLegacyTemplateWorkspace(templateRoot)
 	}
 	if strings.TrimSpace(runtimeKind) == "" {
-		manifestPath := filepath.Join(filepath.Base(templateRoot), localManifestFileName)
+		manifestPath := templateManifestFSPath(templateRoot)
 		_, manifest, err := loadManifestFS(os.DirFS(filepath.Dir(templateRoot)), manifestPath, "template")
 		if err != nil {
 			return WorkspaceRef{}, err
@@ -29,6 +30,10 @@ func materializeTemplateDir(templateRoot, runtimeKind string) (WorkspaceRef, err
 		runtimeKind = manifest.RuntimeKind
 	}
 	return materializeTemplateFS(os.DirFS(templateRoot), ".", runtimeKind)
+}
+
+func templateManifestFSPath(templateRoot string) string {
+	return path.Join(filepath.ToSlash(filepath.Base(templateRoot)), localManifestFileName)
 }
 
 func materializeLegacyTemplateWorkspace(templateRoot string) (WorkspaceRef, error) {

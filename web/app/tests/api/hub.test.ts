@@ -97,6 +97,20 @@ describe("hub API", () => {
     );
   });
 
+  it("includes agent memory only after explicit opt-in", async () => {
+    const fetchMock = mockFetch();
+
+    await publishAgentTemplateRequest("agent-alice", "official", "ReviewBot_2", "Reviews changes", true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates",
+      expect.objectContaining({
+        body: expect.stringContaining('"include_memory":true'),
+        method: "POST",
+      }),
+    );
+  });
+
   it("publishes a local template to the official registry", async () => {
     const fetchMock = mockFetch();
 

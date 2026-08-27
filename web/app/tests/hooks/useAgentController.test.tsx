@@ -1139,7 +1139,7 @@ describe("useAgentController", () => {
     expect(result.current.agentViewProps.saveBillingURL).toBe("https://opencsg-stg.com/settings/billing");
 
     await act(async () => {
-      await result.current.agentViewProps.onPublish?.("official", "manager", "manager template");
+      await result.current.agentViewProps.onPublish?.("official", "manager", "manager template", false);
     });
 
     expect(result.current.agentViewProps.saveError).toBe("agentPublishLoginRequired");
@@ -1179,6 +1179,7 @@ describe("useAgentController", () => {
           "official_deploy",
           "reviewer",
           "Reviews changes",
+          false,
         )) ?? false;
     });
 
@@ -1228,6 +1229,7 @@ describe("useAgentController", () => {
           "official_deploy",
           "reviewer",
           "Reviews changes",
+          false,
         )) ?? false;
     });
 

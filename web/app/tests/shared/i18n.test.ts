@@ -60,12 +60,9 @@ describe("i18n messages", () => {
   it("preserves the upstream reason for generic template publishing failures", () => {
     const message =
       'publish hub template to "official": remote hub request failed with status 500: failed to update repository path';
-    expect(
-      localizeAPIError(
-        { status: 400, code: "template_publish_failed", message },
-        createTranslator("zh"),
-      ),
-    ).toBe(message);
+    expect(localizeAPIError({ status: 400, code: "template_publish_failed", message }, createTranslator("zh"))).toBe(
+      message,
+    );
   });
 
   it("localizes unavailable Docker errors without exposing platform diagnostics", () => {

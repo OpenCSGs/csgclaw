@@ -1205,6 +1205,8 @@ export const messages = {
     agentPublishTemplateNameInvalid:
       "模板名称必须以英文字母开头，最多 24 个字符，且只能包含英文字母、数字、下划线和短横线。",
     agentPublishTemplateDescription: "模板描述",
+    agentPublishIncludeMemory: "包含智能体记忆",
+    agentPublishIncludeMemoryWarning: "可能包含从历史对话中提取的私人信息。仅在确认内容适合共享时启用。",
     resourcesPublishCommunityFailed: "发布到社区失败。",
     resourcesPublishCommunitySuccessTitle: "发布成功",
     resourcesPublishCommunityDeployFailedTitle: "模板已发布，但部署失败",
@@ -2656,6 +2658,9 @@ export const messages = {
     agentPublishTemplateNameInvalid:
       "Template name must start with an English letter, contain at most 24 characters, and use only English letters, numbers, underscores, or hyphens.",
     agentPublishTemplateDescription: "Template description",
+    agentPublishIncludeMemory: "Include agent memory",
+    agentPublishIncludeMemoryWarning:
+      "This may contain private information learned from past conversations. Enable it only after confirming the content is safe to share.",
     resourcesPublishCommunityFailed: "Failed to publish the template to the community.",
     resourcesPublishCommunitySuccessTitle: "Published successfully",
     resourcesPublishCommunityDeployFailedTitle: "Template published, but deployment failed",

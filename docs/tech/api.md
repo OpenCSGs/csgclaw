@@ -749,7 +749,8 @@ Request body:
 ```json
 {
   "agent_id": "u-alice",
-  "registry": "local"
+  "registry": "local",
+  "include_memory": false
 }
 ```
 
@@ -757,6 +758,7 @@ Notes:
 
 - `agent_id` is required
 - `registry` uses the default publish registry when omitted
+- `include_memory` must be explicitly set to `true` to publish the Codex memory summary; it defaults to `false` because memories may contain private conversation-derived information
 - Successful publish returns `201 Created`
 
 ### `GET /api/v1/hub/templates/{id}`

@@ -1712,6 +1712,7 @@ export function useAgentController({
     target: AgentTemplatePublishTarget,
     name: string,
     description: string,
+    includeMemory: boolean,
   ): Promise<boolean> {
     if (!selectedAgentForPage?.id || agentPagePublishBusy) {
       return false;
@@ -1727,7 +1728,13 @@ export function useAgentController({
     setAgentPagePublishError("");
     setAgentPageSaveError("");
     try {
-      const published = await publishAgentTemplateRequest(selectedAgentForPage.id, target, name, description);
+      const published = await publishAgentTemplateRequest(
+        selectedAgentForPage.id,
+        target,
+        name,
+        description,
+        includeMemory,
+      );
       await refreshHubTemplates();
       if (published?.id) {
         setSelectedHubTemplateId(published.id);

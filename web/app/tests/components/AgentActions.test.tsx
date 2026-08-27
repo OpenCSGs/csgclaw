@@ -34,6 +34,8 @@ const labels: Record<string, string> = {
   agentPublishTemplateNameInvalid: "Invalid template name",
   agentPublishLocalNameExists: "A local template with this name already exists.",
   agentPublishTemplateDescription: "Template description",
+  agentPublishIncludeMemory: "Include agent memory",
+  agentPublishIncludeMemoryWarning: "Memory may contain private information.",
   agentProfileSectionNavLabel: "Profile sections",
   agentProfileTab: "Profile",
   agentProfileSkillsTab: "Skills",
@@ -143,7 +145,7 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("textbox", { name: "Template name" })).toHaveValue("Worker");
     expect(screen.getByRole("textbox", { name: "Template description" })).toHaveValue("Agent description");
     await user.click(screen.getByRole("button", { name: "Save as local template" }));
-    expect(onPublish).toHaveBeenCalledWith("local", "Worker", "Agent description");
+    expect(onPublish).toHaveBeenCalledWith("local", "Worker", "Agent description", false);
     expect(screen.queryByRole("dialog", { name: "Publish agent template" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "More" }));
@@ -180,12 +182,13 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("button", { name: "Publish and deploy" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Publish template only" }));
 
-    expect(onPublish).toHaveBeenCalledWith("official", "Worker", "Agent description");
+    expect(onPublish).toHaveBeenCalledWith("official", "Worker", "Agent description", false);
 
     await user.click(screen.getByRole("button", { name: "More" }));
     await user.click(screen.getByRole("menuitem", { name: "Publish to community" }));
+    await user.click(screen.getByRole("checkbox", { name: "Include agent memory" }));
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
-    expect(onPublish).toHaveBeenCalledWith("official_deploy", "Worker", "Agent description");
+    expect(onPublish).toHaveBeenCalledWith("official_deploy", "Worker", "Agent description", true);
   });
 
   it("does not show template publishing actions for the manager", async () => {
@@ -279,7 +282,7 @@ describe("agent action visibility", () => {
     await user.clear(nameInput);
     await user.type(nameInput, "review-bot_2");
     await user.click(screen.getByRole("button", { name: "Save as local template" }));
-    expect(onPublish).toHaveBeenCalledWith("local", "review-bot_2", "Agent description");
+    expect(onPublish).toHaveBeenCalledWith("local", "review-bot_2", "Agent description", false);
   });
 
   it("keeps the publish dialog open and shows duplicate local template errors", async () => {

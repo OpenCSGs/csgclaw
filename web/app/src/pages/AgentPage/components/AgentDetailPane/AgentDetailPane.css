@@ -2650,6 +2650,33 @@
   font-weight: 500;
 }
 
+.agent-publish-memory-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.agent-publish-memory-option .csg-checkbox {
+  margin-top: 3px;
+}
+
+.agent-publish-memory-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.agent-publish-memory-option small {
+  color: var(--text-muted);
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .agent-detail-pane .agent-billing-action {
   display: inline-flex;
   align-items: center;

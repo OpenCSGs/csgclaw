@@ -231,7 +231,7 @@ type templateService interface {
 	FetchWorkspace(context.Context, string) (hub.WorkspaceRef, error)
 }
 
-func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
+func (s *Service) HubPublishSpec(agentID string, includeMemory bool) (hub.PublishSpec, error) {
 	if s == nil {
 		return hub.PublishSpec{}, fmt.Errorf("agent service is required")
 	}
@@ -248,7 +248,7 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 		return hub.PublishSpec{}, err
 	}
 	memoryPath := ""
-	if runtimeOptions[templateMemoryModeKey] != templateMemoryModeDisabled {
+	if includeMemory && runtimeOptions[templateMemoryModeKey] != templateMemoryModeDisabled {
 		memoryPath = codexMemoryPath(layout, got.RuntimeKind)
 	}
 	if memoryPath != "" {

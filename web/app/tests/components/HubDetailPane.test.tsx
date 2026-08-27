@@ -142,6 +142,7 @@ function renderHubDetailPane(
     ) => Promise<{ status: "success" } | { status: "partial"; message: string } | null>;
     publishDisabled?: boolean;
     publishError?: string;
+    lazyMemory?: boolean;
   } = {},
 ) {
   const selectedTemplate = options.selectedTemplate ?? template;
@@ -181,6 +182,19 @@ function renderHubDetailPane(
   };
   function Harness() {
     const [selectedWorkspacePath, setSelectedWorkspacePath] = useState("instructions/AGENTS.md");
+    const [workspaceEntries, setWorkspaceEntries] = useState([
+      { name: "instructions", path: "instructions", type: "dir" as const, depth: 0 },
+      { name: "AGENTS.md", path: "instructions/AGENTS.md", type: "file" as const, depth: 1 },
+      { name: "memories", path: "memories", type: "dir" as const, depth: 0 },
+      ...(!options.lazyMemory
+        ? [{ name: "memory_summary.md", path: "memories/memory_summary.md", type: "file" as const, depth: 1 }]
+        : []),
+      { name: "skills", path: "skills", type: "dir" as const, depth: 0 },
+      { name: "demo", path: "skills/demo", type: "dir" as const, depth: 1 },
+      { name: "SKILL.md", path: "skills/demo/SKILL.md", type: "file" as const, depth: 2 },
+      { name: "mcps", path: "mcps", type: "dir" as const, depth: 0 },
+      { name: "mcp.json", path: "mcps/mcp.json", type: "file" as const, depth: 1 },
+    ]);
     const workspaceFile = workspaceFiles[selectedWorkspacePath as keyof typeof workspaceFiles] || null;
     return (
       <HubDetailPane
@@ -197,7 +211,23 @@ function renderHubDetailPane(
             onSelectSkillFile: vi.fn(),
             onSelectTemplate: vi.fn(),
             onSelectWorkspaceFile: setSelectedWorkspacePath,
-            onToggleWorkspaceDir: vi.fn(),
+            onToggleWorkspaceDir: (path) => {
+              if (options.lazyMemory && path === "memories") {
+                setWorkspaceEntries((entries) =>
+                  entries.some((entry) => entry.path === "memories/memory_summary.md")
+                    ? entries
+                    : [
+                        ...entries,
+                        {
+                          name: "memory_summary.md",
+                          path: "memories/memory_summary.md",
+                          type: "file" as const,
+                          depth: 1,
+                        },
+                      ],
+                );
+              }
+            },
             mcpServers: [],
             selectedMCPServer: null,
             selectedMCPServerName: "",
@@ -219,17 +249,7 @@ function renderHubDetailPane(
             workspaceFiles,
             workspaceFileError: "",
             workspaceFileLoading: false,
-            workspaceEntries: [
-              { name: "instructions", path: "instructions", type: "dir", depth: 0 },
-              { name: "AGENTS.md", path: "instructions/AGENTS.md", type: "file", depth: 1 },
-              { name: "memories", path: "memories", type: "dir", depth: 0 },
-              { name: "memory_summary.md", path: "memories/memory_summary.md", type: "file", depth: 1 },
-              { name: "skills", path: "skills", type: "dir", depth: 0 },
-              { name: "demo", path: "skills/demo", type: "dir", depth: 1 },
-              { name: "SKILL.md", path: "skills/demo/SKILL.md", type: "file", depth: 2 },
-              { name: "mcps", path: "mcps", type: "dir", depth: 0 },
-              { name: "mcp.json", path: "mcps/mcp.json", type: "file", depth: 1 },
-            ],
+            workspaceEntries,
             deleteBusy: false,
             onDeleteTemplate: vi.fn(),
             onPublishTemplate: options.onPublishTemplate,
@@ -598,6 +618,20 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "MCP" }));
     expect(screen.getByText("context7")).toBeInTheDocument();
     expect(screen.getByText("Context lookup")).toBeInTheDocument();
+  });
+
+  it("selects the memory summary after the memories directory is lazily loaded", async () => {
+    const user = userEvent.setup();
+    renderHubDetailPane("template", {
+      selectedTemplate: { ...template, runtime_kind: "codex" },
+      lazyMemory: true,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Memory" }));
+
+    expect(await screen.findByRole("textbox", { name: "Read-only memory summary" })).toHaveValue(
+      "# Memory Summary\n\nThe user prefers concise Chinese replies.",
+    );
   });
 
   it("keeps the MCP empty state visible when templates are available", () => {

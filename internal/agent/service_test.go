@@ -9164,7 +9164,7 @@ func TestHubPublishSpecUsesAgentWorkspaceSnapshot(t *testing.T) {
 		t.Fatalf("WriteFile(PLAYBOOK.md) error = %v", err)
 	}
 
-	spec, err := svc.HubPublishSpec(created.ID)
+	spec, err := svc.HubPublishSpec(created.ID, false)
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
@@ -9220,7 +9220,7 @@ func TestHubPublishSpecUsesOpenClawWorkspaceSnapshot(t *testing.T) {
 		t.Fatalf("WriteFile(PLAYBOOK.md) error = %v", err)
 	}
 
-	spec, err := svc.HubPublishSpec(created.ID)
+	spec, err := svc.HubPublishSpec(created.ID, false)
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
@@ -9270,7 +9270,7 @@ func TestHubPublishSpecUsesCodexHomeAssets(t *testing.T) {
 		t.Fatalf("WriteFile(memory_summary.md) error = %v", err)
 	}
 
-	spec, err := svc.HubPublishSpec("u-alice")
+	spec, err := svc.HubPublishSpec("u-alice", true)
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
@@ -9317,9 +9317,16 @@ func TestHubPublishSpecIncludesCodexMemoryWhenEnabled(t *testing.T) {
 	if err := os.WriteFile(memoryPath, []byte("remember this\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	spec, err := svc.HubPublishSpec("u-alice")
+	spec, err := svc.HubPublishSpec("u-alice", false)
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
+	}
+	if got := spec.WorkspaceRef.MemoryPath; got != "" {
+		t.Fatalf("MemoryPath = %q, want empty without explicit opt-in", got)
+	}
+	spec, err = svc.HubPublishSpec("u-alice", true)
+	if err != nil {
+		t.Fatalf("HubPublishSpec(include memory) error = %v", err)
 	}
 	if got := spec.WorkspaceRef.MemoryPath; got != memoryPath {
 		t.Fatalf("MemoryPath = %q, want %q", got, memoryPath)

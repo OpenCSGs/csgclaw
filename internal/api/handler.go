@@ -1756,7 +1756,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			item, err = hubSvc.PublishTemplate(r.Context(), req.TemplateID, req.Registry)
 		} else {
 			var spec hub.PublishSpec
-			spec, err = h.svc.HubPublishSpec(req.AgentID)
+			spec, err = h.svc.HubPublishSpec(req.AgentID, req.IncludeMemory)
 			if err == nil {
 				spec.Registry = req.Registry
 				if strings.TrimSpace(req.Name) != "" {

@@ -5191,7 +5191,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	spec, err := svc.HubPublishSpec(created.ID)
+	spec, err := svc.HubPublishSpec(created.ID, false)
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
@@ -5268,7 +5268,7 @@ func TestHandleHubTemplatesPublishesCodexRuntimeOptions(t *testing.T) {
 		},
 	}
 	svc := mustNewSeededService(t, []agent.Agent{created})
-	publishSpec, err := svc.HubPublishSpec(created.ID)
+	publishSpec, err := svc.HubPublishSpec(created.ID, false)
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
@@ -5314,6 +5314,66 @@ func TestHandleHubTemplatesPublishesCodexRuntimeOptions(t *testing.T) {
 	manifest := string(manifestData)
 	if !strings.Contains(manifest, "execution_mode = 'read_only'") || !strings.Contains(manifest, "memory_mode = 'disabled'") {
 		t.Fatalf("agent.toml missing Codex runtime options:\n%s", manifest)
+	}
+}
+
+func TestHandleHubTemplatesRequiresExplicitMemoryOptIn(t *testing.T) {
+	created := agent.Agent{
+		ID: "u-codex-memory", Name: "codex-memory", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+	}
+	svc := mustNewSeededService(t, []agent.Agent{created})
+	publishSpec, err := svc.HubPublishSpec(created.ID, true)
+	if err != nil {
+		t.Fatalf("HubPublishSpec() error = %v", err)
+	}
+	if err := os.MkdirAll(publishSpec.WorkspaceRef.Path, 0o755); err != nil {
+		t.Fatalf("MkdirAll(workspace) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(publishSpec.WorkspaceRef.Path, "AGENTS.md"), []byte("instructions\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(AGENTS.md) error = %v", err)
+	}
+	memoryPath := filepath.Join(filepath.Dir(publishSpec.WorkspaceRef.SkillsPath), "memories", "memory_summary.md")
+	if err := os.MkdirAll(filepath.Dir(memoryPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(memory) error = %v", err)
+	}
+	if err := os.WriteFile(memoryPath, []byte("private memory\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(memory_summary.md) error = %v", err)
+	}
+
+	registryRoot := t.TempDir()
+	hubSvc, err := hub.NewService(config.HubConfig{
+		DefaultRegistry: "local", DefaultPublishRegistry: "local",
+		Registries: []config.HubRegistryConfig{{Name: "local", Kind: hub.RegistryKindLocal, Path: registryRoot, Enabled: true}},
+	}, hub.DefaultStoreFactory)
+	if err != nil {
+		t.Fatalf("hub.NewService() error = %v", err)
+	}
+	srv := &Handler{svc: svc}
+	srv.SetHubService(hubSvc)
+
+	for _, test := range []struct {
+		name          string
+		includeMemory bool
+		wantMemory    bool
+	}{
+		{name: "WithoutMemory", includeMemory: false, wantMemory: false},
+		{name: "WithMemory", includeMemory: true, wantMemory: true},
+	} {
+		body := fmt.Sprintf(`{"agent_id":%q,"registry":"local","name":%q,"include_memory":%t}`,
+			created.ID, test.name, test.includeMemory)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		srv.Routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("%s status = %d, want %d; body=%s", test.name, rec.Code, http.StatusCreated, rec.Body.String())
+		}
+		_, statErr := os.Stat(filepath.Join(registryRoot, "templates", test.name, "memories", "memory_summary.md"))
+		if test.wantMemory && statErr != nil {
+			t.Fatalf("%s memory missing: %v", test.name, statErr)
+		}
+		if !test.wantMemory && !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("%s memory was published without opt-in: %v", test.name, statErr)
+		}
 	}
 }
 
@@ -5424,7 +5484,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshotToDefaultRegistryWhenOmitted(t 
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	spec, err := svc.HubPublishSpec(created.ID)
+	spec, err := svc.HubPublishSpec(created.ID, false)
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}

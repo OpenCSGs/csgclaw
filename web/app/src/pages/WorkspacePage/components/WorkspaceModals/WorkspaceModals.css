@@ -1728,7 +1728,9 @@
 
 .selection-item:hover {
   border-color: color-mix(in oklab, var(--brand-600) 42%, var(--line));
-  box-shadow: var(--shadow-xs), 0 0 0 3px color-mix(in oklab, var(--brand-600) 12%, transparent);
+  box-shadow:
+    var(--shadow-xs),
+    0 0 0 3px color-mix(in oklab, var(--brand-600) 12%, transparent);
 }
 
 .profile-editor-shell {

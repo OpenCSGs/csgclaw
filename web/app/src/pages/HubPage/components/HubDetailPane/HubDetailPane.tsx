@@ -770,6 +770,15 @@ export function HubDetailPane({
     }
   }, [activeTemplateTab, onToggleWorkspaceDir, templateSkills, workspaceEntries]);
   useEffect(() => {
+    if (activeTemplateTab !== "memory" || selectedWorkspacePath === "memories/memory_summary.md") {
+      return;
+    }
+    const memoryFile = firstTemplateSectionFile(workspaceEntries, "memories", "memory_summary.md");
+    if (memoryFile) {
+      onSelectWorkspaceFile(memoryFile);
+    }
+  }, [activeTemplateTab, onSelectWorkspaceFile, selectedWorkspacePath, workspaceEntries]);
+  useEffect(() => {
     if (mcpCreateDialogOpen) {
       setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
       setMCPFormError("");
