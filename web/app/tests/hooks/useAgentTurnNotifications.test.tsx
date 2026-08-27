@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { buildUsersById, type IMServerEvent, type TranslateFn } from "@/models/conversations";
-import { TurnNotificationModes, type TurnNotificationMode } from "@/models/turnNotifications";
+import { buildTurnNotificationTag, TurnNotificationModes, type TurnNotificationMode } from "@/models/turnNotifications";
 import { useAgentTurnNotifications } from "@/hooks/workspace/useAgentTurnNotifications";
 import type { DesktopBridge } from "@/shared/platform/desktopBridge";
 
@@ -19,6 +19,7 @@ class FakeNotification {
   static requestPermission = vi.fn(async () => FakeNotification.permission);
 
   onclick: ((this: Notification, ev: Event) => unknown) | null = null;
+  onerror: ((this: Notification, ev: Event) => unknown) | null = null;
   private readonly closeMock = vi.fn();
 
   constructor(title: string, options: NotificationOptions = {}) {
@@ -155,7 +156,7 @@ describe("useAgentTurnNotifications", () => {
     expect(notificationRecords).toHaveLength(1);
     expect(notificationRecords[0]).toMatchObject({
       body: "Research room: The report is ready.",
-      tag: "csgclaw-turn:message-1",
+      tag: buildTurnNotificationTag("turn:message-1"),
       title: "Research Agent finished replying",
     });
 
@@ -266,8 +267,35 @@ describe("useAgentTurnNotifications", () => {
     expect(notificationRecords).toHaveLength(1);
     expect(notificationRecords[0]).toMatchObject({
       body: "Research room: Fallback after reconnect",
-      tag: "csgclaw-turn:message-1",
+      tag: buildTurnNotificationTag("turn:message-1"),
     });
+  });
+
+  it("uses a bounded tag for a scheduled task and retries after a native notification error", () => {
+    const { result } = renderNotifications(TurnNotificationModes.always);
+    const scheduledRequestID = "agent-task-task-scheduled-run-1-created";
+    const released = workEvent({
+      reason: "released",
+      request_id: scheduledRequestID,
+      revision: 2,
+      state: "idle",
+    });
+
+    act(() => result.current.handleRealtimeEvent(released));
+
+    expect(notificationRecords).toHaveLength(1);
+    expect(notificationRecords[0]?.tag).toBe(buildTurnNotificationTag(`turn:${scheduledRequestID}`));
+    expect(notificationRecords[0]?.tag).toHaveLength(24);
+
+    act(() => {
+      notificationRecords[0]?.notification.onerror?.call(
+        notificationRecords[0].notification as unknown as Notification,
+        new Event("error"),
+      );
+    });
+    act(() => result.current.handleRealtimeEvent(released));
+
+    expect(notificationRecords).toHaveLength(2);
   });
 
   it("suppresses unfocused-mode notifications while the app has focus", () => {

@@ -1,5 +1,6 @@
 import type { TranslateFn } from "@/models/conversations";
 import {
+  buildTurnNotificationTag,
   DEFAULT_TURN_NOTIFICATION_MODE,
   formatTurnNotificationBody,
   isCompletedAgentTurnEvent,
@@ -66,6 +67,16 @@ describe("turn notifications", () => {
     expect(isCompletedAgentTurnEvent(completed)).toBe(true);
     expect(isCompletedAgentTurnEvent({ ...completed, work: { ...completed.work, state: "working" } })).toBe(false);
     expect(isCompletedAgentTurnEvent({ ...completed, work: { ...completed.work, reason: "expired" } })).toBe(false);
+  });
+
+  it("keeps scheduled-task notification tags within the Windows limit", () => {
+    const eventKey = "turn:agent-task-task-scheduled-run-1-created";
+    const tag = buildTurnNotificationTag(eventKey);
+
+    expect(tag).toMatch(/^csgclaw-[0-9a-f]{16}$/);
+    expect(buildTurnNotificationTag(eventKey)).toBe(tag);
+    expect(buildTurnNotificationTag(`${eventKey}-other`)).not.toBe(tag);
+    expect(`n#http://127.0.0.1:18080#${tag}`.length).toBeLessThanOrEqual(64);
   });
 
   it("omits a room label that repeats the agent name or belongs to a direct chat", () => {

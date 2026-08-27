@@ -10,6 +10,7 @@ import {
 } from "@/models/conversations";
 import type { IMConversation, IMMessage, IMServerEvent, TranslateFn, UsersById } from "@/models/conversations";
 import {
+  buildTurnNotificationTag,
   formatTurnNotificationBody,
   isCompletedAgentTurnEvent,
   shouldShowTurnNotification,
@@ -168,9 +169,13 @@ export function useAgentTurnNotifications(args: UseAgentTurnNotificationsArgs): 
       const notification = new window.Notification(current.t("turnNotificationTitle", { agent: agentName }), {
         body,
         icon: "favicon.ico",
-        tag: `csgclaw-${input.eventKey}`,
+        tag: buildTurnNotificationTag(input.eventKey),
       });
       notifiedEventKeysRef.current.add(input.eventKey);
+      notification.onerror = () => {
+        notifiedEventKeysRef.current.delete(input.eventKey);
+        setPermission(readSystemNotificationPermission());
+      };
       notification.onclick = async () => {
         notification.close();
         const desktopBridge = getDesktopBridge();
