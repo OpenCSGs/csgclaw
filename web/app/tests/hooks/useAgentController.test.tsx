@@ -1087,6 +1087,27 @@ describe("useAgentController", () => {
     expect(deleteBotRequest).not.toHaveBeenCalled();
   });
 
+  it("keeps the agent module selected and switches to the adjacent agent after deletion", async () => {
+    const worker: AgentLike = { ...oldAgent, id: "u-worker", name: "Worker", role: "worker" };
+    const adjacent: AgentLike = { ...worker, id: "u-adjacent", name: "Adjacent" };
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          activePane: { type: WorkspacePaneTypes.agent, id: String(worker.id) },
+          agents: [oldAgent, worker, adjacent],
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.controller.agentViewProps.onDelete?.(worker);
+    });
+
+    expect(result.current.selectAgent).toHaveBeenCalledWith(expect.objectContaining({ id: adjacent.id }), {
+      replace: true,
+    });
+  });
+
   it("refreshes the selected agent workspace after saving manager profile changes without renaming manager", async () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
