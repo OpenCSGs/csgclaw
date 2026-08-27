@@ -7,6 +7,8 @@ import { fetchBootstrap, fetchBootstrapConfig, fetchRuntimeImages, fetchVersion 
 import type { FetchVersionOptions } from "@/api/app";
 import { fetchMCPServers, fetchRemoteMCPServersPage } from "@/api/mcp";
 import type { RemoteMCPServersPage } from "@/api/mcp";
+import { fetchRemoteKnowledgeBases } from "@/api/knowledgeBases";
+import type { RemoteKnowledgeBasePage } from "@/models/knowledgeBases";
 import { fetchHubTemplate, fetchHubTemplates, fetchHubWorkspace, fetchHubWorkspaceFile } from "@/api/hub";
 import { fetchModelProviders } from "@/api/modelProviders";
 import { fetchRemoteSkillsPage, fetchSkillFile, fetchSkills, fetchSkillTree } from "@/api/skills";
@@ -118,6 +120,9 @@ export const workspaceQueryKeys = {
   mcpServers: () => [WORKSPACE_QUERY_SCOPE, "mcp-servers"] as const,
   remoteMCPServers: (search: string | null | undefined = "") =>
     [WORKSPACE_QUERY_SCOPE, "remote-mcp-servers", String(search || "").trim()] as const,
+  knowledgeBasesScope: () => [WORKSPACE_QUERY_SCOPE, "knowledge-bases"] as const,
+  knowledgeBases: (search: string | null | undefined = "") =>
+    [...workspaceQueryKeys.knowledgeBasesScope(), String(search || "").trim()] as const,
   hubTemplate: (templateID: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "hub-template", templateID || ""] as const,
   hubWorkspaceScope: (templateID: string | null | undefined) =>
@@ -283,6 +288,16 @@ export function useWorkspaceMCPServersQuery(): UseQueryResult<JSONRecord> {
   return useQuery<JSONRecord>({
     queryKey: workspaceQueryKeys.mcpServers(),
     queryFn: fetchMCPServers,
+  });
+}
+
+export function useWorkspaceKnowledgeBasesQuery(search = "", options: { enabled?: boolean } = {}) {
+  const normalizedSearch = String(search || "").trim();
+  return useQuery<RemoteKnowledgeBasePage>({
+    queryKey: workspaceQueryKeys.knowledgeBases(normalizedSearch),
+    queryFn: () => fetchRemoteKnowledgeBases(normalizedSearch),
+    enabled: Boolean(options.enabled),
+    retry: 0,
   });
 }
 

@@ -17,6 +17,7 @@ import type { TurnNotificationMode } from "@/models/turnNotifications";
 type MaybeUpdater<T> = T | ((current: T) => T);
 
 export const HubResourceTypes = {
+  knowledge: "knowledge",
   mcp: "mcp",
   skill: "skill",
   template: "template",
@@ -31,6 +32,7 @@ export type WorkspaceUiState = {
   isSidebarCollapsed: boolean;
   locale: LocaleCode;
   selectedHubResourceType: HubResourceType;
+  selectedKnowledgeBaseID: string;
   selectedMCPServerName: string;
   selectedHubSkillName: string;
   selectedHubSkillPath: string;
@@ -46,6 +48,7 @@ export type WorkspaceUiState = {
   setIsSidebarCollapsed: (value: MaybeUpdater<boolean>) => void;
   setLocale: (locale: LocaleCode) => void;
   setSelectedHubResourceType: (value: MaybeUpdater<HubResourceType>) => void;
+  setSelectedKnowledgeBaseID: (value: MaybeUpdater<string>) => void;
   setSelectedMCPServerName: (value: MaybeUpdater<string>) => void;
   setSelectedHubSkillName: (value: MaybeUpdater<string>) => void;
   setSelectedHubSkillPath: (value: MaybeUpdater<string>) => void;
@@ -70,6 +73,7 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   floatingChatOpen: false,
   workspaceTab: workspaceTabForPane(initialPane),
   selectedHubResourceType: HubResourceTypes.template,
+  selectedKnowledgeBaseID: "",
   selectedMCPServerName: "",
   selectedHubSkillName: "",
   selectedHubSkillPath: "",
@@ -103,6 +107,10 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   setSelectedHubResourceType: (value) =>
     set((state) => ({
       selectedHubResourceType: typeof value === "function" ? value(state.selectedHubResourceType) : value,
+    })),
+  setSelectedKnowledgeBaseID: (value) =>
+    set((state) => ({
+      selectedKnowledgeBaseID: typeof value === "function" ? value(state.selectedKnowledgeBaseID) : value,
     })),
   setSelectedMCPServerName: (value) =>
     set((state) => ({

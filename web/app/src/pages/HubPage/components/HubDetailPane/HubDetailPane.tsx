@@ -8,9 +8,8 @@ import type { Diagnostic } from "@codemirror/lint";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { CloudDownload, FileCode2, Server, Trash2 } from "lucide-react";
+import { BookOpen, CheckCircle2, CloudDownload, FileCode2, RefreshCw, Server, Trash2 } from "lucide-react";
 import { formatRuntimeKindLabel } from "@/models/agents";
-import type { JSONRecord } from "@/models/agents";
 import {
   canPublishHubTemplateToCommunity,
   formatHubDateTime,
@@ -23,9 +22,10 @@ import {
   formatMCPServerDocument,
   mcpServerDescription,
   mcpServerPayloadFromDocument,
-  mcpServersFromMap,
+  mcpServersFromTemplateDocument,
+  mcpToolParameters,
 } from "@/models/mcp";
-import type { MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
+import type { MCPProbeResult, MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { ModelsIcon } from "@/components/ui/Icons";
@@ -44,10 +44,23 @@ import {
 import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { MCPServer } from "@/models/mcp";
+import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import { isReadonlySkill } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 import { RemoteMCPList } from "./RemoteMCPList";
+import styles from "./HubDetailPane.module.css";
+
+type ModuleClassValue = string | false | null | undefined;
+
+function moduleClassNames(...values: ModuleClassValue[]): string {
+  return values
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => value.split(/\s+/))
+    .filter(Boolean)
+    .map((value) => styles[value] || value)
+    .join(" ");
+}
 
 const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
 type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp";
@@ -57,6 +70,20 @@ type TemplateSkillSummary = {
   description: string;
   name: string;
 };
+
+function knowledgeBaseUnavailableText(reason: string, t: TranslateFn): string {
+  switch (String(reason || "").trim()) {
+    case "missing_content":
+    case "content_not_ready":
+      return t("resourcesKnowledgeBaseNoActiveContent");
+    case "mcp_not_ready":
+      return t("resourcesKnowledgeBaseMCPNotReady");
+    case "remote_state_unavailable":
+      return t("resourcesKnowledgeBaseRemoteUnavailable");
+    default:
+      return reason;
+  }
+}
 
 function templateSectionEntries(
   entries: readonly WorkspaceEntry[],
@@ -169,11 +196,98 @@ function templateMCPServerSummaries(
     return [];
   }
   try {
-    const parsed = JSON.parse(mcpFile.content || "") as { mcpServers?: JSONRecord };
-    return mcpServersFromMap(parsed.mcpServers);
+    return mcpServersFromTemplateDocument(JSON.parse(mcpFile.content || ""));
   } catch {
     return [];
   }
+}
+
+function MCPProbePanel({ result, t }: { result: MCPProbeResult; t: TranslateFn }) {
+  const serverLabel = result.serverInfo?.title || result.serverInfo?.name || "";
+  return (
+    <section className={moduleClassNames("mcp-probe-panel")} aria-live="polite">
+      <div className={moduleClassNames("mcp-probe-header")}>
+        <span className={moduleClassNames("mcp-probe-success-icon")} aria-hidden="true">
+          <CheckCircle2 size={18} strokeWidth={2.2} />
+        </span>
+        <div className={moduleClassNames("mcp-probe-heading-copy")}>
+          <strong>{t("resourcesMCPTestSuccess")}</strong>
+          <span>
+            {result.toolsSupported
+              ? t("resourcesMCPTestSuccessSummary", { count: result.tools.length })
+              : t("resourcesMCPToolsUnsupported")}
+          </span>
+        </div>
+        <div className={moduleClassNames("mcp-probe-meta")}>
+          {serverLabel ? (
+            <span>
+              {serverLabel}
+              {result.serverInfo?.version ? ` ${result.serverInfo.version}` : ""}
+            </span>
+          ) : null}
+          {result.protocolVersion ? (
+            <span>{t("resourcesMCPProtocolVersion", { version: result.protocolVersion })}</span>
+          ) : null}
+          <span>{t("resourcesMCPTestDuration", { duration: result.durationMs })}</span>
+        </div>
+      </div>
+
+      {result.toolsSupported ? (
+        <div className={moduleClassNames("mcp-tools-section")}>
+          <div className={moduleClassNames("mcp-tools-heading")}>
+            <strong>{t("resourcesMCPToolsTitle")}</strong>
+            <span>{result.tools.length}</span>
+          </div>
+          {result.tools.length ? (
+            <div className={moduleClassNames("mcp-tools-list")}>
+              {result.tools.map((tool) => {
+                const parameters = mcpToolParameters(tool);
+                const displayName = tool.title || tool.name;
+                return (
+                  <article key={tool.name} className={moduleClassNames("mcp-tool-card")}>
+                    <div className={moduleClassNames("mcp-tool-title-row")}>
+                      <strong>{displayName}</strong>
+                      {displayName !== tool.name ? <code>{tool.name}</code> : null}
+                    </div>
+                    {tool.description ? <p>{tool.description}</p> : null}
+                    {parameters.length ? (
+                      <div className={moduleClassNames("mcp-tool-parameters")}>
+                        {parameters.map((parameter) => (
+                          <span
+                            key={parameter.name}
+                            className={moduleClassNames(
+                              "mcp-tool-parameter",
+                              parameter.required && "mcp-tool-parameter-required",
+                            )}
+                            title={parameter.description}
+                          >
+                            <code>{parameter.name}</code>
+                            <span>{parameter.type}</span>
+                            <em>
+                              {parameter.required
+                                ? t("resourcesMCPToolParameterRequired")
+                                : t("resourcesMCPToolParameterOptional")}
+                            </em>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className={moduleClassNames("mcp-tools-empty")}>{t("resourcesMCPToolsEmpty")}</div>
+          )}
+          {result.truncated ? (
+            <div className={moduleClassNames("mcp-tools-truncated")}>
+              {t("resourcesMCPToolsTruncated", { count: result.tools.length })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 const managedInstructionsStart = "<!-- BEGIN CSGCLAW-INSTRUCTIONS (auto-generated; do not edit) -->";
@@ -210,6 +324,7 @@ type HubDetailPaneHub = {
     loaded: boolean;
     onDeleteSkill?: (item: SkillSummary | null | undefined) => Promise<boolean> | boolean;
     onCreateMCP?: (payload: MCPServerPayload) => Promise<boolean> | boolean;
+    onClearMCPProbe?: () => void;
     onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
     onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
     onPublishTemplate?: (
@@ -222,6 +337,7 @@ type HubDetailPaneHub = {
       | { status: "partial"; message: string }
       | null;
     onSelectMCP?: (name: string | null | undefined) => void;
+    onProbeMCP?: (payload: MCPServerPayload) => Promise<MCPProbeResult | null> | MCPProbeResult | null;
     onUpdateMCP?: (currentName: string, payload: MCPServerPayload) => Promise<boolean> | boolean;
     onRetry: () => void | Promise<void>;
     onSelectSkill?: (name: string | null | undefined) => void;
@@ -235,9 +351,26 @@ type HubDetailPaneHub = {
     mcpStateLoading?: boolean;
     mcpMutationBusy?: boolean;
     mcpMutationError?: string;
+    mcpProbeBusy?: boolean;
+    mcpProbeError?: string;
+    mcpProbeResult?: MCPProbeResult | null;
     mcpCreateError?: string;
     mcpCreateDialogOpen?: boolean;
+    mcpCreateInitialDocument?: string;
+    knowledgeBases?: {
+      copyBusyID: string;
+      copyError: string;
+      items: readonly RemoteKnowledgeBase[];
+      loginRequired: boolean;
+      loading: boolean;
+      loadError: string;
+      prepareMCPConfig: (id: string) => Promise<boolean>;
+      search: string;
+      selected: RemoteKnowledgeBase | null;
+      setSearch: (value: string) => void;
+    };
     onMCPCreateDialogOpenChange?: (open: boolean) => void;
+    onKnowledgeBaseLogin?: () => void | Promise<void>;
     onInstallRemoteMCP?: (item: RemoteMCPServer) => Promise<boolean> | boolean;
     onLoadMoreRemoteMCPServers?: () => Promise<unknown> | unknown;
     onRefreshRemoteMCPServers?: () => Promise<unknown> | unknown;
@@ -252,7 +385,7 @@ type HubDetailPaneHub = {
     remoteMCPServersSearch?: string;
     selectedMCPServer?: MCPServer | null;
     selectedMCPServerName?: string;
-    selectedResourceType?: "mcp" | "skill" | "template";
+    selectedResourceType?: "knowledge" | "mcp" | "skill" | "template";
     selectedSkill: SkillSummary | null;
     selectedSkillPath: string;
     selectedTemplate: HubTemplate | null;
@@ -290,8 +423,12 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   mcpStateLoading: false,
   mcpMutationBusy: false,
   mcpMutationError: "",
+  mcpProbeBusy: false,
+  mcpProbeError: "",
+  mcpProbeResult: null,
   mcpCreateError: "",
   mcpCreateDialogOpen: false,
+  mcpCreateInitialDocument: "",
   remoteMCPInstallBusy: "",
   remoteMCPServers: [],
   remoteMCPServersError: "",
@@ -305,7 +442,9 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   onSelectWorkspaceFile: () => {},
   onToggleWorkspaceDir: () => {},
   onCreateMCP: () => false,
+  onClearMCPProbe: () => {},
   onDeleteMCP: () => false,
+  onProbeMCP: () => null,
   onUpdateMCP: () => false,
   selectedResourceType: "template",
   selectedSkill: null,
@@ -545,13 +684,17 @@ function JSONConfigEditor({
 
   return (
     <div
-      className={`hub-json-editor${invalid ? " is-invalid" : ""}`}
+      className={moduleClassNames(`hub-json-editor${invalid ? " is-invalid" : ""}`)}
       style={{ "--hub-json-editor-min-height": minHeight } as CSSProperties}
     >
-      <label className={`hub-json-editor-label${hideLabel ? " sr-only" : ""}`} htmlFor={editorId}>
+      <label className={moduleClassNames(`hub-json-editor-label${hideLabel ? " sr-only" : ""}`)} htmlFor={editorId}>
         {label}
       </label>
-      <div className="hub-json-editor-shell" ref={editorParentRef} aria-invalid={invalid || undefined} />
+      <div
+        className={moduleClassNames("hub-json-editor-shell")}
+        ref={editorParentRef}
+        aria-invalid={invalid || undefined}
+      />
     </div>
   );
 }
@@ -559,7 +702,7 @@ function JSONConfigEditor({
 function HubPreviewEmptyIcon() {
   return (
     <svg
-      className="hub-preview-empty-icon"
+      className={moduleClassNames("hub-preview-empty-icon")}
       width="32"
       height="32"
       viewBox="0 0 32 32"
@@ -623,8 +766,13 @@ export function HubDetailPane({
     mcpStateLoading = false,
     mcpMutationBusy = false,
     mcpMutationError = "",
+    mcpProbeBusy = false,
+    mcpProbeError = "",
+    mcpProbeResult = null,
     mcpCreateError = "",
     mcpCreateDialogOpen = false,
+    mcpCreateInitialDocument = "",
+    knowledgeBases,
     remoteMCPInstallBusy = "",
     remoteMCPServers = [],
     remoteMCPServersError = "",
@@ -637,17 +785,20 @@ export function HubDetailPane({
     workspaceEntries = EMPTY_WORKSPACE_ENTRIES,
     workspaceTreeLoading = false,
     onSelectSkillFile,
+    onClearMCPProbe,
     onDeleteSkill,
     onCreateMCP,
     onDeleteMCP,
     onDeleteTemplate,
     onPublishTemplate,
     onMCPCreateDialogOpenChange,
+    onKnowledgeBaseLogin,
     onInstallRemoteMCP,
     onLoadMoreRemoteMCPServers,
     onRefreshRemoteMCPServers,
     onRemoteMCPServersSearchChange,
     onRemoteMCPVisibleChange,
+    onProbeMCP,
     onUpdateMCP,
     onUpdateTemplateInstructions,
     deleteBusy = false,
@@ -662,6 +813,9 @@ export function HubDetailPane({
   const canDeleteSkill = Boolean(selectedSkill && !isReadonlySkill(selectedSkill));
   const skillEntries = skillTree?.entries ?? EMPTY_WORKSPACE_ENTRIES;
   const activeResourceType = useMemo(() => {
+    if (selectedResourceType === "knowledge") {
+      return "knowledge";
+    }
     if (selectedResourceType === "mcp") {
       return "mcp";
     }
@@ -749,9 +903,13 @@ export function HubDetailPane({
         label: t("agentProfileSkillsTab"),
         count: templateSkillCount > 0 ? templateSkillCount : undefined,
       },
-      { id: "mcp" as const, label: t("agentProfileMCPTab") },
+      {
+        id: "mcp" as const,
+        label: t("agentProfileMCPTab"),
+        count: templateMCPServers.length > 0 ? templateMCPServers.length : undefined,
+      },
     ],
-    [t, templateMemoryEnabled, templateSkillCount],
+    [t, templateMCPServers.length, templateMemoryEnabled, templateSkillCount],
   );
   useEffect(() => {
     setActiveTemplateTab("profile");
@@ -783,11 +941,11 @@ export function HubDetailPane({
   }, [activeTemplateTab, onSelectWorkspaceFile, selectedWorkspacePath, workspaceEntries]);
   useEffect(() => {
     if (mcpCreateDialogOpen) {
-      setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
+      setMCPDraftDocument(mcpCreateInitialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
       setMCPFormError("");
       setMCPCreateMode("manual");
     }
-  }, [mcpCreateDialogOpen]);
+  }, [mcpCreateDialogOpen, mcpCreateInitialDocument]);
   useEffect(() => {
     if (!selectedMCPServer) {
       setMCPDetailDocument("");
@@ -831,6 +989,16 @@ export function HubDetailPane({
     }
   }
 
+  async function handleProbeMCPDetail() {
+    const result = parseMCPServerDocument(mcpDetailDocument, t);
+    if (result.kind !== "valid") {
+      setMCPDetailError(result.kind === "structure" ? result.message : "");
+      return;
+    }
+    setMCPDetailError("");
+    await onProbeMCP?.(result.payload);
+  }
+
   async function handleDeleteMCPConfirm() {
     const deleted = await onDeleteMCP?.(selectedMCPServer);
     if (deleted) {
@@ -859,6 +1027,7 @@ export function HubDetailPane({
 
   function handleMCPDetailDocumentChange(value: string) {
     setMCPDetailDocument(value);
+    onClearMCPProbe?.();
     const result = parseMCPServerDocument(value, t);
     setMCPDetailError(result.kind === "structure" ? result.message : "");
   }
@@ -898,32 +1067,115 @@ export function HubDetailPane({
   }
 
   return (
-    <section className="entity-pane hub-detail-pane">
-      {error ? <div className="form-error">{error}</div> : null}
+    <section className={moduleClassNames("entity-pane hub-detail-pane")}>
+      {error ? <div className={moduleClassNames("form-error")}>{error}</div> : null}
       {!loaded && !error ? (
-        <div className="workspace-empty">{t("resourcesLoading")}</div>
-      ) : templates.length === 0 && skills.length === 0 && mcpServers.length === 0 ? (
-        <div className="empty-state shell-empty-state hub-empty-state">
-          <span className="rich-empty-mark" aria-hidden="true">
+        <div className={moduleClassNames("workspace-empty")}>{t("resourcesLoading")}</div>
+      ) : activeResourceType !== "knowledge" &&
+        templates.length === 0 &&
+        skills.length === 0 &&
+        mcpServers.length === 0 ? (
+        <div className={moduleClassNames("empty-state shell-empty-state hub-empty-state")}>
+          <span className={moduleClassNames("rich-empty-mark")} aria-hidden="true">
             *
           </span>
           <strong>{t("resourcesEmpty")}</strong>
         </div>
       ) : (
-        <div className="hub-workbench hub-inspector-panel">
-          {activeResourceType === "template" && selectedTemplate ? (
+        <div className={moduleClassNames("hub-workbench hub-inspector-panel")}>
+          {activeResourceType === "knowledge" ? (
             <>
-              <div className="hub-inspector-hero">
-                <div className="hub-inspector-hero-row">
-                  <div className="hub-inspector-brand">
-                    <div className="hub-inspector-copy">
-                      <div className="hub-inspector-title-row">
-                        <span className="hub-inspector-title-icon" aria-hidden="true">
+              <div className={moduleClassNames("hub-inspector-hero")}>
+                <div className={moduleClassNames("hub-inspector-hero-row")}>
+                  <div className={moduleClassNames("hub-inspector-brand")}>
+                    <div className={moduleClassNames("hub-inspector-copy")}>
+                      <div className={moduleClassNames("hub-inspector-title-row")}>
+                        <span className={moduleClassNames("hub-inspector-title-icon")} aria-hidden="true">
+                          <BookOpen size={18} strokeWidth={2} />
+                        </span>
+                        <h2>{knowledgeBases?.selected?.name || t("resourcesKnowledgeBasesLabel")}</h2>
+                        {knowledgeBases?.selected ? (
+                          <span
+                            className={moduleClassNames(
+                              `mini-badge knowledge-base-status ${knowledgeBases.selected.availability}`,
+                            )}
+                          >
+                            {knowledgeBases.selected.configuredMCPName
+                              ? t("resourcesKnowledgeBaseAdded")
+                              : knowledgeBases.selected.availability === "available"
+                                ? t("resourcesKnowledgeBaseAvailable")
+                                : t("resourcesKnowledgeBaseUnavailable")}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p>{knowledgeBases?.selected?.description || t("resourcesKnowledgeBasesDescription")}</p>
+                    </div>
+                  </div>
+                  {knowledgeBases?.selected ? (
+                    <div className={moduleClassNames("hub-template-actions")}>
+                      <Button
+                        variant="primary"
+                        size="md"
+                        loading={knowledgeBases.copyBusyID === knowledgeBases.selected.id}
+                        disabled={
+                          Boolean(knowledgeBases.selected.configuredMCPName) ||
+                          knowledgeBases.selected.availability !== "available"
+                        }
+                        onClick={() => void knowledgeBases.prepareMCPConfig(knowledgeBases.selected?.id || "")}
+                      >
+                        {knowledgeBases.selected.configuredMCPName
+                          ? t("resourcesKnowledgeBaseAdded")
+                          : t("resourcesKnowledgeBaseAddMCP")}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+                {knowledgeBases?.selected?.unavailableReason ? (
+                  <div className={moduleClassNames("form-error")}>
+                    {knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)}
+                  </div>
+                ) : null}
+                {knowledgeBases?.copyError || knowledgeBases?.loadError ? (
+                  <div className={moduleClassNames("form-error")}>
+                    {knowledgeBases.copyError || knowledgeBases.loadError}
+                  </div>
+                ) : null}
+              </div>
+              <div className={moduleClassNames("hub-workspace-block knowledge-base-overview")}>
+                {knowledgeBases?.loading ? (
+                  <div className={moduleClassNames("workspace-empty")}>{t("resourcesKnowledgeBasesLoading")}</div>
+                ) : !knowledgeBases?.selected ? (
+                  <div className={moduleClassNames("empty-state shell-empty-state hub-empty-state")}>
+                    <BookOpen size={28} strokeWidth={1.5} aria-hidden="true" />
+                    <strong>{t("resourcesKnowledgeBasesEmpty")}</strong>
+                    <span>{t("resourcesKnowledgeBasesEmptyHint")}</span>
+                    {knowledgeBases?.loginRequired ? (
+                      <Button variant="primary" size="sm" onClick={() => void onKnowledgeBaseLogin?.()}>
+                        {t("resourcesKnowledgeBasesLogin")}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className={moduleClassNames("knowledge-base-help")}>
+                    <strong>{t("resourcesKnowledgeBaseHowToTitle")}</strong>
+                    <p>{t("resourcesKnowledgeBaseHowToDescription")}</p>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : activeResourceType === "template" && selectedTemplate ? (
+            <>
+              <div className={moduleClassNames("hub-inspector-hero")}>
+                <div className={moduleClassNames("hub-inspector-hero-row")}>
+                  <div className={moduleClassNames("hub-inspector-brand")}>
+                    <div className={moduleClassNames("hub-inspector-copy")}>
+                      <div className={moduleClassNames("hub-inspector-title-row")}>
+                        <span className={moduleClassNames("hub-inspector-title-icon")} aria-hidden="true">
                           <ModelsIcon />
                         </span>
                         <h2>{hubTemplateFullName(selectedTemplate)}</h2>
-                        <div className="hub-inspector-badge-row">
-                          <span className="mini-badge template-runtime-badge">
+                        <div className={moduleClassNames("hub-inspector-badge-row")}>
+                          <span className={moduleClassNames("mini-badge template-runtime-badge")}>
                             {selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind
                               ? formatRuntimeKindLabel(
                                   selectedTemplate.runtime_kind || selectedTemplate.workspace?.kind,
@@ -931,8 +1183,8 @@ export function HubDetailPane({
                                 )
                               : "-"}
                           </span>
-                          <span className="mini-badge template-source-badge">
-                            <span className="template-source-badge-dot" aria-hidden="true"></span>
+                          <span className={moduleClassNames("mini-badge template-source-badge")}>
+                            <span className={moduleClassNames("template-source-badge-dot")} aria-hidden="true"></span>
                             {localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
                           </span>
                         </div>
@@ -940,7 +1192,7 @@ export function HubDetailPane({
                       <p>{selectedTemplate.description || selectedTemplate.id}</p>
                     </div>
                   </div>
-                  <div className="hub-template-actions">
+                  <div className={moduleClassNames("hub-template-actions")}>
                     <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
                       <span>{t("createAgent")}</span>
                     </Button>
@@ -973,7 +1225,7 @@ export function HubDetailPane({
                   </div>
                 </div>
                 {templateReview ? (
-                  <div className={`hub-template-review-alert ${templateReview.kind}`} role="status">
+                  <div className={moduleClassNames(`hub-template-review-alert ${templateReview.kind}`)} role="status">
                     <strong>
                       {templateReview.kind === "pending"
                         ? t("resourcesTemplateReviewPending")
@@ -993,20 +1245,26 @@ export function HubDetailPane({
                 ) : null}
               </div>
 
-              <nav className="hub-template-section-nav" aria-label={t("agentProfileSectionNavLabel")}>
+              <nav
+                className={moduleClassNames("hub-template-section-nav")}
+                aria-label={t("agentProfileSectionNavLabel")}
+              >
                 {templateTabs.map((tab) => {
                   const active = tab.id === activeTemplateTab;
                   return (
                     <button
                       key={tab.id}
                       type="button"
-                      className={`hub-template-section-tab ${active ? "active" : ""}`.trim()}
+                      className={moduleClassNames("hub-template-section-tab", active && "active")}
                       aria-current={active ? "location" : undefined}
                       onClick={() => selectTemplateTab(tab.id)}
                     >
                       <span>{tab.label}</span>
                       {typeof tab.count === "number" ? (
-                        <span className="hub-template-section-tab-count" aria-label={String(tab.count)}>
+                        <span
+                          className={moduleClassNames("hub-template-section-tab-count")}
+                          aria-label={String(tab.count)}
+                        >
                           {tab.count}
                         </span>
                       ) : null}
@@ -1016,14 +1274,16 @@ export function HubDetailPane({
               </nav>
 
               {activeTemplateTab === "profile" ? (
-                <div className="profile-editor-shell hub-template-profile-shell">
-                  <section className="profile-section">
-                    <div className="profile-section-heading">
-                      <div className="profile-section-title">{t("profileRuntimeSection")}</div>
-                      <p className="profile-section-description">{t("profileRuntimeSectionDescription")}</p>
+                <div className={moduleClassNames("profile-editor-shell hub-template-profile-shell")}>
+                  <section className={moduleClassNames("profile-section")}>
+                    <div className={moduleClassNames("profile-section-heading")}>
+                      <div className={moduleClassNames("profile-section-title")}>{t("profileRuntimeSection")}</div>
+                      <p className={moduleClassNames("profile-section-description")}>
+                        {t("profileRuntimeSectionDescription")}
+                      </p>
                     </div>
-                    <div className="profile-grid-compact hub-template-profile-grid">
-                      <label className="field">
+                    <div className={moduleClassNames("profile-grid-compact hub-template-profile-grid")}>
+                      <label className={moduleClassNames("field")}>
                         <span>{t("resourcesRuntimeLabel")}</span>
                         <input
                           value={
@@ -1035,7 +1295,7 @@ export function HubDetailPane({
                           disabled
                         />
                       </label>
-                      <label className="field">
+                      <label className={moduleClassNames("field")}>
                         <span>{t("resourcesSourceLabel")}</span>
                         <input
                           value={localizeTemplateSourceTag(selectedTemplate.source?.name, locale)}
@@ -1043,28 +1303,39 @@ export function HubDetailPane({
                           disabled
                         />
                       </label>
-                      <label className="field span-2">
+                      <label className={moduleClassNames("field span-2")}>
                         <span>{t("resourcesImageLabel")}</span>
                         <input value={selectedTemplate.image || "-"} readOnly disabled />
                       </label>
-                      <label className="field">
+                      <label className={moduleClassNames("field")}>
                         <span>{t("resourcesUpdatedAtLabel")}</span>
                         <input value={formatHubDateTime(selectedTemplate.updated_at, locale)} readOnly disabled />
                       </label>
-                      <div className="field span-2 hub-template-env-field">
-                        <div className="hub-template-env-heading">
+                      <div className={moduleClassNames("field span-2 hub-template-env-field")}>
+                        <div className={moduleClassNames("hub-template-env-heading")}>
                           <span>{t("resourcesTemplateEnvLabel")}</span>
-                          <span className="hub-template-env-count">
+                          <span className={moduleClassNames("hub-template-env-count")}>
                             {t("resourcesTemplateEnvCount", { count: templateImageEnv.length })}
                           </span>
                         </div>
                         {templateImageEnv.length ? (
-                          <div className="hub-template-env-list" role="list">
+                          <div className={moduleClassNames("hub-template-env-list")} role="list">
                             {templateImageEnv.map((item) => (
-                              <div className="hub-template-env-chip" role="listitem" key={item.name}>
-                                <code className="hub-template-env-name">{item.name}</code>
-                                <span className={`hub-template-env-status ${item.required ? "required" : "optional"}`}>
-                                  <span className="hub-template-env-status-dot" aria-hidden="true"></span>
+                              <div
+                                className={moduleClassNames("hub-template-env-chip")}
+                                role="listitem"
+                                key={item.name}
+                              >
+                                <code className={moduleClassNames("hub-template-env-name")}>{item.name}</code>
+                                <span
+                                  className={moduleClassNames(
+                                    `hub-template-env-status ${item.required ? "required" : "optional"}`,
+                                  )}
+                                >
+                                  <span
+                                    className={moduleClassNames("hub-template-env-status-dot")}
+                                    aria-hidden="true"
+                                  ></span>
                                   {item.required
                                     ? t("resourcesTemplateEnvRequiredBadge")
                                     : t("resourcesTemplateEnvOptional")}
@@ -1073,25 +1344,27 @@ export function HubDetailPane({
                             ))}
                           </div>
                         ) : (
-                          <div className="hub-template-env-empty">{t("resourcesTemplateEnvNotRequired")}</div>
+                          <div className={moduleClassNames("hub-template-env-empty")}>
+                            {t("resourcesTemplateEnvNotRequired")}
+                          </div>
                         )}
                       </div>
                     </div>
                   </section>
                 </div>
               ) : activeTemplateTab === "instructions" ? (
-                <section className="profile-section hub-template-instructions-section">
-                  <div className="hub-template-instructions-header">
-                    <div className="profile-section-heading">
-                      <div className="profile-section-title">{t("agentInstructions")}</div>
-                      <p className="profile-section-description">
+                <section className={moduleClassNames("profile-section hub-template-instructions-section")}>
+                  <div className={moduleClassNames("hub-template-instructions-header")}>
+                    <div className={moduleClassNames("profile-section-heading")}>
+                      <div className={moduleClassNames("profile-section-title")}>{t("agentInstructions")}</div>
+                      <p className={moduleClassNames("profile-section-description")}>
                         {templateInstructionsMode === "default"
                           ? t("resourcesTemplateInstructionsDefaultHint")
                           : t("resourcesTemplateInstructionsAdvancedHint")}
                       </p>
                     </div>
                     <div
-                      className="agent-instructions-mode-switch"
+                      className={moduleClassNames("agent-instructions-mode-switch")}
                       role="group"
                       aria-label={t("agentInstructionsViewMode")}
                     >
@@ -1111,11 +1384,11 @@ export function HubDetailPane({
                       </button>
                     </div>
                   </div>
-                  <div className="hub-template-instructions-content">
+                  <div className={moduleClassNames("hub-template-instructions-content")}>
                     {templateInstructionsReadonly ? (
                       templateInstructionsValue.trim() ? (
-                        <div className="hub-template-instructions-preview">
-                          <div className="hub-template-instructions-preview-bar">
+                        <div className={moduleClassNames("hub-template-instructions-preview")}>
+                          <div className={moduleClassNames("hub-template-instructions-preview-bar")}>
                             <FileCode2 size={16} strokeWidth={2} aria-hidden="true" />
                             <span>
                               {templateInstructionsMode === "advanced"
@@ -1126,8 +1399,8 @@ export function HubDetailPane({
                           <pre aria-label={t("agentInstructions")}>{templateInstructionsValue}</pre>
                         </div>
                       ) : (
-                        <div className="hub-template-instructions-empty">
-                          <span className="hub-template-instructions-empty-icon" aria-hidden="true">
+                        <div className={moduleClassNames("hub-template-instructions-empty")}>
+                          <span className={moduleClassNames("hub-template-instructions-empty-icon")} aria-hidden="true">
                             <FileCode2 size={20} strokeWidth={1.8} />
                           </span>
                           <strong>{t("resourcesTemplateInstructionsEmptyTitle")}</strong>
@@ -1142,11 +1415,13 @@ export function HubDetailPane({
                         </div>
                       )
                     ) : (
-                      <div className="profile-grid-compact">
-                        <label className="field span-2">
-                          <span className="sr-only">{t("agentInstructions")}</span>
+                      <div className={moduleClassNames("profile-grid-compact")}>
+                        <label className={moduleClassNames("field span-2")}>
+                          <span className={moduleClassNames("sr-only")}>{t("agentInstructions")}</span>
                           <textarea
-                            className={`compact-textarea hub-template-instructions-editor ${templateInstructionsMode === "advanced" ? "is-advanced" : "is-default"}`}
+                            className={moduleClassNames(
+                              `compact-textarea hub-template-instructions-editor ${templateInstructionsMode === "advanced" ? "is-advanced" : "is-default"}`,
+                            )}
                             value={templateInstructionsValue}
                             onInput={(event) => {
                               const value = event.currentTarget.value;
@@ -1162,7 +1437,7 @@ export function HubDetailPane({
                     )}
                   </div>
                   {selectedTemplate.source?.kind === "local" ? (
-                    <div className="form-actions">
+                    <div className={moduleClassNames("form-actions")}>
                       <Button
                         variant="secondaryGray"
                         loading={templateInstructionsSaving}
@@ -1204,33 +1479,37 @@ export function HubDetailPane({
                   )}
                 </section>
               ) : activeTemplateTab === "skills" ? (
-                <section className="profile-section hub-template-summary-panel hub-template-skills-panel">
-                  <div className="hub-template-summary-heading">
-                    <div className="profile-section-heading">
-                      <div className="profile-section-title">{t("agentSkillsTitle")}</div>
-                      <p className="profile-section-description">{t("resourcesTemplateSkillsDescription")}</p>
+                <section
+                  className={moduleClassNames("profile-section hub-template-summary-panel hub-template-skills-panel")}
+                >
+                  <div className={moduleClassNames("hub-template-summary-heading")}>
+                    <div className={moduleClassNames("profile-section-heading")}>
+                      <div className={moduleClassNames("profile-section-title")}>{t("agentSkillsTitle")}</div>
+                      <p className={moduleClassNames("profile-section-description")}>
+                        {t("resourcesTemplateSkillsDescription")}
+                      </p>
                     </div>
-                    <span className="hub-template-summary-count">
+                    <span className={moduleClassNames("hub-template-summary-count")}>
                       {t("resourcesTemplateSkillsCount", { count: templateSkills.length })}
                     </span>
                   </div>
                   {templateSkills.length ? (
-                    <div className="hub-template-skills-list">
+                    <div className={moduleClassNames("hub-template-skills-list")}>
                       {templateSkills.map((skill) => (
-                        <article className="hub-template-skill-row" key={skill.name}>
-                          <span className="hub-template-skill-icon" aria-hidden="true">
+                        <article className={moduleClassNames("hub-template-skill-row")} key={skill.name}>
+                          <span className={moduleClassNames("hub-template-skill-icon")} aria-hidden="true">
                             <FileCode2 size={18} strokeWidth={1.8} />
                           </span>
-                          <div className="hub-template-skill-copy">
-                            <div className="hub-template-skill-name">{skill.name}</div>
+                          <div className={moduleClassNames("hub-template-skill-copy")}>
+                            <div className={moduleClassNames("hub-template-skill-name")}>{skill.name}</div>
                             <p>{skill.description || "-"}</p>
                           </div>
                         </article>
                       ))}
                     </div>
                   ) : (
-                    <div className="hub-template-skills-empty">
-                      <span className="hub-template-skill-icon" aria-hidden="true">
+                    <div className={moduleClassNames("hub-template-skills-empty")}>
+                      <span className={moduleClassNames("hub-template-skill-icon")} aria-hidden="true">
                         <FileCode2 size={18} strokeWidth={1.8} />
                       </span>
                       <div>
@@ -1241,33 +1520,39 @@ export function HubDetailPane({
                   )}
                 </section>
               ) : activeTemplateTab === "mcp" ? (
-                <section className="profile-section hub-template-summary-panel hub-template-mcp-panel">
-                  <div className="hub-template-summary-heading">
-                    <div className="profile-section-heading">
-                      <div className="profile-section-title">{t("resourcesTemplateMCPServersTitle")}</div>
-                      <p className="profile-section-description">{t("resourcesTemplateMCPServersDescription")}</p>
+                <section
+                  className={moduleClassNames("profile-section hub-template-summary-panel hub-template-mcp-panel")}
+                >
+                  <div className={moduleClassNames("hub-template-summary-heading")}>
+                    <div className={moduleClassNames("profile-section-heading")}>
+                      <div className={moduleClassNames("profile-section-title")}>
+                        {t("resourcesTemplateMCPServersTitle")}
+                      </div>
+                      <p className={moduleClassNames("profile-section-description")}>
+                        {t("resourcesTemplateMCPServersDescription")}
+                      </p>
                     </div>
-                    <span className="hub-template-summary-count">
+                    <span className={moduleClassNames("hub-template-summary-count")}>
                       {t("resourcesTemplateMCPServersCount", { count: templateMCPServers.length })}
                     </span>
                   </div>
                   {templateMCPServers.length ? (
-                    <div className="hub-template-mcp-list">
+                    <div className={moduleClassNames("hub-template-mcp-list")}>
                       {templateMCPServers.map((server) => (
-                        <article className="hub-template-mcp-row" key={server.name}>
-                          <span className="hub-template-mcp-icon" aria-hidden="true">
+                        <article className={moduleClassNames("hub-template-mcp-row")} key={server.name}>
+                          <span className={moduleClassNames("hub-template-mcp-icon")} aria-hidden="true">
                             <Server size={18} strokeWidth={1.8} />
                           </span>
-                          <div className="hub-template-mcp-copy">
-                            <div className="hub-template-mcp-name">{server.name}</div>
+                          <div className={moduleClassNames("hub-template-mcp-copy")}>
+                            <div className={moduleClassNames("hub-template-mcp-name")}>{server.name}</div>
                             <p>{server.description || mcpServerDescription(server.config) || "-"}</p>
                           </div>
                         </article>
                       ))}
                     </div>
                   ) : workspaceFileLoading ? (
-                    <div className="hub-template-mcp-empty">
-                      <span className="hub-template-mcp-icon" aria-hidden="true">
+                    <div className={moduleClassNames("hub-template-mcp-empty")}>
+                      <span className={moduleClassNames("hub-template-mcp-icon")} aria-hidden="true">
                         <Server size={18} strokeWidth={1.8} />
                       </span>
                       <div>
@@ -1275,8 +1560,8 @@ export function HubDetailPane({
                       </div>
                     </div>
                   ) : (
-                    <div className="hub-template-mcp-empty">
-                      <span className="hub-template-mcp-icon" aria-hidden="true">
+                    <div className={moduleClassNames("hub-template-mcp-empty")}>
+                      <span className={moduleClassNames("hub-template-mcp-icon")} aria-hidden="true">
                         <Server size={18} strokeWidth={1.8} />
                       </span>
                       <div>
@@ -1287,11 +1572,11 @@ export function HubDetailPane({
                   )}
                 </section>
               ) : (
-                <div className="hub-workspace-block hub-template-tab-panel">
-                  <div className="hub-workspace-panels">
+                <div className={moduleClassNames("hub-workspace-block hub-template-tab-panel")}>
+                  <div className={moduleClassNames("hub-workspace-panels")}>
                     <WorkspaceFileTree
                       key={`${selectedTemplateId}-${activeTemplateTab}`}
-                      className="hub-workspace-tree"
+                      className={moduleClassNames("hub-workspace-tree")}
                       entries={templateSectionWorkspaceEntries}
                       loading={workspaceTreeLoading}
                       loadingText={t("resourcesWorkspaceLoading")}
@@ -1303,7 +1588,7 @@ export function HubDetailPane({
                       onSelectFile={(path) => onSelectWorkspaceFile(`${templateSection}/${path}`)}
                     />
                     <WorkspaceFilePreview
-                      className="hub-workspace-preview"
+                      className={moduleClassNames("hub-workspace-preview")}
                       file={workspaceFile}
                       loading={workspaceFileLoading}
                       error={workspaceFileError}
@@ -1325,12 +1610,12 @@ export function HubDetailPane({
             </>
           ) : activeResourceType === "skill" && selectedSkill ? (
             <>
-              <div className="hub-inspector-hero">
-                <div className="hub-inspector-hero-row">
-                  <div className="hub-inspector-brand">
-                    <div className="hub-inspector-copy">
-                      <div className="hub-inspector-title-row">
-                        <span className="hub-inspector-title-icon" aria-hidden="true">
+              <div className={moduleClassNames("hub-inspector-hero")}>
+                <div className={moduleClassNames("hub-inspector-hero-row")}>
+                  <div className={moduleClassNames("hub-inspector-brand")}>
+                    <div className={moduleClassNames("hub-inspector-copy")}>
+                      <div className={moduleClassNames("hub-inspector-title-row")}>
+                        <span className={moduleClassNames("hub-inspector-title-icon")} aria-hidden="true">
                           <FileCode2 size={18} strokeWidth={2} />
                         </span>
                         <h2>{selectedSkill.name}</h2>
@@ -1339,9 +1624,9 @@ export function HubDetailPane({
                     </div>
                   </div>
                   {canDeleteSkill ? (
-                    <div className="hub-template-actions">
+                    <div className={moduleClassNames("hub-template-actions")}>
                       <Button
-                        className="hub-skill-delete-button"
+                        className={moduleClassNames("hub-skill-delete-button")}
                         variant="outlineDanger"
                         size="md"
                         disabled={skillDeleteBusy}
@@ -1354,10 +1639,10 @@ export function HubDetailPane({
                 </div>
               </div>
 
-              <div className="hub-workspace-block">
-                <div className="hub-workspace-panels">
+              <div className={moduleClassNames("hub-workspace-block")}>
+                <div className={moduleClassNames("hub-workspace-panels")}>
                   <WorkspaceFileTree
-                    className="hub-workspace-tree"
+                    className={moduleClassNames("hub-workspace-tree")}
                     entries={skillEntries}
                     loading={skillTreeLoading}
                     loadingText={t("resourcesSkillFilesLoading")}
@@ -1366,7 +1651,7 @@ export function HubDetailPane({
                     onSelectFile={onSelectSkillFile}
                   />
                   <WorkspaceFilePreview
-                    className="hub-workspace-preview"
+                    className={moduleClassNames("hub-workspace-preview")}
                     file={skillFile}
                     loading={skillFileLoading}
                     error={skillFileError}
@@ -1387,12 +1672,12 @@ export function HubDetailPane({
             </>
           ) : activeResourceType === "mcp" && selectedMCPServer ? (
             <>
-              <div className="hub-inspector-hero">
-                <div className="hub-inspector-hero-row">
-                  <div className="hub-inspector-brand">
-                    <div className="hub-inspector-copy">
-                      <div className="hub-inspector-title-row">
-                        <span className="hub-inspector-title-icon" aria-hidden="true">
+              <div className={moduleClassNames("hub-inspector-hero")}>
+                <div className={moduleClassNames("hub-inspector-hero-row")}>
+                  <div className={moduleClassNames("hub-inspector-brand")}>
+                    <div className={moduleClassNames("hub-inspector-copy")}>
+                      <div className={moduleClassNames("hub-inspector-title-row")}>
+                        <span className={moduleClassNames("hub-inspector-title-icon")} aria-hidden="true">
                           <Server size={18} strokeWidth={2} />
                         </span>
                         <h2>{selectedMCPServer.name}</h2>
@@ -1404,14 +1689,30 @@ export function HubDetailPane({
                       </p>
                     </div>
                   </div>
-                  <div className="hub-template-actions">
-                    <Button variant="primary" size="md" loading={mcpMutationBusy} onClick={handleSaveMCPDetail}>
+                  <div className={moduleClassNames("hub-template-actions")}>
+                    <Button
+                      variant="secondaryGray"
+                      size="md"
+                      loading={mcpProbeBusy}
+                      disabled={mcpMutationBusy}
+                      onClick={handleProbeMCPDetail}
+                    >
+                      <RefreshCw size={16} strokeWidth={2} aria-hidden="true" />
+                      {mcpProbeBusy ? t("resourcesMCPTesting") : t("resourcesMCPTest")}
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="md"
+                      loading={mcpMutationBusy}
+                      disabled={mcpProbeBusy}
+                      onClick={handleSaveMCPDetail}
+                    >
                       {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
                     </Button>
                     <Button
                       variant="outlineDanger"
                       size="md"
-                      disabled={mcpMutationBusy}
+                      disabled={mcpMutationBusy || mcpProbeBusy}
                       onClick={() => setMCPDeleteDialogOpen(true)}
                     >
                       <Trash2 size={16} strokeWidth={2} />
@@ -1421,12 +1722,16 @@ export function HubDetailPane({
                 </div>
               </div>
 
-              {mcpStateError || mcpMutationError ? (
-                <div className="form-error">{mcpStateError || mcpMutationError}</div>
+              {mcpStateError || mcpMutationError || mcpProbeError ? (
+                <div className={moduleClassNames("form-error")} aria-live="polite">
+                  {mcpStateError || mcpMutationError || mcpProbeError}
+                </div>
               ) : null}
-              {mcpStateLoading ? <div className="workspace-empty">{t("resourcesMCPLoading")}</div> : null}
+              {mcpStateLoading ? (
+                <div className={moduleClassNames("workspace-empty")}>{t("resourcesMCPLoading")}</div>
+              ) : null}
 
-              <div className="hub-workspace-block mcp-server-document-block">
+              <div className={moduleClassNames("hub-workspace-block mcp-server-document-block")}>
                 <JSONConfigEditor
                   label={t("resourcesMCPServerDocumentLabel")}
                   value={mcpDetailDocument}
@@ -1434,12 +1739,15 @@ export function HubDetailPane({
                   invalid={Boolean(mcpDetailError)}
                   minRows={12}
                 />
-                {mcpDetailError ? <div className="form-error hub-json-editor-error">{mcpDetailError}</div> : null}
+                {mcpDetailError ? (
+                  <div className={moduleClassNames("form-error hub-json-editor-error")}>{mcpDetailError}</div>
+                ) : null}
+                {mcpProbeResult ? <MCPProbePanel result={mcpProbeResult} t={t} /> : null}
               </div>
             </>
           ) : (
-            <div className="empty-state shell-empty-state hub-empty-state">
-              <span className="rich-empty-mark" aria-hidden="true">
+            <div className={moduleClassNames("empty-state shell-empty-state hub-empty-state")}>
+              <span className={moduleClassNames("rich-empty-mark")} aria-hidden="true">
                 *
               </span>
               <strong>
@@ -1456,9 +1764,9 @@ export function HubDetailPane({
         </div>
       )}
       <DialogRoot open={deleteSkillDialogOpen} onOpenChange={setDeleteSkillDialogOpen}>
-        <DialogContent className="hub-skill-delete-dialog">
-          <DialogHeader className="hub-skill-delete-dialog-header">
-            <div className="hub-skill-delete-dialog-copy">
+        <DialogContent className={moduleClassNames("hub-skill-delete-dialog")}>
+          <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
+            <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
               <DialogTitle>{t("resourcesDeleteSkill")}</DialogTitle>
               <DialogDescription>
                 {t("resourcesDeleteSkillConfirmMessage", { name: selectedSkill?.name || "" })}
@@ -1466,7 +1774,7 @@ export function HubDetailPane({
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          <DialogFooter className="hub-skill-delete-dialog-actions">
+          <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
             <Button
               variant="secondaryGray"
               size="sm"
@@ -1482,21 +1790,21 @@ export function HubDetailPane({
         </DialogContent>
       </DialogRoot>
       <DialogRoot open={publishSuccessDialogOpen} onOpenChange={setPublishSuccessDialogOpen}>
-        <DialogContent className="hub-skill-delete-dialog">
-          <DialogHeader className="hub-skill-delete-dialog-header">
-            <div className="hub-skill-delete-dialog-copy">
+        <DialogContent className={moduleClassNames("hub-skill-delete-dialog")}>
+          <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
+            <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
               <DialogTitle>
                 {publishPartialMessage
                   ? t("resourcesPublishCommunityDeployFailedTitle")
                   : t("resourcesPublishCommunitySuccessTitle")}
               </DialogTitle>
-              <DialogDescription className={publishPartialMessage ? "hub-publish-partial-message" : undefined}>
+              <DialogDescription className={moduleClassNames(publishPartialMessage && "hub-publish-partial-message")}>
                 {publishPartialMessage ? publishPartialMessage : t("resourcesPublishCommunitySuccessMessage")}
               </DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          <DialogFooter className="hub-skill-delete-dialog-actions">
+          <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
             <Button variant="primary" size="sm" onClick={() => setPublishSuccessDialogOpen(false)}>
               {t("resourcesPublishCommunitySuccessDismiss")}
             </Button>
@@ -1512,7 +1820,7 @@ export function HubDetailPane({
           }
         }}
       >
-        <DialogContent className="agent-publish-dialog">
+        <DialogContent className={moduleClassNames("agent-publish-dialog")}>
           <DialogHeader>
             <div>
               <DialogTitle>{t("agentPublishTemplateTitle")}</DialogTitle>
@@ -1522,7 +1830,7 @@ export function HubDetailPane({
           </DialogHeader>
           {templateMemoryEnabled ? (
             <DialogBody>
-              <label className="hub-template-publish-memory-option">
+              <label className={moduleClassNames("hub-template-publish-memory-option")}>
                 <Checkbox
                   aria-label={t("agentPublishIncludeMemory")}
                   checked={publishTemplateIncludeMemory}
@@ -1535,7 +1843,7 @@ export function HubDetailPane({
               </label>
             </DialogBody>
           ) : null}
-          {publishError ? <div className="form-error">{publishError}</div> : null}
+          {publishError ? <div className={moduleClassNames("form-error")}>{publishError}</div> : null}
           <DialogFooter>
             <Button
               variant="secondaryGray"
@@ -1572,7 +1880,7 @@ export function HubDetailPane({
         open={mcpCreateDialogOpen}
         onOpenChange={(open) => {
           if (open) {
-            setMCPDraftDocument(DEFAULT_MCP_SERVER_DOCUMENT);
+            setMCPDraftDocument(mcpCreateInitialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
             setMCPFormError("");
             setMCPCreateMode("manual");
             onMCPCreateDialogOpenChange?.(true);
@@ -1581,16 +1889,16 @@ export function HubDetailPane({
           }
         }}
       >
-        <DialogContent className="mcp-dialog">
-          <DialogHeader className="hub-skill-delete-dialog-header">
-            <div className="hub-skill-delete-dialog-copy">
+        <DialogContent className={moduleClassNames("mcp-dialog")}>
+          <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
+            <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
               <DialogTitle>{t("resourcesMCPCreateTitle")}</DialogTitle>
               <DialogDescription>{t("resourcesMCPFormDescription")}</DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          <DialogBody className="mcp-form">
-            <div className="mcp-form-mode" role="tablist" aria-label={t("resourcesMCPCreateTitle")}>
+          <DialogBody className={moduleClassNames("mcp-form")}>
+            <div className={moduleClassNames("mcp-form-mode")} role="tablist" aria-label={t("resourcesMCPCreateTitle")}>
               <Button
                 active={mcpCreateMode === "manual"}
                 aria-selected={mcpCreateMode === "manual"}
@@ -1625,7 +1933,9 @@ export function HubDetailPane({
                   minRows={12}
                 />
                 {mcpFormError || mcpCreateError ? (
-                  <div className="form-error hub-json-editor-error">{mcpFormError || mcpCreateError}</div>
+                  <div className={moduleClassNames("form-error hub-json-editor-error")}>
+                    {mcpFormError || mcpCreateError}
+                  </div>
                 ) : null}
               </>
             ) : (
@@ -1647,7 +1957,7 @@ export function HubDetailPane({
               />
             )}
           </DialogBody>
-          <DialogFooter className="hub-skill-delete-dialog-actions">
+          <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
             <Button variant="secondaryGray" size="sm" disabled={mcpMutationBusy} onClick={closeMCPFormDialog}>
               {t("cancel")}
             </Button>
@@ -1660,9 +1970,9 @@ export function HubDetailPane({
         </DialogContent>
       </DialogRoot>
       <DialogRoot open={mcpDeleteDialogOpen} onOpenChange={setMCPDeleteDialogOpen}>
-        <DialogContent className="hub-skill-delete-dialog">
-          <DialogHeader className="hub-skill-delete-dialog-header">
-            <div className="hub-skill-delete-dialog-copy">
+        <DialogContent className={moduleClassNames("hub-skill-delete-dialog")}>
+          <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
+            <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
               <DialogTitle>{t("resourcesMCPDelete")}</DialogTitle>
               <DialogDescription>
                 {t("resourcesMCPDeleteConfirmMessage", { name: selectedMCPServer?.name || "" })}
@@ -1670,8 +1980,8 @@ export function HubDetailPane({
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          {mcpMutationError ? <div className="form-error">{mcpMutationError}</div> : null}
-          <DialogFooter className="hub-skill-delete-dialog-actions">
+          {mcpMutationError ? <div className={moduleClassNames("form-error")}>{mcpMutationError}</div> : null}
+          <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
             <Button
               variant="secondaryGray"
               size="sm"

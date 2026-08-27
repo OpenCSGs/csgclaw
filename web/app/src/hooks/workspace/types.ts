@@ -83,6 +83,7 @@ export type WorkspaceShellController = {
 export type UseWorkspaceHubSelectionArgs = {
   loaded: boolean;
   manualError?: string;
+  openCSGAuthenticated?: boolean;
   refreshTemplates?: () => Promise<unknown>;
   t: TranslateFn;
   templates: readonly HubTemplate[] | null | undefined;

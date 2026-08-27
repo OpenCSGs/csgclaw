@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent } from "react";
-import { FileCode2, Plus } from "lucide-react";
+import { BookOpen, FileCode2, Plus } from "lucide-react";
 import { RoomAvatar } from "@/components/business";
 import { ModelsIcon, SidebarMcpIcon } from "@/components/ui/Icons";
 import { isDirectConversation, resolveConversationUser } from "@/models/conversations";
@@ -41,6 +41,7 @@ const AgentSectionIds = {
 
 const HubSectionIds = {
   templates: WorkspaceContextSectionIds.hubTemplates,
+  knowledgeBases: WorkspaceContextSectionIds.knowledgeBases,
   mcpServers: WorkspaceContextSectionIds.mcpServers,
   skills: WorkspaceContextSectionIds.hubSkills,
   models: WorkspaceContextSectionIds.models,
@@ -91,6 +92,7 @@ type WorkspaceTabPanelsProps = Pick<
   | "onSelectConversation"
   | "onSelectHuman"
   | "onSelectMCPServer"
+  | "onSelectKnowledgeBase"
   | "onSelectHubSkill"
   | "onSelectHubTemplate"
   | "onSelectModelProvider"
@@ -260,6 +262,7 @@ export function WorkspaceTabPanels({
   onPreviewUser,
   onSelectHuman,
   onSelectMCPServer = () => {},
+  onSelectKnowledgeBase = () => {},
   onSelectHubSkill,
   agentItems,
   modelProviders = null,
@@ -282,6 +285,7 @@ export function WorkspaceTabPanels({
   const resourcesTemplates = hub?.templates ?? [];
   const resourcesSkills = hub?.skills ?? [];
   const resourcesMCPServers = hub?.mcpServers ?? [];
+  const resourcesKnowledgeBases = hub?.knowledgeBases?.items ?? [];
   const resourcesError = hub?.listError ?? "";
   const resourcesSkillsError = hub?.skillsError ?? "";
   const resourcesMCPError = hub?.mcpStateError ?? "";
@@ -290,6 +294,7 @@ export function WorkspaceTabPanels({
   const resourcesLoaded = hub?.loaded ?? false;
   const selectedHubResourceType = hub?.selectedHubResourceType ?? "template";
   const selectedMCPServerName = hub?.selectedMCPServerName ?? "";
+  const selectedKnowledgeBaseID = hub?.selectedKnowledgeBaseID ?? "";
   const selectedHubSkillName = hub?.selectedHubSkillName ?? "";
   const selectedHubTemplateId = hub?.selectedHubTemplateId ?? "";
   const resourcesPaneActive = activePane.type === WorkspacePaneTypes.hub;
@@ -922,6 +927,60 @@ export function WorkspaceTabPanels({
     );
   }
 
+  function renderKnowledgeBaseSection(presentation: "group" | "flat" = "group") {
+    const flat = presentation === "flat";
+    const visibleKnowledgeBases = resourcesKnowledgeBases.filter((item) =>
+      matchesSearch(normalizedContextQuery, item.name, item.description || ""),
+    );
+    return (
+      <WorkspaceGroup
+        id="knowledge-bases"
+        title={t("resourcesKnowledgeBasesLabel")}
+        count={resourcesKnowledgeBases.length}
+        collapsed={flat ? false : Boolean(collapsedWorkspaceGroups["knowledge-bases"])}
+        onToggle={() => onToggleWorkspaceGroup("knowledge-bases")}
+        presentation={presentation}
+      >
+        {visibleKnowledgeBases.length ? (
+          visibleKnowledgeBases.map((item) => (
+            <button
+              key={item.id}
+              className={classNames(
+                rowStyles.row,
+                styles.hubTemplateRow,
+                resourcesPaneActive &&
+                  selectedKnowledgeBaseID === item.id &&
+                  selectedHubResourceType === "knowledge" &&
+                  rowStyles.active,
+              )}
+              onClick={() => onSelectKnowledgeBase(item)}
+            >
+              <span className={rowStyles.icon}>
+                <BookOpen size={16} strokeWidth={2} aria-hidden="true" />
+              </span>
+              <span className={rowStyles.main}>
+                <span className={classNames(rowStyles.title, "truncate")}>{item.name}</span>
+                <span className={classNames(rowStyles.meta, "truncate")}>
+                  {item.configuredMCPName
+                    ? t("resourcesKnowledgeBaseAdded")
+                    : item.description || t("resourcesKnowledgeBaseAgenticHub")}
+                </span>
+              </span>
+            </button>
+          ))
+        ) : hub?.knowledgeBases?.loading ? (
+          <div className={styles.empty}>{t("resourcesKnowledgeBasesLoading")}</div>
+        ) : hub?.knowledgeBases?.loadError ? (
+          <div className={styles.empty}>{hub.knowledgeBases.loadError}</div>
+        ) : resourcesKnowledgeBases.length ? (
+          <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>
+        ) : (
+          <div className={styles.empty}>{t("resourcesKnowledgeBasesEmpty")}</div>
+        )}
+      </WorkspaceGroup>
+    );
+  }
+
   function renderHubSkillSection(presentation: "group" | "flat" = "group") {
     const flat = presentation === "flat";
     const visibleSkills = resourcesSkills.filter(skillMatchesQuery);
@@ -1019,6 +1078,7 @@ export function WorkspaceTabPanels({
           aria-label={contextSectionLabel(sectionId)}
         >
           {sectionId === HubSectionIds.templates ? renderHubTemplateSection("flat") : null}
+          {sectionId === HubSectionIds.knowledgeBases ? renderKnowledgeBaseSection("flat") : null}
           {sectionId === HubSectionIds.mcpServers ? renderMCPSection("flat") : null}
           {sectionId === HubSectionIds.skills ? renderHubSkillSection("flat") : null}
           {sectionId === HubSectionIds.models ? renderModelProviderSection("flat") : null}
@@ -1042,6 +1102,7 @@ export function WorkspaceTabPanels({
   function isHubSectionId(value: WorkspaceContextSectionId): value is HubSectionId {
     return (
       value === HubSectionIds.templates ||
+      value === HubSectionIds.knowledgeBases ||
       value === HubSectionIds.mcpServers ||
       value === HubSectionIds.skills ||
       value === HubSectionIds.models
@@ -1069,6 +1130,9 @@ export function WorkspaceTabPanels({
     }
     if (sectionId === HubSectionIds.mcpServers) {
       return t("resourcesMCPLabel");
+    }
+    if (sectionId === HubSectionIds.knowledgeBases) {
+      return t("resourcesKnowledgeBasesLabel");
     }
     if (sectionId === HubSectionIds.skills) {
       return t("resourcesSkillsLabel");
@@ -1141,6 +1205,7 @@ export function WorkspaceTabPanels({
         <div className={styles.panel} role="tabpanel" aria-label={t("resourcesTab")}>
           {renderHubTemplateSection()}
           {renderHubSkillSection()}
+          {renderKnowledgeBaseSection()}
           {renderMCPSection()}
           {renderModelProviderSection()}
           {renderSkillUploadDialog()}

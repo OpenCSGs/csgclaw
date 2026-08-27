@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 
 	"csgclaw/internal/agentengine"
@@ -78,7 +80,11 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Get("/mcp-servers", h.handleMCPServers)
 		r.Get("/mcp-servers/remote", h.handleRemoteMCPServers)
 		r.Post("/mcp-servers/remote/{id}/install", h.handleInstallRemoteMCPServer)
+		r.Get("/knowledge-bases/remote", h.handleRemoteKnowledgeBases)
+		r.Get("/knowledge-bases/remote/{id}/mcp-config", h.handleRemoteKnowledgeBaseMCPConfig)
+		r.Handle("/knowledge-bases/{content_id}/mcp", http.HandlerFunc(h.handleKnowledgeBaseMCPProxy))
 		r.Post("/mcp-servers", h.handleMCPServers)
+		r.Post("/mcp-servers:probe", h.probeMCPServer)
 		r.Put("/mcp-servers/{name}", h.handleMCPServerByName)
 		r.Delete("/mcp-servers/{name}", h.handleMCPServerByName)
 		r.Route("/hub/templates", func(r chi.Router) {

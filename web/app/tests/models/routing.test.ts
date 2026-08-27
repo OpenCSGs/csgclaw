@@ -73,6 +73,11 @@ describe("task routing", () => {
       id: "demo-skill",
       resourceType: "skill",
     });
+    expect(paneFromLocation("/knowledge-bases/42")).toEqual({
+      type: WorkspacePaneTypes.hub,
+      id: "42",
+      resourceType: "knowledge",
+    });
   });
 
   it("builds hub resource routes from hub panes", () => {
@@ -82,6 +87,9 @@ describe("task routing", () => {
     );
     expect(pathForPane({ type: WorkspacePaneTypes.hub, id: "demo-skill", resourceType: "skill" })).toBe(
       "/skills/demo-skill",
+    );
+    expect(pathForPane({ type: WorkspacePaneTypes.hub, id: "42", resourceType: "knowledge" })).toBe(
+      "/knowledge-bases/42",
     );
   });
 

@@ -27,7 +27,7 @@ export type InstallRemoteSkillOptions = {
 };
 
 export function workspaceHubMutationError(
-  resourceType: "mcp" | "skill" | "template",
+  resourceType: "knowledge" | "mcp" | "skill" | "template",
   deleteError: string,
   publishError: string,
   skillDeleteError: string,
@@ -139,6 +139,7 @@ export function useWorkspaceHubController({
     templatesQuery: hubTemplatesQuery,
     loaded: hubLoaded,
     manualError: resourcesManualError,
+    openCSGAuthenticated,
     refreshTemplates: refreshHubTemplates,
     t,
   });

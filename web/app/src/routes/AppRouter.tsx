@@ -69,6 +69,8 @@ const routes: RouteObject[] = [
       { path: "templates/:templateId", element: routeElement(HubPage) },
       { path: "skills/:skillName", element: routeElement(HubPage) },
       { path: "mcp-servers/:mcpName", element: routeElement(HubPage) },
+      { path: "knowledge-bases", element: routeElement(HubPage) },
+      { path: "knowledge-bases/:knowledgeBaseId", element: routeElement(HubPage) },
       { path: "tasks", element: routeElement(TasksPage) },
       { path: "tasks/:taskId", element: routeElement(TasksPage) },
       { path: "settings", element: routeElement(SettingsPage) },

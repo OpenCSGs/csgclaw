@@ -1,6 +1,7 @@
 import { del, get, post, put } from "@/api/client";
 import type { JSONRecord } from "@/models/agents";
-import type { MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
+import { mcpProbeResultFromResponse } from "@/models/mcp";
+import type { MCPProbeResult, MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
 
 const MCP_SERVERS_PATH = "/api/v1/mcp-servers";
 const REMOTE_MCP_SERVERS_PAGE_SIZE = 12;
@@ -40,6 +41,15 @@ export function updateMCPServerRequest(name: string, payload: MCPServerPayload):
 
 export function deleteMCPServerRequest(name: string): Promise<JSONRecord> {
   return del<JSONRecord>(mcpServerPath(name));
+}
+
+export async function probeMCPServerRequest(payload: MCPServerPayload): Promise<MCPProbeResult> {
+  const response = await post<unknown>(`${MCP_SERVERS_PATH}:probe`, payload);
+  const result = mcpProbeResultFromResponse(response);
+  if (!result) {
+    throw new Error("MCP server probe returned an invalid response");
+  }
+  return result;
 }
 
 export async function installRemoteMCPServerRequest(id: string): Promise<string> {

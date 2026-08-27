@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -82,6 +83,30 @@ func (h *Handler) handleMCPServerByName(w http.ResponseWriter, r *http.Request) 
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (h *Handler) probeMCPServer(w http.ResponseWriter, r *http.Request) {
+	if h.mcp == nil {
+		http.Error(w, "mcp service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	req, err := decodeMCPServerRequest(r)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	result, err := h.mcp.ProbeServer(r.Context(), req.Name, req.Config)
+	if err != nil {
+		status := http.StatusBadGateway
+		if errors.Is(err, mcp.ErrInvalidServerConfig) {
+			status = http.StatusBadRequest
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func decodeMCPServerRequest(r *http.Request) (mcpServerRequest, error) {

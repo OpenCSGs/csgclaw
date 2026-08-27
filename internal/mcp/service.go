@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	"csgclaw/internal/knowledgebase"
 )
 
 var (
@@ -16,7 +18,8 @@ var (
 var serverDocumentMu sync.Mutex
 
 type Service struct {
-	store ServerStore
+	prober ServerProber
+	store  ServerStore
 }
 
 type ServiceOption func(*Service)
@@ -29,8 +32,16 @@ func WithServerStore(store ServerStore) ServiceOption {
 	}
 }
 
+func WithServerProber(prober ServerProber) ServiceOption {
+	return func(s *Service) {
+		if prober != nil {
+			s.prober = prober
+		}
+	}
+}
+
 func NewService(options ...ServiceOption) *Service {
-	svc := &Service{store: defaultServerStore()}
+	svc := &Service{prober: defaultServerProber{}, store: defaultServerStore()}
 	for _, option := range options {
 		if option != nil {
 			option(svc)
@@ -58,6 +69,11 @@ func (s *Service) CreateServer(ctx context.Context, name string, config map[stri
 	return s.updateServers(ctx, func(servers map[string]any) error {
 		if _, exists := servers[name]; exists {
 			return fmt.Errorf("%w: %s", ErrServerExists, name)
+		}
+		if metadata, ok := knowledgebase.ManagedMetadataFromServer(config); ok {
+			if existing := knowledgebase.FindConfiguredServer(servers, metadata.KnowledgeBaseID); existing != "" {
+				return fmt.Errorf("%w: %s", ErrServerExists, existing)
+			}
 		}
 		servers[name] = config
 		return nil
@@ -98,6 +114,11 @@ func (s *Service) UpdateServer(ctx context.Context, currentName, nextName string
 	return s.updateServers(ctx, func(servers map[string]any) error {
 		if _, exists := servers[currentName]; !exists {
 			return fmt.Errorf("%w: %s", ErrServerNotFound, currentName)
+		}
+		if metadata, ok := knowledgebase.ManagedMetadataFromServer(config); ok {
+			if existing := knowledgebase.FindConfiguredServer(servers, metadata.KnowledgeBaseID); existing != "" && existing != currentName {
+				return fmt.Errorf("%w: %s", ErrServerExists, existing)
+			}
 		}
 		if nextName != currentName {
 			if _, exists := servers[nextName]; exists {

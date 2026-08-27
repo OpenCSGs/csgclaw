@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/localstore"
 )
 
@@ -133,6 +134,62 @@ func TestServiceCRUDAndErrors(t *testing.T) {
 	}
 	if _, err := svc.DeleteServer(ctx, "beta"); !errors.Is(err, ErrServerNotFound) {
 		t.Fatalf("DeleteServer(beta) error = %v, want ErrServerNotFound", err)
+	}
+}
+
+func TestCreateServerRejectsDuplicateAgenticHubKnowledgeBase(t *testing.T) {
+	store := &memoryServerStore{}
+	svc := NewService(WithServerStore(store))
+	config := map[string]any{
+		"type": "remote",
+		"url":  "https://gateway.example.test/v1/llmwikis/content-42/mcp",
+		knowledgebase.ManagedConfigKey: map[string]any{
+			"kind":              knowledgebase.ManagedKind,
+			"knowledge_base_id": "42",
+			"content_id":        "content-42",
+		},
+	}
+	if _, err := svc.CreateServer(context.Background(), "knowledge-one", config); err != nil {
+		t.Fatalf("CreateServer(first) error = %v", err)
+	}
+	if _, err := svc.CreateServer(context.Background(), "renamed-duplicate", config); !errors.Is(err, ErrServerExists) {
+		t.Fatalf("CreateServer(duplicate) error = %v, want ErrServerExists", err)
+	}
+}
+
+func TestManagedKnowledgeBaseAuthenticationIsPersistedAndListed(t *testing.T) {
+	managedConfig := map[string]any{
+		"type":    "remote",
+		"url":     "https://gateway.example.test/v1/llmwikis/content-42/mcp",
+		"headers": map[string]any{"Authorization": "Bearer current-csghub-token"},
+		knowledgebase.ManagedMetaKey: map[string]any{
+			knowledgebase.ManagedMetaNamespace: map[string]any{
+				"type":        knowledgebase.ManagedMCPType,
+				"resource_id": "42",
+				"content_id":  "content-42",
+				"auth_type":   knowledgebase.ManagedAuthType,
+			},
+		},
+	}
+	store := &memoryServerStore{}
+	svc := NewService(WithServerStore(store))
+	if _, err := svc.CreateServer(context.Background(), "knowledge-base", managedConfig); err != nil {
+		t.Fatalf("CreateServer() error = %v", err)
+	}
+
+	listed, err := svc.ListServers(context.Background())
+	if err != nil {
+		t.Fatalf("ListServers() error = %v", err)
+	}
+	listedConfig := listed["knowledge-base"].(map[string]any)
+	listedHeaders := listedConfig["headers"].(map[string]any)
+	if got, want := listedHeaders["Authorization"], "Bearer current-csghub-token"; got != want {
+		t.Fatalf("listed Authorization = %#v, want %q", got, want)
+	}
+	persisted := store.servers["knowledge-base"].(map[string]any)
+	persistedHeaders := persisted["headers"].(map[string]any)
+	if got, want := persistedHeaders["Authorization"], "Bearer current-csghub-token"; got != want {
+		t.Fatalf("persisted Authorization = %#v, want %q", got, want)
 	}
 }
 

@@ -11595,6 +11595,12 @@ func TestGatewayProvisionRequestUsesDockerHostAliasForImplicitAdvertiseURL(t *te
 }
 
 func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) *hub.Service {
+	return mustNewLocalTemplateHubServiceWithMCP(t, id, item, map[string]any{
+		"template-docs": map[string]any{"command": "npx", "args": []any{"-y", "template-docs"}},
+	})
+}
+
+func mustNewLocalTemplateHubServiceWithMCP(t *testing.T, id string, item hub.Template, mcpServers map[string]any) *hub.Service {
 	t.Helper()
 
 	registryRoot := t.TempDir()
@@ -11641,10 +11647,8 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 		Image:          item.Image,
 		RuntimeOptions: item.RuntimeOptions,
 		WorkspaceRef:   workspaceRef,
-		MCPServers: map[string]any{
-			"template-docs": map[string]any{"command": "npx", "args": []any{"-y", "template-docs"}},
-		},
-		UpdatedAt: time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
+		MCPServers:     mcpServers,
+		UpdatedAt:      time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC),
 	}); err != nil {
 		t.Fatalf("Publish() error = %v", err)
 	}

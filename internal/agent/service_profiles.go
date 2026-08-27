@@ -256,6 +256,10 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 	}
 	modelCfg := modelConfigFromProfile(profile)
 	participantID := participantIDForAgent(got.Name, got.ID)
+	runtimeMCPServers, err := s.materializeRuntimeMCPServers(got.RuntimeKind, got.MCPServers)
+	if err != nil {
+		return err
+	}
 	switch strings.TrimSpace(got.RuntimeKind) {
 	case RuntimeKindPicoClawSandbox:
 		feishuProvider := s.currentFeishuProviderForRuntime(RuntimeKindPicoClawSandbox)
@@ -263,7 +267,7 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 		if err != nil {
 			return err
 		}
-		if _, err := picoclawsandbox.EnsureConfigWithMCPServers(agentHome, participantID, got.ID, s.server, modelCfg, got.MCPServers, s.resolveManagerBaseURL, feishuProvider); err != nil {
+		if _, err := picoclawsandbox.EnsureConfigWithMCPServers(agentHome, participantID, got.ID, s.server, modelCfg, runtimeMCPServers, s.resolveManagerBaseURL, feishuProvider); err != nil {
 			return fmt.Errorf("sync gateway picoclaw config: %w", err)
 		}
 	case RuntimeKindOpenClawSandbox:
@@ -272,7 +276,7 @@ func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
 			return err
 		}
 		feishuProvider := s.currentFeishuProviderForRuntime(RuntimeKindOpenClawSandbox)
-		if _, err := openclawsandbox.EnsureConfigWithMCPServers(agentHome, participantID, got.ID, s.server, modelCfg, got.MCPServers, s.resolveManagerBaseURL, feishuProvider); err != nil {
+		if _, err := openclawsandbox.EnsureConfigWithMCPServers(agentHome, participantID, got.ID, s.server, modelCfg, runtimeMCPServers, s.resolveManagerBaseURL, feishuProvider); err != nil {
 			return fmt.Errorf("sync gateway openclaw config: %w", err)
 		}
 	default:
@@ -1034,7 +1038,11 @@ func (s *Service) validateMCPServers(ctx context.Context, runtimeKind string, cu
 	if !ok {
 		return fmt.Errorf("mcpServers is not supported for runtime_kind %q", runtimeKind)
 	}
-	return controller.ValidateMCPServers(ctx, current)
+	servers, err := s.materializeRuntimeMCPServers(runtimeKind, current.Servers)
+	if err != nil {
+		return err
+	}
+	return controller.ValidateMCPServers(ctx, agentruntime.MCPServersSnapshot{Servers: servers})
 }
 
 func (s *Service) mcpServersRestartRequired(runtimeKind string, change agentruntime.MCPServersChange) (bool, error) {
@@ -1096,7 +1104,15 @@ func (s *Service) reconcileMCPServers(ctx context.Context, previous, current Age
 	if !ok {
 		return fmt.Errorf("mcpServers live reconciliation is not supported for runtime_kind %q", runtimeKind)
 	}
-	return controller.ReconcileMCPServers(ctx, runtimeHandleForAgent(current), mcpServersChangeForAgent(previous.MCPServers, current.MCPServers))
+	previousServers, err := s.materializeRuntimeMCPServers(runtimeKind, previous.MCPServers)
+	if err != nil {
+		return err
+	}
+	currentServers, err := s.materializeRuntimeMCPServers(runtimeKind, current.MCPServers)
+	if err != nil {
+		return err
+	}
+	return controller.ReconcileMCPServers(ctx, runtimeHandleForAgent(current), mcpServersChangeForAgent(previousServers, currentServers))
 }
 
 func normalizeMCPServers(config map[string]any) (map[string]any, error) {

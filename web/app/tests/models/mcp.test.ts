@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   formatMCPServerDocument,
   hasMCPServerName,
+  mcpProbeResultFromResponse,
   mcpServersFromCatalogResponse,
   mcpServersFromMap,
+  mcpServersFromTemplateDocument,
   mcpServerPayloadFromDocument,
+  mcpToolParameters,
 } from "@/models/mcp";
 
 describe("MCP catalog helpers", () => {
@@ -72,6 +75,51 @@ describe("MCP catalog helpers", () => {
         config: { command: "npx", args: ["-y", "context7-mcp"] },
         description: "npx -y context7-mcp",
       },
+    ]);
+  });
+
+  it("reads published template MCP files in direct and legacy wrapped formats", () => {
+    const direct = {
+      context7: { command: "npx", args: ["-y", "context7-mcp"] },
+    };
+    expect(mcpServersFromTemplateDocument(direct)).toHaveLength(1);
+    expect(mcpServersFromTemplateDocument({ mcpServers: direct })).toEqual(mcpServersFromTemplateDocument(direct));
+  });
+
+  it("normalizes MCP probe results and exposes tool parameters", () => {
+    const result = mcpProbeResultFromResponse({
+      connected: true,
+      duration_ms: 42,
+      protocol_version: "2025-11-25",
+      server_info: { name: "docs", title: "Docs", version: "1.0.0" },
+      tools_supported: true,
+      tools: [
+        {
+          name: "search",
+          title: "Search docs",
+          description: "Search documentation.",
+          input_schema: {
+            type: "object",
+            properties: {
+              limit: { type: "integer" },
+              query: { type: "string", description: "Search query" },
+            },
+            required: ["query"],
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      connected: true,
+      durationMs: 42,
+      protocolVersion: "2025-11-25",
+      serverInfo: { name: "docs", title: "Docs", version: "1.0.0" },
+      toolsSupported: true,
+    });
+    expect(mcpToolParameters(result!.tools[0]!)).toEqual([
+      { name: "query", type: "string", description: "Search query", required: true },
+      { name: "limit", type: "integer", description: undefined, required: false },
     ]);
   });
 

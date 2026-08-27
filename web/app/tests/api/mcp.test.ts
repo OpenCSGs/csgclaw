@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { fetchRemoteMCPServersPage, installRemoteMCPServerRequest } from "@/api/mcp";
+import { fetchRemoteMCPServersPage, installRemoteMCPServerRequest, probeMCPServerRequest } from "@/api/mcp";
 
 function mockFetch(handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
   const fetchMock = vi.fn<typeof fetch>(handler);
@@ -82,6 +82,34 @@ describe("MCP API", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "api/v1/mcp-servers/remote/builtin%3Acalendar/install",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("probes the current MCP draft and normalizes its tools", async () => {
+    const fetchMock = mockFetch(
+      async () =>
+        new Response(
+          JSON.stringify({
+            connected: true,
+            duration_ms: 18,
+            protocol_version: "2025-11-25",
+            tools_supported: true,
+            tools: [{ name: "search", description: "Search docs", input_schema: { type: "object" } }],
+          }),
+          { status: 200 },
+        ),
+    );
+    const payload = { name: "docs", config: { url: "https://mcp.example.test" } };
+
+    await expect(probeMCPServerRequest(payload)).resolves.toMatchObject({
+      connected: true,
+      durationMs: 18,
+      protocolVersion: "2025-11-25",
+      tools: [{ name: "search", description: "Search docs" }],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/mcp-servers:probe",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(payload) }),
     );
   });
 });

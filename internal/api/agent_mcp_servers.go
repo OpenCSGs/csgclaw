@@ -80,6 +80,10 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
+	if err := h.validateKnowledgeBaseMCPSelection(r.Context(), servers, req.Names); err != nil {
+		writeKnowledgeBaseError(w, err)
+		return
+	}
 	agents := h.agentEngine.Agents()
 	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{AdoptMCPServers: true})
 	if err == nil {

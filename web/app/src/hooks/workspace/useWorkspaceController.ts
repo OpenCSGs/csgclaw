@@ -34,7 +34,8 @@ import { useAgentTurnNotifications } from "./useAgentTurnNotifications";
 import type { CreateTeamPayload } from "@/api/tasks";
 import type { AgentLike } from "@/models/agents";
 import type { HubTemplate } from "@/models/hubWorkspace";
-import type { MCPServer } from "@/models/mcp";
+import { mcpServerPayloadFromDocument, type MCPServer } from "@/models/mcp";
+import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
 import { TurnNotificationModes } from "@/models/turnNotifications";
@@ -246,6 +247,7 @@ export function useWorkspaceController() {
     workspaceTab,
   });
   const auth = useAuthController(t);
+  const loginOpenCSG = auth.login;
   const modelProviders = useMemo(
     () =>
       modelProviderCatalogForOpenCSGState(rawModelProviders, {
@@ -263,8 +265,13 @@ export function useWorkspaceController() {
     refreshWorkspaceHubTemplates,
     t,
   });
-  const { setSelectedMCPServerName, setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubTemplateId } =
-    hub;
+  const {
+    setSelectedMCPServerName,
+    setSelectedHubResourceType,
+    setSelectedHubSkillName,
+    setSelectedHubTemplateId,
+    setSelectedKnowledgeBaseID,
+  } = hub;
   const upgrade = useUpgradeController({
     appVersion,
     refreshWorkspaceAppVersion,
@@ -717,6 +724,32 @@ export function useWorkspaceController() {
     },
     [navigatePane, rooms, selectHub, setSelectedMCPServerName, setSelectedHubResourceType],
   );
+  const selectKnowledgeBase = useCallback(
+    (item: RemoteKnowledgeBase | null | undefined) => {
+      const id = String(item?.id || "").trim();
+      setSelectedHubResourceType("knowledge");
+      setSelectedKnowledgeBaseID(id);
+      navigatePane({ type: WorkspacePaneTypes.hub, id, resourceType: "knowledge" }, rooms);
+    },
+    [navigatePane, rooms, setSelectedHubResourceType, setSelectedKnowledgeBaseID],
+  );
+
+  useEffect(() => {
+    if (!hub.mcpCreateDialogOpen || !hub.mcpCreateInitialDocument) {
+      return;
+    }
+    let document: unknown;
+    try {
+      document = JSON.parse(hub.mcpCreateInitialDocument);
+    } catch {
+      return;
+    }
+    const payload = mcpServerPayloadFromDocument(document);
+    if (!payload?.name) {
+      return;
+    }
+    navigatePane({ type: WorkspacePaneTypes.hub, id: payload.name, resourceType: "mcp" }, rooms);
+  }, [hub.mcpCreateDialogOpen, hub.mcpCreateInitialDocument, navigatePane, rooms]);
 
   function openCreateModelProviderModal() {
     setCreateModelProviderError("");
@@ -766,6 +799,11 @@ export function useWorkspaceController() {
     if (activePane.resourceType === "mcp" && activePane.id) {
       setSelectedHubResourceType("mcp");
       setSelectedMCPServerName(String(activePane.id));
+      return;
+    }
+    if (activePane.resourceType === "knowledge") {
+      setSelectedHubResourceType("knowledge");
+      setSelectedKnowledgeBaseID(String(activePane.id || ""));
     }
   }, [
     activePane,
@@ -773,6 +811,7 @@ export function useWorkspaceController() {
     setSelectedHubResourceType,
     setSelectedHubSkillName,
     setSelectedHubTemplateId,
+    setSelectedKnowledgeBaseID,
   ]);
 
   const hubViewHub = useMemo(
@@ -785,9 +824,10 @@ export function useWorkspaceController() {
           selectHubSkill(name ? ({ name, description: "" } as SkillSummary) : null),
         onSelectMCP: (name: string | null | undefined) =>
           selectMCPServer(name ? ({ name, config: {} } as MCPServer) : null),
+        onKnowledgeBaseLogin: () => loginOpenCSG(),
       },
     }),
-    [hub, selectMCPServer, selectHubSkill, selectHubTemplate],
+    [hub, loginOpenCSG, selectMCPServer, selectHubSkill, selectHubTemplate],
   );
 
   if (!displayData) {
@@ -889,6 +929,7 @@ export function useWorkspaceController() {
       onOpenCreateTeam: agent.openCreateTeamModal,
       hub,
       onSelectMCPServer: selectMCPServer,
+      onSelectKnowledgeBase: selectKnowledgeBase,
       onSelectHubSkill: selectHubSkill,
       onSelectHubTemplate: selectHubTemplate,
       onSelectHub: () => shell.selectWorkspaceTab(WorkspaceTabs.hub),

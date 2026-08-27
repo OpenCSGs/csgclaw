@@ -23,6 +23,7 @@ import (
 	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	"csgclaw/internal/identity"
+	"csgclaw/internal/knowledgebase"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 	hub "csgclaw/internal/template"
@@ -1224,7 +1225,11 @@ func (s *Service) resolveTemplateCreateSpecWithService(
 			if err := json.Unmarshal([]byte(workspace.MCPServersJSON), &templateMCPServers); err != nil {
 				return CreateAgentSpec{}, cleanup, fmt.Errorf("decode template mcp servers: %w", err)
 			}
-			spec.MCPServers = templateMCPServers
+			hydratedMCPServers, err := knowledgebase.HydrateTemplateServers(ctx, templateMCPServers)
+			if err != nil {
+				return CreateAgentSpec{}, cleanup, err
+			}
+			spec.MCPServers = hydratedMCPServers
 			spec.MCPServersSet = true
 		}
 	}
@@ -2700,6 +2705,11 @@ func (s *Service) provisionRuntimeRequest(ctx context.Context, rt agentruntime.R
 	if rt == nil {
 		return fmt.Errorf("runtime is required")
 	}
+	servers, err := s.materializeRuntimeMCPServers(runtimeKind, req.MCPServers)
+	if err != nil {
+		return err
+	}
+	req.MCPServers = servers
 	if isGatewayRuntimeKind(runtimeKind) && req.Gateway == nil {
 		gateway, err := s.gatewayProvisionRequest(runtimeKind, req.AgentName, req.AgentID)
 		if err != nil {

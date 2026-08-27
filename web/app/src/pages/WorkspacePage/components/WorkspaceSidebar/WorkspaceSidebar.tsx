@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PanelLeftOpen, Plus, Search } from "lucide-react";
+import { BookOpen, PanelLeftOpen, Plus, Search } from "lucide-react";
 import {
   SidebarAlertTriangleIcon,
   SidebarBoxIcon,
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/Icons";
 import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
+import { KnowledgeBaseDiscoveryDialog } from "./KnowledgeBaseDiscoveryDialog";
 import { LogoMark, LogoWordmark } from "./WorkspaceSidebarBrand";
 import { WorkspacePrimaryNavigation } from "./WorkspacePrimaryNavigation";
 import { WorkspaceTabPanels } from "./WorkspaceTabPanels";
@@ -87,6 +88,7 @@ export function WorkspaceSidebar({
   onOpenCreateScheduledTask,
   hub,
   onSelectMCPServer,
+  onSelectKnowledgeBase,
   onSelectHubSkill,
   onSelectHubTemplate,
   onSelectHub,
@@ -125,6 +127,7 @@ export function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   const [contextQuery, setContextQuery] = useState("");
   const [skillUploadOpen, setSkillUploadOpen] = useState(false);
+  const [knowledgeBaseDiscoveryOpen, setKnowledgeBaseDiscoveryOpen] = useState(false);
   const contextNavRef = useRef<HTMLElement | null>(null);
   const currentUser = usersById.get(currentUserID);
   const hasContextSidebar = workspaceHasContextSidebar(activePane);
@@ -133,6 +136,7 @@ export function WorkspaceSidebar({
   const firstTeam = teams[0] ?? null;
   const firstHubTemplate = hub?.templates[0] ?? null;
   const firstMCPServer = hub?.mcpServers?.[0] ?? null;
+  const firstKnowledgeBase = hub?.knowledgeBases?.items?.[0] ?? null;
   const firstHubSkill = hub?.skills[0] ?? null;
   const firstModelProvider = modelProviders?.providers[0] ?? null;
   const isSettingsPane = activePane.type === WorkspacePaneTypes.settings;
@@ -307,6 +311,14 @@ export function WorkspaceSidebar({
             },
           },
           {
+            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.knowledgeBases),
+            groupId: WorkspaceContextSectionIds.knowledgeBases,
+            icon: navigationIcon(BookOpen),
+            id: "knowledge-bases",
+            label: t("resourcesKnowledgeBasesLabel"),
+            onSelect: () => onSelectKnowledgeBase?.(firstKnowledgeBase),
+          },
+          {
             active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.mcpServers),
             groupId: WorkspaceContextSectionIds.mcpServers,
             icon: navigationIcon(SidebarMcpIcon),
@@ -343,6 +355,7 @@ export function WorkspaceSidebar({
       activeTaskBoardView,
       currentUser,
       firstMCPServer,
+      firstKnowledgeBase,
       firstHubSkill,
       firstHubTemplate,
       firstModelProvider,
@@ -353,6 +366,7 @@ export function WorkspaceSidebar({
       onSelectComputer,
       onSelectHub,
       onSelectMCPServer,
+      onSelectKnowledgeBase,
       onSelectHubSkill,
       onSelectHubTemplate,
       onSelectHuman,
@@ -387,6 +401,14 @@ export function WorkspaceSidebar({
     onOpenCreateTask,
     onOpenCreateScheduledTask,
     hub,
+    openKnowledgeBaseDiscovery: () => {
+      setContextQuery("");
+      hub?.knowledgeBases?.setSearch("");
+      setKnowledgeBaseDiscoveryOpen(true);
+      if (!hub?.knowledgeBases?.loginRequired) {
+        void hub?.knowledgeBases?.discoveryRefetch();
+      }
+    },
     setSkillUploadOpen,
     t,
     activeTaskBoardView,
@@ -567,6 +589,22 @@ export function WorkspaceSidebar({
           </nav>
         </aside>
       ) : null}
+      {hub?.knowledgeBases ? (
+        <KnowledgeBaseDiscoveryDialog
+          open={knowledgeBaseDiscoveryOpen}
+          onOpenChange={setKnowledgeBaseDiscoveryOpen}
+          items={hub.knowledgeBases.discoveryItems}
+          loading={hub.knowledgeBases.discoveryLoading}
+          loadError={hub.knowledgeBases.discoveryLoadError}
+          loginRequired={hub.knowledgeBases.loginRequired}
+          copyBusyID={hub.knowledgeBases.copyBusyID}
+          copyError={hub.knowledgeBases.copyError}
+          onAdd={hub.knowledgeBases.prepareMCPConfig}
+          onLogin={() => onLogin()}
+          onRetry={hub.knowledgeBases.discoveryRefetch}
+          t={t}
+        />
+      ) : null}
     </div>
   );
 }
@@ -599,6 +637,9 @@ function contextSectionIdForPane({
     }
     if (activePane.resourceType === "mcp") {
       return WorkspaceContextSectionIds.mcpServers;
+    }
+    if (activePane.resourceType === "knowledge") {
+      return WorkspaceContextSectionIds.knowledgeBases;
     }
     if (activePane.resourceType === "template") {
       return WorkspaceContextSectionIds.hubTemplates;
@@ -666,6 +707,9 @@ function contextTitleForSection(sectionId: WorkspaceContextSectionId, fallback: 
   if (sectionId === WorkspaceContextSectionIds.mcpServers) {
     return t("resourcesMCPLabel");
   }
+  if (sectionId === WorkspaceContextSectionIds.knowledgeBases) {
+    return t("resourcesKnowledgeBasesLabel");
+  }
   if (sectionId === WorkspaceContextSectionIds.hubSkills) {
     return t("resourcesSkillsLabel");
   }
@@ -720,6 +764,9 @@ function contextBadgeCountForSection({
   if (activeContextSectionId === WorkspaceContextSectionIds.mcpServers) {
     return hub?.mcpServers?.length ?? 0;
   }
+  if (activeContextSectionId === WorkspaceContextSectionIds.knowledgeBases) {
+    return hub?.knowledgeBases?.items.length ?? 0;
+  }
   if (activeContextSectionId === WorkspaceContextSectionIds.hubSkills) {
     return hub?.skills.length ?? 0;
   }
@@ -742,6 +789,7 @@ function contextCreateActionForSection({
   onOpenCreateTeam,
   onOpenCreateTask,
   onOpenCreateScheduledTask,
+  openKnowledgeBaseDiscovery,
   setSkillUploadOpen,
   t,
 }: Pick<
@@ -757,6 +805,7 @@ function contextCreateActionForSection({
   activeTaskBoardView?: "tasks" | "scheduled";
   activeContextSectionId: WorkspaceContextSectionId;
   hub: WorkspaceSidebarProps["hub"];
+  openKnowledgeBaseDiscovery: () => void;
   setSkillUploadOpen: (open: boolean) => void;
 }) {
   if (activeContextSectionId === WorkspaceContextSectionIds.agents) {
@@ -795,10 +844,16 @@ function contextCreateActionForSection({
       onClick: () => setSkillUploadOpen(true),
     };
   }
+  if (activeContextSectionId === WorkspaceContextSectionIds.knowledgeBases) {
+    return {
+      label: t("resourcesKnowledgeBaseDiscoverTitle"),
+      onClick: openKnowledgeBaseDiscovery,
+    };
+  }
   if (activeContextSectionId === WorkspaceContextSectionIds.mcpServers && hub?.openCreateMCPDialog) {
     return {
       label: t("resourcesMCPAdd"),
-      onClick: hub.openCreateMCPDialog,
+      onClick: () => hub.openCreateMCPDialog(),
     };
   }
   if (activeContextSectionId === WorkspaceContextSectionIds.models && onCreateModelProvider) {

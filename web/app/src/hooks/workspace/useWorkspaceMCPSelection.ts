@@ -1,17 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
 import {
   createMCPServerRequest,
   deleteMCPServerRequest,
   installRemoteMCPServerRequest,
+  probeMCPServerRequest,
   updateMCPServerRequest,
 } from "@/api/mcp";
 import { mcpServersFromCatalogResponse } from "@/models/mcp";
-import type { MCPServer, MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
+import type { MCPProbeResult, MCPServer, MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
 import { workspaceQueryKeys, useWorkspaceMCPServersQuery, useWorkspaceRemoteMCPServersQuery } from "./workspaceQueries";
 
-type HubResourceType = "template" | "skill" | "mcp";
+type HubResourceType = "knowledge" | "template" | "skill" | "mcp";
 
 type MCPServerNameSetter = (value: string | ((current: string) => string)) => void;
 
@@ -36,9 +37,14 @@ export function useWorkspaceMCPSelection({
 }: UseWorkspaceMCPSelectionArgs) {
   const queryClient = useQueryClient();
   const [mcpCreateDialogOpen, setMCPCreateDialogOpen] = useState(false);
+  const [mcpCreateInitialDocument, setMCPCreateInitialDocument] = useState("");
   const [mcpCreateError, setMCPCreateError] = useState("");
   const [mcpMutationBusy, setMCPMutationBusy] = useState(false);
   const [mcpMutationError, setMCPMutationError] = useState("");
+  const [mcpProbeBusy, setMCPProbeBusy] = useState(false);
+  const [mcpProbeError, setMCPProbeError] = useState("");
+  const [mcpProbeResult, setMCPProbeResult] = useState<MCPProbeResult | null>(null);
+  const mcpProbeRequestID = useRef(0);
   const [remoteMCPServersEnabled, setRemoteMCPServersEnabled] = useState(false);
   const [remoteMCPServersSearch, setRemoteMCPServersSearch] = useState("");
   const [remoteMCPServersSearchQuery, setRemoteMCPServersSearchQuery] = useState("");
@@ -79,6 +85,13 @@ export function useWorkspaceMCPSelection({
   }, [mcpServers, setSelectedMCPServerName]);
 
   useEffect(() => {
+    mcpProbeRequestID.current += 1;
+    setMCPProbeBusy(false);
+    setMCPProbeError("");
+    setMCPProbeResult(null);
+  }, [selectedMCPServerName]);
+
+  useEffect(() => {
     if (selectedHubResourceType === "skill" && !skillCount) {
       setSelectedHubResourceType(mcpServers.length ? "mcp" : "template");
       return;
@@ -95,14 +108,21 @@ export function useWorkspaceMCPSelection({
     return () => window.clearTimeout(timer);
   }, [remoteMCPServersSearch]);
 
-  const openCreateMCPDialog = useCallback(() => {
-    setSelectedHubResourceType("mcp");
-    setMCPCreateError("");
-    setMCPCreateDialogOpen(true);
-  }, [setSelectedHubResourceType]);
+  const openCreateMCPDialog = useCallback(
+    (initialDocument = "") => {
+      setSelectedHubResourceType("mcp");
+      setMCPCreateInitialDocument(initialDocument);
+      setMCPCreateError("");
+      setMCPCreateDialogOpen(true);
+    },
+    [setSelectedHubResourceType],
+  );
 
   const changeMCPCreateDialogOpen = useCallback((open: boolean) => {
     setMCPCreateError("");
+    if (!open) {
+      setMCPCreateInitialDocument("");
+    }
     setMCPCreateDialogOpen(open);
   }, []);
 
@@ -113,6 +133,7 @@ export function useWorkspaceMCPSelection({
       try {
         const state = await createMCPServerRequest(payload);
         queryClient.setQueryData(workspaceQueryKeys.mcpServers(), state);
+        await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
         setSelectedHubResourceType("mcp");
         setSelectedMCPServerName(payload.name);
         setMCPCreateDialogOpen(false);
@@ -134,6 +155,7 @@ export function useWorkspaceMCPSelection({
       try {
         const state = await updateMCPServerRequest(currentName, payload);
         queryClient.setQueryData(workspaceQueryKeys.mcpServers(), state);
+        await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
         setSelectedHubResourceType("mcp");
         setSelectedMCPServerName(payload.name);
         return true;
@@ -159,7 +181,10 @@ export function useWorkspaceMCPSelection({
       setRemoteMCPInstallBusy(id);
       try {
         const name = await installRemoteMCPServerRequest(id);
-        await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.mcpServers() });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.mcpServers() }),
+          queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() }),
+        ]);
         setSelectedHubResourceType("mcp");
         setSelectedMCPServerName(name);
         setMCPCreateDialogOpen(false);
@@ -186,6 +211,7 @@ export function useWorkspaceMCPSelection({
       try {
         const state = await deleteMCPServerRequest(name);
         queryClient.setQueryData(workspaceQueryKeys.mcpServers(), state);
+        await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
         setSelectedMCPServerName("");
         setSelectedHubResourceType("mcp");
         return true;
@@ -197,6 +223,40 @@ export function useWorkspaceMCPSelection({
       }
     },
     [queryClient, setSelectedMCPServerName, setSelectedHubResourceType, t],
+  );
+
+  const clearMCPProbe = useCallback(() => {
+    mcpProbeRequestID.current += 1;
+    setMCPProbeBusy(false);
+    setMCPProbeError("");
+    setMCPProbeResult(null);
+  }, []);
+
+  const probeMCPServer = useCallback(
+    async (payload: MCPServerPayload) => {
+      const requestID = mcpProbeRequestID.current + 1;
+      mcpProbeRequestID.current = requestID;
+      setMCPProbeBusy(true);
+      setMCPProbeError("");
+      setMCPProbeResult(null);
+      try {
+        const result = await probeMCPServerRequest(payload);
+        if (mcpProbeRequestID.current === requestID) {
+          setMCPProbeResult(result);
+        }
+        return result;
+      } catch (error) {
+        if (mcpProbeRequestID.current === requestID) {
+          setMCPProbeError(errorMessage(error, t("resourcesMCPTestFailed")));
+        }
+        return null;
+      } finally {
+        if (mcpProbeRequestID.current === requestID) {
+          setMCPProbeBusy(false);
+        }
+      }
+    },
+    [t],
   );
 
   const rawMCPServersError = mcpServersQuery.error
@@ -215,6 +275,7 @@ export function useWorkspaceMCPSelection({
   }, [remoteMCPServersEnabled, remoteMCPServersQuery]);
 
   return {
+    clearMCPProbe,
     createMCPServer,
     deleteMCPServer,
     installRemoteMCPServer,
@@ -222,8 +283,12 @@ export function useWorkspaceMCPSelection({
     mcpServers,
     mcpCreateError,
     mcpCreateDialogOpen,
+    mcpCreateInitialDocument,
     mcpMutationBusy,
     mcpMutationError,
+    mcpProbeBusy,
+    mcpProbeError,
+    mcpProbeResult,
     mcpStateError,
     openCreateMCPDialog,
     loadMoreRemoteMCPServers,
@@ -241,6 +306,7 @@ export function useWorkspaceMCPSelection({
     setRemoteMCPServersSearch,
     selectedMCPServer,
     setMCPCreateDialogOpen: changeMCPCreateDialogOpen,
+    probeMCPServer,
     updateMCPServer,
   };
 }

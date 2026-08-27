@@ -49,6 +49,18 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesMCPLoading: "Loading MCP servers",
     resourcesMCPSave: "Save",
     resourcesMCPSaving: "Saving...",
+    resourcesMCPTest: "Test connection",
+    resourcesMCPTesting: "Testing...",
+    resourcesMCPTestSuccess: "Connection successful",
+    resourcesMCPTestSuccessSummary: "MCP negotiation completed and {count} tools were discovered.",
+    resourcesMCPTestDuration: "{duration} ms",
+    resourcesMCPProtocolVersion: "Protocol {version}",
+    resourcesMCPToolsTitle: "Available tools",
+    resourcesMCPToolsEmpty: "The connection works, but no tools are currently available.",
+    resourcesMCPToolsUnsupported: "The connection works, but the server does not advertise the tools capability.",
+    resourcesMCPToolsTruncated: "This server exposes many tools. Showing the first {count}.",
+    resourcesMCPToolParameterRequired: "Required",
+    resourcesMCPToolParameterOptional: "Optional",
     resourcesMCPManualTab: "Manual configuration",
     resourcesMCPRemoteInstallAction: "Install",
     resourcesMCPRemoteInstallTab: "Remote install",
@@ -165,12 +177,10 @@ function renderHubDetailPane(
     "mcps/mcp.json": {
       binary: false,
       content: JSON.stringify({
-        mcpServers: {
-          context7: {
-            command: "npx",
-            args: ["-y", "context7-mcp"],
-            description: "Context lookup",
-          },
+        context7: {
+          command: "npx",
+          args: ["-y", "context7-mcp"],
+          description: "Context lookup",
         },
       }),
       path: "mcps/mcp.json",
@@ -328,11 +338,27 @@ function renderHubSkillDetailPane() {
 function renderMCPDetailPane({
   mcpCreateDialogOpen = false,
   mcpCreateError = "",
+  mcpProbeResult = null,
 }: {
   mcpCreateDialogOpen?: boolean;
   mcpCreateError?: string;
+  mcpProbeResult?: {
+    connected: boolean;
+    durationMs: number;
+    protocolVersion?: string;
+    serverInfo?: { name?: string; title?: string; version?: string };
+    tools: Array<{
+      description?: string;
+      inputSchema?: Record<string, unknown>;
+      name: string;
+      title?: string;
+    }>;
+    toolsSupported: boolean;
+    truncated: boolean;
+  } | null;
 } = {}) {
   const onUpdateMCP = vi.fn().mockResolvedValue(true);
+  const onProbeMCP = vi.fn().mockResolvedValue(mcpProbeResult);
   const mcp = {
     name: "grafana",
     description: "Grafana",
@@ -378,9 +404,13 @@ function renderMCPDetailPane({
           mcpCreateError,
           mcpMutationBusy: false,
           mcpMutationError: "",
+          mcpProbeBusy: false,
+          mcpProbeError: "",
+          mcpProbeResult,
           mcpStateError: "",
           mcpStateLoading: false,
           onDeleteMCP: vi.fn(),
+          onProbeMCP,
           onUpdateMCP,
           workspaceFile: null,
           workspaceFileError: "",
@@ -389,7 +419,7 @@ function renderMCPDetailPane({
       }}
     />,
   );
-  return { ...result, onUpdateMCP };
+  return { ...result, onProbeMCP, onUpdateMCP };
 }
 
 function renderMCPCreateDialog() {
@@ -619,7 +649,7 @@ describe("HubDetailPane", () => {
     );
     expect(container.querySelector(".workspace-file-tree")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "MCP" }));
+    await user.click(screen.getByRole("button", { name: /^MCP/ }));
     expect(screen.getByText("context7")).toBeInTheDocument();
     expect(screen.getByText("Context lookup")).toBeInTheDocument();
   });
@@ -700,6 +730,48 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(onUpdateMCP).not.toHaveBeenCalled();
+  });
+
+  it("tests the current MCP draft and renders discovered tools with parameters", async () => {
+    const user = userEvent.setup();
+    const { onProbeMCP } = renderMCPDetailPane({
+      mcpProbeResult: {
+        connected: true,
+        durationMs: 24,
+        protocolVersion: "2025-11-25",
+        serverInfo: { title: "Grafana MCP", version: "1.0.0" },
+        toolsSupported: true,
+        truncated: false,
+        tools: [
+          {
+            name: "search_dashboards",
+            title: "Search dashboards",
+            description: "Find matching dashboards.",
+            inputSchema: {
+              type: "object",
+              properties: { query: { type: "string", description: "Search query" } },
+              required: ["query"],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByText("Connection successful")).toBeInTheDocument();
+    expect(screen.getByText("Search dashboards")).toBeInTheDocument();
+    expect(screen.getByText("search_dashboards")).toBeInTheDocument();
+    expect(screen.getByText("query")).toBeInTheDocument();
+    expect(screen.getByText("Required")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    expect(onProbeMCP).toHaveBeenCalledWith({
+      name: "grafana",
+      config: {
+        command: "grafana-mcp",
+        args: ["--transport", "stdio"],
+        startup_timeout_sec: 120,
+      },
+    });
   });
 
   it("shows MCP creation errors only inside the creation dialog", () => {
