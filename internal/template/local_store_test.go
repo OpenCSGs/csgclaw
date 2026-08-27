@@ -24,6 +24,10 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "skills", "frontend.txt"), []byte("skill"), 0o755); err != nil {
 		t.Fatalf("WriteFile(skill) error = %v", err)
 	}
+	memoryPath := filepath.Join(t.TempDir(), "memory_summary.md")
+	if err := os.WriteFile(memoryPath, []byte("# Learned context\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(memory) error = %v", err)
+	}
 
 	store := NewLocalStore(registryRoot)
 	publishedAt := time.Date(2026, 5, 12, 8, 30, 0, 0, time.UTC)
@@ -32,8 +36,8 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 		Description:    "Frontend worker with UI and styling skills",
 		RuntimeKind:    runtime.KindCodex,
 		Image:          "worker:latest",
-		RuntimeOptions: map[string]any{"execution_mode": "read_only"},
-		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
+		RuntimeOptions: map[string]any{"execution_mode": "read_only", "memory_mode": "enabled"},
+		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot, MemoryPath: memoryPath},
 		UpdatedAt:      publishedAt,
 	})
 	if err != nil {
@@ -51,8 +55,15 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	if got, want := published.RuntimeOptions["execution_mode"], "read_only"; got != want {
 		t.Fatalf("Publish().RuntimeOptions[execution_mode] = %v, want %q", got, want)
 	}
+	if got, want := published.RuntimeOptions["memory_mode"], "enabled"; got != want {
+		t.Fatalf("Publish().RuntimeOptions[memory_mode] = %v, want %q", got, want)
+	}
 	if got, want := published.UpdatedAt, publishedAt; !got.Equal(want) {
 		t.Fatalf("Publish().UpdatedAt = %v, want %v", got, want)
+	}
+	storedMemory, err := os.ReadFile(filepath.Join(registryRoot, localTemplatesDirName, "frontend-alice", localMemoriesDirName, "memory_summary.md"))
+	if err != nil || string(storedMemory) != "# Learned context\n" {
+		t.Fatalf("stored memory_summary.md = %q, error = %v", storedMemory, err)
 	}
 
 	listed, err := store.List(context.Background())
@@ -82,12 +93,17 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	if gotMode, want := got.RuntimeOptions["execution_mode"], "read_only"; gotMode != want {
 		t.Fatalf("Get().RuntimeOptions[execution_mode] = %v, want %q", gotMode, want)
 	}
+	if gotMode, want := got.RuntimeOptions["memory_mode"], "enabled"; gotMode != want {
+		t.Fatalf("Get().RuntimeOptions[memory_mode] = %v, want %q", gotMode, want)
+	}
 	manifestData, err := os.ReadFile(filepath.Join(registryRoot, localTemplatesDirName, "frontend-alice", localManifestFileName))
 	if err != nil {
 		t.Fatalf("ReadFile(agent.toml) error = %v", err)
 	}
-	if !strings.Contains(string(manifestData), "[runtime_options]") || !strings.Contains(string(manifestData), "execution_mode = 'read_only'") {
-		t.Fatalf("agent.toml missing read-only runtime options:\n%s", manifestData)
+	if !strings.Contains(string(manifestData), "[runtime_options]") ||
+		!strings.Contains(string(manifestData), "execution_mode = 'read_only'") ||
+		!strings.Contains(string(manifestData), "memory_mode = 'enabled'") {
+		t.Fatalf("agent.toml missing runtime options:\n%s", manifestData)
 	}
 
 	workspace, err := store.FetchWorkspace(context.Background(), "frontend-alice")
@@ -101,6 +117,12 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 		t.Fatal("FetchWorkspace().Temporary = false, want materialized local workspace to be caller-owned")
 	}
 	defer os.RemoveAll(workspace.Path)
+	if data, err := os.ReadFile(workspace.MemoryPath); err != nil || string(data) != "# Learned context\n" {
+		t.Fatalf("materialized memory = %q, error = %v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace.Path, "MEMORY.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Codex memory leaked into workspace, stat error = %v", err)
+	}
 
 	agentsData, err := os.ReadFile(filepath.Join(workspace.Path, "AGENTS.md"))
 	if err != nil {
@@ -115,6 +137,40 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 	if skillInfo.Mode().Perm()&0o111 == 0 {
 		t.Fatalf("skill mode = %o, want executable bit preserved", skillInfo.Mode().Perm())
+	}
+}
+
+func TestLocalStorePublishOmitsCodexMemoryWhenDisabled(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "AGENTS.md"), []byte("# Instructions\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	memoryPath := filepath.Join(t.TempDir(), "memory_summary.md")
+	if err := os.WriteFile(memoryPath, []byte("# Must not publish\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	registryRoot := t.TempDir()
+	store := NewLocalStore(registryRoot)
+	created, err := store.Publish(context.Background(), PublishSpec{
+		Name:           "disabled-memory",
+		RuntimeKind:    runtime.KindCodex,
+		RuntimeOptions: map[string]any{"memory_mode": "disabled"},
+		WorkspaceRef:   WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot, MemoryPath: memoryPath},
+	})
+	if err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	storedPath := filepath.Join(registryRoot, localTemplatesDirName, created.ID, localMemoriesDirName, "memory_summary.md")
+	if _, err := os.Stat(storedPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("disabled memory snapshot stat error = %v, want not exist", err)
+	}
+	workspace, err := store.FetchWorkspace(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("FetchWorkspace() error = %v", err)
+	}
+	defer os.RemoveAll(workspace.Path)
+	if workspace.MemoryPath != "" {
+		t.Fatalf("FetchWorkspace().MemoryPath = %q, want empty", workspace.MemoryPath)
 	}
 }
 
@@ -185,6 +241,9 @@ func TestLocalStorePublishUsesRuntimeAwareInstructionAndSkillPaths(t *testing.T)
 	if err := os.MkdirAll(filepath.Join(skillsRoot, "custom"), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(skillsRoot, ".system", "openai-docs", "references"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(system skill) error = %v", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(instructionsPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(home) error = %v", err)
 	}
@@ -196,6 +255,9 @@ func TestLocalStorePublishUsesRuntimeAwareInstructionAndSkillPaths(t *testing.T)
 	}
 	if err := os.WriteFile(filepath.Join(skillsRoot, "custom", "SKILL.md"), []byte("custom skill\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(SKILL.md) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillsRoot, ".system", "openai-docs", "references", "internal.md"), []byte("system skill\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(system skill) error = %v", err)
 	}
 
 	store := NewLocalStore(registryRoot)
@@ -221,6 +283,9 @@ func TestLocalStorePublishUsesRuntimeAwareInstructionAndSkillPaths(t *testing.T)
 		t.Fatalf("ReadFile(template SKILL.md) error = %v", err)
 	} else if got, want := string(data), "custom skill\n"; got != want {
 		t.Fatalf("template SKILL.md = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(templateRoot, localSkillsDirName, ".system")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("template system skills stat error = %v, want not exist", err)
 	}
 }
 

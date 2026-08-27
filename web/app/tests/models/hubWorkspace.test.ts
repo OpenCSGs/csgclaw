@@ -7,6 +7,7 @@ import {
   hubTemplateErrorCode,
   isDeletableHubTemplate,
   isVisibleInHubTemplateList,
+  isHubTemplateMemoryEnabled,
 } from "@/models/hubWorkspace";
 
 describe("hub workspace helpers", () => {
@@ -40,8 +41,19 @@ describe("hub workspace helpers", () => {
     ).toBe(false);
   });
 
+  it("shows memory only for Codex templates whose memory mode is enabled", () => {
+    expect(isHubTemplateMemoryEnabled({ runtime_kind: "codex" })).toBe(true);
+    expect(isHubTemplateMemoryEnabled({ runtime_kind: "codex", runtime_options: { memory_mode: "enabled" } })).toBe(
+      true,
+    );
+    expect(isHubTemplateMemoryEnabled({ runtime_kind: "codex", runtime_options: { memory_mode: "disabled" } })).toBe(
+      false,
+    );
+    expect(isHubTemplateMemoryEnabled({ runtime_kind: "openclaw_sandbox" })).toBe(false);
+  });
+
   it("uses structured codes for community publishing errors", () => {
-    expect(hubTemplateErrorCode({ code: "SPACE_ERR_1" })).toBe(HubTemplateErrorCodes.communityNameConflict);
+    expect(hubTemplateErrorCode({ code: "SYS-ERR-4" })).toBe(HubTemplateErrorCodes.communityNameConflict);
     expect(hubTemplateErrorCode({ code: "USER-ERR-18" })).toBe(HubTemplateErrorCodes.accountEmailMissing);
     expect(hubTemplateErrorCode(new Error("The space name already exists."))).toBe("");
   });

@@ -13,6 +13,7 @@ import (
 
 	"csgclaw/internal/agentworkspace"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/runtime"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -304,6 +305,9 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 		return PublishSpec{}, err
 	}
 	spec.RuntimeOptions = runtimeOptions
+	if spec.RuntimeKind == runtime.KindCodex && spec.RuntimeOptions["memory_mode"] == "disabled" {
+		spec.WorkspaceRef.MemoryPath = ""
+	}
 	if spec.RuntimeKind == "" {
 		return PublishSpec{}, ErrRuntimeKindRequired
 	}

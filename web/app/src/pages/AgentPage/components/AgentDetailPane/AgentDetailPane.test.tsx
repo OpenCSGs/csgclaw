@@ -229,8 +229,8 @@ describe("AgentDetailPane memory", () => {
         JSON.stringify({
           enabled,
           ready: true,
-          name: "MEMORY.md",
-          location: "$CODEX_HOME/memories/MEMORY.md",
+          name: "memory_summary.md",
+          location: "$CODEX_HOME/memories/memory_summary.md",
           content: "# Durable memory\n\nRemember this.\n",
         }),
         { headers: { "content-type": "application/json" }, status: 200 },
@@ -247,7 +247,7 @@ describe("AgentDetailPane memory", () => {
     const refresh = screen.getByRole("button", { name: "agentMemoryRefresh" });
     expect(refresh).toHaveClass("agent-skill-add-button");
     expect(refresh.closest(".agent-memory-section-heading")).toBeInTheDocument();
-    expect(screen.getByText("$CODEX_HOME/memories/MEMORY.md").tagName).toBe("CODE");
+    expect(screen.getByText("$CODEX_HOME/memories/memory_summary.md").tagName).toBe("CODE");
 
     const toggle = screen.getByRole("checkbox", { name: "agentMemoryEnabled" });
     expect(toggle).toBeChecked();
@@ -269,7 +269,7 @@ describe("AgentDetailPane memory", () => {
     expect(screen.queryByRole("button", { name: "agentMemoryTab" })).not.toBeInTheDocument();
   });
 
-  it("uses the compact tab empty state before MEMORY.md is generated", async () => {
+  it("uses the compact tab empty state before memory_summary.md is generated", async () => {
     const user = userEvent.setup();
     vi.stubGlobal(
       "fetch",
@@ -279,8 +279,8 @@ describe("AgentDetailPane memory", () => {
             JSON.stringify({
               enabled: true,
               ready: false,
-              name: "MEMORY.md",
-              location: "$CODEX_HOME/memories/MEMORY.md",
+              name: "memory_summary.md",
+              location: "$CODEX_HOME/memories/memory_summary.md",
               content: "",
             }),
             {

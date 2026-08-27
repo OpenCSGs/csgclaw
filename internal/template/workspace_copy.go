@@ -44,6 +44,10 @@ func tempRootMissing(path string) bool {
 }
 
 func copyWorkspaceTree(srcRoot, dstRoot string) error {
+	return copyWorkspaceTreeWithFilter(srcRoot, dstRoot, nil)
+}
+
+func copyWorkspaceTreeWithFilter(srcRoot, dstRoot string, skip func(string, fs.DirEntry) bool) error {
 	srcRoot = strings.TrimSpace(srcRoot)
 	if srcRoot == "" {
 		return ErrWorkspaceDirRequired
@@ -61,10 +65,14 @@ func copyWorkspaceTree(srcRoot, dstRoot string) error {
 	if !info.IsDir() {
 		return ErrWorkspaceDirRequired
 	}
-	return copyWorkspaceTreeFS(os.DirFS(srcRoot), ".", dstRoot, "hub workspace")
+	return copyWorkspaceTreeFSWithFilter(os.DirFS(srcRoot), ".", dstRoot, "hub workspace", skip)
 }
 
 func copyWorkspaceTreeFS(srcFS fs.FS, root, dstRoot, label string) error {
+	return copyWorkspaceTreeFSWithFilter(srcFS, root, dstRoot, label, nil)
+}
+
+func copyWorkspaceTreeFSWithFilter(srcFS fs.FS, root, dstRoot, label string, skip func(string, fs.DirEntry) bool) error {
 	dstRoot = strings.TrimSpace(dstRoot)
 	if dstRoot == "" {
 		return ErrWorkspaceDirRequired
@@ -77,6 +85,12 @@ func copyWorkspaceTreeFS(srcFS fs.FS, root, dstRoot, label string) error {
 		if path == root {
 			if d.Type()&os.ModeSymlink != 0 {
 				return ErrWorkspaceSymlinkDenied
+			}
+			return nil
+		}
+		if skip != nil && skip(path, d) {
+			if d.IsDir() {
+				return fs.SkipDir
 			}
 			return nil
 		}

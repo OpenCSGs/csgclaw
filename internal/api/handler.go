@@ -1781,6 +1781,9 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			if !publishingTemplate {
 				status = http.StatusBadRequest
 			}
+			if code == "SYS-ERR-4" {
+				status = http.StatusBadRequest
+			}
 			if errors.Is(err, hub.ErrTemplateAlreadyExists) {
 				status = http.StatusConflict
 				if code == "" {

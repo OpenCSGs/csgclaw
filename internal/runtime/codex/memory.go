@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	readableMemoryFileName = "MEMORY.md"
-	readableMemoryLocation = "$CODEX_HOME/memories/MEMORY.md"
+	readableMemoryFileName = "memory_summary.md"
+	readableMemoryLocation = "$CODEX_HOME/memories/memory_summary.md"
 )
 
 func (r *Runtime) ReadMemoryDocument(_ context.Context, agentHome string, rawOptions map[string]any) (agentruntime.MemoryDocument, error) {

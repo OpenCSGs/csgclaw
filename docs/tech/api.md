@@ -469,13 +469,13 @@ Returns the Runtime's read-only primary memory document and its enabled state.
 {
   "enabled": true,
   "ready": true,
-  "name": "MEMORY.md",
-  "location": "$CODEX_HOME/memories/MEMORY.md",
+  "name": "memory_summary.md",
+  "location": "$CODEX_HOME/memories/memory_summary.md",
   "content": "# Durable memory\n"
 }
 ```
 
-`location` is a Runtime-provided logical file location for display and diagnostics; Codex currently reports `$CODEX_HOME/memories/MEMORY.md`.
+`location` is a Runtime-provided logical file location for display and diagnostics; Codex currently reports `$CODEX_HOME/memories/memory_summary.md`.
 
 #### `PUT /api/v1/agents/{id}/memory`
 
@@ -699,12 +699,13 @@ Templates use the following layout:
   instructions/AGENTS.md
   skills/<skill>/...
   mcps/mcp.json
+  memories/memory_summary.md # optional Codex memory snapshot
   memories/MEMORY.md         # optional for non-Codex runtimes
 ```
 
 `AGENTS.md` and `mcp.json` are always emitted when publishing.
 Other instruction files are optional.
-Codex templates neither publish nor restore workspace memory files; stable template context belongs in `instructions/`, while Codex-managed memory remains under its isolated `CODEX_HOME/memories/`.
+Codex templates snapshot `CODEX_HOME/memories/memory_summary.md` and restore it to the same location for a newly created agent when `memory_mode` is enabled. Templates with `memory_mode = "disabled"` neither package nor restore a memory summary. They do not copy Codex's SQLite memory pipeline state or treat memory as a workspace overlay.
 For non-Codex runtimes, optional template memories are overlaid according to that Runtime's workspace convention.
 During agent creation, skills are installed under `skills/`, and MCP servers from `mcp.json` are applied unless the create request explicitly supplies `mcpServers`.
 

@@ -98,8 +98,8 @@ describe("agents API", () => {
           JSON.stringify({
             enabled: true,
             ready: true,
-            name: "MEMORY.md",
-            location: "$CODEX_HOME/memories/MEMORY.md",
+            name: "memory_summary.md",
+            location: "$CODEX_HOME/memories/memory_summary.md",
             content: "# Memory\n",
           }),
           {

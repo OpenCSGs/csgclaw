@@ -130,3 +130,41 @@ func TestMaterializeTemplateFSSkipsMemoryForCodex(t *testing.T) {
 		})
 	}
 }
+
+func TestCopyTemplateSkillsSkipsOnlyTopLevelCodexSystemSkills(t *testing.T) {
+	source := t.TempDir()
+	for path, content := range map[string]string{
+		".system/builtin/SKILL.md":       "builtin\n",
+		"custom/SKILL.md":                "custom\n",
+		"custom/references/.system/data": "nested\n",
+	} {
+		path = filepath.Join(source, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	codexTarget := t.TempDir()
+	if err := copyTemplateSkills(source, codexTarget, agentruntime.KindCodex); err != nil {
+		t.Fatalf("copyTemplateSkills(codex) error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(codexTarget, ".system")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("top-level Codex .system stat error = %v, want not exist", err)
+	}
+	for _, path := range []string{"custom/SKILL.md", "custom/references/.system/data"} {
+		if _, err := os.Stat(filepath.Join(codexTarget, filepath.FromSlash(path))); err != nil {
+			t.Fatalf("Codex custom skill path %q missing: %v", path, err)
+		}
+	}
+
+	openClawTarget := t.TempDir()
+	if err := copyTemplateSkills(source, openClawTarget, agentruntime.NameOpenClaw); err != nil {
+		t.Fatalf("copyTemplateSkills(openclaw) error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(openClawTarget, ".system", "builtin", "SKILL.md")); err != nil {
+		t.Fatalf("OpenClaw top-level .system missing: %v", err)
+	}
+}

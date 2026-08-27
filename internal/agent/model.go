@@ -231,6 +231,8 @@ type CreateAgentSpec struct {
 	SandboxEnabled       bool              `json:"sandbox_enabled,omitempty"`
 	FromTemplate         string            `json:"from_template,omitempty"`
 	TemplateInstructions string            `json:"-"`
+	TemplateMemory       string            `json:"-"`
+	TemplateMemorySet    bool              `json:"-"`
 	Role                 string            `json:"role,omitempty"`
 	Status               string            `json:"status,omitempty"`
 	CreatedAt            time.Time         `json:"created_at,omitempty"`

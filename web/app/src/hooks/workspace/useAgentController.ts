@@ -1753,9 +1753,11 @@ export function useAgentController({
               deployReviewPending ? "" : message,
             ),
           );
-        } else {
-          setHubPublishError(message);
         }
+        // Publishing succeeded, but deployment did not. Keep the upstream
+        // result visible after navigating to the newly published template,
+        // including the common case where review is still pending.
+        setHubPublishError(message);
         setSelectedHubTemplateId(publishedTemplateID);
         navigatePane({ type: WorkspacePaneTypes.hub, id: publishedTemplateID, resourceType: "template" }, rooms);
         return true;

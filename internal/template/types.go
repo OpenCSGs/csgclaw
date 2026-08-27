@@ -57,6 +57,7 @@ type WorkspaceRef struct {
 	Path             string
 	InstructionsPath string
 	SkillsPath       string
+	MemoryPath       string
 	MCPServersJSON   string
 	Temporary        bool
 }

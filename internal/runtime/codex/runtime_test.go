@@ -2420,6 +2420,23 @@ func TestRuntimeProvisionSyncsCodexOverlaySkills(t *testing.T) {
 	assertRuntimeSkillFile(t, filepath.Join(root, "agent-alice", ".codex", "home", "skills", "custom", "SKILL.md"), "# Custom\n", 0o644)
 }
 
+func TestRuntimeProvisionRestoresTemplateMemory(t *testing.T) {
+	root := t.TempDir()
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{ID: "agent-alice", Name: "alice", RuntimeID: h.RuntimeID}, nil
+	})
+
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		AgentID: "agent-alice", AgentName: "alice", TemplateMemory: "# Memory\n", TemplateMemorySet: true,
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "agent-alice", ".codex", "home", "memories", "memory_summary.md"))
+	if err != nil || string(data) != "# Memory\n" {
+		t.Fatalf("restored memory_summary.md = %q, error = %v", data, err)
+	}
+}
+
 func TestRuntimeCreateOverlaysManagerTemplateAfterHostSkills(t *testing.T) {
 	root := t.TempDir()
 	hostCodexHome := filepath.Join(t.TempDir(), "shared-codex-home")

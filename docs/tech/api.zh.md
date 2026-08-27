@@ -459,13 +459,13 @@ Runtime 尚未生成文档时，`ready` 为 `false`。
 {
   "enabled": true,
   "ready": true,
-  "name": "MEMORY.md",
-  "location": "$CODEX_HOME/memories/MEMORY.md",
+  "name": "memory_summary.md",
+  "location": "$CODEX_HOME/memories/memory_summary.md",
   "content": "# Durable memory\n"
 }
 ```
 
-`location` 是 Runtime 提供、用于展示和诊断的逻辑文件位置；Codex 当前返回 `$CODEX_HOME/memories/MEMORY.md`。
+`location` 是 Runtime 提供、用于展示和诊断的逻辑文件位置；Codex 当前返回 `$CODEX_HOME/memories/memory_summary.md`。
 
 #### `PUT /api/v1/agents/{id}/memory`
 
@@ -680,12 +680,13 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
   instructions/AGENTS.md
   skills/<skill>/...
   mcps/mcp.json
+  memories/memory_summary.md # 可选的 Codex 记忆快照
   memories/MEMORY.md         # 非 Codex Runtime 可选
 ```
 
 发布时始终生成 `AGENTS.md` 和 `mcp.json`。
 其他 instruction 文件可选。
-Codex 模板不发布也不恢复 workspace memory 文件；模板必须携带的稳定上下文应放在 `instructions/`，Codex 自动管理的 memory 只保存在隔离的 `CODEX_HOME/memories/`。
+当 `memory_mode` 启用时，Codex 模板会快照 `CODEX_HOME/memories/memory_summary.md`，并在创建新 Agent 时恢复到相同位置。`memory_mode = "disabled"` 的模板不会打包或恢复记忆摘要；模板也不会复制 Codex 的 SQLite memory 流水线状态，或把 memory 当作 workspace overlay。
 非 Codex Runtime 的可选模板 memories 仍按对应 Runtime 的 workspace 约定叠加。
 根据模板创建 Agent 时，skills 会安装到 `skills/`，`mcp.json` 中的 MCP server 会自动应用；如果创建请求显式传入 `mcpServers`，则以请求内容为准。
 

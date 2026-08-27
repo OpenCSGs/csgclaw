@@ -1147,6 +1147,7 @@ describe("useAgentController", () => {
   });
 
   it("opens the published template when community deployment is waiting for review", async () => {
+    const setHubPublishError = vi.fn();
     const worker: AgentLike = {
       ...oldAgent,
       id: "u-worker",
@@ -1166,6 +1167,7 @@ describe("useAgentController", () => {
           activePane: { type: WorkspacePaneTypes.agent, id: "u-worker" },
           agents: [worker],
           openCSGAuthenticated: true,
+          setHubPublishError,
         }),
       { wrapper: createWrapper() },
     );
@@ -1183,6 +1185,7 @@ describe("useAgentController", () => {
     expect(published).toBe(true);
     expect(result.current.refreshHubTemplates).toHaveBeenCalledOnce();
     expect(result.current.setSelectedHubTemplateId).toHaveBeenCalledWith("alice/reviewer");
+    expect(setHubPublishError).toHaveBeenCalledWith("sensitive-content review is still pending");
     expect(result.current.navigatePane).toHaveBeenCalledWith(
       { type: WorkspacePaneTypes.hub, id: "alice/reviewer", resourceType: "template" },
       [],

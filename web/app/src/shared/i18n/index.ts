@@ -83,6 +83,15 @@ export function localizeAPIError(error: unknown, t: TranslateFn, fallback = ""):
   if (error && typeof error === "object" && "code" in error) {
     const code = String((error as { code?: unknown }).code || "").trim();
     if (code) {
+      // This is a local fallback code used when the Hub did not provide a
+      // stable business code. Preserve its diagnostic message instead of
+      // replacing the only actionable reason with a generic translation.
+      if (code === "template_publish_failed" && "message" in error) {
+        const message = localizeError((error as { message?: unknown }).message, t);
+        if (message) {
+          return message;
+        }
+      }
       const key = `errors.${code}`;
       const localized = t(key);
       if (localized !== key) {

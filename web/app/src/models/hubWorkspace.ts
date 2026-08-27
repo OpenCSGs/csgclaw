@@ -33,6 +33,18 @@ export function canPublishHubTemplateToCommunity(template: HubTemplate | null | 
   return runtimeKind === "codex";
 }
 
+export function isHubTemplateMemoryEnabled(template: HubTemplate | null | undefined): boolean {
+  const runtimeKind = String(template?.runtime_kind ?? "")
+    .trim()
+    .toLowerCase();
+  if (runtimeKind !== "codex") return false;
+  return (
+    String(template?.runtime_options?.memory_mode ?? "enabled")
+      .trim()
+      .toLowerCase() !== "disabled"
+  );
+}
+
 export function isVisibleInHubTemplateList(template: HubTemplate | null | undefined): boolean {
   const sourceKind = String(template?.source?.kind ?? "")
     .trim()
@@ -53,7 +65,7 @@ export function isVisibleInHubTemplateList(template: HubTemplate | null | undefi
 
 export const HubTemplateErrorCodes = {
   accountEmailMissing: "USER-ERR-18",
-  communityNameConflict: "SPACE_ERR_1",
+  communityNameConflict: "SYS-ERR-4",
   deployResourceUnavailable: "RESOURCE-ERR-1",
   reviewFailed: "AGENT-ERR-23",
   reviewPending: "AGENT-ERR-22",

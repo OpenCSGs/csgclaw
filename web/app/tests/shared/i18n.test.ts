@@ -51,10 +51,21 @@ describe("i18n messages", () => {
     ).toBe("模板已成功发布，但社区部署资源暂时不可用，请稍后重试部署。");
     expect(
       localizeAPIError(
-        { status: 409, code: "SPACE_ERR_1", message: "The space name already exists." },
+        { status: 400, code: "SYS-ERR-4", message: "The repository already exists." },
         createTranslator("en"),
       ),
-    ).toContain("same name already exists");
+    ).toContain("community repository already exists");
+  });
+
+  it("preserves the upstream reason for generic template publishing failures", () => {
+    const message =
+      'publish hub template to "official": remote hub request failed with status 500: failed to update repository path';
+    expect(
+      localizeAPIError(
+        { status: 400, code: "template_publish_failed", message },
+        createTranslator("zh"),
+      ),
+    ).toBe(message);
   });
 
   it("localizes unavailable Docker errors without exposing platform diagnostics", () => {

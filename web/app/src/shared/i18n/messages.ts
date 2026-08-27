@@ -350,6 +350,9 @@ export const messages = {
     resourcesTemplateEnvRequiredBadge: "必填",
     resourcesTemplateEnvCount: "{count} 个变量",
     resourcesTemplateSkillsDescription: "此模板创建 Agent 时会附带的 skills。",
+    resourcesTemplateMemoryDescription: "查看创建此模板时保存的只读记忆摘要。",
+    resourcesTemplateMemoryEmptyTitle: "模板未包含记忆摘要",
+    resourcesTemplateMemoryEmptyDescription: "请使用已生成记忆摘要的 Codex Agent 重新发布此模板。",
     resourcesTemplateSkillsCount: "{count} 项",
     resourcesTemplateSkillsEmptyHint: "此模板创建 Agent 时不会附带额外 skill。",
     resourcesTemplateMCPServersTitle: "MCP Servers",
@@ -1158,8 +1161,8 @@ export const messages = {
     agentMemoryEnabled: "启用记忆",
     agentMemoryToggleHint: "控制是否生成新记忆，并在后续会话中使用已有记忆。",
     agentMemoryRefresh: "刷新",
-    agentMemoryDocumentTitle: "MEMORY.md",
-    agentMemoryDocumentDescription: "查看 Runtime 在后台维护的只读主记忆文档；会话结束后可能不会立即更新。",
+    agentMemoryDocumentTitle: "memory_summary.md",
+    agentMemoryDocumentDescription: "查看 Runtime 在后台维护的只读记忆摘要；会话结束后可能不会立即更新。",
     agentMemoryLoading: "正在加载记忆...",
     agentMemoryLoadFailed: "加载记忆失败",
     agentMemoryUpdateFailed: "更新记忆设置失败",
@@ -1354,7 +1357,7 @@ export const messages = {
       "AGENT-ERR-23": "模板已发布，但未通过敏感内容审核。请根据问题文件修改后重新发布。",
       "RESOURCE-ERR-1": "模板已成功发布，但社区部署资源暂时不可用，请稍后重试部署。",
       "SENSITIVE-ERR-0": "发布失败：模板名称或描述中包含不允许的敏感信息，请修改后重试。",
-      SPACE_ERR_1: "发布失败：社区中已存在同名模板，请修改模板名称后重试。",
+      "SYS-ERR-4": "发布失败：社区仓库已存在，请修改模板名称后重试。",
       "USER-ERR-18": "发布失败：当前 OpenCSG 账号未设置邮箱，请完善账号资料后重试。",
       template_already_exists: "保存失败：本地已存在同名模板，请修改模板名称后重试。",
       template_deploy_failed: "模板已成功发布，但部署失败，请稍后重试。",
@@ -1771,6 +1774,10 @@ export const messages = {
     resourcesTemplateEnvRequiredBadge: "Required",
     resourcesTemplateEnvCount: "{count} variables",
     resourcesTemplateSkillsDescription: "Skills included when creating an agent from this template.",
+    resourcesTemplateMemoryDescription: "View the read-only memory summary captured when this template was created.",
+    resourcesTemplateMemoryEmptyTitle: "No memory summary in this template",
+    resourcesTemplateMemoryEmptyDescription:
+      "Republish this template from a Codex agent with a generated memory summary.",
     resourcesTemplateSkillsCount: "{count} skills",
     resourcesTemplateSkillsEmptyHint: "No additional skills are included when creating an agent from this template.",
     resourcesTemplateMCPServersTitle: "MCP Servers",
@@ -2602,9 +2609,9 @@ export const messages = {
     agentMemoryToggleHint:
       "Control whether new memories are generated and existing memories are used in later sessions.",
     agentMemoryRefresh: "Refresh",
-    agentMemoryDocumentTitle: "MEMORY.md",
+    agentMemoryDocumentTitle: "memory_summary.md",
     agentMemoryDocumentDescription:
-      "View the read-only primary memory document maintained by the runtime. It may not update immediately after a session ends.",
+      "View the read-only memory summary maintained by the runtime. It may not update immediately after a session ends.",
     agentMemoryLoading: "Loading memory...",
     agentMemoryLoadFailed: "Failed to load memory",
     agentMemoryUpdateFailed: "Failed to update memory settings",
@@ -2816,8 +2823,8 @@ export const messages = {
         "The template was published, but community deployment resources are temporarily unavailable. Try deploying again later.",
       "SENSITIVE-ERR-0":
         "Publishing failed because the template name or description contains disallowed sensitive information. Update it and try again.",
-      SPACE_ERR_1:
-        "Publishing failed because a community template with the same name already exists. Choose another name and try again.",
+      "SYS-ERR-4":
+        "Publishing failed because the community repository already exists. Choose another template name and try again.",
       "USER-ERR-18":
         "Publishing failed because the current OpenCSG account has no email address. Complete the account profile and try again.",
       template_already_exists:

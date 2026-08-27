@@ -407,6 +407,15 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	if err != nil {
 		return fmt.Errorf("resolve codex home for agent %q: %w", req.AgentName, err)
 	}
+	if req.TemplateMemorySet {
+		memoryPath := filepath.Join(codexHomeDir, "memories", readableMemoryFileName)
+		if err := r.mkdirAll(filepath.Dir(memoryPath), 0o755); err != nil {
+			return fmt.Errorf("create codex memory directory: %w", err)
+		}
+		if err := r.writeFile(memoryPath, []byte(req.TemplateMemory), 0o644); err != nil {
+			return fmt.Errorf("seed codex template memory: %w", err)
+		}
+	}
 	if err := r.syncManagerTemplateSkills(agentID, codexHomeDir); err != nil {
 		return fmt.Errorf("sync manager codex skills for agent %q: %w", req.AgentName, err)
 	}

@@ -20,7 +20,10 @@ const communityAgentInstancePath = "/api/v1/agent/instances"
 const communityInstanceTemplatePendingCode = "AGENT-ERR-22"
 const communityInstanceSensitiveCheckCode = "AGENT-ERR-23"
 const communityInstanceResourceUnavailableCode = "RESOURCE-ERR-1"
-const communityInstanceDeployRetries = 3
+
+// Retry pending reviews for roughly 30 seconds before reporting that the
+// template was published but has not been deployed yet.
+const communityInstanceDeployRetries = 10
 const communityInstanceDeployRetryDelay = 3 * time.Second
 
 var errCommunityInstanceSensitiveCheck = errors.New("community template has not passed the sensitive-content check")

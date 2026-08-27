@@ -28,6 +28,9 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesTemplateEnvRequired: "Required",
     resourcesTemplateEnvRequiredBadge: "Required",
     resourcesTemplateSkillsDescription: "Template skills.",
+    resourcesTemplateMemoryDescription: "Template memory summary.",
+    resourcesTemplateMemoryEmptyTitle: "No memory summary",
+    resourcesTemplateMemoryEmptyDescription: "Republish from an agent with memory.",
     resourcesTemplateMCPServersTitle: "MCP Servers",
     resourcesTemplateMCPServersDescription: "Template MCP configs.",
     resourcesLoading: "Loading resources",
@@ -75,6 +78,8 @@ function t(key: string, params: Record<string, string | number> = {}) {
       "This template only contains generated defaults. Switch to Advanced to view the full content.",
     resourcesTemplateInstructionsViewAdvancedAction: "View complete AGENTS.md",
     agentProfileSkillsTab: "Skills",
+    agentMemoryTab: "Memory",
+    agentMemoryDocumentLabel: "Read-only memory summary",
     agentProfileMCPTab: "MCP",
     agentProfileSectionNavLabel: "Template sections",
     agentSkillsTitle: "Skills",
@@ -167,6 +172,12 @@ function renderHubDetailPane(
       path: "mcps/mcp.json",
       size: 120,
     },
+    "memories/memory_summary.md": {
+      binary: false,
+      content: "# Memory Summary\n\nThe user prefers concise Chinese replies.",
+      path: "memories/memory_summary.md",
+      size: 58,
+    },
   };
   function Harness() {
     const [selectedWorkspacePath, setSelectedWorkspacePath] = useState("instructions/AGENTS.md");
@@ -211,6 +222,8 @@ function renderHubDetailPane(
             workspaceEntries: [
               { name: "instructions", path: "instructions", type: "dir", depth: 0 },
               { name: "AGENTS.md", path: "instructions/AGENTS.md", type: "file", depth: 1 },
+              { name: "memories", path: "memories", type: "dir", depth: 0 },
+              { name: "memory_summary.md", path: "memories/memory_summary.md", type: "file", depth: 1 },
               { name: "skills", path: "skills", type: "dir", depth: 0 },
               { name: "demo", path: "skills/demo", type: "dir", depth: 1 },
               { name: "SKILL.md", path: "skills/demo/SKILL.md", type: "file", depth: 2 },
@@ -552,9 +565,11 @@ describe("HubDetailPane", () => {
     expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
   });
 
-  it("groups template details into runtime, instructions, skills, and MCP tabs", async () => {
+  it("groups template details into runtime, instructions, memory, skills, and MCP tabs", async () => {
     const user = userEvent.setup();
-    renderHubDetailPane();
+    const { container } = renderHubDetailPane("template", {
+      selectedTemplate: { ...template, runtime_kind: "codex" },
+    });
 
     expect(screen.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
     expect(screen.getByDisplayValue("demo:latest")).toBeInTheDocument();
@@ -573,6 +588,12 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: /^Skills/ }));
     expect(screen.getByText("demo")).toBeInTheDocument();
     expect(screen.getByText("Demo template skill")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Memory" }));
+    expect(screen.getByRole("textbox", { name: "Read-only memory summary" })).toHaveValue(
+      "# Memory Summary\n\nThe user prefers concise Chinese replies.",
+    );
+    expect(container.querySelector(".workspace-file-tree")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "MCP" }));
     expect(screen.getByText("context7")).toBeInTheDocument();

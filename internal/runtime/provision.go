@@ -30,6 +30,8 @@ type ProvisionRequest struct {
 	AgentName            string
 	Instructions         string
 	TemplateInstructions string
+	TemplateMemory       string
+	TemplateMemorySet    bool
 	Profile              Profile
 	RuntimeOptions       map[string]any
 	MCPServers           map[string]any

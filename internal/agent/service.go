@@ -247,6 +247,17 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 	if err != nil {
 		return hub.PublishSpec{}, err
 	}
+	memoryPath := ""
+	if runtimeOptions[templateMemoryModeKey] != templateMemoryModeDisabled {
+		memoryPath = codexMemoryPath(layout, got.RuntimeKind)
+	}
+	if memoryPath != "" {
+		if _, statErr := os.Stat(memoryPath); errors.Is(statErr, os.ErrNotExist) {
+			memoryPath = ""
+		} else if statErr != nil {
+			return hub.PublishSpec{}, fmt.Errorf("stat codex memory summary: %w", statErr)
+		}
+	}
 	return hub.PublishSpec{
 		ID:             got.Name,
 		Name:           got.Name,
@@ -259,9 +270,17 @@ func (s *Service) HubPublishSpec(agentID string) (hub.PublishSpec, error) {
 			Path:             layout.WorkspaceRoot,
 			InstructionsPath: layout.InstructionsPath,
 			SkillsPath:       layout.SkillsRoot,
+			MemoryPath:       memoryPath,
 		},
 		MCPServers: templateSafeMCPServers(got.MCPServers),
 	}, nil
+}
+
+func codexMemoryPath(layout agentruntime.Layout, runtimeKind string) string {
+	if agentruntime.RuntimeConfigForKind(runtimeKind).LegacyKind() != RuntimeKindCodex || strings.TrimSpace(layout.SkillsRoot) == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(layout.SkillsRoot), "memories", "memory_summary.md")
 }
 
 func WithSandboxProvider(provider sandbox.Provider) ServiceOption {
@@ -1178,6 +1197,25 @@ func (s *Service) resolveTemplateCreateSpecWithService(
 			} else if !errors.Is(readErr, os.ErrNotExist) {
 				return CreateAgentSpec{}, cleanup, fmt.Errorf("read codex template instructions: %w", readErr)
 			}
+			if memoryPath := strings.TrimSpace(workspace.MemoryPath); memoryPath != "" {
+				memoryPath, pathErr := validatedCodexTemplateMemoryPath(workspace.Path, memoryPath)
+				if pathErr != nil {
+					return CreateAgentSpec{}, cleanup, pathErr
+				}
+				if spec.RuntimeOptions[templateMemoryModeKey] != templateMemoryModeDisabled {
+					data, readErr := os.ReadFile(memoryPath)
+					if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+						return CreateAgentSpec{}, cleanup, fmt.Errorf("read codex template memory: %w", readErr)
+					}
+					if readErr == nil {
+						spec.TemplateMemory = string(data)
+						spec.TemplateMemorySet = true
+					}
+				}
+				if removeErr := os.RemoveAll(filepath.Dir(memoryPath)); removeErr != nil {
+					return CreateAgentSpec{}, cleanup, fmt.Errorf("remove staged codex template memory: %w", removeErr)
+				}
+			}
 		}
 		spec.FromTemplate = strings.TrimSpace(workspace.Path)
 		if !createSpecSetsMCPServers(spec) && strings.TrimSpace(workspace.MCPServersJSON) != "" {
@@ -1190,6 +1228,23 @@ func (s *Service) resolveTemplateCreateSpecWithService(
 		}
 	}
 	return spec, cleanup, nil
+}
+
+func validatedCodexTemplateMemoryPath(workspaceRoot, memoryPath string) (string, error) {
+	workspaceRoot, err := filepath.Abs(strings.TrimSpace(workspaceRoot))
+	if err != nil {
+		return "", fmt.Errorf("resolve template workspace path: %w", err)
+	}
+	memoryPath, err = filepath.Abs(strings.TrimSpace(memoryPath))
+	if err != nil {
+		return "", fmt.Errorf("resolve codex template memory path: %w", err)
+	}
+	rel, err := filepath.Rel(workspaceRoot, memoryPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) ||
+		filepath.Base(filepath.Dir(memoryPath)) != ".csgclaw-template-memory" || filepath.Base(memoryPath) != "memory_summary.md" {
+		return "", fmt.Errorf("invalid staged codex template memory path %q", memoryPath)
+	}
+	return memoryPath, nil
 }
 
 func shouldResolveTemplateCreateSpec(spec CreateAgentSpec) bool {
@@ -2446,6 +2501,8 @@ func (s *Service) CreateWorker(ctx context.Context, spec CreateAgentSpec) (Agent
 		AgentName:            name,
 		Instructions:         instructions,
 		TemplateInstructions: spec.TemplateInstructions,
+		TemplateMemory:       spec.TemplateMemory,
+		TemplateMemorySet:    spec.TemplateMemorySet,
 		Profile:              runtimeProfile,
 		RuntimeOptions:       utils.CloneAnyMap(spec.RuntimeOptions),
 		MCPServers:           cloneMCPServers(spec.MCPServers),
