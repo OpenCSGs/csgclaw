@@ -34,6 +34,39 @@ const (
 	runtimeAvailabilityMaxAge = 5 * time.Second
 )
 
+const (
+	DesiredStateRunning = "running"
+	DesiredStateStopped = "stopped"
+)
+
+// SetDesiredState persists the lifecycle intent owned by Agent Engine without
+// conflating it with the Runtime's observed status.
+func (s *Service) SetDesiredState(id, desired string, touch bool) (Agent, error) {
+	id = strings.TrimSpace(id)
+	desired = strings.ToLower(strings.TrimSpace(desired))
+	if desired != DesiredStateRunning && desired != DesiredStateStopped {
+		return Agent{}, fmt.Errorf("invalid agent desired state %q", desired)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current, key, ok := s.agentByIDLocked(id)
+	if !ok {
+		return Agent{}, fmt.Errorf("agent %q not found", id)
+	}
+	if current.DesiredState == desired && !touch {
+		return *cloneAgent(&current), nil
+	}
+	previous := current
+	current.DesiredState = desired
+	current.UpdatedAt = time.Now().UTC()
+	s.agents[key] = current
+	if err := s.saveLocked(); err != nil {
+		s.agents[key] = previous
+		return Agent{}, err
+	}
+	return *cloneAgent(&current), nil
+}
+
 var runtimeAvailabilityProbeTimeout = 2 * time.Second
 
 // RuntimeAvailability is intentionally ephemeral. CheckedAt lets clients

@@ -1,9 +1,11 @@
 package team
 
 import (
+	"context"
 	"strings"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
@@ -16,18 +18,22 @@ type participantLookup interface {
 
 type CSGClawTeamDirectory struct {
 	im           *im.Service
-	agents       *agent.Service
+	agents       agentengine.AgentInterface
 	participants participantLookup
 }
 
-func NewCSGClawTeamDirectory(imSvc *im.Service, agentSvc *agent.Service, participantSvc ...participantLookup) *CSGClawTeamDirectory {
+func NewCSGClawTeamDirectory(imSvc *im.Service, engine agentengine.Interface, participantSvc ...participantLookup) *CSGClawTeamDirectory {
 	var lookup participantLookup
 	if len(participantSvc) > 0 {
 		lookup = participantSvc[0]
 	}
+	var agents agentengine.AgentInterface
+	if engine != nil {
+		agents = engine.Agents()
+	}
 	return &CSGClawTeamDirectory{
 		im:           imSvc,
-		agents:       agentSvc,
+		agents:       agents,
 		participants: lookup,
 	}
 }
@@ -78,15 +84,15 @@ func (d *CSGClawTeamDirectory) AgentProfile(id string) (MemberProfile, bool) {
 	if d == nil || d.agents == nil {
 		return MemberProfile{}, false
 	}
-	got, ok := d.agents.AgentMetadata(id)
-	if !ok {
+	got, err := d.agents.Get(context.Background(), id, agentengine.AgentGetOptions{})
+	if err != nil {
 		return MemberProfile{}, false
 	}
 	return MemberProfile{
 		ID:          strings.TrimSpace(got.ID),
-		Name:        strings.TrimSpace(got.Name),
-		Role:        strings.TrimSpace(got.Role),
-		Description: strings.TrimSpace(got.Description),
+		Name:        strings.TrimSpace(got.Spec.Name),
+		Role:        strings.TrimSpace(string(got.Spec.Role)),
+		Description: strings.TrimSpace(got.Spec.Description),
 	}, true
 }
 

@@ -149,7 +149,7 @@ sequenceDiagram
     participant Service as Agent Service and Store
     participant Runtime as Runtime Adapter
 
-    Caller->>Engine: Create, Update, Start, Stop, Recreate, or Delete
+    Caller->>Engine: Create, Update desired state, Recreate, or Delete
     Engine->>Service: validate complete desired Agent state
     Service->>Gate: enter lifecycle mutation
     Gate->>Gate: close execution admission and drain active leases
@@ -223,7 +223,7 @@ The review surface is:
 
 | Resource | Operations | Purpose |
 |---|---|---|
-| `Agents()` | Create, Get, List, Update, Delete, Start, Stop, Recreate | Desired Agent configuration and Runtime lifecycle |
+| `Agents()` | Create, Get, List, Update, Delete, Recreate | Desired Agent configuration and Runtime lifecycle |
 | `Conversations(agentID)` | Files, Run, Cancel, Reset, Resolve | Conversation execution scoped to one Agent |
 | `Conversations(agentID).Files()` | Create, Get, Delete | Immutable files scoped by the selected Agent |
 | `ConversationRuntime` | Run, Cancel, Reset, Resolve | Runtime-specific direct execution behind Engine |
@@ -233,7 +233,8 @@ The public contract is transport-ready without defining a remote Engine protocol
 | Engine operation | HTTP mapping |
 |---|---|
 | `Agents().Create/Get/List/Update/Delete` | Agent collection and resource POST, GET, PUT, DELETE |
-| `Agents().Start/Stop/Recreate` | Agent action POST endpoints |
+| `Agents().Update` with `spec.desired_state` | Start and Stop action POST endpoints |
+| `Agents().Recreate` with options | Recreate and Upgrade action POST endpoints |
 | `Conversations(agentID).Run` | Turn POST with JSON request and JSON or SSE result stream |
 | `Cancel/Reset/Resolve` | Conversation action POST endpoints with typed JSON bodies |
 | `Conversations(agentID).Files().Create` | File metadata plus streaming HTTP request body |
@@ -243,6 +244,11 @@ The public contract is transport-ready without defining a remote Engine protocol
 Every request, resource, event, result, and error value crossing that boundary has a stable JSON representation and contains no Runtime path or process-local capability.
 
 `AgentInterface` is the collection-scoped API for Agent resources, and callers cannot depend on the current `internal/agent.Service`.
+The production HTTP, CLI, Participant, Team, Task, and delivery-recovery administration paths use the shared Engine instance for Agent desired-state queries, mutations, and Runtime lifecycle operations.
+Profiles, Skills, MCP servers, instructions, memory configuration, and lifecycle intent are fields of the Agent resource rather than separate endpoint-shaped interface methods.
+Computed effective instructions, readable memory, redacted model data, capabilities, Runtime readiness, and sandbox identity are observed status projections returned by Get.
+Create retains explicit ID and template selection, Update uses a field mask and resource version for partial changes, and Recreate options distinguish ordinary recreation from image upgrade.
+Channel bindings, Participant records, workspace browsing, log streaming, Runtime registration, and LLM execution remain with their existing owners.
 The Phase 2 Engine Facade may wrap the current Agent Service through a private backend so it can first reuse the already verified Agent persistence and Runtime lifecycle code.
 That wrapper is only an internal Engine implementation; it does not enter the public contract or prevent Phase 4 from separating the broad Service into explicit storage, lifecycle, and Runtime components.
 Conversation execution keeps no duplicate Agent records and coordinates active Turns with lifecycle changes.
@@ -251,7 +257,12 @@ Phase 2 extends this boundary so the complete Engine implements `Agents()` and `
 Phase 4 then replaces the transitional Facade and consolidates the internal owners of Agent state and Runtime lifecycle while preserving external behavior.
 If the internal refactor genuinely requires a public interface change, the change remains subject to joint review and must update every implementation, the Mock Client, and the contract tests together.
 
-`AgentSpec` contains the complete desired state: name, description, instructions, role, Runtime, model, Skills, and MCP servers.
+`AgentSpec` contains the complete desired state: name, description, instructions, role, Runtime, model, Skills, MCP servers, memory configuration, and lifecycle intent.
+`AgentInterface.Update` compares the current and complete desired Spec inside the Agent lifecycle gate, preserves omitted write-only secrets, and reconciles only changed subsystems.
+HTTP Patch and focused Skill, MCP, profile, instructions, and memory routes translate their partial intent into `AgentUpdateRequest.FieldMask` and execute the same Update planner instead of maintaining separate lifecycle paths.
+Start and Stop set `spec.desired_state`; applying `running` also reconciles observed Runtime drift even when the desired value is unchanged.
+Upgrade is `Recreate` with `UpgradeImage` set rather than a separate interface method.
+Omitting a Skill or MCP server from a complete Update means removing it; omitting Runtime credentials preserves them, while an explicit empty credential map clears them.
 `RuntimeSpec.Credentials` maps workspace-relative file paths to complete secret file contents.
 `RuntimeSpec.InitShell` is an idempotent shell program executed with the Runtime workspace as its working directory.
 Create and Update replace both fields as part of the complete desired Runtime state.
@@ -580,7 +591,7 @@ Starting in Phase 2, the Agent Engine interface is the only boundary between Eng
 - Refactor internal Engine components while preserving external behavior; keep the public interface stable by default, but allow it to evolve through joint review when necessary.
 - Replace the Phase 2 Agent Service Facade with focused Agent resource backend, Conversation coordinator, Lifecycle Gate, Runtime Adapter registry, and Runtime Adapter components.
 - Extract reusable storage, Runtime provisioning, credential, InitShell, file exposure, interaction, and Structured Output capabilities while removing duplicate state and reverse-control dependencies.
-- Make `Agents()` the unified Engine entry point for Agent persistence and Runtime lifecycle, then incrementally migrate internal callers that still bypass it.
+- Keep `Agents()` as the unified caller-facing Engine entry point established by the administration caller migration, then replace its private Agent Service Facade without changing caller behavior.
 - Use the Phase 2 contract tests and Phase 3 end-to-end tests to prove the refactor preserves existing CSGClaw behavior; when a reviewed interface change is required, update the Adapter and Mock Client together.
 
 Every merge must leave existing CSGClaw behavior operational.

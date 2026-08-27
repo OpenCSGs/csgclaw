@@ -614,7 +614,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err := reconcileInterruptedUserInputMessages(imSvc); err != nil {
 		return err
 	}
-	participantSvc, err := newParticipantService(svc, imSvc)
+	// One Engine instance owns Agent administration, admission for HTTP
+	// sessions, and direct channel execution.
+	conversationEngine := agentengine.New(svc)
+	participantSvc, err := newParticipantService(conversationEngine, imSvc)
 	if err != nil {
 		return err
 	}
@@ -632,9 +635,6 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	janitorCtx, stopJanitor := context.WithCancel(ctx)
 	defer stopJanitor()
 	go workRegistry.Run(janitorCtx)
-	// One Engine instance owns admission for both HTTP sessions and direct
-	// channel execution. Channel packages must never construct a second Engine.
-	conversationEngine := agentengine.New(svc)
 	feishuBindingMgr, err := NewFeishuBindingManager(feishuSvc, conversationEngine)
 	if err != nil {
 		return err
@@ -717,7 +717,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
-	agentTaskSvc, err := NewAgentTaskService(svc, imSvc, participantSvc)
+	agentTaskSvc, err := NewAgentTaskService(conversationEngine, imSvc, participantSvc)
 	if err != nil {
 		return err
 	}
@@ -1479,7 +1479,7 @@ func newIMService(bus *im.Bus) (*im.Service, error) {
 	return im.NewServiceFromPathWithBus(imStatePath, bus)
 }
 
-func newParticipantService(agentSvc *agent.Service, imSvc *im.Service) (*participant.Service, error) {
+func newParticipantService(engine agentengine.Interface, imSvc *im.Service) (*participant.Service, error) {
 	participantsPath, err := defaultParticipantsPath()
 	if err != nil {
 		return nil, err
@@ -1490,7 +1490,7 @@ func newParticipantService(agentSvc *agent.Service, imSvc *im.Service) (*partici
 	}
 	participantSvc := participant.NewService(
 		store,
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(engine),
 		participant.WithIMService(imSvc),
 	)
 	if deleted, err := participantSvc.RepairDanglingCSGClawAgentParticipants(); err != nil {
@@ -1516,7 +1516,7 @@ func newTeamService(imSvc *im.Service, feishuSvc *feishu.Service, participantSvc
 	return team.NewService(team.WithStore(store), team.WithProjector(projector)), registry, nil
 }
 
-func newAgentTaskService(agentSvc *agent.Service, imSvc *im.Service, participantSvc *participant.Service) (*agenttask.Service, error) {
+func newAgentTaskService(engine agentengine.Interface, imSvc *im.Service, participantSvc *participant.Service) (*agenttask.Service, error) {
 	tasksDir, err := config.DefaultTasksDir()
 	if err != nil {
 		return nil, err
@@ -1526,7 +1526,7 @@ func newAgentTaskService(agentSvc *agent.Service, imSvc *im.Service, participant
 		return nil, err
 	}
 	core := taskcore.NewService(taskcore.WithStore(store))
-	return agenttask.NewService(core, imSvc, agentSvc, participantSvc), nil
+	return agenttask.NewService(core, imSvc, engine, participantSvc), nil
 }
 
 func newScheduledTaskService(agentTaskSvc *agenttask.Service) (*scheduledtask.Service, error) {

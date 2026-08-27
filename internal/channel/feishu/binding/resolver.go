@@ -60,7 +60,7 @@ func (*AppOwnershipConflictError) Unwrap() error { return ErrAppOwnershipConflic
 // AgentLister is the narrow Agent Engine read port used by the Feishu control
 // plane. Resolver never reads RuntimeID or gates a binding on runtime status.
 type AgentLister interface {
-	List(context.Context) ([]agentengine.Agent, error)
+	List(context.Context, agentengine.AgentListOptions) ([]agentengine.Agent, error)
 }
 
 // Resolved contains one desired App Binding and its transport credentials.
@@ -101,7 +101,7 @@ func (r *Resolver) All(ctx context.Context) ([]Resolved, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	agents, err := r.agents.List(ctx)
+	agents, err := r.agents.List(ctx, agentengine.AgentListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("list Agent Engine agents for Feishu bindings: %w", err)
 	}

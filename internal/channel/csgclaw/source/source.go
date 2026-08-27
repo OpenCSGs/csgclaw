@@ -32,7 +32,7 @@ type participantProvider interface {
 }
 
 type agentProvider interface {
-	Get(context.Context, string) (agentengine.Agent, error)
+	Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error)
 }
 
 type workerManager interface {
@@ -389,7 +389,7 @@ func (s *Source) currentBinding(ctx context.Context, bindingID channel.BindingID
 	if sub == nil {
 		return channel.Binding{}, false
 	}
-	selected, err := s.agents.Get(ctx, value.AgentID)
+	selected, err := s.agents.Get(ctx, value.AgentID, agentengine.AgentGetOptions{})
 	if err != nil || !usesHostCodex(selected) {
 		return channel.Binding{}, false
 	}
@@ -406,7 +406,7 @@ func (s *Source) binding(ctx context.Context, item apitypes.Participant) (channe
 	if participantID == "" || agentID == "" {
 		return channel.Binding{}, false
 	}
-	selected, err := s.agents.Get(ctx, agentID)
+	selected, err := s.agents.Get(ctx, agentID, agentengine.AgentGetOptions{})
 	if err != nil || !usesHostCodex(selected) {
 		return channel.Binding{}, false
 	}

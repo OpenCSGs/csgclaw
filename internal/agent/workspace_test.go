@@ -199,6 +199,25 @@ func TestEnsureWorkspaceAtRootOverlay(t *testing.T) {
 	}
 }
 
+func TestOverlayWorkspaceTreeOverwritesReadOnlyFile(t *testing.T) {
+	srcRoot := t.TempDir()
+	dstRoot := t.TempDir()
+	rel := filepath.Join(".git", "objects", "02", "object")
+	writeWorkspaceFileAt(t, srcRoot, rel, "preserved object\n", 0o444)
+	writeWorkspaceFileAt(t, dstRoot, rel, "stale object\n", 0o444)
+
+	if err := overlayWorkspaceTree(srcRoot, dstRoot); err != nil {
+		t.Fatalf("overlayWorkspaceTree() error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dstRoot, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "preserved object\n"; got != want {
+		t.Fatalf("read-only destination content = %q, want %q", got, want)
+	}
+}
+
 func TestOverlayWorkspaceTreeRejectsEmptyWorkspace(t *testing.T) {
 	srcRoot := t.TempDir()
 

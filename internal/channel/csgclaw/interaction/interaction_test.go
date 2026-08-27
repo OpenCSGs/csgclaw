@@ -23,7 +23,7 @@ type staticAgents struct {
 	agent agentengine.Agent
 }
 
-func (a staticAgents) Get(context.Context, string) (agentengine.Agent, error) {
+func (a staticAgents) Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error) {
 	return a.agent, nil
 }
 

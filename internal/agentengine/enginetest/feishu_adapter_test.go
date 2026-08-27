@@ -75,7 +75,7 @@ func TestFeishuAdapterHarnessUsesEngineWithoutLeakingChannelSecrets(t *testing.T
 	if len(calls) != 1 || calls[0].AgentID != seed.ID || calls[0].Request.ConversationKey != "chat-1" || calls[0].Request.ID != "event-1" || calls[0].Request.Admission != agentengine.AdmissionSupersede {
 		t.Fatalf("Engine calls = %+v", calls)
 	}
-	agentItem, err := client.Agents().Get(context.Background(), seed.ID)
+	agentItem, err := client.Agents().Get(context.Background(), seed.ID, agentengine.AgentGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

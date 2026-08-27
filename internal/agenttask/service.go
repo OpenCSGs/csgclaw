@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
@@ -19,7 +20,7 @@ type participantLookup interface {
 type Service struct {
 	core         *taskcore.Service
 	im           *im.Service
-	agents       *agent.Service
+	agents       agentengine.AgentInterface
 	participants participantLookup
 }
 
@@ -45,11 +46,15 @@ type UpdateInput struct {
 	Reason  string
 }
 
-func NewService(core *taskcore.Service, imSvc *im.Service, agentSvc *agent.Service, participantSvc participantLookup) *Service {
+func NewService(core *taskcore.Service, imSvc *im.Service, engine agentengine.Interface, participantSvc participantLookup) *Service {
+	var agents agentengine.AgentInterface
+	if engine != nil {
+		agents = engine.Agents()
+	}
 	return &Service{
 		core:         core,
 		im:           imSvc,
-		agents:       agentSvc,
+		agents:       agents,
 		participants: participantSvc,
 	}
 }
@@ -194,8 +199,8 @@ func (s *Service) Update(input UpdateInput) (taskcore.Task, error) {
 
 func (s *Service) agentIdentity(agentID string) (string, string, error) {
 	if s != nil && s.agents != nil {
-		if got, ok := s.agents.Agent(agentID); ok {
-			return firstNonEmpty(strings.TrimSpace(got.Name), fallbackAgentName(agentID)), strings.TrimSpace(got.Description), nil
+		if got, err := s.agents.Get(context.Background(), agentID, agentengine.AgentGetOptions{}); err == nil {
+			return firstNonEmpty(strings.TrimSpace(got.Spec.Name), fallbackAgentName(agentID)), strings.TrimSpace(got.Spec.Description), nil
 		}
 		return "", "", fmt.Errorf("agent %q not found", agentID)
 	}

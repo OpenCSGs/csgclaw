@@ -23,38 +23,45 @@ func runningAgent(id string) agentengine.Agent {
 
 func TestMemoryClientAgentLifecycleAndSecretRedaction(t *testing.T) {
 	client := NewMemoryClient()
-	created, err := client.Agents().Create(context.Background(), agentengine.AgentSpec{
-		Name:       "worker",
-		Role:       agentengine.AgentRoleWorker,
-		Runtime:    agentengine.RuntimeSpec{Adapter: "codex", Options: map[string]any{"mode": "fast"}},
-		Skills:     []string{"review"},
-		MCPServers: map[string]agentengine.MCPServerConfig{"tools": {"command": "tool"}},
+	created, err := client.Agents().Create(context.Background(), agentengine.AgentCreateRequest{Spec: agentengine.AgentSpec{
+		Name:         "worker",
+		Role:         agentengine.AgentRoleWorker,
+		DesiredState: agentengine.AgentDesiredStateRunning,
+		Runtime:      agentengine.RuntimeSpec{Adapter: "codex", Options: map[string]any{"mode": "fast"}},
+		Skills:       []string{"review"},
+		MCPServers:   map[string]agentengine.MCPServerConfig{"tools": {"command": "tool"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created.Spec.DesiredState = agentengine.AgentDesiredStateRunning
+	started, err := client.Agents().Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+		Spec: created.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: created.ResourceVersion,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	started, err := client.Agents().Start(context.Background(), created.ID)
 	if err != nil || started.Status.State != agentengine.AgentStateRunning {
-		t.Fatalf("Start() = %+v, %v", started, err)
+		t.Fatalf("desired-state Update = %+v, %v", started, err)
 	}
 	started.Spec.Skills[0] = "mutated"
-	got, err := client.Agents().Get(context.Background(), created.ID)
+	got, err := client.Agents().Get(context.Background(), created.ID, agentengine.AgentGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Spec.Skills[0] != "review" || got.Spec.Runtime.Credentials != nil {
 		t.Fatalf("Get() leaked mutation or credentials: %+v", got)
 	}
-	provisioned, err := client.Agents().Update(context.Background(), created.ID, agentengine.AgentSpec{
-		Name:    "worker",
-		Runtime: agentengine.RuntimeSpec{Adapter: "codex", Credentials: map[string]string{"secrets/token": "secret"}, InitShell: "test -f secrets/token"},
+	got.Spec.Runtime = agentengine.RuntimeSpec{Adapter: "codex", Credentials: map[string]string{"secrets/token": "secret"}, InitShell: "test -f secrets/token"}
+	provisioned, err := client.Agents().Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+		Spec: got.Spec, FieldMask: []string{"runtime"}, ResourceVersion: got.ResourceVersion,
 	})
 	if err != nil || provisioned.Spec.Runtime.Credentials != nil || provisioned.Spec.Runtime.InitShell != "test -f secrets/token" {
 		t.Fatalf("provisioned Update = %+v, %v", provisioned, err)
 	}
-	if _, err := client.Agents().Update(context.Background(), created.ID, agentengine.AgentSpec{
-		Name:    "worker",
-		Runtime: agentengine.RuntimeSpec{Adapter: "openclaw", Credentials: map[string]string{"token": "secret"}},
+	provisioned.Spec.Runtime = agentengine.RuntimeSpec{Adapter: "openclaw", Credentials: map[string]string{"token": "secret"}}
+	if _, err := client.Agents().Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+		Spec: provisioned.Spec, FieldMask: []string{"runtime"}, ResourceVersion: provisioned.ResourceVersion,
 	}); !hasCode(err, agentengine.ErrorUnsupportedRuntimeProvision) {
 		t.Fatalf("unsupported credential Update error = %v", err)
 	}

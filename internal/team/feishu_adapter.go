@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	channelfeishu "csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
@@ -129,14 +130,18 @@ func (a *FeishuAdapter) SendMessage(_ context.Context, req SendMessageRequest) (
 
 type FeishuTeamDirectory struct {
 	feishu       *channelfeishu.Service
-	agents       *agent.Service
+	agents       agentengine.AgentInterface
 	participants participantLookup
 }
 
-func NewFeishuTeamDirectory(feishuSvc *channelfeishu.Service, agentSvc *agent.Service, participantSvc participantLookup) *FeishuTeamDirectory {
+func NewFeishuTeamDirectory(feishuSvc *channelfeishu.Service, engine agentengine.Interface, participantSvc participantLookup) *FeishuTeamDirectory {
+	var agents agentengine.AgentInterface
+	if engine != nil {
+		agents = engine.Agents()
+	}
 	return &FeishuTeamDirectory{
 		feishu:       feishuSvc,
-		agents:       agentSvc,
+		agents:       agents,
 		participants: participantSvc,
 	}
 }
@@ -194,15 +199,15 @@ func (d *FeishuTeamDirectory) AgentProfile(id string) (MemberProfile, bool) {
 	if d == nil || d.agents == nil {
 		return MemberProfile{}, false
 	}
-	got, ok := d.agents.AgentMetadata(id)
-	if !ok {
+	got, err := d.agents.Get(context.Background(), id, agentengine.AgentGetOptions{})
+	if err != nil {
 		return MemberProfile{}, false
 	}
 	return MemberProfile{
 		ID:          strings.TrimSpace(got.ID),
-		Name:        strings.TrimSpace(got.Name),
-		Role:        strings.TrimSpace(got.Role),
-		Description: strings.TrimSpace(got.Description),
+		Name:        strings.TrimSpace(got.Spec.Name),
+		Role:        strings.TrimSpace(string(got.Spec.Role)),
+		Description: strings.TrimSpace(got.Spec.Description),
 	}, true
 }
 

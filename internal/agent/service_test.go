@@ -3198,6 +3198,55 @@ func TestPreserveWorkspaceSkillsDropsDefaultSystemSkills(t *testing.T) {
 	}
 }
 
+func TestPreserveWorkspaceSkillsRestoresGitRepositoryWithReadOnlyObjects(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: ":18080", AccessToken: "shared-token"},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{kind: RuntimeKindCodex}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	skillsRoot, err := svc.agentSkillsRoot("agent-qa", RuntimeKindCodex)
+	if err != nil {
+		t.Fatalf("agentSkillsRoot() error = %v", err)
+	}
+	objectPath := filepath.Join(skillsRoot, ".git", "objects", "02", "b97d10dc320cdc19d01fdb97255fd3cbeb71a0")
+	if err := os.MkdirAll(filepath.Dir(objectPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(objectPath, []byte("git object\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(objectPath, 0o444); err != nil {
+		t.Fatal(err)
+	}
+
+	restore, cleanup, err := svc.prepareWorkspaceSkillsPreservation("agent-qa", RuntimeKindCodex, RuntimeKindCodex, RoleWorker)
+	if err != nil {
+		t.Fatalf("prepareWorkspaceSkillsPreservation() error = %v", err)
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if restore == nil {
+		t.Fatal("restore = nil, want repository preservation")
+	}
+	if err := restore(); err != nil {
+		t.Fatalf("restore() error = %v", err)
+	}
+	data, err := os.ReadFile(objectPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(data), "git object\n"; got != want {
+		t.Fatalf("restored Git object = %q, want %q", got, want)
+	}
+}
+
 func TestRecreateTriggersLifecycleObserver(t *testing.T) {
 	observer := &fakeLifecycleObserver{}
 	svc, err := NewService(
@@ -4905,6 +4954,9 @@ func TestUpdateInstructionsPersistsToState(t *testing.T) {
 	if updated.Instructions != nextInstructions {
 		t.Fatalf("Update().Instructions = %q, want %q", updated.Instructions, nextInstructions)
 	}
+	if _, err := svc.SetDesiredState("u-alice", DesiredStateRunning, false); err != nil {
+		t.Fatalf("SetDesiredState() error = %v", err)
+	}
 
 	reloaded, err := NewService(
 		testModelConfig(),
@@ -4922,6 +4974,9 @@ func TestUpdateInstructionsPersistsToState(t *testing.T) {
 	}
 	if got.Instructions != nextInstructions {
 		t.Fatalf("reloaded Agent().Instructions = %q, want %q", got.Instructions, nextInstructions)
+	}
+	if got.DesiredState != DesiredStateRunning || got.Status != string(agentruntime.StateStopped) {
+		t.Fatalf("reloaded desired/observed state = %q/%q, want running/stopped", got.DesiredState, got.Status)
 	}
 }
 

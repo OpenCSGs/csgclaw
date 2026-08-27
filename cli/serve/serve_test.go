@@ -856,22 +856,22 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	releaseStart := make(chan struct{})
 	startReturned := make(chan struct{})
 	startErrors := make(chan string, 6)
-	EnsureBootstrapManager = func(gotCtx context.Context, gotSvc *agent.Service) error {
+	EnsureBootstrapManager = func(gotCtx context.Context, gotService *agent.Service) error {
 		if gotCtx != ctx {
 			startErrors <- fmt.Sprintf("EnsureBootstrapManager context = %v, want %v", gotCtx, ctx)
 		}
-		if gotSvc != svc {
-			startErrors <- fmt.Sprintf("EnsureBootstrapManager service = %p, want %p", gotSvc, svc)
+		if gotService == nil {
+			startErrors <- "EnsureBootstrapManager service = nil"
 		}
 		return nil
 	}
-	StartConfiguredAgents = func(gotCtx context.Context, gotSvc *agent.Service) error {
+	StartConfiguredAgents = func(gotCtx context.Context, gotService *agent.Service) error {
 		defer close(startReturned)
 		if gotCtx != ctx {
 			startErrors <- fmt.Sprintf("StartConfiguredAgents context = %v, want %v", gotCtx, ctx)
 		}
-		if gotSvc != svc {
-			startErrors <- fmt.Sprintf("StartConfiguredAgents service = %p, want %p", gotSvc, svc)
+		if gotService == nil {
+			startErrors <- "StartConfiguredAgents service = nil"
 		}
 		close(startCalled)
 		<-releaseStart

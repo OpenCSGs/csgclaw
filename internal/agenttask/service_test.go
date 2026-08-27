@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/taskcore"
@@ -18,7 +19,7 @@ func TestCreateAgentTaskBindsDirectRoomAndSendsInitialMessage(t *testing.T) {
 	core := taskcore.NewService()
 	imSvc := im.NewService()
 	agentSvc := newTestAgentService(t, []agent.Agent{testWorkerAgent("agent-dev", "dev")})
-	svc := NewService(core, imSvc, agentSvc, nil)
+	svc := NewService(core, imSvc, agentengine.New(agentSvc), nil)
 
 	task, err := svc.CreateAgentTask(context.Background(), CreateInput{
 		AgentID:   "agent-dev",
@@ -75,7 +76,7 @@ func TestCreateAgentTaskRejectsMissingAgentWhenAgentServiceConfigured(t *testing
 	core := taskcore.NewService()
 	imSvc := im.NewService()
 	agentSvc := newTestAgentService(t, nil)
-	svc := NewService(core, imSvc, agentSvc, nil)
+	svc := NewService(core, imSvc, agentengine.New(agentSvc), nil)
 
 	_, err := svc.CreateAgentTask(context.Background(), CreateInput{
 		AgentID:   "agent-missing",

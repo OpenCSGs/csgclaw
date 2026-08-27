@@ -32,7 +32,7 @@ type eventSubmitter interface {
 }
 
 type agentProvider interface {
-	Get(context.Context, string) (agentengine.Agent, error)
+	Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error)
 }
 
 type sessionResolver interface {
@@ -188,7 +188,7 @@ func (c *Coordinator) execution(ctx context.Context, turn channel.TurnContext) (
 	if c.agents == nil || c.sessions == nil {
 		return activity.ExecutionRef{}, fmt.Errorf("structured user input runtime identity is not configured")
 	}
-	selected, err := c.agents.Get(ctx, strings.TrimSpace(turn.AgentID))
+	selected, err := c.agents.Get(ctx, strings.TrimSpace(turn.AgentID), agentengine.AgentGetOptions{})
 	if err != nil {
 		return activity.ExecutionRef{}, fmt.Errorf("resolve structured user input agent: %w", err)
 	}

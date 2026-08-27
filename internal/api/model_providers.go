@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/config"
 )
 
@@ -337,14 +338,15 @@ func (h *Handler) modelProviderInUse(llm config.LLMConfig, id string) bool {
 		agent.SelectorUsesModelProvider(cfg.DefaultSelector(), id) {
 		return true
 	}
-	if h == nil || h.svc == nil {
+	if h == nil || h.agentEngine == nil {
 		return false
 	}
-	for _, item := range h.svc.List() {
-		if agent.NormalizeModelProviderID(item.AgentProfile.ModelProviderID) == id {
-			return true
-		}
-		if agent.SelectorUsesModelProvider(item.Profile, id) {
+	items, err := h.agentEngine.Agents().List(context.Background(), agentengine.AgentListOptions{})
+	if err != nil {
+		return false
+	}
+	for _, item := range items {
+		if agent.NormalizeModelProviderID(item.Spec.Model.ProviderID) == id {
 			return true
 		}
 	}

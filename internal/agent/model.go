@@ -36,6 +36,7 @@ type Agent struct {
 	MCPServers       map[string]any           `json:"mcpServers,omitempty"`
 	Role             string                   `json:"role"`
 	Status           string                   `json:"status"`
+	DesiredState     string                   `json:"-"`
 	CreatedAt        time.Time                `json:"created_at"`
 	UpdatedAt        time.Time                `json:"updated_at,omitempty"`
 	Profile          string                   `json:"profile,omitempty"`
@@ -131,6 +132,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		MCPServers       map[string]any           `json:"mcpServers,omitempty"`
 		Role             string                   `json:"role"`
 		Status           string                   `json:"status"`
+		DesiredState     string                   `json:"desired_state,omitempty"`
 		CreatedAt        time.Time                `json:"created_at"`
 		UpdatedAt        time.Time                `json:"updated_at,omitempty"`
 		ModelConfig      json.RawMessage          `json:"model_config"`
@@ -158,6 +160,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		MCPServers:       cloneMCPServers(decoded.MCPServers),
 		Role:             decoded.Role,
 		Status:           decoded.Status,
+		DesiredState:     decoded.DesiredState,
 		CreatedAt:        decoded.CreatedAt,
 		UpdatedAt:        decoded.UpdatedAt,
 		AgentProfile:     cloneProfile(decoded.AgentProfile),

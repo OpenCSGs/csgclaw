@@ -5,19 +5,22 @@ import (
 	"crypto/rand"
 	"encoding/base32"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 	"unicode"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	hub "csgclaw/internal/template"
+	"csgclaw/internal/utils"
 )
 
 type Service struct {
 	store  *Store
-	agents *agent.Service
+	agents agentengine.AgentInterface
 	im     *im.Service
 }
 
@@ -38,7 +41,17 @@ func NewService(store *Store, opts ...Option) *Service {
 
 func WithAgentService(agentSvc *agent.Service) Option {
 	return func(s *Service) {
-		s.agents = agentSvc
+		if agentSvc != nil {
+			s.agents = agentengine.New(agentSvc).Agents()
+		}
+	}
+}
+
+func WithAgentEngine(engine agentengine.Interface) Option {
+	return func(s *Service) {
+		if engine != nil {
+			s.agents = engine.Agents()
+		}
 	}
 }
 
@@ -193,9 +206,18 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 	if s.agents == nil {
 		return apitypes.Participant{}, fmt.Errorf("agent service is required")
 	}
-	manager, err := s.agents.EnsureManager(ctx, false)
+	manager, err := s.agents.Get(ctx, agent.ManagerUserID, agentengine.AgentGetOptions{})
 	if err != nil {
-		return apitypes.Participant{}, err
+		manager, err = s.agents.Create(ctx, agentengine.AgentCreateRequest{
+			ID: agent.ManagerUserID,
+			Spec: agentengine.AgentSpec{
+				Name: agent.ManagerName,
+				Role: agentengine.AgentRoleManager,
+			},
+		})
+		if err != nil {
+			return apitypes.Participant{}, err
+		}
 	}
 	now := time.Now().UTC()
 	createdAt := manager.CreatedAt.UTC()
@@ -219,7 +241,7 @@ func (s *Service) EnsureBootstrapManager(ctx context.Context) (apitypes.Particip
 		createdAt = source.CreatedAt.UTC()
 	}
 
-	name := strings.TrimSpace(manager.Name)
+	name := strings.TrimSpace(manager.Spec.Name)
 	if name == "" {
 		name = agent.ManagerName
 	}
@@ -540,7 +562,7 @@ func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participa
 		}
 		agentID := strings.TrimSpace(item.AgentID)
 		if agentID != "" {
-			if _, ok := s.agents.Agent(agentID); ok {
+			if _, err := s.agents.Get(context.Background(), agentID, agentengine.AgentGetOptions{}); err == nil {
 				continue
 			}
 		}
@@ -864,7 +886,7 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if s.agents == nil {
 			return "", fmt.Errorf("agent service is required")
 		}
-		if _, ok := s.agents.Agent(req.AgentBinding.AgentID); !ok {
+		if _, err := s.agents.Get(ctx, req.AgentBinding.AgentID, agentengine.AgentGetOptions{}); err != nil {
 			return "", fmt.Errorf("agent %q not found", req.AgentBinding.AgentID)
 		}
 		return agent.CanonicalID(req.AgentBinding.AgentID), nil
@@ -876,7 +898,7 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if agentID == "" {
 			agentID = defaultAgentID(req.ID)
 		}
-		if existing, ok := s.agents.Agent(agentID); ok {
+		if existing, err := s.agents.Get(ctx, agentID, agentengine.AgentGetOptions{}); err == nil {
 			return existing.ID, nil
 		}
 		spec := agent.CreateAgentSpec{}
@@ -890,16 +912,67 @@ func (s *Service) ensureAgentBinding(ctx context.Context, req normalizedCreateRe
 		if strings.TrimSpace(spec.Role) == "" {
 			spec.Role = agent.RoleWorker
 		}
-		created, err := s.agents.Create(ctx, agent.CreateRequest{
-			Spec:       spec,
-			HubService: req.AgentHubService,
-		})
+		createCtx := agentengine.WithLocalTemplateService(ctx, req.AgentHubService)
+		created, err := s.agents.Create(createCtx, participantEngineCreateRequest(spec))
 		if err != nil {
 			return "", err
 		}
 		return created.ID, nil
 	default:
 		return "", fmt.Errorf("agent_binding.mode must be one of %q, %q, or %q", BindingModeCreate, BindingModeReuse, BindingModeNone)
+	}
+}
+
+func participantEngineCreateRequest(spec agent.CreateAgentSpec) agentengine.AgentCreateRequest {
+	runtimeConfig := spec.RuntimeConfig()
+	role := agentengine.AgentRoleWorker
+	if strings.EqualFold(strings.TrimSpace(spec.Role), agent.RoleManager) {
+		role = agentengine.AgentRoleManager
+	}
+	var mcpServers map[string]agentengine.MCPServerConfig
+	if spec.MCPServers != nil {
+		mcpServers = make(map[string]agentengine.MCPServerConfig, len(spec.MCPServers))
+		for name, raw := range spec.MCPServers {
+			config, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			mcpServers[name] = agentengine.MCPServerConfig(utils.CloneAnyMap(config))
+		}
+	}
+	return agentengine.AgentCreateRequest{
+		ID:           spec.ID,
+		FromTemplate: spec.FromTemplate,
+		Spec: agentengine.AgentSpec{
+			Name:         spec.Name,
+			Description:  spec.Description,
+			Instructions: spec.Instructions,
+			Role:         role,
+			Runtime: agentengine.RuntimeSpec{
+				Adapter:     runtimeConfig.Name,
+				Sandboxed:   runtimeConfig.Sandboxed,
+				Image:       spec.Image,
+				Credentials: maps.Clone(spec.RuntimeCredentials),
+				InitShell:   spec.RuntimeInitShell,
+				Options:     utils.CloneAnyMap(spec.RuntimeOptions),
+			},
+			Model: agentengine.ModelSpec{
+				Name:            spec.AgentProfile.Name,
+				Description:     spec.AgentProfile.Description,
+				Provider:        spec.AgentProfile.Provider,
+				ProviderID:      spec.AgentProfile.ModelProviderID,
+				BaseURL:         spec.AgentProfile.BaseURL,
+				APIKey:          spec.AgentProfile.APIKey,
+				Headers:         maps.Clone(spec.AgentProfile.Headers),
+				ModelID:         spec.AgentProfile.ModelID,
+				ReasoningEffort: spec.AgentProfile.ReasoningEffort,
+				FastMode:        spec.AgentProfile.EnableFastMode,
+				Options:         utils.CloneAnyMap(spec.AgentProfile.RequestOptions),
+				Env:             maps.Clone(spec.AgentProfile.Env),
+			},
+			MCPServers:   mcpServers,
+			DesiredState: agentengine.AgentDesiredStateRunning,
+		},
 	}
 }
 

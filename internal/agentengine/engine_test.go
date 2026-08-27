@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,20 @@ import (
 	"csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/codex"
 )
+
+func TestAgentInterfaceRemainsResourceShaped(t *testing.T) {
+	typeOf := reflect.TypeOf((*AgentInterface)(nil)).Elem()
+	want := []string{"Create", "Delete", "Get", "List", "Recreate", "Update"}
+	if typeOf.NumMethod() != len(want) {
+		t.Fatalf("AgentInterface methods = %d, want %d", typeOf.NumMethod(), len(want))
+	}
+	for index, name := range want {
+		method := typeOf.Method(index)
+		if method.Name != name {
+			t.Fatalf("AgentInterface method %d = %s, want %s", index, method.Name, name)
+		}
+	}
+}
 
 type fakeConversationRuntime struct {
 	mu              sync.Mutex
@@ -405,7 +420,7 @@ func TestEngineAgentsFacadeMapsAndRedactsCompleteState(t *testing.T) {
 		},
 	}}, runtimeImpl)
 	engine := New(service)
-	got, err := engine.Agents().Get(context.Background(), "A")
+	got, err := engine.Agents().Get(context.Background(), "A", AgentGetOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,10 +432,13 @@ func TestEngineAgentsFacadeMapsAndRedactsCompleteState(t *testing.T) {
 	if got.Spec.Runtime.Credentials != nil {
 		t.Fatalf("Runtime credentials leaked: %+v", got.Spec.Runtime.Credentials)
 	}
-	updated, err := engine.Agents().Update(context.Background(), got.ID, AgentSpec{
-		Name: "A2", Description: "updated", Instructions: "new instructions", Role: AgentRoleWorker,
-		Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex, Options: map[string]any{"approval": "never"}},
-		Model:   ModelSpec{ProviderID: "provider-a", ModelID: "gpt-test"},
+	updated, err := engine.Agents().Update(context.Background(), got.ID, AgentUpdateRequest{
+		Spec: AgentSpec{
+			Name: "A2", Description: "updated", Instructions: "new instructions", Role: AgentRoleWorker,
+			Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex, Options: map[string]any{"approval": "never"}},
+			Model:   ModelSpec{ProviderID: "provider-a", ModelID: "gpt-test"},
+		},
+		ResourceVersion: got.ResourceVersion,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -434,25 +452,50 @@ func TestEngineAgentsFacadeMapsAndRedactsCompleteState(t *testing.T) {
 		}
 		return nil
 	}
-	provisioned, err := engine.Agents().Update(context.Background(), got.ID, AgentSpec{
-		Name: "A2", Role: AgentRoleWorker,
-		Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex, Credentials: map[string]string{"secrets/token": "secret"}, InitShell: "test -f secrets/token"},
-		Model:   ModelSpec{ProviderID: "provider-a", ModelID: "gpt-test"},
+	provisioned, err := engine.Agents().Update(context.Background(), got.ID, AgentUpdateRequest{
+		Spec: AgentSpec{
+			Name: "A2", Role: AgentRoleWorker,
+			Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex, Credentials: map[string]string{"secrets/token": "secret"}, InitShell: "test -f secrets/token"},
+			Model:   ModelSpec{ProviderID: "provider-a", ModelID: "gpt-test"},
+		},
+		ResourceVersion: updated.ResourceVersion,
 	})
 	if err != nil || provisioned.Spec.Runtime.Credentials != nil || provisioned.Spec.Runtime.InitShell != "test -f secrets/token" {
 		t.Fatalf("provisioned Agent = %+v, %v", provisioned, err)
 	}
 	runtimeImpl.provision = func(context.Context, runtime.ProvisionRequest) error { return errors.New("init failed") }
-	if _, err := engine.Agents().Update(context.Background(), got.ID, AgentSpec{
-		Name: "A2", Role: AgentRoleWorker,
-		Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex, Credentials: map[string]string{"secrets/token": "replacement"}, InitShell: "exit 1"},
-		Model:   ModelSpec{ProviderID: "provider-a", ModelID: "gpt-test"},
+	if _, err := engine.Agents().Update(context.Background(), got.ID, AgentUpdateRequest{
+		Spec: AgentSpec{
+			Name: "A2", Role: AgentRoleWorker,
+			Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex, Credentials: map[string]string{"secrets/token": "replacement"}, InitShell: "exit 1"},
+			Model:   ModelSpec{ProviderID: "provider-a", ModelID: "gpt-test"},
+		},
+		ResourceVersion: provisioned.ResourceVersion,
 	}); err == nil || !strings.Contains(err.Error(), "init failed") {
 		t.Fatalf("failed provisioning error = %v", err)
 	}
-	unchanged, err := engine.Agents().Get(context.Background(), got.ID)
+	unchanged, err := engine.Agents().Get(context.Background(), got.ID, AgentGetOptions{})
 	if err != nil || unchanged.Spec.Runtime.InitShell != "test -f secrets/token" {
 		t.Fatalf("Agent changed after failed provisioning: %+v, %v", unchanged, err)
+	}
+}
+
+func TestEngineAgentDesiredStateIsIndependentFromObservedRuntimeState(t *testing.T) {
+	service := newTestAgentService(t, []agent.Agent{{
+		ID: "agent-a", Name: "A", Role: agent.RoleWorker,
+		RuntimeKind: agent.RuntimeKindCodex, RuntimeName: agent.RuntimeNameCodex,
+		Status: string(runtime.StateStopped),
+	}}, &fakeConversationRuntime{state: runtime.StateStopped})
+	if _, err := service.SetDesiredState("agent-a", agent.DesiredStateRunning, false); err != nil {
+		t.Fatal(err)
+	}
+	engine := New(service)
+	got, err := engine.Agents().Get(context.Background(), "agent-a", AgentGetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Spec.DesiredState != AgentDesiredStateRunning || got.Status.State != AgentStateStopped {
+		t.Fatalf("Agent desired/observed state = %q/%q, want running/stopped", got.Spec.DesiredState, got.Status.State)
 	}
 }
 
@@ -468,11 +511,14 @@ func TestEngineCreateManagerSkillFailurePreservesExistingManager(t *testing.T) {
 		ProfileComplete: true,
 	}}, runtimeImpl)
 	engine := New(service)
-	_, err := engine.Agents().Create(context.Background(), AgentSpec{
-		Name: agent.ManagerName, Role: AgentRoleManager,
-		Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex},
-		Model:   ModelSpec{ProviderID: "provider-a", ModelID: "model-a"},
-		Skills:  []string{"definitely-missing-skill"},
+	_, err := engine.Agents().Create(context.Background(), AgentCreateRequest{
+		ID: agent.ManagerUserID,
+		Spec: AgentSpec{
+			Name: agent.ManagerName, Role: AgentRoleManager,
+			Runtime: RuntimeSpec{Adapter: agent.RuntimeNameCodex},
+			Model:   ModelSpec{ProviderID: "provider-a", ModelID: "model-a"},
+			Skills:  []string{"definitely-missing-skill"},
+		},
 	})
 	if err == nil {
 		t.Fatal("Create(manager) error = nil, want missing Skill failure")
@@ -1166,7 +1212,13 @@ func TestAgentStopDrainsActiveEngineTurn(t *testing.T) {
 	<-started
 	stopDone := make(chan error, 1)
 	go func() {
-		_, err := service.Stop(context.Background(), "agent-a")
+		current, err := engine.Agents().Get(context.Background(), "agent-a", AgentGetOptions{})
+		if err == nil {
+			current.Spec.DesiredState = AgentDesiredStateStopped
+			_, err = engine.Agents().Update(context.Background(), "agent-a", AgentUpdateRequest{
+				Spec: current.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: current.ResourceVersion,
+			})
+		}
 		stopDone <- err
 	}()
 	select {
@@ -1207,7 +1259,14 @@ func TestAgentLifecycleDrainTimeoutLeavesRuntimeUnchanged(t *testing.T) {
 	<-started
 	stopCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if _, err := service.Stop(stopCtx, "agent-a"); !errors.Is(err, context.DeadlineExceeded) {
+	current, err := engine.Agents().Get(context.Background(), "agent-a", AgentGetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.Spec.DesiredState = AgentDesiredStateStopped
+	if _, err := engine.Agents().Update(stopCtx, "agent-a", AgentUpdateRequest{
+		Spec: current.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: current.ResourceVersion,
+	}); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Stop error = %v", err)
 	}
 	selected, ok := service.Agent("agent-a")
@@ -1217,6 +1276,21 @@ func TestAgentLifecycleDrainTimeoutLeavesRuntimeUnchanged(t *testing.T) {
 	close(release)
 	if result := <-runDone; result.Status != TurnSucceeded {
 		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestPreserveWriteOnlyFieldsDistinguishesOmittedAndExplicitClear(t *testing.T) {
+	current := AgentSpec{
+		Runtime: RuntimeSpec{Credentials: map[string]string{"auth.json": "secret"}},
+		Model:   ModelSpec{APIKey: "model-secret"},
+	}
+	preserved := preserveWriteOnlyFields(current, AgentSpec{})
+	if preserved.Runtime.Credentials["auth.json"] != "secret" || preserved.Model.APIKey != "model-secret" {
+		t.Fatalf("preserved write-only fields = %+v", preserved)
+	}
+	cleared := preserveWriteOnlyFields(current, AgentSpec{Runtime: RuntimeSpec{Credentials: map[string]string{}}})
+	if cleared.Runtime.Credentials == nil || len(cleared.Runtime.Credentials) != 0 {
+		t.Fatalf("explicit empty credentials = %#v, want explicit clear", cleared.Runtime.Credentials)
 	}
 }
 

@@ -29,7 +29,7 @@ type fakeAgents struct {
 	items map[string]agentengine.Agent
 }
 
-func (f fakeAgents) Get(_ context.Context, id string) (agentengine.Agent, error) {
+func (f fakeAgents) Get(_ context.Context, id string, _ agentengine.AgentGetOptions) (agentengine.Agent, error) {
 	item, ok := f.items[id]
 	if !ok {
 		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: "agent not found"}
@@ -94,7 +94,7 @@ type mutableAgents struct {
 	items map[string]agentengine.Agent
 }
 
-func (a *mutableAgents) Get(_ context.Context, id string) (agentengine.Agent, error) {
+func (a *mutableAgents) Get(_ context.Context, id string, _ agentengine.AgentGetOptions) (agentengine.Agent, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	item, ok := a.items[id]

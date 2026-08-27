@@ -522,7 +522,7 @@ func newAgentSessionTestHandler(
 	if err != nil {
 		t.Fatal(err)
 	}
-	seeded, err := agentengine.New(agentSvc).Agents().List(context.Background())
+	seeded, err := agentengine.New(agentSvc).Agents().List(context.Background(), agentengine.AgentListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

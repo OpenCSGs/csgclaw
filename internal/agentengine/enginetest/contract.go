@@ -23,20 +23,20 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 	t.Run("agent lifecycle and secret handling", func(t *testing.T) {
 		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateStopped, "codex")}, nil)
 		agents := client.Agents()
-		created, err := agents.Create(context.Background(), agentengine.AgentSpec{
+		created, err := agents.Create(context.Background(), agentengine.AgentCreateRequest{Spec: agentengine.AgentSpec{
 			Name: "created", Role: agentengine.AgentRoleWorker,
 			Runtime: agentengine.RuntimeSpec{Adapter: "openclaw", Sandboxed: true, Image: "contract-openclaw:latest"},
 			Model:   agentengine.ModelSpec{ProviderID: "provider-a", ModelID: "model-a"},
-		})
+		}})
 		if err != nil || created.ID == "" || created.Spec.Runtime.Credentials != nil {
 			t.Fatalf("Create() = %+v, %v", created, err)
 		}
 
-		got, err := agents.Get(context.Background(), "agent-a")
+		got, err := agents.Get(context.Background(), "agent-a", agentengine.AgentGetOptions{})
 		if err != nil || got.Spec.Runtime.Credentials != nil || got.Status.State != agentengine.AgentStateStopped {
 			t.Fatalf("Get() = %+v, %v", got, err)
 		}
-		listed, err := agents.List(context.Background())
+		listed, err := agents.List(context.Background(), agentengine.AgentListOptions{})
 		if err != nil || len(listed) != 2 {
 			t.Fatalf("List() = %+v, %v", listed, err)
 		}
@@ -56,35 +56,108 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 			"local":  {"command": "local-server"},
 			"remote": {"url": "https://mcp.example.test"},
 		}
-		updated, err := agents.Update(context.Background(), got.ID, updatedSpec)
+		updated, err := agents.Update(context.Background(), got.ID, agentengine.AgentUpdateRequest{Spec: updatedSpec, ResourceVersion: got.ResourceVersion})
 		if err != nil || updated.Spec.Name != "updated" || updated.Spec.Description != "updated description" || len(updated.Spec.MCPServers) != 2 || len(updated.Spec.Skills) != 1 || updated.Spec.Skills[0] != "skill-creator" || updated.Spec.Runtime.Credentials != nil || updated.Spec.Runtime.InitShell != "test -f secrets/token.txt" {
 			t.Fatalf("Update() = %+v, %v", updated, err)
 		}
 		replacement := updated.Spec
 		replacement.Skills = []string{"skill-installer"}
 		replacement.Runtime.Credentials = map[string]string{"secrets/token.txt": "contract-secret"}
-		replaced, err := agents.Update(context.Background(), got.ID, replacement)
+		replaced, err := agents.Update(context.Background(), got.ID, agentengine.AgentUpdateRequest{Spec: replacement, ResourceVersion: updated.ResourceVersion})
 		if err != nil || len(replaced.Spec.Skills) != 1 || replaced.Spec.Skills[0] != "skill-installer" {
 			t.Fatalf("complete Skill replacement = %+v, %v", replaced, err)
 		}
 
-		started, err := agents.Start(context.Background(), got.ID)
+		replaced.Spec.DesiredState = agentengine.AgentDesiredStateRunning
+		started, err := agents.Update(context.Background(), got.ID, agentengine.AgentUpdateRequest{Spec: replaced.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: replaced.ResourceVersion})
 		if err != nil || started.Status.State != agentengine.AgentStateRunning || !started.Status.Ready {
 			t.Fatalf("Start() = %+v, %v", started, err)
 		}
-		stopped, err := agents.Stop(context.Background(), got.ID)
+		started.Spec.DesiredState = agentengine.AgentDesiredStateStopped
+		stopped, err := agents.Update(context.Background(), got.ID, agentengine.AgentUpdateRequest{Spec: started.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: started.ResourceVersion})
 		if err != nil || stopped.Status.State != agentengine.AgentStateStopped || stopped.Status.Ready {
 			t.Fatalf("Stop() = %+v, %v", stopped, err)
 		}
-		recreated, err := agents.Recreate(context.Background(), got.ID)
-		if err != nil || recreated.ID != got.ID || recreated.Status.State == "" || recreated.Status.RuntimeID == "" || recreated.Spec.Runtime.Credentials != nil {
+		recreated, err := agents.Recreate(context.Background(), got.ID, agentengine.AgentRecreateOptions{})
+		if err != nil || recreated.ID != got.ID || recreated.Status.State == "" || recreated.Status.RuntimeID == "" || recreated.Spec.DesiredState != agentengine.AgentDesiredStateRunning || recreated.Spec.Runtime.Credentials != nil {
 			t.Fatalf("Recreate() = %+v, %v", recreated, err)
 		}
 		if err := agents.Delete(context.Background(), got.ID); err != nil {
 			t.Fatalf("Delete() error = %v", err)
 		}
-		if _, err := agents.Get(context.Background(), got.ID); agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentUnavailable {
+		if _, err := agents.Get(context.Background(), got.ID, agentengine.AgentGetOptions{}); agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentUnavailable {
 			t.Fatalf("Get(deleted) error = %v", err)
+		}
+	})
+
+	t.Run("agent administration extensions", func(t *testing.T) {
+		seed := contractAgent("agent-admin", agentengine.AgentStateStopped, "codex")
+		client := factory(t, []agentengine.Agent{seed}, nil)
+		agents := client.Agents()
+		created, err := agents.Create(context.Background(), agentengine.AgentCreateRequest{
+			ID: "agent-explicit",
+			Spec: agentengine.AgentSpec{
+				Name:    "explicit",
+				Role:    agentengine.AgentRoleWorker,
+				Runtime: agentengine.RuntimeSpec{Adapter: "openclaw", Sandboxed: true, Image: "contract-openclaw:latest"},
+				Model:   agentengine.ModelSpec{Selector: "provider-a.model-a", ProviderID: "provider-a", ModelID: "model-a"},
+			},
+		})
+		if err != nil || created.ID != "agent-explicit" || created.Spec.Model.Selector != "provider-a.model-a" || created.Spec.Runtime.Credentials != nil || created.Spec.Model.APIKey != "" {
+			t.Fatalf("Create(explicit ID) = %+v, %v", created, err)
+		}
+		unchanged, err := agents.Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{Spec: created.Spec, ResourceVersion: created.ResourceVersion})
+		if err != nil || !unchanged.UpdatedAt.Equal(created.UpdatedAt) {
+			t.Fatalf("no-op Update() = %+v, %v, want UpdatedAt %v", unchanged, err, created.UpdatedAt)
+		}
+		patchedSpec := created.Spec
+		patchedSpec.Description = "patched"
+		patched, err := agents.Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{Spec: patchedSpec, FieldMask: []string{"description"}, ResourceVersion: unchanged.ResourceVersion})
+		if err != nil || patched.Spec.Description != "patched" || patched.Spec.Runtime.Credentials != nil || patched.Spec.Model.APIKey != "" {
+			t.Fatalf("Patch() = %+v, %v", patched, err)
+		}
+		staleSpec := patched.Spec
+		staleSpec.Description = "stale overwrite"
+		if _, err := agents.Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+			Spec: staleSpec, FieldMask: []string{"description"}, ResourceVersion: created.ResourceVersion,
+		}); agentengine.ErrorCodeOf(err) != agentengine.ErrorInvalidRequest {
+			t.Fatalf("stale ResourceVersion Update error = %v", err)
+		}
+		stillPatched, err := agents.Get(context.Background(), created.ID, agentengine.AgentGetOptions{})
+		if err != nil || stillPatched.Spec.Description != "patched" {
+			t.Fatalf("Agent after stale Update = %+v, %v", stillPatched, err)
+		}
+		patched.Spec.Skills = []string{"skill-creator"}
+		withSkills, err := agents.Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+			Spec: patched.Spec, FieldMask: []string{"skills"}, ResourceVersion: patched.ResourceVersion,
+		})
+		if err != nil || len(withSkills.Spec.Skills) != 1 || withSkills.Spec.Skills[0] != "skill-creator" || withSkills.Spec.Description != "patched" {
+			t.Fatalf("Skill field-mask Update() = %+v, %v", withSkills, err)
+		}
+		withSkills.Spec.MCPServers = map[string]agentengine.MCPServerConfig{"local": {"command": "local-server"}}
+		withMCP, err := agents.Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+			Spec: withSkills.Spec, FieldMask: []string{"mcp_servers"}, ResourceVersion: withSkills.ResourceVersion,
+		})
+		if err != nil || len(withMCP.Spec.MCPServers) != 1 || len(withMCP.Spec.Skills) != 1 {
+			t.Fatalf("MCP field-mask Update() = %+v, %v", withMCP, err)
+		}
+		withMCP.Spec.MCPServers = map[string]agentengine.MCPServerConfig{}
+		clearedMCP, err := agents.Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+			Spec: withMCP.Spec, FieldMask: []string{"mcp_servers"}, ResourceVersion: withMCP.ResourceVersion,
+		})
+		if err != nil || clearedMCP.Spec.MCPServers == nil || len(clearedMCP.Spec.MCPServers) != 0 || len(clearedMCP.Spec.Skills) != 1 {
+			t.Fatalf("explicit MCP clear Update() = %+v, %v", clearedMCP, err)
+		}
+		clearedMCP.Spec.Model.ReasoningEffort = "high"
+		withModel, err := agents.Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+			Spec: clearedMCP.Spec, FieldMask: []string{"model"}, ResourceVersion: clearedMCP.ResourceVersion,
+		})
+		if err != nil || withModel.Spec.Model.ReasoningEffort != "high" || len(withModel.Spec.Skills) != 1 {
+			t.Fatalf("Model field-mask Update() = %+v, %v", withModel, err)
+		}
+		got, err := agents.Get(context.Background(), created.ID, agentengine.AgentGetOptions{Reload: true, ProbeRuntime: true})
+		if err != nil || got.Spec.Description != "patched" {
+			t.Fatalf("Inspect() = %+v, %v", got, err)
 		}
 	})
 
@@ -143,20 +216,20 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		manager := contractAgent("agent-manager", agentengine.AgentStateStopped, "codex")
 		manager.Spec.Role = agentengine.AgentRoleManager
 		client := factory(t, []agentengine.Agent{worker, manager}, nil)
-		workerUpdate, err := client.Agents().Get(context.Background(), worker.ID)
+		workerUpdate, err := client.Agents().Get(context.Background(), worker.ID, agentengine.AgentGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		workerUpdate.Spec.Role = agentengine.AgentRoleManager
-		if _, err := client.Agents().Update(context.Background(), worker.ID, workerUpdate.Spec); agentengine.ErrorCodeOf(err) != agentengine.ErrorInvalidRequest {
+		if _, err := client.Agents().Update(context.Background(), worker.ID, agentengine.AgentUpdateRequest{Spec: workerUpdate.Spec, ResourceVersion: workerUpdate.ResourceVersion}); agentengine.ErrorCodeOf(err) != agentengine.ErrorInvalidRequest {
 			t.Fatalf("worker-to-manager Update error = %v", err)
 		}
-		managerUpdate, err := client.Agents().Get(context.Background(), manager.ID)
+		managerUpdate, err := client.Agents().Get(context.Background(), manager.ID, agentengine.AgentGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		managerUpdate.Spec.Role = agentengine.AgentRoleWorker
-		if _, err := client.Agents().Update(context.Background(), manager.ID, managerUpdate.Spec); agentengine.ErrorCodeOf(err) != agentengine.ErrorInvalidRequest {
+		if _, err := client.Agents().Update(context.Background(), manager.ID, agentengine.AgentUpdateRequest{Spec: managerUpdate.Spec, ResourceVersion: managerUpdate.ResourceVersion}); agentengine.ErrorCodeOf(err) != agentengine.ErrorInvalidRequest {
 			t.Fatalf("manager-to-worker Update error = %v", err)
 		}
 	})
@@ -445,17 +518,30 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 	t.Run("agent mutations drain active turns", func(t *testing.T) {
 		operations := map[string]func(context.Context, agentengine.AgentInterface, agentengine.Agent) error{
 			"stop": func(ctx context.Context, agents agentengine.AgentInterface, item agentengine.Agent) error {
-				_, err := agents.Stop(ctx, item.ID)
+				item.Spec.DesiredState = agentengine.AgentDesiredStateStopped
+				_, err := agents.Update(ctx, item.ID, agentengine.AgentUpdateRequest{Spec: item.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: item.ResourceVersion})
 				return err
 			},
 			"update": func(ctx context.Context, agents agentengine.AgentInterface, item agentengine.Agent) error {
 				item.Spec.Description = "updated after drain"
-				_, err := agents.Update(ctx, item.ID, item.Spec)
+				_, err := agents.Update(ctx, item.ID, agentengine.AgentUpdateRequest{Spec: item.Spec, ResourceVersion: item.ResourceVersion})
+				return err
+			},
+			"patch": func(ctx context.Context, agents agentengine.AgentInterface, item agentengine.Agent) error {
+				item.Spec.Description = "patched after drain"
+				_, err := agents.Update(ctx, item.ID, agentengine.AgentUpdateRequest{Spec: item.Spec, FieldMask: []string{"description"}, ResourceVersion: item.ResourceVersion})
 				return err
 			},
 			"recreate": func(ctx context.Context, agents agentengine.AgentInterface, item agentengine.Agent) error {
-				_, err := agents.Recreate(ctx, item.ID)
+				_, err := agents.Recreate(ctx, item.ID, agentengine.AgentRecreateOptions{})
 				return err
+			},
+			"upgrade": func(ctx context.Context, agents agentengine.AgentInterface, item agentengine.Agent) error {
+				// The contract fixture intentionally has no default image, so the
+				// post-drain upgrade may report that configuration error. This case
+				// verifies that the operation still waits for the active Turn first.
+				_, _ = agents.Recreate(ctx, item.ID, agentengine.AgentRecreateOptions{UpgradeImage: true})
+				return nil
 			},
 			"delete": func(ctx context.Context, agents agentengine.AgentInterface, item agentengine.Agent) error {
 				return agents.Delete(ctx, item.ID)
@@ -473,7 +559,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 				}
 				seed := contractAgent("agent-a", agentengine.AgentStateRunning, "codex")
 				client := factory(t, []agentengine.Agent{seed}, behavior)
-				current, err := client.Agents().Get(context.Background(), seed.ID)
+				current, err := client.Agents().Get(context.Background(), seed.ID, agentengine.AgentGetOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -517,10 +603,11 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		<-started
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 		defer cancel()
-		if _, err := client.Agents().Stop(ctx, seed.ID); !errors.Is(err, context.DeadlineExceeded) {
+		seed.Spec.DesiredState = agentengine.AgentDesiredStateStopped
+		if _, err := client.Agents().Update(ctx, seed.ID, agentengine.AgentUpdateRequest{Spec: seed.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: seed.ResourceVersion}); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("Stop() error = %v", err)
 		}
-		got, err := client.Agents().Get(context.Background(), seed.ID)
+		got, err := client.Agents().Get(context.Background(), seed.ID, agentengine.AgentGetOptions{})
 		if err != nil || got.Status.State != agentengine.AgentStateRunning || got.Status.RuntimeID != seed.Status.RuntimeID {
 			t.Fatalf("Agent changed after timeout: %+v, %v", got, err)
 		}
@@ -743,12 +830,12 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		if unsupported.Error == nil || unsupported.Error.Code != agentengine.ErrorRuntimeAdapterUnavailable || unsupported.Dispatched {
 			t.Fatalf("unsupported Run() = %+v", unsupported)
 		}
-		unsupportedAgent, err := client.Agents().Get(context.Background(), "agent-unsupported")
+		unsupportedAgent, err := client.Agents().Get(context.Background(), "agent-unsupported", agentengine.AgentGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		unsupportedAgent.Spec.Runtime.Credentials = map[string]string{"secret.txt": "secret"}
-		if _, err := client.Agents().Update(context.Background(), unsupportedAgent.ID, unsupportedAgent.Spec); agentengine.ErrorCodeOf(err) != agentengine.ErrorUnsupportedRuntimeProvision {
+		if _, err := client.Agents().Update(context.Background(), unsupportedAgent.ID, agentengine.AgentUpdateRequest{Spec: unsupportedAgent.Spec, ResourceVersion: unsupportedAgent.ResourceVersion}); agentengine.ErrorCodeOf(err) != agentengine.ErrorUnsupportedRuntimeProvision {
 			t.Fatalf("unsupported provisioning error = %v", err)
 		}
 	})

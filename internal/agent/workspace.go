@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -353,15 +354,54 @@ func copyWorkspaceFS(srcFS fs.FS, root, dstRoot, label string, overwrite bool) e
 		}
 		mode |= 0o200
 		if !overwrite {
-			if _, err := os.Stat(dst); err == nil {
+			if existing, err := os.Lstat(dst); err == nil {
+				if existing.Mode()&os.ModeSymlink != 0 {
+					return fmt.Errorf("%w: %s", ErrWorkspaceSymlinkDenied, rel)
+				}
 				fileCount++
 				return nil
 			} else if !errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("stat workspace file %q: %w", dst, err)
 			}
 		}
+		var restoreMode os.FileMode
+		if overwrite {
+			existing, err := os.Lstat(dst)
+			switch {
+			case err == nil:
+				if existing.Mode()&os.ModeSymlink != 0 {
+					return fmt.Errorf("%w: %s", ErrWorkspaceSymlinkDenied, rel)
+				}
+				if !existing.Mode().IsRegular() {
+					return fmt.Errorf("workspace destination %q is not a regular file", dst)
+				}
+				existingData, readErr := os.ReadFile(dst)
+				if readErr != nil {
+					return fmt.Errorf("read existing workspace file %q: %w", dst, readErr)
+				}
+				if bytes.Equal(existingData, data) {
+					fileCount++
+					return nil
+				}
+				if existing.Mode().Perm()&0o200 == 0 {
+					restoreMode = existing.Mode().Perm()
+					if err := os.Chmod(dst, restoreMode|0o200); err != nil {
+						return fmt.Errorf("make workspace file writable %q: %w", dst, err)
+					}
+				}
+			case errors.Is(err, os.ErrNotExist):
+			default:
+				return fmt.Errorf("stat workspace file %q: %w", dst, err)
+			}
+		}
 		if err := os.WriteFile(dst, data, mode); err != nil {
+			if restoreMode != 0 {
+				_ = os.Chmod(dst, restoreMode)
+			}
 			return fmt.Errorf("write workspace file %q: %w", dst, err)
+		}
+		if err := os.Chmod(dst, mode); err != nil {
+			return fmt.Errorf("set workspace file mode %q: %w", dst, err)
 		}
 		fileCount++
 		return nil

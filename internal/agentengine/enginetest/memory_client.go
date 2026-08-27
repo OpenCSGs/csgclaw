@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"sort"
 	"strings"
@@ -54,6 +55,7 @@ type MemoryClient struct {
 type memoryProvision struct {
 	credentials map[string]string
 	initShell   string
+	modelAPIKey string
 }
 
 type memoryConversation struct {
@@ -109,7 +111,8 @@ func NewMemoryClient(agents ...agentengine.Agent) *MemoryClient {
 		files:         agentengine.NewFileStore(),
 	}
 	for _, item := range agents {
-		client.provisions[item.ID] = memoryProvision{credentials: cloneStringMap(item.Spec.Runtime.Credentials), initShell: item.Spec.Runtime.InitShell}
+		client.provisions[item.ID] = memoryProvision{credentials: cloneStringMap(item.Spec.Runtime.Credentials), initShell: item.Spec.Runtime.InitShell, modelAPIKey: item.Spec.Model.APIKey}
+		item.Status.Model = redactedModelView(item.Spec.Model, item.Spec.Model.APIKey)
 		item = cloneAgent(item)
 		item.Spec.Runtime.Credentials = nil
 		client.agents[item.ID] = item
@@ -158,23 +161,37 @@ type memoryAgents struct {
 	client *MemoryClient
 }
 
-func (a *memoryAgents) Create(_ context.Context, spec agentengine.AgentSpec) (agentengine.Agent, error) {
+func (a *memoryAgents) Create(_ context.Context, request agentengine.AgentCreateRequest) (agentengine.Agent, error) {
+	spec := request.Spec
 	spec = normalizeSpec(spec)
 	if err := validateSpec(spec); err != nil {
 		return agentengine.Agent{}, err
 	}
-	id := fmt.Sprintf("memory-agent-%d", a.client.nextAgentID.Add(1))
+	id := strings.TrimSpace(request.ID)
+	if id == "" {
+		id = fmt.Sprintf("memory-agent-%d", a.client.nextAgentID.Add(1))
+	}
 	now := time.Now().UTC()
-	item := agentengine.Agent{ID: id, Spec: cloneSpec(spec), Status: agentengine.AgentStatus{State: agentengine.AgentStateStopped}, CreatedAt: now, UpdatedAt: now}
+	state := agentengine.AgentStateRunning
+	ready := true
+	if spec.DesiredState == agentengine.AgentDesiredStateStopped {
+		state = agentengine.AgentStateStopped
+		ready = false
+	}
+	item := agentengine.Agent{ID: id, ResourceVersion: now.Format(time.RFC3339Nano), Spec: cloneSpec(spec), Status: agentengine.AgentStatus{State: state, Ready: ready, Model: redactedModelView(spec.Model, spec.Model.APIKey)}, CreatedAt: now, UpdatedAt: now}
+	if spec.Memory != nil {
+		item.Status.Memory = &agentengine.MemoryStatus{Enabled: spec.Memory.Enabled, Ready: true, Name: "memory.md"}
+	}
 	item.Spec.Runtime.Credentials = nil
+	item.Spec.Model.APIKey = ""
 	a.client.mu.Lock()
 	a.client.agents[id] = item
-	a.client.provisions[id] = memoryProvision{credentials: cloneStringMap(spec.Runtime.Credentials), initShell: spec.Runtime.InitShell}
+	a.client.provisions[id] = memoryProvision{credentials: cloneStringMap(spec.Runtime.Credentials), initShell: spec.Runtime.InitShell, modelAPIKey: spec.Model.APIKey}
 	a.client.mu.Unlock()
 	return cloneAgent(item), nil
 }
 
-func (a *memoryAgents) Get(_ context.Context, agentID string) (agentengine.Agent, error) {
+func (a *memoryAgents) Get(_ context.Context, agentID string, _ agentengine.AgentGetOptions) (agentengine.Agent, error) {
 	a.client.mu.Lock()
 	defer a.client.mu.Unlock()
 	item, ok := a.client.agents[strings.TrimSpace(agentID)]
@@ -192,7 +209,7 @@ func (a *memoryAgents) Get(_ context.Context, agentID string) (agentengine.Agent
 	return cloneAgent(item), nil
 }
 
-func (a *memoryAgents) List(context.Context) ([]agentengine.Agent, error) {
+func (a *memoryAgents) List(context.Context, agentengine.AgentListOptions) ([]agentengine.Agent, error) {
 	a.client.mu.Lock()
 	defer a.client.mu.Unlock()
 	out := make([]agentengine.Agent, 0, len(a.client.agents))
@@ -203,11 +220,50 @@ func (a *memoryAgents) List(context.Context) ([]agentengine.Agent, error) {
 	return out, nil
 }
 
-func (a *memoryAgents) Update(ctx context.Context, agentID string, spec agentengine.AgentSpec) (agentengine.Agent, error) {
-	spec = normalizeSpec(spec)
-	if err := validateSpec(spec); err != nil {
-		return agentengine.Agent{}, err
+func mergeMemoryUpdate(current agentengine.AgentSpec, request agentengine.AgentUpdateRequest) agentengine.AgentSpec {
+	next := cloneSpec(current)
+	for _, field := range request.FieldMask {
+		switch strings.ToLower(strings.TrimSpace(field)) {
+		case "name":
+			next.Name = request.Spec.Name
+		case "description":
+			next.Description = request.Spec.Description
+		case "instructions":
+			next.Instructions = request.Spec.Instructions
+		case "role":
+			next.Role = request.Spec.Role
+		case "runtime":
+			next.Runtime = request.Spec.Runtime
+		case "runtime.image":
+			next.Runtime.Image = request.Spec.Runtime.Image
+		case "runtime.options":
+			next.Runtime.Options = cloneAnyMap(request.Spec.Runtime.Options)
+		case "runtime.credentials":
+			next.Runtime.Credentials = cloneStringMap(request.Spec.Runtime.Credentials)
+		case "runtime.init_shell":
+			next.Runtime.InitShell = request.Spec.Runtime.InitShell
+		case "model":
+			next.Model = request.Spec.Model
+		case "skills":
+			next.Skills = append([]string(nil), request.Spec.Skills...)
+		case "mcp_servers":
+			next.MCPServers = cloneMCPServers(request.Spec.MCPServers)
+		case "memory":
+			if request.Spec.Memory == nil {
+				next.Memory = nil
+			} else {
+				memory := *request.Spec.Memory
+				next.Memory = &memory
+			}
+		case "desired_state":
+			next.DesiredState = request.Spec.DesiredState
+		}
 	}
+	return next
+}
+
+func (a *memoryAgents) Update(ctx context.Context, agentID string, request agentengine.AgentUpdateRequest) (agentengine.Agent, error) {
+	spec := request.Spec
 	if err := a.waitForAgent(ctx, agentID); err != nil {
 		return agentengine.Agent{}, err
 	}
@@ -217,14 +273,58 @@ func (a *memoryAgents) Update(ctx context.Context, agentID string, spec agenteng
 	if !ok {
 		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
+	if request.ResourceVersion != "" && request.ResourceVersion != item.ResourceVersion {
+		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent resource version is stale"}
+	}
+	if len(request.FieldMask) > 0 {
+		spec = mergeMemoryUpdate(item.Spec, request)
+	}
+	spec = normalizeSpec(spec)
+	if err := validateSpec(spec); err != nil {
+		return agentengine.Agent{}, err
+	}
 	if item.Spec.Role != spec.Role {
 		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent role changes are not supported"}
 	}
-	item.Spec = cloneSpec(spec)
+	provision := a.client.provisions[item.ID]
+	runtimeCredentials := spec.Runtime.Credentials
+	if runtimeCredentials == nil {
+		runtimeCredentials = provision.credentials
+	}
+	modelAPIKey := spec.Model.APIKey
+	if modelAPIKey == "" {
+		modelAPIKey = provision.modelAPIKey
+	}
+	desired := cloneSpec(spec)
+	desired.Runtime.Credentials = cloneStringMap(runtimeCredentials)
+	desired.Model.APIKey = modelAPIKey
+	current := cloneSpec(item.Spec)
+	current.Runtime.Credentials = cloneStringMap(provision.credentials)
+	current.Model.APIKey = provision.modelAPIKey
+	if reflect.DeepEqual(current, desired) {
+		return cloneAgent(item), nil
+	}
+	item.Spec = desired
 	item.Spec.Runtime.Credentials = nil
+	item.Spec.Model.APIKey = ""
+	item.Status.Model = redactedModelView(desired.Model, modelAPIKey)
+	if current.Instructions != desired.Instructions {
+		item.Status.Instructions = &agentengine.InstructionsStatus{Effective: desired.Instructions}
+	}
+	if desired.Memory != nil {
+		item.Status.Memory = &agentengine.MemoryStatus{Enabled: desired.Memory.Enabled, Ready: true, Name: "memory.md"}
+	}
 	item.UpdatedAt = time.Now().UTC()
+	item.ResourceVersion = item.UpdatedAt.Format(time.RFC3339Nano)
+	if desired.DesiredState == agentengine.AgentDesiredStateStopped {
+		item.Status.State = agentengine.AgentStateStopped
+		item.Status.Ready = false
+	} else {
+		item.Status.State = agentengine.AgentStateRunning
+		item.Status.Ready = true
+	}
 	a.client.agents[item.ID] = item
-	a.client.provisions[item.ID] = memoryProvision{credentials: cloneStringMap(spec.Runtime.Credentials), initShell: spec.Runtime.InitShell}
+	a.client.provisions[item.ID] = memoryProvision{credentials: cloneStringMap(runtimeCredentials), initShell: spec.Runtime.InitShell, modelAPIKey: modelAPIKey}
 	return cloneAgent(item), nil
 }
 
@@ -256,7 +356,7 @@ func (a *memoryAgents) Stop(ctx context.Context, agentID string) (agentengine.Ag
 	return a.setState(agentID, agentengine.AgentStateStopped, false)
 }
 
-func (a *memoryAgents) Recreate(ctx context.Context, agentID string) (agentengine.Agent, error) {
+func (a *memoryAgents) Recreate(ctx context.Context, agentID string, _ agentengine.AgentRecreateOptions) (agentengine.Agent, error) {
 	if err := a.waitForAgent(ctx, agentID); err != nil {
 		return agentengine.Agent{}, err
 	}
@@ -272,10 +372,16 @@ func (a *memoryAgents) setState(agentID string, state agentengine.AgentState, re
 	}
 	item.Status.State = state
 	item.Status.Ready = ready
+	if state == agentengine.AgentStateStopped {
+		item.Spec.DesiredState = agentengine.AgentDesiredStateStopped
+	} else if state == agentengine.AgentStateRunning {
+		item.Spec.DesiredState = agentengine.AgentDesiredStateRunning
+	}
 	if ready && item.Status.RuntimeID == "" {
 		item.Status.RuntimeID = "memory-" + item.ID
 	}
 	item.UpdatedAt = time.Now().UTC()
+	item.ResourceVersion = item.UpdatedAt.Format(time.RFC3339Nano)
 	a.client.agents[item.ID] = item
 	return cloneAgent(item), nil
 }
@@ -786,6 +892,9 @@ func normalizeSpec(spec agentengine.AgentSpec) agentengine.AgentSpec {
 	}
 	spec.Role = agentengine.AgentRole(strings.ToLower(strings.TrimSpace(string(spec.Role))))
 	spec.Runtime.Adapter = strings.ToLower(strings.TrimSpace(spec.Runtime.Adapter))
+	if spec.DesiredState == "" {
+		spec.DesiredState = agentengine.AgentDesiredStateRunning
+	}
 	return spec
 }
 
@@ -795,7 +904,16 @@ func failed(code agentengine.ErrorCode, message string) agentengine.TurnResult {
 
 func cloneAgent(input agentengine.Agent) agentengine.Agent {
 	input.Spec = cloneSpec(input.Spec)
+	if input.Status.Instructions != nil {
+		status := *input.Status.Instructions
+		input.Status.Instructions = &status
+	}
+	if input.Status.Memory != nil {
+		status := *input.Status.Memory
+		input.Status.Memory = &status
+	}
 	input.Spec.Runtime.Credentials = nil
+	input.Spec.Model.APIKey = ""
 	return input
 }
 
@@ -804,12 +922,33 @@ func cloneSpec(input agentengine.AgentSpec) agentengine.AgentSpec {
 	input.Runtime.Credentials = cloneStringMap(input.Runtime.Credentials)
 	input.Runtime.Options = cloneAnyMap(input.Runtime.Options)
 	input.Model.Options = cloneAnyMap(input.Model.Options)
+	input.Model.Headers = maps.Clone(input.Model.Headers)
+	input.Model.Env = maps.Clone(input.Model.Env)
+	if input.Memory != nil {
+		memory := *input.Memory
+		input.Memory = &memory
+	}
 	servers := input.MCPServers
 	input.MCPServers = make(map[string]agentengine.MCPServerConfig, len(servers))
 	for name, config := range servers {
 		input.MCPServers[name] = agentengine.MCPServerConfig(cloneAnyMap(map[string]any(config)))
 	}
 	return input
+}
+
+func redactedModelView(spec agentengine.ModelSpec, apiKey string) agentengine.ModelView {
+	viewSpec := spec
+	viewSpec.APIKey = ""
+	view := agentengine.ModelView{
+		ModelSpec:       viewSpec,
+		APIKeySet:       strings.TrimSpace(apiKey) != "",
+		ProfileComplete: strings.TrimSpace(spec.ProviderID) != "" && strings.TrimSpace(spec.ModelID) != "",
+	}
+	runes := []rune(strings.TrimSpace(apiKey))
+	if len(runes) >= 9 {
+		view.APIKeyPreview = string(runes[:4]) + "..."
+	}
+	return view
 }
 
 func cloneRequest(input agentengine.TurnRequest) agentengine.TurnRequest {
@@ -912,6 +1051,17 @@ func cloneAnyMap(input map[string]any) map[string]any {
 	return out
 }
 
+func cloneMCPServers(input map[string]agentengine.MCPServerConfig) map[string]agentengine.MCPServerConfig {
+	if input == nil {
+		return nil
+	}
+	out := make(map[string]agentengine.MCPServerConfig, len(input))
+	for name, config := range input {
+		out[name] = agentengine.MCPServerConfig(cloneAnyMap(map[string]any(config)))
+	}
+	return out
+}
+
 func cloneAny(input any) any {
 	switch value := input.(type) {
 	case map[string]any:
@@ -930,3 +1080,4 @@ func cloneAny(input any) any {
 }
 
 var _ agentengine.Interface = (*MemoryClient)(nil)
+var _ agentengine.AgentInterface = (*memoryAgents)(nil)

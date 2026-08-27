@@ -147,7 +147,7 @@ sequenceDiagram
     participant Service as Agent Service 和 Store
     participant Runtime as Runtime Adapter
 
-    Caller->>Engine: Create、Update、Start、Stop、Recreate 或 Delete
+    Caller->>Engine: Create、Update 期望状态、Recreate 或 Delete
     Engine->>Service: 校验完整 Agent 期望状态
     Service->>Gate: 进入生命周期变更
     Gate->>Gate: 关闭执行准入并等待 Active Lease 结束
@@ -221,7 +221,7 @@ Runtime Adapter 只管理 Runtime 特有的 Mapping、Protocol Translation、Cre
 
 | Resource | 操作 | 用途 |
 |---|---|---|
-| `Agents()` | Create、Get、List、Update、Delete、Start、Stop、Recreate | Agent 期望配置和 Runtime 生命周期 |
+| `Agents()` | Create、Get、List、Update、Delete、Recreate | Agent 期望配置和 Runtime 生命周期 |
 | `Conversations(agentID)` | Files、Run、Cancel、Reset、Resolve | 限定到一个 Agent 的 Conversation 执行 |
 | `Conversations(agentID).Files()` | Create、Get、Delete | 由已选择 Agent 限定的不可变文件 |
 | `ConversationRuntime` | Run、Cancel、Reset、Resolve | Engine 后面的 Runtime 特有直接执行 |
@@ -231,7 +231,8 @@ Runtime Adapter 只管理 Runtime 特有的 Mapping、Protocol Translation、Cre
 | Engine Operation | HTTP Mapping |
 |---|---|
 | `Agents().Create/Get/List/Update/Delete` | Agent Collection 与 Resource 的 POST、GET、PUT、DELETE |
-| `Agents().Start/Stop/Recreate` | Agent Action POST Endpoint |
+| 带 `spec.desired_state` 的 `Agents().Update` | Start 与 Stop Action POST Endpoint |
+| 带 Options 的 `Agents().Recreate` | Recreate 与 Upgrade Action POST Endpoint |
 | `Conversations(agentID).Run` | 使用 JSON Request 和 JSON 或 SSE Result Stream 的 Turn POST |
 | `Cancel/Reset/Resolve` | 使用 typed JSON Body 的 Conversation Action POST Endpoint |
 | `Conversations(agentID).Files().Create` | File Metadata 加 Streaming HTTP Request Body |
@@ -241,6 +242,11 @@ Runtime Adapter 只管理 Runtime 特有的 Mapping、Protocol Translation、Cre
 跨过该边界的 Request、Resource、Event、Result 和 Error Value 都具有稳定 JSON 表示，并且不包含 Runtime Path 或进程内 Capability。
 
 `AgentInterface` 是 Agent Resource 的 Collection-scoped API，调用方不能依赖当前 `internal/agent.Service`。
+生产环境中的 HTTP、CLI、Participant、Team、Task 和投递恢复管理路径，通过共享的 Engine 实例执行 Agent 期望状态查询、变更和 Runtime 生命周期操作。
+Profile、Skill、MCP Server、Instructions、Memory 配置和生命周期意图都是 Agent Resource Field，不再对应独立的 Endpoint-shaped Interface Method。
+生效指令、可读 Memory、脱敏 Model 数据、Capability、Runtime Readiness 和 Sandbox Identity 作为 Get 返回的观测 Status Projection。
+Create 保留显式 ID 与 Template Selection，Update 使用 Field Mask 和 Resource Version 表示部分变更，Recreate Options 区分普通重建与镜像升级。
+Channel Binding、Participant 记录、Workspace 浏览、日志流、Runtime 注册和 LLM 执行继续由现有 Owner 负责。
 阶段 2 的 Engine Facade 可以通过私有 Backend 包装当前 Agent Service，以优先复用已经验证的 Agent 持久化和 Runtime 生命周期代码。
 该包装只是 Engine 内部实现，不进入公共 Contract，也不阻止阶段 4 把宽泛的 Service 拆成明确的 Storage、Lifecycle 和 Runtime 组件。
 Conversation Execution 不保存重复的 Agent Record，并协调 Active Turn 和生命周期变更。
@@ -249,7 +255,12 @@ Conversation Execution 不保存重复的 Agent Record，并协调 Active Turn �
 阶段 4 再在保持外部行为的前提下替换临时 Facade，并收敛 Agent State 与 Runtime 生命周期的内部 Owner。
 如果内部重构确实需要调整公共 Interface，该调整继续通过共同 Review 完成，并同步所有实现、Mock Client 和 Contract Test。
 
-`AgentSpec` 包含完整期望状态：Name、Description、Instructions、Role、Runtime、Model、Skills 和 MCP Server。
+`AgentSpec` 包含完整期望状态：Name、Description、Instructions、Role、Runtime、Model、Skills、MCP Server、Memory 配置和生命周期意图。
+`AgentInterface.Update` 在 Agent 生命周期 Gate 内比较当前 Spec 与完整期望 Spec，保留未提供的只写 Secret，并且只协调发生变化的子系统。
+HTTP Patch 以及聚焦的 Skill、MCP、Profile、Instructions 和 Memory Route，把部分意图翻译成 `AgentUpdateRequest.FieldMask`，再执行同一个 Update Planner，不维护独立生命周期路径。
+Start 和 Stop 设置 `spec.desired_state`；应用 `running` 时，即使期望值没有变化，也会协调观测到的 Runtime Drift。
+Upgrade 使用设置 `UpgradeImage` 的 `Recreate`，而不是独立 Interface Method。
+完整 Update 中缺少某个 Skill 或 MCP Server 表示删除它；未提供 Runtime Credential 表示保留，显式空 Credential Map 表示清除。
 `RuntimeSpec.Credentials` 是 Workspace 相对文件路径到完整 Secret File Content 的 Map。
 `RuntimeSpec.InitShell` 是以 Runtime Workspace 为工作目录执行的幂等 Shell Program。
 Create 和 Update 把这两个 Field 作为完整 Runtime 期望状态的一部分进行替换。
@@ -578,7 +589,7 @@ Agent 删除由 Application 和 Binding 边界协调：删除或停用关联 Bin
 - 在外部行为保持不变的前提下重构 Engine 内部组件；公共 Interface 默认保持稳定，确有必要时仍可通过共同 Review 演进。
 - 把阶段 2 的 Agent Service Facade 收敛为职责明确的 Agent Resource Backend、Conversation Coordinator、Lifecycle Gate、Runtime Adapter Registry 和 Runtime Adapter。
 - 抽取可复用的 Storage、Runtime Provision、Credential、InitShell、File Exposure、Interaction 和 Structured Output 能力，删除重复状态与反向控制依赖。
-- 让 `Agents()` 成为 Agent 持久化和 Runtime 生命周期的统一 Engine 入口，并逐步迁移仍然绕过该入口的内部调用方。
+- 保持管理调用方迁移后由 `Agents()` 提供统一的 Engine 入口，再在不改变调用方行为的前提下替换其私有 Agent Service Facade。
 - 使用阶段 2 的 Contract Test 和阶段 3 的端到端测试证明重构不改变 CSGClaw 现有行为；如果 Interface 发生经 Review 的调整，则同步更新 Adapter 和 Mock Client。
 
 每次合入都必须保持 CSGClaw 现有行为可用。

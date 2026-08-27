@@ -18,7 +18,7 @@ type testAgents struct {
 	err   error
 }
 
-func (a *testAgents) List(context.Context) ([]agentengine.Agent, error) {
+func (a *testAgents) List(context.Context, agentengine.AgentListOptions) ([]agentengine.Agent, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return append([]agentengine.Agent(nil), a.items...), a.err

@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
+	"csgclaw/internal/mcpschema"
 )
 
 type batchAddAgentMCPServersRequest struct {
@@ -16,7 +20,7 @@ type batchDeleteAgentMCPServersRequest struct {
 }
 
 func (h *Handler) handleAgentMCPServersByID(w http.ResponseWriter, r *http.Request) {
-	if h.svc == nil {
+	if h.agentEngine == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -25,7 +29,7 @@ func (h *Handler) handleAgentMCPServersByID(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
-	view, err := h.svc.MCPServersView(r.Context(), id)
+	current, err := h.agentEngine.Agents().Get(r.Context(), id, agentengine.AgentGetOptions{})
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -34,7 +38,7 @@ func (h *Handler) handleAgentMCPServersByID(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, http.StatusOK, view)
+	writeJSON(w, http.StatusOK, agent.MCPServersView{AgentID: current.ID, RuntimeKind: current.Status.RuntimeKind, Servers: serviceMCPServers(current.Spec.MCPServers)})
 }
 
 func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +46,7 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.svc == nil {
+	if h.agentEngine == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -76,17 +80,48 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	updated, err := h.svc.AddMCPServersFromHub(r.Context(), id, req.Names, servers)
+	agents := h.agentEngine.Agents()
+	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{})
+	if err == nil {
+		if current.Spec.MCPServers == nil {
+			current.Spec.MCPServers = map[string]agentengine.MCPServerConfig{}
+		}
+		for _, rawName := range req.Names {
+			name := strings.TrimSpace(rawName)
+			raw, ok := servers[name]
+			if !ok {
+				err = fmt.Errorf("mcp server %q not found", name)
+				break
+			}
+			config, ok := raw.(map[string]any)
+			if !ok {
+				err = fmt.Errorf("mcp server %q config must be an object", name)
+				break
+			}
+			normalized, normalizeErr := mcpschema.NormalizeMCPServers(map[string]any{name: config})
+			if normalizeErr != nil {
+				err = normalizeErr
+				break
+			}
+			server, ok := normalized[name].(map[string]any)
+			if !ok {
+				err = fmt.Errorf("mcp server %q config must be an object", name)
+				break
+			}
+			delete(server, "description")
+			current.Spec.MCPServers[name] = agentengine.MCPServerConfig(server)
+		}
+	}
+	var updated agentengine.Agent
+	if err == nil {
+		updated, err = agents.Update(r.Context(), id, agentengine.AgentUpdateRequest{Spec: current.Spec, FieldMask: []string{"mcp_servers"}, ResourceVersion: current.ResourceVersion})
+	}
 	if err != nil {
 		writeAgentMCPServersMutationError(w, err)
 		return
 	}
-	h.publishUpdatedAgentUser(updated)
-	view, err := h.svc.MCPServersView(r.Context(), updated.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	h.publishUpdatedAgentUser(serviceAgentFromEngine(updated))
+	view := agent.MCPServersView{AgentID: updated.ID, RuntimeKind: updated.Status.RuntimeKind, Servers: serviceMCPServers(updated.Spec.MCPServers)}
 	writeJSON(w, http.StatusOK, view)
 }
 
@@ -95,7 +130,7 @@ func (h *Handler) handleBatchDeleteAgentMCPServers(w http.ResponseWriter, r *htt
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.svc == nil {
+	if h.agentEngine == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -113,17 +148,28 @@ func (h *Handler) handleBatchDeleteAgentMCPServers(w http.ResponseWriter, r *htt
 		http.Error(w, "names is required", http.StatusBadRequest)
 		return
 	}
-	updated, err := h.svc.DeleteMCPServers(r.Context(), id, req.Names)
+	agents := h.agentEngine.Agents()
+	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{})
+	if err == nil {
+		for _, rawName := range req.Names {
+			name := strings.TrimSpace(rawName)
+			if _, ok := current.Spec.MCPServers[name]; !ok {
+				err = fmt.Errorf("mcp server %q not found", name)
+				break
+			}
+			delete(current.Spec.MCPServers, name)
+		}
+	}
+	var updated agentengine.Agent
+	if err == nil {
+		updated, err = agents.Update(r.Context(), id, agentengine.AgentUpdateRequest{Spec: current.Spec, FieldMask: []string{"mcp_servers"}, ResourceVersion: current.ResourceVersion})
+	}
 	if err != nil {
 		writeAgentMCPServersMutationError(w, err)
 		return
 	}
-	h.publishUpdatedAgentUser(updated)
-	view, err := h.svc.MCPServersView(r.Context(), updated.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	h.publishUpdatedAgentUser(serviceAgentFromEngine(updated))
+	view := agent.MCPServersView{AgentID: updated.ID, RuntimeKind: updated.Status.RuntimeKind, Servers: serviceMCPServers(updated.Spec.MCPServers)}
 	writeJSON(w, http.StatusOK, view)
 }
 

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/participant"
@@ -68,9 +68,9 @@ func (h *Handler) teamDirectory(channel ...string) teamDirectory {
 	}
 	switch selected {
 	case team.FeishuExecutionChannel:
-		return team.NewFeishuTeamDirectory(h.feishu, h.svc, h.participant)
+		return team.NewFeishuTeamDirectory(h.feishu, h.agentEngine, h.participant)
 	default:
-		return team.NewCSGClawTeamDirectory(h.im, h.svc, h.participant)
+		return team.NewCSGClawTeamDirectory(h.im, h.agentEngine, h.participant)
 	}
 }
 
@@ -163,14 +163,14 @@ func apiTeamsWithPresenter(items []team.TeamMeta, presenter teamIdentityPresente
 }
 
 type teamIdentityPresenter struct {
-	agents    *agent.Service
+	agents    agentengine.AgentInterface
 	namesByID map[string]string
 }
 
 func (h *Handler) newTeamIdentityPresenter() teamIdentityPresenter {
 	p := teamIdentityPresenter{namesByID: make(map[string]string)}
-	if h != nil {
-		p.agents = h.svc
+	if h != nil && h.agentEngine != nil {
+		p.agents = h.agentEngine.Agents()
 	}
 	if h == nil || h.participant == nil {
 		return p
@@ -263,14 +263,17 @@ func (p teamIdentityPresenter) agentDisplayName(id string) string {
 	if id == "" || p.agents == nil {
 		return ""
 	}
-	if name, ok := p.agents.AgentDisplayName(id); ok {
-		return name
+	if item, err := p.agents.Get(context.Background(), id, agentengine.AgentGetOptions{}); err == nil {
+		return strings.TrimSpace(item.Spec.Name)
 	}
 	if strings.HasPrefix(id, "u-") || id == "" {
 		return ""
 	}
-	name, _ := p.agents.AgentDisplayName("u-" + id)
-	return name
+	item, err := p.agents.Get(context.Background(), "u-"+id, agentengine.AgentGetOptions{})
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(item.Spec.Name)
 }
 
 func apiTask(item team.TeamTask, presenter teamIdentityPresenter) apitypes.TeamTask {

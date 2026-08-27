@@ -1,8 +1,15 @@
 package api
 
-import "github.com/go-chi/chi/v5"
+import (
+	"github.com/go-chi/chi/v5"
+
+	"csgclaw/internal/agentengine"
+)
 
 func (h *Handler) Routes() chi.Router {
+	if h != nil && h.agentEngine == nil && h.svc != nil {
+		h.agentEngine = agentengine.New(h.svc)
+	}
 	router := chi.NewRouter()
 	h.registerCoreRoutes(router)
 	h.registerChannelRoutes(router)

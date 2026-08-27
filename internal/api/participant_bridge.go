@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
@@ -627,7 +628,8 @@ func participantSSEID(messageID string) string {
 }
 
 func (h *Handler) reconnectMissedParticipantAgents(senderID string, participantIDs []string) {
-	if h == nil || h.svc == nil || h.isAgentSender(senderID) || len(participantIDs) == 0 {
+	engine := h.agentAdministrationEngine()
+	if engine == nil || h.isAgentSender(senderID) || len(participantIDs) == 0 {
 		return
 	}
 	seen := make(map[string]struct{}, len(participantIDs))
@@ -640,55 +642,72 @@ func (h *Handler) reconnectMissedParticipantAgents(senderID string, participantI
 			continue
 		}
 		seen[agentID] = struct{}{}
-		if _, ok := h.svc.Agent(agentID); !ok {
+		if _, err := engine.Agents().Get(context.Background(), agentID, agentengine.AgentGetOptions{}); err != nil {
 			continue
 		}
-		go h.recoverMissedParticipantDelivery(agentID)
+		go h.recoverMissedParticipantDelivery(engine, agentID)
 	}
 }
 
-func (h *Handler) recoverMissedParticipantDelivery(participantID string) {
-	if h == nil || h.svc == nil {
+func (h *Handler) recoverMissedParticipantDelivery(engine agentengine.Interface, participantID string) {
+	if h == nil || engine == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	view, err := h.svc.RuntimeView(ctx, participantID)
+	view, err := engine.Agents().Get(ctx, participantID, agentengine.AgentGetOptions{ProbeRuntime: true})
 	if err != nil {
 		slog.Warn("participant delivery recovery failed", "agent_id", participantID, "error", err)
 		return
 	}
-	if err := h.applyParticipantDeliveryRecoveryPolicy(ctx, view); err != nil {
-		slog.Warn("participant delivery recovery failed", "agent_id", participantID, "runtime_kind", view.RuntimeKind, "state", view.State, "error", err)
+	if err := h.applyParticipantDeliveryRecoveryPolicy(ctx, engine, view); err != nil {
+		slog.Warn("participant delivery recovery failed", "agent_id", participantID, "runtime_kind", view.Status.RuntimeKind, "state", view.Status.State, "error", err)
 	}
 }
 
-func (h *Handler) applyParticipantDeliveryRecoveryPolicy(ctx context.Context, view agent.RuntimeView) error {
-	if h == nil || h.svc == nil {
+func (h *Handler) applyParticipantDeliveryRecoveryPolicy(ctx context.Context, engine agentengine.Interface, view agentengine.Agent) error {
+	if h == nil || engine == nil {
 		return nil
 	}
-	switch view.State {
+	agents := engine.Agents()
+	switch agentruntime.State(view.Status.State) {
 	case agentruntime.StateCreated, agentruntime.StateStopped, agentruntime.StateExited, agentruntime.StateFailed:
-		_, err := h.svc.Start(ctx, view.AgentID)
+		view.Spec.DesiredState = agentengine.AgentDesiredStateRunning
+		_, err := agents.Update(ctx, view.ID, agentengine.AgentUpdateRequest{Spec: view.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: view.ResourceVersion})
 		return err
 	case agentruntime.StateRunning:
-		_, err := h.svc.Start(ctx, view.AgentID)
+		view.Spec.DesiredState = agentengine.AgentDesiredStateRunning
+		_, err := agents.Update(ctx, view.ID, agentengine.AgentUpdateRequest{Spec: view.Spec, FieldMask: []string{"desired_state"}, ResourceVersion: view.ResourceVersion})
 		return err
 	case "", agentruntime.StateUnknown:
 		fallthrough
 	default:
-		_, err := h.svc.Recreate(ctx, view.AgentID)
+		_, err := agents.Recreate(ctx, view.ID, agentengine.AgentRecreateOptions{})
 		return err
 	}
 }
 
 func (h *Handler) isAgentSender(senderID string) bool {
-	if h == nil || h.svc == nil {
+	engine := h.agentAdministrationEngine()
+	if engine == nil {
 		return false
 	}
-	_, ok := h.svc.Agent(h.runtimeAgentIDForBridgeID(senderID))
-	return ok
+	_, err := engine.Agents().Get(context.Background(), h.runtimeAgentIDForBridgeID(senderID), agentengine.AgentGetOptions{})
+	return err == nil
+}
+
+func (h *Handler) agentAdministrationEngine() agentengine.Interface {
+	if h == nil {
+		return nil
+	}
+	if h.agentEngine != nil {
+		return h.agentEngine
+	}
+	if h.svc != nil {
+		return agentengine.New(h.svc)
+	}
+	return nil
 }
 
 func (h *Handler) runtimeAgentIDForBridgeID(id string) string {
