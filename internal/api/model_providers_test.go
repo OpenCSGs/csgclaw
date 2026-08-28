@@ -361,6 +361,44 @@ models = ["gpt-test"]
 	}
 }
 
+func TestModelProviderDeleteRejectsSelectorOnlyAgentReference(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	content := `[server]
+listen_addr = "127.0.0.1:18080"
+access_token = "secret"
+
+[models]
+default = "codex.gpt-test"
+
+[models.providers.openai]
+base_url = "https://api.openai.example/v1"
+api_key = "sk-team"
+models = ["gpt-test"]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+	agentState := []agent.Agent{{
+		ID: "agent-selector", Name: "selector", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		CreatedAt: time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC), Profile: "codex.gpt-test",
+		AgentProfile: agent.AgentProfile{
+			Provider: agent.ProviderCodex, ModelProviderID: "codex", ModelID: "gpt-test", ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}}
+	handler := newModelProviderTestHandler(t, configPath, agentState)
+	patchRecorder := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(patchRecorder, httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-selector", strings.NewReader(`{"profile":"openai.gpt-test"}`)))
+	if patchRecorder.Code != http.StatusOK {
+		t.Fatalf("selector PATCH status = %d, want %d; body=%s", patchRecorder.Code, http.StatusOK, patchRecorder.Body.String())
+	}
+	recorder := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodDelete, "/api/v1/model-providers/openai", nil))
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("DELETE selector-referenced provider status = %d, want %d; body=%s", recorder.Code, http.StatusConflict, recorder.Body.String())
+	}
+}
+
 func TestModelProviderUpdateRejectsUnreachableTransportWhileProviderIsInUse(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	content := `[server]

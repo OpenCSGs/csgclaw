@@ -231,6 +231,30 @@ type failingMCPServersListRuntime struct {
 	err error
 }
 
+type snapshotMCPServersRuntime struct {
+	fakeCompatRuntime
+	servers   map[string]any
+	listCalls int
+}
+
+func (f *snapshotMCPServersRuntime) ListMCPServers(context.Context, agentruntime.Handle, agentruntime.MCPServersSnapshot) (agentruntime.MCPServersSnapshot, error) {
+	f.listCalls++
+	return agentruntime.MCPServersSnapshot{Servers: f.servers}, nil
+}
+
+func (*snapshotMCPServersRuntime) ValidateMCPServers(context.Context, agentruntime.MCPServersSnapshot) error {
+	return nil
+}
+
+func (*snapshotMCPServersRuntime) MCPServersRestartRequired(agentruntime.MCPServersChange) (bool, error) {
+	return false, nil
+}
+
+func (f *snapshotMCPServersRuntime) ReconcileMCPServers(_ context.Context, _ agentruntime.Handle, change agentruntime.MCPServersChange) error {
+	f.servers = change.Current.Servers
+	return nil
+}
+
 func (f failingMCPServersListRuntime) ListMCPServers(context.Context, agentruntime.Handle, agentruntime.MCPServersSnapshot) (agentruntime.MCPServersSnapshot, error) {
 	return agentruntime.MCPServersSnapshot{}, f.err
 }
@@ -4527,6 +4551,67 @@ func TestHandleBatchDeleteAgentMCPServersUsesBackendManagedState(t *testing.T) {
 		t.Fatalf("saved MCPServers = %#v, retained deleted MCP server", saved.MCPServers)
 	}
 	mcpServerForTest(t, saved.MCPServers, "native")
+}
+
+func TestAgentMCPServersAdoptsUnmanagedRuntimeStateBeforeMutation(t *testing.T) {
+	runtimeImpl := &snapshotMCPServersRuntime{
+		fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex},
+		servers: map[string]any{
+			"native": map[string]any{"command": "native-server"},
+		},
+	}
+	svc := mustNewSeededServiceWithOptions(t, []agent.Agent{{
+		ID: "agent-mcp-adopt", Name: "mcp-adopt", Role: agent.RoleWorker,
+		RuntimeID: "rt-agent-mcp-adopt", RuntimeKind: agent.RuntimeKindCodex, RuntimeName: agent.RuntimeNameCodex,
+		Status: string(agentruntime.StateStopped), AgentProfile: agent.AgentProfile{ProfileComplete: true}, ProfileComplete: true,
+	}}, agent.WithRuntime(runtimeImpl))
+	mcpSvc := mcp.NewService()
+	if _, err := mcpSvc.CreateServer(context.Background(), "catalog", map[string]any{"command": "catalog-server"}); err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{svc: svc, mcp: mcpSvc}
+
+	getRecorder := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(getRecorder, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-mcp-adopt/mcp-servers", nil))
+	if getRecorder.Code != http.StatusOK || !strings.Contains(getRecorder.Body.String(), `"native"`) {
+		t.Fatalf("GET unmanaged MCP servers = %d %s", getRecorder.Code, getRecorder.Body.String())
+	}
+
+	addRecorder := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(addRecorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-mcp-adopt/mcp-servers:batchAdd", strings.NewReader(`{"names":["catalog"]}`)))
+	if addRecorder.Code != http.StatusOK {
+		t.Fatalf("batch add status = %d; body=%s", addRecorder.Code, addRecorder.Body.String())
+	}
+	var added agent.MCPServersView
+	if err := json.NewDecoder(addRecorder.Body).Decode(&added); err != nil {
+		t.Fatal(err)
+	}
+	mcpServerForTest(t, added.Servers, "native")
+	mcpServerForTest(t, added.Servers, "catalog")
+	saved, ok := svc.Agent("agent-mcp-adopt")
+	if !ok {
+		t.Fatal("Agent missing after MCP adoption")
+	}
+	mcpServerForTest(t, saved.MCPServers, "native")
+	mcpServerForTest(t, saved.MCPServers, "catalog")
+	listCallsAfterAdoption := runtimeImpl.listCalls
+
+	deleteRecorder := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(deleteRecorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-mcp-adopt/mcp-servers:batchDelete", strings.NewReader(`{"names":["native"]}`)))
+	if deleteRecorder.Code != http.StatusOK {
+		t.Fatalf("batch delete status = %d; body=%s", deleteRecorder.Code, deleteRecorder.Body.String())
+	}
+	var deleted agent.MCPServersView
+	if err := json.NewDecoder(deleteRecorder.Body).Decode(&deleted); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := deleted.Servers["native"]; exists {
+		t.Fatalf("batch delete retained adopted native server: %#v", deleted.Servers)
+	}
+	mcpServerForTest(t, deleted.Servers, "catalog")
+	if runtimeImpl.listCalls != listCallsAfterAdoption {
+		t.Fatalf("Runtime MCP servers were re-imported after persistence: before=%d after=%d", listCallsAfterAdoption, runtimeImpl.listCalls)
+	}
 }
 
 func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, agent.Agent) {

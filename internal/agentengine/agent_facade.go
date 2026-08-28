@@ -166,6 +166,7 @@ func (f agentFacade) Get(ctx context.Context, agentID string, options AgentGetOp
 		if !ok {
 			return Agent{}, &TurnError{Code: ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 		}
+		selected = f.withAdoptedMCPServers(ctx, selected)
 		if options.IncludeDocuments {
 			return f.convertWithDocuments(ctx, selected)
 		}
@@ -178,10 +179,22 @@ func (f agentFacade) Get(ctx context.Context, agentID string, options AgentGetOp
 	if !ok {
 		return Agent{}, &TurnError{Code: ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
+	selected = f.withAdoptedMCPServers(ctx, selected)
 	if options.IncludeDocuments {
 		return f.convertWithDocuments(ctx, selected)
 	}
 	return f.convert(selected)
+}
+
+func (f agentFacade) withAdoptedMCPServers(ctx context.Context, selected agent.Agent) agent.Agent {
+	if selected.MCPServers != nil {
+		return selected
+	}
+	view, err := f.service.MCPServersView(ctx, selected.ID)
+	if err == nil {
+		selected.MCPServers = view.Servers
+	}
+	return selected
 }
 
 func (f agentFacade) List(ctx context.Context, options AgentListOptions) ([]Agent, error) {

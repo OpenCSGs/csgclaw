@@ -349,6 +349,9 @@ func (h *Handler) modelProviderInUse(llm config.LLMConfig, id string) bool {
 		if agent.NormalizeModelProviderID(item.Spec.Model.ProviderID) == id {
 			return true
 		}
+		if agent.SelectorUsesModelProvider(item.Spec.Model.Selector, id) {
+			return true
+		}
 	}
 	return false
 }
