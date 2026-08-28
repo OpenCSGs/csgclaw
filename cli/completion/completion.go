@@ -287,6 +287,7 @@ func templateSpec() CommandSpec {
 					{Name: "registry", TakesValue: true},
 					{Name: "name", TakesValue: true},
 					{Name: "description", TakesValue: true},
+					{Name: "include-memory"},
 				},
 			},
 		},

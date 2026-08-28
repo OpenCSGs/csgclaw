@@ -687,8 +687,8 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
 
 发布时始终生成 `AGENTS.md` 和 `mcp.json`。
 其他 instruction 文件可选。
-当 `memory_mode` 启用时，Codex 模板会快照 `CODEX_HOME/memories/memory_summary.md`，并在创建新 Agent 时恢复到相同位置。`memory_mode = "disabled"` 的模板不会打包或恢复记忆摘要；模板也不会复制 Codex 的 SQLite memory 流水线状态，或把 memory 当作 workspace overlay。
-非 Codex Runtime 的可选模板 memories 仍按对应 Runtime 的 workspace 约定叠加。
+只有每次发布请求显式设置 `include_memory: true` 时才会包含记忆；仅启用 Runtime memory 并不代表同意在发布时导出记忆。在显式发布 opt-in 且 `memory_mode` 启用时，Codex 模板会快照 `CODEX_HOME/memories/memory_summary.md`，并在创建新 Agent 时恢复到相同位置。`memory_mode = "disabled"` 的模板不会打包或恢复记忆摘要；模板也不会复制 Codex 的 SQLite memory 流水线状态，或把 memory 当作 workspace overlay。
+在同样显式发布 opt-in 的前提下，受支持的非 Codex Runtime 会按对应 Runtime 的 workspace 约定保留并叠加可选模板 memories。
 根据模板创建 Agent 时，skills 会安装到 `skills/`，`mcp.json` 中的 MCP server 会自动应用；如果创建请求显式传入 `mcpServers`，则以请求内容为准。
 
 Codex Worker 模板可在 `agent.toml` 中保存运行模式：

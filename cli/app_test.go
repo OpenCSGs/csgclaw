@@ -954,10 +954,10 @@ func TestExecuteHubGetEscapesNamespaceTemplateIDAsSinglePathSegment(t *testing.T
 }
 
 func TestExecuteHubPublishUsesHTTPClient(t *testing.T) {
-	var stdout bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	app := &App{
 		stdout: &stdout,
-		stderr: &bytes.Buffer{},
+		stderr: &stderr,
 		httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.Method != http.MethodPost {
 				t.Fatalf("method = %q, want %q", req.Method, http.MethodPost)
@@ -978,18 +978,24 @@ func TestExecuteHubPublishUsesHTTPClient(t *testing.T) {
 			if payload["name"] != "ReviewBot_2" || payload["description"] != "Reviews changes" {
 				t.Fatalf("payload metadata = %#v/%#v, want CLI values", payload["name"], payload["description"])
 			}
+			if payload["include_memory"] != true {
+				t.Fatalf("payload[include_memory] = %#v, want true", payload["include_memory"])
+			}
 			return jsonResponse(http.StatusCreated, `{"id":"local.alice","name":"alice","runtime_kind":"codex","source":{"name":"local","kind":"local"}}`), nil
 		}),
 	}
 
 	if err := app.Execute(context.Background(), []string{
 		"--endpoint", "http://example.test", "--output", "json", "template", "publish",
-		"--agent", "u-alice", "--registry", "local", "--name", "ReviewBot_2", "--description", "Reviews changes",
+		"--agent", "u-alice", "--registry", "local", "--name", "ReviewBot_2", "--description", "Reviews changes", "--include-memory",
 	}); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if !strings.Contains(stdout.String(), `"id": "local.alice"`) {
 		t.Fatalf("stdout = %q, want template id", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "private information derived from conversation history") {
+		t.Fatalf("stderr = %q, want sensitive-memory warning", stderr.String())
 	}
 }
 
@@ -1004,6 +1010,9 @@ func TestExecuteHubPublishDefaultsToOfficialRegistry(t *testing.T) {
 			}
 			if got, want := payload["registry"], "official"; got != want {
 				t.Fatalf("payload[registry] = %#v, want %q", got, want)
+			}
+			if _, ok := payload["include_memory"]; ok {
+				t.Fatalf("payload[include_memory] = %#v, want omitted by default", payload["include_memory"])
 			}
 			return jsonResponse(http.StatusCreated, `{"id":"official.alice/review-bot","name":"review-bot","source":{"name":"official","kind":"remote"}}`), nil
 		}),
