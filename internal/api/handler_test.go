@@ -4570,6 +4570,17 @@ func TestAgentMCPServersAdoptsUnmanagedRuntimeStateBeforeMutation(t *testing.T) 
 		t.Fatal(err)
 	}
 	handler := &Handler{svc: svc, mcp: mcpSvc}
+	engine := agentengine.New(svc)
+	ordinary, err := engine.Agents().Get(context.Background(), "agent-mcp-adopt", agentengine.AgentGetOptions{})
+	if err != nil {
+		t.Fatalf("ordinary Agent Get() error = %v", err)
+	}
+	if ordinary.Spec.MCPServers != nil {
+		t.Fatalf("ordinary Agent Get() MCP servers = %#v, want unmanaged desired state", ordinary.Spec.MCPServers)
+	}
+	if runtimeImpl.listCalls != 0 {
+		t.Fatalf("ordinary Agent Get() performed %d Runtime MCP reads, want 0", runtimeImpl.listCalls)
+	}
 
 	getRecorder := httptest.NewRecorder()
 	handler.Routes().ServeHTTP(getRecorder, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-mcp-adopt/mcp-servers", nil))
@@ -4611,6 +4622,50 @@ func TestAgentMCPServersAdoptsUnmanagedRuntimeStateBeforeMutation(t *testing.T) 
 	mcpServerForTest(t, deleted.Servers, "catalog")
 	if runtimeImpl.listCalls != listCallsAfterAdoption {
 		t.Fatalf("Runtime MCP servers were re-imported after persistence: before=%d after=%d", listCallsAfterAdoption, runtimeImpl.listCalls)
+	}
+}
+
+func TestAgentMCPServersMutationAbortsWhenInitialRuntimeAdoptionFails(t *testing.T) {
+	readErr := errors.New("native MCP config is unreadable")
+	tests := []struct {
+		name string
+		path string
+	}{
+		{name: "add", path: "/api/v1/agents/agent-mcp-unreadable/mcp-servers:batchAdd"},
+		{name: "delete", path: "/api/v1/agents/agent-mcp-unreadable/mcp-servers:batchDelete"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			svc := mustNewSeededServiceWithOptions(t, []agent.Agent{{
+				ID: "agent-mcp-unreadable", Name: "mcp-unreadable", Role: agent.RoleWorker,
+				RuntimeID: "rt-agent-mcp-unreadable", RuntimeKind: agent.RuntimeKindCodex, RuntimeName: agent.RuntimeNameCodex,
+				Status: string(agentruntime.StateStopped), AgentProfile: agent.AgentProfile{ProfileComplete: true}, ProfileComplete: true,
+			}}, agent.WithRuntime(failingMCPServersListRuntime{
+				fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex},
+				err:               readErr,
+			}))
+			mcpSvc := mcp.NewService()
+			if _, err := mcpSvc.CreateServer(context.Background(), "catalog", map[string]any{"command": "catalog-server"}); err != nil {
+				t.Fatal(err)
+			}
+			handler := &Handler{svc: svc, mcp: mcpSvc}
+
+			recorder := httptest.NewRecorder()
+			handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(`{"names":["catalog"]}`)))
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusBadRequest, recorder.Body.String())
+			}
+			if !strings.Contains(recorder.Body.String(), readErr.Error()) {
+				t.Fatalf("body = %q, want Runtime read failure", recorder.Body.String())
+			}
+			saved, ok := svc.Agent("agent-mcp-unreadable")
+			if !ok {
+				t.Fatal("Agent missing after failed MCP adoption")
+			}
+			if saved.MCPServers != nil {
+				t.Fatalf("saved MCPServers = %#v, want unmanaged state preserved", saved.MCPServers)
+			}
+		})
 	}
 }
 

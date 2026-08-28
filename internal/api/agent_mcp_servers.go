@@ -29,7 +29,7 @@ func (h *Handler) handleAgentMCPServersByID(w http.ResponseWriter, r *http.Reque
 		http.NotFound(w, r)
 		return
 	}
-	current, err := h.agentEngine.Agents().Get(r.Context(), id, agentengine.AgentGetOptions{})
+	current, err := h.agentEngine.Agents().Get(r.Context(), id, agentengine.AgentGetOptions{AdoptMCPServers: true})
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
@@ -81,7 +81,7 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 		return
 	}
 	agents := h.agentEngine.Agents()
-	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{})
+	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{AdoptMCPServers: true})
 	if err == nil {
 		if current.Spec.MCPServers == nil {
 			current.Spec.MCPServers = map[string]agentengine.MCPServerConfig{}
@@ -149,7 +149,7 @@ func (h *Handler) handleBatchDeleteAgentMCPServers(w http.ResponseWriter, r *htt
 		return
 	}
 	agents := h.agentEngine.Agents()
-	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{})
+	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{AdoptMCPServers: true})
 	if err == nil {
 		for _, rawName := range req.Names {
 			name := strings.TrimSpace(rawName)

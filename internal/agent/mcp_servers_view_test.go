@@ -149,3 +149,30 @@ func TestMCPServersViewKeepsPersistedServersWhenRuntimeReadFails(t *testing.T) {
 		t.Fatalf("servers = %s, want persisted server map", got)
 	}
 }
+
+func TestMCPServersViewReturnsRuntimeReadFailureBeforeFirstManagement(t *testing.T) {
+	readErr := errors.New("native config is unreadable")
+	svc := &Service{
+		agents: map[string]Agent{
+			"u-mcp": {
+				ID:          "u-mcp",
+				RuntimeKind: RuntimeKindCodex,
+			},
+		},
+		runtimeRegistry: map[string]agentruntime.Runtime{
+			RuntimeKindCodex: mcpServersViewTestRuntime{
+				fakeAgentRuntime: fakeAgentRuntime{kind: RuntimeKindCodex},
+				list: func(context.Context, agentruntime.Handle, agentruntime.MCPServersSnapshot) (agentruntime.MCPServersSnapshot, error) {
+					return agentruntime.MCPServersSnapshot{}, readErr
+				},
+			},
+		},
+	}
+
+	if _, err := svc.MCPServersView(context.Background(), "u-mcp"); !errors.Is(err, readErr) {
+		t.Fatalf("MCPServersView() error = %v, want %v", err, readErr)
+	}
+	if got, ok := svc.Agent("u-mcp"); !ok || got.MCPServers != nil {
+		t.Fatalf("Agent().MCPServers = %#v, want unmanaged state preserved", got.MCPServers)
+	}
+}

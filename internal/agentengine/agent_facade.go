@@ -166,7 +166,11 @@ func (f agentFacade) Get(ctx context.Context, agentID string, options AgentGetOp
 		if !ok {
 			return Agent{}, &TurnError{Code: ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 		}
-		selected = f.withAdoptedMCPServers(ctx, selected)
+		var err error
+		selected, err = f.withAdoptedMCPServers(ctx, selected, options.AdoptMCPServers)
+		if err != nil {
+			return Agent{}, err
+		}
 		if options.IncludeDocuments {
 			return f.convertWithDocuments(ctx, selected)
 		}
@@ -179,22 +183,27 @@ func (f agentFacade) Get(ctx context.Context, agentID string, options AgentGetOp
 	if !ok {
 		return Agent{}, &TurnError{Code: ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
-	selected = f.withAdoptedMCPServers(ctx, selected)
+	var err error
+	selected, err = f.withAdoptedMCPServers(ctx, selected, options.AdoptMCPServers)
+	if err != nil {
+		return Agent{}, err
+	}
 	if options.IncludeDocuments {
 		return f.convertWithDocuments(ctx, selected)
 	}
 	return f.convert(selected)
 }
 
-func (f agentFacade) withAdoptedMCPServers(ctx context.Context, selected agent.Agent) agent.Agent {
-	if selected.MCPServers != nil {
-		return selected
+func (f agentFacade) withAdoptedMCPServers(ctx context.Context, selected agent.Agent, adopt bool) (agent.Agent, error) {
+	if !adopt || selected.MCPServers != nil {
+		return selected, nil
 	}
 	view, err := f.service.MCPServersView(ctx, selected.ID)
-	if err == nil {
-		selected.MCPServers = view.Servers
+	if err != nil {
+		return agent.Agent{}, err
 	}
-	return selected
+	selected.MCPServers = view.Servers
+	return selected, nil
 }
 
 func (f agentFacade) List(ctx context.Context, options AgentListOptions) ([]Agent, error) {

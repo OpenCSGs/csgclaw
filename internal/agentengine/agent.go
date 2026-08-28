@@ -33,6 +33,9 @@ type AgentGetOptions struct {
 	Reload           bool `json:"reload,omitempty"`
 	ProbeRuntime     bool `json:"probe_runtime,omitempty"`
 	IncludeDocuments bool `json:"include_documents,omitempty"`
+	// AdoptMCPServers reads unmanaged Runtime MCP state for an explicit MCP
+	// administration operation. Runtime read failures are returned to the caller.
+	AdoptMCPServers bool `json:"adopt_mcp_servers,omitempty"`
 }
 
 type AgentListOptions struct {

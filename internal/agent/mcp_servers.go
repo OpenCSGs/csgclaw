@@ -63,8 +63,7 @@ func (s *Service) MCPServersView(ctx context.Context, id string) (MCPServersView
 	}
 	servers, err := s.currentMCPServersForManagement(ctx, got)
 	if err != nil {
-		view.Servers = cloneMCPServers(got.MCPServers)
-		return view, nil
+		return MCPServersView{}, err
 	}
 	view.Servers = cloneMCPServers(servers)
 	return view, nil
