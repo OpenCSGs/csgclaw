@@ -8227,6 +8227,15 @@ func TestCreateOpenClawWorkerFromTemplateOverlaysOpenClawWorkspace(t *testing.T)
 	if _, err := os.Stat(filepath.Join(openclawWorkspace, "skills", "custom", "SKILL.md")); err != nil {
 		t.Fatalf("template skill missing from OpenClaw workspace after overlay: %v", err)
 	}
+	for path, want := range map[string]string{
+		"MEMORY.md":            "# OpenClaw template memory\n",
+		"memory/2026-08-28.md": "OpenClaw dated memory\n",
+	} {
+		data, readErr := os.ReadFile(filepath.Join(openclawWorkspace, filepath.FromSlash(path)))
+		if readErr != nil || string(data) != want {
+			t.Fatalf("restored OpenClaw memory %s = %q, error = %v, want %q", path, data, readErr, want)
+		}
+	}
 	if _, err := os.Stat(filepath.Join(agentHome, hostWorkspaceDir, "skills", "custom", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("template skill should not be written to legacy workspace path for OpenClaw, stat error = %v", err)
 	}
@@ -11547,16 +11556,29 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 
 	store := hub.NewLocalStore(registryRoot)
 	workspaceRef := hub.WorkspaceRef{Kind: hub.WorkspaceKindDir, Path: workspaceRoot}
+	includeMemory := false
 	if agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind() == RuntimeKindCodex {
 		memoryPath := filepath.Join(t.TempDir(), "memory_summary.md")
 		if err := os.WriteFile(memoryPath, []byte("# Template memory\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(memory_summary.md) error = %v", err)
 		}
 		workspaceRef.MemoryPath = memoryPath
+		includeMemory = true
+	} else if agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind() == RuntimeKindOpenClawSandbox {
+		if err := os.WriteFile(filepath.Join(workspaceRoot, "MEMORY.md"), []byte("# OpenClaw template memory\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(MEMORY.md) error = %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(workspaceRoot, "memory"), 0o755); err != nil {
+			t.Fatalf("MkdirAll(memory) error = %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(workspaceRoot, "memory", "2026-08-28.md"), []byte("OpenClaw dated memory\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(dated memory) error = %v", err)
+		}
+		includeMemory = true
 	}
 	if _, err := store.Publish(context.Background(), hub.PublishSpec{
 		ID:             id,
-		IncludeMemory:  workspaceRef.MemoryPath != "",
+		IncludeMemory:  includeMemory,
 		Name:           item.Name,
 		Description:    item.Description,
 		RuntimeKind:    item.RuntimeKind,

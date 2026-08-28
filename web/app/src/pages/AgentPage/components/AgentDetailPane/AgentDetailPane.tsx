@@ -317,6 +317,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const runtimeKind = agentRuntimeKind(item);
   const canPublishLocal = !isManager && (runtimeKind === "codex" || runtimeKind === "openclaw_sandbox");
   const canPublishCommunity = !isManager && runtimeKind === "codex";
+  const supportsTemplateMemory = runtimeKind === "codex" || runtimeKind === "openclaw_sandbox";
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
   const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
@@ -1237,7 +1238,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 onChange={(event) => setPublishTemplateDescription(event.target.value)}
               />
             </label>
-            {runtimeKind === "codex" ? (
+            {supportsTemplateMemory ? (
               <label className="agent-publish-memory-option">
                 <Checkbox
                   aria-label={t("agentPublishIncludeMemory")}

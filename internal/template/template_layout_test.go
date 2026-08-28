@@ -86,7 +86,7 @@ func TestWriteTemplateLayoutKeepsWorkspaceMemoryOutOfCodexTemplates(t *testing.T
 			}
 			for _, path := range []string{
 				filepath.Join(templateRoot, localMemoriesDirName, "MEMORY.md"),
-				filepath.Join(templateRoot, localMemoriesDirName, "2026-08-25.md"),
+				filepath.Join(templateRoot, localMemoriesDirName, "memory", "2026-08-25.md"),
 			} {
 				_, err := os.Stat(path)
 				if tt.wantMemory && err != nil {
@@ -100,6 +100,73 @@ func TestWriteTemplateLayoutKeepsWorkspaceMemoryOutOfCodexTemplates(t *testing.T
 				t.Fatalf("reserved memory staging directory leaked into instructions: %v", err)
 			}
 		})
+	}
+}
+
+func TestOpenClawTemplateMemoryRoundTripPreservesWorkspaceLayout(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	for path, content := range map[string]string{
+		"AGENTS.md":            "# Instructions\n",
+		"MEMORY.md":            "# Durable memory\n",
+		"memory/2026-08-28.md": "dated memory\n",
+	} {
+		path = filepath.Join(workspaceRoot, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	store := NewLocalStore(t.TempDir())
+	created, err := store.Publish(context.Background(), PublishSpec{
+		ID: "openclaw-memory", Name: "openclaw-memory", RuntimeKind: agentruntime.NameOpenClaw,
+		Image: "openclaw:test", IncludeMemory: true,
+		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot},
+	})
+	if err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	workspace, err := store.FetchWorkspace(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("FetchWorkspace() error = %v", err)
+	}
+	defer os.RemoveAll(workspace.Path)
+	for path, want := range map[string]string{
+		"MEMORY.md":            "# Durable memory\n",
+		"memory/2026-08-28.md": "dated memory\n",
+	} {
+		data, readErr := os.ReadFile(filepath.Join(workspace.Path, filepath.FromSlash(path)))
+		if readErr != nil || string(data) != want {
+			t.Fatalf("restored %s = %q, error = %v, want %q", path, data, readErr, want)
+		}
+	}
+}
+
+func TestMaterializeWorkspaceMemorySupportsLegacyFlattenedEntries(t *testing.T) {
+	templateRoot := t.TempDir()
+	for path, content := range map[string]string{
+		"instructions/AGENTS.md": "# Instructions\n",
+		"memories/MEMORY.md":     "# Durable memory\n",
+		"memories/2026-08-27.md": "legacy dated memory\n",
+		"mcps/mcp.json":          "{}\n",
+	} {
+		path = filepath.Join(templateRoot, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	workspace, err := materializeTemplateFS(os.DirFS(templateRoot), ".", agentruntime.NameOpenClaw)
+	if err != nil {
+		t.Fatalf("materializeTemplateFS() error = %v", err)
+	}
+	defer os.RemoveAll(workspace.Path)
+	if data, readErr := os.ReadFile(filepath.Join(workspace.Path, "memory", "2026-08-27.md")); readErr != nil || string(data) != "legacy dated memory\n" {
+		t.Fatalf("legacy dated memory = %q, error = %v", data, readErr)
 	}
 }
 

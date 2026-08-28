@@ -681,7 +681,8 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
   skills/<skill>/...
   mcps/mcp.json
   memories/memory_summary.md # 可选的 Codex 记忆快照
-  memories/MEMORY.md         # 非 Codex Runtime 可选
+  memories/MEMORY.md         # 非 Codex Runtime 可选的根记忆文件
+  memories/memory/*.md       # 非 Codex Runtime 可选的日期记忆文件
 ```
 
 发布时始终生成 `AGENTS.md` 和 `mcp.json`。

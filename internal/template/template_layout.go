@@ -69,11 +69,7 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (Works
 	}
 	for _, part := range []struct{ source, target string }{
 		{localSkillsDirName, localSkillsDirName},
-		{localMemoriesDirName, ""},
 	} {
-		if part.source == localMemoriesDirName && !templateUsesWorkspaceMemory(runtimeKind) {
-			continue
-		}
 		source := filepath.ToSlash(filepath.Join(templateRoot, part.source))
 		if info, statErr := fs.Stat(srcFS, source); statErr == nil && info.IsDir() {
 			target := dstRoot
@@ -83,6 +79,11 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (Works
 			if err := copyWorkspaceTreeFS(srcFS, source, target, "template "+part.source); err != nil {
 				return cleanup(err)
 			}
+		}
+	}
+	if templateUsesWorkspaceMemory(runtimeKind) {
+		if err := materializeWorkspaceMemoryFS(srcFS, templateRoot, dstRoot); err != nil {
+			return cleanup(err)
 		}
 	}
 	var memoryPath string
@@ -153,7 +154,7 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind strin
 		}
 		if reservedName == "memory" {
 			if includeMemory && templateUsesWorkspaceMemory(runtimeKind) {
-				if err := copyWorkspaceTree(source, filepath.Join(templateRoot, localMemoriesDirName)); err != nil {
+				if err := copyWorkspaceTree(source, filepath.Join(templateRoot, localMemoriesDirName, "memory")); err != nil {
 					return err
 				}
 			}
@@ -233,6 +234,46 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind strin
 	}
 	data = append(data, '\n')
 	return os.WriteFile(filepath.Join(templateRoot, localMCPsDirName, localMCPFileName), data, 0o644)
+}
+
+func materializeWorkspaceMemoryFS(srcFS fs.FS, templateRoot, workspaceRoot string) error {
+	memoriesRoot := filepath.ToSlash(filepath.Join(templateRoot, localMemoriesDirName))
+	entries, err := fs.ReadDir(srcFS, memoriesRoot)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		source := filepath.ToSlash(filepath.Join(memoriesRoot, name))
+		if strings.EqualFold(name, "MEMORY.md") && !entry.IsDir() {
+			if err := copySingleTemplateFileFS(srcFS, source, filepath.Join(workspaceRoot, "MEMORY.md")); err != nil {
+				return err
+			}
+			continue
+		}
+		target := filepath.Join(workspaceRoot, "memory")
+		if strings.EqualFold(name, "memory") && entry.IsDir() {
+			if err := copyWorkspaceTreeFS(srcFS, source, target, "template memories/memory"); err != nil {
+				return err
+			}
+			continue
+		}
+		// Older CSGClaw versions flattened memory/* directly under memories/.
+		// Restore those entries under memory/ so existing templates retain the
+		// OpenClaw workspace layout expected by the runtime.
+		target = filepath.Join(target, name)
+		if entry.IsDir() {
+			if err := copyWorkspaceTreeFS(srcFS, source, target, "legacy template memory"); err != nil {
+				return err
+			}
+		} else if err := copySingleTemplateFileFS(srcFS, source, target); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func copyTemplateSkills(source, target, runtimeKind string) error {

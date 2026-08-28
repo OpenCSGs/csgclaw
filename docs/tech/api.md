@@ -700,7 +700,8 @@ Templates use the following layout:
   skills/<skill>/...
   mcps/mcp.json
   memories/memory_summary.md # optional Codex memory snapshot
-  memories/MEMORY.md         # optional for non-Codex runtimes
+  memories/MEMORY.md         # optional root memory for non-Codex runtimes
+  memories/memory/*.md       # optional dated memory files for non-Codex runtimes
 ```
 
 `AGENTS.md` and `mcp.json` are always emitted when publishing.

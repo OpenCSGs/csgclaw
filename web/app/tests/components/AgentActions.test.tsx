@@ -144,9 +144,16 @@ describe("agent action visibility", () => {
     expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Template name" })).toHaveValue("Worker");
     expect(screen.getByRole("textbox", { name: "Template description" })).toHaveValue("Agent description");
+    expect(screen.getByRole("checkbox", { name: "Include agent memory" })).not.toBeChecked();
     await user.click(screen.getByRole("button", { name: "Save as local template" }));
     expect(onPublish).toHaveBeenCalledWith("local", "Worker", "Agent description", false);
     expect(screen.queryByRole("dialog", { name: "Publish agent template" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Save as local template" }));
+    await user.click(screen.getByRole("checkbox", { name: "Include agent memory" }));
+    await user.click(screen.getByRole("button", { name: "Save as local template" }));
+    expect(onPublish).toHaveBeenLastCalledWith("local", "Worker", "Agent description", true);
 
     await user.click(screen.getByRole("button", { name: "More" }));
     expect(screen.queryByRole("menuitem", { name: "Publish to community" })).not.toBeInTheDocument();
