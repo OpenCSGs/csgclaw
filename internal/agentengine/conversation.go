@@ -200,6 +200,7 @@ type ErrorCode string
 
 const (
 	ErrorInvalidRequest              ErrorCode = "invalid_request"
+	ErrorAgentNotFound               ErrorCode = "agent_not_found"
 	ErrorAgentUnavailable            ErrorCode = "agent_unavailable"
 	ErrorRuntimeAdapterUnavailable   ErrorCode = "runtime_adapter_unavailable"
 	ErrorConversationBusy            ErrorCode = "conversation_busy"

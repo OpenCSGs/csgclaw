@@ -86,7 +86,7 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		if err := agents.Delete(context.Background(), got.ID); err != nil {
 			t.Fatalf("Delete() error = %v", err)
 		}
-		if _, err := agents.Get(context.Background(), got.ID, agentengine.AgentGetOptions{}); agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentUnavailable {
+		if _, err := agents.Get(context.Background(), got.ID, agentengine.AgentGetOptions{}); agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentNotFound {
 			t.Fatalf("Get(deleted) error = %v", err)
 		}
 	})

@@ -1383,9 +1383,15 @@ func TestHandleAgentGetDistinguishesNotFoundFromEngineFailure(t *testing.T) {
 	}{
 		{
 			name:       "not found",
-			err:        &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: "agent missing"},
+			err:        &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: "agent missing"},
 			wantStatus: http.StatusNotFound,
 			wantBody:   "agent not found",
+		},
+		{
+			name:       "engine unavailable",
+			err:        &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: "agent service is unavailable"},
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   "agent service is unavailable",
 		},
 		{
 			name:       "reload failure",

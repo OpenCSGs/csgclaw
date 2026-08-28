@@ -204,7 +204,7 @@ func (a *memoryAgents) Get(_ context.Context, agentID string, _ agentengine.Agen
 		}
 	}
 	if !ok {
-		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: fmt.Sprintf("agent %q not found", agentID)}
+		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
 	return cloneAgent(item), nil
 }
@@ -273,7 +273,7 @@ func (a *memoryAgents) Update(ctx context.Context, agentID string, request agent
 	defer a.client.mu.Unlock()
 	item, ok := a.client.agents[strings.TrimSpace(agentID)]
 	if !ok {
-		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: fmt.Sprintf("agent %q not found", agentID)}
+		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
 	if request.ResourceVersion != "" && request.ResourceVersion != item.ResourceVersion {
 		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent resource version is stale"}
@@ -375,7 +375,7 @@ func (a *memoryAgents) setState(agentID string, state agentengine.AgentState, re
 	defer a.client.mu.Unlock()
 	item, ok := a.client.agents[strings.TrimSpace(agentID)]
 	if !ok {
-		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: fmt.Sprintf("agent %q not found", agentID)}
+		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
 	item.Status.State = state
 	item.Status.Ready = ready

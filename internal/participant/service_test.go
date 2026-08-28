@@ -353,27 +353,37 @@ func TestRepairDanglingCSGClawAgentParticipantsRequiresIMService(t *testing.T) {
 }
 
 func TestRepairDanglingCSGClawAgentParticipantsPreservesStateOnEngineFailure(t *testing.T) {
-	store := NewMemoryStore([]Participant{{
-		ID: "pt-qa", Channel: ChannelCSGClaw, Type: TypeAgent, Name: "qa",
-		ChannelUserRef: "user-qa", ChannelUserKind: ChannelUserKindLocalUserID, AgentID: "agent-qa",
-	}})
-	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-qa", Name: "qa"}}})
-	base := enginetest.NewMemoryClient()
-	svc := NewService(store, WithIMService(imSvc))
-	svc.agents = repairGetErrorAgents{AgentInterface: base.Agents(), err: errors.New("temporary engine outage")}
+	for _, test := range []struct {
+		name string
+		err  error
+	}{
+		{name: "untyped outage", err: errors.New("temporary engine outage")},
+		{name: "typed unavailable", err: &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: "agent backend unavailable"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := NewMemoryStore([]Participant{{
+				ID: "pt-qa", Channel: ChannelCSGClaw, Type: TypeAgent, Name: "qa",
+				ChannelUserRef: "user-qa", ChannelUserKind: ChannelUserKindLocalUserID, AgentID: "agent-qa",
+			}})
+			imSvc := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-qa", Name: "qa"}}})
+			base := enginetest.NewMemoryClient()
+			svc := NewService(store, WithIMService(imSvc))
+			svc.agents = repairGetErrorAgents{AgentInterface: base.Agents(), err: test.err}
 
-	deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
-	if err == nil || !strings.Contains(err.Error(), "temporary engine outage") {
-		t.Fatalf("RepairDanglingCSGClawAgentParticipants() = %+v, %v, want operational error", deleted, err)
-	}
-	if len(deleted) != 0 {
-		t.Fatalf("deleted = %+v, want no deletion on Engine failure", deleted)
-	}
-	if _, ok := store.Get(ChannelCSGClaw, "pt-qa"); !ok {
-		t.Fatal("participant was deleted on Engine failure")
-	}
-	if _, ok := imSvc.User("user-qa"); !ok {
-		t.Fatal("local user was deleted on Engine failure")
+			deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
+			if err == nil {
+				t.Fatalf("RepairDanglingCSGClawAgentParticipants() = %+v, nil, want operational error", deleted)
+			}
+			if len(deleted) != 0 {
+				t.Fatalf("deleted = %+v, want no deletion on Engine failure", deleted)
+			}
+			if _, ok := store.Get(ChannelCSGClaw, "pt-qa"); !ok {
+				t.Fatal("participant was deleted on Engine failure")
+			}
+			if _, ok := imSvc.User("user-qa"); !ok {
+				t.Fatal("local user was deleted on Engine failure")
+			}
+		})
 	}
 }
 

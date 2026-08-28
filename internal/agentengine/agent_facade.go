@@ -164,7 +164,7 @@ func (f agentFacade) Get(ctx context.Context, agentID string, options AgentGetOp
 	if options.ProbeRuntime {
 		selected, ok := f.service.Inspect(ctx, agentID)
 		if !ok {
-			return Agent{}, &TurnError{Code: ErrorAgentUnavailable, Message: fmt.Sprintf("agent %q not found", agentID)}
+			return Agent{}, &TurnError{Code: ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 		}
 		if options.IncludeDocuments {
 			return f.convertWithDocuments(ctx, selected)
@@ -176,7 +176,7 @@ func (f agentFacade) Get(ctx context.Context, agentID string, options AgentGetOp
 		selected, ok = f.service.AgentByName(agentID)
 	}
 	if !ok {
-		return Agent{}, &TurnError{Code: ErrorAgentUnavailable, Message: fmt.Sprintf("agent %q not found", agentID)}
+		return Agent{}, &TurnError{Code: ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
 	if options.IncludeDocuments {
 		return f.convertWithDocuments(ctx, selected)

@@ -1639,7 +1639,7 @@ func writeAgentOperationError(w http.ResponseWriter, err error, defaultStatus in
 }
 
 func writeAgentGetError(w http.ResponseWriter, err error) {
-	if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentUnavailable {
+	if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentNotFound {
 		http.Error(w, "agent not found", http.StatusNotFound)
 		return
 	}
