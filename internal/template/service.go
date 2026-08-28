@@ -232,7 +232,7 @@ func (s *Service) Publish(ctx context.Context, spec PublishSpec) (Template, erro
 	return decorateTemplate(cfgStore, item), nil
 }
 
-func (s *Service) PublishTemplate(ctx context.Context, id, registry string) (Template, error) {
+func (s *Service) PublishTemplate(ctx context.Context, id, registry string, includeMemory bool) (Template, error) {
 	item, err := s.Get(ctx, id)
 	if err != nil {
 		return Template{}, err
@@ -244,6 +244,9 @@ func (s *Service) PublishTemplate(ctx context.Context, id, registry string) (Tem
 	if workspace.Temporary && strings.TrimSpace(workspace.Path) != "" {
 		defer func() { _ = os.RemoveAll(workspace.Path) }()
 	}
+	if !includeMemory {
+		workspace.MemoryPath = ""
+	}
 	var mcpServers map[string]any
 	if raw := strings.TrimSpace(workspace.MCPServersJSON); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &mcpServers); err != nil {
@@ -252,6 +255,7 @@ func (s *Service) PublishTemplate(ctx context.Context, id, registry string) (Tem
 	}
 	return s.Publish(ctx, PublishSpec{
 		Registry:       registry,
+		IncludeMemory:  includeMemory,
 		ID:             item.Name,
 		Name:           item.Name,
 		Description:    item.Description,

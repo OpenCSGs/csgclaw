@@ -260,6 +260,7 @@ func (s *Service) HubPublishSpec(agentID string, includeMemory bool) (hub.Publis
 	}
 	return hub.PublishSpec{
 		ID:             got.Name,
+		IncludeMemory:  includeMemory,
 		Name:           got.Name,
 		Description:    got.Description,
 		RuntimeKind:    got.RuntimeConfig().Kind(),

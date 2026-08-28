@@ -139,6 +139,24 @@ describe("hub API", () => {
     );
   });
 
+  it("includes local template memory only after explicit opt-in", async () => {
+    const fetchMock = mockFetch();
+
+    await publishHubTemplateToCommunityRequest("local.review-bot", false, true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/hub/templates",
+      expect.objectContaining({
+        body: JSON.stringify({
+          template_id: "local.review-bot",
+          registry: "official",
+          include_memory: true,
+        }),
+        method: "POST",
+      }),
+    );
+  });
+
   it("uses single-id paths for template delete requests", async () => {
     const fetchMock = mockFetch();
 

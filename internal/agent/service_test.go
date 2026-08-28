@@ -11556,6 +11556,7 @@ func mustNewLocalTemplateHubService(t *testing.T, id string, item hub.Template) 
 	}
 	if _, err := store.Publish(context.Background(), hub.PublishSpec{
 		ID:             id,
+		IncludeMemory:  workspaceRef.MemoryPath != "",
 		Name:           item.Name,
 		Description:    item.Description,
 		RuntimeKind:    item.RuntimeKind,

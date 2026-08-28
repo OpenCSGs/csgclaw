@@ -31,6 +31,7 @@ import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { ModelsIcon } from "@/components/ui/Icons";
 import {
   Button,
+  Checkbox,
   DialogBody,
   DialogCloseButton,
   DialogContent,
@@ -214,6 +215,7 @@ type HubDetailPaneHub = {
     onPublishTemplate?: (
       item: HubTemplate | null | undefined,
       deploy?: boolean,
+      includeMemory?: boolean,
     ) =>
       | Promise<{ status: "success" } | { status: "partial"; message: string } | null>
       | { status: "success" }
@@ -681,6 +683,7 @@ export function HubDetailPane({
   const [publishSuccessDialogOpen, setPublishSuccessDialogOpen] = useState(false);
   const [publishPartialMessage, setPublishPartialMessage] = useState("");
   const [publishChoiceDialogOpen, setPublishChoiceDialogOpen] = useState(false);
+  const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
@@ -836,7 +839,7 @@ export function HubDetailPane({
   }
 
   async function handlePublishTemplate(deploy = false) {
-    const result = await onPublishTemplate?.(selectedTemplate, deploy);
+    const result = await onPublishTemplate?.(selectedTemplate, deploy, publishTemplateIncludeMemory);
     if (result?.status === "success") {
       setPublishPartialMessage("");
       setPublishChoiceDialogOpen(false);
@@ -948,7 +951,10 @@ export function HubDetailPane({
                         loading={publishBusy}
                         disabled={publishBusy || publishDisabled}
                         title={publishDisabled ? t("agentPublishLoginRequired") : undefined}
-                        onClick={() => setPublishChoiceDialogOpen(true)}
+                        onClick={() => {
+                          setPublishTemplateIncludeMemory(false);
+                          setPublishChoiceDialogOpen(true);
+                        }}
                       >
                         {t("agentPublishCommunity")}
                       </Button>
@@ -1497,7 +1503,15 @@ export function HubDetailPane({
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
-      <DialogRoot open={publishChoiceDialogOpen} onOpenChange={setPublishChoiceDialogOpen}>
+      <DialogRoot
+        open={publishChoiceDialogOpen}
+        onOpenChange={(open) => {
+          setPublishChoiceDialogOpen(open);
+          if (!open) {
+            setPublishTemplateIncludeMemory(false);
+          }
+        }}
+      >
         <DialogContent className="agent-publish-dialog">
           <DialogHeader>
             <div>
@@ -1506,6 +1520,21 @@ export function HubDetailPane({
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
+          {templateMemoryEnabled ? (
+            <DialogBody>
+              <label className="hub-template-publish-memory-option">
+                <Checkbox
+                  aria-label={t("agentPublishIncludeMemory")}
+                  checked={publishTemplateIncludeMemory}
+                  onCheckedChange={(checked) => setPublishTemplateIncludeMemory(checked === true)}
+                />
+                <span>
+                  <strong>{t("agentPublishIncludeMemory")}</strong>
+                  <small>{t("agentPublishIncludeMemoryWarning")}</small>
+                </span>
+              </label>
+            </DialogBody>
+          ) : null}
           {publishError ? <div className="form-error">{publishError}</div> : null}
           <DialogFooter>
             <Button

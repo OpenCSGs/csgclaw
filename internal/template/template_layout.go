@@ -130,7 +130,7 @@ func readTemplateMCPServers(srcFS fs.FS, filePath string) (map[string]any, error
 	return raw, nil
 }
 
-func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind string, mcpServers map[string]any) error {
+func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind string, mcpServers map[string]any, includeMemory bool) error {
 	workspaceRoot := workspace.Path
 	instructionsRoot := filepath.Join(templateRoot, localInstructionsDirName)
 	if err := os.MkdirAll(instructionsRoot, 0o755); err != nil {
@@ -143,6 +143,30 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind strin
 	for _, entry := range entries {
 		name := entry.Name()
 		source := filepath.Join(workspaceRoot, name)
+		reservedName := strings.ToLower(name)
+		if reservedName == strings.ToLower(codexTemplateMemoryStagingDir) {
+			// Materialized Codex templates stage memory inside WorkspaceRef.Path so
+			// agent creation can restore it separately. Never treat that reserved
+			// directory as instructions: memory may only leave through the explicit
+			// WorkspaceRef.MemoryPath channel below.
+			continue
+		}
+		if reservedName == "memory" {
+			if includeMemory && templateUsesWorkspaceMemory(runtimeKind) {
+				if err := copyWorkspaceTree(source, filepath.Join(templateRoot, localMemoriesDirName)); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if reservedName == "memory.md" {
+			if includeMemory && templateUsesWorkspaceMemory(runtimeKind) {
+				if err := copySingleTemplateFile(source, filepath.Join(templateRoot, localMemoriesDirName, "MEMORY.md")); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		switch name {
 		case requiredInstructionsFile:
 			if strings.TrimSpace(workspace.InstructionsPath) != "" {
@@ -156,20 +180,6 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind strin
 				continue
 			}
 			if err := copyTemplateSkills(source, filepath.Join(templateRoot, localSkillsDirName), runtimeKind); err != nil {
-				return err
-			}
-		case "memory":
-			if !templateUsesWorkspaceMemory(runtimeKind) {
-				continue
-			}
-			if err := copyWorkspaceTree(source, filepath.Join(templateRoot, localMemoriesDirName)); err != nil {
-				return err
-			}
-		case "MEMORY.md":
-			if !templateUsesWorkspaceMemory(runtimeKind) {
-				continue
-			}
-			if err := copySingleTemplateFile(source, filepath.Join(templateRoot, localMemoriesDirName, name)); err != nil {
 				return err
 			}
 		default:

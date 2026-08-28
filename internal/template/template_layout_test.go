@@ -52,27 +52,36 @@ func TestWriteTemplateLayoutKeepsWorkspaceMemoryOutOfCodexTemplates(t *testing.T
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "AGENTS.md"), []byte("# Instructions\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(workspaceRoot, "MEMORY.md"), []byte("# Pinned memory\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "memory.md"), []byte("# Pinned memory\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(workspaceRoot, "memory"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, "Memory"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(workspaceRoot, "memory", "2026-08-25.md"), []byte("dated memory\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "Memory", "2026-08-25.md"), []byte("dated memory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stagingDir := filepath.Join(workspaceRoot, ".CSGClaw-Template-Memory")
+	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stagingDir, "memory_summary.md"), []byte("staged memory\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, tt := range []struct {
-		name        string
-		runtimeKind string
-		wantMemory  bool
+		name          string
+		runtimeKind   string
+		includeMemory bool
+		wantMemory    bool
 	}{
-		{name: "codex", runtimeKind: agentruntime.KindCodex, wantMemory: false},
-		{name: "openclaw", runtimeKind: agentruntime.NameOpenClaw, wantMemory: true},
+		{name: "codex", runtimeKind: agentruntime.KindCodex, includeMemory: true, wantMemory: false},
+		{name: "openclaw default off", runtimeKind: agentruntime.NameOpenClaw, wantMemory: false},
+		{name: "openclaw explicit opt in", runtimeKind: agentruntime.NameOpenClaw, includeMemory: true, wantMemory: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			templateRoot := t.TempDir()
-			if err := writeTemplateLayout(WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot}, templateRoot, tt.runtimeKind, nil); err != nil {
+			if err := writeTemplateLayout(WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot}, templateRoot, tt.runtimeKind, nil, tt.includeMemory); err != nil {
 				t.Fatalf("writeTemplateLayout() error = %v", err)
 			}
 			for _, path := range []string{
@@ -86,6 +95,9 @@ func TestWriteTemplateLayoutKeepsWorkspaceMemoryOutOfCodexTemplates(t *testing.T
 				if !tt.wantMemory && !errors.Is(err, os.ErrNotExist) {
 					t.Fatalf("Codex template unexpectedly contains workspace memory %q: %v", path, err)
 				}
+			}
+			if _, err := os.Stat(filepath.Join(templateRoot, localInstructionsDirName, ".CSGClaw-Template-Memory")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("reserved memory staging directory leaked into instructions: %v", err)
 			}
 		})
 	}

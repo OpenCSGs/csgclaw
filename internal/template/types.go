@@ -64,6 +64,7 @@ type WorkspaceRef struct {
 
 type PublishSpec struct {
 	Registry       string
+	IncludeMemory  bool
 	ID             string
 	Name           string
 	Description    string

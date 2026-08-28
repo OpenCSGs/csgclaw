@@ -61,10 +61,15 @@ export function publishAgentTemplateRequest(
   return post<HubTemplate>(HUB_TEMPLATES_PATH, payload);
 }
 
-export function publishHubTemplateToCommunityRequest(templateID: string, deploy = false): Promise<HubTemplate> {
+export function publishHubTemplateToCommunityRequest(
+  templateID: string,
+  deploy = false,
+  includeMemory = false,
+): Promise<HubTemplate> {
   return post<HubTemplate>(HUB_TEMPLATES_PATH, {
     template_id: templateID,
     registry: "official",
+    ...(includeMemory ? { include_memory: true } : {}),
     ...(deploy ? { deploy: true } : {}),
   });
 }

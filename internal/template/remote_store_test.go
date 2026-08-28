@@ -155,6 +155,13 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	if err := os.WriteFile(memoryPath, []byte("must not upload\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	stagedMemoryDir := filepath.Join(workspace, codexTemplateMemoryStagingDir)
+	if err := os.MkdirAll(stagedMemoryDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stagedMemoryDir, "memory_summary.md"), []byte("staged memory must not upload\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(filepath.Join(workspace, "skills", "custom"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -277,16 +284,20 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 	names := make(map[string]bool, len(archive.File))
 	for _, file := range archive.File {
 		names[file.Name] = true
+		reader, openErr := file.Open()
+		if openErr != nil {
+			t.Fatalf("Open(%s) error = %v", file.Name, openErr)
+		}
+		content, readErr := io.ReadAll(reader)
+		_ = reader.Close()
+		if readErr != nil {
+			t.Fatalf("ReadAll(%s) error = %v", file.Name, readErr)
+		}
+		if bytes.Contains(content, []byte("staged memory must not upload")) {
+			t.Errorf("uploaded archive leaked staged memory through %q", file.Name)
+		}
 		if file.Name == "agent.toml" {
-			reader, err := file.Open()
-			if err != nil {
-				t.Fatalf("Open(agent.toml) error = %v", err)
-			}
-			manifest, err := io.ReadAll(reader)
-			_ = reader.Close()
-			if err != nil {
-				t.Fatalf("ReadAll(agent.toml) error = %v", err)
-			}
+			manifest := content
 			if !strings.Contains(string(manifest), `schema_version = "agentfile/v1"`) {
 				t.Errorf("agent.toml missing schema_version: %s", manifest)
 			}
@@ -317,6 +328,9 @@ func TestRemoteStorePublishUploadsArchiveAndCreatesTemplateCode(t *testing.T) {
 		}
 		if name == "memories/memory_summary.md" {
 			t.Errorf("uploaded archive contains disabled Codex memory summary")
+		}
+		if strings.Contains(name, codexTemplateMemoryStagingDir) {
+			t.Errorf("uploaded archive contains reserved memory staging path %q", name)
 		}
 	}
 }

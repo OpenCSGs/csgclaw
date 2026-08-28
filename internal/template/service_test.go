@@ -3,6 +3,8 @@ package template
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"csgclaw/internal/config"
@@ -212,6 +214,63 @@ func TestPublishUsesDefaultPublishRegistry(t *testing.T) {
 	}
 	if got, want := item.ID, "local.frontend-alice"; got != want {
 		t.Fatalf("Publish().ID = %q, want %q", got, want)
+	}
+}
+
+func TestPublishTemplateRequiresExplicitMemoryOptIn(t *testing.T) {
+	sourceRoot := t.TempDir()
+	targetRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspaceRoot, requiredInstructionsFile), []byte("# Instructions\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	memoryPath := filepath.Join(t.TempDir(), "memory_summary.md")
+	if err := os.WriteFile(memoryPath, []byte("private memory marker\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sourceStore := NewLocalStore(sourceRoot)
+	if _, err := sourceStore.Publish(context.Background(), PublishSpec{
+		ID: "codex-memory", Name: "codex-memory", RuntimeKind: "codex", IncludeMemory: true,
+		WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot, MemoryPath: memoryPath},
+	}); err != nil {
+		t.Fatalf("seed source template: %v", err)
+	}
+	svc, err := NewService(config.HubConfig{
+		DefaultRegistry:        "source",
+		DefaultPublishRegistry: "target",
+		Registries: []config.HubRegistryConfig{
+			{Name: "source", Kind: RegistryKindLocal, Path: sourceRoot, Enabled: true},
+			{Name: "target", Kind: RegistryKindLocal, Path: targetRoot, Enabled: true},
+		},
+	}, DefaultStoreFactory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.PublishTemplate(context.Background(), "source.codex-memory", "target", false); err != nil {
+		t.Fatalf("PublishTemplate(default) error = %v", err)
+	}
+	targetTemplateRoot := filepath.Join(targetRoot, localTemplatesDirName, "codex-memory")
+	for _, leakedPath := range []string{
+		filepath.Join(targetTemplateRoot, localMemoriesDirName, "memory_summary.md"),
+		filepath.Join(targetTemplateRoot, localInstructionsDirName, codexTemplateMemoryStagingDir, "memory_summary.md"),
+	} {
+		if _, statErr := os.Stat(leakedPath); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("default publish leaked memory at %q: %v", leakedPath, statErr)
+		}
+	}
+	if err := NewLocalStore(targetRoot).Delete(context.Background(), "codex-memory"); err != nil {
+		t.Fatalf("delete default publish: %v", err)
+	}
+	if _, err := svc.PublishTemplate(context.Background(), "source.codex-memory", "target", true); err != nil {
+		t.Fatalf("PublishTemplate(opt-in) error = %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(targetTemplateRoot, localMemoriesDirName, "memory_summary.md"))
+	if err != nil || string(data) != "private memory marker\n" {
+		t.Fatalf("opt-in memory = %q, error = %v", data, err)
+	}
+	if _, statErr := os.Stat(filepath.Join(targetTemplateRoot, localInstructionsDirName, codexTemplateMemoryStagingDir)); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("opt-in publish copied staging directory into instructions: %v", statErr)
 	}
 }
 

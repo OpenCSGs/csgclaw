@@ -56,6 +56,7 @@ export type WorkspaceHubController = {
     publishHubTemplate: (
       template: HubTemplate | null | undefined,
       deploy?: boolean,
+      includeMemory?: boolean,
     ) => Promise<PublishHubTemplateResult>;
     setPublishError: (message: string) => void;
     deleteSkill: DeleteSkill;
@@ -75,6 +76,7 @@ export type WorkspaceHubController = {
       onPublishTemplate: (
         template: HubTemplate | null | undefined,
         deploy?: boolean,
+        includeMemory?: boolean,
       ) => Promise<PublishHubTemplateResult>;
       publishBusy: boolean;
       publishDisabled: boolean;
@@ -224,14 +226,18 @@ export function useWorkspaceHubController({
   );
 
   const publishHubTemplate = useCallback(
-    async (template: HubTemplate | null | undefined, deploy = false): Promise<PublishHubTemplateResult> => {
+    async (
+      template: HubTemplate | null | undefined,
+      deploy = false,
+      includeMemory = false,
+    ): Promise<PublishHubTemplateResult> => {
       if (!template?.id || !isDeletableHubTemplate(template) || !openCSGAuthenticated) {
         return null;
       }
       setResourcesPublishBusy(true);
       setResourcesPublishError("");
       try {
-        const published = await publishHubTemplateToCommunityRequest(template.id, deploy);
+        const published = await publishHubTemplateToCommunityRequest(template.id, deploy, includeMemory);
         await refreshHubTemplates();
         if (published.id) {
           setSelectedHubTemplateId(published.id);

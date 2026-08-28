@@ -15,6 +15,8 @@ function t(key: string, params: Record<string, string | number> = {}) {
     agentPublishLoginRequired: "Sign in first",
     agentPublishTemplateCommunitySubtitle: "Publish remotely",
     agentPublishTemplateTitle: "Publish agent template",
+    agentPublishIncludeMemory: "Include agent memory",
+    agentPublishIncludeMemoryWarning: "Memory may contain private information.",
     agentPublishing: "Publishing",
     resourcesDeleteSkill: "Delete skill",
     resourcesDeleteSkillConfirmAction: "Delete",
@@ -139,6 +141,7 @@ function renderHubDetailPane(
     onPublishTemplate?: (
       item: HubTemplate | null | undefined,
       deploy?: boolean,
+      includeMemory?: boolean,
     ) => Promise<{ status: "success" } | { status: "partial"; message: string } | null>;
     publishDisabled?: boolean;
     publishError?: string;
@@ -469,7 +472,7 @@ describe("HubDetailPane", () => {
     expect(screen.getByRole("button", { name: "Publish and deploy" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Publish template only" }));
 
-    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, false);
+    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, false, false);
     expect(await screen.findByRole("dialog", { name: "Published successfully" })).toBeInTheDocument();
     expect(screen.getByText("The template has been published to the community.")).toBeInTheDocument();
 
@@ -510,9 +513,10 @@ describe("HubDetailPane", () => {
     renderHubDetailPane("template", { selectedTemplate: localTemplate, onPublishTemplate });
 
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
+    await user.click(screen.getByRole("checkbox", { name: "Include agent memory" }));
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
 
-    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true);
+    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true, true);
   });
 
   it("closes the publish form and shows deployment details after partial success", async () => {

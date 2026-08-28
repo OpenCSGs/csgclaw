@@ -1753,7 +1753,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 		var item hub.Template
 		publishingTemplate := strings.TrimSpace(req.TemplateID) != ""
 		if publishingTemplate {
-			item, err = hubSvc.PublishTemplate(r.Context(), req.TemplateID, req.Registry)
+			item, err = hubSvc.PublishTemplate(r.Context(), req.TemplateID, req.Registry, req.IncludeMemory)
 		} else {
 			var spec hub.PublishSpec
 			spec, err = h.svc.HubPublishSpec(req.AgentID, req.IncludeMemory)

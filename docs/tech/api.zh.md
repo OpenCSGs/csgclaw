@@ -739,7 +739,7 @@ Codex Worker 目前保存 `execution_mode` 和 `memory_mode`，不会保存 `loc
 
 - `agent_id` 必填
 - `registry` 省略时使用默认 publish registry
-- 只有显式设置 `include_memory: true` 才会发布 Codex 记忆摘要；由于记忆可能包含从对话中提取的隐私信息，该字段默认是 `false`
+- 只有显式设置 `include_memory: true` 才会发布 Codex 记忆摘要，包括通过 `template_id` 再发布已有本地模板时；由于记忆可能包含从对话中提取的隐私信息，该字段默认是 `false`
 - 发布成功返回 `201 Created`
 
 ### `GET /api/v1/hub/templates/{id}`

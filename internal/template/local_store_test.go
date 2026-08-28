@@ -33,6 +33,7 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	publishedAt := time.Date(2026, 5, 12, 8, 30, 0, 0, time.UTC)
 	published, err := store.Publish(context.Background(), PublishSpec{
 		Name:           "frontend-alice",
+		IncludeMemory:  true,
 		Description:    "Frontend worker with UI and styling skills",
 		RuntimeKind:    runtime.KindCodex,
 		Image:          "worker:latest",

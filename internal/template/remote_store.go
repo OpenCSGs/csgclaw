@@ -1002,7 +1002,7 @@ func buildRemoteTemplateArchive(spec PublishSpec) ([]byte, error) {
 		return nil, err
 	}
 	if spec.WorkspaceRef.Kind == WorkspaceKindDir {
-		if err := writeTemplateLayout(spec.WorkspaceRef, tmpDir, spec.RuntimeKind, spec.MCPServers); err != nil {
+		if err := writeTemplateLayout(spec.WorkspaceRef, tmpDir, spec.RuntimeKind, spec.MCPServers, spec.IncludeMemory); err != nil {
 			return nil, err
 		}
 	}
