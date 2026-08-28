@@ -204,6 +204,15 @@ export function useWorkspaceController() {
   const rooms = useMemo(() => displayData?.rooms ?? [], [displayData]);
   const [conversationProfileDetailAgentID, setConversationProfileDetailAgentID] = useState("");
   const conversationProfileDetailTriggerRef = useRef<HTMLElement | null>(null);
+  const handleAgentDeleted = useCallback((item: AgentLike) => {
+    setConversationProfileDetailAgentID((current) => {
+      if (current !== item.id) {
+        return current;
+      }
+      conversationProfileDetailTriggerRef.current = null;
+      return "";
+    });
+  }, []);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
   const {
     navigatePane,
@@ -296,6 +305,7 @@ export function useWorkspaceController() {
     modelProviders,
     modelProvidersLoaded,
     openCSGAuthenticated: isAuthenticated(auth.status),
+    onAgentDeleted: handleAgentDeleted,
     profileDetailAgentID: conversationProfileDetailAgentID,
     refreshMCPServers: hub.refetchMCPServers,
     refreshHubTemplates,

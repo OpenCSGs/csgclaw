@@ -260,6 +260,7 @@ export type UseAgentControllerArgs = {
   modelProviders?: ModelProviderCatalog | null;
   modelProvidersLoaded?: boolean;
   openCSGAuthenticated?: boolean;
+  onAgentDeleted?: (item: AgentLike) => void;
   profileDetailAgentID?: string;
   refreshMCPServers?: () => Promise<unknown>;
   refreshHubTemplates: () => Promise<void>;

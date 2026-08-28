@@ -212,6 +212,7 @@ function useAgentControllerHarness(
     managerProfile?: AgentProfileLike | null;
     modelProviders?: ModelProviderCatalog | null;
     modelProvidersLoaded?: boolean;
+    onAgentDeleted?: (item: AgentLike) => void;
     openCSGAuthenticated?: boolean;
     bootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshedBootstrapConfig?: RuntimeBootstrapConfig | null;
@@ -274,6 +275,7 @@ function useAgentControllerHarness(
     managerProfile: options.managerProfile ?? null,
     modelProviders: options.modelProviders ?? null,
     modelProvidersLoaded: options.modelProvidersLoaded ?? false,
+    onAgentDeleted: options.onAgentDeleted,
     openCSGAuthenticated: options.openCSGAuthenticated ?? false,
     refreshMCPServers: options.refreshMCPServers ?? vi.fn(async () => null),
     refreshHubTemplates: refreshHubTemplatesRef.current,
@@ -1077,7 +1079,10 @@ describe("useAgentController", () => {
   });
 
   it("deletes an agent through the agent-aware delete endpoint", async () => {
-    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+    const onAgentDeleted = vi.fn();
+    const { result } = renderHook(() => useAgentControllerHarness({ onAgentDeleted }).controller, {
+      wrapper: createWrapper(),
+    });
 
     await act(async () => {
       await result.current.agentViewProps.onDelete?.(oldAgent);
@@ -1085,6 +1090,21 @@ describe("useAgentController", () => {
 
     expect(deleteAgentLikeRequest).toHaveBeenCalledWith(oldAgent);
     expect(deleteBotRequest).not.toHaveBeenCalled();
+    expect(onAgentDeleted).toHaveBeenCalledWith(oldAgent);
+  });
+
+  it("keeps the profile detail open when deleting the agent fails", async () => {
+    const onAgentDeleted = vi.fn();
+    vi.mocked(deleteAgentLikeRequest).mockRejectedValueOnce(new Error("Delete failed"));
+    const { result } = renderHook(() => useAgentControllerHarness({ onAgentDeleted }).controller, {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.agentViewProps.onDelete?.(oldAgent);
+    });
+
+    expect(onAgentDeleted).not.toHaveBeenCalled();
   });
 
   it("keeps the agent module selected and switches to the adjacent agent after deletion", async () => {
