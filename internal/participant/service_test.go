@@ -2,12 +2,15 @@ package participant
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/enginetest"
 	"csgclaw/internal/assets"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
@@ -15,6 +18,15 @@ import (
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
 )
+
+type repairGetErrorAgents struct {
+	agentengine.AgentInterface
+	err error
+}
+
+func (a repairGetErrorAgents) Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error) {
+	return agentengine.Agent{}, a.err
+}
 
 func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
@@ -337,6 +349,31 @@ func TestRepairDanglingCSGClawAgentParticipantsRequiresIMService(t *testing.T) {
 	}
 	if _, ok := store.Get(ChannelCSGClaw, "pt-dev"); !ok {
 		t.Fatal("participant was deleted without an IM service")
+	}
+}
+
+func TestRepairDanglingCSGClawAgentParticipantsPreservesStateOnEngineFailure(t *testing.T) {
+	store := NewMemoryStore([]Participant{{
+		ID: "pt-qa", Channel: ChannelCSGClaw, Type: TypeAgent, Name: "qa",
+		ChannelUserRef: "user-qa", ChannelUserKind: ChannelUserKindLocalUserID, AgentID: "agent-qa",
+	}})
+	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{Users: []im.User{{ID: "user-qa", Name: "qa"}}})
+	base := enginetest.NewMemoryClient()
+	svc := NewService(store, WithIMService(imSvc))
+	svc.agents = repairGetErrorAgents{AgentInterface: base.Agents(), err: errors.New("temporary engine outage")}
+
+	deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
+	if err == nil || !strings.Contains(err.Error(), "temporary engine outage") {
+		t.Fatalf("RepairDanglingCSGClawAgentParticipants() = %+v, %v, want operational error", deleted, err)
+	}
+	if len(deleted) != 0 {
+		t.Fatalf("deleted = %+v, want no deletion on Engine failure", deleted)
+	}
+	if _, ok := store.Get(ChannelCSGClaw, "pt-qa"); !ok {
+		t.Fatal("participant was deleted on Engine failure")
+	}
+	if _, ok := imSvc.User("user-qa"); !ok {
+		t.Fatal("local user was deleted on Engine failure")
 	}
 }
 

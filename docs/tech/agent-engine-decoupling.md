@@ -248,6 +248,7 @@ The production HTTP, CLI, Participant, Team, Task, and delivery-recovery adminis
 Profiles, Skills, MCP servers, instructions, memory configuration, and lifecycle intent are fields of the Agent resource rather than separate endpoint-shaped interface methods.
 Computed effective instructions, readable memory, redacted model data, capabilities, Runtime readiness, and sandbox identity are observed status projections returned by Get.
 Create retains explicit ID and template selection, Update uses a field mask and resource version for partial changes, and Recreate options distinguish ordinary recreation from image upgrade.
+The compatibility replace route passes its field-masked desired-state update through Recreate so the Runtime is rebuilt once without adding another interface method.
 Channel bindings, Participant records, workspace browsing, log streaming, Runtime registration, and LLM execution remain with their existing owners.
 The Phase 2 Engine Facade may wrap the current Agent Service through a private backend so it can first reuse the already verified Agent persistence and Runtime lifecycle code.
 That wrapper is only an internal Engine implementation; it does not enter the public contract or prevent Phase 4 from separating the broad Service into explicit storage, lifecycle, and Runtime components.

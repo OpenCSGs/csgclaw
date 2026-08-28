@@ -112,6 +112,23 @@ func (*contractRuntime) ReconcileMCPServers(context.Context, runtime.Handle, run
 	return nil
 }
 
+func (*contractRuntime) ReadMemoryDocument(_ context.Context, _ string, options map[string]any) (runtime.MemoryDocument, error) {
+	return runtime.MemoryDocument{Enabled: options["memory_mode"] != "disabled", Ready: true, Name: "MEMORY.md"}, nil
+}
+
+func (*contractRuntime) ConfigureMemory(options map[string]any, enabled bool) (map[string]any, error) {
+	next := make(map[string]any, len(options)+1)
+	for key, value := range options {
+		next[key] = value
+	}
+	if enabled {
+		next["memory_mode"] = "enabled"
+	} else {
+		next["memory_mode"] = "disabled"
+	}
+	return next, nil
+}
+
 func (r *contractRuntime) EnsureEngineSession(_ context.Context, _ string, conversationKey string) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

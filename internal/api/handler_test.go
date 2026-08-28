@@ -59,6 +59,22 @@ type fakeReadinessCompatRuntime struct {
 	readiness func(context.Context, agentruntime.Handle) error
 }
 
+type getErrorEngine struct {
+	agentengine.Interface
+	agents agentengine.AgentInterface
+}
+
+func (e getErrorEngine) Agents() agentengine.AgentInterface { return e.agents }
+
+type getErrorAgents struct {
+	agentengine.AgentInterface
+	err error
+}
+
+func (a getErrorAgents) Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error) {
+	return agentengine.Agent{}, a.err
+}
+
 type fakeSandboxAvailabilityProvider struct {
 	name string
 	err  error
@@ -1354,6 +1370,41 @@ func TestHandleAgentsGetByIDReturnsAgent(t *testing.T) {
 	}
 	if got.ID != "agent-alice" || got.Name != "alice" || got.Role != agent.RoleWorker {
 		t.Fatalf("agent = %+v, want agent-alice/alice/worker", got)
+	}
+}
+
+func TestHandleAgentGetDistinguishesNotFoundFromEngineFailure(t *testing.T) {
+	base := enginetest.NewMemoryClient()
+	for _, test := range []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "not found",
+			err:        &agentengine.TurnError{Code: agentengine.ErrorAgentUnavailable, Message: "agent missing"},
+			wantStatus: http.StatusNotFound,
+			wantBody:   "agent not found",
+		},
+		{
+			name:       "reload failure",
+			err:        errors.New("reload agent state: storage unavailable"),
+			wantStatus: http.StatusInternalServerError,
+			wantBody:   "storage unavailable",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			handler := &Handler{agentEngine: getErrorEngine{
+				Interface: base,
+				agents:    getErrorAgents{AgentInterface: base.Agents(), err: test.err},
+			}}
+			recorder := httptest.NewRecorder()
+			handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-a", nil))
+			if recorder.Code != test.wantStatus || !strings.Contains(recorder.Body.String(), test.wantBody) {
+				t.Fatalf("response = %d %q, want %d containing %q", recorder.Code, recorder.Body.String(), test.wantStatus, test.wantBody)
+			}
+		})
 	}
 }
 
@@ -3644,6 +3695,52 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 	}
 }
 
+func TestHandleAgentsCreateReplaceIDOnlyRecreatesWithoutClearingSpec(t *testing.T) {
+	createCalls := 0
+	created := agent.Agent{
+		ID: "agent-alice", Name: "alice", Description: "keep description", Instructions: "keep instructions",
+		Image: "agent-image:v1", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindPicoClawSandbox,
+		RuntimeID: "rt-agent-alice", BoxID: "box-alice-existing", Status: string(agentruntime.StateRunning),
+		AgentProfile: agent.AgentProfile{
+			Provider: agent.ProviderAPI, BaseURL: "http://127.0.0.1:4000", APIKey: "secret", ModelID: "model-a", ProfileComplete: true,
+		},
+		ProfileComplete: true, CreatedAt: time.Date(2026, 8, 28, 0, 0, 0, 0, time.UTC),
+	}
+	svc := mustNewSeededServiceWithOptions(t, []agent.Agent{created}, agent.WithRuntime(fakeCompatRuntime{
+		kind: agent.RuntimeKindPicoClawSandbox,
+		new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+			createCalls++
+			return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: fmt.Sprintf("box-alice-%d", createCalls)}, nil
+		},
+	}))
+	beforeCreates := createCalls
+
+	handler := &Handler{
+		svc: svc,
+		hub: mustNewLocalTemplateHubServiceWithoutWorkspace(t, "unused", hub.Template{
+			Name: "unused", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeNamePicoClaw, Image: "unused:test",
+		}),
+	}
+	recorder := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(
+		`{"id":"agent-alice","replace":true,"field_mask":["id"]}`,
+	)))
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusCreated, recorder.Body.String())
+	}
+	var replaced agent.Agent
+	if err := json.NewDecoder(recorder.Body).Decode(&replaced); err != nil {
+		t.Fatal(err)
+	}
+	if replaced.ID != created.ID || replaced.Name != created.Name || replaced.Description != created.Description ||
+		replaced.Instructions != created.Instructions || replaced.Image != created.Image {
+		t.Fatalf("id-only replace changed Agent spec: before=%+v after=%+v", created, replaced)
+	}
+	if got := createCalls; got != beforeCreates+1 {
+		t.Fatalf("Runtime create calls = %d, want %d after id-only recreate", got, beforeCreates+1)
+	}
+}
+
 func TestAgentCreateRequestFromAPIIncludesFromTemplate(t *testing.T) {
 	got := agentCreateRequestFromAPI(apitypes.CreateAgentRequest{
 		Name:         "alice",
@@ -3680,8 +3777,40 @@ func TestAgentEngineAdministrationPreservesModelSelector(t *testing.T) {
 		t.Fatalf("create model selector = %q, want %q", created.Spec.Model.Selector, selector)
 	}
 	patched := engineUpdateRequest(agent.UpdateRequest{Profile: &selector}, "version-1")
-	if patched.Spec.Model.Selector != selector || !agentUpdateIncludes(patched, "model") {
+	if patched.Spec.Model.Selector != selector || !agentUpdateIncludes(patched, "model.selector") {
 		t.Fatalf("patch model selector = %q with mask %v, want %q", patched.Spec.Model.Selector, patched.FieldMask, selector)
+	}
+}
+
+func TestHandleAgentsPatchSelectorPreservesModelConfiguration(t *testing.T) {
+	profile := agent.AgentProfile{
+		Provider: agent.ProviderAPI, BaseURL: "https://models.example/v1", APIKey: "secret",
+		Headers: map[string]string{"X-Test": "keep"}, ModelID: "model-a", ReasoningEffort: "high",
+		RequestOptions: map[string]any{"temperature": 0.2}, Env: map[string]string{"KEEP": "yes"}, ProfileComplete: true,
+	}
+	svc := mustNewSeededService(t, []agent.Agent{{
+		ID: "agent-selector", Name: "selector", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
+		Status: string(agentruntime.StateStopped), Profile: "old-selector", AgentProfile: profile, ProfileComplete: true,
+	}})
+	handler := &Handler{svc: svc}
+	recorder := httptest.NewRecorder()
+	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-selector", strings.NewReader(
+		`{"profile":"new-selector"}`,
+	)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	updated, ok := svc.Agent("agent-selector")
+	if !ok {
+		t.Fatal("updated Agent not found")
+	}
+	if updated.Profile != "new-selector" || updated.AgentProfile.Provider != profile.Provider ||
+		updated.AgentProfile.ModelProviderID != profile.ModelProviderID || updated.AgentProfile.BaseURL != profile.BaseURL ||
+		updated.AgentProfile.APIKey != profile.APIKey || updated.AgentProfile.ModelID != profile.ModelID ||
+		updated.AgentProfile.ReasoningEffort != profile.ReasoningEffort ||
+		updated.AgentProfile.Headers["X-Test"] != "keep" || updated.AgentProfile.Env["KEEP"] != "yes" ||
+		updated.AgentProfile.RequestOptions["temperature"] != 0.2 {
+		t.Fatalf("selector PATCH changed model configuration: selector=%q profile=%+v", updated.Profile, updated.AgentProfile)
 	}
 }
 

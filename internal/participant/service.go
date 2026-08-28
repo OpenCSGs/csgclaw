@@ -564,6 +564,8 @@ func (s *Service) RepairDanglingCSGClawAgentParticipants() ([]apitypes.Participa
 		if agentID != "" {
 			if _, err := s.agents.Get(context.Background(), agentID, agentengine.AgentGetOptions{}); err == nil {
 				continue
+			} else if agentengine.ErrorCodeOf(err) != agentengine.ErrorAgentUnavailable {
+				return deleted, fmt.Errorf("inspect agent %q while repairing participants: %w", agentID, err)
 			}
 		}
 		removed, ok, err := s.store.Delete(item.Channel, item.ID)

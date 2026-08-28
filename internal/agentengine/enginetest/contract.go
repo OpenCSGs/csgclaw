@@ -27,8 +27,9 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 			Name: "created", Role: agentengine.AgentRoleWorker,
 			Runtime: agentengine.RuntimeSpec{Adapter: "openclaw", Sandboxed: true, Image: "contract-openclaw:latest"},
 			Model:   agentengine.ModelSpec{ProviderID: "provider-a", ModelID: "model-a"},
+			Memory:  &agentengine.MemorySpec{Enabled: false},
 		}})
-		if err != nil || created.ID == "" || created.Spec.Runtime.Credentials != nil {
+		if err != nil || created.ID == "" || created.Spec.Runtime.Credentials != nil || created.Spec.Memory == nil || created.Spec.Memory.Enabled {
 			t.Fatalf("Create() = %+v, %v", created, err)
 		}
 
@@ -154,6 +155,17 @@ func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 		})
 		if err != nil || withModel.Spec.Model.ReasoningEffort != "high" || len(withModel.Spec.Skills) != 1 {
 			t.Fatalf("Model field-mask Update() = %+v, %v", withModel, err)
+		}
+		modelBeforeSelector := withModel.Spec.Model
+		withModel.Spec.Model.Selector = "provider-b.model-b"
+		withSelector, err := agents.Update(context.Background(), created.ID, agentengine.AgentUpdateRequest{
+			Spec: withModel.Spec, FieldMask: []string{"model.selector"}, ResourceVersion: withModel.ResourceVersion,
+		})
+		if err != nil || withSelector.Spec.Model.Selector != "provider-b.model-b" ||
+			withSelector.Spec.Model.ProviderID != modelBeforeSelector.ProviderID ||
+			withSelector.Spec.Model.ModelID != modelBeforeSelector.ModelID ||
+			withSelector.Spec.Model.ReasoningEffort != modelBeforeSelector.ReasoningEffort {
+			t.Fatalf("Model selector field-mask Update() = %+v, %v", withSelector, err)
 		}
 		got, err := agents.Get(context.Background(), created.ID, agentengine.AgentGetOptions{Reload: true, ProbeRuntime: true})
 		if err != nil || got.Spec.Description != "patched" {

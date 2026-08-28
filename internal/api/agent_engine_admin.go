@@ -91,7 +91,7 @@ func engineUpdateRequest(request agent.UpdateRequest, resourceVersion string) ag
 	}
 	if request.Profile != nil {
 		result.Spec.Model.Selector = *request.Profile
-		add("model")
+		add("model.selector")
 	}
 	if request.MCPServersSet || request.MCPServers != nil {
 		if request.MCPServers != nil {
@@ -114,6 +114,7 @@ func engineReplaceRequest(request agent.CreateRequest, current agentengine.Agent
 	for _, field := range request.FieldMask {
 		switch strings.ToLower(strings.TrimSpace(field)) {
 		case "id":
+			result.FieldMask = append(result.FieldMask, "id")
 		case "name", "description", "instructions", "role":
 			result.FieldMask = append(result.FieldMask, strings.ToLower(strings.TrimSpace(field)))
 		case "image":
@@ -124,7 +125,9 @@ func engineReplaceRequest(request agent.CreateRequest, current agentengine.Agent
 			result.FieldMask = append(result.FieldMask, "runtime.options")
 		case "mcpservers":
 			result.FieldMask = append(result.FieldMask, "mcp_servers")
-		case "profile", "agent_profile":
+		case "profile":
+			result.FieldMask = append(result.FieldMask, "model.selector")
+		case "agent_profile":
 			result.FieldMask = append(result.FieldMask, "model")
 		}
 	}
@@ -132,12 +135,23 @@ func engineReplaceRequest(request agent.CreateRequest, current agentengine.Agent
 		if result.Spec.Runtime.Adapter == "" {
 			result.Spec.Runtime = current.Spec.Runtime
 		}
+		if !engineModelConfigured(result.Spec.Model) {
+			result.Spec.Model = current.Spec.Model
+		}
 		if result.Spec.Role == "" {
 			result.Spec.Role = current.Spec.Role
 		}
 		result.Spec.DesiredState = current.Spec.DesiredState
 	}
 	return result
+}
+
+func engineModelConfigured(spec agentengine.ModelSpec) bool {
+	return strings.TrimSpace(spec.Selector) != "" || strings.TrimSpace(spec.Provider) != "" ||
+		strings.TrimSpace(spec.ProviderID) != "" || strings.TrimSpace(spec.BaseURL) != "" ||
+		strings.TrimSpace(spec.APIKey) != "" || strings.TrimSpace(spec.ModelID) != "" ||
+		strings.TrimSpace(spec.ReasoningEffort) != "" || spec.FastMode || len(spec.Headers) > 0 ||
+		len(spec.Env) > 0 || len(spec.Options) > 0
 }
 
 func serviceAgentFromEngine(item agentengine.Agent) agent.Agent {

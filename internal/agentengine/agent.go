@@ -47,7 +47,8 @@ type AgentUpdateRequest struct {
 }
 
 type AgentRecreateOptions struct {
-	UpgradeImage bool `json:"upgrade_image,omitempty"`
+	UpgradeImage bool                `json:"upgrade_image,omitempty"`
+	Update       *AgentUpdateRequest `json:"update,omitempty"`
 }
 
 // Agent is the resource for one executable agent.

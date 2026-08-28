@@ -2,6 +2,7 @@ package agentengine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -118,6 +119,17 @@ func (f agentFacade) Create(ctx context.Context, request AgentCreateRequest) (Ag
 			return Agent{}, err
 		}
 	}
+	if spec.Memory != nil {
+		if _, err := f.service.UpdateMemoryEnabled(ctx, created.ID, spec.Memory.Enabled); err != nil {
+			if createdByCall {
+				if rollbackErr := f.service.Delete(context.Background(), created.ID); rollbackErr != nil {
+					return Agent{}, errors.Join(err, fmt.Errorf("rollback Agent after memory reconciliation failure: %w", rollbackErr))
+				}
+			}
+			return Agent{}, err
+		}
+		created, _ = f.service.Agent(created.ID)
+	}
 	if spec.DesiredState == AgentDesiredStateStopped {
 		created, err = f.service.Stop(ctx, created.ID)
 		if err != nil {
@@ -128,7 +140,15 @@ func (f agentFacade) Create(ctx context.Context, request AgentCreateRequest) (Ag
 	if err != nil {
 		return Agent{}, err
 	}
-	return f.convert(created)
+	converted, err := f.convert(created)
+	if err != nil {
+		return Agent{}, err
+	}
+	if spec.Memory != nil {
+		memory := *spec.Memory
+		converted.Spec.Memory = &memory
+	}
+	return converted, nil
 }
 
 func (f agentFacade) Get(ctx context.Context, agentID string, options AgentGetOptions) (Agent, error) {
@@ -194,7 +214,7 @@ func (f agentFacade) Update(ctx context.Context, agentID string, request AgentUp
 	loadSkills := len(request.FieldMask) == 0 || fieldMaskContains(request.FieldMask, "skills")
 	loadMemory := fieldMaskContains(request.FieldMask, "memory") || request.Spec.Memory != nil
 	reconcileDesiredState := fieldMaskContains(request.FieldMask, "desired_state")
-	return f.updateDesired(ctx, agentID, request.ResourceVersion, loadSkills, loadMemory, reconcileDesiredState, func(current AgentSpec) (AgentSpec, error) {
+	return f.updateDesired(ctx, agentID, request.ResourceVersion, loadSkills, loadMemory, reconcileDesiredState, false, func(current AgentSpec) (AgentSpec, error) {
 		return mergeAgentUpdate(current, request), nil
 	})
 }
@@ -239,6 +259,8 @@ func mergeAgentUpdate(current AgentSpec, request AgentUpdateRequest) AgentSpec {
 			next.Runtime.InitShell = request.Spec.Runtime.InitShell
 		case "model":
 			next.Model = request.Spec.Model
+		case "model.selector":
+			next.Model.Selector = request.Spec.Model.Selector
 		case "skills":
 			next.Skills = append([]string(nil), request.Spec.Skills...)
 		case "mcp_servers":
@@ -260,7 +282,8 @@ func mergeAgentUpdate(current AgentSpec, request AgentUpdateRequest) AgentSpec {
 type agentSpecChange struct {
 	name, description, instructions, image bool
 	runtimeSelection, runtimeOptions       bool
-	model, skills, mcpServers              bool
+	modelSelector, modelConfig             bool
+	skills, mcpServers                     bool
 	memory                                 bool
 	runtimeCredentials, runtimeInitShell   bool
 	desiredState                           bool
@@ -268,17 +291,21 @@ type agentSpecChange struct {
 
 func (c agentSpecChange) any() bool {
 	return c.name || c.description || c.instructions || c.image ||
-		c.runtimeSelection || c.runtimeOptions || c.model || c.skills ||
+		c.runtimeSelection || c.runtimeOptions || c.modelSelector || c.modelConfig || c.skills ||
 		c.mcpServers || c.memory || c.runtimeCredentials || c.runtimeInitShell || c.desiredState
 }
 
 func (c agentSpecChange) serviceUpdate() bool {
 	return c.name || c.description || c.instructions || c.image ||
-		c.runtimeOptions || c.model || c.mcpServers ||
+		c.runtimeOptions || c.modelSelector || c.modelConfig || c.mcpServers ||
 		c.runtimeCredentials || c.runtimeInitShell
 }
 
 func diffAgentSpec(previous, desired AgentSpec) agentSpecChange {
+	previousModelConfig := previous.Model
+	previousModelConfig.Selector = ""
+	desiredModelConfig := desired.Model
+	desiredModelConfig.Selector = ""
 	return agentSpecChange{
 		name:               previous.Name != desired.Name,
 		description:        previous.Description != desired.Description,
@@ -286,7 +313,8 @@ func diffAgentSpec(previous, desired AgentSpec) agentSpecChange {
 		image:              previous.Runtime.Image != desired.Runtime.Image,
 		runtimeSelection:   previous.Runtime.Adapter != desired.Runtime.Adapter || previous.Runtime.Sandboxed != desired.Runtime.Sandboxed,
 		runtimeOptions:     !reflect.DeepEqual(previous.Runtime.Options, desired.Runtime.Options),
-		model:              !reflect.DeepEqual(previous.Model, desired.Model),
+		modelSelector:      previous.Model.Selector != desired.Model.Selector,
+		modelConfig:        !reflect.DeepEqual(previousModelConfig, desiredModelConfig),
 		skills:             !slices.Equal(previous.Skills, desired.Skills),
 		mcpServers:         !reflect.DeepEqual(previous.MCPServers, desired.MCPServers),
 		memory:             !reflect.DeepEqual(previous.Memory, desired.Memory),
@@ -320,7 +348,7 @@ func preserveWriteOnlyFields(current, desired AgentSpec) AgentSpec {
 	return desired
 }
 
-func (f agentFacade) updateDesired(ctx context.Context, agentID, resourceVersion string, loadSkills, loadMemory, reconcileDesiredState bool, mutate func(AgentSpec) (AgentSpec, error)) (Agent, error) {
+func (f agentFacade) updateDesired(ctx context.Context, agentID, resourceVersion string, loadSkills, loadMemory, reconcileDesiredState, forceRecreate bool, mutate func(AgentSpec) (AgentSpec, error)) (Agent, error) {
 	var updated agent.Agent
 	err := f.service.WithAgentLifecycle(ctx, agentID, func(lifecycleCtx context.Context) error {
 		previous, ok := f.service.Agent(agentID)
@@ -354,6 +382,9 @@ func (f agentFacade) updateDesired(ctx context.Context, agentID, resourceVersion
 			return err
 		}
 		desired = normalizeAgentSpec(desired)
+		if forceRecreate {
+			desired.DesiredState = AgentDesiredStateRunning
+		}
 		desired = preserveWriteOnlyFields(current, desired)
 		if err := validateAgentSpec(desired); err != nil {
 			return err
@@ -362,7 +393,7 @@ func (f agentFacade) updateDesired(ctx context.Context, agentID, resourceVersion
 			return &TurnError{Code: ErrorInvalidRequest, Message: "agent role changes are not supported"}
 		}
 		change := diffAgentSpec(current, desired)
-		if !change.any() && !reconcileDesiredState {
+		if !change.any() && !reconcileDesiredState && !forceRecreate {
 			updated = previous
 			return nil
 		}
@@ -409,7 +440,7 @@ func (f agentFacade) updateDesired(ctx context.Context, agentID, resourceVersion
 				}
 			}
 		}
-		if change.desiredState || reconcileDesiredState {
+		if (change.desiredState || reconcileDesiredState) && !forceRecreate {
 			switch desired.DesiredState {
 			case AgentDesiredStateRunning:
 				updated, err = f.service.Start(lifecycleCtx, agentID)
@@ -429,7 +460,13 @@ func (f agentFacade) updateDesired(ctx context.Context, agentID, resourceVersion
 			}
 			updated, _ = f.service.Agent(agentID)
 		}
-		skillOnly := change.skills && !replacesRuntime && !change.serviceUpdate() && !change.desiredState && !reconcileDesiredState && !change.memory
+		if forceRecreate && !replacesRuntime {
+			updated, err = f.service.Recreate(lifecycleCtx, agentID)
+			if err != nil {
+				return err
+			}
+		}
+		skillOnly := change.skills && !replacesRuntime && !change.serviceUpdate() && !change.desiredState && !reconcileDesiredState && !change.memory && !forceRecreate
 		updated, err = f.service.SetDesiredState(agentID, string(desired.DesiredState), skillOnly)
 		if err != nil {
 			return err
@@ -457,6 +494,17 @@ func (f agentFacade) Delete(ctx context.Context, agentID string) error {
 }
 
 func (f agentFacade) Recreate(ctx context.Context, agentID string, options AgentRecreateOptions) (Agent, error) {
+	if options.Update != nil {
+		if options.UpgradeImage {
+			return Agent{}, &TurnError{Code: ErrorInvalidRequest, Message: "recreate update and image upgrade cannot be combined"}
+		}
+		request := *options.Update
+		loadSkills := len(request.FieldMask) == 0 || fieldMaskContains(request.FieldMask, "skills")
+		loadMemory := fieldMaskContains(request.FieldMask, "memory") || request.Spec.Memory != nil
+		return f.updateDesired(ctx, agentID, request.ResourceVersion, loadSkills, loadMemory, false, true, func(current AgentSpec) (AgentSpec, error) {
+			return mergeAgentUpdate(current, request), nil
+		})
+	}
 	var (
 		selected agent.Agent
 		err      error
@@ -640,12 +688,14 @@ func updateAgentRequestForChanges(spec AgentSpec, change agentSpecChange, _ Agen
 		request.RuntimeOptions = &options
 		addField("runtime_options")
 	}
-	if change.model {
+	if change.modelSelector {
 		selector := strings.TrimSpace(spec.Model.Selector)
-		profile := modelToService(spec.Model)
 		request.Profile = &selector
-		request.AgentProfile = &profile
 		addField("profile")
+	}
+	if change.modelConfig {
+		profile := modelToService(spec.Model)
+		request.AgentProfile = &profile
 		addField("agent_profile")
 	}
 	if change.mcpServers {

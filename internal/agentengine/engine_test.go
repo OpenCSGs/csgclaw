@@ -38,6 +38,7 @@ func TestAgentInterfaceRemainsResourceShaped(t *testing.T) {
 }
 
 type fakeConversationRuntime struct {
+	kind            string
 	mu              sync.Mutex
 	subscribers     []chan activity.RuntimeEvent
 	conversationKey string
@@ -54,15 +55,24 @@ type fakeConversationRuntime struct {
 	deleteCalls     int
 }
 
-func (*fakeConversationRuntime) Kind() string { return runtime.KindCodex }
+func (f *fakeConversationRuntime) Kind() string {
+	if strings.TrimSpace(f.kind) != "" {
+		return f.kind
+	}
+	return runtime.KindCodex
+}
 func (*fakeConversationRuntime) Layout(root string) runtime.Layout {
 	return runtime.Layout{
 		WorkspaceRoot: filepath.Join(root, "workspace"),
 		SkillsRoot:    filepath.Join(root, "workspace", ".agents", "skills"),
 	}
 }
-func (*fakeConversationRuntime) New(_ context.Context, spec runtime.Spec) (runtime.Handle, error) {
-	return runtime.Handle{RuntimeID: spec.RuntimeID}, nil
+func (f *fakeConversationRuntime) New(_ context.Context, spec runtime.Spec) (runtime.Handle, error) {
+	handle := runtime.Handle{RuntimeID: spec.RuntimeID}
+	if strings.TrimSpace(f.kind) != "" {
+		handle.HandleID = "box-" + spec.AgentID
+	}
+	return handle, nil
 }
 func (*fakeConversationRuntime) Start(context.Context, runtime.Handle) (runtime.State, error) {
 	return runtime.StateRunning, nil
@@ -496,6 +506,28 @@ func TestEngineAgentDesiredStateIsIndependentFromObservedRuntimeState(t *testing
 	}
 	if got.Spec.DesiredState != AgentDesiredStateRunning || got.Status.State != AgentStateStopped {
 		t.Fatalf("Agent desired/observed state = %q/%q, want running/stopped", got.Spec.DesiredState, got.Status.State)
+	}
+}
+
+func TestEngineCreateMemoryFailureRollsBackAgent(t *testing.T) {
+	runtimeImpl := &fakeConversationRuntime{kind: runtime.KindPicoClawSandbox, state: runtime.StateRunning}
+	service := newTestAgentService(t, nil, runtimeImpl)
+	engine := New(service)
+	_, err := engine.Agents().Create(context.Background(), AgentCreateRequest{
+		ID: "agent-memory",
+		Spec: AgentSpec{
+			Name: "memory", Role: AgentRoleWorker, Runtime: RuntimeSpec{Adapter: agent.RuntimeNamePicoClaw, Sandboxed: true, Image: "picoclaw:test"},
+			Model: ModelSpec{ProviderID: "provider-a", ModelID: "model-a"}, Memory: &MemorySpec{Enabled: false},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "does not expose memory") {
+		t.Fatalf("Create(memory) error = %v, want unsupported memory failure", err)
+	}
+	if items := service.List(); len(items) != 0 {
+		t.Fatalf("Agents persisted after memory reconciliation failure: %+v", items)
+	}
+	if runtimeImpl.deleteCalls != 1 {
+		t.Fatalf("Runtime delete calls = %d, want rollback delete", runtimeImpl.deleteCalls)
 	}
 }
 

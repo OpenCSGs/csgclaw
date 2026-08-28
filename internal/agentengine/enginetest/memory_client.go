@@ -244,6 +244,8 @@ func mergeMemoryUpdate(current agentengine.AgentSpec, request agentengine.AgentU
 			next.Runtime.InitShell = request.Spec.Runtime.InitShell
 		case "model":
 			next.Model = request.Spec.Model
+		case "model.selector":
+			next.Model.Selector = request.Spec.Model.Selector
 		case "skills":
 			next.Skills = append([]string(nil), request.Spec.Skills...)
 		case "mcp_servers":
@@ -356,7 +358,12 @@ func (a *memoryAgents) Stop(ctx context.Context, agentID string) (agentengine.Ag
 	return a.setState(agentID, agentengine.AgentStateStopped, false)
 }
 
-func (a *memoryAgents) Recreate(ctx context.Context, agentID string, _ agentengine.AgentRecreateOptions) (agentengine.Agent, error) {
+func (a *memoryAgents) Recreate(ctx context.Context, agentID string, options agentengine.AgentRecreateOptions) (agentengine.Agent, error) {
+	if options.Update != nil {
+		if _, err := a.Update(ctx, agentID, *options.Update); err != nil {
+			return agentengine.Agent{}, err
+		}
+	}
 	if err := a.waitForAgent(ctx, agentID); err != nil {
 		return agentengine.Agent{}, err
 	}

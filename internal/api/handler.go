@@ -1149,7 +1149,7 @@ func (h *Handler) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		item, err := agents.Get(ctx, id, agentengine.AgentGetOptions{Reload: true, ProbeRuntime: true})
 		if err != nil {
-			http.Error(w, "agent not found", http.StatusNotFound)
+			writeAgentGetError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, h.presentEngineAgentForRequest(r, item))
@@ -1622,7 +1622,8 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 			writeAgentOperationErrorWithBillingURL(w, getErr, http.StatusBadRequest, llm.OpenCSGBillingURL(createReq.Spec.AgentProfile))
 			return
 		}
-		created, err = agents.Update(ctx, current.ID, engineReplaceRequest(createReq, current))
+		update := engineReplaceRequest(createReq, current)
+		created, err = agents.Recreate(ctx, current.ID, agentengine.AgentRecreateOptions{Update: &update})
 	} else {
 		created, err = agents.Create(ctx, engineCreateRequest(createReq))
 	}
@@ -1635,6 +1636,14 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 
 func writeAgentOperationError(w http.ResponseWriter, err error, defaultStatus int) {
 	writeAgentOperationErrorWithBillingURL(w, err, defaultStatus, "")
+}
+
+func writeAgentGetError(w http.ResponseWriter, err error) {
+	if agentengine.ErrorCodeOf(err) == agentengine.ErrorAgentUnavailable {
+		http.Error(w, "agent not found", http.StatusNotFound)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 func writeAgentOperationErrorWithBillingURL(w http.ResponseWriter, err error, defaultStatus int, billingURL string) {

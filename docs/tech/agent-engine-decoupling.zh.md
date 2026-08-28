@@ -246,6 +246,7 @@ Runtime Adapter 只管理 Runtime 特有的 Mapping、Protocol Translation、Cre
 Profile、Skill、MCP Server、Instructions、Memory 配置和生命周期意图都是 Agent Resource Field，不再对应独立的 Endpoint-shaped Interface Method。
 生效指令、可读 Memory、脱敏 Model 数据、Capability、Runtime Readiness 和 Sandbox Identity 作为 Get 返回的观测 Status Projection。
 Create 保留显式 ID 与 Template Selection，Update 使用 Field Mask 和 Resource Version 表示部分变更，Recreate Options 区分普通重建与镜像升级。
+兼容性的 Replace Route 把带 Field Mask 的期望状态更新交给 Recreate，因此只重建一次 Runtime，也不需要新增 Interface Method。
 Channel Binding、Participant 记录、Workspace 浏览、日志流、Runtime 注册和 LLM 执行继续由现有 Owner 负责。
 阶段 2 的 Engine Facade 可以通过私有 Backend 包装当前 Agent Service，以优先复用已经验证的 Agent 持久化和 Runtime 生命周期代码。
 该包装只是 Engine 内部实现，不进入公共 Contract，也不阻止阶段 4 把宽泛的 Service 拆成明确的 Storage、Lifecycle 和 Runtime 组件。
