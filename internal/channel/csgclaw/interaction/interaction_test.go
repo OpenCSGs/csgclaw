@@ -41,7 +41,7 @@ func (s *staticSessions) ExistingEngineSession(_ context.Context, runtimeID, con
 
 func TestCoordinatorDetachedRequestUsesRuntimeSessionCancellationIdentity(t *testing.T) {
 	broker := runtimecodex.NewUserInputBroker(nil)
-	store, err := delivery.NewIMTranscriptStore(im.NewService(), staticParticipants{})
+	store, err := delivery.NewIMTranscriptStore(im.NewService(), staticParticipants{}, nil)
 	if err != nil {
 		t.Fatalf("NewIMTranscriptStore() error = %v", err)
 	}

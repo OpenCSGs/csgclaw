@@ -10,7 +10,8 @@ import {
   useQuestionAnswerMode,
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
-import { DialogContent, DialogRoot } from "@/components/ui";
+import { DocumentPreviewPanel, type DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
+import { DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
 import {
   getConversationDescription,
@@ -140,6 +141,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   const [logLoading, setLogLoading] = useState(false);
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
+  const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
   const logAgentID = logAgent?.id || "";
   const logAgentName = logAgent?.name || conversation.title || "";
   const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
@@ -176,7 +178,16 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     setLogLoading(false);
     setClearMessagesDialogOpen(false);
     setDeleteRoomDialogOpen(false);
+    setDocumentPreview(null);
   }, [conversation.id, logAgentID]);
+
+  const handlePreviewAttachment = useCallback(
+    (request: DocumentPreviewRequest) => {
+      onCloseThread();
+      setDocumentPreview(request);
+    },
+    [onCloseThread],
+  );
 
   const refreshAgentLogs = useCallback(async () => {
     if (!logAgentID) {
@@ -235,6 +246,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       onSetThreadSlashIndex={onSetThreadSlashIndex}
       mentionableUsers={conversationMembers}
       onPreviewUser={onPreviewUser}
+      onPreviewAttachment={handlePreviewAttachment}
       onQuestionSelect={threadQuestionMode.select}
       questionMode={threadQuestionMode}
       onSend={onSendThreadReply}
@@ -289,6 +301,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         onOpenThread={onOpenThread}
         onPickPrompt={onPickPrompt}
         onPreviewUser={onPreviewUser}
+        onPreviewAttachment={handlePreviewAttachment}
         onQuestionSelect={questionMode.select}
       />
       {questionMode.pending.length > 0 ? (
@@ -337,6 +350,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           onDisconnectGitLabConnector={onDisconnectGitLabConnector}
           onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
+          onPreviewAttachment={handlePreviewAttachment}
           onRetrySend={onRetrySend}
           onSaveConnectorConfig={onSaveConnectorConfig}
           onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}
@@ -359,6 +373,25 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         {threadPanel ? (
           <DialogContent className="thread-dialog-content" overlayClassName="thread-dialog-backdrop">
             {threadPanel}
+          </DialogContent>
+        ) : null}
+      </DialogRoot>
+      <DialogRoot
+        open={Boolean(documentPreview)}
+        onOpenChange={(open) => (!open ? setDocumentPreview(null) : undefined)}
+      >
+        {documentPreview ? (
+          <DialogContent className="document-preview-dialog-content" aria-describedby={undefined}>
+            <DialogTitle className="sr-only">
+              {documentPreview.items[documentPreview.index]?.name || t("attachmentPreview")}
+            </DialogTitle>
+            <DocumentPreviewPanel
+              {...documentPreview}
+              mode="overlay"
+              t={t}
+              onClose={() => setDocumentPreview(null)}
+              onIndexChange={(index) => setDocumentPreview((current) => (current ? { ...current, index } : current))}
+            />
           </DialogContent>
         ) : null}
       </DialogRoot>

@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
+import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, Tooltip } from "@/components/ui";
 import { IconImage } from "@/components/ui/Icons";
 import { resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
@@ -77,6 +78,7 @@ export type ConversationThreadPanelProps = {
   onAddAttachments?: (files: File[]) => void;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   questionMode?: QuestionAnswerMode;
   onRemoveAttachment?: (id: string) => void;
@@ -119,6 +121,7 @@ export function ConversationThreadPanel({
   onSetThreadSlashIndex = (_index) => {},
   onOpenAgentDetail,
   onPreviewUser,
+  onPreviewAttachment,
   onQuestionSelect,
   questionMode,
   onRemoveAttachment = () => {},
@@ -309,6 +312,7 @@ export function ConversationThreadPanel({
               t={t}
               onOpenAgentDetail={onOpenAgentDetail}
               onPreviewUser={onPreviewUser}
+              onPreviewAttachment={onPreviewAttachment}
               onQuestionSelect={onQuestionSelect}
             />
           </div>
@@ -327,6 +331,7 @@ export function ConversationThreadPanel({
                 t={t}
                 onOpenAgentDetail={onOpenAgentDetail}
                 onPreviewUser={onPreviewUser}
+                onPreviewAttachment={onPreviewAttachment}
                 onQuestionSelect={onQuestionSelect}
               />
             ))
@@ -376,7 +381,12 @@ export function ConversationThreadPanel({
               onSelect={insertThreadMention}
             />
           ) : null}
-          <AttachmentDraftStrip drafts={attachmentDrafts} t={t} onRemove={onRemoveAttachment} />
+          <AttachmentDraftStrip
+            drafts={attachmentDrafts}
+            t={t}
+            onPreviewAttachment={onPreviewAttachment}
+            onRemove={onRemoveAttachment}
+          />
           <div
             ref={threadEditorRef}
             contentEditable={!disabled}
@@ -531,6 +541,7 @@ type ThreadMessageProps = {
   message: IMMessage;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   t: TranslateFn;
   theme: ThemeMode;
@@ -546,6 +557,7 @@ function ThreadMessage({
   t,
   onOpenAgentDetail,
   onPreviewUser,
+  onPreviewAttachment,
   onQuestionSelect,
   compact = false,
 }: ThreadMessageProps) {
@@ -596,7 +608,7 @@ function ThreadMessage({
             />
           </div>
         ) : null}
-        <MessageAttachments attachments={message.attachments} t={t} />
+        <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
         <ConversationMessageActions className="thread-message-actions" content={message.content} t={t} />
       </div>
     </div>

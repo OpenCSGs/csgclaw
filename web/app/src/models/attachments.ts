@@ -30,6 +30,16 @@ export type MessageAttachment = {
   workspace_path?: string;
 };
 
+export type AttachmentPreviewItem = {
+  downloadURL?: string;
+  file?: File;
+  id: string;
+  mediaType: string;
+  name: string;
+  previewURL?: string;
+  sizeBytes: number;
+};
+
 export type AttachmentSelectionResult = {
   countExceeded: boolean;
   duplicateNames: string[];

@@ -32,6 +32,10 @@ type TranscriptStore interface {
 	DeliverActivity(ctx context.Context, turn channel.TurnContext, event agentengine.TurnEvent) error
 }
 
+type finalMessageStore interface {
+	DeliverFinalMessage(ctx context.Context, turn channel.TurnContext, text string, files []agentengine.OutputFile) error
+}
+
 // ActivityDelivery is the legacy-compatible activity representation persisted
 // by the built-in IM adapter. Event remains available for delivery metadata.
 type ActivityDelivery struct {
@@ -227,7 +231,12 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 	if !state.hasText && strings.TrimSpace(result.Output) != "" {
 		state.renderer.ApplyText(activity.RuntimeEvent{Kind: activity.RuntimeEventTextDelta, Text: result.Output})
 	}
-	if text := strings.TrimSpace(strings.Join(state.renderer.FinalMessages(), "\n\n")); text != "" {
+	text := strings.TrimSpace(strings.Join(state.renderer.FinalMessages(), "\n\n"))
+	if store, ok := r.store.(finalMessageStore); ok && len(result.Files) > 0 {
+		if err := store.DeliverFinalMessage(ctx, turn, text, result.Files); err != nil {
+			return err
+		}
+	} else if text != "" {
 		if err := r.store.DeliverMessage(ctx, turn, text); err != nil {
 			return err
 		}

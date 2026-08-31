@@ -9,6 +9,7 @@ import {
   useQuestionAnswerMode,
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
+import { DocumentPreviewPanel, type DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { AgentView, type AgentDetailPaneHandle } from "@/pages/AgentPage/components";
 import { Button, DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
@@ -212,6 +213,7 @@ export function ConversationPane({
   const [focusedActivityEntryID, setFocusedActivityEntryID] = useState<string | null>(null);
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
+  const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
   const logAgentID = logAgent?.id || "";
   const logAgentName = logAgent?.name || conversation.title || "";
   const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
@@ -247,6 +249,7 @@ export function ConversationPane({
     setLogLoading(false);
     setClearMessagesDialogOpen(false);
     setDeleteRoomDialogOpen(false);
+    setDocumentPreview(null);
   }, [conversation.id, logAgentID]);
 
   const refreshAgentLogs = useCallback(async () => {
@@ -273,6 +276,7 @@ export function ConversationPane({
     if (!activityPanelOpen) {
       onCloseThread();
       onToggleChannelTools(false);
+      setDocumentPreview(null);
     }
     setActivityPanelOpen((open) => !open);
   }, [activityPanelOpen, onCloseThread, onToggleChannelTools]);
@@ -282,14 +286,25 @@ export function ConversationPane({
       setFocusedActivityEntryID(participant?.activity?.entryID || null);
       onCloseThread();
       onToggleChannelTools(false);
+      setDocumentPreview(null);
       setActivityPanelOpen(true);
     },
     [onCloseThread, onToggleChannelTools],
   );
 
+  const handlePreviewAttachment = useCallback(
+    (request: DocumentPreviewRequest) => {
+      onCloseThread();
+      setActivityPanelOpen(false);
+      setDocumentPreview(request);
+    },
+    [onCloseThread],
+  );
+
   useEffect(() => {
     if (activeThreadRootID) {
       setActivityPanelOpen(false);
+      setDocumentPreview(null);
     }
   }, [activeThreadRootID]);
 
@@ -332,6 +347,7 @@ export function ConversationPane({
       onSetThreadSlashIndex={onSetThreadSlashIndex}
       mentionableUsers={conversationMembers}
       onPreviewUser={onPreviewUser}
+      onPreviewAttachment={handlePreviewAttachment}
       onQuestionSelect={threadQuestionMode.select}
       questionMode={threadQuestionMode}
       onSend={onSendThreadReply}
@@ -350,7 +366,15 @@ export function ConversationPane({
       onClose={() => setActivityPanelOpen(false)}
     />
   ) : null;
-  const sidePanel = agentDetailPanel ?? activityPanel ?? threadPanel;
+  const documentPreviewPanel = documentPreview ? (
+    <DocumentPreviewPanel
+      {...documentPreview}
+      t={t}
+      onClose={() => setDocumentPreview(null)}
+      onIndexChange={(index) => setDocumentPreview((current) => (current ? { ...current, index } : current))}
+    />
+  ) : null;
+  const sidePanel = agentDetailPanel ?? documentPreviewPanel ?? activityPanel ?? threadPanel;
 
   return (
     <>
@@ -416,6 +440,7 @@ export function ConversationPane({
         onOpenAgentDetail={onOpenAgentDetail}
         onOpenThread={onOpenThread}
         onPreviewUser={onPreviewUser}
+        onPreviewAttachment={handlePreviewAttachment}
         onQuestionSelect={questionMode.select}
       />
 
@@ -465,6 +490,7 @@ export function ConversationPane({
           onDisconnectGitLabConnector={onDisconnectGitLabConnector}
           onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
+          onPreviewAttachment={handlePreviewAttachment}
           onRetrySend={onRetrySend}
           onSaveConnectorConfig={onSaveConnectorConfig}
           onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}

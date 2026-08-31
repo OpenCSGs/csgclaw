@@ -2,6 +2,7 @@ import { Fragment, memo, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
+import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 import { IconImage } from "@/components/ui/Icons";
 import { isAgentAvailable, resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
@@ -42,6 +43,7 @@ export type ConversationMessageListProps = {
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
   t: TranslateFn;
   theme: ThemeMode;
@@ -66,6 +68,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   onMessageAction,
   onOpenThread,
   onPreviewUser,
+  onPreviewAttachment,
   onQuestionSelect,
 }: ConversationMessageListProps) {
   const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
@@ -173,7 +176,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                     />
                   </div>
                 ) : null}
-                <MessageAttachments attachments={message.attachments} t={t} />
+                <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
                 {threadSummary ? (
                   <div className="message-thread-actions has-thread-summary">
                     <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>

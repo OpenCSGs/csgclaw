@@ -1,0 +1,503 @@
+.document-preview-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--surface);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.chat-panel:has(> .document-preview-panel.is-panel) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.chat-panel:has(> .document-preview-panel.is-panel) > .chat-header,
+.chat-panel:has(> .document-preview-panel.is-panel) > .messages,
+.chat-panel:has(> .document-preview-panel.is-panel) > .composer {
+  min-width: 0;
+  grid-column: 1;
+}
+
+.chat-panel > .document-preview-panel.is-panel {
+  grid-column: 2;
+  grid-row: 1 / 4;
+}
+
+.csg-dialog-content.document-preview-dialog-content {
+  width: auto;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.document-preview-panel.is-panel {
+  width: min(var(--document-preview-panel-width, 640px), calc(100vw - 360px));
+  border-left: 1px solid var(--line);
+  box-shadow: -12px 0 28px color-mix(in srgb, var(--gray-900) 16%, transparent);
+  z-index: 3;
+}
+
+.document-preview-panel.is-overlay {
+  width: min(1120px, calc(100vw - 32px));
+  height: min(880px, calc(100dvh - 32px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+}
+
+.document-preview-panel:fullscreen {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.document-preview-resize-handle {
+  position: absolute;
+  z-index: 5;
+  inset: 0 auto 0 -5px;
+  width: 10px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.document-preview-resize-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 4px;
+  width: 2px;
+  background: transparent;
+}
+
+.document-preview-resize-handle:hover::after,
+.document-preview-resize-handle:focus-visible::after,
+.document-preview-panel.is-resizing .document-preview-resize-handle::after {
+  background: var(--primary);
+}
+
+.document-preview-panel.is-resizing,
+.document-preview-panel.is-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.document-preview-header {
+  min-width: 0;
+  min-height: 56px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--panel);
+}
+
+.document-preview-title-group {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 1px;
+}
+
+.document-preview-title-group strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.document-preview-title-group span,
+.document-preview-toolbar > span {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.document-preview-toolbar {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.document-preview-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.document-preview-toolbar > * {
+  flex: 0 0 auto;
+}
+
+.document-preview-close-button {
+  position: sticky;
+  right: 0;
+  background: var(--panel);
+  box-shadow: -8px 0 8px var(--panel);
+}
+
+.document-preview-icon-link {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.document-preview-icon-link:hover,
+.document-preview-icon-link:focus-visible {
+  background: var(--field);
+  color: var(--text);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.document-preview-body {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: auto;
+  background: var(--field);
+}
+
+.document-preview-status,
+.document-preview-unsupported {
+  min-height: 100%;
+  padding: 32px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.document-preview-status.is-error {
+  color: var(--danger);
+}
+
+.document-preview-image-stage {
+  min-width: 100%;
+  min-height: 100%;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+}
+
+.document-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 112px);
+  object-fit: contain;
+  transform-origin: center;
+  transition: transform 120ms ease;
+}
+
+.document-preview-markdown,
+.document-preview-docx,
+.document-preview-text {
+  width: min(100%, 920px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+
+.document-preview-shiki {
+  min-width: 100%;
+  min-height: 100%;
+  overflow: auto;
+  background: var(--surface);
+}
+
+.document-preview-shiki .shiki {
+  min-width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 28px 32px 64px;
+  overflow: auto;
+  font: inherit;
+  font-family: var(--font-mono);
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+:root[data-theme="dark"] .document-preview-shiki .shiki,
+:root[data-theme="dark"] .document-preview-shiki .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+.document-preview-markdown-shell {
+  min-width: 100%;
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(120px, 22%) minmax(0, 1fr);
+}
+
+.document-preview-markdown-main {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.document-preview-markdown-outline {
+  padding: 14px 10px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.document-preview-mode-switch {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding: 7px 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.document-preview-mode-switch button {
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.document-preview-mode-switch button.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.document-preview-text {
+  white-space: pre-wrap;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.document-preview-docx img,
+.document-preview-markdown img {
+  max-width: 100%;
+}
+
+.document-preview-docx-shell {
+  min-width: 100%;
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(120px, 22%) minmax(0, 1fr);
+}
+
+.document-preview-docx-outline {
+  padding: 14px 10px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.document-preview-spreadsheet {
+  min-width: 100%;
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.document-preview-sheet-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 7px 10px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.document-preview-sheet-tabs button {
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.document-preview-sheet-tabs button.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.document-preview-table-wrap {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.document-preview-table-wrap table {
+  border-collapse: collapse;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.document-preview-table-wrap th,
+.document-preview-table-wrap td {
+  min-width: 72px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  text-align: left;
+  font-weight: 400;
+}
+
+.document-preview-table-wrap th {
+  min-width: 42px;
+  background: var(--panel);
+  color: var(--muted);
+  text-align: right;
+}
+
+.document-preview-pdf,
+.document-preview-powerpoint {
+  min-width: 100%;
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.document-preview-pdf-main,
+.document-preview-ppt-stage-shell {
+  min-width: 0;
+  min-height: 0;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+}
+
+.document-preview-pdf-main .react-pdf__Page {
+  box-shadow: var(--shadow);
+}
+
+.document-preview-page-controls {
+  min-height: 42px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.document-preview-page-controls button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.document-preview-page-controls button:hover:not(:disabled) {
+  background: var(--field);
+  color: var(--text);
+}
+
+.document-preview-page-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.document-preview-ppt-stage {
+  width: 960px;
+  height: 540px;
+  transform-origin: center;
+}
+
+@media (max-width: 960px) {
+  .document-preview-panel.is-panel {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    z-index: var(--z-page-overlay);
+  }
+
+  .document-preview-panel.is-panel .document-preview-resize-handle {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .document-preview-header {
+    align-items: flex-start;
+  }
+
+  .document-preview-title-group {
+    max-width: 34vw;
+  }
+
+  .document-preview-markdown-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .document-preview-docx-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .document-preview-docx-outline {
+    display: none;
+  }
+
+  .document-preview-markdown-outline {
+    display: none;
+  }
+
+  .document-preview-markdown,
+  .document-preview-docx,
+  .document-preview-text {
+    padding: 18px 16px 48px;
+  }
+
+  .document-preview-shiki .shiki {
+    padding: 18px 16px 48px;
+  }
+}

@@ -150,12 +150,13 @@ func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
 	}
 }
 
-func TestAppServerManagerPreservesColdEngineConversationContext(t *testing.T) {
+func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T) {
 	withAppServerHelperCommand(t, "resume-success")
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.ConversationSessions = map[string]string{"conversation-1": "cold-thread"}
 	var persisted map[string]string
-	deps := testAppServerManagerDeps()
+	sink := &recordingSink{}
+	deps := testAppServerManagerDepsWithSink(sink)
 	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string) error {
 		persisted = cloneConversationSessions(conversations)
 		return nil
@@ -179,8 +180,31 @@ func TestAppServerManagerPreservesColdEngineConversationContext(t *testing.T) {
 	live.mu.Lock()
 	filePublishing := live.filePublishingThreads[threadID]
 	live.mu.Unlock()
-	if filePublishing {
-		t.Fatal("cold resumed thread was incorrectly marked file-capable")
+	if !filePublishing {
+		t.Fatal("cold resumed Engine thread was not marked file-capable")
+	}
+	response, err := manager.handleAppServerServerRequest(spec.RuntimeID, live, appServerServerRequest{
+		Method: "item/tool/call",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": threadID,
+			"turnId":   "turn-cold-file",
+			"callId":   "call-cold-file",
+			"tool":     appServerPublishFileToolName,
+			"arguments": map[string]any{
+				"path": "generated-file.txt", "mimeType": "text/plain",
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("cold resumed file tool error = %v", err)
+	}
+	result, _ := response.(map[string]any)
+	if result["success"] != true {
+		t.Fatalf("cold resumed file tool response = %#v", response)
+	}
+	events := sink.snapshot()
+	if len(events) != 1 || events[0].Kind != activity.RuntimeEventFileOutput || events[0].SessionID != threadID {
+		t.Fatalf("cold resumed file events = %#v", events)
 	}
 }
 

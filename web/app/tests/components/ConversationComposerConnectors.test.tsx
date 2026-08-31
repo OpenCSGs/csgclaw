@@ -192,11 +192,13 @@ describe("ConversationComposer connectors", () => {
     const user = userEvent.setup();
     const onSendMessage = vi.fn();
     const onRemoveAttachment = vi.fn();
+    const onPreviewAttachment = vi.fn();
     const attachmentDrafts = createAttachmentDrafts([new File(["hello"], "note.txt", { type: "text/plain" })]);
     renderComposer({
       attachmentDrafts,
       draftText: "",
       onRemoveAttachment,
+      onPreviewAttachment,
       onSendMessage,
     });
 
@@ -206,13 +208,12 @@ describe("ConversationComposer connectors", () => {
 
     expect(screen.getByTitle("note.txt")).toHaveAttribute("title", "note.txt");
     await user.click(screen.getByRole("button", { name: "Preview attachment: note.txt" }));
-    const previewDialog = screen.getByRole("dialog", { name: "note.txt" });
-    expect(previewDialog).toBeInTheDocument();
-    expect(within(previewDialog).getByTitle("Preview attachment: note.txt")).toHaveAttribute(
-      "src",
-      expect.stringMatching(/^blob:/),
+    expect(onPreviewAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        index: 0,
+        items: [expect.objectContaining({ file: attachmentDrafts[0].file, name: "note.txt" })],
+      }),
     );
-    await user.click(screen.getByRole("button", { name: "Close" }));
     await user.click(screen.getByRole("button", { name: "Remove attachment: note.txt" }));
     expect(onRemoveAttachment).toHaveBeenCalledWith(attachmentDrafts[0].id);
     await user.click(sendButton);

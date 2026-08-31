@@ -478,7 +478,8 @@ Engine 在选定 Agent Scope 内解析 ID，Runtime Adapter 再把不可变快�
 
 对于输出，每个 Runtime Adapter 消费 typed 原生文件引用，并在跨过 Engine 边界前完成解析。
 Codex app-server Adapter 只在 Engine 创建的 Thread 上暴露接收 workspace 相对路径的 typed dynamic tool `csgclaw_publish_file`；Legacy Bridge Thread 不发布无法投递的能力。
-当前 app-server Protocol 不能在 cold `thread/resume` 时附加 Dynamic Tool，因此恢复出的 Engine Mapping 会续接同一个原生 Thread 以保留 Conversation Context，但在协议支持重新附加前不会发布 File Capability。
+app-server Protocol 不能在 cold `thread/resume` 时附加新的 Dynamic Tool，因此 CSGClaw 会续接同一个原生 Thread 以保留 Conversation Context，并且只为恢复出的 Engine-owned Mapping 重新授权文件发布。
+如果恢复出的 Thread 保留了原有 `csgclaw_publish_file` 定义，其工具调用可以继续工作；Legacy Mapping 不会获得或发布该工具。
 直接使用 Responses 的 Adapter 应消费原生生成文件引用和工具输出。
 Runtime Adapter 通过受 workspace 根目录约束的文件访问打开解析后的本地路径，拒绝越界路径和最终为 symlink 的非普通文件，并注册包含权威名称、MIME type、大小与 SHA-256 元数据的唯一不可变快照。
 Engine 分配与 SHA-256 无关的随机 opaque ID，并在成功的 `TurnResult.Files` 中返回 Metadata，但不暴露宿主路径。

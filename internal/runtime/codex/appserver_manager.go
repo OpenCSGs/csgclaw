@@ -412,6 +412,9 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 
 	live.mu.Lock()
 	if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] {
+		if publishFiles {
+			live.filePublishingThreads[threadID] = true
+		}
 		live.mu.Unlock()
 		return threadID, nil
 	}
@@ -425,6 +428,9 @@ func (m *appServerManager) ensureSession(ctx context.Context, handle SessionHand
 
 		live.mu.Lock()
 		if threadID := strings.TrimSpace(live.conversationSessions[conversationKey]); threadID != "" && live.loadedConversations[conversationKey] {
+			if publishFiles {
+				live.filePublishingThreads[threadID] = true
+			}
 			live.mu.Unlock()
 			return threadID, nil
 		}
@@ -661,9 +667,9 @@ func (m *appServerManager) startOrResumeThread(ctx context.Context, live *liveSe
 		resumed, err := m.resumeThread(ctx, live, threadID)
 		if err == nil {
 			if strings.TrimSpace(resumed) != "" {
-				return resumed, false, nil
+				return resumed, publishFiles, nil
 			}
-			return threadID, false, nil
+			return threadID, publishFiles, nil
 		}
 		if live.appClient != nil {
 			live.appClient.logDebug("codex app-server thread resume failed; starting a new thread", "thread_id", threadID, "error", err)

@@ -2,6 +2,7 @@ import { memo, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { ArrowUp, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
+import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import {
   Button,
   DialogBody,
@@ -89,6 +90,7 @@ export type ConversationComposerProps = {
   onDisconnectGitLabConnector?: () => VoidOrPromise;
   onManageConnector?: () => VoidOrPromise;
   onProviderLogin: (provider: string) => VoidOrPromise;
+  onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onRetrySend?: () => VoidOrPromise;
   onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => VoidOrPromise;
   onSaveGitLabConnectorConfig?: (draft: GitLabConnectorConfigDraft) => VoidOrPromise;
@@ -150,6 +152,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   onDisconnectGitLabConnector,
   onManageConnector,
   onProviderLogin,
+  onPreviewAttachment,
   onRetrySend,
   onSaveGitLabConnectorConfig,
   onRemoveAttachment = () => {},
@@ -234,6 +237,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           progress={sendProgress}
           status={sendStatus === "sending" ? "uploading" : sendStatus === "failed" ? "failed" : "idle"}
           t={t}
+          onPreviewAttachment={onPreviewAttachment}
           onRemove={onRemoveAttachment}
         />
         <div className="composer-editor-wrap">

@@ -1414,7 +1414,7 @@ func newCSGClawAdapterSource(
 	if engine == nil || agentSvc == nil || imSvc == nil || participantSvc == nil || participantBridge == nil {
 		return nil, nil
 	}
-	store, err := delivery.NewIMTranscriptStore(imSvc, participantSvc)
+	store, err := delivery.NewIMTranscriptStore(imSvc, participantSvc, engine)
 	if err != nil {
 		return nil, err
 	}

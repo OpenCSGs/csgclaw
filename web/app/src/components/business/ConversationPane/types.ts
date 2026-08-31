@@ -1,6 +1,7 @@
 import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction } from "react";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
+import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
 import type { ComposerMentionUser, ComposerSegment } from "@/models/composer";
@@ -133,6 +134,7 @@ export type ConversationPaneProps = {
   onRemoveAttachment?: (id: string) => void;
   onRemoveThreadAttachment?: (id: string) => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
+  onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onProviderLogin: (provider: string) => VoidOrPromise;
   onRetrySend?: () => VoidOrPromise;
   onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => VoidOrPromise;
