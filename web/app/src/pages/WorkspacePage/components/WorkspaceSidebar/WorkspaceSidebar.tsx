@@ -564,6 +564,7 @@ export function WorkspaceSidebar({
               onOpenCreateScheduledTask={onOpenCreateScheduledTask}
               hub={hub}
               onSelectMCPServer={onSelectMCPServer}
+              onSelectKnowledgeBase={onSelectKnowledgeBase}
               onSelectHubSkill={onSelectHubSkill}
               onSelectHubTemplate={onSelectHubTemplate}
               onSelectTask={onSelectTask}
@@ -601,7 +602,7 @@ export function WorkspaceSidebar({
           loginRequired={hub.knowledgeBases.loginRequired}
           copyBusyID={hub.knowledgeBases.copyBusyID}
           copyError={hub.knowledgeBases.copyError}
-          onAdd={hub.knowledgeBases.prepareMCPConfig}
+          onAdd={hub.knowledgeBases.requestMCPConfig}
           onLogin={() => onLogin()}
           onLoadMore={hub.knowledgeBases.discoveryLoadMore}
           onRetry={hub.knowledgeBases.discoveryRefetch}

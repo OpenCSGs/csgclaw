@@ -28,6 +28,8 @@ const labels: Record<string, string> = {
   normalTasksTab: "Tasks",
   notificationsSection: "Notifications",
   resourcesModelProvidersSection: "Models",
+  resourcesKnowledgeBasesLabel: "Knowledge bases",
+  resourcesKnowledgeBaseAdded: "Added to MCP",
   resourcesSkillsLabel: "Skills",
   resourcesMCPLabel: "MCP",
   resourcesTab: "Resources",
@@ -239,6 +241,58 @@ describe("WorkspaceSidebar", () => {
     expect(onSelectModelProvider).toHaveBeenCalledWith(props.modelProviders?.providers[0]);
     expect(document.querySelector('[data-workspace-section="models"]')).toBeInTheDocument();
     expect(onToggleWorkspaceGroup).toHaveBeenCalledWith("models");
+  });
+
+  it("forwards knowledge base row selection from the context sidebar", () => {
+    const knowledgeBase = {
+      availability: "available" as const,
+      configuredMCPName: "kb-investment",
+      contentID: "kb-investment",
+      id: "143",
+      name: "Investment handbook",
+    };
+    const onSelectKnowledgeBase = vi.fn();
+
+    renderSidebar({
+      activePane: { type: WorkspacePaneTypes.hub, id: "143", resourceType: "knowledge" },
+      hub: {
+        loaded: true,
+        listError: "",
+        knowledgeBases: {
+          copyBusyID: "",
+          copyError: "",
+          discoveryHasMore: false,
+          discoveryItems: [],
+          discoveryLoadError: "",
+          discoveryLoading: false,
+          discoveryLoadingMore: false,
+          discoveryLoadMore: vi.fn(),
+          discoveryRefetch: vi.fn(),
+          items: [knowledgeBase],
+          loadError: "",
+          loading: false,
+          loginRequired: false,
+          requestMCPConfig: vi.fn(),
+          search: "",
+          setSearch: vi.fn(),
+        },
+        mcpServers: [],
+        selectedHubResourceType: "knowledge",
+        selectedKnowledgeBaseID: "143",
+        selectedHubSkillName: "",
+        selectedHubTemplateId: "",
+        skills: [],
+        skillsError: "",
+        templates: [],
+        uploadBusy: false,
+        uploadError: "",
+      } as unknown as WorkspaceSidebarProps["hub"],
+      onSelectKnowledgeBase,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Investment handbook/ }));
+
+    expect(onSelectKnowledgeBase).toHaveBeenCalledWith(knowledgeBase);
   });
 
   it("omits counts from resource navigation items", () => {

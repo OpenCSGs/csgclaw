@@ -8,7 +8,16 @@ import type { Diagnostic } from "@codemirror/lint";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
-import { BookOpen, CheckCircle2, CloudDownload, FileCode2, RefreshCw, Server, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  CheckCircle2,
+  CloudDownload,
+  ExternalLink,
+  FileCode2,
+  RefreshCw,
+  Server,
+  Trash2,
+} from "lucide-react";
 import { formatRuntimeKindLabel } from "@/models/agents";
 import {
   canPublishHubTemplateToCommunity,
@@ -84,6 +93,18 @@ function knowledgeBaseUnavailableText(reason: string, t: TranslateFn): string {
     default:
       return reason;
   }
+}
+
+function formatKnowledgeBaseMCPPreview(server: MCPServer | null): string {
+  if (!server) {
+    return "";
+  }
+  const config = JSON.parse(
+    JSON.stringify(server.config, (key, value) =>
+      key.toLowerCase() === "authorization" ? "Bearer ${OPENCSG_TOKEN}" : value,
+    ),
+  ) as MCPServer["config"];
+  return formatMCPServerDocument(server.name, config);
 }
 
 function templateSectionEntries(
@@ -365,13 +386,16 @@ type HubDetailPaneHub = {
     mcpCreateDialogOpen?: boolean;
     mcpCreateInitialDocument?: string;
     knowledgeBases?: {
+      cancelMCPConfig: () => void;
+      confirmMCPConfig: () => Promise<boolean>;
       copyBusyID: string;
       copyError: string;
       items: readonly RemoteKnowledgeBase[];
       loginRequired: boolean;
       loading: boolean;
       loadError: string;
-      prepareMCPConfig: (id: string) => Promise<boolean>;
+      pendingMCPKnowledgeBase: RemoteKnowledgeBase | null;
+      requestMCPConfig: (id: string) => Promise<boolean>;
       search: string;
       selected: RemoteKnowledgeBase | null;
       setSearch: (value: string) => void;
@@ -805,6 +829,7 @@ export function HubDetailPane({
     onDeleteMCP,
     onDeleteTemplate,
     onPublishTemplate,
+    onSelectMCP,
     onMCPCreateDialogOpenChange,
     onKnowledgeBaseLogin,
     onInstallRemoteMCP,
@@ -854,11 +879,20 @@ export function HubDetailPane({
   const [publishChoiceDialogOpen, setPublishChoiceDialogOpen] = useState(false);
   const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
+  const [knowledgeBaseDeleteDialogOpen, setKnowledgeBaseDeleteDialogOpen] = useState(false);
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
   const [mcpDetailError, setMCPDetailError] = useState("");
   const [mcpFormError, setMCPFormError] = useState("");
   const [mcpCreateMode, setMCPCreateMode] = useState<MCPCreateMode>("manual");
+  const configuredKnowledgeBaseMCP = useMemo(() => {
+    const name = knowledgeBases?.selected?.configuredMCPName;
+    return name ? mcpServers.find((server) => server.name === name) || null : null;
+  }, [knowledgeBases?.selected?.configuredMCPName, mcpServers]);
+  const knowledgeBaseMCPPreview = useMemo(
+    () => formatKnowledgeBaseMCPPreview(configuredKnowledgeBaseMCP),
+    [configuredKnowledgeBaseMCP],
+  );
   const selectedManagedMCPSource = useMemo(
     () => mcpManagedKnowledgeBaseSource(selectedMCPServer?.config),
     [selectedMCPServer?.config],
@@ -912,6 +946,9 @@ export function HubDetailPane({
     templateInstructionsMode === "advanced" ? templateInstructionsDraft : templateCustomInstructions;
   const templateInstructionsReadonly = selectedTemplate?.source?.kind !== "local";
   const templateMemoryEnabled = isHubTemplateMemoryEnabled(selectedTemplate);
+  useEffect(() => {
+    setKnowledgeBaseDeleteDialogOpen(false);
+  }, [knowledgeBases?.selected?.id]);
   const templateTabs = useMemo(
     () => [
       { id: "profile" as const, label: t("agentProfileTab") },
@@ -1033,6 +1070,13 @@ export function HubDetailPane({
     }
   }
 
+  async function handleDeleteKnowledgeBaseMCPConfirm() {
+    const deleted = await onDeleteMCP?.(configuredKnowledgeBaseMCP);
+    if (deleted) {
+      setKnowledgeBaseDeleteDialogOpen(false);
+    }
+  }
+
   async function handlePublishTemplate(deploy = false) {
     const result = await onPublishTemplate?.(selectedTemplate, deploy, publishTemplateIncludeMemory);
     if (result?.status === "success") {
@@ -1136,24 +1180,52 @@ export function HubDetailPane({
                         ) : null}
                       </div>
                       <p>{knowledgeBases?.selected?.description || t("resourcesKnowledgeBasesDescription")}</p>
+                      {knowledgeBases?.selected ? (
+                        <div className={moduleClassNames("knowledge-base-badges")}>
+                          <span className={moduleClassNames("mini-badge knowledge-base-source-badge")}>
+                            {t("resourcesKnowledgeBaseAgenticHub")}
+                          </span>
+                          {knowledgeBases.selected.configuredMCPName ? (
+                            <span className={moduleClassNames("mini-badge knowledge-base-mcp-badge")}>
+                              {t("resourcesKnowledgeBaseMCPServerBadge")}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   {knowledgeBases?.selected ? (
                     <div className={moduleClassNames("hub-template-actions")}>
-                      <Button
-                        variant="primary"
-                        size="md"
-                        loading={knowledgeBases.copyBusyID === knowledgeBases.selected.id}
-                        disabled={
-                          Boolean(knowledgeBases.selected.configuredMCPName) ||
-                          knowledgeBases.selected.availability !== "available"
-                        }
-                        onClick={() => void knowledgeBases.prepareMCPConfig(knowledgeBases.selected?.id || "")}
-                      >
-                        {knowledgeBases.selected.configuredMCPName
-                          ? t("resourcesKnowledgeBaseAdded")
-                          : t("resourcesKnowledgeBaseAddMCP")}
-                      </Button>
+                      {knowledgeBases.selected.configuredMCPName ? (
+                        <>
+                          <Button
+                            variant="secondaryGray"
+                            size="md"
+                            onClick={() => onSelectMCP?.(knowledgeBases.selected?.configuredMCPName)}
+                          >
+                            <ExternalLink size={16} strokeWidth={2} aria-hidden="true" />
+                            {t("resourcesKnowledgeBaseViewMCP")}
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="md"
+                            disabled={!configuredKnowledgeBaseMCP}
+                            onClick={() => setKnowledgeBaseDeleteDialogOpen(true)}
+                          >
+                            <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
+                            {t("resourcesKnowledgeBaseRemoveMCP")}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          size="md"
+                          disabled={knowledgeBases.selected.availability !== "available"}
+                          onClick={() => void knowledgeBases.requestMCPConfig(knowledgeBases.selected?.id || "")}
+                        >
+                          {t("resourcesKnowledgeBaseAddMCP")}
+                        </Button>
+                      )}
                     </div>
                   ) : null}
                 </div>
@@ -1181,6 +1253,24 @@ export function HubDetailPane({
                         {t("resourcesKnowledgeBasesLogin")}
                       </Button>
                     ) : null}
+                  </div>
+                ) : knowledgeBases.selected.configuredMCPName ? (
+                  <div className={moduleClassNames("knowledge-base-configured")}>
+                    <p>{t("resourcesKnowledgeBaseConfiguredDescription")}</p>
+                    <div className={moduleClassNames("knowledge-base-mcp-name")}>
+                      <span>{t("resourcesKnowledgeBaseMCPNameLabel")}</span>
+                      <strong>{knowledgeBases.selected.configuredMCPName}</strong>
+                    </div>
+                    {knowledgeBaseMCPPreview ? (
+                      <pre
+                        className={moduleClassNames("knowledge-base-mcp-preview")}
+                        aria-label={t("resourcesKnowledgeBaseMCPConfigLabel")}
+                      >
+                        <code>{knowledgeBaseMCPPreview}</code>
+                      </pre>
+                    ) : (
+                      <div className={moduleClassNames("knowledge-base-mcp-loading")}>{t("resourcesMCPLoading")}</div>
+                    )}
                   </div>
                 ) : (
                   <div className={moduleClassNames("knowledge-base-help")}>
@@ -1956,6 +2046,58 @@ export function HubDetailPane({
         </DialogContent>
       </DialogRoot>
       <DialogRoot
+        open={Boolean(knowledgeBases?.pendingMCPKnowledgeBase)}
+        onOpenChange={(open) => {
+          if (!open && !knowledgeBases?.copyBusyID) {
+            knowledgeBases?.cancelMCPConfig();
+          }
+        }}
+      >
+        <DialogContent className={moduleClassNames("knowledge-base-guide-dialog")}>
+          <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
+            <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
+              <DialogTitle>{t("resourcesKnowledgeBaseGuideTitle")}</DialogTitle>
+            </div>
+            <DialogCloseButton
+              label={t("close")}
+              size="sm"
+              variant="tertiaryGray"
+              disabled={Boolean(knowledgeBases?.copyBusyID)}
+            />
+          </DialogHeader>
+          <DialogBody>
+            <DialogDescription className={moduleClassNames("knowledge-base-guide-description")}>
+              {t("resourcesKnowledgeBaseGuideDescription", {
+                name: knowledgeBases?.pendingMCPKnowledgeBase?.name || "",
+              })}
+            </DialogDescription>
+            {knowledgeBases?.copyError ? (
+              <div className={moduleClassNames("form-error knowledge-base-guide-error")}>
+                {knowledgeBases.copyError}
+              </div>
+            ) : null}
+          </DialogBody>
+          <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={Boolean(knowledgeBases?.copyBusyID)}
+              onClick={() => knowledgeBases?.cancelMCPConfig()}
+            >
+              {t("resourcesKnowledgeBaseGuideLater")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={knowledgeBases?.copyBusyID === knowledgeBases?.pendingMCPKnowledgeBase?.id}
+              onClick={() => void knowledgeBases?.confirmMCPConfig()}
+            >
+              {t("resourcesKnowledgeBaseGuideContinue")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot
         open={mcpCreateDialogOpen}
         onOpenChange={(open) => {
           if (open) {
@@ -2045,6 +2187,41 @@ export function HubDetailPane({
                 {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
               </Button>
             ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+      <DialogRoot open={knowledgeBaseDeleteDialogOpen} onOpenChange={setKnowledgeBaseDeleteDialogOpen}>
+        <DialogContent className={moduleClassNames("hub-skill-delete-dialog")}>
+          <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
+            <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
+              <DialogTitle>{t("resourcesKnowledgeBaseRemoveMCP")}</DialogTitle>
+              <DialogDescription>
+                {t("resourcesKnowledgeBaseRemoveMCPConfirm", {
+                  name: configuredKnowledgeBaseMCP?.name || knowledgeBases?.selected?.configuredMCPName || "",
+                })}
+              </DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+          {mcpMutationError ? <div className={moduleClassNames("form-error")}>{mcpMutationError}</div> : null}
+          <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
+            <Button
+              variant="secondaryGray"
+              size="sm"
+              disabled={mcpMutationBusy}
+              onClick={() => setKnowledgeBaseDeleteDialogOpen(false)}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={mcpMutationBusy}
+              disabled={!configuredKnowledgeBaseMCP}
+              onClick={handleDeleteKnowledgeBaseMCPConfirm}
+            >
+              {t("resourcesKnowledgeBaseRemoveMCP")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </DialogRoot>

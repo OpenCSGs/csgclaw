@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
 import { configuredKnowledgeBases, mergeRemoteKnowledgeBasePages } from "@/models/knowledgeBases";
+import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import { formatMCPServerDocument } from "@/models/mcp";
 import { useWorkspaceKnowledgeBasesQuery } from "./workspaceQueries";
 
@@ -28,6 +29,7 @@ export function useWorkspaceKnowledgeBaseSelection({
   const [searchQuery, setSearchQuery] = useState("");
   const [copyBusyID, setCopyBusyID] = useState("");
   const [copyError, setCopyError] = useState("");
+  const [pendingMCPKnowledgeBase, setPendingMCPKnowledgeBase] = useState<RemoteKnowledgeBase | null>(null);
   const catalogQuery = useWorkspaceKnowledgeBasesQuery("", { enabled: enabled && authenticated });
   const discoveryQuery = useWorkspaceKnowledgeBasesQuery(searchQuery, { enabled: enabled && authenticated });
   const catalogItems = useMemo(
@@ -100,6 +102,35 @@ export function useWorkspaceKnowledgeBaseSelection({
     [catalogQuery, discoveryQuery, openCreateMCPDialog, t],
   );
 
+  const requestMCPConfig = useCallback(
+    async (id: string) => {
+      const normalizedID = String(id || "").trim();
+      const item = [...catalogItems, ...discoveryItems].find((candidate) => candidate.id === normalizedID);
+      if (!item || item.availability !== "available" || item.configuredMCPName) {
+        return false;
+      }
+      setCopyError("");
+      setPendingMCPKnowledgeBase(item);
+      return true;
+    },
+    [catalogItems, discoveryItems],
+  );
+
+  const cancelMCPConfig = useCallback(() => {
+    setPendingMCPKnowledgeBase(null);
+  }, []);
+
+  const confirmMCPConfig = useCallback(async () => {
+    if (!pendingMCPKnowledgeBase) {
+      return false;
+    }
+    const prepared = await prepareMCPConfig(pendingMCPKnowledgeBase.id);
+    if (prepared) {
+      setPendingMCPKnowledgeBase(null);
+    }
+    return prepared;
+  }, [pendingMCPKnowledgeBase, prepareMCPConfig]);
+
   const loginRequired = enabled && !authenticated;
   const loginError = loginRequired ? t("resourcesKnowledgeBasesLoginRequired") : "";
   const fetchNextDiscoveryPage = discoveryQuery.fetchNextPage;
@@ -115,6 +146,8 @@ export function useWorkspaceKnowledgeBaseSelection({
   return {
     copyBusyID,
     copyError,
+    cancelMCPConfig,
+    confirmMCPConfig,
     discoveryItems,
     discoveryHasMore: Boolean(discoveryHasNextPage),
     discoveryLoadError:
@@ -130,8 +163,9 @@ export function useWorkspaceKnowledgeBaseSelection({
     loadError:
       loginError ||
       (catalogQuery.error ? errorMessage(catalogQuery.error, t("resourcesKnowledgeBasesLoadFailed")) : ""),
-    prepareMCPConfig,
+    pendingMCPKnowledgeBase,
     refetch: catalogQuery.refetch,
+    requestMCPConfig,
     search,
     selected,
     setSearch,

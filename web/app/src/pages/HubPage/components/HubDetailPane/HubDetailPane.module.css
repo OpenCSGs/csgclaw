@@ -282,7 +282,30 @@
 }
 
 .knowledge-base-overview {
-  padding: 24px;
+  padding: 0;
+}
+
+.knowledge-base-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.knowledge-base-source-badge {
+  color: var(--brand-700);
+  background: color-mix(in srgb, var(--brand-500) 10%, var(--panel-soft));
+}
+
+.knowledge-base-mcp-badge {
+  color: var(--gray-700);
+  background: var(--gray-100);
+}
+
+:root[data-theme="dark"] .knowledge-base-mcp-badge {
+  color: var(--gray-300);
+  background: var(--gray-800);
 }
 
 .knowledge-base-help {
@@ -304,6 +327,77 @@
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
+}
+
+.knowledge-base-configured {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.knowledge-base-configured > p {
+  margin: 0;
+  max-width: 920px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.knowledge-base-mcp-name {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.knowledge-base-mcp-name strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.knowledge-base-mcp-preview {
+  width: 100%;
+  max-height: min(480px, 54vh);
+  margin: 0;
+  overflow: auto;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-base-mcp-loading {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.knowledge-base-guide-dialog {
+  width: min(620px, calc(100vw - 40px));
+  max-width: 620px;
+}
+
+.knowledge-base-guide-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.knowledge-base-guide-error {
+  margin-top: 14px;
 }
 
 .hub-workspace-block.mcp-server-document-block {
@@ -560,7 +654,8 @@
 }
 
 .mcp-dialog {
-  max-width: 680px;
+  width: min(960px, calc(100vw - 48px));
+  max-width: 960px;
 }
 
 .mcp-form {

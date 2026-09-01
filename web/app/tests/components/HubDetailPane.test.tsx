@@ -70,6 +70,25 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesMCPRemoteServersLoading: "Loading remote MCP servers...",
     resourcesMCPRemoteServersRefresh: "Refresh",
     resourcesMCPRemoteServersSearchPlaceholder: "Search remote MCP servers",
+    resourcesKnowledgeBasesLabel: "Knowledge bases",
+    resourcesKnowledgeBasesDescription: "Remote knowledge bases",
+    resourcesKnowledgeBaseAdded: "Added to MCP",
+    resourcesKnowledgeBaseAddMCP: "Add to MCP",
+    resourcesKnowledgeBaseAgenticHub: "AgenticHub knowledge base",
+    resourcesKnowledgeBaseAvailable: "Available",
+    resourcesKnowledgeBaseConfiguredDescription: "Managed in AgenticHub and enabled through agent MCP settings.",
+    resourcesKnowledgeBaseGuideContinue: "Go to MCP management",
+    resourcesKnowledgeBaseGuideDescription: 'MCP management will open with "{name}" filled in automatically.',
+    resourcesKnowledgeBaseGuideLater: "Later",
+    resourcesKnowledgeBaseGuideTitle: "Add knowledge base to MCP",
+    resourcesKnowledgeBaseHowToDescription: "Save it, then enable it for an agent.",
+    resourcesKnowledgeBaseHowToTitle: "Enable for an agent",
+    resourcesKnowledgeBaseMCPConfigLabel: "Knowledge base MCP configuration",
+    resourcesKnowledgeBaseMCPNameLabel: "MCP name ·",
+    resourcesKnowledgeBaseMCPServerBadge: "MCP Server",
+    resourcesKnowledgeBaseRemoveMCP: "Remove from MCP",
+    resourcesKnowledgeBaseRemoveMCPConfirm: 'Remove "{name}" from MCP?',
+    resourcesKnowledgeBaseViewMCP: "View in MCP",
     resourcesRefresh: "Refresh templates",
     resourcesPublishCommunitySuccessTitle: "Published successfully",
     resourcesPublishCommunityDeployFailedTitle: "Template published, but deployment failed",
@@ -524,7 +543,139 @@ function renderMCPCreateDialog() {
   return { ...result, onInstallRemoteMCP, onRemoteMCPVisibleChange };
 }
 
+function renderKnowledgeBaseDetail(configured: boolean) {
+  const knowledgeBase = {
+    availability: "available" as const,
+    configuredMCPName: configured ? "kb-investment" : undefined,
+    contentID: "kb-investment",
+    description: "Investment knowledge base",
+    id: "143",
+    name: "Investment handbook",
+  };
+  const mcp = {
+    name: "kb-investment",
+    description: "Investment knowledge base",
+    config: {
+      type: "remote",
+      url: "https://example.test/mcp",
+      headers: { Authorization: "Bearer saved-token" },
+    },
+  };
+  const requestMCPConfig = vi.fn();
+  const confirmMCPConfig = vi.fn().mockResolvedValue(true);
+  const cancelMCPConfig = vi.fn();
+  const onDeleteMCP = vi.fn().mockResolvedValue(true);
+  const onSelectMCP = vi.fn();
+
+  function KnowledgeBaseDetailHarness() {
+    const [pendingMCPKnowledgeBase, setPendingMCPKnowledgeBase] = useState<typeof knowledgeBase | null>(null);
+    return (
+      <HubDetailPane
+        locale="en"
+        t={t}
+        hub={{
+          detailPaneProps: {
+            detailLoading: false,
+            error: "",
+            knowledgeBases: {
+              cancelMCPConfig: () => {
+                cancelMCPConfig();
+                setPendingMCPKnowledgeBase(null);
+              },
+              confirmMCPConfig,
+              copyBusyID: "",
+              copyError: "",
+              items: [knowledgeBase],
+              loadError: "",
+              loading: false,
+              loginRequired: false,
+              pendingMCPKnowledgeBase,
+              requestMCPConfig: async (id) => {
+                requestMCPConfig(id);
+                setPendingMCPKnowledgeBase(knowledgeBase);
+                return true;
+              },
+              search: "",
+              selected: knowledgeBase,
+              setSearch: vi.fn(),
+            },
+            loaded: true,
+            mcpServers: configured ? [mcp] : [],
+            onDeleteMCP,
+            onRetry: vi.fn(),
+            onSelectMCP,
+            onSelectSkillFile: vi.fn(),
+            onSelectWorkspaceFile: vi.fn(),
+            selectedMCPServer: null,
+            selectedMCPServerName: "",
+            selectedResourceType: "knowledge",
+            selectedSkill: null,
+            selectedSkillPath: "",
+            selectedTemplate: null,
+            selectedTemplateId: "",
+            selectedWorkspacePath: "",
+            skillFile: null,
+            skillFileError: "",
+            skillFileLoading: false,
+            skills: [],
+            skillTree: null,
+            skillTreeError: "",
+            skillTreeLoading: false,
+            templates: [],
+            workspaceFile: null,
+            workspaceFileError: "",
+            workspaceFileLoading: false,
+          },
+        }}
+      />
+    );
+  }
+
+  return {
+    ...render(<KnowledgeBaseDetailHarness />),
+    confirmMCPConfig,
+    mcp,
+    onDeleteMCP,
+    onSelectMCP,
+    requestMCPConfig,
+  };
+}
+
 describe("HubDetailPane", () => {
+  it("explains the automatic handoff before opening MCP management", async () => {
+    const user = userEvent.setup();
+    const { confirmMCPConfig, requestMCPConfig } = renderKnowledgeBaseDetail(false);
+
+    await user.click(screen.getByRole("button", { name: "Add to MCP" }));
+
+    expect(requestMCPConfig).toHaveBeenCalledWith("143");
+    expect(screen.getByRole("dialog")).toHaveTextContent('MCP management will open with "Investment handbook"');
+    expect(confirmMCPConfig).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Go to MCP management" }));
+
+    expect(confirmMCPConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the configured MCP with safe preview, navigation, and removal", async () => {
+    const user = userEvent.setup();
+    const { mcp, onDeleteMCP, onSelectMCP } = renderKnowledgeBaseDetail(true);
+
+    expect(screen.getByText("kb-investment")).toBeInTheDocument();
+    const preview = screen.getByLabelText("Knowledge base MCP configuration");
+    expect(preview).toHaveTextContent("Bearer ${OPENCSG_TOKEN}");
+    expect(preview).not.toHaveTextContent("saved-token");
+
+    await user.click(screen.getByRole("button", { name: "View in MCP" }));
+    expect(onSelectMCP).toHaveBeenCalledWith("kb-investment");
+
+    await user.click(screen.getByRole("button", { name: "Remove from MCP" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent('Remove "kb-investment" from MCP?');
+    await user.click(screen.getAllByRole("button", { name: "Remove from MCP" }).at(-1)!);
+
+    expect(onDeleteMCP).toHaveBeenCalledWith(mcp);
+  });
+
   it("publishes a local template to the community", async () => {
     const user = userEvent.setup();
     const onPublishTemplate = vi.fn().mockResolvedValue({ status: "success" });

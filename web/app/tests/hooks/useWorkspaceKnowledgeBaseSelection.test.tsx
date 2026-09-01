@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fetchRemoteKnowledgeBases } from "@/api/knowledgeBases";
+import { fetchRemoteKnowledgeBaseMCPConfig, fetchRemoteKnowledgeBases } from "@/api/knowledgeBases";
 import { useWorkspaceKnowledgeBaseSelection } from "@/hooks/workspace/useWorkspaceKnowledgeBaseSelection";
 
 vi.mock("@/api/knowledgeBases", () => ({
@@ -25,6 +25,7 @@ function createWrapper() {
 
 describe("useWorkspaceKnowledgeBaseSelection", () => {
   beforeEach(() => {
+    vi.mocked(fetchRemoteKnowledgeBaseMCPConfig).mockReset();
     vi.mocked(fetchRemoteKnowledgeBases).mockReset();
   });
 
@@ -77,5 +78,58 @@ describe("useWorkspaceKnowledgeBaseSelection", () => {
 
     await waitFor(() => expect(fetchRemoteKnowledgeBases).toHaveBeenCalledWith("", 2));
     await waitFor(() => expect(result.current.items.map((item) => item.id)).toEqual(["configured"]));
+  });
+
+  it("explains the MCP handoff before preparing and opening the prefilled configuration", async () => {
+    vi.mocked(fetchRemoteKnowledgeBases).mockResolvedValue({
+      items: [
+        {
+          availability: "available",
+          contentID: "content-42",
+          id: "42",
+          name: "Investment handbook",
+        },
+      ],
+      page: 1,
+      per: 50,
+      total: 1,
+    });
+    vi.mocked(fetchRemoteKnowledgeBaseMCPConfig).mockResolvedValue({
+      name: "kb-investment",
+      config: { type: "remote", url: "https://example.test/mcp" },
+    });
+    const openCreateMCPDialog = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useWorkspaceKnowledgeBaseSelection({
+          authenticated: true,
+          enabled: true,
+          openCreateMCPDialog,
+          selectedKnowledgeBaseID: "42",
+          setSelectedKnowledgeBaseID: vi.fn(),
+          t: (key) => key,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.discoveryItems).toHaveLength(1));
+    await act(async () => {
+      await result.current.requestMCPConfig("42");
+    });
+
+    expect(result.current.pendingMCPKnowledgeBase?.name).toBe("Investment handbook");
+    expect(fetchRemoteKnowledgeBaseMCPConfig).not.toHaveBeenCalled();
+    expect(openCreateMCPDialog).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.confirmMCPConfig();
+    });
+
+    expect(fetchRemoteKnowledgeBaseMCPConfig).toHaveBeenCalledWith("42");
+    expect(openCreateMCPDialog).toHaveBeenCalledWith(
+      '{\n  "mcpServers": {\n    "kb-investment": {\n      "type": "remote",\n      "url": "https://example.test/mcp"\n    }\n  }\n}',
+    );
+    expect(result.current.pendingMCPKnowledgeBase).toBeNull();
   });
 });

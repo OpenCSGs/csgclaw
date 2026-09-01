@@ -266,7 +266,6 @@ export function useWorkspaceMCPSelection({
         queryClient.setQueryData(workspaceQueryKeys.mcpServers(), state);
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
         setSelectedMCPServerName("");
-        setSelectedHubResourceType("mcp");
         return true;
       } catch (error) {
         setMCPMutationError(errorMessage(error, t("resourcesMCPDeleteFailed")));
@@ -275,7 +274,7 @@ export function useWorkspaceMCPSelection({
         setMCPMutationBusy(false);
       }
     },
-    [queryClient, setSelectedMCPServerName, setSelectedHubResourceType, t],
+    [queryClient, setSelectedMCPServerName, t],
   );
 
   const syncSelectedMCPServerSource = useCallback(async () => {
