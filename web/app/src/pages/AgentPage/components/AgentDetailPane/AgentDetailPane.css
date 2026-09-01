@@ -2453,26 +2453,34 @@
 }
 
 .agent-memory-document-shell {
+  position: relative;
   min-height: 360px;
+  overflow: hidden;
 }
 
 .agent-memory-document {
   width: 100%;
   height: min(52vh, 520px);
   min-height: 360px;
-  padding: 16px;
-  resize: vertical;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  font-family: var(--font-mono);
+  padding: 20px 52px 28px 20px;
+  overflow: auto;
+  background: var(--surface);
   line-height: 1.55;
-  white-space: pre;
 }
 
-.agent-memory-document:focus {
-  outline: none;
+.agent-memory-document > :first-child {
+  margin-top: 0;
+}
+
+.agent-memory-document > :last-child {
+  margin-bottom: 0;
+}
+
+.agent-memory-copy-button {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
 }
 
 .agent-memory-summary-empty {

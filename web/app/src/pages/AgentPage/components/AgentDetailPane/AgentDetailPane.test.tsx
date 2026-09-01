@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
 import type { Ref } from "react";
@@ -244,7 +244,7 @@ describe("AgentDetailPane memory", () => {
           ready: true,
           name: "memory_summary.md",
           location: "$CODEX_HOME/memories/memory_summary.md",
-          content: "# Durable memory\n\nRemember this.\n",
+          content: "# Durable memory\n\nRemember **this**.\n\n<script>unsafe()</script>\n",
         }),
         { headers: { "content-type": "application/json" }, status: 200 },
       );
@@ -254,9 +254,19 @@ describe("AgentDetailPane memory", () => {
     render(<Harness item={{ ...agent, memory_supported: true }} onMemoryChange={onMemoryChange} />);
 
     await user.click(screen.getByRole("button", { name: "agentMemoryTab" }));
-    const document = await screen.findByRole("textbox", { name: "agentMemoryDocumentLabel" });
-    expect(document).toHaveValue("# Durable memory\n\nRemember this.\n");
+    const document = await screen.findByRole("region", { name: "agentMemoryDocumentLabel" });
+    expect(within(document).getByRole("heading", { name: "Durable memory" })).toBeInTheDocument();
+    expect(within(document).getByText("this").tagName).toBe("STRONG");
+    expect(document.querySelector("script")).not.toBeInTheDocument();
     expect(document.closest(".agent-memory-document-shell")).toHaveClass("agent-section-form");
+    const copy = screen.getByRole("button", { name: "copyToClipboard" });
+    const clipboardWrite = vi.spyOn(navigator.clipboard, "writeText");
+    expect(copy).toHaveClass("agent-memory-copy-button");
+    await user.click(copy);
+    expect(clipboardWrite).toHaveBeenCalledWith(
+      "# Durable memory\n\nRemember **this**.\n\n<script>unsafe()</script>\n",
+    );
+    expect(screen.getByRole("button", { name: "copiedToClipboard" })).toBeInTheDocument();
     const refresh = screen.getByRole("button", { name: "agentMemoryRefresh" });
     expect(refresh).toHaveClass("agent-skill-add-button");
     expect(refresh.closest(".agent-memory-section-heading")).toBeInTheDocument();
@@ -309,6 +319,6 @@ describe("AgentDetailPane memory", () => {
     await user.click(screen.getByRole("button", { name: "agentMemoryTab" }));
     const emptyTitle = await screen.findByText("agentMemoryEmptyTitle");
     expect(emptyTitle.closest(".agent-memory-summary-empty")).toHaveClass("agent-skills-summary-empty");
-    expect(screen.queryByRole("textbox", { name: "agentMemoryDocumentLabel" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "agentMemoryDocumentLabel" })).not.toBeInTheDocument();
   });
 });

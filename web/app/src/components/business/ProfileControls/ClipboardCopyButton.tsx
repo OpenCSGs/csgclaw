@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui";
 
 export type ClipboardCopyButtonProps = {
   className?: string;
   disabled?: boolean;
+  icon?: ReactNode;
+  iconOnly?: boolean;
   label: string;
+  copiedIcon?: ReactNode;
+  copiedLabel?: string;
   text?: string;
 };
 
@@ -27,7 +32,16 @@ async function copyTextToClipboard(text: string) {
   }
 }
 
-export function ClipboardCopyButton({ className, disabled, label, text }: ClipboardCopyButtonProps) {
+export function ClipboardCopyButton({
+  className,
+  copiedIcon,
+  copiedLabel,
+  disabled,
+  icon,
+  iconOnly = false,
+  label,
+  text,
+}: ClipboardCopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<number | null>(null);
   const value = String(text ?? "");
@@ -59,12 +73,15 @@ export function ClipboardCopyButton({ className, disabled, label, text }: Clipbo
 
   return (
     <Button
+      aria-label={copied ? copiedLabel || label : label}
       className={className || "notifier-copy-button"}
       disabled={busy}
+      iconOnly={iconOnly}
       onClick={handleClick}
       style={copied ? { background: "#16a34a", borderColor: "transparent", color: "#fff" } : undefined}
+      title={copied ? copiedLabel || label : label}
     >
-      {copied ? "OK" : label}
+      {copied ? copiedIcon || "OK" : icon || label}
     </Button>
   );
 }

@@ -3,6 +3,7 @@ import {
   Check,
   CheckCircle2,
   CircleDashed,
+  Copy,
   Edit3,
   ExternalLink,
   FileCode2,
@@ -85,6 +86,8 @@ import { skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
 import type { SlashSkillOption } from "@/models/slashCommands";
 import { AgentAvatarContent, AgentAvatarPicker } from "@/components/business/AgentAvatar";
+import { renderMarkdown } from "@/components/business/MessageContent/markdown";
+import "@/components/business/MessageContent/MessageContent.css";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import type { AgentTemplatePublishTarget } from "@/api/hub";
@@ -1814,6 +1817,7 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const renderedMemory = useMemo(() => renderMarkdown(document?.content || ""), [document?.content]);
 
   const loadMemory = useCallback(async () => {
     if (!agentID) return;
@@ -1910,11 +1914,20 @@ function AgentMemoryPanel({ agentID, onMemoryChange, t }: AgentMemoryPanelProps)
           </div>
         ) : document?.ready ? (
           <div className="agent-section-form agent-memory-document-shell">
-            <textarea
-              className="compact-textarea agent-memory-document"
-              value={document.content || ""}
-              readOnly
+            <ClipboardCopyButton
+              className="agent-memory-copy-button"
+              copiedIcon={<Check aria-hidden="true" size={16} strokeWidth={2.2} />}
+              copiedLabel={t("copiedToClipboard")}
+              icon={<Copy aria-hidden="true" size={16} strokeWidth={2.2} />}
+              iconOnly
+              label={t("copyToClipboard")}
+              text={document.content || ""}
+            />
+            <div
+              className="agent-memory-document message-content"
+              role="region"
               aria-label={t("agentMemoryDocumentLabel")}
+              dangerouslySetInnerHTML={{ __html: renderedMemory }}
             />
           </div>
         ) : (
