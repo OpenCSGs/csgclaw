@@ -129,18 +129,32 @@ func RefreshManagedServerSnapshot(ctx context.Context, config map[string]any, co
 	if err != nil {
 		return KnowledgeBase{}, nil, fmt.Errorf("refresh knowledge base MCP: %w", err)
 	}
-	if item.ID != metadata.KnowledgeBaseID || item.ContentID != metadata.ContentID {
-		return KnowledgeBase{}, nil, fmt.Errorf("refresh knowledge base MCP: resource identity changed")
-	}
-	if availability, reason := AvailabilityFor(item); availability != AvailabilityAvailable {
-		return KnowledgeBase{}, nil, fmt.Errorf("refresh knowledge base MCP: knowledge base is unavailable: %s", reason)
-	}
-
-	prepared, err := hydrateServerConfig(config, mcpEndpointFor(item), token)
+	prepared, err := RefreshManagedServerConfig(config, item, token)
 	if err != nil {
 		return KnowledgeBase{}, nil, err
 	}
 	return item, prepared, nil
+}
+
+// RefreshManagedServerConfig overlays the current AgenticHub-owned endpoint
+// and credential fields onto one persisted server snapshot. Runtime tuning and
+// other locally authored fields remain owned by that snapshot.
+func RefreshManagedServerConfig(config map[string]any, item KnowledgeBase, csgHubAccessToken string) (map[string]any, error) {
+	metadata, ok := ManagedMetadataFromServer(config)
+	if !ok {
+		return nil, fmt.Errorf("refresh knowledge base MCP: managed metadata is required")
+	}
+	if item.ID != metadata.KnowledgeBaseID || item.ContentID != metadata.ContentID {
+		return nil, fmt.Errorf("refresh knowledge base MCP: resource identity changed")
+	}
+	if availability, reason := AvailabilityFor(item); availability != AvailabilityAvailable {
+		return nil, fmt.Errorf("refresh knowledge base MCP: knowledge base is unavailable: %s", reason)
+	}
+	token := strings.TrimSpace(csgHubAccessToken)
+	if token == "" {
+		return nil, fmt.Errorf("refresh knowledge base MCP: CSGHub access token is required")
+	}
+	return hydrateServerConfig(config, mcpEndpointFor(item), token)
 }
 
 func hydrateServerConfig(config map[string]any, endpoint, token string) (map[string]any, error) {
@@ -154,7 +168,17 @@ func hydrateServerConfig(config map[string]any, endpoint, token string) (map[str
 	}
 	prepared["url"] = strings.TrimSpace(endpoint)
 	prepared["transport"] = "streamable-http"
-	prepared["headers"] = map[string]any{"Authorization": "Bearer " + strings.TrimSpace(token)}
+	headers := map[string]any{}
+	if existing, ok := prepared["headers"].(map[string]any); ok {
+		for name, value := range existing {
+			if strings.EqualFold(strings.TrimSpace(name), "Authorization") {
+				continue
+			}
+			headers[name] = value
+		}
+	}
+	headers["Authorization"] = "Bearer " + strings.TrimSpace(token)
+	prepared["headers"] = headers
 	return prepared, nil
 }
 

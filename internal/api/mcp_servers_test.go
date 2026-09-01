@@ -149,10 +149,12 @@ func TestManagedKnowledgeBaseMCPSourceStatusAndManualSync(t *testing.T) {
 
 	store := &knowledgeBaseServerStore{servers: map[string]any{
 		"content-42": map[string]any{
-			"type":      "remote",
-			"url":       "https://gateway.example.test/snapshot/mcp",
-			"transport": "streamable-http",
-			"headers":   map[string]any{"Authorization": "Bearer snapshot-token"},
+			"type":                "remote",
+			"url":                 "https://gateway.example.test/snapshot/mcp",
+			"transport":           "streamable-http",
+			"headers":             map[string]any{"Authorization": "Bearer snapshot-token", "X-Local": "global"},
+			"startup_timeout_sec": float64(45),
+			"tool_timeout_sec":    float64(90),
 			knowledgebase.ManagedMetaKey: map[string]any{
 				knowledgebase.ManagedMetaNamespace: map[string]any{
 					"type":        knowledgebase.ManagedMCPType,
@@ -201,6 +203,15 @@ func TestManagedKnowledgeBaseMCPSourceStatusAndManualSync(t *testing.T) {
 	if got, want := headers["Authorization"], "Bearer current-token"; got != want {
 		t.Fatalf("synced Authorization = %#v, want %q", got, want)
 	}
+	if got, want := headers["X-Local"], "global"; got != want {
+		t.Fatalf("synced X-Local = %#v, want %q", got, want)
+	}
+	if got, want := config["startup_timeout_sec"], float64(45); got != want {
+		t.Fatalf("synced startup_timeout_sec = %#v, want %#v", got, want)
+	}
+	if got, want := config["tool_timeout_sec"], float64(90); got != want {
+		t.Fatalf("synced tool_timeout_sec = %#v, want %#v", got, want)
+	}
 }
 
 func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *testing.T) {
@@ -223,9 +234,11 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *t
 	})
 
 	handler, service, created := newAgentMCPManagementTestServer(t)
-	agentSnapshot := map[string]any{
-		"content-42": managedKnowledgeBaseMCPConfigForTest("https://gateway.example.test/agent-snapshot/mcp", "agent-snapshot-token"),
-	}
+	agentConfig := managedKnowledgeBaseMCPConfigForTest("https://gateway.example.test/agent-snapshot/mcp", "agent-snapshot-token")
+	agentConfig["startup_timeout_sec"] = float64(90)
+	agentConfig["tool_timeout_sec"] = float64(180)
+	agentConfig["headers"].(map[string]any)["X-Local"] = "agent"
+	agentSnapshot := map[string]any{"content-42": agentConfig}
 	if _, err := service.Update(context.Background(), created.ID, agent.UpdateRequest{
 		MCPServers:    &agentSnapshot,
 		MCPServersSet: true,
@@ -233,10 +246,11 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *t
 	}); err != nil {
 		t.Fatalf("seed Agent MCP snapshot: %v", err)
 	}
-	if _, err := handler.mcp.CreateServer(context.Background(), "content-42", managedKnowledgeBaseMCPConfigForTest(
-		"https://gateway.example.test/global-snapshot/mcp",
-		"global-snapshot-token",
-	)); err != nil {
+	globalConfig := managedKnowledgeBaseMCPConfigForTest("https://gateway.example.test/global-snapshot/mcp", "global-snapshot-token")
+	globalConfig["startup_timeout_sec"] = float64(30)
+	globalConfig["tool_timeout_sec"] = float64(60)
+	globalConfig["headers"].(map[string]any)["X-Local"] = "global"
+	if _, err := handler.mcp.CreateServer(context.Background(), "content-42", globalConfig); err != nil {
 		t.Fatalf("seed global MCP snapshot: %v", err)
 	}
 
@@ -272,11 +286,31 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *t
 		t.Fatalf("list global MCP servers: %v", err)
 	}
 	assertManagedKnowledgeBaseMCPRuntimeSnapshot(t, globalServers["content-42"], "https://gateway.example.test/current/mcp", "current-token")
+	refreshedGlobal := globalServers["content-42"].(map[string]any)
+	if got, want := refreshedGlobal["startup_timeout_sec"], float64(30); got != want {
+		t.Fatalf("global startup_timeout_sec = %#v, want %#v", got, want)
+	}
+	if got, want := refreshedGlobal["tool_timeout_sec"], float64(60); got != want {
+		t.Fatalf("global tool_timeout_sec = %#v, want %#v", got, want)
+	}
+	if got, want := refreshedGlobal["headers"].(map[string]any)["X-Local"], "global"; got != want {
+		t.Fatalf("global X-Local = %#v, want %q", got, want)
+	}
 	saved, ok := service.Agent(created.ID)
 	if !ok {
 		t.Fatalf("Agent(%q) not found", created.ID)
 	}
 	assertManagedKnowledgeBaseMCPRuntimeSnapshot(t, saved.MCPServers["content-42"], "https://gateway.example.test/current/mcp", "current-token")
+	refreshedAgent := saved.MCPServers["content-42"].(map[string]any)
+	if got, want := refreshedAgent["startup_timeout_sec"], float64(90); got != want {
+		t.Fatalf("Agent startup_timeout_sec = %#v, want %#v", got, want)
+	}
+	if got, want := refreshedAgent["tool_timeout_sec"], float64(180); got != want {
+		t.Fatalf("Agent tool_timeout_sec = %#v, want %#v", got, want)
+	}
+	if got, want := refreshedAgent["headers"].(map[string]any)["X-Local"], "agent"; got != want {
+		t.Fatalf("Agent X-Local = %#v, want %q", got, want)
+	}
 }
 
 func managedKnowledgeBaseMCPConfigForTest(endpoint, token string) map[string]any {

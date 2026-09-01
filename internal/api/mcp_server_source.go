@@ -64,7 +64,7 @@ func (h *Handler) handleMCPServerSourceByName(w http.ResponseWriter, r *http.Req
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, resolved.Status)
 	case http.MethodPost:
-		state, err := h.mcp.UpdateServer(r.Context(), name, name, resolved.CanonicalConfig)
+		state, err := h.mcp.UpdateServer(r.Context(), name, name, resolved.Refreshed)
 		if err != nil {
 			writeMCPServerError(w, err)
 			return

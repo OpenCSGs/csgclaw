@@ -98,6 +98,11 @@ func TestHydrateManagedServerRefreshesEndpointAndCSGHubAccessToken(t *testing.T)
 	if err != nil {
 		t.Fatalf("ServerConfig() error = %v", err)
 	}
+	config["startup_timeout_sec"] = 90
+	originalHeaders := config["headers"].(map[string]any)
+	delete(originalHeaders, "Authorization")
+	originalHeaders["authorization"] = "Bearer stored-csghub-token"
+	originalHeaders["X-Tenant-ID"] = "tenant-a"
 	current := availableKnowledgeBase()
 	current.Metadata.MCPEndpoint = "https://current-gateway.example.test/v1/llmwikis/wiki-content-42/mcp"
 	hubURL := installKnowledgeBaseResponse(t, current, "current-csghub-token")
@@ -116,9 +121,17 @@ func TestHydrateManagedServerRefreshesEndpointAndCSGHubAccessToken(t *testing.T)
 	if got, want := headers["Authorization"], "Bearer current-csghub-token"; got != want {
 		t.Fatalf("Authorization = %#v, want %q", got, want)
 	}
-	originalHeaders := config["headers"].(map[string]any)
-	if got, want := originalHeaders["Authorization"], "Bearer stored-csghub-token"; got != want {
-		t.Fatalf("original Authorization = %#v, want %q", got, want)
+	if _, exists := headers["authorization"]; exists {
+		t.Fatalf("headers retained stale case-variant Authorization: %#v", headers)
+	}
+	if got, want := headers["X-Tenant-ID"], "tenant-a"; got != want {
+		t.Fatalf("X-Tenant-ID = %#v, want %q", got, want)
+	}
+	if got, want := prepared["startup_timeout_sec"], float64(90); got != want {
+		t.Fatalf("startup_timeout_sec = %#v, want %#v", got, want)
+	}
+	if got, want := originalHeaders["authorization"], "Bearer stored-csghub-token"; got != want {
+		t.Fatalf("original authorization = %#v, want %q", got, want)
 	}
 }
 
