@@ -2,6 +2,8 @@ type SharedWorkerGlobal = typeof globalThis & {
   onconnect: ((event: MessageEvent) => void) | null;
 };
 
+export {};
+
 type WorkerControlMessage = {
   endpoint?: string;
   type?: "close" | "subscribe" | string;
@@ -9,7 +11,7 @@ type WorkerControlMessage = {
 
 let es: EventSource | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
-let endpoint = "/api/v1/events";
+let endpoint: string | null = null;
 const ports = new Set<MessagePort>();
 let reconnectDelayMs = 3000;
 
@@ -45,7 +47,7 @@ function scheduleReconnect(): void {
 }
 
 function connect(): void {
-  if (es || ports.size === 0) {
+  if (es || ports.size === 0 || !endpoint) {
     return;
   }
 
@@ -79,7 +81,11 @@ function connect(): void {
   port.onmessage = ({ data }: MessageEvent<WorkerControlMessage>) => {
     if (data?.type === "subscribe") {
       if (typeof data.endpoint === "string" && data.endpoint.length > 0) {
-        endpoint = data.endpoint;
+        if (endpoint !== data.endpoint) {
+          endpoint = data.endpoint;
+          clearReconnectTimer();
+          cleanup();
+        }
       }
       connect();
       return;
@@ -92,6 +98,4 @@ function connect(): void {
       }
     }
   };
-
-  connect();
 };

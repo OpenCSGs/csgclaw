@@ -24,7 +24,13 @@ export function safeParseEventData(raw: string): IMServerEvent | null {
   }
 }
 
+export function resolveIMEventsEndpoint(baseURI: string): string {
+  return new URL(ApiEndpoints.imEvents, baseURI).toString();
+}
+
 export function subscribeIMEvents(onEvent: (payload: IMServerEvent) => void): () => void {
+  const endpoint = resolveIMEventsEndpoint(document.baseURI);
+
   if (typeof window.SharedWorker === "function") {
     try {
       const worker = createSharedWorker();
@@ -41,7 +47,7 @@ export function subscribeIMEvents(onEvent: (payload: IMServerEvent) => void): ()
 
       port.addEventListener("message", handleMessage);
       port.start();
-      port.postMessage({ type: "subscribe", endpoint: ApiEndpoints.imEvents });
+      port.postMessage({ type: "subscribe", endpoint });
 
       return () => {
         port.postMessage({ type: "close" });
@@ -53,7 +59,7 @@ export function subscribeIMEvents(onEvent: (payload: IMServerEvent) => void): ()
     }
   }
 
-  const source = new EventSource(ApiEndpoints.imEvents);
+  const source = new EventSource(endpoint);
   source.onmessage = (event) => {
     const payload = safeParseEventData(event.data);
     if (payload) {
