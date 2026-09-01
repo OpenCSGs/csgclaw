@@ -2,6 +2,8 @@
 
 本文档记录 CSGClaw Agent 模板中 `agent.toml` 的字段含义、必填要求，以及后续是否计划保留。
 
+知识库 MCP 随 Agent 发布和从社区模板恢复的过程，见 [AgenticHub 知识库 MCP 流程](knowledge-base-mcp.zh.md)。
+
 > 注意：表格记录字段精简决策。标记为 ❌ 的字段已经从当前实现中移除；旧清单中残留的这些字段会被忽略。
 >
 > `[runtime_options]` 当前仅适用于 Codex Worker 模板，支持 `execution_mode` 和 `memory_mode`。
