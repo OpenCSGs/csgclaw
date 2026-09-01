@@ -796,6 +796,7 @@ export const messages = {
     attachmentPreviewDescription: "在应用内预览附件内容。",
     attachmentPreviewLoading: "正在加载附件预览…",
     attachmentPreviewFailed: "无法加载附件预览，请下载后重试。",
+    attachmentPreviewTruncated: "文件较大，仅显示前 256 KiB。下载文件可查看完整内容。",
     attachmentPreviewUnavailable: "此文件类型无法直接预览，可以下载后使用系统应用打开。",
     attachmentPreviewResize: "调整文档预览宽度",
     attachmentPreviewZoomOut: "缩小",
@@ -2279,6 +2280,8 @@ export const messages = {
     attachmentPreviewDescription: "Preview the attachment without leaving the app.",
     attachmentPreviewLoading: "Loading attachment preview…",
     attachmentPreviewFailed: "Unable to load the attachment preview. Download the file to try again.",
+    attachmentPreviewTruncated:
+      "This file is large, so only the first 256 KiB is shown. Download it to view the full content.",
     attachmentPreviewUnavailable: "This file type cannot be previewed here. Download it to open with a system app.",
     attachmentPreviewResize: "Resize document preview",
     attachmentPreviewZoomOut: "Zoom out",

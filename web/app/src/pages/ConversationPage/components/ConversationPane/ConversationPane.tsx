@@ -294,11 +294,14 @@ export function ConversationPane({
 
   const handlePreviewAttachment = useCallback(
     (request: DocumentPreviewRequest) => {
+      if (agentDetailPanelProps?.onClose(false) === false) {
+        return;
+      }
       onCloseThread();
       setActivityPanelOpen(false);
       setDocumentPreview(request);
     },
-    [onCloseThread],
+    [agentDetailPanelProps, onCloseThread],
   );
 
   useEffect(() => {

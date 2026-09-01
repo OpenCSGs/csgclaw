@@ -35,6 +35,8 @@ type TextEncoding = "utf-16be" | "utf-16le" | "utf-8";
 
 const textSniffBytes = 64 * 1024;
 
+export const MAX_TEXT_PREVIEW_BYTES = 256 * 1024;
+
 export function documentPreviewKind(
   item: Pick<AttachmentPreviewItem, "mediaType" | "name">,
   data?: ArrayBuffer,

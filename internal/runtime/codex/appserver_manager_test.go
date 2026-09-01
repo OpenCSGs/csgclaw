@@ -62,7 +62,7 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	spec := testAppServerSessionSpec(dir)
 	var persisted []map[string]string
 	deps := testAppServerManagerDeps()
-	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string) error {
+	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string, _ map[string]bool) error {
 		persisted = append(persisted, cloneConversationSessions(conversations))
 		return nil
 	}
@@ -120,6 +120,44 @@ func TestAppServerManagerEnsureSessionCreatesConversationThread(t *testing.T) {
 	}
 }
 
+func TestAppServerManagerEnsureEngineSessionReplacesLoadedLegacyThread(t *testing.T) {
+	withAppServerHelperCommand(t, "conversation-thread")
+	spec := testAppServerSessionSpec(t.TempDir())
+	var persistedFilePublishing map[string]bool
+	deps := testAppServerManagerDeps()
+	deps.OnConversationSessionsChange = func(_ *Session, _ map[string]string, filePublishing map[string]bool) error {
+		persistedFilePublishing = cloneFilePublishingConversations(filePublishing)
+		return nil
+	}
+	manager := newAppServerManager(deps)
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	legacyThread, err := manager.EnsureSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
+	if err != nil {
+		t.Fatalf("EnsureSession() error = %v", err)
+	}
+	engineThread, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
+	if err != nil {
+		t.Fatalf("EnsureEngineSession() error = %v", err)
+	}
+	if engineThread == legacyThread {
+		t.Fatalf("EnsureEngineSession() reused legacy thread %q without the publish-file tool", engineThread)
+	}
+	if !persistedFilePublishing["room-1"] {
+		t.Fatalf("persisted file-publishing capabilities = %#v, want room-1", persistedFilePublishing)
+	}
+	live := manager.liveSession(spec.RuntimeID)
+	live.mu.Lock()
+	filePublishing := live.filePublishingThreads[engineThread]
+	live.mu.Unlock()
+	if !filePublishing {
+		t.Fatalf("replacement Engine thread %q was not marked file-capable", engineThread)
+	}
+}
+
 func TestAppServerManagerRestoresConversationThreadMapping(t *testing.T) {
 	withAppServerHelperCommand(t, "resume-success")
 	dir := t.TempDir()
@@ -154,11 +192,14 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	withAppServerHelperCommand(t, "resume-success")
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.ConversationSessions = map[string]string{"conversation-1": "cold-thread"}
+	spec.FilePublishingConversations = map[string]bool{"conversation-1": true}
 	var persisted map[string]string
+	var persistedFilePublishing map[string]bool
 	sink := &recordingSink{}
 	deps := testAppServerManagerDepsWithSink(sink)
-	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string) error {
+	deps.OnConversationSessionsChange = func(_ *Session, conversations map[string]string, filePublishing map[string]bool) error {
 		persisted = cloneConversationSessions(conversations)
+		persistedFilePublishing = cloneFilePublishingConversations(filePublishing)
 		return nil
 	}
 	manager := newAppServerManager(deps)
@@ -172,6 +213,9 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	}
 	if threadID != "resumed-thread" || persisted["conversation-1"] != threadID {
 		t.Fatalf("resumed Engine thread=%q persisted=%v", threadID, persisted)
+	}
+	if !persistedFilePublishing["conversation-1"] {
+		t.Fatalf("persisted file-publishing capabilities = %#v, want conversation-1", persistedFilePublishing)
 	}
 	if got, ok, err := manager.ExistingEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "conversation-1"); err != nil || !ok || got != threadID {
 		t.Fatalf("loaded ExistingEngineSession=%q ok=%v err=%v", got, ok, err)
@@ -208,6 +252,25 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	}
 }
 
+func TestAppServerManagerReplacesColdConversationWithoutFilePublishingProvenance(t *testing.T) {
+	withAppServerHelperCommand(t, "conversation-thread")
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.ConversationSessions = map[string]string{"conversation-1": "legacy-thread"}
+	manager := newAppServerManager(testAppServerManagerDeps())
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	threadID, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "conversation-1")
+	if err != nil {
+		t.Fatalf("EnsureEngineSession() error = %v", err)
+	}
+	if threadID == "legacy-thread" {
+		t.Fatalf("EnsureEngineSession() reused persisted thread %q without capability provenance", threadID)
+	}
+}
+
 func TestAppServerManagerSerializesConversationPersistence(t *testing.T) {
 	withAppServerHelperCommand(t, "conversation-thread")
 	dir := t.TempDir()
@@ -215,7 +278,7 @@ func TestAppServerManagerSerializesConversationPersistence(t *testing.T) {
 	entered := make(chan struct{}, 2)
 	release := make(chan struct{})
 	deps := testAppServerManagerDeps()
-	deps.OnConversationSessionsChange = func(_ *Session, _ map[string]string) error {
+	deps.OnConversationSessionsChange = func(_ *Session, _ map[string]string, _ map[string]bool) error {
 		entered <- struct{}{}
 		<-release
 		return nil

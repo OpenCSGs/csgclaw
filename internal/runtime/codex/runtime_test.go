@@ -3736,9 +3736,10 @@ func TestRuntimeNewRestoresPersistedConversationMappings(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := writeJSONFile(os.WriteFile, filepath.Join(runtimeDir, sessionFileName), sessionMetadata{
-		RuntimeID:            "rt-u-alice",
-		SessionID:            "main-thread",
-		ConversationSessions: map[string]string{"room-1": "room-thread"},
+		RuntimeID:                   "rt-u-alice",
+		SessionID:                   "main-thread",
+		ConversationSessions:        map[string]string{"room-1": "room-thread"},
+		FilePublishingConversations: map[string]bool{"room-1": true},
 	}); err != nil {
 		t.Fatalf("write session metadata: %v", err)
 	}
@@ -3780,6 +3781,9 @@ func TestRuntimeNewRestoresPersistedConversationMappings(t *testing.T) {
 	}
 	if got, want := startedSpec.ConversationSessions["room-1"], "room-thread"; got != want {
 		t.Fatalf("New() conversation mapping = %q, want %q", got, want)
+	}
+	if !startedSpec.FilePublishingConversations["room-1"] {
+		t.Fatalf("New() file-publishing conversations = %#v, want room-1", startedSpec.FilePublishingConversations)
 	}
 }
 
@@ -3824,9 +3828,10 @@ func TestRuntimeStartRestoresPersistedConversationMappings(t *testing.T) {
 	}
 	runtimeDir := filepath.Join(root, "agent-alice", ".codex")
 	if err := writeJSONFile(os.WriteFile, filepath.Join(runtimeDir, sessionFileName), sessionMetadata{
-		RuntimeID:            "rt-u-alice",
-		SessionID:            "main-thread",
-		ConversationSessions: map[string]string{"room-1": "room-thread"},
+		RuntimeID:                   "rt-u-alice",
+		SessionID:                   "main-thread",
+		ConversationSessions:        map[string]string{"room-1": "room-thread"},
+		FilePublishingConversations: map[string]bool{"room-1": true},
 	}); err != nil {
 		t.Fatalf("write session metadata: %v", err)
 	}
@@ -3842,6 +3847,9 @@ func TestRuntimeStartRestoresPersistedConversationMappings(t *testing.T) {
 	}
 	if got, want := startedSpec.ConversationSessions["room-1"], "room-thread"; got != want {
 		t.Fatalf("Start() conversation mapping = %q, want %q", got, want)
+	}
+	if !startedSpec.FilePublishingConversations["room-1"] {
+		t.Fatalf("Start() file-publishing conversations = %#v, want room-1", startedSpec.FilePublishingConversations)
 	}
 }
 

@@ -33,6 +33,8 @@ export default function PowerPointPreview({
     let mainPreviewer: PPTXPreviewer | null = null;
     stage.replaceChildren();
     setError(false);
+    setSlide(1);
+    setSlideCount(0);
     void import("pptx-preview")
       .then(({ init }) => {
         mainPreviewer = init(stage, { height: 540, mode: "slide", width: 960 });
@@ -47,6 +49,7 @@ export default function PowerPointPreview({
           throw new Error("PowerPoint preview is unavailable");
         }
         setSlideCount(mainPreviewer.slideCount);
+        setSlide((current) => Math.min(Math.max(current, 1), Math.max(mainPreviewer?.slideCount ?? 1, 1)));
         mainPreviewer.renderSingleSlide(0);
       })
       .catch(() => {

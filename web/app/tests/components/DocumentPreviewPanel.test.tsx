@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
-import { DocumentPreviewPanel } from "@/components/business/DocumentPreviewPanel";
+import { DocumentPreviewPanel, MAX_TEXT_PREVIEW_BYTES } from "@/components/business/DocumentPreviewPanel";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 
 vi.mock("react-pdf", async () => {
@@ -30,6 +30,23 @@ vi.mock("react-pdf", async () => {
   };
 });
 
+const pptxMock = vi.hoisted(() => ({
+  counts: [10, 3],
+  renderSingleSlide: vi.fn(),
+}));
+
+vi.mock("pptx-preview", () => ({
+  init: () => {
+    const slideCount = pptxMock.counts.shift() ?? 1;
+    return {
+      destroy: vi.fn(),
+      preview: vi.fn(async () => undefined),
+      renderSingleSlide: pptxMock.renderSingleSlide,
+      slideCount,
+    };
+  },
+}));
+
 const t = (key: string, params?: Record<string, string | number>) => {
   const labels: Record<string, string> = {
     attachmentPreview: "Attachment preview",
@@ -37,6 +54,8 @@ const t = (key: string, params?: Record<string, string | number>) => {
     attachmentPreviewFit: "Fit",
     attachmentPreviewFullscreen: "Fullscreen",
     attachmentPreviewLoading: "Loading preview",
+    attachmentPreviewSlideCount: `Slide ${params?.page ?? 0} of ${params?.count ?? 0}`,
+    attachmentPreviewTruncated: "Only the first 256 KiB is shown",
     attachmentPreviewResetZoom: "Reset zoom",
     attachmentPreviewResize: "Resize preview",
     attachmentPreviewUnavailable: "Preview unavailable",
@@ -51,6 +70,10 @@ const t = (key: string, params?: Record<string, string | number>) => {
 };
 
 describe("DocumentPreviewPanel", () => {
+  beforeEach(() => {
+    pptxMock.counts = [10, 3];
+    pptxMock.renderSingleSlide.mockClear();
+  });
   const items: AttachmentPreviewItem[] = [
     {
       id: "markdown",
@@ -252,5 +275,69 @@ describe("DocumentPreviewPanel", () => {
       ),
     );
     expect(screen.queryByText(/Unexpected Application Error/)).not.toBeInTheDocument();
+  });
+
+  it("resets PowerPoint navigation when switching to a shorter deck", async () => {
+    const items: AttachmentPreviewItem[] = [
+      {
+        file: new File(["first deck"], "first.pptx", {
+          type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        }),
+        id: "pptx-first",
+        mediaType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        name: "first.pptx",
+        sizeBytes: 10,
+      },
+      {
+        file: new File(["short deck"], "short.pptx", {
+          type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        }),
+        id: "pptx-short",
+        mediaType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        name: "short.pptx",
+        sizeBytes: 10,
+      },
+    ];
+    const { container, rerender } = render(
+      <DocumentPreviewPanel index={0} items={items} t={t} onClose={() => {}} onIndexChange={() => {}} />,
+    );
+    expect(await screen.findByText("Slide 1 of 10")).toBeInTheDocument();
+    const nextSlide = container.querySelector<HTMLButtonElement>(".document-preview-page-controls button:last-child");
+    expect(nextSlide).not.toBeNull();
+    for (let index = 1; index < 10; index += 1) {
+      await userEvent.click(nextSlide!);
+    }
+    expect(screen.getByText("Slide 10 of 10")).toBeInTheDocument();
+
+    rerender(<DocumentPreviewPanel index={1} items={items} t={t} onClose={() => {}} onIndexChange={() => {}} />);
+    expect(await screen.findByText("Slide 1 of 3")).toBeInTheDocument();
+    expect(screen.queryByText("Slide 10 of 3")).not.toBeInTheDocument();
+  });
+
+  it("bounds large text previews and keeps the complete file downloadable", async () => {
+    const fullText = `${"x".repeat(MAX_TEXT_PREVIEW_BYTES + 32)}TAIL`;
+    const { container } = render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[
+          {
+            file: new File([fullText], "large.txt", { type: "text/plain" }),
+            id: "large-text",
+            mediaType: "text/plain",
+            name: "large.txt",
+            sizeBytes: fullText.length,
+          },
+        ]}
+        t={t}
+        onClose={() => {}}
+        onIndexChange={() => {}}
+      />,
+    );
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Only the first 256 KiB is shown");
+    const preview = container.querySelector(".document-preview-text");
+    expect(preview?.textContent).toHaveLength(MAX_TEXT_PREVIEW_BYTES);
+    expect(preview).not.toHaveTextContent("TAIL");
+    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("download", "large.txt");
   });
 });

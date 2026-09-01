@@ -14,6 +14,7 @@ import { formatAttachmentSize } from "@/models/attachments";
 import { DOCUMENT_PREVIEW_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import { DocumentPreviewContent } from "./DocumentPreviewContent";
 import { clampDocumentPreviewPanelWidth } from "./panelWidth";
+import { documentPreviewKind, MAX_TEXT_PREVIEW_BYTES } from "./previewTypes";
 import type { DocumentPreviewPanelProps } from "./types";
 
 const DEFAULT_PANEL_WIDTH = 640;
@@ -47,6 +48,7 @@ export function DocumentPreviewPanel({
   const [scale, setScale] = useState(1);
   const [data, setData] = useState<ArrayBuffer | null>(null);
   const [objectURL, setObjectURL] = useState("");
+  const [previewTruncated, setPreviewTruncated] = useState(false);
   const [loadState, setLoadState] = useState<"error" | "loading" | "ready">("loading");
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export function DocumentPreviewPanel({
     let nextObjectURL = "";
     setData(null);
     setObjectURL("");
+    setPreviewTruncated(false);
     setLoadState("loading");
     const load = item.file
       ? Promise.resolve(item.file)
@@ -95,14 +98,22 @@ export function DocumentPreviewPanel({
           return response.blob();
         });
     void load
-      .then(async (blob) => ({ blob, buffer: await blob.arrayBuffer() }))
-      .then(({ blob, buffer }) => {
+      .then(async (blob) => {
+        const initialKind = documentPreviewKind(item);
+        const limitTextBytes = initialKind === "markdown" || initialKind === "text" || initialKind === "unsupported";
+        const truncated = limitTextBytes && blob.size > MAX_TEXT_PREVIEW_BYTES;
+        const previewBlob = limitTextBytes ? blob.slice(0, MAX_TEXT_PREVIEW_BYTES) : blob;
+        const buffer = initialKind === "image" ? new ArrayBuffer(0) : await previewBlob.arrayBuffer();
+        return { blob, buffer, truncated };
+      })
+      .then(({ blob, buffer, truncated }) => {
         if (cancelled) {
           return;
         }
         nextObjectURL = URL.createObjectURL(blob);
         setObjectURL(nextObjectURL);
         setData(buffer);
+        setPreviewTruncated(truncated);
         setLoadState("ready");
       })
       .catch((error: unknown) => {
@@ -340,7 +351,14 @@ export function DocumentPreviewPanel({
           <div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>
         ) : null}
         {loadState === "ready" && data ? (
-          <DocumentPreviewContent data={data} item={item} objectURL={objectURL} scale={scale} t={t} />
+          <>
+            {previewTruncated ? (
+              <div className="document-preview-status is-truncated" role="status">
+                {t("attachmentPreviewTruncated")}
+              </div>
+            ) : null}
+            <DocumentPreviewContent data={data} item={item} objectURL={objectURL} scale={scale} t={t} />
+          </>
         ) : null}
       </div>
     </aside>

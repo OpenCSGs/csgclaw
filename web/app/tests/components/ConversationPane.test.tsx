@@ -1,5 +1,5 @@
 import { createRef, useRef, useState } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
@@ -170,6 +170,7 @@ const t: TranslateFn = (key, params = {}) => {
     threadComposerPlaceholder: "Reply in thread",
     threadNoReplies: "No replies",
     threadPanelTitle: "Thread",
+    previewAttachmentNamed: "Preview attachment: {name}",
   };
   if (key === "threadReplies") {
     return `${params.count ?? 0} replies`;
@@ -202,10 +203,12 @@ function renderThreadPane({
   onClearMemberActionError = vi.fn(),
   onApplyMention = vi.fn(),
   agentDetailPanelProps = null,
+  agentDetailPanelStateRef,
   usersByIdOverride = usersById,
 }: {
   agents?: NonNullable<ConversationPaneProps["agents"]>;
   agentDetailPanelProps?: ConversationPaneProps["agentDetailPanelProps"];
+  agentDetailPanelStateRef?: { close?: () => void };
   conversationTitle?: string;
   conversationMembers?: IMUser[];
   isDirect?: boolean;
@@ -259,6 +262,10 @@ function renderThreadPane({
     const [showChannelTools, setShowChannelTools] = useState(false);
     const [showMemberList, setShowMemberList] = useState(false);
     const [threadDraftSegments, setThreadDraftSegments] = useState<ComposerSegment[]>([]);
+    const [agentDetailOpen, setAgentDetailOpen] = useState(Boolean(agentDetailPanelProps));
+    if (agentDetailPanelStateRef) {
+      agentDetailPanelStateRef.close = () => setAgentDetailOpen(false);
+    }
     return (
       <ConversationPane
         activeThreadRootID="msg-root"
@@ -311,7 +318,7 @@ function renderThreadPane({
         onToggleMemberList={setShowMemberList}
         onToggleToolCalls={() => {}}
         selectedMessageCount={timelineMessages.length}
-        agentDetailPanelProps={agentDetailPanelProps}
+        agentDetailPanelProps={agentDetailOpen ? agentDetailPanelProps : null}
         showChannelTools={showChannelTools}
         showMemberList={showMemberList}
         showToolCalls={showToolCalls}
@@ -795,6 +802,52 @@ describe("ConversationPane", () => {
 
     expect(onClose).toHaveBeenCalledWith(false, { skipUnsavedCheck: true });
     expect(onOpenDM).not.toHaveBeenCalled();
+  });
+
+  it("does not queue an attachment preview when agent-detail closing is blocked", async () => {
+    const onClose = vi.fn(() => false);
+    const panelState: { close?: () => void } = {};
+    renderThreadPane({
+      agentDetailPanelProps: {
+        item: { id: "u-manager", name: "manager", role: "worker" },
+        t,
+        onClose,
+        onDelete: vi.fn(),
+        onInvite: vi.fn(),
+        onOpenDM: vi.fn(),
+        onRecreate: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+      },
+      agentDetailPanelStateRef: panelState,
+      messages: [
+        {
+          attachments: [
+            {
+              created_at: "2026-09-01T00:00:00Z",
+              download_url: "/api/v1/attachments/report?token=test",
+              id: "report",
+              kind: "file",
+              media_type: "text/plain",
+              name: "report.txt",
+              sha256: "sha",
+              size_bytes: 12,
+            },
+          ],
+          content: "Generated file",
+          created_at: "2026-09-01T00:00:00Z",
+          id: "message-with-file",
+          sender_id: "u-manager",
+        },
+      ],
+    });
+
+    const attachmentButton = document.querySelector<HTMLButtonElement>(".message-file-attachment");
+    expect(attachmentButton).not.toBeNull();
+    fireEvent.click(attachmentButton!);
+    expect(onClose).toHaveBeenCalledWith(false);
+    act(() => panelState.close?.());
+    expect(screen.queryByLabelText("attachmentPreview")).not.toBeInTheDocument();
   });
 
   it("keeps nested agent skill dialogs inside the active drawer layer", async () => {
