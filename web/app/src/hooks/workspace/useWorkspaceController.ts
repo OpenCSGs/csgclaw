@@ -34,7 +34,7 @@ import { useAgentTurnNotifications } from "./useAgentTurnNotifications";
 import type { CreateTeamPayload } from "@/api/tasks";
 import type { AgentLike } from "@/models/agents";
 import type { HubTemplate } from "@/models/hubWorkspace";
-import { mcpServerPayloadFromDocument, type MCPServer } from "@/models/mcp";
+import type { MCPServer, MCPServerPayload } from "@/models/mcp";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
@@ -43,6 +43,19 @@ import type { TurnNotificationMode } from "@/models/turnNotifications";
 
 function isBootstrapAdminUser(user: IMUser | null | undefined) {
   return user?.id === "u-admin" || String(user?.name ?? "").toLowerCase() === "admin";
+}
+
+export async function saveMCPServerAndSelect(
+  payload: MCPServerPayload,
+  onCreate: ((payload: MCPServerPayload) => Promise<boolean> | boolean) | undefined,
+  onSaved: (name: string) => void,
+): Promise<boolean> {
+  const saved = await onCreate?.(payload);
+  if (!saved) {
+    return false;
+  }
+  onSaved(payload.name);
+  return true;
 }
 
 function initialsForIdentity(name: string) {
@@ -734,22 +747,13 @@ export function useWorkspaceController() {
     [navigatePane, rooms, setSelectedHubResourceType, setSelectedKnowledgeBaseID],
   );
 
-  useEffect(() => {
-    if (!hub.mcpCreateDialogOpen || !hub.mcpCreateInitialDocument) {
-      return;
-    }
-    let document: unknown;
-    try {
-      document = JSON.parse(hub.mcpCreateInitialDocument);
-    } catch {
-      return;
-    }
-    const payload = mcpServerPayloadFromDocument(document);
-    if (!payload?.name) {
-      return;
-    }
-    navigatePane({ type: WorkspacePaneTypes.hub, id: payload.name, resourceType: "mcp" }, rooms);
-  }, [hub.mcpCreateDialogOpen, hub.mcpCreateInitialDocument, navigatePane, rooms]);
+  const createMCPServerAndNavigate = useCallback(
+    (payload: MCPServerPayload) =>
+      saveMCPServerAndSelect(payload, hub.detailPaneProps.onCreateMCP, (name) => {
+        navigatePane({ type: WorkspacePaneTypes.hub, id: name, resourceType: "mcp" }, rooms);
+      }),
+    [hub.detailPaneProps.onCreateMCP, navigatePane, rooms],
+  );
 
   function openCreateModelProviderModal() {
     setCreateModelProviderError("");
@@ -824,10 +828,11 @@ export function useWorkspaceController() {
           selectHubSkill(name ? ({ name, description: "" } as SkillSummary) : null),
         onSelectMCP: (name: string | null | undefined) =>
           selectMCPServer(name ? ({ name, config: {} } as MCPServer) : null),
+        onCreateMCP: createMCPServerAndNavigate,
         onKnowledgeBaseLogin: () => loginOpenCSG(),
       },
     }),
-    [hub, loginOpenCSG, selectMCPServer, selectHubSkill, selectHubTemplate],
+    [createMCPServerAndNavigate, hub, loginOpenCSG, selectMCPServer, selectHubSkill, selectHubTemplate],
   );
 
   if (!displayData) {

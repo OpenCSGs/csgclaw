@@ -1,10 +1,18 @@
 package agent
 
-import "csgclaw/internal/knowledgebase"
+import (
+	"context"
 
-func (s *Service) materializeRuntimeMCPServers(runtimeKind string, servers map[string]any) (map[string]any, error) {
+	"csgclaw/internal/knowledgebase"
+)
+
+func (s *Service) materializeRuntimeMCPServers(ctx context.Context, runtimeKind string, servers map[string]any) (map[string]any, error) {
 	if servers == nil {
 		return cloneMCPServers(servers), nil
 	}
-	return knowledgebase.RuntimeServers(servers)
+	hydrated, err := knowledgebase.HydrateTemplateServers(ctx, servers)
+	if err != nil {
+		return nil, err
+	}
+	return knowledgebase.RuntimeServers(hydrated)
 }

@@ -594,14 +594,19 @@ export function WorkspaceSidebar({
           open={knowledgeBaseDiscoveryOpen}
           onOpenChange={setKnowledgeBaseDiscoveryOpen}
           items={hub.knowledgeBases.discoveryItems}
+          hasMore={hub.knowledgeBases.discoveryHasMore}
           loading={hub.knowledgeBases.discoveryLoading}
+          loadingMore={hub.knowledgeBases.discoveryLoadingMore}
           loadError={hub.knowledgeBases.discoveryLoadError}
           loginRequired={hub.knowledgeBases.loginRequired}
           copyBusyID={hub.knowledgeBases.copyBusyID}
           copyError={hub.knowledgeBases.copyError}
           onAdd={hub.knowledgeBases.prepareMCPConfig}
           onLogin={() => onLogin()}
+          onLoadMore={hub.knowledgeBases.discoveryLoadMore}
           onRetry={hub.knowledgeBases.discoveryRefetch}
+          onSearchChange={hub.knowledgeBases.setSearch}
+          search={hub.knowledgeBases.search}
           t={t}
         />
       ) : null}

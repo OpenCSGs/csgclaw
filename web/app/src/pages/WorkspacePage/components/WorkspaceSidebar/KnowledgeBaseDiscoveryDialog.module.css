@@ -46,6 +46,14 @@
   background: var(--surface);
 }
 
+.listState {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
 .icon {
   width: 38px;
   height: 38px;

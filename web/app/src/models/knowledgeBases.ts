@@ -15,6 +15,7 @@ export type RemoteKnowledgeBase = {
 
 export type RemoteKnowledgeBasePage = {
   items: RemoteKnowledgeBase[];
+  nextPage?: number;
   page: number;
   per: number;
   total: number;
@@ -27,4 +28,17 @@ export type RemoteKnowledgeBaseMCPConfig = {
 
 export function configuredKnowledgeBases(items: readonly RemoteKnowledgeBase[]): RemoteKnowledgeBase[] {
   return items.filter((item) => Boolean(item.configuredMCPName?.trim()));
+}
+
+export function mergeRemoteKnowledgeBasePages(pages: readonly RemoteKnowledgeBasePage[]): RemoteKnowledgeBase[] {
+  const seen = new Set<string>();
+  return pages.flatMap((page) =>
+    page.items.filter((item) => {
+      if (!item.id || seen.has(item.id)) {
+        return false;
+      }
+      seen.add(item.id);
+      return true;
+    }),
+  );
 }

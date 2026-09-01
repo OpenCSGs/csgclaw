@@ -293,9 +293,12 @@ export function useWorkspaceMCPServersQuery(): UseQueryResult<JSONRecord> {
 
 export function useWorkspaceKnowledgeBasesQuery(search = "", options: { enabled?: boolean } = {}) {
   const normalizedSearch = String(search || "").trim();
-  return useQuery<RemoteKnowledgeBasePage>({
+  return useInfiniteQuery<RemoteKnowledgeBasePage>({
     queryKey: workspaceQueryKeys.knowledgeBases(normalizedSearch),
-    queryFn: () => fetchRemoteKnowledgeBases(normalizedSearch),
+    queryFn: ({ pageParam }) =>
+      fetchRemoteKnowledgeBases(normalizedSearch, typeof pageParam === "number" ? pageParam : Number(pageParam) || 1),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => lastPage.nextPage,
     enabled: Boolean(options.enabled),
     retry: 0,
   });

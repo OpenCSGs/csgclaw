@@ -2705,7 +2705,7 @@ func (s *Service) provisionRuntimeRequest(ctx context.Context, rt agentruntime.R
 	if rt == nil {
 		return fmt.Errorf("runtime is required")
 	}
-	servers, err := s.materializeRuntimeMCPServers(runtimeKind, req.MCPServers)
+	servers, err := s.materializeRuntimeMCPServers(ctx, runtimeKind, req.MCPServers)
 	if err != nil {
 		return err
 	}

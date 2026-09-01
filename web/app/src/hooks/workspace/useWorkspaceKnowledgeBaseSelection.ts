@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
-import { configuredKnowledgeBases } from "@/models/knowledgeBases";
+import { configuredKnowledgeBases, mergeRemoteKnowledgeBasePages } from "@/models/knowledgeBases";
 import { formatMCPServerDocument } from "@/models/mcp";
 import { useWorkspaceKnowledgeBasesQuery } from "./workspaceQueries";
 
@@ -30,8 +30,14 @@ export function useWorkspaceKnowledgeBaseSelection({
   const [copyError, setCopyError] = useState("");
   const catalogQuery = useWorkspaceKnowledgeBasesQuery("", { enabled: enabled && authenticated });
   const discoveryQuery = useWorkspaceKnowledgeBasesQuery(searchQuery, { enabled: enabled && authenticated });
-  const catalogItems = useMemo(() => catalogQuery.data?.items ?? [], [catalogQuery.data?.items]);
-  const discoveryItems = useMemo(() => discoveryQuery.data?.items ?? [], [discoveryQuery.data?.items]);
+  const catalogItems = useMemo(
+    () => mergeRemoteKnowledgeBasePages(catalogQuery.data?.pages ?? []),
+    [catalogQuery.data?.pages],
+  );
+  const discoveryItems = useMemo(
+    () => mergeRemoteKnowledgeBasePages(discoveryQuery.data?.pages ?? []),
+    [discoveryQuery.data?.pages],
+  );
   const items = useMemo(() => configuredKnowledgeBases(catalogItems), [catalogItems]);
   const selected = useMemo(
     () => items.find((item) => item.id === selectedKnowledgeBaseID) || items[0] || null,
@@ -42,6 +48,26 @@ export function useWorkspaceKnowledgeBaseSelection({
     const timer = window.setTimeout(() => setSearchQuery(search.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  const catalogPageCount = catalogQuery.data?.pages.length ?? 0;
+  const fetchNextCatalogPage = catalogQuery.fetchNextPage;
+  const catalogHasNextPage = catalogQuery.hasNextPage;
+  const catalogIsFetchNextPageError = catalogQuery.isFetchNextPageError;
+  const catalogIsFetchingNextPage = catalogQuery.isFetchingNextPage;
+  useEffect(() => {
+    if (!enabled || !authenticated || !catalogHasNextPage || catalogIsFetchingNextPage || catalogIsFetchNextPageError) {
+      return;
+    }
+    void fetchNextCatalogPage();
+  }, [
+    authenticated,
+    catalogPageCount,
+    catalogHasNextPage,
+    catalogIsFetchNextPageError,
+    catalogIsFetchingNextPage,
+    enabled,
+    fetchNextCatalogPage,
+  ]);
 
   useEffect(() => {
     if (!items.length) {
@@ -76,15 +102,27 @@ export function useWorkspaceKnowledgeBaseSelection({
 
   const loginRequired = enabled && !authenticated;
   const loginError = loginRequired ? t("resourcesKnowledgeBasesLoginRequired") : "";
+  const fetchNextDiscoveryPage = discoveryQuery.fetchNextPage;
+  const discoveryHasNextPage = discoveryQuery.hasNextPage;
+  const discoveryIsFetchingNextPage = discoveryQuery.isFetchingNextPage;
+  const loadMoreDiscovery = useCallback(async () => {
+    if (!discoveryHasNextPage || discoveryIsFetchingNextPage) {
+      return;
+    }
+    await fetchNextDiscoveryPage();
+  }, [discoveryHasNextPage, discoveryIsFetchingNextPage, fetchNextDiscoveryPage]);
 
   return {
     copyBusyID,
     copyError,
     discoveryItems,
+    discoveryHasMore: Boolean(discoveryHasNextPage),
     discoveryLoadError:
       loginError ||
       (discoveryQuery.error ? errorMessage(discoveryQuery.error, t("resourcesKnowledgeBasesLoadFailed")) : ""),
-    discoveryLoading: enabled && authenticated && discoveryQuery.isFetching,
+    discoveryLoading: enabled && authenticated && discoveryQuery.isFetching && !discoveryIsFetchingNextPage,
+    discoveryLoadingMore: discoveryIsFetchingNextPage,
+    discoveryLoadMore: loadMoreDiscovery,
     discoveryRefetch: discoveryQuery.refetch,
     items,
     loginRequired,

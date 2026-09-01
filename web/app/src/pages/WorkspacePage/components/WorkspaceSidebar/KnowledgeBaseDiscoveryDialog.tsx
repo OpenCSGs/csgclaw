@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect } from "react";
+import type { UIEvent } from "react";
 import { BookOpen, RefreshCw, Search } from "lucide-react";
 import {
   Button,
@@ -19,46 +20,60 @@ import styles from "./KnowledgeBaseDiscoveryDialog.module.css";
 export type KnowledgeBaseDiscoveryDialogProps = {
   copyBusyID: string;
   copyError: string;
+  hasMore: boolean;
   items: readonly RemoteKnowledgeBase[];
   loadError: string;
   loading: boolean;
+  loadingMore: boolean;
   loginRequired: boolean;
   onAdd: (id: string) => Promise<boolean>;
   onLogin: () => void | Promise<void>;
+  onLoadMore: () => void | Promise<unknown>;
   onOpenChange: (open: boolean) => void;
   onRetry: () => void | Promise<unknown>;
   open: boolean;
+  onSearchChange: (value: string) => void;
+  search: string;
   t: TranslateFn;
 };
 
 export function KnowledgeBaseDiscoveryDialog({
   copyBusyID,
   copyError,
+  hasMore,
   items,
   loadError,
   loading,
+  loadingMore,
   loginRequired,
   onAdd,
   onLogin,
+  onLoadMore,
   onOpenChange,
   onRetry,
   open,
+  onSearchChange,
+  search,
   t,
 }: KnowledgeBaseDiscoveryDialogProps) {
-  const [search, setSearch] = useState("");
-  const visibleItems = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
-    if (!query) {
-      return items;
-    }
-    return items.filter((item) => `${item.name} ${item.description || ""}`.toLocaleLowerCase().includes(query));
-  }, [items, search]);
-
   useEffect(() => {
     if (!open) {
-      setSearch("");
+      onSearchChange("");
     }
-  }, [open]);
+  }, [onSearchChange, open]);
+
+  const handleScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      if (!hasMore || loadingMore) {
+        return;
+      }
+      const target = event.currentTarget;
+      if (target.scrollHeight - target.scrollTop - target.clientHeight <= 80) {
+        void onLoadMore();
+      }
+    },
+    [hasMore, loadingMore, onLoadMore],
+  );
 
   async function addKnowledgeBase(id: string) {
     if (await onAdd(id)) {
@@ -85,7 +100,7 @@ export function KnowledgeBaseDiscoveryDialog({
               value={search}
               placeholder={t("resourcesKnowledgeBaseSearchPlaceholder")}
               aria-label={t("resourcesKnowledgeBaseSearchPlaceholder")}
-              onChange={(event) => setSearch(event.currentTarget.value)}
+              onChange={(event) => onSearchChange(event.currentTarget.value)}
             />
           </label>
           {copyError ? <div className="form-error">{copyError}</div> : null}
@@ -106,9 +121,9 @@ export function KnowledgeBaseDiscoveryDialog({
             </div>
           ) : loading && !items.length ? (
             <div className={styles.state}>{t("resourcesKnowledgeBasesLoading")}</div>
-          ) : visibleItems.length ? (
-            <div className={styles.list}>
-              {visibleItems.map((item) => {
+          ) : items.length ? (
+            <div className={styles.list} onScroll={handleScroll}>
+              {items.map((item) => {
                 const added = Boolean(item.configuredMCPName);
                 const available = item.availability === "available";
                 return (
@@ -143,10 +158,11 @@ export function KnowledgeBaseDiscoveryDialog({
                   </div>
                 );
               })}
+              {loadingMore ? <div className={styles.listState}>{t("resourcesKnowledgeBasesLoading")}</div> : null}
             </div>
           ) : (
             <div className={styles.state}>
-              {items.length ? t("workspaceSearchNoResults") : t("resourcesKnowledgeBasesEmpty")}
+              {search.trim() ? t("workspaceSearchNoResults") : t("resourcesKnowledgeBasesEmpty")}
             </div>
           )}
         </DialogBody>

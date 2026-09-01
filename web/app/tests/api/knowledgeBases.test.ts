@@ -58,6 +58,7 @@ describe("knowledge bases API", () => {
           unavailableReason: undefined,
         },
       ],
+      nextPage: undefined,
       page: 1,
       per: 50,
       total: 1,
@@ -95,5 +96,28 @@ describe("knowledge bases API", () => {
     expect(JSON.stringify(result)).not.toContain("OPENCSG_TOKEN");
     expect(result.config).not.toHaveProperty("headers");
     expect(JSON.stringify(result)).not.toContain("current-user-token");
+  });
+
+  it("requests later knowledge-base pages and exposes the next page", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ items: [], page: 2, per: 50, total: 120 }), {
+          status: 200,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchRemoteKnowledgeBases(" tourism ", 2)).resolves.toEqual({
+      items: [],
+      nextPage: 3,
+      page: 2,
+      per: 50,
+      total: 120,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/knowledge-bases/remote?page=2&per=50&search=tourism",
+      expect.any(Object),
+    );
   });
 });

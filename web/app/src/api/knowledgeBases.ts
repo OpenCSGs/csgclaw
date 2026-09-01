@@ -16,19 +16,24 @@ type RemoteKnowledgeBaseResponse = {
   total?: unknown;
 };
 
-export async function fetchRemoteKnowledgeBases(search = ""): Promise<RemoteKnowledgeBasePage> {
+export async function fetchRemoteKnowledgeBases(search = "", page = 1): Promise<RemoteKnowledgeBasePage> {
+  const currentPage = Math.max(Math.trunc(page), 1);
   const params = new URLSearchParams({
-    page: "1",
+    page: String(currentPage),
     per: String(REMOTE_KNOWLEDGE_BASES_PAGE_SIZE),
     search: String(search || "").trim(),
   });
   const payload = await get<RemoteKnowledgeBaseResponse>(`${REMOTE_KNOWLEDGE_BASES_PATH}?${params.toString()}`);
   const records = Array.isArray(payload?.items) ? payload.items : [];
+  const responsePage = Math.max(numberFromUnknown(payload?.page, currentPage), 1);
+  const per = Math.max(numberFromUnknown(payload?.per, REMOTE_KNOWLEDGE_BASES_PAGE_SIZE), 1);
+  const total = numberFromUnknown(payload?.total, records.length);
   return {
     items: records.map(normalizeKnowledgeBase).filter((item): item is RemoteKnowledgeBase => Boolean(item)),
-    page: numberFromUnknown(payload?.page, 1),
-    per: numberFromUnknown(payload?.per, REMOTE_KNOWLEDGE_BASES_PAGE_SIZE),
-    total: numberFromUnknown(payload?.total, records.length),
+    nextPage: responsePage * per < total ? responsePage + 1 : undefined,
+    page: responsePage,
+    per,
+    total,
   };
 }
 

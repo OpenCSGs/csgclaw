@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { configuredKnowledgeBases } from "@/models/knowledgeBases";
+import { configuredKnowledgeBases, mergeRemoteKnowledgeBasePages } from "@/models/knowledgeBases";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 
 const REMOTE_KNOWLEDGE_BASES: RemoteKnowledgeBase[] = [
@@ -25,5 +25,16 @@ describe("configuredKnowledgeBases", () => {
 
   it("returns an empty local list when no remote knowledge base has been added", () => {
     expect(configuredKnowledgeBases([REMOTE_KNOWLEDGE_BASES[0]])).toEqual([]);
+  });
+});
+
+describe("mergeRemoteKnowledgeBasePages", () => {
+  it("keeps later pages while removing duplicate knowledge bases", () => {
+    expect(
+      mergeRemoteKnowledgeBasePages([
+        { items: [REMOTE_KNOWLEDGE_BASES[0]], page: 1, per: 1, total: 2 },
+        { items: [REMOTE_KNOWLEDGE_BASES[0], REMOTE_KNOWLEDGE_BASES[1]], page: 2, per: 1, total: 2 },
+      ]),
+    ).toEqual(REMOTE_KNOWLEDGE_BASES);
   });
 });

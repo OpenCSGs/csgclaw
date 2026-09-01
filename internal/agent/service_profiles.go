@@ -245,18 +245,18 @@ func (s *Service) syncGatewayAfterProfileChange(ctx context.Context, id string, 
 		return err
 	}
 	if gatewayProfileRuntimeRestartRequired(previous, normalized) {
-		return s.syncGatewayHostConfig(got, runtimeNormalized)
+		return s.syncGatewayHostConfig(ctx, got, runtimeNormalized)
 	}
 	return nil
 }
 
-func (s *Service) syncGatewayHostConfig(got Agent, profile AgentProfile) error {
+func (s *Service) syncGatewayHostConfig(ctx context.Context, got Agent, profile AgentProfile) error {
 	if s == nil {
 		return nil
 	}
 	modelCfg := modelConfigFromProfile(profile)
 	participantID := participantIDForAgent(got.Name, got.ID)
-	runtimeMCPServers, err := s.materializeRuntimeMCPServers(got.RuntimeKind, got.MCPServers)
+	runtimeMCPServers, err := s.materializeRuntimeMCPServers(ctx, got.RuntimeKind, got.MCPServers)
 	if err != nil {
 		return err
 	}
@@ -1038,7 +1038,7 @@ func (s *Service) validateMCPServers(ctx context.Context, runtimeKind string, cu
 	if !ok {
 		return fmt.Errorf("mcpServers is not supported for runtime_kind %q", runtimeKind)
 	}
-	servers, err := s.materializeRuntimeMCPServers(runtimeKind, current.Servers)
+	servers, err := s.materializeRuntimeMCPServers(ctx, runtimeKind, current.Servers)
 	if err != nil {
 		return err
 	}
@@ -1104,11 +1104,11 @@ func (s *Service) reconcileMCPServers(ctx context.Context, previous, current Age
 	if !ok {
 		return fmt.Errorf("mcpServers live reconciliation is not supported for runtime_kind %q", runtimeKind)
 	}
-	previousServers, err := s.materializeRuntimeMCPServers(runtimeKind, previous.MCPServers)
+	previousServers, err := s.materializeRuntimeMCPServers(ctx, runtimeKind, previous.MCPServers)
 	if err != nil {
 		return err
 	}
-	currentServers, err := s.materializeRuntimeMCPServers(runtimeKind, current.MCPServers)
+	currentServers, err := s.materializeRuntimeMCPServers(ctx, runtimeKind, current.MCPServers)
 	if err != nil {
 		return err
 	}

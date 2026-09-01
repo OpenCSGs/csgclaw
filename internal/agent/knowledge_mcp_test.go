@@ -87,21 +87,12 @@ func TestManagedKnowledgeBaseMCPPublishAndRuntimeMaterialization(t *testing.T) {
 	}
 
 	hubURL := installAgentKnowledgeBaseResponse(t, "https://runner-gateway.example.test/v1/llmwikis/content-42/mcp", "runner-csghub-token")
-	hydratedConfig, err := knowledgebase.HydrateManagedServer(context.Background(), publishedConfig, knowledgebase.Connection{
-		CSGHubBaseURL:     hubURL,
-		AIGatewayBaseURL:  "https://must-not-be-used.example.test/v1",
-		CSGHubAccessToken: "runner-csghub-token",
-	})
-	if err != nil {
-		t.Fatalf("HydrateManagedServer() error = %v", err)
-	}
-	hydrated := map[string]any{"handbook": hydratedConfig}
-	if _, managed := knowledgebase.ManagedMetadataFromServer(hydrated["handbook"]); !managed {
-		t.Fatalf("hydrated config lost managed metadata: %#v", hydrated)
-	}
-
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CSGHUB_API_BASE_URL", hubURL)
+	t.Setenv("CSGHUB_ACCESS_TOKEN", "runner-csghub-token")
+	t.Setenv("CSGHUB_AIGATEWAY_BASE_URL", "https://must-not-be-used.example.test/v1")
 	svc := &Service{}
-	runtimeServers, err := svc.materializeRuntimeMCPServers(RuntimeKindCodex, hydrated)
+	runtimeServers, err := svc.materializeRuntimeMCPServers(context.Background(), RuntimeKindCodex, published)
 	if err != nil {
 		t.Fatalf("materializeRuntimeMCPServers() error = %v", err)
 	}
