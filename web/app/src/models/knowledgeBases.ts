@@ -4,6 +4,7 @@ export type RemoteKnowledgeBaseAvailability = "available" | "unavailable";
 
 export type RemoteKnowledgeBase = {
   availability: RemoteKnowledgeBaseAvailability;
+  csgHubResponse?: JSONRecord;
   configuredMCPName?: string;
   contentID: string;
   description?: string;

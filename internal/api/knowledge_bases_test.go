@@ -136,7 +136,7 @@ func TestHandleRemoteKnowledgeBasesReportsAvailabilityAndConfiguredMCP(t *testin
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":42,"name":"Handbook","description":"Runbooks","content_id":"content-42","type":"llmwiki","metadata":{"mcp_endpoint_url":"https://gateway.example.test/v1/llmwikis/content-42/mcp","resource_state":{"readiness":"ready","mcp_status":"ready"}}}],"total":1}`)),
+			Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":42,"name":"Handbook","description":"Runbooks","content_id":"content-42","type":"llmwiki","metadata":{"mcp_endpoint_url":"https://gateway.example.test/v1/llmwikis/content-42/mcp","resource_state":{"readiness":"ready","mcp_status":"ready"}},"remote_only":{"status":"kept"}}],"total":1,"request_id":"remote-request-123"}`)),
 		}, nil
 	})
 	store := &knowledgeBaseServerStore{servers: map[string]any{
@@ -162,6 +162,17 @@ func TestHandleRemoteKnowledgeBasesReportsAvailabilityAndConfiguredMCP(t *testin
 	}
 	if len(response.Items) != 1 || response.Items[0].ConfiguredMCP != "existing-handbook" {
 		t.Fatalf("items = %#v", response.Items)
+	}
+	var csgHubResponse map[string]any
+	if err := json.Unmarshal(response.Items[0].CSGHubResponse, &csgHubResponse); err != nil {
+		t.Fatalf("decode csghub_response: %v", err)
+	}
+	if got, want := csgHubResponse["id"], float64(42); got != want {
+		t.Fatalf("csghub_response id = %#v, want %#v", got, want)
+	}
+	remoteOnly := csgHubResponse["remote_only"].(map[string]any)
+	if got, want := remoteOnly["status"], "kept"; got != want {
+		t.Fatalf("csghub_response remote_only.status = %#v, want %q", got, want)
 	}
 }
 

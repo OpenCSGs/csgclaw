@@ -54,6 +54,7 @@ function normalizeKnowledgeBase(value: unknown): RemoteKnowledgeBase | null {
   }
   return {
     availability: value.availability === "available" ? "available" : "unavailable",
+    csgHubResponse: isJSONRecord(value.csghub_response) ? value.csghub_response : undefined,
     configuredMCPName: stringFromUnknown(value.configured_mcp_name) || undefined,
     contentID: stringFromUnknown(value.content_id),
     description: stringFromUnknown(value.description) || undefined,

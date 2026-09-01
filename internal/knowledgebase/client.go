@@ -23,8 +23,9 @@ type ListOptions struct {
 }
 
 type ListResult struct {
-	Items []KnowledgeBase
-	Total int
+	Items    []KnowledgeBase
+	RawItems []json.RawMessage
+	Total    int
 }
 
 type KnowledgeBase struct {
@@ -97,17 +98,23 @@ func (c Client) List(ctx context.Context, options ListOptions) (ListResult, erro
 	endpoint.RawQuery = query.Encode()
 
 	var response struct {
-		Data  []KnowledgeBase `json:"data"`
-		Total int             `json:"total"`
+		Data  []json.RawMessage `json:"data"`
+		Total int               `json:"total"`
 	}
-	if err := c.getJSON(ctx, endpoint.String(), &response); err != nil {
+	if _, err := c.getJSON(ctx, endpoint.String(), &response); err != nil {
 		return ListResult{}, err
 	}
 	items := make([]KnowledgeBase, 0, len(response.Data))
-	for _, item := range response.Data {
+	rawItems := make([]json.RawMessage, 0, len(response.Data))
+	for _, rawItem := range response.Data {
+		var item KnowledgeBase
+		if err := json.Unmarshal(rawItem, &item); err != nil {
+			return ListResult{}, fmt.Errorf("decode AgenticHub knowledge base item: %w", err)
+		}
 		items = append(items, normalizeKnowledgeBase(item))
+		rawItems = append(rawItems, rawItem)
 	}
-	return ListResult{Items: items, Total: response.Total}, nil
+	return ListResult{Items: items, RawItems: rawItems, Total: response.Total}, nil
 }
 
 func (c Client) Get(ctx context.Context, id int64) (KnowledgeBase, error) {
@@ -121,7 +128,7 @@ func (c Client) Get(ctx context.Context, id int64) (KnowledgeBase, error) {
 	var response struct {
 		Data KnowledgeBase `json:"data"`
 	}
-	if err := c.getJSON(ctx, endpoint.String(), &response); err != nil {
+	if _, err := c.getJSON(ctx, endpoint.String(), &response); err != nil {
 		return KnowledgeBase{}, err
 	}
 	item := normalizeKnowledgeBase(response.Data)
@@ -143,14 +150,14 @@ func (c Client) endpoint(path string) (*url.URL, error) {
 	return endpoint, nil
 }
 
-func (c Client) getJSON(ctx context.Context, endpoint string, target any) error {
+func (c Client) getJSON(ctx context.Context, endpoint string, target any) (json.RawMessage, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	token := strings.TrimSpace(c.Token)
 	if token == "" {
-		return fmt.Errorf("OpenCSG sign-in is required")
+		return nil, fmt.Errorf("OpenCSG sign-in is required")
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
@@ -160,7 +167,7 @@ func (c Client) getJSON(ctx context.Context, endpoint string, target any) error 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("request AgenticHub knowledge bases: %w", err)
+		return nil, fmt.Errorf("request AgenticHub knowledge bases: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
@@ -168,12 +175,16 @@ func (c Client) getJSON(ctx context.Context, endpoint string, target any) error 
 		if message == "" {
 			message = http.StatusText(resp.StatusCode)
 		}
-		return &HTTPError{StatusCode: resp.StatusCode, Message: message}
+		return nil, &HTTPError{StatusCode: resp.StatusCode, Message: message}
 	}
-	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
-		return fmt.Errorf("decode AgenticHub knowledge base response: %w", err)
+	var rawResponse json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&rawResponse); err != nil {
+		return nil, fmt.Errorf("decode AgenticHub knowledge base response: %w", err)
 	}
-	return nil
+	if err := json.Unmarshal(rawResponse, target); err != nil {
+		return nil, fmt.Errorf("decode AgenticHub knowledge base response: %w", err)
+	}
+	return rawResponse, nil
 }
 
 func normalizeKnowledgeBase(item KnowledgeBase) KnowledgeBase {

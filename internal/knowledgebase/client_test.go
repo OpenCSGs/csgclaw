@@ -2,6 +2,7 @@ package knowledgebase
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -36,9 +37,10 @@ func TestClientListUsesCurrentUserBearerAndServerSideLLMWikiFilter(t *testing.T)
 				Header:     make(http.Header),
 				Body: io.NopCloser(strings.NewReader(`{
 					"data":[
-						{"id":42,"name":" Handbook ","content_id":"kb-42","metadata":{"mcp_endpoint_url":" https://gateway.example.test/v1/llmwikis/kb-42/mcp ","resource_state":{"readiness":"ready","mcp_status":"ready"}}}
+						{"id":42,"name":" Handbook ","content_id":"kb-42","metadata":{"mcp_endpoint_url":" https://gateway.example.test/v1/llmwikis/kb-42/mcp ","resource_state":{"readiness":"ready","mcp_status":"ready"}},"remote_only":{"status":"kept"}}
 					],
-					"total":1
+					"total":1,
+					"request_id":"remote-request-123"
 				}`)),
 			}, nil
 		})},
@@ -53,5 +55,16 @@ func TestClientListUsesCurrentUserBearerAndServerSideLLMWikiFilter(t *testing.T)
 	}
 	if got, want := result.Items[0].Metadata.MCPEndpoint, "https://gateway.example.test/v1/llmwikis/kb-42/mcp"; got != want {
 		t.Fatalf("mcp_endpoint_url = %q, want %q", got, want)
+	}
+	if got, want := len(result.RawItems), 1; got != want {
+		t.Fatalf("raw item count = %d, want %d", got, want)
+	}
+	var rawItem map[string]any
+	if err := json.Unmarshal(result.RawItems[0], &rawItem); err != nil {
+		t.Fatalf("decode raw item: %v", err)
+	}
+	remoteOnly := rawItem["remote_only"].(map[string]any)
+	if got, want := remoteOnly["status"], "kept"; got != want {
+		t.Fatalf("raw item remote_only.status = %#v, want %q", got, want)
 	}
 }

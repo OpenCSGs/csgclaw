@@ -15,6 +15,13 @@ describe("knowledge bases API", () => {
             items: [
               {
                 availability: "available",
+                csghub_response: {
+                  id: 42,
+                  metadata: {
+                    mcp_endpoint_url: "https://gateway.example.test/v1/llmwikis/content-42/mcp",
+                  },
+                  remote_only: { status: "kept" },
+                },
                 configured_mcp_name: "agentichub-kb-42",
                 content_id: "content-42",
                 description: "Engineering runbooks",
@@ -36,6 +43,13 @@ describe("knowledge bases API", () => {
       items: [
         {
           availability: "available",
+          csgHubResponse: {
+            id: 42,
+            metadata: {
+              mcp_endpoint_url: "https://gateway.example.test/v1/llmwikis/content-42/mcp",
+            },
+            remote_only: { status: "kept" },
+          },
           configuredMCPName: "agentichub-kb-42",
           contentID: "content-42",
           description: "Engineering runbooks",

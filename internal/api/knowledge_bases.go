@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -61,6 +62,7 @@ type remoteKnowledgeBasesListResponse struct {
 
 type remoteKnowledgeBaseSummary struct {
 	Availability      knowledgebase.Availability `json:"availability"`
+	CSGHubResponse    json.RawMessage            `json:"csghub_response"`
 	ConfiguredMCP     string                     `json:"configured_mcp_name,omitempty"`
 	ContentID         string                     `json:"content_id"`
 	Description       string                     `json:"description,omitempty"`
@@ -107,10 +109,15 @@ func (h *Handler) handleRemoteKnowledgeBases(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	items := make([]remoteKnowledgeBaseSummary, 0, len(result.Items))
-	for _, item := range result.Items {
+	for index, item := range result.Items {
 		availability, reason := knowledgebase.AvailabilityFor(item)
+		var csgHubResponse json.RawMessage
+		if index < len(result.RawItems) {
+			csgHubResponse = result.RawItems[index]
+		}
 		items = append(items, remoteKnowledgeBaseSummary{
 			Availability:      availability,
+			CSGHubResponse:    csgHubResponse,
 			ConfiguredMCP:     knowledgebase.FindConfiguredServer(servers, item.ID),
 			ContentID:         item.ContentID,
 			Description:       item.Description,
@@ -119,7 +126,12 @@ func (h *Handler) handleRemoteKnowledgeBases(w http.ResponseWriter, r *http.Requ
 			UnavailableReason: reason,
 		})
 	}
-	writeJSON(w, http.StatusOK, remoteKnowledgeBasesListResponse{Items: items, Page: page, Per: per, Total: result.Total})
+	writeJSON(w, http.StatusOK, remoteKnowledgeBasesListResponse{
+		Items: items,
+		Page:  page,
+		Per:   per,
+		Total: result.Total,
+	})
 }
 
 func (h *Handler) handleRemoteKnowledgeBaseMCPConfig(w http.ResponseWriter, r *http.Request) {
