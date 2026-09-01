@@ -1974,11 +1974,20 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 			}
 		}
 	}
+	previousLocale := room.Locale
+	messageCount := len(room.Messages)
+	threadCount := len(room.Threads)
+	rollbackRoom := func() {
+		room.Locale = previousLocale
+		room.Messages = room.Messages[:messageCount]
+		room.Threads = room.Threads[:threadCount]
+	}
 	if locale := messagePresentationLocale(req.Locale); strings.TrimSpace(req.Locale) != "" {
 		room.Locale = locale
 	}
 	relatesTo, err := s.normalizeMessageRelationLocked(*room, req.RelatesTo)
 	if err != nil {
+		rollbackRoom()
 		return Message{}, false, err
 	}
 	if relatesTo != nil && relatesTo.RelType == RelationTypeThread {
@@ -1991,11 +2000,16 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 	message.RelatesTo = relatesTo
 	attachments, err := s.storeMessageAttachmentsLocked(roomID, message.ID, senderID, req.Attachments)
 	if err != nil {
+		rollbackRoom()
 		return Message{}, false, err
 	}
 	message.Attachments = attachments
 	room.Messages = append(room.Messages, message)
 	if err := s.saveLocked(); err != nil {
+		rollbackRoom()
+		if rollbackErr := s.saveLocked(); rollbackErr != nil {
+			return Message{}, false, errors.Join(err, fmt.Errorf("restore IM state after failed message save: %w", rollbackErr))
+		}
 		return Message{}, false, err
 	}
 	return s.presentMessageLocked(*room, message, ""), true, nil

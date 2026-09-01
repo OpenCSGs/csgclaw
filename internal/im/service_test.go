@@ -155,6 +155,138 @@ func TestCreateMessageOnceDeduplicatesClientMessageID(t *testing.T) {
 	}
 }
 
+func TestCreateMessageOnceRetriesAfterPersistenceFailure(t *testing.T) {
+	svc := NewService()
+	room, err := svc.CreateRoom(CreateRoomRequest{
+		Title:     "Idempotency retry",
+		CreatorID: "user-admin",
+	})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+	before, err := svc.ListMessages(room.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(before) error = %v", err)
+	}
+
+	dir := t.TempDir()
+	blockedParent := filepath.Join(dir, "not-a-directory")
+	if err := os.WriteFile(blockedParent, []byte("blocked"), 0o600); err != nil {
+		t.Fatalf("WriteFile(blocked parent) error = %v", err)
+	}
+	svc.statePath = filepath.Join(blockedParent, "state.json")
+	req := CreateMessageRequest{
+		RoomID:          room.ID,
+		SenderID:        "user-admin",
+		Content:         "retry me",
+		ClientMessageID: "client-message-retry",
+	}
+	if _, _, err := svc.CreateMessageOnce(req); err == nil {
+		t.Fatal("CreateMessageOnce(first) error = nil, want persistence error")
+	}
+	afterFailure, err := svc.ListMessages(room.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(after failure) error = %v", err)
+	}
+	if len(afterFailure) != len(before) {
+		t.Fatalf("messages after failure = %d, want %d", len(afterFailure), len(before))
+	}
+
+	svc.statePath = filepath.Join(dir, "im", "state.json")
+	createdMessage, created, err := svc.CreateMessageOnce(req)
+	if err != nil {
+		t.Fatalf("CreateMessageOnce(retry) error = %v", err)
+	}
+	if !created {
+		t.Fatal("CreateMessageOnce(retry) created = false, want true")
+	}
+	if createdMessage.ClientMessageID != req.ClientMessageID {
+		t.Fatalf("client message id = %q, want %q", createdMessage.ClientMessageID, req.ClientMessageID)
+	}
+	reloaded, err := NewServiceFromPath(svc.statePath)
+	if err != nil {
+		t.Fatalf("NewServiceFromPath() error = %v", err)
+	}
+	persisted, err := reloaded.ListMessages(room.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(reloaded) error = %v", err)
+	}
+	if len(persisted) != len(before)+1 {
+		t.Fatalf("persisted messages = %d, want %d", len(persisted), len(before)+1)
+	}
+}
+
+func TestCreateMessageOnceRestoresPersistedStateAfterPartialSave(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "im", "state.json")
+	svc, err := NewServiceFromPath(statePath)
+	if err != nil {
+		t.Fatalf("NewServiceFromPath() error = %v", err)
+	}
+	room, err := svc.CreateRoom(CreateRoomRequest{
+		Title:     "Partial save retry",
+		CreatorID: "user-admin",
+	})
+	if err != nil {
+		t.Fatalf("CreateRoom() error = %v", err)
+	}
+	root, err := svc.CreateMessage(CreateMessageRequest{
+		RoomID:   room.ID,
+		SenderID: "user-admin",
+		Content:  "thread root",
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage(root) error = %v", err)
+	}
+	before, err := svc.ListMessages(room.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(before) error = %v", err)
+	}
+
+	blockedThreadDir := filepath.Join(filepath.Dir(statePath), threadsDirName, room.ID)
+	if err := os.WriteFile(blockedThreadDir, []byte("blocked"), 0o600); err != nil {
+		t.Fatalf("WriteFile(blocked thread dir) error = %v", err)
+	}
+	req := CreateMessageRequest{
+		RoomID:          room.ID,
+		SenderID:        "user-admin",
+		Content:         "retry thread reply",
+		ClientMessageID: "client-partial-save-retry",
+		RelatesTo: &MessageRelation{
+			RelType: RelationTypeThread,
+			EventID: root.ID,
+		},
+	}
+	if _, _, err := svc.CreateMessageOnce(req); err == nil {
+		t.Fatal("CreateMessageOnce(first) error = nil, want thread persistence error")
+	}
+
+	reloaded, err := NewServiceFromPath(statePath)
+	if err != nil {
+		t.Fatalf("NewServiceFromPath(reload after failure) error = %v", err)
+	}
+	afterReload, err := reloaded.ListMessages(room.ID)
+	if err != nil {
+		t.Fatalf("ListMessages(after reload) error = %v", err)
+	}
+	if len(afterReload) != len(before) {
+		t.Fatalf("messages after reload = %d, want %d", len(afterReload), len(before))
+	}
+
+	if err := os.Remove(blockedThreadDir); err != nil {
+		t.Fatalf("Remove(blocked thread dir) error = %v", err)
+	}
+	createdMessage, created, err := svc.CreateMessageOnce(req)
+	if err != nil {
+		t.Fatalf("CreateMessageOnce(retry) error = %v", err)
+	}
+	if !created {
+		t.Fatal("CreateMessageOnce(retry) created = false, want true")
+	}
+	if createdMessage.ClientMessageID != req.ClientMessageID {
+		t.Fatalf("client message id = %q, want %q", createdMessage.ClientMessageID, req.ClientMessageID)
+	}
+}
+
 func TestUpdateRoomPersistsNotifyAllAgentsAndPublishesEvent(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "im", "state.json")
 	bus := NewBus()
