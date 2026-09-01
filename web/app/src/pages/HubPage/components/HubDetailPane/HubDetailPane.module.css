@@ -242,6 +242,11 @@
   max-width: 100%;
 }
 
+.hub-inspector-copy :global(.mcp-knowledge-badge) {
+  background: color-mix(in srgb, var(--brand-500) 10%, var(--panel-soft));
+  color: var(--brand-700);
+}
+
 .hub-template-card-title-row h2 {
   margin: 0;
   color: color-mix(in srgb, var(--text) 78%, var(--muted) 22%);
@@ -638,6 +643,48 @@
   margin: 0;
   padding-left: 18px;
   overflow-wrap: anywhere;
+}
+
+.mcp-source-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.mcp-source-notice.update-available {
+  border-color: color-mix(in srgb, var(--warning-600) 45%, var(--line));
+  background: color-mix(in srgb, var(--warning-50) 78%, var(--surface) 22%);
+  color: var(--warning-800);
+}
+
+.mcp-source-notice.check-failed {
+  border-color: color-mix(in srgb, var(--error-600) 32%, var(--line));
+  background: color-mix(in srgb, var(--error-50) 62%, var(--surface) 38%);
+}
+
+.mcp-source-notice-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mcp-source-notice-copy strong {
+  color: var(--text);
+}
+
+.mcp-source-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .hub-publish-partial-message {

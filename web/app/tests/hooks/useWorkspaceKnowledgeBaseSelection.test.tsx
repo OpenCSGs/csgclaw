@@ -50,7 +50,7 @@ describe("useWorkspaceKnowledgeBaseSelection", () => {
         items: [
           {
             availability: "available",
-            configuredMCPName: "agentichub-kb-configured",
+            configuredMCPName: "configured-content",
             contentID: "configured-content",
             id: "configured",
             name: "Configured knowledge base",

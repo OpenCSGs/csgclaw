@@ -22,7 +22,7 @@ describe("knowledge bases API", () => {
                   },
                   remote_only: { status: "kept" },
                 },
-                configured_mcp_name: "agentichub-kb-42",
+                configured_mcp_name: "content-42",
                 content_id: "content-42",
                 description: "Engineering runbooks",
                 id: 42,
@@ -50,7 +50,7 @@ describe("knowledge bases API", () => {
             },
             remote_only: { status: "kept" },
           },
-          configuredMCPName: "agentichub-kb-42",
+          configuredMCPName: "content-42",
           contentID: "content-42",
           description: "Engineering runbooks",
           id: "42",
@@ -74,14 +74,17 @@ describe("knowledge bases API", () => {
       Promise.resolve(
         new Response(
           JSON.stringify({
-            name: "agentichub-kb-42",
+            name: "content-42",
             config: {
               type: "remote",
               url: "https://gateway.example.test/v1/llmwikis/content-42/mcp",
-              csgclaw: {
-                kind: "agentichub_knowledge_base",
-                knowledge_base_id: "42",
-                content_id: "content-42",
+              _meta: {
+                "com.opencsg/mcp": {
+                  type: "llm_wiki",
+                  resource_id: "42",
+                  content_id: "content-42",
+                  auth_type: "csghub_access_token",
+                },
               },
             },
           }),
@@ -92,7 +95,7 @@ describe("knowledge bases API", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await fetchRemoteKnowledgeBaseMCPConfig("42");
-    expect(result.name).toBe("agentichub-kb-42");
+    expect(result.name).toBe("content-42");
     expect(JSON.stringify(result)).not.toContain("OPENCSG_TOKEN");
     expect(result.config).not.toHaveProperty("headers");
     expect(JSON.stringify(result)).not.toContain("current-user-token");

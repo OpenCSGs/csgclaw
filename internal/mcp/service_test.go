@@ -137,22 +137,28 @@ func TestServiceCRUDAndErrors(t *testing.T) {
 	}
 }
 
-func TestCreateServerRejectsDuplicateAgenticHubKnowledgeBase(t *testing.T) {
+func TestCreateServerRequiresManagedKnowledgeBaseContentIDName(t *testing.T) {
 	store := &memoryServerStore{}
 	svc := NewService(WithServerStore(store))
 	config := map[string]any{
 		"type": "remote",
 		"url":  "https://gateway.example.test/v1/llmwikis/content-42/mcp",
-		knowledgebase.ManagedConfigKey: map[string]any{
-			"kind":              knowledgebase.ManagedKind,
-			"knowledge_base_id": "42",
-			"content_id":        "content-42",
+		knowledgebase.ManagedMetaKey: map[string]any{
+			knowledgebase.ManagedMetaNamespace: map[string]any{
+				"type":        knowledgebase.ManagedMCPType,
+				"resource_id": "42",
+				"content_id":  "content-42",
+				"auth_type":   knowledgebase.ManagedAuthType,
+			},
 		},
 	}
-	if _, err := svc.CreateServer(context.Background(), "knowledge-one", config); err != nil {
-		t.Fatalf("CreateServer(first) error = %v", err)
+	if _, err := svc.CreateServer(context.Background(), "knowledge-one", config); err == nil {
+		t.Fatal("CreateServer(alias) error = nil")
 	}
-	if _, err := svc.CreateServer(context.Background(), "renamed-duplicate", config); !errors.Is(err, ErrServerExists) {
+	if _, err := svc.CreateServer(context.Background(), "content-42", config); err != nil {
+		t.Fatalf("CreateServer(content ID) error = %v", err)
+	}
+	if _, err := svc.CreateServer(context.Background(), "content-42", config); !errors.Is(err, ErrServerExists) {
 		t.Fatalf("CreateServer(duplicate) error = %v, want ErrServerExists", err)
 	}
 }
@@ -173,7 +179,7 @@ func TestManagedKnowledgeBaseAuthenticationIsPersistedAndListed(t *testing.T) {
 	}
 	store := &memoryServerStore{}
 	svc := NewService(WithServerStore(store))
-	if _, err := svc.CreateServer(context.Background(), "knowledge-base", managedConfig); err != nil {
+	if _, err := svc.CreateServer(context.Background(), "content-42", managedConfig); err != nil {
 		t.Fatalf("CreateServer() error = %v", err)
 	}
 
@@ -181,12 +187,12 @@ func TestManagedKnowledgeBaseAuthenticationIsPersistedAndListed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListServers() error = %v", err)
 	}
-	listedConfig := listed["knowledge-base"].(map[string]any)
+	listedConfig := listed["content-42"].(map[string]any)
 	listedHeaders := listedConfig["headers"].(map[string]any)
 	if got, want := listedHeaders["Authorization"], "Bearer current-csghub-token"; got != want {
 		t.Fatalf("listed Authorization = %#v, want %q", got, want)
 	}
-	persisted := store.servers["knowledge-base"].(map[string]any)
+	persisted := store.servers["content-42"].(map[string]any)
 	persistedHeaders := persisted["headers"].(map[string]any)
 	if got, want := persistedHeaders["Authorization"], "Bearer current-csghub-token"; got != want {
 		t.Fatalf("persisted Authorization = %#v, want %q", got, want)

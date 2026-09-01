@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { fetchRemoteMCPServersPage, installRemoteMCPServerRequest, probeMCPServerRequest } from "@/api/mcp";
+import {
+  fetchAgentMCPServerSourceStatus,
+  fetchMCPServerSourceStatus,
+  fetchRemoteMCPServersPage,
+  installRemoteMCPServerRequest,
+  probeMCPServerRequest,
+  syncMCPServerSource,
+  syncAgentMCPServerSource,
+} from "@/api/mcp";
 
 function mockFetch(handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
   const fetchMock = vi.fn<typeof fetch>(handler);
@@ -110,6 +118,155 @@ describe("MCP API", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "api/v1/mcp-servers:probe",
       expect.objectContaining({ method: "POST", body: JSON.stringify(payload) }),
+    );
+  });
+
+  it("checks a managed MCP source without mutating its saved snapshot", async () => {
+    const fetchMock = mockFetch(
+      async () =>
+        new Response(
+          JSON.stringify({
+            auth_type: "csghub_access_token",
+            configured_endpoint_url: "https://old.example.test/mcp",
+            content_id: "kb-investment",
+            kind: "llm_wiki",
+            latest_endpoint_url: "https://current.example.test/mcp",
+            resource_id: "143",
+            source_description: "Investment knowledge base",
+            source_name: "Investment",
+            update_available: true,
+          }),
+          { status: 200 },
+        ),
+    );
+
+    await expect(fetchMCPServerSourceStatus("kb-investment")).resolves.toEqual({
+      agentUpdateAvailable: false,
+      authType: "csghub_access_token",
+      configuredEndpointURL: "https://old.example.test/mcp",
+      contentID: "kb-investment",
+      globalServerName: undefined,
+      globalUpdateAvailable: false,
+      kind: "llm_wiki",
+      latestEndpointURL: "https://current.example.test/mcp",
+      resourceID: "143",
+      sourceDescription: "Investment knowledge base",
+      sourceName: "Investment",
+      updateAvailable: true,
+    });
+    expect(fetchMock).toHaveBeenCalledWith("api/v1/mcp-servers/kb-investment/source", expect.any(Object));
+  });
+
+  it("manually syncs a managed MCP source and returns the persisted snapshot", async () => {
+    const fetchMock = mockFetch(
+      async () =>
+        new Response(
+          JSON.stringify({
+            source: {
+              auth_type: "csghub_access_token",
+              configured_endpoint_url: "https://current.example.test/mcp",
+              content_id: "kb-investment",
+              kind: "llm_wiki",
+              latest_endpoint_url: "https://current.example.test/mcp",
+              resource_id: "143",
+              update_available: false,
+            },
+            state: {
+              mcpServers: {
+                "kb-investment": {
+                  headers: { Authorization: "Bearer current-token" },
+                  url: "https://current.example.test/mcp",
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+
+    await expect(syncMCPServerSource("kb-investment")).resolves.toMatchObject({
+      source: { contentID: "kb-investment", resourceID: "143", updateAvailable: false },
+      state: {
+        mcpServers: {
+          "kb-investment": { url: "https://current.example.test/mcp" },
+        },
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "api/v1/mcp-servers/kb-investment/source:sync",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("checks and synchronizes AgenticHub through the current Agent MCP", async () => {
+    let synced = false;
+    const fetchMock = mockFetch(async (_input, init) => {
+      if (init?.method === "POST") {
+        synced = true;
+        return new Response(
+          JSON.stringify({
+            agent: {
+              agent_id: "agent-1",
+              servers: {
+                kb_investment: { url: "https://current.example.test/mcp" },
+              },
+            },
+            global_state: {
+              mcpServers: {
+                kb_investment: { url: "https://current.example.test/mcp" },
+              },
+            },
+            source: {
+              auth_type: "csghub_access_token",
+              configured_endpoint_url: "https://current.example.test/mcp",
+              content_id: "kb_investment",
+              global_server_name: "kb_investment",
+              kind: "agentichub_knowledge_base",
+              latest_endpoint_url: "https://current.example.test/mcp",
+              resource_id: "143",
+              update_available: false,
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          agent_update_available: true,
+          auth_type: "csghub_access_token",
+          configured_endpoint_url: "https://old.example.test/mcp",
+          content_id: "kb_investment",
+          global_update_available: true,
+          kind: "agentichub_knowledge_base",
+          latest_endpoint_url: "https://current.example.test/mcp",
+          resource_id: "143",
+          update_available: true,
+        }),
+        { status: 200 },
+      );
+    });
+
+    await expect(fetchAgentMCPServerSourceStatus("agent-1", "kb_investment")).resolves.toMatchObject({
+      agentUpdateAvailable: true,
+      contentID: "kb_investment",
+      globalUpdateAvailable: true,
+      updateAvailable: true,
+    });
+    await expect(syncAgentMCPServerSource("agent-1", "kb_investment")).resolves.toMatchObject({
+      agent: { agent_id: "agent-1", servers: { kb_investment: { url: "https://current.example.test/mcp" } } },
+      globalState: { mcpServers: { kb_investment: { url: "https://current.example.test/mcp" } } },
+      source: { globalServerName: "kb_investment", updateAvailable: false },
+    });
+    expect(synced).toBe(true);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "api/v1/agents/agent-1/mcp-servers/kb_investment/source",
+      expect.any(Object),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "api/v1/agents/agent-1/mcp-servers/kb_investment/source:sync",
+      expect.objectContaining({ method: "POST" }),
     );
   });
 });

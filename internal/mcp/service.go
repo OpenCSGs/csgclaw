@@ -71,7 +71,7 @@ func (s *Service) CreateServer(ctx context.Context, name string, config map[stri
 			return fmt.Errorf("%w: %s", ErrServerExists, name)
 		}
 		if metadata, ok := knowledgebase.ManagedMetadataFromServer(config); ok {
-			if existing := knowledgebase.FindConfiguredServer(servers, metadata.KnowledgeBaseID); existing != "" {
+			if existing := knowledgebase.FindConfiguredServer(servers, metadata.ContentID); existing != "" {
 				return fmt.Errorf("%w: %s", ErrServerExists, existing)
 			}
 		}
@@ -116,7 +116,7 @@ func (s *Service) UpdateServer(ctx context.Context, currentName, nextName string
 			return fmt.Errorf("%w: %s", ErrServerNotFound, currentName)
 		}
 		if metadata, ok := knowledgebase.ManagedMetadataFromServer(config); ok {
-			if existing := knowledgebase.FindConfiguredServer(servers, metadata.KnowledgeBaseID); existing != "" && existing != currentName {
+			if existing := knowledgebase.FindConfiguredServer(servers, metadata.ContentID); existing != "" && existing != currentName {
 				return fmt.Errorf("%w: %s", ErrServerExists, existing)
 			}
 		}

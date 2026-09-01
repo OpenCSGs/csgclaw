@@ -20,12 +20,13 @@ import {
 } from "@/models/hubWorkspace";
 import {
   formatMCPServerDocument,
+  mcpManagedKnowledgeBaseSource,
   mcpServerDescription,
   mcpServerPayloadFromDocument,
   mcpServersFromTemplateDocument,
   mcpToolParameters,
 } from "@/models/mcp";
-import type { MCPProbeResult, MCPServerPayload, RemoteMCPServer } from "@/models/mcp";
+import type { MCPProbeResult, MCPServerPayload, MCPServerSourceStatus, RemoteMCPServer } from "@/models/mcp";
 import { WorkspaceFilePreview, WorkspaceFileTree } from "@/components/business/WorkspaceFileTree";
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { ModelsIcon } from "@/components/ui/Icons";
@@ -324,6 +325,7 @@ type HubDetailPaneHub = {
     loaded: boolean;
     onDeleteSkill?: (item: SkillSummary | null | undefined) => Promise<boolean> | boolean;
     onCreateMCP?: (payload: MCPServerPayload) => Promise<boolean> | boolean;
+    onCheckMCPSource?: () => Promise<MCPServerSourceStatus | null> | MCPServerSourceStatus | null;
     onClearMCPProbe?: () => void;
     onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
     onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
@@ -338,6 +340,7 @@ type HubDetailPaneHub = {
       | null;
     onSelectMCP?: (name: string | null | undefined) => void;
     onProbeMCP?: (payload: MCPServerPayload) => Promise<MCPProbeResult | null> | MCPProbeResult | null;
+    onSyncMCPSource?: () => Promise<boolean> | boolean;
     onUpdateMCP?: (currentName: string, payload: MCPServerPayload) => Promise<boolean> | boolean;
     onRetry: () => void | Promise<void>;
     onSelectSkill?: (name: string | null | undefined) => void;
@@ -354,6 +357,10 @@ type HubDetailPaneHub = {
     mcpProbeBusy?: boolean;
     mcpProbeError?: string;
     mcpProbeResult?: MCPProbeResult | null;
+    mcpSourceBusy?: boolean;
+    mcpSourceError?: string;
+    mcpSourceStatus?: MCPServerSourceStatus | null;
+    mcpSourceSyncBusy?: boolean;
     mcpCreateError?: string;
     mcpCreateDialogOpen?: boolean;
     mcpCreateInitialDocument?: string;
@@ -442,9 +449,11 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   onSelectWorkspaceFile: () => {},
   onToggleWorkspaceDir: () => {},
   onCreateMCP: () => false,
+  onCheckMCPSource: () => null,
   onClearMCPProbe: () => {},
   onDeleteMCP: () => false,
   onProbeMCP: () => null,
+  onSyncMCPSource: () => false,
   onUpdateMCP: () => false,
   selectedResourceType: "template",
   selectedSkill: null,
@@ -769,6 +778,10 @@ export function HubDetailPane({
     mcpProbeBusy = false,
     mcpProbeError = "",
     mcpProbeResult = null,
+    mcpSourceBusy = false,
+    mcpSourceError = "",
+    mcpSourceStatus = null,
+    mcpSourceSyncBusy = false,
     mcpCreateError = "",
     mcpCreateDialogOpen = false,
     mcpCreateInitialDocument = "",
@@ -786,6 +799,7 @@ export function HubDetailPane({
     workspaceTreeLoading = false,
     onSelectSkillFile,
     onClearMCPProbe,
+    onCheckMCPSource,
     onDeleteSkill,
     onCreateMCP,
     onDeleteMCP,
@@ -799,6 +813,7 @@ export function HubDetailPane({
     onRemoteMCPServersSearchChange,
     onRemoteMCPVisibleChange,
     onProbeMCP,
+    onSyncMCPSource,
     onUpdateMCP,
     onUpdateTemplateInstructions,
     deleteBusy = false,
@@ -844,6 +859,10 @@ export function HubDetailPane({
   const [mcpDetailError, setMCPDetailError] = useState("");
   const [mcpFormError, setMCPFormError] = useState("");
   const [mcpCreateMode, setMCPCreateMode] = useState<MCPCreateMode>("manual");
+  const selectedManagedMCPSource = useMemo(
+    () => mcpManagedKnowledgeBaseSource(selectedMCPServer?.config),
+    [selectedMCPServer?.config],
+  );
   const [activeTemplateTab, setActiveTemplateTab] = useState<TemplateDetailTabID>("profile");
   const [templateInstructionsMode, setTemplateInstructionsMode] = useState<"default" | "advanced">("default");
   const [templateInstructionsDraft, setTemplateInstructionsDraft] = useState("");
@@ -997,6 +1016,14 @@ export function HubDetailPane({
     }
     setMCPDetailError("");
     await onProbeMCP?.(result.payload);
+  }
+
+  async function handleCheckMCPSource() {
+    await onCheckMCPSource?.();
+  }
+
+  async function handleSyncMCPSource() {
+    await onSyncMCPSource?.();
   }
 
   async function handleDeleteMCPConfirm() {
@@ -1681,6 +1708,11 @@ export function HubDetailPane({
                           <Server size={18} strokeWidth={2} />
                         </span>
                         <h2>{selectedMCPServer.name}</h2>
+                        {selectedManagedMCPSource ? (
+                          <span className={moduleClassNames("mini-badge mcp-knowledge-badge")}>
+                            {t("resourcesKnowledgeMCPBadge")}
+                          </span>
+                        ) : null}
                       </div>
                       <p>
                         {selectedMCPServer.description ||
@@ -1729,6 +1761,53 @@ export function HubDetailPane({
               ) : null}
               {mcpStateLoading ? (
                 <div className={moduleClassNames("workspace-empty")}>{t("resourcesMCPLoading")}</div>
+              ) : null}
+
+              {selectedManagedMCPSource && (mcpSourceError || mcpSourceStatus?.updateAvailable) ? (
+                <div
+                  className={moduleClassNames(
+                    "mcp-source-notice",
+                    mcpSourceStatus?.updateAvailable ? "update-available" : "",
+                    mcpSourceError && !mcpSourceStatus?.updateAvailable ? "check-failed" : "",
+                  )}
+                  role="status"
+                >
+                  <div className={moduleClassNames("mcp-source-notice-copy")}>
+                    <strong>
+                      {mcpSourceStatus?.updateAvailable
+                        ? t("resourcesKnowledgeMCPUpdateAvailable")
+                        : t("resourcesKnowledgeMCPCheckFailed")}
+                    </strong>
+                    <span>
+                      {mcpSourceStatus?.updateAvailable
+                        ? t("resourcesKnowledgeMCPUpdateHint")
+                        : t("resourcesKnowledgeMCPCheckFailedHint")}
+                    </span>
+                  </div>
+                  <div className={moduleClassNames("mcp-source-notice-actions")}>
+                    {mcpSourceStatus?.updateAvailable ? (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        loading={mcpSourceSyncBusy}
+                        disabled={mcpSourceBusy}
+                        onClick={handleSyncMCPSource}
+                      >
+                        {t("resourcesMCPSourceUpdate")}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="secondaryGray"
+                        size="sm"
+                        loading={mcpSourceBusy}
+                        disabled={mcpSourceSyncBusy}
+                        onClick={handleCheckMCPSource}
+                      >
+                        {t("resourcesMCPSourceRetry")}
+                      </Button>
+                    )}
+                  </div>
+                </div>
               ) : null}
 
               <div className={moduleClassNames("hub-workspace-block mcp-server-document-block")}>

@@ -3,7 +3,7 @@ import { saveMCPServerAndSelect } from "@/hooks/workspace/useWorkspaceController
 
 const payload = {
   config: { type: "remote", url: "https://gateway.example.test/mcp" },
-  name: "agentichub-kb-42",
+  name: "content-42",
 };
 
 describe("saveMCPServerAndSelect", () => {
@@ -14,6 +14,6 @@ describe("saveMCPServerAndSelect", () => {
     expect(onSaved).not.toHaveBeenCalled();
 
     await expect(saveMCPServerAndSelect(payload, async () => true, onSaved)).resolves.toBe(true);
-    expect(onSaved).toHaveBeenCalledWith("agentichub-kb-42");
+    expect(onSaved).toHaveBeenCalledWith("content-42");
   });
 });

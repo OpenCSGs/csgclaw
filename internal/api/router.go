@@ -55,6 +55,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Get("/mcp-servers", h.handleAgentMCPServersByID)
 				r.Post("/mcp-servers:batchAdd", h.handleBatchAddAgentMCPServers)
 				r.Post("/mcp-servers:batchDelete", h.handleBatchDeleteAgentMCPServers)
+				r.Get("/mcp-servers/{name}/source", h.handleAgentMCPServerSource)
+				r.Post("/mcp-servers/{name}/source:sync", h.handleAgentMCPServerSource)
 				r.Route("/profile", func(r chi.Router) {
 					r.Get("/", h.getAgentProfile)
 					r.Put("/", h.updateAgentProfile)
@@ -85,6 +87,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Handle("/knowledge-bases/{content_id}/mcp", http.HandlerFunc(h.handleKnowledgeBaseMCPProxy))
 		r.Post("/mcp-servers", h.handleMCPServers)
 		r.Post("/mcp-servers:probe", h.probeMCPServer)
+		r.Get("/mcp-servers/{name}/source", h.handleMCPServerSourceByName)
+		r.Post("/mcp-servers/{name}/source:sync", h.handleMCPServerSourceByName)
 		r.Put("/mcp-servers/{name}", h.handleMCPServerByName)
 		r.Delete("/mcp-servers/{name}", h.handleMCPServerByName)
 		r.Route("/hub/templates", func(r chi.Router) {

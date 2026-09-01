@@ -11,7 +11,7 @@ const REMOTE_KNOWLEDGE_BASES: RemoteKnowledgeBase[] = [
   },
   {
     availability: "available",
-    configuredMCPName: "agentichub-kb-local",
+    configuredMCPName: "content-local",
     contentID: "content-local",
     id: "local",
     name: "Added locally",

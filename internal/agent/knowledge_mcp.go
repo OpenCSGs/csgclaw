@@ -10,9 +10,5 @@ func (s *Service) materializeRuntimeMCPServers(ctx context.Context, runtimeKind 
 	if servers == nil {
 		return cloneMCPServers(servers), nil
 	}
-	hydrated, err := knowledgebase.HydrateTemplateServers(ctx, servers)
-	if err != nil {
-		return nil, err
-	}
-	return knowledgebase.RuntimeServers(hydrated)
+	return knowledgebase.RuntimeServers(servers)
 }

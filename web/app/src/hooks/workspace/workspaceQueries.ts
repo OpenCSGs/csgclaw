@@ -149,6 +149,8 @@ export const workspaceQueryKeys = {
   agentSkills: (agentID: string | null | undefined) => [WORKSPACE_QUERY_SCOPE, "agent-skills", agentID || ""] as const,
   agentMCPServers: (agentID: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "agent-mcp-servers", agentID || ""] as const,
+  agentMCPServerSource: (agentID: string | null | undefined, name: string | null | undefined) =>
+    [WORKSPACE_QUERY_SCOPE, "agent-mcp-server-source", agentID || "", name || ""] as const,
   agentProfileModels: (requestKey: string | null | undefined) =>
     [WORKSPACE_QUERY_SCOPE, "agent-profile-models", requestKey || ""] as const,
   cliProxyAuthStatus: (provider: string | null | undefined) =>

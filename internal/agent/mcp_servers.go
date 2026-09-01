@@ -10,11 +10,13 @@ import (
 
 func templateSafeMCPServers(servers map[string]any) map[string]any {
 	cloned := cloneMCPServers(servers)
-	for _, raw := range cloned {
+	for name, raw := range cloned {
 		entry, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
+		entry = utils.CloneAnyMap(entry)
+		cloned[name] = entry
 		for key := range entry {
 			normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(key), "-", "_"))
 			if normalized == "env" || normalized == "headers" || normalized == "http_headers" ||

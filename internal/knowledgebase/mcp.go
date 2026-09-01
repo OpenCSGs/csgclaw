@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	ManagedConfigKey     = "csgclaw"
 	ManagedKind          = "agentichub_knowledge_base"
 	ManagedMetaKey       = "_meta"
 	ManagedMetaNamespace = "com.opencsg/mcp"
@@ -63,7 +62,7 @@ func mcpEndpointFor(item KnowledgeBase) string {
 }
 
 func ServerName(item KnowledgeBase) string {
-	return "agentichub-kb-" + strconv.FormatInt(item.ID, 10)
+	return strings.TrimSpace(item.ContentID)
 }
 
 func ServerConfig(item KnowledgeBase, csgHubAccessToken string) (string, map[string]any, error) {
@@ -105,31 +104,43 @@ func ServerConfig(item KnowledgeBase, csgHubAccessToken string) (string, map[str
 // user's CSGHub record. The API-provided public endpoint is used verbatim so
 // CSGClaw does not duplicate AIGateway routing rules.
 func HydrateManagedServer(ctx context.Context, config map[string]any, connection Connection) (map[string]any, error) {
+	_, prepared, err := RefreshManagedServerSnapshot(ctx, config, connection)
+	return prepared, err
+}
+
+// RefreshManagedServerSnapshot resolves the current AgenticHub source only
+// when the user explicitly requests a snapshot refresh. Normal runtime
+// materialization uses the persisted snapshot without contacting AgenticHub.
+func RefreshManagedServerSnapshot(ctx context.Context, config map[string]any, connection Connection) (KnowledgeBase, map[string]any, error) {
 	metadata, ok := ManagedMetadataFromServer(config)
 	if !ok {
-		return config, nil
+		return KnowledgeBase{}, config, nil
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(connection.CSGHubBaseURL), "/")
 	if baseURL == "" {
-		return nil, fmt.Errorf("hydrate knowledge base MCP: CSGHub base URL is required")
+		return KnowledgeBase{}, nil, fmt.Errorf("refresh knowledge base MCP: CSGHub base URL is required")
 	}
 	token := strings.TrimSpace(connection.CSGHubAccessToken)
 	if token == "" {
-		return nil, fmt.Errorf("hydrate knowledge base MCP: CSGHub access token is required")
+		return KnowledgeBase{}, nil, fmt.Errorf("refresh knowledge base MCP: CSGHub access token is required")
 	}
 
 	item, err := (Client{BaseURL: baseURL, Token: token}).Get(ctx, metadata.KnowledgeBaseID)
 	if err != nil {
-		return nil, fmt.Errorf("refresh knowledge base MCP: %w", err)
+		return KnowledgeBase{}, nil, fmt.Errorf("refresh knowledge base MCP: %w", err)
 	}
 	if item.ID != metadata.KnowledgeBaseID || item.ContentID != metadata.ContentID {
-		return nil, fmt.Errorf("refresh knowledge base MCP: resource identity changed")
+		return KnowledgeBase{}, nil, fmt.Errorf("refresh knowledge base MCP: resource identity changed")
 	}
 	if availability, reason := AvailabilityFor(item); availability != AvailabilityAvailable {
-		return nil, fmt.Errorf("refresh knowledge base MCP: knowledge base is unavailable: %s", reason)
+		return KnowledgeBase{}, nil, fmt.Errorf("refresh knowledge base MCP: knowledge base is unavailable: %s", reason)
 	}
 
-	return hydrateServerConfig(config, mcpEndpointFor(item), token)
+	prepared, err := hydrateServerConfig(config, mcpEndpointFor(item), token)
+	if err != nil {
+		return KnowledgeBase{}, nil, err
+	}
+	return item, prepared, nil
 }
 
 func hydrateServerConfig(config map[string]any, endpoint, token string) (map[string]any, error) {
@@ -174,8 +185,12 @@ func HydrateTemplateServers(ctx context.Context, servers map[string]any) (map[st
 		if !ok {
 			continue
 		}
-		if _, managed := ManagedMetadataFromServer(entry); !managed {
+		metadata, managed := ManagedMetadataFromServer(entry)
+		if !managed {
 			continue
+		}
+		if name != metadata.ContentID {
+			return nil, fmt.Errorf("hydrate %s: managed knowledge-base MCP server name must match content_id %q", name, metadata.ContentID)
 		}
 		prepared, err := HydrateManagedServer(ctx, entry, connection)
 		if err != nil {
@@ -191,10 +206,7 @@ func ManagedMetadataFromServer(config any) (ManagedMetadata, bool) {
 	if !ok {
 		return ManagedMetadata{}, false
 	}
-	if metadata, ok := managedMetadataFromMeta(entry); ok {
-		return metadata, true
-	}
-	return managedMetadataFromLegacyConfig(entry)
+	return managedMetadataFromMeta(entry)
 }
 
 func managedMetadataFromMeta(entry map[string]any) (ManagedMetadata, bool) {
@@ -217,30 +229,16 @@ func managedMetadataFromMeta(entry map[string]any) (ManagedMetadata, bool) {
 	return ManagedMetadata{Kind: ManagedKind, KnowledgeBaseID: id, ContentID: contentID}, true
 }
 
-func managedMetadataFromLegacyConfig(entry map[string]any) (ManagedMetadata, bool) {
-	raw, ok := entry[ManagedConfigKey].(map[string]any)
-	if !ok || strings.TrimSpace(stringValue(raw["kind"])) != ManagedKind {
-		return ManagedMetadata{}, false
-	}
-	id, err := strconv.ParseInt(strings.TrimSpace(stringValue(raw["knowledge_base_id"])), 10, 64)
-	if err != nil || id < 1 {
-		return ManagedMetadata{}, false
-	}
-	contentID := strings.TrimSpace(stringValue(raw["content_id"]))
+func FindConfiguredServer(servers map[string]any, contentID string) string {
+	contentID = strings.TrimSpace(contentID)
 	if contentID == "" {
-		return ManagedMetadata{}, false
+		return ""
 	}
-	return ManagedMetadata{Kind: ManagedKind, KnowledgeBaseID: id, ContentID: contentID}, true
-}
-
-func FindConfiguredServer(servers map[string]any, knowledgeBaseID int64) string {
-	for name, raw := range servers {
-		metadata, ok := ManagedMetadataFromServer(raw)
-		if ok && metadata.KnowledgeBaseID == knowledgeBaseID {
-			return name
-		}
+	metadata, ok := ManagedMetadataFromServer(servers[contentID])
+	if !ok || metadata.ContentID != contentID {
+		return ""
 	}
-	return ""
+	return contentID
 }
 
 // RuntimeServers removes CSGClaw-only management metadata while retaining the
@@ -278,7 +276,6 @@ func cloneServers(servers map[string]any) (map[string]any, error) {
 }
 
 func removeManagedMetadata(entry map[string]any) {
-	delete(entry, ManagedConfigKey)
 	meta, ok := entry[ManagedMetaKey].(map[string]any)
 	if !ok {
 		return

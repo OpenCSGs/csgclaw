@@ -339,9 +339,15 @@ function renderMCPDetailPane({
   mcpCreateDialogOpen = false,
   mcpCreateError = "",
   mcpProbeResult = null,
+  managedSource = false,
+  sourceError = "",
+  sourceUpdateAvailable = false,
 }: {
   mcpCreateDialogOpen?: boolean;
   mcpCreateError?: string;
+  managedSource?: boolean;
+  sourceError?: string;
+  sourceUpdateAvailable?: boolean;
   mcpProbeResult?: {
     connected: boolean;
     durationMs: number;
@@ -359,14 +365,31 @@ function renderMCPDetailPane({
 } = {}) {
   const onUpdateMCP = vi.fn().mockResolvedValue(true);
   const onProbeMCP = vi.fn().mockResolvedValue(mcpProbeResult);
+  const onCheckMCPSource = vi.fn().mockResolvedValue(undefined);
+  const onSyncMCPSource = vi.fn().mockResolvedValue(true);
   const mcp = {
-    name: "grafana",
+    name: managedSource ? "kb-investment" : "grafana",
     description: "Grafana",
-    config: {
-      command: "grafana-mcp",
-      args: ["--transport", "stdio"],
-      startup_timeout_sec: 120,
-    },
+    config: managedSource
+      ? {
+          type: "remote",
+          transport: "streamable-http",
+          url: "https://old.example.test/mcp",
+          headers: { Authorization: "Bearer saved-token" },
+          _meta: {
+            "com.opencsg/mcp": {
+              auth_type: "csghub_access_token",
+              content_id: "kb-investment",
+              resource_id: "143",
+              type: "llm_wiki",
+            },
+          },
+        }
+      : {
+          command: "grafana-mcp",
+          args: ["--transport", "stdio"],
+          startup_timeout_sec: 120,
+        },
   };
   const result = render(
     <HubDetailPane
@@ -407,10 +430,28 @@ function renderMCPDetailPane({
           mcpProbeBusy: false,
           mcpProbeError: "",
           mcpProbeResult,
+          mcpSourceBusy: false,
+          mcpSourceError: sourceError,
+          mcpSourceStatus: managedSource
+            ? {
+                authType: "csghub_access_token",
+                configuredEndpointURL: "https://old.example.test/mcp",
+                contentID: "kb-investment",
+                kind: "llm_wiki",
+                latestEndpointURL: sourceUpdateAvailable
+                  ? "https://current.example.test/mcp"
+                  : "https://old.example.test/mcp",
+                resourceID: "143",
+                updateAvailable: sourceUpdateAvailable,
+              }
+            : null,
+          mcpSourceSyncBusy: false,
           mcpStateError: "",
           mcpStateLoading: false,
           onDeleteMCP: vi.fn(),
+          onCheckMCPSource,
           onProbeMCP,
+          onSyncMCPSource,
           onUpdateMCP,
           workspaceFile: null,
           workspaceFileError: "",
@@ -419,7 +460,7 @@ function renderMCPDetailPane({
       }}
     />,
   );
-  return { ...result, onProbeMCP, onUpdateMCP };
+  return { ...result, onCheckMCPSource, onProbeMCP, onSyncMCPSource, onUpdateMCP };
 }
 
 function renderMCPCreateDialog() {
@@ -772,6 +813,31 @@ describe("HubDetailPane", () => {
         startup_timeout_sec: 120,
       },
     });
+  });
+
+  it("shows only actionable knowledge base MCP updates", async () => {
+    const user = userEvent.setup();
+    const { onCheckMCPSource, onSyncMCPSource } = renderMCPDetailPane({
+      managedSource: true,
+      sourceUpdateAvailable: true,
+    });
+
+    expect(screen.getByText("resourcesKnowledgeMCPBadge")).toBeInTheDocument();
+    expect(screen.getByText("resourcesKnowledgeMCPUpdateAvailable")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "resourcesMCPSourceRetry" })).not.toBeInTheDocument();
+    expect(onCheckMCPSource).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "resourcesMCPSourceUpdate" }));
+    expect(onSyncMCPSource).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a healthy knowledge base MCP status out of the way", () => {
+    renderMCPDetailPane({ managedSource: true });
+
+    expect(screen.getByText("resourcesKnowledgeMCPBadge")).toBeInTheDocument();
+    expect(screen.queryByText("resourcesKnowledgeMCPUpdateAvailable")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "resourcesMCPSourceUpdate" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "resourcesMCPSourceRetry" })).not.toBeInTheDocument();
   });
 
   it("shows MCP creation errors only inside the creation dialog", () => {

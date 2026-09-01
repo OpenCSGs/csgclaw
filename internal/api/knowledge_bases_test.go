@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/auth"
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcp"
 )
 
@@ -140,13 +141,16 @@ func TestHandleRemoteKnowledgeBasesReportsAvailabilityAndConfiguredMCP(t *testin
 		}, nil
 	})
 	store := &knowledgeBaseServerStore{servers: map[string]any{
-		"existing-handbook": map[string]any{
+		"content-42": map[string]any{
 			"type": "remote",
 			"url":  "https://example.test/mcp",
-			"csgclaw": map[string]any{
-				"kind":              "agentichub_knowledge_base",
-				"knowledge_base_id": "42",
-				"content_id":        "content-42",
+			knowledgebase.ManagedMetaKey: map[string]any{
+				knowledgebase.ManagedMetaNamespace: map[string]any{
+					"type":        knowledgebase.ManagedMCPType,
+					"resource_id": "42",
+					"content_id":  "content-42",
+					"auth_type":   knowledgebase.ManagedAuthType,
+				},
 			},
 		},
 	}}
@@ -160,7 +164,7 @@ func TestHandleRemoteKnowledgeBasesReportsAvailabilityAndConfiguredMCP(t *testin
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(response.Items) != 1 || response.Items[0].ConfiguredMCP != "existing-handbook" {
+	if len(response.Items) != 1 || response.Items[0].ConfiguredMCP != "content-42" {
 		t.Fatalf("items = %#v", response.Items)
 	}
 	var csgHubResponse map[string]any

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcpschema"
 )
 
@@ -29,6 +30,9 @@ func normalizeServerInput(name string, config map[string]any) (string, map[strin
 	normalizedServer, ok := normalized[name].(map[string]any)
 	if !ok {
 		return "", nil, fmt.Errorf("mcp server config for %q must be an object", name)
+	}
+	if metadata, managed := knowledgebase.ManagedMetadataFromServer(normalizedServer); managed && name != metadata.ContentID {
+		return "", nil, fmt.Errorf("managed knowledge-base MCP server name must match content_id %q", metadata.ContentID)
 	}
 	return name, cloneMap(normalizedServer), nil
 }

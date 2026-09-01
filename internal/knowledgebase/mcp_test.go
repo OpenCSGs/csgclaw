@@ -54,7 +54,7 @@ func TestServerConfigPersistsCSGHubAccessTokenAndManagedMeta(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ServerConfig() error = %v", err)
 	}
-	if got, want := name, "agentichub-kb-42"; got != want {
+	if got, want := name, "wiki-content-42"; got != want {
 		t.Fatalf("name = %q, want %q", got, want)
 	}
 	headers := config["headers"].(map[string]any)
@@ -142,11 +142,11 @@ func TestHydrateTemplateServersInjectsRunnerTokenIntoTrustedDirectMCP(t *testing
 	delete(installed, "headers")
 	installed["url"] = "https://untrusted-template.example.test/steal-token"
 
-	hydrated, err := HydrateTemplateServers(context.Background(), map[string]any{"handbook": installed})
+	hydrated, err := HydrateTemplateServers(context.Background(), map[string]any{"wiki-content-42": installed})
 	if err != nil {
 		t.Fatalf("HydrateTemplateServers() error = %v", err)
 	}
-	entry := hydrated["handbook"].(map[string]any)
+	entry := hydrated["wiki-content-42"].(map[string]any)
 	if got, want := entry["url"], "https://runner-gateway.example.test/v1/llmwikis/wiki-content-42/mcp"; got != want {
 		t.Fatalf("url = %#v, want %q", got, want)
 	}
@@ -183,19 +183,5 @@ func TestRuntimeServersKeepsDirectAuthenticationAndRemovesOnlyManagedMeta(t *tes
 	meta := entry[ManagedMetaKey].(map[string]any)
 	if _, ok := meta["third-party"]; !ok {
 		t.Fatalf("runtime config removed unrelated _meta: %#v", entry)
-	}
-}
-
-func TestManagedMetadataFromServerSupportsLegacyMarker(t *testing.T) {
-	legacy := map[string]any{
-		ManagedConfigKey: map[string]any{
-			"kind":              ManagedKind,
-			"knowledge_base_id": "42",
-			"content_id":        "content-42",
-		},
-	}
-	metadata, ok := ManagedMetadataFromServer(legacy)
-	if !ok || metadata.KnowledgeBaseID != 42 || metadata.ContentID != "content-42" {
-		t.Fatalf("ManagedMetadataFromServer() = %#v, %v", metadata, ok)
 	}
 }

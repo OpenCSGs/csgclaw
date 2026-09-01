@@ -80,7 +80,8 @@ import {
 } from "@/models/modelProviders";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
-import type { MCPServer } from "@/models/mcp";
+import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
+import type { MCPServer, MCPServerSourceStatus } from "@/models/mcp";
 import { skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
 import type { SlashSkillOption } from "@/models/slashCommands";
@@ -202,6 +203,10 @@ export type AgentDetailPaneProps = {
   mcpCandidatesError?: string;
   mcpCandidatesLoading?: boolean;
   mcpServers?: MCPServer[];
+  mcpSourceBusyNames?: ReadonlySet<string>;
+  mcpSourceErrorNames?: ReadonlySet<string>;
+  mcpSourceSyncBusyName?: string;
+  mcpUpdateAvailableNames?: ReadonlySet<string>;
   mcpAddBusy?: boolean;
   mcpAddError?: string;
   mcpDeleteBusy?: boolean;
@@ -215,6 +220,10 @@ export type AgentDetailPaneProps = {
   onAddSkills?: (skillNames: string[]) => Promise<boolean> | boolean;
   onDeleteSkill?: (skill: SlashSkillOption | string) => Promise<boolean> | boolean;
   onInstallMCPServers?: (serverNames: string[]) => Promise<boolean> | boolean;
+  onCheckMCPServerSource?: (
+    server: MCPServer | string,
+  ) => Promise<MCPServerSourceStatus | null> | MCPServerSourceStatus | null;
+  onUpdateMCPServer?: (server: MCPServer | string) => Promise<boolean> | boolean;
   onDeleteMCPServer?: (server: MCPServer | string) => Promise<boolean> | boolean;
   onRetryMCPServers?: () => void | Promise<unknown>;
 };
@@ -268,6 +277,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     mcpCandidatesError = "",
     mcpCandidatesLoading = false,
     mcpServers = [],
+    mcpSourceBusyNames = new Set<string>(),
+    mcpSourceErrorNames = new Set<string>(),
+    mcpSourceSyncBusyName = "",
+    mcpUpdateAvailableNames = new Set<string>(),
     mcpAddBusy = false,
     mcpAddError = "",
     mcpDeleteBusy = false,
@@ -295,6 +308,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onAddSkills,
     onDeleteSkill,
     onInstallMCPServers,
+    onCheckMCPServerSource,
+    onUpdateMCPServer,
     onDeleteMCPServer,
     onRetryMCPServers,
   },
@@ -975,12 +990,18 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 deleteBusy={mcpDeleteBusy}
                 deleteError={mcpDeleteError}
                 servers={mcpServers}
+                sourceBusyNames={mcpSourceBusyNames}
+                sourceErrorNames={mcpSourceErrorNames}
+                sourceSyncBusyName={mcpSourceSyncBusyName}
+                updateAvailableNames={mcpUpdateAvailableNames}
                 t={t}
                 onOpenAddMCP={() => setAddMCPDialogOpen(true)}
                 onRequestDeleteMCP={(server) => {
                   setMCPPendingDelete(server);
                   setDeleteMCPDialogOpen(true);
                 }}
+                onCheckMCPSource={onCheckMCPServerSource}
+                onUpdateMCP={onUpdateMCPServer}
               />
             ) : null}
           </div>
@@ -1521,7 +1542,13 @@ type AgentMCPPanelProps = {
   deleteError: string;
   onOpenAddMCP: () => void;
   onRequestDeleteMCP: (server: MCPServer) => void;
+  onCheckMCPSource?: (server: MCPServer) => Promise<MCPServerSourceStatus | null> | MCPServerSourceStatus | null;
+  onUpdateMCP?: (server: MCPServer) => Promise<boolean> | boolean;
   servers: readonly MCPServer[];
+  sourceBusyNames: ReadonlySet<string>;
+  sourceErrorNames: ReadonlySet<string>;
+  sourceSyncBusyName: string;
+  updateAvailableNames: ReadonlySet<string>;
   t: TranslateFn;
 };
 
@@ -1532,7 +1559,13 @@ function AgentMCPPanel({
   deleteError,
   onOpenAddMCP,
   onRequestDeleteMCP,
+  onCheckMCPSource,
+  onUpdateMCP,
   servers,
+  sourceBusyNames,
+  sourceErrorNames,
+  sourceSyncBusyName,
+  updateAvailableNames,
   t,
 }: AgentMCPPanelProps) {
   return (
@@ -1582,31 +1615,83 @@ function AgentMCPPanel({
       ) : null}
       {servers.length ? (
         <div className="agent-skills-summary-list">
-          {servers.map((server) => (
-            <article key={server.name} className="agent-skills-summary-row agent-mcp-summary-row">
-              <span className="agent-skills-summary-icon" aria-hidden="true">
-                <Server size={18} strokeWidth={1.8} />
-              </span>
-              <div className="agent-skills-summary-copy">
-                <div className="agent-skills-summary-name">{server.name}</div>
-                <p>{server.description || "-"}</p>
-              </div>
-              <Tooltip content={t("agentDeleteMCP")}>
-                <span className="agent-skills-summary-delete">
-                  <Button
-                    className="agent-skill-icon-button"
-                    variant="outlineDanger"
-                    size="sm"
-                    aria-label={t("agentDeleteMCP")}
-                    disabled={deleteBusy}
-                    onClick={() => onRequestDeleteMCP(server)}
-                  >
-                    <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
-                  </Button>
+          {servers.map((server) => {
+            const managedSource = Boolean(mcpManagedKnowledgeBaseSource(server.config));
+            const sourceBusy = sourceBusyNames.has(server.name);
+            const sourceError = sourceErrorNames.has(server.name);
+            const updateAvailable = updateAvailableNames.has(server.name);
+            const syncBusy = sourceSyncBusyName === server.name;
+            return (
+              <article key={server.name} className="agent-skills-summary-row agent-mcp-summary-row">
+                <span className="agent-skills-summary-icon" aria-hidden="true">
+                  <Server size={18} strokeWidth={1.8} />
                 </span>
-              </Tooltip>
-            </article>
-          ))}
+                <div className="agent-skills-summary-copy">
+                  <div className="agent-mcp-name-row">
+                    <div className="agent-skills-summary-name">{server.name}</div>
+                    {managedSource ? (
+                      <span className="agent-mcp-knowledge-badge">{t("agentKnowledgeMCPBadge")}</span>
+                    ) : null}
+                  </div>
+                  <p>{server.description || "-"}</p>
+                  {managedSource && (updateAvailable || sourceError) ? (
+                    <p
+                      className={`agent-mcp-source-hint ${
+                        updateAvailable ? "update-available" : sourceError ? "source-error" : ""
+                      }`.trim()}
+                    >
+                      {updateAvailable ? t("agentKnowledgeMCPUpdateAvailable") : t("agentKnowledgeMCPCheckFailed")}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="agent-mcp-summary-actions">
+                  {updateAvailable && !sourceError && onUpdateMCP ? (
+                    <Button
+                      variant="secondaryGray"
+                      size="sm"
+                      loading={syncBusy}
+                      loadingLabel={t("agentMCPUpdateConfig")}
+                      disabled={sourceBusy || deleteBusy || Boolean(sourceSyncBusyName && !syncBusy)}
+                      onClick={() => {
+                        void onUpdateMCP(server);
+                      }}
+                    >
+                      <RefreshCw aria-hidden="true" size={14} strokeWidth={2} />
+                      {t("agentMCPUpdateConfig")}
+                    </Button>
+                  ) : managedSource && sourceError && onCheckMCPSource ? (
+                    <Button
+                      variant="secondaryGray"
+                      size="sm"
+                      loading={sourceBusy}
+                      loadingLabel={t("agentMCPSourceRetry")}
+                      disabled={deleteBusy || Boolean(sourceSyncBusyName)}
+                      onClick={() => {
+                        void onCheckMCPSource(server);
+                      }}
+                    >
+                      <RefreshCw aria-hidden="true" size={14} strokeWidth={2} />
+                      {t("agentMCPSourceRetry")}
+                    </Button>
+                  ) : null}
+                  <Tooltip content={t("agentDeleteMCP")}>
+                    <span className="agent-skills-summary-delete">
+                      <Button
+                        className="agent-skill-icon-button"
+                        variant="outlineDanger"
+                        size="sm"
+                        aria-label={t("agentDeleteMCP")}
+                        disabled={addBusy || deleteBusy || Boolean(sourceSyncBusyName)}
+                        onClick={() => onRequestDeleteMCP(server)}
+                      >
+                        <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </div>
+              </article>
+            );
+          })}
         </div>
       ) : null}
     </section>

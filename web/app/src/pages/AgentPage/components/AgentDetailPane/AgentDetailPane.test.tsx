@@ -312,3 +312,40 @@ describe("AgentDetailPane memory", () => {
     expect(screen.queryByRole("textbox", { name: "agentMemoryDocumentLabel" })).not.toBeInTheDocument();
   });
 });
+
+describe("AgentDetailPane MCP snapshots", () => {
+  it("offers a manual update when the agent snapshot differs from the global MCP", async () => {
+    const user = userEvent.setup();
+    const onUpdateMCPServer = vi.fn().mockResolvedValue(true);
+    const mcpServer = {
+      name: "kb_investment",
+      description: "Saved knowledge base snapshot",
+      config: {
+        url: "https://old.example.test/mcp",
+        _meta: {
+          "com.opencsg/mcp": {
+            auth_type: "csghub_access_token",
+            content_id: "kb_investment",
+            resource_id: "143",
+            type: "llm_wiki",
+          },
+        },
+      },
+    };
+    render(
+      <Harness
+        workspaceSupported
+        mcpServers={[mcpServer]}
+        mcpUpdateAvailableNames={new Set([mcpServer.name])}
+        onUpdateMCPServer={onUpdateMCPServer}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "agentProfileMCPTab" }));
+    expect(screen.getByText("agentKnowledgeMCPBadge")).toBeInTheDocument();
+    expect(screen.getByText("agentKnowledgeMCPUpdateAvailable")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "agentMCPUpdateConfig" }));
+    expect(onUpdateMCPServer).toHaveBeenCalledWith(mcpServer);
+  });
+});

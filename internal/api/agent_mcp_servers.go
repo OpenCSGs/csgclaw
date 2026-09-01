@@ -8,6 +8,7 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcpschema"
 )
 
@@ -102,18 +103,12 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 				err = fmt.Errorf("mcp server %q config must be an object", name)
 				break
 			}
-			normalized, normalizeErr := mcpschema.NormalizeMCPServers(map[string]any{name: config})
+			server, normalizeErr := agentMCPServerConfig(name, config)
 			if normalizeErr != nil {
 				err = normalizeErr
 				break
 			}
-			server, ok := normalized[name].(map[string]any)
-			if !ok {
-				err = fmt.Errorf("mcp server %q config must be an object", name)
-				break
-			}
-			delete(server, "description")
-			current.Spec.MCPServers[name] = agentengine.MCPServerConfig(server)
+			current.Spec.MCPServers[name] = server
 		}
 	}
 	var updated agentengine.Agent
@@ -127,6 +122,22 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 	h.publishUpdatedAgentUser(serviceAgentFromEngine(updated))
 	view := agent.MCPServersView{AgentID: updated.ID, RuntimeKind: updated.Status.RuntimeKind, Servers: serviceMCPServers(updated.Spec.MCPServers)}
 	writeJSON(w, http.StatusOK, view)
+}
+
+func agentMCPServerConfig(name string, config map[string]any) (agentengine.MCPServerConfig, error) {
+	if metadata, managed := knowledgebase.ManagedMetadataFromServer(config); managed && name != metadata.ContentID {
+		return nil, fmt.Errorf("managed knowledge-base MCP server name must match content_id %q", metadata.ContentID)
+	}
+	normalized, err := mcpschema.NormalizeMCPServers(map[string]any{name: config})
+	if err != nil {
+		return nil, err
+	}
+	server, ok := normalized[name].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("mcp server %q config must be an object", name)
+	}
+	delete(server, "description")
+	return agentengine.MCPServerConfig(server), nil
 }
 
 func (h *Handler) handleBatchDeleteAgentMCPServers(w http.ResponseWriter, r *http.Request) {

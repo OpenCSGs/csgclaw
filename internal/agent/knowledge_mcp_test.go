@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"csgclaw/internal/config"
 	"csgclaw/internal/knowledgebase"
+	agentruntime "csgclaw/internal/runtime"
 	hub "csgclaw/internal/template"
 )
 
@@ -86,22 +88,20 @@ func TestManagedKnowledgeBaseMCPPublishAndRuntimeMaterialization(t *testing.T) {
 		t.Fatalf("published MCP document leaked publisher token: %s", encoded)
 	}
 
-	hubURL := installAgentKnowledgeBaseResponse(t, "https://runner-gateway.example.test/v1/llmwikis/content-42/mcp", "runner-csghub-token")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("CSGHUB_API_BASE_URL", hubURL)
-	t.Setenv("CSGHUB_ACCESS_TOKEN", "runner-csghub-token")
-	t.Setenv("CSGHUB_AIGATEWAY_BASE_URL", "https://must-not-be-used.example.test/v1")
 	svc := &Service{}
-	runtimeServers, err := svc.materializeRuntimeMCPServers(context.Background(), RuntimeKindCodex, published)
+	runtimeServers, err := svc.materializeRuntimeMCPServers(context.Background(), RuntimeKindCodex, map[string]any{"handbook": localConfig})
 	if err != nil {
 		t.Fatalf("materializeRuntimeMCPServers() error = %v", err)
 	}
 	runtimeConfig := runtimeServers["handbook"].(map[string]any)
-	if got, want := runtimeConfig["url"], "https://runner-gateway.example.test/v1/llmwikis/content-42/mcp"; got != want {
+	if got, want := runtimeConfig["url"], "https://publisher-gateway.example.test/v1/llmwikis/content-42/mcp"; got != want {
 		t.Fatalf("runtime url = %#v, want %q", got, want)
 	}
-	headers := runtimeConfig["headers"].(map[string]any)
-	if got, want := headers["Authorization"], "Bearer runner-csghub-token"; got != want {
+	headers, ok := runtimeConfig["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime headers = %#v, want object; config=%#v", runtimeConfig["headers"], runtimeConfig)
+	}
+	if got, want := headers["Authorization"], "Bearer publisher-csghub-token"; got != want {
 		t.Fatalf("runtime Authorization = %#v, want %q", got, want)
 	}
 	if _, managed := knowledgebase.ManagedMetadataFromServer(runtimeConfig); managed {
@@ -134,7 +134,7 @@ func TestTemplateCreateSpecInjectsCurrentRunnerTokenIntoManagedKnowledgeBaseMCP(
 		Name:        "knowledge-worker",
 		Role:        hub.TemplateRoleWorker,
 		RuntimeKind: RuntimeNameCodex,
-	}, map[string]any{"knowledge": templateConfig})
+	}, map[string]any{"content-42": templateConfig})
 	svc, err := NewService(testModelConfig(), config.ServerConfig{}, "manager-image:1", "", WithHubService(hubSvc))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -150,7 +150,7 @@ func TestTemplateCreateSpecInjectsCurrentRunnerTokenIntoManagedKnowledgeBaseMCP(
 	if err != nil {
 		t.Fatalf("resolveTemplateCreateSpec() error = %v", err)
 	}
-	entry := resolved.MCPServers["knowledge"].(map[string]any)
+	entry := resolved.MCPServers["content-42"].(map[string]any)
 	if got, want := entry["url"], "https://runner-gateway.example.test/v1/llmwikis/content-42/mcp"; got != want {
 		t.Fatalf("url = %#v, want %q", got, want)
 	}
@@ -160,5 +160,71 @@ func TestTemplateCreateSpecInjectsCurrentRunnerTokenIntoManagedKnowledgeBaseMCP(
 	}
 	if _, managed := knowledgebase.ManagedMetadataFromServer(entry); !managed {
 		t.Fatalf("resolved config lost managed _meta: %#v", entry)
+	}
+}
+
+func TestDeleteManagedKnowledgeBaseMCPUsesPersistedSnapshotWithoutSourceAccess(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	var reconciled agentruntime.MCPServersChange
+	svc, err := NewService(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindCodex,
+			mcpRestart: func(agentruntime.MCPServersChange) (bool, error) {
+				return false, nil
+			},
+			mcpReconcile: func(_ context.Context, _ agentruntime.Handle, change agentruntime.MCPServersChange) error {
+				reconciled = change
+				return nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	managed := map[string]any{
+		"type":      "remote",
+		"url":       "https://gateway.example.test/snapshot/mcp",
+		"transport": "streamable-http",
+		"headers":   map[string]any{"Authorization": "Bearer saved-token"},
+		knowledgebase.ManagedMetaKey: map[string]any{
+			knowledgebase.ManagedMetaNamespace: map[string]any{
+				"type":        knowledgebase.ManagedMCPType,
+				"resource_id": "42",
+				"content_id":  "content-42",
+				"auth_type":   knowledgebase.ManagedAuthType,
+			},
+		},
+	}
+	svc.agents["u-dev"] = Agent{
+		ID:          "u-dev",
+		Name:        "dev",
+		RuntimeID:   "rt-u-dev",
+		RuntimeKind: RuntimeKindCodex,
+		Role:        RoleWorker,
+		Status:      string(agentruntime.StateRunning),
+		MCPServers:  map[string]any{"content-42": managed},
+		CreatedAt:   time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	updated, err := svc.DeleteMCPServers(context.Background(), "u-dev", []string{"content-42"})
+	if err != nil {
+		t.Fatalf("DeleteMCPServers() error = %v", err)
+	}
+	if len(updated.MCPServers) != 0 {
+		t.Fatalf("updated MCPServers = %#v, want empty", updated.MCPServers)
+	}
+	previous := reconciled.Previous.Servers["content-42"].(map[string]any)
+	if got, want := previous["url"], "https://gateway.example.test/snapshot/mcp"; got != want {
+		t.Fatalf("reconciled previous URL = %#v, want %q", got, want)
+	}
+	if _, managed := knowledgebase.ManagedMetadataFromServer(previous); managed {
+		t.Fatalf("reconciled previous snapshot retained managed metadata: %#v", previous)
+	}
+	if len(reconciled.Current.Servers) != 0 {
+		t.Fatalf("reconciled current servers = %#v, want empty", reconciled.Current.Servers)
 	}
 }

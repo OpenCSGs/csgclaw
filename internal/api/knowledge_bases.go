@@ -118,7 +118,7 @@ func (h *Handler) handleRemoteKnowledgeBases(w http.ResponseWriter, r *http.Requ
 		items = append(items, remoteKnowledgeBaseSummary{
 			Availability:      availability,
 			CSGHubResponse:    csgHubResponse,
-			ConfiguredMCP:     knowledgebase.FindConfiguredServer(servers, item.ID),
+			ConfiguredMCP:     knowledgebase.FindConfiguredServer(servers, item.ContentID),
 			ContentID:         item.ContentID,
 			Description:       item.Description,
 			ID:                item.ID,
@@ -165,7 +165,7 @@ func (h *Handler) handleRemoteKnowledgeBaseMCPConfig(w http.ResponseWriter, r *h
 			http.Error(w, listErr.Error(), http.StatusBadGateway)
 			return
 		}
-		if existing := knowledgebase.FindConfiguredServer(servers, item.ID); existing != "" {
+		if existing := knowledgebase.FindConfiguredServer(servers, item.ContentID); existing != "" {
 			http.Error(w, "mcp server already exists: "+existing, http.StatusConflict)
 			return
 		}

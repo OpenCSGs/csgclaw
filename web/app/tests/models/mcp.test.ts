@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   formatMCPServerDocument,
   hasMCPServerName,
+  managedMCPServerSnapshotDiffers,
+  mcpManagedKnowledgeBaseSource,
   mcpProbeResultFromResponse,
   mcpServersFromCatalogResponse,
   mcpServersFromMap,
@@ -129,5 +131,64 @@ describe("MCP catalog helpers", () => {
     expect(hasMCPServerName(servers, "calendar")).toBe(true);
     expect(hasMCPServerName(servers, "calendar ")).toBe(true);
     expect(hasMCPServerName(servers, "github")).toBe(false);
+  });
+
+  it("reads managed knowledge base identity without treating it as a live reference", () => {
+    const config = {
+      url: "https://gateway.example.test/v1/llmwikis/kb-investment/mcp",
+      _meta: {
+        "com.opencsg/mcp": {
+          auth_type: "csghub_access_token",
+          content_id: "kb-investment",
+          resource_id: "143",
+          type: "llm_wiki",
+        },
+      },
+    };
+
+    expect(mcpManagedKnowledgeBaseSource(config)).toEqual({
+      contentID: "kb-investment",
+      resourceID: "143",
+    });
+  });
+
+  it("detects a newer global snapshot only for the same managed knowledge base", () => {
+    const managed = {
+      _meta: {
+        "com.opencsg/mcp": {
+          auth_type: "csghub_access_token",
+          content_id: "kb-investment",
+          resource_id: "143",
+          type: "llm_wiki",
+        },
+      },
+      headers: { Authorization: "Bearer saved-token" },
+      transport: "streamable_http",
+      type: "http",
+      url: "https://old.example.test/mcp",
+    };
+
+    expect(
+      managedMCPServerSnapshotDiffers(managed, {
+        ...managed,
+        headers: { Authorization: "Bearer current-token" },
+        url: "https://current.example.test/mcp",
+      }),
+    ).toBe(true);
+    expect(managedMCPServerSnapshotDiffers(managed, { ...managed })).toBe(false);
+    expect(
+      managedMCPServerSnapshotDiffers(managed, {
+        ...managed,
+        _meta: {
+          "com.opencsg/mcp": {
+            auth_type: "csghub_access_token",
+            content_id: "kb-tourism",
+            resource_id: "144",
+            type: "llm_wiki",
+          },
+        },
+        url: "https://current.example.test/mcp",
+      }),
+    ).toBe(false);
   });
 });

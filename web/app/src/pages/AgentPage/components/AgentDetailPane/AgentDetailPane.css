@@ -1361,7 +1361,7 @@
 
 .agent-skills-summary-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 28px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
   min-width: 0;
@@ -1413,6 +1413,49 @@
 .agent-mcp-summary-row .agent-skills-summary-copy p {
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+.agent-mcp-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agent-mcp-knowledge-badge {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-500) 10%, var(--gray-100));
+  color: var(--brand-700);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.agent-mcp-summary-row .agent-skills-summary-copy .agent-mcp-source-hint {
+  display: block;
+  margin-top: 7px;
+  color: var(--gray-500);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.agent-mcp-summary-row .agent-skills-summary-copy .agent-mcp-source-hint.update-available {
+  color: var(--warning-700);
+}
+
+.agent-mcp-summary-row .agent-skills-summary-copy .agent-mcp-source-hint.source-error {
+  color: var(--error-700);
+}
+
+.agent-mcp-summary-actions {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .agent-skills-summary-delete {

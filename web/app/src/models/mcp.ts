@@ -19,6 +19,26 @@ export type MCPServerPayload = {
   name: string;
 };
 
+export type MCPManagedKnowledgeBaseSource = {
+  contentID: string;
+  resourceID: string;
+};
+
+export type MCPServerSourceStatus = {
+  agentUpdateAvailable?: boolean;
+  authType: string;
+  configuredEndpointURL: string;
+  contentID: string;
+  globalServerName?: string;
+  globalUpdateAvailable?: boolean;
+  kind: string;
+  latestEndpointURL: string;
+  resourceID: string;
+  sourceDescription?: string;
+  sourceName?: string;
+  updateAvailable: boolean;
+};
+
 export type MCPProbeServerInfo = {
   name?: string;
   title?: string;
@@ -91,6 +111,44 @@ export function mcpServersMap(servers: unknown): Record<string, JSONRecord> {
 export function hasMCPServerName(servers: readonly MCPServer[], name: string | null | undefined): boolean {
   const normalizedName = String(name || "").trim();
   return Boolean(normalizedName && servers.some((server) => server.name === normalizedName));
+}
+
+export function mcpManagedKnowledgeBaseSource(
+  config: JSONRecord | null | undefined,
+): MCPManagedKnowledgeBaseSource | null {
+  if (!config) {
+    return null;
+  }
+  const meta = isJSONRecord(config._meta) ? config._meta : null;
+  const managed = meta && isJSONRecord(meta["com.opencsg/mcp"]) ? meta["com.opencsg/mcp"] : null;
+  if (managed && stringFromUnknown(managed.type) === "llm_wiki") {
+    const resourceID = stringFromUnknown(managed.resource_id);
+    const contentID = stringFromUnknown(managed.content_id);
+    if (resourceID && contentID && stringFromUnknown(managed.auth_type) === "csghub_access_token") {
+      return { contentID, resourceID };
+    }
+  }
+  return null;
+}
+
+export function managedMCPServerSnapshotDiffers(
+  current: JSONRecord | null | undefined,
+  candidate: JSONRecord | null | undefined,
+): boolean {
+  const currentSource = mcpManagedKnowledgeBaseSource(current);
+  const candidateSource = mcpManagedKnowledgeBaseSource(candidate);
+  if (
+    !currentSource ||
+    !candidateSource ||
+    currentSource.resourceID !== candidateSource.resourceID ||
+    currentSource.contentID !== candidateSource.contentID
+  ) {
+    return false;
+  }
+  return ["type", "url", "transport", "headers"].some(
+    (key) =>
+      JSON.stringify(comparableJSONValue(current?.[key])) !== JSON.stringify(comparableJSONValue(candidate?.[key])),
+  );
 }
 
 export function mcpServerPayloadFromDocument(document: unknown): MCPServerPayload | null {
@@ -241,6 +299,20 @@ function cloneMCPServersRecord(value: Record<string, unknown> | null | undefined
 
 function isJSONRecord(value: unknown): value is JSONRecord {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function comparableJSONValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(comparableJSONValue);
+  }
+  if (!isJSONRecord(value)) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => [key, comparableJSONValue(nested)]),
+  );
 }
 
 function stringFromUnknown(value: unknown): string {
