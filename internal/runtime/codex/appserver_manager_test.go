@@ -367,6 +367,141 @@ func TestAppServerManagerPromptCompletesTurn(t *testing.T) {
 	}
 }
 
+func TestAppServerManagerCheckpointsMemoryWithoutPublishingMaintenanceOutput(t *testing.T) {
+	withAppServerHelperCommand(t, "memory-checkpoint")
+	originalIdle := appServerMemoryCheckpointIdleTime
+	originalTimeout := appServerMemoryMaintenanceTimeout
+	originalDedup := appServerMemoryMaintenanceDedup
+	originalCleanup := appServerMemoryCheckpointCleanup
+	appServerMemoryCheckpointIdleTime = 20 * time.Millisecond
+	appServerMemoryMaintenanceTimeout = 2 * time.Second
+	appServerMemoryMaintenanceDedup = time.Second
+	appServerMemoryCheckpointCleanup = 20 * time.Millisecond
+	t.Cleanup(func() {
+		appServerMemoryCheckpointIdleTime = originalIdle
+		appServerMemoryMaintenanceTimeout = originalTimeout
+		appServerMemoryMaintenanceDedup = originalDedup
+		appServerMemoryCheckpointCleanup = originalCleanup
+	})
+	deleteMarker := filepath.Join(t.TempDir(), "checkpoint-deleted")
+	t.Setenv("CSGCLAW_MEMORY_CHECKPOINT_DELETE_MARKER", deleteMarker)
+
+	sink := &recordingSink{}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(sink))
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.MemoryEnabled = true
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+
+	roomThread, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
+	if err != nil {
+		t.Fatalf("EnsureEngineSession() error = %v", err)
+	}
+	if roomThread != "room-thread" {
+		t.Fatalf("room thread = %q, want room-thread", roomThread)
+	}
+	if _, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: roomThread,
+		Prompt:    []PromptContentBlock{TextBlock("remember my preference")},
+	}); err != nil {
+		t.Fatalf("Prompt() error = %v", err)
+	}
+
+	live := manager.liveSession(spec.RuntimeID)
+	waitForRuntime(t, func() bool {
+		live.memoryCheckpointMu.Lock()
+		defer live.memoryCheckpointMu.Unlock()
+		return !live.memoryLastMaintenance.IsZero() && live.memoryMaintenanceID == ""
+	})
+	waitForRuntime(t, func() bool {
+		_, err := os.Stat(deleteMarker)
+		return err == nil
+	})
+	if _, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: roomThread,
+		Prompt:    []PromptContentBlock{TextBlock("second preference")},
+	}); err != nil {
+		t.Fatalf("second Prompt() error = %v", err)
+	}
+	for _, event := range sink.snapshot() {
+		if event.SessionID == "main-thread" {
+			t.Fatalf("hidden maintenance event leaked to runtime sink: %#v", event)
+		}
+	}
+}
+
+func TestAppServerManagerKeepsThreadBusyWhileMemoryForkIsInFlight(t *testing.T) {
+	withAppServerHelperCommand(t, "memory-checkpoint")
+	forkEntered := filepath.Join(t.TempDir(), "fork-entered")
+	forkRelease := filepath.Join(t.TempDir(), "fork-release")
+	t.Setenv("CSGCLAW_MEMORY_CHECKPOINT_FORK_ENTERED", forkEntered)
+	t.Setenv("CSGCLAW_MEMORY_CHECKPOINT_FORK_RELEASE", forkRelease)
+
+	manager := newAppServerManager(testAppServerManagerDeps())
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.MemoryEnabled = true
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+	roomThread, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
+	if err != nil {
+		t.Fatalf("EnsureEngineSession() error = %v", err)
+	}
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+			SessionID: roomThread,
+			Prompt:    []PromptContentBlock{TextBlock("remember my preference")},
+		})
+		firstDone <- err
+	}()
+	waitForRuntime(t, func() bool {
+		_, err := os.Stat(forkEntered)
+		return err == nil
+	})
+	_, secondErr := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+		SessionID: roomThread,
+		Prompt:    []PromptContentBlock{TextBlock("second preference")},
+	})
+	if secondErr == nil || !strings.Contains(secondErr.Error(), "turn already in progress") {
+		t.Fatalf("second Prompt() error = %v, want in-progress rejection while fork is blocked", secondErr)
+	}
+	if err := os.WriteFile(forkRelease, []byte("release"), 0o600); err != nil {
+		t.Fatalf("release blocked fork: %v", err)
+	}
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first Prompt() error = %v", err)
+	}
+}
+
+func TestAppServerManagerThrottlesFailedMemoryForks(t *testing.T) {
+	withAppServerHelperCommand(t, "memory-checkpoint")
+	t.Setenv("CSGCLAW_MEMORY_CHECKPOINT_FORK_ERROR", "1")
+	manager := newAppServerManager(testAppServerManagerDeps())
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.MemoryEnabled = true
+	if _, err := manager.Start(context.Background(), spec); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() { _ = manager.Stop(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}) })
+	roomThread, err := manager.EnsureEngineSession(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, "room-1")
+	if err != nil {
+		t.Fatalf("EnsureEngineSession() error = %v", err)
+	}
+	for _, prompt := range []string{"remember my preference", "second preference"} {
+		if _, err := manager.Prompt(context.Background(), SessionHandle{RuntimeID: spec.RuntimeID}, PromptRequest{
+			SessionID: roomThread,
+			Prompt:    []PromptContentBlock{TextBlock(prompt)},
+		}); err != nil {
+			t.Fatalf("Prompt(%q) error = %v", prompt, err)
+		}
+	}
+}
+
 func TestAppServerManagerPublishFileDynamicToolEndToEnd(t *testing.T) {
 	withAppServerHelperCommand(t, "prompt-publish-file")
 	dir := t.TempDir()
@@ -1249,6 +1384,45 @@ func TestAppServerEventAdapterStreamsAgentMessageDeltasWithoutCompletedDuplicate
 	}
 	if phase := live.agentMessagePhase("msg-1"); phase != "" || live.hasStreamedAgentMessage("msg-1") {
 		t.Fatalf("completed agent message retained stream state: phase=%q streamed=%v", phase, live.hasStreamedAgentMessage("msg-1"))
+	}
+}
+
+func TestAppServerEventAdapterIgnoresStaleCompletionForNewTurn(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	waiter, err := live.registerAppServerTurnWaiter("main-thread")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiter.setTurnID("turn-new")
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "turn/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turn":     map[string]any{"id": "turn-old", "status": "completed"},
+		}),
+	})
+	if len(waiter.ch) != 0 {
+		t.Fatalf("stale completion reached new waiter: %#v", <-waiter.ch)
+	}
+	if events := sink.snapshot(); len(events) != 0 {
+		t.Fatalf("stale completion leaked as runtime event: %#v", events)
+	}
+
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{
+		Method: "turn/completed",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "main-thread",
+			"turn":     map[string]any{"id": "turn-new", "status": "completed"},
+		}),
+	})
+	select {
+	case result := <-waiter.ch:
+		if !result.success || result.turnID != "turn-new" {
+			t.Fatalf("new turn completion = %#v", result)
+		}
+	default:
+		t.Fatal("matching completion did not reach new waiter")
 	}
 }
 
@@ -2584,6 +2758,82 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				writeRPCNotification(t, "item/completed", map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "item-1", "type": "agentMessage", "text": "done"}})
 				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-1", "status": "completed"}})
 				return rpcResult(msg["id"], map[string]any{"turnId": "turn-1"}), true
+			default:
+				return nil, false
+			}
+		})
+	case "memory-checkpoint":
+		threadStarts := 0
+		forks := 0
+		roomTurns := 0
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				threadStarts++
+				threadID := "main-thread"
+				if threadStarts > 1 {
+					threadID = "room-thread"
+				}
+				return rpcResult(msg["id"], map[string]any{"threadId": threadID}), true
+			case "thread/fork":
+				forks++
+				if forks > 1 {
+					t.Fatalf("checkpoint fork count = %d, want one within throttle interval", forks)
+				}
+				params, _ := msg["params"].(map[string]any)
+				if params["threadId"] != "room-thread" {
+					t.Fatalf("checkpoint fork params = %#v", params)
+				}
+				if entered := strings.TrimSpace(os.Getenv("CSGCLAW_MEMORY_CHECKPOINT_FORK_ENTERED")); entered != "" {
+					if err := os.WriteFile(entered, []byte("entered"), 0o600); err != nil {
+						t.Fatalf("write fork-entered marker: %v", err)
+					}
+					release := os.Getenv("CSGCLAW_MEMORY_CHECKPOINT_FORK_RELEASE")
+					deadline := time.Now().Add(2 * time.Second)
+					for {
+						if _, err := os.Stat(release); err == nil {
+							break
+						}
+						if time.Now().After(deadline) {
+							t.Fatalf("timed out waiting to release blocked checkpoint fork")
+						}
+						time.Sleep(5 * time.Millisecond)
+					}
+				}
+				if os.Getenv("CSGCLAW_MEMORY_CHECKPOINT_FORK_ERROR") != "" {
+					return rpcError(msg["id"], -32000, "fork unavailable"), true
+				}
+				return rpcResult(msg["id"], map[string]any{"thread": map[string]any{"id": "checkpoint-thread"}}), true
+			case "thread/delete":
+				params, _ := msg["params"].(map[string]any)
+				if params["threadId"] != "checkpoint-thread" {
+					t.Fatalf("checkpoint delete params = %#v", params)
+				}
+				if err := os.WriteFile(os.Getenv("CSGCLAW_MEMORY_CHECKPOINT_DELETE_MARKER"), []byte("deleted"), 0o600); err != nil {
+					t.Fatalf("write checkpoint delete marker: %v", err)
+				}
+				return rpcResult(msg["id"], map[string]any{}), true
+			case "turn/start":
+				params, _ := msg["params"].(map[string]any)
+				threadID, _ := params["threadId"].(string)
+				turnID := "turn-room"
+				message := "room done"
+				if threadID == "main-thread" {
+					turnID = "turn-maintenance"
+					message = "OK"
+					assertTurnStartParams(t, msg, "main-thread", "medium", memoryMaintenancePrompt)
+				} else {
+					roomTurns++
+					prompt := "remember my preference"
+					if roomTurns > 1 {
+						prompt = "second preference"
+					}
+					assertTurnStartParams(t, msg, "room-thread", "medium", prompt)
+				}
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID}})
+				writeRPCNotification(t, "item/completed", map[string]any{"threadId": threadID, "turnId": turnID, "item": map[string]any{"id": "message-" + turnID, "type": "agentMessage", "text": message}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID, "status": "completed"}})
+				return rpcResult(msg["id"], map[string]any{"turnId": turnID}), true
 			default:
 				return nil, false
 			}

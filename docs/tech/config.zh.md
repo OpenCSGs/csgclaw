@@ -136,6 +136,11 @@ Memory 文件属于自动生成的 runtime state，必须始终生效的 Agent �
 删除 Agent 时仍会删除完整 Agent home，包括 memory。
 
 对于完整的 Codex worker profile，CSGClaw 会写入 `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml`，其中 OpenAI 兼容代理 provider 始终使用 `wire_api = "responses"`，因为 Codex CLI 的 app-server 路径走的是 Responses API。
+启用 Codex 记忆时，CSGClaw 会设置 `memories.min_rollout_idle_hours = 1`，使用 Codex 支持的最短空闲窗口，让已结束的房间线程更早具备后台提取资格。
+由于 Codex 会跳过当前活跃线程，CSGClaw 会在房间对话轮次成功结束后创建不可见 checkpoint，每个会话每小时最多一次，同时保持原线程继续服务当前房间。
+Checkpoint 空闲满一小时后，CSGClaw 会在 Runtime 私有的 maintenance thread 上发送不可见维护轮次，因此即使用户始终不进入其他房间，也能启动记忆提取。
+Checkpoint 和维护输出不会发送到房间，但后台提取与合并请求会消耗模型额度，并且仍可能被 Codex 的额度保护延后。
+维护触发成功后，CSGClaw 会保留 checkpoint 30 分钟供异步记忆流水线完成，然后将其删除，避免 Codex thread store 持续增长。
 生成的 provider 使用 HTTP Responses，而不是 Responses WebSocket。
 如果上游明确表示不支持 Responses 端点，或内置 CLIProxy 的 Codex/ClaudeCode Responses 后端在纯文本请求上返回 5xx，CSGClaw 会保持 Codex 侧的 Responses 配置不变，并在代理后面回退到上游 chat completions。
 当 Responses 不受支持时，runtime 校验会继续探测 chat completions 回退，因此错误的 base URL 不会仅因为 `/responses` 返回 `404` 就通过启动校验。

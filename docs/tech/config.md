@@ -136,6 +136,11 @@ Recreation replaces generated configuration and model catalogs, process metadata
 Deleting the Agent still removes its complete Agent home, including memory.
 
 For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml` with an OpenAI-compatible proxy provider and always sets `wire_api = "responses"` because the Codex CLI app-server path uses the Responses API.
+When Codex memory is enabled, CSGClaw sets `memories.min_rollout_idle_hours = 1`, the minimum supported idle window, so completed room threads become eligible for background extraction sooner.
+Because Codex skips the currently active thread, CSGClaw forks an invisible checkpoint after a successful room turn, at most once per conversation per hour, without changing the thread that continues serving the room.
+After the checkpoint has been idle for one hour, CSGClaw sends an invisible maintenance turn on the Runtime's private maintenance thread so memory extraction can run even when the user never opens another room.
+Checkpoint and maintenance output is not delivered to the room, but the background extraction and consolidation requests consume model usage and may still be deferred by Codex's rate-limit guard.
+After a successful maintenance trigger, CSGClaw retains the checkpoint for 30 minutes so the asynchronous memory pipeline can finish, then deletes it to keep the Codex thread store bounded.
 The generated provider uses HTTP Responses rather than Responses WebSocket.
 If the upstream provider reports the Responses endpoint as unsupported, or the embedded CLIProxy Codex/ClaudeCode Responses backend returns a 5xx for a text-only request, CSGClaw keeps the Codex-side Responses configuration and falls back to upstream chat completions behind the proxy.
 Runtime validation probes the chat completions fallback when Responses is unsupported, so an invalid base URL cannot pass startup merely because `/responses` returned `404`.

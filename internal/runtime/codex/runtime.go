@@ -75,6 +75,7 @@ type SessionSpec struct {
 	StderrPath           string
 	Profile              agentruntime.Profile
 	ExecutionMode        string
+	MemoryEnabled        bool
 	ConversationSessions map[string]string
 }
 
@@ -717,6 +718,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 		return nil, err
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
+	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
 	manager := r.sessionManager()
 	tracker, tracksSessions := manager.(interface{ hasSession(string) bool })
 	if !tracksSessions || !tracker.hasSession(runtimeID) {
@@ -825,6 +827,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		return nil, err
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
+	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
 	if err := r.mkdirAll(spec.WorkspaceDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create codex workspace dir %s: %w", spec.WorkspaceDir, err)
 	}

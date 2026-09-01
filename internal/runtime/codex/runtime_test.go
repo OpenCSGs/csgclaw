@@ -2683,6 +2683,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		`[memories]`,
 		`generate_memories = false`,
 		`use_memories = false`,
+		`min_rollout_idle_hours = 6`,
 		``,
 	}, "\n")
 	if err := os.WriteFile(filepath.Join(hostHome, ".codex", configFileName), []byte(hostConfig), 0o600); err != nil {
@@ -2760,6 +2761,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		`memories = true`,
 		`generate_memories = true`,
 		`use_memories = true`,
+		`min_rollout_idle_hours = 1`,
 	} {
 		if !strings.Contains(configText, want) {
 			t.Fatalf("runtime config missing %q:\n%s", want, configText)
@@ -2775,6 +2777,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		`memories = false`,
 		`generate_memories = false`,
 		`use_memories = false`,
+		`min_rollout_idle_hours = 6`,
 	} {
 		if strings.Contains(configText, unwanted) {
 			t.Fatalf("runtime config still contains stale host directive %q:\n%s", unwanted, configText)
@@ -2814,6 +2817,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		`generate_memories = false`,
 		csgclawMemoryConfigEndMarker,
 		`use_memories = false`,
+		`min_rollout_idle_hours = 6`,
 		``,
 	}, "\n")
 
@@ -2845,6 +2849,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		`default_mode_request_user_input = false`,
 		`generate_memories = false`,
 		`use_memories = false`,
+		`min_rollout_idle_hours = 6`,
 	} {
 		if strings.Contains(first, unwanted) {
 			t.Fatalf("managed config should replace stale directive %q:\n%s", unwanted, first)
@@ -2857,6 +2862,7 @@ func TestConfigureCodexHomeConfigReplacesManagedBlocksIdempotently(t *testing.T)
 		`memories = true`,
 		`generate_memories = true`,
 		`use_memories = true`,
+		`min_rollout_idle_hours = 1`,
 	} {
 		if !strings.Contains(first, expected) {
 			t.Fatalf("managed config should contain sandbox directive %q:\n%s", expected, first)
@@ -2879,6 +2885,7 @@ func TestConfigureCodexHomeConfigDisablesMemories(t *testing.T) {
 		`features.memories = false`,
 		`memories.generate_memories = false`,
 		`memories.use_memories = false`,
+		`memories.min_rollout_idle_hours = 1`,
 	} {
 		if !strings.Contains(config, want) {
 			t.Fatalf("disabled memory config missing %q:\n%s", want, config)

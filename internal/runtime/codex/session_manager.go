@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -18,6 +19,8 @@ type liveSession struct {
 	mu                    sync.Mutex
 	conversationResumeMu  sync.Mutex
 	conversationPersistMu sync.Mutex
+	memoryCheckpointMu    sync.Mutex
+	memoryMaintenanceMu   sync.Mutex
 	session               *Session
 	appClient             *appServerClient
 	cmd                   *exec.Cmd
@@ -26,6 +29,10 @@ type liveSession struct {
 	done                  chan struct{}
 	spec                  SessionSpec
 	conversationSessions  map[string]string
+	memoryCheckpointLast  map[string]time.Time
+	memoryCheckpointBusy  map[string]bool
+	memoryLastMaintenance time.Time
+	memoryMaintenanceID   string
 	loadedConversations   map[string]bool
 	filePublishingThreads map[string]bool
 	turnWaiters           map[string]*appServerTurnWaiter

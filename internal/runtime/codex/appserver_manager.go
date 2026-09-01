@@ -145,6 +145,8 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		spec:                  spec,
 		appClient:             appClient,
 		conversationSessions:  conversationSessions,
+		memoryCheckpointLast:  make(map[string]time.Time),
+		memoryCheckpointBusy:  make(map[string]bool),
 		loadedConversations:   make(map[string]bool),
 		filePublishingThreads: make(map[string]bool),
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
@@ -316,17 +318,13 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	}
 	promptInput, err := appServerPromptInput(req)
 	if err != nil {
-		if m.deps.EventSink != nil {
-			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, err))
-		}
+		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
 
 	waiter, err := live.registerAppServerTurnWaiter(sessionID)
 	if err != nil {
-		if m.deps.EventSink != nil {
-			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, err))
-		}
+		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
 	defer live.removeAppServerTurnWaiter(sessionID, waiter)
@@ -348,15 +346,11 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		)
 		if ctx.Err() != nil {
 			response, stopErr := m.stopCanceledAppServerTurn(ctx, live, waiter, "turn/start context canceled")
-			if m.deps.EventSink != nil {
-				m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, stopErr))
-			}
+			m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, stopErr))
 			return response, stopErr
 		}
 		err = fmt.Errorf("codex turn/start failed: %w", err)
-		if m.deps.EventSink != nil {
-			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, err))
-		}
+		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
@@ -382,9 +376,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 			"last_activity", waiter.currentLastActivity(),
 			"error", err,
 		)
-		if m.deps.EventSink != nil {
-			m.deps.EventSink.Publish(promptFailedEvent(runtimeID, sessionID, err))
-		}
+		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return resp, err
 	}
 	live.appClient.logDebug("codex app-server turn wait completed",
@@ -394,9 +386,8 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		"duration", time.Since(waitStartAt),
 		"stop_reason", strings.TrimSpace(resp.StopReason),
 	)
-	if m.deps.EventSink != nil {
-		m.deps.EventSink.Publish(promptCompletedEvent(runtimeID, sessionID, resp))
-	}
+	m.publishAppServerEvent(promptCompletedEvent(runtimeID, sessionID, resp))
+	m.maybeCreateMemoryCheckpoint(live, sessionID)
 	return resp, nil
 }
 
@@ -1285,6 +1276,14 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	s.mu.Unlock()
 	if waiter == nil {
 		return false
+	}
+	// A final agent message can release the previous Prompt before its trailing
+	// turn/completed notification arrives. Do not let that stale notification
+	// complete the next Prompt registered on the same thread.
+	expectedTurnID := waiter.currentTurnID()
+	resultTurnID := strings.TrimSpace(result.turnID)
+	if expectedTurnID != "" && resultTurnID != "" && expectedTurnID != resultTurnID {
+		return true
 	}
 	waiter.apply(&result)
 	if result.userInputStateChanged {

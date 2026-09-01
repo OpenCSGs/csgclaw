@@ -436,6 +436,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 				live.notifyAppServerTurn(threadID, appServerTurnResult{
 					success:    true,
 					stopReason: StopReasonEndTurn,
+					turnID:     appServerNotificationTurnID(params),
 					activity:   "agentMessage:completed:" + itemID,
 				})
 			}
@@ -455,6 +456,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			live.notifyAppServerTurn(threadID, appServerTurnResult{
 				success:    true,
 				stopReason: StopReasonEndTurn,
+				turnID:     appServerNotificationTurnID(params),
 				activity:   "agentMessage:completed:" + itemID,
 			})
 		}
@@ -910,6 +912,9 @@ func (m *appServerManager) publishAppServerEvent(event SessionEvent) {
 	event.RuntimeKind = agentruntime.KindCodex
 	event.RuntimeID = strings.TrimSpace(event.RuntimeID)
 	event.SessionID = strings.TrimSpace(event.SessionID)
+	if live := m.liveSession(event.RuntimeID); live != nil && live.isMemoryMaintenanceThread(event.SessionID) {
+		return
+	}
 	event.ReceivedAt = time.Now().UTC()
 	m.deps.EventSink.Publish(event)
 }
