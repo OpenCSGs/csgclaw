@@ -8,7 +8,18 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
-import { ChevronLeft, ChevronRight, Download, Expand, Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Expand,
+  Maximize2,
+  Minimize2,
+  Minus,
+  Plus,
+  RotateCcw,
+  X,
+} from "lucide-react";
 import { Button, Tooltip } from "@/components/ui";
 import { formatAttachmentSize } from "@/models/attachments";
 import { DOCUMENT_PREVIEW_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
@@ -49,6 +60,7 @@ export function DocumentPreviewPanel({
   const [data, setData] = useState<ArrayBuffer | null>(null);
   const [objectURL, setObjectURL] = useState("");
   const [previewTruncated, setPreviewTruncated] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [loadState, setLoadState] = useState<"error" | "loading" | "ready">("loading");
 
   useEffect(() => {
@@ -141,6 +153,15 @@ export function DocumentPreviewPanel({
   }, [onClose]);
 
   useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreen(document.fullscreenElement === panelRef.current);
+    };
+    handleFullscreenChange();
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
     return () => anchor?.focus({ preventScroll: true });
   }, [anchor]);
 
@@ -195,6 +216,14 @@ export function DocumentPreviewPanel({
     } catch {
       // Keyboard resizing remains available when browser storage is disabled.
     }
+  }
+
+  async function toggleFullscreen() {
+    if (document.fullscreenElement === panelRef.current) {
+      await document.exitFullscreen?.();
+      return;
+    }
+    await panelRef.current?.requestFullscreen?.();
   }
 
   const style = { "--document-preview-panel-width": `${panelWidth}px` } as CSSProperties;
@@ -306,15 +335,15 @@ export function DocumentPreviewPanel({
               <Expand aria-hidden="true" size={15} />
             </Button>
           </Tooltip>
-          <Tooltip content={t("attachmentPreviewFullscreen")}>
+          <Tooltip content={t(fullscreen ? "attachmentPreviewExitFullscreen" : "attachmentPreviewFullscreen")}>
             <Button
               iconOnly
               size="sm"
               variant="tertiaryGray"
-              aria-label={t("attachmentPreviewFullscreen")}
-              onClick={() => void panelRef.current?.requestFullscreen?.()}
+              aria-label={t(fullscreen ? "attachmentPreviewExitFullscreen" : "attachmentPreviewFullscreen")}
+              onClick={() => void toggleFullscreen()}
             >
-              <Maximize2 aria-hidden="true" size={15} />
+              {fullscreen ? <Minimize2 aria-hidden="true" size={15} /> : <Maximize2 aria-hidden="true" size={15} />}
             </Button>
           </Tooltip>
           {downloadURL ? (

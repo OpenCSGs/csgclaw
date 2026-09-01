@@ -60,7 +60,7 @@ export default function DocxPreview({
     return <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>;
   }
   return (
-    <div className="document-preview-docx-shell">
+    <div className={`document-preview-docx-shell ${headings.length > 0 ? "has-outline" : "without-outline"}`}>
       {headings.length > 0 ? (
         <aside className="document-preview-docx-outline" aria-label={t("attachmentPreviewOutline")}>
           {headings.map((heading, index) => (

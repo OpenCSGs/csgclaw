@@ -315,6 +315,10 @@
   grid-template-columns: minmax(120px, 22%) minmax(0, 1fr);
 }
 
+.document-preview-docx-shell.without-outline {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .document-preview-docx-outline {
   padding: 14px 10px;
   display: grid;
@@ -398,14 +402,45 @@
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
+.document-preview-pdf,
+.document-preview-powerpoint {
+  height: 100%;
+}
+
 .document-preview-pdf-main,
 .document-preview-ppt-stage-shell {
   min-width: 0;
   min-height: 0;
   padding: 20px;
-  display: grid;
-  place-items: center;
   overflow: auto;
+}
+
+.document-preview-ppt-stage-shell {
+  display: block;
+}
+
+.document-preview-pdf-pages {
+  width: max-content;
+  min-width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+}
+
+.document-preview-pdf-page {
+  width: max-content;
+  min-height: 120px;
+  display: grid;
+  place-items: start center;
+  scroll-margin-top: 20px;
+}
+
+.document-preview-pdf-page-placeholder {
+  width: 612px;
+  max-width: none;
+  aspect-ratio: 612 / 792;
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .document-preview-pdf-main .react-pdf__Page {
@@ -449,8 +484,9 @@
 
 .document-preview-ppt-stage {
   width: 960px;
-  height: 540px;
-  transform-origin: center;
+  min-height: 540px;
+  margin: 0 auto;
+  transform-origin: top center;
 }
 
 @media (max-width: 960px) {
