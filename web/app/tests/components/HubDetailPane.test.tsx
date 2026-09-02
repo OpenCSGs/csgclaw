@@ -464,6 +464,7 @@ function renderMCPDetailPane({
                   ? "https://current.example.test/mcp"
                   : "https://old.example.test/mcp",
                 resourceID: "143",
+                sourceAvailable: true,
                 updateAvailable: sourceUpdateAvailable,
               }
             : null,

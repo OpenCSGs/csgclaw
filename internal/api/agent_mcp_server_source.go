@@ -8,30 +8,23 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
-	"csgclaw/internal/knowledgebase"
 )
 
 type agentMCPServerSourceSyncResponse struct {
-	Agent       agent.MCPServersView          `json:"agent"`
-	GlobalState map[string]any                `json:"global_state"`
-	Source      mcpServerSourceStatusResponse `json:"source"`
+	Agent  agent.MCPServersView          `json:"agent"`
+	Source mcpServerSourceStatusResponse `json:"source"`
 }
 
 type resolvedAgentMCPServerSource struct {
-	Agent           agentengine.Agent
-	AgentName       string
-	GlobalName      string
-	GlobalRefreshed map[string]any
-	Managed         resolvedManagedMCPServerSource
+	Agent       agentengine.Agent
+	AgentName   string
+	Managed     resolvedManagedMCPServerSource
+	SourceError error
 }
 
 func (h *Handler) handleAgentMCPServerSource(w http.ResponseWriter, r *http.Request) {
 	if h.agentEngine == nil {
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
-		return
-	}
-	if h.mcp == nil {
-		http.Error(w, "mcp service is not configured", http.StatusServiceUnavailable)
 		return
 	}
 	agentID := strings.TrimSpace(pathValue(r, "id"))
@@ -53,12 +46,11 @@ func (h *Handler) handleAgentMCPServerSource(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	globalState, globalName, err := h.persistManagedMCPGlobalSnapshot(r.Context(), resolved)
-	if err != nil {
-		writeMCPServerError(w, err)
+	if resolved.SourceError != nil {
+		writeMCPServerSourceError(w, resolved.SourceError)
 		return
 	}
+
 	server, err := agentMCPServerConfig(resolved.AgentName, resolved.Managed.Refreshed)
 	if err != nil {
 		writeAgentMCPServersMutationError(w, err)
@@ -81,8 +73,6 @@ func (h *Handler) handleAgentMCPServerSource(w http.ResponseWriter, r *http.Requ
 	status := resolved.Managed.Status
 	status.AgentUpdateAvailable = false
 	status.ConfiguredEndpointURL = status.LatestEndpointURL
-	status.GlobalServerName = globalName
-	status.GlobalUpdateAvailable = false
 	status.UpdateAvailable = false
 	writeJSON(w, http.StatusOK, agentMCPServerSourceSyncResponse{
 		Agent: agent.MCPServersView{
@@ -90,8 +80,7 @@ func (h *Handler) handleAgentMCPServerSource(w http.ResponseWriter, r *http.Requ
 			RuntimeKind: updated.Status.RuntimeKind,
 			Servers:     serviceMCPServers(updated.Spec.MCPServers),
 		},
-		GlobalState: globalState,
-		Source:      status,
+		Source: status,
 	})
 }
 
@@ -107,45 +96,22 @@ func (h *Handler) resolveAgentMCPServerSource(ctx context.Context, agentID, name
 	config := map[string]any(raw)
 	managed, err := h.resolveManagedMCPServerSource(ctx, config)
 	if err != nil {
-		return resolvedAgentMCPServerSource{}, err
-	}
-	servers, err := h.mcp.ListServers(ctx)
-	if err != nil {
-		return resolvedAgentMCPServerSource{}, err
-	}
-	metadata, _ := knowledgebase.ManagedMetadataFromServer(config)
-	globalName := knowledgebase.FindConfiguredServer(servers, metadata.ContentID)
-	globalUpdateAvailable := globalName == ""
-	var globalRefreshed map[string]any
-	if globalName != "" {
-		globalConfig, ok := servers[globalName].(map[string]any)
-		if !ok {
-			return resolvedAgentMCPServerSource{}, fmt.Errorf("mcp server %q config must be an object", globalName)
-		}
-		globalRefreshed, err = knowledgebase.RefreshManagedServerConfig(globalConfig, managed.Item, managed.Connection.CSGHubAccessToken)
-		if err != nil {
+		unavailable, missing := unavailableManagedMCPServerSource(config, err)
+		if !missing {
 			return resolvedAgentMCPServerSource{}, err
 		}
-		globalUpdateAvailable = managedMCPRuntimeSnapshotChanged(globalConfig, globalRefreshed)
+		return resolvedAgentMCPServerSource{
+			Agent:       current,
+			AgentName:   name,
+			Managed:     unavailable,
+			SourceError: err,
+		}, nil
 	}
 	managed.Status.AgentUpdateAvailable = managedMCPRuntimeSnapshotChanged(config, managed.Refreshed)
-	managed.Status.GlobalServerName = globalName
-	managed.Status.GlobalUpdateAvailable = globalUpdateAvailable
-	managed.Status.UpdateAvailable = managed.Status.AgentUpdateAvailable || globalUpdateAvailable
+	managed.Status.UpdateAvailable = managed.Status.AgentUpdateAvailable
 	return resolvedAgentMCPServerSource{
-		Agent:           current,
-		AgentName:       name,
-		GlobalName:      globalName,
-		GlobalRefreshed: globalRefreshed,
-		Managed:         managed,
+		Agent:     current,
+		AgentName: name,
+		Managed:   managed,
 	}, nil
-}
-
-func (h *Handler) persistManagedMCPGlobalSnapshot(ctx context.Context, resolved resolvedAgentMCPServerSource) (map[string]any, string, error) {
-	if resolved.GlobalName != "" {
-		state, err := h.mcp.UpdateServer(ctx, resolved.GlobalName, resolved.GlobalName, resolved.GlobalRefreshed)
-		return state, resolved.GlobalName, err
-	}
-	state, err := h.mcp.CreateServer(ctx, resolved.Managed.CanonicalName, resolved.Managed.CanonicalConfig)
-	return state, resolved.Managed.CanonicalName, err
 }

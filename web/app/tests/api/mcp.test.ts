@@ -146,15 +146,40 @@ describe("MCP API", () => {
       configuredEndpointURL: "https://old.example.test/mcp",
       contentID: "kb-investment",
       globalServerName: undefined,
-      globalUpdateAvailable: false,
       kind: "llm_wiki",
       latestEndpointURL: "https://current.example.test/mcp",
       resourceID: "143",
+      sourceAvailable: true,
       sourceDescription: "Investment knowledge base",
       sourceName: "Investment",
       updateAvailable: true,
     });
     expect(fetchMock).toHaveBeenCalledWith("api/v1/mcp-servers/kb-investment/source", expect.any(Object));
+  });
+
+  it("reports a deleted knowledge base source as unavailable", async () => {
+    mockFetch(
+      async () =>
+        new Response(
+          JSON.stringify({
+            auth_type: "csghub_access_token",
+            configured_endpoint_url: "https://old.example.test/mcp",
+            content_id: "kb-investment",
+            kind: "agentichub_knowledge_base",
+            latest_endpoint_url: "",
+            resource_id: "143",
+            source_available: false,
+            update_available: false,
+          }),
+          { status: 200 },
+        ),
+    );
+
+    await expect(fetchAgentMCPServerSourceStatus("agent-1", "kb-investment")).resolves.toMatchObject({
+      contentID: "kb-investment",
+      sourceAvailable: false,
+      updateAvailable: false,
+    });
   });
 
   it("manually syncs a managed MCP source and returns the persisted snapshot", async () => {
@@ -211,19 +236,14 @@ describe("MCP API", () => {
                 kb_investment: { url: "https://current.example.test/mcp" },
               },
             },
-            global_state: {
-              mcpServers: {
-                kb_investment: { url: "https://current.example.test/mcp" },
-              },
-            },
             source: {
               auth_type: "csghub_access_token",
               configured_endpoint_url: "https://current.example.test/mcp",
               content_id: "kb_investment",
-              global_server_name: "kb_investment",
               kind: "agentichub_knowledge_base",
               latest_endpoint_url: "https://current.example.test/mcp",
               resource_id: "143",
+              source_available: true,
               update_available: false,
             },
           }),
@@ -236,10 +256,10 @@ describe("MCP API", () => {
           auth_type: "csghub_access_token",
           configured_endpoint_url: "https://old.example.test/mcp",
           content_id: "kb_investment",
-          global_update_available: true,
           kind: "agentichub_knowledge_base",
           latest_endpoint_url: "https://current.example.test/mcp",
           resource_id: "143",
+          source_available: true,
           update_available: true,
         }),
         { status: 200 },
@@ -249,13 +269,12 @@ describe("MCP API", () => {
     await expect(fetchAgentMCPServerSourceStatus("agent-1", "kb_investment")).resolves.toMatchObject({
       agentUpdateAvailable: true,
       contentID: "kb_investment",
-      globalUpdateAvailable: true,
+      sourceAvailable: true,
       updateAvailable: true,
     });
     await expect(syncAgentMCPServerSource("agent-1", "kb_investment")).resolves.toMatchObject({
       agent: { agent_id: "agent-1", servers: { kb_investment: { url: "https://current.example.test/mcp" } } },
-      globalState: { mcpServers: { kb_investment: { url: "https://current.example.test/mcp" } } },
-      source: { globalServerName: "kb_investment", updateAvailable: false },
+      source: { sourceAvailable: true, updateAvailable: false },
     });
     expect(synced).toBe(true);
     expect(fetchMock).toHaveBeenNthCalledWith(

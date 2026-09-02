@@ -30,10 +30,10 @@ export type MCPServerSourceStatus = {
   configuredEndpointURL: string;
   contentID: string;
   globalServerName?: string;
-  globalUpdateAvailable?: boolean;
   kind: string;
   latestEndpointURL: string;
   resourceID: string;
+  sourceAvailable: boolean;
   sourceDescription?: string;
   sourceName?: string;
   updateAvailable: boolean;

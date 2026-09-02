@@ -517,8 +517,7 @@ export const messages = {
     agentMCPEmpty: "当前没有安装 MCP servers。",
     agentKnowledgeMCPBadge: "知识库 MCP",
     agentKnowledgeMCPUpdateAvailable: "这个知识库的 MCP 配置有更新，建议更新当前 Agent。",
-    agentKnowledgeMCPCheckFailed: "暂时无法检查这个知识库的 MCP 配置，当前 Agent 仍会使用已保存的配置。",
-    agentMCPSourceRetry: "重新检查",
+    agentKnowledgeMCPSourceDeleted: "AgenticHub 知识库已删除，此 MCP 配置已失效，请从当前 Agent 中移除。",
     agentMCPUpdateConfig: "更新配置",
     agentMCPSourceSyncFailed: "同步知识库 MCP 配置失败，请稍后重试。",
     agentDeleteMCP: "删除",
@@ -2062,9 +2061,8 @@ export const messages = {
     agentKnowledgeMCPBadge: "Knowledge base MCP",
     agentKnowledgeMCPUpdateAvailable:
       "This knowledge base MCP configuration has changed. We recommend updating the current agent.",
-    agentKnowledgeMCPCheckFailed:
-      "Unable to check this knowledge base MCP configuration. The current agent will keep using its saved configuration.",
-    agentMCPSourceRetry: "Check again",
+    agentKnowledgeMCPSourceDeleted:
+      "The AgenticHub knowledge base has been deleted. This MCP configuration is no longer valid; remove it from the current agent.",
     agentMCPUpdateConfig: "Update configuration",
     agentMCPSourceSyncFailed: "Failed to sync the knowledge base MCP configuration. Please try again.",
     agentDeleteMCP: "Delete",

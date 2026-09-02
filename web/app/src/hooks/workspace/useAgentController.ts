@@ -113,7 +113,7 @@ import type {
   RuntimeBootstrapConfig,
 } from "@/models/agents";
 import { isDirectConversation, localIdentitiesMatch, upsertUserInData } from "@/models/conversations";
-import { managedMCPServerSnapshotDiffers, mcpManagedKnowledgeBaseSource, mcpServersFromMap } from "@/models/mcp";
+import { mcpManagedKnowledgeBaseSource, mcpServersFromMap } from "@/models/mcp";
 import type { MCPServerSourceStatus } from "@/models/mcp";
 import { displayTeam, teamMemberIDs } from "@/models/tasks";
 import type { WorkspaceTeam } from "@/models/tasks";
@@ -827,25 +827,25 @@ export function useAgentController({
       ),
     [agentMCPSourceQueries, agentManagedMCPServers],
   );
-  const agentMCPSourceErrorNames = useMemo(
+  const agentMCPSourceUnavailableNames = useMemo(
     () =>
       new Set(
-        agentManagedMCPServers.filter((_, index) => agentMCPSourceQueries[index]?.isError).map((server) => server.name),
+        agentManagedMCPServers
+          .filter((server) => agentMCPSourceStatusByName[server.name]?.sourceAvailable === false)
+          .map((server) => server.name),
       ),
-    [agentMCPSourceQueries, agentManagedMCPServers],
+    [agentMCPSourceStatusByName, agentManagedMCPServers],
   );
   const agentMCPUpdateAvailableNames = useMemo(() => {
-    const catalogByName = new Map(catalogMCPServers.map((server) => [server.name, server]));
     return new Set(
       agentMCPServers
-        .filter(
-          (server) =>
-            agentMCPSourceStatusByName[server.name]?.updateAvailable ||
-            managedMCPServerSnapshotDiffers(server.config, catalogByName.get(server.name)?.config),
-        )
+        .filter((server) => {
+          const sourceStatus = agentMCPSourceStatusByName[server.name];
+          return sourceStatus?.sourceAvailable !== false && sourceStatus?.updateAvailable;
+        })
         .map((server) => server.name),
     );
-  }, [agentMCPServers, agentMCPSourceStatusByName, catalogMCPServers]);
+  }, [agentMCPServers, agentMCPSourceStatusByName]);
   const activeConversation = useMemo(
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],
@@ -2587,25 +2587,6 @@ export function useAgentController({
     [agentMCPAddBusy, errorMessage, queryClient, agentDetailAgentID, t],
   );
 
-  const checkAgentMCPServerSource = useCallback(
-    async (server: { name?: string | null } | string | null | undefined) => {
-      const name = (typeof server === "string" ? server : String(server?.name || "")).trim();
-      if (!agentDetailAgentID || !name) {
-        return null;
-      }
-      try {
-        return await queryClient.fetchQuery({
-          queryKey: workspaceQueryKeys.agentMCPServerSource(agentDetailAgentID, name),
-          queryFn: () => fetchAgentMCPServerSourceStatus(agentDetailAgentID, name),
-          staleTime: 0,
-        });
-      } catch {
-        return null;
-      }
-    },
-    [agentDetailAgentID, queryClient],
-  );
-
   const syncAgentMCPServerSnapshot = useCallback(
     async (server: { name?: string | null } | string | null | undefined) => {
       const name = (typeof server === "string" ? server : String(server?.name || "")).trim();
@@ -2619,7 +2600,6 @@ export function useAgentController({
         const result = await syncAgentMCPServerSource(agentDetailAgentID, name);
         const mcpServers = cloneMCPServersForDraft(result.agent.servers);
         queryClient.setQueryData(workspaceQueryKeys.agentMCPServers(agentDetailAgentID), result.agent);
-        queryClient.setQueryData(workspaceQueryKeys.mcpServers(), result.globalState);
         queryClient.setQueryData(workspaceQueryKeys.agentMCPServerSource(agentDetailAgentID, name), result.source);
         setAgentPageDraft((current) => (current ? { ...current, mcpServers } : current));
         setAgentPageSavedDraft((current) => (current ? { ...current, mcpServers } : current));
@@ -2805,7 +2785,7 @@ export function useAgentController({
       mcpServers: agentMCPServers,
       mcpUpdateAvailableNames: agentMCPUpdateAvailableNames,
       mcpSourceBusyNames: agentMCPSourceBusyNames,
-      mcpSourceErrorNames: agentMCPSourceErrorNames,
+      mcpSourceUnavailableNames: agentMCPSourceUnavailableNames,
       mcpSourceSyncBusyName: agentMCPSourceSyncBusyName,
       mcpAddBusy: agentMCPAddBusy,
       mcpAddError: agentMCPAddError,
@@ -2843,7 +2823,6 @@ export function useAgentController({
       onAddSkills: batchAddAgentSkills,
       onDeleteSkill: deleteAgentSkill,
       onInstallMCPServers: installAgentMCPServers,
-      onCheckMCPServerSource: checkAgentMCPServerSource,
       onUpdateMCPServer: syncAgentMCPServerSnapshot,
       onDeleteMCPServer: deleteAgentMCPServer,
       onRetryMCPServers: refreshMCPServers,

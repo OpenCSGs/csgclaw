@@ -358,4 +358,64 @@ describe("AgentDetailPane MCP snapshots", () => {
     await user.click(screen.getByRole("button", { name: "agentMCPUpdateConfig" }));
     expect(onUpdateMCPServer).toHaveBeenCalledWith(mcpServer);
   });
+
+  it("keeps a stale knowledge base MCP removable without offering update or retry", async () => {
+    const user = userEvent.setup();
+    const onDeleteMCPServer = vi.fn().mockResolvedValue(true);
+    const onUpdateMCPServer = vi.fn();
+    const mcpServer = {
+      name: "kb_deleted",
+      description: "Deleted knowledge base snapshot",
+      config: {
+        url: "https://old.example.test/mcp",
+        _meta: {
+          "com.opencsg/mcp": {
+            auth_type: "csghub_access_token",
+            content_id: "kb_deleted",
+            resource_id: "143",
+            type: "llm_wiki",
+          },
+        },
+      },
+    };
+    render(
+      <Harness
+        workspaceSupported
+        mcpServers={[mcpServer]}
+        mcpSourceUnavailableNames={new Set([mcpServer.name])}
+        onUpdateMCPServer={onUpdateMCPServer}
+        onDeleteMCPServer={onDeleteMCPServer}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "agentProfileMCPTab" }));
+    expect(screen.getByText("agentKnowledgeMCPSourceDeleted")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "agentMCPUpdateConfig" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
+  });
+
+  it("keeps source-check failures silent while the saved MCP remains usable", async () => {
+    const user = userEvent.setup();
+    const mcpServer = {
+      name: "kb_unchecked",
+      description: "Saved knowledge base snapshot",
+      config: {
+        url: "https://saved.example.test/mcp",
+        _meta: {
+          "com.opencsg/mcp": {
+            auth_type: "csghub_access_token",
+            content_id: "kb_unchecked",
+            resource_id: "144",
+            type: "llm_wiki",
+          },
+        },
+      },
+    };
+    render(<Harness workspaceSupported mcpServers={[mcpServer]} />);
+
+    await user.click(screen.getByRole("button", { name: "agentProfileMCPTab" }));
+    expect(screen.queryByText("agentKnowledgeMCPSourceDeleted")).not.toBeInTheDocument();
+    expect(screen.queryByText("agentKnowledgeMCPUpdateAvailable")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
+  });
 });

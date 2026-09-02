@@ -1004,6 +1004,21 @@ func TestRuntimeStopAndDelete(t *testing.T) {
 	}
 }
 
+func TestStopProcessTreatsExitedProcessAsStopped(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start short-lived process: %v", err)
+	}
+	pid := cmd.Process.Pid
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("wait for short-lived process: %v", err)
+	}
+
+	if err := stopProcess(pid); err != nil {
+		t.Fatalf("stopProcess(%d) after exit error = %v, want nil", pid, err)
+	}
+}
+
 func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 	t.Setenv("HOME", "/host-home")
 	t.Setenv("OPENAI_BASE_URL", "https://host.example/v1")

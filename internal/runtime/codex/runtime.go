@@ -2008,8 +2008,18 @@ func stopProcess(pid int) error {
 	if pid <= 0 {
 		return nil
 	}
+	// Stopping the tracked app-server can race with the process exiting after
+	// its stdin is closed. On Windows, os.FindProcess opens a process handle and
+	// returns ERROR_INVALID_PARAMETER once that PID no longer exists. Treat an
+	// already-exited process as a successful, idempotent stop.
+	if !processAlive(pid) {
+		return nil
+	}
 	proc, err := os.FindProcess(pid)
 	if err != nil {
+		if !processAlive(pid) {
+			return nil
+		}
 		return err
 	}
 	_ = proc.Signal(os.Interrupt)
@@ -2031,6 +2041,9 @@ func stopProcess(pid int) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 	if err := proc.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		if !processAlive(pid) {
+			return nil
+		}
 		return err
 	}
 	deadline = time.Now().Add(3 * time.Second)
