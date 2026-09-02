@@ -127,6 +127,7 @@ export type ConversationPaneProps = {
   onDismissThreadSlashPicker?: () => void;
   onInviteAction: () => void;
   onMessageAction: (action: MessageAction, message?: MessageLike | null) => VoidOrPromise;
+  onPreserveMessageAnchor?: (anchor?: HTMLElement | null) => void;
   onNotifyAllAgentsChange?: (enabled: boolean) => VoidOrPromise;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
   onOpenThread: (message: IMMessage) => VoidOrPromise;

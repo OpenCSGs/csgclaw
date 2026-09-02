@@ -189,6 +189,7 @@ function renderThreadPane({
   onCloseThread = vi.fn(),
   onDeleteRoom = vi.fn(),
   onOpenAgentDetail = vi.fn(),
+  onPreserveMessageAnchor = vi.fn(),
   onPreviewUser = vi.fn(),
   onRemoveMember = vi.fn(),
   replies = [],
@@ -221,6 +222,7 @@ function renderThreadPane({
   onDeleteRoom?: (id: string) => void;
   onApplyMention?: (user: IMUser) => void;
   onOpenAgentDetail?: NonNullable<ConversationPaneProps["onOpenAgentDetail"]>;
+  onPreserveMessageAnchor?: NonNullable<ConversationPaneProps["onPreserveMessageAnchor"]>;
   onPreviewUser?: (user: IMUser) => void;
   onRemoveMember?: (memberID: string) => void;
   memberActionBusyID?: string;
@@ -307,6 +309,7 @@ function renderThreadPane({
         onMessageAction={() => {}}
         onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onOpenAgentDetail={onOpenAgentDetail}
+        onPreserveMessageAnchor={onPreserveMessageAnchor}
         onOpenThread={() => {}}
         onRemoveMember={onRemoveMember}
         onProviderLogin={() => {}}
@@ -848,6 +851,39 @@ describe("ConversationPane", () => {
     expect(onClose).toHaveBeenCalledWith(false);
     act(() => panelState.close?.());
     expect(screen.queryByLabelText("attachmentPreview")).not.toBeInTheDocument();
+  });
+
+  it("keeps the clicked attachment near the viewport after opening its preview", async () => {
+    const onPreserveMessageAnchor = vi.fn();
+    renderThreadPane({
+      onPreserveMessageAnchor,
+      messages: [
+        {
+          attachments: [
+            {
+              created_at: "2026-09-02T00:00:00Z",
+              download_url: "/api/v1/attachments/nearby?token=test",
+              id: "nearby",
+              kind: "file",
+              media_type: "text/plain",
+              name: "nearby.txt",
+              sha256: "sha",
+              size_bytes: 12,
+            },
+          ],
+          content: "Nearby file",
+          created_at: "2026-09-02T00:00:00Z",
+          id: "message-nearby-file",
+          sender_id: "u-manager",
+        },
+      ],
+    });
+
+    const attachmentButton = document.querySelector<HTMLButtonElement>(".message-file-attachment");
+    expect(attachmentButton).not.toBeNull();
+    fireEvent.click(attachmentButton!);
+
+    expect(onPreserveMessageAnchor).toHaveBeenCalledWith(attachmentButton);
   });
 
   it("keeps nested agent skill dialogs inside the active drawer layer", async () => {

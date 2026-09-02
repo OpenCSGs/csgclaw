@@ -1739,6 +1739,7 @@ export function useConversationController({
       messageActionBusy,
       messageActionFeedback,
       onMessageAction,
+      onPreserveMessageAnchor: messageListAutoScroll.preserveAnchor,
       activeThreadRootID,
       activeThreadView,
       threadLoading,

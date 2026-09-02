@@ -28,7 +28,9 @@ vi.mock("react-pdf", async () => {
       }, [file, onLoadSuccess]);
       return <div data-testid="mock-pdf-document">{children}</div>;
     },
-    Page: ({ pageNumber }: { pageNumber: number }) => <div data-page-number={pageNumber} data-testid="mock-pdf-page" />,
+    Page: ({ pageNumber, width }: { pageNumber: number; width?: number }) => (
+      <div data-page-number={pageNumber} data-testid="mock-pdf-page" data-width={width} />
+    ),
   };
 });
 
@@ -74,6 +76,7 @@ const t = (key: string, params?: Record<string, string | number>) => {
     attachmentPreviewFullscreen: "Fullscreen",
     attachmentPreviewExitFullscreen: "Exit fullscreen",
     attachmentPreviewLoading: "Loading preview",
+    attachmentPreviewOutline: "Document outline",
     attachmentPreviewPageCount: `Page ${params?.page ?? 0} of ${params?.count ?? 0}`,
     attachmentPreviewSlideCount: `Slide ${params?.page ?? 0} of ${params?.count ?? 0}`,
     attachmentPreviewTruncated: "Only the first 256 KiB is shown",
@@ -141,6 +144,7 @@ describe("DocumentPreviewPanel", () => {
       />,
     );
     expect(await screen.findByRole("heading", { name: "Generated report" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Document outline")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("api/v1/attachments/markdown?token=one", {
       credentials: "same-origin",
       signal: expect.any(AbortSignal),
@@ -440,6 +444,11 @@ describe("DocumentPreviewPanel", () => {
     );
 
     expect(await screen.findAllByTestId("mock-pdf-page")).toHaveLength(2);
+    expect(screen.getAllByTestId("mock-pdf-page")[0]).toHaveAttribute("data-width", "612");
+    const pdfMain = container.querySelector(".document-preview-pdf-main");
+    expect(pdfMain).toHaveClass("is-width-fitted");
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(pdfMain).toHaveClass("allows-horizontal-pan");
     expect(container.querySelectorAll(".document-preview-pdf-page")).toHaveLength(3);
     const secondPage = container.querySelector<HTMLElement>('.document-preview-pdf-page[data-page-number="2"]');
     expect(secondPage).not.toBeNull();
@@ -451,7 +460,8 @@ describe("DocumentPreviewPanel", () => {
     expect(await screen.findAllByTestId("mock-pdf-page")).toHaveLength(3);
   });
 
-  it("uses the full DOCX preview width when no outline is available", async () => {
+  it("never renders a DOCX outline and always uses the full preview width", async () => {
+    mammothMock.html = "<h1>Document heading</h1><p>Full-width document body</p>";
     const { container } = render(
       <DocumentPreviewPanel
         index={0}
@@ -473,7 +483,8 @@ describe("DocumentPreviewPanel", () => {
     );
 
     expect(await screen.findByText("Full-width document body")).toBeInTheDocument();
-    expect(container.querySelector(".document-preview-docx-shell")).toHaveClass("without-outline");
+    expect(screen.queryByLabelText("Document outline")).not.toBeInTheDocument();
+    expect(container.querySelector(".document-preview-docx-shell")).not.toBeInTheDocument();
     expect(container.querySelector(".document-preview-docx-outline")).not.toBeInTheDocument();
   });
 });

@@ -249,25 +249,13 @@
   min-width: 100%;
   min-height: 100%;
   display: grid;
-  grid-template-columns: minmax(120px, 22%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .document-preview-markdown-main {
   min-width: 0;
   min-height: 0;
   position: relative;
-}
-
-.document-preview-markdown-outline {
-  padding: 14px 10px;
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  overflow: auto;
-  border-right: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .document-preview-mode-switch {
@@ -306,29 +294,6 @@
 .document-preview-docx img,
 .document-preview-markdown img {
   max-width: 100%;
-}
-
-.document-preview-docx-shell {
-  min-width: 100%;
-  min-height: 100%;
-  display: grid;
-  grid-template-columns: minmax(120px, 22%) minmax(0, 1fr);
-}
-
-.document-preview-docx-shell.without-outline {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.document-preview-docx-outline {
-  padding: 14px 10px;
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  overflow: auto;
-  border-right: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .document-preview-spreadsheet {
@@ -412,11 +377,21 @@
   min-width: 0;
   min-height: 0;
   padding: 20px;
-  overflow: auto;
+}
+
+.document-preview-pdf-main {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-x: none;
+}
+
+.document-preview-pdf-main.allows-horizontal-pan {
+  overflow-x: auto;
 }
 
 .document-preview-ppt-stage-shell {
   display: block;
+  overflow: auto;
 }
 
 .document-preview-pdf-pages {
@@ -513,18 +488,6 @@
 
   .document-preview-markdown-shell {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .document-preview-docx-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .document-preview-docx-outline {
-    display: none;
-  }
-
-  .document-preview-markdown-outline {
-    display: none;
   }
 
   .document-preview-markdown,

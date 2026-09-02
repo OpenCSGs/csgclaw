@@ -186,6 +186,7 @@ export function ConversationPane({
   messageActionBusy,
   messageActionFeedback,
   onMessageAction,
+  onPreserveMessageAnchor = () => {},
   onOpenAgentDetail,
   activeThreadRootID,
   activeThreadView,
@@ -297,11 +298,12 @@ export function ConversationPane({
       if (agentDetailPanelProps?.onClose(false) === false) {
         return;
       }
+      onPreserveMessageAnchor(request.anchor);
       onCloseThread();
       setActivityPanelOpen(false);
       setDocumentPreview(request);
     },
-    [agentDetailPanelProps, onCloseThread],
+    [agentDetailPanelProps, onCloseThread, onPreserveMessageAnchor],
   );
 
   useEffect(() => {

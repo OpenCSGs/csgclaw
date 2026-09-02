@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type UIEvent } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
 import pdfWorkerURL from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -13,12 +13,12 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 function LazyPdfPage({
   active,
   pageNumber,
-  scale,
+  width,
   t,
 }: {
   active: boolean;
   pageNumber: number;
-  scale: number;
+  width: number;
   t: Translate;
 }) {
   return (
@@ -26,7 +26,7 @@ function LazyPdfPage({
       {active ? (
         <Page
           pageNumber={pageNumber}
-          scale={scale}
+          width={width}
           loading={<div className="document-preview-pdf-page-placeholder" />}
           error={<div className="document-preview-status is-error">{t("attachmentPreviewFailed")}</div>}
         />
@@ -34,7 +34,7 @@ function LazyPdfPage({
         <div
           className="document-preview-pdf-page-placeholder"
           aria-label={t("attachmentPreviewPageNamed", { page: pageNumber })}
-          style={{ width: `${612 * scale}px` }}
+          style={{ width: `${width}px` }}
         />
       )}
     </div>
@@ -45,10 +45,37 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [page, setPage] = useState(1);
+  const [fittedPageWidth, setFittedPageWidth] = useState(612);
   const file = useMemo(() => ({ data: new Uint8Array(copyPreviewBuffer(data)) }), [data]);
   const handleLoadSuccess = useCallback((pdf: { numPages: number }) => {
     setPageCount(pdf.numPages);
     setPage(1);
+  }, []);
+  const pageWidth = fittedPageWidth * scale;
+
+  useLayoutEffect(() => {
+    const container = scrollRootRef.current;
+    if (!container) {
+      return undefined;
+    }
+    const updateWidth = () => {
+      if (container.clientWidth <= 0) {
+        return;
+      }
+      const style = window.getComputedStyle(container);
+      const horizontalPadding =
+        (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+      const nextWidth = Math.max(240, Math.floor(container.clientWidth - horizontalPadding));
+      setFittedPageWidth((current) => (current === nextWidth ? current : nextWidth));
+    };
+    updateWidth();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateWidth);
+    observer?.observe(container);
+    window.addEventListener("resize", updateWidth);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updateWidth);
+    };
   }, []);
 
   function goToPage(nextPage: number) {
@@ -77,7 +104,11 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
 
   return (
     <div className="document-preview-pdf">
-      <div ref={scrollRootRef} className="document-preview-pdf-main" onScroll={handleScroll}>
+      <div
+        ref={scrollRootRef}
+        className={`document-preview-pdf-main is-width-fitted${scale > 1.001 ? " allows-horizontal-pan" : ""}`}
+        onScroll={handleScroll}
+      >
         <Document
           file={file}
           loading={<div className="document-preview-status">{t("attachmentPreviewLoading")}</div>}
@@ -90,7 +121,7 @@ export default function PdfPreview({ data, scale, t }: { data: ArrayBuffer; scal
                 key={index + 1}
                 active={Math.abs(index + 1 - page) <= 1}
                 pageNumber={index + 1}
-                scale={scale}
+                width={pageWidth}
                 t={t}
               />
             ))}
