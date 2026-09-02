@@ -17,6 +17,16 @@ const requiredInstructionsFile = "AGENTS.md"
 const codexSystemSkillsDirName = ".system"
 const codexTemplateMemoryStagingDir = ".csgclaw-template-memory"
 
+var templateInstructionFileNames = map[string]struct{}{
+	"AGENT.md":     {},
+	"AGENTS.md":    {},
+	"HEARTBEAT.md": {},
+	"IDENTITY.md":  {},
+	"SOUL.md":      {},
+	"TOOLS.md":     {},
+	"USER.md":      {},
+}
+
 func materializeTemplateDir(templateRoot, runtimeKind string) (WorkspaceRef, error) {
 	if !templateLayoutExists(templateRoot) && legacyTemplateWorkspaceExists(templateRoot) {
 		return materializeLegacyTemplateWorkspace(templateRoot)
@@ -184,11 +194,10 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind strin
 				return err
 			}
 		default:
-			if entry.IsDir() {
-				if err := copyWorkspaceTree(source, filepath.Join(instructionsRoot, name)); err != nil {
-					return err
-				}
-			} else if err := copySingleTemplateFile(source, filepath.Join(instructionsRoot, name)); err != nil {
+			if entry.IsDir() || !isTemplateInstructionFile(name) {
+				continue
+			}
+			if err := copySingleTemplateFile(source, filepath.Join(instructionsRoot, name)); err != nil {
 				return err
 			}
 		}
@@ -234,6 +243,11 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind strin
 	}
 	data = append(data, '\n')
 	return os.WriteFile(filepath.Join(templateRoot, localMCPsDirName, localMCPFileName), data, 0o644)
+}
+
+func isTemplateInstructionFile(name string) bool {
+	_, ok := templateInstructionFileNames[name]
+	return ok
 }
 
 func materializeWorkspaceMemoryFS(srcFS fs.FS, templateRoot, workspaceRoot string) error {

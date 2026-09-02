@@ -5598,8 +5598,12 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(spec.WorkspaceRef.Path, "PLAYBOOK.md"), []byte("published workspace\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(PLAYBOOK.md) error = %v", err)
+	downloadsRoot := filepath.Join(spec.WorkspaceRef.Path, "downloads")
+	if err := os.MkdirAll(downloadsRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(downloads) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(downloadsRoot, "input.pdf"), []byte("must not publish\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(downloads/input.pdf) error = %v", err)
 	}
 
 	registryRoot := t.TempDir()
@@ -5642,11 +5646,9 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if got.Source.Name != "local" || got.Source.Kind != "local" {
 		t.Fatalf("template source = %+v, want local/local", got.Source)
 	}
-	publishedWorkspace := filepath.Join(registryRoot, "templates", "ReviewBot_2", "instructions", "PLAYBOOK.md")
-	if data, err := os.ReadFile(publishedWorkspace); err != nil {
-		t.Fatalf("ReadFile(PLAYBOOK.md) error = %v", err)
-	} else if strings.TrimSpace(string(data)) != "published workspace" {
-		t.Fatalf("PLAYBOOK.md = %q, want %q", strings.TrimSpace(string(data)), "published workspace")
+	publishedWorkspace := filepath.Join(registryRoot, "templates", "ReviewBot_2", "instructions", "downloads")
+	if _, err := os.Stat(publishedWorkspace); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("published downloads stat error = %v, want not exist", err)
 	}
 
 	duplicateReq := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
