@@ -7,7 +7,7 @@ export function parseDesktopThemeSource(input: unknown): DesktopThemeSource {
   return input;
 }
 
-export function shouldUseDarkDockIcon(
+export function shouldUseDarkThemeIcon(
   theme: DesktopThemeSource,
   systemUsesDarkColors: boolean,
 ): boolean {

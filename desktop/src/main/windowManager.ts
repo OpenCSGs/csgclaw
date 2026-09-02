@@ -1,5 +1,5 @@
 import path from "node:path";
-import { BrowserWindow, session, type Session } from "electron";
+import { BrowserWindow, session, type NativeImage, type Session } from "electron";
 import { installNavigationPolicy } from "./navigationPolicy";
 import { isWindowsDesktop, windowsAppIconPath } from "./platform";
 import { installPermissionPolicy } from "./permissionPolicy";
@@ -13,6 +13,7 @@ export class WindowManager {
   private allowedOrigin = "";
   private authToken = "";
   private mainWindow: BrowserWindow | null = null;
+  private windowsIcon: NativeImage | null = null;
   private readonly desktopSession: Session;
 
   constructor(private readonly options: WindowManagerOptions) {
@@ -45,7 +46,7 @@ export class WindowManager {
       backgroundColor: "#0d1017",
       ...(isWindowsDesktop
         ? {
-            icon: windowsAppIconPath(),
+            icon: this.windowsIcon ?? windowsAppIconPath(),
           }
         : {}),
       webPreferences: {
@@ -108,6 +109,14 @@ export class WindowManager {
     }
     window.show();
     window.focus();
+  }
+
+  setWindowsIcon(icon: NativeImage): void {
+    if (!isWindowsDesktop || icon.isEmpty()) {
+      return;
+    }
+    this.windowsIcon = icon;
+    this.mainWindow?.setIcon(icon);
   }
 
   destroy(): void {

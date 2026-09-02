@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseDesktopThemeSource, shouldUseDarkDockIcon } from "./desktopTheme";
+import { parseDesktopThemeSource, shouldUseDarkThemeIcon } from "./desktopTheme";
 
 test("parseDesktopThemeSource accepts supported theme sources", () => {
   for (const theme of ["system", "light", "dark"] as const) {
@@ -17,14 +17,14 @@ test("parseDesktopThemeSource rejects unsupported values", () => {
   }
 });
 
-test("shouldUseDarkDockIcon gives the app setting precedence", () => {
-  assert.equal(shouldUseDarkDockIcon("light", true), false);
-  assert.equal(shouldUseDarkDockIcon("light", false), false);
-  assert.equal(shouldUseDarkDockIcon("dark", true), true);
-  assert.equal(shouldUseDarkDockIcon("dark", false), true);
+test("shouldUseDarkThemeIcon gives the app setting precedence", () => {
+  assert.equal(shouldUseDarkThemeIcon("light", true), false);
+  assert.equal(shouldUseDarkThemeIcon("light", false), false);
+  assert.equal(shouldUseDarkThemeIcon("dark", true), true);
+  assert.equal(shouldUseDarkThemeIcon("dark", false), true);
 });
 
-test("shouldUseDarkDockIcon follows macOS in system mode", () => {
-  assert.equal(shouldUseDarkDockIcon("system", true), true);
-  assert.equal(shouldUseDarkDockIcon("system", false), false);
+test("shouldUseDarkThemeIcon follows the operating system in system mode", () => {
+  assert.equal(shouldUseDarkThemeIcon("system", true), true);
+  assert.equal(shouldUseDarkThemeIcon("system", false), false);
 });
