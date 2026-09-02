@@ -95,7 +95,7 @@ function knowledgeBaseUnavailableText(reason: string, t: TranslateFn): string {
   }
 }
 
-function formatKnowledgeBaseMCPPreview(server: MCPServer | null): string {
+function formatKnowledgeBaseMCPPreview(server: MCPServer | null, name = "", description = ""): string {
   if (!server) {
     return "";
   }
@@ -104,6 +104,10 @@ function formatKnowledgeBaseMCPPreview(server: MCPServer | null): string {
       key.toLowerCase() === "authorization" ? "Bearer ${OPENCSG_TOKEN}" : value,
     ),
   ) as MCPServer["config"];
+  config.description = [name, description]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" | ");
   return formatMCPServerDocument(server.name, config);
 }
 
@@ -890,8 +894,13 @@ export function HubDetailPane({
     return name ? mcpServers.find((server) => server.name === name) || null : null;
   }, [knowledgeBases?.selected?.configuredMCPName, mcpServers]);
   const knowledgeBaseMCPPreview = useMemo(
-    () => formatKnowledgeBaseMCPPreview(configuredKnowledgeBaseMCP),
-    [configuredKnowledgeBaseMCP],
+    () =>
+      formatKnowledgeBaseMCPPreview(
+        configuredKnowledgeBaseMCP,
+        knowledgeBases?.selected?.name,
+        knowledgeBases?.selected?.description,
+      ),
+    [configuredKnowledgeBaseMCP, knowledgeBases?.selected?.description, knowledgeBases?.selected?.name],
   );
   const selectedManagedMCPSource = useMemo(
     () => mcpManagedKnowledgeBaseSource(selectedMCPServer?.config),
@@ -2184,7 +2193,7 @@ export function HubDetailPane({
             </Button>
             {mcpCreateMode === "manual" ? (
               <Button variant="primary" size="sm" loading={mcpMutationBusy} onClick={handleSaveMCP}>
-                {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
+                {mcpMutationBusy ? t("resourcesMCPCreating") : t("resourcesMCPCreateAction")}
               </Button>
             ) : null}
           </DialogFooter>

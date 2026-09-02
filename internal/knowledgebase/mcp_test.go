@@ -11,10 +11,11 @@ import (
 
 func availableKnowledgeBase() KnowledgeBase {
 	return KnowledgeBase{
-		ID:        42,
-		Name:      "Engineering Handbook",
-		ContentID: "wiki-content-42",
-		Type:      TypeLLMWiki,
+		ID:          42,
+		Name:        "Engineering Handbook",
+		Description: "Engineering runbooks",
+		ContentID:   "wiki-content-42",
+		Type:        TypeLLMWiki,
 		Metadata: Metadata{
 			MCPEndpoint: "https://gateway.example.test/v1/llmwikis/wiki-content-42/mcp",
 			ResourceState: &ResourceState{
@@ -56,6 +57,9 @@ func TestServerConfigPersistsCSGHubAccessTokenAndManagedMeta(t *testing.T) {
 	}
 	if got, want := name, "wiki-content-42"; got != want {
 		t.Fatalf("name = %q, want %q", got, want)
+	}
+	if got, want := config["description"], "Engineering Handbook | Engineering runbooks"; got != want {
+		t.Fatalf("description = %#v, want %q", got, want)
 	}
 	headers := config["headers"].(map[string]any)
 	if got, want := headers["Authorization"], "Bearer current-csghub-token"; got != want {

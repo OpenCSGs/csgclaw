@@ -248,6 +248,7 @@ describe("WorkspaceSidebar", () => {
       availability: "available" as const,
       configuredMCPName: "kb-investment",
       contentID: "kb-investment",
+      description: "Investment knowledge base",
       id: "143",
       name: "Investment handbook",
     };
@@ -293,6 +294,72 @@ describe("WorkspaceSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: /Investment handbook/ }));
 
     expect(onSelectKnowledgeBase).toHaveBeenCalledWith(knowledgeBase);
+    expect(screen.getByText("Investment knowledge base")).toBeInTheDocument();
+    expect(screen.queryByText("Added to MCP")).not.toBeInTheDocument();
+  });
+
+  it("searches configured knowledge bases by name and description", () => {
+    renderSidebar({
+      activePane: { type: WorkspacePaneTypes.hub, id: "143", resourceType: "knowledge" },
+      hub: {
+        loaded: true,
+        listError: "",
+        knowledgeBases: {
+          copyBusyID: "",
+          copyError: "",
+          discoveryHasMore: false,
+          discoveryItems: [],
+          discoveryLoadError: "",
+          discoveryLoading: false,
+          discoveryLoadingMore: false,
+          discoveryLoadMore: vi.fn(),
+          discoveryRefetch: vi.fn(),
+          items: [
+            {
+              availability: "available",
+              configuredMCPName: "kb-investment",
+              contentID: "kb-investment",
+              description: "Investment knowledge base",
+              id: "143",
+              name: "招商知识库",
+            },
+            {
+              availability: "available",
+              configuredMCPName: "kb-tourism",
+              contentID: "kb-tourism",
+              description: "Travel guides",
+              id: "144",
+              name: "旅游知识库",
+            },
+          ],
+          loadError: "",
+          loading: false,
+          loginRequired: false,
+          requestMCPConfig: vi.fn(),
+          search: "",
+          setSearch: vi.fn(),
+        },
+        mcpServers: [],
+        selectedHubResourceType: "knowledge",
+        selectedKnowledgeBaseID: "143",
+        selectedHubSkillName: "",
+        selectedHubTemplateId: "",
+        skills: [],
+        skillsError: "",
+        templates: [],
+        uploadBusy: false,
+        uploadError: "",
+      } as unknown as WorkspaceSidebarProps["hub"],
+    });
+
+    const search = screen.getByRole("searchbox", { name: "Search" });
+    fireEvent.change(search, { target: { value: "investment" } });
+    expect(screen.getByRole("button", { name: /招商知识库/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /旅游知识库/ })).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "旅游" } });
+    expect(screen.getByRole("button", { name: /旅游知识库/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /招商知识库/ })).not.toBeInTheDocument();
   });
 
   it("omits counts from resource navigation items", () => {

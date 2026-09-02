@@ -77,7 +77,7 @@ func ServerConfig(item KnowledgeBase, csgHubAccessToken string) (string, map[str
 		"type":        "remote",
 		"url":         mcpEndpointFor(item),
 		"transport":   "streamable-http",
-		"description": strings.TrimSpace(item.Name) + " | AgenticHub knowledge base",
+		"description": serverDescription(item),
 		"headers": map[string]any{
 			"Authorization": "Bearer " + strings.TrimSpace(csgHubAccessToken),
 		},
@@ -98,6 +98,16 @@ func ServerConfig(item KnowledgeBase, csgHubAccessToken string) (string, map[str
 		return "", nil, err
 	}
 	return name, normalized[name].(map[string]any), nil
+}
+
+func serverDescription(item KnowledgeBase) string {
+	parts := make([]string, 0, 2)
+	for _, value := range []string{item.Name, item.Description} {
+		if value = strings.TrimSpace(value); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	return strings.Join(parts, " | ")
 }
 
 // HydrateManagedServer refreshes a managed knowledge-base MCP from the current

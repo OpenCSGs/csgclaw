@@ -43,6 +43,8 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesMCPServerDocumentInvalidShape:
       "MCP server definition must be an mcpServers JSON object with exactly one server.",
     resourcesMCPCreateTitle: "Add MCP Server",
+    resourcesMCPCreateAction: "Add",
+    resourcesMCPCreating: "Adding...",
     resourcesMCPDelete: "Delete",
     resourcesMCPDeleteConfirmMessage: 'Delete MCP server "{name}"?',
     resourcesMCPEmpty: "No MCP servers available yet.",
@@ -77,8 +79,9 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesKnowledgeBaseAgenticHub: "AgenticHub knowledge base",
     resourcesKnowledgeBaseAvailable: "Available",
     resourcesKnowledgeBaseConfiguredDescription: "Managed in AgenticHub and enabled through agent MCP settings.",
-    resourcesKnowledgeBaseGuideContinue: "Go to MCP management",
-    resourcesKnowledgeBaseGuideDescription: 'MCP management will open with "{name}" filled in automatically.',
+    resourcesKnowledgeBaseGuideContinue: "Add",
+    resourcesKnowledgeBaseGuideDescription:
+      'MCP management will open with "{name}" filled in automatically. After adding it, you can enable the knowledge base from an agent\'s MCP configuration.',
     resourcesKnowledgeBaseGuideLater: "Later",
     resourcesKnowledgeBaseGuideTitle: "Add knowledge base to MCP",
     resourcesKnowledgeBaseHowToDescription: "Save it, then enable it for an agent.",
@@ -556,6 +559,7 @@ function renderKnowledgeBaseDetail(configured: boolean) {
     name: "kb-investment",
     description: "Investment knowledge base",
     config: {
+      description: "Investment handbook | AgenticHub knowledge base",
       type: "remote",
       url: "https://example.test/mcp",
       headers: { Authorization: "Bearer saved-token" },
@@ -649,10 +653,12 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Add to MCP" }));
 
     expect(requestMCPConfig).toHaveBeenCalledWith("143");
-    expect(screen.getByRole("dialog")).toHaveTextContent('MCP management will open with "Investment handbook"');
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      'MCP management will open with "Investment handbook" filled in automatically. After adding it, you can enable the knowledge base from an agent\'s MCP configuration.',
+    );
     expect(confirmMCPConfig).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Go to MCP management" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
 
     expect(confirmMCPConfig).toHaveBeenCalledTimes(1);
   });
@@ -664,6 +670,8 @@ describe("HubDetailPane", () => {
     expect(screen.getByText("kb-investment")).toBeInTheDocument();
     const preview = screen.getByLabelText("Knowledge base MCP configuration");
     expect(preview).toHaveTextContent("Bearer ${OPENCSG_TOKEN}");
+    expect(preview).toHaveTextContent('"description": "Investment handbook | Investment knowledge base"');
+    expect(preview).not.toHaveTextContent("AgenticHub knowledge base");
     expect(preview).not.toHaveTextContent("saved-token");
 
     await user.click(screen.getByRole("button", { name: "View in MCP" }));
@@ -999,6 +1007,7 @@ describe("HubDetailPane", () => {
 
     expect(screen.getByRole("dialog")).toHaveTextContent("mcp server already exists: filesystem");
     expect(screen.getAllByText("mcp server already exists: filesystem")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
   });
 
   it("installs a remote MCP through the Hub install flow", async () => {

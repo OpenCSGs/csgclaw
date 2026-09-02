@@ -960,11 +960,7 @@ export function WorkspaceTabPanels({
               </span>
               <span className={rowStyles.main}>
                 <span className={classNames(rowStyles.title, "truncate")}>{item.name}</span>
-                <span className={classNames(rowStyles.meta, "truncate")}>
-                  {item.configuredMCPName
-                    ? t("resourcesKnowledgeBaseAdded")
-                    : item.description || t("resourcesKnowledgeBaseAgenticHub")}
-                </span>
+                <span className={classNames(rowStyles.meta, "truncate")}>{item.description}</span>
               </span>
             </button>
           ))
