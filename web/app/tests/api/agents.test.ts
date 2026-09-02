@@ -52,7 +52,7 @@ describe("agents API", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "api/v1/agents",
       expect.objectContaining({
-        body: JSON.stringify({ id: "u-manager", replace: true }),
+        body: JSON.stringify({ id: "u-manager", replace: true, field_mask: ["id"] }),
         method: "POST",
       }),
     );

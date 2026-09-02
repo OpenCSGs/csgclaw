@@ -256,6 +256,7 @@ export function createManagerAgentRequest(): Promise<AgentLike> {
   const payload = {
     id: MANAGER_AGENT_ID, // Legacy contract: id: "u-manager",
     replace: true,
+    field_mask: ["id"],
   };
   return post("api/v1/agents", payload);
 }
