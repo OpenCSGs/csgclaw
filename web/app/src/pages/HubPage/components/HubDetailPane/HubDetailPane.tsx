@@ -14,6 +14,7 @@ import {
   CloudDownload,
   ExternalLink,
   FileCode2,
+  LoaderCircle,
   RefreshCw,
   Server,
   Trash2,
@@ -1150,7 +1151,10 @@ export function HubDetailPane({
     <section className={moduleClassNames("entity-pane hub-detail-pane")}>
       {error ? <div className={moduleClassNames("form-error")}>{error}</div> : null}
       {!loaded && !error ? (
-        <div className={moduleClassNames("workspace-empty")}>{t("resourcesLoading")}</div>
+        <div className={moduleClassNames("hub-loading-state")} role="status" aria-live="polite">
+          <LoaderCircle className={moduleClassNames("hub-loading-spinner")} size={24} aria-hidden="true" />
+          <span>{t("resourcesLoading")}</span>
+        </div>
       ) : activeResourceType !== "knowledge" &&
         templates.length === 0 &&
         skills.length === 0 &&

@@ -89,6 +89,7 @@ export type WorkspaceHubController = {
 };
 
 export function useWorkspaceHubController({
+  activePane,
   hubLoaded,
   hubTemplates,
   hubTemplatesQuery,
@@ -135,6 +136,7 @@ export function useWorkspaceHubController({
   );
 
   const hub = useWorkspaceHubSelection({
+    activePane,
     templates: visibleHubTemplates,
     templatesQuery: hubTemplatesQuery,
     loaded: hubLoaded,

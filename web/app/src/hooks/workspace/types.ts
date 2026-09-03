@@ -81,6 +81,7 @@ export type WorkspaceShellController = {
 };
 
 export type UseWorkspaceHubSelectionArgs = {
+  activePane: WorkspacePane;
   loaded: boolean;
   manualError?: string;
   openCSGAuthenticated?: boolean;
@@ -91,6 +92,7 @@ export type UseWorkspaceHubSelectionArgs = {
 };
 
 export type UseWorkspaceHubControllerArgs = {
+  activePane: WorkspacePane;
   hubLoaded: boolean;
   hubTemplates: HubTemplate[];
   hubTemplatesQuery: UseQueryResult<HubTemplate[]>;

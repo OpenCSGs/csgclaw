@@ -280,6 +280,7 @@ export function useWorkspaceController() {
   );
   const connectors = useConnectorController(t);
   const { hub, refreshHubTemplates } = useWorkspaceHubController({
+    activePane,
     hubLoaded,
     hubTemplates,
     hubTemplatesQuery,

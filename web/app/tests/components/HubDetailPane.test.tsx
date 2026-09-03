@@ -180,6 +180,7 @@ function renderHubDetailPane(
     publishDisabled?: boolean;
     publishError?: string;
     lazyMemory?: boolean;
+    loaded?: boolean;
   } = {},
 ) {
   const selectedTemplate = options.selectedTemplate ?? template;
@@ -240,7 +241,7 @@ function renderHubDetailPane(
           detailPaneProps: {
             detailLoading: false,
             error: "",
-            loaded: true,
+            loaded: options.loaded ?? true,
             onRetry: vi.fn(),
             onSelectSkill: vi.fn(),
             onSelectSkillFile: vi.fn(),
@@ -646,6 +647,15 @@ function renderKnowledgeBaseDetail(configured: boolean) {
 }
 
 describe("HubDetailPane", () => {
+  it("renders the initial resource loading state as an accessible status", () => {
+    renderHubDetailPane("template", { loaded: false });
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Loading resources");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status.querySelector("svg")).toBeInTheDocument();
+  });
+
   it("explains the automatic handoff before opening MCP management", async () => {
     const user = userEvent.setup();
     const { confirmMCPConfig, requestMCPConfig } = renderKnowledgeBaseDetail(false);
