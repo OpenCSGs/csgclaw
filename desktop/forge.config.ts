@@ -38,6 +38,8 @@ const iconDirectory = path.resolve(__dirname, "resources", "icons");
 const macIcon = path.join(iconDirectory, "csgclaw-theme.icns");
 const macDockLightIcon = path.join(iconDirectory, "csgclaw-dock-light.png");
 const macDockDarkIcon = path.join(iconDirectory, "csgclaw-dock-dark.png");
+const windowsTaskbarLightIcon = path.join(iconDirectory, "csgclaw-taskbar-light.ico");
+const windowsTaskbarDarkIcon = path.join(iconDirectory, "csgclaw-taskbar-dark.ico");
 const markLightIcon = path.join(iconDirectory, "csgclaw-mark-light.svg");
 const markDarkIcon = path.join(iconDirectory, "csgclaw-mark-dark.svg");
 const windowsIcon = path.join(iconDirectory, "csgclaw.ico");
@@ -132,6 +134,7 @@ const config: ForgeConfig = {
       markLightIcon,
       markDarkIcon,
       ...(isMacTarget ? [macDockLightIcon, macDockDarkIcon] : []),
+      ...(isWindowsTarget ? [windowsTaskbarLightIcon, windowsTaskbarDarkIcon] : []),
       ...(isWindowsTarget ? [windowsIcon, windowsUpdateHelper] : []),
     ],
     icon: appIcon,

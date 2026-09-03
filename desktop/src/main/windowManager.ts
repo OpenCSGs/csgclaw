@@ -1,7 +1,11 @@
 import path from "node:path";
 import { BrowserWindow, session, type NativeImage, type Session } from "electron";
 import { installNavigationPolicy } from "./navigationPolicy";
-import { isWindowsDesktop, windowsAppIconPath } from "./platform";
+import {
+  isWindowsDesktop,
+  windowsAppIconPath,
+  windowsTaskbarAppUserModelID,
+} from "./platform";
 import { installPermissionPolicy } from "./permissionPolicy";
 
 export type WindowManagerOptions = {
@@ -14,6 +18,8 @@ export class WindowManager {
   private authToken = "";
   private mainWindow: BrowserWindow | null = null;
   private windowsIcon: NativeImage | null = null;
+  private windowsIconPath = "";
+  private windowsUseDarkColors = true;
   private readonly desktopSession: Session;
 
   constructor(private readonly options: WindowManagerOptions) {
@@ -65,6 +71,7 @@ export class WindowManager {
       },
     });
     this.mainWindow = window;
+    this.applyWindowsTaskbarDetails(window);
     installNavigationPolicy(window, this.allowedOrigin);
 
     window.once("ready-to-show", () => {
@@ -111,12 +118,23 @@ export class WindowManager {
     window.focus();
   }
 
-  setWindowsIcon(icon: NativeImage): void {
+  setWindowsIcon(icon: NativeImage, iconPath: string, useDarkColors: boolean): void {
     if (!isWindowsDesktop || icon.isEmpty()) {
       return;
     }
     this.windowsIcon = icon;
-    this.mainWindow?.setIcon(icon);
+    this.windowsIconPath = iconPath;
+    this.windowsUseDarkColors = useDarkColors;
+    const window = this.mainWindow;
+    if (window && !window.isDestroyed()) {
+      // Installed Squirrel shortcuts make Windows prefer the executable icon for
+      // the shared AppUserModelID. Recreate the taskbar button with a themed
+      // per-window ID so the Shell reads the current relaunch and window icons.
+      window.setSkipTaskbar(true);
+      this.applyWindowsTaskbarDetails(window);
+      window.setIcon(icon);
+      window.setSkipTaskbar(false);
+    }
   }
 
   destroy(): void {
@@ -128,6 +146,19 @@ export class WindowManager {
 
   get window(): BrowserWindow | null {
     return this.mainWindow && !this.mainWindow.isDestroyed() ? this.mainWindow : null;
+  }
+
+  private applyWindowsTaskbarDetails(window: BrowserWindow): void {
+    if (!isWindowsDesktop || !this.windowsIconPath) {
+      return;
+    }
+    window.setAppDetails({
+      appId: windowsTaskbarAppUserModelID(this.windowsUseDarkColors),
+      appIconPath: this.windowsIconPath,
+      appIconIndex: 0,
+      relaunchCommand: process.execPath,
+      relaunchDisplayName: "CSGClaw",
+    });
   }
 
   private installRequestAuthentication(): void {

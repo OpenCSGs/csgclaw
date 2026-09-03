@@ -355,11 +355,12 @@ export class AppLifecycle {
       nativeTheme.shouldUseDarkColors,
     );
     const iconName = useDarkColors
-      ? "csgclaw-dock-dark.png"
-      : "csgclaw-dock-light.png";
-    const icon = nativeImage.createFromPath(desktopIconResourcePath(iconName));
+      ? "csgclaw-taskbar-dark.ico"
+      : "csgclaw-taskbar-light.ico";
+    const iconPath = desktopIconResourcePath(iconName);
+    const icon = nativeImage.createFromPath(iconPath);
     if (!icon.isEmpty()) {
-      this.windowManager?.setWindowsIcon(icon);
+      this.windowManager?.setWindowsIcon(icon, iconPath, useDarkColors);
     }
   }
 
