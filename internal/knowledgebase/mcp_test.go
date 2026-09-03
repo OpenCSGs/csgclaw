@@ -50,6 +50,26 @@ func installKnowledgeBaseResponse(t *testing.T, item KnowledgeBase, wantToken st
 	return "https://hub.example.test"
 }
 
+func installKnowledgeBaseErrorResponse(t *testing.T, status int, wantToken string) string {
+	t.Helper()
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got, want := r.URL.Path, "/api/v1/agent/knowledge-bases/42"; got != want {
+			t.Fatalf("path = %q, want %q", got, want)
+		}
+		if got, want := r.Header.Get("Authorization"), "Bearer "+wantToken; got != want {
+			t.Fatalf("Authorization = %q, want %q", got, want)
+		}
+		return &http.Response{
+			StatusCode: status,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(bytes.NewBufferString(`{"message":"unauthorized"}`)),
+		}, nil
+	})
+	return "https://hub.example.test"
+}
+
 func TestServerConfigPersistsCSGHubAccessTokenAndManagedMeta(t *testing.T) {
 	name, config, err := ServerConfig(availableKnowledgeBase(), "current-csghub-token")
 	if err != nil {
@@ -173,6 +193,66 @@ func TestHydrateTemplateServersInjectsRunnerTokenIntoTrustedDirectMCP(t *testing
 	}
 	if _, managed := ManagedMetadataFromServer(entry); !managed {
 		t.Fatalf("hydrated config lost managed _meta: %#v", entry)
+	}
+}
+
+func TestHydrateTemplateServersKeepsSanitizedSnapshotWhenHydrationFails(t *testing.T) {
+	tests := []struct {
+		name      string
+		configure func(*testing.T)
+	}{
+		{
+			name: "knowledge base unavailable",
+			configure: func(t *testing.T) {
+				current := availableKnowledgeBase()
+				current.Metadata.ResourceState = nil
+				t.Setenv("CSGHUB_API_BASE_URL", installKnowledgeBaseResponse(t, current, "template-runner-token"))
+				t.Setenv("CSGHUB_USER_TOKEN", "template-runner-token")
+			},
+		},
+		{
+			name: "runner token rejected",
+			configure: func(t *testing.T) {
+				t.Setenv("CSGHUB_API_BASE_URL", installKnowledgeBaseErrorResponse(t, http.StatusUnauthorized, "invalid-runner-token"))
+				t.Setenv("CSGHUB_USER_TOKEN", "invalid-runner-token")
+			},
+		},
+		{name: "runner token missing", configure: func(*testing.T) {}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			originalLoader := loadInteractiveConnection
+			t.Cleanup(func() { loadInteractiveConnection = originalLoader })
+			loadInteractiveConnection = func(context.Context) (Connection, bool, error) {
+				return Connection{}, false, nil
+			}
+			t.Setenv("CSGHUB_ACCESS_TOKEN", "")
+			t.Setenv("CSGHUB_USER_TOKEN", "")
+			test.configure(t)
+
+			_, installed, err := ServerConfig(availableKnowledgeBase(), "publisher-token")
+			if err != nil {
+				t.Fatalf("ServerConfig() error = %v", err)
+			}
+			delete(installed, "headers")
+			installed["url"] = "https://template.example.test/sanitized-snapshot"
+
+			hydrated, err := HydrateTemplateServers(context.Background(), map[string]any{"wiki-content-42": installed})
+			if err != nil {
+				t.Fatalf("HydrateTemplateServers() error = %v", err)
+			}
+			entry := hydrated["wiki-content-42"].(map[string]any)
+			if got, want := entry["url"], "https://template.example.test/sanitized-snapshot"; got != want {
+				t.Fatalf("url = %#v, want %q", got, want)
+			}
+			if _, exists := entry["headers"]; exists {
+				t.Fatalf("fallback config injected credentials: %#v", entry)
+			}
+			if _, managed := ManagedMetadataFromServer(entry); !managed {
+				t.Fatalf("fallback config lost managed metadata: %#v", entry)
+			}
+		})
 	}
 }
 

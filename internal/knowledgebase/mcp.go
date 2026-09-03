@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -192,9 +193,11 @@ func hydrateServerConfig(config map[string]any, endpoint, token string) (map[str
 	return prepared, nil
 }
 
-// HydrateTemplateServers injects the current template runner's CSGHub access
-// token into managed knowledge-base MCP servers. The URL is resolved from the
-// runner's current CSGHub record instead of trusting a community template URL.
+// HydrateTemplateServers best-effort injects the current template runner's
+// CSGHub access token into managed knowledge-base MCP servers. Successful
+// refreshes use the runner's current CSGHub record instead of trusting a
+// community template URL. Failed refreshes retain the sanitized template
+// snapshot so an external dependency cannot block agent creation.
 func HydrateTemplateServers(ctx context.Context, servers map[string]any) (map[string]any, error) {
 	hydrated, err := cloneServers(servers)
 	if err != nil || hydrated == nil {
@@ -212,7 +215,8 @@ func HydrateTemplateServers(ctx context.Context, servers map[string]any) (map[st
 	}
 	connection, err := LoadConnection(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("hydrate knowledge base MCP servers: %w", err)
+		slog.Warn("keeping template knowledge-base MCP snapshots because credentials are unavailable", "error", err)
+		return hydrated, nil
 	}
 	for name, raw := range hydrated {
 		entry, ok := raw.(map[string]any)
@@ -224,11 +228,13 @@ func HydrateTemplateServers(ctx context.Context, servers map[string]any) (map[st
 			continue
 		}
 		if name != metadata.ContentID {
-			return nil, fmt.Errorf("hydrate %s: managed knowledge-base MCP server name must match content_id %q", name, metadata.ContentID)
+			slog.Warn("keeping template knowledge-base MCP snapshot with mismatched identity", "server", name, "content_id", metadata.ContentID)
+			continue
 		}
 		prepared, err := HydrateManagedServer(ctx, entry, connection)
 		if err != nil {
-			return nil, fmt.Errorf("hydrate %s: %w", name, err)
+			slog.Warn("keeping template knowledge-base MCP snapshot after hydration failure", "server", name, "error", err)
+			continue
 		}
 		hydrated[name] = prepared
 	}
