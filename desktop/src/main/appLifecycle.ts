@@ -360,7 +360,7 @@ export class AppLifecycle {
     const iconPath = desktopIconResourcePath(iconName);
     const icon = nativeImage.createFromPath(iconPath);
     if (!icon.isEmpty()) {
-      this.windowManager?.setWindowsIcon(icon, iconPath, useDarkColors);
+      this.windowManager?.setWindowsIcon(icon, iconPath);
     }
   }
 

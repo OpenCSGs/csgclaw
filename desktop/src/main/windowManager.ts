@@ -1,12 +1,9 @@
 import path from "node:path";
 import { BrowserWindow, session, type NativeImage, type Session } from "electron";
 import { installNavigationPolicy } from "./navigationPolicy";
-import {
-  isWindowsDesktop,
-  windowsAppIconPath,
-  windowsTaskbarAppUserModelID,
-} from "./platform";
+import { isWindowsDesktop, windowsAppIconPath } from "./platform";
 import { installPermissionPolicy } from "./permissionPolicy";
+import { windowsTaskbarAppDetails } from "./windowsTaskbar";
 
 export type WindowManagerOptions = {
   onLoadFailure: (error: Error) => void;
@@ -19,7 +16,6 @@ export class WindowManager {
   private mainWindow: BrowserWindow | null = null;
   private windowsIcon: NativeImage | null = null;
   private windowsIconPath = "";
-  private windowsUseDarkColors = true;
   private readonly desktopSession: Session;
 
   constructor(private readonly options: WindowManagerOptions) {
@@ -118,22 +114,21 @@ export class WindowManager {
     window.focus();
   }
 
-  setWindowsIcon(icon: NativeImage, iconPath: string, useDarkColors: boolean): void {
+  setWindowsIcon(icon: NativeImage, iconPath: string): void {
     if (!isWindowsDesktop || icon.isEmpty()) {
       return;
     }
+    const iconChanged = this.windowsIconPath !== iconPath;
     this.windowsIcon = icon;
     this.windowsIconPath = iconPath;
-    this.windowsUseDarkColors = useDarkColors;
     const window = this.mainWindow;
     if (window && !window.isDestroyed()) {
-      // Installed Squirrel shortcuts make Windows prefer the executable icon for
-      // the shared AppUserModelID. Recreate the taskbar button with a themed
-      // per-window ID so the Shell reads the current relaunch and window icons.
-      window.setSkipTaskbar(true);
-      this.applyWindowsTaskbarDetails(window);
       window.setIcon(icon);
-      window.setSkipTaskbar(false);
+      if (iconChanged && !process.windowsStore) {
+        window.setSkipTaskbar(true);
+        this.applyWindowsTaskbarDetails(window);
+        window.setSkipTaskbar(false);
+      }
     }
   }
 
@@ -149,16 +144,15 @@ export class WindowManager {
   }
 
   private applyWindowsTaskbarDetails(window: BrowserWindow): void {
-    if (!isWindowsDesktop || !this.windowsIconPath) {
+    const details = windowsTaskbarAppDetails(
+      process.platform,
+      process.windowsStore,
+      this.windowsIconPath,
+    );
+    if (!details) {
       return;
     }
-    window.setAppDetails({
-      appId: windowsTaskbarAppUserModelID(this.windowsUseDarkColors),
-      appIconPath: this.windowsIconPath,
-      appIconIndex: 0,
-      relaunchCommand: process.execPath,
-      relaunchDisplayName: "CSGClaw",
-    });
+    window.setAppDetails(details);
   }
 
   private installRequestAuthentication(): void {

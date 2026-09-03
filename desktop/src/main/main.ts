@@ -7,7 +7,8 @@ import {
   logDesktopError,
   logDesktopInfo,
 } from "./desktopLogger";
-import { isWindowsDesktop, windowsAppUserModelID } from "./platform";
+import { isWindowsDesktop } from "./platform";
+import { windowsAppUserModelID } from "./windowsTaskbar";
 
 app.enableSandbox();
 app.setName("CSGClaw");

@@ -4,11 +4,6 @@ import { DesktopPlatform } from "../shared/desktopEnvironment";
 
 export const isMacOSDesktop = process.platform === DesktopPlatform.MacOS;
 export const isWindowsDesktop = process.platform === DesktopPlatform.Windows;
-export const windowsAppUserModelID = "com.squirrel.csgclaw_desktop.CSGClaw";
-
-export function windowsTaskbarAppUserModelID(useDarkColors: boolean): string {
-  return `${windowsAppUserModelID}.${useDarkColors ? "dark" : "light"}`;
-}
 
 export function desktopIconResourcePath(fileName: string): string {
   return app.isPackaged
