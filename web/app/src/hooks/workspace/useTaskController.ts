@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  createWorkspaceTask,
-  fetchGlobalTasks,
-  fetchTeamEvents,
-  fetchTeams,
-  planWorkspaceTask,
-  startWorkspaceTask,
-} from "@/api/tasks";
+import { createWorkspaceTask, fetchGlobalTasks, fetchTeamEvents, fetchTeams, planWorkspaceTask } from "@/api/tasks";
 import {
   createScheduledTask,
   deleteScheduledTask,
@@ -69,10 +62,6 @@ export function useTaskController({
   const [scheduledTaskActionID, setScheduledTaskActionID] = useState("");
   const [scheduledTaskActionError, setScheduledTaskActionError] = useState("");
   const [selectedScheduledTaskID, setSelectedScheduledTaskID] = useState("");
-  const [planTaskBusy, setPlanTaskBusy] = useState(false);
-  const [startTaskBusy, setStartTaskBusy] = useState(false);
-  const [planningTaskID, setPlanningTaskID] = useState("");
-  const [startingTaskID, setStartingTaskID] = useState("");
   const [taskActionError, setTaskActionError] = useState("");
   const [parentDetailTaskID, setParentDetailTaskID] = useState("");
   const lastTaskTabRevalidateAttemptAt = useRef(0);
@@ -146,14 +135,17 @@ export function useTaskController({
   const selectedTaskID = activePane.type === WorkspacePaneTypes.task ? String(activePane.id || "") : "";
   const selectedTask = useMemo(() => tasks.find((item) => item.id === selectedTaskID) ?? null, [selectedTaskID, tasks]);
   const activeRootTask = useMemo(() => rootTaskForTask(tasks, selectedTask), [selectedTask, tasks]);
-  const visibleRootTask = activeRootTask ?? parentTasks[0] ?? null;
+  const boardActiveRootTask = useMemo(
+    () => (activeRootTask && parentTasks.some((task) => task.id === activeRootTask.id) ? activeRootTask : null),
+    [activeRootTask, parentTasks],
+  );
+  const visibleRootTask = boardActiveRootTask ?? parentTasks[0] ?? null;
   const activeEventsTeamID =
-    activeRootTask?.assignment_type === "team"
-      ? activeRootTask.team_id
-      : selectedTask?.assignment_type === "team"
-        ? selectedTask.team_id
-        : "";
-  const shouldPollActiveTaskBoard = useMemo(() => shouldPollTaskBoard(tasks, activeRootTask), [activeRootTask, tasks]);
+    taskBoardView === "tasks" && visibleRootTask?.assignment_type === "team" ? visibleRootTask.team_id : "";
+  const shouldPollActiveTaskBoard = useMemo(
+    () => taskBoardView === "tasks" && shouldPollTaskBoard(tasks, visibleRootTask),
+    [taskBoardView, tasks, visibleRootTask],
+  );
   const shouldPollScheduledGeneratedTasks = useMemo(
     () =>
       scheduledTaskViewActive &&
@@ -207,11 +199,17 @@ export function useTaskController({
   }, [activePane.id, activePane.type, refetchTasks, tasksDataUpdatedAt, tasksFetching]);
 
   useEffect(() => {
-    if (!selectedTask?.parent_id) {
+    if (
+      activePane.type !== WorkspacePaneTypes.task ||
+      taskBoardView !== "tasks" ||
+      tasksFetching ||
+      !visibleRootTask ||
+      selectedTaskID === visibleRootTask.id
+    ) {
       return;
     }
-    onSelectTask(selectedTask.parent_id, { replace: true });
-  }, [onSelectTask, selectedTask]);
+    onSelectTask(visibleRootTask.id, { replace: true });
+  }, [activePane.type, onSelectTask, selectedTaskID, taskBoardView, tasksFetching, visibleRootTask]);
 
   useEffect(() => {
     if (!shouldPollTasks) {
@@ -263,18 +261,6 @@ export function useTaskController({
       window.clearTimeout(timer);
     };
   }, [missingScheduledGeneratedTaskIDs, refetchTasks, taskBoardView]);
-
-  function taskById(taskId: string) {
-    return tasks.find((item) => item.id === taskId) ?? null;
-  }
-
-  function getPlanTarget(taskId?: string) {
-    const target = taskById(String(taskId || "")) ?? activeRootTask;
-    if (!target) {
-      return null;
-    }
-    return rootTaskForTask(tasks, target);
-  }
 
   function openParentTaskDetail(taskId?: string) {
     const targetID = String(taskId || visibleRootTask?.id || "").trim();
@@ -428,9 +414,6 @@ export function useTaskController({
   async function autoPlanAndStartTask(taskID: string, teamID: string): Promise<void> {
     if (teamID && taskID) {
       try {
-        setPlanningTaskID(taskID);
-        setPlanTaskBusy(true);
-        setStartTaskBusy(true);
         setTaskActionError("");
         const planned = await planWorkspaceTask({
           team_id: teamID,
@@ -444,101 +427,7 @@ export function useTaskController({
         }
       } catch (err) {
         setTaskActionError(errorMessage(err, t("taskPlanFailed")));
-      } finally {
-        setPlanTaskBusy(false);
-        setStartTaskBusy(false);
-        setPlanningTaskID("");
-        setStartingTaskID("");
       }
-    }
-  }
-
-  async function planTask(taskId: string): Promise<void> {
-    if (planTaskBusy || startTaskBusy) {
-      return;
-    }
-    const target = getPlanTarget(taskId);
-    if (!target) {
-      setTaskActionError(t("taskPlanFailed"));
-      return;
-    }
-    if (target.assignment_type !== "team") {
-      return;
-    }
-    setPlanTaskBusy(true);
-    setPlanningTaskID(target.id);
-    setTaskActionError("");
-    try {
-      const planned = await planWorkspaceTask({
-        team_id: target.team_id,
-        task_id: target.id,
-        auto_start: true,
-      });
-      await tasksQuery.refetch();
-      await queryClient.invalidateQueries({ queryKey: teamEventsQueryKey(target.team_id) });
-      if (planned.started) {
-        await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.bootstrap() });
-      }
-    } catch (err) {
-      setTaskActionError(errorMessage(err, t("taskPlanFailed")));
-    } finally {
-      setPlanTaskBusy(false);
-      setPlanningTaskID("");
-    }
-  }
-
-  async function finishStartTask(target: WorkspaceTask): Promise<void> {
-    await tasksQuery.refetch();
-    await queryClient.invalidateQueries({ queryKey: teamEventsQueryKey(target.team_id) });
-    await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.bootstrap() });
-  }
-
-  async function startTask(taskId: string): Promise<void> {
-    if (startTaskBusy || planTaskBusy) {
-      return;
-    }
-    const target = getPlanTarget(taskId);
-    if (!target) {
-      setTaskActionError(t("taskStartFailed"));
-      return;
-    }
-    if (target.assignment_type !== "team") {
-      return;
-    }
-    setStartTaskBusy(true);
-    setStartingTaskID(target.id);
-    setTaskActionError("");
-    try {
-      await startWorkspaceTask({
-        team_id: target.team_id,
-        task_id: target.id,
-      });
-      await finishStartTask(target);
-      return;
-    } catch (err) {
-      const needPlan = shouldAutoPlanForStartError(err);
-      if (needPlan) {
-        try {
-          await planWorkspaceTask({
-            team_id: target.team_id,
-            task_id: target.id,
-          });
-          await queryClient.invalidateQueries({ queryKey: teamEventsQueryKey(target.team_id) });
-          await startWorkspaceTask({
-            team_id: target.team_id,
-            task_id: target.id,
-          });
-          await finishStartTask(target);
-          return;
-        } catch (fallbackErr) {
-          setTaskActionError(errorMessage(fallbackErr, t("taskStartFailed")));
-          return;
-        }
-      }
-      setTaskActionError(errorMessage(err, t("taskStartFailed")));
-    } finally {
-      setStartTaskBusy(false);
-      setStartingTaskID("");
     }
   }
 
@@ -549,8 +438,6 @@ export function useTaskController({
     scheduledTaskCount: scheduledTasks.length,
     taskBoardView,
     setTaskBoardView,
-    planningTaskID,
-    startingTaskID,
     openParentTaskDetail,
     openCreateTaskModal: () => {
       setCreateTaskError("");
@@ -586,10 +473,6 @@ export function useTaskController({
       createScheduledTaskError,
       editScheduledTaskBusy,
       editScheduledTaskError,
-      planTaskBusy,
-      planningTaskID,
-      startTaskBusy,
-      startingTaskID,
       taskActionError,
       scheduledTaskActionID,
       scheduledTaskActionError,
@@ -621,8 +504,6 @@ export function useTaskController({
       onCreateScheduledTask: createScheduledTaskDraft,
       onEditScheduledTask: editScheduledTaskDraft,
       onDeleteScheduledTask: removeScheduledTask,
-      onPlanTask: planTask,
-      onStartTask: startTask,
       onRunScheduledTask: runScheduledTask,
       onToggleScheduledTask: toggleScheduledTask,
       onSelectScheduledTask: setSelectedScheduledTaskID,
@@ -634,25 +515,9 @@ export function useTaskController({
         }
       },
       onSelectTask,
-      onCloseTaskDetails: () => onSelectTask(),
       onOpenConversation: onSelectConversation,
-      onViewParentDetail: openParentTaskDetail,
     },
   };
-}
-
-function isApiError(value: unknown): value is ApiError {
-  return Boolean(
-    value && typeof value === "object" && "status" in value && typeof (value as ApiError).status === "number",
-  );
-}
-
-function shouldAutoPlanForStartError(error: unknown): boolean {
-  const message = errorMessage(error, "").toLowerCase();
-  if (!isApiError(error) || error.status !== 409) {
-    return false;
-  }
-  return message.includes("no subtasks") || message.includes("has no subtasks");
 }
 
 function isScheduledTaskAlreadyTriggeredError(error: unknown): boolean {

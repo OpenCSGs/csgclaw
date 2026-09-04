@@ -7,7 +7,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 20px 24px 12px;
+  padding: 16px 20px 12px;
 }
 
 .headerRow {
@@ -31,7 +31,8 @@
   color: var(--text);
   font-family: var(--font-display);
   font-size: 20px;
-  font-weight: 650;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   line-height: 1.25;
 }
 
@@ -64,10 +65,21 @@
   box-shadow: 0 8px 20px rgb(15 23 42 / 0.04);
 }
 
+.tasksBoardPanelTaskView {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .tasksBoardHead {
   align-items: flex-start;
   justify-content: space-between;
   padding: 18px 20px 14px;
+}
+
+.tasksBoardHeadTaskView {
+  padding: 0 0 12px;
 }
 
 .tasksBoardHeading {
@@ -104,6 +116,88 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-strong) 18%, transparent);
 }
 
+.taskBoardView {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.taskBoardControls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 10px;
+}
+
+.taskBoardParentSelect {
+  width: 112px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.taskBoardAssigneeSelect {
+  width: 112px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.taskBoardSearchInput {
+  flex: 0 1 220px;
+}
+
+:global(:root) body .taskBoardControls input.taskBoardSearchInput {
+  appearance: none;
+  width: 220px;
+  min-width: 180px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: none;
+  font: inherit;
+  font-size: 13px;
+}
+
+:global(:root) body .taskBoardControls input.taskBoardSearchInput:hover:not(:disabled) {
+  border-color: var(--gray-400);
+}
+
+:global(:root) body .taskBoardControls input.taskBoardSearchInput:focus {
+  border-color: var(--gray-400);
+  box-shadow: none;
+}
+
+:global(:root) body .taskBoardControls input.taskBoardSearchInput::placeholder {
+  color: var(--text-subtle);
+}
+
+:global(:root) body .taskBoardControls input.taskBoardSearchInput::-webkit-search-cancel-button,
+:global(:root) body .taskBoardControls input.taskBoardSearchInput::-webkit-search-decoration {
+  appearance: none;
+}
+
+.taskBoardHint {
+  flex: 0 0 auto;
+  padding: 0 0 8px;
+  color: var(--text-subtle);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .tasksKanbanScroll {
   flex: 1 1 auto;
   min-width: 0;
@@ -111,16 +205,16 @@
   height: auto;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 8px;
+  padding: 4px 0 16px;
 }
 
 .tasksKanban {
-  display: grid;
-  grid-auto-columns: 280px;
-  grid-auto-flow: column;
-  gap: 16px;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
   height: 100%;
   min-height: 0;
+  padding-bottom: 8px;
 }
 
 .taskBoardColumn {
@@ -128,25 +222,26 @@
   --task-status-color: var(--gray-600);
 
   display: grid;
+  flex: 1 1 0;
   grid-template-rows: auto minmax(0, 1fr);
-  min-width: 0;
+  min-width: 168px;
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  border-radius: var(--radius-xl);
-  padding: 8px;
+  border-radius: 12px;
+  padding: 10px 8px 12px;
   background: var(--task-column-bg);
 }
 
 .taskBoardColumnHead {
   justify-content: flex-start;
   min-height: 30px;
-  padding: 2px 6px 8px;
+  padding: 4px 6px 10px;
   border-radius: 0;
   background: transparent;
   color: var(--text);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .taskBoardColumnTitle {
@@ -167,7 +262,7 @@
 .taskBoardColumnTitle strong {
   flex: 0 0 auto;
   color: var(--gray-500);
-  font-weight: 650;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -178,8 +273,9 @@
 }
 
 .taskBoardColumnBody {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 8px;
   overflow-x: hidden;
   overflow-y: auto;
@@ -187,24 +283,22 @@
   min-height: 0;
   overscroll-behavior-y: contain;
   overscroll-behavior-x: auto;
-  padding: 4px;
-  border-radius: var(--radius-md);
+  padding: 0;
+  border-radius: 10px;
 }
 
 .taskBoardCard {
   display: grid;
   gap: 8px;
   min-width: 0;
-  padding: 14px 16px;
-  border: 0.5px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  padding: 10px 10px 9px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 74%, transparent);
+  border-radius: 10px;
   background: var(--surface);
   color: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow:
-    0 3px 6px -2px rgb(16 24 40 / 0.02),
-    0 1px 1px rgb(16 24 40 / 0.04);
+  box-shadow: none;
   transition:
     background 160ms ease,
     border-color 160ms ease,
@@ -214,17 +308,15 @@
 .taskBoardCardTopline {
   display: flex;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
 }
 
 .taskBoardCard:hover {
-  border-color: color-mix(in srgb, var(--accent-strong) 18%, var(--border-subtle));
-  background: color-mix(in srgb, var(--gray-25) 82%, var(--surface));
-  box-shadow:
-    0 6px 12px -8px rgb(15 23 42 / 0.16),
-    0 1px 1px rgb(16 24 40 / 0.04);
+  border-color: color-mix(in srgb, var(--border-subtle) 72%, var(--gray-400));
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.06);
 }
 
 .taskBoardCard:focus-visible {
@@ -234,60 +326,78 @@
     0 8px 18px rgb(15 23 42 / 0.1);
 }
 
-.taskBoardCardId {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-  color: var(--text-subtle);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.taskBoardCardId::before {
-  display: inline-block;
-  flex: 0 0 auto;
-  width: 12px;
-  height: 2px;
-  border-radius: 999px;
-  background: currentcolor;
-  content: "";
-  opacity: 0.75;
-}
-
-.taskBoardCardActions {
+.taskBoardCardPriority {
   display: inline-flex;
   flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.taskBoardCardWorkerBadge {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 5px;
-  max-width: 112px;
-  min-width: 0;
-  padding: 3px 7px;
-  border-radius: 999px;
+  min-width: 24px;
+  justify-content: center;
+  padding: 1px 5px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--gray-100) 86%, var(--surface));
   color: var(--text-subtle);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 650;
   line-height: 16px;
 }
 
-.taskBoardCardWorkerBadge svg {
-  flex: 0 0 auto;
+.taskBoardCardPriority[data-priority="urgent"] {
+  background: color-mix(in srgb, var(--error-50) 82%, var(--surface));
+  color: var(--error-600);
 }
 
-.taskBoardCardWorkerBadge span {
+.taskBoardCardPriority[data-priority="high"] {
+  background: color-mix(in srgb, var(--warning-50) 82%, var(--surface));
+  color: var(--warning-700);
+}
+
+.taskBoardCardMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-subtle);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.taskBoardCardWorker {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.taskBoardCardAvatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--purple-500, #7c6cf0);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.taskBoardCardAvatar[data-tone="1"] {
+  background: var(--blue-600);
+}
+
+.taskBoardCardAvatar[data-tone="2"] {
+  background: var(--success-600);
+}
+
+.taskBoardCardAvatar[data-tone="3"] {
+  background: var(--warning-600);
+}
+
+.taskBoardCardAvatar[data-tone="4"] {
+  background: var(--error-600);
+}
+
+.taskBoardCardWorkerName {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -303,88 +413,52 @@
 }
 
 .taskBoardCardTitle {
+  flex: 1 1 auto;
   color: var(--text);
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
   -webkit-line-clamp: 2;
 }
 
-.taskBoardCardDescription {
-  color: var(--text-subtle);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 18px;
-  -webkit-line-clamp: 1;
-}
-
-.taskBoardCardFooter {
+.taskBoardCardTags {
   display: flex;
   min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 2px;
-  color: var(--text-subtle);
-  font-size: 12px;
-  line-height: 18px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.taskBoardCardFooter > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.taskBoardCardTeam {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
-  font-weight: 500;
-}
-
-.taskBoardCardTeamIcon {
-  display: inline-grid;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  place-items: center;
+.taskBoardCardTag {
+  padding: 1px 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--gray-100) 86%, var(--surface));
   color: var(--text-subtle);
+  font-size: 11px;
+  line-height: 16px;
 }
 
-.taskBoardCardTeam > span:last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.taskBoardCardTag[data-tone="warning"] {
+  background: color-mix(in srgb, var(--error-50) 84%, var(--surface));
+  color: var(--error-600);
 }
 
-.taskBoardCardUpdated {
-  flex: 0 1 auto;
-  color: var(--text-subtle);
-  text-align: right;
-}
-
-.parentTaskBoardCard {
-  gap: 6px;
+.taskBoardCardTag[data-tone="time"] {
+  background: color-mix(in srgb, var(--blue-25) 82%, var(--surface));
+  color: var(--blue-600);
 }
 
 .taskBoardEmpty {
   display: grid;
   place-items: center;
-  min-height: 160px;
+  flex: 1 1 auto;
+  min-height: 120px;
   color: var(--text-subtle);
   font-size: 13px;
   line-height: 20px;
 }
 
-.taskBoardColumnBlocked,
-.taskBoardColumnIn_review {
+.taskBoardColumnIn_review,
+.taskBoardColumnBlocked {
   --task-column-bg: color-mix(in srgb, var(--success-50) 48%, var(--surface));
   --task-status-color: var(--success-700);
 }
@@ -395,8 +469,8 @@
 }
 
 .taskBoardColumnCompleted {
-  --task-column-bg: color-mix(in srgb, var(--blue-25) 54%, var(--surface));
-  --task-status-color: var(--blue-600);
+  --task-column-bg: color-mix(in srgb, var(--gray-100) 34%, var(--surface));
+  --task-status-color: var(--gray-700);
 }
 
 .taskBoardColumnFailed,
@@ -412,8 +486,8 @@
   --task-status-color: var(--gray-700);
 }
 
-.taskBoardColumnBlocked .taskBoardColumnHead,
-.taskBoardColumnIn_review .taskBoardColumnHead {
+.taskBoardColumnIn_review .taskBoardColumnHead,
+.taskBoardColumnBlocked .taskBoardColumnHead {
   color: var(--success-700);
 }
 
@@ -422,7 +496,7 @@
 }
 
 .taskBoardColumnCompleted .taskBoardColumnHead {
-  color: var(--blue-600);
+  color: var(--gray-700);
 }
 
 .taskBoardColumnFailed .taskBoardColumnHead,
@@ -441,8 +515,8 @@
   --task-status-color: var(--gray-300);
 }
 
-:root[data-theme="dark"] .taskBoardColumnBlocked,
-:root[data-theme="dark"] .taskBoardColumnIn_review {
+:root[data-theme="dark"] .taskBoardColumnIn_review,
+:root[data-theme="dark"] .taskBoardColumnBlocked {
   --task-column-bg: color-mix(in srgb, var(--success-700) 12%, var(--surface));
   --task-status-color: var(--success-500);
 }
@@ -453,8 +527,8 @@
 }
 
 :root[data-theme="dark"] .taskBoardColumnCompleted {
-  --task-column-bg: color-mix(in srgb, var(--blue-600) 13%, var(--surface));
-  --task-status-color: var(--blue-100);
+  --task-column-bg: color-mix(in srgb, var(--gray-700) 12%, var(--surface));
+  --task-status-color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .taskBoardColumnFailed,
@@ -1221,6 +1295,10 @@
   border-top: 1px solid var(--line);
 }
 
+.taskContentLayoutTaskView {
+  border-top: 0;
+}
+
 .taskSideList {
   display: flex;
   min-width: 0;
@@ -1582,6 +1660,23 @@
 
   .tasksBoardHead {
     justify-content: flex-start;
+  }
+
+  .taskBoardControls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .taskBoardParentSelect,
+  .taskBoardAssigneeSelect {
+    width: 100%;
+    max-width: none;
+  }
+
+  :global(:root) body .taskBoardControls input.taskBoardSearchInput {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
   }
 
   .taskCreateForm {

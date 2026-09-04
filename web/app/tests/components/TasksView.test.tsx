@@ -17,6 +17,16 @@ const labels: Record<string, string> = {
   subTaskBoardTitle: "Sub-task board",
   taskAssigneeLabel: "Assignee",
   taskAssigneeUnassigned: "Unassigned",
+  taskBoardSelectLabel: "Select task board",
+  taskBoardSelectPlaceholder: "No task boards",
+  taskBoardSelectSearchPlaceholder: "Search task boards",
+  taskBoardSearchLabel: "Search child tasks",
+  taskBoardSearchPlaceholder: "Search title or task ID",
+  taskBoardAssigneeFilterLabel: "Filter by assignee",
+  taskBoardAllAssignees: "All assignees",
+  taskBoardWaitingDependencies: "Waiting for prerequisites",
+  taskBoardDependenciesReady: "Prerequisites complete",
+  taskBoardInteractionHint: "Select a child task card to view details",
   taskBoardColumnEmpty: "No tasks",
   taskBoardNoChildren: "No child tasks",
   taskCardUpdatedAt: "Updated {time}",
@@ -33,10 +43,16 @@ const labels: Record<string, string> = {
   taskOpenExecutionRoom: "Open execution room",
   taskOpenExecutionRoomShort: "Room",
   taskOpenConversation: "View history",
+  taskOpenConversationShort: "History",
   taskConversationAgentDeleted: "Cannot open history: the corresponding agent was deleted.",
   taskParentDetailTitle: "Task detail",
+  taskDetailsShort: "Details",
+  taskViewDetails: "View details",
   taskRoomLabel: "Room",
   taskCreate: "New task",
+  taskBoardCreate: "New board",
+  taskPlan: "Plan",
+  taskStart: "Start",
   taskCreateSubmit: "Create",
   taskCreateSubtitle: "Create a task",
   taskCreateTitle: "New task",
@@ -233,7 +249,7 @@ function scheduledTaskRun(overrides: Partial<WorkspaceScheduledTaskRun> = {}): W
 }
 
 describe("TasksView", () => {
-  it("shows parent tasks first and opens a parent-task dialog with grouped activity", async () => {
+  it("shows one parent board with independent child cards and preserves grouped parent activity", async () => {
     const tasks = [
       task({ id: "task-1", title: "Build blog", status: "pending" }),
       task({
@@ -298,19 +314,31 @@ describe("TasksView", () => {
       },
     ];
 
-    render(<TasksView tasks={tasks} taskEvents={taskEvents} selectedTask={tasks[0]} t={t} />);
+    const { rerender } = render(<TasksView tasks={tasks} taskEvents={taskEvents} selectedTask={tasks[0]} t={t} />);
 
     expect(screen.getByRole("heading", { name: "Task board" })).toBeInTheDocument();
-    const parentCard = screen.getByText("Build blog").closest("button");
-    expect(parentCard).toHaveTextContent("1/2");
-    expect(parentCard).toHaveTextContent("te-team");
-    expect(parentCard).toHaveTextContent(/Updated/);
-    expect(parentCard).not.toHaveTextContent(/\d{4}\.\d{2}\.\d{2}/);
+    expect(screen.getByRole("combobox", { name: "Select task board" })).toHaveTextContent("Build blog");
+    const board = screen.getByRole("region", { name: "Sub-task board" });
+    const frontendCard = within(board).getByText("Implement frontend").closest("button");
+    const qualityCard = within(board).getByText("Verify quality").closest("button");
+    expect(frontendCard).toHaveTextContent("alice");
+    expect(qualityCard).toHaveTextContent("bob");
+    expect(qualityCard).toHaveTextContent("Prerequisites complete");
+    expect(within(board).queryByText("Build blog")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "View details" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Open execution room" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View history" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Build blog" })).not.toBeInTheDocument();
 
-    fireEvent.click(parentCard!);
+    fireEvent.click(qualityCard!);
+
+    const childDialog = screen.getByRole("dialog", { name: "Verify quality" });
+    expect(within(childDialog).getAllByText("task-3").length).toBeGreaterThan(0);
+    expect(within(childDialog).getByText("task-2")).toBeInTheDocument();
+    fireEvent.click(within(childDialog).getAllByRole("button", { name: "Close" })[0]!);
+
+    rerender(
+      <TasksView tasks={tasks} taskEvents={taskEvents} selectedTask={tasks[0]} parentDetailTaskID="task-1" t={t} />,
+    );
 
     expect(screen.getByRole("dialog", { name: "Build blog" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Build blog" })).toBeInTheDocument();
@@ -339,6 +367,87 @@ describe("TasksView", () => {
     expect(screen.getByText(/Dispatch quality check/)).toBeInTheDocument();
   });
 
+  it("switches parent boards through navigation and filters cards without changing task state", async () => {
+    const user = userEvent.setup();
+    const onSelectTask = vi.fn();
+    const tasks = [
+      task({ id: "task-1", title: "Release one" }),
+      task({
+        id: "task-2",
+        title: "Frontend",
+        body: "needle only in the hidden description",
+        parent_id: "task-1",
+        assigned_to: "alice",
+        assigned_to_agent_name: "Alice",
+      }),
+      task({ id: "task-3", title: "Quality", parent_id: "task-1", assigned_to: "bob", assigned_to_agent_name: "Bob" }),
+      task({ id: "task-4", title: "Release two" }),
+      task({
+        id: "task-5",
+        title: "Documentation",
+        parent_id: "task-4",
+        assigned_to: "alice",
+        assigned_to_agent_name: "Alice",
+      }),
+    ];
+
+    render(<TasksView tasks={tasks} selectedTask={tasks[0]} onSelectTask={onSelectTask} t={t} />);
+
+    const board = screen.getByRole("region", { name: "Sub-task board" });
+    await user.type(screen.getByRole("searchbox", { name: "Search child tasks" }), "front");
+    expect(within(board).getByText("Frontend")).toBeInTheDocument();
+    expect(within(board).queryByText("Quality")).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search child tasks" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search child tasks" }), "needle");
+    expect(within(board).queryByText("Frontend")).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search child tasks" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search child tasks" }), "task-2");
+    expect(within(board).getByText("Frontend")).toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search child tasks" }));
+    await user.click(screen.getByRole("combobox", { name: "Filter by assignee" }));
+    await user.click(await screen.findByRole("option", { name: "Alice" }));
+    expect(within(board).getByText("Frontend")).toBeInTheDocument();
+    expect(within(board).queryByText("Quality")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Select task board" }));
+    await user.click(await screen.findByRole("option", { name: /Release two/ }));
+    expect(onSelectTask).toHaveBeenCalledWith("task-4");
+  });
+
+  it("maps the existing blocked and failed statuses to review and blocked icons", () => {
+    const root = task({ id: "task-root", title: "Release" });
+    const reviewTask = task({ id: "task-review", parent_id: root.id, status: "blocked", title: "Review copy" });
+    const blockedTask = task({ id: "task-blocked", parent_id: root.id, status: "failed", title: "Resolve failure" });
+
+    render(<TasksView tasks={[root, reviewTask, blockedTask]} selectedTask={root} t={t} />);
+
+    const reviewColumn = screen.getByText("blocked").closest("section");
+    const blockedColumn = screen.getByText("failed").closest("section");
+    expect(reviewColumn?.querySelector('path[d^="M4.2 7.1"]')).toBeInTheDocument();
+    expect(blockedColumn?.querySelector('path[d^="M7 4.1"]')).toBeInTheDocument();
+  });
+
+  it("keeps a directly assigned agent task visible as a single-card board", () => {
+    const agentTask = task({
+      assignment_type: "agent",
+      assignment_id: "agent-1",
+      team_id: "",
+      team_title: "",
+      assigned_to: "agent-1",
+      assigned_to_agent_name: "Worker One",
+      status: "in_progress",
+      title: "Independent investigation",
+    });
+
+    render(<TasksView tasks={[agentTask]} selectedTask={agentTask} t={t} />);
+
+    const board = screen.getByRole("region", { name: "Sub-task board" });
+    expect(within(board).getByText("Independent investigation").closest("button")).toHaveTextContent("Worker One");
+  });
+
   it("hides unresolved technical ids from parent task metadata", () => {
     const parent = task({
       id: "task-1",
@@ -354,9 +463,7 @@ describe("TasksView", () => {
       claimed_by_agent_name: "",
     });
 
-    render(<TasksView tasks={[parent]} t={t} />);
-
-    fireEvent.click(screen.getByText("Build blog").closest("button")!);
+    render(<TasksView tasks={[parent]} parentDetailTaskID={parent.id} t={t} />);
 
     const metadata = screen.getByRole("complementary", { name: "Task info" });
     expect(within(metadata).queryByText("Assignee")).not.toBeInTheDocument();
@@ -483,7 +590,7 @@ describe("TasksView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "New task" }));
+    fireEvent.click(screen.getByRole("button", { name: "New board" }));
 
     expect(onOpenCreateTaskModal).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "New scheduled task" })).not.toBeInTheDocument();
@@ -500,7 +607,21 @@ describe("TasksView", () => {
     fireEvent.click(screen.getByRole("button", { name: "New scheduled task" }));
 
     expect(onOpenCreateScheduledTaskModal).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "New task" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New board" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the task board header limited to refresh and board creation", () => {
+    const root = task({ id: "task-root", assignment_type: "team", status: "pending" });
+    const child = task({ id: "task-child", parent_id: root.id, status: "pending" });
+    const { rerender } = render(<TasksView tasks={[root]} selectedTask={root} onOpenCreateTaskModal={vi.fn()} t={t} />);
+
+    expect(within(screen.getByLabelText("Task actions")).getAllByRole("button")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Plan" })).not.toBeInTheDocument();
+
+    rerender(<TasksView tasks={[root, child]} selectedTask={root} onOpenCreateTaskModal={vi.fn()} t={t} />);
+
+    expect(within(screen.getByLabelText("Task actions")).getAllByRole("button")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
   });
 
   it("shows only the task form in the task create dialog", () => {
@@ -644,9 +765,7 @@ describe("TasksView", () => {
       }),
     ];
 
-    render(<TasksView tasks={tasks} selectedTask={tasks[0]} t={t} />);
-
-    fireEvent.click(screen.getByText("Build blog").closest("button")!);
+    render(<TasksView tasks={tasks} selectedTask={tasks[0]} parentDetailTaskID="task-1" t={t} />);
 
     expect(screen.getByRole("dialog", { name: "Build blog" })).toBeInTheDocument();
     expect(screen.queryByTitle("planner done")).not.toBeInTheDocument();

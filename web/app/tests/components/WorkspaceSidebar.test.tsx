@@ -144,7 +144,6 @@ function renderSidebar(overrides: Partial<WorkspaceSidebarProps> = {}) {
     onToggleWorkspaceGroup: vi.fn(),
     onViewTaskDetails: vi.fn(),
     onWorkspaceTabChange: vi.fn(),
-    planningTaskID: "",
     roomCount: 0,
     runningAgentCount: 0,
     scheduledTaskCount: 0,

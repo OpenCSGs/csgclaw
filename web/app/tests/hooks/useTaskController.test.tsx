@@ -50,14 +50,18 @@ function createWrapper(queryClient: QueryClient) {
   };
 }
 
-function renderTaskController(queryClient: QueryClient, activePane: WorkspacePane) {
+function renderTaskController(
+  queryClient: QueryClient,
+  activePane: WorkspacePane,
+  onSelectTask: (taskID?: string, options?: { replace?: boolean }) => void = vi.fn(),
+) {
   return renderHook(
     ({ pane }: { pane: WorkspacePane }) =>
       useTaskController({
         activePane: pane,
         agents: [],
         onSelectConversation: vi.fn(),
-        onSelectTask: vi.fn(),
+        onSelectTask,
         t,
       }),
     {
@@ -163,6 +167,28 @@ describe("useTaskController", () => {
 
     await waitFor(() => {
       expect(fetchGlobalTasks).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("canonicalizes the task overview to the first parent board and loads its events", async () => {
+    const queryClient = createQueryClient();
+    const parent = task({ id: "task-parent", team_id: "team-visible", assignment_id: "team-visible" });
+    const child = task({
+      id: "task-child",
+      parent_id: parent.id,
+      team_id: parent.team_id,
+      assignment_id: parent.team_id,
+    });
+    const onSelectTask = vi.fn();
+    queryClient.setQueryData<WorkspaceTask[]>(TASKS_QUERY_KEY, [parent, child]);
+
+    renderTaskController(queryClient, { type: WorkspacePaneTypes.task, id: "" }, onSelectTask);
+
+    await waitFor(() => {
+      expect(onSelectTask).toHaveBeenCalledWith(parent.id, { replace: true });
+    });
+    await waitFor(() => {
+      expect(fetchTeamEvents).toHaveBeenCalledWith(parent.team_id);
     });
   });
 

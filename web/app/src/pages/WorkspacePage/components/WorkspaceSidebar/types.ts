@@ -112,8 +112,6 @@ export type WorkspaceSidebarProps = {
   scheduledTaskCount?: number;
   activeTaskBoardView?: "tasks" | "scheduled";
   taskItems: WorkspaceTask[];
-  planningTaskID?: string;
-  startingTaskID?: string;
   teams: WorkspaceTeam[];
   roomCount: number;
   runningAgentCount: number;

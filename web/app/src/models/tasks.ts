@@ -387,25 +387,9 @@ export function taskChildren(tasks: readonly WorkspaceTask[], parentID: string):
   return tasks.filter((task) => task.parent_id === parentID).sort(compareTasks);
 }
 
-export type TaskSidebarPhase = "idle" | "planning" | "dispatching";
+export type TaskSidebarPhase = "idle" | "planning";
 
-type ResolveTaskSidebarPhaseOptions = {
-  planningTaskID?: string;
-  startingTaskID?: string;
-};
-
-export function resolveTaskSidebarPhase(
-  task: WorkspaceTask,
-  children: readonly WorkspaceTask[],
-  options: ResolveTaskSidebarPhaseOptions = {},
-): TaskSidebarPhase {
-  if (options.planningTaskID === task.id) {
-    return "planning";
-  }
-  if (options.startingTaskID === task.id) {
-    return "dispatching";
-  }
-
+export function resolveTaskSidebarPhase(task: WorkspaceTask, children: readonly WorkspaceTask[]): TaskSidebarPhase {
   const status = normalizeTaskStatus(task.status);
   if (status === "failed" || status === "cancelled" || status === "completed") {
     return "idle";
@@ -453,14 +437,17 @@ export function groupTasksByParent(tasks: readonly WorkspaceTask[]): WorkspaceTa
 }
 
 export function boardColumnsForTask(tasks: readonly WorkspaceTask[], parentID: string): WorkspaceTaskColumn[] {
-  const children = taskChildren(tasks, parentID);
+  return boardColumnsForTasks(taskChildren(tasks, parentID));
+}
+
+export function boardColumnsForTasks(tasks: readonly WorkspaceTask[]): WorkspaceTaskColumn[] {
   const defaultStatuses: readonly string[] = TASK_BOARD_STATUSES;
   const extraStatuses = Array.from(
-    new Set(children.map((task) => task.status).filter((status) => !defaultStatuses.includes(status))),
+    new Set(tasks.map((task) => task.status).filter((status) => !defaultStatuses.includes(status))),
   ).sort();
   return [...TASK_BOARD_STATUSES, ...extraStatuses].map((status) => ({
     status,
-    tasks: children.filter((task) => task.status === status),
+    tasks: tasks.filter((task) => task.status === status),
   }));
 }
 

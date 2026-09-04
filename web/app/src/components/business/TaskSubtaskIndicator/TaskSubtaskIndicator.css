@@ -117,12 +117,6 @@
   color: var(--brand-700);
 }
 
-.task-subtask-indicator-dispatching {
-  border-color: color-mix(in srgb, var(--warning-700) 24%, transparent);
-  background: color-mix(in srgb, var(--warning-700) 10%, transparent);
-  color: var(--warning-700);
-}
-
 @keyframes task-subtask-indicator-dot-bounce {
   0%,
   60%,
@@ -141,12 +135,6 @@
   border-color: color-mix(in srgb, var(--brand-300) 34%, transparent);
   background: color-mix(in srgb, var(--brand-300) 14%, transparent);
   color: var(--brand-100);
-}
-
-:root[data-theme="dark"] .task-subtask-indicator-dispatching {
-  border-color: color-mix(in srgb, var(--warning-600) 34%, transparent);
-  background: color-mix(in srgb, var(--warning-600) 14%, transparent);
-  color: var(--warning-50);
 }
 
 @media (prefers-reduced-motion: reduce) {

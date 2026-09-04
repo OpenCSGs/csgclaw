@@ -21,8 +21,8 @@ export function TaskSubtaskIndicator({
   compact = false,
   className,
 }: TaskSubtaskIndicatorProps) {
-  if (phase === "planning" || phase === "dispatching") {
-    const label = phase === "planning" ? t("taskSidebarPlanning") : t("taskSidebarDispatching");
+  if (phase === "planning") {
+    const label = t("taskSidebarPlanning");
     return (
       <Tooltip content={label}>
         <span
@@ -30,7 +30,7 @@ export function TaskSubtaskIndicator({
             "task-subtask-indicator",
             compact && "task-subtask-indicator-compact",
             "task-subtask-indicator-loading",
-            phase === "planning" ? "task-subtask-indicator-planning" : "task-subtask-indicator-dispatching",
+            "task-subtask-indicator-planning",
             className,
           )}
           aria-label={label}

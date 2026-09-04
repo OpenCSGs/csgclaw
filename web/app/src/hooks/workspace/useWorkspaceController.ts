@@ -932,8 +932,6 @@ export function useWorkspaceController() {
       scheduledTaskCount: task.scheduledTaskCount,
       activeTaskBoardView: task.taskBoardView,
       taskItems: task.tasks,
-      planningTaskID: task.planningTaskID,
-      startingTaskID: task.startingTaskID,
       roomCount: conversation.roomCount,
       threadCount: conversation.threadCount,
       channels: conversation.channels,

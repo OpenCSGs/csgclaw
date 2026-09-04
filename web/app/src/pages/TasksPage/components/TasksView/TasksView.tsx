@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
-import { Bot, CalendarClock, ChevronDown, Pencil, Play, Trash2, Users } from "lucide-react";
+import { Bot, CalendarClock, ChevronDown, Pencil, Play, Trash2 } from "lucide-react";
 import {
   Button,
   Tooltip,
@@ -13,7 +13,7 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@/components/ui";
-import { TaskStatusPill, TaskSubtaskIndicator } from "@/components/business";
+import { TaskStatusPill } from "@/components/business";
 import type { CreateWorkspaceTaskPayload } from "@/api/tasks";
 import type { CreateScheduledTaskPayload, UpdateScheduledTaskPayload } from "@/api/scheduledTasks";
 import type { AgentLike } from "@/models/agents";
@@ -24,25 +24,25 @@ import {
   type WorkspaceScheduledTaskRun,
 } from "@/models/scheduledTasks";
 import {
-  TASK_BOARD_STATUSES,
+  boardColumnsForTask,
+  boardColumnsForTasks,
   displayTaskAssignedAgent,
   displayTaskAssignmentTarget,
   displayTaskClaimedAgent,
   displayTaskRoomTitle,
   displayTeam,
   formatTaskUpdatedAt,
-  formatTaskUpdatedRelative,
-  resolveTaskSidebarPhase,
   rootTaskForTask,
   rootTasks,
   taskChildren,
   taskExecutionRoomID,
   taskStatusLabel,
 } from "@/models/tasks";
-import type { TaskSidebarPhase, WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
+import type { WorkspaceTask, WorkspaceTeam, WorkspaceTeamEvent } from "@/models/tasks";
 import { classNames } from "@/shared/lib/classNames";
 import { ScheduledTaskCreateDialog } from "./ScheduledTaskCreateDialog";
 import { ScheduledTaskFormFields } from "./ScheduledTaskFormFields";
+import { TaskKanbanBoard } from "./TaskKanbanBoard";
 import { TaskCreateDialog } from "./TaskCreateDialog";
 import { TaskDialogCloseButton } from "./TaskDialogCloseButton";
 import {
@@ -286,7 +286,6 @@ export type TasksViewProps = {
   onCloseCreateTaskModal?: () => void;
   onCloseEditScheduledTaskModal?: () => void;
   onCloseParentTaskDetail?: () => void;
-  onCloseTaskDetails?: () => VoidOrPromise;
   onCreateTask?: (payload: CreateWorkspaceTaskPayload) => VoidOrPromise;
   onCreateScheduledTask?: (payload: CreateScheduledTaskPayload) => VoidOrPromise;
   onDeleteScheduledTask?: (taskID: string) => VoidOrPromise;
@@ -295,25 +294,19 @@ export type TasksViewProps = {
   onOpenCreateTaskModal?: () => VoidOrPromise;
   onOpenCreateScheduledTaskModal?: () => VoidOrPromise;
   onOpenEditScheduledTaskModal?: (taskID: string) => void;
-  onPlanTask?: (taskID: string) => VoidOrPromise;
   onRefresh?: () => VoidOrPromise;
   onRunScheduledTask?: (taskID: string) => VoidOrPromise;
   onSelectScheduledTask?: (taskID: string) => void;
+  onSelectTask?: (taskID?: string) => VoidOrPromise;
   onSelectTaskBoardView?: (view: TaskBoardView) => void;
-  onStartTask?: (taskID: string) => VoidOrPromise;
   onToggleScheduledTask?: (taskID: string, enabled: boolean) => VoidOrPromise;
-  onViewParentDetail?: (taskID: string) => VoidOrPromise;
   parentDetailTaskID?: string;
-  planTaskBusy?: boolean;
-  planningTaskID?: string;
   rooms?: readonly Pick<IMConversation, "id">[];
   selectedTask?: WorkspaceTask | null;
   selectedScheduledTaskID?: string;
   showCreateTaskModal?: boolean;
   showCreateScheduledTaskModal?: boolean;
   editingScheduledTaskID?: string;
-  startTaskBusy?: boolean;
-  startingTaskID?: string;
   taskActionError?: string;
   taskEvents?: WorkspaceTeamEvent[];
   taskBoardTasks?: WorkspaceTask[];
@@ -341,8 +334,6 @@ export function TasksView({
   loading = false,
   error = "",
   taskActionError = "",
-  planTaskBusy = false,
-  startTaskBusy = false,
   createTaskBusy = false,
   createTaskError = "",
   createScheduledTaskBusy = false,
@@ -359,14 +350,12 @@ export function TasksView({
   scheduledTaskActionID = "",
   scheduledTaskActionError = "",
   parentDetailTaskID = "",
-  planningTaskID = "",
-  startingTaskID = "",
+  selectedTask = null,
   rooms,
   onCloseCreateScheduledTaskModal,
   onCloseCreateTaskModal,
   onCloseEditScheduledTaskModal,
   onCloseParentTaskDetail,
-  onCloseTaskDetails,
   onCreateTask,
   onCreateScheduledTask,
   onDeleteScheduledTask,
@@ -376,12 +365,34 @@ export function TasksView({
   onRefresh = () => {},
   onRunScheduledTask = () => {},
   onSelectScheduledTask = () => {},
+  onSelectTask = () => {},
   onSelectTaskBoardView = () => {},
   onToggleScheduledTask = () => {},
   onOpenEditScheduledTaskModal,
   onOpenConversation = () => {},
 }: TasksViewProps) {
   const parentTasks = useMemo(() => rootTasks(taskBoardTasks), [taskBoardTasks]);
+  const routedRootTask = useMemo(() => rootTaskForTask(taskBoardTasks, selectedTask), [selectedTask, taskBoardTasks]);
+  const activeRootTask = useMemo(
+    () =>
+      routedRootTask && parentTasks.some((task) => task.id === routedRootTask.id)
+        ? routedRootTask
+        : (parentTasks[0] ?? null),
+    [parentTasks, routedRootTask],
+  );
+  const activeChildTasks = useMemo(
+    () => (activeRootTask ? taskChildren(taskBoardTasks, activeRootTask.id) : []),
+    [activeRootTask, taskBoardTasks],
+  );
+  const boardColumns = useMemo(() => {
+    if (!activeRootTask) {
+      return boardColumnsForTasks([]);
+    }
+    if (activeChildTasks.length || activeRootTask.assignment_type !== "agent") {
+      return boardColumnsForTask(taskBoardTasks, activeRootTask.id);
+    }
+    return boardColumnsForTasks([activeRootTask]);
+  }, [activeChildTasks.length, activeRootTask, taskBoardTasks]);
   const assignmentOptions = useMemo(() => taskAssignmentOptions(teams, agents, t), [agents, t, teams]);
   const scheduledAgentOptions = useMemo(() => scheduledTaskAgentOptions(agents), [agents]);
   const agentNames = useMemo(() => agentNameLookup(agents), [agents]);
@@ -422,7 +433,11 @@ export function TasksView({
     () => (parentDialogTask ? taskChildren(taskBoardTasks, parentDialogTask.id) : []),
     [parentDialogTask, taskBoardTasks],
   );
-  const parentColumns = useMemo(() => boardColumnsForParentTasks(parentTasks), [parentTasks]);
+  const [childDialogTaskID, setChildDialogTaskID] = useState("");
+  const childDialogTask = useMemo(
+    () => (childDialogTaskID ? (taskBoardTasks.find((item) => item.id === childDialogTaskID) ?? null) : null),
+    [childDialogTaskID, taskBoardTasks],
+  );
   const [createDraft, setCreateDraft] = useState<TaskCreateDraft>(emptyCreateDraft);
   const [createFieldErrors, setCreateFieldErrors] = useState<TaskCreateFieldErrors>({});
   const [scheduledDraft, setScheduledDraft] = useState<ScheduledTaskFormDraft>(emptyScheduledTaskDraft);
@@ -445,6 +460,10 @@ export function TasksView({
   useEffect(() => {
     setConversationOpenError("");
   }, [activeView, selectedScheduledTask?.id]);
+
+  useEffect(() => {
+    setChildDialogTaskID("");
+  }, [activeRootTask?.id]);
 
   useEffect(() => {
     if (!showCreateTaskModal) {
@@ -629,7 +648,15 @@ export function TasksView({
     setParentDialogTaskID("");
     setConversationOpenError("");
     onCloseParentTaskDetail?.();
-    void onCloseTaskDetails?.();
+  }
+
+  function openBoardTask(task: WorkspaceTask) {
+    if (task.parent_id) {
+      setChildDialogTaskID(task.id);
+      setConversationOpenError("");
+      return;
+    }
+    openRootTaskDetail(task);
   }
 
   function selectScheduledTask(taskID: string) {
@@ -677,72 +704,43 @@ export function TasksView({
       ) : null}
       {!error ? (
         <div className={styles.tasksBoardWorkbench} aria-busy={loading}>
-          <div className={styles.tasksBoardPanel}>
-            <div className={classNames(styles.headerRow, styles.justifyEnd, styles.tasksBoardHead)}>
+          <div className={classNames(styles.tasksBoardPanel, activeView === "tasks" && styles.tasksBoardPanelTaskView)}>
+            <div
+              className={classNames(
+                styles.headerRow,
+                styles.justifyEnd,
+                styles.tasksBoardHead,
+                activeView === "tasks" && styles.tasksBoardHeadTaskView,
+              )}
+            >
               <div className={styles.tasksBoardHeading}>
                 <h1>{t("mainTaskBoardTitle")}</h1>
               </div>
               <TaskActionStrip
                 t={t}
-                showConversation={false}
-                showParentDetail={false}
-                canPlanTask={false}
-                canStartTask={false}
-                planTaskBusy={planTaskBusy}
-                startTaskBusy={startTaskBusy}
                 onCreateTask={activeView === "tasks" ? onOpenCreateTaskModal : undefined}
                 onCreateScheduledTask={activeView === "scheduled" ? onOpenCreateScheduledTaskModal : undefined}
                 onRefresh={onRefresh}
               />
             </div>
-            <div className={styles.taskContentLayout}>
+            <div
+              className={classNames(
+                styles.taskContentLayout,
+                activeView === "tasks" && styles.taskContentLayoutTaskView,
+              )}
+            >
               <div className={styles.taskContentMain}>
                 {activeView === "tasks" ? (
-                  <div className={styles.tasksKanbanScroll} role="region" aria-label={t("mainTaskBoardTitle")}>
-                    <div className={styles.tasksKanban}>
-                      {parentColumns.map((column) => (
-                        <section
-                          key={column.status}
-                          className={classNames(
-                            styles.taskBoardColumn,
-                            moduleSuffixStyle("taskBoardColumn", column.status),
-                          )}
-                        >
-                          <header className={classNames(styles.headerRow, styles.taskBoardColumnHead)}>
-                            <span className={styles.taskBoardColumnTitle}>
-                              <TaskBoardStatusIcon status={column.status} />
-                              <span>{taskStatusLabel(column.status, t)}</span>
-                              <strong>{column.tasks.length}</strong>
-                            </span>
-                          </header>
-                          <div className={styles.taskBoardColumnBody}>
-                            {column.tasks.length ? (
-                              column.tasks.map((task) => {
-                                const children = taskChildren(taskBoardTasks, task.id);
-                                const phase = resolveTaskSidebarPhase(task, children, {
-                                  planningTaskID,
-                                  startingTaskID,
-                                });
-                                return (
-                                  <ParentTaskBoardCard
-                                    key={task.id}
-                                    task={task}
-                                    children={children}
-                                    agentNames={agentNames}
-                                    phase={phase}
-                                    t={t}
-                                    onSelect={() => openRootTaskDetail(task)}
-                                  />
-                                );
-                              })
-                            ) : (
-                              <div className={styles.taskBoardEmpty}>{t("taskBoardColumnEmpty")}</div>
-                            )}
-                          </div>
-                        </section>
-                      ))}
-                    </div>
-                  </div>
+                  <TaskKanbanBoard
+                    activeParentTask={activeRootTask}
+                    agentNames={agentNames}
+                    columns={boardColumns}
+                    parentTasks={parentTasks}
+                    t={t}
+                    tasks={taskBoardTasks}
+                    onOpenTask={openBoardTask}
+                    onSelectParentTask={onSelectTask}
+                  />
                 ) : (
                   <div className={styles.scheduledTaskLayout}>
                     <section className={styles.scheduledTaskList} aria-label={t("scheduledTasksTab")}>
@@ -909,6 +907,16 @@ export function TasksView({
       ) : null}
       <TaskDetailDialog
         t={t}
+        task={childDialogTask}
+        agentNames={agentNames}
+        teams={teams}
+        taskEvents={taskEvents}
+        open={Boolean(childDialogTask)}
+        onClose={() => setChildDialogTaskID("")}
+        onOpenConversation={openTaskConversation}
+      />
+      <TaskDetailDialog
+        t={t}
         title={t("taskParentDetailTitle")}
         task={parentDialogTask}
         childCount={parentDialogChildTasks.length}
@@ -1031,40 +1039,16 @@ export function TasksView({
 }
 
 type TaskActionStripProps = {
-  canPlanTask: boolean;
-  canStartTask: boolean;
-  conversationLabel?: string;
-  conversationShortLabel?: string;
   onCreateScheduledTask?: () => VoidOrPromise;
   onCreateTask?: () => VoidOrPromise;
-  onOpenConversation?: () => VoidOrPromise;
-  onPlanTask?: () => VoidOrPromise;
   onRefresh: () => VoidOrPromise;
-  onStartTask?: () => VoidOrPromise;
-  onViewParentDetail?: () => VoidOrPromise;
-  planTaskBusy: boolean;
-  showConversation: boolean;
-  showParentDetail?: boolean;
-  startTaskBusy: boolean;
   t: TranslateFn;
 };
 
 function TaskActionStrip({
   t,
-  showConversation,
-  showParentDetail = false,
-  canPlanTask,
-  canStartTask,
-  planTaskBusy,
-  startTaskBusy,
-  conversationLabel = undefined,
-  conversationShortLabel = undefined,
-  onOpenConversation = undefined,
   onCreateTask = undefined,
   onCreateScheduledTask = undefined,
-  onViewParentDetail = undefined,
-  onPlanTask = undefined,
-  onStartTask = undefined,
   onRefresh,
 }: TaskActionStripProps) {
   return (
@@ -1074,42 +1058,19 @@ function TaskActionStrip({
     >
       <TaskToolbarButton label={t("tasksRefreshShort")} title={t("tasksRefresh")} onClick={onRefresh} />
       {onCreateTask ? (
-        <TaskToolbarButton label={t("taskCreate")} title={t("taskCreate")} onClick={onCreateTask} />
+        <TaskToolbarButton
+          label={t("taskBoardCreate")}
+          title={t("taskBoardCreate")}
+          variant="primary"
+          onClick={onCreateTask}
+        />
       ) : null}
       {onCreateScheduledTask ? (
         <TaskToolbarButton
           label={t("scheduledTaskCreate")}
           title={t("scheduledTaskCreate")}
-          onClick={onCreateScheduledTask}
-        />
-      ) : null}
-      {showParentDetail ? (
-        <TaskToolbarButton label={t("taskDetailsShort")} title={t("taskViewDetails")} onClick={onViewParentDetail} />
-      ) : null}
-      {canPlanTask ? (
-        <TaskToolbarButton
-          label={t("taskPlan")}
-          onClick={onPlanTask}
-          loading={planTaskBusy}
-          loadingLabel={t("taskPlanLoading")}
-          disabled={planTaskBusy || startTaskBusy}
-        />
-      ) : null}
-      {canStartTask ? (
-        <TaskToolbarButton
-          label={t("taskStart")}
           variant="primary"
-          onClick={onStartTask}
-          loading={startTaskBusy}
-          loadingLabel={t("taskStartLoading")}
-          disabled={startTaskBusy || planTaskBusy}
-        />
-      ) : null}
-      {showConversation ? (
-        <TaskToolbarButton
-          label={conversationShortLabel || t("taskOpenConversationShort")}
-          title={conversationLabel || t("taskOpenConversation")}
-          onClick={onOpenConversation}
+          onClick={onCreateScheduledTask}
         />
       ) : null}
     </div>
@@ -1124,134 +1085,15 @@ type TaskToolbarButtonProps = {
 
 function TaskToolbarButton({ label, title = label, variant = "secondaryGray", ...props }: TaskToolbarButtonProps) {
   return (
-    <Tooltip content={title}>
-      <span>
-        <Button
-          className={classNames(
-            styles.taskToolbarButton,
-            variant === "secondaryGray" && styles.taskToolbarButtonSecondary,
-          )}
-          aria-label={title}
-          size="sm"
-          variant={variant}
-          {...props}
-        >
-          {label}
-        </Button>
-      </span>
-    </Tooltip>
-  );
-}
-
-function TaskBoardStatusIcon({ status }: { status: string }) {
-  const progress = taskBoardStatusProgress(status);
-
-  return (
-    <svg className={styles.taskBoardStatusIcon} viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <TaskBoardProgressCircle progress={progress}>
-        {progress === 1 ? (
-          <path
-            d="M10.951 4.24896C11.283 4.58091 11.283 5.11909 10.951 5.45104L5.95104 10.451C5.61909 10.783 5.0809 10.783 4.74896 10.451L2.74896 8.45104C2.41701 8.11909 2.41701 7.5809 2.74896 7.24896C3.0809 6.91701 3.61909 6.91701 3.95104 7.24896L5.35 8.64792L9.74896 4.24896C10.0809 3.91701 10.6191 3.91701 10.951 4.24896Z"
-            fill="white"
-            stroke="none"
-          />
-        ) : status === "failed" || status === "cancelled" || status === "canceled" ? (
-          <path d="M5 5 L9 9 M9 5 L5 9" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
-        ) : null}
-      </TaskBoardProgressCircle>
-    </svg>
-  );
-}
-
-function TaskBoardProgressCircle({ progress, children }: { progress: number; children?: ReactNode }) {
-  return (
-    <>
-      <circle cx={7} cy={7} r={6} fill="none" stroke="currentColor" strokeWidth={1.5} />
-      {progress === 1 ? (
-        <circle cx={7} cy={7} r={6} fill="currentColor" />
-      ) : progress > 0 ? (
-        <path d={taskBoardPiePath(7, 7, 3.5, progress)} fill="currentColor" />
-      ) : null}
-      {children}
-    </>
-  );
-}
-
-function taskBoardPiePath(cx: number, cy: number, radius: number, progress: number): string {
-  const angle = 2 * Math.PI * progress;
-  const endX = cx + radius * Math.sin(angle);
-  const endY = cy - radius * Math.cos(angle);
-  const largeArc = progress > 0.5 ? 1 : 0;
-  return `M${cx},${cy} L${cx},${cy - radius} A${radius},${radius} 0 ${largeArc},1 ${endX},${endY} Z`;
-}
-
-function taskBoardStatusProgress(status: string): number {
-  if (status === "completed" || status === "done") {
-    return 1;
-  }
-  if (status === "blocked" || status === "in_review") {
-    return 0.75;
-  }
-  if (status === "in_progress" || status === "running") {
-    return 0.5;
-  }
-  return 0;
-}
-
-type ParentTaskBoardCardProps = {
-  agentNames: ReadonlyMap<string, string>;
-  children: WorkspaceTask[];
-  onSelect: () => void;
-  phase: TaskSidebarPhase;
-  t: TranslateFn;
-  task: WorkspaceTask;
-};
-
-function ParentTaskBoardCard({ task, children, agentNames, phase, t, onSelect }: ParentTaskBoardCardProps) {
-  const description = task.body || task.plan_summary || task.result || task.error || t("tasksDetailPlaceholder");
-  const activeWorker = taskActiveWorker(task, children, t, agentNames);
-  const updatedRelative = formatTaskUpdatedRelative(task.updated_at, document.documentElement.lang);
-  const updatedLabel = updatedRelative === "-" ? "" : t("taskCardUpdatedAt", { time: updatedRelative });
-  const assignmentTarget = displayTaskAssignmentTargetName(task, agentNames);
-
-  return (
-    <Tooltip content={`${task.id} ${task.title}`}>
-      <button type="button" className={classNames(styles.taskBoardCard, styles.parentTaskBoardCard)} onClick={onSelect}>
-        <span className={styles.taskBoardCardTopline}>
-          <span className={styles.taskBoardCardId}>{task.id}</span>
-          <span className={styles.taskBoardCardActions}>
-            {activeWorker ? (
-              <Tooltip content={`${activeWorker.name} ${activeWorker.label}`}>
-                <span className={styles.taskBoardCardWorkerBadge}>
-                  <Bot size={12} strokeWidth={1.9} aria-hidden="true" />
-                  <span>{activeWorker.label}</span>
-                </span>
-              </Tooltip>
-            ) : null}
-            <TaskSubtaskIndicator subtasks={children} phase={phase} t={t} compact />
-          </span>
-        </span>
-        <strong className={classNames(styles.lineClampText, styles.taskBoardCardTitle)}>{task.title}</strong>
-        <span className={classNames(styles.lineClampText, styles.taskBoardCardDescription)}>{description}</span>
-        <span className={styles.taskBoardCardFooter}>
-          {assignmentTarget ? (
-            <Tooltip content={assignmentTarget}>
-              <span className={styles.taskBoardCardTeam}>
-                <span className={styles.taskBoardCardTeamIcon} aria-hidden="true">
-                  {task.assignment_type === "agent" ? (
-                    <Bot size={13} strokeWidth={1.8} />
-                  ) : (
-                    <Users size={13} strokeWidth={1.8} />
-                  )}
-                </span>
-                <span>{assignmentTarget}</span>
-              </span>
-            </Tooltip>
-          ) : null}
-          {updatedLabel ? <span className={styles.taskBoardCardUpdated}>{updatedLabel}</span> : null}
-        </span>
-      </button>
-    </Tooltip>
+    <Button
+      className={classNames(styles.taskToolbarButton, variant === "secondaryGray" && styles.taskToolbarButtonSecondary)}
+      aria-label={title}
+      size="sm"
+      variant={variant}
+      {...props}
+    >
+      {label}
+    </Button>
   );
 }
 
@@ -1913,17 +1755,6 @@ function taskMetaTags(
   addTag("depends_on", t("taskDependsOnLabel"), task.depends_on.length ? task.depends_on.join(", ") : "");
 
   return tags;
-}
-
-function boardColumnsForParentTasks(tasks: readonly WorkspaceTask[]) {
-  const defaultStatuses: readonly string[] = TASK_BOARD_STATUSES;
-  const extraStatuses = Array.from(
-    new Set(tasks.map((task) => task.status).filter((status) => !defaultStatuses.includes(status))),
-  ).sort();
-  return [...TASK_BOARD_STATUSES, ...extraStatuses].map((status) => ({
-    status,
-    tasks: tasks.filter((task) => task.status === status),
-  }));
 }
 
 function taskEventsForDetail(

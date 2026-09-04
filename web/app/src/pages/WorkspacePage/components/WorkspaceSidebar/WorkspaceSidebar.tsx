@@ -122,8 +122,6 @@ export function WorkspaceSidebar({
   onLogout,
   taskItems,
   teams,
-  planningTaskID = "",
-  startingTaskID = "",
 }: WorkspaceSidebarProps) {
   const [contextQuery, setContextQuery] = useState("");
   const [skillUploadOpen, setSkillUploadOpen] = useState(false);
@@ -542,8 +540,6 @@ export function WorkspaceSidebar({
               activeTaskBoardView={activeTaskBoardView}
               taskItems={taskItems}
               teams={teams}
-              planningTaskID={planningTaskID}
-              startingTaskID={startingTaskID}
               channels={channels}
               directMessages={directMessages}
               threadGroups={threadGroups}

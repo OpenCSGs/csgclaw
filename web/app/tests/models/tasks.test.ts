@@ -1,5 +1,6 @@
 import {
   boardColumnsForTask,
+  boardColumnsForTasks,
   displayTaskAssignedAgent,
   displayTaskAssignmentTarget,
   displayTaskClaimedAgent,
@@ -243,6 +244,23 @@ describe("tasks model", () => {
     expect(columns.find((column) => column.status === "completed")?.tasks).toEqual([]);
   });
 
+  it("groups an explicit task collection without changing parent-child semantics", () => {
+    const independent = normalizeTask({
+      id: "task-standalone",
+      assignment_type: "agent",
+      assignment_id: "agent-1",
+      status: "in_progress",
+      title: "Independent task",
+    });
+
+    const columns = boardColumnsForTasks(independent ? [independent] : []);
+
+    expect(columns.find((column) => column.status === "in_progress")?.tasks.map((item) => item.id)).toEqual([
+      "task-standalone",
+    ]);
+    expect(columns.find((column) => column.status === "pending")?.tasks).toEqual([]);
+  });
+
   it("resolves execution room directly from the parent task", () => {
     const teams = normalizeTeamList([
       {
@@ -276,7 +294,7 @@ describe("tasks model", () => {
     expect(taskUsesExecutionRoom(parent!, teams, children)).toBe(true);
   });
 
-  it("resolves sidebar phases for planning and dispatching parent tasks", () => {
+  it("resolves sidebar phases from persisted parent-task state", () => {
     const planningTask = normalizeTaskList([
       {
         id: "task-1",
@@ -287,7 +305,6 @@ describe("tasks model", () => {
       },
     ])[0];
     expect(resolveTaskSidebarPhase(planningTask, [])).toBe("planning");
-    expect(resolveTaskSidebarPhase(planningTask, [], { planningTaskID: "task-1" })).toBe("planning");
 
     const dispatchTasks = normalizeTaskList([
       {
@@ -311,7 +328,6 @@ describe("tasks model", () => {
     const parent = dispatchTasks[0];
     const children = taskChildren(dispatchTasks, "task-1");
     expect(resolveTaskSidebarPhase(parent, children)).toBe("idle");
-    expect(resolveTaskSidebarPhase(parent, children, { startingTaskID: "task-1" })).toBe("dispatching");
 
     const dispatchedChild = {
       ...children[0],
