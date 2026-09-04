@@ -128,7 +128,7 @@ func TestRemoteStorePostJSONPreservesRepositoryPathConflictCode(t *testing.T) {
 	}
 }
 
-func TestRemoteStorePostJSONDoesNotInferConflictWithoutCode(t *testing.T) {
+func TestRemoteStorePostJSONNormalizesRepositoryPathConstraintViolation(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -139,8 +139,11 @@ func TestRemoteStorePostJSONDoesNotInferConflictWithoutCode(t *testing.T) {
 
 	store := NewRemoteStore(srv.URL, "token")
 	err := store.postJSON(context.Background(), srv.URL, nil, nil)
-	if errors.Is(err, ErrTemplateAlreadyExists) {
-		t.Fatalf("postJSON() error = %v, must not infer a name conflict without an upstream code", err)
+	if got, want := RemoteAPIErrorCode(err), remoteRepositoryPathConflictCode; got != want {
+		t.Fatalf("RemoteAPIErrorCode() = %q, want %q; error=%v", got, want, err)
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "sqlstate") {
+		t.Fatalf("postJSON() error = %v, must not expose the database error", err)
 	}
 }
 
