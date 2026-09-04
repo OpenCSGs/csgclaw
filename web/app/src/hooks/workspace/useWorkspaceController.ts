@@ -279,11 +279,24 @@ export function useWorkspaceController() {
     [auth.environment.aiGatewayBaseURL, auth.status, rawModelProviders],
   );
   const connectors = useConnectorController(t);
+  const navigateAfterSkillDelete = useCallback(
+    (nextSkill: SkillSummary | null) => {
+      if (!nextSkill?.name) {
+        selectHub({ replace: true });
+        return;
+      }
+      navigatePane({ type: WorkspacePaneTypes.hub, id: nextSkill.name, resourceType: "skill" }, rooms, {
+        replace: true,
+      });
+    },
+    [navigatePane, rooms, selectHub],
+  );
   const { hub, refreshHubTemplates } = useWorkspaceHubController({
     activePane,
     hubLoaded,
     hubTemplates,
     hubTemplatesQuery,
+    onSkillDeleted: navigateAfterSkillDelete,
     openCSGAuthenticated: isAuthenticated(auth.status),
     refreshWorkspaceHubTemplates,
     t,

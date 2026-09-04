@@ -48,6 +48,17 @@ export function visibleWorkspaceHubTemplates(
   return templates.filter((item) => item.id !== deletingTemplateID && isVisibleInHubTemplateList(item));
 }
 
+export function nextWorkspaceSkillAfterDelete(
+  skills: readonly SkillSummary[],
+  deletedName: string,
+): SkillSummary | null {
+  const deletedIndex = skills.findIndex((item) => item.name === deletedName);
+  if (deletedIndex < 0) {
+    return skills[0] ?? null;
+  }
+  return skills[deletedIndex + 1] ?? skills[deletedIndex - 1] ?? null;
+}
+
 export type WorkspaceHubController = {
   hub: Omit<WorkspaceHubSelection, "detailPaneProps"> & {
     deleteBusy: boolean;
@@ -93,6 +104,7 @@ export function useWorkspaceHubController({
   hubLoaded,
   hubTemplates,
   hubTemplatesQuery,
+  onSkillDeleted,
   openCSGAuthenticated = false,
   refreshWorkspaceHubTemplates,
   t,
@@ -145,8 +157,13 @@ export function useWorkspaceHubController({
     refreshTemplates: refreshHubTemplates,
     t,
   });
-  const { setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, setSelectedHubTemplateId } =
-    hub;
+  const {
+    skills: workspaceSkills,
+    setSelectedHubResourceType,
+    setSelectedHubSkillName,
+    setSelectedHubSkillPath,
+    setSelectedHubTemplateId,
+  } = hub;
   const mutationError = workspaceHubMutationError(
     hub.selectedHubResourceType,
     resourcesDeleteError,
@@ -210,13 +227,15 @@ export function useWorkspaceHubController({
       setSkillDeleteError("");
       try {
         await deleteSkillRequest(name);
+        const nextSkill = nextWorkspaceSkillAfterDelete(workspaceSkills, name);
+        setSelectedHubSkillName(nextSkill?.name ?? "");
+        setSelectedHubSkillPath(nextSkill ? `${nextSkill.name}/SKILL.md` : "");
+        onSkillDeleted?.(nextSkill);
         queryClient.setQueryData<SkillSummary[]>(workspaceQueryKeys.skills(), (current) =>
           (Array.isArray(current) ? current : []).filter((item) => item.name !== name),
         );
-        queryClient.removeQueries({ queryKey: workspaceQueryKeys.skillTree(name) });
-        setSelectedHubSkillName("");
-        setSelectedHubSkillPath("");
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.skills() });
+        queryClient.removeQueries({ queryKey: workspaceQueryKeys.skillTree(name), type: "inactive" });
         return true;
       } catch (err) {
         setSkillDeleteError(errorMessage(err, t("resourcesSkillDeleteFailed")));
@@ -225,7 +244,7 @@ export function useWorkspaceHubController({
         setSkillDeleteBusy(false);
       }
     },
-    [errorMessage, queryClient, setSelectedHubSkillName, setSelectedHubSkillPath, t],
+    [errorMessage, onSkillDeleted, queryClient, setSelectedHubSkillName, setSelectedHubSkillPath, t, workspaceSkills],
   );
 
   const publishHubTemplate = useCallback(

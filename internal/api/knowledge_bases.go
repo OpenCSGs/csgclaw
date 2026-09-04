@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -218,37 +217,6 @@ func (h *Handler) handleKnowledgeBaseMCPProxy(w http.ResponseWriter, r *http.Req
 		writer = flushResponseWriter{Writer: w, Flusher: flusher}
 	}
 	_, _ = io.Copy(writer, response.Body)
-}
-
-func (h *Handler) validateKnowledgeBaseMCPSelection(ctx context.Context, servers map[string]any, names []string) error {
-	managed := make([]knowledgebase.ManagedMetadata, 0, len(names))
-	for _, name := range names {
-		metadata, ok := knowledgebase.ManagedMetadataFromServer(servers[strings.TrimSpace(name)])
-		if ok {
-			managed = append(managed, metadata)
-		}
-	}
-	if len(managed) == 0 {
-		return nil
-	}
-	connection, err := loadKnowledgeBaseConnection(ctx)
-	if err != nil {
-		return err
-	}
-	client := knowledgebase.Client{BaseURL: connection.CSGHubBaseURL, Token: connection.CSGHubAccessToken}
-	for _, metadata := range managed {
-		item, err := client.Get(ctx, metadata.KnowledgeBaseID)
-		if err != nil {
-			return err
-		}
-		if item.ContentID != metadata.ContentID {
-			return fmt.Errorf("%w: resource identity changed", errKnowledgeBaseUnavailable)
-		}
-		if availability, reason := knowledgebase.AvailabilityFor(item); availability != knowledgebase.AvailabilityAvailable {
-			return fmt.Errorf("%w: %s", errKnowledgeBaseUnavailable, reason)
-		}
-	}
-	return nil
 }
 
 func writeKnowledgeBaseError(w http.ResponseWriter, err error) {

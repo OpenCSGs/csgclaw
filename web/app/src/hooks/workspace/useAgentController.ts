@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "react-router-dom";
 import { apiErrorBillingURL, errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
@@ -33,7 +33,6 @@ import type {
   FeishuRegistrationFinalizeResult,
   FetchAgentsOptions,
 } from "@/api/agents";
-import { fetchAgentMCPServerSourceStatus, syncAgentMCPServerSource } from "@/api/mcp";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { publishAgentTemplateRequest, type AgentTemplatePublishTarget } from "@/api/hub";
 import { HubTemplateErrorCodes, hubTemplateErrorCode, upsertHubTemplateReviewState } from "@/models/hubWorkspace";
@@ -113,8 +112,7 @@ import type {
   RuntimeBootstrapConfig,
 } from "@/models/agents";
 import { isDirectConversation, localIdentitiesMatch, upsertUserInData } from "@/models/conversations";
-import { mcpManagedKnowledgeBaseSource, mcpServersFromMap } from "@/models/mcp";
-import type { MCPServerSourceStatus } from "@/models/mcp";
+import { mcpServersFromMap } from "@/models/mcp";
 import { displayTeam, teamMemberIDs } from "@/models/tasks";
 import type { WorkspaceTeam } from "@/models/tasks";
 import {
@@ -568,7 +566,6 @@ export function useAgentController({
   const [agentMCPAddError, setAgentMCPAddError] = useState("");
   const [agentMCPDeleteBusy, setAgentMCPDeleteBusy] = useState(false);
   const [agentMCPDeleteError, setAgentMCPDeleteError] = useState("");
-  const [agentMCPSourceSyncBusyName, setAgentMCPSourceSyncBusyName] = useState("");
   const [agentPageNotices, setAgentPageNotices] = useState<Record<string, AgentPageNoticeState>>({});
   const agentPageNoticeTimersRef = useRef<Record<string, number>>({});
   const agentPageDraftLoadSeqRef = useRef(0);
@@ -798,54 +795,6 @@ export function useAgentController({
     const currentNames = new Set(agentMCPServers.map((server) => server.name));
     return catalogMCPServers.filter((server) => server.name && !currentNames.has(server.name));
   }, [agentMCPServers, catalogMCPServers]);
-  const agentManagedMCPServers = useMemo(
-    () => agentMCPServers.filter((server) => Boolean(mcpManagedKnowledgeBaseSource(server.config))),
-    [agentMCPServers],
-  );
-  const agentMCPSourceQueries = useQueries({
-    queries: agentManagedMCPServers.map((server) => ({
-      queryKey: workspaceQueryKeys.agentMCPServerSource(agentDetailAgentID, server.name),
-      queryFn: () => fetchAgentMCPServerSourceStatus(agentDetailAgentID, server.name),
-      enabled: Boolean(agentDetailAgentID),
-      retry: false,
-    })),
-  });
-  const agentMCPSourceStatusByName = useMemo(() => {
-    return Object.fromEntries(
-      agentManagedMCPServers.flatMap((server, index) => {
-        const status = agentMCPSourceQueries[index]?.data;
-        return status ? [[server.name, status]] : [];
-      }),
-    ) as Record<string, MCPServerSourceStatus>;
-  }, [agentMCPSourceQueries, agentManagedMCPServers]);
-  const agentMCPSourceBusyNames = useMemo(
-    () =>
-      new Set(
-        agentManagedMCPServers
-          .filter((_, index) => agentMCPSourceQueries[index]?.isFetching)
-          .map((server) => server.name),
-      ),
-    [agentMCPSourceQueries, agentManagedMCPServers],
-  );
-  const agentMCPSourceUnavailableNames = useMemo(
-    () =>
-      new Set(
-        agentManagedMCPServers
-          .filter((server) => agentMCPSourceStatusByName[server.name]?.sourceAvailable === false)
-          .map((server) => server.name),
-      ),
-    [agentMCPSourceStatusByName, agentManagedMCPServers],
-  );
-  const agentMCPUpdateAvailableNames = useMemo(() => {
-    return new Set(
-      agentMCPServers
-        .filter((server) => {
-          const sourceStatus = agentMCPSourceStatusByName[server.name];
-          return sourceStatus?.sourceAvailable !== false && sourceStatus?.updateAvailable;
-        })
-        .map((server) => server.name),
-    );
-  }, [agentMCPServers, agentMCPSourceStatusByName]);
   const activeConversation = useMemo(
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],
@@ -2587,37 +2536,6 @@ export function useAgentController({
     [agentMCPAddBusy, errorMessage, queryClient, agentDetailAgentID, t],
   );
 
-  const syncAgentMCPServerSnapshot = useCallback(
-    async (server: { name?: string | null } | string | null | undefined) => {
-      const name = (typeof server === "string" ? server : String(server?.name || "")).trim();
-      if (!agentDetailAgentID || !name || agentMCPSourceSyncBusyName) {
-        return false;
-      }
-      setAgentMCPSourceSyncBusyName(name);
-      setAgentMCPAddError("");
-      setAgentMCPDeleteError("");
-      try {
-        const result = await syncAgentMCPServerSource(agentDetailAgentID, name);
-        const mcpServers = cloneMCPServersForDraft(result.agent.servers);
-        queryClient.setQueryData(workspaceQueryKeys.agentMCPServers(agentDetailAgentID), result.agent);
-        queryClient.setQueryData(workspaceQueryKeys.agentMCPServerSource(agentDetailAgentID, name), result.source);
-        setAgentPageDraft((current) => (current ? { ...current, mcpServers } : current));
-        setAgentPageSavedDraft((current) => (current ? { ...current, mcpServers } : current));
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agents() }),
-          queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() }),
-        ]);
-        return true;
-      } catch (err) {
-        setAgentMCPAddError(errorMessage(err, t("agentMCPSourceSyncFailed")));
-        return false;
-      } finally {
-        setAgentMCPSourceSyncBusyName("");
-      }
-    },
-    [agentDetailAgentID, agentMCPSourceSyncBusyName, errorMessage, queryClient, t],
-  );
-
   const deleteAgentMCPServer = useCallback(
     async (server: { name?: string | null } | string | null | undefined) => {
       if (!agentDetailAgentID || agentMCPDeleteBusy) {
@@ -2783,10 +2701,6 @@ export function useAgentController({
       mcpCandidatesLoading: catalogMCPServersLoading,
       mcpCandidatesError: catalogMCPServersError,
       mcpServers: agentMCPServers,
-      mcpUpdateAvailableNames: agentMCPUpdateAvailableNames,
-      mcpSourceBusyNames: agentMCPSourceBusyNames,
-      mcpSourceUnavailableNames: agentMCPSourceUnavailableNames,
-      mcpSourceSyncBusyName: agentMCPSourceSyncBusyName,
       mcpAddBusy: agentMCPAddBusy,
       mcpAddError: agentMCPAddError,
       mcpDeleteBusy: agentMCPDeleteBusy,
@@ -2823,7 +2737,6 @@ export function useAgentController({
       onAddSkills: batchAddAgentSkills,
       onDeleteSkill: deleteAgentSkill,
       onInstallMCPServers: installAgentMCPServers,
-      onUpdateMCPServer: syncAgentMCPServerSnapshot,
       onDeleteMCPServer: deleteAgentMCPServer,
       onRetryMCPServers: refreshMCPServers,
       teamActionBusy,

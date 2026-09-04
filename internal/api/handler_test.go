@@ -29,6 +29,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/mcp"
 	"csgclaw/internal/modelprovider"
@@ -4499,6 +4500,52 @@ func TestHandleBatchAddAgentMCPServersAddsCatalogServersByName(t *testing.T) {
 	savedServers := mcpServersForTest(t, saved.MCPServers)
 	if len(savedServers) != 2 {
 		t.Fatalf("saved mcpServers = %#v, want 2 entries", savedServers)
+	}
+}
+
+func TestHandleBatchAddAgentMCPServersTrustsManagedKnowledgeBaseSnapshot(t *testing.T) {
+	srv, svc, created := newAgentMCPManagementTestServer(t)
+
+	originalLoader := loadKnowledgeBaseConnection
+	t.Cleanup(func() { loadKnowledgeBaseConnection = originalLoader })
+	loadKnowledgeBaseConnection = func(context.Context) (knowledgeBaseConnection, error) {
+		t.Fatal("adding a managed knowledge-base MCP must not query AgenticHub")
+		return knowledgeBaseConnection{}, nil
+	}
+
+	if _, err := srv.mcp.CreateServer(context.Background(), "kb_tourism", map[string]any{
+		"type":      "remote",
+		"url":       "https://mcp.example.com/knowledge/kb_tourism",
+		"transport": "streamable-http",
+		"headers": map[string]any{
+			"Authorization": "Bearer stored-token",
+		},
+		knowledgebase.ManagedMetaKey: map[string]any{
+			knowledgebase.ManagedMetaNamespace: map[string]any{
+				"type":        knowledgebase.ManagedMCPType,
+				"resource_id": "142",
+				"content_id":  "kb_tourism",
+				"auth_type":   knowledgebase.ManagedAuthType,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("CreateServer(kb_tourism) error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/mcp-servers:batchAdd", strings.NewReader(`{"names":["kb_tourism"]}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	saved, ok := svc.Agent(created.ID)
+	if !ok {
+		t.Fatalf("Agent(%q) not found", created.ID)
+	}
+	server := mcpServerForTest(t, mcpServersForTest(t, saved.MCPServers), "kb_tourism")
+	if _, managed := knowledgebase.ManagedMetadataFromServer(server); !managed {
+		t.Fatalf("saved knowledge-base MCP lost managed metadata: %#v", server)
 	}
 }
 

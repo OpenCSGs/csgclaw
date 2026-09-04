@@ -29,6 +29,7 @@ import {
 } from "@/api/agents";
 import { createUserRequest } from "@/api/im";
 import { publishAgentTemplateRequest } from "@/api/hub";
+import { fetchAgentMCPServerSourceStatus } from "@/api/mcp";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
@@ -131,6 +132,14 @@ vi.mock("@/api/hub", async () => {
   return {
     ...actual,
     publishAgentTemplateRequest: vi.fn(),
+  };
+});
+
+vi.mock("@/api/mcp", async () => {
+  const actual = await vi.importActual<typeof import("@/api/mcp")>("@/api/mcp");
+  return {
+    ...actual,
+    fetchAgentMCPServerSourceStatus: vi.fn(),
   };
 });
 
@@ -328,6 +337,7 @@ describe("useAgentController", () => {
     vi.mocked(deleteAgentSkillRequest).mockReset();
     vi.mocked(deleteBotRequest).mockReset();
     vi.mocked(fetchAgentMCPServers).mockReset();
+    vi.mocked(fetchAgentMCPServerSourceStatus).mockReset();
     vi.mocked(fetchAgentWorkspace).mockReset();
     vi.mocked(createUserRequest).mockReset();
     vi.mocked(fetchAgentSkills).mockReset();
@@ -1684,6 +1694,44 @@ describe("useAgentController", () => {
 
     expect(batchDeleteAgentMCPServersRequest).toHaveBeenCalledWith("u-manager", ["manual"]);
     expect(result.current.agentViewProps.mcpDeleteError).toBe("");
+  });
+
+  it("treats a managed knowledge base as a regular agent MCP without loading its source detail", async () => {
+    vi.mocked(fetchAgentMCPServers).mockResolvedValueOnce({
+      agent_id: "u-manager",
+      runtime_kind: "codex",
+      servers: {
+        kb_tourism: {
+          _meta: {
+            "com.opencsg/mcp": {
+              auth_type: "csghub_access_token",
+              content_id: "content-tourism",
+              resource_id: "143",
+              type: "llm_wiki",
+            },
+          },
+          headers: { Authorization: "Bearer trusted-token" },
+          type: "http",
+          url: "https://runner.example/mcp",
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.agentViewProps.mcpServers).toHaveLength(1));
+    expect(result.current.agentViewProps.mcpServers[0]).toMatchObject({
+      name: "kb_tourism",
+      config: {
+        _meta: {
+          "com.opencsg/mcp": {
+            resource_id: "143",
+            type: "llm_wiki",
+          },
+        },
+      },
+    });
+    expect(fetchAgentMCPServerSourceStatus).not.toHaveBeenCalled();
   });
 
   it("uses the single backend MCP server map for display, candidates, and deletion", async () => {
