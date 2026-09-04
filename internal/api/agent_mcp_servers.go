@@ -8,7 +8,6 @@ import (
 
 	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
-	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcpschema"
 )
 
@@ -81,10 +80,6 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	if err := h.validateKnowledgeBaseMCPSelection(r.Context(), servers, req.Names); err != nil {
-		writeKnowledgeBaseError(w, err)
-		return
-	}
 	agents := h.agentEngine.Agents()
 	current, err := agents.Get(r.Context(), id, agentengine.AgentGetOptions{AdoptMCPServers: true})
 	if err == nil {
@@ -125,9 +120,6 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 }
 
 func agentMCPServerConfig(name string, config map[string]any) (agentengine.MCPServerConfig, error) {
-	if metadata, managed := knowledgebase.ManagedMetadataFromServer(config); managed && name != metadata.ContentID {
-		return nil, fmt.Errorf("managed knowledge-base MCP server name must match content_id %q", metadata.ContentID)
-	}
 	normalized, err := mcpschema.NormalizeMCPServers(map[string]any{name: config})
 	if err != nil {
 		return nil, err
