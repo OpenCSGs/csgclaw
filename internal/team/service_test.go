@@ -2,6 +2,8 @@ package team
 
 import (
 	"bytes"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/taskcore"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,9 +14,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/taskcore"
 )
 
 func TestCreateTasksBatchIsAtomic(t *testing.T) {

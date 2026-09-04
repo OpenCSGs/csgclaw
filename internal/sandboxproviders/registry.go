@@ -2,13 +2,12 @@ package sandboxproviders
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	"csgclaw/internal/sandbox"
 	"fmt"
 	"sort"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	"csgclaw/internal/sandbox"
 )
 
 // providerFactory converts config into a concrete sandbox provider. Providers
@@ -95,12 +94,12 @@ func (p deferredAvailabilityProvider) CheckAvailability(ctx context.Context) err
 
 // ServiceOptions resolves the configured sandbox provider against the set of
 // providers compiled into the current binary.
-func ServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {
+func ServiceOptions(cfg config.SandboxConfig) ([]agent.ControllerOption, error) {
 	provider, err := Provider(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return []agent.ServiceOption{
+	return []agent.ControllerOption{
 		agent.WithSandboxProvider(provider),
 	}, nil
 }

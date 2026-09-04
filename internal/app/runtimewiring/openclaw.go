@@ -1,17 +1,16 @@
 package runtimewiring
 
 import (
-	"fmt"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/channel/feishu"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/sandboxgateway"
+	"fmt"
 )
 
-func WithOpenClawSandboxRuntime(feishuProvider feishu.AgentCredentialProvider) agent.ServiceOption {
-	return func(s *agent.Service) error {
+func WithOpenClawSandboxRuntime(feishuProvider feishu.AgentCredentialProvider) agent.ControllerOption {
+	return func(s *agent.Controller) error {
 		if s == nil {
 			return fmt.Errorf("agent service is required")
 		}
@@ -22,7 +21,7 @@ func WithOpenClawSandboxRuntime(feishuProvider feishu.AgentCredentialProvider) a
 	}
 }
 
-func UpdateOpenClawFeishuProvider(svc *agent.Service, provider feishu.AgentCredentialProvider) {
+func UpdateOpenClawFeishuProvider(svc *agent.Controller, provider feishu.AgentCredentialProvider) {
 	updateRuntimeFeishuProvider(svc, agentruntime.KindOpenClawSandbox, provider)
 }
 

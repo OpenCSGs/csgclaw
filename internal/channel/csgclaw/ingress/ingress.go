@@ -12,7 +12,6 @@ import (
 	"csgclaw/internal/channel/csgclaw/conv"
 	"csgclaw/internal/channel/csgclaw/execution"
 	"csgclaw/internal/channel/csgclaw/state"
-	"csgclaw/internal/channelbridge"
 )
 
 const (
@@ -42,7 +41,7 @@ type Worker struct {
 }
 
 type queuedEvent struct {
-	event           channelbridge.BotEvent
+	event           channel.Event
 	dedupeKey       string
 	conversationKey agentengine.ConversationKey
 	generation      uint64
@@ -81,7 +80,7 @@ func (w *Worker) SameBinding(binding channel.Binding) bool {
 		w.binding.ParticipantID == strings.TrimSpace(binding.ParticipantID)
 }
 
-func (w *Worker) Submit(event channelbridge.BotEvent) error {
+func (w *Worker) Submit(event channel.Event) error {
 	if w == nil {
 		return fmt.Errorf("binding worker is not running")
 	}
@@ -223,7 +222,7 @@ func (w *Worker) handle(ctx context.Context, item queuedEvent) {
 	}
 }
 
-func (w *Worker) acceptAndEnqueue(event channelbridge.BotEvent) (queuedEvent, bool, error) {
+func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error) {
 	key := eventDedupKey(event)
 	if key == "" {
 		return queuedEvent{}, false, nil
@@ -345,6 +344,6 @@ func nextDispatchable(pending []queuedEvent, active map[agentengine.Conversation
 	return -1
 }
 
-func eventDedupKey(event channelbridge.BotEvent) string {
+func eventDedupKey(event channel.Event) string {
 	return strings.TrimSpace(event.MessageID)
 }

@@ -2,17 +2,16 @@ package agenttask
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	"csgclaw/internal/im"
+	"csgclaw/internal/taskcore"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
-	"csgclaw/internal/config"
-	"csgclaw/internal/im"
-	"csgclaw/internal/taskcore"
 )
 
 func TestCreateAgentTaskBindsDirectRoomAndSendsInitialMessage(t *testing.T) {
@@ -130,7 +129,7 @@ func TestClaimAndCompleteAgentTask(t *testing.T) {
 	}
 }
 
-func newTestAgentService(t *testing.T, agents []agent.Agent) *agent.Service {
+func newTestAgentService(t *testing.T, agents []agent.Agent) *agent.Controller {
 	t.Helper()
 
 	t.Setenv("HOME", t.TempDir())
@@ -143,7 +142,7 @@ func newTestAgentService(t *testing.T, agents []agent.Agent) *agent.Service {
 	if err := os.WriteFile(statePath, append(data, '\n'), 0o600); err != nil {
 		t.Fatalf("write seeded agents: %v", err)
 	}
-	svc, err := agent.NewService(config.ModelConfig{
+	svc, err := agent.NewController(config.ModelConfig{
 		Provider: config.ProviderLLMAPI,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",

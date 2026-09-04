@@ -1,18 +1,17 @@
 package runtimewiring
 
 import (
-	"fmt"
-	"strings"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/channel/feishu"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/runtime/sandboxgateway"
+	"fmt"
+	"strings"
 )
 
-func WithPicoClawSandboxRuntime(feishuProvider feishu.AgentCredentialProvider) agent.ServiceOption {
-	return func(s *agent.Service) error {
+func WithPicoClawSandboxRuntime(feishuProvider feishu.AgentCredentialProvider) agent.ControllerOption {
+	return func(s *agent.Controller) error {
 		if s == nil {
 			return fmt.Errorf("agent service is required")
 		}
@@ -23,7 +22,7 @@ func WithPicoClawSandboxRuntime(feishuProvider feishu.AgentCredentialProvider) a
 	}
 }
 
-func UpdatePicoClawFeishuProvider(svc *agent.Service, provider feishu.AgentCredentialProvider) {
+func UpdatePicoClawFeishuProvider(svc *agent.Controller, provider feishu.AgentCredentialProvider) {
 	updateRuntimeFeishuProvider(svc, agentruntime.KindPicoClawSandbox, provider)
 }
 

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"csgclaw/cli/command"
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	appbootstrap "csgclaw/internal/app"
 	"csgclaw/internal/config"
 	"csgclaw/internal/desktop"

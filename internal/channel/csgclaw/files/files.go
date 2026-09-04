@@ -5,7 +5,6 @@ import (
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge"
 )
 
 // Resolver authorizes one source attachment and resolves it to an Engine InputFile.
@@ -14,8 +13,8 @@ type Resolver interface {
 	Resolve(
 		ctx context.Context,
 		binding channel.Binding,
-		event channelbridge.BotEvent,
-		attachment channelbridge.MessageAttachment,
+		event channel.Event,
+		attachment channel.MessageAttachment,
 	) (file agentengine.InputFile, release func(), err error)
 }
 
@@ -26,6 +25,6 @@ type ContextResolver interface {
 	ResolveContext(
 		ctx context.Context,
 		binding channel.Binding,
-		event channelbridge.BotEvent,
-	) (resolved channelbridge.BotEvent, release func(), err error)
+		event channel.Event,
+	) (resolved channel.Event, release func(), err error)
 }

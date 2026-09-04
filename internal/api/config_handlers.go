@@ -1,16 +1,15 @@
 package api
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strings"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
 )
 
 func (h *Handler) resolveConfigPath() (string, error) {
@@ -86,7 +85,7 @@ func (h *Handler) handleServerConfig(w http.ResponseWriter, r *http.Request) {
 			if managerChanged || workerChanged {
 				switch bootstrapDefaults.ManagerRuntimeKind {
 				case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
-					if err := h.svc.SetGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind, bootstrapDefaults.ManagerImage); err != nil {
+					if err := h.agentRuntime.SetGatewayRuntime(bootstrapDefaults.ManagerRuntimeKind, bootstrapDefaults.ManagerImage); err != nil {
 						http.Error(w, err.Error(), http.StatusBadRequest)
 						return
 					}

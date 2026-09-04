@@ -1,10 +1,9 @@
 package team
 
 import (
-	"testing"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/im"
+	"testing"
 )
 
 func TestTaskExecutionRoomMemberParticipantIDsIncludesWorkerAgents(t *testing.T) {

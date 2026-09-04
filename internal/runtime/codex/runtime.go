@@ -16,9 +16,10 @@ import (
 	"time"
 
 	"csgclaw/internal/activity"
-	"csgclaw/internal/agent"
 	"csgclaw/internal/codexmodel"
+	"csgclaw/internal/identity"
 	agentruntime "csgclaw/internal/runtime"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/runtime/sandboxgateway"
 	"csgclaw/internal/sandbox"
 	templateembed "csgclaw/internal/template/embed"
@@ -85,6 +86,7 @@ type SessionHandle struct {
 }
 
 type Session struct {
+	ExtensionDigests            map[string]string
 	RuntimeID                   string
 	AgentID                     string
 	AgentName                   string
@@ -170,7 +172,6 @@ var (
 	_ agentruntime.Runtime                     = (*Runtime)(nil)
 	_ agentruntime.Provisioner                 = (*Runtime)(nil)
 	_ agentruntime.LogStreamer                 = (*Runtime)(nil)
-	_ agentruntime.ConversationStarter         = (*Runtime)(nil)
 	_ agentruntime.RuntimeOptionSchemaProvider = (*Runtime)(nil)
 	_ agentruntime.RuntimeConfigController     = (*Runtime)(nil)
 	_ agentruntime.RuntimeStartConfigValidator = (*Runtime)(nil)
@@ -208,7 +209,7 @@ func (r *Runtime) WorkspaceRoot(agentHome string) string {
 }
 
 func canonicalRuntimeAgentID(agentID string) string {
-	return agent.CanonicalID(agentID)
+	return identity.CanonicalAgentID(agentID)
 }
 
 func (r *Runtime) resolveWorkspaceDir(agentID string, runtimeOptions map[string]any) (string, error) {
@@ -621,20 +622,6 @@ func (r *Runtime) StreamLogs(ctx context.Context, h agentruntime.Handle, opts ag
 		lines = 20
 	}
 	return streamLogFile(ctx, logPath, opts.Follow, lines, opts.Writer)
-}
-
-func (r *Runtime) NewConversation(ctx context.Context, h agentruntime.Handle, req agentruntime.ConversationStartRequest) (agentruntime.ConversationStartAction, error) {
-	roomID := strings.TrimSpace(req.RoomID)
-	if roomID == "" {
-		return agentruntime.ConversationStartAction{}, fmt.Errorf("room id is required")
-	}
-	if strings.TrimSpace(h.RuntimeID) == "" {
-		return agentruntime.ConversationStartAction{}, fmt.Errorf("runtime id is required")
-	}
-	return agentruntime.ConversationStartAction{
-		Mode:    agentruntime.ConversationStartActionInternal,
-		AckText: "Cleared my internal history for this conversation. The IM room messages were not cleared.",
-	}, nil
 }
 
 func (r *Runtime) sessionManager() Manager {
@@ -1091,7 +1078,7 @@ func (r *Runtime) seedCodexHomeWorkspaceSkills(agentID, workspaceDir, runtimeCod
 		return fmt.Errorf("read codex workspace skills %s: %w", sourceRoot, err)
 	}
 	managerSkills := map[string]struct{}{}
-	if canonicalRuntimeAgentID(agentID) == agent.ManagerUserID {
+	if canonicalRuntimeAgentID(agentID) == identity.ManagerAgentID {
 		names, err := managerTemplateSkillNames()
 		if err != nil {
 			return err
@@ -1130,14 +1117,14 @@ func (r *Runtime) seedCodexHomeWorkspaceSkills(agentID, workspaceDir, runtimeCod
 }
 
 func codexWorkspaceTemplateRoot(agentID string) string {
-	if canonicalRuntimeAgentID(agentID) == agent.ManagerUserID {
+	if canonicalRuntimeAgentID(agentID) == identity.ManagerAgentID {
 		return templateembed.CodexManagerRoot
 	}
 	return templateembed.CodexWorkerRoot
 }
 
 func (r *Runtime) seedManagerTemplate(agentID, runtimeCodexHome string) error {
-	if canonicalRuntimeAgentID(agentID) != agent.ManagerUserID {
+	if canonicalRuntimeAgentID(agentID) != identity.ManagerAgentID {
 		return nil
 	}
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
@@ -1157,7 +1144,7 @@ func (r *Runtime) seedManagerTemplate(agentID, runtimeCodexHome string) error {
 // also drops files that disappeared from newer skill versions while leaving
 // custom skills with other names untouched.
 func (r *Runtime) syncManagerTemplateSkills(agentID, runtimeCodexHome string) error {
-	if canonicalRuntimeAgentID(agentID) != agent.ManagerUserID {
+	if canonicalRuntimeAgentID(agentID) != identity.ManagerAgentID {
 		return nil
 	}
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
@@ -1231,6 +1218,11 @@ func (r *Runtime) ensureBinary(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("codex binary provider is required")
 	}
 	return r.deps.BinaryProvider.Ensure(ctx)
+}
+
+func (r *Runtime) CheckAvailability(ctx context.Context) error {
+	_, err := r.ensureBinary(ctx)
+	return err
 }
 
 func (r *Runtime) ensureRuntimeHome(agentID string) error {
@@ -1345,6 +1337,14 @@ func (r *Runtime) resolveCodexHomeDir(agentID string) (string, error) {
 }
 
 func (r *Runtime) refreshCodexHomeAgentsFile(h agentruntime.Handle, codexHomeDir string) error {
+	fragments, err := managedExtensionInstructions(codexHomeDir)
+	if err != nil {
+		return err
+	}
+	return r.refreshCodexHomeAgentsFileWithFragments(h, codexHomeDir, fragments)
+}
+
+func (r *Runtime) refreshCodexHomeAgentsFileWithFragments(h agentruntime.Handle, codexHomeDir string, fragments []string) error {
 	codexHomeDir = strings.TrimSpace(codexHomeDir)
 	if codexHomeDir == "" {
 		return fmt.Errorf("codex home dir is required")
@@ -1361,8 +1361,8 @@ func (r *Runtime) refreshCodexHomeAgentsFile(h agentruntime.Handle, codexHomeDir
 	if IsReadOnlyExecutionMode(agentRef.RuntimeOptions) {
 		instructions = strings.TrimSpace(instructions + "\n\n" + readOnlyRuntimeInstructions)
 	}
-	block := agent.RenderRuntimeAgentsInstructionsBlockWithOptions(agentRef.ID, instructions, agent.RuntimeManagedInstructionsOptions{
-		FeishuLarkCLI: r.hasFeishuLarkCLIBinding(codexHomeDir),
+	block := runtimeinstructions.RenderRuntimeAgentsInstructionsBlockWithOptions(agentRef.ID, instructions, runtimeinstructions.RuntimeManagedInstructionsOptions{
+		Extensions: fragments,
 	})
 	current, err := r.readFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -1378,17 +1378,13 @@ func (r *Runtime) refreshCodexHomeAgentsFile(h agentruntime.Handle, codexHomeDir
 	return nil
 }
 
-func (r *Runtime) hasFeishuLarkCLIBinding(codexHomeDir string) bool {
-	return hasFeishuLarkCLIBinding(codexHomeDir, r.stat)
-}
-
 func (r *Runtime) SyncWorkspaceAgentsFile(ctx context.Context, h agentruntime.Handle, previousRuntimeOptions map[string]any) error {
 	_ = previousRuntimeOptions
 	return r.RefreshCodexHomeAgentsFile(ctx, h)
 }
 
 func mergeAgentsInstructionsBlock(current, block string) string {
-	start, end := agent.AgentsInstructionsBlockMarkers()
+	start, end := runtimeinstructions.AgentsInstructionsBlockMarkers()
 	current = strings.ReplaceAll(current, "\r\n", "\n")
 	block = strings.TrimRight(strings.ReplaceAll(block, "\r\n", "\n"), "\n")
 
@@ -1417,7 +1413,7 @@ func replaceAgentsInstructionsBlock(current, start, end, block string) (string, 
 }
 
 func removeAgentsInstructionsBlock(current string) (string, bool) {
-	start, end := agent.AgentsInstructionsBlockMarkers()
+	start, end := runtimeinstructions.AgentsInstructionsBlockMarkers()
 	current = strings.ReplaceAll(current, "\r\n", "\n")
 	startIdx := strings.Index(current, start)
 	if startIdx < 0 {

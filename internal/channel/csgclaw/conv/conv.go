@@ -7,8 +7,30 @@ import (
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge"
+	agentruntime "csgclaw/internal/runtime"
 )
+
+// ResetText preserves the command protocol consumed by each supported channel.
+// Host Codex ingress handles the canonical command through Engine.Reset, while
+// sandbox gateways consume their native reset commands on the existing bridge.
+func ResetText(adapter string, sandboxed bool, reason string) (string, error) {
+	if sandboxed {
+		switch adapter {
+		case agentruntime.NameOpenClaw:
+			return "/new", nil
+		case agentruntime.NamePicoClaw:
+			return "/clear", nil
+		}
+	}
+	if adapter != agentruntime.NameCodex || sandboxed {
+		return "", fmt.Errorf("runtime %q does not support conversation reset", adapter)
+	}
+	command := `<slash-command name="new" arg="conversation"></slash-command>`
+	if reason = strings.TrimSpace(reason); reason != "" {
+		command += " " + reason
+	}
+	return command, nil
+}
 
 // RoomScope is the channel-owned room policy used before a turn is submitted.
 type RoomScope struct {
@@ -17,7 +39,7 @@ type RoomScope struct {
 }
 
 // ConversationKey builds a stable Engine key from Binding + Room + optional Thread.
-func ConversationKey(binding channel.Binding, event channelbridge.BotEvent) (agentengine.ConversationKey, error) {
+func ConversationKey(binding channel.Binding, event channel.Event) (agentengine.ConversationKey, error) {
 	bindingID := strings.TrimSpace(string(binding.StableID()))
 	roomID := strings.TrimSpace(event.RoomID)
 	if bindingID == "" || roomID == "" {
@@ -32,7 +54,7 @@ func ConversationKey(binding channel.Binding, event channelbridge.BotEvent) (age
 }
 
 // TextInput returns hidden channel/thread context followed by the current message.
-func TextInput(binding channel.Binding, event channelbridge.BotEvent) []agentengine.InputPart {
+func TextInput(binding channel.Binding, event channel.Event) []agentengine.InputPart {
 	var input []agentengine.InputPart
 	if hidden := hiddenContext(binding, event); hidden != "" {
 		input = append(input, agentengine.InputPart{Kind: agentengine.InputPartText, Text: hidden})
@@ -48,7 +70,7 @@ func TextInput(binding channel.Binding, event channelbridge.BotEvent) []agenteng
 }
 
 // ShouldDispatch reports whether this binding should execute the source event.
-func ShouldDispatch(binding channel.Binding, event channelbridge.BotEvent, senderID string, room RoomScope) bool {
+func ShouldDispatch(binding channel.Binding, event channel.Event, senderID string, room RoomScope) bool {
 	senderID = strings.TrimSpace(senderID)
 	participantID := strings.TrimSpace(binding.ParticipantID)
 	agentID := strings.TrimSpace(binding.AgentID)
@@ -67,7 +89,7 @@ func ShouldDispatch(binding channel.Binding, event channelbridge.BotEvent, sende
 	return false
 }
 
-func hiddenContext(binding channel.Binding, event channelbridge.BotEvent) string {
+func hiddenContext(binding channel.Binding, event channel.Event) string {
 	channelID := strings.TrimSpace(event.Channel)
 	if channelID == "" {
 		channelID = string(channel.ChannelCSGClaw)
@@ -99,7 +121,7 @@ func hiddenContext(binding channel.Binding, event channelbridge.BotEvent) string
 	return strings.Join(parts, "\n\n")
 }
 
-func formatThreadContext(thread *channelbridge.BotThreadContext) string {
+func formatThreadContext(thread *channel.ThreadContext) string {
 	if thread == nil || len(thread.Context) == 0 {
 		return ""
 	}
@@ -141,7 +163,7 @@ func formatThreadContext(thread *channelbridge.BotThreadContext) string {
 	return strings.TrimSpace(out.String())
 }
 
-func formatAttachmentSummary(attachments []channelbridge.MessageAttachment) string {
+func formatAttachmentSummary(attachments []channel.MessageAttachment) string {
 	if len(attachments) == 0 {
 		return ""
 	}

@@ -15,7 +15,6 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/binding"
-	"csgclaw/internal/channelbridge"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
@@ -38,7 +37,7 @@ type agentProvider interface {
 type workerManager interface {
 	Ensure(channel.Binding) error
 	Stop(channel.BindingID)
-	Submit(channel.Binding, channelbridge.BotEvent) error
+	Submit(channel.Binding, channel.Event) error
 	Close()
 }
 
@@ -424,8 +423,8 @@ func usesHostCodex(selected agentengine.Agent) bool {
 		!selected.Spec.Runtime.Sandboxed
 }
 
-func botEvent(value channel.Binding, event im.ParticipantEvent) channelbridge.BotEvent {
-	return channelbridge.BotEvent{
+func botEvent(value channel.Binding, event im.ParticipantEvent) channel.Event {
+	return channel.Event{
 		Channel:       string(channel.ChannelCSGClaw),
 		ParticipantID: value.ParticipantID,
 		MessageID:     strings.TrimSpace(event.MessageID),
@@ -433,7 +432,7 @@ func botEvent(value channel.Binding, event im.ParticipantEvent) channelbridge.Bo
 		Locale:        strings.TrimSpace(event.Locale),
 		ChatType:      strings.TrimSpace(event.ChatType),
 		Text:          event.Text,
-		Attachments:   append([]channelbridge.MessageAttachment(nil), event.Attachments...),
+		Attachments:   append([]channel.MessageAttachment(nil), event.Attachments...),
 		Mentions:      append([]string(nil), event.Mentions...),
 		Mentioned:     event.Mentioned,
 		ThreadRootID:  strings.TrimSpace(event.ThreadRootID),
@@ -441,13 +440,13 @@ func botEvent(value channel.Binding, event im.ParticipantEvent) channelbridge.Bo
 	}
 }
 
-func botThreadContext(value *im.ParticipantThreadContext) *channelbridge.BotThreadContext {
+func botThreadContext(value *im.ParticipantThreadContext) *channel.ThreadContext {
 	if value == nil {
 		return nil
 	}
-	out := &channelbridge.BotThreadContext{
+	out := &channel.ThreadContext{
 		RootMessageID: strings.TrimSpace(value.RootMessageID),
-		Summary: channelbridge.BotThreadContextSummary{
+		Summary: channel.ThreadContextSummary{
 			RootExcerpt:  value.Summary.RootExcerpt,
 			MessageCount: value.Summary.MessageCount,
 			BeforeCount:  value.Summary.BeforeCount,
@@ -459,12 +458,12 @@ func botThreadContext(value *im.ParticipantThreadContext) *channelbridge.BotThre
 		if !message.CreatedAt.IsZero() {
 			createdAt = message.CreatedAt.UTC().Format("2006-01-02T15:04:05.000Z07:00")
 		}
-		out.Context = append(out.Context, channelbridge.BotThreadContextMessage{
+		out.Context = append(out.Context, channel.ThreadContextMessage{
 			ID:          message.ID,
 			SenderID:    message.SenderID,
 			Content:     message.Content,
 			CreatedAt:   createdAt,
-			Attachments: append([]channelbridge.MessageAttachment(nil), message.Attachments...),
+			Attachments: append([]channel.MessageAttachment(nil), message.Attachments...),
 		})
 	}
 	return out

@@ -646,7 +646,7 @@ func writeInstalledBundle(t *testing.T, parentDir, marker string) string {
 	for path, content := range map[string]string{
 		filepath.Join(root, ".csgclaw-bundle.json"): `{"app":"csgclaw","layout":"official-bundle","version":"test"}`,
 		filepath.Join(root, "bin", "csgclaw"):       "#!/bin/sh\n# " + marker + "\n",
-		filepath.Join(root, "bin", "codex"):          "bundled codex",
+		filepath.Join(root, "bin", "codex"):         "bundled codex",
 		filepath.Join(root, "bin", "boxlite"):       "#!/bin/sh\n# " + marker + " boxlite\n",
 		filepath.Join(root, "README.md"):            marker,
 	} {

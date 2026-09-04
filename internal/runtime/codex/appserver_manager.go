@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"mime"
 	"os"
 	"os/exec"
@@ -96,6 +97,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	m.mu.RUnlock()
 	if current != nil && current.session != nil && processAlive(current.session.ProcessID) {
 		cloned := *current.session
+		cloned.ExtensionDigests = maps.Clone(cloned.ExtensionDigests)
 		return &cloned, nil
 	}
 
@@ -110,7 +112,12 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("prepare codex app-server command: %w", err)
 	}
 	cmd.Dir = spec.WorkspaceDir
-	cmd.Env = buildSessionEnv(spec)
+	environment, extensionDigests, err := buildSessionEnvironment(spec)
+	if err != nil {
+		_ = stderrFile.Close()
+		return nil, fmt.Errorf("prepare Runtime extension environment: %w", err)
+	}
+	cmd.Env = environment
 	cmd.Stderr = stderrFile
 	if sysProcAttr := newSessionSysProcAttr(); sysProcAttr != nil {
 		cmd.SysProcAttr = sysProcAttr
@@ -217,6 +224,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		CreatedAt:                   now,
 		StartedAt:                   now,
 		ConversationSessions:        cloneConversationSessions(spec.ConversationSessions),
+		ExtensionDigests:            extensionDigests,
 		FilePublishingConversations: cloneFilePublishingConversations(spec.FilePublishingConversations),
 	}
 	live.mu.Lock()
@@ -224,6 +232,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	live.mu.Unlock()
 
 	cloned := *session
+	cloned.ExtensionDigests = maps.Clone(cloned.ExtensionDigests)
 	return &cloned, nil
 }
 
@@ -295,6 +304,7 @@ func (m *appServerManager) Session(handle SessionHandle) (*Session, error) {
 		return nil, err
 	}
 	cloned := *live.session
+	cloned.ExtensionDigests = maps.Clone(cloned.ExtensionDigests)
 	return &cloned, nil
 }
 
@@ -308,6 +318,7 @@ func (m *appServerManager) LiveSession(handle SessionHandle) (*Session, error) {
 		return nil, os.ErrNotExist
 	}
 	cloned := *live.session
+	cloned.ExtensionDigests = maps.Clone(cloned.ExtensionDigests)
 	return &cloned, nil
 }
 

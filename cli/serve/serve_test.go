@@ -16,11 +16,12 @@ import (
 
 	"csgclaw/cli/command"
 	"csgclaw/internal/activity"
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
+	csgclawinteraction "csgclaw/internal/channel/csgclaw/interaction"
+	channelrender "csgclaw/internal/channel/csgclaw/render"
 	"csgclaw/internal/channel/feishu"
-	"csgclaw/internal/channelbridge/runtimebridge"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
@@ -38,7 +39,7 @@ func TestReconcileInterruptedUserInputMessagesIncludesThreadReplies(t *testing.T
 	t.Parallel()
 
 	now := time.Now().UTC()
-	renderer := runtimebridge.NewTurnRenderer()
+	renderer := channelrender.NewTurnRenderer()
 	pending, ok := renderer.RenderActivity(activity.RuntimeEvent{
 		Kind: activity.RuntimeEventUserInputRequest,
 		Payload: activity.UserInputSnapshot{
@@ -831,9 +832,9 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	})
 
 	ctx := context.WithValue(context.Background(), struct{}{}, "serve-context")
-	svc := &agent.Service{}
+	svc := &agent.Controller{}
 
-	NewAgentService = func(config.Config, feishu.AgentCredentialProvider) (*agent.Service, error) {
+	NewAgentService = func(config.Config, feishu.AgentCredentialProvider) (*agent.Controller, error) {
 		return svc, nil
 	}
 	NewIMService = func(*im.Bus) (*im.Service, error) {
@@ -845,7 +846,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		}
 		return feishu.NewServiceWithProvider(provider), nil
 	}
-	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) {
+	NewLLMService = func(config.Config, *agent.Controller) (*llm.Service, error) {
 		return nil, nil
 	}
 	EnsureCLIProxy = func(context.Context) error { return nil }
@@ -856,7 +857,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 	releaseStart := make(chan struct{})
 	startReturned := make(chan struct{})
 	startErrors := make(chan string, 6)
-	EnsureBootstrapManager = func(gotCtx context.Context, gotService *agent.Service) error {
+	EnsureBootstrapManager = func(gotCtx context.Context, gotService *agent.Controller) error {
 		if gotCtx != ctx {
 			startErrors <- fmt.Sprintf("EnsureBootstrapManager context = %v, want %v", gotCtx, ctx)
 		}
@@ -865,7 +866,7 @@ func TestServeForegroundPassesContextToServer(t *testing.T) {
 		}
 		return nil
 	}
-	StartConfiguredAgents = func(gotCtx context.Context, gotService *agent.Service) error {
+	StartConfiguredAgents = func(gotCtx context.Context, gotService *agent.Controller) error {
 		defer close(startReturned)
 		if gotCtx != ctx {
 			startErrors <- fmt.Sprintf("StartConfiguredAgents context = %v, want %v", gotCtx, ctx)
@@ -1080,7 +1081,7 @@ func TestServeForegroundStartsConfiguredAgentsOnReady(t *testing.T) {
 	defer restore()
 
 	started := make(chan struct{})
-	StartConfiguredAgents = func(context.Context, *agent.Service) error {
+	StartConfiguredAgents = func(context.Context, *agent.Controller) error {
 		close(started)
 		return nil
 	}
@@ -1107,11 +1108,11 @@ func TestServeForegroundEnsuresBootstrapManagerBeforeConfiguredAgents(t *testing
 	defer restore()
 
 	calls := make(chan string, 2)
-	EnsureBootstrapManager = func(context.Context, *agent.Service) error {
+	EnsureBootstrapManager = func(context.Context, *agent.Controller) error {
 		calls <- "manager"
 		return nil
 	}
-	StartConfiguredAgents = func(context.Context, *agent.Service) error {
+	StartConfiguredAgents = func(context.Context, *agent.Controller) error {
 		calls <- "configured-agents"
 		return nil
 	}
@@ -1218,12 +1219,12 @@ func TestServeForegroundUsesSingleBuiltInIMAdapterSource(t *testing.T) {
 	var cancelSubscription func()
 	NewCSGClawAdapterSource = func(
 		engine *agentengine.Engine,
-		_ *agent.Service,
-		_ *im.Service,
+		_ *agent.Controller, _ *im.Service,
 		_ *im.Bus,
 		_ *participant.Service,
 		workReporter worklease.ParticipantWorkReporter,
 		bridge *im.ParticipantBridge,
+		_ *csgclawinteraction.Coordinator,
 	) (csgclawAdapterSource, error) {
 		if engine == nil || workReporter == nil || bridge == nil {
 			t.Fatal("built-in IM adapter dependencies were not assembled")
@@ -1295,7 +1296,7 @@ func TestServeForegroundUsesSingleBuiltInIMAdapterSource(t *testing.T) {
 	}
 }
 
-func TestChannelBindingActivatorRoutesToChannelOwner(t *testing.T) {
+func TestChannelBindingCoordinatorRoutesToChannelOwner(t *testing.T) {
 	t.Parallel()
 
 	var csgclawCalls, feishuCalls int
@@ -1307,7 +1308,7 @@ func TestChannelBindingActivatorRoutesToChannelOwner(t *testing.T) {
 		feishuCalls++
 		return nil
 	}}
-	activator := newChannelBindingActivator(csgclawSource, feishuManager)
+	activator := newChannelBindingCoordinator(csgclawSource, feishuManager)
 	target := agent.Agent{ID: "agent-1"}
 	if err := activator.RefreshAgentChannel(context.Background(), target, " CSGCLAW "); err != nil {
 		t.Fatalf("refresh csgclaw: %v", err)
@@ -1321,20 +1322,7 @@ func TestChannelBindingActivatorRoutesToChannelOwner(t *testing.T) {
 	if err := activator.RefreshAgentChannel(context.Background(), target, "unknown"); err == nil {
 		t.Fatal("refresh unknown channel succeeded")
 	}
-	stoppedPolicy, ok := activator.(agent.StoppedAgentBindingActivator)
-	if !ok {
-		t.Fatal("binding activator does not expose stopped-agent refresh policy")
-	}
-	if !stoppedPolicy.CanRefreshStoppedAgentBinding(csgclawchannel.ChannelID) {
-		t.Fatal("csgclaw binding should refresh independently of agent runtime state")
-	}
-	if !stoppedPolicy.CanRefreshStoppedAgentBinding(feishu.ChannelID) {
-		t.Fatal("feishu binding should refresh independently of agent runtime state")
-	}
-	if stoppedPolicy.CanRefreshStoppedAgentBinding("unknown") {
-		t.Fatal("unknown binding should not refresh while the agent is stopped")
-	}
-	feishuOnly := newChannelBindingActivator(nil, feishuManager)
+	feishuOnly := newChannelBindingCoordinator(nil, feishuManager)
 	if err := feishuOnly.RefreshAgentChannel(context.Background(), target, csgclawchannel.ChannelID); err == nil {
 		t.Fatal("refresh without csgclaw manager succeeded")
 	}
@@ -1342,6 +1330,10 @@ func TestChannelBindingActivatorRoutesToChannelOwner(t *testing.T) {
 
 func TestServeForegroundPreservesBootstrapDefaultTemplates(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	origEnsureCLIProxy, origShutdownCLIProxy := EnsureCLIProxy, ShutdownCLIProxy
+	EnsureCLIProxy = func(context.Context) error { return nil }
+	ShutdownCLIProxy = func(context.Context) error { return nil }
+	t.Cleanup(func() { EnsureCLIProxy, ShutdownCLIProxy = origEnsureCLIProxy, origShutdownCLIProxy })
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
 	origEnsureBootstrapManager := EnsureBootstrapManager
@@ -1358,8 +1350,8 @@ func TestServeForegroundPreservesBootstrapDefaultTemplates(t *testing.T) {
 		}
 		return nil
 	}
-	EnsureBootstrapManager = func(context.Context, *agent.Service) error { return nil }
-	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
+	EnsureBootstrapManager = func(context.Context, *agent.Controller) error { return nil }
+	StartConfiguredAgents = func(context.Context, *agent.Controller) error { return nil }
 
 	cfg := config.Config{
 		Server: config.ServerConfig{
@@ -1376,14 +1368,14 @@ func TestServeForegroundPreservesBootstrapDefaultTemplates(t *testing.T) {
 			DefaultWorkerTemplate:  "local.review-worker",
 		},
 	}
-	NewAgentService = func(got config.Config, _ feishu.AgentCredentialProvider) (*agent.Service, error) {
+	NewAgentService = func(got config.Config, _ feishu.AgentCredentialProvider) (*agent.Controller, error) {
 		if got.Bootstrap.DefaultManagerTemplate != "local.review-manager" {
 			t.Fatalf("default manager template = %q, want preserved template", got.Bootstrap.DefaultManagerTemplate)
 		}
 		if got.Bootstrap.DefaultWorkerTemplate != "local.review-worker" {
 			t.Fatalf("default worker template = %q, want preserved template", got.Bootstrap.DefaultWorkerTemplate)
 		}
-		return &agent.Service{}, nil
+		return &agent.Controller{}, nil
 	}
 
 	if err := serveForeground(context.Background(), testContext(), cfg, "json"); err != nil {
@@ -1846,19 +1838,19 @@ func stubServeDependencies(t *testing.T) func() {
 		}
 		return nil
 	}
-	NewAgentService = func(config.Config, feishu.AgentCredentialProvider) (*agent.Service, error) {
-		return &agent.Service{}, nil
+	NewAgentService = func(config.Config, feishu.AgentCredentialProvider) (*agent.Controller, error) {
+		return &agent.Controller{}, nil
 	}
 	NewIMService = func(*im.Bus) (*im.Service, error) { return nil, nil }
 	NewFeishuService = func(feishu.Provider) (*feishu.Service, error) { return nil, nil }
-	NewLLMService = func(config.Config, *agent.Service) (*llm.Service, error) { return nil, nil }
-	EnsureBootstrapManager = func(context.Context, *agent.Service) error { return nil }
-	StartConfiguredAgents = func(context.Context, *agent.Service) error { return nil }
-	StopRunningSandboxAgents = func(context.Context, *agent.Service) error { return nil }
+	NewLLMService = func(config.Config, *agent.Controller) (*llm.Service, error) { return nil, nil }
+	EnsureBootstrapManager = func(context.Context, *agent.Controller) error { return nil }
+	StartConfiguredAgents = func(context.Context, *agent.Controller) error { return nil }
+	StopRunningSandboxAgents = func(context.Context, *agent.Controller) error { return nil }
 	NewFeishuBindingManager = func(*feishu.Service, agentengine.Interface) (feishuBindingManager, error) {
 		return nil, nil
 	}
-	NewCSGClawAdapterSource = func(*agentengine.Engine, *agent.Service, *im.Service, *im.Bus, *participant.Service, worklease.ParticipantWorkReporter, *im.ParticipantBridge) (csgclawAdapterSource, error) {
+	NewCSGClawAdapterSource = func(*agentengine.Engine, *agent.Controller, *im.Service, *im.Bus, *participant.Service, worklease.ParticipantWorkReporter, *im.ParticipantBridge, *csgclawinteraction.Coordinator) (csgclawAdapterSource, error) {
 		return nil, nil
 	}
 	EnsureCLIProxy = func(context.Context) error { return nil }
@@ -1908,7 +1900,7 @@ func TestServeForegroundConfiguresDesktopAgentShutdown(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	shutdownCalled := false
-	StopRunningSandboxAgents = func(context.Context, *agent.Service) error {
+	StopRunningSandboxAgents = func(context.Context, *agent.Controller) error {
 		shutdownCalled = true
 		return nil
 	}

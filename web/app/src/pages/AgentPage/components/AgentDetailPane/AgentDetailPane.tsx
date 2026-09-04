@@ -2302,7 +2302,9 @@ function AgentChannelsSection({
   );
   const connectLabel = connected ? t("feishuReconnect") : t("feishuConnect");
   const canStart = Boolean(onStartFeishuConnect);
-  const canDisconnect = connected && Boolean(onDisconnectFeishu);
+  const cleanupPending = !connected && Boolean(item.lark_cli?.cleanup_pending);
+  const disconnectLabel = cleanupPending ? t("feishuCleanupRetry") : t("feishuDisconnect");
+  const canDisconnect = (connected || cleanupPending) && Boolean(onDisconnectFeishu);
   const connectURL = String(pendingRegistration?.connect_url || "").trim();
   const larkCLIState = String(item.lark_cli?.state || "")
     .trim()
@@ -2310,14 +2312,17 @@ function AgentChannelsSection({
   const larkCLIUnavailable = larkCLIState === "unavailable";
   const larkCLIMismatch = larkCLIState === "mismatch";
   const larkCLIBound = Boolean(item.lark_cli?.bound) && !larkCLIUnavailable && !larkCLIMismatch;
+  const larkCLIPendingLoad = larkCLIBound && item.lark_cli?.runtime_loaded === false;
   const canInitLarkCLI = larkCLIUnavailable ? Boolean(onShowLarkCLIInstall) : Boolean(onInitLarkCLI);
   const larkCLIButtonLabel = larkCLIUnavailable
     ? t("larkCLIInstallRequiredAction")
     : larkCLIMismatch
       ? t("larkCLIReinit")
-      : larkCLIBound
-        ? t("larkCLIConfiguredAction")
-        : t("larkCLIInit");
+      : larkCLIPendingLoad
+        ? t("larkCLIConfiguredPendingLoadAction")
+        : larkCLIBound
+          ? t("larkCLIConfiguredAction")
+          : t("larkCLIInit");
 
   return (
     <section
@@ -2386,6 +2391,8 @@ function AgentChannelsSection({
                 <AlertCircle aria-hidden="true" size={15} strokeWidth={2} />
               ) : larkCLIMismatch ? (
                 <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
+              ) : larkCLIPendingLoad ? (
+                <CircleDashed aria-hidden="true" size={15} strokeWidth={2} />
               ) : larkCLIBound ? (
                 <CheckCircle2 aria-hidden="true" size={15} strokeWidth={2} />
               ) : (
@@ -2394,18 +2401,18 @@ function AgentChannelsSection({
               {larkCLIButtonLabel}
             </Button>
           ) : null}
-          {connected ? (
+          {connected || cleanupPending ? (
             <Button
               variant="outlineDanger"
               size="sm"
               type="button"
               loading={disconnectBusy}
-              loadingLabel={t("feishuDisconnect")}
+              loadingLabel={disconnectLabel}
               disabled={!canDisconnect || actionBusy}
               onClick={() => onDisconnectFeishu?.(item)}
             >
               <Unlink2 aria-hidden="true" size={15} strokeWidth={2} />
-              {t("feishuDisconnect")}
+              {disconnectLabel}
             </Button>
           ) : null}
         </span>

@@ -12,7 +12,6 @@ import (
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge"
 	"csgclaw/internal/im"
 )
 
@@ -44,8 +43,8 @@ func NewLocalResolver(imService *im.Service, workspaces workspaceResolver, engin
 func (r *LocalResolver) Resolve(
 	ctx context.Context,
 	binding channel.Binding,
-	event channelbridge.BotEvent,
-	attachment channelbridge.MessageAttachment,
+	event channel.Event,
+	attachment channel.MessageAttachment,
 ) (agentengine.InputFile, func(), error) {
 	if err := contextError(ctx); err != nil {
 		return agentengine.InputFile{}, nil, err
@@ -132,20 +131,20 @@ func (r *LocalResolver) Resolve(
 func (r *LocalResolver) ResolveContext(
 	ctx context.Context,
 	binding channel.Binding,
-	event channelbridge.BotEvent,
-) (channelbridge.BotEvent, func(), error) {
+	event channel.Event,
+) (channel.Event, func(), error) {
 	if event.ThreadContext == nil || len(event.ThreadContext.Context) == 0 {
 		return event, nil, nil
 	}
 	if err := contextError(ctx); err != nil {
-		return channelbridge.BotEvent{}, nil, err
+		return channel.Event{}, nil, err
 	}
 	workspaceRoot, err := r.workspaces.WorkspaceRootByID(strings.TrimSpace(binding.AgentID))
 	if err != nil {
-		return channelbridge.BotEvent{}, nil, fmt.Errorf("resolve agent workspace for thread context: %w", err)
+		return channel.Event{}, nil, fmt.Errorf("resolve agent workspace for thread context: %w", err)
 	}
 	thread := *event.ThreadContext
-	thread.Context = append([]channelbridge.BotThreadContextMessage(nil), event.ThreadContext.Context...)
+	thread.Context = append([]channel.ThreadContextMessage(nil), event.ThreadContext.Context...)
 	var releases []func()
 	releaseAll := func() {
 		for index := len(releases) - 1; index >= 0; index-- {
@@ -156,7 +155,7 @@ func (r *LocalResolver) ResolveContext(
 	}
 	for messageIndex := range thread.Context {
 		message := &thread.Context[messageIndex]
-		message.Attachments = append([]channelbridge.MessageAttachment(nil), message.Attachments...)
+		message.Attachments = append([]channel.MessageAttachment(nil), message.Attachments...)
 		for attachmentIndex := range message.Attachments {
 			attachment := &message.Attachments[attachmentIndex]
 			if release := managedAttachmentRelease(workspaceRoot, attachment.WorkspacePath); release != nil {
@@ -176,7 +175,7 @@ func (r *LocalResolver) ResolveContext(
 			resolved, resolveErr := r.im.MaterializeAttachment(attachmentID, workspaceRoot, relativeDir)
 			if resolveErr != nil {
 				releaseAll()
-				return channelbridge.BotEvent{}, nil, fmt.Errorf("materialize thread context attachment %q: %w", attachmentID, resolveErr)
+				return channel.Event{}, nil, fmt.Errorf("materialize thread context attachment %q: %w", attachmentID, resolveErr)
 			}
 			*attachment = resolved
 			releases = append(releases, managedAttachmentRelease(workspaceRoot, resolved.WorkspacePath))
@@ -279,7 +278,7 @@ func managedAttachmentRelease(workspaceRoot, sourcePath string) func() {
 	}
 }
 
-func eventContainsAttachment(event channelbridge.BotEvent, attachmentID string) bool {
+func eventContainsAttachment(event channel.Event, attachmentID string) bool {
 	for _, candidate := range event.Attachments {
 		if strings.TrimSpace(candidate.ID) == attachmentID {
 			return true

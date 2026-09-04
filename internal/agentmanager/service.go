@@ -2,11 +2,10 @@ package agentmanager
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/connectors"
 	"fmt"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/connectors"
 )
 
 type AgentService interface {

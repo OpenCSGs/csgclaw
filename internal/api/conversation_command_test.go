@@ -1,11 +1,57 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/im"
 )
+
+func TestNativeConversationResetThroughMessageAPI(t *testing.T) {
+	for _, tc := range []struct{ kind, command string }{
+		{agent.RuntimeKindOpenClawSandbox, "/new"},
+		{agent.RuntimeKindPicoClawSandbox, "/clear"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			target := completeWorkerAgent("agent-native", "native")
+			target.RuntimeKind = tc.kind
+			controller := mustNewSeededServiceWithOptions(t, []agent.Agent{target}, agent.WithRuntime(fakeCompatRuntime{kind: tc.kind}))
+			bus := im.NewBus()
+			imService := im.NewServiceFromBootstrapWithBus(im.Bootstrap{CurrentUserID: "u-admin", Users: []im.User{{ID: "u-admin", Name: "admin"}, {ID: "u-native", Name: "native", Role: "worker"}}, Rooms: []im.Room{{ID: "room-native", IsDirect: true, Members: []string{"u-admin", "u-native"}}}}, bus)
+			messages, unsubscribeMessages := bus.Subscribe()
+			defer unsubscribeMessages()
+			bridge := im.NewParticipantBridge("")
+			events, unsubscribe := bridge.Subscribe("u-native")
+			defer unsubscribe()
+			h := NewHandler(AgentServices{Records: controller, Workspace: controller.Workspace(), Models: controller.Models(), Runtime: controller}, agentengine.New(controller), imService, bus, bridge, nil, nil)
+			w := httptest.NewRecorder()
+			h.Routes().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/messages", strings.NewReader(`{"room_id":"room-native","sender_id":"u-admin","content":"<slash-command name=\"new\" arg=\"conversation\"></slash-command> reset"}`)))
+			if w.Code != http.StatusCreated {
+				t.Fatalf("HTTP=%d %s", w.Code, w.Body)
+			}
+			select {
+			case message := <-messages:
+				h.PublishParticipantEvent(message)
+			case <-time.After(time.Second):
+				t.Fatal("message API did not publish its event")
+			}
+			select {
+			case event := <-events:
+				if event.Text != tc.command {
+					t.Fatalf("native gateway received %q, want %q", event.Text, tc.command)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("native gateway did not receive reset command")
+			}
+		})
+	}
+}
 
 func TestNewConversationCommandReasonExtractsCanonicalBody(t *testing.T) {
 	reason, matched, err := newConversationCommandReason(`<slash-command name="new" arg="conversation"></slash-command> reset before rebuild`)

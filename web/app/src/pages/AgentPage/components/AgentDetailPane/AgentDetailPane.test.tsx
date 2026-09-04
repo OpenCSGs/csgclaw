@@ -61,6 +61,7 @@ const savedDraft: AgentDraft = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 type HarnessProps = Partial<AgentDetailPaneProps>;
@@ -92,6 +93,25 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
+  it("offers tool cleanup after Feishu disconnect without showing a connected Bot", async () => {
+    const user = userEvent.setup();
+    const onDisconnectFeishu = vi.fn();
+    render(
+      <Harness
+        item={{
+          ...agent,
+          lark_cli: { state: "mismatch", bound: false, available: true, runtime_loaded: false, cleanup_pending: true },
+        }}
+        onDisconnectFeishu={onDisconnectFeishu}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "agentChannelsTitle" }));
+    expect(screen.getByText("feishuDisconnected")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "feishuDisconnect" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "feishuCleanupRetry" }));
+    expect(onDisconnectFeishu).toHaveBeenCalledTimes(1);
+  });
+
   it("places a dismiss button on the right side of a notice", async () => {
     const user = userEvent.setup();
     const onDismissNotice = vi.fn();

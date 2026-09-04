@@ -22,7 +22,6 @@ type Runtime struct {
 }
 
 var _ agentruntime.Provisioner = (*Runtime)(nil)
-var _ agentruntime.ConversationStarter = (*Runtime)(nil)
 
 func New(deps Dependencies) *Runtime {
 	deps.RuntimeKind = agentruntime.KindOpenClawSandbox
@@ -57,11 +56,12 @@ func (r *Runtime) Layout(agentHome string) agentruntime.Layout {
 	}
 }
 
-func (r *Runtime) NewConversation(_ context.Context, _ agentruntime.Handle, _ agentruntime.ConversationStartRequest) (agentruntime.ConversationStartAction, error) {
-	return agentruntime.ConversationStartAction{
-		Mode:         agentruntime.ConversationStartActionBotEvent,
-		BotEventText: "/new",
-	}, nil
+func (r *Runtime) ReconcileHostConfig(_ context.Context, req agentruntime.ProvisionRequest) error {
+	if req.Gateway == nil {
+		return fmt.Errorf("gateway configuration is required")
+	}
+	_, err := EnsureConfigWithMCPServers(req.Gateway.AgentHome, req.ParticipantID, req.AgentID, req.Gateway.Server, configModelFromProfile(req.Profile.Normalized()), req.MCPServers, fixedBaseURL(req.Gateway.ManagerBaseURL), r.CurrentFeishuProvider())
+	return err
 }
 
 func (r *Runtime) Provision(_ context.Context, req agentruntime.ProvisionRequest) error {

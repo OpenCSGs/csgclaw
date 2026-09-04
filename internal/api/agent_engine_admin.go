@@ -1,14 +1,13 @@
 package api
 
 import (
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/utils"
 	"maps"
 	"slices"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
-	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/utils"
 )
 
 func engineCreateRequest(request agent.CreateRequest) agentengine.AgentCreateRequest {

@@ -20,6 +20,57 @@ type InterfaceFactory func(testing.TB, []agentengine.Agent, TurnBehavior) agente
 // against any Interface implementation.
 func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 	t.Helper()
+	runDetachedInteractionContract(t, factory)
+	t.Run("required unsupported extension blocks readiness", func(t *testing.T) {
+		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, nil)
+		extensions := client.RuntimeExtensions("agent-a")
+		item, _ := extensions.Apply(context.Background(), agentengine.RuntimeExtensionApplyRequest{Spec: agentengine.RuntimeExtensionSpec{Name: "required", Kind: "unregistered", Source: agentengine.RuntimeExtensionSourceRef{Provider: "contract", Ref: "source"}, FailurePolicy: agentengine.RuntimeExtensionBlockRuntime}})
+		if item.Status.State != agentengine.RuntimeExtensionError || item.Status.Reason != "extension_unsupported" {
+			t.Fatalf("unsupported=%+v", item)
+		}
+		agent, err := client.Agents().Get(context.Background(), "agent-a", agentengine.AgentGetOptions{})
+		if err != nil || agent.Status.Ready {
+			t.Fatalf("required readiness=%+v %v", agent, err)
+		}
+		result := client.Conversations("agent-a").Run(context.Background(), contractTurn("blocked", "conversation"), nil)
+		if result.Dispatched || result.Error == nil || result.Error.Code != agentengine.ErrorAgentUnavailable {
+			t.Fatalf("blocked Run=%+v", result)
+		}
+		if err := extensions.Delete(context.Background(), "required"); err != nil {
+			t.Fatal(err)
+		}
+		agent, err = client.Agents().Get(context.Background(), "agent-a", agentengine.AgentGetOptions{})
+		if err != nil || !agent.Status.Ready {
+			t.Fatalf("restored readiness=%+v %v", agent, err)
+		}
+	})
+	t.Run("runtime extension resources", func(t *testing.T) {
+		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateStopped, "codex")}, nil)
+		extensions := client.RuntimeExtensions("agent-a")
+		created, err := extensions.Apply(context.Background(), agentengine.RuntimeExtensionApplyRequest{Spec: agentengine.RuntimeExtensionSpec{
+			Name: "contract-extension", Kind: "contract", Source: agentengine.RuntimeExtensionSourceRef{Provider: "contract", Ref: "source-a"},
+		}})
+		if err != nil || created.Status.State != agentengine.RuntimeExtensionConfigured || created.Status.Generation != 1 || created.Status.ObservedGeneration != 1 {
+			t.Fatalf("Apply() = %+v, %v", created, err)
+		}
+		got, err := extensions.Get(context.Background(), created.Spec.Name)
+		if err != nil || got.ResourceVersion != created.ResourceVersion {
+			t.Fatalf("Get() = %+v, %v", got, err)
+		}
+		listed, err := extensions.List(context.Background())
+		if err != nil || len(listed) != 1 || listed[0].Spec.Name != created.Spec.Name {
+			t.Fatalf("List() = %+v, %v", listed, err)
+		}
+		if _, err := extensions.Apply(context.Background(), agentengine.RuntimeExtensionApplyRequest{Spec: created.Spec, ResourceVersion: "stale"}); agentengine.ErrorCodeOf(err) != agentengine.ErrorRuntimeExtensionConflict {
+			t.Fatalf("stale Apply() error = %v", err)
+		}
+		if err := extensions.Delete(context.Background(), created.Spec.Name); err != nil {
+			t.Fatalf("Delete() error = %v", err)
+		}
+		if _, err := extensions.Get(context.Background(), created.Spec.Name); agentengine.ErrorCodeOf(err) != agentengine.ErrorRuntimeExtensionNotFound {
+			t.Fatalf("Get() after Delete error = %v", err)
+		}
+	})
 	t.Run("agent lifecycle and secret handling", func(t *testing.T) {
 		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateStopped, "codex")}, nil)
 		agents := client.Agents()

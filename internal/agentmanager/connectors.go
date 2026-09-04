@@ -2,13 +2,12 @@ package agentmanager
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/connectors"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/connectors"
 )
 
 type AgentConnectorRef struct {

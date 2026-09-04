@@ -4,6 +4,31 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentengine/enginetest"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/app/runtimewiring"
+	"csgclaw/internal/auth"
+	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/config"
+	"csgclaw/internal/im"
+	"csgclaw/internal/knowledgebase"
+	"csgclaw/internal/llm"
+	"csgclaw/internal/mcp"
+	"csgclaw/internal/modelprovider"
+	"csgclaw/internal/participant"
+	agentruntime "csgclaw/internal/runtime"
+	codexruntime "csgclaw/internal/runtime/codex"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
+	"csgclaw/internal/runtime/openclawsandbox"
+	"csgclaw/internal/runtime/picoclawsandbox"
+	larkextension "csgclaw/internal/runtimeextension/larkcli"
+	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandbox/sandboxtest"
+	"csgclaw/internal/sandboxproviders"
+	skillsystem "csgclaw/internal/skill/system"
+	hub "csgclaw/internal/template"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,30 +44,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
-	"csgclaw/internal/agentengine/enginetest"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/app/runtimewiring"
-	"csgclaw/internal/auth"
-	"csgclaw/internal/channel/feishu"
-	"csgclaw/internal/config"
-	"csgclaw/internal/im"
-	"csgclaw/internal/knowledgebase"
-	"csgclaw/internal/llm"
-	"csgclaw/internal/mcp"
-	"csgclaw/internal/modelprovider"
-	"csgclaw/internal/participant"
-	agentruntime "csgclaw/internal/runtime"
-	codexruntime "csgclaw/internal/runtime/codex"
-	"csgclaw/internal/runtime/openclawsandbox"
-	"csgclaw/internal/runtime/picoclawsandbox"
-	"csgclaw/internal/sandbox"
-	"csgclaw/internal/sandbox/sandboxtest"
-	"csgclaw/internal/sandboxproviders"
-	skillsystem "csgclaw/internal/skill/system"
-	hub "csgclaw/internal/template"
 )
 
 type fakeCompatRuntime struct {
@@ -53,6 +54,36 @@ type fakeCompatRuntime struct {
 	stop    func(context.Context, agentruntime.Handle) (agentruntime.State, error)
 	del     func(context.Context, agentruntime.Handle) error
 	info    func(context.Context, agentruntime.Handle) (agentruntime.Info, error)
+}
+
+func (f fakeCompatRuntime) RuntimeExtensionDriver(kind string) (agentruntime.ExtensionDriver, bool) {
+	if f.kind != agent.RuntimeKindCodex || kind != larkextension.Kind {
+		return nil, false
+	}
+	return fakeLarkCLIExtensionDriver{}, true
+}
+
+type fakeLarkCLIExtensionDriver struct{}
+
+var larkCLICommandContext = exec.CommandContext
+
+func (fakeLarkCLIExtensionDriver) ObserveExtension(ctx context.Context, _ string, _ agentruntime.ExtensionDesired) (agentruntime.ExtensionResult, error) {
+	if _, err := testLarkCLIPath(ctx); err != nil {
+		return agentruntime.ExtensionResult{State: agentruntime.ExtensionStateUnavailable, Reason: "executable_unavailable", Message: err.Error(), CheckedAt: time.Now().UTC()}, nil
+	}
+	return agentruntime.ExtensionResult{State: agentruntime.ExtensionStateConfigured, CheckedAt: time.Now().UTC(), RuntimeLoaded: true}, nil
+}
+
+func testLarkCLIPath(ctx context.Context) (string, error) {
+	path, err := larkCLILookPath("lark-cli")
+	if err != nil || strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("lark-cli is not installed or not on PATH. Install lark-cli on this host and retry")
+	}
+	cmd := larkCLICommandContext(ctx, path, "-v")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("lark-cli cannot be started: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return path, nil
 }
 
 type fakeReadinessCompatRuntime struct {
@@ -79,6 +110,12 @@ func (a getErrorAgents) Get(context.Context, string, agentengine.AgentGetOptions
 type fakeSandboxAvailabilityProvider struct {
 	name string
 	err  error
+}
+
+type noOpChannelBindingReconciler struct{}
+
+func (noOpChannelBindingReconciler) RefreshAgentChannel(context.Context, agent.Agent, string) error {
+	return nil
 }
 
 func TestWriteAgentOperationErrorSanitizesWrappedUpstreamError(t *testing.T) {
@@ -262,7 +299,7 @@ func (f failingMCPServersListRuntime) ListMCPServers(context.Context, agentrunti
 
 func init() {
 	locateCodexCLI = func() (string, error) { return "/opt/csgclaw/bin/codex", nil }
-	_ = agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
+	_ = agent.TestOnlySetDefaultControllerOption(func(s *agent.Controller) error {
 		if err := runtimewiring.WithPicoClawSandboxRuntime(nil)(s); err != nil {
 			return err
 		}
@@ -370,22 +407,6 @@ func (f fakeCompatRuntime) ProjectsGuestPath() string {
 
 func (f fakeCompatRuntime) RuntimeOptionsSchema() []agentruntime.RuntimeOptionSchema {
 	return append([]agentruntime.RuntimeOptionSchema(nil), f.schemas...)
-}
-
-type fakeConversationRuntime struct {
-	fakeCompatRuntime
-	newConversation func(context.Context, agentruntime.Handle, agentruntime.ConversationStartRequest) (agentruntime.ConversationStartAction, error)
-}
-
-func (f fakeConversationRuntime) NewConversation(ctx context.Context, handle agentruntime.Handle, req agentruntime.ConversationStartRequest) (agentruntime.ConversationStartAction, error) {
-	if f.newConversation != nil {
-		return f.newConversation(ctx, handle, req)
-	}
-	return agentruntime.ConversationStartAction{
-		Mode:         agentruntime.ConversationStartActionInternal,
-		BotEventText: "",
-		AckText:      "",
-	}, nil
 }
 
 type apiFakeCodexBinaryProvider struct{}
@@ -770,7 +791,7 @@ func TestFriendlySandboxRuntimeMessageReportsDockerTimeout(t *testing.T) {
 
 func TestHandlerBootstrapConfigIncludesRuntimeOptionSchemas(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "agents.json")
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{},
 		config.ServerConfig{},
 		"manager-image:test",
@@ -793,7 +814,7 @@ func TestHandlerBootstrapConfigIncludesRuntimeOptionSchemas(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/bootstrap", nil)
 
@@ -815,7 +836,7 @@ func TestHandlerBootstrapConfigIncludesRuntimeOptionSchemas(t *testing.T) {
 }
 
 func TestBootstrapConfigIncludesBuiltinOpenClawRuntimeDefaultImage(t *testing.T) {
-	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	hubSvc, err := hub.NewService(config.HubConfig{Registries: []config.HubRegistryConfig{{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, Enabled: false}}}, hub.DefaultStoreFactory)
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
@@ -847,7 +868,7 @@ func TestHandleAgentIncludesRuntimeOptionSchemas(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{},
 		config.ServerConfig{},
 		"manager-image:test",
@@ -874,7 +895,7 @@ func TestHandleAgentIncludesRuntimeOptionSchemas(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-codex", nil)
 
@@ -916,7 +937,7 @@ func TestHandleManagerOmitsRuntimeOptionSchemas(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{},
 		config.ServerConfig{},
 		"manager-image:test",
@@ -937,7 +958,7 @@ func TestHandleManagerOmitsRuntimeOptionSchemas(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+agent.ManagerUserID, nil)
 
@@ -1131,7 +1152,7 @@ func TestHandleAgentsListReturnsUnifiedAgents(t *testing.T) {
 		{ID: "agent-1", Name: "observer", Role: agent.RoleAgent, CreatedAt: time.Date(2026, 3, 28, 11, 0, 0, 0, time.UTC)},
 	})
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
 	rec := httptest.NewRecorder()
 
@@ -1187,8 +1208,8 @@ func TestHandleAgentDeleteRemovesBoundParticipants(t *testing.T) {
 			LifecycleStatus: participant.LifecycleStatusActive,
 			Mentionable:     true,
 		},
-	}), participant.WithAgentService(svc), participant.WithIMService(imSvc))
-	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc}
+	}), participant.WithAgentEngine(agentengine.New(svc)), participant.WithIMService(imSvc))
+	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/agent-qa", nil)
@@ -1239,7 +1260,7 @@ func TestHandleAgentsListExposesLinkedLocalUser(t *testing.T) {
 		Mentionable:     true,
 	}}))
 
-	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc}
+	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents?include_participants=true", nil)
 	rec := httptest.NewRecorder()
 
@@ -1285,7 +1306,7 @@ func TestHandleAgentResponsesExposeLinkedLocalUserWithoutCSGClawParticipant(t *t
 		Mentionable:     true,
 	}}))
 
-	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc}
+	srv := &Handler{svc: svc, im: imSvc, participant: participantSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	tests := []struct {
 		name       string
 		method     string
@@ -1349,12 +1370,12 @@ func TestHandleAgentsListHydratesStatusFromSandboxInfo(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath, agent.WithSandboxProvider(provider))
+	svc, err := agent.NewController(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath, agent.WithSandboxProvider(provider))
 	if err != nil {
 		t.Fatalf("agent.NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
 	rec := httptest.NewRecorder()
 
@@ -1380,7 +1401,7 @@ func TestHandleAgentsGetByIDReturnsAgent(t *testing.T) {
 		{ID: "u-alice", Name: "alice", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
 	})
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice", nil)
 	rec := httptest.NewRecorder()
 
@@ -1458,7 +1479,7 @@ func TestHandleAgentsListReportsConfiguredStartupPending(t *testing.T) {
 	})
 	svc.PrepareConfiguredAgentsStartup()
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil))
 
@@ -1501,7 +1522,7 @@ func TestHandleAgentsGetByIDSeparatesGatewayAvailabilityFromLifecycle(t *testing
 		},
 	}))
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice", nil))
 
@@ -1564,7 +1585,7 @@ func TestHandleAgentUpgradeUsesLatestDefaultImage(t *testing.T) {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
 	var newImage string
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{},
 		config.ServerConfig{},
 		"manager-image:test",
@@ -1582,7 +1603,7 @@ func TestHandleAgentUpgradeUsesLatestDefaultImage(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/upgrade", nil)
 	rec := httptest.NewRecorder()
 
@@ -1671,7 +1692,7 @@ func TestHandleAgentsListReportsImageUpgradeRequiredByTemplateVersion(t *testing
 			}); err != nil {
 				t.Fatalf("writeSeededAgents() error = %v", err)
 			}
-			svc, err := agent.NewService(
+			svc, err := agent.NewController(
 				config.ModelConfig{},
 				config.ServerConfig{},
 				"manager-image:test",
@@ -1689,7 +1710,7 @@ func TestHandleAgentsListReportsImageUpgradeRequiredByTemplateVersion(t *testing
 				t.Fatalf("NewService() error = %v", err)
 			}
 
-			srv := &Handler{svc: svc}
+			srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
 			rec := httptest.NewRecorder()
 
@@ -1779,7 +1800,7 @@ func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) 
 				Version:     tt.version,
 				Image:       tt.latestImage,
 			})
-			svc, err := agent.NewService(
+			svc, err := agent.NewController(
 				config.ModelConfig{},
 				config.ServerConfig{},
 				"manager-image:unused",
@@ -1796,7 +1817,7 @@ func TestHandleManagerGetIgnoresLocalTemplatePublishedFromManager(t *testing.T) 
 				t.Fatalf("NewService() error = %v", err)
 			}
 
-			srv := &Handler{svc: svc}
+			srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager", nil)
 			rec := httptest.NewRecorder()
 
@@ -1847,7 +1868,7 @@ func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
 	var newImage string
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{},
 		config.ServerConfig{},
 		"manager-image:test",
@@ -1869,7 +1890,7 @@ func TestHandleAgentUpgradeClearsOutdatedImageFlag(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	beforeReq := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice", nil)
 	beforeRec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(beforeRec, beforeReq)
@@ -1953,7 +1974,7 @@ func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
 	var newImage string
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{},
 		config.ServerConfig{},
 		"manager-image:unused",
@@ -1975,7 +1996,7 @@ func TestHandleManagerUpgradeUsesDefaultTemplateVersionWhenLocalImageListIsStale
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	srv := httptest.NewServer((&Handler{svc: svc}).Routes())
+	srv := httptest.NewServer((&Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}).Routes())
 	defer srv.Close()
 	getAgent := func(path string) agentResponse {
 		t.Helper()
@@ -2053,7 +2074,7 @@ func TestHandleAgentsListRedactsProfileAPIKey(t *testing.T) {
 		},
 	})
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents", nil)
 	rec := httptest.NewRecorder()
 
@@ -2093,7 +2114,7 @@ func TestHandleAgentProfileResolvesAgentName(t *testing.T) {
 			ProfileComplete: false,
 		},
 	}})
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	t.Run("get", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/alice/profile", nil)
@@ -2152,7 +2173,7 @@ func TestHandleAgentsPatchUpdatesMetadataAndProfile(t *testing.T) {
 		},
 	}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}))
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	body := `{"description":"new role","agent_profile":{"name":"alice","provider":"csghub_lite","model_id":"new-model","env":{"A":"B"}}}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-alice", strings.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -2197,7 +2218,7 @@ func TestHandleAgentsPatchFieldMaskClearsRuntimeOptions(t *testing.T) {
 		},
 	}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}))
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	body := `{"runtime_options":{},"field_mask":["runtime_options"]}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-alice", strings.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -2231,7 +2252,7 @@ func TestHandleAgentsGetByIDReloadsStateBeforeLookup(t *testing.T) {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-bob", nil)
 	rec := httptest.NewRecorder()
 
@@ -2252,7 +2273,7 @@ func TestHandleAgentsGetByIDReloadsStateBeforeLookup(t *testing.T) {
 func TestHandleAgentsGetByIDNotFound(t *testing.T) {
 	svc := mustNewSeededService(t, nil)
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/missing", nil)
 	rec := httptest.NewRecorder()
 
@@ -2273,11 +2294,11 @@ func TestHandleAgentLogsStreamsGatewayLog(t *testing.T) {
 	var gotBoxID string
 	var gotCmd string
 	var gotArgs []string
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
 		gotBoxID = idOrName
 		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice"}), nil
 	})
-	agent.TestOnlySetRunBoxCommandHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance, name string, args []string, w io.Writer) (int, error) {
+	agent.TestOnlySetRunBoxCommandHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance, name string, args []string, w io.Writer) (int, error) {
 		gotCmd = name
 		gotArgs = append([]string(nil), args...)
 		_, _ = io.WriteString(w, "hello\nworld\n")
@@ -2288,7 +2309,7 @@ func TestHandleAgentLogsStreamsGatewayLog(t *testing.T) {
 		agent.TestOnlySetRunBoxCommandHook(nil)
 	}()
 
-	srv := &Handler{svc: agentSvc}
+	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice/logs?lines=80", nil)
 	rec := httptest.NewRecorder()
 
@@ -2324,11 +2345,11 @@ func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
 	}
 
 	var gotBoxID string
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
 		gotBoxID = idOrName
 		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice"}), nil
 	})
-	agent.TestOnlySetRunBoxCommandHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance, _ string, _ []string, w io.Writer) (int, error) {
+	agent.TestOnlySetRunBoxCommandHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance, _ string, _ []string, w io.Writer) (int, error) {
 		_, _ = io.WriteString(w, "line-1\n")
 		return 0, nil
 	})
@@ -2337,7 +2358,7 @@ func TestHandleAgentLogsReloadsStateBeforeStreaming(t *testing.T) {
 		agent.TestOnlySetRunBoxCommandHook(nil)
 	}()
 
-	srv := &Handler{svc: agentSvc}
+	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-alice/logs", nil)
 	rec := httptest.NewRecorder()
 
@@ -2365,15 +2386,15 @@ func TestHandleAgentStartStartsExistingBox(t *testing.T) {
 
 	var gotBoxID string
 	var startCalls int
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
 		gotBoxID = idOrName
 		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice", State: sandbox.StateStopped}), nil
 	})
-	agent.TestOnlySetStartBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance) error {
+	agent.TestOnlySetStartBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance) error {
 		startCalls++
 		return nil
 	})
-	agent.TestOnlySetBoxInfoHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
+	agent.TestOnlySetBoxInfoHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
 		state := sandbox.StateStopped
 		if startCalls > 0 {
 			state = sandbox.StateRunning
@@ -2386,7 +2407,7 @@ func TestHandleAgentStartStartsExistingBox(t *testing.T) {
 		agent.TestOnlySetBoxInfoHook(nil)
 	}()
 
-	srv := &Handler{svc: agentSvc}
+	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/start", nil)
 	rec := httptest.NewRecorder()
 
@@ -2419,7 +2440,7 @@ func TestHandleAgentStartEnsuresCodexBridge(t *testing.T) {
 
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 
-	agentSvc, err := agent.NewService(
+	agentSvc, err := agent.NewController(
 		config.ModelConfig{
 			Provider: config.ProviderLLMAPI,
 			BaseURL:  "http://127.0.0.1:4000",
@@ -2443,7 +2464,7 @@ func TestHandleAgentStartEnsuresCodexBridge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	created, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+	created, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			Name:        "alice",
 			Role:        agent.RoleWorker,
@@ -2460,9 +2481,7 @@ func TestHandleAgentStartEnsuresCodexBridge(t *testing.T) {
 		t.Fatalf("Stop() error = %v", err)
 	}
 
-	bridge := &fakeCodexBridgeController{}
-	agentSvc.SetLifecycleObserver(bridge)
-	srv := &Handler{svc: agentSvc}
+	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/start", nil)
 	rec := httptest.NewRecorder()
 
@@ -2470,12 +2489,6 @@ func TestHandleAgentStartEnsuresCodexBridge(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if len(bridge.ensureCalls) != 1 {
-		t.Fatalf("EnsureAgent() calls = %d, want 1", len(bridge.ensureCalls))
-	}
-	if bridge.ensureCalls[0].ID != created.ID || bridge.ensureCalls[0].RuntimeKind != agent.RuntimeKindCodex {
-		t.Fatalf("EnsureAgent() got %+v, want codex worker %q", bridge.ensureCalls[0], created.ID)
 	}
 }
 
@@ -2485,8 +2498,8 @@ func TestHandleAgentApplyBindingsRefreshesRequestedChannelWithoutLifecycleEnsure
 	manager.RuntimeKind = agent.RuntimeKindCodex
 	manager.RuntimeID = "rt-manager"
 	bridge := &fakeCodexBridgeController{}
-	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager}, agent.WithBindingActivator(bridge))
-	srv := &Handler{svc: agentSvc}
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager})
+	srv := &Handler{svc: agentSvc, channelBindings: bridge, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+agent.ManagerUserID+"/bindings:apply?channel=feishu", nil)
 	rec := httptest.NewRecorder()
 
@@ -2509,8 +2522,8 @@ func TestHandleAgentApplyBindingsDefaultsLegacyRequestToFeishu(t *testing.T) {
 	manager.RuntimeKind = agent.RuntimeKindCodex
 	manager.RuntimeID = "rt-manager"
 	bridge := &fakeCodexBridgeController{}
-	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager}, agent.WithBindingActivator(bridge))
-	srv := &Handler{svc: agentSvc}
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager})
+	srv := &Handler{svc: agentSvc, channelBindings: bridge, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+agent.ManagerUserID+"/bindings:apply", nil)
 	rec := httptest.NewRecorder()
 
@@ -2541,18 +2554,18 @@ func TestHandleAgentStopStopsExistingBox(t *testing.T) {
 
 	var gotBoxID string
 	var stopCalls int
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
 		gotBoxID = idOrName
 		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice", State: sandbox.StateRunning}), nil
 	})
-	agent.TestOnlySetStopBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance, opts sandbox.StopOptions) error {
+	agent.TestOnlySetStopBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance, opts sandbox.StopOptions) error {
 		stopCalls++
 		if opts != (sandbox.StopOptions{}) {
 			t.Fatalf("Stop() opts = %+v, want zero value", opts)
 		}
 		return nil
 	})
-	agent.TestOnlySetBoxInfoHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
+	agent.TestOnlySetBoxInfoHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
 		return sandbox.Info{ID: "box-new", Name: "alice", State: sandbox.StateStopped}, nil
 	})
 	defer func() {
@@ -2561,7 +2574,7 @@ func TestHandleAgentStopStopsExistingBox(t *testing.T) {
 		agent.TestOnlySetBoxInfoHook(nil)
 	}()
 
-	srv := &Handler{svc: agentSvc}
+	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/stop", nil)
 	rec := httptest.NewRecorder()
 
@@ -2597,13 +2610,13 @@ func TestHandleAgentStopStopsCodexBridge(t *testing.T) {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
 
-	agent.TestOnlySetGetBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
+	agent.TestOnlySetGetBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, idOrName string) (sandbox.Instance, error) {
 		return sandboxtest.NewInstance(sandbox.Info{ID: idOrName, Name: "alice", State: sandbox.StateRunning}), nil
 	})
-	agent.TestOnlySetStopBoxHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance, _ sandbox.StopOptions) error {
+	agent.TestOnlySetStopBoxHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance, _ sandbox.StopOptions) error {
 		return nil
 	})
-	agent.TestOnlySetBoxInfoHook(func(_ *agent.Service, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
+	agent.TestOnlySetBoxInfoHook(func(_ *agent.Controller, _ context.Context, _ sandbox.Instance) (sandbox.Info, error) {
 		return sandbox.Info{ID: "box-new", Name: "alice", State: sandbox.StateStopped}, nil
 	})
 	defer func() {
@@ -2612,9 +2625,7 @@ func TestHandleAgentStopStopsCodexBridge(t *testing.T) {
 		agent.TestOnlySetBoxInfoHook(nil)
 	}()
 
-	bridge := &fakeCodexBridgeController{}
-	agentSvc.SetLifecycleObserver(bridge)
-	srv := &Handler{svc: agentSvc}
+	srv := &Handler{svc: agentSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/u-alice/stop", nil)
 	rec := httptest.NewRecorder()
 
@@ -2623,9 +2634,6 @@ func TestHandleAgentStopStopsCodexBridge(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if len(bridge.stopCalls) != 1 || bridge.stopCalls[0] != "agent-alice" {
-		t.Fatalf("StopAgent() calls = %v, want [agent-alice]", bridge.stopCalls)
-	}
 }
 
 func TestHandleAgentsDeleteRemovesAgent(t *testing.T) {
@@ -2633,7 +2641,7 @@ func TestHandleAgentsDeleteRemovesAgent(t *testing.T) {
 		{ID: "u-alice", Name: "alice", Role: agent.RoleWorker, CreatedAt: time.Date(2026, 3, 28, 10, 0, 0, 0, time.UTC)},
 	})
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/u-alice", nil)
 	rec := httptest.NewRecorder()
 
@@ -2650,7 +2658,7 @@ func TestHandleAgentsDeleteRemovesAgent(t *testing.T) {
 func TestHandleAgentsDeleteNotFound(t *testing.T) {
 	svc := mustNewSeededService(t, nil)
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/agents/missing", nil)
 	rec := httptest.NewRecorder()
 
@@ -2712,7 +2720,7 @@ func TestAgentSubresourceAdministrationUsesOnlyResourceCRUD(t *testing.T) {
 		Status: agentengine.AgentStatus{
 			State:        agentengine.AgentStateStopped,
 			Capabilities: agentengine.AgentCapabilities{Memory: true},
-			Instructions: &agentengine.InstructionsStatus{Effective: agent.RenderAgentsInstructionsBlock("before")},
+			Instructions: &agentengine.InstructionsStatus{Effective: runtimeinstructions.RenderAgentsInstructionsBlock("before")},
 			Memory:       &agentengine.MemoryStatus{Enabled: true, Ready: true, Name: "MEMORY.md", Content: "memory"},
 		},
 		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
@@ -2735,7 +2743,7 @@ func TestAgentSubresourceAdministrationUsesOnlyResourceCRUD(t *testing.T) {
 	request(http.MethodPost, "/api/v1/agents/agent-resource-admin/skills:batchAdd", `{"names":["new-skill"]}`, http.StatusNoContent)
 	request(http.MethodDelete, "/api/v1/agents/agent-resource-admin/skills/old-skill", "", http.StatusNoContent)
 	request(http.MethodPost, "/api/v1/agents/agent-resource-admin/mcp-servers:batchDelete", `{"names":["legacy"]}`, http.StatusOK)
-	effective, err := json.Marshal(map[string]string{"effective": agent.RenderAgentsInstructionsBlock("after instructions")})
+	effective, err := json.Marshal(map[string]string{"effective": runtimeinstructions.RenderAgentsInstructionsBlock("after instructions")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2765,7 +2773,7 @@ func TestHandleAgentsCreateDoesNotProvisionIMUser(t *testing.T) {
 	svc := mustNewService(t)
 	srv := &Handler{
 		svc: svc,
-		im:  im.NewService(),
+		im:  im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker"}`))
 	rec := httptest.NewRecorder()
@@ -2794,7 +2802,7 @@ func TestHandleAgentsCreateWorkerUsesRequestedRuntimeKind(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{
 			Provider: config.ProviderLLMAPI,
 			BaseURL:  "http://127.0.0.1:4000",
@@ -2815,7 +2823,7 @@ func TestHandleAgentsCreateWorkerUsesRequestedRuntimeKind(t *testing.T) {
 
 	srv := &Handler{
 		svc: svc,
-		im:  im.NewService(),
+		im:  im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_name":"codex"}`))
 	rec := httptest.NewRecorder()
@@ -2841,7 +2849,7 @@ func TestHandleAgentsCreateWorkerSupportsLegacyRuntimeKindRequest(t *testing.T) 
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{
 			Provider: config.ProviderLLMAPI,
 			BaseURL:  "http://127.0.0.1:4000",
@@ -2862,7 +2870,7 @@ func TestHandleAgentsCreateWorkerSupportsLegacyRuntimeKindRequest(t *testing.T) 
 
 	srv := &Handler{
 		svc: svc,
-		im:  im.NewService(),
+		im:  im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_kind":"codex"}`))
 	rec := httptest.NewRecorder()
@@ -2885,7 +2893,7 @@ func TestHandleAgentsCreateCodexWorkerEnsuresCodexBridge(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{
 			Provider: config.ProviderLLMAPI,
 			BaseURL:  "http://127.0.0.1:4000",
@@ -2904,11 +2912,9 @@ func TestHandleAgentsCreateCodexWorkerEnsuresCodexBridge(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	bridge := &fakeCodexBridgeController{}
-	svc.SetLifecycleObserver(bridge)
 	srv := &Handler{
 		svc: svc,
-		im:  im.NewService(),
+		im:  im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"name":"alice","role":"worker","runtime_name":"codex","agent_profile":{"profile_complete":true}}`))
 	rec := httptest.NewRecorder()
@@ -2917,12 +2923,6 @@ func TestHandleAgentsCreateCodexWorkerEnsuresCodexBridge(t *testing.T) {
 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusCreated, rec.Body.String())
-	}
-	if len(bridge.ensureCalls) != 1 {
-		t.Fatalf("EnsureAgent() calls = %d, want 1", len(bridge.ensureCalls))
-	}
-	if !strings.HasPrefix(bridge.ensureCalls[0].ID, "agent-") || bridge.ensureCalls[0].RuntimeKind != agent.RuntimeKindCodex {
-		t.Fatalf("EnsureAgent() got %+v, want codex worker typed agent ID", bridge.ensureCalls[0])
 	}
 }
 
@@ -2953,7 +2953,7 @@ func TestHandleAgentsMCPServersClosedLoopForSupportedRuntimes(t *testing.T) {
 		Manager: codexManager,
 	})
 
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{
 			Provider: config.ProviderLLMAPI,
 			BaseURL:  "https://llm.example/v1",
@@ -2972,7 +2972,7 @@ func TestHandleAgentsMCPServersClosedLoopForSupportedRuntimes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	srv := &Handler{svc: svc, im: im.NewService()}
+	srv := &Handler{svc: svc, im: im.NewService(), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	mcpServers := map[string]any{
 		"context7": map[string]any{
@@ -3108,7 +3108,7 @@ func TestHandleAgentsMCPServersClosedLoopForSupportedRuntimes(t *testing.T) {
 
 func TestAgentMCPServersResponsesRedactSecrets(t *testing.T) {
 	svc, _ := mustNewSeededServiceWithPath(t, nil)
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	secretConfig := map[string]any{
 		"context7": map[string]any{
 			"command": "uvx",
@@ -3173,7 +3173,7 @@ func TestAgentMCPServersDedicatedEndpointsUseDirectRawMaps(t *testing.T) {
 		},
 	}
 
-	updated, err := svc.Update(context.Background(), created.ID, agent.UpdateRequest{
+	updated, err := svc.UpdateRecord(context.Background(), created.ID, agent.UpdateRequest{
 		MCPServers:    &desired,
 		MCPServersSet: true,
 		FieldMask:     []string{"mcpServers"},
@@ -3256,7 +3256,7 @@ func TestGetAgentMCPServersReturnsPersistedServersWhenRuntimeIsUnreadable(t *tes
 		fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex},
 		err:               readErr,
 	}))
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-mcp-view/mcp-servers", nil)
 	rec := httptest.NewRecorder()
@@ -3578,7 +3578,7 @@ func TestHandleAgentsCreateManagerUsesBootstrapManager(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"manager","name":"manager"}`))
 	rec := httptest.NewRecorder()
 
@@ -3601,7 +3601,7 @@ func TestHandleAgentsCreateManagerRejectsNonCodexRuntime(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"manager","name":"manager","runtime_kind":"openclaw_sandbox"}`))
 	rec := httptest.NewRecorder()
 
@@ -3625,7 +3625,7 @@ func TestHandleAgentsCreateManagerRejectsMCPRuntimeOptions(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc := mustNewService(t)
-			srv := &Handler{svc: svc}
+			srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 			req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
 			rec := httptest.NewRecorder()
 
@@ -3646,7 +3646,7 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:   "u-alice",
 			Name: "alice",
@@ -3656,7 +3656,7 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 		t.Fatalf("seed Create() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-alice","name":"alice-v2","role":"worker","replace":true}`))
 	rec := httptest.NewRecorder()
 
@@ -3682,7 +3682,7 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-alice",
 			Name:        "alice",
@@ -3694,7 +3694,7 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 		t.Fatalf("seed Create() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-alice","name":"alice-v2","description":"","image":"agent-image:v2","replace":true,"field_mask":["id","name"]}`))
 	rec := httptest.NewRecorder()
 
@@ -3750,7 +3750,7 @@ func TestHandleAgentsCreateReplaceIDOnlyRecreatesWithoutClearingSpec(t *testing.
 		svc: svc,
 		hub: mustNewLocalTemplateHubServiceWithoutWorkspace(t, "unused", hub.Template{
 			Name: "unused", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeNamePicoClaw, Image: "unused:test",
-		}),
+		}), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 	recorder := httptest.NewRecorder()
 	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(
@@ -3823,7 +3823,7 @@ func TestHandleAgentsPatchSelectorPreservesModelConfiguration(t *testing.T) {
 		ID: "agent-selector", Name: "selector", Role: agent.RoleWorker, RuntimeKind: agent.RuntimeKindCodex,
 		Status: string(agentruntime.StateStopped), Profile: "old-selector", AgentProfile: profile, ProfileComplete: true,
 	}})
-	handler := &Handler{svc: svc}
+	handler := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	recorder := httptest.NewRecorder()
 	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPatch, "/api/v1/agents/agent-selector", strings.NewReader(
 		`{"profile":"new-selector"}`,
@@ -4095,7 +4095,7 @@ func TestHandleHubTemplateWorkspaceFileByIDReturnsContent(t *testing.T) {
 
 func TestHandleAgentWorkspaceFileReturnsContent(t *testing.T) {
 	svc := mustNewService(t)
-	created, err := svc.Create(context.Background(), agent.CreateRequest{
+	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			Name:        "alice",
 			Role:        agent.RoleWorker,
@@ -4120,7 +4120,7 @@ func TestHandleAgentWorkspaceFileReturnsContent(t *testing.T) {
 		t.Fatalf("write skill file: %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/workspace/file?path=skills/custom/SKILL.md", nil)
 	rec := httptest.NewRecorder()
 
@@ -4145,12 +4145,12 @@ func TestHandleAgentSkillsReturnsContentFromSkillsRoot(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	hubSvc, err := hub.NewService(config.HubConfig{Registries: []config.HubRegistryConfig{{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, Enabled: false}}}, hub.DefaultStoreFactory)
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	svc, err := agent.NewService(config.ModelConfig{
+	svc, err := agent.NewController(config.ModelConfig{
 		Provider: config.ProviderLLMAPI,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",
@@ -4167,7 +4167,7 @@ func TestHandleAgentSkillsReturnsContentFromSkillsRoot(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	created, err := svc.Create(context.Background(), agent.CreateRequest{
+	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			Name:        "alice",
 			Role:        agent.RoleWorker,
@@ -4192,7 +4192,7 @@ func TestHandleAgentSkillsReturnsContentFromSkillsRoot(t *testing.T) {
 		t.Fatalf("write skill file: %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/skills", nil)
 	rec := httptest.NewRecorder()
@@ -4408,16 +4408,16 @@ func TestHandleAgentSkillsMutationsReturnNotFoundForMissingAgent(t *testing.T) {
 	}
 }
 
-func newAgentSkillManagementTestServer(t *testing.T) (*Handler, *agent.Service, agent.Agent) {
+func newAgentSkillManagementTestServer(t *testing.T) (*Handler, *agent.Controller, agent.Agent) {
 	t.Helper()
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	hubSvc, err := hub.NewService(config.HubConfig{Registries: []config.HubRegistryConfig{{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, Enabled: false}}}, hub.DefaultStoreFactory)
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	svc, err := agent.NewService(config.ModelConfig{
+	svc, err := agent.NewController(config.ModelConfig{
 		Provider: config.ProviderLLMAPI,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",
@@ -4434,7 +4434,7 @@ func newAgentSkillManagementTestServer(t *testing.T) (*Handler, *agent.Service, 
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	created, err := svc.Create(context.Background(), agent.CreateRequest{
+	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			Name:        "alice",
 			Role:        agent.RoleWorker,
@@ -4448,7 +4448,7 @@ func newAgentSkillManagementTestServer(t *testing.T) (*Handler, *agent.Service, 
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	return &Handler{svc: svc, hub: hubSvc}, svc, created
+	return &Handler{svc: svc, hub: hubSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}, svc, created
 }
 
 func TestHandleBatchAddAgentMCPServersAddsCatalogServersByName(t *testing.T) {
@@ -4567,7 +4567,7 @@ func TestHandleBatchDeleteAgentMCPServersUsesBackendManagedState(t *testing.T) {
 		"context7": map[string]any{"command": "uvx", "args": []any{"context7-mcp"}},
 		"native":   map[string]any{"command": "npx", "args": []any{"native-mcp"}},
 	}
-	if _, err := svc.Update(context.Background(), created.ID, agent.UpdateRequest{
+	if _, err := svc.UpdateRecord(context.Background(), created.ID, agent.UpdateRequest{
 		MCPServers:    &initial,
 		MCPServersSet: true,
 		FieldMask:     []string{"mcpServers"},
@@ -4616,7 +4616,7 @@ func TestAgentMCPServersAdoptsUnmanagedRuntimeStateBeforeMutation(t *testing.T) 
 	if _, err := mcpSvc.CreateServer(context.Background(), "catalog", map[string]any{"command": "catalog-server"}); err != nil {
 		t.Fatal(err)
 	}
-	handler := &Handler{svc: svc, mcp: mcpSvc}
+	handler := &Handler{svc: svc, mcp: mcpSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	engine := agentengine.New(svc)
 	ordinary, err := engine.Agents().Get(context.Background(), "agent-mcp-adopt", agentengine.AgentGetOptions{})
 	if err != nil {
@@ -4695,7 +4695,7 @@ func TestAgentMCPServersMutationAbortsWhenInitialRuntimeAdoptionFails(t *testing
 			if _, err := mcpSvc.CreateServer(context.Background(), "catalog", map[string]any{"command": "catalog-server"}); err != nil {
 				t.Fatal(err)
 			}
-			handler := &Handler{svc: svc, mcp: mcpSvc}
+			handler := &Handler{svc: svc, mcp: mcpSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 			recorder := httptest.NewRecorder()
 			handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(`{"names":["catalog"]}`)))
@@ -4716,7 +4716,7 @@ func TestAgentMCPServersMutationAbortsWhenInitialRuntimeAdoptionFails(t *testing
 	}
 }
 
-func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, agent.Agent) {
+func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Controller, agent.Agent) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
@@ -4732,7 +4732,7 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, ag
 	})
 	mcpSvc := mcp.NewService()
 
-	svc, err := agent.NewService(config.ModelConfig{
+	svc, err := agent.NewController(config.ModelConfig{
 		Provider: config.ProviderLLMAPI,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",
@@ -4747,7 +4747,7 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, ag
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	created, err := svc.Create(context.Background(), agent.CreateRequest{
+	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			Name:        "mcp-agent",
 			Role:        agent.RoleWorker,
@@ -4761,7 +4761,7 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Service, ag
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	return &Handler{svc: svc, mcp: mcpSvc}, svc, created
+	return &Handler{svc: svc, mcp: mcpSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}, svc, created
 }
 
 func TestHandleMCPServersUsesMCPService(t *testing.T) {
@@ -5239,6 +5239,8 @@ func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
 		})
 	}))
 	defer officialHub.Close()
+	t.Setenv("CSGHUB_API_BASE_URL", officialHub.URL)
+	stubHubTransport(t, officialHub.URL)
 
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	content := `[server]
@@ -5381,6 +5383,8 @@ func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
 		}
 	}))
 	defer officialHub.Close()
+	t.Setenv("CSGHUB_API_BASE_URL", officialHub.URL)
+	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
 
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	content := `[server]
@@ -5629,7 +5633,7 @@ func mustZipBytes(t *testing.T, files map[string]string) []byte {
 
 func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	svc := mustNewService(t)
-	created, err := svc.Create(context.Background(), agent.CreateRequest{
+	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-alice",
 			Name:        "alice",
@@ -5665,7 +5669,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.SetHubService(hubSvc)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
 		`{"agent_id":"u-alice","registry":"local","name":"ReviewBot_2","description":"Published review template"}`,
@@ -5740,7 +5744,7 @@ func TestHandleHubTemplatesPublishesCodexRuntimeOptions(t *testing.T) {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.SetHubService(hubSvc)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
 		fmt.Sprintf(`{"agent_id":%q,"registry":"local"}`, created.ID),
@@ -5800,7 +5804,7 @@ func TestHandleHubTemplatesRequiresExplicitMemoryOptIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.SetHubService(hubSvc)
 
 	for _, test := range []struct {
@@ -5846,7 +5850,7 @@ func TestHandleHubTemplatesRequiresOpenCSGLoginForOfficialPublish(t *testing.T) 
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: mustNewService(t)}
+	srv := &Handler{svc: mustNewService(t), agentEngine: agentengine.New(mustNewService(t)), workspace: mustNewService(t).Workspace(), agentModels: mustNewService(t).Models(), agentRuntime: mustNewService(t)}
 	srv.SetHubService(hubSvc)
 	req := httptest.NewRequest(
 		http.MethodPost,
@@ -5864,7 +5868,7 @@ func TestHandleHubTemplatesRequiresOpenCSGLoginForOfficialPublish(t *testing.T) 
 
 func TestHandleHubTemplatesRejectsInvalidPublishName(t *testing.T) {
 	svc := mustNewService(t)
-	created, err := svc.Create(context.Background(), agent.CreateRequest{Spec: agent.CreateAgentSpec{
+	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{Spec: agent.CreateAgentSpec{
 		ID: "u-alice", Name: "alice", RuntimeKind: agent.RuntimeKindPicoClawSandbox, Image: "worker-image:1",
 	}})
 	if err != nil {
@@ -5880,7 +5884,7 @@ func TestHandleHubTemplatesRejectsInvalidPublishName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.SetHubService(hubSvc)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(
 		fmt.Sprintf(`{"agent_id":%q,"registry":"local","name":"2-invalid"}`, created.ID),
@@ -5924,7 +5928,7 @@ func TestValidateAgentTemplatePublishTarget(t *testing.T) {
 
 func TestHandleHubTemplatesPublishesAgentSnapshotToDefaultRegistryWhenOmitted(t *testing.T) {
 	svc := mustNewService(t)
-	created, err := svc.Create(context.Background(), agent.CreateRequest{
+	created, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-alice",
 			Name:        "alice",
@@ -5956,7 +5960,7 @@ func TestHandleHubTemplatesPublishesAgentSnapshotToDefaultRegistryWhenOmitted(t 
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.SetHubService(hubSvc)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(`{"agent_id":"u-alice"}`))
 	rec := httptest.NewRecorder()
@@ -6058,7 +6062,7 @@ func TestHandleAgentsCreateReplaceManagerUsesUnifiedServiceEntry(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:   agent.ManagerUserID,
 			Name: agent.ManagerName,
@@ -6067,7 +6071,7 @@ func TestHandleAgentsCreateReplaceManagerUsesUnifiedServiceEntry(t *testing.T) {
 		t.Fatalf("seed Create() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true}`))
 	rec := httptest.NewRecorder()
 
@@ -6090,7 +6094,7 @@ func TestHandleAgentsCreateReplaceManagerRejectsNonCodexRuntime(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:   agent.ManagerUserID,
 			Name: agent.ManagerName,
@@ -6099,7 +6103,7 @@ func TestHandleAgentsCreateReplaceManagerRejectsNonCodexRuntime(t *testing.T) {
 		t.Fatalf("seed Create() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"runtime_name":"openclaw","sandbox_enabled":true}`))
 	rec := httptest.NewRecorder()
 
@@ -6118,7 +6122,7 @@ func TestHandleAgentsCreateReplaceManagerRejectsMCPRuntimeOptions(t *testing.T) 
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:   agent.ManagerUserID,
 			Name: agent.ManagerName,
@@ -6127,7 +6131,7 @@ func TestHandleAgentsCreateReplaceManagerRejectsMCPRuntimeOptions(t *testing.T) 
 		t.Fatalf("seed Create() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(`{"id":"u-manager","name":"manager","replace":true,"field_mask":["runtime_options"],"runtime_options":{"mcp":{"mcpServers":{"context7":{"command":"npx"}}}}}`))
 	rec := httptest.NewRecorder()
 
@@ -6146,7 +6150,7 @@ func TestHandleAgentsPatchManagerRejectsNonCodexRuntime(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:   agent.ManagerUserID,
 			Name: agent.ManagerName,
@@ -6155,7 +6159,7 @@ func TestHandleAgentsPatchManagerRejectsNonCodexRuntime(t *testing.T) {
 		t.Fatalf("seed Create() error = %v", err)
 	}
 
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/agents/u-manager", strings.NewReader(`{"runtime":{"name":"openclaw","sandbox_enabled":true}}`))
 	rec := httptest.NewRecorder()
 
@@ -6175,7 +6179,7 @@ func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *t
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
-	if _, err := svc.Create(context.Background(), agent.CreateRequest{
+	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:   agent.ManagerUserID,
 			Name: agent.ManagerName,
@@ -6183,7 +6187,7 @@ func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *t
 	}); err != nil {
 		t.Fatalf("seed Create() error = %v", err)
 	}
-	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	hubSvc, err := hub.NewService(config.HubConfig{Registries: []config.HubRegistryConfig{{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, Enabled: false}}}, hub.DefaultStoreFactory)
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
@@ -6192,7 +6196,7 @@ func TestHandleAgentsCreateReplaceManagerIgnoresImageAndUsesRuntimeTemplate(t *t
 		t.Fatalf("Get(openclaw-manager) error = %v", err)
 	}
 
-	srv := httptest.NewServer((&Handler{svc: svc}).Routes())
+	srv := httptest.NewServer((&Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}).Routes())
 	defer srv.Close()
 
 	resp, err := http.Post(
@@ -6523,14 +6527,14 @@ func TestHandleUsersCreateWithParticipantServiceCreatesWorkerAgent(t *testing.T)
 
 	participantSvc := participant.NewService(
 		participant.NewMemoryStore(nil),
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 		participant.WithIMService(imSvc),
 	)
 	srv := &Handler{
 		svc:         agentSvc,
 		participant: participantSvc,
 		im:          imSvc,
-		imBus:       bus,
+		imBus:       bus, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"u-qa","name":"qa","role":"qa"}`))
@@ -6611,9 +6615,9 @@ func TestHandleUsersCreateReusesExistingWorkerParticipant(t *testing.T) {
 		Mentionable:     true,
 	}}))
 	srv := &Handler{
-		svc:         &agent.Service{},
+		svc:         &agent.Controller{},
 		im:          imSvc,
-		participant: participantSvc,
+		participant: participantSvc, agentEngine: agentengine.New(&agent.Controller{}), workspace: (&agent.Controller{}).Workspace(), agentModels: (&agent.Controller{}).Models(), agentRuntime: &agent.Controller{},
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/users", strings.NewReader(`{"id":"user-dahym7","name":"qa","role":"worker"}`))
@@ -7296,7 +7300,7 @@ func TestHandleFeishuMessagesGetListsRoomMessages(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(got) != 1 || got[0].ID != "om_1" || got[0].SenderID != "manager" {
+	if len(got) != 1 || got[0].ID != "om_1" || got[0].SenderID != "agent-manager" {
 		t.Fatalf("messages = %+v, want listed feishu messages with bot ids", got)
 	}
 }
@@ -8268,9 +8272,13 @@ func TestPublishParticipantEventNotifyAllFansOutHumanMessagesWithoutCascadingAge
 		},
 	})
 	bridge := im.NewParticipantBridge("")
+	// Both workers are connected. Otherwise fanout to A starts asynchronous
+	// recovery that is unrelated to this routing test and outlives its store.
+	_, cancelA := bridge.Subscribe("pt-a")
+	defer cancelA()
 	events, cancel := bridge.Subscribe("pt-b")
 	defer cancel()
-	srv := &Handler{svc: svc, im: imSvc, participantBridge: bridge}
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: bridge, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	humanSender, ok := imSvc.User("user-admin")
 	if !ok {
 		t.Fatal("missing human sender")
@@ -8366,7 +8374,7 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	started := make(chan string, 1)
 	recreated := make(chan string, 1)
-	restoreDefault := agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
+	restoreDefault := agent.TestOnlySetDefaultControllerOption(func(s *agent.Controller) error {
 		return agent.WithRuntime(fakeCompatRuntime{
 			info: func(context.Context, agentruntime.Handle) (agentruntime.Info, error) {
 				return agentruntime.Info{HandleID: "box-stale", State: agentruntime.StateRunning}, nil
@@ -8399,7 +8407,7 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{ModelID: "gpt-5.5"},
 		config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"}, "manager-image:test", statePath,
 	)
@@ -8430,7 +8438,7 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 		t.Fatalf("room = %+v, want one message", room)
 	}
 
-	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge("")}
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge(""), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.PublishParticipantEvent(im.Event{
 		Type:    im.EventTypeMessageCreated,
 		RoomID:  "room-1",
@@ -8453,7 +8461,7 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	started := make(chan string, 1)
-	restoreDefault := agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
+	restoreDefault := agent.TestOnlySetDefaultControllerOption(func(s *agent.Controller) error {
 		return agent.WithRuntime(fakeCompatRuntime{
 			info: func(context.Context, agentruntime.Handle) (agentruntime.Info, error) {
 				return agentruntime.Info{HandleID: "box-stale", State: agentruntime.StateStopped}, nil
@@ -8482,7 +8490,7 @@ func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{ModelID: "gpt-5.5"},
 		config.ServerConfig{ListenAddr: ":18080", AccessToken: "token"}, "manager-image:test", statePath,
 	)
@@ -8513,7 +8521,7 @@ func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 		t.Fatalf("room = %+v, want one message", room)
 	}
 
-	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge("")}
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: im.NewParticipantBridge(""), agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.PublishParticipantEvent(im.Event{
 		Type:    im.EventTypeMessageCreated,
 		RoomID:  "room-1",
@@ -8747,22 +8755,8 @@ func TestReplayRecentBotMessagesReplaysParticipantRoomUsingChannelUserRef(t *tes
 
 func TestReplayRecentBotMessagesUsesNewConversationFlow(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	restoreDefault := agent.TestOnlySetDefaultServiceOption(func(s *agent.Service) error {
-		return agent.WithRuntime(fakeConversationRuntime{
-			fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex},
-			newConversation: func(_ context.Context, _ agentruntime.Handle, req agentruntime.ConversationStartRequest) (agentruntime.ConversationStartAction, error) {
-				if strings.TrimSpace(req.Channel) != "csgclaw" {
-					t.Fatalf("new conversation request channel = %q, want csgclaw", req.Channel)
-				}
-				if strings.TrimSpace(req.RoomID) != "room-1" {
-					t.Fatalf("new conversation request room_id = %q, want room-1", req.RoomID)
-				}
-				return agentruntime.ConversationStartAction{
-					Mode:         agentruntime.ConversationStartActionBotEvent,
-					BotEventText: "ack: cleared",
-				}, nil
-			},
-		})(s)
+	restoreDefault := agent.TestOnlySetDefaultControllerOption(func(s *agent.Controller) error {
+		return agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex})(s)
 	})
 	t.Cleanup(restoreDefault)
 
@@ -8781,7 +8775,7 @@ func TestReplayRecentBotMessagesUsesNewConversationFlow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewService(config.ModelConfig{ModelID: "gpt-5.5"}, config.ServerConfig{}, "manager-image:test", statePath)
+	svc, err := agent.NewController(config.ModelConfig{ModelID: "gpt-5.5"}, config.ServerConfig{}, "manager-image:test", statePath)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -8812,13 +8806,13 @@ func TestReplayRecentBotMessagesUsesNewConversationFlow(t *testing.T) {
 	events, cancel := bridge.Subscribe("manager")
 	defer cancel()
 
-	srv := &Handler{svc: svc, im: imSvc, participantBridge: bridge}
+	srv := &Handler{svc: svc, im: imSvc, participantBridge: bridge, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.replayRecentParticipantMessages("manager", "")
 
 	select {
 	case evt := <-events:
-		if evt.MessageID != "msg-new-convo" || evt.Text != "ack: cleared" {
-			t.Fatalf("replayed event = %+v, want msg-new-convo ack: cleared", evt)
+		if evt.MessageID != "msg-new-convo" || evt.Text != `<slash-command name="new" arg="conversation"></slash-command> clear all` {
+			t.Fatalf("replayed event = %+v, want the canonical new-conversation command", evt)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("replayRecentParticipantMessages() timed out waiting for event")
@@ -9004,7 +8998,7 @@ func TestHandleBotLLMModelsReturnsBridgeCatalog(t *testing.T) {
 	if err := writeSeededAgents(statePath, agents); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewServiceWithLLM(config.SingleProfileLLM(config.ModelConfig{
+	svc, err := agent.NewControllerWithLLM(config.SingleProfileLLM(config.ModelConfig{
 		Provider: config.ProviderLLMAPI,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",
@@ -9026,7 +9020,7 @@ func TestHandleBotLLMModelsReturnsBridgeCatalog(t *testing.T) {
 		svc:               svc,
 		participantBridge: im.NewParticipantBridge("secret"),
 		llm:               bridge,
-		serverAccessToken: "secret",
+		serverAccessToken: "secret", agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/llm/v1/models", nil)
@@ -9066,7 +9060,7 @@ func TestHandleBotLLMModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
 	if err := writeSeededAgents(statePath, agents); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewServiceWithLLM(config.SingleProfileLLM(config.ModelConfig{
+	svc, err := agent.NewControllerWithLLM(config.SingleProfileLLM(config.ModelConfig{
 		Provider: config.ProviderLLMAPI,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",
@@ -9088,7 +9082,7 @@ func TestHandleBotLLMModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
 		svc:               svc,
 		participantBridge: im.NewParticipantBridge("secret"),
 		llm:               bridge,
-		serverAccessToken: "secret",
+		serverAccessToken: "secret", agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc,
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agents/u-manager/llm/models", nil)
@@ -9104,17 +9098,17 @@ func TestHandleBotLLMModelsLegacyRouteReturnsBridgeCatalog(t *testing.T) {
 	}
 }
 
-func mustNewService(t *testing.T) *agent.Service {
+func mustNewService(t *testing.T) *agent.Controller {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	hubSvc, err := hub.NewService(config.HubConfig{Registries: []config.HubRegistryConfig{{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, Enabled: false}}}, hub.DefaultStoreFactory)
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	svc, err := agent.NewService(config.ModelConfig{
+	svc, err := agent.NewController(config.ModelConfig{
 		Provider: config.ProviderLLMAPI,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",
@@ -9132,27 +9126,27 @@ func mustNewService(t *testing.T) *agent.Service {
 	return svc
 }
 
-func mustNewSeededService(t *testing.T, agents []agent.Agent) *agent.Service {
+func mustNewSeededService(t *testing.T, agents []agent.Agent) *agent.Controller {
 	t.Helper()
 
 	svc, _ := mustNewSeededServiceWithPath(t, agents)
 	return svc
 }
 
-func mustNewSeededServiceWithOptions(t *testing.T, agents []agent.Agent, opts ...agent.ServiceOption) *agent.Service {
+func mustNewSeededServiceWithOptions(t *testing.T, agents []agent.Agent, opts ...agent.ControllerOption) *agent.Controller {
 	t.Helper()
 
 	svc, _ := mustNewSeededServiceWithPathAndOptions(t, agents, opts...)
 	return svc
 }
 
-func mustNewSeededServiceWithPath(t *testing.T, agents []agent.Agent) (*agent.Service, string) {
+func mustNewSeededServiceWithPath(t *testing.T, agents []agent.Agent) (*agent.Controller, string) {
 	t.Helper()
 
 	return mustNewSeededServiceWithPathAndOptions(t, agents)
 }
 
-func mustNewSeededServiceWithPathAndOptions(t *testing.T, agents []agent.Agent, opts ...agent.ServiceOption) (*agent.Service, string) {
+func mustNewSeededServiceWithPathAndOptions(t *testing.T, agents []agent.Agent, opts ...agent.ControllerOption) (*agent.Controller, string) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
@@ -9163,16 +9157,17 @@ func mustNewSeededServiceWithPathAndOptions(t *testing.T, agents []agent.Agent, 
 
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "agents.json")
+	t.Setenv("CSGCLAW_TEST_AGENT_ROOT", filepath.Join(dir, config.AgentsDirName))
 	if err := writeSeededAgents(statePath, agents); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
 
-	hubSvc, err := hub.NewService(config.HubConfig{}, hub.DefaultStoreFactory)
+	hubSvc, err := hub.NewService(config.HubConfig{Registries: []config.HubRegistryConfig{{Name: config.DefaultOfficialHubRegistryName, Kind: config.HubRegistryKindRemote, Enabled: false}}}, hub.DefaultStoreFactory)
 	if err != nil {
 		t.Fatalf("hub.NewService() error = %v", err)
 	}
 
-	serviceOpts := []agent.ServiceOption{
+	serviceOpts := []agent.ControllerOption{
 		agent.WithHubService(hubSvc),
 		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{
 			DefaultManagerTemplate: config.DefaultBootstrapManagerTemplate,
@@ -9181,7 +9176,7 @@ func mustNewSeededServiceWithPathAndOptions(t *testing.T, agents []agent.Agent, 
 	}
 	serviceOpts = append(serviceOpts, opts...)
 
-	svc, err := agent.NewService(config.ModelConfig{
+	svc, err := agent.NewController(config.ModelConfig{
 		Provider: config.ProviderLLMAPI,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",

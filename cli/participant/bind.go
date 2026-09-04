@@ -9,7 +9,7 @@ import (
 	"text/tabwriter"
 
 	"csgclaw/cli/command"
-	agentpkg "csgclaw/internal/agent"
+	agentpkg "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	participantpkg "csgclaw/internal/participant"
 )

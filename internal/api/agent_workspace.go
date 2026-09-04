@@ -96,7 +96,7 @@ func (h *Handler) agentWorkspaceRoot(id string) (string, error) {
 	if !ok {
 		return "", errAgentWorkspaceNotFound
 	}
-	return h.svc.WorkspaceRoot(item.Name)
+	return h.workspace.WorkspaceRoot(item.Name)
 }
 
 func (h *Handler) agentSkillsRoot(id string) (string, error) {
@@ -104,7 +104,7 @@ func (h *Handler) agentSkillsRoot(id string) (string, error) {
 	if !ok {
 		return "", errAgentWorkspaceNotFound
 	}
-	return h.svc.SkillsRoot(item.Name)
+	return h.workspace.SkillsRoot(item.Name)
 }
 
 func writeAgentWorkspaceError(w http.ResponseWriter, err error) {

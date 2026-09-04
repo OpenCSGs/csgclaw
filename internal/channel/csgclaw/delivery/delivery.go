@@ -10,7 +10,7 @@ import (
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge/runtimebridge"
+	channelrender "csgclaw/internal/channel/csgclaw/render"
 )
 
 const (
@@ -59,43 +59,29 @@ type failureStore interface {
 	DeliverFailure(context.Context, channel.TurnContext, string) error
 }
 
-// UserInputBinder attaches a Runtime-native blocking question to its IM scope
-// before the activity card becomes actionable in the Web UI.
-type UserInputBinder interface {
-	Bind(requestID, channel, roomID, threadRootID, requesterID string) (activity.UserInputSnapshot, error)
+// InteractionProjector owns trusted Channel routes and UI projection only.
+// All decisions and answers are resolved by Agent Engine.
+type InteractionProjector interface {
+	Bind(channel.TurnContext, agentengine.InteractionRequest) (agentengine.InteractionRequest, error)
+	Project(agentengine.TurnEvent) agentengine.TurnEvent
+	Observe(channel.TurnContext, agentengine.TurnEvent)
 }
-
-// StructuredUserInputActivator turns a validated request_user_input output
-// item into a detached, actionable IM question.
-type StructuredUserInputActivator interface {
-	Activate(context.Context, channel.TurnContext, activity.RequestUserInputArgs) (activity.UserInputSnapshot, error)
-}
-
 type RendererOption func(*TranscriptRenderer)
 
-func WithUserInputBinder(binder UserInputBinder) RendererOption {
-	return func(renderer *TranscriptRenderer) {
-		renderer.userInput = binder
-	}
-}
-
-func WithStructuredUserInputActivator(activator StructuredUserInputActivator) RendererOption {
-	return func(renderer *TranscriptRenderer) {
-		renderer.structuredUserInput = activator
-	}
+func WithInteractionProjector(projector InteractionProjector) RendererOption {
+	return func(renderer *TranscriptRenderer) { renderer.interactions = projector }
 }
 
 // TranscriptRenderer maps Engine turn events onto the existing IM activity
 // and transcript contract. Rendering state is isolated by the complete Turn
 // identity so interleaved conversations cannot overwrite each other.
 type TranscriptRenderer struct {
-	store               TranscriptStore
-	userInput           UserInputBinder
-	structuredUserInput StructuredUserInputActivator
+	store        TranscriptStore
+	interactions InteractionProjector
 
 	mu             sync.Mutex
 	turns          map[turnBufferKey]*turnRenderState
-	completed      map[turnBufferKey]struct{}
+	completed      map[turnBufferKey]uint64
 	completedOrder []turnBufferKey
 	now            func() time.Time
 	thoughtLimit   int
@@ -103,7 +89,7 @@ type TranscriptRenderer struct {
 }
 
 type turnRenderState struct {
-	renderer            *runtimebridge.TurnRenderer
+	renderer            *channelrender.TurnRenderer
 	thought             string
 	thoughtDirty        bool
 	lastThoughtFlush    time.Time
@@ -139,8 +125,14 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 	if r == nil {
 		return nil
 	}
+	if r.interactions != nil {
+		event = r.interactions.Project(event)
+	}
 	state, ok := r.acceptEvent(turn, event)
 	if !ok {
+		if event.Kind == agentengine.TurnEventActivityUpdate {
+			return r.deliverLateInteraction(ctx, turn, event)
+		}
 		return nil
 	}
 
@@ -195,7 +187,13 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 		}
 		return nil
 	}
-	return r.deliverRenderedActivity(ctx, turn, activityDelivery(turn, event, rendered))
+	if err := r.deliverRenderedActivity(ctx, turn, activityDelivery(turn, event, rendered)); err != nil {
+		return err
+	}
+	if r.interactions != nil {
+		r.interactions.Observe(turn, event)
+	}
+	return nil
 }
 
 func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnContext, result agentengine.TurnResult) error {
@@ -241,33 +239,26 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 			return err
 		}
 	}
-	if state.structuredUserInput == nil || r.structuredUserInput == nil {
-		return nil
+	for index, request := range result.Interactions {
+		event := agentengine.TurnEvent{TurnID: turn.TurnID, Kind: agentengine.TurnEventInteractionRequest, Sequence: state.lastSequence + 1 + uint64(index), Interaction: &request}
+		bound, err := r.bindInteraction(turn, event)
+		if err != nil {
+			return err
+		}
+		event = bound
+		runtimeEvent, ok := normalizedRuntimeEvent(turn, event)
+		if !ok {
+			continue
+		}
+		rendered, ok := state.renderer.RenderActivity(runtimeEvent, string(channel.ChannelCSGClaw), turn.RoomID, turn.ParticipantID)
+		if !ok {
+			continue
+		}
+		if err := r.deliverRenderedActivity(ctx, turn, activityDelivery(turn, event, rendered)); err != nil {
+			return err
+		}
 	}
-	snapshot, err := r.structuredUserInput.Activate(ctx, turn, *cloneRequestUserInputArgs(state.structuredUserInput))
-	if err != nil {
-		return err
-	}
-	event := agentengine.TurnEvent{
-		TurnID:   turn.TurnID,
-		Kind:     agentengine.TurnEventInteractionRequest,
-		Sequence: state.lastSequence + 1,
-		Interaction: &agentengine.InteractionRequest{
-			ID:      snapshot.ID,
-			Kind:    agentengine.InteractionUserInput,
-			Title:   "User input required",
-			Payload: snapshot,
-		},
-	}
-	runtimeEvent, ok := normalizedRuntimeEvent(turn, event)
-	if !ok {
-		return nil
-	}
-	rendered, ok := state.renderer.RenderActivity(runtimeEvent, string(channel.ChannelCSGClaw), turn.RoomID, turn.ParticipantID)
-	if !ok {
-		return nil
-	}
-	return r.deliverRenderedActivity(ctx, turn, activityDelivery(turn, event, rendered))
+	return nil
 }
 
 func (r *TranscriptRenderer) acceptEvent(turn channel.TurnContext, event agentengine.TurnEvent) (*turnRenderState, bool) {
@@ -295,7 +286,7 @@ func (r *TranscriptRenderer) acceptEvent(turn channel.TurnContext, event agenten
 }
 
 func newTurnRenderState(locale string) *turnRenderState {
-	renderer := runtimebridge.NewTurnRenderer()
+	renderer := channelrender.NewTurnRenderer()
 	renderer.SetLocale(locale)
 	return &turnRenderState{renderer: renderer}
 }
@@ -390,21 +381,44 @@ func (r *TranscriptRenderer) captureOutputItem(state *turnRenderState, event age
 }
 
 func (r *TranscriptRenderer) bindInteraction(turn channel.TurnContext, event agentengine.TurnEvent) (agentengine.TurnEvent, error) {
-	if r.userInput == nil || event.Interaction == nil || event.Interaction.Kind != agentengine.InteractionUserInput {
+	if r.interactions == nil || event.Interaction == nil {
 		return event, nil
 	}
-	snapshot, ok := userInputSnapshot(event.Interaction.Payload)
-	if !ok {
-		return event, nil
-	}
-	bound, err := r.userInput.Bind(snapshot.ID, string(channel.ChannelCSGClaw), turn.RoomID, turn.ThreadRootID, turn.ParticipantID)
+	bound, err := r.interactions.Bind(turn, *event.Interaction)
 	if err != nil {
 		return event, err
 	}
-	interaction := *event.Interaction
-	interaction.Payload = bound
-	event.Interaction = &interaction
+	event.Interaction = &bound
 	return event, nil
+}
+func (r *TranscriptRenderer) deliverLateInteraction(ctx context.Context, turn channel.TurnContext, event agentengine.TurnEvent) error {
+	if event.Activity == nil || event.Activity.Kind != string(activity.RuntimeEventUserInputResolved) {
+		return nil
+	}
+	r.mu.Lock()
+	key := bufferKey(turn)
+	sequence, completed := r.completed[key]
+	if !completed || event.Sequence == 0 || event.Sequence <= sequence {
+		r.mu.Unlock()
+		return nil
+	}
+	r.completed[key] = event.Sequence
+	r.mu.Unlock()
+	runtimeEvent, ok := normalizedRuntimeEvent(turn, event)
+	if !ok {
+		return nil
+	}
+	rendered, ok := channelrender.NewTurnRenderer().RenderActivity(runtimeEvent, string(channel.ChannelCSGClaw), turn.RoomID, turn.ParticipantID)
+	if !ok {
+		return nil
+	}
+	if err := r.deliverRenderedActivity(ctx, turn, activityDelivery(turn, event, rendered)); err != nil {
+		return err
+	}
+	if r.interactions != nil {
+		r.interactions.Observe(turn, event)
+	}
+	return nil
 }
 
 func (r *TranscriptRenderer) deliverRenderedActivity(ctx context.Context, turn channel.TurnContext, rendered ActivityDelivery) error {
@@ -424,12 +438,16 @@ func (r *TranscriptRenderer) finishState(turn channel.TurnContext) *turnRenderSt
 	state := r.turns[key]
 	delete(r.turns, key)
 	if r.completed == nil {
-		r.completed = make(map[turnBufferKey]struct{})
+		r.completed = make(map[turnBufferKey]uint64)
 	}
 	if _, exists := r.completed[key]; exists {
 		return state
 	}
-	r.completed[key] = struct{}{}
+	var sequence uint64
+	if state != nil {
+		sequence = state.lastSequence
+	}
+	r.completed[key] = sequence
 	r.completedOrder = append(r.completedOrder, key)
 	if len(r.completedOrder) <= completedTurnWindow {
 		return state
@@ -514,7 +532,7 @@ func activitySessionID(turn channel.TurnContext) string {
 	return conversationKey + "\x00" + turnID
 }
 
-func activityDelivery(turn channel.TurnContext, event agentengine.TurnEvent, rendered runtimebridge.RenderedActivity) ActivityDelivery {
+func activityDelivery(turn channel.TurnContext, event agentengine.TurnEvent, rendered channelrender.RenderedActivity) ActivityDelivery {
 	delivery := ActivityDelivery{
 		MessageID: rendered.MessageID,
 		Text:      rendered.Text,

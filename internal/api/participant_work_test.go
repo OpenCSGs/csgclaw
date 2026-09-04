@@ -514,9 +514,7 @@ func newParticipantWorkTestHandler(t *testing.T, noAuth bool) (*Handler, *workle
 		worklease.WithEpoch("epoch-api-test"),
 		worklease.WithControlBus(controlBus),
 	)
-	handler := NewHandlerWithAuth(
-		nil,
-		imService,
+	handler := NewHandlerWithAuth(AgentServices{}, nil, imService,
 		im.NewBus(),
 		im.NewParticipantBridge("secret"),
 		nil,

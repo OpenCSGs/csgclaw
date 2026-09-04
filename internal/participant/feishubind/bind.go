@@ -2,14 +2,13 @@ package feishubind
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/participant"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
-	"csgclaw/internal/participant"
 )
 
 var (
@@ -57,11 +56,10 @@ func BindAdminHuman(ctx context.Context, participantSvc *participant.Service, op
 	}, nil
 }
 
-func BindBot(ctx context.Context, engine agentengine.Interface, participantSvc *participant.Service, agentRef, appID, appSecret string, restart bool) (Result, error) {
+func BindBot(ctx context.Context, engine agentengine.Interface, participantSvc *participant.Service, agentRef, appID, appSecret string) (Result, error) {
 	if engine == nil {
 		return Result{}, fmt.Errorf("agent service is required")
 	}
-	agents := engine.Agents()
 	if participantSvc == nil {
 		return Result{}, fmt.Errorf("participant service is required")
 	}
@@ -81,13 +79,14 @@ func BindBot(ctx context.Context, engine agentengine.Interface, participantSvc *
 	if err != nil {
 		return Result{}, fmt.Errorf("resolve agent %q: %w", agentRef, err)
 	}
-	bindBotMu.Lock()
-	defer bindBotMu.Unlock()
-	if err := ValidateBotAppIDExclusive(participantSvc, target.ID, appID); err != nil {
-		return Result{}, err
-	}
 	participantID := agent.ParticipantIDForAgent(target.Name, target.ID)
-	item, warnings, err := upsertBotParticipant(ctx, participantSvc, participantID, target, appID, appSecret)
+	var item participant.Participant
+	var warnings []string
+	err = WithExclusiveBotAppID(participantSvc, target.ID, appID, func() error {
+		var err error
+		item, warnings, err = upsertBotParticipant(ctx, participantSvc, participantID, target, appID, appSecret)
+		return err
+	})
 	if err != nil {
 		return Result{}, fmt.Errorf("bind feishu bot participant_id=%q agent_id=%q: %w", participantID, target.ID, err)
 	}
@@ -101,22 +100,19 @@ func BindBot(ctx context.Context, engine agentengine.Interface, participantSvc *
 		ConfigSaved:     true,
 		Warnings:        warnings,
 	}
-	if restart {
-		restartStatus := "worker_recreated"
-		if strings.EqualFold(target.ID, agent.ManagerUserID) || strings.EqualFold(target.Role, agent.RoleManager) {
-			restartStatus = "manager_recreated"
-		}
-		if _, err := agents.Recreate(ctx, target.ID, agentengine.AgentRecreateOptions{}); err != nil {
-			result.Status = "partial"
-			result.RestartStatus = "recreate_failed"
-			result.RestartError = err.Error()
-		} else {
-			result.RestartStatus = restartStatus
-		}
-	} else {
-		result.RestartStatus = "restart_skipped"
-	}
+	result.RestartStatus = "restart_skipped"
 	return result, nil
+}
+
+// WithExclusiveBotAppID serializes the cross-Agent uniqueness check with the
+// Participant write. Runtime reconciliation is outside this short global lock.
+func WithExclusiveBotAppID(svc *participant.Service, agentID, appID string, write func() error) error {
+	bindBotMu.Lock()
+	defer bindBotMu.Unlock()
+	if err := ValidateBotAppIDExclusive(svc, agentID, appID); err != nil {
+		return err
+	}
+	return write()
 }
 
 func ValidateBotAppIDExclusive(participantSvc *participant.Service, agentID, appID string) error {
@@ -137,7 +133,7 @@ func ValidateBotAppIDExclusive(participantSvc *participant.Service, agentID, app
 			continue
 		}
 		if channelAppConfigString(item.ChannelAppConfig, "app_id") == appID {
-			return fmt.Errorf("%w: app_id %q is used by agent %q", ErrBotAppIDConflict, appID, otherAgentID)
+			return fmt.Errorf("%w: app_id %q is already connected to worker %q; disconnect Feishu from that worker or use another Bot app", ErrBotAppIDConflict, appID, otherAgentID)
 		}
 	}
 	return nil

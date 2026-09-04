@@ -1,6 +1,8 @@
 package api
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/auth"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,9 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/auth"
 )
 
 const authCallbackPath = "/api/v1/auth/callback"
@@ -246,7 +245,7 @@ func (h *Handler) syncAgentHubService(r *http.Request) {
 		slog.Warn("sync agent Hub service after OpenCSG environment change failed", "error", err)
 		return
 	}
-	h.svc.SetHubService(hubSvc)
+	h.agentRuntime.SetHubService(hubSvc)
 }
 
 func (h *Handler) resetEnvironmentSensitiveRuntimes() {
@@ -255,7 +254,7 @@ func (h *Handler) resetEnvironmentSensitiveRuntimes() {
 	}
 	reset := h.environmentRuntimeReset
 	if reset == nil && h.svc != nil {
-		reset = h.svc.ResetSandboxRuntimes
+		reset = h.agentRuntime.ResetSandboxRuntimes
 	}
 	if reset == nil {
 		return

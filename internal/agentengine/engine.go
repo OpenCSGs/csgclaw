@@ -2,10 +2,12 @@ package agentengine
 
 import (
 	"context"
+	"csgclaw/internal/activity"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 const maxCompletedTurns = 1024
@@ -24,9 +26,11 @@ type conversationRuntimeAdapter interface {
 // identity, pending interactions, replay-safe event delivery, and terminal
 // result idempotency.
 type Engine struct {
-	agents   AgentInterface
-	runtimes conversationRuntimeResolver
-	files    *FileStore
+	agents       AgentInterface
+	runtimes     conversationRuntimeResolver
+	files        *FileStore
+	extensions   runtimeExtensionScopes
+	interactions InteractionCoordinator
 
 	mu             sync.Mutex
 	active         map[conversationIdentity]*activeTurn
@@ -62,15 +66,17 @@ type pendingInteraction struct {
 }
 
 type activeTurn struct {
-	request      TurnRequest
-	ctx          context.Context
-	cancel       context.CancelFunc
-	done         chan struct{}
-	runtime      conversationRuntimeAdapter
-	interactions map[string]*pendingInteraction
-	sequence     uint64
-	events       []TurnEvent
-	result       TurnResult
+	agentID             string
+	structuredUserInput *activity.RequestUserInputArgs
+	request             TurnRequest
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	done                chan struct{}
+	runtime             conversationRuntimeAdapter
+	interactions        map[string]*pendingInteraction
+	sequence            uint64
+	events              []TurnEvent
+	result              TurnResult
 }
 
 type completedTurn struct {
@@ -90,9 +96,16 @@ func (e *Engine) Conversations(agentID string) ConversationInterface {
 	return &conversations{engine: e, agentID: strings.TrimSpace(agentID)}
 }
 
+func (e *Engine) RuntimeExtensions(agentID string) RuntimeExtensionInterface {
+	if e == nil || e.extensions == nil {
+		return unavailableRuntimeExtensions{}
+	}
+	return e.extensions.Scope(strings.TrimSpace(agentID))
+}
+
 func (c *conversations) Files() FileInterface {
 	if c == nil || c.engine == nil || c.engine.files == nil {
-		return unavailableFiles{}
+		return UnavailableFiles{}
 	}
 	return c.engine.files.Scope(c.agentID)
 }
@@ -154,6 +167,8 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if admissionResult != nil {
 		return *admissionResult
 	}
+	turn.agentID = c.agentID
+	c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
 	runtimeAdapter, releaseRuntime, resolveErr := c.engine.runtimes.conversationRuntime(turn.ctx, c.agentID)
 	if resolveErr != nil {
 		result := TurnResult{Status: TurnFailed, Error: resolveErr}
@@ -171,11 +186,11 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	})
 	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)
 	if result.Status != TurnSucceeded {
-		cleanupOutputFiles(result.files)
+		cleanupOutputFiles(result.RuntimeFiles)
 		result.Files = nil
-		result.files = nil
-	} else if len(result.files) > 0 {
-		files, fileErr := c.engine.files.registerTurnFiles(c.agentID, request.ConversationKey, request.ID, result.files)
+		result.RuntimeFiles = nil
+	} else if len(result.RuntimeFiles) > 0 {
+		files, fileErr := c.engine.files.RegisterTurnFiles(c.agentID, request.ConversationKey, request.ID, result.RuntimeFiles)
 		if fileErr != nil {
 			result.Status = TurnFailed
 			result.Output = ""
@@ -184,7 +199,22 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		} else {
 			result.Files = files
 		}
-		result.files = nil
+		result.RuntimeFiles = nil
+	}
+	if result.Status == TurnSucceeded {
+		c.engine.interactions.CompleteTurn(c.agentID, request.ConversationKey, request.ID)
+	} else {
+		c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, request.ID, false)
+	}
+	if result.Status == TurnSucceeded && request.Interaction == InteractionResolve && turn.structuredUserInput != nil {
+		interaction, err := c.engine.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *turn.structuredUserInput, func(interaction InteractionRequest) {
+			c.engine.emitDetached(identity, turn, sink, interaction)
+		})
+		if err != nil {
+			result = failedResult(ErrorRuntimeFailed, err.Error())
+		} else {
+			result.Interactions = []InteractionRequest{interaction}
+		}
 	}
 	turn.cancel()
 	releaseRuntime()
@@ -228,20 +258,20 @@ func (e *Engine) resolveInputFiles(agentID string, request TurnRequest) (TurnReq
 		if part.Kind != InputPartFile {
 			continue
 		}
-		file, releaseFile, err := e.files.resolve(agentID, part.File.ID)
+		file, releaseFile, err := e.files.Resolve(agentID, part.File.ID)
 		if err != nil {
 			release()
 			return TurnRequest{}, func() {}, err
 		}
 		releases = append(releases, releaseFile)
-		part.File.file = file
+		part.File.Resolved = file
 	}
 	return resolved, release, nil
 }
 
 func cleanupOutputFiles(files []*OutputFile) {
 	for _, file := range files {
-		file.cleanup()
+		file.Cleanup()
 	}
 }
 
@@ -255,6 +285,7 @@ func (c *conversations) Cancel(ctx context.Context, key ConversationKey, turnID 
 		return &TurnError{Code: ErrorInvalidRequest, Message: "agent ID, conversation key, and turn ID are required"}
 	}
 	identity := conversationIdentity{agentID: c.agentID, key: key}
+	c.engine.interactions.Interrupt(c.agentID, key, turnID, true)
 	c.engine.mu.Lock()
 	turn := c.engine.active[identity]
 	if turn == nil || turn.request.ID != turnID {
@@ -293,56 +324,33 @@ func (c *conversations) Reset(ctx context.Context, key ConversationKey) error {
 	if releaseRuntime != nil {
 		defer releaseRuntime()
 	}
+	c.engine.interactions.Interrupt(c.agentID, key, "", false)
 	if err := runtimeAdapter.Reset(ctx, key); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *conversations) Resolve(ctx context.Context, resolution InteractionResolution) error {
-	if ctx == nil {
-		ctx = context.Background()
+func (c *conversations) GetInteraction(ctx context.Context, key ConversationKey, id string) (InteractionRequest, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return InteractionRequest{}, err
+		}
 	}
+	if c == nil || c.engine == nil || c.agentID == "" || key == "" || strings.TrimSpace(id) == "" {
+		return InteractionRequest{}, &TurnError{Code: ErrorInvalidRequest, Message: "agent, conversation and interaction are required"}
+	}
+	return c.engine.interactions.Get(c.agentID, key, id)
+}
+
+func (c *conversations) Resolve(ctx context.Context, resolution InteractionResolution) error {
 	resolution.ConversationKey = ConversationKey(strings.TrimSpace(string(resolution.ConversationKey)))
 	resolution.InteractionID = strings.TrimSpace(resolution.InteractionID)
 	resolution.ResponderID = strings.TrimSpace(resolution.ResponderID)
 	if c == nil || c.engine == nil || c.agentID == "" || resolution.ConversationKey == "" || resolution.InteractionID == "" {
-		return &TurnError{Code: ErrorInvalidRequest, Message: "agent ID, conversation key, and interaction ID are required"}
+		return &TurnError{Code: ErrorInvalidRequest, Message: "agent, conversation and interaction are required"}
 	}
-	identity := conversationIdentity{agentID: c.agentID, key: resolution.ConversationKey}
-	c.engine.mu.Lock()
-	turn := c.engine.active[identity]
-	var pending *pendingInteraction
-	if turn != nil {
-		pending = turn.interactions[resolution.InteractionID]
-	}
-	if pending == nil || pending.state != interactionPending || turn.runtime == nil {
-		c.engine.mu.Unlock()
-		return &TurnError{Code: ErrorInteractionNotFound, Message: "pending interaction was not found"}
-	}
-	pending.state = interactionResolving
-	request := pending.request
-	runtimeAdapter := turn.runtime
-	c.engine.mu.Unlock()
-
-	if err := runtimeAdapter.Resolve(ctx, request, resolution); err != nil {
-		c.engine.mu.Lock()
-		if current := c.engine.active[identity]; current == turn {
-			if currentPending := turn.interactions[resolution.InteractionID]; currentPending == pending && currentPending.state == interactionResolving {
-				currentPending.state = interactionPending
-			}
-		}
-		c.engine.mu.Unlock()
-		return err
-	}
-	c.engine.mu.Lock()
-	if current := c.engine.active[identity]; current == turn {
-		if currentPending := turn.interactions[resolution.InteractionID]; currentPending == pending {
-			delete(turn.interactions, resolution.InteractionID)
-		}
-	}
-	c.engine.mu.Unlock()
-	return nil
+	return c.engine.interactions.Resolve(ctx, c.agentID, resolution)
 }
 
 func (e *Engine) admit(ctx context.Context, identity conversationIdentity, request TurnRequest) (*activeTurn, *completedTurn, *activeTurn, *TurnResult) {
@@ -496,11 +504,20 @@ func (e *Engine) recordAndEmit(ctx context.Context, turn *activeTurn, sink Event
 	turn.sequence++
 	event.TurnID = turn.request.ID
 	event.Sequence = turn.sequence
+	if event.Output != nil && event.Output.Kind == OutputItemRequestUserInput {
+		if args, ok := event.Output.Payload.(activity.RequestUserInputArgs); ok {
+			turn.structuredUserInput = &args
+		}
+	}
+	if event.Activity != nil {
+		e.interactions.Observe(turn.agentID, turn.request.ConversationKey, event)
+	}
 	if event.Interaction != nil {
 		interaction := *event.Interaction
 		interaction.ID = strings.TrimSpace(interaction.ID)
 		if interaction.ID != "" {
-			turn.interactions[interaction.ID] = &pendingInteraction{request: interaction, state: interactionPending}
+			runtimeAdapter := turn.runtime
+			e.interactions.Register(turn.agentID, turn.request.ConversationKey, turn.request.ID, interaction, runtimeAdapter.Resolve, nil)
 			event.Interaction = &interaction
 		}
 	}
@@ -525,7 +542,7 @@ func (e *Engine) complete(identity conversationIdentity, turn *activeTurn, resul
 			oldest := e.completedOrder[0]
 			e.completedOrder = e.completedOrder[1:]
 			delete(e.completed, oldest)
-			e.files.deleteTurn(oldest.agentID, oldest.key, oldest.id)
+			e.files.DeleteTurn(oldest.agentID, oldest.key, oldest.id)
 		}
 	}
 	close(turn.done)
@@ -625,7 +642,14 @@ func cloneTurnEvent(input TurnEvent) TurnEvent {
 
 func cloneTurnResult(input TurnResult) TurnResult {
 	input.Files = cloneOutputFiles(input.Files)
-	input.files = nil
+	if input.Interactions != nil {
+		interactions := make([]InteractionRequest, len(input.Interactions))
+		for i, item := range input.Interactions {
+			interactions[i] = cloneInteraction(item)
+		}
+		input.Interactions = interactions
+	}
+	input.RuntimeFiles = nil
 	if input.Error != nil {
 		errorCopy := *input.Error
 		input.Error = &errorCopy
@@ -639,7 +663,7 @@ func cloneOutputFiles(input []OutputFile) []OutputFile {
 	}
 	output := make([]OutputFile, len(input))
 	for index, file := range input {
-		output[index] = file.metadata()
+		output[index] = file.Metadata()
 	}
 	return output
 }
@@ -688,4 +712,24 @@ func validateInput(input []InputPart) *TurnError {
 
 func failedResult(code ErrorCode, message string) TurnResult {
 	return TurnResult{Status: TurnFailed, Error: &TurnError{Code: code, Message: message}}
+}
+
+func (e *Engine) emitDetached(identity conversationIdentity, turn *activeTurn, sink EventSink, interaction InteractionRequest) {
+	event := TurnEvent{Kind: TurnEventActivityUpdate, Activity: &ActivityUpdate{ID: interaction.ID, Kind: string(activity.RuntimeEventUserInputResolved), Payload: interaction.Payload}}
+	if snapshot, ok := interaction.Payload.(activity.UserInputSnapshot); ok {
+		event.Activity.Status = string(snapshot.Status)
+	}
+	e.mu.Lock()
+	turn.sequence++
+	event.TurnID = turn.request.ID
+	event.Sequence = turn.sequence
+	key := turnIdentity{conversationIdentity: identity, id: turn.request.ID}
+	if completed, ok := e.completed[key]; ok {
+		completed.events = append(completed.events, cloneTurnEvent(event))
+		e.completed[key] = completed
+	}
+	e.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_ = emitTurnEvent(ctx, sink, event)
 }

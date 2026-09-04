@@ -2,15 +2,15 @@ package interaction
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/enginetest"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channel/csgclaw/delivery"
-	"csgclaw/internal/im"
-	runtimecodex "csgclaw/internal/runtime/codex"
 )
 
 type staticParticipants struct{}
@@ -19,69 +19,63 @@ func (staticParticipants) Get(_ string, id string) (apitypes.Participant, bool) 
 	return apitypes.Participant{ID: id, ChannelUserRef: "user-" + id}, true
 }
 
-type staticAgents struct {
-	agent agentengine.Agent
-}
-
-func (a staticAgents) Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error) {
-	return a.agent, nil
-}
-
-type staticSessions struct {
-	runtimeID       string
-	conversationKey string
-	sessionID       string
-}
-
-func (s *staticSessions) ExistingEngineSession(_ context.Context, runtimeID, conversationKey string) (string, bool, error) {
-	s.runtimeID = runtimeID
-	s.conversationKey = conversationKey
-	return s.sessionID, true, nil
-}
-
-func TestCoordinatorDetachedRequestUsesRuntimeSessionCancellationIdentity(t *testing.T) {
-	broker := runtimecodex.NewUserInputBroker(nil)
-	store, err := delivery.NewIMTranscriptStore(im.NewService(), staticParticipants{}, nil)
+func detachedFixture(t *testing.T) (*Coordinator, agentengine.Interface, channel.TurnContext, agentengine.InteractionRequest) {
+	t.Helper()
+	engine := enginetest.NewMemoryClient(agentengine.Agent{ID: "agent-1", Spec: agentengine.AgentSpec{Name: "worker", Runtime: agentengine.RuntimeSpec{Adapter: "codex"}}, Status: agentengine.AgentStatus{State: agentengine.AgentStateRunning, Ready: true}})
+	engine.SetTurnBehavior(func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventOutputItem, Output: &agentengine.OutputItem{Kind: agentengine.OutputItemRequestUserInput, Payload: activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "choice", Header: "Choice", Question: "Continue?", IsOther: true}}}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true}
+	})
+	turn := channel.TurnContext{AgentID: "agent-1", BindingID: "binding-1", ParticipantID: "participant-1", RoomID: "room-1", SourceMessageID: "message-1", ConversationKey: "conversation-1", TurnID: "turn-1"}
+	result := engine.Conversations(turn.AgentID).Run(context.Background(), agentengine.TurnRequest{ID: turn.TurnID, ConversationKey: turn.ConversationKey, Interaction: agentengine.InteractionResolve, Input: []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: "question"}}}, nil)
+	if len(result.Interactions) != 1 {
+		t.Fatalf("Run=%+v, want Engine-owned detached question", result)
+	}
+	coordinator := NewCoordinator(engine, staticParticipants{})
+	request, err := coordinator.Bind(turn, result.Interactions[0])
 	if err != nil {
-		t.Fatalf("NewIMTranscriptStore() error = %v", err)
+		t.Fatal(err)
 	}
-	sessions := &staticSessions{sessionID: "session-1"}
-	coordinator := NewCoordinator(
-		broker,
-		staticParticipants{},
-		store,
-		WithRuntimeIdentity(staticAgents{agent: agentengine.Agent{
-			ID:     "agent-1",
-			Status: agentengine.AgentStatus{RuntimeID: "runtime-1"},
-		}}, sessions),
-	)
+	return coordinator, engine, turn, request
+}
 
-	snapshot, err := coordinator.Activate(context.Background(), channel.TurnContext{
-		BindingID:       "binding-1",
-		ParticipantID:   "participant-1",
-		AgentID:         "agent-1",
-		RoomID:          "room-1",
-		SourceMessageID: "message-1",
-		ConversationKey: "conversation-1",
-		TurnID:          "turn-1",
-	}, activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{
-		ID: "choice", Header: "Choice", Question: "Continue?",
-	}}})
-	if err != nil {
-		t.Fatalf("Activate() error = %v", err)
+func TestDetachedAnswerResolvesThroughEngine(t *testing.T) {
+	coordinator, engine, turn, request := detachedFixture(t)
+	calls := 0
+	response := activity.UserInputResponseRequest{Channel: "csgclaw", RoomID: turn.RoomID, ActivityID: request.ID, ResponderID: "user-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{"choice": {Answers: []string{"user_note: continue"}}}}, RecordTranscript: func(_ context.Context, snapshot activity.UserInputSnapshot) error {
+		calls++
+		if snapshot.RoomID != turn.RoomID || snapshot.RequesterID != "user-participant-1" {
+			t.Fatalf("unbound transcript: %+v", snapshot)
+		}
+		return nil
+	}}
+	snapshot, err := coordinator.Respond(context.Background(), response)
+	if err != nil || snapshot.Status != activity.UserInputStatusAnswered {
+		t.Fatalf("Respond=(%+v,%v)", snapshot, err)
 	}
-	if sessions.runtimeID != "runtime-1" || sessions.conversationKey != "conversation-1" {
-		t.Fatalf("session lookup = (%q, %q), want (runtime-1, conversation-1)", sessions.runtimeID, sessions.conversationKey)
+	stored, err := engine.Conversations(turn.AgentID).GetInteraction(context.Background(), turn.ConversationKey, request.ID)
+	if err != nil || stored.Payload.(activity.UserInputSnapshot).Status != activity.UserInputStatusAnswered {
+		t.Fatalf("Engine did not receive resolution: %+v %v", stored, err)
 	}
+	if _, err := coordinator.Respond(context.Background(), response); !errors.Is(err, activity.ErrUserInputAlreadyResolved) {
+		t.Fatalf("duplicate=%v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("transcript calls=%d", calls)
+	}
+}
 
-	broker.CancelSession("binding-1", "conversation-1")
-	if pending, ok := broker.Get(snapshot.ID); !ok || pending.Status != activity.UserInputStatusPending {
-		t.Fatalf("request after channel-identity cancellation = (%q, %v), want pending", pending.Status, ok)
+func TestDetachedTranscriptFailureLeavesEngineRequestPending(t *testing.T) {
+	coordinator, engine, turn, request := detachedFixture(t)
+	_, err := coordinator.Respond(context.Background(), activity.UserInputResponseRequest{Channel: "csgclaw", RoomID: turn.RoomID, ActivityID: request.ID, ResponderID: "user-admin", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{"choice": {Answers: []string{"user_note: continue"}}}}, RecordTranscript: func(context.Context, activity.UserInputSnapshot) error { return errors.New("store unavailable") }})
+	if err == nil || !strings.Contains(err.Error(), "store unavailable") {
+		t.Fatalf("error=%v", err)
 	}
-
-	broker.CancelSession("runtime-1", "session-1")
-	resolved, ok := broker.Get(snapshot.ID)
-	if !ok || resolved.Status != activity.UserInputStatusInterrupted {
-		t.Fatalf("request after runtime/session cancellation = (%q, %v), want interrupted", resolved.Status, ok)
+	item, _ := engine.Conversations(turn.AgentID).GetInteraction(context.Background(), turn.ConversationKey, request.ID)
+	if item.Payload.(activity.UserInputSnapshot).Status != activity.UserInputStatusPending {
+		t.Fatalf("not pending: %+v", item)
 	}
 }

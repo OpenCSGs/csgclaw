@@ -170,9 +170,13 @@ func cancellableLoginProvider(ctx context.Context, provider string, opts cliprox
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if err := ctx.Err(); err != nil {
+		return cliproxy.AuthStatus{}, err
+	}
+	login := loginProvider
 	resultCh := make(chan loginProviderResult, 1)
 	go func() {
-		status, err := loginProvider(ctx, provider, opts)
+		status, err := login(ctx, provider, opts)
 		resultCh <- loginProviderResult{status: status, err: err}
 	}()
 

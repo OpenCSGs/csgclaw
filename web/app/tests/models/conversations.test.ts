@@ -127,6 +127,19 @@ describe("conversation model helpers", () => {
     ).toBe('<slash-command name="use-skill" arg="skill-creator"><b>bad</b></slash-command>');
   });
 
+  it("shows the interaction title instead of its JSON envelope in thread previews", () => {
+    const content = JSON.stringify({
+      type: "com.opencsg.csgclaw.agent.activity",
+      version: 1,
+      content: {
+        msgtype: "com.opencsg.csgclaw.agent.action",
+        body: "Permission required",
+        action: { id: "permission", kind: "permission", title: "允许执行验证命令？", status: "pending", options: [] },
+      },
+    });
+    expect(formatMessagePreviewText(content)).toBe("允许执行验证命令？");
+  });
+
   it("keeps path-like slash segments in plain text previews", () => {
     expect(splitMessagePreviewText("Open /tmp/build logs")).toEqual([{ text: "Open /tmp/build logs", type: "text" }]);
     expect(splitMessagePreviewText("/skill-creator run tests")).toEqual([
@@ -616,7 +629,7 @@ describe("conversation model helpers", () => {
           },
         }),
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isToolCallMessage({
         content: "Inspect workspace state",

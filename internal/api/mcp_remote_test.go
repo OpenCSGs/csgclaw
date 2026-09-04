@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"csgclaw/internal/auth"
 	"csgclaw/internal/mcp"
 )
 
@@ -28,11 +29,17 @@ func TestHandleRemoteMCPServersUsesConfiguredOfficialHub(t *testing.T) {
 			t.Fatalf("search = %q, want %q", got, want)
 		}
 		if got, want := r.Header.Get("Authorization"), "Bearer hub-token"; got != want {
-			t.Fatalf("Authorization = %q, want %q", got, want)
+			t.Fatal("unexpected fixture authorization")
 		}
 		_, _ = fmt.Fprint(w, `{"msg":"OK","data":{"data":[{"id":"builtin:calendar","name":"calendar","description":"Calendar tools"}],"total":25}}`)
 	}))
 	t.Cleanup(remote.Close)
+	t.Setenv("CSGHUB_API_BASE_URL", remote.URL)
+	t.Setenv("CSGHUB_USER_TOKEN", "hub-token")
+	previousToken := remoteMCPHubAccessToken
+	remoteMCPHubAccessToken = func() (string, error) { return "hub-token", nil }
+	t.Cleanup(func() { remoteMCPHubAccessToken = previousToken })
+	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
 
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	configText := `[server]
@@ -84,6 +91,12 @@ func TestHandleRemoteMCPServersKeepsPagingAfterFilteringMalformedSummaries(t *te
 		_, _ = fmt.Fprint(w, `{"data":[{"id":"builtin:calendar","name":"calendar"},{"name":"missing-id"}]}`)
 	}))
 	t.Cleanup(remote.Close)
+	t.Setenv("CSGHUB_API_BASE_URL", remote.URL)
+	t.Setenv("CSGHUB_USER_TOKEN", "hub-token")
+	previousToken := remoteMCPHubAccessToken
+	remoteMCPHubAccessToken = func() (string, error) { return "hub-token", nil }
+	t.Cleanup(func() { remoteMCPHubAccessToken = previousToken })
+	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
 
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	configText := `[server]
@@ -132,6 +145,12 @@ func TestHandleInstallRemoteMCPServerResolvesDetailsServerSide(t *testing.T) {
 		_, _ = fmt.Fprint(w, `{"data":{"id":"builtin:calendar","name":"calendar-mcp","description":"Calendar tools","protocol":"sse","url":"https://mcp.example.test/calendar/sse","headers":{"Authorization":"test-secret"}}}`)
 	}))
 	t.Cleanup(remote.Close)
+	t.Setenv("CSGHUB_API_BASE_URL", remote.URL)
+	t.Setenv("CSGHUB_USER_TOKEN", "hub-token")
+	previousToken := remoteMCPHubAccessToken
+	remoteMCPHubAccessToken = func() (string, error) { return "hub-token", nil }
+	t.Cleanup(func() { remoteMCPHubAccessToken = previousToken })
+	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
 
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	configText := `[server]

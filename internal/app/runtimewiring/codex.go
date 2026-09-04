@@ -1,17 +1,16 @@
 package runtimewiring
 
 import (
-	"fmt"
-	"strings"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/codexcli"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
+	"fmt"
+	"strings"
 )
 
-func WithCodexRuntime() agent.ServiceOption {
-	return func(s *agent.Service) error {
+func WithCodexRuntime() agent.ControllerOption {
+	return func(s *agent.Controller) error {
 		if s == nil {
 			return fmt.Errorf("agent service is required")
 		}
