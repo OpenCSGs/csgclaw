@@ -26,13 +26,14 @@ import (
 )
 
 const (
-	defaultRemoteHTTPTimeout    = 60 * time.Second
-	defaultRemoteMaxJSONBytes   = 4 * 1024 * 1024
-	defaultRemoteMaxFileBytes   = 50 * 1024 * 1024
-	officialTemplateNamespace   = "Agentic"
-	remoteManifestFileName      = "agent.toml"
-	remoteFilePreviewMaxBytes   = 256 * 1024
-	remoteAgentTemplatesPerPage = 20
+	defaultRemoteHTTPTimeout         = 60 * time.Second
+	defaultRemoteMaxJSONBytes        = 4 * 1024 * 1024
+	defaultRemoteMaxFileBytes        = 50 * 1024 * 1024
+	officialTemplateNamespace        = "Agentic"
+	remoteRepositoryPathConflictCode = "SYS-ERR-4"
+	remoteManifestFileName           = "agent.toml"
+	remoteFilePreviewMaxBytes        = 256 * 1024
+	remoteAgentTemplatesPerPage      = 20
 )
 
 type RemoteStore struct {
@@ -945,10 +946,23 @@ func decodeRemoteAPIError(statusCode int, data []byte) *RemoteAPIError {
 			Message:    strings.TrimSpace(payload.Msg),
 		}
 		if remoteErr.Code != "" || remoteErr.Message != "" {
-			return remoteErr
+			return normalizeRemoteAPIError(remoteErr)
 		}
 	}
-	return &RemoteAPIError{StatusCode: statusCode, Message: truncateRemoteBody(data)}
+	return normalizeRemoteAPIError(&RemoteAPIError{StatusCode: statusCode, Message: truncateRemoteBody(data)})
+}
+
+func normalizeRemoteAPIError(remoteErr *RemoteAPIError) *RemoteAPIError {
+	if remoteErr == nil || strings.TrimSpace(remoteErr.Code) != "" {
+		return remoteErr
+	}
+	message := strings.ToLower(remoteErr.Message)
+	if strings.Contains(message, "idx_repositories_git_path") &&
+		strings.Contains(message, "sqlstate 23505") {
+		remoteErr.Code = remoteRepositoryPathConflictCode
+		remoteErr.Message = "repository path already exists"
+	}
+	return remoteErr
 }
 
 func (s *RemoteStore) uploadArchive(ctx context.Context, upload remoteUploadURL, archive []byte) error {
