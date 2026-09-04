@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Publish Release"
+  short_description: "Publish stable or beta GitHub releases safely"
+  default_prompt: "Use $github-publish-release to publish version <version> with tag <tag> from the latest origin/main commit."
