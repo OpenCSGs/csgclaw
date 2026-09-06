@@ -57,6 +57,7 @@ func TestCreateAgentTaskBindsDirectRoomAndSendsInitialMessage(t *testing.T) {
 	}
 	for _, want := range []string{
 		"csgclaw-cli task claim --task " + task.ID,
+		"If blocked, claim it again when ready to resume.",
 		"csgclaw-cli task update --task " + task.ID,
 	} {
 		if !strings.Contains(last.Content, want) {

@@ -1459,8 +1459,8 @@ func TestAppServerEventAdapterStreamsAgentMessageDeltasWithoutCompletedDuplicate
 		result := <-waiter.ch
 		completed = completed || result.success
 	}
-	if !completed {
-		t.Fatal("item/completed without phase did not finish the final-answer turn")
+	if completed {
+		t.Fatal("final-answer item completed the turn before turn/completed")
 	}
 	if phase := live.agentMessagePhase("msg-1"); phase != "" || live.hasStreamedAgentMessage("msg-1") {
 		t.Fatalf("completed agent message retained stream state: phase=%q streamed=%v", phase, live.hasStreamedAgentMessage("msg-1"))

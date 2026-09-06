@@ -170,7 +170,6 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		streamedAgentMessages: make(map[string]struct{}),
 		streamedAgentThreads:  make(map[string]struct{}),
 		agentMessagePhases:    make(map[string]string),
-		inferredAgentPhases:   make(map[string]struct{}),
 		agentMessageStreams:   make(map[string]*assistantStructuredOutputStream),
 	}
 	appClient.onNotification = func(note appServerNotification) {
@@ -1239,6 +1238,7 @@ type appServerTurnWaiter struct {
 	threadID                 string
 	turnID                   string
 	ch                       chan appServerTurnResult
+	terminalResults          map[string]appServerTurnResult
 	lastActivity             string
 	pendingInputs            int
 	structuredOutputBoundary bool
@@ -1331,15 +1331,9 @@ func (s *liveSession) notifyAppServerTurn(threadID string, result appServerTurnR
 	if waiter == nil {
 		return false
 	}
-	// A final agent message can release the previous Prompt before its trailing
-	// turn/completed notification arrives. Do not let that stale notification
-	// complete the next Prompt registered on the same thread.
-	expectedTurnID := waiter.currentTurnID()
-	resultTurnID := strings.TrimSpace(result.turnID)
-	if expectedTurnID != "" && resultTurnID != "" && expectedTurnID != resultTurnID {
+	if !waiter.apply(&result) {
 		return true
 	}
-	waiter.apply(&result)
 	if result.userInputStateChanged {
 		select {
 		case waiter.ch <- result:
@@ -1371,16 +1365,38 @@ func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.turnID = turnID
+	for id := range w.terminalResults {
+		if id != "" && id != turnID {
+			delete(w.terminalResults, id)
+		}
+	}
 }
 
-func (w *appServerTurnWaiter) apply(result *appServerTurnResult) {
+func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 	if w == nil || result == nil {
-		return
+		return false
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if result.turnID != "" {
-		w.turnID = strings.TrimSpace(result.turnID)
+	result.turnID = strings.TrimSpace(result.turnID)
+	if w.turnID != "" && result.turnID != "" && w.turnID != result.turnID {
+		return false
+	}
+	// Only a start notification or the turn/start response establishes identity.
+	// A previous turn can finish while the next start response is still pending.
+	if result.started && result.turnID != "" {
+		w.turnID = result.turnID
+	}
+	if result.success || result.err != nil {
+		// Progress is coalescible, but a terminal outcome must survive a full
+		// notification channel. Retain outcomes by ID until turn/start binds the
+		// waiter, including completions that precede its RPC response.
+		if w.terminalResults == nil {
+			w.terminalResults = make(map[string]appServerTurnResult)
+		}
+		if _, exists := w.terminalResults[result.turnID]; !exists {
+			w.terminalResults[result.turnID] = *result
+		}
 	}
 	if result.activity != "" {
 		w.lastActivity = strings.TrimSpace(result.activity)
@@ -1393,6 +1409,22 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) {
 		result.userInputStateChanged = true
 		result.waitingForUser = w.pendingInputs > 0
 	}
+	return true
+}
+
+func (w *appServerTurnWaiter) terminalResult() (appServerTurnResult, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	if result, ok := w.terminalResults[w.turnID]; ok {
+		return result, true
+	}
+	result, ok := w.terminalResults[""]
+	return result, ok
+}
+
+func (w *appServerTurnWaiter) matchesTurn(turnID string) bool {
+	expected := w.currentTurnID()
+	return expected == "" || turnID == "" || expected == strings.TrimSpace(turnID)
 }
 
 func (w *appServerTurnWaiter) currentTurnID() string {
@@ -1528,8 +1560,21 @@ func (m *appServerManager) waitAppServerTurn(ctx context.Context, live *liveSess
 	}
 
 	for {
+		if result, ok := waiter.terminalResult(); ok {
+			if result.err != nil {
+				return PromptResponse{}, result.err
+			}
+			stopReason := result.stopReason
+			if stopReason == "" {
+				stopReason = StopReasonEndTurn
+			}
+			return PromptResponse{StopReason: stopReason}, nil
+		}
 		select {
 		case result := <-waiter.ch:
+			if !waiter.matchesTurn(result.turnID) {
+				continue
+			}
 			if result.userInputStateChanged && result.waitingForUser != waitingForUser {
 				now := time.Now()
 				waitingForUser = result.waitingForUser
@@ -1684,9 +1729,12 @@ func (m *appServerManager) interruptAppServerTurn(live *liveSession, waiter *app
 	}
 
 	for {
+		if _, ok := waiter.terminalResult(); ok {
+			return nil
+		}
 		select {
 		case result := <-waiter.ch:
-			if result.err != nil || result.success {
+			if waiter.matchesTurn(result.turnID) && (result.err != nil || result.success) {
 				return nil
 			}
 		case <-live.done:

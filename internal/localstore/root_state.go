@@ -54,6 +54,36 @@ func ReadSection(path, section string, target any) (bool, error) {
 }
 
 func WriteSection(path, section string, value any) error {
+	return updateSection(path, section, func(json.RawMessage) (json.RawMessage, error) {
+		return json.Marshal(value)
+	})
+}
+
+// UpdateObjectSection reads, modifies, and writes a JSON object under the root
+// state lock, preserving concurrent updates to other keys and sections.
+// The callback must not call other localstore functions.
+func UpdateObjectSection(path, section string, update func(map[string]json.RawMessage) error) error {
+	return updateSection(path, section, func(raw json.RawMessage) (json.RawMessage, error) {
+		value := make(map[string]json.RawMessage)
+		if len(raw) > 0 && string(raw) != "null" {
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return nil, fmt.Errorf("decode root state section %q: %w", section, err)
+			}
+		}
+		if value == nil {
+			value = make(map[string]json.RawMessage)
+		}
+		if err := update(value); err != nil {
+			return nil, err
+		}
+		if len(value) == 0 && (len(raw) == 0 || string(raw) == "null") {
+			return nil, nil
+		}
+		return json.Marshal(value)
+	})
+}
+
+func updateSection(path, section string, update func(json.RawMessage) (json.RawMessage, error)) error {
 	rootStateMu.Lock()
 	defer rootStateMu.Unlock()
 
@@ -75,9 +105,15 @@ func WriteSection(path, section string, value any) error {
 		return fmt.Errorf("read root state: %w", err)
 	}
 
-	raw, err := json.Marshal(value)
+	if state == nil {
+		state = make(map[string]json.RawMessage)
+	}
+	raw, err := update(state[section])
 	if err != nil {
-		return fmt.Errorf("encode root state section %q: %w", section, err)
+		return fmt.Errorf("update root state section %q: %w", section, err)
+	}
+	if raw == nil {
+		return nil
 	}
 	state["version"] = json.RawMessage("1")
 	state[section] = raw

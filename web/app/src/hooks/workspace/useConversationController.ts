@@ -117,6 +117,7 @@ type RemovedAttachmentBatch = {
   removedAt: number;
 };
 type RemovedAttachmentsByKey = Record<string, RemovedAttachmentBatch>;
+type ThreadSelection = { roomID: string; rootID: string };
 
 const idleComposerSendState: ComposerSendState = {
   error: "",
@@ -329,9 +330,17 @@ export function useConversationController({
   const messageListRef = useRef<HTMLElement | null>(null);
   const memberMenuRef = useRef<HTMLDivElement | null>(null);
   const channelToolsRef = useRef<HTMLDivElement | null>(null);
-  const activeThreadKeyRef = useRef("");
+  const activeThreadSelectionRef = useRef<ThreadSelection | null>(null);
   const notifyAllAgentsRequestRef = useRef(0);
   const managerProfileIncompleteRef = useRef(managerProfileIncomplete);
+
+  const resetThread = useCallback(() => {
+    activeThreadSelectionRef.current = null;
+    setActiveThreadRootID("");
+    setActiveThreadView(null);
+    setThreadLoading(false);
+    setThreadError("");
+  }, []);
 
   const setComposerError = useCallback(
     (error: string, conversationID = activeConversationId) => {
@@ -606,17 +615,25 @@ export function useConversationController({
   }, [activeConversationId, removedAttachment]);
 
   useEffect(() => {
-    activeThreadKeyRef.current = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
-  }, [activeConversationId, activeThreadRootID]);
+    const selection = activeThreadSelectionRef.current;
+    if (selection && selection.roomID !== activeConversationId) {
+      resetThread();
+    }
+  }, [activeConversationId, resetThread]);
 
   const handleRealtimeEvent = useCallback((payload: IMServerEvent) => {
+    const selection = activeThreadSelectionRef.current;
+    if (!selection) {
+      return;
+    }
+    const selectedKey = threadKey(selection.roomID, selection.rootID);
     if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
-      if (threadViewKey(payload.thread) === activeThreadKeyRef.current) {
+      if (threadViewKey(payload.thread) === selectedKey) {
         setActiveThreadView(payload.thread);
       }
     }
     if (payload?.type === "message.created" && payload.message) {
-      if (threadMessageKey(payload.room_id, payload.message) === activeThreadKeyRef.current) {
+      if (threadMessageKey(payload.room_id, payload.message) === selectedKey) {
         setActiveThreadView((current) => appendReplyToThreadView(current, payload.message) ?? null);
       }
     }
@@ -1035,6 +1052,8 @@ export function useConversationController({
       preserveMessagePosition(rootID);
     }
     const shouldLoadPersistedThread = isThreadReply(message) || threadHasReplies(root.thread);
+    const selection = { roomID: conversationID, rootID };
+    activeThreadSelectionRef.current = selection;
     setThreadError("");
     setActiveThreadRootID(rootID);
     setActiveThreadView({
@@ -1049,13 +1068,15 @@ export function useConversationController({
     }
 
     try {
-      const view = await fetchThreadRequest(conversationID, rootID);
-      setActiveThreadView(view);
-      setBootstrapData((current) => applyThreadToData(current, conversationID, view));
+      await refreshThreadView(selection);
     } catch (err) {
-      setThreadError(errorMessage(err, t("threadLoadFailed")));
+      if (activeThreadSelectionRef.current === selection) {
+        setThreadError(errorMessage(err, t("threadLoadFailed")));
+      }
     } finally {
-      setThreadLoading(false);
+      if (activeThreadSelectionRef.current === selection) {
+        setThreadLoading(false);
+      }
     }
   }
 
@@ -1066,11 +1087,13 @@ export function useConversationController({
     await openThreadInConversation(activeConversation.id, message);
   }
 
-  async function refreshThreadView(roomID: string, rootID: string) {
-    const view = await fetchThreadRequest(roomID, rootID);
+  async function refreshThreadView(selection: ThreadSelection) {
+    const view = await fetchThreadRequest(selection.roomID, selection.rootID);
+    if (activeThreadSelectionRef.current !== selection) {
+      return;
+    }
     setActiveThreadView(view);
-    setBootstrapData((current) => applyThreadToData(current, roomID, view));
-    return view;
+    setBootstrapData((current) => applyThreadToData(current, selection.roomID, view));
   }
 
   async function sendThreadReply(): Promise<void> {
@@ -1092,10 +1115,14 @@ export function useConversationController({
     }
     const serializedDraft = serializeComposerSegments(activeThreadDraftSegments);
     const text = normalizeSlashShorthandForPayload(serializedDraft);
+    const selection = activeThreadSelectionRef.current;
     if (
       !data?.current_user_id ||
       !activeConversation ||
       !activeThreadRootID ||
+      !selection ||
+      selection.roomID !== activeConversation.id ||
+      selection.rootID !== activeThreadRootID ||
       (!text.trim() && activeThreadAttachmentDrafts.length === 0)
     ) {
       return;
@@ -1132,21 +1159,18 @@ export function useConversationController({
       setThreadDraftsByKey((current) => updateDrafts(current, activeThreadDraftKey, []));
       setThreadAttachmentDraftsByKey((current) => updateAttachmentDrafts(current, activeThreadDraftKey, []));
       delete pendingClientMessagesRef.current[threadSendKey];
-      setActiveThreadView((current) => appendReplyToThreadView(current, created) ?? null);
+      if (activeThreadSelectionRef.current === selection) {
+        setActiveThreadView((current) => appendReplyToThreadView(current, created) ?? null);
+      }
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
-      await refreshThreadView(activeConversation.id, activeThreadRootID);
+      await refreshThreadView(selection);
     } catch (err) {
-      setThreadError(errorMessage(err, t("sendFailed")));
+      if (activeThreadSelectionRef.current === selection) {
+        setThreadError(errorMessage(err, t("sendFailed")));
+      }
     } finally {
       delete sendLocksRef.current[threadSendKey];
     }
-  }
-
-  function resetThread() {
-    setActiveThreadRootID("");
-    setActiveThreadView(null);
-    setThreadLoading(false);
-    setThreadError("");
   }
 
   function closeThread() {

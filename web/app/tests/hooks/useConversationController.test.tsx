@@ -2,7 +2,7 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
 import { WorkspacePaneTypes } from "@/models/routing";
-import type { IMConversation, IMData, IMMessage, IMUser, TranslateFn } from "@/models/conversations";
+import type { IMConversation, IMData, IMMessage, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import type { AgentLike } from "@/models/agents";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import type { SendMessageRequestOptions } from "@/api/im";
@@ -91,6 +91,16 @@ function dataWithMessages(messages: IMMessage[]): IMData {
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function renderConversationController(
   options: {
     activeConversationId?: string;
@@ -99,6 +109,7 @@ function renderConversationController(
     managerRuntimeUnavailable?: boolean;
     managerRuntimeWarning?: string;
     messageListActive?: boolean;
+    setBootstrapData?: (updater: unknown) => void;
     workingParticipantsForRoom?: (roomID: string | null | undefined) => ConversationWorkingParticipant[];
   } = {},
 ) {
@@ -139,7 +150,7 @@ function renderConversationController(
         selectComputer: vi.fn(),
         selectConversation: vi.fn(),
         setActiveConversationId: vi.fn(),
-        setBootstrapData: vi.fn(),
+        setBootstrapData: options.setBootstrapData ?? vi.fn(),
         setShowToolCalls: vi.fn(),
         showToolCalls: false,
         t,
@@ -280,6 +291,208 @@ describe("useConversationController", () => {
 
     expect(apiMocks.fetchThreadRequest).toHaveBeenCalledWith("room-1", "msg-root");
     expect(result.current.conversationViewProps.activeThreadView?.replies).toHaveLength(1);
+  });
+
+  describe("thread selection changes", () => {
+    const firstRoot: IMMessage = {
+      id: "root-first",
+      content: "First thread",
+      sender_id: "u-admin",
+      thread: { root_id: "root-first", reply_count: 1 },
+    };
+    const secondRoot: IMMessage = { id: "root-second", content: "Second thread", sender_id: "u-admin" };
+    const firstView: ThreadView = { room_id: "room-1", root: firstRoot, replies: [], summary: firstRoot.thread };
+    const secondView: ThreadView = { room_id: "room-1", root: secondRoot, replies: [], summary: null };
+
+    it("keeps replies addressed to the thread shown after an older load finishes", async () => {
+      const load = deferred<ThreadView>();
+      apiMocks.fetchThreadRequest.mockReturnValueOnce(load.promise).mockResolvedValue(secondView);
+      const { result } = renderConversationController({ data: dataWithMessages([firstRoot, secondRoot]) });
+      let opening!: Promise<void>;
+      act(() => {
+        opening = result.current.conversationViewProps.onOpenThread(firstRoot);
+      });
+      await act(async () => {
+        await result.current.conversationViewProps.onOpenThread(secondRoot);
+      });
+      await act(async () => {
+        load.resolve(firstView);
+        await opening;
+      });
+
+      expect(result.current.conversationViewProps.activeThreadView?.root?.id).toBe(secondRoot.id);
+      act(() => {
+        result.current.conversationViewProps.onThreadDraftChange([{ type: "text", text: "Reply to this thread" }]);
+      });
+      apiMocks.sendMessageRequest.mockResolvedValue({
+        id: "reply-new",
+        content: "Reply to this thread",
+        sender_id: "u-admin",
+        relates_to: { rel_type: "m.thread", event_id: secondRoot.id },
+      });
+      await act(async () => {
+        await result.current.conversationViewProps.onSendThreadReply();
+      });
+
+      expect(apiMocks.sendMessageRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ relates_to: { rel_type: "m.thread", event_id: secondRoot.id } }),
+      );
+    });
+
+    it.each(["close", "switch room"])("discards a delayed thread load after %s", async (action) => {
+      const load = deferred<ThreadView>();
+      apiMocks.fetchThreadRequest.mockReturnValue(load.promise);
+      const data = dataWithMessages([firstRoot]);
+      data.rooms.push({ ...directConversation, id: "room-2", messages: [] });
+      const { result, rerender } = renderConversationController({ data });
+      let opening!: Promise<void>;
+      act(() => {
+        opening = result.current.conversationViewProps.onOpenThread(firstRoot);
+      });
+      if (action === "close") {
+        act(() => result.current.conversationViewProps.onCloseThread());
+      } else {
+        rerender({ activeConversationId: "room-2", data });
+      }
+      await act(async () => {
+        load.resolve(firstView);
+        await opening;
+      });
+
+      expect(result.current.activeThreadRootID).toBe("");
+      expect(result.current.conversationViewProps.activeThreadView).toBeNull();
+      expect(result.current.conversationViewProps.threadLoading).toBe(false);
+    });
+
+    it("ignores a previous load when the same thread is reopened", async () => {
+      const oldLoad = deferred<ThreadView>();
+      const newLoad = deferred<ThreadView>();
+      apiMocks.fetchThreadRequest.mockReturnValueOnce(oldLoad.promise).mockReturnValueOnce(newLoad.promise);
+      const { result } = renderConversationController({ data: dataWithMessages([firstRoot, secondRoot]) });
+      let oldOpening!: Promise<void>;
+      let newOpening!: Promise<void>;
+      act(() => {
+        oldOpening = result.current.conversationViewProps.onOpenThread(firstRoot);
+      });
+      await act(async () => {
+        await result.current.conversationViewProps.onOpenThread(secondRoot);
+      });
+      act(() => {
+        newOpening = result.current.conversationViewProps.onOpenThread(firstRoot);
+      });
+      await act(async () => {
+        oldLoad.reject(new Error("Previous request failed"));
+        await oldOpening;
+      });
+
+      expect(result.current.conversationViewProps.threadError).toBe("");
+      expect(result.current.conversationViewProps.threadLoading).toBe(true);
+      await act(async () => {
+        newLoad.resolve(firstView);
+        await newOpening;
+      });
+      expect(result.current.conversationViewProps.activeThreadView).toEqual(firstView);
+      expect(result.current.conversationViewProps.threadLoading).toBe(false);
+    });
+
+    it("keeps a thread selected from another room when navigation completes", async () => {
+      const load = deferred<ThreadView>();
+      apiMocks.fetchThreadRequest.mockReturnValue(load.promise);
+      const data = dataWithMessages([]);
+      data.rooms.push({ ...directConversation, id: "room-2", messages: [firstRoot] });
+      const { result, rerender } = renderConversationController({ data });
+      let opening!: Promise<void>;
+      act(() => {
+        opening = result.current.openThreadInConversation("room-2", firstRoot);
+      });
+      rerender({ activeConversationId: "room-2", data });
+      await act(async () => {
+        load.resolve({ ...firstView, room_id: "room-2" });
+        await opening;
+      });
+
+      expect(result.current.activeThreadRootID).toBe(firstRoot.id);
+      expect(result.current.conversationViewProps.activeThreadView).toMatchObject({
+        room_id: "room-2",
+        root: { id: firstRoot.id },
+      });
+    });
+
+    it("does not replace a reopened thread or its cached messages with an older response", async () => {
+      const oldLoad = deferred<ThreadView>();
+      const newLoad = deferred<ThreadView>();
+      const setBootstrapData = vi.fn();
+      apiMocks.fetchThreadRequest.mockReturnValueOnce(oldLoad.promise).mockReturnValueOnce(newLoad.promise);
+      const { result } = renderConversationController({
+        data: dataWithMessages([firstRoot, secondRoot]),
+        setBootstrapData,
+      });
+      let oldOpening!: Promise<void>;
+      let newOpening!: Promise<void>;
+      act(() => {
+        oldOpening = result.current.conversationViewProps.onOpenThread(firstRoot);
+      });
+      await act(async () => {
+        await result.current.conversationViewProps.onOpenThread(secondRoot);
+      });
+      act(() => {
+        newOpening = result.current.conversationViewProps.onOpenThread(firstRoot);
+      });
+      const newView = { ...firstView, replies: [{ id: "latest-reply", sender_id: "u-demo", content: "Latest reply" }] };
+      await act(async () => {
+        newLoad.resolve(newView);
+        await newOpening;
+      });
+      await act(async () => {
+        oldLoad.resolve(firstView);
+        await oldOpening;
+      });
+
+      expect(result.current.conversationViewProps.activeThreadView).toEqual(newView);
+      expect(setBootstrapData).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["success", "failure"])(
+      "keeps the selected thread after a pending reply refresh ends in %s",
+      async (outcome) => {
+        const refresh = deferred<ThreadView>();
+        apiMocks.fetchThreadRequest.mockResolvedValueOnce(firstView).mockReturnValueOnce(refresh.promise);
+        apiMocks.sendMessageRequest.mockResolvedValue({
+          id: "reply-new",
+          content: "Reply",
+          sender_id: "u-admin",
+          relates_to: { rel_type: "m.thread", event_id: firstRoot.id },
+        });
+        const { result } = renderConversationController({ data: dataWithMessages([firstRoot, secondRoot]) });
+        await act(async () => {
+          await result.current.conversationViewProps.onOpenThread(firstRoot);
+        });
+        act(() => {
+          result.current.conversationViewProps.onThreadDraftChange([{ type: "text", text: "Reply" }]);
+        });
+        let sending!: Promise<void>;
+        await act(async () => {
+          sending = result.current.conversationViewProps.onSendThreadReply();
+          await Promise.resolve();
+        });
+        expect(apiMocks.fetchThreadRequest).toHaveBeenCalledTimes(2);
+        await act(async () => {
+          await result.current.conversationViewProps.onOpenThread(secondRoot);
+        });
+        await act(async () => {
+          if (outcome === "success") {
+            refresh.resolve(firstView);
+          } else {
+            refresh.reject(new Error("Previous thread refresh failed"));
+          }
+          await sending;
+        });
+
+        expect(result.current.activeThreadRootID).toBe(secondRoot.id);
+        expect(result.current.conversationViewProps.activeThreadView?.root?.id).toBe(secondRoot.id);
+        expect(result.current.conversationViewProps.threadError).toBe("");
+      },
+    );
   });
 
   it("blocks thread replies when every conversation agent is offline", async () => {
