@@ -2,17 +2,8 @@ package api
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
-	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/feishu"
@@ -20,6 +11,13 @@ import (
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 	hub "csgclaw/internal/template"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
@@ -27,13 +25,13 @@ func TestCreateCSGClawAgentParticipantViaAPI(t *testing.T) {
 	imSvc := im.NewService()
 	participantSvc := participant.NewService(
 		participant.NewMemoryStore(nil),
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 		participant.WithIMService(imSvc),
 	)
 	srv := &Handler{
 		svc:         agentSvc,
 		im:          imSvc,
-		participant: participantSvc,
+		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	body := `{
@@ -104,14 +102,14 @@ func TestCreateCSGClawAgentParticipantViaAPIUsesRequestHub(t *testing.T) {
 	imSvc := im.NewService()
 	participantSvc := participant.NewService(
 		participant.NewMemoryStore(nil),
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 		participant.WithIMService(imSvc),
 	)
 	srv := &Handler{
 		svc:         agentSvc,
 		hub:         requestHub,
 		im:          imSvc,
-		participant: participantSvc,
+		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	body := `{
 		"id": "request-worker",
@@ -149,13 +147,13 @@ func TestCreateCSGClawAgentParticipantViaAPIRequiresAgentBinding(t *testing.T) {
 	imSvc := im.NewService()
 	participantSvc := participant.NewService(
 		participant.NewMemoryStore(nil),
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 		participant.WithIMService(imSvc),
 	)
 	srv := &Handler{
 		svc:         agentSvc,
 		im:          imSvc,
-		participant: participantSvc,
+		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	body := `{
@@ -200,13 +198,13 @@ func TestCreateCSGClawAgentParticipantViaAPIReturnsConflictForDuplicateAgentName
 	imSvc := im.NewService()
 	participantSvc := participant.NewService(
 		participant.NewMemoryStore(nil),
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 		participant.WithIMService(imSvc),
 	)
 	srv := &Handler{
 		svc:         agentSvc,
 		im:          imSvc,
-		participant: participantSvc,
+		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	body := `{
@@ -307,11 +305,11 @@ func TestCreateFeishuAgentParticipantViaAPIReusesExistingAgent(t *testing.T) {
 	}})
 	participantSvc := participant.NewService(
 		participant.NewMemoryStore(nil),
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 	)
 	srv := &Handler{
 		svc:         agentSvc,
-		participant: participantSvc,
+		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	body := `{
@@ -394,14 +392,13 @@ func TestCreateFeishuBotParticipantRedactsChannelAppConfigSecretViaAPI(t *testin
 	}
 }
 
-func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
+func TestDeleteFeishuAgentParticipantReconcilesOwningRuntimeOrChannel(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		agentID       string
 		agentName     string
 		role          string
 		participantID string
-		wantRecreate  bool
 	}{
 		{
 			name:          "worker",
@@ -409,7 +406,6 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 			agentName:     "dev",
 			role:          agent.RoleWorker,
 			participantID: "pt-dev",
-			wantRecreate:  true,
 		},
 		{
 			name:          "manager",
@@ -417,13 +413,16 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 			agentName:     "manager",
 			role:          agent.RoleManager,
 			participantID: "pt-manager",
-			wantRecreate:  false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var recreated []string
+			bindings := &fakeCodexBridgeController{}
 			target := completeWorkerAgent(tc.agentID, tc.agentName)
 			target.Role = tc.role
+			if tc.role == agent.RoleManager {
+				target.RuntimeKind = agent.RuntimeKindCodex
+			}
 			agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{target},
 				agent.WithRuntime(fakeCompatRuntime{
 					kind: agent.RuntimeKindPicoClawSandbox,
@@ -448,11 +447,12 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 					LifecycleStatus: participant.LifecycleStatusActive,
 					Mentionable:     true,
 				}}),
-				participant.WithAgentService(agentSvc),
+				participant.WithAgentEngine(agentengine.New(agentSvc)),
 			)
 			srv := &Handler{
-				svc:         agentSvc,
-				participant: participantSvc,
+				svc:             agentSvc,
+				participant:     participantSvc,
+				channelBindings: bindings, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 			}
 
 			rec := httptest.NewRecorder()
@@ -465,19 +465,12 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 			if _, ok := participantSvc.Get(participant.ChannelFeishu, tc.participantID); ok {
 				t.Fatalf("participant feishu:%s still exists after delete", tc.participantID)
 			}
-			if tc.wantRecreate {
-				if len(recreated) != 1 || recreated[0] != tc.agentID {
-					t.Fatalf("recreated = %#v, want only %q", recreated, tc.agentID)
+			if tc.role == agent.RoleWorker {
+				if len(recreated) != 1 || recreated[0] != tc.agentID || len(bindings.refreshCalls) != 0 {
+					t.Fatalf("native Runtime recreates=%v, hosted binding calls=%v", recreated, bindings.refreshCalls)
 				}
-			} else if len(recreated) != 0 {
-				t.Fatalf("recreated = %#v, want none for codex manager", recreated)
-			}
-			got, ok := agentSvc.Agent(tc.agentID)
-			if !ok {
-				t.Fatalf("agent %q not found after recreate", tc.agentID)
-			}
-			if got.BoxID != "box-"+tc.agentName {
-				t.Fatalf("agent BoxID = %q, want recreated runtime handle %q", got.BoxID, "box-"+tc.agentName)
+			} else if len(recreated) != 0 || len(bindings.refreshCalls) != 1 || bindings.refreshCalls[0].agent.ID != tc.agentID {
+				t.Fatalf("Codex recreates=%v, hosted binding calls=%v", recreated, bindings.refreshCalls)
 			}
 		})
 	}
@@ -485,6 +478,7 @@ func TestDeleteFeishuAgentParticipantRecreatesBoundAgent(t *testing.T) {
 
 func TestDeleteFeishuAgentParticipantRemovesSameAgentFeishuBotsBeforeRecreate(t *testing.T) {
 	var recreated []string
+	bindings := &fakeCodexBridgeController{}
 	target := completeWorkerAgent("u-dev", "dev")
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{target},
 		agent.WithRuntime(fakeCompatRuntime{
@@ -526,11 +520,12 @@ func TestDeleteFeishuAgentParticipantRemovesSameAgentFeishuBotsBeforeRecreate(t 
 				Mentionable:     true,
 			},
 		}),
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 	)
 	srv := &Handler{
-		svc:         agentSvc,
-		participant: participantSvc,
+		svc:             agentSvc,
+		participant:     participantSvc,
+		channelBindings: bindings, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	rec := httptest.NewRecorder()
@@ -545,8 +540,8 @@ func TestDeleteFeishuAgentParticipantRemovesSameAgentFeishuBotsBeforeRecreate(t 
 			t.Fatalf("participant feishu:%s still exists after disconnect", id)
 		}
 	}
-	if len(recreated) != 1 || recreated[0] != "agent-dev" {
-		t.Fatalf("recreated = %#v, want only %q", recreated, "agent-dev")
+	if len(recreated) != 1 || recreated[0] != "agent-dev" || len(bindings.refreshCalls) != 0 {
+		t.Fatalf("runtime recreates = %#v, binding refreshes = %+v", recreated, bindings.refreshCalls)
 	}
 }
 
@@ -565,7 +560,6 @@ func TestDeleteFeishuCodexAgentParticipantRefreshesBridgeWithoutRecreate(t *test
 	target.ProfileComplete = true
 	bridge := &fakeCodexBridgeController{}
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{target},
-		agent.WithBindingActivator(bridge),
 		agent.WithRuntime(fakeCompatRuntime{
 			kind: agent.RuntimeKindCodex,
 			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
@@ -605,29 +599,13 @@ func TestDeleteFeishuCodexAgentParticipantRefreshesBridgeWithoutRecreate(t *test
 				Mentionable:     true,
 			},
 		}),
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 	)
 	srv := &Handler{
-		svc:         agentSvc,
-		participant: participantSvc,
+		svc:             agentSvc,
+		participant:     participantSvc,
+		channelBindings: bridge, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
-	layout, err := agentSvc.AgentLayout("agent-dev")
-	if err != nil {
-		t.Fatalf("AgentLayout() error = %v", err)
-	}
-	codexHomeDir := codexHomeDirFromLayout(layout)
-	for _, dir := range []string{
-		filepath.Join(codexHomeDir, larkCLIConfigDirName),
-		filepath.Join(codexHomeDir, larkCLISourceDirName),
-	} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			t.Fatalf("create stale lark-cli dir %s: %v", dir, err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "stale.json"), []byte("{}\n"), 0o600); err != nil {
-			t.Fatalf("write stale lark-cli file in %s: %v", dir, err)
-		}
-	}
-
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/channels/feishu/participants/dev", nil)
 	srv.Routes().ServeHTTP(rec, req)
@@ -648,14 +626,6 @@ func TestDeleteFeishuCodexAgentParticipantRefreshesBridgeWithoutRecreate(t *test
 	}
 	if bridge.refreshCalls[0].agent.ID != "agent-dev" || bridge.refreshCalls[0].channel != participant.ChannelFeishu {
 		t.Fatalf("RefreshAgentChannel() call = %+v, want agent-dev feishu", bridge.refreshCalls[0])
-	}
-	for _, dir := range []string{
-		filepath.Join(codexHomeDir, larkCLIConfigDirName),
-		filepath.Join(codexHomeDir, larkCLISourceDirName),
-	} {
-		if _, err := os.Stat(dir); !os.IsNotExist(err) {
-			t.Fatalf("stat stale lark-cli dir %s = %v, want not exist", dir, err)
-		}
 	}
 }
 
@@ -710,7 +680,7 @@ func TestListAgentsIncludesParticipantsWhenRequested(t *testing.T) {
 	}}))
 	srv := &Handler{
 		svc:         agentSvc,
-		participant: participantSvc,
+		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	rec := httptest.NewRecorder()
@@ -848,7 +818,7 @@ func TestParticipantMessageRouteCanonicalizesAgentIDAlias(t *testing.T) {
 
 func TestParticipantDeleteWithAgentCleanupRemovesCSGClawUser(t *testing.T) {
 	agentSvc := mustNewService(t)
-	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+	if _, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
 			Name:        "qa",
@@ -876,11 +846,11 @@ func TestParticipantDeleteWithAgentCleanupRemovesCSGClawUser(t *testing.T) {
 		AgentID:         "u-qa",
 		LifecycleStatus: participant.LifecycleStatusActive,
 		Mentionable:     true,
-	}}), participant.WithAgentService(agentSvc), participant.WithIMService(imSvc))
+	}}), participant.WithAgentEngine(agentengine.New(agentSvc)), participant.WithIMService(imSvc))
 	srv := &Handler{
 		svc:         agentSvc,
 		im:          imSvc,
-		participant: participantSvc,
+		participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	rec := httptest.NewRecorder()
@@ -1329,7 +1299,7 @@ func TestParticipantEventsRouteReceivesParticipantIDQueue(t *testing.T) {
 	}
 	ctx, cancelReq := context.WithCancel(context.Background())
 	defer cancelReq()
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/csgclaw/participants/manager/events", nil).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer secret")
 	done := make(chan struct{})
@@ -1354,7 +1324,7 @@ func TestParticipantEventsRouteReceivesParticipantIDQueue(t *testing.T) {
 	}
 	bridge.PublishMessageEvent(room, sender, message)
 	waitForCondition(t, time.Second, 10*time.Millisecond, func() bool {
-		return strings.Contains(rec.Body.String(), `"message_id":"msg-1"`)
+		return strings.Contains(rec.BodyString(), `"message_id":"msg-1"`)
 	})
 	cancelReq()
 	<-done
@@ -1381,7 +1351,7 @@ func TestFeishuParticipantEventsRouteUsesParticipantChannelUserRef(t *testing.T)
 
 	ctx, cancelReq := context.WithCancel(context.Background())
 	defer cancelReq()
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/qa/events", nil).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer secret")
 	done := make(chan struct{})
@@ -1391,7 +1361,7 @@ func TestFeishuParticipantEventsRouteUsesParticipantChannelUserRef(t *testing.T)
 	}()
 
 	waitForCondition(t, time.Second, 10*time.Millisecond, func() bool {
-		return strings.Contains(rec.Body.String(), ": connected")
+		return strings.Contains(rec.BodyString(), ": connected")
 	})
 	feishuSvc.MessageBus().Publish(feishu.MessageEvent{
 		Type:   feishu.MessageEventTypeMessageCreated,
@@ -1406,7 +1376,7 @@ func TestFeishuParticipantEventsRouteUsesParticipantChannelUserRef(t *testing.T)
 		},
 	})
 	waitForCondition(t, time.Second, 10*time.Millisecond, func() bool {
-		return strings.Contains(rec.Body.String(), `"id":"om_qa"`)
+		return strings.Contains(rec.BodyString(), `"id":"om_qa"`)
 	})
 	cancelReq()
 	<-done
@@ -1446,7 +1416,7 @@ func TestFeishuParticipantEventsRouteUsesBotOpenIDForAppIDParticipant(t *testing
 
 	ctx, cancelReq := context.WithCancel(context.Background())
 	defer cancelReq()
-	rec := httptest.NewRecorder()
+	rec := newSSERecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/channels/feishu/participants/dev/events", nil).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer secret")
 	done := make(chan struct{})
@@ -1456,7 +1426,7 @@ func TestFeishuParticipantEventsRouteUsesBotOpenIDForAppIDParticipant(t *testing
 	}()
 
 	waitForCondition(t, time.Second, 10*time.Millisecond, func() bool {
-		return strings.Contains(rec.Body.String(), ": connected")
+		return strings.Contains(rec.BodyString(), ": connected")
 	})
 	feishuSvc.MessageBus().Publish(feishu.MessageEvent{
 		Type:   feishu.MessageEventTypeMessageCreated,
@@ -1471,7 +1441,7 @@ func TestFeishuParticipantEventsRouteUsesBotOpenIDForAppIDParticipant(t *testing
 		},
 	})
 	waitForCondition(t, time.Second, 10*time.Millisecond, func() bool {
-		return strings.Contains(rec.Body.String(), `"id":"om_dev"`)
+		return strings.Contains(rec.BodyString(), `"id":"om_dev"`)
 	})
 	cancelReq()
 	<-done

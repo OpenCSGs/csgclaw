@@ -2,13 +2,12 @@ package team
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/im"
 	"errors"
 	"strings"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/im"
 )
 
 func TestProjectorProjectsBuiltInChannelMessages(t *testing.T) {

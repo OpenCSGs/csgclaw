@@ -2,24 +2,23 @@ package runtimewiring
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
-	"os"
-	"path/filepath"
-	"strings"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/channel/feishu"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/sandboxgateway"
 	"csgclaw/internal/runtimeassets"
 	"csgclaw/internal/sandbox"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 type sandboxRuntimeEnvBuilder func(baseURL, accessToken, participantID, agentID, llmBaseURL, modelID string, provider feishu.AgentCredentialProvider) map[string]string
 
-func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feishu.AgentCredentialProvider, buildRuntimeEnv sandboxRuntimeEnvBuilder, newRuntime func(sandboxgateway.Dependencies) agentruntime.Runtime) agent.ServiceOption {
-	return func(s *agent.Service) error {
+func withSandboxRuntimeHost(host agent.PicoClawRuntimeHost, feishuProvider feishu.AgentCredentialProvider, buildRuntimeEnv sandboxRuntimeEnvBuilder, newRuntime func(sandboxgateway.Dependencies) agentruntime.Runtime) agent.ControllerOption {
+	return func(s *agent.Controller) error {
 		return agent.WithRuntime(newRuntime(sandboxgateway.Dependencies{
 			FeishuProvider:      feishuProvider,
 			SandboxProviderName: host.SandboxProviderName,
@@ -83,7 +82,7 @@ func sandboxToolsDir() (string, error) {
 	return dir, nil
 }
 
-func updateRuntimeFeishuProvider(svc *agent.Service, runtimeKind string, provider feishu.AgentCredentialProvider) {
+func updateRuntimeFeishuProvider(svc *agent.Controller, runtimeKind string, provider feishu.AgentCredentialProvider) {
 	if svc == nil {
 		slog.Warn("skip feishu provider update: agent service is nil", "runtime_kind", runtimeKind)
 		return

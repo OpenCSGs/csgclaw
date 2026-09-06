@@ -2,16 +2,15 @@ package onboard
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	"csgclaw/internal/im"
-	"csgclaw/internal/participant"
 )
 
 func TestEnsureStateCreatesConfigAndBootstrapsManagerState(t *testing.T) {

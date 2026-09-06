@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"csgclaw/internal/activity"
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
 	"csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/codex"
@@ -53,6 +53,10 @@ type fakeConversationRuntime struct {
 	state           runtime.State
 	closeEvents     bool
 	deleteCalls     int
+}
+
+func (f *fakeConversationRuntime) Conversation(runtimeID string) RuntimeConversation {
+	return codex.NewConversationAdapter(runtimeID, f)
 }
 
 func (f *fakeConversationRuntime) Kind() string {
@@ -523,7 +527,7 @@ func TestEngineCreateMemoryFailureRollsBackAgent(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "does not expose memory") {
 		t.Fatalf("Create(memory) error = %v, want unsupported memory failure", err)
 	}
-	if items := service.List(); len(items) != 0 {
+	if items := service.ListRecords(); len(items) != 0 {
 		t.Fatalf("Agents persisted after memory reconciliation failure: %+v", items)
 	}
 	if runtimeImpl.deleteCalls != 1 {
@@ -650,28 +654,20 @@ func TestConversationRunRejectsUnsupportedInteraction(t *testing.T) {
 }
 
 func TestConversationResolveAddressesPendingUserInput(t *testing.T) {
-	broker := codex.NewUserInputBroker(nil)
-	runtimeImpl := &fakeConversationRuntime{userInput: broker}
-	resolved := make(chan struct{})
-	broker.AddDetachedHandler(func(codex.DetachedUserInputResolution) {
-		close(resolved)
-	})
-	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, _ string) error {
-		snapshot, err := broker.CreateDetached(codex.PendingUserInputRequest{
+	runtimeImpl := &fakeConversationRuntime{}
+	broker := codex.NewUserInputBroker(nativeInteractionSink(runtimeImpl.publish))
+	runtimeImpl.userInput = broker
+	runtimeImpl.prompt = func(ctx context.Context, runtimeID, sessionID, _ string) error {
+		decision, err := broker.Request(ctx, codex.PendingUserInputRequest{
 			Execution: activity.ExecutionRef{RuntimeID: runtimeID, SessionID: sessionID},
-			Questions: []activity.UserInputQuestionSnapshot{{
-				ID: "choice", Header: "Choice", Question: "Continue?",
-				Options: []activity.UserInputOptionSnapshot{{Label: "Yes"}, {Label: "No"}},
-			}},
-		}, codex.DetachedUserInputContext{Channel: "test", RoomID: "room"})
+			Questions: []activity.UserInputQuestionSnapshot{{ID: "choice", Header: "Choice", Question: "Continue?", Options: []activity.UserInputOptionSnapshot{{Label: "Yes"}, {Label: "No"}}}},
+		})
 		if err != nil {
 			return err
 		}
-		runtimeImpl.publish(activity.RuntimeEvent{
-			RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventUserInputRequest,
-			UserInputID: snapshot.ID, Payload: snapshot,
-		})
-		<-resolved
+		if answers := decision.Response.Answers["choice"].Answers; len(answers) != 1 || answers[0] != "Yes" {
+			return errors.New("native response was lost")
+		}
 		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
 		return nil
 	}
@@ -1163,7 +1159,7 @@ func TestConversationResolveClaimsInteractionBeforeRuntimeCall(t *testing.T) {
 	second := engine.Conversations("agent-a").Resolve(context.Background(), InteractionResolution{
 		ConversationKey: "conversation-1", InteractionID: "question-1", ResponderID: "feishu:user-1",
 	})
-	if ErrorCodeOf(second) != ErrorInteractionNotFound {
+	if ErrorCodeOf(second) != ErrorInteractionAlreadyResolved {
 		t.Fatalf("duplicate Resolve error = %v", second)
 	}
 	if calls := resolveCalls.Load(); calls != 1 {
@@ -1311,21 +1307,6 @@ func TestAgentLifecycleDrainTimeoutLeavesRuntimeUnchanged(t *testing.T) {
 	}
 }
 
-func TestPreserveWriteOnlyFieldsDistinguishesOmittedAndExplicitClear(t *testing.T) {
-	current := AgentSpec{
-		Runtime: RuntimeSpec{Credentials: map[string]string{"auth.json": "secret"}},
-		Model:   ModelSpec{APIKey: "model-secret"},
-	}
-	preserved := preserveWriteOnlyFields(current, AgentSpec{})
-	if preserved.Runtime.Credentials["auth.json"] != "secret" || preserved.Model.APIKey != "model-secret" {
-		t.Fatalf("preserved write-only fields = %+v", preserved)
-	}
-	cleared := preserveWriteOnlyFields(current, AgentSpec{Runtime: RuntimeSpec{Credentials: map[string]string{}}})
-	if cleared.Runtime.Credentials == nil || len(cleared.Runtime.Credentials) != 0 {
-		t.Fatalf("explicit empty credentials = %#v, want explicit clear", cleared.Runtime.Credentials)
-	}
-}
-
 func textInput(values ...string) []InputPart {
 	parts := make([]InputPart, 0, len(values))
 	for _, value := range values {
@@ -1345,7 +1326,7 @@ func createEngineTestFile(t testing.TB, engine Interface, agentID, name, mediaTy
 	return file
 }
 
-func newTestAgentService(t *testing.T, agents []agent.Agent, runtimeImpl runtime.Runtime) *agent.Service {
+func newTestAgentService(t *testing.T, agents []agent.Agent, runtimeImpl runtime.Runtime) *agent.Controller {
 	t.Helper()
 	statePath := filepath.Join(t.TempDir(), "agents.json")
 	data, err := json.Marshal(map[string]any{"agents": agents})
@@ -1355,9 +1336,13 @@ func newTestAgentService(t *testing.T, agents []agent.Agent, runtimeImpl runtime
 	if err := os.WriteFile(statePath, append(data, '\n'), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	service, err := agent.NewService(config.ModelConfig{}, config.ServerConfig{}, "manager:test", statePath, agent.WithRuntime(runtimeImpl))
+	service, err := agent.NewController(config.ModelConfig{}, config.ServerConfig{}, "manager:test", statePath, agent.WithRuntime(runtimeImpl))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return service
 }
+
+type nativeInteractionSink func(activity.RuntimeEvent)
+
+func (f nativeInteractionSink) Publish(event codex.SessionEvent) { f(event) }

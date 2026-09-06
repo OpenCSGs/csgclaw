@@ -11,7 +11,7 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge/runtimebridge"
+	channelrender "csgclaw/internal/channel/csgclaw/render"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 )
@@ -180,7 +180,7 @@ func (s *IMTranscriptStore) DeliverFailure(ctx context.Context, turn channel.Tur
 	if err := contextError(ctx); err != nil {
 		return err
 	}
-	renderer := runtimebridge.NewTurnRenderer()
+	renderer := channelrender.NewTurnRenderer()
 	renderer.SetLocale(turn.Locale)
 	renderer.SetPromptError(internalError)
 	publicError := renderer.PromptError()
@@ -190,7 +190,7 @@ func (s *IMTranscriptStore) DeliverFailure(ctx context.Context, turn channel.Tur
 	}
 	metadata := transcriptMetadata("final", turn, nil)
 	metadata = mergeCSGClawMetadata(metadata, map[string]any{
-		runtimebridge.RuntimeErrorMetaKey: true,
+		channelrender.RuntimeErrorMetaKey: true,
 		"error_code":                      publicError.Code,
 		"presentation_version":            2,
 	})
@@ -414,7 +414,7 @@ func mergeCSGClawMetadata(metadata map[string]any, values map[string]any) map[st
 	if out == nil {
 		out = make(map[string]any)
 	}
-	namespace, _ := out[runtimebridge.CSGClawMetadataKey].(map[string]any)
+	namespace, _ := out[channelrender.CSGClawMetadataKey].(map[string]any)
 	namespace = cloneMetadata(namespace)
 	if namespace == nil {
 		namespace = make(map[string]any)
@@ -422,7 +422,7 @@ func mergeCSGClawMetadata(metadata map[string]any, values map[string]any) map[st
 	for key, value := range values {
 		namespace[key] = value
 	}
-	out[runtimebridge.CSGClawMetadataKey] = namespace
+	out[channelrender.CSGClawMetadataKey] = namespace
 	return out
 }
 

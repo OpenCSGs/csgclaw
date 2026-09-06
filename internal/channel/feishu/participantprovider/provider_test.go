@@ -1,13 +1,12 @@
 package participantprovider
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/participant"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/participant"
 )
 
 func TestProviderReadsBotAndAdminConfigFromParticipants(t *testing.T) {

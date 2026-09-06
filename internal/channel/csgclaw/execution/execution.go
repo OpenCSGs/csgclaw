@@ -12,7 +12,6 @@ import (
 	"csgclaw/internal/channel/csgclaw/conv"
 	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/channel/csgclaw/files"
-	"csgclaw/internal/channelbridge"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/slashcommand"
 	"csgclaw/internal/worklease"
@@ -98,11 +97,11 @@ func New(engine Engine, renderer delivery.Renderer, opts ...Option) (*Adapter, e
 }
 
 // Classify reports whether a source event should run, reset, or be skipped.
-func Classify(event channelbridge.BotEvent) string {
+func Classify(event channel.Event) string {
 	return string(classifyInbound(event))
 }
 
-func classifyInbound(event channelbridge.BotEvent) inboundKind {
+func classifyInbound(event channel.Event) inboundKind {
 	text := strings.TrimSpace(event.Text)
 	if cmd, ok, err := slashcommand.Parse(text); err == nil && ok && slashcommand.IsNewConversationCommand(cmd) {
 		return inboundReset
@@ -115,7 +114,7 @@ func classifyInbound(event channelbridge.BotEvent) inboundKind {
 
 // Handle classifies an already-routed source event and either runs a turn or
 // invokes the available Engine control capability.
-func (a *Adapter) Handle(ctx context.Context, binding channel.Binding, event channelbridge.BotEvent) (channel.Outcome, error) {
+func (a *Adapter) Handle(ctx context.Context, binding channel.Binding, event channel.Event) (channel.Outcome, error) {
 	switch classifyInbound(event) {
 	case inboundSkip:
 		return channel.Outcome{}, nil
@@ -168,7 +167,7 @@ func (a *Adapter) conversation(agentID string) (agentengine.ConversationInterfac
 	return conversation, nil
 }
 
-func (a *Adapter) reset(ctx context.Context, binding channel.Binding, event channelbridge.BotEvent) (outcome channel.Outcome, err error) {
+func (a *Adapter) reset(ctx context.Context, binding channel.Binding, event channel.Event) (outcome channel.Outcome, err error) {
 	turn, err := a.turnContext(binding, event)
 	if err != nil {
 		return channel.Outcome{}, err
@@ -193,7 +192,7 @@ func (a *Adapter) reset(ctx context.Context, binding channel.Binding, event chan
 }
 
 // Run executes one already-routed and already-deduplicated built-in IM event.
-func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channelbridge.BotEvent) (outcome channel.Outcome, err error) {
+func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channel.Event) (outcome channel.Outcome, err error) {
 	turn, err := a.turnContext(binding, event)
 	if err != nil {
 		return channel.Outcome{}, err
@@ -233,7 +232,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	return a.complete(ctx, turn, result)
 }
 
-func (a *Adapter) turnContext(binding channel.Binding, event channelbridge.BotEvent) (channel.TurnContext, error) {
+func (a *Adapter) turnContext(binding channel.Binding, event channel.Event) (channel.TurnContext, error) {
 	if a == nil || a.engine == nil {
 		return channel.TurnContext{}, fmt.Errorf("built-in IM adapter is not configured")
 	}
@@ -271,7 +270,7 @@ func (a *Adapter) turnContext(binding channel.Binding, event channelbridge.BotEv
 	}, nil
 }
 
-func (a *Adapter) input(ctx context.Context, binding channel.Binding, event channelbridge.BotEvent) ([]agentengine.InputPart, func(), error) {
+func (a *Adapter) input(ctx context.Context, binding channel.Binding, event channel.Event) ([]agentengine.InputPart, func(), error) {
 	if a.attachments == nil && len(event.Attachments) > 0 {
 		return nil, nil, fmt.Errorf("attachment resolver is not configured")
 	}
@@ -326,7 +325,7 @@ func failed(code agentengine.ErrorCode, message string) agentengine.TurnResult {
 	}
 }
 
-func sourceTurnID(binding channel.Binding, event channelbridge.BotEvent) agentengine.TurnID {
+func sourceTurnID(binding channel.Binding, event channel.Event) agentengine.TurnID {
 	identity := string(binding.StableID()) + "\x00" + strings.TrimSpace(event.MessageID)
 	sum := sha256.Sum256([]byte(identity))
 	return agentengine.TurnID("turn-csgclaw-" + hex.EncodeToString(sum[:16]))

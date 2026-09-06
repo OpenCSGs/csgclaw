@@ -114,15 +114,17 @@ export type AgentRuntimeAvailabilityLike = {
 };
 
 export type AgentLarkCLIStatus = {
+  cleanup_pending?: boolean;
   bound?: boolean | null;
   available?: boolean | null;
   state?: string | null;
   error?: string | null;
-  executable_path?: string | null;
   app_id?: string | null;
-  config_dir?: string | null;
-  config_path?: string | null;
-  source_config_path?: string | null;
+  generation?: number | null;
+  observed_generation?: number | null;
+  runtime_loaded?: boolean | null;
+  reason?: string | null;
+  checked_at?: string | null;
   bound_at?: string | null;
 };
 

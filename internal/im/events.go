@@ -82,13 +82,10 @@ func (b *Bus) Publish(evt Event) {
 		return
 	}
 	b.mu.Lock()
-	targets := make([]chan Event, 0, len(b.subscribers))
-	for _, ch := range b.subscribers {
-		targets = append(targets, ch)
-	}
-	b.mu.Unlock()
+	defer b.mu.Unlock()
 
-	for _, ch := range targets {
+	// Cancellation closes channels under the same lock. Sends never block.
+	for _, ch := range b.subscribers {
 		select {
 		case ch <- evt:
 		default:

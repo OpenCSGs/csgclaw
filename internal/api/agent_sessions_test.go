@@ -3,6 +3,12 @@ package api
 import (
 	"bytes"
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentengine/enginetest"
+	"csgclaw/internal/agentsession"
+	"csgclaw/internal/config"
+	"csgclaw/internal/im"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,13 +19,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
-	"csgclaw/internal/agentengine/enginetest"
-	"csgclaw/internal/agentsession"
-	"csgclaw/internal/config"
-	"csgclaw/internal/im"
 )
 
 type fakeSessionEngine struct {
@@ -34,6 +33,10 @@ func (e *fakeSessionEngine) Agents() agentengine.AgentInterface {
 
 func (e *fakeSessionEngine) Conversations(agentID string) agentengine.ConversationInterface {
 	return fakeSessionConversations{engine: e, delegate: e.client.Conversations(agentID)}
+}
+
+func (e *fakeSessionEngine) RuntimeExtensions(agentID string) agentengine.RuntimeExtensionInterface {
+	return e.client.RuntimeExtensions(agentID)
 }
 
 type fakeSessionConversations struct {
@@ -514,7 +517,7 @@ func newAgentSessionTestHandler(
 	if err := os.WriteFile(agentPath, append(data, '\n'), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	agentSvc, err := agent.NewService(
+	agentSvc, err := agent.NewController(
 		config.ModelConfig{}, config.ServerConfig{}, "manager:test", agentPath,
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
@@ -541,7 +544,7 @@ func newAgentSessionTestHandler(
 		t.Fatal(err)
 	}
 	imSvc := im.NewServiceFromBootstrap(im.Bootstrap{CurrentUserID: im.AdminUserID, Users: []im.User{{ID: im.AdminUserID, Name: "admin", Role: "admin"}}})
-	handler := NewHandler(agentSvc, imSvc, nil, im.NewParticipantBridge(""), nil, nil)
+	handler := NewHandler(AgentServices{Records: agentSvc, Workspace: agentSvc.Workspace(), Models: agentSvc.Models(), Runtime: agentSvc}, agentengine.New(agentSvc), imSvc, nil, im.NewParticipantBridge(""), nil, nil)
 	handler.SetAgentEngine(engine, bindings)
 	return handler, imSvc, bindings, bindingPath
 }
@@ -556,4 +559,8 @@ func performAgentSessionRequest(t *testing.T, handler *Handler, agentSelector, s
 	recorder := httptest.NewRecorder()
 	handler.Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, bytes.NewReader(payload)))
 	return recorder
+}
+
+func (fakeSessionConversations) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
+	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

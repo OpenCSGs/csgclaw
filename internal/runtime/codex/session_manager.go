@@ -1,18 +1,14 @@
 package codex
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
-)
-
-const (
-	larkCLIConfigDirName = "lark-cli"
-	larkCLISourceDirName = "lark-cli-source"
 )
 
 type liveSession struct {
@@ -44,7 +40,6 @@ type liveSession struct {
 	streamedAgentMessages map[string]struct{}
 	streamedAgentThreads  map[string]struct{}
 	agentMessagePhases    map[string]string
-	inferredAgentPhases   map[string]struct{}
 	agentMessageStreams   map[string]*assistantStructuredOutputStream
 	appProtocol           string
 }
@@ -100,15 +95,6 @@ func buildSessionEnv(spec SessionSpec) []string {
 		envMap["HOME"] = homeDir
 	}
 	envMap["CODEX_HOME"] = spec.CodexHomeDir
-	if codexHomeDir := strings.TrimSpace(spec.CodexHomeDir); codexHomeDir != "" {
-		if hasFeishuLarkCLIBinding(codexHomeDir, os.Stat) {
-			envMap["LARKSUITE_CLI_CONFIG_DIR"] = larkCLIConfigDir(codexHomeDir)
-			envMap["LARK_CHANNEL"] = "1"
-			envMap["LARK_CHANNEL_HOME"] = codexHomeDir
-			envMap["LARK_CHANNEL_PROFILE"] = strings.TrimSpace(spec.AgentID)
-			envMap["LARK_CHANNEL_CONFIG"] = larkCLISourceConfigPath(codexHomeDir)
-		}
-	}
 	if apiKey := spec.Profile.APIKey; apiKey != "" {
 		envMap["OPENAI_API_KEY"] = apiKey
 	}
@@ -153,32 +139,6 @@ func isReservedSessionEnvKey(key string) bool {
 	}
 }
 
-func larkCLIConfigDir(codexHomeDir string) string {
-	return filepath.Join(codexHomeDir, larkCLIConfigDirName)
-}
-
-func larkCLISourceConfigPath(codexHomeDir string) string {
-	return filepath.Join(codexHomeDir, larkCLISourceDirName, "config.json")
-}
-
-func larkCLIBindMarkerPath(codexHomeDir string) string {
-	return filepath.Join(codexHomeDir, larkCLISourceDirName, "bound.json")
-}
-
-func hasFeishuLarkCLIBinding(codexHomeDir string, stat func(string) (os.FileInfo, error)) bool {
-	codexHomeDir = strings.TrimSpace(codexHomeDir)
-	if codexHomeDir == "" || stat == nil {
-		return false
-	}
-	for _, path := range []string{larkCLISourceConfigPath(codexHomeDir), larkCLIBindMarkerPath(codexHomeDir)} {
-		info, err := stat(path)
-		if err != nil || info.IsDir() {
-			return false
-		}
-	}
-	return true
-}
-
 func uniqueStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil
@@ -197,4 +157,49 @@ func uniqueStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func buildSessionEnvironment(spec SessionSpec) ([]string, map[string]string, error) {
+	base := buildSessionEnv(spec)
+	if strings.TrimSpace(spec.CodexHomeDir) == "" {
+		return base, nil, nil
+	}
+	store, err := extensionStore(spec.CodexHomeDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	projections, err := store.List()
+	if err != nil {
+		return nil, nil, err
+	}
+	values := make(map[string]string, len(base))
+	for _, entry := range base {
+		key, value, _ := strings.Cut(entry, "=")
+		values[key] = value
+	}
+	contributed := make(map[string]string)
+	digests := make(map[string]string, len(projections))
+	for _, projection := range projections {
+		for key, value := range projection.Environment {
+			if previous, ok := contributed[key]; ok && previous != value {
+				return nil, nil, fmt.Errorf("conflicting extension environment key %q", key)
+			}
+			if previous, ok := spec.Profile.Env[key]; ok && previous != value {
+				return nil, nil, fmt.Errorf("extension environment key %q conflicts with the Agent profile", key)
+			}
+			contributed[key] = value
+			values[key] = value
+		}
+		digests[projection.Name] = projection.Digest
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, key+"="+values[key])
+	}
+	return out, digests, nil
 }

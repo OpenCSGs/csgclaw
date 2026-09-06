@@ -344,6 +344,16 @@ Do not use the generic manager recreate endpoint or any terminal/host-side manag
 
 ## Common Pitfalls
 
+### Creating a Feishu worker room
+
+When the user asks for a group containing workers, keep the human requester as `--creator-id`.
+Include `manager` plus the requested worker participant IDs in `--member-ids`.
+Use the actual requester instead of `admin` when different, and replace `<worker-participant-id>` with IDs from `participant list`.
+
+```bash
+csgclaw-cli room create --title worker-group --creator-id admin --member-ids manager,<worker-participant-id> --channel feishu
+```
+
 1. Using `csgclaw-cli agent ...`: lite CLI does not have agent commands. Use full `csgclaw` or API.
 2. Running host-only commands from inside manager: manager usually only has `csgclaw-cli`; use this script/API from manager, and ask the host operator to clean stale runtime state if needed.
 3. If you see older workflow docs mentioning alternate Feishu config commands, ignore them and use `csgclaw-cli participant bind ...` to write config.

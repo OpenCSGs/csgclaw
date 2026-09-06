@@ -1,7 +1,7 @@
 package participant
 
 import (
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	hub "csgclaw/internal/template"
 )

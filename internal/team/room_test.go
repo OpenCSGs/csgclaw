@@ -1,10 +1,9 @@
 package team
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
 	"strings"
 	"testing"
-
-	"csgclaw/internal/agent"
 )
 
 func TestTaskExecutionRoomTitleIncludesTaskID(t *testing.T) {

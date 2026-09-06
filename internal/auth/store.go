@@ -170,20 +170,11 @@ func (s Store) Save(record Record) error {
 		return fmt.Errorf("auth base url is required")
 	}
 	if localstore.IsRootStatePath(path) {
-		authState, _, err := readRootAuthState(path)
-		if err != nil {
-			return err
-		}
-		openCSG := openCSGAuthRecord{}
-		if existing, ok := authState[openCSGAuthKey]; ok && len(existing) > 0 {
-			if err := json.Unmarshal(existing, &openCSG); err != nil {
-				return fmt.Errorf("decode root opencsg auth: %w", err)
-			}
-		}
-		openCSG.Tokens = record.Tokens
-		openCSG.Account = record.Account
-		openCSG.LastRefresh = record.LastRefresh
-		if err := setRootOpenCSGAuth(path, authState, openCSG); err != nil {
+		if err := updateRootOpenCSGAuth(path, func(openCSG *openCSGAuthRecord) {
+			openCSG.Tokens = record.Tokens
+			openCSG.Account = record.Account
+			openCSG.LastRefresh = record.LastRefresh
+		}); err != nil {
 			return fmt.Errorf("write auth store: %w", err)
 		}
 		return nil
@@ -200,15 +191,10 @@ func (s Store) Delete() error {
 		return err
 	}
 	if localstore.IsRootStatePath(path) {
-		authState, found, err := readRootAuthState(path)
-		if err != nil {
-			return err
-		}
-		if !found {
+		if err := localstore.UpdateObjectSection(path, rootAuthSectionName, func(authState map[string]json.RawMessage) error {
+			delete(authState, openCSGAuthKey)
 			return nil
-		}
-		delete(authState, openCSGAuthKey)
-		if err := localstore.WriteSection(path, rootAuthSectionName, authState); err != nil {
+		}); err != nil {
 			return fmt.Errorf("delete auth store: %w", err)
 		}
 		return nil
@@ -299,19 +285,10 @@ func (s Store) SaveCSGHubProviderCredentials(credentials CSGHubProviderCredentia
 		}
 	}
 	if localstore.IsRootStatePath(path) {
-		authState, _, err := readRootAuthState(path)
-		if err != nil {
-			return err
-		}
-		openCSG := openCSGAuthRecord{}
-		if existing, ok := authState[openCSGAuthKey]; ok && len(existing) > 0 {
-			if err := json.Unmarshal(existing, &openCSG); err != nil {
-				return fmt.Errorf("decode root opencsg auth: %w", err)
-			}
-		}
-		openCSG.AIGatewayBaseURL = credentials.AIGatewayBaseURL
-		openCSG.AIGatewayBuiltinAPIKey = credentials.AIGatewayBuiltinAPIKey
-		if err := setRootOpenCSGAuth(path, authState, openCSG); err != nil {
+		if err := updateRootOpenCSGAuth(path, func(openCSG *openCSGAuthRecord) {
+			openCSG.AIGatewayBaseURL = credentials.AIGatewayBaseURL
+			openCSG.AIGatewayBuiltinAPIKey = credentials.AIGatewayBuiltinAPIKey
+		}); err != nil {
 			return fmt.Errorf("write csghub provider auth store: %w", err)
 		}
 		return nil
@@ -415,16 +392,22 @@ func readRootAuthState(path string) (map[string]json.RawMessage, bool, error) {
 	return authState, found, nil
 }
 
-func setRootOpenCSGAuth(path string, authState map[string]json.RawMessage, state openCSGAuthRecord) error {
-	if authState == nil {
-		authState = make(map[string]json.RawMessage)
-	}
-	raw, err := json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("encode root opencsg auth: %w", err)
-	}
-	authState[openCSGAuthKey] = raw
-	return localstore.WriteSection(path, rootAuthSectionName, authState)
+func updateRootOpenCSGAuth(path string, update func(*openCSGAuthRecord)) error {
+	return localstore.UpdateObjectSection(path, rootAuthSectionName, func(authState map[string]json.RawMessage) error {
+		state := openCSGAuthRecord{}
+		if existing := authState[openCSGAuthKey]; len(existing) > 0 {
+			if err := json.Unmarshal(existing, &state); err != nil {
+				return fmt.Errorf("decode root opencsg auth: %w", err)
+			}
+		}
+		update(&state)
+		raw, err := json.Marshal(state)
+		if err != nil {
+			return fmt.Errorf("encode root opencsg auth: %w", err)
+		}
+		authState[openCSGAuthKey] = raw
+		return nil
+	})
 }
 
 func (r openCSGAuthRecord) Record() Record {

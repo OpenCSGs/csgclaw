@@ -2,23 +2,22 @@ package onboard
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"strings"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	hub "csgclaw/internal/template"
+	"fmt"
+	"os"
+	"strings"
 )
 
 var (
 	loadIMBootstrap      = im.LoadBootstrap
 	openParticipantStore = participant.NewStore
 	openAgentState       = func(cfg config.Config, path, managerImage string) (agentStateReader, error) {
-		return agent.NewServiceWithLLM(
+		return agent.NewControllerWithLLM(
 			effectiveLLMConfig(cfg),
 			cfg.Server,
 			managerImage,

@@ -3,19 +3,18 @@ package participant
 import (
 	"context"
 	"crypto/rand"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/im"
+	hub "csgclaw/internal/template"
+	"csgclaw/internal/utils"
 	"encoding/base32"
 	"fmt"
 	"maps"
 	"strings"
 	"time"
 	"unicode"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/im"
-	hub "csgclaw/internal/template"
-	"csgclaw/internal/utils"
 )
 
 type Service struct {
@@ -37,14 +36,6 @@ func NewService(store *Store, opts ...Option) *Service {
 		}
 	}
 	return s
-}
-
-func WithAgentService(agentSvc *agent.Service) Option {
-	return func(s *Service) {
-		if agentSvc != nil {
-			s.agents = agentengine.New(agentSvc).Agents()
-		}
-	}
 }
 
 func WithAgentEngine(engine agentengine.Interface) Option {

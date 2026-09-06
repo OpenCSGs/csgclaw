@@ -1,14 +1,13 @@
 package participant
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/apitypes"
 )
 
 func TestNewStoreMigratesLegacyBotsAndDeletesSource(t *testing.T) {

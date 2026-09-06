@@ -17,6 +17,12 @@ type Provisioner interface {
 	Provision(ctx context.Context, req ProvisionRequest) error
 }
 
+// HostConfigReconciler updates configuration without reseeding a workspace,
+// reinstalling Skills or rerunning base initialization.
+type HostConfigReconciler interface {
+	ReconcileHostConfig(context.Context, ProvisionRequest) error
+}
+
 // ProvisionRequest contains the narrow, preparation-oriented inputs that a
 // runtime may need before Runtime.New is called.
 //

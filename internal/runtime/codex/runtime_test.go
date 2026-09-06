@@ -3,6 +3,10 @@ package codex
 import (
 	"bytes"
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	agentruntime "csgclaw/internal/runtime"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
+	"csgclaw/internal/sandbox"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -15,10 +19,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/sandbox"
 
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -484,16 +484,7 @@ func TestRefreshCodexHomeAgentsFileAddsFeishuLarkCLIInstructionsWhenBound(t *tes
 		return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID, Instructions: "Prefer targeted tests."}, nil
 	})
 	codexHomeDir := filepath.Join(root, "agent-alice", ".codex", "home")
-	sourcePath := larkCLISourceConfigPath(codexHomeDir)
-	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(sourcePath, []byte("{}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(larkCLIBindMarkerPath(codexHomeDir), []byte("{}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	seedManagedLarkProjection(t, codexHomeDir, "agent-dev")
 
 	if err := rt.RefreshCodexHomeAgentsFile(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-alice"}); err != nil {
 		t.Fatalf("RefreshCodexHomeAgentsFile() error = %v", err)
@@ -527,7 +518,7 @@ func TestRefreshCodexHomeAgentsFileDoesNotAddFeishuLarkCLIInstructionsForSourceO
 		return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID, Instructions: "Prefer targeted tests."}, nil
 	})
 	codexHomeDir := filepath.Join(root, "agent-alice", ".codex", "home")
-	sourcePath := larkCLISourceConfigPath(codexHomeDir)
+	sourcePath := filepath.Join(codexHomeDir, "runtime-extensions", "feishu-lark-cli", "generation-staged", "source", "config.json")
 	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -867,7 +858,7 @@ func TestSyncWorkspaceAgentsFileRefreshesCodexHomeAgentsFileWithoutTouchingWorks
 	if err := os.MkdirAll(filepath.Dir(homeAgentsPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(homeAgentsPath, []byte("# User AGENTS\n\nKeep this.\n\n"+agent.RenderAgentsInstructionsBlock("Old instructions.")), 0o644); err != nil {
+	if err := os.WriteFile(homeAgentsPath, []byte("# User AGENTS\n\nKeep this.\n\n"+runtimeinstructions.RenderAgentsInstructionsBlock("Old instructions.")), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1089,30 +1080,27 @@ func TestBuildSessionEnvOnlyInjectsOpenAIAPIKey(t *testing.T) {
 
 func TestBuildSessionEnvInjectsLarkCLIOnlyWhenBound(t *testing.T) {
 	codexHomeDir := t.TempDir()
-	sourcePath := larkCLISourceConfigPath(codexHomeDir)
-	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(sourcePath, []byte("{}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(larkCLIBindMarkerPath(codexHomeDir), []byte("{}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	projection := seedManagedLarkProjection(t, codexHomeDir, "agent-dev")
 
-	env := buildSessionEnv(SessionSpec{
+	env, digests, err := buildSessionEnvironment(SessionSpec{
 		AgentID:      "agent-dev",
 		HomeDir:      "/host-home",
 		CodexHomeDir: codexHomeDir,
 		Profile:      agentruntime.Profile{APIKey: "runtime-key"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digests[projection.Name] != projection.Digest {
+		t.Fatal("loaded generation digest missing")
+	}
 	envMap := make(map[string]string, len(env))
 	for _, entry := range env {
 		key, value, _ := strings.Cut(entry, "=")
 		envMap[key] = value
 	}
 
-	if got, want := envMap["LARKSUITE_CLI_CONFIG_DIR"], filepath.Join(codexHomeDir, "lark-cli"); got != want {
+	if got, want := envMap["LARKSUITE_CLI_CONFIG_DIR"], projection.Environment["LARKSUITE_CLI_CONFIG_DIR"]; got != want {
 		t.Fatalf("LARKSUITE_CLI_CONFIG_DIR = %q, want %q", got, want)
 	}
 	if got, want := envMap["LARK_CHANNEL"], "1"; got != want {
@@ -1124,7 +1112,7 @@ func TestBuildSessionEnvInjectsLarkCLIOnlyWhenBound(t *testing.T) {
 	if got, want := envMap["LARK_CHANNEL_PROFILE"], "agent-dev"; got != want {
 		t.Fatalf("LARK_CHANNEL_PROFILE = %q, want %q", got, want)
 	}
-	if got, want := envMap["LARK_CHANNEL_CONFIG"], sourcePath; got != want {
+	if got, want := envMap["LARK_CHANNEL_CONFIG"], projection.Environment["LARK_CHANNEL_CONFIG"]; got != want {
 		t.Fatalf("LARK_CHANNEL_CONFIG = %q, want %q", got, want)
 	}
 }
@@ -1323,6 +1311,7 @@ func TestDeletePreservesDurableStateForRuntimeRecreate(t *testing.T) {
 	agentHome := filepath.Join(root, "agent-manager")
 	runtimeDir := filepath.Join(agentHome, ".codex")
 	codexHomeDir := filepath.Join(runtimeDir, homeDirName)
+	projection := seedManagedLarkProjection(t, codexHomeDir, "agent-manager")
 	preservedFiles := map[string]string{
 		filepath.Join(runtimeDir, workspaceDirName, "project.txt"):                                     "workspace state\n",
 		filepath.Join(runtimeDir, sessionFileName):                                                     `{"conversation_sessions":{"room":"thread"}}`,
@@ -1339,9 +1328,6 @@ func TestDeletePreservesDurableStateForRuntimeRecreate(t *testing.T) {
 		filepath.Join(runtimeDir, homeDirName, "rules", "default.rules"):                               "rules state\n",
 		filepath.Join(runtimeDir, homeDirName, "hooks.json"):                                           "hooks state\n",
 		filepath.Join(runtimeDir, homeDirName, "installation_id"):                                      "installation state\n",
-		filepath.Join(larkCLIConfigDir(codexHomeDir), "lark-channel", "config.json"):                   `{"app_id":"cli_manager"}`,
-		larkCLISourceConfigPath(codexHomeDir):                                                          `{"source":"lark-channel"}`,
-		larkCLIBindMarkerPath(codexHomeDir):                                                            `{"app_id":"cli_manager"}`,
 	}
 	ephemeralFiles := map[string]string{
 		filepath.Join(runtimeDir, homeDirName, configFileName):                  "features.memories = true\n",
@@ -1385,7 +1371,12 @@ func TestDeletePreservesDurableStateForRuntimeRecreate(t *testing.T) {
 			t.Fatalf("preserved file %s = %q, %v; want %q", path, raw, err, want)
 		}
 	}
-	if !hasFeishuLarkCLIBinding(codexHomeDir, os.Stat) {
+	store, err := extensionStore(codexHomeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preserved, found, err := store.Load(projection.Name)
+	if err != nil || !found || preserved.Digest != projection.Digest {
 		t.Fatal("Feishu lark-cli binding was not preserved across runtime recreate")
 	}
 	for path := range ephemeralFiles {
@@ -4144,4 +4135,20 @@ func TestRuntimeInfoMarksExitedAndFailedWhenProcessIsGone(t *testing.T) {
 			}
 		})
 	}
+}
+func seedManagedLarkProjection(t *testing.T, home, agentID string) agentruntime.ExtensionProjection {
+	t.Helper()
+	store, err := extensionStore(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	change, err := store.Stage("feishu-lark-cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	change.SetProjection(agentruntime.ExtensionProjection{Name: "feishu-lark-cli", Kind: "lark-cli", Generation: 1, SourceRevision: "source-v1", Environment: larkEnvironment(home, change.Directory(), agentID), Instructions: feishuLarkCLIManagedInstructions})
+	if err := change.Activate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return change.Projection()
 }

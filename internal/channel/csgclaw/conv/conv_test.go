@@ -4,16 +4,15 @@ import (
 	"testing"
 
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge"
 )
 
 func TestConversationKeySeparatesTopLevelAndThread(t *testing.T) {
 	binding := channel.Binding{ID: "binding-1", ParticipantID: "manager", AgentID: "u-manager"}
-	top, err := ConversationKey(binding, channelbridge.BotEvent{RoomID: "room-1"})
+	top, err := ConversationKey(binding, channel.Event{RoomID: "room-1"})
 	if err != nil {
 		t.Fatalf("top ConversationKey() error = %v", err)
 	}
-	thread, err := ConversationKey(binding, channelbridge.BotEvent{RoomID: "room-1", ThreadRootID: "root-1"})
+	thread, err := ConversationKey(binding, channel.Event{RoomID: "room-1", ThreadRootID: "root-1"})
 	if err != nil {
 		t.Fatalf("thread ConversationKey() error = %v", err)
 	}
@@ -24,7 +23,7 @@ func TestConversationKeySeparatesTopLevelAndThread(t *testing.T) {
 
 func TestShouldDispatch(t *testing.T) {
 	binding := channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}
-	event := channelbridge.BotEvent{MessageID: "m1", RoomID: "room-1", Text: "hello"}
+	event := channel.Event{MessageID: "m1", RoomID: "room-1", Text: "hello"}
 
 	if !ShouldDispatch(binding, event, "u-admin", RoomScope{Direct: true}) {
 		t.Fatal("direct room should dispatch")

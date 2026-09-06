@@ -116,7 +116,9 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 		m.handleRawTurnCompleted(runtimeID, live, threadID, params)
 	case "thread/status/changed":
 		if strings.EqualFold(appServerNestedString(params, "status", "type"), "idle") {
-			live.notifyAppServerTurn(threadID, appServerTurnResult{success: true, stopReason: StopReasonEndTurn, activity: "status:idle"})
+			// Thread status has no turn identity. Only turn/completed can release
+			// admission for the next prompt on this thread.
+			live.notifyAppServerTurn(threadID, appServerTurnResult{activity: "status:idle"})
 		}
 	case "error":
 		m.handleRawErrorNotification(runtimeID, live, threadID, params)
@@ -267,16 +269,13 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	switch {
 	case method == "item/started" && itemType == "agentMessage":
 		phase := appServerString(item, "phase")
-		inferred := false
 		if strings.TrimSpace(phase) == "" {
 			// Some OpenAI-compatible providers, including qwen3.6-plus,
 			// omit the Codex-specific phase field. A typed agentMessage item
-			// is still streamable assistant output, but the inferred phase must
-			// not complete the turn before a subsequent tool call.
+			// is still streamable assistant output.
 			phase = "final_answer"
-			inferred = true
 		}
-		live.setAgentMessagePhase(itemID, phase, inferred)
+		live.setAgentMessagePhase(itemID, phase)
 	case method == "item/started" && itemType == "commandExecution":
 		command := appServerString(item, "command")
 		m.publishAppServerEvent(SessionEvent{
@@ -418,7 +417,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 		})
 	case method == "item/completed" && itemType == "agentMessage":
 		defer live.clearAgentMessageState(itemID)
-		live.setAgentMessagePhase(itemID, appServerString(item, "phase"), false)
+		live.setAgentMessagePhase(itemID, appServerString(item, "phase"))
 		text := appServerString(item, "text")
 		cleanedText := m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, itemID, text, live)
 		if live.hasStreamedAgentMessage(itemID) {
@@ -430,14 +429,6 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 					MessageID: itemID,
 					Text:      remainder,
 					Payload:   item,
-				})
-			}
-			if appServerAgentMessageCompletesTurn(live, itemID, item) {
-				live.notifyAppServerTurn(threadID, appServerTurnResult{
-					success:    true,
-					stopReason: StopReasonEndTurn,
-					turnID:     appServerNotificationTurnID(params),
-					activity:   "agentMessage:completed:" + itemID,
 				})
 			}
 			return
@@ -452,14 +443,8 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 				Payload:   item,
 			})
 		}
-		if appServerAgentMessageCompletesTurn(live, itemID, item) {
-			live.notifyAppServerTurn(threadID, appServerTurnResult{
-				success:    true,
-				stopReason: StopReasonEndTurn,
-				turnID:     appServerNotificationTurnID(params),
-				activity:   "agentMessage:completed:" + itemID,
-			})
-		}
+		// A final-answer item can precede native turn completion. Keep the
+		// waiter active until turn/completed so turn/start cannot steer it.
 	}
 }
 
@@ -471,15 +456,7 @@ func cloneAppServerParams(params map[string]any) map[string]any {
 	return cloned
 }
 
-func appServerAgentMessageCompletesTurn(live *liveSession, itemID string, item map[string]any) bool {
-	phase := strings.TrimSpace(strings.ToLower(appServerString(item, "phase")))
-	if phase == "" && live != nil {
-		phase = live.explicitAgentMessagePhase(itemID)
-	}
-	return phase == "final_answer"
-}
-
-func (s *liveSession) setAgentMessagePhase(itemID, phase string, inferred bool) {
+func (s *liveSession) setAgentMessagePhase(itemID, phase string) {
 	itemID = strings.TrimSpace(itemID)
 	phase = strings.TrimSpace(strings.ToLower(phase))
 	if itemID == "" || phase == "" {
@@ -491,14 +468,6 @@ func (s *liveSession) setAgentMessagePhase(itemID, phase string, inferred bool) 
 		s.agentMessagePhases = make(map[string]string)
 	}
 	s.agentMessagePhases[itemID] = phase
-	if inferred {
-		if s.inferredAgentPhases == nil {
-			s.inferredAgentPhases = make(map[string]struct{})
-		}
-		s.inferredAgentPhases[itemID] = struct{}{}
-	} else {
-		delete(s.inferredAgentPhases, itemID)
-	}
 }
 
 func (s *liveSession) agentMessagePhase(itemID string) string {
@@ -511,19 +480,6 @@ func (s *liveSession) agentMessagePhase(itemID string) string {
 	return s.agentMessagePhases[itemID]
 }
 
-func (s *liveSession) explicitAgentMessagePhase(itemID string) string {
-	itemID = strings.TrimSpace(itemID)
-	if itemID == "" {
-		return ""
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, inferred := s.inferredAgentPhases[itemID]; inferred {
-		return ""
-	}
-	return s.agentMessagePhases[itemID]
-}
-
 func (s *liveSession) clearAgentMessageState(itemID string) {
 	itemID = strings.TrimSpace(itemID)
 	if itemID == "" {
@@ -531,7 +487,6 @@ func (s *liveSession) clearAgentMessageState(itemID string) {
 	}
 	s.mu.Lock()
 	delete(s.agentMessagePhases, itemID)
-	delete(s.inferredAgentPhases, itemID)
 	delete(s.streamedAgentMessages, itemID)
 	delete(s.agentMessageStreams, itemID)
 	s.mu.Unlock()

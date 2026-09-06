@@ -207,6 +207,41 @@ describe("useTaskController", () => {
     expect(fetchGlobalTasks).toHaveBeenCalledTimes(1);
   });
 
+  it("recovers task polling after a transient HTTP failure", async () => {
+    vi.useFakeTimers();
+    const queryClient = createQueryClient();
+    const activeTask = task({ status: "in_progress" });
+    queryClient.setQueryData(TASKS_QUERY_KEY, [activeTask]);
+    vi.mocked(fetchGlobalTasks)
+      .mockRejectedValueOnce(new Error("Temporary HTTP 503"))
+      .mockResolvedValue([task({ status: "completed" })]);
+    const { result, unmount } = renderTaskController(queryClient, {
+      type: WorkspacePaneTypes.task,
+      id: activeTask.id,
+    });
+    try {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(fetchGlobalTasks).toHaveBeenCalledTimes(1);
+      expect(result.current.tasks[0].status).toBe("in_progress");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3001);
+      });
+      expect(fetchGlobalTasks).toHaveBeenCalledTimes(2);
+      expect(result.current.tasks[0].status).toBe("completed");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6000);
+      });
+      expect(fetchGlobalTasks).toHaveBeenCalledTimes(2);
+    } finally {
+      unmount();
+      queryClient.clear();
+      vi.useRealTimers();
+    }
+  });
+
   it("refreshes scheduled task state while background task polling is active in the scheduled view", async () => {
     vi.useFakeTimers();
     try {

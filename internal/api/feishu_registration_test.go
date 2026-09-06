@@ -2,6 +2,11 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/participant"
+	agentruntime "csgclaw/internal/runtime"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,11 +18,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/participant"
-	agentruntime "csgclaw/internal/runtime"
 )
 
 func TestCreateFeishuRegistrationStoresSafeState(t *testing.T) {
@@ -26,11 +26,12 @@ func TestCreateFeishuRegistrationStoresSafeState(t *testing.T) {
 	withFeishuRegistrationAccountsBaseURL(t, accounts.URL)
 
 	agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")})
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		channelBindings:            noOpChannelBindingReconciler{},
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	rec := httptest.NewRecorder()
@@ -88,11 +89,12 @@ func TestFinalizeFeishuRegistrationBindsWorkerParticipant(t *testing.T) {
 		Name:            "admin",
 		ChannelUserRef:  "ou_old_admin",
 		ChannelUserKind: participant.ChannelUserKindOpenID,
-	}}), participant.WithAgentService(agentSvc))
+	}}), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		channelBindings:            noOpChannelBindingReconciler{},
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
 
@@ -176,17 +178,28 @@ func TestFinalizeFeishuRegistrationConfiguresAvailableLarkCLIForCodexWorker(t *t
 	worker := completeWorkerAgent("u-dev", "dev")
 	worker.RuntimeKind = agent.RuntimeKindCodex
 	bridge := &fakeCodexBridgeController{}
+	var runtimeStarts, runtimeStops int
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{worker},
-		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
-		agent.WithBindingActivator(bridge),
+		agent.WithRuntime(fakeCompatRuntime{
+			kind: agent.RuntimeKindCodex,
+			start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+				runtimeStarts++
+				return agentruntime.StateRunning, nil
+			},
+			stop: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+				runtimeStops++
+				return agentruntime.StateStopped, nil
+			},
+		}),
 	)
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
+		channelBindings:            bridge,
 		serverAccessToken:          "server-secret",
 		internalBaseURL:            "http://csgclaw.test",
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
 
@@ -205,6 +218,9 @@ func TestFinalizeFeishuRegistrationConfiguresAvailableLarkCLIForCodexWorker(t *t
 	}
 	if len(bridge.refreshCalls) != 1 || bridge.refreshCalls[0].agent.ID != "agent-dev" {
 		t.Fatalf("RefreshAgentChannel() calls = %+v, want agent-dev once", bridge.refreshCalls)
+	}
+	if runtimeStarts != 1 || runtimeStops != 1 {
+		t.Fatalf("automatic Feishu connection must reload once: starts=%d stops=%d", runtimeStarts, runtimeStops)
 	}
 
 	recordRaw, err := os.ReadFile(recordPath)
@@ -258,14 +274,14 @@ func TestFinalizeFeishuRegistrationKeepsConnectionWhenLarkCLIUnavailable(t *test
 	bridge := &fakeCodexBridgeController{}
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{worker},
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
-		agent.WithBindingActivator(bridge),
 	)
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
+		channelBindings:            bridge,
 		serverAccessToken:          "server-secret",
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
 
@@ -342,14 +358,14 @@ func TestFinalizeFeishuRegistrationReportsLarkCLIBindFailure(t *testing.T) {
 	bridge := &fakeCodexBridgeController{}
 	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{worker},
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
-		agent.WithBindingActivator(bridge),
 	)
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
+		channelBindings:            bridge,
 		serverAccessToken:          "server-secret",
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
 
@@ -397,11 +413,12 @@ func TestFinalizeFeishuRegistrationRejectsBotAppIDUsedByAnotherWorker(t *testing
 		AgentID:         "agent-dev",
 		LifecycleStatus: participant.LifecycleStatusActive,
 		Mentionable:     true,
-	}}), participant.WithAgentService(agentSvc))
+	}}), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		channelBindings:            noOpChannelBindingReconciler{},
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, "u-qa")
 
@@ -440,11 +457,12 @@ func TestFinalizeFeishuRegistrationDoesNotUpdateCanonicalAdminForWorker(t *testi
 		Name:            "admin",
 		ChannelUserRef:  "ou_old_admin",
 		ChannelUserKind: participant.ChannelUserKindOpenID,
-	}}), participant.WithAgentService(agentSvc))
+	}}), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		channelBindings:            noOpChannelBindingReconciler{},
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
 
@@ -497,14 +515,13 @@ func TestFinalizeFeishuRegistrationResolvesAdminNameFromFeishuOpenAPI(t *testing
 	manager.Role = agent.RoleManager
 	manager.RuntimeKind = agent.RuntimeKindCodex
 	bridge := &fakeCodexBridgeController{}
-	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager},
-		agent.WithBindingActivator(bridge),
-	)
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager})
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		channelBindings:            bridge,
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, agent.ManagerUserID)
 
@@ -530,11 +547,11 @@ func TestFinalizeFeishuRegistrationPendingDoesNotBind(t *testing.T) {
 	withFeishuRegistrationAccountsBaseURL(t, accounts.URL)
 
 	agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")})
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
 
@@ -556,11 +573,11 @@ func TestCreateFeishuRegistrationConflictsWithActiveRegistration(t *testing.T) {
 	withFeishuRegistrationAccountsBaseURL(t, accounts.URL)
 
 	agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")})
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	firstID := startFeishuRegistrationForTest(t, srv, "u-dev")
 
@@ -600,11 +617,11 @@ func TestFinalizeFeishuRegistrationDeniedAndExpiredDoNotBind(t *testing.T) {
 			withFeishuRegistrationNow(t, time.Date(2026, 6, 16, 8, 0, 0, 0, time.UTC))
 
 			agentSvc, _ := mustNewSeededServiceWithPath(t, []agent.Agent{completeWorkerAgent("u-dev", "dev")})
-			participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+			participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 			srv := &Handler{
 				svc:                        agentSvc,
 				participant:                participantSvc,
-				feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+				feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 			}
 			registrationID := startFeishuRegistrationForTest(t, srv, "u-dev")
 			if tc.expire {
@@ -640,15 +657,13 @@ func TestFinalizeFeishuRegistrationBindsManagerAdminHuman(t *testing.T) {
 	manager.Role = agent.RoleManager
 	manager.RuntimeKind = agent.RuntimeKindCodex
 	bridge := &fakeCodexBridgeController{}
-	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager},
-		agent.WithLifecycleObserver(bridge),
-		agent.WithBindingActivator(bridge),
-	)
-	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentService(agentSvc))
+	agentSvc, _ := mustNewSeededServiceWithPathAndOptions(t, []agent.Agent{manager})
+	participantSvc := participant.NewService(participant.NewMemoryStore(nil), participant.WithAgentEngine(agentengine.New(agentSvc)))
 	srv := &Handler{
 		svc:                        agentSvc,
 		participant:                participantSvc,
-		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"),
+		channelBindings:            bridge,
+		feishuRegistrationStateDir: filepath.Join(t.TempDir(), "registrations"), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 	registrationID := startFeishuRegistrationForTest(t, srv, agent.ManagerUserID)
 

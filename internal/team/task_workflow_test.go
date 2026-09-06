@@ -2,10 +2,9 @@ package team
 
 import (
 	"context"
-	"testing"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/im"
+	"testing"
 )
 
 func TestCreateTasksWithExecutionRoomBindsParentOnCreate(t *testing.T) {

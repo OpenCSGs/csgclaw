@@ -1,6 +1,10 @@
 package sandboxproviders
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandbox/boxlitecli"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,11 +13,6 @@ import (
 	"strings"
 	"testing"
 	"unsafe"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	"csgclaw/internal/sandbox"
-	"csgclaw/internal/sandbox/boxlitecli"
 )
 
 func TestBoxLiteProviderFactoryUsesDefaultResolvedPath(t *testing.T) {
@@ -120,9 +119,9 @@ func TestBoxLiteProviderFactoryAcceptsBundledBinaryWithoutPATHLookup(t *testing.
 	}
 }
 
-func sandboxProviderFromOption(t *testing.T, opt agent.ServiceOption) sandbox.Provider {
+func sandboxProviderFromOption(t *testing.T, opt agent.ControllerOption) sandbox.Provider {
 	t.Helper()
-	svc := &agent.Service{}
+	svc := &agent.Controller{}
 	if err := opt(svc); err != nil {
 		t.Fatalf("ServiceOption() error = %v", err)
 	}

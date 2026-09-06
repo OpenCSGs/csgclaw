@@ -1,5 +1,5 @@
-// Package interaction connects Agent Engine interaction events to the existing
-// built-in IM question UI and Codex user-input broker.
+// Package interaction maps Channel UI identities to Engine-owned interactions.
+// It owns transcript routing and continuation delivery, never Runtime requests.
 package interaction
 
 import (
@@ -15,301 +15,276 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channel/csgclaw/delivery"
-	"csgclaw/internal/channelbridge"
-	"csgclaw/internal/channelbridge/runtimebridge"
-	"csgclaw/internal/participant"
-	runtimecodex "csgclaw/internal/runtime/codex"
 )
 
 type participantResolver interface {
 	Get(channel, id string) (apitypes.Participant, bool)
 }
-
 type eventSubmitter interface {
-	Submit(channel.Binding, channelbridge.BotEvent) error
+	Submit(channel.Binding, channel.Event) error
 	IsCurrent(channel.BindingID, agentengine.ConversationKey, string) bool
 }
-
-type agentProvider interface {
-	Get(context.Context, string, agentengine.AgentGetOptions) (agentengine.Agent, error)
+type route struct {
+	turn        channel.TurnContext
+	requesterID string
+	detached    bool
 }
 
-type sessionResolver interface {
-	ExistingEngineSession(context.Context, string, string) (string, bool, error)
-}
-
-type Option func(*Coordinator)
-
-// WithRuntimeIdentity lets detached requests participate in the same
-// Runtime/session cancellation lifecycle as native Codex interactions.
-func WithRuntimeIdentity(agents agentProvider, sessions sessionResolver) Option {
-	return func(coordinator *Coordinator) {
-		coordinator.agents = agents
-		coordinator.sessions = sessions
-	}
-}
-
-type detachedRequest struct {
-	turn    channel.TurnContext
-	binding channel.Binding
-}
-
-// Coordinator binds blocking Runtime interactions and activates detached
-// request_user_input structured outputs. It intentionally reuses the existing
-// broker and Web APIs instead of adding an Engine-specific browser endpoint.
+// Coordinator stores only the trusted UI-to-Engine route. Pending state,
+// validation, duplicate decisions, expiry and cancellation belong to Engine.
 type Coordinator struct {
-	broker       runtimecodex.UserInputBroker
+	engine       agentengine.Interface
 	participants participantResolver
-	store        *delivery.IMTranscriptStore
-	agents       agentProvider
-	sessions     sessionResolver
-
-	mu        sync.Mutex
-	submitter eventSubmitter
-	requests  map[string]detachedRequest
+	mu           sync.Mutex
+	routes       map[string]route
+	submitter    eventSubmitter
+	lastPrune    time.Time
 }
 
-func NewCoordinator(
-	broker runtimecodex.UserInputBroker,
-	participants participantResolver,
-	store *delivery.IMTranscriptStore,
-	opts ...Option,
-) *Coordinator {
-	if broker == nil || participants == nil || store == nil {
+func NewCoordinator(engine agentengine.Interface, participants participantResolver) *Coordinator {
+	if engine == nil || participants == nil {
 		return nil
 	}
-	coordinator := &Coordinator{
-		broker:       broker,
-		participants: participants,
-		store:        store,
-		requests:     make(map[string]detachedRequest),
-	}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(coordinator)
-		}
-	}
-	broker.AddDetachedHandler(coordinator.handleDetachedResolution)
-	return coordinator
+	return &Coordinator{engine: engine, participants: participants, routes: make(map[string]route)}
 }
-
 func (c *Coordinator) SetSubmitter(submitter eventSubmitter) {
-	if c == nil {
-		return
-	}
 	c.mu.Lock()
 	c.submitter = submitter
 	c.mu.Unlock()
 }
 
-func (c *Coordinator) Bind(requestID, channelID, roomID, threadRootID, requesterID string) (activity.UserInputSnapshot, error) {
-	if c == nil || c.broker == nil {
+func (c *Coordinator) Bind(turn channel.TurnContext, request agentengine.InteractionRequest) (agentengine.InteractionRequest, error) {
+	if c == nil || strings.TrimSpace(request.ID) == "" {
+		return request, fmt.Errorf("interaction and coordinator are required")
+	}
+	c.mu.Lock()
+	prune := time.Since(c.lastPrune) >= time.Minute
+	if prune {
+		c.lastPrune = time.Now()
+	}
+	c.mu.Unlock()
+	if prune {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		c.Prune(ctx)
+		cancel()
+	}
+	current, err := c.engine.Conversations(turn.AgentID).GetInteraction(context.Background(), turn.ConversationKey, request.ID)
+	if err != nil {
+		return request, err
+	}
+	request = current
+	requester := strings.TrimSpace(turn.ParticipantID)
+	if item, ok := c.participants.Get(string(channel.ChannelCSGClaw), requester); ok && item.ChannelUserRef != "" {
+		requester = item.ChannelUserRef
+	}
+	c.mu.Lock()
+	if previous, ok := c.routes[request.ID]; ok && (previous.turn.AgentID != turn.AgentID || previous.turn.ConversationKey != turn.ConversationKey) {
+		c.mu.Unlock()
+		return request, fmt.Errorf("interaction is already bound to another conversation")
+	}
+	c.routes[request.ID] = route{turn: turn, requesterID: requester, detached: request.Detached}
+	c.mu.Unlock()
+	return project(request, route{turn: turn, requesterID: requester, detached: request.Detached}), nil
+}
+func project(request agentengine.InteractionRequest, where route) agentengine.InteractionRequest {
+	if snapshot, ok := request.Payload.(activity.UserInputSnapshot); ok {
+		snapshot = activity.PublicUserInputSnapshot(snapshot)
+		snapshot.Channel = string(channel.ChannelCSGClaw)
+		snapshot.RoomID = where.turn.RoomID
+		snapshot.ThreadRootID = where.turn.ThreadRootID
+		snapshot.RequesterID = where.requesterID
+		request.Payload = snapshot
+	}
+	return request
+}
+func (c *Coordinator) Project(event agentengine.TurnEvent) agentengine.TurnEvent {
+	if event.Activity == nil {
+		return event
+	}
+	where, ok := c.lookup(event.Activity.ID)
+	if !ok {
+		return event
+	}
+	update := *event.Activity
+	update.Payload = project(agentengine.InteractionRequest{Payload: update.Payload}, where).Payload
+	event.Activity = &update
+	return event
+}
+func (c *Coordinator) lookup(id string) (route, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	value, ok := c.routes[strings.TrimSpace(id)]
+	return value, ok
+}
+func (c *Coordinator) read(ctx context.Context, id string) (agentengine.InteractionRequest, route, error) {
+	where, ok := c.lookup(id)
+	if !ok {
+		return agentengine.InteractionRequest{}, route{}, activity.ErrUserInputNotFound
+	}
+	item, err := c.engine.Conversations(where.turn.AgentID).GetInteraction(ctx, where.turn.ConversationKey, id)
+	return project(item, where), where, err
+}
+func (c *Coordinator) Get(id string) (activity.UserInputSnapshot, bool) {
+	item, _, err := c.read(context.Background(), id)
+	if err != nil {
+		return activity.UserInputSnapshot{}, false
+	}
+	snapshot, ok := item.Payload.(activity.UserInputSnapshot)
+	return snapshot, ok
+}
+func (c *Coordinator) Respond(ctx context.Context, req activity.UserInputResponseRequest) (activity.UserInputSnapshot, error) {
+	item, where, err := c.read(ctx, req.ActivityID)
+	if err != nil {
 		return activity.UserInputSnapshot{}, activity.ErrUserInputNotFound
 	}
-	return c.broker.Bind(requestID, channelID, roomID, threadRootID, c.channelUserID(requesterID))
-}
-
-func (c *Coordinator) Activate(
-	ctx context.Context,
-	turn channel.TurnContext,
-	args activity.RequestUserInputArgs,
-) (activity.UserInputSnapshot, error) {
-	if c == nil || c.broker == nil {
-		return activity.UserInputSnapshot{}, fmt.Errorf("structured user input is not configured")
+	snapshot, ok := item.Payload.(activity.UserInputSnapshot)
+	if !ok || req.Channel != string(channel.ChannelCSGClaw) || snapshot.RoomID != req.RoomID || strings.TrimSpace(req.ResponderID) == "" {
+		return activity.UserInputSnapshot{}, activity.ErrUserInputNotFound
 	}
-	if ctx == nil {
-		ctx = context.Background()
+	resolution := agentengine.InteractionResolution{ConversationKey: where.turn.ConversationKey, InteractionID: req.ActivityID, ResponderID: req.ResponderID, Answers: make(map[string]agentengine.InteractionAnswer, len(req.Response.Answers))}
+	for id, answer := range req.Response.Answers {
+		resolution.Answers[id] = agentengine.InteractionAnswer{Values: append([]string(nil), answer.Answers...), Skipped: len(answer.Answers) == 0}
 	}
-	select {
-	case <-ctx.Done():
-		return activity.UserInputSnapshot{}, ctx.Err()
-	default:
-	}
-	questions := make([]activity.UserInputQuestionSnapshot, 0, len(args.Questions))
-	for _, question := range args.Questions {
-		options := make([]activity.UserInputOptionSnapshot, 0, len(question.Options))
-		for _, option := range question.Options {
-			options = append(options, activity.UserInputOptionSnapshot{
-				Label:       option.Label,
-				Description: option.Description,
-			})
+	if req.RecordTranscript != nil {
+		resolution.BeforeResolve = func(ctx context.Context, request agentengine.InteractionRequest) error {
+			projected := project(request, where)
+			snapshot, ok := projected.Payload.(activity.UserInputSnapshot)
+			if !ok {
+				return fmt.Errorf("Engine returned an invalid user input snapshot")
+			}
+			if len(req.Response.Answers) == 0 {
+				return nil
+			}
+			return req.RecordTranscript(ctx, snapshot)
 		}
-		questions = append(questions, activity.UserInputQuestionSnapshot{
-			ID:       question.ID,
-			Header:   question.Header,
-			Question: question.Question,
-			Options:  options,
-			IsOther:  question.IsOther,
-			IsSecret: question.IsSecret,
-		})
 	}
-	var autoResolve time.Duration
-	if args.AutoResolutionMS != nil {
-		autoResolve = time.Duration(*args.AutoResolutionMS) * time.Millisecond
+	err = c.engine.Conversations(where.turn.AgentID).Resolve(ctx, resolution)
+	updated, _, readErr := c.read(ctx, req.ActivityID)
+	if readErr == nil {
+		if value, ok := updated.Payload.(activity.UserInputSnapshot); ok {
+			snapshot = value
+		}
 	}
-	execution, err := c.execution(ctx, turn)
-	if err != nil {
-		return activity.UserInputSnapshot{}, err
-	}
-	execution.ToolCallID = "structured-output-" + strings.TrimSpace(turn.SourceMessageID)
-	execution.ToolKind = "request_user_input"
-	snapshot, err := c.broker.CreateDetached(runtimecodex.PendingUserInputRequest{
-		Execution:   execution,
-		Questions:   questions,
-		RequestedAt: time.Now().UTC(),
-		AutoResolve: autoResolve,
-	}, runtimecodex.DetachedUserInputContext{
-		Channel:         string(channel.ChannelCSGClaw),
-		RoomID:          strings.TrimSpace(turn.RoomID),
-		ThreadRootID:    strings.TrimSpace(turn.ThreadRootID),
-		SourceMessageID: strings.TrimSpace(turn.SourceMessageID),
-		RequesterID:     c.channelUserID(turn.ParticipantID),
-	})
-	if err != nil {
-		return activity.UserInputSnapshot{}, err
-	}
-	c.mu.Lock()
-	c.requests[snapshot.ID] = detachedRequest{
-		turn: turn,
-		binding: channel.Binding{
-			ID:            string(turn.BindingID),
-			Channel:       channel.ChannelCSGClaw,
-			ParticipantID: turn.ParticipantID,
-			AgentID:       turn.AgentID,
-			Enabled:       true,
-		},
-	}
-	c.mu.Unlock()
-	return snapshot, nil
+	return snapshot, userInputError(err)
 }
-
-func (c *Coordinator) execution(ctx context.Context, turn channel.TurnContext) (activity.ExecutionRef, error) {
-	if c.agents == nil || c.sessions == nil {
-		return activity.ExecutionRef{}, fmt.Errorf("structured user input runtime identity is not configured")
+func (c *Coordinator) Decide(ctx context.Context, req activity.ActivityDecisionRequest) (activity.ActivitySnapshot, error) {
+	if req.Channel != string(channel.ChannelCSGClaw) {
+		return activity.ActivitySnapshot{}, activity.ErrActionNotFound
 	}
-	selected, err := c.agents.Get(ctx, strings.TrimSpace(turn.AgentID), agentengine.AgentGetOptions{})
+	item, where, err := c.read(ctx, req.ActivityID)
 	if err != nil {
-		return activity.ExecutionRef{}, fmt.Errorf("resolve structured user input agent: %w", err)
+		return activity.ActivitySnapshot{}, activity.ErrActionNotFound
 	}
-	runtimeID := strings.TrimSpace(selected.Status.RuntimeID)
-	if runtimeID == "" {
-		return activity.ExecutionRef{}, fmt.Errorf("structured user input runtime is unavailable")
-	}
-	sessionID, ok, err := c.sessions.ExistingEngineSession(ctx, runtimeID, strings.TrimSpace(string(turn.ConversationKey)))
-	if err != nil {
-		return activity.ExecutionRef{}, fmt.Errorf("resolve structured user input session: %w", err)
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if !ok || sessionID == "" {
-		return activity.ExecutionRef{}, fmt.Errorf("structured user input session is unavailable")
-	}
-	return activity.ExecutionRef{
-		RuntimeKind: "codex",
-		RuntimeID:   runtimeID,
-		SessionID:   sessionID,
-		TurnID:      string(turn.TurnID),
-	}, nil
-}
-
-func (c *Coordinator) handleDetachedResolution(resolution runtimecodex.DetachedUserInputResolution) {
-	if c == nil {
-		return
-	}
-	c.mu.Lock()
-	request, ok := c.requests[resolution.Snapshot.ID]
-	if ok {
-		delete(c.requests, resolution.Snapshot.ID)
-	}
-	submitter := c.submitter
-	c.mu.Unlock()
+	snapshot, ok := item.Payload.(activity.ActivitySnapshot)
 	if !ok {
-		return
+		return snapshot, activity.ErrActionNotFound
 	}
+	err = c.engine.Conversations(where.turn.AgentID).Resolve(ctx, agentengine.InteractionResolution{ConversationKey: where.turn.ConversationKey, InteractionID: req.ActivityID, OptionID: req.OptionID})
+	if updated, _, readErr := c.read(ctx, req.ActivityID); readErr == nil {
+		if value, ok := updated.Payload.(activity.ActivitySnapshot); ok {
+			snapshot = value
+		}
+	}
+	switch agentengine.ErrorCodeOf(err) {
+	case agentengine.ErrorInvalidRequest:
+		return snapshot, activity.ErrActionInvalidOption
+	case agentengine.ErrorInteractionNotFound:
+		return snapshot, activity.ErrActionNotFound
+	case agentengine.ErrorInteractionAlreadyResolved:
+		return snapshot, activity.ErrActionAlreadyDecided
+	case agentengine.ErrorInteractionGone:
+		return snapshot, activity.ErrActionGone
+	}
+	return snapshot, err
+}
+func userInputError(err error) error {
+	switch agentengine.ErrorCodeOf(err) {
+	case agentengine.ErrorInvalidRequest:
+		return fmt.Errorf("%w: %v", activity.ErrUserInputInvalidResponse, err)
+	case agentengine.ErrorInteractionNotFound:
+		return activity.ErrUserInputNotFound
+	case agentengine.ErrorInteractionAlreadyResolved:
+		return activity.ErrUserInputAlreadyResolved
+	case agentengine.ErrorInteractionGone:
+		return activity.ErrUserInputGone
+	}
+	return err
+}
 
-	snapshot := resolution.Snapshot
-	if snapshot.Status == activity.UserInputStatusAnswered &&
-		(submitter == nil || !submitter.IsCurrent(request.turn.BindingID, request.turn.ConversationKey, request.turn.SourceMessageID)) {
-		snapshot.Status = activity.UserInputStatusInterrupted
-		now := time.Now().UTC()
-		snapshot.ResolvedAt = &now
-	}
-	if err := c.persistResolution(request.turn, snapshot); err != nil {
-		slog.Warn("persist structured user input resolution failed", "request_id", resolution.Snapshot.ID, "error", err)
+// Observe projects Runtime/Engine updates. A detached answer re-enters the
+// Channel's normal ingress exactly once after its resolved card is persisted.
+func (c *Coordinator) Observe(turn channel.TurnContext, event agentengine.TurnEvent) {
+	if event.Activity == nil || event.Activity.Kind != string(activity.RuntimeEventUserInputResolved) {
 		return
 	}
-	if snapshot.Status != activity.UserInputStatusAnswered || submitter == nil {
+	id := event.Activity.ID
+	c.mu.Lock()
+	where, ok := c.routes[id]
+	submitter := c.submitter
+	if !ok || !where.detached {
+		c.mu.Unlock()
 		return
 	}
-	body, err := json.Marshal(activity.RedactSecretUserInputResponse(snapshot, resolution.Response))
+	// Claim the continuation, retaining the route for duplicate HTTP requests.
+	where.detached = false
+	c.routes[id] = where
+	c.mu.Unlock()
+	snapshot, ok := event.Activity.Payload.(activity.UserInputSnapshot)
+	if !ok || snapshot.Status != activity.UserInputStatusAnswered || submitter == nil || !submitter.IsCurrent(turn.BindingID, turn.ConversationKey, turn.SourceMessageID) {
+		return
+	}
+	response := activity.RequestUserInputResponse{Answers: make(map[string]activity.RequestUserInputAnswer, len(snapshot.Questions))}
+	for _, question := range snapshot.Questions {
+		answer := snapshot.Answers[question.ID]
+		values := []string{}
+		if answer.Answered {
+			if answer.Secret {
+				values = append(values, "user_note: <redacted>")
+			} else {
+				if answer.OptionLabel != "" {
+					values = append(values, answer.OptionLabel)
+				}
+				if answer.Text != "" {
+					values = append(values, "user_note: "+answer.Text)
+				}
+			}
+		}
+		response.Answers[question.ID] = activity.RequestUserInputAnswer{Answers: values}
+	}
+	body, err := json.Marshal(response)
 	if err != nil {
-		slog.Warn("encode structured user input continuation failed", "request_id", resolution.Snapshot.ID, "error", err)
 		return
 	}
 	prompt := "The user answered the request_user_input emitted by the previous successful command. Continue the same workflow using this wire-compatible response JSON. Secret values are replaced with <redacted> before entering the model session:\n" + string(body)
-	if err := submitter.Submit(request.binding, channelbridge.BotEvent{
-		Channel:       string(channel.ChannelCSGClaw),
-		ParticipantID: request.binding.ParticipantID,
-		MessageID:     "structured-user-input-" + resolution.Snapshot.ID,
-		RoomID:        request.turn.RoomID,
-		Locale:        request.turn.Locale,
-		ChatType:      request.turn.ChatType,
-		Text:          prompt,
-		ThreadRootID:  request.turn.ThreadRootID,
-	}); err != nil {
-		slog.Warn("submit structured user input continuation failed", "request_id", resolution.Snapshot.ID, "error", err)
-	}
-}
-
-func (c *Coordinator) persistResolution(turn channel.TurnContext, snapshot activity.UserInputSnapshot) error {
-	event := activity.RuntimeEvent{
-		RuntimeKind:     "codex",
-		RuntimeID:       string(turn.BindingID),
-		SessionID:       string(turn.ConversationKey),
-		TurnID:          string(turn.TurnID),
-		Kind:            activity.RuntimeEventUserInputResolved,
-		ReceivedAt:      time.Now().UTC(),
-		UserInputID:     snapshot.ID,
-		UserInputStatus: string(snapshot.Status),
-		Payload:         snapshot,
-	}
-	rendered, ok := runtimebridge.NewTurnRenderer().RenderActivity(
-		event,
-		string(channel.ChannelCSGClaw),
-		turn.RoomID,
-		turn.ParticipantID,
-	)
-	if !ok {
-		return fmt.Errorf("render structured user input resolution")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	return c.store.DeliverRenderedActivity(ctx, turn, delivery.ActivityDelivery{
-		MessageID:    rendered.MessageID,
-		Text:         rendered.Text,
-		Metadata:     rendered.Metadata,
-		ThreadRootID: turn.ThreadRootID,
-		Event: agentengine.TurnEvent{
-			TurnID: turn.TurnID,
-			Kind:   agentengine.TurnEventActivityUpdate,
-			Activity: &agentengine.ActivityUpdate{
-				ID:      snapshot.ID,
-				Kind:    string(activity.RuntimeEventUserInputResolved),
-				Status:  string(snapshot.Status),
-				Payload: snapshot,
-			},
-		},
+	err = submitter.Submit(channel.Binding{ID: string(turn.BindingID), Channel: channel.ChannelCSGClaw, ParticipantID: turn.ParticipantID, AgentID: turn.AgentID, Enabled: true}, channel.Event{
+		Channel: string(channel.ChannelCSGClaw), ParticipantID: turn.ParticipantID, MessageID: "structured-user-input-" + id, RoomID: turn.RoomID, Locale: turn.Locale, ChatType: turn.ChatType, Text: prompt, ThreadRootID: turn.ThreadRootID,
 	})
+	if err != nil {
+		slog.Warn("submit user input continuation failed", "interaction_id", id, "error", err)
+	}
 }
 
-func (c *Coordinator) channelUserID(participantID string) string {
-	participantID = strings.TrimSpace(participantID)
-	if c != nil && c.participants != nil {
-		if item, ok := c.participants.Get(participant.ChannelCSGClaw, participantID); ok {
-			if channelUserRef := strings.TrimSpace(item.ChannelUserRef); channelUserRef != "" {
-				return channelUserRef
-			}
+// Prune forgets expired UI routes without retaining Runtime or secret state.
+func (c *Coordinator) Prune(ctx context.Context) {
+	c.mu.Lock()
+	routes := make(map[string]route, len(c.routes))
+	for id, r := range c.routes {
+		routes[id] = r
+	}
+	c.mu.Unlock()
+	for id, r := range routes {
+		if ctx.Err() != nil {
+			return
+		}
+		item, err := c.engine.Conversations(r.turn.AgentID).GetInteraction(ctx, r.turn.ConversationKey, id)
+		stale := agentengine.ErrorCodeOf(err) == agentengine.ErrorInteractionNotFound
+		if snapshot, ok := item.Payload.(activity.UserInputSnapshot); ok && snapshot.ResolvedAt != nil {
+			stale = time.Since(*snapshot.ResolvedAt) > 10*time.Minute
+		}
+		if stale {
+			c.mu.Lock()
+			delete(c.routes, id)
+			c.mu.Unlock()
 		}
 	}
-	return participantID
 }

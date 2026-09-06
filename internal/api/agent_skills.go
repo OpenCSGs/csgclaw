@@ -1,6 +1,8 @@
 package api
 
 import (
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,9 +10,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
 )
 
 type batchAddAgentSkillsRequest struct {

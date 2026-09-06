@@ -3,20 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
-	goruntime "runtime"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
@@ -24,6 +12,7 @@ import (
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/csgclaw/notification"
 	"csgclaw/internal/channel/feishu"
+	feishularkcli "csgclaw/internal/channel/feishu/larkcli"
 	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	"csgclaw/internal/connectors"
@@ -44,10 +33,21 @@ import (
 	"csgclaw/internal/utils"
 	"csgclaw/internal/version"
 	"csgclaw/internal/worklease"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	goruntime "runtime"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 type Handler struct {
-	svc                        *agent.Service
+	svc                        AgentRecords
 	participant                *participant.Service
 	im                         *im.Service
 	csgclaw                    *csgclawchannel.Service
@@ -86,18 +86,29 @@ type Handler struct {
 	activityDecider            ActivityDecider
 	userInputResponder         UserInputResponder
 	agentEngine                agentengine.Interface
+	channelBindings            ChannelBindingReconciler
 	sessionBindings            *agentsession.Store
 	localDirectoryPicker       func(context.Context) (string, error)
 	feishuRegistrationStateDir string
-	larkCLIBindLocksMu         sync.Mutex
-	larkCLIBindLocks           map[string]*sync.Mutex
-	larkCLIProbeMu             sync.Mutex
-	larkCLIProbe               larkCLIProbeCache
+	runtimeExtensionSourcesSet bool
+	larkCLISigningOnce         sync.Once
+	larkCLISigningSecret       string
+	larkCLISigningErr          error
 
 	participantActivityTurnsMu sync.Mutex
 	participantActivityTurns   map[string]participantActivityTurn
 	sessionTurnsMu             sync.Mutex
 	sessionTurns               map[string]map[agentengine.TurnID]agentSessionTurn
+	workspace                  AgentWorkspace
+
+	// ChannelBindingReconciler keeps Channel Worker lifecycle with the Channel
+	// layer instead of routing it backward through Agent Runtime lifecycle.
+	agentModels  AgentModels
+	agentRuntime AgentRuntimeSupport
+}
+
+type ChannelBindingReconciler interface {
+	RefreshAgentChannel(context.Context, agent.Agent, string) error
 }
 
 const (
@@ -416,7 +427,7 @@ func (h *Handler) handleBootstrapConfig(w http.ResponseWriter, r *http.Request) 
 				}
 				switch defaults.ManagerRuntimeKind {
 				case agent.RuntimeKindPicoClawSandbox, agent.RuntimeKindOpenClawSandbox:
-					if err := h.svc.SetGatewayRuntime(defaults.ManagerRuntimeKind, defaults.ManagerImage); err != nil {
+					if err := h.agentRuntime.SetGatewayRuntime(defaults.ManagerRuntimeKind, defaults.ManagerImage); err != nil {
 						http.Error(w, err.Error(), http.StatusBadRequest)
 						return
 					}
@@ -689,7 +700,7 @@ func (h *Handler) defaultWorkerCreateSpec(agentID, name string) agent.CreateAgen
 	if h == nil || h.svc == nil {
 		return spec
 	}
-	runtimeKind := h.svc.GatewayRuntime()
+	runtimeKind := h.agentRuntime.GatewayRuntime()
 	spec.RuntimeKind = runtimeKind
 	spec.RuntimeName = agent.RuntimeNamePicoClaw
 	spec.SandboxEnabled = true
@@ -777,17 +788,18 @@ type removeRoomMemberRequest struct {
 	Locale    string `json:"locale"`
 }
 
-func NewHandler(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service) *Handler {
-	return NewHandlerWithAccessToken(svc, imSvc, imBus, participantBridge, feishu, llmSvc, "")
+func NewHandler(svc AgentServices, engine agentengine.Interface, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service) *Handler {
+	return NewHandlerWithAccessToken(svc, engine, imSvc, imBus, participantBridge, feishu, llmSvc, "")
 }
 
-func NewHandlerWithAccessToken(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string) *Handler {
-	return NewHandlerWithAuth(svc, imSvc, imBus, participantBridge, feishu, llmSvc, serverAccessToken, false)
+func NewHandlerWithAccessToken(svc AgentServices, engine agentengine.Interface, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string) *Handler {
+	return NewHandlerWithAuth(svc, engine, imSvc, imBus, participantBridge, feishu, llmSvc, serverAccessToken, false)
 }
 
-func NewHandlerWithAuth(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string, serverNoAuth bool) *Handler {
+func NewHandlerWithAuth(svc AgentServices, engine agentengine.Interface, imSvc *im.Service, imBus *im.Bus, participantBridge *im.ParticipantBridge, feishu *feishu.Service, llmSvc *llm.Service, serverAccessToken string, serverNoAuth bool) *Handler {
 	h := &Handler{
-		svc:               svc,
+		svc:               svc.Records,
+		agentEngine:       engine,
 		im:                imSvc,
 		csgclaw:           csgclawchannel.NewService(imSvc),
 		imBus:             imBus,
@@ -797,10 +809,7 @@ func NewHandlerWithAuth(svc *agent.Service, imSvc *im.Service, imBus *im.Bus, pa
 		llm:               llmSvc,
 		serverAccessToken: serverAccessToken,
 		serverNoAuth:      serverNoAuth,
-		upgradeApply:      upgrade.StartApplyHelper,
-	}
-	if svc != nil {
-		h.agentEngine = agentengine.New(svc)
+		upgradeApply:      upgrade.StartApplyHelper, workspace: svc.Workspace, agentModels: svc.Models, agentRuntime: svc.Runtime,
 	}
 	return h
 }
@@ -814,6 +823,7 @@ func (h *Handler) SetNotificationDeliver(d notification.Fanouter) {
 func (h *Handler) SetParticipantService(svc *participant.Service) {
 	if h != nil {
 		h.participant = svc
+		h.configureRuntimeExtensionSources()
 	}
 }
 
@@ -847,7 +857,42 @@ func (h *Handler) SetAgentEngine(engine agentengine.Interface, bindings *agentse
 	if h != nil {
 		h.agentEngine = engine
 		h.sessionBindings = bindings
+		h.runtimeExtensionSourcesSet = false
+		h.configureRuntimeExtensionSources()
 	}
+}
+
+func (h *Handler) SetChannelBindingReconciler(reconciler ChannelBindingReconciler) {
+	if h != nil {
+		h.channelBindings = reconciler
+	}
+}
+
+func (h *Handler) configureRuntimeExtensionSources() {
+	if h == nil || h.runtimeExtensionSourcesSet || h.participant == nil || h.agentEngine == nil {
+		return
+	}
+	registrar, ok := h.agentEngine.(interface {
+		RegisterRuntimeExtensionSource(string, agentengine.RuntimeExtensionSource) error
+	})
+	if !ok {
+		return
+	}
+	source, err := feishularkcli.NewSource(feishularkcli.Options{
+		Participants: h.participant,
+		BaseURL:      h.internalSourceBaseURL,
+		AccessToken:  h.larkCLIRevisionAccessToken,
+		HelperPath:   larkCLISourceHelperPath,
+	})
+	if err != nil {
+		return
+	}
+	if err := registrar.RegisterRuntimeExtensionSource("feishu-participant", source); err != nil {
+		if !strings.Contains(err.Error(), "already registered") {
+			return
+		}
+	}
+	h.runtimeExtensionSourcesSet = true
 }
 
 func (h *Handler) localChannel() *csgclawchannel.Service {
@@ -1375,7 +1420,7 @@ func (h *Handler) handleAgentProfileModels(w http.ResponseWriter, r *http.Reques
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
-	models, err := h.svc.ListModelsForRequest(r.Context(), req)
+	models, err := h.agentModels.ListModelsForRequest(r.Context(), req)
 	if err != nil {
 		writeAgentOperationError(w, err, http.StatusBadGateway)
 		return
@@ -1395,7 +1440,7 @@ func (h *Handler) handleAgentProfileDefaults(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
-	writeJSON(w, http.StatusOK, profileResponseFromAgentView(h.svc.ProfileDefaultsView()))
+	writeJSON(w, http.StatusOK, profileResponseFromAgentView(h.agentModels.ProfileDefaultsView()))
 }
 
 func (h *Handler) handleAgentStart(w http.ResponseWriter, r *http.Request, id string) {
@@ -1482,7 +1527,12 @@ func (h *Handler) handleAgentApplyBindings(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	activated, _, err := h.svc.ApplyExternalBinding(r.Context(), id, channel)
+	target, ok := h.svc.Agent(id)
+	if !ok {
+		http.Error(w, fmt.Sprintf("agent %q not found", id), http.StatusNotFound)
+		return
+	}
+	refreshed, _, err := h.refreshAgentChannel(r.Context(), target, channel)
 	if err != nil {
 		status := http.StatusBadRequest
 		if strings.Contains(err.Error(), "not found") {
@@ -1491,7 +1541,7 @@ func (h *Handler) handleAgentApplyBindings(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), status)
 		return
 	}
-	writeJSON(w, http.StatusOK, h.presentAgentResponse(activated))
+	writeJSON(w, http.StatusOK, h.presentAgentResponse(refreshed))
 }
 
 type applyAgentBindingsRequest struct {
@@ -1565,7 +1615,7 @@ func (h *Handler) handleAgentLogs(w http.ResponseWriter, r *http.Request, id str
 	}
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	if err := h.svc.StreamLogs(r.Context(), id, follow, lines, logWriter); err != nil {
+	if err := h.workspace.StreamLogs(r.Context(), id, follow, lines, logWriter); err != nil {
 		if !parseBoolQuery(r.URL.Query().Get("follow")) {
 			status := http.StatusBadRequest
 			if strings.Contains(err.Error(), "not found") {
@@ -1819,7 +1869,7 @@ func (h *Handler) handleHubTemplates(w http.ResponseWriter, r *http.Request) {
 			item, err = hubSvc.PublishTemplate(r.Context(), req.TemplateID, req.Registry, req.IncludeMemory)
 		} else {
 			var spec hub.PublishSpec
-			spec, err = h.svc.HubPublishSpec(req.AgentID, req.IncludeMemory)
+			spec, err = h.workspace.HubPublishSpec(req.AgentID, req.IncludeMemory)
 			if err == nil {
 				spec.Registry = req.Registry
 				if strings.TrimSpace(req.Name) != "" {
@@ -3166,7 +3216,7 @@ func (h *Handler) backfillAgentLocalUser(resp *agentResponse) {
 func (h *Handler) presentAgentResponse(item agent.Agent) agentResponse {
 	resp := presentAgent(item)
 	if resp.Runtime.SandboxEnabled && h != nil && h.svc != nil {
-		resp.Runtime.SandboxProvider = h.svc.SandboxProviderName()
+		resp.Runtime.SandboxProvider = h.agentRuntime.SandboxProviderName()
 	}
 	if item.ID != agent.ManagerUserID && item.Role != agent.RoleManager {
 		resp.RuntimeOptionSchemas = h.runtimeOptionSchemasForKind(item.RuntimeKind)
@@ -3216,22 +3266,10 @@ func (h *Handler) runtimeOptionSchemasByKind(kinds []string) map[string][]agentr
 }
 
 func (h *Handler) runtimeOptionSchemasForKind(kind string) []agentruntime.RuntimeOptionSchema {
-	if h == nil || h.svc == nil {
+	if h == nil || h.agentRuntime == nil {
 		return nil
 	}
-	rt, err := h.svc.Runtime(strings.TrimSpace(kind))
-	if err != nil {
-		return nil
-	}
-	provider, ok := rt.(agentruntime.RuntimeOptionSchemaProvider)
-	if !ok {
-		return nil
-	}
-	schemas := provider.RuntimeOptionsSchema()
-	if len(schemas) == 0 {
-		return nil
-	}
-	return append([]agentruntime.RuntimeOptionSchema(nil), schemas...)
+	return h.agentRuntime.RuntimeOptionsSchema(strings.TrimSpace(kind))
 }
 
 func includeParticipants(r *http.Request) bool {

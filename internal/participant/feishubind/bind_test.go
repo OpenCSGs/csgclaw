@@ -2,6 +2,7 @@ package feishubind
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/apitypes"
@@ -25,5 +26,7 @@ func TestValidateBotAppIDExclusive(t *testing.T) {
 	}
 	if err := ValidateBotAppIDExclusive(participantSvc, "u-qa", "cli_shared"); !errors.Is(err, ErrBotAppIDConflict) {
 		t.Fatalf("other worker validation error = %v, want ErrBotAppIDConflict", err)
+	} else if !strings.Contains(err.Error(), "disconnect Feishu") || !strings.Contains(err.Error(), "agent-dev") {
+		t.Fatalf("conflict guidance = %q", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,25 @@ import (
 	"csgclaw/internal/auth"
 	"csgclaw/internal/config"
 )
+
+// Keep environment/URL presentation tests hermetic while exercising the real
+// Hub protocol against a local server.
+func stubHubTransport(t *testing.T, endpoint string) {
+	t.Helper()
+	local, err := url.Parse(endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := http.DefaultTransport
+	http.DefaultTransport = knowledgeBaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		copy := req.Clone(req.Context())
+		u := *req.URL
+		u.Scheme, u.Host = local.Scheme, local.Host
+		copy.URL = &u
+		return previous.RoundTrip(copy)
+	})
+	t.Cleanup(func() { http.DefaultTransport = previous })
+}
 
 func TestSkillConfigForEnvironmentUsesDefaultRegistryForStage(t *testing.T) {
 	cfg := skillConfigForEnvironment(config.SkillConfig{}, auth.Environment{

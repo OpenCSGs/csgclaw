@@ -1,14 +1,13 @@
 package participantprovider
 
 import (
-	"fmt"
-	"log/slog"
-	"strings"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/participant"
+	"fmt"
+	"log/slog"
+	"strings"
 )
 
 const feishuAdminParticipantID = "admin"

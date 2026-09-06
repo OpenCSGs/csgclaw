@@ -1,12 +1,12 @@
 package api
 
 import (
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"encoding/json"
 	"net/http"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
 )
 
 func (h *Handler) getAgentInstructions(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +50,7 @@ func (h *Handler) putAgentInstructions(w http.ResponseWriter, r *http.Request) {
 	agents := h.agentEngine.Agents()
 	current, err := agents.Get(r.Context(), pathValue(r, "id"), agentengine.AgentGetOptions{IncludeDocuments: true})
 	if err == nil {
-		current.Spec.Instructions = agent.ExtractUserInstructionsFromAgentsDocument(request.Effective)
+		current.Spec.Instructions = runtimeinstructions.ExtractUserInstructionsFromAgentsDocument(request.Effective)
 		_, err = agents.Update(r.Context(), current.ID, agentengine.AgentUpdateRequest{
 			Spec: current.Spec, FieldMask: []string{"instructions"}, ResourceVersion: current.ResourceVersion,
 		})

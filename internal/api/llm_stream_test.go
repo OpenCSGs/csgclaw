@@ -3,6 +3,9 @@ package api
 import (
 	"bufio"
 	"bytes"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	"csgclaw/internal/llm"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,10 +13,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	"csgclaw/internal/llm"
 )
 
 func TestHandleBotLLMChatCompletionsFlushesSSEBeforeCompletion(t *testing.T) {
