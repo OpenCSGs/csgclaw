@@ -14,6 +14,7 @@ import {
   CloudDownload,
   ExternalLink,
   FileCode2,
+  LoaderCircle,
   RefreshCw,
   Server,
   Trash2,
@@ -1150,7 +1151,10 @@ export function HubDetailPane({
     <section className={moduleClassNames("entity-pane hub-detail-pane")}>
       {error ? <div className={moduleClassNames("form-error")}>{error}</div> : null}
       {!loaded && !error ? (
-        <div className={moduleClassNames("workspace-empty")}>{t("resourcesLoading")}</div>
+        <div className={moduleClassNames("hub-loading-state")} role="status" aria-live="polite">
+          <LoaderCircle className={moduleClassNames("hub-loading-spinner")} size={24} aria-hidden="true" />
+          <span>{t("resourcesLoading")}</span>
+        </div>
       ) : activeResourceType !== "knowledge" &&
         templates.length === 0 &&
         skills.length === 0 &&
@@ -1575,30 +1579,36 @@ export function HubDetailPane({
                   ) : null}
                 </section>
               ) : activeTemplateTab === "memory" ? (
-                <section className="profile-section hub-template-memory-panel">
-                  <div className="hub-template-memory-heading">
-                    <div className="profile-section-heading">
-                      <div className="profile-section-title">memory_summary.md</div>
-                      <p className="profile-section-description">{t("resourcesTemplateMemoryDescription")}</p>
-                      <code className="hub-template-memory-location">memories/memory_summary.md</code>
+                <section className={moduleClassNames("profile-section hub-template-memory-panel")}>
+                  <div className={moduleClassNames("hub-template-memory-heading")}>
+                    <div className={moduleClassNames("profile-section-heading")}>
+                      <div className={moduleClassNames("profile-section-title")}>memory_summary.md</div>
+                      <p className={moduleClassNames("profile-section-description")}>
+                        {t("resourcesTemplateMemoryDescription")}
+                      </p>
+                      <code className={moduleClassNames("hub-template-memory-location")}>
+                        memories/memory_summary.md
+                      </code>
                     </div>
                   </div>
-                  {workspaceFileError ? <div className="form-error">{workspaceFileError}</div> : null}
+                  {workspaceFileError ? (
+                    <div className={moduleClassNames("form-error")}>{workspaceFileError}</div>
+                  ) : null}
                   {workspaceFileLoading ? (
-                    <div className="hub-template-memory-empty" role="status">
+                    <div className={moduleClassNames("hub-template-memory-empty")} role="status">
                       <strong>{t("resourcesWorkspaceFileLoading")}</strong>
                     </div>
                   ) : templateMemoryFile && !templateMemoryFile.binary ? (
-                    <div className="agent-section-form hub-template-memory-document-shell">
+                    <div className={moduleClassNames("agent-section-form hub-template-memory-document-shell")}>
                       <textarea
-                        className="compact-textarea hub-template-memory-document"
+                        className={moduleClassNames("compact-textarea hub-template-memory-document")}
                         value={templateMemoryFile.content || ""}
                         readOnly
                         aria-label={t("agentMemoryDocumentLabel")}
                       />
                     </div>
                   ) : (
-                    <div className="hub-template-memory-empty">
+                    <div className={moduleClassNames("hub-template-memory-empty")}>
                       <strong>{t("resourcesTemplateMemoryEmptyTitle")}</strong>
                       <p>{t("resourcesTemplateMemoryEmptyDescription")}</p>
                     </div>

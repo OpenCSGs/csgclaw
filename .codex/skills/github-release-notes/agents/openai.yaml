@@ -1,4 +1,4 @@
 interface:
   display_name: "GitHub Release Notes"
-  short_description: "Draft release notes from selected commits"
-  default_prompt: "Use $github-release-notes to draft GitHub release notes from specific commits in this repo."
+  short_description: "Write bilingual versioned release-notes files"
+  default_prompt: "Use $github-release-notes to write bilingual release notes for a version from specific commits in this repo."

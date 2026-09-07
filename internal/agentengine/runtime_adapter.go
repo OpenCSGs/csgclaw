@@ -218,7 +218,7 @@ func (a *codexRuntimeAdapter) handleEvent(ctx context.Context, request TurnReque
 			return &result
 		}
 		if artifact.RequestUserInput != nil {
-			if result := emit(TurnEvent{Kind: TurnEventOutputItem, Output: &OutputItem{Kind: OutputItemRequestUserInput, Payload: *artifact.RequestUserInput}}); result != nil {
+			if result := emit(TurnEvent{Kind: TurnEventOutputItem, Text: event.Text, Output: &OutputItem{Kind: OutputItemRequestUserInput, Payload: *artifact.RequestUserInput}}); result != nil {
 				return result
 			}
 		}

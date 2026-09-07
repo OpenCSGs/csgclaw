@@ -10,6 +10,7 @@ import {
   syncMCPServerSource,
   updateMCPServerRequest,
 } from "@/api/mcp";
+import { resolveHubListSelection } from "@/models/hubSelection";
 import { mcpManagedKnowledgeBaseSource, mcpServersFromCatalogResponse } from "@/models/mcp";
 import type { MCPProbeResult, MCPServer, MCPServerPayload, MCPServerSourceStatus, RemoteMCPServer } from "@/models/mcp";
 import { workspaceQueryKeys, useWorkspaceMCPServersQuery, useWorkspaceRemoteMCPServersQuery } from "./workspaceQueries";
@@ -77,7 +78,7 @@ export function useWorkspaceMCPSelection({
     );
   }, [remoteMCPServersQuery.data]);
   const selectedMCPServer = useMemo(
-    () => mcpServers.find((item) => item.name === selectedMCPServerName) || mcpServers[0] || null,
+    () => resolveHubListSelection(mcpServers, selectedMCPServerName, (item) => item.name),
     [mcpServers, selectedMCPServerName],
   );
   const selectedMCPSource = useMemo(

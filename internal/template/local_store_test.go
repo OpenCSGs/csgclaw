@@ -493,7 +493,7 @@ func TestLocalStorePublishRejectsSymlinks(t *testing.T) {
 	if err := os.WriteFile(target, []byte("outside"), 0o644); err != nil {
 		t.Fatalf("WriteFile(target) error = %v", err)
 	}
-	linkPath := filepath.Join(workspaceRoot, "outside.txt")
+	linkPath := filepath.Join(workspaceRoot, "USER.md")
 	if err := os.Symlink(target, linkPath); err != nil {
 		t.Skipf("Symlink() unsupported: %v", err)
 	}

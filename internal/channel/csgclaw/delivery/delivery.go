@@ -379,6 +379,7 @@ func (r *TranscriptRenderer) captureOutputItem(state *turnRenderState, event age
 		state.structuredUserInput = cloneRequestUserInputArgs(&args)
 		state.renderer.ApplyStructuredOutput(activity.RuntimeEvent{
 			Kind: activity.RuntimeEventStructuredOutput,
+			Text: event.Text,
 			Payload: activity.StructuredOutputArtifact{
 				RequestUserInput: cloneRequestUserInputArgs(&args),
 			},

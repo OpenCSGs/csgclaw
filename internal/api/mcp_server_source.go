@@ -21,10 +21,10 @@ type mcpServerSourceStatusResponse struct {
 	ConfiguredEndpointURL string `json:"configured_endpoint_url"`
 	ContentID             string `json:"content_id"`
 	GlobalServerName      string `json:"global_server_name,omitempty"`
-	GlobalUpdateAvailable bool   `json:"global_update_available,omitempty"`
 	Kind                  string `json:"kind"`
 	LatestEndpointURL     string `json:"latest_endpoint_url"`
 	ResourceID            string `json:"resource_id"`
+	SourceAvailable       bool   `json:"source_available"`
 	SourceDescription     string `json:"source_description,omitempty"`
 	SourceName            string `json:"source_name,omitempty"`
 	UpdateAvailable       bool   `json:"update_available"`
@@ -36,12 +36,8 @@ type mcpServerSourceSyncResponse struct {
 }
 
 type resolvedManagedMCPServerSource struct {
-	CanonicalConfig map[string]any
-	CanonicalName   string
-	Connection      knowledgeBaseConnection
-	Item            knowledgebase.KnowledgeBase
-	Refreshed       map[string]any
-	Status          mcpServerSourceStatusResponse
+	Refreshed map[string]any
+	Status    mcpServerSourceStatusResponse
 }
 
 func (h *Handler) handleMCPServerSourceByName(w http.ResponseWriter, r *http.Request) {
@@ -107,16 +103,8 @@ func (h *Handler) resolveManagedMCPServerSource(ctx context.Context, config map[
 	if err != nil {
 		return resolvedManagedMCPServerSource{}, err
 	}
-	canonicalName, canonicalConfig, err := knowledgebase.ServerConfig(item, connection.CSGHubAccessToken)
-	if err != nil {
-		return resolvedManagedMCPServerSource{}, err
-	}
 	return resolvedManagedMCPServerSource{
-		CanonicalConfig: canonicalConfig,
-		CanonicalName:   canonicalName,
-		Connection:      connection,
-		Item:            item,
-		Refreshed:       refreshed,
+		Refreshed: refreshed,
 		Status: mcpServerSourceStatusResponse{
 			AuthType:              knowledgebase.ManagedAuthType,
 			ConfiguredEndpointURL: mcpSourceString(config["url"]),
@@ -124,11 +112,34 @@ func (h *Handler) resolveManagedMCPServerSource(ctx context.Context, config map[
 			Kind:                  metadata.Kind,
 			LatestEndpointURL:     mcpSourceString(refreshed["url"]),
 			ResourceID:            strconv.FormatInt(metadata.KnowledgeBaseID, 10),
+			SourceAvailable:       true,
 			SourceDescription:     strings.TrimSpace(item.Description),
 			SourceName:            strings.TrimSpace(item.Name),
 			UpdateAvailable:       managedMCPRuntimeSnapshotChanged(config, refreshed),
 		},
 	}, nil
+}
+
+func unavailableManagedMCPServerSource(config map[string]any, err error) (resolvedManagedMCPServerSource, bool) {
+	var remoteErr *knowledgebase.HTTPError
+	if !errors.As(err, &remoteErr) || remoteErr.StatusCode != http.StatusNotFound {
+		return resolvedManagedMCPServerSource{}, false
+	}
+	metadata, ok := knowledgebase.ManagedMetadataFromServer(config)
+	if !ok {
+		return resolvedManagedMCPServerSource{}, false
+	}
+	return resolvedManagedMCPServerSource{
+		Status: mcpServerSourceStatusResponse{
+			AuthType:              knowledgebase.ManagedAuthType,
+			ConfiguredEndpointURL: mcpSourceString(config["url"]),
+			ContentID:             metadata.ContentID,
+			Kind:                  metadata.Kind,
+			ResourceID:            strconv.FormatInt(metadata.KnowledgeBaseID, 10),
+			SourceAvailable:       false,
+			UpdateAvailable:       false,
+		},
+	}, true
 }
 
 func mcpSourceString(value any) string {

@@ -29,6 +29,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/mcp"
 	"csgclaw/internal/modelprovider"
@@ -4502,6 +4503,52 @@ func TestHandleBatchAddAgentMCPServersAddsCatalogServersByName(t *testing.T) {
 	}
 }
 
+func TestHandleBatchAddAgentMCPServersTrustsManagedKnowledgeBaseSnapshot(t *testing.T) {
+	srv, svc, created := newAgentMCPManagementTestServer(t)
+
+	originalLoader := loadKnowledgeBaseConnection
+	t.Cleanup(func() { loadKnowledgeBaseConnection = originalLoader })
+	loadKnowledgeBaseConnection = func(context.Context) (knowledgeBaseConnection, error) {
+		t.Fatal("adding a managed knowledge-base MCP must not query AgenticHub")
+		return knowledgeBaseConnection{}, nil
+	}
+
+	if _, err := srv.mcp.CreateServer(context.Background(), "kb_tourism", map[string]any{
+		"type":      "remote",
+		"url":       "https://mcp.example.com/knowledge/kb_tourism",
+		"transport": "streamable-http",
+		"headers": map[string]any{
+			"Authorization": "Bearer stored-token",
+		},
+		knowledgebase.ManagedMetaKey: map[string]any{
+			knowledgebase.ManagedMetaNamespace: map[string]any{
+				"type":        knowledgebase.ManagedMCPType,
+				"resource_id": "142",
+				"content_id":  "kb_tourism",
+				"auth_type":   knowledgebase.ManagedAuthType,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("CreateServer(kb_tourism) error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/mcp-servers:batchAdd", strings.NewReader(`{"names":["kb_tourism"]}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	saved, ok := svc.Agent(created.ID)
+	if !ok {
+		t.Fatalf("Agent(%q) not found", created.ID)
+	}
+	server := mcpServerForTest(t, mcpServersForTest(t, saved.MCPServers), "kb_tourism")
+	if _, managed := knowledgebase.ManagedMetadataFromServer(server); !managed {
+		t.Fatalf("saved knowledge-base MCP lost managed metadata: %#v", server)
+	}
+}
+
 func TestHandleBatchAddAgentMCPServersReturnsNotFoundWhenCatalogServerMissing(t *testing.T) {
 	srv, _, created := newAgentMCPManagementTestServer(t)
 
@@ -5598,8 +5645,12 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HubPublishSpec() error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(spec.WorkspaceRef.Path, "PLAYBOOK.md"), []byte("published workspace\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(PLAYBOOK.md) error = %v", err)
+	downloadsRoot := filepath.Join(spec.WorkspaceRef.Path, "downloads")
+	if err := os.MkdirAll(downloadsRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(downloads) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(downloadsRoot, "input.pdf"), []byte("must not publish\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(downloads/input.pdf) error = %v", err)
 	}
 
 	registryRoot := t.TempDir()
@@ -5642,11 +5693,9 @@ func TestHandleHubTemplatesPublishesAgentSnapshot(t *testing.T) {
 	if got.Source.Name != "local" || got.Source.Kind != "local" {
 		t.Fatalf("template source = %+v, want local/local", got.Source)
 	}
-	publishedWorkspace := filepath.Join(registryRoot, "templates", "ReviewBot_2", "instructions", "PLAYBOOK.md")
-	if data, err := os.ReadFile(publishedWorkspace); err != nil {
-		t.Fatalf("ReadFile(PLAYBOOK.md) error = %v", err)
-	} else if strings.TrimSpace(string(data)) != "published workspace" {
-		t.Fatalf("PLAYBOOK.md = %q, want %q", strings.TrimSpace(string(data)), "published workspace")
+	publishedWorkspace := filepath.Join(registryRoot, "templates", "ReviewBot_2", "instructions", "downloads")
+	if _, err := os.Stat(publishedWorkspace); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("published downloads stat error = %v, want not exist", err)
 	}
 
 	duplicateReq := httptest.NewRequest(http.MethodPost, "/api/v1/hub/templates", strings.NewReader(

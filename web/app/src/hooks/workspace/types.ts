@@ -11,6 +11,7 @@ import type { HubTemplate } from "@/models/hubWorkspace";
 import type { MCPServer } from "@/models/mcp";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
+import type { SkillSummary } from "@/models/skillhub";
 import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { ThemeMode } from "@/shared/theme/theme";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
@@ -81,6 +82,7 @@ export type WorkspaceShellController = {
 };
 
 export type UseWorkspaceHubSelectionArgs = {
+  activePane: WorkspacePane;
   loaded: boolean;
   manualError?: string;
   openCSGAuthenticated?: boolean;
@@ -91,9 +93,11 @@ export type UseWorkspaceHubSelectionArgs = {
 };
 
 export type UseWorkspaceHubControllerArgs = {
+  activePane: WorkspacePane;
   hubLoaded: boolean;
   hubTemplates: HubTemplate[];
   hubTemplatesQuery: UseQueryResult<HubTemplate[]>;
+  onSkillDeleted?: (nextSkill: SkillSummary | null) => void;
   openCSGAuthenticated?: boolean;
   refreshWorkspaceHubTemplates: () => Promise<HubTemplate[]>;
   t: TranslateFn;

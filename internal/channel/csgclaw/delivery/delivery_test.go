@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
 )
@@ -14,6 +15,42 @@ import (
 type recordingStore struct {
 	messages   []deliveredMessage
 	activities int
+}
+
+func TestTranscriptRendererPreservesStructuredQuestionText(t *testing.T) {
+	for _, text := range []string{"## Step 1\n\nChoose the workflow branch.", "## 交互式输出演示 - 第 2/3 步\n\n请配置验证方式。", ""} {
+		t.Run(text, func(t *testing.T) {
+			store := &recordingStore{}
+			renderer := NewTranscriptRenderer(store)
+			turn := channel.TurnContext{RoomID: "room-demo", SourceMessageID: "message-demo"}
+			for _, event := range []agentengine.TurnEvent{
+				{Kind: agentengine.TurnEventTextDelta, Text: "Earlier model commentary."},
+				{Kind: agentengine.TurnEventOutputItem, Text: text, Output: &agentengine.OutputItem{
+					Kind:    agentengine.OutputItemRequestUserInput,
+					Payload: activity.RequestUserInputArgs{Questions: []activity.RequestUserInputQuestion{{ID: "demo_kind", Header: "Demo", Question: "Which workflow?"}}},
+				}},
+				{Kind: agentengine.TurnEventOutputItem, Output: &agentengine.OutputItem{
+					Kind:    agentengine.OutputItemResourceLink,
+					Payload: activity.ResourceLink{Type: "resource_link", Name: "docs", URI: "https://example.com/docs"},
+				}},
+			} {
+				if err := renderer.Emit(context.Background(), turn, event); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := renderer.Complete(context.Background(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded}); err != nil {
+				t.Fatal(err)
+			}
+			want := text
+			if want == "" {
+				want = "Earlier model commentary."
+			}
+			want += "\n\nLinks\n- [docs](<https://example.com/docs>)"
+			if len(store.messages) != 1 || store.messages[0].text != want {
+				t.Fatalf("messages = %+v, want %q", store.messages, want)
+			}
+		})
+	}
 }
 
 type deliveredMessage struct {
