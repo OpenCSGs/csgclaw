@@ -22,7 +22,7 @@ func (cmd) Name() string {
 }
 
 func (cmd) Summary() string {
-	return "Manage agent tasks."
+	return "Manage tasks across rooms, teams, and agents."
 }
 
 func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -44,6 +44,8 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		return c.runClaim(ctx, run, args[1:], globals)
 	case "update":
 		return c.runUpdate(ctx, run, args[1:], globals)
+	case "context", "submit", "get", "plan", "start", "dispatch", "review", "message", "stop", "recover", "report", "retry-delivery":
+		return c.runRoomAction(ctx, run, args[0], args[1:], globals)
 	default:
 		c.usage(run)
 		return fmt.Errorf("unknown task subcommand %q", args[0])
@@ -52,22 +54,39 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 
 func (c cmd) usage(run *command.Context) {
 	run.UsageCommandGroup(c, run.Program+" task <subcommand> [flags]", []string{
-		"list                        List global tasks",
+		"list                        List global tasks or tasks in --room",
 		"create                      Create an agent task",
-		"claim                       Claim an agent task",
-		"update                      Update an agent task status",
+		"claim                       Claim a task; assignment is resolved from its id",
+		"update                      Update a task; assignment is resolved from its id",
+		"context                     Inspect an on-demand room's task context",
+		"submit                      Create a Manager parent task in --room",
+		"get                          Read a task with assignment-specific details",
+		"plan | start | dispatch     Plan or schedule room work",
+		"review | report             Review or summarize room work",
+		"message                     Send a task-scoped message",
+		"stop | recover              Control a room task execution",
+		"retry-delivery              Retry persisted task messages in --room",
 	})
 }
 
 func (c cmd) runList(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
 	fs := run.NewFlagSet("task list", run.Program+" task list", "List global tasks.")
+	roomID := fs.String("room", "", "limit the list to one room")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("task list does not accept positional arguments")
 	}
-	items, err := run.APIClient(globals).ListGlobalTasks(ctx)
+	client := run.APIClient(globals)
+	if strings.TrimSpace(*roomID) != "" {
+		items, err := client.ListRoomTasks(ctx, strings.TrimSpace(*roomID))
+		if err != nil {
+			return err
+		}
+		return command.WriteJSON(run.Stdout, items)
+	}
+	items, err := client.ListGlobalTasks(ctx)
 	if err != nil {
 		return err
 	}
@@ -102,23 +121,49 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 }
 
 func (c cmd) runClaim(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("task claim", run.Program+" task claim --task <id> --participant-id <participant>", "Claim an agent task.")
+	fs := run.NewFlagSet("task claim", run.Program+" task claim --task <id> --actor-id <participant> [--attempt <n>]", "Claim a task after resolving its assignment.")
 	taskID := fs.String("task", "", "task id")
-	participantID := fs.String("participant-id", "", "worker participant id")
+	actorID := fs.String("actor-id", "", "worker participant id")
+	attempt := fs.Int("attempt", 0, "room task execution attempt")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("task claim does not accept positional arguments")
 	}
-	if strings.TrimSpace(*taskID) == "" || strings.TrimSpace(*participantID) == "" {
-		return fmt.Errorf("task and participant_id are required")
+	if strings.TrimSpace(*taskID) == "" || strings.TrimSpace(*actorID) == "" {
+		return fmt.Errorf("task and actor_id are required")
 	}
-	item, err := run.APIClient(globals).ClaimAgentTask(ctx, *taskID, *participantID)
+	client := run.APIClient(globals)
+	assignment, err := client.GetTask(ctx, *taskID)
 	if err != nil {
 		return err
 	}
-	return command.RenderTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
+	switch assignment.AssignmentType {
+	case taskcore.AssignmentTypeRoom:
+		if *attempt < 1 {
+			return fmt.Errorf("attempt is required for room tasks")
+		}
+		item, err := client.ClaimRoomTask(ctx, assignment.AssignmentID, *taskID, strings.TrimSpace(*actorID), *attempt)
+		if err != nil {
+			return err
+		}
+		return command.WriteJSON(run.Stdout, item)
+	case taskcore.AssignmentTypeTeam:
+		item, err := client.ClaimTeamTask(ctx, assignment.AssignmentID, *taskID, strings.TrimSpace(*actorID))
+		if err != nil {
+			return err
+		}
+		return command.RenderTeamTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
+	case taskcore.AssignmentTypeAgent:
+		item, err := client.ClaimAgentTask(ctx, *taskID, strings.TrimSpace(*actorID))
+		if err != nil {
+			return err
+		}
+		return command.RenderTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
+	default:
+		return fmt.Errorf("task %s has unsupported assignment_type %q", *taskID, assignment.AssignmentType)
+	}
 }
 
 func (c cmd) runUpdate(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
@@ -129,6 +174,7 @@ func (c cmd) runUpdate(ctx context.Context, run *command.Context, args []string,
 	result := fs.String("result", "", "task result text")
 	errorText := fs.String("error", "", "task error text")
 	reason := fs.String("reason", "", "blocking reason")
+	attempt := fs.Int("attempt", 0, "room task execution attempt")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -141,17 +187,46 @@ func (c cmd) runUpdate(ctx context.Context, run *command.Context, args []string,
 	if !isSupportedStatus(*status) {
 		return fmt.Errorf("status must be one of: blocked, completed, failed")
 	}
-	item, err := run.APIClient(globals).UpdateAgentTask(ctx, *taskID, apitypes.PatchAgentTaskRequest{
-		ActorID: strings.TrimSpace(*actorID),
-		Status:  strings.TrimSpace(*status),
-		Result:  strings.TrimSpace(*result),
-		Error:   strings.TrimSpace(*errorText),
-		Reason:  strings.TrimSpace(*reason),
-	})
+	client := run.APIClient(globals)
+	assignment, err := client.GetTask(ctx, *taskID)
 	if err != nil {
 		return err
 	}
-	return command.RenderTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
+	switch assignment.AssignmentType {
+	case taskcore.AssignmentTypeRoom:
+		if *attempt < 1 {
+			return fmt.Errorf("attempt is required for room tasks")
+		}
+		item, err := client.UpdateRoomTask(ctx, assignment.AssignmentID, *taskID, strings.TrimSpace(*actorID), apitypes.UpdateRoomTaskRequest{
+			Attempt: *attempt,
+			Status:  strings.TrimSpace(*status),
+			Result:  strings.TrimSpace(*result),
+			Error:   strings.TrimSpace(*errorText),
+			Reason:  strings.TrimSpace(*reason),
+		})
+		if err != nil {
+			return err
+		}
+		return command.WriteJSON(run.Stdout, item)
+	case taskcore.AssignmentTypeTeam:
+		item, err := client.UpdateTeamTask(ctx, assignment.AssignmentID, *taskID, strings.TrimSpace(*actorID), apitypes.PatchTeamTaskRequest{
+			Status: strings.TrimSpace(*status), Result: strings.TrimSpace(*result), Error: strings.TrimSpace(*errorText), Reason: strings.TrimSpace(*reason),
+		})
+		if err != nil {
+			return err
+		}
+		return command.RenderTeamTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
+	case taskcore.AssignmentTypeAgent:
+		item, err := client.UpdateAgentTask(ctx, *taskID, apitypes.PatchAgentTaskRequest{
+			ActorID: strings.TrimSpace(*actorID), Status: strings.TrimSpace(*status), Result: strings.TrimSpace(*result), Error: strings.TrimSpace(*errorText), Reason: strings.TrimSpace(*reason),
+		})
+		if err != nil {
+			return err
+		}
+		return command.RenderTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
+	default:
+		return fmt.Errorf("task %s has unsupported assignment_type %q", *taskID, assignment.AssignmentType)
+	}
 }
 
 func isSupportedStatus(status string) bool {

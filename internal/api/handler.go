@@ -21,12 +21,14 @@ import (
 	"csgclaw/internal/mcp"
 	"csgclaw/internal/modelprovider"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/roomtask"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/scheduledtask"
+	"csgclaw/internal/taskcore"
 	"csgclaw/internal/team"
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
@@ -62,6 +64,7 @@ type Handler struct {
 	llm                        *llm.Service
 	hub                        *hub.Service
 	mcp                        *mcp.Service
+	roomTaskSvc                *roomtask.Service
 	teamSvc                    *team.Service
 	agentTaskSvc               *agenttask.Service
 	scheduledTaskSvc           *scheduledtask.Service
@@ -2497,10 +2500,32 @@ func (h *Handler) handleRoomMemberDeletePath(w http.ResponseWriter, r *http.Requ
 		Locale:    req.Locale,
 	}
 
+	if h.im != nil && h.roomTaskSvc != nil {
+		if current, found := h.im.Room(roomID); found && current.IsOnDemand() {
+			for _, member := range serviceReq.UserIDs {
+				if h.participantBridgeTargetForRoomMember(member).matches(current.ManagerID) {
+					http.Error(w, "cannot remove the collaboration manager", http.StatusConflict)
+					return
+				}
+				for _, task := range h.roomTaskSvc.List(roomID) {
+					if h.participantBridgeTargetForRoomMember(task.AssignedTo).matches(member) && (task.Status == taskcore.StatusInProgress || task.Status == taskcore.StatusAssigned && task.DispatchedAt != nil || task.RecoveryRequired) {
+						http.Error(w, "stop the running worker before removing it", http.StatusConflict)
+						return
+					}
+				}
+			}
+		}
+	}
 	room, err := channel.RemoveRoomMembers(serviceReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	if room.IsOnDemand() && h.roomTaskSvc != nil {
+		if err := h.roomTaskSvc.MembersChanged(room.ID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, room)
 }
@@ -2862,6 +2887,21 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serviceReq = h.resolveCSGClawParticipantMessageRequest(serviceReq)
+	if caller := strings.TrimSpace(r.Header.Get("X-CSGClaw-Caller-Agent")); caller != "" {
+		if reader, ok := h.participantWork.(activeRoomReader); ok {
+			rooms := reader.ActiveRooms(h.participantBridgeTargetForRoomMember(caller).bridgeID)
+			if len(rooms) > 0 {
+				allowed := false
+				for _, roomID := range rooms {
+					allowed = allowed || roomID == serviceReq.RoomID
+				}
+				if !allowed || !h.participantBridgeTargetForRoomMember(serviceReq.SenderID).matches(caller) {
+					http.Error(w, "message must use the runtime caller and an active room", http.StatusForbidden)
+					return
+				}
+			}
+		}
+	}
 
 	message, created, err := channel.SendMessageOnce(serviceReq)
 	if err != nil {
@@ -2888,6 +2928,21 @@ func (h *Handler) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 	req.CreatorID = h.resolveCSGClawParticipantUserID(req.CreatorID)
 	req.MemberIDs = h.resolveCSGClawParticipantUserIDs(req.MemberIDs)
+	if apitypes.NormalizeRoomType(req.Type) == apitypes.RoomTypeOnDemand {
+		if req.ManagerID == "" {
+			req.ManagerID = agent.ManagerParticipantID
+		}
+		req.ManagerID = h.resolveCSGClawParticipantUserID(req.ManagerID)
+		if h.im == nil {
+			http.Error(w, "manager unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		manager, found := h.im.User(req.ManagerID)
+		if !found || !strings.EqualFold(manager.Role, "manager") {
+			http.Error(w, "valid manager required", http.StatusBadRequest)
+			return
+		}
+	}
 
 	room, err := channel.CreateRoom(req)
 	if err != nil {
@@ -3699,6 +3754,11 @@ func (h *Handler) publishMessageCreated(conversationID, senderID string, message
 func (h *Handler) handleTeamRoomCommand(ctx context.Context, roomID string, senderID string, content string) {
 	if h == nil || h.teamSvc == nil {
 		return
+	}
+	if h.im != nil {
+		if room, ok := h.im.Room(roomID); ok && room.IsOnDemand() {
+			return
+		}
 	}
 	adapter, ok := h.teamAdapterForChannel(team.DefaultExecutionChannel)
 	if !ok {

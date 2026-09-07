@@ -23,6 +23,14 @@ type Service struct {
 	participants participantLookup
 }
 
+// Core shares the task repository with other assignment workflows at wiring time.
+func (s *Service) Core() *taskcore.Service {
+	if s == nil {
+		return nil
+	}
+	return s.core
+}
+
 type CreateInput struct {
 	ID        string
 	AgentID   string

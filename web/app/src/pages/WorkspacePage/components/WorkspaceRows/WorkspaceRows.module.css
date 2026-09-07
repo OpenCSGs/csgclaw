@@ -405,6 +405,26 @@
   white-space: nowrap;
 }
 
+.roomModeBadge {
+  flex: 0 0 auto;
+  min-height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  background: var(--gray-50);
+  color: var(--gray-500);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.roomModeBadgeOnDemand {
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--primary-strong);
+}
+
 .online {
   background: var(--success-600);
 }
@@ -534,6 +554,18 @@
 :global(:root[data-theme="dark"]) .conversationRow.active .time,
 :global(:root[data-theme="dark"]) .active.conversationRow .time {
   color: var(--white);
+}
+
+:global(:root[data-theme="dark"]) .roomModeBadge {
+  border-color: rgba(208, 213, 221, 0.16);
+  background: rgba(208, 213, 221, 0.08);
+  color: var(--gray-400);
+}
+
+:global(:root[data-theme="dark"]) .roomModeBadgeOnDemand {
+  border-color: color-mix(in srgb, var(--primary) 38%, transparent);
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: var(--brand-300);
 }
 
 :global(:root[data-theme="dark"]) .addButton:hover:not(:disabled),

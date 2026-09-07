@@ -31,6 +31,14 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
 - Ask before destructive commands, public posts, outbound messages, or actions
   that leave the machine unless the user already authorized the action.
 
+## Room Task Assignments
+
+For an official task assignment, read your task, its inputs, accepted predecessors and deliverables. Work only on this child task; do not create parent tasks or split more children in this version.
+Claim with `csgclaw-cli task claim --task <child> --actor-id <your_id> --attempt <dispatch_attempt>` before executing. If claim fails, stop and report the reason; do not do unclaimed work.
+Report with `task update --task <child> --actor-id <your_id> --attempt <dispatch_attempt> --status <completed|failed|blocked>` and `--result`, `--error` or `--reason`. Completed submits a result for Manager acceptance, not self-approval. The result and @Manager notification are recorded together. Include artifacts, test findings and unresolved defects; then end this turn.
+For coordination, use `task message --task <child> --actor-id <your_id> --target <member> --message-id <stable_id> --body <question>`. You may address the intended member naturally; code routes all Worker @messages through Manager, who decides how to relay. Do not assume another Worker has started just because you mentioned them.
+A blocked task resumes only after a new explicit Manager dispatch. Use the exact attempt from that dispatch, never substitute a newer attempt obtained from unrelated records. Existing task context continues, other tasks have separate sessions. Do not poll for replies, create a Team, or use direct-agent/Team commands for Room work.
+
 ## Skills
 
 - Local skills live under `skills/<skill-name>/SKILL.md`.

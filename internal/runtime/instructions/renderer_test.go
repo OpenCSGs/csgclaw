@@ -15,6 +15,20 @@ func TestAgentsInstructionsBlockMarkers(t *testing.T) {
 	}
 }
 
+func TestRuntimeBindsAllExecutableExamplesAndAvoidsRoomDiscovery(t *testing.T) {
+	path := "/bundle with spaces/Jared's $(ignored)/bin/csgclaw-cli"
+	got := RenderRuntimeAgentsInstructionsBlockWithOptions("agent-manager", "", RuntimeManagedInstructionsOptions{CLIPath: path})
+	command := "'/bundle with spaces/Jared'\"'\"'s $(ignored)/bin/csgclaw-cli'"
+	for _, want := range []string{command + " task submit", command + " task get", "--plan-file", "Do not call context/list", "queued turn starts"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q", want)
+		}
+	}
+	if strings.Contains(got, `"$CSGCLAW_CLI"`) || strings.Contains(got, "`csgclaw-cli ") || strings.Contains(got, "task list --room") || strings.Contains(got, "permits one root") {
+		t.Fatal("conflicting executable or routine discovery instruction remains")
+	}
+}
+
 func TestRenderAgentsInstructionsBlockIncludesEmbeddedRules(t *testing.T) {
 	got := RenderAgentsInstructionsBlock("")
 	for _, want := range []string{
@@ -75,11 +89,20 @@ func TestRenderAgentsInstructionsBlockWithoutInstructions(t *testing.T) {
 	if strings.Contains(got, "# Agent Instructions") {
 		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want no agent instructions section", got)
 	}
-	if !strings.Contains(got, "# CSGClaw Rules\n\n### Scope") {
+	if !strings.Contains(got, "# CSGClaw Rules\n\n### On-demand Room Takes Precedence") {
 		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want embedded rules section", got)
 	}
 	if !strings.HasSuffix(got, agentsInstructionsBlockEnd+"\n") {
 		t.Fatalf("RenderAgentsInstructionsBlock() suffix = %q", got)
+	}
+}
+
+func TestManagedInstructionsSelectCompanionCLIAndRejectFakeDispatch(t *testing.T) {
+	got := RenderAgentsInstructionsBlock("")
+	for _, want := range []string{"CSGCLAW_CLI", "never the bare executable found on PATH", "do not retry a different CLI or claim work was assigned", "A manual mention is not a task assignment"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing managed rule %q", want)
+		}
 	}
 }
 
@@ -148,7 +171,7 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForMan
 		"Do not treat an empty result from an external Codex GitHub app connector as proof",
 		"reconnect the CSGClaw GitHub OAuth connector",
 		"Historical Attachment Recovery",
-		"csgclaw-cli message list --channel <current_channel> --room-id <target_room_id>",
+		`"$CSGCLAW_CLI" message list --channel <current_channel> --room-id <target_room_id>`,
 		"jq '[.[] as $message | ($message.attachments // [])[]",
 		"runtime-local cache copies, not as the durable attachment index",
 		"GET $CSGCLAW_BASE_URL/api/v1/attachments/<attachment-id>",
@@ -170,5 +193,13 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsManagerConnectorRulesOnlyForMan
 		strings.Contains(worker, "Historical Attachment Recovery") ||
 		strings.Contains(worker, "`GITHUB_TOKEN`") {
 		t.Fatalf("worker runtime instructions include manager connector guidance: %q", worker)
+	}
+}
+
+func TestCompanionBindingPreservesUserInstructions(t *testing.T) {
+	instructions := "Use `/other/bin/csgclaw-cli status` for a separate installation.\nThe literal variable is \"$CSGCLAW_CLI\"."
+	got := RenderRuntimeAgentsInstructionsBlockWithOptions("agent-manager", instructions, RuntimeManagedInstructionsOptions{CLIPath: "/bundle/bin/csgclaw-cli"})
+	if ExtractUserInstructionsFromAgentsDocument(got) != instructions {
+		t.Fatal("runtime binding rewrote user instructions")
 	}
 }

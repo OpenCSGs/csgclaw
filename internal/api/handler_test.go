@@ -7588,11 +7588,8 @@ func TestHandleRoomsPostUsesCsgclawChannelAdapter(t *testing.T) {
 	}
 }
 
-func TestHandleRoomsPatchUpdatesNotifyAllAgents(t *testing.T) {
-	bus := im.NewBus()
-	events, cancel := bus.Subscribe()
-	defer cancel()
-	svc := im.NewServiceFromBootstrapWithBus(im.Bootstrap{
+func TestHandleRoomsPatchRejectsNotifyAllForGroupRoom(t *testing.T) {
+	svc := im.NewServiceFromBootstrap(im.Bootstrap{
 		CurrentUserID: "u-admin",
 		Users: []im.User{
 			{ID: "u-admin", Name: "admin"},
@@ -7603,26 +7600,15 @@ func TestHandleRoomsPatchUpdatesNotifyAllAgents(t *testing.T) {
 			Title:   "Launch",
 			Members: []string{"u-admin", "u-alice"},
 		}},
-	}, bus)
+	})
 	srv := &Handler{im: svc}
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/rooms/room-1", strings.NewReader(`{"notify_all_agents":true}`))
 	rec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	var got im.Room
-	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if !got.NotifyAllAgents {
-		t.Fatal("notify_all_agents = false, want true")
-	}
-	event := mustReceiveIMEvent(t, events)
-	if event.Type != im.EventTypeRoomUpdated || event.Room == nil || !event.Room.NotifyAllAgents {
-		t.Fatalf("event = %+v, want room.updated with notify_all_agents", event)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
 
@@ -8251,7 +8237,7 @@ func TestPublishParticipantEventQueuesUntilParticipantSubscribes(t *testing.T) {
 	}
 }
 
-func TestPublishParticipantEventNotifyAllFansOutHumanMessagesWithoutCascadingAgentReplies(t *testing.T) {
+func TestPublishParticipantEventFreeRoomOnlyRoutesExplicitMentions(t *testing.T) {
 	svc := mustNewSeededService(t, []agent.Agent{
 		{ID: "agent-a", Name: "agent-a", Role: agent.RoleWorker},
 		{ID: "agent-b", Name: "agent-b", Role: agent.RoleWorker},
@@ -8300,12 +8286,8 @@ func TestPublishParticipantEventNotifyAllFansOutHumanMessagesWithoutCascadingAge
 	})
 	select {
 	case event := <-events:
-		if event.MessageID != "msg-human" || !event.Mentioned {
-			t.Fatalf("implicit human fanout event = %+v, want mentioned msg-human", event)
-		}
-		bridge.Ack("pt-b", event.MessageID)
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for implicit human fanout delivery")
+		t.Fatalf("unexpected free-room delivery without @mention: %+v", event)
+	default:
 	}
 
 	srv.PublishParticipantEvent(im.Event{
@@ -8321,12 +8303,8 @@ func TestPublishParticipantEventNotifyAllFansOutHumanMessagesWithoutCascadingAge
 	})
 	select {
 	case event := <-events:
-		if event.MessageID != "msg-human-mention" || !event.Mentioned {
-			t.Fatalf("explicit human mention fanout event = %+v, want mentioned msg-human-mention", event)
-		}
-		bridge.Ack("pt-b", event.MessageID)
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for explicit human mention fanout delivery")
+		t.Fatalf("unexpected delivery to unmentioned worker: %+v", event)
+	default:
 	}
 
 	srv.PublishParticipantEvent(im.Event{
@@ -8345,8 +8323,8 @@ func TestPublishParticipantEventNotifyAllFansOutHumanMessagesWithoutCascadingAge
 	default:
 	}
 	room, ok := imSvc.Room("room-1")
-	if !ok || !room.NotifyAllAgents {
-		t.Fatalf("room = %+v, want notify-all setting to remain enabled", room)
+	if !ok || room.NotifyAllAgents {
+		t.Fatalf("room = %+v, want legacy notify-all setting normalized off", room)
 	}
 
 	srv.PublishParticipantEvent(im.Event{
@@ -8425,7 +8403,7 @@ func TestPublishParticipantEventReensuresRunningWorkerLifecycle(t *testing.T) {
 				ID:              "room-1",
 				NotifyAllAgents: true,
 				Members:         []string{"u-admin", "u-worker"},
-				Messages:        []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", CreatedAt: time.Now().UTC()}},
+				Messages:        []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", Mentions: []im.Mention{{ID: "u-worker"}}, CreatedAt: time.Now().UTC()}},
 			},
 		},
 	})
@@ -8508,7 +8486,7 @@ func TestPublishParticipantEventStartsStoppedWorker(t *testing.T) {
 				ID:              "room-1",
 				NotifyAllAgents: true,
 				Members:         []string{"u-admin", "u-worker"},
-				Messages:        []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", CreatedAt: time.Now().UTC()}},
+				Messages:        []im.Message{{ID: "msg-1", SenderID: "u-admin", Content: "please handle this", Mentions: []im.Mention{{ID: "u-worker"}}, CreatedAt: time.Now().UTC()}},
 			},
 		},
 	})

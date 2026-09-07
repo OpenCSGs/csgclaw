@@ -1,6 +1,7 @@
 package im
 
 import (
+	"csgclaw/internal/taskmeta"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -9,15 +10,37 @@ import (
 
 type ParticipantBridge struct {
 	mu          sync.Mutex
+	roomContext func(roomID, participantID, sourceID, taskID string) (string, error)
 	subscribers map[string]map[chan ParticipantEvent]struct{}
 	pending     map[string][]ParticipantEvent
 	inflight    map[string]map[string]ParticipantEvent
 	seen        map[string]map[string]struct{}
 }
 
+// SetRoomContextProvider installs a server-owned context reader. Read it when
+// a queued turn starts, not when the triggering message is persisted.
+func (b *ParticipantBridge) SetRoomContextProvider(provider func(string, string, string, string) (string, error)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.roomContext = provider
+}
+
+func (b *ParticipantBridge) RoomContext(roomID, participantID, sourceID, taskID string) (string, error) {
+	b.mu.Lock()
+	provider := b.roomContext
+	b.mu.Unlock()
+	if provider == nil {
+		return "", nil
+	}
+	return provider(roomID, participantID, sourceID, taskID)
+}
+
 const maxPendingParticipantEventsPerParticipant = 64
 
 type ParticipantEvent struct {
+	RoomManager   bool                      `json:"room_manager,omitempty"`
+	TaskAttempt   int                       `json:"task_attempt,omitempty"`
+	TaskID        string                    `json:"task_id,omitempty"`
 	MessageID     string                    `json:"message_id"`
 	RoomID        string                    `json:"room_id"`
 	Locale        string                    `json:"locale,omitempty"`
@@ -173,7 +196,7 @@ func (b *ParticipantBridge) SubscriberCount(participantID string) int {
 func (b *ParticipantBridge) PublishMessageEvent(room Room, sender User, message Message) []string {
 	var missed []string
 	for _, participantID := range room.Members {
-		if !shouldNotifyParticipant(room, message, participantID) {
+		if !shouldNotifyParticipant(room, sender, message, participantID) {
 			continue
 		}
 		if !b.EnqueueMessageEvent(room, sender, message, participantID) {
@@ -185,7 +208,7 @@ func (b *ParticipantBridge) PublishMessageEvent(room Room, sender User, message 
 
 func (b *ParticipantBridge) EnqueueMessageEvent(room Room, sender User, message Message, participantID string) bool {
 	participantID = canonicalIMParticipantID(participantID)
-	if !shouldNotifyParticipant(room, message, participantID) {
+	if !shouldNotifyParticipant(room, sender, message, participantID) {
 		return true
 	}
 	return b.enqueue(participantID, messageEventForParticipant(room, sender, message, participantID))
@@ -193,7 +216,7 @@ func (b *ParticipantBridge) EnqueueMessageEvent(room Room, sender User, message 
 
 func (b *ParticipantBridge) EnqueueMessageEventWithText(room Room, sender User, message Message, participantID string, text string) bool {
 	participantID = canonicalIMParticipantID(participantID)
-	if !shouldNotifyParticipant(room, message, participantID) {
+	if !shouldNotifyParticipant(room, sender, message, participantID) {
 		return true
 	}
 	evt := messageEventForParticipant(room, sender, message, participantID)
@@ -393,8 +416,21 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 	chatType := chatTypeForRoom(room)
 	mentions := mentionsForParticipant(message.Mentions, participantID)
 	mentioned := len(mentions) > 0 || (!room.IsDirect && room.NotifyAllAgents)
+	if room.IsOnDemand() && canonicalIMUserID(participantID) == canonicalIMUserID(room.ManagerID) {
+		// Manager is the implicit addressee of human input. Preserve the actual
+		// message/mentions, but mark it addressed for downstream runtime routing.
+		mentioned = true
+		mentions = nil
+		for _, mention := range message.Mentions {
+			mentions = append(mentions, mention.ID)
+		}
+	}
 	text := textForParticipantEvent(message, participantID)
+	attempt := taskmeta.Attempt(message.Metadata)
 	return ParticipantEvent{
+		RoomManager:  room.IsOnDemand() && canonicalIMUserID(participantID) == canonicalIMUserID(room.ManagerID),
+		TaskAttempt:  attempt,
+		TaskID:       roomExecutionTaskID(room, message),
 		MessageID:    message.ID,
 		RoomID:       room.ID,
 		Locale:       room.Locale,
@@ -430,6 +466,13 @@ func messageEventForParticipant(room Room, sender User, message Message, partici
 			},
 		},
 	}
+}
+
+func roomExecutionTaskID(room Room, message Message) string {
+	if !room.IsOnDemand() {
+		return ""
+	}
+	return taskmeta.ID(message.Metadata)
 }
 
 func textForParticipantEvent(message Message, participantID string) string {
@@ -584,13 +627,57 @@ func (e ParticipantEvent) MarshalJSONLine() ([]byte, error) {
 	return data, nil
 }
 
-func shouldNotifyParticipant(room Room, message Message, participantID string) bool {
+// Human intake is separate from agent-to-agent notifications. Unknown roles
+// are not treated as human, so a missing runtime identity cannot cause fanout.
+func onDemandHumanMessage(room Room, sender User, message Message) bool {
+	if room.IsDirect || !room.IsOnDemand() || message.Event != nil ||
+		(message.Kind != MessageKindMessage && message.Kind != "") || IsAgentActivityMessage(message) {
+		return false
+	}
+	if canonicalIMUserID(sender.ID) != canonicalIMUserID(message.SenderID) || !containsUserIDInRoom(room, sender.ID) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(sender.Role)) {
+	case "admin", "human", "user":
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldNotifyParticipant(room Room, sender User, message Message, participantID string) bool {
+	if IsAgentActivityMessage(message) {
+		return false
+	}
 	userID := userIDForParticipantID(participantID)
-	if canonicalIMUserID(message.SenderID) == userID {
+	if canonicalIMUserID(message.SenderID) == userID && !(room.IsOnDemand() && message.Event != nil && message.Event.Key == "task_feedback") {
 		return false
 	}
 	if !containsUserIDInRoom(room, participantID) {
 		return false
+	}
+	if room.IsOnDemand() && !room.IsDirect {
+		manager := canonicalIMUserID(room.ManagerID)
+		if manager == "" {
+			return false
+		}
+		if onDemandHumanMessage(room, sender, message) {
+			// Human @worker is a request for the manager, not direct dispatch.
+			return userID == manager
+		}
+		if message.Event != nil {
+			return ((userID == manager && message.Event.Key == "task_feedback") || (canonicalIMUserID(message.SenderID) == manager && message.Event.Key == "task_assigned")) && messageMentionsParticipant(message, participantID)
+		}
+		if message.Kind != MessageKindMessage && message.Kind != "" {
+			return false
+		}
+		if canonicalIMUserID(message.SenderID) != manager {
+			return userID == manager && len(message.Mentions) > 0
+		}
+		// Manager task-scoped relays are validated by the API bridge; other
+		// mentions in ordinary prose are not new work assignments.
+		taskID := taskmeta.ID(message.Metadata)
+		return taskID != "" && messageMentionsParticipant(message, participantID)
 	}
 	return room.IsDirect || room.NotifyAllAgents || messageMentionsParticipant(message, participantID)
 }

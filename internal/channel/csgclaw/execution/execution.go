@@ -39,6 +39,7 @@ type Adapter struct {
 	renderer    delivery.Renderer
 	newTurnID   idGenerator
 	work        workOptions
+	roomContext func(roomID, participantID, sourceID, taskID string) (string, error)
 }
 
 // builtInIMAdmissionPolicy deliberately preserves queued, in-order delivery
@@ -47,6 +48,12 @@ type Adapter struct {
 const builtInIMAdmissionPolicy = agentengine.AdmissionWait
 
 type Option func(*Adapter)
+
+// WithRoomContextProvider supplies fresh private collaboration facts after the
+// ingress queue admits this room's next turn. It never creates an IM message.
+func WithRoomContextProvider(provider func(string, string, string, string) (string, error)) Option {
+	return func(adapter *Adapter) { adapter.roomContext = provider }
+}
 
 func WithAttachmentResolver(resolver files.Resolver) Option {
 	return func(adapter *Adapter) {
@@ -257,6 +264,8 @@ func (a *Adapter) turnContext(binding channel.Binding, event channel.Event) (cha
 		return channel.TurnContext{}, fmt.Errorf("generated turn id is empty")
 	}
 	return channel.TurnContext{
+		TaskID:      strings.TrimSpace(event.TaskID),
+		RoomManager: event.RoomManager, TaskAttempt: event.TaskAttempt,
 		BindingID:       binding.StableID(),
 		ParticipantID:   participantID,
 		AgentID:         agentID,
@@ -292,6 +301,16 @@ func (a *Adapter) input(ctx context.Context, binding channel.Binding, event chan
 		releases = append(releases, release)
 	}
 	input := conv.TextInput(binding, event)
+	if a.roomContext != nil {
+		hidden, err := a.roomContext(event.RoomID, binding.ParticipantID, event.MessageID, event.TaskID)
+		if err != nil {
+			releaseAll()
+			return nil, nil, fmt.Errorf("resolve room context: %w", err)
+		}
+		if hidden != "" {
+			input = append([]agentengine.InputPart{{Kind: agentengine.InputPartText, Text: hidden}}, input...)
+		}
+	}
 	for _, attachment := range event.Attachments {
 		file, release, err := a.attachments.Resolve(ctx, binding, event, attachment)
 		if err != nil {

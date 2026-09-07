@@ -35,6 +35,8 @@ export type ConversationMessageListProps = {
   conversation: IMConversation;
   currentUserID?: string;
   emptyStateSlot?: ReactNode;
+  headerSlot?: ReactNode;
+  renderMessageFooter?: (message: IMMessage) => ReactNode;
   locale: LocaleCode;
   messageActionBusy: string;
   messageActionFeedback: MessageActionFeedback;
@@ -56,6 +58,8 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   conversation,
   currentUserID = "",
   emptyStateSlot,
+  headerSlot,
+  renderMessageFooter,
   locale,
   messageActionBusy,
   messageActionFeedback,
@@ -75,6 +79,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
 
   return (
     <section ref={messageListRef} className="messages">
+      {headerSlot}
       {conversation.messages.length === 0 ? (
         (emptyStateSlot ?? (
           <div className="messages-empty rich-empty">
@@ -204,6 +209,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                 ) : null}
                 <ConversationMessageActions
                   className="message-hover-actions"
+                  leading={renderMessageFooter?.(message)}
                   content={message.content}
                   onOpenThread={() => onOpenThread(message)}
                   t={t}

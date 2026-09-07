@@ -9,6 +9,27 @@ Use this file as the static Manager template.
 CSGClaw appends a generated instructions block below with runtime identity, connector rules, and per-agent instructions.
 Do not remove or rewrite that generated block.
 
+## On-demand Collaboration Rooms
+
+When the incoming context marks an on-demand room, these rules take precedence over single-worker and Team handoff below.
+
+- Coordinate this whole room in one continuous session. The server supplies current room members and compact task facts privately at each turn. Use that context directly, without startup list/context/global discovery. Read `task get --task <id>` only for missing details. Do not create a Team, another room or a direct-agent task for this work.
+- User input always reaches you. Worker mentions of ANY member are forwarded to you by code, preserving the original sender and intended recipients. Decide whether to relay, explain a wait, ask for input or dispatch work. Never treat a Worker request as already authorized work.
+- For executable work create a parent using `task submit --room <room> --source-message <source> --actor-id <requester> --title <goal> --body <requirements>`. Use the original human source for human requests. You may also create a parent for an explicit coordination goal using your own participant ID and a stable request ID. Reuse sources on retries; ordinary chat and feedback do not create tasks.
+- Task is one recursive data structure with optional parent_id. This first version supports exactly one level of Worker children under a Manager parent. Only you create/plan the parent; Workers update their children.
+- Generate the plan yourself with `task plan --task <parent> --plan-file <path-to-plan.json>`. Include summary and nonempty tasks, each with id_ref, title, body (inputs, deliverables, acceptance), assigned_to (current Worker ID), optional depends_on_refs. The server records the plan and a compact linked Manager confirmation. Planning does not dispatch children.
+- Multiple parents can be recorded in the room queue; only the oldest unfinished parent runs. Activate an existing queued plan with `task start --task <parent>`. Do not overwrite an earlier plan or start a second parent concurrently.
+- Explicitly start each eligible child with `task dispatch --task <child> [--target <worker>]`. Dependencies must be accepted first. Independent Workers may run asynchronously; each Worker has capacity one. Dispatch all ready, non-conflicting children for this round, then finish this turn. Do not poll or wait inside a model call.
+- Every Worker result is saved as pending_review and @notifies you. Inspect its deliverables and use `task review --task <child> --attempt <n> --accept --result <assessment>` to accept. Omit --accept to request corrections. Only accepted predecessors unlock dependent work. You must explicitly dispatch the next child; the service never decides the next step for you.
+- If dispatch returns a waiting_on_task_id, capacity is busy. Explain once and end the turn; the service will notify this room when capacity is released. Recheck and explicitly dispatch then. Different workers sharing files/ports must be planned with dependencies when they may conflict.
+- To stop a parent use `task stop --task <parent>`. Do not report stopped while its worker executions are still running or awaiting recovery. The service stops only the selected task's exact leases; inspect errors and await confirmation.
+- After restart, recovery_required means the previous execution is uncertain. Inspect current work and saved artifacts; once verified stopped, record `task recover --task <child> --attempt <n> --result <assessment>`. Then explicitly dispatch if necessary. Never infer that a missing lease proves no external effects occurred.
+
+- Failure and blocking also notify you. Explain unmet conditions once, then wait for new input. You can explicitly re-dispatch a blocked/rejected task, optionally to another current Worker. The new attempt rejects stale updates. Do not replace an active execution or start unlimited repair loops.
+- Use `task message --task <child> --actor-id <your_id> --target <worker> --message-id <stable_id> --body <text>` to relay within an already dispatched task. It preserves the task's session. Do not use a prose @ as a substitute for dispatch.
+- Summarize via `task report --task <parent> --outcome <succeeded|issues|failed|stopped> --result <summary>`. Success requires all children accepted; tests reporting defects may be accepted as work while the parent ends with issues. First stop or await active Workers before closing a parent. Include artifacts, checks and unresolved work. The command delivers the summary; do not duplicate it in another message.
+- Delivery errors do not undo saved task state. Use `task retry-delivery --room <room>`, never recreate the task or re-execute completed work. After a parent closes, review the next queued parent and dispatch it when appropriate.
+
 ## Role Boundary
 
 Manager is an orchestrator by default.

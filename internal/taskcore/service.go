@@ -33,6 +33,8 @@ type Service struct {
 type Option func(*Service)
 
 type CreateRootInput struct {
+	Status           string
+	SourceMessageID  string
 	ID               string
 	AssignmentType   string
 	AssignmentID     string
@@ -170,7 +172,14 @@ func (s *Service) CreateRoot(input CreateRootInput) (Task, error) {
 	if strings.TrimSpace(input.AssignedTo) != "" {
 		status = StatusAssigned
 	}
+	if input.Status != "" {
+		if input.Status != StatusQueued {
+			return Task{}, fmt.Errorf("unsupported initial task status")
+		}
+		status = input.Status
+	}
 	task := &Task{
+		SourceMessageID:  strings.TrimSpace(input.SourceMessageID),
 		ID:               id,
 		AssignmentType:   strings.TrimSpace(input.AssignmentType),
 		AssignmentID:     strings.TrimSpace(input.AssignmentID),
@@ -209,9 +218,6 @@ func (s *Service) CreateChild(input CreateChildInput) (Task, error) {
 	rootID, parent, err := s.requireTaskLocked(input.ParentID)
 	if err != nil {
 		return Task{}, err
-	}
-	if strings.TrimSpace(parent.ParentID) != "" {
-		return Task{}, fmt.Errorf("%w: only root tasks can have children", ErrTransitionInvalid)
 	}
 	if strings.TrimSpace(input.Title) == "" {
 		return Task{}, fmt.Errorf("title is required")
@@ -256,6 +262,7 @@ func (s *Service) CreateChild(input CreateChildInput) (Task, error) {
 	})
 	if err := s.persistRootLocked(rootID, eventStart); err != nil {
 		delete(s.childrenForRootLocked(rootID), child.ID)
+		s.events[rootID] = s.events[rootID][:eventStart]
 		return Task{}, err
 	}
 	return cloneTask(*child), nil
@@ -740,7 +747,7 @@ func (s *Service) bumpApprovalIdentifier(id string) {
 
 func validateAssignment(assignmentType, assignmentID string) error {
 	switch strings.TrimSpace(assignmentType) {
-	case AssignmentTypeTeam, AssignmentTypeAgent:
+	case AssignmentTypeTeam, AssignmentTypeAgent, AssignmentTypeRoom:
 	default:
 		return fmt.Errorf("unsupported assignment_type %q", assignmentType)
 	}

@@ -1,0 +1,250 @@
+.dialog {
+  width: min(600px, calc(100vw - 32px));
+  max-height: min(820px, calc(100dvh - 48px));
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+}
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.body {
+  overflow: auto;
+  padding: 12px 16px 16px;
+  min-height: 0;
+  overscroll-behavior: contain;
+  background: color-mix(in srgb, var(--panel-strong) 64%, var(--panel));
+}
+.reference {
+  max-width: 100%;
+  gap: 8px;
+  margin-top: 6px;
+  white-space: normal;
+  text-align: left;
+}
+.title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 36ch;
+}
+.status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 22px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  border-radius: var(--radius-full);
+  padding: 3px 9px;
+  background: var(--panel-soft);
+  color: var(--gray-600);
+  white-space: nowrap;
+}
+.status[data-state="completed"] {
+  background: color-mix(in srgb, var(--success-600) 12%, transparent);
+  color: var(--success-700);
+}
+.status[data-state="in_progress"],
+.status[data-state="pending_review"],
+.status[data-state="summarizing"] {
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+.status[data-state="blocked"],
+.status[data-state="waiting_dependency"],
+.status[data-state="waiting_resource"] {
+  background: color-mix(in srgb, var(--warning-600) 12%, transparent);
+  color: var(--warning-700);
+}
+.status[data-state="failed"],
+.status[data-state="cancelled"],
+.status[data-state="canceled"],
+.status[data-state="recovery"] {
+  background: color-mix(in srgb, var(--error-600) 11%, transparent);
+  color: var(--error-700);
+}
+.children {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-xs);
+}
+.children li {
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+}
+.row {
+  display: grid;
+  grid-template-columns: 18px auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.row strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.row > span {
+  font-size: 13px;
+}
+.completedIcon {
+  color: var(--success-600);
+}
+.pendingIcon {
+  color: var(--gray-400);
+}
+.taskNumber {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-base);
+  background: var(--panel-soft);
+  color: var(--gray-500);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .row {
+    grid-template-columns: 18px auto minmax(0, 1fr) auto;
+  }
+  .row > .status {
+    grid-column: 3 / -1;
+    justify-self: start;
+  }
+  .header,
+  .body {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+  .title {
+    max-width: 18ch;
+  }
+}
+
+.reference :global(.btn-content) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+.reference .title {
+  min-width: 0;
+}
+.reference svg {
+  flex-shrink: 0;
+}
+
+.compactReference {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  max-width: 140px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.compactReference > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compactReference svg {
+  flex-shrink: 0;
+}
+.compactReference:hover {
+  border-color: var(--primary);
+}
+.compactReference:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.heading {
+  min-width: 0;
+  flex: 1;
+}
+.headingRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.headingRow h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+}
+.headingRow h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.description {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+}
+.group + .group {
+  margin-top: 12px;
+}
+.children li:first-child {
+  border-top: 0;
+}
+.assignee {
+  max-width: 16ch;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+:root[data-theme="dark"] .status {
+  color: var(--gray-300);
+}
+:root[data-theme="dark"] .status[data-state="completed"] {
+  color: var(--success-300);
+}
+:root[data-theme="dark"] .status[data-state="blocked"],
+:root[data-theme="dark"] .status[data-state="waiting_dependency"],
+:root[data-theme="dark"] .status[data-state="waiting_resource"] {
+  color: var(--warning-200);
+}
+:root[data-theme="dark"] .status[data-state="failed"],
+:root[data-theme="dark"] .status[data-state="cancelled"],
+:root[data-theme="dark"] .status[data-state="canceled"],
+:root[data-theme="dark"] .status[data-state="recovery"] {
+  color: var(--error-300);
+}

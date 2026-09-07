@@ -1,3 +1,4 @@
+import type { RoomTaskEvent } from "@/models/roomTasks";
 import { del, get, patch, post } from "@/api/client";
 import {
   normalizeTask,
@@ -36,6 +37,12 @@ export type CreateWorkspaceTaskPayload = {
 
 export async function fetchGlobalTasks(): Promise<WorkspaceTask[]> {
   return normalizeTaskList(await get<unknown>("/api/v1/tasks"));
+}
+
+export async function fetchRoomTasks(roomID: string, signal?: AbortSignal): Promise<WorkspaceTask[]> {
+  return normalizeTaskList(
+    await get<unknown>(`/api/v1/rooms/${encodeURIComponent(roomID)}/tasks`, { signal, cache: "no-store" }),
+  );
 }
 
 export async function fetchTeams(): Promise<WorkspaceTeam[]> {
@@ -228,4 +235,18 @@ function normalizeCreatedTask(input: unknown): WorkspaceTask | null {
 function numberValue(value: unknown): number {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export async function fetchRoomTaskEvents(
+  roomID: string,
+  taskID: string,
+  signal?: AbortSignal,
+): Promise<RoomTaskEvent[]> {
+  return get<RoomTaskEvent[]>(
+    `/api/v1/rooms/${encodeURIComponent(roomID)}/tasks/${encodeURIComponent(taskID)}/events`,
+    { signal },
+  );
+}
+export async function stopRoomTask(roomID: string, taskID: string): Promise<void> {
+  await post(`/api/v1/rooms/${encodeURIComponent(roomID)}/tasks/${encodeURIComponent(taskID)}/stop`, {});
 }

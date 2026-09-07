@@ -60,6 +60,9 @@ func (b Binding) StableID() BindingID {
 // TurnContext is channel-owned identity for rendering and source delivery.
 // SourceMessageID is a dedupe key, not a TurnID.
 type TurnContext struct {
+	RoomManager     bool
+	TaskAttempt     int
+	TaskID          string
 	BindingID       BindingID
 	ParticipantID   string
 	AgentID         string

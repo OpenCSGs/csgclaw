@@ -17,6 +17,7 @@ import {
   formatSidebarTime,
   hasConnectedHumanChannel,
   isDirectConversation,
+  isOnDemandConversation,
   resolveAgentForUser,
   resolveConversationUser,
 } from "@/models/conversations";
@@ -314,6 +315,7 @@ export function WorkspaceConversationRow({
 }) {
   const lastMessage = conversation.messages[conversation.messages.length - 1];
   const isDirect = isDirectConversation(conversation);
+  const onDemand = !isDirect && isOnDemandConversation(conversation);
   const displayUser = isDirect ? resolveConversationUser(conversation, currentUserID, usersById) : null;
   const directAgent = isDirect && displayUser ? resolveAgentForUser(agents, displayUser) : null;
   const directAgentRunning = isAgentAvailable(directAgent);
@@ -347,6 +349,11 @@ export function WorkspaceConversationRow({
       <span className={styles.main}>
         <span className={styles.titleLine}>
           <span className={classNames(styles.title, "truncate")}>{title}</span>
+          {isDirect ? null : (
+            <span className={classNames(styles.roomModeBadge, onDemand && styles.roomModeBadgeOnDemand)}>
+              {t(onDemand ? "onDemandCollaborationTag" : "freeCollaborationTag")}
+            </span>
+          )}
           {questionCount > 0 ? (
             <span
               className={styles.pendingQuestionBadge}

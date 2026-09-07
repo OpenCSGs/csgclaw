@@ -210,19 +210,4 @@ describe("legacy UI contract", () => {
     expect(source).toContain("agents: agent.agentItems,");
     expect(styles).toContain(".message-avatar-status.online");
   });
-
-  it("keeps the room notification switch copy contained in its menu row", () => {
-    const menuContentRule = styleRule(".tool-menu-row > .btn-content");
-    const notificationRowRule = styleRule(".tool-menu-row.room-notification-row");
-    const notificationCopyRule = styleRule(".tool-menu-copy");
-    const notificationHintRule = styleRule(".tool-menu-copy small");
-
-    expect(menuContentRule).toContain("width: 100%;");
-    expect(menuContentRule).toContain("justify-content: space-between;");
-    expect(notificationRowRule).toContain("height: auto;");
-    expect(notificationRowRule).toContain("white-space: normal;");
-    expect(notificationCopyRule).toContain("flex: 1 1 auto;");
-    expect(notificationCopyRule).toContain("white-space: normal;");
-    expect(notificationHintRule).toContain("overflow-wrap: anywhere;");
-  });
 });

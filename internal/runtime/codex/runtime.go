@@ -1366,6 +1366,7 @@ func (r *Runtime) refreshCodexHomeAgentsFileWithFragments(h agentruntime.Handle,
 	}
 	block := runtimeinstructions.RenderRuntimeAgentsInstructionsBlockWithOptions(agentRef.ID, instructions, runtimeinstructions.RuntimeManagedInstructionsOptions{
 		Extensions: fragments,
+		CLIPath:    agentRef.Profile.Env["CSGCLAW_CLI"],
 	})
 	current, err := r.readFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {

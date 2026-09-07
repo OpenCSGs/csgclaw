@@ -54,18 +54,18 @@ func TestShouldNotifyParticipantRequiresMentionWhenRoomFanoutIsDisabled(t *testi
 		CreatedAt: time.Now().UTC(),
 	}
 
-	if shouldNotifyParticipant(room, message, "u-bot") {
+	if shouldNotifyParticipant(room, User{ID: "u-admin", Role: "admin"}, message, "u-bot") {
 		t.Fatal("shouldNotifyParticipant() = true, want false without mention")
 	}
 
 	message.Mentions = []Mention{{ID: "u-bot", Name: "bot"}}
-	if !shouldNotifyParticipant(room, message, "u-bot") {
+	if !shouldNotifyParticipant(room, User{ID: "u-admin", Role: "admin"}, message, "u-bot") {
 		t.Fatal("shouldNotifyParticipant() = false, want true for mentioned room member")
 	}
 
 	message.Mentions = nil
 	room.NotifyAllAgents = true
-	if !shouldNotifyParticipant(room, message, "u-bot") {
+	if !shouldNotifyParticipant(room, User{ID: "u-admin", Role: "admin"}, message, "u-bot") {
 		t.Fatal("shouldNotifyParticipant() = false, want true when room fanout is enabled")
 	}
 }

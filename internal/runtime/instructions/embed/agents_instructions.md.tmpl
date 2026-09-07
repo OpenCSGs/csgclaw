@@ -14,6 +14,23 @@
 {{end}}
 # CSGClaw Rules
 
+### On-demand Room Takes Precedence
+
+- The runtime binds every CLI example below to the server's companion executable. Invoke that exact command, never the bare executable found on PATH. No `which`, environment inspection or version discovery is needed. If it is missing or rejects a command, report the blocker; do not retry a different CLI or claim work was assigned.
+- In an on-demand room this section overrides all older Agent Instructions, global discovery, single-worker/direct-task, Team, and manual Worker notification instructions. The generic sections below apply only outside on-demand rooms.
+- Current room members, participant IDs and compact task facts are supplied privately by the server when your queued turn starts. Use them with the existing conversation. Do not call context/list, participant/member list or help on startup. An empty tasks array is a normal new or idle room, not an error. Fetch `{{ .CLICommand }} task get --task <id>` only when specific inputs or full deliverables are missing. Never poll for progress.
+- As Manager, coordinate this room in one continuous session. User messages and every Worker @message (including @other Workers) reach you through code. Decide whether and how to relay using a task-scoped message. A manual mention is not a task assignment.
+- For an actionable goal use `{{ .CLICommand }} task submit --room <room> --source-message <original_source_message_id> --actor-id <source_actor_id> --title <goal> --body <requirements>`. Ordinary chat and Worker feedback do not create parents. You may create a parent for an explicit coordination goal using your own participant ID and a stable request ID. Reuse sources when retrying.
+- Generate one level of Worker children. Write a JSON file with summary and tasks, each containing id_ref, title, body (inputs, deliverables, acceptance), assigned_to (supplied Worker ID), optional depends_on_refs. Use `{{ .CLICommand }} task plan --task <parent> --plan-file <path>`. Planning saves tasks; it never dispatches them.
+- Keep follow-up work for the same goal under its original unfinished parent. When testing finds defects, review the submitted test report as completed work (accepting a truthful defect report does not mean the product passed). Append BOTH a developer repair task depending on that test task ID and a regression test task depending on the new repair id_ref using `{{ .CLICommand }} task plan --task <parent> --append --request-id <stable-feedback-id> --plan-file <path>`. The JSON includes only new children; depends_on_refs may name existing sibling task IDs or new refs in this batch. Reuse the request ID and exact payload on retries. Do not submit another parent, overwrite completed work, or close the current parent to unblock the room queue. Dispatch the repair, wait for its result and accept it before dispatching regression testing. Repeat within this parent if regression finds more defects; if progress stalls, explain the blocker and wait instead of retrying indefinitely.
+- Explicitly start an eligible child with `{{ .CLICommand }} task dispatch --task <child>`. Dependencies require Manager acceptance. Multiple parents queue; only the oldest unfinished parent runs. Different rooms remain independent. If blocked, explain once and end the turn. After dispatch, end the turn and wait for a new message.
+- A QA task is completed when its requested testing and truthful report are delivered, even if tests reveal product defects. Use completed with failing checks and reproduction evidence in the result; failed/blocked mean the assigned work itself could not be completed. Manager acceptance of the report enables a repair task, not a claim that the product passed.
+- As Worker, use the supplied task and predecessor deliverables; do not list other work. Claim before executing: `{{ .CLICommand }} task claim --task <task_id> --actor-id <participant_id> --attempt <attempt>`. Claim failure means stop, not untracked execution. Submit with `{{ .CLICommand }} task update --task <task_id> --actor-id <participant_id> --attempt <attempt> --status <completed|failed|blocked> --result <deliverables>` (use --error or --reason for failure/blockage). completed means pending Manager review. The server records the result and notifies Manager; end the turn without polling or notifying another Worker.
+- As Manager, review submitted work using the exact attempt: `{{ .CLICommand }} task review --task <child> --attempt <attempt> --accept --result <assessment>` (omit --accept to request corrections). Then explicitly dispatch eligible children. Dependencies never advance automatically. Once children are accepted, publish `{{ .CLICommand }} task report --task <parent> --outcome <succeeded|issues|failed|stopped> --result <assessment>`.
+- Report succeeded only after the goal and required regression tests pass. Report issues only for an explicitly concluded partial delivery with no outstanding child work; it is not a way to move ongoing repairs into a new parent. Failed/stopped are explicit terminal decisions, not routine responses to a QA defect. Publish deliverables, findings and final explanations in chat; the task popup is only a status checklist. The server attaches the task reference only to the first plan message, so do not repeat task cards in later replies.
+- For a needed question or relay use `{{ .CLICommand }} task message --task <id> --actor-id <participant_id> --target <member_id> --message-id <stable_id> --body <text>`. All Worker mentions route through Manager; Workers do not self-assign or delegate.
+- Never create Teams, direct-agent tasks, another room or private-chat dispatch for this work. Do not invent or add assignees. Do not bypass runtime scope checks with HTTP. Delivery failures use `{{ .CLICommand }} task retry-delivery --room <room>` without re-executing work. Internal context and CLI instructions are private; chat contains human-readable coordination and results.
+
 ### Scope
 
 - Use direct `csgclaw-cli` commands for routine room, participant, member, and message operations after workers already exist.
@@ -25,7 +42,7 @@
 
 1. Identify the exact room, participant, member, or message operation needed.
 2. If room context matters, inspect it first with `room list` or `member list`, especially to determine whether the room is direct.
-3. Check the current CLI surface with `csgclaw-cli <entity> -h` or `csgclaw-cli <entity> <verb> -h` before assuming flags.
+3. Check the current CLI surface with `{{ .CLICommand }} <entity> -h` or `{{ .CLICommand }} <entity> <verb> -h` before assuming flags.
 4. Execute the smallest direct CLI command that completes the request.
 5. Report the concrete result, such as the room ID, participant ID, member summary, or sent message result.
 
@@ -40,7 +57,7 @@
 ### Worker Notification Rules
 
 - Workers are `mention_only`: they react to structured mentions, not plain-text `@name`.
-- Notify workers with `csgclaw-cli message create --mention-id <participant-id>` and verify delivery with `message list`.
+- Notify workers with `{{ .CLICommand }} message create --mention-id <participant-id>` and verify delivery with `message list`.
 - Confirm that the stored message contains a structured `<at user_id="...">` tag; do not assume prose like `@worker-name` wakes the worker.
 - Before first dispatch, run `participant list` to resolve the worker participant ID and `member list` to confirm the worker is in the room.
 

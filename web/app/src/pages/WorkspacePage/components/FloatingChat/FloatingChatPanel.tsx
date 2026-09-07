@@ -70,8 +70,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     messageActionBusy,
     messageActionFeedback,
     messageListRef,
-    notifyAllAgentsBusy = false,
-    notifyAllAgentsError = "",
     onApplyMention,
     onApplySlashCandidate = (_name) => {},
     onApplyThreadSlashCandidate = (_name) => {},
@@ -89,7 +87,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onDismissThreadSlashPicker = () => {},
     onInviteAction,
     onMessageAction,
-    onNotifyAllAgentsChange,
     onManageConnector,
     onOpenThread,
     onPreviewUser,
@@ -267,8 +264,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         memberMenuRef={memberMenuRef}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={floatingVisibleMessages.length}
-        notifyAllAgentsBusy={notifyAllAgentsBusy}
-        notifyAllAgentsError={notifyAllAgentsError}
         showChannelTools={showChannelTools}
         showInviteAction={false}
         showMemberList={showMemberList}
@@ -277,7 +272,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
         onInviteAction={onInviteAction}
-        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onOpenAgentLogs={handleOpenAgentLogs}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}

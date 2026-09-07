@@ -13,10 +13,6 @@ type TaskIDAllocator struct {
 	next int64
 }
 
-type taskCounterState struct {
-	Task int64 `json:"task"`
-}
-
 var taskIDAllocators = struct {
 	sync.Mutex
 	byRoot map[string]*TaskIDAllocator
@@ -102,32 +98,16 @@ func (a *TaskIDAllocator) Bump(id string) error {
 	return nil
 }
 
-func (a *TaskIDAllocator) writeIndex(entries []IndexEntry) error {
-	if a == nil {
-		return fmt.Errorf("task id allocator is required")
-	}
-	if a.root == "" {
-		return nil
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	return a.writeIndexLocked(entries)
-}
-
 func (a *TaskIDAllocator) load() error {
 	if a.root == "" {
 		return nil
 	}
-	state, ok, err := readTaskIndex(filepath.Join(a.root, indexFileName))
+	state, ok, err := readTaskSequence(filepath.Join(a.root, sequenceFileName))
 	if err != nil {
 		return err
 	}
 	if ok {
-		a.next = state.Counters.Task
-		for _, entry := range state.Tasks {
-			a.next = maxCounterFromIdentifier(entry.ID, "task-", a.next)
-		}
+		a.next = state.LastTask
 		return nil
 	}
 	entries, err := buildTaskIndex(a.root)
@@ -144,27 +124,7 @@ func (a *TaskIDAllocator) saveLocked() error {
 	if a.root == "" {
 		return nil
 	}
-	state, ok, err := readTaskIndex(filepath.Join(a.root, indexFileName))
-	if err != nil {
-		return err
-	}
-	if !ok {
-		state.Tasks, err = buildTaskIndex(a.root)
-		if err != nil {
-			return err
-		}
-	}
-	return a.writeIndexLocked(state.Tasks)
-}
-
-func (a *TaskIDAllocator) writeIndexLocked(entries []IndexEntry) error {
-	if err := writeTaskIndex(filepath.Join(a.root, indexFileName), taskIndexState{
-		Counters: taskCounterState{Task: a.next},
-		Tasks:    cloneIndexEntries(entries),
-	}); err != nil {
-		return err
-	}
-	return nil
+	return writeTaskSequence(filepath.Join(a.root, sequenceFileName), taskSequenceState{LastTask: a.next})
 }
 
 func formatTaskIdentifier(value int64) string {

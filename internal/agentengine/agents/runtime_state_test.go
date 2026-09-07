@@ -6,6 +6,7 @@ import (
 
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/runtimeassets"
 )
 
 func TestPicoClawRuntimeHostAgentHomeUsesAgentRoot(t *testing.T) {
@@ -117,11 +118,20 @@ func TestRuntimeProfileInjectsConnectorCapabilityOnlyForManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	manager := svc.runtimeProfileForKind(RuntimeKindCodex, ManagerUserID, ManagerName, "", AgentProfile{})
+	manager := svc.runtimeProfileForKind(RuntimeKindCodex, ManagerUserID, ManagerName, "", AgentProfile{Env: map[string]string{"CSGCLAW_CLI": "/stale/cli"}})
+	if got, want := manager.Env["CSGCLAW_CLI"], runtimeassets.HostCLIPath(); got == "" || got != want {
+		t.Fatalf("manager companion CLI = %q, want %q", got, want)
+	}
+	if manager.Env["CSGCLAW_CALLER_AGENT_ID"] != ManagerUserID {
+		t.Fatal("manager CLI caller identity missing")
+	}
 	if got := manager.Env[ConnectorCapabilityEnv]; got == "" {
 		t.Fatal("manager runtime connector capability is empty")
 	}
 	worker := svc.runtimeProfileForKind(RuntimeKindCodex, "agent-worker", "worker", "", AgentProfile{})
+	if worker.Env["CSGCLAW_CLI"] != manager.Env["CSGCLAW_CLI"] {
+		t.Fatal("worker must use the same server companion CLI")
+	}
 	if got := worker.Env[ConnectorCapabilityEnv]; got != "" {
 		t.Fatalf("worker runtime connector capability = %q, want empty", got)
 	}

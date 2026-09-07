@@ -3,7 +3,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button as CSGButton } from "@/components/ui/Button";
 import { useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { IMUser, TranslateFn } from "@/models/conversations";
+import { RoomTypes, type IMUser, type RoomType, type TranslateFn } from "@/models/conversations";
 import { toggleSelection } from "@/shared/lib/collections";
 import { ModalCloseButton } from "./ModalCloseButton";
 
@@ -36,6 +36,9 @@ function AvatarStack({ users }: { users: IMUser[] }) {
 }
 
 export type CreateRoomModalProps = {
+  roomType: RoomType;
+  managerAvailable?: boolean;
+  onRoomTypeChange: (type: RoomType) => void;
   candidates: IMUser[];
   lockedRoomMemberIDs: string[];
   onClose: () => void;
@@ -51,6 +54,9 @@ export type CreateRoomModalProps = {
 };
 
 export function CreateRoomModal({
+  roomType,
+  managerAvailable = true,
+  onRoomTypeChange,
   t,
   roomTitle,
   onRoomTitleChange,
@@ -91,6 +97,40 @@ export function CreateRoomModal({
           <ModalCloseButton label={t("close")} onClose={onClose} />
         </div>
         <div className="create-room-modal-content">
+          <div className="create-room-section create-room-type-section">
+            <div className="create-room-section-title">{t("roomSpeakingMode")}</div>
+            <div className="create-room-type-options" role="radiogroup" aria-label={t("roomSpeakingMode")}>
+              <label className="create-room-type-option">
+                <span className="create-room-type-copy">
+                  <strong>{t("onDemandCollaboration")}</strong>
+                  <small>{t("onDemandCollaborationHint")}</small>
+                </span>
+                <input
+                  type="radio"
+                  name="room-type"
+                  value={RoomTypes.onDemand}
+                  checked={roomType === RoomTypes.onDemand}
+                  onChange={() => onRoomTypeChange(RoomTypes.onDemand)}
+                />
+              </label>
+              <label className="create-room-type-option">
+                <span className="create-room-type-copy">
+                  <strong>{t("freeCollaboration")}</strong>
+                  <small>{t("freeCollaborationHint")}</small>
+                </span>
+                <input
+                  type="radio"
+                  name="room-type"
+                  value={RoomTypes.free}
+                  checked={roomType === RoomTypes.free}
+                  onChange={() => onRoomTypeChange(RoomTypes.free)}
+                />
+              </label>
+            </div>
+            {roomType === RoomTypes.onDemand && !managerAvailable ? (
+              <div className="form-error">{t("collaborationManagerRequired")}</div>
+            ) : null}
+          </div>
           <div className="create-room-section">
             <div className="create-room-section-title">{t("basicInfo")}</div>
             <label className="field create-room-field">
@@ -167,7 +207,12 @@ export function CreateRoomModal({
           <CSGButton variant="secondaryGray" size="md" onClick={onClose}>
             {t("cancel")}
           </CSGButton>
-          <CSGButton variant="primary" size="md" disabled={isBlank(roomTitle)} onClick={onCreate}>
+          <CSGButton
+            variant="primary"
+            size="md"
+            disabled={isBlank(roomTitle) || (roomType === RoomTypes.onDemand && !managerAvailable)}
+            onClick={onCreate}
+          >
             {t("create")}
           </CSGButton>
         </div>

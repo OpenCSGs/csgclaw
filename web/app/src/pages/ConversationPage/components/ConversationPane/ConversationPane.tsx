@@ -13,9 +13,16 @@ import { DocumentPreviewPanel, type DocumentPreviewRequest } from "@/components/
 import { AgentView, type AgentDetailPaneHandle } from "@/pages/AgentPage/components";
 import { Button, DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
-import { getConversationDescription, isDirectConversation } from "@/models/conversations";
+import { getConversationDescription, isDirectConversation, isOnDemandConversation } from "@/models/conversations";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
 import { ConversationActivityPanel } from "../ConversationActivityPanel";
+import { RoomTaskDialog, RoomTaskReference } from "../RoomTaskDialog";
+import type { ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
+import { ListTodo } from "lucide-react";
+import { type IMMessage } from "@/models/conversations";
+import { roomTaskParent, roomTaskMessageAnchors } from "@/models/roomTasks";
+import { useRoomTasks } from "../../useRoomTasks";
 import {
   conversationActivityAgents,
   conversationActivityEntries,
@@ -102,7 +109,86 @@ function AgentDetailSidePanel({ onClose, onOpenDM, ...props }: AgentDetailSidePa
   );
 }
 
-export function ConversationPane({
+type RoomTaskSlots = { taskHeader?: ReactNode; taskDialog?: ReactNode; taskFooter?: (message: IMMessage) => ReactNode };
+export function ConversationPane(props: ConversationPaneProps) {
+  if (isOnDemandConversation(props.conversation) && !props.conversation.is_direct) {
+    return <RoomTaskConversation key={props.conversation.id} {...props} />;
+  }
+  return <ConversationPaneContent {...props} />;
+}
+function RoomTaskConversation(props: ConversationPaneProps) {
+  const { conversation, t } = props;
+  const query = useRoomTasks(conversation);
+  const [params, setParams] = useSearchParams();
+  const selected = params.get("task") ?? "";
+  const trigger = useRef<HTMLElement | null>(null);
+  const tasks = query.data ?? [];
+  const anchors = roomTaskMessageAnchors(conversation.messages ?? [], conversation.manager_id ?? "");
+  const open = (id: string, anchor?: HTMLElement) => {
+    if (anchor) trigger.current = anchor;
+    void query.refetch();
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("task", id);
+      return next;
+    });
+  };
+  const close = () =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("task");
+        return next;
+      },
+      { replace: true },
+    );
+  const footer = (message: IMMessage) => {
+    const id = anchors.get(message.id ?? "");
+    if (!id) return null;
+    const parent = roomTaskParent(tasks, id);
+    return (
+      <RoomTaskReference
+        compact
+        taskID={parent?.id ?? id}
+        task={parent}
+        tasks={tasks}
+        t={t}
+        onOpen={(anchor) => open(parent?.id ?? id, anchor)}
+      />
+    );
+  };
+  return (
+    <ConversationPaneContent
+      {...props}
+      taskFooter={footer}
+      taskHeader={
+        <Button
+          size="lg"
+          variant="secondaryGray"
+          iconOnly
+          aria-label={t("roomTasksOpen")}
+          onClick={(event) => open("list", event.currentTarget)}
+        >
+          <ListTodo size={20} />
+        </Button>
+      }
+      taskDialog={
+        <RoomTaskDialog
+          roomID={conversation.id}
+          roomTitle={conversation.title ?? conversation.id}
+          taskID={selected}
+          tasks={tasks}
+          loading={query.isLoading}
+          error={query.isError ? errorMessage(query.error, t("tasksLoadFailed")) : ""}
+          onClose={close}
+          onRestoreFocus={() => trigger.current?.focus({ preventScroll: true })}
+          t={t}
+        />
+      }
+    />
+  );
+}
+function ConversationPaneContent({
   conversation,
   visibleMessages,
   currentUserID = "",
@@ -125,9 +211,6 @@ export function ConversationPane({
   onPreviewUser,
   onDeleteRoom,
   onClearRoomMessages = (_id) => {},
-  notifyAllAgentsBusy = false,
-  notifyAllAgentsError = "",
-  onNotifyAllAgentsChange,
   inviteActionLabel,
   onInviteAction,
   mentionCandidates,
@@ -203,7 +286,10 @@ export function ConversationPane({
   onAddThreadAttachments,
   onRemoveThreadAttachment,
   agentDetailPanelProps,
-}: ConversationPaneProps) {
+  taskHeader,
+  taskDialog,
+  taskFooter,
+}: ConversationPaneProps & RoomTaskSlots) {
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
   const [logModalOpen, setLogModalOpen] = useState(false);
@@ -383,36 +469,38 @@ export function ConversationPane({
 
   return (
     <>
+      {taskDialog}
       <Conversation.Header
         channelToolsRef={channelToolsRef}
         conversation={conversation}
         conversationMembers={conversationMembers}
         description={description}
         headerAccessory={
-          <Button
-            className="icon-button activity-record-button"
-            active={activityPanelOpen}
-            iconOnly
-            size="lg"
-            variant="secondaryGray"
-            aria-label={t("conversationActivityOpen")}
-            aria-pressed={activityPanelOpen}
-            data-tooltip={t("conversationActivityOpen")}
-            data-tooltip-side="bottom"
-            onClick={handleToggleActivityPanel}
-          >
-            <span className="icon-button-mark" aria-hidden="true">
-              <ActivityWaveIcon />
-            </span>
-          </Button>
+          <>
+            {taskHeader}
+            <Button
+              className="icon-button activity-record-button"
+              active={activityPanelOpen}
+              iconOnly
+              size="lg"
+              variant="secondaryGray"
+              aria-label={t("conversationActivityOpen")}
+              aria-pressed={activityPanelOpen}
+              data-tooltip={t("conversationActivityOpen")}
+              data-tooltip-side="bottom"
+              onClick={handleToggleActivityPanel}
+            >
+              <span className="icon-button-mark" aria-hidden="true">
+                <ActivityWaveIcon />
+              </span>
+            </Button>
+          </>
         }
         inviteActionLabel={inviteActionLabel}
         logAgent={logAgent}
         logModalOpen={logModalOpen}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={visibleMessages.length}
-        notifyAllAgentsBusy={notifyAllAgentsBusy}
-        notifyAllAgentsError={notifyAllAgentsError}
         showChannelTools={showChannelTools}
         showInviteAction={true}
         showMemberListAction={false}
@@ -421,7 +509,6 @@ export function ConversationPane({
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
         onInviteAction={onInviteAction}
-        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onOpenAgentLogs={handleOpenAgentLogs}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}
@@ -429,6 +516,7 @@ export function ConversationPane({
       />
 
       <Conversation.MessageList
+        renderMessageFooter={taskFooter}
         agents={agents}
         conversation={conversation}
         currentUserID={currentUserID}

@@ -51,11 +51,12 @@ func ExtractUserInstructionsFromAgentsDocument(document string) string {
 }
 
 func RenderAgentsInstructionsBlock(instructions string) string {
-	return renderAgentsInstructionsBlock(instructions, "")
+	return renderAgentsInstructionsBlock(instructions, "", `"$CSGCLAW_CLI"`)
 }
 
 type RuntimeManagedInstructionsOptions struct {
 	Extensions []string
+	CLIPath    string
 }
 
 func RenderRuntimeAgentsInstructionsBlock(agentID, instructions string) string {
@@ -70,7 +71,11 @@ func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions strin
 	for _, fragment := range options.Extensions {
 		managedInstructions = joinManagedInstructions(managedInstructions, fragment)
 	}
-	return renderAgentsInstructionsBlock(instructions, managedInstructions)
+	command := `"$CSGCLAW_CLI"`
+	if path := strings.TrimSpace(options.CLIPath); path != "" {
+		command = "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
+	}
+	return renderAgentsInstructionsBlock(instructions, managedInstructions, command)
 }
 
 const runtimeFilePublishingInstructions = `### Output File Delivery
@@ -123,10 +128,13 @@ const managerRuntimeConnectorInstructions = `### GitHub Connector Access
 - Do not search the web for a referenced upload, rely only on ` + "`find`" + ` in the current workspace, or request a re-upload until durable CSGClaw history has been checked.
 - Never print, echo, or include ` + "`CSGCLAW_ACCESS_TOKEN`" + ` or a capability token in tool output, logs, prompts, or responses.`
 
-func renderAgentsInstructionsBlock(instructions, managedInstructions string) string {
+func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand string) string {
 	instructions = strings.TrimSpace(instructions)
 	managedInstructions = strings.TrimSpace(managedInstructions)
+	managedInstructions = strings.ReplaceAll(managedInstructions, "`csgclaw-cli ", "`"+cliCommand+" ")
+	managedInstructions = strings.ReplaceAll(managedInstructions, `"$CSGCLAW_CLI"`, cliCommand)
 	data := struct {
+		CLICommand             string
 		StartMarker            string
 		EndMarker              string
 		Instructions           string
@@ -134,6 +142,7 @@ func renderAgentsInstructionsBlock(instructions, managedInstructions string) str
 		ManagedInstructions    string
 		HasManagedInstructions bool
 	}{
+		CLICommand:             cliCommand,
 		StartMarker:            agentsInstructionsBlockStart,
 		EndMarker:              agentsInstructionsBlockEnd,
 		Instructions:           instructions,

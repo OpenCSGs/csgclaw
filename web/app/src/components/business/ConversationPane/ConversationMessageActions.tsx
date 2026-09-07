@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Copy, MessageSquareReply } from "lucide-react";
 import { flattenMentionText } from "@/components/business/MessageContent";
 import type { TranslateFn } from "@/models/conversations";
@@ -7,6 +7,7 @@ import type { VoidOrPromise } from "./types";
 
 export type ConversationMessageActionsProps = {
   className?: string;
+  leading?: ReactNode;
   content?: string | null;
   onOpenThread?: () => VoidOrPromise;
   t: TranslateFn;
@@ -15,6 +16,7 @@ export type ConversationMessageActionsProps = {
 export function ConversationMessageActions({
   className = "",
   content,
+  leading,
   onOpenThread,
   t,
 }: ConversationMessageActionsProps) {
@@ -47,12 +49,13 @@ export function ConversationMessageActions({
     }, 2000);
   }
 
-  if (!canCopy && !onOpenThread) {
+  if (!canCopy && !onOpenThread && !leading) {
     return null;
   }
 
   return (
-    <div className={`message-action-controls ${className}`.trim()}>
+    <div className={`message-action-controls ${className} ${leading ? "has-leading" : ""}`.trim()}>
+      {leading ? <span className="message-action-leading">{leading}</span> : null}
       {canCopy ? (
         <button
           type="button"

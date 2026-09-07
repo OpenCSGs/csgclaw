@@ -190,6 +190,9 @@ func (h *Handler) updateAgentTask(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listGlobalTasks(w http.ResponseWriter, r *http.Request) {
 	h.handleListGlobalTasks(w, r)
 }
+func (h *Handler) getGlobalTask(w http.ResponseWriter, r *http.Request) {
+	h.handleGetGlobalTask(w, r)
+}
 
 func (h *Handler) listScheduledTasks(w http.ResponseWriter, r *http.Request) {
 	h.handleListScheduledTasks(w, r)

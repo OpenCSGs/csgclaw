@@ -540,6 +540,39 @@ func (r *Registry) ActiveCount(roomID, participantID string) int {
 	return len(r.activeBySubject[strings.TrimSpace(roomID)][participantID])
 }
 
+// ActiveRooms returns current execution scope, excluding expired leases even
+// before the janitor runs. Multiple rooms are deliberately not guessed between.
+// ActiveWork returns exact, unexpired leases for task-scoped stop control.
+func (r *Registry) ActiveWork(roomID string) []apitypes.ParticipantWorkUpdate {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []apitypes.ParticipantWorkUpdate{}
+	for _, lease := range r.activeByKey {
+		if lease.roomID == roomID && lease.expiresAt.After(r.now()) {
+			out = append(out, r.updateFor(lease, apitypes.ParticipantWorkStateWorking, ""))
+		}
+	}
+	return out
+}
+
+func (r *Registry) ActiveRooms(participantID string) []string {
+	participantID = r.canonicalParticipantID(participantID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rooms := map[string]bool{}
+	for _, lease := range r.activeByKey {
+		if lease.participantID == participantID && lease.expiresAt.After(r.now()) {
+			rooms[lease.roomID] = true
+		}
+	}
+	out := make([]string, 0, len(rooms))
+	for id := range rooms {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
+}
+
 func (r *Registry) validate(request ParticipantWorkLease) (activeLease, error) {
 	item, ok := r.participants.Get(participant.ChannelCSGClaw, strings.TrimSpace(request.ParticipantID))
 	if !ok || item.Channel != participant.ChannelCSGClaw || item.Type != participant.TypeAgent || item.LifecycleStatus != participant.LifecycleStatusActive {

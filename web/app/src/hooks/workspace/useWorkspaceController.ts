@@ -966,7 +966,7 @@ export function useWorkspaceController() {
       onSelectTeamSection: selectTeamSection,
       onSelectTask: selectTasks,
       onSelectTaskBoardView: task.setTaskBoardView,
-      onOpenCreateTask: task.openCreateTaskModal,
+      onOpenCreateTask: () => conversation.openCreateRoomModal(),
       onOpenCreateScheduledTask: task.openCreateScheduledTaskModal,
       onViewTaskDetails: task.openParentTaskDetail,
       onSelectTeam: selectTeam,
@@ -1039,7 +1039,10 @@ export function useWorkspaceController() {
       onPreviewUser: profilePreview.openParticipantPreview,
       agentDetailPanelProps: conversationAgentDetailPanelProps,
     },
-    taskViewProps: task.taskViewProps,
+    taskViewProps: {
+      ...task.taskViewProps,
+      onOpenCreateTaskModal: () => conversation.openCreateRoomModal(),
+    },
     teamViewProps: {
       t,
       team: selectedTeam,

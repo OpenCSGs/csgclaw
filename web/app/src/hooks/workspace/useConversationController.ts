@@ -9,7 +9,6 @@ import {
   inviteRoomUsersRequest,
   removeRoomUserRequest,
   sendMessageRequest,
-  updateRoomRequest,
 } from "@/api/im";
 import { fetchAgentSkills, fetchAgentSkillsFile } from "@/api/agents";
 import {
@@ -20,10 +19,11 @@ import {
   applyThreadToData,
   conversationThreadViews,
   isDirectConversation,
+  RoomTypes,
+  type RoomType,
   isThreadReply,
   isToolCallMessage,
   localIdentitiesMatch,
-  mergeRoomNotificationUpdateInData,
   participantIDForLocalIdentity,
   removeConversationFromData,
   resolveConversationUser,
@@ -306,6 +306,8 @@ export function useConversationController({
   const [threadSlashIndex, setThreadSlashIndex] = useState(0);
   const [threadSlashQuery, setThreadSlashQuery] = useState<string | null>(null);
   const [showCreateRoom, setShowCreateRoom] = useState(false);
+  const [newRoomType, setNewRoomType] = useState<RoomType>(RoomTypes.onDemand);
+  const roomManagerID = data?.users.find((user) => user.role?.toLowerCase() === "manager")?.id ?? "";
   const [showInvite, setShowInvite] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
   const [showChannelTools, setShowChannelTools] = useState(false);
@@ -317,8 +319,6 @@ export function useConversationController({
   const [submitError, setSubmitError] = useState("");
   const [memberActionBusyID, setMemberActionBusyID] = useState("");
   const [memberActionError, setMemberActionError] = useState("");
-  const [notifyAllAgentsBusy, setNotifyAllAgentsBusy] = useState(false);
-  const [notifyAllAgentsError, setNotifyAllAgentsError] = useState("");
   const [composerErrorsByConversationId, setComposerErrorsByConversationId] = useState<ComposerErrorsByKey>({});
   const [attachmentErrorsByConversationId, setAttachmentErrorsByConversationId] = useState<ComposerErrorsByKey>({});
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -331,7 +331,6 @@ export function useConversationController({
   const memberMenuRef = useRef<HTMLDivElement | null>(null);
   const channelToolsRef = useRef<HTMLDivElement | null>(null);
   const activeThreadSelectionRef = useRef<ThreadSelection | null>(null);
-  const notifyAllAgentsRequestRef = useRef(0);
   const managerProfileIncompleteRef = useRef(managerProfileIncomplete);
 
   const resetThread = useCallback(() => {
@@ -790,11 +789,8 @@ export function useConversationController({
   }, [activeConversationId, activePane.type]);
 
   useEffect(() => {
-    notifyAllAgentsRequestRef.current += 1;
     setMemberActionBusyID("");
     setMemberActionError("");
-    setNotifyAllAgentsBusy(false);
-    setNotifyAllAgentsError("");
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -1195,6 +1191,8 @@ export function useConversationController({
     try {
       const created = await createRoomRequest({
         title: roomTitle,
+        type: newRoomType,
+        manager_id: newRoomType === RoomTypes.onDemand ? roomManagerID : undefined,
         description: roomDescription,
         creator_id: data.current_user_id,
         member_ids: memberIDs,
@@ -1213,6 +1211,7 @@ export function useConversationController({
     if (!data) {
       return;
     }
+    setNewRoomType(RoomTypes.onDemand);
     const lockedIDs = Array.from(
       new Set((options.lockedMemberIDs ?? [data.current_user_id]).filter((id): id is string => Boolean(id))),
     );
@@ -1221,7 +1220,7 @@ export function useConversationController({
     );
     setRoomTitle(options.title ?? "");
     setRoomDescription(options.description ?? "");
-    setRoomMemberIDs(selectedIDs);
+    setRoomMemberIDs(Array.from(new Set([...selectedIDs, ...(roomManagerID ? [roomManagerID] : [])])));
     setLockedRoomMemberIDs(lockedIDs);
     setSubmitError("");
     setShowInvite(false);
@@ -1347,28 +1346,6 @@ export function useConversationController({
     setSubmitError("");
     if (activeConversationId === roomID) {
       resetThread();
-    }
-  }
-
-  async function updateNotifyAllAgents(enabled: boolean): Promise<void> {
-    if (!activeConversation || isDirectConversation(activeConversation)) {
-      return;
-    }
-    const requestID = notifyAllAgentsRequestRef.current + 1;
-    notifyAllAgentsRequestRef.current = requestID;
-    setNotifyAllAgentsBusy(true);
-    setNotifyAllAgentsError("");
-    try {
-      const updated = await updateRoomRequest(activeConversation.id, { notify_all_agents: enabled });
-      setBootstrapData((current) => mergeRoomNotificationUpdateInData(current, updated));
-    } catch (err) {
-      if (notifyAllAgentsRequestRef.current === requestID) {
-        setNotifyAllAgentsError(localizeError(errorMessage(err, ""), t) || t("notifyAllAgentsUpdateFailed"));
-      }
-    } finally {
-      if (notifyAllAgentsRequestRef.current === requestID) {
-        setNotifyAllAgentsBusy(false);
-      }
     }
   }
 
@@ -1708,9 +1685,6 @@ export function useConversationController({
       editorRef,
       onDeleteRoom: deleteRoom,
       onClearRoomMessages: clearRoomMessages,
-      notifyAllAgentsBusy,
-      notifyAllAgentsError,
-      onNotifyAllAgentsChange: updateNotifyAllAgents,
       inviteActionLabel,
       onInviteAction: handleInviteAction,
       mentionCandidates,
@@ -1811,8 +1785,18 @@ export function useConversationController({
             onRoomDescriptionChange: setRoomDescription,
             candidates: data.users,
             roomMemberIDs,
-            lockedRoomMemberIDs,
+            lockedRoomMemberIDs:
+              newRoomType === RoomTypes.onDemand && roomManagerID
+                ? [...lockedRoomMemberIDs, roomManagerID]
+                : lockedRoomMemberIDs,
             onRoomMemberIDsChange: setRoomMemberIDs,
+            roomType: newRoomType,
+            managerAvailable: Boolean(roomManagerID),
+            onRoomTypeChange: (type: RoomType) => {
+              setNewRoomType(type);
+              if (type === RoomTypes.onDemand && roomManagerID)
+                setRoomMemberIDs((current) => Array.from(new Set([...current, roomManagerID])));
+            },
             submitError,
             onClose: () => setShowCreateRoom(false),
             onCreate: createRoom,

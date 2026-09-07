@@ -210,7 +210,7 @@ func (h *Handler) handleListTeamTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleListGlobalTasks(w http.ResponseWriter, r *http.Request) {
-	if h == nil || (h.teamSvc == nil && h.agentTaskSvc == nil) {
+	if h == nil || (h.teamSvc == nil && h.agentTaskSvc == nil && h.roomTaskSvc == nil) {
 		http.Error(w, "task service is not configured", http.StatusServiceUnavailable)
 		return
 	}
@@ -229,7 +229,56 @@ func (h *Handler) handleListGlobalTasks(w http.ResponseWriter, r *http.Request) 
 			resp = append(resp, apiGlobalCoreTask(task, roomTitle, presenter))
 		}
 	}
+	if h.roomTaskSvc != nil {
+		for _, task := range h.roomTaskSvc.List("") {
+			roomTitle := ""
+			if h.im != nil {
+				if room, ok := h.im.Room(task.RoomID); ok {
+					roomTitle = room.Title
+				}
+			}
+			resp = append(resp, apiGlobalCoreTask(task, roomTitle, presenter))
+		}
+	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) handleGetGlobalTask(w http.ResponseWriter, r *http.Request) {
+	taskID := strings.TrimSpace(pathValue(r, "task_id"))
+	if taskID == "" {
+		http.NotFound(w, r)
+		return
+	}
+	presenter := h.newTeamIdentityPresenter()
+	if h.roomTaskSvc != nil {
+		if task, found := h.roomTaskSvc.Resolve(taskID); found {
+			roomTitle := ""
+			if h.im != nil {
+				if room, ok := h.im.Room(task.RoomID); ok {
+					roomTitle = room.Title
+				}
+			}
+			writeJSON(w, http.StatusOK, apiGlobalCoreTask(task, roomTitle, presenter))
+			return
+		}
+	}
+	if h.agentTaskSvc != nil {
+		for _, task := range h.agentTaskSvc.List() {
+			if task.ID == taskID {
+				writeJSON(w, http.StatusOK, apiGlobalCoreTask(task, "", presenter))
+				return
+			}
+		}
+	}
+	if h.teamSvc != nil {
+		for _, task := range h.teamSvc.ListGlobalTaskViews(h.teamDirectory()) {
+			if task.Task.ID == taskID {
+				writeJSON(w, http.StatusOK, apiGlobalTask(task, presenter))
+				return
+			}
+		}
+	}
+	http.Error(w, "task not found", http.StatusNotFound)
 }
 
 func (h *Handler) handleCreateTeamTasksBatch(w http.ResponseWriter, r *http.Request) {

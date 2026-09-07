@@ -14,6 +14,7 @@ import (
 	channelrender "csgclaw/internal/channel/csgclaw/render"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	"csgclaw/internal/taskmeta"
 )
 
 const (
@@ -388,10 +389,10 @@ func transcriptMetadata(kind string, turn channel.TurnContext, tool *agentengine
 		entry["tool_kind"] = strings.TrimSpace(tool.Kind)
 		entry["tool_status"] = strings.TrimSpace(tool.Status)
 	}
-	metadata := map[string]any{
+	metadata := taskmeta.Set(map[string]any{
 		"codex":    cloneMetadata(entry),
 		"openclaw": cloneMetadata(entry),
-	}
+	}, turn.TaskID, turn.TaskAttempt)
 	return withChannelMetadata(metadata)
 }
 

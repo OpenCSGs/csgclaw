@@ -38,7 +38,7 @@ type RoomScope struct {
 	NotifyAll bool
 }
 
-// ConversationKey builds a stable Engine key from Binding + Room + optional Thread.
+// ConversationKey isolates task executions from room chat and other tasks.
 func ConversationKey(binding channel.Binding, event channel.Event) (agentengine.ConversationKey, error) {
 	bindingID := strings.TrimSpace(string(binding.StableID()))
 	roomID := strings.TrimSpace(event.RoomID)
@@ -47,7 +47,12 @@ func ConversationKey(binding channel.Binding, event channel.Event) (agentengine.
 	}
 
 	key := "csgclaw-im:" + url.QueryEscape(bindingID) + ":room:" + url.QueryEscape(roomID)
-	if threadRootID := strings.TrimSpace(event.ThreadRootID); threadRootID != "" {
+	if event.RoomManager {
+		return agentengine.ConversationKey(key), nil
+	}
+	if taskID := strings.TrimSpace(event.TaskID); taskID != "" {
+		key += ":task:" + url.QueryEscape(taskID)
+	} else if threadRootID := strings.TrimSpace(event.ThreadRootID); threadRootID != "" {
 		key += ":thread:" + url.QueryEscape(threadRootID)
 	}
 	return agentengine.ConversationKey(key), nil
@@ -102,6 +107,14 @@ func hiddenContext(binding channel.Binding, event channel.Event) string {
 	var parts []string
 	var channelContext strings.Builder
 	channelContext.WriteString("Current channel context for CSGClaw CLI operations.\n")
+	if taskID := strings.TrimSpace(event.TaskID); taskID != "" {
+		channelContext.WriteString("- task_id: " + taskID + "\n")
+		if event.RoomManager {
+			channelContext.WriteString("This is related task context inside your continuous room coordination session.\n")
+		} else {
+			channelContext.WriteString(fmt.Sprintf("This session belongs only to this execution task, attempt %d. Read its inputs and dependencies; deliver results to this Room.\n", event.TaskAttempt))
+		}
+	}
 	channelContext.WriteString("- channel: ")
 	channelContext.WriteString(channelID)
 	if roomID := strings.TrimSpace(event.RoomID); roomID != "" {

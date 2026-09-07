@@ -2,14 +2,6 @@ package api
 
 import (
 	"context"
-	"csgclaw/internal/agentengine"
-	agent "csgclaw/internal/agentengine/agents"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/config"
-	"csgclaw/internal/im"
-	"csgclaw/internal/llm"
-	"csgclaw/internal/participant"
-	"csgclaw/internal/team"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +10,16 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/config"
+	"csgclaw/internal/im"
+	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
+	"csgclaw/internal/taskcore"
+	"csgclaw/internal/team"
 )
 
 func newTestTeamAdapterRegistry(adapter team.TeamChannelAdapter) *team.AdapterRegistry {
@@ -865,6 +867,18 @@ func TestListGlobalTasks(t *testing.T) {
 	}
 	if tasks[0].RoomID == "" {
 		t.Fatalf("task.RoomID = empty, want dedicated execution room")
+	}
+	getRec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+tasks[0].ID, nil))
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get task status = %d, want %d: %s", getRec.Code, http.StatusOK, getRec.Body.String())
+	}
+	var got apitypes.GlobalTask
+	if err := json.NewDecoder(getRec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode get task response: %v", err)
+	}
+	if got.ID != tasks[0].ID || got.AssignmentType != taskcore.AssignmentTypeTeam || got.AssignmentID != created.ID {
+		t.Fatalf("resolved task = %+v", got)
 	}
 }
 

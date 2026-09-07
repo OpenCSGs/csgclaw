@@ -144,9 +144,48 @@ describe("WorkspaceRows", () => {
     const row = screen.getByRole("button");
     expect(row).toHaveTextContent("Alice");
     expect(row).not.toHaveTextContent("#");
+    expect(row).not.toHaveTextContent("freeCollaborationTag");
+    expect(row).not.toHaveTextContent("onDemandCollaborationTag");
     expect(row).toHaveTextContent(avatarFallbackText("", "Alice Bob", "", "u-agent"));
     await user.click(row);
     expect(onSelect).toHaveBeenCalledWith(conversation.id);
+  });
+
+  it("shows the speaking mode on room rows and defaults legacy rooms to free discussion", () => {
+    const room: IMConversation = {
+      id: "room-1",
+      type: "on_demand",
+      members: [],
+      messages: [],
+      title: "Project room",
+    };
+    const { rerender } = render(
+      <WorkspaceConversationRow
+        active={false}
+        conversation={room}
+        currentUserID="u-local"
+        locale="en"
+        onSelect={() => {}}
+        t={t}
+        usersById={new Map()}
+      />,
+    );
+
+    expect(screen.getByText("onDemandCollaborationTag")).toBeInTheDocument();
+
+    rerender(
+      <WorkspaceConversationRow
+        active={false}
+        conversation={{ ...room, type: undefined }}
+        currentUserID="u-local"
+        locale="en"
+        onSelect={() => {}}
+        t={t}
+        usersById={new Map()}
+      />,
+    );
+
+    expect(screen.getByText("freeCollaborationTag")).toBeInTheDocument();
   });
 
   it("renders thread rows without markdown code-fence language prefixes", () => {

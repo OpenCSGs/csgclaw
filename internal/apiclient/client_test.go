@@ -11,9 +11,10 @@ import (
 )
 
 type recordingHTTPClient struct {
-	status   int
-	body     string
-	requests []string
+	callerIDs []string
+	status    int
+	body      string
+	requests  []string
 }
 
 func TestExtractAPIErrorMessageReadsStructuredError(t *testing.T) {
@@ -31,6 +32,7 @@ func TestExtractAPIErrorMessageFallsBackToStructuredCode(t *testing.T) {
 }
 
 func (c *recordingHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	c.callerIDs = append(c.callerIDs, req.Header.Get("X-CSGClaw-Caller-Agent"))
 	c.requests = append(c.requests, req.Method+" "+req.URL.RequestURI())
 	status := c.status
 	if status == 0 {
@@ -41,6 +43,20 @@ func (c *recordingHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		Body:       io.NopCloser(strings.NewReader(c.body)),
 		Header:     make(http.Header),
 	}, nil
+}
+
+func TestRuntimeCallerScopeOnJSONAndStreamRequests(t *testing.T) {
+	rec := &recordingHTTPClient{body: `[]`}
+	c := New("http://example.test", "", rec).WithCallerAgentID("agent-manager")
+	if _, err := c.ListAgents(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Stream(context.Background(), "/events", nil, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.callerIDs) != 2 || rec.callerIDs[0] != "agent-manager" || rec.callerIDs[1] != "agent-manager" {
+		t.Fatalf("caller scope missing: %v", rec.callerIDs)
+	}
 }
 
 func TestClientUsesExpectedRoutes(t *testing.T) {

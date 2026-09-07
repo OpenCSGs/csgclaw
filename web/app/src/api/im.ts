@@ -1,10 +1,11 @@
-import { del, get, patch, post, resolveRequestPath, type ApiError } from "@/api/client";
+import { del, get, post, resolveRequestPath, type ApiError } from "@/api/client";
 import type {
   IMConversation,
   IMMessage,
   IMUser,
   MessageRelation,
   ParticipantWorkUpdate,
+  RoomType,
   ThreadView,
 } from "@/models/conversations";
 
@@ -32,6 +33,8 @@ export type StartThreadPayload = {
 };
 
 export type CreateRoomPayload = {
+  type: RoomType;
+  manager_id?: string;
   creator_id: string;
   description?: string;
   locale?: string;
@@ -44,10 +47,6 @@ export type InviteRoomUsersPayload = {
   locale?: string;
   room_id: string;
   user_ids: string[];
-};
-
-export type UpdateRoomPayload = {
-  notify_all_agents: boolean;
 };
 
 export type RemoveRoomUserPayload = {
@@ -169,10 +168,6 @@ export function fetchThreadRequest(roomID: string, rootMessageID: string): Promi
 
 export function createRoomRequest(payload: CreateRoomPayload): Promise<IMConversation> {
   return post("api/v1/rooms", payload);
-}
-
-export function updateRoomRequest(roomID: string, payload: UpdateRoomPayload): Promise<IMConversation> {
-  return patch(`api/v1/rooms/${encodeURIComponent(roomID)}`, payload);
 }
 
 export function inviteRoomUsersRequest(payload: InviteRoomUsersPayload): Promise<IMConversation> {
