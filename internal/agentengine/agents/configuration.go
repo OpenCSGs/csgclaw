@@ -989,7 +989,7 @@ func (s *Controller) Upgrade(ctx context.Context, id string) (Agent, error) {
 	})
 }
 
-func (s *Controller) recreate(ctx context.Context, id string, imageFor func(context.Context, Agent) (string, error)) (Agent, error) {
+func (s *Controller) recreate(ctx context.Context, id string, imageFor func(context.Context, Agent) (string, error)) (_ Agent, err error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return Agent{}, fmt.Errorf("agent id is required")
@@ -1135,6 +1135,31 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 	if err != nil {
 		return Agent{}, fmt.Errorf("create agent box: %w", err)
 	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		// New owns a live process before observation and persistence finish.
+		// Keep its exact handle reachable and clean it up even if the HTTP
+		// request was canceled. The Agent mutation lease still excludes retries.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		cleanupErr := runtimeImpl.Delete(cleanupCtx, handle)
+		if sandbox.IsNotFound(cleanupErr) {
+			cleanupErr = nil
+		}
+		if cleanupErr != nil {
+			err = errors.Join(err, fmt.Errorf("cleanup replacement runtime: %w", cleanupErr))
+		} else if stoppedErr := s.observeStoppedExtensions(cleanupCtx, id); stoppedErr != nil {
+			err = errors.Join(err, fmt.Errorf("clear replacement extension observations: %w", stoppedErr))
+		}
+		// Preserve desired configuration for retry. If cleanup itself failed,
+		// retain the new handle rather than leaving an untracked instance.
+		if _, saveErr := s.updateRuntimeState(id, agentruntime.Info{HandleID: handle.HandleID, State: agentruntime.StateFailed}); saveErr != nil {
+			err = errors.Join(err, fmt.Errorf("record failed runtime replacement: %w", saveErr))
+		}
+	}()
 	if err := s.observeStartedExtensions(ctx, id); err != nil {
 		return Agent{}, err
 	}
@@ -1153,6 +1178,7 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 	if err != nil {
 		return Agent{}, err
 	}
+	committed = true
 	return recreated, nil
 }
 
