@@ -312,7 +312,7 @@ func (s *Service) Claim(input ClaimInput) (Task, error) {
 		return Task{}, fmt.Errorf("participant_id is required")
 	}
 	switch task.Status {
-	case StatusPending, StatusAssigned:
+	case StatusPending, StatusAssigned, StatusBlocked:
 	default:
 		return Task{}, fmt.Errorf("%w: cannot claim task in status %s", ErrTransitionInvalid, task.Status)
 	}
@@ -323,6 +323,7 @@ func (s *Service) Claim(input ClaimInput) (Task, error) {
 	now := s.now()
 	task.Status = StatusInProgress
 	task.ClaimedBy = participantID
+	task.Error = ""
 	task.UpdatedAt = now
 	s.appendEventLocked(rootID, TaskEvent{
 		Type:      EventTaskClaimed,

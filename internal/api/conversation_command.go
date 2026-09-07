@@ -2,13 +2,10 @@ package api
 
 import (
 	"context"
-	"log/slog"
-	"strings"
-
-	"csgclaw/internal/agent"
-	csgclawchannel "csgclaw/internal/channel/csgclaw"
+	"csgclaw/internal/channel/csgclaw/conv"
 	"csgclaw/internal/im"
 	"csgclaw/internal/slashcommand"
+	"strings"
 )
 
 func newConversationCommandReason(content string) (string, bool, error) {
@@ -27,33 +24,21 @@ func (h *Handler) publishNewConversationParticipantEvent(ctx context.Context, ro
 		return nil
 	}
 	var missed []string
-	threadRootID := conversationThreadRootID(message)
 	for _, target := range h.newConversationBridgeTargets(room, message) {
-		participantID := target.bridgeID
-		agentID := h.runtimeAgentIDForBridgeID(participantID)
-		action, err := h.svc.NewConversationAction(ctx, agent.NewConversationRequest{
-			Channel:      csgclawchannel.ChannelID,
-			BotID:        agentID,
-			RoomID:       room.ID,
-			ThreadRootID: threadRootID,
-			Reason:       reason,
-		})
-		if err != nil {
-			slog.Warn("new conversation action failed", "channel", csgclawchannel.ChannelID, "participant_id", participantID, "room_id", room.ID, "error", err)
+		agentID := h.runtimeAgentIDForBridgeID(target.bridgeID)
+		selected, ok := h.svc.Agent(agentID)
+		if !ok {
+			missed = append(missed, target.bridgeID)
 			continue
 		}
-		switch action.Mode {
-		case agent.NewConversationActionBotEvent:
-			if action.BotEventText == "" {
-				continue
-			}
-			if !h.enqueueParticipantMessageEventForBridgeTarget(room, sender, message, target, action.BotEventText) {
-				missed = append(missed, participantID)
-			}
-		case agent.NewConversationActionInternal:
-			if !h.enqueueParticipantMessageEventForBridgeTarget(room, sender, message, target, "") {
-				missed = append(missed, participantID)
-			}
+		runtimeConfig := selected.RuntimeConfig()
+		command, err := conv.ResetText(runtimeConfig.Name, runtimeConfig.Sandboxed, reason)
+		if err != nil {
+			missed = append(missed, target.bridgeID)
+			continue
+		}
+		if !h.enqueueParticipantMessageEventForBridgeTarget(room, sender, message, target, command) {
+			missed = append(missed, target.bridgeID)
 		}
 	}
 	return missed

@@ -53,7 +53,7 @@ worklease.Registry ── participant.work.updated ──> SSE ──> Web“工
 
 ### Codex
 
-Codex 的接入位于 `internal/channelbridge/codexbridge/bridge.go`。处理 turn 前创建租约，处理期间每 5 秒续租，并通过 `defer` 覆盖成功、失败和提前返回等结束路径。
+Agent Engine 的接入位于 `internal/channel/csgclaw/execution/work.go`。处理 Turn 前创建租约，处理期间续租，并通过 `defer` 覆盖成功、失败和提前返回等结束路径。
 
 ### OpenClaw
 

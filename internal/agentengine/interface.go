@@ -1,22 +1,138 @@
-// Package agentengine defines resource-oriented contracts and runtime-neutral
-// orchestration for managing and executing CSGClaw agents.
-//
-// Design principles:
-//   - Coding agents treat these principles as hard constraints. Before violating
-//     one, stop, explain why the violation is necessary, and obtain two separate
-//     explicit confirmations from a human.
-//   - Execution follows one path: Channel Adapter or Session API -> Agent Engine
-//     -> Runtime Adapter.
-//   - Agent Engine owns the shared contract, not concrete Runtime behavior.
-//     Runtime-specific concerns stay behind the Runtime Adapter boundary;
-//     incremental implementations reject unsupported values instead of narrowing
-//     shared types.
+// Package agentengine implements the Agent Engine resource client.
+// The shared contract is dependency-free from concrete Runtime implementations.
 package agentengine
 
-// Interface is the complete review surface for Agent Engine.
-// It follows the Kubernetes client pattern: callers first select a resource,
-// then invoke operations on that resource's focused interface.
-type Interface interface {
-	Agents() AgentInterface
-	Conversations(agentID string) ConversationInterface
-}
+import "csgclaw/internal/agentengine/contract"
+
+type RuntimeConversation = contract.RuntimeConversation
+type ConversationProvider = contract.ConversationProvider
+
+type AgentInterface = contract.AgentInterface
+type AgentCreateRequest = contract.AgentCreateRequest
+type AgentGetOptions = contract.AgentGetOptions
+type AgentListOptions = contract.AgentListOptions
+type AgentUpdateRequest = contract.AgentUpdateRequest
+type AgentRecreateOptions = contract.AgentRecreateOptions
+type Agent = contract.Agent
+type AgentSpec = contract.AgentSpec
+type MemorySpec = contract.MemorySpec
+type AgentDesiredState = contract.AgentDesiredState
+type AgentRole = contract.AgentRole
+type RuntimeSpec = contract.RuntimeSpec
+type ModelSpec = contract.ModelSpec
+type ModelView = contract.ModelView
+type ProfileDetectionResult = contract.ProfileDetectionResult
+type MCPServerConfig = contract.MCPServerConfig
+type AgentStatus = contract.AgentStatus
+type AgentCapabilities = contract.AgentCapabilities
+type InstructionsStatus = contract.InstructionsStatus
+type MemoryStatus = contract.MemoryStatus
+type RuntimeAvailability = contract.RuntimeAvailability
+type AgentState = contract.AgentState
+type ConversationInterface = contract.ConversationInterface
+type EventSink = contract.EventSink
+type EventSinkFunc = contract.EventSinkFunc
+type ConversationKey = contract.ConversationKey
+type TurnID = contract.TurnID
+type AdmissionPolicy = contract.AdmissionPolicy
+type ContinuationPolicy = contract.ContinuationPolicy
+type InteractionPolicy = contract.InteractionPolicy
+type InputPartKind = contract.InputPartKind
+type InputPart = contract.InputPart
+type InputFile = contract.InputFile
+type TurnRequest = contract.TurnRequest
+type TurnEventKind = contract.TurnEventKind
+type TurnEvent = contract.TurnEvent
+type ToolActivity = contract.ToolActivity
+type ActivityUpdate = contract.ActivityUpdate
+type InteractionKind = contract.InteractionKind
+type InteractionRequest = contract.InteractionRequest
+type InteractionResolution = contract.InteractionResolution
+type InteractionAnswer = contract.InteractionAnswer
+type OutputItemKind = contract.OutputItemKind
+type OutputItem = contract.OutputItem
+type TurnStatus = contract.TurnStatus
+type ErrorCode = contract.ErrorCode
+type TurnError = contract.TurnError
+type TurnResult = contract.TurnResult
+type Interface = contract.Interface
+type RuntimeExtensionInterface = contract.RuntimeExtensionInterface
+type RuntimeExtensionApplyRequest = contract.RuntimeExtensionApplyRequest
+type RuntimeExtensionSpec = contract.RuntimeExtensionSpec
+type RuntimeExtensionSourceRef = contract.RuntimeExtensionSourceRef
+type RuntimeExtensionFailurePolicy = contract.RuntimeExtensionFailurePolicy
+type RuntimeExtensionState = contract.RuntimeExtensionState
+type RuntimeExtension = contract.RuntimeExtension
+type RuntimeExtensionStatus = contract.RuntimeExtensionStatus
+type ResolvedRuntimeExtension = contract.ResolvedRuntimeExtension
+type RuntimeExtensionSource = contract.RuntimeExtensionSource
+type FileInterface = contract.FileInterface
+type FileContent = contract.FileContent
+type FileCreateRequest = contract.FileCreateRequest
+type FileStore = contract.FileStore
+type UnavailableFiles = contract.UnavailableFiles
+type OutputFileMetadata = contract.OutputFileMetadata
+type OutputFile = contract.OutputFile
+
+const (
+	AgentDesiredStateRunning         = contract.AgentDesiredStateRunning
+	AgentDesiredStateStopped         = contract.AgentDesiredStateStopped
+	AgentRoleWorker                  = contract.AgentRoleWorker
+	AgentRoleManager                 = contract.AgentRoleManager
+	AgentStateCreating               = contract.AgentStateCreating
+	AgentStateStarting               = contract.AgentStateStarting
+	AgentStateRunning                = contract.AgentStateRunning
+	AgentStateStopping               = contract.AgentStateStopping
+	AgentStateStopped                = contract.AgentStateStopped
+	AgentStateRecreating             = contract.AgentStateRecreating
+	AgentStateFailed                 = contract.AgentStateFailed
+	AdmissionRejectIfBusy            = contract.AdmissionRejectIfBusy
+	AdmissionWait                    = contract.AdmissionWait
+	AdmissionSupersede               = contract.AdmissionSupersede
+	ContinuationCreateOrResume       = contract.ContinuationCreateOrResume
+	ContinuationRequireExisting      = contract.ContinuationRequireExisting
+	InteractionResolve               = contract.InteractionResolve
+	InteractionReject                = contract.InteractionReject
+	InteractionSkipUserInput         = contract.InteractionSkipUserInput
+	InputPartText                    = contract.InputPartText
+	InputPartFile                    = contract.InputPartFile
+	TurnEventTextDelta               = contract.TurnEventTextDelta
+	TurnEventThoughtDelta            = contract.TurnEventThoughtDelta
+	TurnEventToolCallStart           = contract.TurnEventToolCallStart
+	TurnEventToolCallUpdate          = contract.TurnEventToolCallUpdate
+	TurnEventActivityUpdate          = contract.TurnEventActivityUpdate
+	TurnEventInteractionRequest      = contract.TurnEventInteractionRequest
+	TurnEventOutputItem              = contract.TurnEventOutputItem
+	InteractionPermission            = contract.InteractionPermission
+	InteractionUserInput             = contract.InteractionUserInput
+	OutputItemRequestUserInput       = contract.OutputItemRequestUserInput
+	OutputItemResourceLink           = contract.OutputItemResourceLink
+	TurnSucceeded                    = contract.TurnSucceeded
+	TurnFailed                       = contract.TurnFailed
+	TurnCanceled                     = contract.TurnCanceled
+	ErrorInvalidRequest              = contract.ErrorInvalidRequest
+	ErrorAgentNotFound               = contract.ErrorAgentNotFound
+	ErrorAgentUnavailable            = contract.ErrorAgentUnavailable
+	ErrorRuntimeAdapterUnavailable   = contract.ErrorRuntimeAdapterUnavailable
+	ErrorConversationBusy            = contract.ErrorConversationBusy
+	ErrorConversationNotResumable    = contract.ErrorConversationNotResumable
+	ErrorFileUnavailable             = contract.ErrorFileUnavailable
+	ErrorFileNotFound                = contract.ErrorFileNotFound
+	ErrorInteractionNotFound         = contract.ErrorInteractionNotFound
+	ErrorInteractionUnsupported      = contract.ErrorInteractionUnsupported
+	ErrorInteractionAlreadyResolved  = contract.ErrorInteractionAlreadyResolved
+	ErrorInteractionGone             = contract.ErrorInteractionGone
+	ErrorCanceled                    = contract.ErrorCanceled
+	ErrorRuntimeFailed               = contract.ErrorRuntimeFailed
+	ErrorUnsupportedRuntimeProvision = contract.ErrorUnsupportedRuntimeProvision
+	ErrorRuntimeExtensionNotFound    = contract.ErrorRuntimeExtensionNotFound
+	ErrorRuntimeExtensionConflict    = contract.ErrorRuntimeExtensionConflict
+	RuntimeExtensionOptional         = contract.RuntimeExtensionOptional
+	RuntimeExtensionBlockRuntime     = contract.RuntimeExtensionBlockRuntime
+	RuntimeExtensionConfigured       = contract.RuntimeExtensionConfigured
+	RuntimeExtensionUnavailable      = contract.RuntimeExtensionUnavailable
+	RuntimeExtensionError            = contract.RuntimeExtensionError
+)
+
+var NewFileStore = contract.NewFileStore
+var ErrorCodeOf = contract.ErrorCodeOf

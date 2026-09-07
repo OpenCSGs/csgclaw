@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/auth"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -13,9 +15,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/auth"
 )
 
 func TestHandleAuthStatus(t *testing.T) {

@@ -250,6 +250,35 @@ func TestDeleteStopsBoxBeforeForceRemove(t *testing.T) {
 	}
 }
 
+func TestDeleteKnownHandleDoesNotRequireObservationOrPersistence(t *testing.T) {
+	deps := testGatewayDeps(func() string { return "docker" }, nil)
+	deps.ResolveBox = func(_ context.Context, _ sandbox.Runtime, got AgentRef) (sandbox.Instance, string, error) {
+		if got.BoxID != "replacement" {
+			t.Errorf("Delete resolved stale handle %q", got.BoxID)
+		}
+		return testSandboxBox{}, "replacement", nil
+	}
+	deps.StopBox = func(context.Context, sandbox.Instance, sandbox.StopOptions) error { return nil }
+	deps.BoxInfo = func(context.Context, sandbox.Instance) (sandbox.Info, error) {
+		return sandbox.Info{}, errors.New("observation is unavailable")
+	}
+	deps.SyncHandle = func(agentruntime.Handle) error {
+		t.Error("Delete attempted to persist a handle being removed")
+		return errors.New("persistence is unavailable")
+	}
+	var removed string
+	deps.ForceRemoveBox = func(_ context.Context, _ sandbox.Runtime, id string) error {
+		removed = id
+		return nil
+	}
+	if err := New(deps).Delete(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-manager", HandleID: "replacement"}); err != nil {
+		t.Fatal(err)
+	}
+	if removed != "replacement" {
+		t.Fatalf("removed %q, want replacement", removed)
+	}
+}
+
 func TestResolvedAgentRuntimeHomeUsesAgentID(t *testing.T) {
 	var ensureRuntimeID string
 	var runtimeHomeID string

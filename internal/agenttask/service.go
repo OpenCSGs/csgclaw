@@ -2,15 +2,14 @@ package agenttask
 
 import (
 	"context"
-	"fmt"
-	"strings"
-
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/taskcore"
+	"fmt"
+	"strings"
 )
 
 type participantLookup interface {
@@ -243,6 +242,7 @@ func renderInitialMessage(task taskcore.Task) string {
 	b.WriteString("csgclaw-cli task claim --task ")
 	b.WriteString(task.ID)
 	b.WriteString(" --participant-id <worker_participant_id>")
+	b.WriteString("\nIf blocked, claim it again when ready to resume.")
 	b.WriteString("\n\nWhen finished, update it with:\n")
 	b.WriteString("csgclaw-cli task update --task ")
 	b.WriteString(task.ID)

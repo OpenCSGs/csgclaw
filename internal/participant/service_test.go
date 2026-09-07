@@ -2,14 +2,8 @@ package participant
 
 import (
 	"context"
-	"errors"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentengine/enginetest"
 	"csgclaw/internal/assets"
 	"csgclaw/internal/config"
@@ -17,6 +11,11 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
 	"csgclaw/internal/sandbox/sandboxtest"
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 type repairGetErrorAgents struct {
@@ -32,7 +31,7 @@ func TestCreateAgentParticipantUsesStableParticipantIDForDefaultAgentID(t *testi
 	agentSvc := mustNewAgentService(t)
 	imSvc := im.NewService()
 	store := NewMemoryStore(nil)
-	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
 
 	created, err := svc.Create(context.Background(), CreateRequest{
 		ID:      "qa",
@@ -78,7 +77,7 @@ func TestCreateParticipantKeepsAvatarOnIMUserOnly(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
 	imSvc := im.NewService()
 	store := NewMemoryStore(nil)
-	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
 
 	created, err := svc.Create(context.Background(), CreateRequest{
 		ID:      "qa",
@@ -123,7 +122,7 @@ func TestCreateAgentParticipantReplacesInitialsWithBuiltInAvatar(t *testing.T) {
 		t.Fatalf("seed channel user: %v", err)
 	}
 	store := NewMemoryStore(nil)
-	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
 
 	if _, err := svc.Create(context.Background(), CreateRequest{
 		ID:      "qa",
@@ -162,9 +161,9 @@ func TestCreateAgentParticipantCanReuseExistingAgentWithDifferentParticipantID(t
 	agentSvc := mustNewAgentService(t)
 	imSvc := im.NewService()
 	store := NewMemoryStore(nil)
-	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
 
-	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+	if _, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
 			Name:        "QA-Runtime",
@@ -233,7 +232,7 @@ func TestCreateCSGClawAgentParticipantRequiresAgentBinding(t *testing.T) {
 
 func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
-	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+	if _, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "agent-qa",
 			Name:        "qa",
@@ -290,7 +289,7 @@ func TestRepairDanglingCSGClawAgentParticipantsRemovesParticipantShells(t *testi
 			ChannelUserKind: ChannelUserKindLocalUserID,
 		},
 	})
-	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
 
 	deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
 	if err != nil {
@@ -338,7 +337,7 @@ func TestRepairDanglingCSGClawAgentParticipantsRequiresIMService(t *testing.T) {
 			Mentionable:     true,
 		},
 	})
-	svc := NewService(store, WithAgentService(agentSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)))
 
 	deleted, err := svc.RepairDanglingCSGClawAgentParticipants()
 	if err != nil {
@@ -567,7 +566,7 @@ func TestEnsureBootstrapManagerUsesDefaultParticipantIDSeparateFromAgentID(t *te
 	agentSvc := mustNewManagerAgentService(t)
 	imSvc := im.NewService()
 	store := NewMemoryStore(nil)
-	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
 
 	created, err := svc.EnsureBootstrapManager(context.Background())
 	if err != nil {
@@ -619,7 +618,7 @@ func TestEnsureBootstrapManagerRenamesLegacyManagerParticipant(t *testing.T) {
 		CreatedAt:       createdAt,
 		UpdatedAt:       createdAt,
 	}})
-	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
 
 	created, err := svc.EnsureBootstrapManager(context.Background())
 	if err != nil {
@@ -657,7 +656,7 @@ func TestEnsureBootstrapManagerDeletesMisspelledManagerParticipant(t *testing.T)
 		CreatedAt:       createdAt,
 		UpdatedAt:       createdAt,
 	}})
-	svc := NewService(store, WithAgentService(agentSvc), WithIMService(imSvc))
+	svc := NewService(store, WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
 
 	created, err := svc.EnsureBootstrapManager(context.Background())
 	if err != nil {
@@ -677,8 +676,8 @@ func TestEnsureBootstrapManagerDeletesMisspelledManagerParticipant(t *testing.T)
 
 func TestDeleteParticipantDoesNotDeleteAgentByDefault(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
-	svc := NewService(NewMemoryStore(nil), WithAgentService(agentSvc), WithIMService(im.NewService()))
-	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+	svc := NewService(NewMemoryStore(nil), WithAgentEngine(agentengine.New(agentSvc)), WithIMService(im.NewService()))
+	if _, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
 			Name:        "QA-Runtime",
@@ -750,8 +749,8 @@ func TestDeleteNotificationParticipantRemovesLocalUserAndDirectRoom(t *testing.T
 
 func TestDeleteParticipantRejectsAgentCleanupWhenStillReferenced(t *testing.T) {
 	agentSvc := mustNewAgentService(t)
-	svc := NewService(NewMemoryStore(nil), WithAgentService(agentSvc), WithIMService(im.NewService()))
-	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+	svc := NewService(NewMemoryStore(nil), WithAgentEngine(agentengine.New(agentSvc)), WithIMService(im.NewService()))
+	if _, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
 			Name:        "QA-Runtime",
@@ -822,8 +821,8 @@ func TestDeleteParticipantAgentCleanupKeepsSharedCSGClawUser(t *testing.T) {
 			{ID: "u-qa", Name: "QA"},
 		},
 	})
-	svc := NewService(NewMemoryStore(nil), WithAgentService(agentSvc), WithIMService(imSvc))
-	if _, err := agentSvc.Create(context.Background(), agent.CreateRequest{
+	svc := NewService(NewMemoryStore(nil), WithAgentEngine(agentengine.New(agentSvc)), WithIMService(imSvc))
+	if _, err := agentSvc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-qa",
 			Name:        "QA-Runtime",
@@ -893,12 +892,12 @@ func TestCreateHumanParticipantRejectsCreateAgentBinding(t *testing.T) {
 	}
 }
 
-func mustNewAgentService(t *testing.T) *agent.Service {
+func mustNewAgentService(t *testing.T) *agent.Controller {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
-	svc, err := agent.NewService(
+	svc, err := agent.NewController(
 		config.ModelConfig{
 			Provider: config.ProviderLLMAPI,
 			BaseURL:  "http://127.0.0.1:4000",
@@ -916,14 +915,14 @@ func mustNewAgentService(t *testing.T) *agent.Service {
 	return svc
 }
 
-func mustNewManagerAgentService(t *testing.T) *agent.Service {
+func mustNewManagerAgentService(t *testing.T) *agent.Controller {
 	t.Helper()
 	svc := mustNewAgentService(t)
 	agent.SetTestHooks(
-		func(_ *agent.Service, _ string) (sandbox.Runtime, error) {
+		func(_ *agent.Controller, _ string) (sandbox.Runtime, error) {
 			return sandboxtest.NewRuntime(), nil
 		},
-		func(_ *agent.Service, _ context.Context, _ sandbox.Runtime, _, name, _ string, _ agent.AgentProfile) (sandbox.Instance, sandbox.Info, error) {
+		func(_ *agent.Controller, _ context.Context, _ sandbox.Runtime, _, name, _ string, _ agent.AgentProfile) (sandbox.Instance, sandbox.Info, error) {
 			info := sandbox.Info{
 				ID:        "box-" + name,
 				Name:      name,

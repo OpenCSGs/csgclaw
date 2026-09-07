@@ -2,16 +2,102 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
+	"csgclaw/internal/scheduledtask"
 	"csgclaw/internal/taskcore"
 )
+
+func TestScheduledTaskResumesAfterBlockedRunOverHTTP(t *testing.T) {
+	for _, status := range []string{taskcore.StatusCompleted, taskcore.StatusFailed} {
+		t.Run(status, func(t *testing.T) {
+			now := time.Date(2026, 9, 6, 9, 0, 0, 0, time.UTC)
+			coreStore, err := taskcore.NewStore(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			core := taskcore.NewService(taskcore.WithStore(coreStore))
+			imSvc := im.NewService()
+			tasks := agenttask.NewService(core, imSvc, nil, nil)
+			scheduleStore, err := scheduledtask.NewStore(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			schedules, err := scheduledtask.NewService(scheduleStore, tasks, scheduledtask.WithNowFunc(func() time.Time { return now }))
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := &Handler{im: imSvc, agentTaskSvc: tasks, scheduledTaskSvc: schedules}
+			server := httptest.NewServer(h.Routes())
+			defer server.Close()
+			request := func(method, path, body string, wantStatus int, result any) {
+				t.Helper()
+				req, err := http.NewRequest(method, server.URL+path, strings.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				resp, err := server.Client().Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer resp.Body.Close()
+				data, err := io.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if resp.StatusCode != wantStatus {
+					t.Fatalf("%s %s: status %d, want %d: %s", method, path, resp.StatusCode, wantStatus, data)
+				}
+				if result != nil {
+					if err := json.Unmarshal(data, result); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			var schedule apitypes.ScheduledTask
+			request(http.MethodPost, "/api/v1/scheduled-tasks", `{"title":"Daily check","agent_id":"agent-dev","prompt":"Check work","recurrence":"daily","first_run_at":"2026-09-06T09:00:00Z"}`, http.StatusCreated, &schedule)
+			var firstRun apitypes.ScheduledTaskRun
+			runPath := "/api/v1/scheduled-tasks/" + schedule.ID + "/run-now"
+			request(http.MethodPost, runPath, `{}`, http.StatusCreated, &firstRun)
+			taskPath := "/api/v1/agent-tasks/" + firstRun.TaskID
+			request(http.MethodPost, taskPath+"/claim", `{"participant_id":"pt-dev"}`, http.StatusOK, nil)
+			request(http.MethodPatch, taskPath, `{"actor_id":"pt-dev","status":"blocked","reason":"Waiting for input"}`, http.StatusOK, nil)
+			request(http.MethodPost, runPath, `{}`, http.StatusConflict, nil)
+			request(http.MethodPost, taskPath+"/claim", `{"participant_id":"pt-other"}`, http.StatusBadRequest, nil)
+
+			var resumed apitypes.TeamTask
+			request(http.MethodPost, taskPath+"/claim", `{"participant_id":"pt-dev"}`, http.StatusOK, &resumed)
+			if resumed.Status != taskcore.StatusInProgress || resumed.Error != "" || resumed.ClaimedBy != "pt-dev" {
+				t.Fatalf("resumed task retained blocked state: %+v", resumed)
+			}
+			request(http.MethodPatch, taskPath, `{"actor_id":"pt-dev","status":"`+status+`","result":"done","error":"cannot continue"}`, http.StatusOK, nil)
+			reloaded := taskcore.NewService(taskcore.WithStore(coreStore))
+			persisted, ok := reloaded.Get(firstRun.TaskID)
+			if !ok || persisted.Status != status {
+				t.Fatalf("persisted task = %+v, found %v", persisted, ok)
+			}
+
+			now = now.AddDate(0, 0, 1)
+			runs := schedules.TriggerDue(t.Context())
+			if len(runs) != 1 || runs[0].Status != scheduledtask.StatusTriggered || runs[0].TaskID == firstRun.TaskID {
+				t.Fatalf("next automatic run = %+v, want a new task", runs)
+			}
+			var history []apitypes.ScheduledTaskRun
+			request(http.MethodGet, "/api/v1/scheduled-tasks/"+schedule.ID+"/runs", "", http.StatusOK, &history)
+			if len(history) != 2 {
+				t.Fatalf("run history = %+v, want both scheduled runs", history)
+			}
+		})
+	}
+}
 
 func TestAgentTaskAPI(t *testing.T) {
 	core := taskcore.NewService()

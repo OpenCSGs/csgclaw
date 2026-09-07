@@ -22,6 +22,7 @@ import {
   fetchAgentSkillsFile,
   finalizeFeishuRegistrationRequest,
   initAgentLarkCLIRequest,
+  cleanupAgentLarkCLIRequest,
   patchNotificationBotRequest,
   runAgentActionRequest,
   startFeishuRegistrationRequest,
@@ -199,6 +200,32 @@ export function feishuRegistrationFinalizeNotice(result: FeishuRegistrationFinal
   }
   const warnings = (result?.warnings || []).map((warning) => String(warning || "").trim()).filter(Boolean);
   return { kind: warnings.length > 0 ? "warnings" : "success", warnings };
+}
+
+export type LarkCLIInitErrorKind =
+  | "missing_bot"
+  | "install"
+  | "app_conflict"
+  | "source_unavailable"
+  | "bind_failed"
+  | "generic";
+
+export function larkCLIInitErrorKind(code: string | null | undefined): LarkCLIInitErrorKind {
+  switch (String(code || "").trim()) {
+    case "feishu_bot_not_configured":
+      return "missing_bot";
+    case "lark_cli_unavailable":
+      return "install";
+    case "feishu_bot_app_id_conflict":
+      return "app_conflict";
+    case "lark_cli_source_unavailable":
+      return "source_unavailable";
+    case "lark_cli_bind_failed":
+    case "lark_cli_config_failed":
+      return "bind_failed";
+    default:
+      return "generic";
+  }
 }
 
 const AGENT_RUNTIME_SYNC_INTERVAL_MS = 2_000;
@@ -2260,7 +2287,7 @@ export function useAgentController({
   async function disconnectFeishu(item: AgentLike | null | undefined): Promise<void> {
     const agentID = String(item?.id || "").trim();
     const participantID = String(feishuAgentParticipant(item)?.id || "").trim();
-    if (!agentID || !participantID || isAgentActionBusy(agentID)) {
+    if (!agentID || (!participantID && !item?.lark_cli?.cleanup_pending) || isAgentActionBusy(agentID)) {
       return;
     }
     const busyKey = feishuActionKey(agentID, "disconnect");
@@ -2269,7 +2296,11 @@ export function useAgentController({
     }
     setAgentPageSaveError("");
     try {
-      await deleteFeishuParticipantRequest(participantID);
+      if (participantID) {
+        await deleteFeishuParticipantRequest(participantID);
+      } else {
+        await cleanupAgentLarkCLIRequest(agentID);
+      }
       updateFeishuPendingRegistrations((current) => {
         const next = { ...current };
         delete next[agentID];
@@ -2279,6 +2310,7 @@ export function useAgentController({
       showAgentPageNotice(t("feishuDisconnectConfigured"), "success", 5000, agentID);
     } catch (err) {
       setAgentPageSaveError(errorMessage(err, t("feishuDisconnectFailed")));
+      await refreshAgentStateRef.current(agentID);
     } finally {
       releaseAgentAction(agentID, busyKey);
     }
@@ -2297,20 +2329,46 @@ export function useAgentController({
     try {
       const result = await initAgentLarkCLIRequest(agentID);
       await refreshAgentStateRef.current(agentID);
-      showAgentPageNotice(t("larkCLIConfigured"), "success", 5000, agentID);
+      showAgentPageNotice(
+        t(result.runtime_loaded === false ? "larkCLIConfiguredPendingLoad" : "larkCLIConfigured"),
+        "success",
+        5000,
+        agentID,
+      );
       if (result?.restart_error) {
         setAgentPageSaveError(`${t("larkCLIRestartFailed")} ${result.restart_error}`);
+      } else if (result.warning) {
+        setAgentPageSaveError(result.warning);
       }
     } catch (err) {
       const apiError = err as ApiError | null;
-      if (apiError?.code === "feishu_bot_not_configured") {
+      const errorKind = larkCLIInitErrorKind(apiError?.code);
+      if (errorKind === "missing_bot") {
         setLarkCLIDialog({
           kind: "message",
           title: t("larkCLINoFeishuBotTitle"),
           message: t("larkCLINoFeishuBotMessage"),
         });
-      } else if (apiError?.code === "lark_cli_unavailable") {
+      } else if (errorKind === "install") {
         showLarkCLIInstall(item);
+      } else if (errorKind === "app_conflict") {
+        setLarkCLIDialog({
+          kind: "message",
+          title: t("larkCLIAppConflictTitle"),
+          message: [t("larkCLIAppConflictMessage"), apiErrorMessage(err, "")].filter(Boolean).join("\n\n"),
+        });
+      } else if (errorKind === "source_unavailable") {
+        setLarkCLIDialog({
+          kind: "message",
+          title: t("larkCLISourceUnavailableTitle"),
+          message: [t("larkCLISourceUnavailableMessage"), apiErrorMessage(err, "")].filter(Boolean).join("\n\n"),
+        });
+      } else if (errorKind === "bind_failed") {
+        setLarkCLIDialog({
+          kind: "message",
+          title: t("larkCLIBindFailedTitle"),
+          message: [t("larkCLIBindFailedMessage"), apiErrorMessage(err, "")].filter(Boolean).join("\n\n"),
+        });
       } else {
         setAgentPageSaveError(errorMessage(err, t("larkCLIInitFailed")));
       }

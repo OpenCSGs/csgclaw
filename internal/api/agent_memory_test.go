@@ -3,16 +3,16 @@ package api
 import (
 	"bytes"
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	agentruntime "csgclaw/internal/runtime"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	agentruntime "csgclaw/internal/runtime"
 )
 
 type fakeMemoryCompatRuntime struct {
@@ -56,13 +56,13 @@ func TestAgentMemoryEndpointsExposeCapabilityDocumentAndToggle(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("writeSeededAgents() error = %v", err)
 	}
-	svc, err := agent.NewService(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath,
+	svc, err := agent.NewController(config.ModelConfig{}, config.ServerConfig{}, "manager-image:test", statePath,
 		agent.WithRuntime(fakeMemoryCompatRuntime{fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex}}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	handler := &Handler{svc: svc}
+	handler := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 
 	agentRecorder := httptest.NewRecorder()
 	handler.Routes().ServeHTTP(agentRecorder, httptest.NewRequest(http.MethodGet, "/api/v1/agents/agent-alice", nil))

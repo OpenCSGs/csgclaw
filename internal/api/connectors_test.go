@@ -2,6 +2,11 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	"csgclaw/internal/connectors"
+	agentruntime "csgclaw/internal/runtime"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,11 +15,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	"csgclaw/internal/connectors"
-	agentruntime "csgclaw/internal/runtime"
 )
 
 func TestConnectorGitHubOAuthAPIFlowAndCredentialAuth(t *testing.T) {
@@ -231,7 +231,7 @@ func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
 
 	var specs []agentruntime.Spec
 	var deleteCalls int
-	agentSvc, err := agent.NewService(
+	agentSvc, err := agent.NewController(
 		config.ModelConfig{
 			Provider: config.ProviderLLMAPI,
 			BaseURL:  "http://127.0.0.1:4000",
@@ -288,7 +288,7 @@ func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
 		t.Fatalf("worker role = %q, want worker", worker.Role)
 	}
 
-	handler := &Handler{svc: agentSvc, serverAccessToken: "server-token"}
+	handler := &Handler{svc: agentSvc, serverAccessToken: "server-token", agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	handler.SetConnectorService(connectorSvc)
 	routes := handler.Routes()
 

@@ -18,7 +18,8 @@ import (
 
 type fakeEngine struct{ conversation *fakeConversation }
 
-func (e fakeEngine) Agents() agentengine.AgentInterface { return nil }
+func (e fakeEngine) Agents() agentengine.AgentInterface                             { return nil }
+func (e fakeEngine) RuntimeExtensions(string) agentengine.RuntimeExtensionInterface { return nil }
 func (e fakeEngine) Conversations(string) agentengine.ConversationInterface {
 	return e.conversation
 }
@@ -499,4 +500,8 @@ func runnerMessage(eventID, turnID, conversationKey, text string) channeltypes.I
 		TurnID:          turnID,
 		Text:            text,
 	}
+}
+
+func (*fakeConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
+	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

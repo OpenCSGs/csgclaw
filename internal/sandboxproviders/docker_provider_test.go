@@ -1,17 +1,16 @@
 package sandboxproviders
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	"csgclaw/internal/sandbox"
+	"csgclaw/internal/sandbox/dockercli"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 	"unsafe"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	"csgclaw/internal/sandbox"
-	"csgclaw/internal/sandbox/dockercli"
 )
 
 func TestDockerProviderFactoryUsesConfiguredPath(t *testing.T) {
@@ -89,7 +88,7 @@ func TestDockerServiceOptionWiresProvider(t *testing.T) {
 	if len(opt) != 1 {
 		t.Fatalf("len(opt) = %d, want 1", len(opt))
 	}
-	svc := &agent.Service{}
+	svc := &agent.Controller{}
 	if err := opt[0](svc); err != nil {
 		t.Fatalf("sandbox option error = %v", err)
 	}

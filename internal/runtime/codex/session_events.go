@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"csgclaw/internal/activity"
 	"encoding/json"
 	"regexp"
 	"strings"
@@ -51,7 +52,7 @@ func permissionDecisionEvent(state permissionState) SessionEvent {
 }
 
 func userInputRequestEvent(state userInputState) SessionEvent {
-	snapshot := publicUserInputSnapshot(state.snapshot)
+	snapshot := activity.PublicUserInputSnapshot(state.snapshot)
 	return SessionEvent{
 		RuntimeKind:     agentruntime.KindCodex,
 		RuntimeID:       strings.TrimSpace(state.execution.RuntimeID),
@@ -69,7 +70,7 @@ func userInputRequestEvent(state userInputState) SessionEvent {
 }
 
 func userInputResolvedEvent(state userInputState) SessionEvent {
-	snapshot := publicUserInputSnapshot(state.snapshot)
+	snapshot := activity.PublicUserInputSnapshot(state.snapshot)
 	return SessionEvent{
 		RuntimeKind:     agentruntime.KindCodex,
 		RuntimeID:       strings.TrimSpace(state.execution.RuntimeID),

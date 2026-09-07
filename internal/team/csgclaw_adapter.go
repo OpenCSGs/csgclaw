@@ -2,12 +2,11 @@ package team
 
 import (
 	"context"
-	"fmt"
-	"strings"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	"fmt"
+	"strings"
 )
 
 const builtinChannelName = "csgclaw"

@@ -1,18 +1,17 @@
 package onboard
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
-
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
 	"csgclaw/internal/localstore"
 	"csgclaw/internal/participant"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
 func TestDetectStateFreshHomeReportsIncompleteBootstrap(t *testing.T) {

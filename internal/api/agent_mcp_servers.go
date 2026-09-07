@@ -1,14 +1,13 @@
 package api
 
 import (
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/mcpschema"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
-	"csgclaw/internal/mcpschema"
 )
 
 type batchAddAgentMCPServersRequest struct {

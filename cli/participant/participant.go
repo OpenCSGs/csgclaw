@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"csgclaw/cli/command"
-	"csgclaw/internal/agent"
+	agent "csgclaw/internal/agentengine/agents"
 	participantpkg "csgclaw/internal/participant"
 )
 

@@ -2,6 +2,13 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
+	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/worklease"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,14 +18,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/im"
-	"csgclaw/internal/participant"
-	agentruntime "csgclaw/internal/runtime"
-	"csgclaw/internal/worklease"
 )
 
 const (
@@ -192,7 +191,7 @@ func (h *Handler) materializeAttachmentsForParticipant(attachments []im.MessageA
 	if strings.TrimSpace(agentID) == "" {
 		return append([]im.MessageAttachment(nil), attachments...)
 	}
-	workspaceRoot, err := h.svc.WorkspaceRootByID(agentID)
+	workspaceRoot, err := h.workspace.WorkspaceRootByID(agentID)
 	if err != nil {
 		slog.Warn("resolve attachment workspace failed", "agent_id", agentID, "participant_id", bridgeID, "error", err)
 		return append([]im.MessageAttachment(nil), attachments...)
@@ -701,13 +700,7 @@ func (h *Handler) agentAdministrationEngine() agentengine.Interface {
 	if h == nil {
 		return nil
 	}
-	if h.agentEngine != nil {
-		return h.agentEngine
-	}
-	if h.svc != nil {
-		return agentengine.New(h.svc)
-	}
-	return nil
+	return h.agentEngine
 }
 
 func (h *Handler) runtimeAgentIDForBridgeID(id string) string {

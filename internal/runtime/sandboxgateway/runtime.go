@@ -224,22 +224,35 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 		_ = r.deps.CloseRuntime(runtimeHome, rt)
 	}()
 
-	boxIDOrName := ""
+	boxIDOrName := strings.TrimSpace(h.HandleID)
+	if boxIDOrName != "" {
+		got.BoxID = boxIDOrName
+	}
 	box, resolvedKey, err := r.deps.ResolveBox(ctx, rt, got)
 	if err == nil {
 		if stopErr := r.deps.StopBox(ctx, box, sandbox.StopOptions{}); stopErr != nil && !sandbox.IsNotFound(stopErr) {
 			_ = r.deps.CloseBox(box)
 			return stopErr
 		}
-		info, infoErr := r.infoForBox(ctx, h, box)
-		_ = r.deps.CloseBox(box)
-		if infoErr != nil {
-			return infoErr
+		// ResolveBox may repair a stale persisted ID through this Agent's
+		// stable sandbox name. Remove the instance that was actually resolved.
+		if key := strings.TrimSpace(resolvedKey); key != "" {
+			boxIDOrName = key
 		}
-		boxIDOrName = strings.TrimSpace(info.HandleID)
 		if boxIDOrName == "" {
-			boxIDOrName = strings.TrimSpace(resolvedKey)
+			// Deletion must not depend on persisting an observation, especially
+			// when rolling back a replacement after a state-store failure.
+			info, infoErr := r.deps.BoxInfo(ctx, box)
+			if infoErr != nil {
+				_ = r.deps.CloseBox(box)
+				return infoErr
+			}
+			boxIDOrName = strings.TrimSpace(info.ID)
+			if boxIDOrName == "" {
+				boxIDOrName = strings.TrimSpace(resolvedKey)
+			}
 		}
+		_ = r.deps.CloseBox(box)
 	} else if !sandbox.IsNotFound(err) {
 		return err
 	}

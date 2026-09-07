@@ -11,10 +11,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"csgclaw/internal/activity"
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentengine/enginetest"
 	"csgclaw/internal/config"
 	"csgclaw/internal/runtime"
@@ -26,7 +27,8 @@ func TestRealEngineInterfaceContract(t *testing.T) {
 }
 
 type contractRuntime struct {
-	kind string
+	inputStarted chan struct{}
+	kind         string
 
 	mu            sync.Mutex
 	states        map[string]runtime.State
@@ -40,15 +42,41 @@ type contractRuntime struct {
 	openFile      func(context.Context, string) (io.ReadCloser, error)
 }
 
+func (r *contractRuntime) Conversation(runtimeID string) agentengine.RuntimeConversation {
+	if r.kind != "codex" {
+		return nil
+	}
+	return codex.NewConversationAdapter(runtimeID, r)
+}
+
 func newContractRuntime(kind, workspace string, behavior enginetest.TurnBehavior) *contractRuntime {
-	return &contractRuntime{
+	r := &contractRuntime{
 		kind: kind, states: make(map[string]runtime.State), conversations: make(map[string]string),
 		sessionKeys: make(map[string]agentengine.ConversationKey), behavior: behavior, workspace: workspace,
-		permission: codex.NewPermissionBroker(nil), userInput: codex.NewUserInputBroker(nil),
+		permission: codex.NewPermissionBroker(nil), inputStarted: make(chan struct{}, 16),
 	}
+	r.userInput = codex.NewUserInputBroker(contractInputSink{runtime: r})
+	return r
 }
 
 func (r *contractRuntime) Kind() string { return r.kind }
+
+func (r *contractRuntime) RuntimeExtensionDriver(kind string) (runtime.ExtensionDriver, bool) {
+	if kind != "contract" || r.kind != runtime.KindCodex {
+		return nil, false
+	}
+	return r, true
+}
+
+func (r *contractRuntime) ObserveExtension(_ context.Context, _ string, _ runtime.ExtensionDesired) (runtime.ExtensionResult, error) {
+	return runtime.ExtensionResult{State: runtime.ExtensionStateConfigured, CheckedAt: time.Now().UTC(), RuntimeLoaded: true}, nil
+}
+
+type contractExtensionSource struct{}
+
+func (contractExtensionSource) Resolve(context.Context, string, string) (agentengine.ResolvedRuntimeExtension, error) {
+	return agentengine.ResolvedRuntimeExtension{SourceRevision: "contract-revision", Payload: json.RawMessage(`{"value":"resolved-only"}`)}, nil
+}
 
 func (r *contractRuntime) Layout(root string) runtime.Layout {
 	return runtime.Layout{
@@ -165,7 +193,7 @@ func (r *contractRuntime) PromptTurn(ctx context.Context, runtimeID, sessionID, 
 	result := agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true}
 	if behavior != nil {
 		result = behavior(ctx, "agent-a", request, agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
-			return r.publishTurnEvent(runtimeID, sessionID, event)
+			return r.publishTurnEvent(ctx, runtimeID, sessionID, event)
 		}))
 	}
 	if ctx.Err() != nil {
@@ -240,7 +268,7 @@ func (r *contractRuntime) SubscribeSession(_, _ string) (<-chan activity.Runtime
 	}
 }
 
-func (r *contractRuntime) publishTurnEvent(runtimeID, sessionID string, event agentengine.TurnEvent) error {
+func (r *contractRuntime) publishTurnEvent(ctx context.Context, runtimeID, sessionID string, event agentengine.TurnEvent) error {
 	runtimeEvent := activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID}
 	switch event.Kind {
 	case agentengine.TurnEventTextDelta:
@@ -301,19 +329,18 @@ func (r *contractRuntime) publishTurnEvent(runtimeID, sessionID string, event ag
 		if event.Interaction == nil || event.Interaction.Kind != agentengine.InteractionUserInput {
 			return fmt.Errorf("unsupported contract interaction")
 		}
-		snapshot, err := r.userInput.CreateDetached(codex.PendingUserInputRequest{
-			Execution: activity.ExecutionRef{RuntimeID: runtimeID, SessionID: sessionID},
-			Questions: []activity.UserInputQuestionSnapshot{{
-				ID: "choice", Header: "Choice", Question: "Continue?",
-				Options: []activity.UserInputOptionSnapshot{{Label: "Yes"}, {Label: "No"}},
-			}},
-		}, codex.DetachedUserInputContext{Channel: "contract", RoomID: "contract"})
-		if err != nil {
-			return err
+		go func() {
+			_, _ = r.userInput.Request(ctx, codex.PendingUserInputRequest{
+				Execution: activity.ExecutionRef{RuntimeID: runtimeID, SessionID: sessionID},
+				Questions: []activity.UserInputQuestionSnapshot{{ID: "choice", Header: "Choice", Question: "Continue?", Options: []activity.UserInputOptionSnapshot{{Label: "Yes"}, {Label: "No"}}}},
+			})
+		}()
+		select {
+		case <-r.inputStarted:
+		case <-ctx.Done():
+			return ctx.Err()
 		}
-		runtimeEvent.Kind = activity.RuntimeEventUserInputRequest
-		runtimeEvent.UserInputID = snapshot.ID
-		runtimeEvent.Payload = snapshot
+		return nil
 	default:
 		return fmt.Errorf("unsupported contract event %q", event.Kind)
 	}
@@ -380,7 +407,7 @@ func newRealContractEngine(t testing.TB, seeded []agentengine.Agent, behavior en
 	if err := os.WriteFile(statePath, append(data, '\n'), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	service, err := agent.NewService(
+	service, err := agent.NewController(
 		config.ModelConfig{}, config.ServerConfig{}, "manager:test", statePath,
 		agent.WithRuntime(codexRuntime), agent.WithRuntime(openClawRuntime),
 	)
@@ -389,6 +416,9 @@ func newRealContractEngine(t testing.TB, seeded []agentengine.Agent, behavior en
 	}
 	t.Cleanup(func() { _ = service.Close() })
 	engine := agentengine.New(service)
+	if err := engine.RegisterRuntimeExtensionSource("contract", contractExtensionSource{}); err != nil {
+		t.Fatal(err)
+	}
 	codexRuntime.openFile = func(ctx context.Context, fileID string) (io.ReadCloser, error) {
 		download, err := engine.Conversations("agent-a").Files().Get(ctx, fileID)
 		if err != nil {
@@ -397,4 +427,13 @@ func newRealContractEngine(t testing.TB, seeded []agentengine.Agent, behavior en
 		return download.Content, nil
 	}
 	return engine
+}
+
+type contractInputSink struct{ runtime *contractRuntime }
+
+func (s contractInputSink) Publish(event codex.SessionEvent) {
+	s.runtime.publish(event)
+	if event.Kind == activity.RuntimeEventUserInputRequest {
+		s.runtime.inputStarted <- struct{}{}
+	}
 }

@@ -11,7 +11,7 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge/runtimebridge"
+	channelrender "csgclaw/internal/channel/csgclaw/render"
 	"csgclaw/internal/im"
 )
 
@@ -241,13 +241,13 @@ func TestIMTranscriptStorePreservesActivityAndRuntimeErrorMetadata(t *testing.T)
 		ParticipantID: "pt-worker", RoomID: "room-1", SourceMessageID: "message-1",
 		ConversationKey: "conversation-1", TurnID: "turn-1",
 	}
-	activityPayload := map[string]any{"type": runtimebridge.AgentActivityType}
+	activityPayload := map[string]any{"type": channelrender.AgentActivityType}
 	if err := store.DeliverRenderedActivity(context.Background(), turn, ActivityDelivery{
 		MessageID: "question-1",
 		Text:      "question",
 		Metadata: map[string]any{
-			runtimebridge.CSGClawMetadataKey: map[string]any{
-				runtimebridge.AgentActivityMetaKey: activityPayload,
+			channelrender.CSGClawMetadataKey: map[string]any{
+				channelrender.AgentActivityMetaKey: activityPayload,
 			},
 		},
 	}); err != nil {
@@ -265,13 +265,13 @@ func TestIMTranscriptStorePreservesActivityAndRuntimeErrorMetadata(t *testing.T)
 		t.Fatalf("room = %+v, want question and failure", room)
 	}
 	assertChannelMetadata(t, room.Messages[0].Metadata)
-	questionMetadata, _ := room.Messages[0].Metadata[runtimebridge.CSGClawMetadataKey].(map[string]any)
-	if questionMetadata[runtimebridge.AgentActivityMetaKey] == nil {
+	questionMetadata, _ := room.Messages[0].Metadata[channelrender.CSGClawMetadataKey].(map[string]any)
+	if questionMetadata[channelrender.AgentActivityMetaKey] == nil {
 		t.Fatalf("question metadata = %#v, want preserved agent activity", room.Messages[0].Metadata)
 	}
 	assertChannelMetadata(t, room.Messages[1].Metadata)
-	failureMetadata, _ := room.Messages[1].Metadata[runtimebridge.CSGClawMetadataKey].(map[string]any)
-	if failureMetadata[runtimebridge.RuntimeErrorMetaKey] != true || failureMetadata["error_code"] != "rate_limit_exceeded" {
+	failureMetadata, _ := room.Messages[1].Metadata[channelrender.CSGClawMetadataKey].(map[string]any)
+	if failureMetadata[channelrender.RuntimeErrorMetaKey] != true || failureMetadata["error_code"] != "rate_limit_exceeded" {
 		t.Fatalf("failure metadata = %#v, want runtime error fields", failureMetadata)
 	}
 }
@@ -286,4 +286,8 @@ func assertChannelMetadata(t *testing.T, metadata map[string]any) map[string]any
 		t.Fatalf("channel metadata = %#v, want only CSGClaw and version %d", namespace, channelMetadataVersion)
 	}
 	return namespace
+}
+
+func (fixedOutputFileConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
+	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

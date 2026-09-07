@@ -23,8 +23,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"csgclaw/cli/command"
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/agentmanager"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
@@ -39,12 +39,12 @@ import (
 	"csgclaw/internal/channel/csgclaw/execution"
 	"csgclaw/internal/channel/csgclaw/files"
 	csgclawinteraction "csgclaw/internal/channel/csgclaw/interaction"
+	channelrender "csgclaw/internal/channel/csgclaw/render"
 	csgclawsource "csgclaw/internal/channel/csgclaw/source"
 	"csgclaw/internal/channel/feishu"
 	feishubinding "csgclaw/internal/channel/feishu/binding"
 	"csgclaw/internal/channel/feishu/participantprovider"
 	feishutransport "csgclaw/internal/channel/feishu/transport"
-	"csgclaw/internal/channelbridge/runtimebridge"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/connectors"
@@ -56,7 +56,6 @@ import (
 	internalonboard "csgclaw/internal/onboard"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
-	runtimecodex "csgclaw/internal/runtime/codex"
 	"csgclaw/internal/runtimecatalog"
 	"csgclaw/internal/sandboxproviders"
 	"csgclaw/internal/scheduledtask"
@@ -89,19 +88,19 @@ var (
 	}
 	DetectBootstrapState   = internalonboard.DetectState
 	EnsureBootstrapState   = internalonboard.EnsureState
-	EnsureBootstrapManager = func(ctx context.Context, svc *agent.Service) error {
+	EnsureBootstrapManager = func(ctx context.Context, svc *agent.Controller) error {
 		if svc == nil {
 			return nil
 		}
 		return svc.EnsureBootstrapManager(ctx, false)
 	}
-	StartConfiguredAgents = func(ctx context.Context, svc *agent.Service) error {
+	StartConfiguredAgents = func(ctx context.Context, svc *agent.Controller) error {
 		if svc == nil {
 			return nil
 		}
 		return svc.StartConfiguredAgents(ctx)
 	}
-	StopRunningSandboxAgents = func(ctx context.Context, svc *agent.Service) error {
+	StopRunningSandboxAgents = func(ctx context.Context, svc *agent.Controller) error {
 		if svc == nil {
 			return nil
 		}
@@ -581,11 +580,11 @@ func parseServeLogLevel(level string) (slog.Level, error) {
 	}
 }
 
-func startServer(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, output string) error {
+func startServer(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Controller, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, output string) error {
 	return startServerWithConfigPath(ctx, run, cfg, svc, imSvc, imBus, feishuSvc, "", output)
 }
 
-func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Service, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, configPath, output string, opts ...serveOptions) error {
+func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Controller, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, configPath, output string, opts ...serveOptions) error {
 	serveOpts := serveOptions{}
 	if len(opts) > 0 {
 		serveOpts = opts[0]
@@ -639,15 +638,12 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	if err != nil {
 		return err
 	}
-	imAdapterSource, err := NewCSGClawAdapterSource(conversationEngine, svc, imSvc, imBus, participantSvc, workRegistry, participantBridge)
+	interactionCoordinator := csgclawinteraction.NewCoordinator(conversationEngine, participantSvc)
+	imAdapterSource, err := NewCSGClawAdapterSource(conversationEngine, svc, imSvc, imBus, participantSvc, workRegistry, participantBridge, interactionCoordinator)
 	if err != nil {
 		return err
 	}
-	if svc != nil {
-		if activator := newChannelBindingActivator(imAdapterSource, feishuBindingMgr); activator != nil {
-			svc.SetBindingActivator(activator)
-		}
-	}
+	channelBindings := newChannelBindingCoordinator(imAdapterSource, feishuBindingMgr)
 	if imAdapterSource != nil {
 		defer imAdapterSource.Close()
 		if err := imAdapterSource.Start(ctx); err != nil {
@@ -766,7 +762,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		ListenAddr:         cfg.Server.ListenAddr,
 		Listener:           serveOpts.Listener,
 		SandboxListener:    serveOpts.SandboxListener,
-		Service:            svc,
+		AgentServices:      api.AgentServices{Records: svc, Workspace: svc.Workspace(), Models: svc.Models(), Runtime: svc},
 		Hub:                hubSvc,
 		MCP:                mcpSvc,
 		Participant:        participantSvc,
@@ -784,9 +780,10 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		AgentRuntimes:      agentRuntimeSvc,
 		TeamAdapters:       teamAdapters,
 		Upgrade:            upgradeManager,
-		ActivityDecider:    channelActivityDecider(svc),
-		UserInputResponder: channelUserInputResponder(svc),
+		ActivityDecider:    interactionCoordinator,
+		UserInputResponder: interactionCoordinator,
 		AgentEngine:        conversationEngine,
+		ChannelBindings:    channelBindings,
 		SessionBindings:    sessionBindings,
 		ConfigPath:         configPath,
 		AccessToken:        cfg.Server.AccessToken,
@@ -829,7 +826,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 					slog.Warn("some configured agents failed to start", "error", err)
 				}
 			}()
-		},
+		}, RuntimeCloser: svc,
 	})
 }
 
@@ -840,7 +837,7 @@ func reconcileInterruptedUserInputMessages(imSvc *im.Service) error {
 	now := time.Now().UTC()
 	for _, room := range imSvc.ListRoomsWithOptions(im.ListMessagesOptions{IncludeThreadReplies: true}) {
 		for _, message := range room.Messages {
-			content, metadata, changed := runtimebridge.InterruptPendingQuestionActivity(message.Content, message.Metadata, now)
+			content, metadata, changed := channelrender.InterruptPendingQuestionActivity(message.Content, message.Metadata, now)
 			if !changed {
 				continue
 			}
@@ -863,7 +860,7 @@ func reconcileInterruptedUserInputMessages(imSvc *im.Service) error {
 	return nil
 }
 
-func refreshStartupModelProviders(ctx context.Context, cfg config.Config, configPath string, svc *agent.Service) (config.Config, []agent.ModelProviderCheckResult, error) {
+func refreshStartupModelProviders(ctx context.Context, cfg config.Config, configPath string, svc *agent.Controller) (config.Config, []agent.ModelProviderCheckResult, error) {
 	configPath = strings.TrimSpace(configPath)
 	if configPath == "" {
 		return cfg, nil, nil
@@ -882,7 +879,7 @@ func refreshStartupModelProviders(ctx context.Context, cfg config.Config, config
 		return cfg, results, err
 	}
 	if svc != nil {
-		svc.SetLLMConfig(updatedLLM)
+		svc.Models().SetLLMConfig(updatedLLM)
 	}
 	return cfg, results, nil
 }
@@ -896,7 +893,7 @@ func logStartupModelProviderRefresh(results []agent.ModelProviderCheckResult) {
 	}
 }
 
-func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Service) {
+func configureFeishuService(feishuSvc *feishu.Service, svc *agent.Controller) {
 	if feishuSvc == nil {
 		return
 	}
@@ -1202,7 +1199,7 @@ func missingModelFlags(fields []string) []string {
 	return flags
 }
 
-func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialProvider) (*agent.Service, error) {
+func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialProvider) (*agent.Controller, error) {
 	agentsPath, err := config.DefaultAgentsPath()
 	if err != nil {
 		return nil, err
@@ -1232,12 +1229,12 @@ func newAgentService(cfg config.Config, feishuProvider feishu.AgentCredentialPro
 	if hubSvc != nil {
 		opts = append(opts, agent.WithHubService(hubSvc))
 	}
-	return agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, bootstrapDefaults.ManagerImage, agentsPath, opts...)
+	return agent.NewControllerWithLLM(effectiveLLMConfig(cfg), cfg.Server, bootstrapDefaults.ManagerImage, agentsPath, opts...)
 }
 
 type bootstrapManagerAgentService struct {
-	svc    *agent.Service
-	ensure func(context.Context, *agent.Service) error
+	svc    *agent.Controller
+	ensure func(context.Context, *agent.Controller) error
 }
 
 func (s bootstrapManagerAgentService) EnsureManager(ctx context.Context, _ bool) (agent.Agent, error) {
@@ -1258,7 +1255,7 @@ func (s bootstrapManagerAgentService) EnsureManager(ctx context.Context, _ bool)
 	return manager, nil
 }
 
-func newAgentManagerService(svc *agent.Service, ensure func(context.Context, *agent.Service) error) (*agentmanager.Service, error) {
+func newAgentManagerService(svc *agent.Controller, ensure func(context.Context, *agent.Controller) error) (*agentmanager.Service, error) {
 	if svc == nil {
 		return nil, nil
 	}
@@ -1291,22 +1288,22 @@ type channelBindingReconciler interface {
 	Reconcile(context.Context) error
 }
 
-// channelBindingActivator keeps binding configuration changes on their owning
+// channelBindingCoordinator keeps binding configuration changes on their owning
 // channel manager. Both built-in IM and Feishu bindings are deliberately
 // independent from Agent runtime lifecycle.
-type channelBindingActivator struct {
+type channelBindingCoordinator struct {
 	csgclaw channelBindingReconciler
 	feishu  channelBindingReconciler
 }
 
-func newChannelBindingActivator(csgclaw, feishu channelBindingReconciler) agent.BindingActivator {
+func newChannelBindingCoordinator(csgclaw, feishu channelBindingReconciler) api.ChannelBindingReconciler {
 	if csgclaw == nil && feishu == nil {
 		return nil
 	}
-	return &channelBindingActivator{csgclaw: csgclaw, feishu: feishu}
+	return &channelBindingCoordinator{csgclaw: csgclaw, feishu: feishu}
 }
 
-func (a *channelBindingActivator) RefreshAgentChannel(ctx context.Context, _ agent.Agent, channel string) error {
+func (a *channelBindingCoordinator) RefreshAgentChannel(ctx context.Context, _ agent.Agent, channel string) error {
 	channel = strings.ToLower(strings.TrimSpace(channel))
 	switch channel {
 	case csgclawchannel.ChannelID:
@@ -1322,52 +1319,6 @@ func (a *channelBindingActivator) RefreshAgentChannel(ctx context.Context, _ age
 	default:
 		return fmt.Errorf("unsupported agent channel %q", channel)
 	}
-}
-
-func (a *channelBindingActivator) CanRefreshStoppedAgentBinding(channel string) bool {
-	if a == nil {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(channel)) {
-	case csgclawchannel.ChannelID:
-		return a.csgclaw != nil
-	case feishu.ChannelID:
-		return a.feishu != nil
-	default:
-		return false
-	}
-}
-
-func channelActivityDecider(svc *agent.Service) api.ActivityDecider {
-	codexRuntime := codexRuntimeForService(svc)
-	if codexRuntime == nil {
-		return nil
-	}
-	decider := codexRuntime.PermissionBroker()
-	if decider == nil {
-		return nil
-	}
-	return runtimecodex.NewPermissionActivityDecider(csgclawchannel.ChannelID, decider)
-}
-
-func channelUserInputResponder(svc *agent.Service) api.UserInputResponder {
-	codexRuntime := codexRuntimeForService(svc)
-	if codexRuntime == nil {
-		return nil
-	}
-	return codexRuntime.UserInputBroker()
-}
-
-func codexRuntimeForService(svc *agent.Service) *runtimecodex.Runtime {
-	if svc == nil {
-		return nil
-	}
-	runtimeImpl, err := svc.Runtime(agent.RuntimeKindCodex)
-	if err != nil {
-		return nil
-	}
-	codexRuntime, _ := runtimeImpl.(*runtimecodex.Runtime)
-	return codexRuntime
 }
 
 func newFeishuBindingManager(feishuSvc *feishu.Service, engine agentengine.Interface) (feishuBindingManager, error) {
@@ -1404,12 +1355,12 @@ func newFeishuBindingManager(feishuSvc *feishu.Service, engine agentengine.Inter
 
 func newCSGClawAdapterSource(
 	engine *agentengine.Engine,
-	agentSvc *agent.Service,
-	imSvc *im.Service,
+	agentSvc *agent.Controller, imSvc *im.Service,
 	imBus *im.Bus,
 	participantSvc *participant.Service,
 	workReporter worklease.ParticipantWorkReporter,
 	participantBridge *im.ParticipantBridge,
+	interactionCoordinator *csgclawinteraction.Coordinator,
 ) (csgclawAdapterSource, error) {
 	if engine == nil || agentSvc == nil || imSvc == nil || participantSvc == nil || participantBridge == nil {
 		return nil, nil
@@ -1422,22 +1373,7 @@ func newCSGClawAdapterSource(
 	if err != nil {
 		return nil, err
 	}
-	var interactionCoordinator *csgclawinteraction.Coordinator
-	var rendererOptions []delivery.RendererOption
-	if codexRuntime := codexRuntimeForService(agentSvc); codexRuntime != nil {
-		interactionCoordinator = csgclawinteraction.NewCoordinator(
-			codexRuntime.UserInputBroker(),
-			participantSvc,
-			store,
-			csgclawinteraction.WithRuntimeIdentity(engine.Agents(), codexRuntime),
-		)
-		if interactionCoordinator != nil {
-			rendererOptions = append(rendererOptions,
-				delivery.WithUserInputBinder(interactionCoordinator),
-				delivery.WithStructuredUserInputActivator(interactionCoordinator),
-			)
-		}
-	}
+	rendererOptions := []delivery.RendererOption{delivery.WithInteractionProjector(interactionCoordinator)}
 	adapterOptions := []execution.Option{
 		execution.WithAttachmentResolver(attachmentResolver),
 		execution.WithParticipantWorkReporter(workReporter),
@@ -1464,7 +1400,7 @@ func newCSGClawAdapterSource(
 	return source, nil
 }
 
-func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ServiceOption, error) {
+func sandboxServiceOptions(cfg config.SandboxConfig) ([]agent.ControllerOption, error) {
 	return sandboxproviders.ServiceOptions(cfg)
 }
 
@@ -1575,7 +1511,7 @@ func defaultParticipantsPath() (string, error) {
 	return config.DefaultStatePath()
 }
 
-func newLLMService(cfg config.Config, svc *agent.Service) (*llm.Service, error) {
+func newLLMService(cfg config.Config, svc *agent.Controller) (*llm.Service, error) {
 	if svc == nil {
 		return nil, nil
 	}

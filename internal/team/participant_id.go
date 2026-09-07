@@ -1,10 +1,9 @@
 package team
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
 	"fmt"
 	"strings"
-
-	"csgclaw/internal/agent"
 )
 
 func cleanParticipantID(id string) string {

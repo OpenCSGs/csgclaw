@@ -12,7 +12,6 @@ import (
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/execution"
 	"csgclaw/internal/channel/csgclaw/ingress"
-	"csgclaw/internal/channelbridge"
 )
 
 const workerCloseTimeout = 5 * time.Second
@@ -103,7 +102,7 @@ func (m *Manager) Close() {
 }
 
 // Submit enqueues an already-routed source event onto the binding worker.
-func (m *Manager) Submit(value channel.Binding, event channelbridge.BotEvent) error {
+func (m *Manager) Submit(value channel.Binding, event channel.Event) error {
 	if m == nil {
 		return fmt.Errorf("built-in IM worker manager is not configured")
 	}

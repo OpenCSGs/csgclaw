@@ -8,11 +8,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/config"
+	"github.com/go-chi/chi/v5"
 )
 
 var appCheckModelProvider = agent.CheckModelProvider
@@ -312,7 +311,7 @@ func (h *Handler) saveModelProvidersConfig(path string, cfg config.Config) error
 		return err
 	}
 	if h != nil && h.svc != nil {
-		h.svc.SetLLMConfig(cfg.Models)
+		h.agentModels.SetLLMConfig(cfg.Models)
 	}
 	return nil
 }

@@ -339,7 +339,7 @@ export function isToolCallMessage(messageOrContent: IMMessage | unknown): boolea
   if (isMessageLike(messageOrContent)) {
     const activity = parseAgentActivity(messageOrContent);
     if (activity) {
-      return activity.content.msgtype !== AgentActivityMsgTypes.question;
+      return activity.content.msgtype === AgentActivityMsgTypes.tool;
     }
     if (isOpenClawToolDeliveryMessage(messageOrContent)) {
       return true;
@@ -355,7 +355,7 @@ export function isToolCallMessage(messageOrContent: IMMessage | unknown): boolea
 function isNonMessageActivityContent(content: unknown): boolean {
   const activity = parseAgentActivity(content);
   return Boolean(
-    (activity && activity.content.msgtype !== AgentActivityMsgTypes.question) || isLegacyToolCallContent(content),
+    (activity && activity.content.msgtype === AgentActivityMsgTypes.tool) || isLegacyToolCallContent(content),
   );
 }
 
@@ -403,7 +403,14 @@ export function formatConversationPreview(
 }
 
 export function formatMessagePreviewText(content: unknown): string {
-  return collapsePreviewWhitespace(stripPreviewCodeFence(flattenMentionText(renderSlashCommandPreviewText(content))));
+  const activity = parseAgentActivity(content);
+  const preview =
+    activity?.content.action?.title ||
+    activity?.content.tool?.title ||
+    activity?.content.question?.questions[0]?.question ||
+    activity?.content.body ||
+    content;
+  return collapsePreviewWhitespace(stripPreviewCodeFence(flattenMentionText(renderSlashCommandPreviewText(preview))));
 }
 
 export type MessagePreviewTextToken = {
