@@ -4,9 +4,12 @@ import { errorMessage } from "@/api/client";
 import { fetchHubWorkspace, fetchHubWorkspaceFile, updateHubWorkspaceFile } from "@/api/hub";
 import { hasSkillName, isOfficialSkill, isPersonalSkill } from "@/models/skillhub";
 import { mergeHubTemplateDetail, type HubWorkspaceFile } from "@/models/hubWorkspace";
+import { resolveHubListSelection } from "@/models/hubSelection";
+import { WorkspacePaneTypes } from "@/models/routing";
 import { flattenWorkspaceDirectoryListings } from "@/models/workspace";
 import type { WorkspaceDirectoryListings } from "@/models/workspace";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
+import type { HubResourceType } from "./workspaceUiStore";
 import { useWorkspaceMCPSelection } from "./useWorkspaceMCPSelection";
 import { useWorkspaceKnowledgeBaseSelection } from "./useWorkspaceKnowledgeBaseSelection";
 import {
@@ -20,12 +23,43 @@ import {
   useWorkspaceSkillTreeQuery,
 } from "./workspaceQueries";
 import type { HubTemplate } from "@/models/hubWorkspace";
+import type { WorkspacePane } from "@/models/routing";
 import type { UseWorkspaceHubSelectionArgs } from "./types";
 
 type TemplateWorkspaceFilesState = {
   files: Record<string, HubWorkspaceFile>;
   templateID: string;
 };
+
+export type HubSelectionState = {
+  selectedHubResourceType: HubResourceType;
+  selectedHubSkillName: string;
+  selectedHubTemplateId: string;
+  selectedKnowledgeBaseID: string;
+  selectedMCPServerName: string;
+};
+
+export function resolveRouteDrivenHubSelection(
+  activePane: WorkspacePane,
+  selection: HubSelectionState,
+): HubSelectionState {
+  if (activePane.type !== WorkspacePaneTypes.hub || !activePane.resourceType) {
+    return selection;
+  }
+
+  const id = String(activePane.id ?? "");
+  const resolved = { ...selection, selectedHubResourceType: activePane.resourceType };
+  switch (activePane.resourceType) {
+    case "template":
+      return { ...resolved, selectedHubTemplateId: id };
+    case "skill":
+      return { ...resolved, selectedHubSkillName: id };
+    case "mcp":
+      return { ...resolved, selectedMCPServerName: id };
+    case "knowledge":
+      return { ...resolved, selectedKnowledgeBaseID: id };
+  }
+}
 
 export function templateWorkspaceFilesStateNeedsReset(state: TemplateWorkspaceFilesState): boolean {
   return Boolean(state.templateID || Object.keys(state.files).length);
@@ -43,6 +77,7 @@ export function resolveHubTemplateSelection(
 }
 
 export function useWorkspaceHubSelection({
+  activePane,
   templates,
   templatesQuery,
   loaded,
@@ -53,20 +88,33 @@ export function useWorkspaceHubSelection({
 }: UseWorkspaceHubSelectionArgs) {
   const queryClient = useQueryClient();
   const resourcesTemplates = useMemo(() => templates ?? [], [templates]);
-  const selectedHubTemplateId = useWorkspaceUiStore((state) => state.selectedHubTemplateId);
+  const storedSelectedHubTemplateId = useWorkspaceUiStore((state) => state.selectedHubTemplateId);
   const setSelectedHubTemplateId = useWorkspaceUiStore((state) => state.setSelectedHubTemplateId);
   const selectedHubWorkspacePath = useWorkspaceUiStore((state) => state.selectedHubWorkspacePath);
   const setSelectedHubWorkspacePath = useWorkspaceUiStore((state) => state.setSelectedHubWorkspacePath);
-  const selectedHubSkillName = useWorkspaceUiStore((state) => state.selectedHubSkillName);
+  const storedSelectedHubSkillName = useWorkspaceUiStore((state) => state.selectedHubSkillName);
   const setSelectedHubSkillName = useWorkspaceUiStore((state) => state.setSelectedHubSkillName);
   const selectedHubSkillPath = useWorkspaceUiStore((state) => state.selectedHubSkillPath);
   const setSelectedHubSkillPath = useWorkspaceUiStore((state) => state.setSelectedHubSkillPath);
-  const selectedMCPServerName = useWorkspaceUiStore((state) => state.selectedMCPServerName);
+  const storedSelectedMCPServerName = useWorkspaceUiStore((state) => state.selectedMCPServerName);
   const setSelectedMCPServerName = useWorkspaceUiStore((state) => state.setSelectedMCPServerName);
-  const selectedHubResourceType = useWorkspaceUiStore((state) => state.selectedHubResourceType);
+  const storedSelectedHubResourceType = useWorkspaceUiStore((state) => state.selectedHubResourceType);
   const setSelectedHubResourceType = useWorkspaceUiStore((state) => state.setSelectedHubResourceType);
-  const selectedKnowledgeBaseID = useWorkspaceUiStore((state) => state.selectedKnowledgeBaseID);
+  const storedSelectedKnowledgeBaseID = useWorkspaceUiStore((state) => state.selectedKnowledgeBaseID);
   const setSelectedKnowledgeBaseID = useWorkspaceUiStore((state) => state.setSelectedKnowledgeBaseID);
+  const {
+    selectedHubResourceType,
+    selectedHubSkillName,
+    selectedHubTemplateId,
+    selectedKnowledgeBaseID,
+    selectedMCPServerName,
+  } = resolveRouteDrivenHubSelection(activePane, {
+    selectedHubResourceType: storedSelectedHubResourceType,
+    selectedHubSkillName: storedSelectedHubSkillName,
+    selectedHubTemplateId: storedSelectedHubTemplateId,
+    selectedKnowledgeBaseID: storedSelectedKnowledgeBaseID,
+    selectedMCPServerName: storedSelectedMCPServerName,
+  });
   const [remoteSkillsEnabled, setRemoteSkillsEnabled] = useState(false);
   const [remoteSkillsSearch, setRemoteSkillsSearch] = useState("");
   const [remoteSkillsSearchQuery, setRemoteSkillsSearchQuery] = useState("");
@@ -100,7 +148,7 @@ export function useWorkspaceHubSelection({
     [resourcesTemplates, selectedHubTemplateId],
   );
   const selectedHubSkill = useMemo(
-    () => skills.find((item) => item.name === selectedHubSkillName) || skills[0] || null,
+    () => resolveHubListSelection(skills, selectedHubSkillName, (item) => item.name),
     [selectedHubSkillName, skills],
   );
   const [workspaceListingsState, setWorkspaceListingsState] = useState<{

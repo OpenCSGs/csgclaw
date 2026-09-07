@@ -180,7 +180,10 @@ export function SkillUploadDialog({
               role="tab"
               size="sm"
               variant={mode === "zip" ? "primary" : "secondaryGray"}
-              onClick={() => setMode("zip")}
+              onClick={() => {
+                setMode("zip");
+                inputRef.current?.click();
+              }}
             >
               <UploadCloud size={15} strokeWidth={2} aria-hidden="true" />
               {t("resourcesSkillUploadZipTab")}
@@ -197,6 +200,13 @@ export function SkillUploadDialog({
               {t("resourcesSkillRemoteInstallTab")}
             </Button>
           </div>
+          <input
+            ref={inputRef}
+            className={styles.fileInput}
+            type="file"
+            accept=".zip,application/zip"
+            onChange={handleFileChange}
+          />
           {mode === "zip" ? (
             <>
               <button
@@ -229,13 +239,6 @@ export function SkillUploadDialog({
                   <small>{selectedFile ? selectedFile.name : t("resourcesSkillUploadDropHint")}</small>
                 </span>
               </button>
-              <input
-                ref={inputRef}
-                className={styles.fileInput}
-                type="file"
-                accept=".zip,application/zip"
-                onChange={handleFileChange}
-              />
               {localError || error ? <div className="form-error">{localError || error}</div> : null}
             </>
           ) : (

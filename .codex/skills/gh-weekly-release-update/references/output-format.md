@@ -1,6 +1,6 @@
 # Weekly Update Output Format
 
-Use this structure unless the user asks for another format. Save the final result as a Markdown file under `docs/weekly-releases`.
+Use this structure unless the user asks for another format. Save the final result as a Markdown file under `docs/releases`.
 
 Recommended filenames:
 

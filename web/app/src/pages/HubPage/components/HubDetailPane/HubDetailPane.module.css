@@ -11,6 +11,38 @@
   background: var(--bg);
 }
 
+.hub-loading-state {
+  flex: 1 1 auto;
+  min-height: 240px;
+  width: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.hub-loading-spinner {
+  color: var(--primary);
+  animation: hub-loading-spin 800ms linear infinite;
+}
+
+@keyframes hub-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-loading-spinner {
+    animation: none;
+  }
+}
+
 .hub-template-publish-memory-option {
   display: flex;
   align-items: flex-start;

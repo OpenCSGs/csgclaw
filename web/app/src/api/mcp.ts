@@ -34,10 +34,10 @@ type MCPServerSourceStatusResponse = {
   configured_endpoint_url?: unknown;
   content_id?: unknown;
   global_server_name?: unknown;
-  global_update_available?: unknown;
   kind?: unknown;
   latest_endpoint_url?: unknown;
   resource_id?: unknown;
+  source_available?: unknown;
   source_description?: unknown;
   source_name?: unknown;
   update_available?: unknown;
@@ -50,7 +50,6 @@ type MCPServerSourceSyncResponse = {
 
 type AgentMCPServerSourceSyncResponse = {
   agent?: unknown;
-  global_state?: unknown;
   source?: unknown;
 };
 
@@ -94,14 +93,13 @@ export async function fetchAgentMCPServerSourceStatus(agentID: string, name: str
 export async function syncAgentMCPServerSource(
   agentID: string,
   name: string,
-): Promise<{ agent: AgentMCPServersView; globalState: JSONRecord; source: MCPServerSourceStatus }> {
+): Promise<{ agent: AgentMCPServersView; source: MCPServerSourceStatus }> {
   const payload = await post<AgentMCPServerSourceSyncResponse>(`${agentMCPServerPath(agentID, name)}/source:sync`);
-  if (!isJSONRecord(payload?.agent) || !isJSONRecord(payload?.global_state)) {
+  if (!isJSONRecord(payload?.agent)) {
     throw new Error("Agent MCP source sync returned an invalid state");
   }
   return {
     agent: payload.agent as AgentMCPServersView,
-    globalState: payload.global_state,
     source: normalizeMCPServerSourceStatus(payload.source),
   };
 }
@@ -197,10 +195,10 @@ export function normalizeMCPServerSourceStatus(record: unknown): MCPServerSource
     configuredEndpointURL: stringFromUnknown(record.configured_endpoint_url),
     contentID,
     globalServerName: stringFromUnknown(record.global_server_name) || undefined,
-    globalUpdateAvailable: record.global_update_available === true,
     kind,
     latestEndpointURL: stringFromUnknown(record.latest_endpoint_url),
     resourceID,
+    sourceAvailable: record.source_available !== false,
     sourceDescription: stringFromUnknown(record.source_description) || undefined,
     sourceName: stringFromUnknown(record.source_name) || undefined,
     updateAvailable: record.update_available === true,

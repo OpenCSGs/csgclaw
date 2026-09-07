@@ -103,6 +103,48 @@ func TestWriteTemplateLayoutKeepsWorkspaceMemoryOutOfCodexTemplates(t *testing.T
 	}
 }
 
+func TestWriteTemplateLayoutPublishesOnlyAllowedWorkspaceFiles(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	for path, content := range map[string]string{
+		"AGENT.md":            "# Legacy instructions\n",
+		"HEARTBEAT.md":        "heartbeat\n",
+		"IDENTITY.md":         "identity\n",
+		"SOUL.md":             "soul\n",
+		"TOOLS.md":            "tools\n",
+		"USER.md":             "user\n",
+		"PLAYBOOK.md":         "not an instruction file\n",
+		"heartbeat.log":       "runtime log\n",
+		"downloads/input.pdf": "downloaded data\n",
+		"sessions/chat.jsonl": "conversation\n",
+		"state/state.json":    "runtime state\n",
+		".csgclaw/input":      "runtime data\n",
+	} {
+		path = filepath.Join(workspaceRoot, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	templateRoot := t.TempDir()
+	if err := writeTemplateLayout(WorkspaceRef{Kind: WorkspaceKindDir, Path: workspaceRoot}, templateRoot, agentruntime.NameOpenClaw, nil, false); err != nil {
+		t.Fatalf("writeTemplateLayout() error = %v", err)
+	}
+	instructionsRoot := filepath.Join(templateRoot, localInstructionsDirName)
+	for _, name := range []string{"AGENTS.md", "HEARTBEAT.md", "IDENTITY.md", "SOUL.md", "TOOLS.md", "USER.md"} {
+		if _, err := os.Stat(filepath.Join(instructionsRoot, name)); err != nil {
+			t.Errorf("allowed instruction %q missing: %v", name, err)
+		}
+	}
+	for _, name := range []string{"AGENT.md", "PLAYBOOK.md", "heartbeat.log", "downloads", "sessions", "state", ".csgclaw"} {
+		if _, err := os.Stat(filepath.Join(instructionsRoot, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("non-template workspace entry %q was published: %v", name, err)
+		}
+	}
+}
+
 func TestOpenClawTemplateMemoryRoundTripPreservesWorkspaceLayout(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	for path, content := range map[string]string{

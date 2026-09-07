@@ -5,7 +5,7 @@ description: Generate user-facing weekly release updates from a GitHub release r
 
 # GH Weekly Release Update
 
-Generate a weekly update from one or more GitHub releases. Fetch the release range with `gh`, read the release notes, rewrite the changes in language that users can understand, and save the result as a Markdown document under `docs/weekly-releases`.
+Generate a weekly update from one or more GitHub releases. Fetch the release range with `gh`, read the release notes, rewrite the changes in language that users can understand, and save the result as a Markdown document under `docs/releases`.
 
 ## Workflow
 
@@ -31,17 +31,17 @@ Use the `body`, `name`, `tag_name`, `published_at`, and `url` fields as the sour
 5. Write the weekly update in both Chinese and English.
 Follow the output structure in `references/output-format.md`.
 
-6. Save the result to `docs/weekly-releases`.
+6. Save the result to `docs/releases`.
 Create the directory if it does not exist. Prefer a filename in this form:
 
 ```text
-docs/weekly-releases/v0.3.1-v0.3.2.md
+docs/releases/v0.3.1-v0.3.2.md
 ```
 
 If the range contains only one release, prefer:
 
 ```text
-docs/weekly-releases/v0.3.2.md
+docs/releases/v0.3.2.md
 ```
 
 If the user asks for a date-based filename instead, follow that request.
@@ -79,7 +79,7 @@ If the user asks for a date-based filename instead, follow that request.
 - If `gh auth` is missing or the API call is denied, report that clearly.
 - If one of the tags cannot be found, stop and report which tag is missing.
 - If the repo cannot be inferred, ask the user for `owner/repo`.
-- If `docs/weekly-releases` does not exist, create it before writing the Markdown file.
+- If `docs/releases` does not exist, create it before writing the Markdown file.
 
 ## Example Prompt
 

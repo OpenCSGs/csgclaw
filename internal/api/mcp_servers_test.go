@@ -176,7 +176,7 @@ func TestManagedKnowledgeBaseMCPSourceStatusAndManualSync(t *testing.T) {
 	if err := json.NewDecoder(statusRecorder.Body).Decode(&status); err != nil {
 		t.Fatalf("decode source status: %v", err)
 	}
-	if !status.UpdateAvailable || status.ConfiguredEndpointURL != "https://gateway.example.test/snapshot/mcp" || status.LatestEndpointURL != "https://gateway.example.test/current/mcp" {
+	if !status.SourceAvailable || !status.UpdateAvailable || status.ConfiguredEndpointURL != "https://gateway.example.test/snapshot/mcp" || status.LatestEndpointURL != "https://gateway.example.test/current/mcp" {
 		t.Fatalf("source status = %#v", status)
 	}
 	if got := store.servers["content-42"].(map[string]any)["url"]; got != "https://gateway.example.test/snapshot/mcp" {
@@ -214,7 +214,7 @@ func TestManagedKnowledgeBaseMCPSourceStatusAndManualSync(t *testing.T) {
 	}
 }
 
-func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *testing.T) {
+func TestAgentManagedKnowledgeBaseMCPSourceSyncUsesAgentSnapshotWithoutGlobalMCP(t *testing.T) {
 	originalLoader := loadKnowledgeBaseConnection
 	originalTransport := http.DefaultTransport
 	defer func() {
@@ -246,13 +246,9 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *t
 	}); err != nil {
 		t.Fatalf("seed Agent MCP snapshot: %v", err)
 	}
-	globalConfig := managedKnowledgeBaseMCPConfigForTest("https://gateway.example.test/global-snapshot/mcp", "global-snapshot-token")
-	globalConfig["startup_timeout_sec"] = float64(30)
-	globalConfig["tool_timeout_sec"] = float64(60)
-	globalConfig["headers"].(map[string]any)["X-Local"] = "global"
-	if _, err := handler.mcp.CreateServer(context.Background(), "content-42", globalConfig); err != nil {
-		t.Fatalf("seed global MCP snapshot: %v", err)
-	}
+	// Once installed, the Agent snapshot refreshes directly from AgenticHub and
+	// must not depend on the global MCP catalog still being configured.
+	handler.mcp = nil
 
 	router := handler.Routes()
 	statusRecorder := httptest.NewRecorder()
@@ -264,7 +260,7 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *t
 	if err := json.NewDecoder(statusRecorder.Body).Decode(&status); err != nil {
 		t.Fatalf("decode Agent MCP source status: %v", err)
 	}
-	if !status.UpdateAvailable || !status.AgentUpdateAvailable || !status.GlobalUpdateAvailable || status.GlobalServerName != "content-42" {
+	if !status.SourceAvailable || !status.UpdateAvailable || !status.AgentUpdateAvailable || status.GlobalServerName != "" {
 		t.Fatalf("Agent MCP source status = %#v", status)
 	}
 
@@ -277,24 +273,8 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *t
 	if err := json.NewDecoder(syncRecorder.Body).Decode(&synced); err != nil {
 		t.Fatalf("decode Agent MCP source sync: %v", err)
 	}
-	if synced.Source.UpdateAvailable || synced.Source.GlobalServerName != "content-42" {
+	if synced.Source.UpdateAvailable || synced.Source.AgentUpdateAvailable || synced.Source.GlobalServerName != "" {
 		t.Fatalf("synced source status = %#v", synced.Source)
-	}
-
-	globalServers, err := handler.mcp.ListServers(context.Background())
-	if err != nil {
-		t.Fatalf("list global MCP servers: %v", err)
-	}
-	assertManagedKnowledgeBaseMCPRuntimeSnapshot(t, globalServers["content-42"], "https://gateway.example.test/current/mcp", "current-token")
-	refreshedGlobal := globalServers["content-42"].(map[string]any)
-	if got, want := refreshedGlobal["startup_timeout_sec"], float64(30); got != want {
-		t.Fatalf("global startup_timeout_sec = %#v, want %#v", got, want)
-	}
-	if got, want := refreshedGlobal["tool_timeout_sec"], float64(60); got != want {
-		t.Fatalf("global tool_timeout_sec = %#v, want %#v", got, want)
-	}
-	if got, want := refreshedGlobal["headers"].(map[string]any)["X-Local"], "global"; got != want {
-		t.Fatalf("global X-Local = %#v, want %q", got, want)
 	}
 	saved, ok := service.Agent(created.ID)
 	if !ok {
@@ -310,6 +290,71 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUpdatesGlobalAndCurrentAgent(t *t
 	}
 	if got, want := refreshedAgent["headers"].(map[string]any)["X-Local"], "agent"; got != want {
 		t.Fatalf("Agent X-Local = %#v, want %q", got, want)
+	}
+}
+
+func TestAgentManagedKnowledgeBaseMCPMissingSourceCanStillBeRemoved(t *testing.T) {
+	originalLoader := loadKnowledgeBaseConnection
+	originalTransport := http.DefaultTransport
+	defer func() {
+		loadKnowledgeBaseConnection = originalLoader
+		http.DefaultTransport = originalTransport
+	}()
+	loadKnowledgeBaseConnection = func(context.Context) (knowledgeBaseConnection, error) {
+		return knowledgeBaseConnection{CSGHubBaseURL: "https://hub.example.test", CSGHubAccessToken: "current-token"}, nil
+	}
+	http.DefaultTransport = knowledgeBaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"message":"knowledge base not found"}`)),
+		}, nil
+	})
+
+	handler, service, created := newAgentMCPManagementTestServer(t)
+	agentConfig := managedKnowledgeBaseMCPConfigForTest("https://gateway.example.test/deleted/mcp", "snapshot-token")
+	agentSnapshot := map[string]any{"content-42": agentConfig}
+	if _, err := service.Update(context.Background(), created.ID, agent.UpdateRequest{
+		MCPServers:    &agentSnapshot,
+		MCPServersSet: true,
+		FieldMask:     []string{"mcpServers"},
+	}); err != nil {
+		t.Fatalf("seed Agent MCP snapshot: %v", err)
+	}
+	handler.mcp = nil
+
+	router := handler.Routes()
+	statusRecorder := httptest.NewRecorder()
+	router.ServeHTTP(statusRecorder, httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/mcp-servers/content-42/source", nil))
+	if got, want := statusRecorder.Code, http.StatusOK; got != want {
+		t.Fatalf("GET deleted Agent MCP source status = %d, want %d; body=%s", got, want, statusRecorder.Body.String())
+	}
+	var status mcpServerSourceStatusResponse
+	if err := json.NewDecoder(statusRecorder.Body).Decode(&status); err != nil {
+		t.Fatalf("decode deleted Agent MCP source status: %v", err)
+	}
+	if status.SourceAvailable || status.UpdateAvailable || status.ContentID != "content-42" || status.ResourceID != "42" || status.ConfiguredEndpointURL != "https://gateway.example.test/deleted/mcp" {
+		t.Fatalf("deleted Agent MCP source status = %#v", status)
+	}
+
+	syncRecorder := httptest.NewRecorder()
+	router.ServeHTTP(syncRecorder, httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/mcp-servers/content-42/source:sync", nil))
+	if got, want := syncRecorder.Code, http.StatusNotFound; got != want {
+		t.Fatalf("POST deleted Agent MCP source sync = %d, want %d; body=%s", got, want, syncRecorder.Body.String())
+	}
+
+	deleteRecorder := httptest.NewRecorder()
+	deleteRequest := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/mcp-servers:batchDelete", strings.NewReader(`{"names":["content-42"]}`))
+	router.ServeHTTP(deleteRecorder, deleteRequest)
+	if got, want := deleteRecorder.Code, http.StatusOK; got != want {
+		t.Fatalf("POST delete stale Agent MCP = %d, want %d; body=%s", got, want, deleteRecorder.Body.String())
+	}
+	var deleted agent.MCPServersView
+	if err := json.NewDecoder(deleteRecorder.Body).Decode(&deleted); err != nil {
+		t.Fatalf("decode deleted Agent MCP view: %v", err)
+	}
+	if _, exists := deleted.Servers["content-42"]; exists {
+		t.Fatalf("deleted Agent MCP view still contains content-42: %#v", deleted.Servers)
 	}
 }
 

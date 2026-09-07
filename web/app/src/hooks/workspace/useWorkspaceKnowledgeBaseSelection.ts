@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { errorMessage } from "@/api/client";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
+import { resolveHubListSelection } from "@/models/hubSelection";
 import { configuredKnowledgeBases, mergeRemoteKnowledgeBasePages } from "@/models/knowledgeBases";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import { formatMCPServerDocument } from "@/models/mcp";
@@ -42,7 +43,7 @@ export function useWorkspaceKnowledgeBaseSelection({
   );
   const items = useMemo(() => configuredKnowledgeBases(catalogItems), [catalogItems]);
   const selected = useMemo(
-    () => items.find((item) => item.id === selectedKnowledgeBaseID) || items[0] || null,
+    () => resolveHubListSelection(items, selectedKnowledgeBaseID, (item) => item.id),
     [items, selectedKnowledgeBaseID],
   );
 
