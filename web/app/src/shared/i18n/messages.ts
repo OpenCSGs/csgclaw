@@ -1468,6 +1468,7 @@ export const messages = {
     errors: {
       "AGENT-ERR-22": "模板已发布，当前仍在审核中。请稍后在模板列表中查看最新状态。",
       "AGENT-ERR-23": "模板已发布，但未通过敏感内容审核。请根据问题文件修改后重新发布。",
+      "AGENT-ERR-25": "该智能体模板的敏感内容检查仍在进行中，无法创建智能体。",
       "RESOURCE-ERR-1": "模板已成功发布，但社区部署资源暂时不可用，请稍后重试部署。",
       "SENSITIVE-ERR-0": "发布失败：模板名称或描述中包含不允许的敏感信息，请修改后重试。",
       "SYS-ERR-4": "发布失败：社区仓库已存在，请修改模板名称后重试。",
@@ -3061,6 +3062,7 @@ export const messages = {
       "AGENT-ERR-22": "The template was published and is still under review. Check the template list again later.",
       "AGENT-ERR-23":
         "The template was published but did not pass sensitive-content review. Update the affected files and publish again.",
+      "AGENT-ERR-25": "This agent template is still undergoing sensitive-content review, so the agent cannot be created.",
       "RESOURCE-ERR-1":
         "The template was published, but community deployment resources are temporarily unavailable. Try deploying again later.",
       "SENSITIVE-ERR-0":

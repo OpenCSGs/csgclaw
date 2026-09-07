@@ -76,6 +76,7 @@ type SessionSpec struct {
 	Profile                     agentruntime.Profile
 	ExecutionMode               string
 	MemoryEnabled               bool
+	MCPServers                  map[string]any
 	ConversationSessions        map[string]string
 	FilePublishingConversations map[string]bool
 }
@@ -728,6 +729,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
 	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
+	spec.MCPServers = agentRef.MCPServers
 	manager := r.sessionManager()
 	tracker, tracksSessions := manager.(interface{ hasSession(string) bool })
 	if !tracksSessions || !tracker.hasSession(runtimeID) {
@@ -828,6 +830,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		CodexHomeDir:                dirs.CodexHome,
 		StderrPath:                  dirs.StderrLog,
 		Profile:                     agentRef.Profile.Normalized(),
+		MCPServers:                  agentRef.MCPServers,
 		ExecutionMode:               ExecutionModeStandard,
 		ConversationSessions:        cloneConversationSessions(sessionMeta.ConversationSessions),
 		FilePublishingConversations: cloneFilePublishingConversations(sessionMeta.FilePublishingConversations),

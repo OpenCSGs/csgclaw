@@ -9,6 +9,8 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,7 +30,9 @@ const (
 	appServerTurnInterruptTimeout      = 5 * time.Second
 	appServerTrackedTurnLimit          = 256
 	appServerPublishFileToolName       = "csgclaw_publish_file"
+	appServerUploadFileToolName        = "csgclaw_upload_file"
 	appServerMaxPublishedFileNameBytes = 255
+	appServerMaxUploadBytes            = 50 << 20
 )
 
 var (
@@ -156,6 +160,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		loadedConversations:   make(map[string]bool),
 		filePublishingThreads: filePublishingThreads,
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
+		turnContexts:          make(map[string]context.Context),
 		turnThreads:           make(map[string]string),
 		commandOutputs:        make(map[string]*appServerCommandOutputState),
 		replayedExecCommands:  make(map[string]struct{}),
@@ -312,6 +317,9 @@ func (m *appServerManager) LiveSession(handle SessionHandle) (*Session, error) {
 }
 
 func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req PromptRequest) (PromptResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	runtimeID := strings.TrimSpace(handle.RuntimeID)
 	live, err := m.ensureLiveSession(ctx, handle)
 	if err != nil {
@@ -335,6 +343,12 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	defer live.removeAppServerTurnWaiter(sessionID, waiter)
+	turnCtx, cancelTurn := context.WithCancel(ctx)
+	live.setAppServerTurnContext(sessionID, turnCtx)
+	defer func() {
+		cancelTurn()
+		live.clearAppServerTurnContext(sessionID)
+	}()
 
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	turnStartAt := time.Now()
@@ -749,7 +763,7 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		"experimentalRawEvents":  false,
 	}
 	if publishFiles {
-		params["dynamicTools"] = []map[string]any{appServerPublishFileToolSpec()}
+		params["dynamicTools"] = []map[string]any{appServerPublishFileToolSpec(), appServerUploadFileToolSpec()}
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -762,6 +776,23 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		params["permissions"] = readOnlyPermissionsProfile
 	}
 	return params
+}
+
+func appServerUploadFileToolSpec() map[string]any {
+	return map[string]any{
+		"name":        appServerUploadFileToolName,
+		"description": "Upload an existing Runtime workspace file to a URI issued by one of this Agent's configured MCP servers. Call the MCP upload-creation tool first, then pass its server name and upload URI here. The destination must be same-origin with that configured MCP server. Do not use curl or expose upload credentials.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"path":        map[string]any{"type": "string", "description": "Runtime workspace-relative path of the input file."},
+				"server":      map[string]any{"type": "string", "description": "Configured MCP server name that issued the upload URI."},
+				"uploadUri":   map[string]any{"type": "string", "minLength": 1, "description": "Relative or absolute same-origin upload URI returned by the MCP server."},
+				"contentType": map[string]any{"type": "string", "description": "Optional file content type."},
+			},
+			"required": []string{"path", "server", "uploadUri"}, "additionalProperties": false,
+		},
+	}
 }
 
 func appServerPublishFileToolSpec() map[string]any {
@@ -905,11 +936,18 @@ func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *
 }
 
 type appServerDynamicToolCallParams struct {
-	ThreadID  string                   `json:"threadId"`
-	TurnID    string                   `json:"turnId"`
-	CallID    string                   `json:"callId"`
-	Tool      string                   `json:"tool"`
-	Arguments appServerPublishFileArgs `json:"arguments"`
+	ThreadID  string          `json:"threadId"`
+	TurnID    string          `json:"turnId"`
+	CallID    string          `json:"callId"`
+	Tool      string          `json:"tool"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+type appServerUploadFileArgs struct {
+	Path        string `json:"path"`
+	Server      string `json:"server"`
+	UploadURI   string `json:"uploadUri"`
+	ContentType string `json:"contentType"`
 }
 
 type appServerPublishFileArgs struct {
@@ -930,13 +968,31 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 	if params.ThreadID == "" || params.TurnID == "" || params.CallID == "" {
 		return nil, fmt.Errorf("dynamic tool thread ID, turn ID, and call ID are required")
 	}
-	if params.Tool != appServerPublishFileToolName {
+	if params.Tool != appServerPublishFileToolName && params.Tool != appServerUploadFileToolName {
 		return nil, fmt.Errorf("unsupported dynamic tool %q", params.Tool)
 	}
 	if live == nil || !live.appServerPublishesFilesForThread(params.ThreadID) {
 		return nil, fmt.Errorf("dynamic file tool references unknown or unsupported thread %q", params.ThreadID)
 	}
-	file, err := normalizeAppServerPublishFileArgs(params.Arguments)
+	if params.Tool == appServerUploadFileToolName {
+		var args appServerUploadFileArgs
+		if err := json.Unmarshal(params.Arguments, &args); err != nil {
+			return appServerDynamicToolResponse(false, "invalid upload arguments"), nil
+		}
+		uploadCtx, ok := live.appServerTurnContext(params.ThreadID)
+		if !ok {
+			return appServerDynamicToolResponse(false, "file upload is unavailable outside an active turn"), nil
+		}
+		if err := uploadAppServerWorkspaceFile(uploadCtx, live.spec, args); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		return appServerDynamicToolResponse(true, "File uploaded successfully. Continue by calling the MCP parse tool with its file ID."), nil
+	}
+	var publishArgs appServerPublishFileArgs
+	if err := json.Unmarshal(params.Arguments, &publishArgs); err != nil {
+		return appServerDynamicToolResponse(false, "invalid publish arguments"), nil
+	}
+	file, err := normalizeAppServerPublishFileArgs(publishArgs)
 	if err != nil {
 		return appServerDynamicToolResponse(false, err.Error()), nil
 	}
@@ -955,6 +1011,74 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		Payload:    file,
 	})
 	return appServerDynamicToolResponse(true, "File publication requested."), nil
+}
+
+func uploadAppServerWorkspaceFile(ctx context.Context, spec SessionSpec, args appServerUploadFileArgs) error {
+	path := strings.TrimSpace(args.Path)
+	cleaned := filepath.Clean(path)
+	if path == "" || cleaned == "." || filepath.IsAbs(cleaned) || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path must stay within the Runtime workspace")
+	}
+	entry, ok := spec.MCPServers[strings.TrimSpace(args.Server)].(map[string]any)
+	if !ok {
+		return fmt.Errorf("MCP server %q is not configured for this Agent", strings.TrimSpace(args.Server))
+	}
+	baseText, _ := entry["url"].(string)
+	base, err := url.Parse(strings.TrimSpace(baseText))
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
+		return fmt.Errorf("configured MCP server does not have a valid HTTP URL")
+	}
+	uploadURI := strings.TrimSpace(args.UploadURI)
+	if uploadURI == "" {
+		return fmt.Errorf("upload URI is required")
+	}
+	target, err := base.Parse(uploadURI)
+	if err != nil || target.Scheme != base.Scheme || !strings.EqualFold(target.Host, base.Host) || target.User != nil {
+		return fmt.Errorf("upload URI must be same-origin with MCP server %q", strings.TrimSpace(args.Server))
+	}
+	root, err := os.OpenRoot(spec.WorkspaceDir)
+	if err != nil {
+		return fmt.Errorf("open Runtime workspace: %w", err)
+	}
+	defer root.Close()
+	file, err := root.Open(cleaned)
+	if err != nil {
+		return fmt.Errorf("open upload file: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return fmt.Errorf("upload path must reference a regular file")
+	}
+	if info.Size() > appServerMaxUploadBytes {
+		return fmt.Errorf("upload file exceeds %d bytes", appServerMaxUploadBytes)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPut, target.String(), io.LimitReader(file, appServerMaxUploadBytes+1))
+	if err != nil {
+		return fmt.Errorf("create upload request: %w", err)
+	}
+	request.ContentLength = info.Size()
+	if contentType := strings.TrimSpace(args.ContentType); contentType != "" {
+		if _, _, err := mime.ParseMediaType(contentType); err != nil {
+			return fmt.Errorf("contentType is invalid")
+		}
+		request.Header.Set("Content-Type", contentType)
+	}
+	client := &http.Client{
+		Timeout: 90 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return errors.New("upload redirects are not allowed")
+		},
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("upload file: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("upload endpoint returned HTTP %d", response.StatusCode)
+	}
+	return nil
 }
 
 func normalizeAppServerPublishFileArgs(args appServerPublishFileArgs) (activity.RuntimeFile, error) {
@@ -1275,6 +1399,38 @@ func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServ
 	if s.turnWaiters[strings.TrimSpace(threadID)] == waiter {
 		delete(s.turnWaiters, strings.TrimSpace(threadID))
 	}
+}
+
+func (s *liveSession) setAppServerTurnContext(threadID string, ctx context.Context) {
+	threadID = strings.TrimSpace(threadID)
+	if s == nil || threadID == "" || ctx == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.turnContexts == nil {
+		s.turnContexts = make(map[string]context.Context)
+	}
+	s.turnContexts[threadID] = ctx
+}
+
+func (s *liveSession) clearAppServerTurnContext(threadID string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.turnContexts, strings.TrimSpace(threadID))
+}
+
+func (s *liveSession) appServerTurnContext(threadID string) (context.Context, bool) {
+	if s == nil {
+		return nil, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ctx, ok := s.turnContexts[strings.TrimSpace(threadID)]
+	return ctx, ok
 }
 
 func (s *liveSession) trackAppServerTurn(threadID, turnID string) {

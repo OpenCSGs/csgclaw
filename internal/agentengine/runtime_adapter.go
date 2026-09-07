@@ -523,12 +523,17 @@ func (a *codexRuntimeAdapter) prepareInput(ctx context.Context, turnID TurnID, i
 			blocks = append(blocks, codex.TextBlock(part.Text))
 			continue
 		}
+		if part.File == nil || part.File.file == nil {
+			cleanup()
+			return nil, func() {}, a.runtimeInputFileUnavailable("resolve_input", fmt.Errorf("input file is unresolved"))
+		}
+		mediaType := strings.ToLower(strings.TrimSpace(part.File.file.MediaType))
 		path, err := copyVerifiedInput(ctx, workspaceRoot, workspace, turnDir, index, *part.File)
 		if err != nil {
 			cleanup()
 			return nil, func() {}, a.runtimeInputFileUnavailable("copy_input", err)
 		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(part.File.file.MediaType)), "image/") {
+		if strings.HasPrefix(mediaType, "image/") {
 			blocks = append(blocks, codex.LocalImageBlock(path))
 		} else {
 			blocks = append(blocks, codex.TextBlock(fmt.Sprintf("Attached file %q is available in the Runtime workspace at %s", part.File.file.Name, path)))
