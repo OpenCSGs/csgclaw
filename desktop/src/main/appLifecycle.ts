@@ -42,7 +42,7 @@ export class AppLifecycle {
   private tray: Tray | null = null;
   private updater: DesktopUpdater | null = null;
   private windowManager: WindowManager | null = null;
-  private windowsTrayIconRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private windowsThemeIconRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private windowsThemeIconRevision = 0;
 
   async start(): Promise<void> {
@@ -321,7 +321,8 @@ export class AppLifecycle {
     const revision = ++this.windowsThemeIconRevision;
     this.updateDockThemeIcon();
     this.updateWindowsTaskbarIcon();
-    this.updateWindowsTrayIcon(revision);
+    this.updateWindowsTrayIcon();
+    this.scheduleWindowsThemeIconRefresh(revision);
   }
 
   private updateDockThemeIcon(): void {
@@ -356,12 +357,11 @@ export class AppLifecycle {
     this.updateThemeIcons();
   }
 
-  private updateWindowsTrayIcon(revision: number): void {
+  private updateWindowsTrayIcon(): void {
     if (process.platform !== DesktopPlatform.Windows || !this.tray) {
       return;
     }
     this.applyWindowsTrayIcon("immediate");
-    this.scheduleWindowsTrayIconRefresh(revision);
   }
 
   private applyWindowsTrayIcon(reason: "immediate" | "deferred"): void {
@@ -377,15 +377,19 @@ export class AppLifecycle {
     });
   }
 
-  private scheduleWindowsTrayIconRefresh(revision: number): void {
-    if (this.windowsTrayIconRefreshTimer) {
-      clearTimeout(this.windowsTrayIconRefreshTimer);
+  private scheduleWindowsThemeIconRefresh(revision: number): void {
+    if (process.platform !== DesktopPlatform.Windows) {
+      return;
     }
-    this.windowsTrayIconRefreshTimer = setTimeout(() => {
-      this.windowsTrayIconRefreshTimer = null;
+    if (this.windowsThemeIconRefreshTimer) {
+      clearTimeout(this.windowsThemeIconRefreshTimer);
+    }
+    this.windowsThemeIconRefreshTimer = setTimeout(() => {
+      this.windowsThemeIconRefreshTimer = null;
       if (revision !== this.windowsThemeIconRevision) {
         return;
       }
+      this.windowManager?.refreshWindowsIcon();
       this.applyWindowsTrayIcon("deferred");
     }, 150);
   }
@@ -498,9 +502,9 @@ export class AppLifecycle {
 
   private cleanup(): void {
     this.updater?.stopBackgroundChecks();
-    if (this.windowsTrayIconRefreshTimer) {
-      clearTimeout(this.windowsTrayIconRefreshTimer);
-      this.windowsTrayIconRefreshTimer = null;
+    if (this.windowsThemeIconRefreshTimer) {
+      clearTimeout(this.windowsThemeIconRefreshTimer);
+      this.windowsThemeIconRefreshTimer = null;
     }
     this.cleanupThemeIcons?.();
     this.cleanupThemeIcons = null;

@@ -146,6 +146,28 @@ test("coalesces repeated theme events but reapplies the icon when shown again", 
   assert.equal(window.icons.length, 2);
 });
 
+test("refreshes the final taskbar icon after rapid theme changes settle", () => {
+  const taskbar = new WindowsTaskbarIcon(DesktopPlatform.Windows, false);
+  const window = fakeWindow();
+  const light = fakeIcon();
+  const dark = fakeIcon();
+
+  taskbar.select(light, "light.ico");
+  taskbar.apply(window);
+  taskbar.select(dark, "dark.ico");
+  taskbar.apply(window);
+  taskbar.select(light, "light.ico");
+  taskbar.apply(window);
+  taskbar.refresh(window);
+
+  assert.deepEqual(window.icons, [light, dark, light, light]);
+  assert.equal(window.details.at(-1)?.appIconPath, "light.ico");
+  assert.deepEqual(
+    window.taskbarVisibility,
+    [true, false, true, false, true, false],
+  );
+});
+
 test("ignores invalid icons without losing the last valid selection", () => {
   const taskbar = new WindowsTaskbarIcon(DesktopPlatform.Windows, false);
   const window = fakeWindow();

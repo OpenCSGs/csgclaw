@@ -141,6 +141,13 @@ export class WindowManager {
     }
   }
 
+  refreshWindowsIcon(): void {
+    const window = this.mainWindow;
+    if (window) {
+      this.windowsTaskbarIcon.refresh(window);
+    }
+  }
+
   destroy(): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.destroy();

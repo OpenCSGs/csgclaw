@@ -4,6 +4,9 @@ The desktop window uses the selected light/dark icon, or follows the system when
 the selected theme is `system`. The effective icon is cached before window
 creation and restored when the window is recreated or shown from the tray.
 Repeated notifications for the same icon do not repeat shortcut writes.
+After rapid theme changes settle, the latest taskbar and tray icons are applied
+again so delayed Explorer refreshes cannot leave the visible taskbar button on
+an earlier theme.
 
 For installed Squirrel builds, Explorer can prefer the shortcut icon for the
 application's taskbar group over `BrowserWindow.setIcon()`. Theme changes update

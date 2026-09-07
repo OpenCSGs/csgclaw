@@ -80,6 +80,18 @@ export class WindowsTaskbarIcon {
   }
 
   apply(window: TaskbarWindow, force = false): void {
+    this.applySelected(window, force, false);
+  }
+
+  refresh(window: TaskbarWindow): void {
+    this.applySelected(window, true, true);
+  }
+
+  private applySelected(
+    window: TaskbarWindow,
+    force: boolean,
+    recreateButton: boolean,
+  ): void {
     const icon = this.selected;
     if (
       !icon ||
@@ -92,7 +104,7 @@ export class WindowsTaskbarIcon {
     const refreshButton =
       !this.windowsStore &&
       previous !== undefined &&
-      previous !== icon &&
+      (previous !== icon || recreateButton) &&
       window.isVisible();
     const details = windowsTaskbarAppDetails(
       this.platform,
