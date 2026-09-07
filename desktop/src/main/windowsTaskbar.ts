@@ -39,9 +39,13 @@ type ThemeIcon = {
   sourcePath: string;
 };
 
+const waitForWindowsTaskbarRemoval = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, 75));
+
 export class WindowsTaskbarIcon {
   private selected: ThemeIcon | null = null;
   private readonly applied = new WeakMap<TaskbarWindow, ThemeIcon>();
+  private refreshRevision = 0;
 
   constructor(
     private readonly platform: NodeJS.Platform,
@@ -49,6 +53,8 @@ export class WindowsTaskbarIcon {
     private readonly syncShortcutIcon: (iconPath: string) => string = (
       iconPath,
     ) => iconPath,
+    private readonly waitForTaskbarRemoval: () => Promise<void> =
+      waitForWindowsTaskbarRemoval,
   ) {}
 
   get image(): NativeImage | undefined {
@@ -80,18 +86,6 @@ export class WindowsTaskbarIcon {
   }
 
   apply(window: TaskbarWindow, force = false): void {
-    this.applySelected(window, force, false);
-  }
-
-  refresh(window: TaskbarWindow): void {
-    this.applySelected(window, true, true);
-  }
-
-  private applySelected(
-    window: TaskbarWindow,
-    force: boolean,
-    recreateButton: boolean,
-  ): void {
     const icon = this.selected;
     if (
       !icon ||
@@ -100,26 +94,42 @@ export class WindowsTaskbarIcon {
     ) {
       return;
     }
-    const previous = this.applied.get(window);
-    const refreshButton =
-      !this.windowsStore &&
-      previous !== undefined &&
-      (previous !== icon || recreateButton) &&
-      window.isVisible();
     const details = windowsTaskbarAppDetails(
       this.platform,
       this.windowsStore,
       icon.path,
     );
-    // Recreate only an existing visible button after the matching shortcut has
-    // been updated, so Explorer can reread its full icon under the same AUMID.
-    if (refreshButton) window.setSkipTaskbar(true);
-    try {
-      if (details) window.setAppDetails(details);
-      window.setIcon(icon.image);
-    } finally {
-      if (refreshButton && !window.isDestroyed()) window.setSkipTaskbar(false);
-    }
+    if (details) window.setAppDetails(details);
+    window.setIcon(icon.image);
     this.applied.set(window, icon);
+  }
+
+  async refresh(window: TaskbarWindow): Promise<void> {
+    if (!this.selected || window.isDestroyed()) {
+      return;
+    }
+    if (this.windowsStore || !window.isVisible()) {
+      this.apply(window, true);
+      return;
+    }
+
+    const revision = ++this.refreshRevision;
+    window.setSkipTaskbar(true);
+    try {
+      // Give Explorer a separate message-loop window to remove the old button.
+      // Applying the latest selected icon only after that gap avoids Windows
+      // coalescing an immediate true -> false transition during rapid changes.
+      await this.waitForTaskbarRemoval();
+      if (revision !== this.refreshRevision || window.isDestroyed()) {
+        return;
+      }
+      this.apply(window, true);
+    } finally {
+      // A newer refresh owns restoring the button. An older completion must not
+      // make the taskbar visible early with an intermediate theme.
+      if (revision === this.refreshRevision && !window.isDestroyed()) {
+        window.setSkipTaskbar(false);
+      }
+    }
   }
 }

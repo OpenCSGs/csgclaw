@@ -391,7 +391,7 @@ export class AppLifecycle {
       }
       this.windowManager?.refreshWindowsIcon();
       this.applyWindowsTrayIcon("deferred");
-    }, 150);
+    }, 300);
   }
 
   private updateWindowsTaskbarIcon(): void {

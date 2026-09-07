@@ -98,7 +98,7 @@ test("changes the entire live icon while preserving Squirrel identity and relaun
     taskbar.apply(window);
   }
   assert.deepEqual(window.icons, [light, dark, light]);
-  assert.deepEqual(window.taskbarVisibility, [true, false, true, false]);
+  assert.deepEqual(window.taskbarVisibility, []);
   assert.deepEqual(
     window.details.map((details) => details.appIconPath),
     ["light.ico", "dark.ico", "light.ico"],
@@ -146,8 +146,13 @@ test("coalesces repeated theme events but reapplies the icon when shown again", 
   assert.equal(window.icons.length, 2);
 });
 
-test("refreshes the final taskbar icon after rapid theme changes settle", () => {
-  const taskbar = new WindowsTaskbarIcon(DesktopPlatform.Windows, false);
+test("refreshes the final taskbar icon after rapid theme changes settle", async () => {
+  const taskbar = new WindowsTaskbarIcon(
+    DesktopPlatform.Windows,
+    false,
+    (iconPath) => iconPath,
+    async () => {},
+  );
   const window = fakeWindow();
   const light = fakeIcon();
   const dark = fakeIcon();
@@ -158,14 +163,85 @@ test("refreshes the final taskbar icon after rapid theme changes settle", () => 
   taskbar.apply(window);
   taskbar.select(light, "light.ico");
   taskbar.apply(window);
-  taskbar.refresh(window);
+  await taskbar.refresh(window);
 
   assert.deepEqual(window.icons, [light, dark, light, light]);
   assert.equal(window.details.at(-1)?.appIconPath, "light.ico");
-  assert.deepEqual(
-    window.taskbarVisibility,
-    [true, false, true, false, true, false],
+  assert.deepEqual(window.taskbarVisibility, [true, false]);
+});
+
+test("applies the latest selection while Explorer removes the old button", async () => {
+  let finishRemoval: (() => void) | undefined;
+  const taskbar = new WindowsTaskbarIcon(
+    DesktopPlatform.Windows,
+    false,
+    (iconPath) => iconPath,
+    () =>
+      new Promise<void>((resolve) => {
+        finishRemoval = resolve;
+      }),
   );
+  const window = fakeWindow();
+  const light = fakeIcon();
+  const dark = fakeIcon();
+
+  taskbar.select(light, "light.ico");
+  taskbar.apply(window);
+  const refresh = taskbar.refresh(window);
+  taskbar.select(dark, "dark.ico");
+  taskbar.apply(window);
+  finishRemoval?.();
+  await refresh;
+
+  assert.deepEqual(window.icons, [light, dark, dark]);
+  assert.equal(window.details.at(-1)?.appIconPath, "dark.ico");
+  assert.deepEqual(window.taskbarVisibility, [true, false]);
+});
+
+test("only the newest refresh restores the taskbar button", async () => {
+  const finishRemovals: Array<() => void> = [];
+  const taskbar = new WindowsTaskbarIcon(
+    DesktopPlatform.Windows,
+    false,
+    (iconPath) => iconPath,
+    () =>
+      new Promise<void>((resolve) => {
+        finishRemovals.push(resolve);
+      }),
+  );
+  const window = fakeWindow();
+
+  taskbar.select(fakeIcon(), "light.ico");
+  taskbar.apply(window);
+  const first = taskbar.refresh(window);
+  const second = taskbar.refresh(window);
+
+  finishRemovals[0]?.();
+  await first;
+  assert.deepEqual(window.taskbarVisibility, [true, true]);
+
+  finishRemovals[1]?.();
+  await second;
+  assert.deepEqual(window.taskbarVisibility, [true, true, false]);
+});
+
+test("restores the taskbar button when the delayed icon update fails", async () => {
+  const taskbar = new WindowsTaskbarIcon(
+    DesktopPlatform.Windows,
+    false,
+    (iconPath) => iconPath,
+    async () => {},
+  );
+  const window = fakeWindow();
+
+  taskbar.select(fakeIcon(), "light.ico");
+  taskbar.apply(window);
+  window.setAppDetails = () => {
+    throw new Error("Explorer unavailable");
+  };
+
+  await assert.rejects(taskbar.refresh(window), /Explorer unavailable/);
+  assert.deepEqual(window.taskbarVisibility, [true, false]);
 });
 
 test("ignores invalid icons without losing the last valid selection", () => {
@@ -204,11 +280,11 @@ test("retries a failed native update instead of caching it as applied", () => {
   };
   taskbar.select(fakeIcon(), "dark.ico");
   assert.throws(() => taskbar.apply(window), /Shell unavailable/);
-  assert.deepEqual(window.taskbarVisibility, [true, false]);
+  assert.deepEqual(window.taskbarVisibility, []);
   window.setAppDetails = applyDetails;
   taskbar.apply(window);
   assert.equal(window.details.length, 2);
-  assert.deepEqual(window.taskbarVisibility, [true, false, true, false]);
+  assert.deepEqual(window.taskbarVisibility, []);
 });
 
 test("keeps updating the live icon if shortcut icon persistence fails", () => {
