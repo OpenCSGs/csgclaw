@@ -3,6 +3,7 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import {
   agentSelectionAfterDelete,
   feishuRegistrationFinalizeNotice,
+  larkCLIInitErrorKind,
   shouldReturnToAgentOverviewAfterAgentMissing,
 } from "./useAgentController";
 
@@ -23,6 +24,17 @@ describe("shouldReturnToAgentOverviewAfterAgentMissing", () => {
         id: "room-1",
       }),
     ).toBe(false);
+  });
+});
+
+describe("larkCLIInitErrorKind", () => {
+  it("maps actionable backend errors to focused user guidance", () => {
+    expect(larkCLIInitErrorKind("feishu_bot_not_configured")).toBe("missing_bot");
+    expect(larkCLIInitErrorKind("lark_cli_unavailable")).toBe("install");
+    expect(larkCLIInitErrorKind("feishu_bot_app_id_conflict")).toBe("app_conflict");
+    expect(larkCLIInitErrorKind("lark_cli_source_unavailable")).toBe("source_unavailable");
+    expect(larkCLIInitErrorKind("lark_cli_bind_failed")).toBe("bind_failed");
+    expect(larkCLIInitErrorKind("unexpected")).toBe("generic");
   });
 });
 

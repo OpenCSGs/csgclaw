@@ -13,7 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/interactionstate"
+	"csgclaw/internal/agentengine/lifecycle"
+	"csgclaw/internal/runtime/extensionstate"
 )
 
 // TurnBehavior programs one MemoryClient Run.
@@ -36,7 +40,9 @@ type Resolution struct {
 // MemoryClient is a concurrency-safe, stateful implementation of the same
 // Interface used by production adapters.
 type MemoryClient struct {
-	mu sync.Mutex
+	lifecycle    lifecycle.Coordinator
+	interactions agentengine.InteractionCoordinator
+	mu           sync.Mutex
 
 	agents         map[string]agentengine.Agent
 	provisions     map[string]memoryProvision
@@ -49,6 +55,7 @@ type MemoryClient struct {
 	calls          []TurnCall
 	resolutions    []Resolution
 	files          *agentengine.FileStore
+	extensions     map[string]map[string]agentengine.RuntimeExtension
 	nextAgentID    atomic.Uint64
 }
 
@@ -109,6 +116,7 @@ func NewMemoryClient(agents ...agentengine.Agent) *MemoryClient {
 		controls:      make(map[memoryConversation]*memoryControl),
 		completed:     make(map[memoryTurnIdentity]memoryCompletedTurn),
 		files:         agentengine.NewFileStore(),
+		extensions:    make(map[string]map[string]agentengine.RuntimeExtension),
 	}
 	for _, item := range agents {
 		client.provisions[item.ID] = memoryProvision{credentials: cloneStringMap(item.Spec.Runtime.Credentials), initShell: item.Spec.Runtime.InitShell, modelAPIKey: item.Spec.Model.APIKey}
@@ -157,8 +165,139 @@ func (c *MemoryClient) Conversations(agentID string) agentengine.ConversationInt
 	return &memoryConversations{client: c, agentID: strings.TrimSpace(agentID)}
 }
 
+func (c *MemoryClient) RuntimeExtensions(agentID string) agentengine.RuntimeExtensionInterface {
+	return &memoryRuntimeExtensions{client: c, agentID: strings.TrimSpace(agentID)}
+}
+
+type memoryRuntimeExtensions struct {
+	client  *MemoryClient
+	agentID string
+}
+
+func (e *memoryRuntimeExtensions) Apply(ctx context.Context, request agentengine.RuntimeExtensionApplyRequest) (agentengine.RuntimeExtension, error) {
+	if e == nil || e.client == nil || e.agentID == "" {
+		return agentengine.RuntimeExtension{}, &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "agent ID is required"}
+	}
+
+	ctx, release, err := e.client.lifecycle.Mutation(ctx, e.agentID)
+	if err != nil {
+		return agentengine.RuntimeExtension{}, err
+	}
+	defer release()
+	spec := request.Spec
+	spec.Name = strings.TrimSpace(spec.Name)
+	spec.Kind = strings.TrimSpace(spec.Kind)
+	spec.Source.Provider = strings.TrimSpace(spec.Source.Provider)
+	spec.Source.Ref = strings.TrimSpace(spec.Source.Ref)
+	if spec.FailurePolicy == "" {
+		spec.FailurePolicy = agentengine.RuntimeExtensionOptional
+	}
+	if !extensionstate.ValidName(spec.Name) || spec.Kind == "" || spec.Source.Provider == "" || spec.Source.Ref == "" || (spec.FailurePolicy != agentengine.RuntimeExtensionOptional && spec.FailurePolicy != agentengine.RuntimeExtensionBlockRuntime) {
+		return agentengine.RuntimeExtension{}, &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "runtime extension name, kind, source provider, and source ref are required"}
+	}
+	e.client.mu.Lock()
+	defer e.client.mu.Unlock()
+	if _, ok := e.client.agents[e.agentID]; !ok {
+		return agentengine.RuntimeExtension{}, &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", e.agentID)}
+	}
+	items := e.client.extensions[e.agentID]
+	if items == nil {
+		items = make(map[string]agentengine.RuntimeExtension)
+		e.client.extensions[e.agentID] = items
+	}
+	current, found := items[spec.Name]
+	if request.ResourceVersion != "" && (!found || request.ResourceVersion != current.ResourceVersion) {
+		return agentengine.RuntimeExtension{}, &agentengine.TurnError{Code: agentengine.ErrorRuntimeExtensionConflict, Message: "runtime extension resource version does not match"}
+	}
+	now := time.Now().UTC()
+	if !found {
+		current = agentengine.RuntimeExtension{AgentID: e.agentID, CreatedAt: now}
+	}
+	current.Spec = spec
+	current.UpdatedAt = now
+	current.ResourceVersion = now.Format(time.RFC3339Nano)
+	current.Status.Generation++
+	current.Status.ObservedGeneration = current.Status.Generation
+	current.Status.SourceRevision = spec.Source.Ref
+	current.Status.State = agentengine.RuntimeExtensionConfigured
+	current.Status.RuntimeLoaded = e.client.agents[e.agentID].Status.Ready
+	current.Status.CheckedAt = now
+	current.Status.AppliedAt = now
+	// The test Runtime has one deterministic source/driver pair. Unknown
+	// capabilities must fail just like a production registry miss.
+	var applyErr error
+	if spec.Source.Provider != "contract" || spec.Kind != "contract" {
+		current.Status.State = agentengine.RuntimeExtensionError
+		current.Status.Reason = "extension_unsupported"
+		if spec.Source.Provider != "contract" {
+			current.Status.Reason = "source_unavailable"
+		}
+		current.Status.Message = "The test Runtime capability is not registered"
+		current.Status.RuntimeLoaded = false
+		current.Status.ObservedGeneration = 0
+		applyErr = errors.New(current.Status.Message)
+	}
+	items[spec.Name] = current
+	return current, applyErr
+}
+
+func (e *memoryRuntimeExtensions) Get(_ context.Context, name string) (agentengine.RuntimeExtension, error) {
+	e.client.mu.Lock()
+	defer e.client.mu.Unlock()
+	item, ok := e.client.extensions[e.agentID][strings.TrimSpace(name)]
+	if !ok {
+		return agentengine.RuntimeExtension{}, &agentengine.TurnError{Code: agentengine.ErrorRuntimeExtensionNotFound, Message: fmt.Sprintf("runtime extension %q not found", name)}
+	}
+	return item, nil
+}
+
+func (e *memoryRuntimeExtensions) List(context.Context) ([]agentengine.RuntimeExtension, error) {
+	e.client.mu.Lock()
+	defer e.client.mu.Unlock()
+	items := e.client.extensions[e.agentID]
+	out := make([]agentengine.RuntimeExtension, 0, len(items))
+	for _, item := range items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Spec.Name < out[j].Spec.Name })
+	return out, nil
+}
+
+func (e *memoryRuntimeExtensions) Delete(ctx context.Context, name string) error {
+	ctx, release, err := e.client.lifecycle.Mutation(ctx, e.agentID)
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	e.client.mu.Lock()
+	defer e.client.mu.Unlock()
+	name = strings.TrimSpace(name)
+	if _, ok := e.client.extensions[e.agentID][name]; !ok {
+		return &agentengine.TurnError{Code: agentengine.ErrorRuntimeExtensionNotFound, Message: fmt.Sprintf("runtime extension %q not found", name)}
+	}
+	delete(e.client.extensions[e.agentID], name)
+	return nil
+}
+
 type memoryAgents struct {
 	client *MemoryClient
+}
+
+func (c *MemoryClient) withExtensionReadinessLocked(item agentengine.Agent) agentengine.Agent {
+	for _, extension := range c.extensions[item.ID] {
+		if extension.Spec.FailurePolicy == agentengine.RuntimeExtensionBlockRuntime && (extension.Status.State != agentengine.RuntimeExtensionConfigured || !extension.Status.RuntimeLoaded || extension.Status.Generation != extension.Status.ObservedGeneration) {
+			item.Status.Ready = false
+			item.Status.Message = "Required Runtime extension is not loaded"
+		}
+	}
+	return cloneAgent(item)
+}
+func (c *MemoryClient) syncExtensionLoadLocked(agentID string, running bool) {
+	for name, item := range c.extensions[agentID] {
+		item.Status.RuntimeLoaded = running && item.Status.State == agentengine.RuntimeExtensionConfigured
+		c.extensions[agentID][name] = item
+	}
 }
 
 func (a *memoryAgents) Create(_ context.Context, request agentengine.AgentCreateRequest) (agentengine.Agent, error) {
@@ -206,7 +345,7 @@ func (a *memoryAgents) Get(_ context.Context, agentID string, _ agentengine.Agen
 	if !ok {
 		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
-	return cloneAgent(item), nil
+	return a.client.withExtensionReadinessLocked(item), nil
 }
 
 func (a *memoryAgents) List(context.Context, agentengine.AgentListOptions) ([]agentengine.Agent, error) {
@@ -214,7 +353,7 @@ func (a *memoryAgents) List(context.Context, agentengine.AgentListOptions) ([]ag
 	defer a.client.mu.Unlock()
 	out := make([]agentengine.Agent, 0, len(a.client.agents))
 	for _, item := range a.client.agents {
-		out = append(out, cloneAgent(item))
+		out = append(out, a.client.withExtensionReadinessLocked(item))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
@@ -265,10 +404,18 @@ func mergeMemoryUpdate(current agentengine.AgentSpec, request agentengine.AgentU
 }
 
 func (a *memoryAgents) Update(ctx context.Context, agentID string, request agentengine.AgentUpdateRequest) (agentengine.Agent, error) {
+	invalidate := false
+	defer func() {
+		if invalidate {
+			a.client.interactions.Interrupt(agentID, "", "", true)
+		}
+	}()
 	spec := request.Spec
-	if err := a.waitForAgent(ctx, agentID); err != nil {
+	ctx, release, err := a.client.lifecycle.Mutation(ctx, agentID)
+	if err != nil {
 		return agentengine.Agent{}, err
 	}
+	defer release()
 	a.client.mu.Lock()
 	defer a.client.mu.Unlock()
 	item, ok := a.client.agents[strings.TrimSpace(agentID)]
@@ -326,17 +473,23 @@ func (a *memoryAgents) Update(ctx context.Context, agentID string, request agent
 		item.Status.Ready = true
 	}
 	a.client.agents[item.ID] = item
+	a.client.syncExtensionLoadLocked(item.ID, item.Status.State == agentengine.AgentStateRunning)
 	a.client.provisions[item.ID] = memoryProvision{credentials: cloneStringMap(runtimeCredentials), initShell: spec.Runtime.InitShell, modelAPIKey: modelAPIKey}
+	invalidate = item.Status.State == agentengine.AgentStateStopped
 	return cloneAgent(item), nil
 }
 
 func (a *memoryAgents) Delete(ctx context.Context, agentID string) error {
-	if err := a.waitForAgent(ctx, agentID); err != nil {
+	a.client.interactions.Interrupt(agentID, "", "", true)
+	ctx, release, err := a.client.lifecycle.Mutation(ctx, agentID)
+	if err != nil {
 		return err
 	}
+	defer release()
 	a.client.mu.Lock()
 	delete(a.client.agents, strings.TrimSpace(agentID))
 	delete(a.client.provisions, strings.TrimSpace(agentID))
+	delete(a.client.extensions, strings.TrimSpace(agentID))
 	for key := range a.client.conversations {
 		if key.agentID == strings.TrimSpace(agentID) {
 			delete(a.client.conversations, key)
@@ -352,22 +505,33 @@ func (a *memoryAgents) Start(_ context.Context, agentID string) (agentengine.Age
 }
 
 func (a *memoryAgents) Stop(ctx context.Context, agentID string) (agentengine.Agent, error) {
-	if err := a.waitForAgent(ctx, agentID); err != nil {
+	ctx, release, err := a.client.lifecycle.Mutation(ctx, agentID)
+	if err != nil {
 		return agentengine.Agent{}, err
 	}
+	defer release()
 	return a.setState(agentID, agentengine.AgentStateStopped, false)
 }
 
 func (a *memoryAgents) Recreate(ctx context.Context, agentID string, options agentengine.AgentRecreateOptions) (agentengine.Agent, error) {
+	ctx, release, err := a.client.lifecycle.Mutation(ctx, agentID)
+	if err != nil {
+		return agentengine.Agent{}, err
+	}
+	defer release()
 	if options.Update != nil {
+		if options.UpgradeImage {
+			return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorInvalidRequest, Message: "recreate update and image upgrade cannot be combined"}
+		}
 		if _, err := a.Update(ctx, agentID, *options.Update); err != nil {
 			return agentengine.Agent{}, err
 		}
 	}
-	if err := a.waitForAgent(ctx, agentID); err != nil {
-		return agentengine.Agent{}, err
+	item, err := a.setState(agentID, agentengine.AgentStateRunning, true)
+	if err == nil {
+		a.client.interactions.Interrupt(agentID, "", "", true)
 	}
-	return a.setState(agentID, agentengine.AgentStateRunning, true)
+	return item, err
 }
 
 func (a *memoryAgents) setState(agentID string, state agentengine.AgentState, ready bool) (agentengine.Agent, error) {
@@ -379,6 +543,7 @@ func (a *memoryAgents) setState(agentID string, state agentengine.AgentState, re
 	}
 	item.Status.State = state
 	item.Status.Ready = ready
+	a.client.syncExtensionLoadLocked(item.ID, state == agentengine.AgentStateRunning)
 	if state == agentengine.AgentStateStopped {
 		item.Spec.DesiredState = agentengine.AgentDesiredStateStopped
 	} else if state == agentengine.AgentStateRunning {
@@ -391,27 +556,6 @@ func (a *memoryAgents) setState(agentID string, state agentengine.AgentState, re
 	item.ResourceVersion = item.UpdatedAt.Format(time.RFC3339Nano)
 	a.client.agents[item.ID] = item
 	return cloneAgent(item), nil
-}
-
-func (a *memoryAgents) waitForAgent(ctx context.Context, agentID string) error {
-	for {
-		a.client.mu.Lock()
-		var pending []*memoryTurn
-		for key, turn := range a.client.active {
-			if key.agentID == strings.TrimSpace(agentID) {
-				pending = append(pending, turn)
-			}
-		}
-		a.client.mu.Unlock()
-		if len(pending) == 0 {
-			return nil
-		}
-		select {
-		case <-pending[0].done:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
 }
 
 type memoryConversations struct {
@@ -493,10 +637,23 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	if admissionResult != nil {
 		return *admissionResult
 	}
+	releaseExecution, leaseErr := c.client.lifecycle.Execution(turn.ctx, c.agentID)
+	if leaseErr != nil {
+		result := failed(agentengine.ErrorAgentUnavailable, "Agent lifecycle change is in progress")
+		if turn.ctx.Err() != nil {
+			result = memoryContextResult(turn.ctx, leaseErr)
+		}
+		turn.cancel()
+		c.completeMemoryTurn(key, turn, result)
+		return result
+	}
+	defer releaseExecution()
+	c.client.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
 
 	c.client.mu.Lock()
 	agentItem, exists := c.client.agents[c.agentID]
-	if !exists || agentItem.Status.State != agentengine.AgentStateRunning {
+	agentItem = c.client.withExtensionReadinessLocked(agentItem)
+	if !exists || agentItem.Status.State != agentengine.AgentStateRunning || !agentItem.Status.Ready {
 		c.client.mu.Unlock()
 		result := failed(agentengine.ErrorAgentUnavailable, "agent is unavailable")
 		turn.cancel()
@@ -569,14 +726,49 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 	if result.Status != agentengine.TurnSucceeded {
 		result.Files = nil
 	}
+	if result.Status == agentengine.TurnSucceeded {
+		c.client.interactions.CompleteTurn(c.agentID, request.ConversationKey, request.ID)
+	} else {
+		c.client.interactions.Interrupt(c.agentID, request.ConversationKey, request.ID, false)
+	}
+	if result.Status == agentengine.TurnSucceeded && request.Interaction == agentengine.InteractionResolve {
+		var args *activity.RequestUserInputArgs
+		for _, event := range turn.events {
+			if event.Output != nil && event.Output.Kind == agentengine.OutputItemRequestUserInput {
+				if value, ok := event.Output.Payload.(activity.RequestUserInputArgs); ok {
+					args = &value
+				}
+			}
+		}
+		if args != nil {
+			item, err := c.client.interactions.CreateDetached(c.agentID, request.ConversationKey, request.ID, *args, func(item agentengine.InteractionRequest) {
+				event := agentengine.TurnEvent{Kind: agentengine.TurnEventActivityUpdate, Activity: &agentengine.ActivityUpdate{ID: item.ID, Kind: string(activity.RuntimeEventUserInputResolved), Payload: item.Payload}}
+				if snapshot, ok := item.Payload.(activity.UserInputSnapshot); ok {
+					event.Activity.Status = string(snapshot.Status)
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				_ = c.recordMemoryEvent(ctx, turn, sink, event)
+			})
+			if err != nil {
+				result = failed(agentengine.ErrorRuntimeFailed, err.Error())
+			} else {
+				result.Interactions = []agentengine.InteractionRequest{item}
+			}
+		}
+	}
 	turn.cancel()
 	c.completeMemoryTurn(key, turn, result)
 	return result
 }
 
 func (c *memoryConversations) Cancel(ctx context.Context, key agentengine.ConversationKey, turnID agentengine.TurnID) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	key = agentengine.ConversationKey(strings.TrimSpace(string(key)))
 	turnID = agentengine.TurnID(strings.TrimSpace(string(turnID)))
+	c.client.interactions.Interrupt(c.agentID, key, turnID, true)
 	c.client.mu.Lock()
 	turn := c.client.active[memoryConversation{agentID: c.agentID, key: key}]
 	if turn == nil || turn.request.ID != turnID {
@@ -608,6 +800,7 @@ func (c *memoryConversations) Reset(ctx context.Context, key agentengine.Convers
 		return &agentengine.TurnError{Code: agentengine.ErrorConversationBusy, Message: "conversation already has a control operation"}
 	}
 	defer c.endMemoryControl(identity, control)
+	c.client.interactions.Interrupt(c.agentID, key, "", true)
 	if active != nil {
 		if err := waitMemory(ctx, active.done); err != nil {
 			return err
@@ -619,7 +812,20 @@ func (c *memoryConversations) Reset(ctx context.Context, key agentengine.Convers
 	return nil
 }
 
-func (c *memoryConversations) Resolve(_ context.Context, resolution agentengine.InteractionResolution) error {
+func (c *memoryConversations) GetInteraction(ctx context.Context, key agentengine.ConversationKey, id string) (agentengine.InteractionRequest, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return agentengine.InteractionRequest{}, err
+		}
+	}
+	return c.client.interactions.Get(c.agentID, key, id)
+}
+
+func (c *memoryConversations) Resolve(ctx context.Context, resolution agentengine.InteractionResolution) error {
+	return c.client.interactions.Resolve(ctx, c.agentID, resolution)
+}
+
+func (c *memoryConversations) resolveNative(_ context.Context, resolution agentengine.InteractionResolution) error {
 	resolution.ConversationKey = agentengine.ConversationKey(strings.TrimSpace(string(resolution.ConversationKey)))
 	resolution.InteractionID = strings.TrimSpace(resolution.InteractionID)
 	resolution.ResponderID = strings.TrimSpace(resolution.ResponderID)
@@ -774,10 +980,22 @@ func (c *memoryConversations) recordMemoryEvent(ctx context.Context, turn *memor
 		interaction.ID = strings.TrimSpace(interaction.ID)
 		if interaction.ID != "" {
 			turn.interactions[interaction.ID] = &memoryInteraction{request: interaction}
+			c.client.interactions.Register(c.agentID, turn.request.ConversationKey, turn.request.ID, interaction, func(ctx context.Context, _ agentengine.InteractionRequest, resolution agentengine.InteractionResolution) *agentengine.TurnError {
+				err := c.resolveNative(ctx, resolution)
+				if err != nil {
+					return &agentengine.TurnError{Code: agentengine.ErrorCodeOf(err), Message: err.Error()}
+				}
+				return nil
+			}, nil)
 			event.Interaction = &interaction
 		}
 	}
 	turn.events = append(turn.events, cloneEvent(event))
+	identity := memoryTurnIdentity{memoryConversation: memoryConversation{agentID: c.agentID, key: turn.request.ConversationKey}, id: turn.request.ID}
+	if completed, ok := c.client.completed[identity]; ok {
+		completed.events = append(completed.events, cloneEvent(event))
+		c.client.completed[identity] = completed
+	}
 	if turn.callIndex >= 0 {
 		c.client.calls[turn.callIndex].Events = append(c.client.calls[turn.callIndex].Events, cloneEvent(event))
 	}
@@ -862,6 +1080,13 @@ func cloneMemoryCompleted(input memoryCompletedTurn) memoryCompletedTurn {
 
 func cloneMemoryResult(input agentengine.TurnResult) agentengine.TurnResult {
 	input.Files = cloneMemoryFiles(input.Files)
+	if input.Interactions != nil {
+		items := make([]agentengine.InteractionRequest, len(input.Interactions))
+		for i, item := range input.Interactions {
+			items[i] = interactionstate.Clone(item)
+		}
+		input.Interactions = items
+	}
 	if input.Error != nil {
 		errorCopy := *input.Error
 		input.Error = &errorCopy
@@ -970,8 +1195,9 @@ func cloneRequest(input agentengine.TurnRequest) agentengine.TurnRequest {
 }
 
 func cloneResolution(input agentengine.InteractionResolution) agentengine.InteractionResolution {
-	input.Answers = make(map[string]agentengine.InteractionAnswer, len(input.Answers))
-	for key, answer := range input.Answers {
+	answers := input.Answers
+	input.Answers = make(map[string]agentengine.InteractionAnswer, len(answers))
+	for key, answer := range answers {
 		answer.Values = append([]string(nil), answer.Values...)
 		input.Answers[key] = answer
 	}

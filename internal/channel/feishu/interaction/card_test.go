@@ -14,7 +14,8 @@ type recordingEngine struct {
 	conversation *recordingConversation
 }
 
-func (e *recordingEngine) Agents() agentengine.AgentInterface { return nil }
+func (e *recordingEngine) Agents() agentengine.AgentInterface                             { return nil }
+func (e *recordingEngine) RuntimeExtensions(string) agentengine.RuntimeExtensionInterface { return nil }
 
 func (e *recordingEngine) Conversations(agentID string) agentengine.ConversationInterface {
 	e.agentID = agentID
@@ -146,4 +147,8 @@ func TestNewHandlerRequiresEngine(t *testing.T) {
 	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "agent engine is required") {
 		t.Fatalf("NewHandler(nil) error = %v", err)
 	}
+}
+
+func (*recordingConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
+	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

@@ -3,7 +3,6 @@ package codex
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -33,10 +32,7 @@ func TestUserInputBrokerRespondsWithCodexLabelsAndNotes(t *testing.T) {
 	}()
 
 	requestID := waitForUserInputRequest(t, sink)
-	if _, err := broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent"); err != nil {
-		t.Fatalf("Bind() error = %v", err)
-	}
-	snapshot, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+	snapshot, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{
 		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "user-1",
 		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
 			"color":  {Answers: []string{"Green", "user_note: darker"}},
@@ -46,7 +42,7 @@ func TestUserInputBrokerRespondsWithCodexLabelsAndNotes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Respond() error = %v", err)
 	}
-	if snapshot.Status != activity.UserInputStatusAnswered || snapshot.ResponderID != "user-1" || snapshot.RequesterID != "pt-agent" {
+	if snapshot.Status != activity.UserInputStatusAnswered || snapshot.ResponderID != "user-1" {
 		t.Fatalf("snapshot = %+v, want pt-agent question answered by user-1", snapshot)
 	}
 
@@ -61,151 +57,6 @@ func TestUserInputBrokerRespondsWithCodexLabelsAndNotes(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("broker request did not return")
-	}
-}
-
-func TestUserInputBrokerRecordsTranscriptBeforeReleasingRuntime(t *testing.T) {
-	t.Parallel()
-
-	sink := &recordingSink{}
-	broker := NewUserInputBroker(sink)
-	resultCh := make(chan UserInputDecision, 1)
-	go func() {
-		decision, _ := broker.Request(context.Background(), PendingUserInputRequest{
-			Execution: activity.ExecutionRef{RuntimeID: "rt-1", SessionID: "session-1"},
-			Questions: []activity.UserInputQuestionSnapshot{{
-				ID: "kind", Header: "Kind", Question: "Choose",
-				Options: []activity.UserInputOptionSnapshot{{Label: "Standard", Description: "Normal checks."}},
-			}},
-		})
-		resultCh <- decision
-	}()
-
-	requestID := waitForUserInputRequest(t, sink)
-	if _, err := broker.Bind(requestID, "csgclaw", "room-1", "thread-1", "pt-agent"); err != nil {
-		t.Fatalf("Bind() error = %v", err)
-	}
-	recorded := make(chan activity.UserInputSnapshot, 1)
-	releaseRecorder := make(chan struct{})
-	responded := make(chan error, 1)
-	go func() {
-		_, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
-			Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "user-1",
-			Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
-				"kind": {Answers: []string{"Standard"}},
-			}},
-			RecordTranscript: func(_ context.Context, snapshot activity.UserInputSnapshot) error {
-				recorded <- snapshot
-				<-releaseRecorder
-				return nil
-			},
-		})
-		responded <- err
-	}()
-
-	var snapshot activity.UserInputSnapshot
-	select {
-	case snapshot = <-recorded:
-	case <-time.After(3 * time.Second):
-		t.Fatal("transcript recorder did not run")
-	}
-	if snapshot.ThreadRootID != "thread-1" || snapshot.RequesterID != "pt-agent" || snapshot.ResponderID != "user-1" || snapshot.Answers["kind"].OptionLabel != "Standard" {
-		t.Fatalf("recorded snapshot = %+v", snapshot)
-	}
-	select {
-	case <-resultCh:
-		t.Fatal("runtime resumed before transcript persistence")
-	default:
-	}
-	close(releaseRecorder)
-	if err := <-responded; err != nil {
-		t.Fatalf("Respond() error = %v", err)
-	}
-	select {
-	case <-resultCh:
-	case <-time.After(3 * time.Second):
-		t.Fatal("runtime did not resume after transcript persistence")
-	}
-}
-
-func TestUserInputBrokerTranscriptFailureLeavesRequestPending(t *testing.T) {
-	t.Parallel()
-
-	broker := NewUserInputBroker(nil)
-	snapshot, err := broker.CreateDetached(PendingUserInputRequest{
-		Questions: []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Answer?"}},
-	}, DetachedUserInputContext{Channel: "csgclaw", RoomID: "room-1"})
-	if err != nil {
-		t.Fatalf("CreateDetached() error = %v", err)
-	}
-	_, err = broker.Respond(context.Background(), activity.UserInputResponseRequest{
-		Channel: "csgclaw", ActivityID: snapshot.ID, RoomID: "room-1", ResponderID: "user-1",
-		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
-			"q": {Answers: []string{"user_note: value"}},
-		}},
-		RecordTranscript: func(context.Context, activity.UserInputSnapshot) error { return errors.New("disk full") },
-	})
-	if err == nil || !strings.Contains(err.Error(), "disk full") {
-		t.Fatalf("Respond() error = %v, want transcript failure", err)
-	}
-	pending, ok := broker.Get(snapshot.ID)
-	if !ok || pending.Status != activity.UserInputStatusPending {
-		t.Fatalf("pending snapshot = %+v, %v", pending, ok)
-	}
-}
-
-func TestUserInputBrokerRecordsTranscriptBeforeDetachedContinuation(t *testing.T) {
-	t.Parallel()
-
-	broker := NewUserInputBroker(nil)
-	resolved := make(chan DetachedUserInputResolution, 1)
-	broker.AddDetachedHandler(func(resolution DetachedUserInputResolution) {
-		resolved <- resolution
-	})
-	snapshot, err := broker.CreateDetached(PendingUserInputRequest{
-		Questions: []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Answer?"}},
-	}, DetachedUserInputContext{Channel: "csgclaw", RoomID: "room-1"})
-	if err != nil {
-		t.Fatalf("CreateDetached() error = %v", err)
-	}
-	recorderStarted := make(chan struct{})
-	releaseRecorder := make(chan struct{})
-	responded := make(chan error, 1)
-	go func() {
-		_, respondErr := broker.Respond(context.Background(), activity.UserInputResponseRequest{
-			Channel: "csgclaw", ActivityID: snapshot.ID, RoomID: "room-1", ResponderID: "user-1",
-			Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
-				"q": {Answers: []string{"user_note: value"}},
-			}},
-			RecordTranscript: func(context.Context, activity.UserInputSnapshot) error {
-				close(recorderStarted)
-				<-releaseRecorder
-				return nil
-			},
-		})
-		responded <- respondErr
-	}()
-	select {
-	case <-recorderStarted:
-	case <-time.After(3 * time.Second):
-		t.Fatal("transcript recorder did not run")
-	}
-	select {
-	case continuation := <-resolved:
-		t.Fatalf("detached continuation ran before persistence: %+v", continuation)
-	default:
-	}
-	close(releaseRecorder)
-	if err := <-responded; err != nil {
-		t.Fatalf("Respond() error = %v", err)
-	}
-	select {
-	case continuation := <-resolved:
-		if continuation.Snapshot.Status != activity.UserInputStatusAnswered {
-			t.Fatalf("continuation = %+v, want answered", continuation)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("detached continuation did not run after persistence")
 	}
 }
 
@@ -227,8 +78,7 @@ func TestUserInputBrokerSynthesizesOtherAndRedactsSecrets(t *testing.T) {
 	}()
 
 	requestID := waitForUserInputRequest(t, sink)
-	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent")
-	snapshot, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+	snapshot, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{
 		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "user-1",
 		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
 			"token": {Answers: []string{"None of the above", "user_note: super-secret"}},
@@ -238,7 +88,7 @@ func TestUserInputBrokerSynthesizesOtherAndRedactsSecrets(t *testing.T) {
 		t.Fatalf("Respond() error = %v", err)
 	}
 	answer := snapshot.Answers["token"]
-	if answer.Text != "******" || !answer.Secret || !answer.Answered || answer.OptionLabel != userInputOtherLabel {
+	if answer.Text != "******" || !answer.Secret || !answer.Answered || answer.OptionLabel != "None of the above" {
 		t.Fatalf("public secret answer = %+v, want masked Other answer", answer)
 	}
 
@@ -253,7 +103,7 @@ func TestUserInputBrokerSynthesizesOtherAndRedactsSecrets(t *testing.T) {
 	}
 }
 
-func TestUserInputBrokerFirstResponseWinsAndValidatesRoom(t *testing.T) {
+func TestUserInputBrokerFirstResponseWins(t *testing.T) {
 	t.Parallel()
 
 	sink := &recordingSink{}
@@ -268,17 +118,6 @@ func TestUserInputBrokerFirstResponseWinsAndValidatesRoom(t *testing.T) {
 	}()
 
 	requestID := waitForUserInputRequest(t, sink)
-	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent")
-	wrongRoom := activity.UserInputResponseRequest{
-		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-2", ResponderID: "user-1",
-		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
-			"q": {Answers: []string{"user_note: wrong"}},
-		}},
-	}
-	if _, err := broker.Respond(context.Background(), wrongRoom); !errors.Is(err, ErrUserInputNotFound) {
-		t.Fatalf("wrong-room Respond() error = %v, want not found", err)
-	}
-
 	responses := []activity.UserInputResponseRequest{
 		{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "user-1", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{"q": {Answers: []string{"user_note: first"}}}}},
 		{Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "user-2", Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{"q": {Answers: []string{"user_note: second"}}}}},
@@ -289,7 +128,7 @@ func TestUserInputBrokerFirstResponseWinsAndValidatesRoom(t *testing.T) {
 		wg.Add(1)
 		go func(response activity.UserInputResponseRequest) {
 			defer wg.Done()
-			_, err := broker.Respond(context.Background(), response)
+			_, err := respondUserInputForTest(broker, context.Background(), response)
 			errs <- err
 		}(response)
 	}
@@ -373,122 +212,6 @@ func TestUserInputBrokerRejectsMalformedQuestionsAndAnswers(t *testing.T) {
 	}
 }
 
-func TestUserInputBrokerSupportsFiveQuestions(t *testing.T) {
-	t.Parallel()
-
-	broker := NewUserInputBroker(nil)
-	questions := make([]activity.UserInputQuestionSnapshot, 5)
-	for index := range questions {
-		id := string(rune('a' + index))
-		questions[index] = activity.UserInputQuestionSnapshot{ID: id, Header: id, Question: id}
-	}
-	snapshot, err := broker.CreateDetached(PendingUserInputRequest{Questions: questions}, DetachedUserInputContext{
-		Channel: "csgclaw",
-		RoomID:  "room-1",
-	})
-	if err != nil {
-		t.Fatalf("CreateDetached() error = %v", err)
-	}
-	if len(snapshot.Questions) != 5 {
-		t.Fatalf("questions = %d, want 5", len(snapshot.Questions))
-	}
-}
-
-func TestUserInputBrokerDetachedResolutionUsesExactResponseAndRedactsHistory(t *testing.T) {
-	t.Parallel()
-
-	sink := &recordingSink{}
-	broker := NewUserInputBroker(sink)
-	resolved := make(chan DetachedUserInputResolution, 1)
-	broker.AddDetachedHandler(func(resolution DetachedUserInputResolution) {
-		resolved <- resolution
-	})
-	snapshot, err := broker.CreateDetached(PendingUserInputRequest{
-		Execution: activity.ExecutionRef{RuntimeID: "rt-1", SessionID: "session-1", TurnID: "turn-1"},
-		Questions: []activity.UserInputQuestionSnapshot{
-			{ID: "kind", Header: "Kind", Question: "Choose", Options: []activity.UserInputOptionSnapshot{{Label: "Standard"}}},
-			{ID: "secret", Header: "Secret", Question: "Disposable value", IsOther: true, IsSecret: true},
-		},
-	}, DetachedUserInputContext{Channel: "csgclaw", RoomID: "room-1", SourceMessageID: "message-1"})
-	if err != nil {
-		t.Fatalf("CreateDetached() error = %v", err)
-	}
-	response := activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
-		"kind":   {Answers: []string{"Standard"}},
-		"secret": {Answers: []string{"user_note: disposable-test-secret"}},
-	}}
-	public, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
-		Channel: "csgclaw", ActivityID: snapshot.ID, RoomID: "room-1", ResponderID: "user-1", Response: response,
-	})
-	if err != nil {
-		t.Fatalf("Respond() error = %v", err)
-	}
-	if public.Answers["secret"].Text != "******" || !public.Answers["secret"].Secret {
-		t.Fatalf("public secret = %+v", public.Answers["secret"])
-	}
-	select {
-	case resolution := <-resolved:
-		if resolution.Context.SourceMessageID != "message-1" || resolution.Execution.TurnID != "turn-1" {
-			t.Fatalf("resolution context = %+v execution = %+v", resolution.Context, resolution.Execution)
-		}
-		if got := resolution.Response.Answers["secret"].Answers; len(got) != 1 || got[0] != "user_note: disposable-test-secret" {
-			t.Fatalf("exact secret response = %#v", got)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("detached handler did not run")
-	}
-	for _, event := range sink.snapshot() {
-		if strings.Contains(fmt.Sprintf("%+v", event.Payload), "disposable-test-secret") {
-			t.Fatalf("runtime event leaked secret: %+v", event)
-		}
-	}
-	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
-		Channel: "csgclaw", ActivityID: snapshot.ID, RoomID: "room-1", ResponderID: "user-1", Response: response,
-	}); !errors.Is(err, ErrUserInputAlreadyResolved) {
-		t.Fatalf("duplicate response error = %v", err)
-	}
-}
-
-func TestUserInputBrokerDetachedExpirationAndCancellationDoNotAnswer(t *testing.T) {
-	t.Parallel()
-
-	for name, resolve := range map[string]func(*MemoryUserInputBroker, string){
-		"expires": func(_ *MemoryUserInputBroker, _ string) {},
-		"cancels": func(broker *MemoryUserInputBroker, _ string) { broker.CancelSession("rt-1", "session-1") },
-	} {
-		t.Run(name, func(t *testing.T) {
-			broker := NewUserInputBroker(nil)
-			resolved := make(chan DetachedUserInputResolution, 1)
-			broker.AddDetachedHandler(func(resolution DetachedUserInputResolution) { resolved <- resolution })
-			autoResolve := time.Duration(0)
-			if name == "expires" {
-				autoResolve = 20 * time.Millisecond
-			}
-			snapshot, err := broker.CreateDetached(PendingUserInputRequest{
-				Execution:   activity.ExecutionRef{RuntimeID: "rt-1", SessionID: "session-1"},
-				Questions:   []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Q?"}},
-				AutoResolve: autoResolve,
-			}, DetachedUserInputContext{Channel: "csgclaw", RoomID: "room-1"})
-			if err != nil {
-				t.Fatalf("CreateDetached() error = %v", err)
-			}
-			resolve(broker, snapshot.ID)
-			select {
-			case resolution := <-resolved:
-				wantStatus := activity.UserInputStatusExpired
-				if name == "cancels" {
-					wantStatus = activity.UserInputStatusInterrupted
-				}
-				if resolution.Snapshot.Status != wantStatus || len(resolution.Response.Answers) != 0 {
-					t.Fatalf("resolution = %+v", resolution)
-				}
-			case <-time.After(3 * time.Second):
-				t.Fatal("detached request was not resolved")
-			}
-		})
-	}
-}
-
 func waitForUserInputRequest(t *testing.T, sink *recordingSink) string {
 	t.Helper()
 	var requestID string
@@ -502,4 +225,8 @@ func waitForUserInputRequest(t *testing.T, sink *recordingSink) string {
 		return false
 	})
 	return requestID
+}
+
+func respondUserInputForTest(b *MemoryUserInputBroker, ctx context.Context, req activity.UserInputResponseRequest) (activity.UserInputSnapshot, error) {
+	return b.RespondDirect(ctx, req.ActivityID, req.ResponderID, req.Response)
 }

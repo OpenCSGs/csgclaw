@@ -2,14 +2,13 @@ package team
 
 import (
 	"context"
-	"fmt"
-	"strings"
-
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	channelfeishu "csgclaw/internal/channel/feishu"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
+	"fmt"
+	"strings"
 )
 
 type FeishuAdapter struct {

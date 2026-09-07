@@ -4,6 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/auth"
+	"csgclaw/internal/cliproxy"
+	"csgclaw/internal/codexmodel"
+	"csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
+	"csgclaw/internal/modelprovider"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,20 +23,12 @@ import (
 	"sync"
 	"time"
 
-	"csgclaw/internal/agent"
-	"csgclaw/internal/auth"
-	"csgclaw/internal/cliproxy"
-	"csgclaw/internal/codexmodel"
-	"csgclaw/internal/config"
-	"csgclaw/internal/modelcap"
-	"csgclaw/internal/modelprovider"
-
 	"github.com/gorilla/websocket"
 )
 
 type Service struct {
 	defaults                      config.ModelConfig
-	agents                        *agent.Service
+	agents                        AgentProfileReader
 	client                        *http.Client
 	openCSGCredentialRefreshMu    sync.Mutex
 	responsesCapabilityMu         sync.Mutex
@@ -77,7 +76,12 @@ func (e *HTTPError) Error() string {
 	return e.Message
 }
 
-func NewService(defaults config.ModelConfig, agents *agent.Service) *Service {
+// AgentProfileReader is the model proxy's only Agent dependency.
+type AgentProfileReader interface {
+	ResolvedAgentProfile(string) (agent.AgentProfile, error)
+}
+
+func NewService(defaults config.ModelConfig, agents AgentProfileReader) *Service {
 	return &Service{
 		defaults:                      defaults.Resolved(),
 		agents:                        agents,

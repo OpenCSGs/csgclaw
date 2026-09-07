@@ -2,12 +2,11 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"fmt"
 	"net/http"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
 )
 
 type agentMCPServerSourceSyncResponse struct {

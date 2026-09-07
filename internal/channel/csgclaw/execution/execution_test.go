@@ -12,7 +12,6 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/worklease"
 )
@@ -94,8 +93,8 @@ type fakeAttachmentResolver struct {
 func (f *fakeAttachmentResolver) Resolve(
 	_ context.Context,
 	_ channel.Binding,
-	_ channelbridge.BotEvent,
-	attachment channelbridge.MessageAttachment,
+	_ channel.Event,
+	attachment channel.MessageAttachment,
 ) (agentengine.InputFile, func(), error) {
 	return agentengine.InputFile{ID: attachment.ID}, func() { f.released++ }, nil
 }
@@ -210,20 +209,20 @@ func TestAdapterRunBuildsRuntimeNeutralTurn(t *testing.T) {
 
 	outcome, err := adapter.Run(context.Background(), channel.Binding{
 		ID: "binding:manager", ParticipantID: "manager", AgentID: "u-manager",
-	}, channelbridge.BotEvent{
+	}, channel.Event{
 		Channel:       string(channel.ChannelCSGClaw),
 		ParticipantID: "manager",
 		MessageID:     "message-1",
 		RoomID:        "room/1",
 		ThreadRootID:  "root-1",
 		Text:          "please inspect this",
-		ThreadContext: &channelbridge.BotThreadContext{
+		ThreadContext: &channel.ThreadContext{
 			RootMessageID: "root-1",
-			Context: []channelbridge.BotThreadContextMessage{{
+			Context: []channel.ThreadContextMessage{{
 				ID: "root-1", SenderID: "u-admin", Content: "original question",
 			}},
 		},
-		Attachments: []channelbridge.MessageAttachment{{
+		Attachments: []channel.MessageAttachment{{
 			ID: "attachment-1", Name: "report.pdf", MediaType: "application/pdf", SizeBytes: 42, SHA256: "sha",
 		}},
 	})
@@ -276,7 +275,7 @@ func TestAdapterRunReportsParticipantWorkLeaseLifecycle(t *testing.T) {
 
 	outcome, err := adapter.Run(context.Background(), channel.Binding{
 		ParticipantID: "pt-worker", AgentID: "agent-worker",
-	}, channelbridge.BotEvent{
+	}, channel.Event{
 		MessageID: "message-work", RoomID: "room-work", ThreadRootID: "thread-work", Text: "handle this",
 	})
 	if err != nil {
@@ -333,7 +332,7 @@ func TestAdapterWorkStopCancelsTurnAndFinishesStopped(t *testing.T) {
 	go func() {
 		outcome, _ := adapter.Run(context.Background(), channel.Binding{
 			ParticipantID: "pt-worker", AgentID: "agent-worker",
-		}, channelbridge.BotEvent{MessageID: "message-stop", RoomID: "room-stop", Text: "keep working"})
+		}, channel.Event{MessageID: "message-stop", RoomID: "room-stop", Text: "keep working"})
 		result <- outcome
 	}()
 	select {
@@ -397,7 +396,7 @@ func TestAdapterRenewsParticipantWorkLeaseUntilTurnCompletes(t *testing.T) {
 	go func() {
 		_, _ = adapter.Run(context.Background(), channel.Binding{
 			ParticipantID: "pt-worker", AgentID: "agent-worker",
-		}, channelbridge.BotEvent{MessageID: "message-renew", RoomID: "room-renew", Text: "keep working"})
+		}, channel.Event{MessageID: "message-renew", RoomID: "room-renew", Text: "keep working"})
 		close(done)
 	}()
 	select {
@@ -436,11 +435,11 @@ func TestAdapterRunRejectsAttachmentsWithoutResolver(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	outcome, err := adapter.Run(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channelbridge.BotEvent{
+	outcome, err := adapter.Run(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channel.Event{
 		MessageID: "message-1",
 		RoomID:    "room-1",
 		Text:      "see file",
-		Attachments: []channelbridge.MessageAttachment{{
+		Attachments: []channel.MessageAttachment{{
 			ID: "attachment-1", Name: "report.pdf",
 		}},
 	})
@@ -475,7 +474,7 @@ func TestAdapterRunKeepsRendererFailureOnEnginePath(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	outcome, err := adapter.Run(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channelbridge.BotEvent{
+	outcome, err := adapter.Run(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channel.Event{
 		MessageID: "message-1", RoomID: "room-1", Text: "hello",
 	})
 	if err != nil {
@@ -495,7 +494,7 @@ func TestAdapterHandleResetUsesEngineConversation(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	outcome, err := adapter.Handle(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channelbridge.BotEvent{
+	outcome, err := adapter.Handle(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channel.Event{
 		MessageID: "message-new",
 		RoomID:    "room-1",
 		Text:      `<slash-command name="new" arg="conversation"></slash-command>`,
@@ -526,7 +525,7 @@ func TestAdapterHandleResetMapsEngineError(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	outcome, err := adapter.Handle(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channelbridge.BotEvent{
+	outcome, err := adapter.Handle(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channel.Event{
 		MessageID: "message-new",
 		RoomID:    "room-1",
 		Text:      `<slash-command name="new" arg="conversation"></slash-command>`,
@@ -549,7 +548,7 @@ func TestAdapterDerivesStableScopedTurnIDFromSourceMessage(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	binding := channel.Binding{ID: "binding-a", ParticipantID: "pt-a", AgentID: "agent-a"}
-	event := channelbridge.BotEvent{MessageID: "message-1", RoomID: "room-1", Text: "hello"}
+	event := channel.Event{MessageID: "message-1", RoomID: "room-1", Text: "hello"}
 	first, err := adapter.turnContext(binding, event)
 	if err != nil {
 		t.Fatal(err)
@@ -577,7 +576,7 @@ func TestAdapterHandleSkipsEmptyEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	outcome, err := adapter.Handle(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channelbridge.BotEvent{
+	outcome, err := adapter.Handle(context.Background(), channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}, channel.Event{
 		MessageID: "message-empty",
 		RoomID:    "room-1",
 	})
@@ -587,4 +586,8 @@ func TestAdapterHandleSkipsEmptyEvents(t *testing.T) {
 	if outcome.Turn.TurnID != "" || engine.request.ID != "" {
 		t.Fatalf("empty event was executed: outcome=%+v request=%+v", outcome, engine.request)
 	}
+}
+
+func (fakeConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
+	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

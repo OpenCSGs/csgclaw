@@ -1,6 +1,9 @@
 package api
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/agentmanager"
+	"csgclaw/internal/connectors"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,10 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentmanager"
-	"csgclaw/internal/connectors"
 )
 
 const githubConnectorCallbackPath = "/api/v1/connectors/github/oauth/callback"

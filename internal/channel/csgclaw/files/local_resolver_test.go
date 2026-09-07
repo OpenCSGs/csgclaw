@@ -9,7 +9,6 @@ import (
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge"
 	"csgclaw/internal/im"
 )
 
@@ -32,6 +31,8 @@ func (e staticEngine) Agents() agentengine.AgentInterface {
 func (e staticEngine) Conversations(string) agentengine.ConversationInterface {
 	return staticConversation{files: e.files}
 }
+
+func (staticEngine) RuntimeExtensions(string) agentengine.RuntimeExtensionInterface { return nil }
 
 type staticConversation struct {
 	files agentengine.FileInterface
@@ -94,7 +95,7 @@ func TestLocalResolverStoresManagedAttachmentInAgentEngine(t *testing.T) {
 	input, release, err := resolver.Resolve(
 		context.Background(),
 		channel.Binding{AgentID: "agent-worker"},
-		channelbridge.BotEvent{RoomID: room.ID, MessageID: message.ID, Attachments: message.Attachments},
+		channel.Event{RoomID: room.ID, MessageID: message.ID, Attachments: message.Attachments},
 		attachment,
 	)
 	if err != nil {
@@ -143,4 +144,8 @@ func TestResolveManagedAttachmentSourcePathRejectsOutsideWorkspace(t *testing.T)
 	if _, err := resolveManagedAttachmentSourcePath(workspaceRoot, outsidePath); err == nil {
 		t.Fatal("resolveManagedAttachmentSourcePath() error = nil, want outside path rejected")
 	}
+}
+
+func (staticConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
+	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

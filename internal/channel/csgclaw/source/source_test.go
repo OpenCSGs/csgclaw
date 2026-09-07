@@ -12,7 +12,6 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
-	"csgclaw/internal/channelbridge"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 )
@@ -42,12 +41,12 @@ type fakeWorkers struct {
 	submits   chan submittedEvent
 	stops     chan channel.BindingID
 	submitErr error
-	submit    func(channel.Binding, channelbridge.BotEvent) error
+	submit    func(channel.Binding, channel.Event) error
 }
 
 type submittedEvent struct {
 	binding channel.Binding
-	event   channelbridge.BotEvent
+	event   channel.Event
 }
 
 func (f *fakeWorkers) Ensure(value channel.Binding) error {
@@ -68,7 +67,7 @@ func (f *fakeWorkers) Stop(id channel.BindingID) {
 	}
 }
 
-func (f *fakeWorkers) Submit(value channel.Binding, event channelbridge.BotEvent) error {
+func (f *fakeWorkers) Submit(value channel.Binding, event channel.Event) error {
 	f.submits <- submittedEvent{binding: value, event: event}
 	if f.submit != nil {
 		return f.submit(value, event)
@@ -261,7 +260,7 @@ func TestSourceRetriesEventWhileSubscriptionRemainsActive(t *testing.T) {
 	workers := &fakeWorkers{
 		ensured: make(chan channel.Binding, 1),
 		submits: make(chan submittedEvent, 2),
-		submit: func(channel.Binding, channelbridge.BotEvent) error {
+		submit: func(channel.Binding, channel.Event) error {
 			if attempts.Add(1) == 1 {
 				return errors.New("worker stopped")
 			}
@@ -330,7 +329,7 @@ func TestSourceDrainsBridgePendingAfterRetryBackpressure(t *testing.T) {
 	workers := &fakeWorkers{
 		ensured: make(chan channel.Binding, 1),
 		submits: make(chan submittedEvent, 128),
-		submit: func(_ channel.Binding, event channelbridge.BotEvent) error {
+		submit: func(_ channel.Binding, event channel.Event) error {
 			if !available.Load() {
 				firstAttemptOnce.Do(func() { close(firstAttempt) })
 				return errors.New("worker unavailable")

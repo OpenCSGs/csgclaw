@@ -2,6 +2,10 @@ package llm
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/auth"
+	"csgclaw/internal/cliproxy"
+	"csgclaw/internal/config"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,11 +15,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/auth"
-	"csgclaw/internal/cliproxy"
-	"csgclaw/internal/config"
 )
 
 func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
@@ -1457,7 +1456,7 @@ func inputContainsReasoning(input []any) bool {
 	return false
 }
 
-func mustSeededAgentService(t *testing.T, llmCfg config.LLMConfig, agents []agent.Agent) *agent.Service {
+func mustSeededAgentService(t *testing.T, llmCfg config.LLMConfig, agents []agent.Agent) *agent.Controller {
 	t.Helper()
 
 	for i := range agents {
@@ -1478,7 +1477,7 @@ func mustSeededAgentService(t *testing.T, llmCfg config.LLMConfig, agents []agen
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	svc, err := agent.NewServiceWithLLM(llmCfg, config.ServerConfig{}, "manager-image:test", statePath)
+	svc, err := agent.NewControllerWithLLM(llmCfg, config.ServerConfig{}, "manager-image:test", statePath)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

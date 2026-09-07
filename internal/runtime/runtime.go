@@ -51,30 +51,11 @@ type ReadinessChecker interface {
 	CheckReadiness(ctx context.Context, h Handle) error
 }
 
-type ConversationStartActionMode string
+// AvailabilityChecker validates Runtime dependencies without creating a process.
+type AvailabilityChecker interface{ CheckAvailability(context.Context) error }
 
-const (
-	ConversationStartActionBotEvent ConversationStartActionMode = "bot_event"
-	ConversationStartActionInternal ConversationStartActionMode = "internal"
-)
-
-type ConversationStartRequest struct {
-	Channel      string
-	BotID        string
-	RoomID       string
-	ThreadRootID string
-	Reason       string
-}
-
-type ConversationStartAction struct {
-	Mode         ConversationStartActionMode
-	BotEventText string
-	AckText      string
-}
-
-type ConversationStarter interface {
-	NewConversation(ctx context.Context, h Handle, req ConversationStartRequest) (ConversationStartAction, error)
-}
+// DefaultImageProvider supplies an Adapter-owned image default.
+type DefaultImageProvider interface{ DefaultImage() string }
 
 // HydrateTrustPersistedStopped reports whether hydrate should keep a persisted "stopped"
 // agent status instead of overwriting it from runtime Info (some in-process runtimes

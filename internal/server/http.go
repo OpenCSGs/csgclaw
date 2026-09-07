@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-
-	"csgclaw/internal/agent"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
@@ -27,13 +25,15 @@ import (
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/upgrade"
 	"csgclaw/internal/worklease"
+	"github.com/go-chi/chi/v5"
 )
 
 type Options struct {
 	ListenAddr         string
 	Listener           net.Listener
 	SandboxListener    net.Listener
-	Service            *agent.Service
+	AgentServices      api.AgentServices
+	RuntimeCloser      io.Closer
 	Hub                *hub.Service
 	MCP                *mcp.Service
 	Participant        *participant.Service
@@ -54,6 +54,7 @@ type Options struct {
 	ActivityDecider    api.ActivityDecider
 	UserInputResponder api.UserInputResponder
 	AgentEngine        agentengine.Interface
+	ChannelBindings    api.ChannelBindingReconciler
 	SessionBindings    *agentsession.Store
 	ConfigPath         string
 	AccessToken        string
@@ -67,7 +68,7 @@ type Options struct {
 }
 
 func newHandler(opts Options) *api.Handler {
-	handler := api.NewHandlerWithAuth(opts.Service, opts.IM, opts.IMBus, opts.ParticipantBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
+	handler := api.NewHandlerWithAuth(opts.AgentServices, opts.AgentEngine, opts.IM, opts.IMBus, opts.ParticipantBridge, opts.Feishu, opts.LLM, opts.AccessToken, opts.NoAuth)
 	handler.SetParticipantService(opts.Participant)
 	handler.SetParticipantWorkService(opts.WorkReporter, opts.WorkBus, opts.WorkControlBus)
 	handler.SetHubService(opts.Hub)
@@ -83,6 +84,7 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetActivityDecider(opts.ActivityDecider)
 	handler.SetUserInputResponder(opts.UserInputResponder)
 	handler.SetAgentEngine(opts.AgentEngine, opts.SessionBindings)
+	handler.SetChannelBindingReconciler(opts.ChannelBindings)
 	handler.SetUpgradeConfigPath(opts.ConfigPath)
 	handler.SetConfigPath(opts.ConfigPath)
 	handler.SetAdvertiseBaseURL(opts.AdvertiseBaseURL)
@@ -225,8 +227,8 @@ func Run(opts Options) error {
 	if firstErr != nil {
 		return errors.Join(firstErr, shutdownErr)
 	}
-	if opts.Service != nil {
-		return errors.Join(shutdownErr, opts.Service.Close())
+	if opts.RuntimeCloser != nil {
+		return errors.Join(shutdownErr, opts.RuntimeCloser.Close())
 	}
 	return shutdownErr
 }

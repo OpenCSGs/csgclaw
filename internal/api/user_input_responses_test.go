@@ -13,8 +13,12 @@ import (
 	"time"
 
 	"csgclaw/internal/activity"
+	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/enginetest"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/channel"
+	channelinteraction "csgclaw/internal/channel/csgclaw/interaction"
 	"csgclaw/internal/im"
-	runtimecodex "csgclaw/internal/runtime/codex"
 )
 
 type fakeUserInputResponder struct {
@@ -60,14 +64,14 @@ func TestChannelUserInputResponseEndpoint(t *testing.T) {
 func TestChannelUserInputResponsePersistsReadableLocalUserTranscript(t *testing.T) {
 	t.Parallel()
 
-	broker := runtimecodex.NewUserInputBroker(nil)
+	broker := newEngineQuestionFixture(t)
 	h, statePath, bus := newPersistentUserInputTestHandler(t, broker)
 	if _, err := h.im.DeliverMessage(im.DeliverMessageRequest{
 		RoomID: "room-1", SenderID: "user-agent", Content: "Thread root", MessageID: "thread-root",
 	}); err != nil {
 		t.Fatalf("create thread root: %v", err)
 	}
-	snapshot, err := broker.CreateDetached(runtimecodex.PendingUserInputRequest{
+	snapshot, err := broker.CreateQuestion(questionFixtureRequest{
 		Questions: []activity.UserInputQuestionSnapshot{
 			{
 				ID: "kind", Header: "Kind", Question: "Choose",
@@ -76,7 +80,7 @@ func TestChannelUserInputResponsePersistsReadableLocalUserTranscript(t *testing.
 			{ID: "note", Header: "Note", Question: "Add note", IsOther: true},
 			{ID: "secret", Header: "Secret", Question: "Disposable only", IsOther: true, IsSecret: true},
 		},
-	}, runtimecodex.DetachedUserInputContext{
+	}, questionFixtureContext{
 		Channel: "csgclaw", RoomID: "room-1", ThreadRootID: "thread-root", SourceMessageID: "source-1", RequesterID: "pt-agent",
 	})
 	if err != nil {
@@ -163,11 +167,11 @@ func TestChannelUserInputResponsePersistsReadableLocalUserTranscript(t *testing.
 func TestChannelUserInputResponseSkipAllDoesNotPersistTranscript(t *testing.T) {
 	t.Parallel()
 
-	broker := runtimecodex.NewUserInputBroker(nil)
+	broker := newEngineQuestionFixture(t)
 	h := newUserInputTestHandler(broker)
-	snapshot, err := broker.CreateDetached(runtimecodex.PendingUserInputRequest{
+	snapshot, err := broker.CreateQuestion(questionFixtureRequest{
 		Questions: []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Answer?"}},
-	}, runtimecodex.DetachedUserInputContext{Channel: "csgclaw", RoomID: "room-1"})
+	}, questionFixtureContext{Channel: "csgclaw", RoomID: "room-1"})
 	if err != nil {
 		t.Fatalf("CreateDetached() error = %v", err)
 	}
@@ -187,14 +191,14 @@ func TestChannelUserInputResponseSkipAllDoesNotPersistTranscript(t *testing.T) {
 func TestChannelUserInputResponseDoesNotMentionAskingAgentInDirectRoom(t *testing.T) {
 	t.Parallel()
 
-	broker := runtimecodex.NewUserInputBroker(nil)
+	broker := newEngineQuestionFixture(t)
 	bootstrap := userInputTestBootstrap()
 	bootstrap.Rooms[0].IsDirect = true
 	h := &Handler{im: im.NewServiceFromBootstrap(bootstrap)}
 	h.SetUserInputResponder(broker)
-	snapshot, err := broker.CreateDetached(runtimecodex.PendingUserInputRequest{
+	snapshot, err := broker.CreateQuestion(questionFixtureRequest{
 		Questions: []activity.UserInputQuestionSnapshot{{ID: "q", Header: "Q", Question: "Answer?", IsOther: true}},
-	}, runtimecodex.DetachedUserInputContext{Channel: "csgclaw", RoomID: "room-1", RequesterID: "pt-agent"})
+	}, questionFixtureContext{Channel: "csgclaw", RoomID: "room-1", RequesterID: "pt-agent"})
 	if err != nil {
 		t.Fatalf("CreateDetached() error = %v", err)
 	}
@@ -345,4 +349,49 @@ func userInputTestBootstrap() im.Bootstrap {
 		},
 		Rooms: []im.Room{{ID: "room-1", Title: "Room", Members: []string{"user-admin", "user-agent"}}},
 	}
+}
+
+type questionFixtureRequest struct {
+	Questions []activity.UserInputQuestionSnapshot
+}
+type questionFixtureContext struct{ Channel, RoomID, ThreadRootID, SourceMessageID, RequesterID string }
+type engineQuestionFixture struct {
+	*channelinteraction.Coordinator
+	engine *enginetest.MemoryClient
+	t      *testing.T
+}
+type questionParticipants struct{}
+
+func (questionParticipants) Get(_, id string) (apitypes.Participant, bool) {
+	return apitypes.Participant{ID: id, ChannelUserRef: "user-agent"}, true
+}
+func newEngineQuestionFixture(t *testing.T) *engineQuestionFixture {
+	engine := enginetest.NewMemoryClient(agentengine.Agent{ID: "agent-question", Spec: agentengine.AgentSpec{Name: "question", Runtime: agentengine.RuntimeSpec{Adapter: "codex"}}, Status: agentengine.AgentStatus{State: agentengine.AgentStateRunning, Ready: true}})
+	return &engineQuestionFixture{Coordinator: channelinteraction.NewCoordinator(engine, questionParticipants{}), engine: engine, t: t}
+}
+func (f *engineQuestionFixture) CreateQuestion(req questionFixtureRequest, where questionFixtureContext) (activity.UserInputSnapshot, error) {
+	args := activity.RequestUserInputArgs{}
+	for _, q := range req.Questions {
+		item := activity.RequestUserInputQuestion{ID: q.ID, Header: q.Header, Question: q.Question, IsOther: q.IsOther, IsSecret: q.IsSecret}
+		for _, o := range q.Options {
+			item.Options = append(item.Options, activity.RequestUserInputOption{Label: o.Label, Description: o.Description})
+		}
+		args.Questions = append(args.Questions, item)
+	}
+	f.engine.SetTurnBehavior(func(ctx context.Context, _ string, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventOutputItem, Output: &agentengine.OutputItem{Kind: agentengine.OutputItemRequestUserInput, Payload: args}}); err != nil {
+			f.t.Fatal(err)
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Dispatched: true}
+	})
+	turn := channel.TurnContext{AgentID: "agent-question", BindingID: "binding-question", ParticipantID: "pt-agent", RoomID: where.RoomID, ThreadRootID: where.ThreadRootID, SourceMessageID: where.SourceMessageID, ConversationKey: "question-conversation", TurnID: "question-turn"}
+	result := f.engine.Conversations(turn.AgentID).Run(context.Background(), agentengine.TurnRequest{ID: turn.TurnID, ConversationKey: turn.ConversationKey, Interaction: agentengine.InteractionResolve, Input: []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: "Ask"}}}, nil)
+	if len(result.Interactions) != 1 {
+		f.t.Fatalf("question Turn: %+v", result)
+	}
+	bound, err := f.Bind(turn, result.Interactions[0])
+	if err != nil {
+		return activity.UserInputSnapshot{}, err
+	}
+	return bound.Payload.(activity.UserInputSnapshot), nil
 }

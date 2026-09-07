@@ -81,19 +81,14 @@ func (s Store) save(provider string, state State) error {
 	if err != nil {
 		return err
 	}
-	authState, _, err := readRootAuthState(path)
-	if err != nil {
-		return err
-	}
-	if authState == nil {
-		authState = make(map[string]json.RawMessage)
-	}
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("encode root %s auth: %w", provider, err)
 	}
-	authState[provider] = raw
-	if err := localstore.WriteSection(path, rootAuthSectionName, authState); err != nil {
+	if err := localstore.UpdateObjectSection(path, rootAuthSectionName, func(authState map[string]json.RawMessage) error {
+		authState[provider] = raw
+		return nil
+	}); err != nil {
 		return fmt.Errorf("write %s connector store: %w", provider, err)
 	}
 	return nil
@@ -109,12 +104,10 @@ func (s Store) DeleteGitHub() error {
 	if err != nil {
 		return err
 	}
-	authState, found, err := readRootAuthState(path)
-	if err != nil || !found {
-		return err
-	}
-	delete(authState, ProviderGitHub)
-	if err := localstore.WriteSection(path, rootAuthSectionName, authState); err != nil {
+	if err := localstore.UpdateObjectSection(path, rootAuthSectionName, func(authState map[string]json.RawMessage) error {
+		delete(authState, ProviderGitHub)
+		return nil
+	}); err != nil {
 		return fmt.Errorf("delete github connector store: %w", err)
 	}
 	return nil

@@ -11,7 +11,6 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/execution"
-	"csgclaw/internal/channelbridge"
 )
 
 type fakeEngine struct {
@@ -104,7 +103,7 @@ func TestManagerSubmitDedupesSourceMessage(t *testing.T) {
 
 	value := channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}
 	ensureManagerBinding(t, manager, value)
-	event := channelbridge.BotEvent{MessageID: "message-1", RoomID: "room-1", Text: "hello"}
+	event := channel.Event{MessageID: "message-1", RoomID: "room-1", Text: "hello"}
 	if err := manager.Submit(value, event); err != nil {
 		t.Fatalf("Submit() error = %v", err)
 	}
@@ -135,7 +134,7 @@ func TestManagerSubmitResetDoesNotRunEngine(t *testing.T) {
 
 	binding := channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}
 	ensureManagerBinding(t, manager, binding)
-	if err := manager.Submit(binding, channelbridge.BotEvent{
+	if err := manager.Submit(binding, channel.Event{
 		MessageID: "message-new",
 		RoomID:    "room-1",
 		Text:      `<slash-command name="new" arg="conversation"></slash-command>`,
@@ -174,7 +173,7 @@ func TestManagerRunsIndependentConversationsConcurrently(t *testing.T) {
 
 	binding := channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}
 	ensureManagerBinding(t, manager, binding)
-	if err := manager.Submit(binding, channelbridge.BotEvent{MessageID: "message-1", RoomID: "room-1", Text: "first"}); err != nil {
+	if err := manager.Submit(binding, channel.Event{MessageID: "message-1", RoomID: "room-1", Text: "first"}); err != nil {
 		t.Fatalf("first Submit() error = %v", err)
 	}
 	select {
@@ -182,7 +181,7 @@ func TestManagerRunsIndependentConversationsConcurrently(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for room-1 turn")
 	}
-	if err := manager.Submit(binding, channelbridge.BotEvent{MessageID: "message-2", RoomID: "room-2", Text: "second"}); err != nil {
+	if err := manager.Submit(binding, channel.Event{MessageID: "message-2", RoomID: "room-2", Text: "second"}); err != nil {
 		t.Fatalf("second Submit() error = %v", err)
 	}
 	select {
@@ -219,7 +218,7 @@ func TestManagerPreservesOrderWithinConversation(t *testing.T) {
 
 	binding := channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}
 	ensureManagerBinding(t, manager, binding)
-	if err := manager.Submit(binding, channelbridge.BotEvent{MessageID: "message-1", RoomID: "room-1", Text: "first"}); err != nil {
+	if err := manager.Submit(binding, channel.Event{MessageID: "message-1", RoomID: "room-1", Text: "first"}); err != nil {
 		t.Fatalf("first Submit() error = %v", err)
 	}
 	select {
@@ -227,7 +226,7 @@ func TestManagerPreservesOrderWithinConversation(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for first turn")
 	}
-	if err := manager.Submit(binding, channelbridge.BotEvent{MessageID: "message-2", RoomID: "room-1", Text: "second"}); err != nil {
+	if err := manager.Submit(binding, channel.Event{MessageID: "message-2", RoomID: "room-1", Text: "second"}); err != nil {
 		t.Fatalf("second Submit() error = %v", err)
 	}
 	select {
@@ -260,10 +259,10 @@ func TestStoppedWorkerRejectsSubmit(t *testing.T) {
 	worker := manager.workers[binding.StableID()]
 	manager.mu.Unlock()
 	manager.Stop(binding.StableID())
-	if err := worker.Submit(channelbridge.BotEvent{MessageID: "message-late", RoomID: "room-1", Text: "late"}); err == nil {
+	if err := worker.Submit(channel.Event{MessageID: "message-late", RoomID: "room-1", Text: "late"}); err == nil {
 		t.Fatal("stopped worker accepted a late event")
 	}
-	if err := manager.Submit(binding, channelbridge.BotEvent{MessageID: "message-revive", RoomID: "room-1", Text: "revive"}); err == nil {
+	if err := manager.Submit(binding, channel.Event{MessageID: "message-revive", RoomID: "room-1", Text: "revive"}); err == nil {
 		t.Fatal("late submit recreated a stopped binding worker")
 	}
 	manager.mu.Lock()
@@ -297,7 +296,7 @@ func TestManagerSubmitResetCancelsActiveTurnBeforeReset(t *testing.T) {
 
 	binding := channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}
 	ensureManagerBinding(t, manager, binding)
-	if err := manager.Submit(binding, channelbridge.BotEvent{
+	if err := manager.Submit(binding, channel.Event{
 		MessageID: "message-run", RoomID: "room-1", Text: "keep working",
 	}); err != nil {
 		t.Fatalf("run Submit() error = %v", err)
@@ -308,7 +307,7 @@ func TestManagerSubmitResetCancelsActiveTurnBeforeReset(t *testing.T) {
 		t.Fatal("timed out waiting for active turn")
 	}
 
-	if err := manager.Submit(binding, channelbridge.BotEvent{
+	if err := manager.Submit(binding, channel.Event{
 		MessageID: "message-new",
 		RoomID:    "room-1",
 		Text:      `<slash-command name="new" arg="conversation"></slash-command>`,
@@ -352,7 +351,7 @@ func TestManagerSubmitResetDiscardsOlderQueuedMessages(t *testing.T) {
 
 	binding := channel.Binding{ParticipantID: "manager", AgentID: "u-manager"}
 	ensureManagerBinding(t, manager, binding)
-	if err := manager.Submit(binding, channelbridge.BotEvent{MessageID: "message-active", RoomID: "room-1", Text: "active"}); err != nil {
+	if err := manager.Submit(binding, channel.Event{MessageID: "message-active", RoomID: "room-1", Text: "active"}); err != nil {
 		t.Fatalf("active Submit() error = %v", err)
 	}
 	select {
@@ -360,10 +359,10 @@ func TestManagerSubmitResetDiscardsOlderQueuedMessages(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for active turn")
 	}
-	if err := manager.Submit(binding, channelbridge.BotEvent{MessageID: "message-stale", RoomID: "room-1", Text: "stale"}); err != nil {
+	if err := manager.Submit(binding, channel.Event{MessageID: "message-stale", RoomID: "room-1", Text: "stale"}); err != nil {
 		t.Fatalf("stale Submit() error = %v", err)
 	}
-	if err := manager.Submit(binding, channelbridge.BotEvent{
+	if err := manager.Submit(binding, channel.Event{
 		MessageID: "message-new",
 		RoomID:    "room-1",
 		Text:      `<slash-command name="new" arg="conversation"></slash-command>`,
@@ -377,7 +376,7 @@ func TestManagerSubmitResetDiscardsOlderQueuedMessages(t *testing.T) {
 	}
 	waitFor(t, func() bool { return engine.resets.Load() == 1 })
 
-	if err := manager.Submit(binding, channelbridge.BotEvent{MessageID: "message-fresh", RoomID: "room-1", Text: "fresh"}); err != nil {
+	if err := manager.Submit(binding, channel.Event{MessageID: "message-fresh", RoomID: "room-1", Text: "fresh"}); err != nil {
 		t.Fatalf("fresh Submit() error = %v", err)
 	}
 	select {
@@ -410,4 +409,8 @@ func waitFor(t *testing.T, ready func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("timed out")
+}
+
+func (fakeConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
+	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

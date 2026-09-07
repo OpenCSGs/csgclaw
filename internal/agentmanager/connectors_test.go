@@ -2,15 +2,14 @@ package agentmanager
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/connectors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/connectors"
 )
 
 func TestDefaultConnectorGrantPolicyGrantsGitHubOnlyToManager(t *testing.T) {

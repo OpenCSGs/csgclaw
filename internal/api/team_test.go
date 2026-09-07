@@ -2,6 +2,14 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/config"
+	"csgclaw/internal/im"
+	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
+	"csgclaw/internal/team"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,14 +18,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/config"
-	"csgclaw/internal/im"
-	"csgclaw/internal/llm"
-	"csgclaw/internal/participant"
-	"csgclaw/internal/team"
 )
 
 func newTestTeamAdapterRegistry(adapter team.TeamChannelAdapter) *team.AdapterRegistry {
@@ -317,7 +317,7 @@ func TestTeamTaskResponsesIncludeParticipantDisplayNames(t *testing.T) {
 		participant:  participantSvc,
 		im:           imSvc,
 		teamSvc:      teamSvc,
-		teamAdapters: newTestTeamAdapterRegistry(adapter),
+		teamAdapters: newTestTeamAdapterRegistry(adapter), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"title":"data","lead_agent_id":"u-manager","member_agent_ids":["u-agent-ymkx7q"]}`))
@@ -622,7 +622,7 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 		im:           imSvc,
 		llm:          llm.NewService(config.ModelConfig{}, agentSvc),
 		teamSvc:      teamSvc,
-		teamAdapters: newTestTeamAdapterRegistry(adapter),
+		teamAdapters: newTestTeamAdapterRegistry(adapter), agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc,
 	}
 
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/teams", strings.NewReader(`{"title":"release","lead_agent_id":"u-manager","member_agent_ids":["u-writer","u-tester"]}`))
@@ -666,6 +666,12 @@ func TestTeamRoutesPlanStartDispatchesWithManagerLLM(t *testing.T) {
 	if !planResp.Planning || len(planResp.CreatedTasks) != 0 {
 		t.Fatalf("plan response = %+v, want planning accepted without synchronous child tasks", planResp)
 	}
+	t.Cleanup(func() {
+		if t.Failed() {
+			tasks := teamSvc.ListTasks(created.ID)
+			t.Logf("planner called=%v, tasks=%+v", sawPlannerRequest.Load(), tasks)
+		}
+	})
 	waitForCondition(t, time.Second, 10*time.Millisecond, func() bool {
 		return sawPlannerRequest.Load() && len(teamSvc.ListTasks(created.ID)) == 3
 	})

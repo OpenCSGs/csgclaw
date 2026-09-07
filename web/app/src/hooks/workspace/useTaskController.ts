@@ -229,7 +229,7 @@ export function useTaskController({
           mergeWorkspaceTaskList(current ?? [], nextTasks),
         );
       } catch {
-        return;
+        // Keep polling active tasks after a transient request failure.
       }
       if (!cancelled) {
         timer = window.setTimeout(poll, TASK_BOARD_POLL_DELAY_MS);

@@ -2,13 +2,8 @@ package onboard
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
-
-	"csgclaw/internal/agent"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/app/runtimewiring"
 	"csgclaw/internal/config"
 	"csgclaw/internal/im"
@@ -16,6 +11,11 @@ import (
 	"csgclaw/internal/participant"
 	"csgclaw/internal/sandboxproviders"
 	hub "csgclaw/internal/template"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
 var (
@@ -171,7 +171,7 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 	if noAuthDetectFromContext(ctx) {
 		opts = append(opts, agent.WithStartupProfileDetectionDisabled())
 	}
-	agentSvc, err := agent.NewServiceWithLLM(effectiveLLMConfig(cfg), cfg.Server, bootstrapDefaults.ManagerImage, agentsPath, opts...)
+	agentSvc, err := agent.NewControllerWithLLM(effectiveLLMConfig(cfg), cfg.Server, bootstrapDefaults.ManagerImage, agentsPath, opts...)
 	if err != nil {
 		return participant.Participant{}, err
 	}
@@ -193,7 +193,7 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 	}
 	participantSvc := participant.NewService(
 		store,
-		participant.WithAgentService(agentSvc),
+		participant.WithAgentEngine(agentengine.New(agentSvc)),
 		participant.WithIMService(imSvc),
 	)
 	if _, err := participantSvc.RepairDanglingCSGClawAgentParticipants(); err != nil {

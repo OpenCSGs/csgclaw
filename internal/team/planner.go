@@ -2,14 +2,13 @@ package team
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
-
-	"csgclaw/internal/agent"
 )
 
 const managerPlannerModel = "csgclaw-manager-planner"

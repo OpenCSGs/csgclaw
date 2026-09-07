@@ -3,16 +3,15 @@ package api
 import (
 	"bytes"
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/knowledgebase"
+	"csgclaw/internal/mcp"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/knowledgebase"
-	"csgclaw/internal/mcp"
 )
 
 type stubMCPServerProber struct {
@@ -239,7 +238,7 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUsesAgentSnapshotWithoutGlobalMCP
 	agentConfig["tool_timeout_sec"] = float64(180)
 	agentConfig["headers"].(map[string]any)["X-Local"] = "agent"
 	agentSnapshot := map[string]any{"content-42": agentConfig}
-	if _, err := service.Update(context.Background(), created.ID, agent.UpdateRequest{
+	if _, err := service.UpdateRecord(context.Background(), created.ID, agent.UpdateRequest{
 		MCPServers:    &agentSnapshot,
 		MCPServersSet: true,
 		FieldMask:     []string{"mcpServers"},
@@ -314,7 +313,7 @@ func TestAgentManagedKnowledgeBaseMCPMissingSourceCanStillBeRemoved(t *testing.T
 	handler, service, created := newAgentMCPManagementTestServer(t)
 	agentConfig := managedKnowledgeBaseMCPConfigForTest("https://gateway.example.test/deleted/mcp", "snapshot-token")
 	agentSnapshot := map[string]any{"content-42": agentConfig}
-	if _, err := service.Update(context.Background(), created.ID, agent.UpdateRequest{
+	if _, err := service.UpdateRecord(context.Background(), created.ID, agent.UpdateRequest{
 		MCPServers:    &agentSnapshot,
 		MCPServersSet: true,
 		FieldMask:     []string{"mcpServers"},

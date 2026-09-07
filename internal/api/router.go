@@ -4,14 +4,9 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-
-	"csgclaw/internal/agentengine"
 )
 
 func (h *Handler) Routes() chi.Router {
-	if h != nil && h.agentEngine == nil && h.svc != nil {
-		h.agentEngine = agentengine.New(h.svc)
-	}
 	router := chi.NewRouter()
 	h.registerCoreRoutes(router)
 	h.registerChannelRoutes(router)
@@ -41,6 +36,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Post("/stop", h.stopAgent)
 				r.Post("/bindings:apply", h.applyAgentBindings)
 				r.Post("/lark-cli:init", h.initAgentLarkCLI)
+				r.Post("/lark-cli:cleanup", h.cleanupAgentLarkCLI)
 				r.Get("/logs", h.getAgentLogs)
 				r.Get("/instructions", h.getAgentInstructions)
 				r.Put("/instructions", h.putAgentInstructions)

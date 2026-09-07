@@ -2,17 +2,17 @@ package api
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/im"
+	"csgclaw/internal/llm"
+	"csgclaw/internal/participant"
+	"csgclaw/internal/participant/feishubind"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/im"
-	"csgclaw/internal/llm"
-	"csgclaw/internal/participant"
 )
 
 func participantCreateStatus(err error) int {
@@ -58,8 +58,22 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.AgentHubService = hubSvc
-		created, err := h.participant.Create(r.Context(), req)
+		var created apitypes.Participant
+		create := func(ctx context.Context) error {
+			var err error
+			created, err = h.participant.Create(ctx, req)
+			return err
+		}
+		if channelName == participant.ChannelFeishu && req.Type == participant.TypeAgent {
+			err = h.mutateFeishuBot(r.Context(), req.AgentBinding.AgentID, channelAppConfigString(req.ChannelAppConfig, "app_id"), create)
+		} else {
+			err = create(r.Context())
+		}
 		if err != nil {
+			if errors.Is(err, feishubind.ErrBotAppIDConflict) {
+				h.writeFeishuBotAppInfoError(w, err)
+				return
+			}
 			billingURL := ""
 			if req.AgentBinding.Agent != nil {
 				billingURL = llm.OpenCSGBillingURL(req.AgentBinding.Agent.AgentProfile)
@@ -101,8 +115,33 @@ func (h *Handler) handleParticipantByIDPath(w http.ResponseWriter, r *http.Reque
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
-		updated, ok, err := h.participant.Update(r.Context(), channelName, id, req)
+		var updated apitypes.Participant
+		var ok bool
+		update := func(ctx context.Context) error {
+			var err error
+			updated, ok, err = h.participant.Update(ctx, channelName, id, req)
+			return err
+		}
+		current, found := h.participant.Get(channelName, id)
+		var err error
+		if found && current.Channel == participant.ChannelFeishu && current.Type == participant.TypeAgent {
+			if req.AgentID != nil && agent.CanonicalID(*req.AgentID) != agent.CanonicalID(current.AgentID) {
+				http.Error(w, "Disconnect the Bot before binding it to another Agent", http.StatusConflict)
+				return
+			}
+			appID := channelAppConfigString(current.ChannelAppConfig, "app_id")
+			if req.ChannelAppConfig != nil {
+				appID = channelAppConfigString(req.ChannelAppConfig, "app_id")
+			}
+			err = h.mutateFeishuBot(r.Context(), current.AgentID, appID, update)
+		} else {
+			err = update(r.Context())
+		}
 		if err != nil {
+			if errors.Is(err, feishubind.ErrBotAppIDConflict) {
+				h.writeFeishuBotAppInfoError(w, err)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -114,26 +153,76 @@ func (h *Handler) handleParticipantByIDPath(w http.ResponseWriter, r *http.Reque
 		h.publishParticipantEvent(im.EventTypeParticipantUpdated, presented)
 		writeJSON(w, http.StatusOK, presented)
 	case http.MethodDelete:
-		deleted, ok, err := h.participant.Delete(r.Context(), channelName, id, participant.DeleteOptions{
-			DeleteAgent: r.URL.Query().Get("delete_agent"),
-		})
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if !ok {
+		current, exists := h.participant.Get(channelName, id)
+		if !exists {
 			http.NotFound(w, r)
 			return
 		}
-		if err := h.deactivateFeishuAgentAfterDisconnect(r.Context(), deleted, r.URL.Query().Get("delete_agent")); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		var deleted apitypes.Participant
+		var removed bool
+		remove := func(ctx context.Context) error {
+			var err error
+			deleted, removed, err = h.participant.Delete(ctx, channelName, id, participant.DeleteOptions{DeleteAgent: r.URL.Query().Get("delete_agent")})
+			if err != nil || !removed {
+				return err
+			}
+			// Publish the fact even when Runtime cleanup fails. Source tokens are
+			// already invalid and the UI must not keep showing a connected Bot.
+			h.publishParticipantEvent(im.EventTypeParticipantDeleted, h.presentParticipant(deleted))
+			return h.deactivateFeishuAgentAfterDisconnect(ctx, deleted, r.URL.Query().Get("delete_agent"))
+		}
+		var err error
+		if current.Channel == participant.ChannelFeishu && current.Type == participant.TypeAgent && current.AgentID != "" {
+			if h.agentRuntime == nil {
+				http.Error(w, "Agent lifecycle coordinator is unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			err = h.agentRuntime.WithAgentLifecycle(r.Context(), current.AgentID, remove)
+		} else {
+			err = remove(r.Context())
+		}
+		if err != nil {
+			if removed {
+				writeJSON(w, http.StatusConflict, map[string]string{"status": "partial", "code": "feishu_cleanup_pending", "error": "Feishu is disconnected. Runtime tool cleanup is incomplete; retry cleanup."})
+			} else {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			}
 			return
 		}
-		h.publishParticipantEvent(im.EventTypeParticipantDeleted, h.presentParticipant(deleted))
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// Both UI registration and manual Participant/CLI writes share the same Agent
+// lease. A changed source token becomes invalid before any new Runtime runs.
+func (h *Handler) mutateFeishuBot(ctx context.Context, agentID, appID string, write func(context.Context) error) error {
+	if strings.TrimSpace(agentID) == "" {
+		return feishubind.WithExclusiveBotAppID(h.participant, agentID, appID, func() error { return write(ctx) })
+	}
+	if h.agentRuntime == nil {
+		return errors.New("An existing Agent and its lifecycle coordinator are required")
+	}
+	return h.agentRuntime.WithAgentLifecycle(ctx, agentID, func(ctx context.Context) error {
+		if err := feishubind.WithExclusiveBotAppID(h.participant, agentID, appID, func() error { return write(ctx) }); err != nil {
+			return err
+		}
+		if strings.TrimSpace(appID) == "" {
+			return nil
+		}
+		target, ok := h.svc.Agent(agentID)
+		if !ok {
+			return fmt.Errorf("agent %q not found", agentID)
+		}
+		if target.RuntimeKind == agent.RuntimeKindCodex && appID != "" {
+			// Optional tool errors are exposed in Engine status, not as failure
+			// of the successfully saved Channel credentials.
+			_, _ = h.configureAgentLarkCLILocked(ctx, target)
+		}
+		_, _, err := h.refreshAgentChannel(ctx, target, participant.ChannelFeishu)
+		return err
+	})
 }
 
 func (h *Handler) deactivateFeishuAgentAfterDisconnect(ctx context.Context, deleted apitypes.Participant, deleteAgentMode string) error {
@@ -171,8 +260,10 @@ func (h *Handler) deactivateFeishuAgentAfterDisconnect(ctx context.Context, dele
 		}
 	}
 	var errs []error
-	if _, _, err := h.svc.DeactivateExternalBinding(ctx, agentID, participant.ChannelFeishu); err != nil {
-		errs = append(errs, fmt.Errorf("deactivate feishu binding for agent %q after disconnecting participant %q: %w", agentID, deleted.ID, err))
+	if target, ok := h.svc.Agent(agentID); ok {
+		if _, _, err := h.refreshAgentChannel(ctx, target, participant.ChannelFeishu); err != nil {
+			errs = append(errs, fmt.Errorf("reconcile feishu binding for agent %q after disconnecting participant %q: %w", agentID, deleted.ID, err))
+		}
 	}
 	if err := h.clearAgentLarkCLIState(ctx, agentID); err != nil {
 		errs = append(errs, fmt.Errorf("clear lark-cli state for agent %q after disconnecting participant %q: %w", agentID, deleted.ID, err))

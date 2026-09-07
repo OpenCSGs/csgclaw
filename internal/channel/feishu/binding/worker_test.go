@@ -23,6 +23,9 @@ type pipelineTestEngine struct {
 }
 
 func (*pipelineTestEngine) Agents() agentengine.AgentInterface { return nil }
+func (*pipelineTestEngine) RuntimeExtensions(string) agentengine.RuntimeExtensionInterface {
+	return nil
+}
 func (e *pipelineTestEngine) Conversations(string) agentengine.ConversationInterface {
 	return pipelineTestConversation{engine: e}
 }
@@ -299,4 +302,8 @@ func channelBinding(agentID, participantID string) channeltypes.Binding {
 	return channeltypes.Binding{
 		ID: participantID, Channel: feishu.ChannelID, AgentID: agentID, ParticipantID: participantID,
 	}
+}
+
+func (pipelineTestConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
+	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }

@@ -1,6 +1,11 @@
 package participant
 
 import (
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/config"
+	"csgclaw/internal/im"
+	"csgclaw/internal/localstore"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,12 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/config"
-	"csgclaw/internal/im"
-	"csgclaw/internal/localstore"
 )
 
 type Store struct {

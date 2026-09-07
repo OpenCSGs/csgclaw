@@ -682,10 +682,7 @@ func TestAppServerManagerQuestionRoundTripForManagerAndWorker(t *testing.T) {
 			if !ok || len(request.Questions) != 1 || request.Questions[0].ID != "color" {
 				t.Fatalf("request snapshot = %+v", request)
 			}
-			if _, err := broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent"); err != nil {
-				t.Fatalf("Bind() error = %v", err)
-			}
-			if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+			if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{
 				Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
 				Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
 					"color": {Answers: []string{"Green", "user_note: deep shade"}},
@@ -748,14 +745,13 @@ func TestAppServerManagerPausesTurnWatchdogsWhileWaitingForUser(t *testing.T) {
 		promptResult <- err
 	}()
 	requestID := waitForUserInputRequest(t, sink)
-	_, _ = broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent")
 	time.Sleep(75 * time.Millisecond)
 	select {
 	case err := <-promptResult:
 		t.Fatalf("prompt ended while waiting for user input: %v", err)
 	default:
 	}
-	_, err = broker.Respond(context.Background(), activity.UserInputResponseRequest{
+	_, err = respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{
 		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
 		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
 			"color": {Answers: []string{"Green", "user_note: deep shade"}},
@@ -832,10 +828,7 @@ func TestAppServerManagerKeepsTurnOpenWhenAgentMessagePrecedesQuestion(t *testin
 		t.Fatalf("prompt ended before the user-input request was answered: %v", err)
 	default:
 	}
-	if _, err := broker.Bind(requestID, "csgclaw", "room-1", "", "pt-agent"); err != nil {
-		t.Fatalf("Bind() error = %v", err)
-	}
-	if _, err := broker.Respond(context.Background(), activity.UserInputResponseRequest{
+	if _, err := respondUserInputForTest(broker, context.Background(), activity.UserInputResponseRequest{
 		Channel: "csgclaw", ActivityID: requestID, RoomID: "room-1", ResponderID: "u-admin",
 		Response: activity.RequestUserInputResponse{Answers: map[string]activity.RequestUserInputAnswer{
 			"next": {Answers: []string{"Continue"}},
@@ -1469,8 +1462,8 @@ func TestAppServerEventAdapterStreamsAgentMessageDeltasWithoutCompletedDuplicate
 		result := <-waiter.ch
 		completed = completed || result.success
 	}
-	if !completed {
-		t.Fatal("item/completed without phase did not finish the final-answer turn")
+	if completed {
+		t.Fatal("final-answer item completed the turn before turn/completed")
 	}
 	if phase := live.agentMessagePhase("msg-1"); phase != "" || live.hasStreamedAgentMessage("msg-1") {
 		t.Fatalf("completed agent message retained stream state: phase=%q streamed=%v", phase, live.hasStreamedAgentMessage("msg-1"))

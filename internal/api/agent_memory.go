@@ -1,11 +1,10 @@
 package api
 
 import (
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
 	"encoding/json"
 	"net/http"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/agentengine"
 )
 
 func (h *Handler) getAgentMemory(w http.ResponseWriter, r *http.Request) {

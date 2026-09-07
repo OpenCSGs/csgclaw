@@ -2,6 +2,11 @@ package api
 
 import (
 	"bytes"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -13,11 +18,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/apitypes"
-	"csgclaw/internal/im"
-	"csgclaw/internal/participant"
 )
 
 func TestHandleCsgclawChannelRoutesMirrorLocalCollections(t *testing.T) {
@@ -285,7 +285,7 @@ func TestMaterializeAttachmentsForParticipantResolvesAgentByID(t *testing.T) {
 		ChannelUserRef: worker.ID,
 		AgentID:        "agent-resume",
 	}}))
-	handler := &Handler{svc: agentSvc, im: imSvc, participant: participantSvc}
+	handler := &Handler{svc: agentSvc, im: imSvc, participant: participantSvc, agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 
 	attachments := handler.materializeAttachmentsForParticipant(
 		message.Attachments,

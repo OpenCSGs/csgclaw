@@ -3,6 +3,10 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	"csgclaw/internal/participant"
+	"csgclaw/internal/participant/feishubind"
 	"encoding/base32"
 	"encoding/json"
 	"errors"
@@ -15,11 +19,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	"csgclaw/internal/participant"
-	"csgclaw/internal/participant/feishubind"
 )
 
 const (
@@ -217,32 +216,52 @@ func (h *Handler) finalizeFeishuRegistration(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-	result, err := feishubind.BindBot(r.Context(), h.agentEngine, h.participant, state.AgentID, appID, appSecret, false)
+	var result feishubind.Result
+	var larkCLIStatus string
+	var larkCLIError *feishuRegistrationLarkCLIError
+	if h.agentRuntime == nil {
+		http.Error(w, "Agent lifecycle coordinator is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	err = h.agentRuntime.WithAgentLifecycle(r.Context(), target.ID, func(ctx context.Context) error {
+		refreshed, resolveErr := feishubind.ResolveAgent(h.agentEngine, state.AgentID)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		target = refreshed
+		var bindErr error
+		result, bindErr = feishubind.BindBot(ctx, h.agentEngine, h.participant, state.AgentID, appID, appSecret)
+		if bindErr != nil {
+			return bindErr
+		}
+		if strings.EqualFold(strings.TrimSpace(target.RuntimeKind), agent.RuntimeKindCodex) {
+			if _, applyErr := h.configureAgentLarkCLILocked(ctx, target); applyErr != nil {
+				larkCLIStatus, larkCLIError = feishuRegistrationLarkCLIWarning(applyErr)
+				result.Warnings = append(result.Warnings, larkCLIError.Message)
+				slog.Warn("configure lark-cli after Feishu connection failed", "agent_id", target.ID, "error", applyErr)
+			} else {
+				larkCLIStatus = "configured"
+			}
+		}
+		// Keep the fact update and native Runtime activation under the same
+		// Agent lease so a concurrent Bot switch cannot be activated out of order.
+		_, activation, activationErr := h.refreshAgentChannel(ctx, target, participant.ChannelFeishu)
+		if activationErr != nil {
+			result.Status = "partial"
+			result.ActivationStatus = "activation_failed"
+			result.ActivationError = activationErr.Error()
+		} else {
+			result.ActivationStatus = activation
+		}
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, errFeishuBotAppIDConflict) {
 			h.writeFeishuBotAppInfoError(w, err)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	var larkCLIStatus string
-	var larkCLIError *feishuRegistrationLarkCLIError
-	if strings.EqualFold(strings.TrimSpace(target.RuntimeKind), agent.RuntimeKindCodex) {
-		if _, err := h.configureAgentLarkCLI(r.Context(), target, h.internalSourceBaseURL(), false); err != nil {
-			larkCLIStatus, larkCLIError = feishuRegistrationLarkCLIWarning(err)
-			result.Warnings = append(result.Warnings, larkCLIError.Message)
-			slog.Warn("configure lark-cli after Feishu connection failed", "agent_id", target.ID, "error", err)
 		} else {
-			larkCLIStatus = "configured"
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
-	}
-	if _, activation, err := h.svc.ApplyExternalBinding(r.Context(), state.AgentID, participant.ChannelFeishu); err != nil {
-		result.Status = "partial"
-		result.ActivationStatus = "activation_failed"
-		result.ActivationError = err.Error()
-	} else {
-		result.ActivationStatus = string(activation)
+		return
 	}
 	_ = h.deleteFeishuRegistration(state.RegistrationID)
 	writeJSON(w, http.StatusOK, feishuRegistrationFinalizeResponse{

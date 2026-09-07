@@ -2,6 +2,10 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/config"
+	agentruntime "csgclaw/internal/runtime"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,10 +14,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/config"
-	agentruntime "csgclaw/internal/runtime"
 )
 
 type modelProviderTestResponse struct {
@@ -538,11 +538,11 @@ func newModelProviderTestHandler(t *testing.T, configPath string, agents []agent
 			t.Fatalf("WriteFile(agent state) error = %v", err)
 		}
 	}
-	svc, err := agent.NewServiceWithLLM(cfg.Models, cfg.Server, "manager-image:test", statePath, agent.WithRuntime(modelProviderFakeRuntime{kind: agent.RuntimeKindCodex}))
+	svc, err := agent.NewControllerWithLLM(cfg.Models, cfg.Server, "manager-image:test", statePath, agent.WithRuntime(modelProviderFakeRuntime{kind: agent.RuntimeKindCodex}))
 	if err != nil {
 		t.Fatalf("NewServiceWithLLM() error = %v", err)
 	}
-	srv := &Handler{svc: svc}
+	srv := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}
 	srv.SetConfigPath(configPath)
 	return srv
 }

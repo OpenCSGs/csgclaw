@@ -2,11 +2,10 @@ package team
 
 import (
 	"context"
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/im"
 	"testing"
 	"time"
-
-	"csgclaw/internal/agent"
-	"csgclaw/internal/im"
 )
 
 func TestCSGClawAdapterEnsureParticipantUserReusesManagerParticipantIdentity(t *testing.T) {
