@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -33,7 +32,7 @@ type liveSession struct {
 	loadedConversations   map[string]bool
 	filePublishingThreads map[string]bool
 	turnWaiters           map[string]*appServerTurnWaiter
-	turnContexts          map[string]context.Context
+	turnContexts          map[string]appServerTurnContext
 	turnThreads           map[string]string
 	turnThreadOrder       []string
 	commandOutputs        map[string]*appServerCommandOutputState

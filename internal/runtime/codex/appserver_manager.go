@@ -167,7 +167,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		loadedConversations:   make(map[string]bool),
 		filePublishingThreads: filePublishingThreads,
 		turnWaiters:           make(map[string]*appServerTurnWaiter),
-		turnContexts:          make(map[string]context.Context),
+		turnContexts:          make(map[string]appServerTurnContext),
 		turnThreads:           make(map[string]string),
 		commandOutputs:        make(map[string]*appServerCommandOutputState),
 		replayedExecCommands:  make(map[string]struct{}),
@@ -354,10 +354,9 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	}
 	defer live.removeAppServerTurnWaiter(sessionID, waiter)
 	turnCtx, cancelTurn := context.WithCancel(ctx)
-	live.setAppServerTurnContext(sessionID, turnCtx)
 	defer func() {
 		cancelTurn()
-		live.clearAppServerTurnContext(sessionID)
+		live.clearAppServerTurnContext(sessionID, waiter.currentTurnID())
 	}()
 
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
@@ -385,6 +384,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
+	live.setAppServerTurnContext(sessionID, waiter.currentTurnID(), turnCtx)
 	if req.OnAccepted != nil {
 		req.OnAccepted()
 	}
@@ -773,7 +773,11 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		"experimentalRawEvents":  false,
 	}
 	if publishFiles {
-		params["dynamicTools"] = []map[string]any{appServerPublishFileToolSpec(), appServerUploadFileToolSpec()}
+		tools := []map[string]any{appServerPublishFileToolSpec()}
+		if spec.ExecutionMode != ExecutionModeReadOnly {
+			tools = append(tools, appServerUploadFileToolSpec())
+		}
+		params["dynamicTools"] = tools
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -985,11 +989,14 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 		return nil, fmt.Errorf("dynamic file tool references unknown or unsupported thread %q", params.ThreadID)
 	}
 	if params.Tool == appServerUploadFileToolName {
+		if live.spec.ExecutionMode == ExecutionModeReadOnly {
+			return appServerDynamicToolResponse(false, "file upload is unavailable in read-only mode"), nil
+		}
 		var args appServerUploadFileArgs
 		if err := json.Unmarshal(params.Arguments, &args); err != nil {
 			return appServerDynamicToolResponse(false, "invalid upload arguments"), nil
 		}
-		uploadCtx, ok := live.appServerTurnContext(params.ThreadID)
+		uploadCtx, ok := live.appServerTurnContext(params.ThreadID, params.TurnID)
 		if !ok {
 			return appServerDynamicToolResponse(false, "file upload is unavailable outside an active turn"), nil
 		}
@@ -1051,7 +1058,7 @@ func uploadAppServerWorkspaceFile(ctx context.Context, spec SessionSpec, args ap
 		return fmt.Errorf("open Runtime workspace: %w", err)
 	}
 	defer root.Close()
-	file, err := root.Open(cleaned)
+	file, err := openAppServerUploadFile(root, cleaned)
 	if err != nil {
 		return fmt.Errorf("open upload file: %w", err)
 	}
@@ -1063,11 +1070,10 @@ func uploadAppServerWorkspaceFile(ctx context.Context, spec SessionSpec, args ap
 	if info.Size() > appServerMaxUploadBytes {
 		return fmt.Errorf("upload file exceeds %d bytes", appServerMaxUploadBytes)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPut, target.String(), io.LimitReader(file, appServerMaxUploadBytes+1))
+	request, err := newAppServerUploadRequest(ctx, target.String(), file, info.Size())
 	if err != nil {
 		return fmt.Errorf("create upload request: %w", err)
 	}
-	request.ContentLength = info.Size()
 	if contentType := strings.TrimSpace(args.ContentType); contentType != "" {
 		if _, _, err := mime.ParseMediaType(contentType); err != nil {
 			return fmt.Errorf("contentType is invalid")
@@ -1089,6 +1095,19 @@ func uploadAppServerWorkspaceFile(ctx context.Context, spec SessionSpec, args ap
 		return fmt.Errorf("upload endpoint returned HTTP %d", response.StatusCode)
 	}
 	return nil
+}
+
+func newAppServerUploadRequest(ctx context.Context, target string, file *os.File, size int64) (*http.Request, error) {
+	var body io.Reader = http.NoBody
+	if size > 0 {
+		body = io.LimitReader(file, size)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPut, target, body)
+	if err != nil {
+		return nil, err
+	}
+	request.ContentLength = size
+	return request, nil
 }
 
 func normalizeAppServerPublishFileArgs(args appServerPublishFileArgs) (activity.RuntimeFile, error) {
@@ -1412,36 +1431,49 @@ func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServ
 	}
 }
 
-func (s *liveSession) setAppServerTurnContext(threadID string, ctx context.Context) {
+type appServerTurnContext struct {
+	turnID string
+	ctx    context.Context
+}
+
+func (s *liveSession) setAppServerTurnContext(threadID, turnID string, ctx context.Context) {
 	threadID = strings.TrimSpace(threadID)
-	if s == nil || threadID == "" || ctx == nil {
+	turnID = strings.TrimSpace(turnID)
+	if s == nil || threadID == "" || turnID == "" || ctx == nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.turnContexts == nil {
-		s.turnContexts = make(map[string]context.Context)
+		s.turnContexts = make(map[string]appServerTurnContext)
 	}
-	s.turnContexts[threadID] = ctx
+	s.turnContexts[threadID] = appServerTurnContext{turnID: turnID, ctx: ctx}
 }
 
-func (s *liveSession) clearAppServerTurnContext(threadID string) {
+func (s *liveSession) clearAppServerTurnContext(threadID, turnID string) {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.turnContexts, strings.TrimSpace(threadID))
+	threadID = strings.TrimSpace(threadID)
+	active, ok := s.turnContexts[threadID]
+	if ok && active.turnID == strings.TrimSpace(turnID) {
+		delete(s.turnContexts, threadID)
+	}
 }
 
-func (s *liveSession) appServerTurnContext(threadID string) (context.Context, bool) {
+func (s *liveSession) appServerTurnContext(threadID, turnID string) (context.Context, bool) {
 	if s == nil {
 		return nil, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ctx, ok := s.turnContexts[strings.TrimSpace(threadID)]
-	return ctx, ok
+	active, ok := s.turnContexts[strings.TrimSpace(threadID)]
+	if !ok || active.turnID != strings.TrimSpace(turnID) || active.ctx == nil {
+		return nil, false
+	}
+	return active.ctx, true
 }
 
 func (s *liveSession) trackAppServerTurn(threadID, turnID string) {
