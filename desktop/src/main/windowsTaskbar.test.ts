@@ -224,6 +224,40 @@ test("applies the latest selection while Explorer removes the old button", async
   assert.deepEqual(window.taskbarVisibility, [true, false]);
 });
 
+test("forces the latest icon after restoring the taskbar button", async () => {
+  const operations: string[] = [];
+  const taskbar = new WindowsTaskbarIcon(
+    DesktopPlatform.Windows,
+    false,
+    (iconPath) => iconPath,
+    async () => {},
+    async () => {},
+  );
+  const window = fakeWindow();
+  const setSkipTaskbar = window.setSkipTaskbar;
+  const setIcon = window.setIcon;
+
+  window.setSkipTaskbar = (skip: boolean) => {
+    operations.push(skip ? "hide" : "show");
+    setSkipTaskbar.call(window, skip);
+  };
+  window.setIcon = (image: NativeImage | string) => {
+    operations.push("icon");
+    setIcon.call(window, image);
+  };
+
+  const light = fakeIcon();
+  const dark = fakeIcon();
+  taskbar.select(light, "light.ico");
+  taskbar.apply(window);
+  taskbar.select(dark, "dark.ico");
+  taskbar.apply(window);
+  await taskbar.refresh(window);
+
+  assert.deepEqual(operations, ["icon", "icon", "hide", "show", "icon"]);
+  assert.equal(window.icons.at(-1), dark);
+});
+
 test("only the newest refresh restores the taskbar button", async () => {
   const finishRemovals: Array<() => void> = [];
   const taskbar = new WindowsTaskbarIcon(

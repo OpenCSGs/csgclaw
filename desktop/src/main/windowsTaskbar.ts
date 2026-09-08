@@ -42,6 +42,9 @@ type ThemeIcon = {
 const waitForWindowsTaskbarRemoval = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 75));
 
+const waitForWindowsTaskbarRestore = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, 0));
+
 export class WindowsTaskbarIcon {
   private selected: ThemeIcon | null = null;
   private readonly applied = new WeakMap<TaskbarWindow, ThemeIcon>();
@@ -56,6 +59,8 @@ export class WindowsTaskbarIcon {
     ) => iconPath,
     private readonly waitForTaskbarRemoval: () => Promise<void> =
       waitForWindowsTaskbarRemoval,
+    private readonly waitForTaskbarRestore: () => Promise<void> =
+      waitForWindowsTaskbarRestore,
   ) {}
 
   get image(): NativeImage | undefined {
@@ -118,20 +123,27 @@ export class WindowsTaskbarIcon {
     }
 
     const revision = ++this.refreshRevision;
+    let restored = false;
     window.setSkipTaskbar(true);
     try {
-      // Give Explorer a separate message-loop window to remove the old button.
-      // Applying the latest selected icon only after that gap avoids Windows
-      // coalescing an immediate true -> false transition during rapid changes.
+      // Give Explorer a separate message-loop window to remove the old button
+      // before recreating it for the latest window icon.
       await this.waitForTaskbarRemoval();
+      if (revision !== this.refreshRevision || window.isDestroyed()) {
+        return;
+      }
+      window.setSkipTaskbar(false);
+      restored = true;
+      // Explorer may read the window icon as it restores the taskbar button.
+      // Force the final icon once more after restoration so rapid app-level
+      // theme switches do not rely on a pre-restore setIcon being observed.
+      await this.waitForTaskbarRestore();
       if (revision !== this.refreshRevision || window.isDestroyed()) {
         return;
       }
       this.apply(window, true);
     } finally {
-      // A newer refresh owns restoring the button. An older completion must not
-      // make the taskbar visible early with an intermediate theme.
-      if (revision === this.refreshRevision && !window.isDestroyed()) {
+      if (!restored && revision === this.refreshRevision && !window.isDestroyed()) {
         window.setSkipTaskbar(false);
       }
     }
