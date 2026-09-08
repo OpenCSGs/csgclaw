@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2556,8 +2559,8 @@ func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	params := appServerThreadStartParams(spec, true)
 	tools, ok := params["dynamicTools"].([]map[string]any)
-	if !ok || len(tools) != 1 {
-		t.Fatalf("dynamicTools = %#v, want one typed tool", params["dynamicTools"])
+	if !ok || len(tools) != 2 {
+		t.Fatalf("dynamicTools = %#v, want publish and upload tools", params["dynamicTools"])
 	}
 	tool := tools[0]
 	description := strings.TrimSpace(fmt.Sprint(tool["description"]))
@@ -2574,6 +2577,267 @@ func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
 	required, _ := schema["required"].([]string)
 	if schema["type"] != "object" || properties["path"] == nil || properties["name"] == nil || properties["mimeType"] == nil || len(required) != 1 || required[0] != "path" || schema["additionalProperties"] != false {
 		t.Fatalf("publish file input schema = %#v", schema)
+	}
+}
+
+func TestAppServerReadOnlyThreadOmitsUploadFileDynamicTool(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.ExecutionMode = ExecutionModeReadOnly
+	params := appServerThreadStartParams(spec, true)
+	tools, ok := params["dynamicTools"].([]map[string]any)
+	if !ok || len(tools) != 1 || tools[0]["name"] != appServerPublishFileToolName {
+		t.Fatalf("dynamicTools = %#v, want publish tool only", params["dynamicTools"])
+	}
+}
+
+func TestAppServerUploadFileDynamicToolUploadsToConfiguredMCPSameOrigin(t *testing.T) {
+	var body string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/uploads/file-1" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.ContentLength != int64(len("PDFDATA")) {
+			t.Errorf("ContentLength = %d, want %d", r.ContentLength, len("PDFDATA"))
+		}
+		data, _ := io.ReadAll(r.Body)
+		body = string(data)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.MCPServers = map[string]any{"parser": map[string]any{"url": server.URL + "/mcp"}}
+	if err := os.WriteFile(filepath.Join(spec.WorkspaceDir, "resume.pdf"), []byte("PDFDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	live := &liveSession{
+		spec:                  spec,
+		filePublishingThreads: map[string]bool{"thread-1": true},
+		turnContexts:          testAppServerTurnContexts("thread-1", "turn-1", context.Background()),
+	}
+	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
+		Method: "item/tool/call",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": appServerUploadFileToolName,
+			"arguments": map[string]any{"path": "resume.pdf", "server": "parser", "uploadUri": "/uploads/file-1", "contentType": "application/pdf"},
+		}),
+	})
+	if err != nil || body != "PDFDATA" {
+		t.Fatalf("response = %#v, error = %v, body = %q", response, err, body)
+	}
+	result, _ := response.(map[string]any)
+	if result["success"] != true {
+		t.Fatalf("response = %#v", response)
+	}
+}
+
+func TestAppServerUploadFileDynamicToolRejectsReadOnlyMode(t *testing.T) {
+	live := &liveSession{
+		spec:                  SessionSpec{ExecutionMode: ExecutionModeReadOnly},
+		filePublishingThreads: map[string]bool{"thread-1": true},
+		turnContexts:          testAppServerTurnContexts("thread-1", "turn-1", context.Background()),
+	}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
+	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
+		Method: "item/tool/call",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": appServerUploadFileToolName,
+			"arguments": map[string]any{"path": "secret.txt", "server": "parser", "uploadUri": "/upload"},
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _ := response.(map[string]any)
+	if result["success"] != false || !strings.Contains(fmt.Sprint(result), "read-only mode") {
+		t.Fatalf("response = %#v, want read-only rejection", response)
+	}
+}
+
+func TestAppServerUploadFileDynamicToolRejectsMismatchedTurn(t *testing.T) {
+	live := &liveSession{
+		spec:                  testAppServerSessionSpec(t.TempDir()),
+		filePublishingThreads: map[string]bool{"thread-1": true},
+		turnContexts:          testAppServerTurnContexts("thread-1", "turn-2", context.Background()),
+	}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
+	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
+		Method: "item/tool/call",
+		Params: mustJSONRaw(t, map[string]any{
+			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": appServerUploadFileToolName,
+			"arguments": map[string]any{"path": "secret.txt", "server": "parser", "uploadUri": "/upload"},
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _ := response.(map[string]any)
+	if result["success"] != false || !strings.Contains(fmt.Sprint(result), "outside an active turn") {
+		t.Fatalf("response = %#v, want mismatched-turn rejection", response)
+	}
+}
+
+func TestAppServerUploadContextBecomesAvailableOnTurnStarted(t *testing.T) {
+	waiter := &appServerTurnWaiter{threadID: "thread-1"}
+	live := &liveSession{}
+	ctx := context.Background()
+	live.setAppServerTurnContext("thread-1", waiter, ctx)
+	if _, ok := live.appServerTurnContext("thread-1", "turn-1"); ok {
+		t.Fatal("upload context became available before turn identity was established")
+	}
+	if !waiter.apply(&appServerTurnResult{started: true, turnID: "turn-1"}) {
+		t.Fatal("turn/started did not establish waiter identity")
+	}
+	got, ok := live.appServerTurnContext("thread-1", "turn-1")
+	if !ok || got != ctx {
+		t.Fatalf("upload context = (%v, %v), want active turn context", got, ok)
+	}
+	if _, ok := live.appServerTurnContext("thread-1", "turn-old"); ok {
+		t.Fatal("stale turn reused active upload context")
+	}
+}
+
+func testAppServerTurnContexts(threadID, turnID string, ctx context.Context) map[string]appServerTurnContext {
+	return map[string]appServerTurnContext{
+		threadID: {waiter: &appServerTurnWaiter{threadID: threadID, turnID: turnID}, ctx: ctx},
+	}
+}
+
+func TestAppServerUploadFileDynamicToolRejectsCrossOriginURI(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.MCPServers = map[string]any{"parser": map[string]any{"url": "https://mcp.example.com/mcp"}}
+	if err := os.WriteFile(filepath.Join(spec.WorkspaceDir, "resume.pdf"), []byte("PDFDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := uploadAppServerWorkspaceFile(context.Background(), spec, appServerUploadFileArgs{
+		Path: "resume.pdf", Server: "parser", UploadURI: "https://evil.example/upload",
+	})
+	if err == nil || !strings.Contains(err.Error(), "same-origin") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestAppServerUploadFileDynamicToolRejectsEmptyUploadURI(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.MCPServers = map[string]any{"parser": map[string]any{"url": "https://mcp.example.com/mcp"}}
+	if err := os.WriteFile(filepath.Join(spec.WorkspaceDir, "resume.pdf"), []byte("PDFDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := uploadAppServerWorkspaceFile(context.Background(), spec, appServerUploadFileArgs{
+		Path: "resume.pdf", Server: "parser", UploadURI: " ",
+	})
+	if err == nil || !strings.Contains(err.Error(), "upload URI is required") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestAppServerUploadRequestDoesNotReadPastValidatedSize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "growing.txt")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	request, err := newAppServerUploadRequest(context.Background(), "https://mcp.example.com/upload", file, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("added after validation"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(request.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != 0 || request.ContentLength != 0 {
+		t.Fatalf("body = %q, ContentLength = %d; want validated empty upload", body, request.ContentLength)
+	}
+}
+
+func TestAppServerUploadFileDynamicToolRejectsRedirect(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/redirected" {
+			t.Error("upload redirect was followed")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Location", "/redirected")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.MCPServers = map[string]any{"parser": map[string]any{"url": server.URL + "/mcp"}}
+	if err := os.WriteFile(filepath.Join(spec.WorkspaceDir, "resume.pdf"), []byte("PDFDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := uploadAppServerWorkspaceFile(context.Background(), spec, appServerUploadFileArgs{
+		Path: "resume.pdf", Server: "parser", UploadURI: "/uploads/file-1",
+	})
+	if err == nil || !strings.Contains(err.Error(), "redirects are not allowed") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestAppServerUploadFileDynamicToolCancelsWithActiveTurn(t *testing.T) {
+	requestStarted := make(chan struct{})
+	requestCanceled := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		close(requestStarted)
+		<-r.Context().Done()
+		close(requestCanceled)
+	}))
+	defer server.Close()
+
+	spec := testAppServerSessionSpec(t.TempDir())
+	spec.MCPServers = map[string]any{"parser": map[string]any{"url": server.URL + "/mcp"}}
+	if err := os.WriteFile(filepath.Join(spec.WorkspaceDir, "resume.pdf"), []byte("PDFDATA"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	turnCtx, cancelTurn := context.WithCancel(context.Background())
+	live := &liveSession{
+		spec:                  spec,
+		filePublishingThreads: map[string]bool{"thread-1": true},
+		turnContexts:          testAppServerTurnContexts("thread-1", "turn-1", turnCtx),
+	}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
+	params := mustJSONRaw(t, map[string]any{
+		"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": appServerUploadFileToolName,
+		"arguments": map[string]any{"path": "resume.pdf", "server": "parser", "uploadUri": "/uploads/file-1"},
+	})
+	result := make(chan any, 1)
+	go func() {
+		response, _ := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
+			Method: "item/tool/call",
+			Params: params,
+		})
+		result <- response
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("upload request did not start")
+	}
+	cancelTurn()
+	select {
+	case response := <-result:
+		got, _ := response.(map[string]any)
+		if got["success"] != false {
+			t.Fatalf("response = %#v, want canceled upload failure", response)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("upload did not stop after turn cancellation")
+	}
+	select {
+	case <-requestCanceled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not observe upload cancellation")
 	}
 }
 
@@ -2948,7 +3212,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 					}
 					return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 				}
-				if len(tools) != 1 {
+				if len(tools) != 2 {
 					t.Fatalf("thread/start dynamicTools = %#v", params["dynamicTools"])
 				}
 				tool, _ := tools[0].(map[string]any)

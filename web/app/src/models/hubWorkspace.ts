@@ -69,6 +69,7 @@ export const HubTemplateErrorCodes = {
   deployResourceUnavailable: "RESOURCE-ERR-1",
   reviewFailed: "AGENT-ERR-23",
   reviewPending: "AGENT-ERR-22",
+  sensitiveCheckPending: "AGENT-ERR-25",
   sensitiveInformation: "SENSITIVE-ERR-0",
   templateAlreadyExists: "template_already_exists",
 } as const;

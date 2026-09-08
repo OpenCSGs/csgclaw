@@ -487,12 +487,17 @@ func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.
 			blocks = append(blocks, TextBlock(part.Text))
 			continue
 		}
+		if part.File == nil || part.File.Resolved == nil {
+			cleanup()
+			return nil, func() {}, a.runtimeInputFileUnavailable("resolve_input", fmt.Errorf("input file is unresolved"))
+		}
+		mediaType := strings.ToLower(strings.TrimSpace(part.File.Resolved.MediaType))
 		path, err := copyVerifiedInput(ctx, workspaceRoot, workspace, turnDir, index, *part.File)
 		if err != nil {
 			cleanup()
 			return nil, func() {}, a.runtimeInputFileUnavailable("copy_input", err)
 		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(part.File.Resolved.MediaType)), "image/") {
+		if strings.HasPrefix(mediaType, "image/") {
 			blocks = append(blocks, LocalImageBlock(path))
 		} else {
 			blocks = append(blocks, TextBlock(fmt.Sprintf("Attached file %q is available in the Runtime workspace at %s", part.File.Resolved.Name, path)))

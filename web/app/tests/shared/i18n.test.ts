@@ -55,6 +55,13 @@ describe("i18n messages", () => {
         createTranslator("en"),
       ),
     ).toContain("community repository already exists");
+    const pendingSensitiveCheck = { status: 409, code: "AGENT-ERR-25", message: "sensitive check pending" };
+    expect(localizeAPIError(pendingSensitiveCheck, createTranslator("zh"))).toBe(
+      "该智能体模板的敏感内容检查仍在进行中，无法创建智能体。",
+    );
+    expect(localizeAPIError(pendingSensitiveCheck, createTranslator("en"))).toBe(
+      "This agent template is still undergoing sensitive-content review, so the agent cannot be created.",
+    );
   });
 
   it("preserves the upstream reason for generic template publishing failures", () => {

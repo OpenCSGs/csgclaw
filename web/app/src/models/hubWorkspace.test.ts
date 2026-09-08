@@ -127,6 +127,7 @@ describe("hubTemplateErrorCode", () => {
       HubTemplateErrorCodes.reviewPending,
     );
     expect(hubTemplateErrorCode({ code: "RESOURCE-ERR-1" })).toBe(HubTemplateErrorCodes.deployResourceUnavailable);
+    expect(hubTemplateErrorCode({ code: "AGENT-ERR-25" })).toBe(HubTemplateErrorCodes.sensitiveCheckPending);
   });
 
   it("does not infer codes from legacy error messages", () => {
