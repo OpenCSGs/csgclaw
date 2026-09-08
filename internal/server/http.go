@@ -100,6 +100,10 @@ func Run(opts Options) error {
 	if opts.Context == nil {
 		opts.Context = context.Background()
 	}
+	runCtx, cancelRun := context.WithCancel(opts.Context)
+	defer cancelRun()
+	streamCtx, cancelStreams := context.WithCancel(context.Background())
+	defer cancelStreams()
 
 	listener := opts.Listener
 	if listener == nil {
@@ -111,6 +115,7 @@ func Run(opts Options) error {
 	}
 
 	handler := newHandler(opts)
+	handler.SetEventStreamShutdown(streamCtx.Done())
 	router := handler.Routes()
 	router.Handle("/*", uiFallbackHandler())
 
@@ -181,8 +186,6 @@ func Run(opts Options) error {
 		go opts.ScheduledTask.Start(opts.Context)
 	}
 
-	runCtx, cancelRun := context.WithCancel(opts.Context)
-	defer cancelRun()
 	shutdownDone := make(chan struct{})
 	var shutdownErr error
 	go func() {
@@ -192,6 +195,9 @@ func Run(opts Options) error {
 			shutdownErr = opts.BeforeShutdown(hookCtx)
 			cancel()
 		}
+		// Keep event subscriptions available to the shutdown hook, then end
+		// them while ordinary requests retain their HTTP shutdown grace period.
+		cancelStreams()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		for _, endpoint := range endpoints {

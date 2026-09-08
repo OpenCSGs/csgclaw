@@ -92,6 +92,8 @@ func (h *Handler) streamFeishuEvents(w http.ResponseWriter, r *http.Request, tar
 		select {
 		case <-r.Context().Done():
 			return
+		case <-h.eventStreamShutdown:
+			return
 		case <-ticker.C:
 			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
 				return
