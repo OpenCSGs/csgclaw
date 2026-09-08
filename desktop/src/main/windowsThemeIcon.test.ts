@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { windowsThemeIconName, WindowsTaskbarRefreshScheduler } from "./windowsThemeIcon";
 
-test("continuous clicks refresh at fixed deadlines using the latest selection", (t) => {
+test("continuous clicks refresh at fixed deadlines using the latest selection", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const scheduler = new WindowsTaskbarRefreshScheduler();
   let selected = "light";
   const shown: string[] = [];
-  const refresh = () => shown.push(selected);
+  const refresh = () => {
+    shown.push(selected);
+  };
   scheduler.request(refresh);
   for (let i = 0; i < 9; i++) {
     t.mock.timers.tick(10);
@@ -17,6 +19,7 @@ test("continuous clicks refresh at fixed deadlines using the latest selection", 
   assert.deepEqual(shown, []);
   t.mock.timers.tick(10);
   assert.deepEqual(shown, ["dark"]);
+  await Promise.resolve();
   selected = "light";
   scheduler.request(refresh);
   t.mock.timers.tick(100);
@@ -29,13 +32,47 @@ test("cleanup cancels a pending taskbar refresh", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const scheduler = new WindowsTaskbarRefreshScheduler();
   let calls = 0;
-  scheduler.request(() => calls++);
+  scheduler.request(() => {
+    calls++;
+  });
   scheduler.cancel();
   t.mock.timers.tick(100);
   assert.equal(calls, 0);
-  scheduler.request(() => calls++);
+  scheduler.request(() => {
+    calls++;
+  });
   t.mock.timers.tick(100);
   assert.equal(calls, 1);
+});
+
+test("runs a final refresh when theme changes during an active taskbar refresh", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const scheduler = new WindowsTaskbarRefreshScheduler();
+  let selected = "light";
+  const shown: string[] = [];
+  let finishRefresh: (() => void) | undefined;
+
+  scheduler.request(
+    () =>
+      new Promise<void>((resolve) => {
+        shown.push(selected);
+        finishRefresh = resolve;
+      }),
+  );
+  t.mock.timers.tick(100);
+  assert.deepEqual(shown, ["light"]);
+
+  selected = "dark";
+  scheduler.request(() => {
+    shown.push(selected);
+  });
+  t.mock.timers.tick(1000);
+  assert.deepEqual(shown, ["light"]);
+
+  finishRefresh?.();
+  await Promise.resolve();
+  t.mock.timers.tick(100);
+  assert.deepEqual(shown, ["light", "dark"]);
 });
 
 test("uses the app theme before the system theme for Windows icons", () => {

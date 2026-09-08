@@ -1,21 +1,34 @@
 import type { DesktopThemeSource } from "../shared/desktopBridge.types";
 import { shouldUseDarkThemeIcon } from "../shared/desktopTheme";
 
-// A fixed deadline, not trailing debounce: repeated clicks cannot starve refresh.
 export class WindowsTaskbarRefreshScheduler {
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private refreshActive = false;
+  private pending = false;
 
-  request(refresh: () => void): void {
-    if (this.timer !== null) return;
+  request(refresh: () => void | Promise<void>): void {
+    this.pending = true;
+    if (this.timer !== null || this.refreshActive) return;
+    this.schedule(refresh);
+  }
+
+  private schedule(refresh: () => void | Promise<void>): void {
     this.timer = setTimeout(() => {
       this.timer = null;
-      refresh();
+      if (!this.pending) return;
+      this.pending = false;
+      this.refreshActive = true;
+      void Promise.resolve(refresh()).finally(() => {
+        this.refreshActive = false;
+        if (this.pending) this.schedule(refresh);
+      });
     }, 100);
   }
 
   cancel(): void {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
+    this.pending = false;
   }
 }
 
