@@ -1,9 +1,11 @@
 import path from "node:path";
-import { BrowserWindow, session, type NativeImage, type Session } from "electron";
+import { app, BrowserWindow, session, shell, type NativeImage, type Session } from "electron";
 import { installNavigationPolicy } from "./navigationPolicy";
 import { isWindowsDesktop, windowsAppIconPath } from "./platform";
 import { installPermissionPolicy } from "./permissionPolicy";
-import { windowsTaskbarAppDetails } from "./windowsTaskbar";
+import { WindowsTaskbarIcon } from "./windowsTaskbar";
+import { syncWindowsShortcutIcon } from "./windowsShortcuts";
+import { logDesktopError } from "./desktopLogger";
 
 export type WindowManagerOptions = {
   onLoadFailure: (error: Error) => void;
@@ -14,8 +16,22 @@ export class WindowManager {
   private allowedOrigin = "";
   private authToken = "";
   private mainWindow: BrowserWindow | null = null;
-  private windowsIcon: NativeImage | null = null;
-  private windowsIconPath = "";
+  private readonly windowsTaskbarIcon = new WindowsTaskbarIcon(
+    process.platform,
+    process.windowsStore,
+    (iconPath) => syncWindowsShortcutIcon({
+      platform: process.platform,
+      windowsStore: process.windowsStore,
+      packaged: app.isPackaged,
+      executablePath: process.execPath,
+      appData: app.getPath("appData"),
+      userData: app.getPath("userData"),
+      desktop: app.getPath("desktop"),
+      iconPath,
+      shell,
+      onError: (error) => logDesktopError("windows-shortcut-icon-failed", error),
+    }),
+  );
   private readonly desktopSession: Session;
 
   constructor(private readonly options: WindowManagerOptions) {
@@ -48,7 +64,7 @@ export class WindowManager {
       backgroundColor: "#0d1017",
       ...(isWindowsDesktop
         ? {
-            icon: this.windowsIcon ?? windowsAppIconPath(),
+            icon: this.windowsTaskbarIcon.image ?? windowsAppIconPath(),
           }
         : {}),
       webPreferences: {
@@ -67,7 +83,10 @@ export class WindowManager {
       },
     });
     this.mainWindow = window;
-    this.applyWindowsTaskbarDetails(window);
+    this.windowsTaskbarIcon.apply(window);
+    // A hidden window has no live taskbar button. Restore the cached presentation
+    // when it is shown, including after closing to the tray.
+    window.on("show", () => this.windowsTaskbarIcon.apply(window, true));
     installNavigationPolicy(window, this.allowedOrigin);
 
     window.once("ready-to-show", () => {
@@ -115,20 +134,19 @@ export class WindowManager {
   }
 
   setWindowsIcon(icon: NativeImage, iconPath: string): void {
-    if (!isWindowsDesktop || icon.isEmpty()) {
-      return;
-    }
-    const iconChanged = this.windowsIconPath !== iconPath;
-    this.windowsIcon = icon;
-    this.windowsIconPath = iconPath;
+    this.windowsTaskbarIcon.select(icon, iconPath);
     const window = this.mainWindow;
-    if (window && !window.isDestroyed()) {
-      window.setIcon(icon);
-      if (iconChanged && !process.windowsStore) {
-        window.setSkipTaskbar(true);
-        this.applyWindowsTaskbarDetails(window);
-        window.setSkipTaskbar(false);
-      }
+    if (window) {
+      this.windowsTaskbarIcon.apply(window);
+    }
+  }
+
+  async refreshWindowsIcon(): Promise<void> {
+    const window = this.mainWindow;
+    if (window) {
+      await this.windowsTaskbarIcon.refresh(window).catch((error) =>
+        logDesktopError("windows-taskbar-icon-refresh-failed", error),
+      );
     }
   }
 
@@ -141,18 +159,6 @@ export class WindowManager {
 
   get window(): BrowserWindow | null {
     return this.mainWindow && !this.mainWindow.isDestroyed() ? this.mainWindow : null;
-  }
-
-  private applyWindowsTaskbarDetails(window: BrowserWindow): void {
-    const details = windowsTaskbarAppDetails(
-      process.platform,
-      process.windowsStore,
-      this.windowsIconPath,
-    );
-    if (!details) {
-      return;
-    }
-    window.setAppDetails(details);
   }
 
   private installRequestAuthentication(): void {

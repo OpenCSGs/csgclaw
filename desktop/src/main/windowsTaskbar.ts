@@ -1,3 +1,4 @@
+import type { BrowserWindow, NativeImage } from "electron";
 import { DesktopPlatform } from "../shared/desktopEnvironment";
 
 export const windowsAppUserModelID = "com.squirrel.csgclaw_desktop.CSGClaw";
@@ -25,4 +26,126 @@ export function windowsTaskbarAppDetails(
     appIconPath: iconPath,
     appIconIndex: 0,
   };
+}
+
+type TaskbarWindow = Pick<
+  BrowserWindow,
+  "isDestroyed" | "isVisible" | "setIcon" | "setAppDetails" | "setSkipTaskbar"
+>;
+
+type ThemeIcon = {
+  image: NativeImage;
+  path: string;
+  sourcePath: string;
+};
+
+const waitForWindowsTaskbarRemoval = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, 75));
+
+const waitForWindowsTaskbarRestore = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, 0));
+
+export class WindowsTaskbarIcon {
+  private selected: ThemeIcon | null = null;
+  private readonly applied = new WeakMap<TaskbarWindow, ThemeIcon>();
+  private refreshRevision = 0;
+  private persisted: ThemeIcon | null = null;
+
+  constructor(
+    private readonly platform: NodeJS.Platform,
+    private readonly windowsStore: boolean | undefined,
+    private readonly syncShortcutIcon: (iconPath: string) => string = (
+      iconPath,
+    ) => iconPath,
+    private readonly waitForTaskbarRemoval: () => Promise<void> =
+      waitForWindowsTaskbarRemoval,
+    private readonly waitForTaskbarRestore: () => Promise<void> =
+      waitForWindowsTaskbarRestore,
+  ) {}
+
+  get image(): NativeImage | undefined {
+    return this.selected?.image;
+  }
+
+  select(image: NativeImage, iconPath: string): void {
+    if (
+      this.platform !== DesktopPlatform.Windows ||
+      !iconPath ||
+      image.isEmpty() ||
+      this.selected?.sourcePath === iconPath
+    ) {
+      return;
+    }
+    this.selected = {
+      image,
+      path: iconPath,
+      sourcePath: iconPath,
+    };
+  }
+
+  apply(window: TaskbarWindow, force = false): void {
+    const icon = this.selected;
+    if (
+      !icon ||
+      window.isDestroyed() ||
+      (!force && this.applied.get(window) === icon)
+    ) {
+      return;
+    }
+    const details = windowsTaskbarAppDetails(
+      this.platform,
+      this.windowsStore,
+      icon.path,
+    );
+    if (details) window.setAppDetails(details);
+    window.setIcon(icon.image);
+    this.applied.set(window, icon);
+  }
+
+  async refresh(window: TaskbarWindow): Promise<void> {
+    if (!this.selected || window.isDestroyed()) {
+      return;
+    }
+    // Shortcut enumeration and writes must never block the immediate icon path.
+    // The caller coalesces refreshes, persisting the latest selection per window.
+    if (!this.windowsStore && this.persisted !== this.selected) {
+      const icon = this.selected;
+      try {
+        icon.path = this.syncShortcutIcon(icon.sourcePath);
+        this.persisted = icon;
+      } catch {
+        // Keep the resource path and allow a later refresh to retry persistence.
+      }
+    }
+    if (this.windowsStore || !window.isVisible()) {
+      this.apply(window, true);
+      return;
+    }
+
+    const revision = ++this.refreshRevision;
+    let restored = false;
+    window.setSkipTaskbar(true);
+    try {
+      // Give Explorer a separate message-loop window to remove the old button
+      // before recreating it for the latest window icon.
+      await this.waitForTaskbarRemoval();
+      if (revision !== this.refreshRevision || window.isDestroyed()) {
+        return;
+      }
+      window.setSkipTaskbar(false);
+      restored = true;
+      // Explorer may read the window icon as it restores the taskbar button.
+      // Force the final icon once more after restoration so rapid app-level
+      // theme switches do not rely on a pre-restore setIcon being observed.
+      await this.waitForTaskbarRestore();
+      if (revision !== this.refreshRevision || window.isDestroyed()) {
+        return;
+      }
+      this.apply(window, true);
+    } finally {
+      if (!restored && revision === this.refreshRevision && !window.isDestroyed()) {
+        window.setSkipTaskbar(false);
+      }
+    }
+  }
 }
