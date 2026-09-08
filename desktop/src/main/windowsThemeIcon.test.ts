@@ -7,7 +7,7 @@ test("continuous clicks refresh at fixed deadlines using the latest selection", 
   const scheduler = new WindowsTaskbarRefreshScheduler();
   let selected = "light";
   const shown: string[] = [];
-  const refresh = () => {
+  const refresh = async () => {
     shown.push(selected);
   };
   scheduler.request(refresh);
@@ -32,13 +32,13 @@ test("cleanup cancels a pending taskbar refresh", (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const scheduler = new WindowsTaskbarRefreshScheduler();
   let calls = 0;
-  scheduler.request(() => {
+  scheduler.request(async () => {
     calls++;
   });
   scheduler.cancel();
   t.mock.timers.tick(100);
   assert.equal(calls, 0);
-  scheduler.request(() => {
+  scheduler.request(async () => {
     calls++;
   });
   t.mock.timers.tick(100);
@@ -63,7 +63,7 @@ test("runs a final refresh when theme changes during an active taskbar refresh",
   assert.deepEqual(shown, ["light"]);
 
   selected = "dark";
-  scheduler.request(() => {
+  scheduler.request(async () => {
     shown.push(selected);
   });
   t.mock.timers.tick(1000);

@@ -141,10 +141,10 @@ export class WindowManager {
     }
   }
 
-  refreshWindowsIcon(): void {
+  async refreshWindowsIcon(): Promise<void> {
     const window = this.mainWindow;
     if (window) {
-      void this.windowsTaskbarIcon.refresh(window).catch((error) =>
+      await this.windowsTaskbarIcon.refresh(window).catch((error) =>
         logDesktopError("windows-taskbar-icon-refresh-failed", error),
       );
     }

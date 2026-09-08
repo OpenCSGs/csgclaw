@@ -6,13 +6,15 @@ export class WindowsTaskbarRefreshScheduler {
   private refreshActive = false;
   private pending = false;
 
-  request(refresh: () => void | Promise<void>): void {
+  // Require completion to propagate through every caller. A void callback lets
+  // overlapping hide/show cycles race even though refreshActive is set.
+  request(refresh: () => Promise<void>): void {
     this.pending = true;
     if (this.timer !== null || this.refreshActive) return;
     this.schedule(refresh);
   }
 
-  private schedule(refresh: () => void | Promise<void>): void {
+  private schedule(refresh: () => Promise<void>): void {
     this.timer = setTimeout(() => {
       this.timer = null;
       if (!this.pending) return;

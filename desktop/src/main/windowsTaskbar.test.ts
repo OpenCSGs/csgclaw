@@ -42,6 +42,8 @@ function fakeIcon(empty = false): NativeImage {
   } as NativeImage;
 }
 
+import { WindowsTaskbarRefreshScheduler } from "./windowsThemeIcon";
+
 function fakeWindow() {
   return {
     destroyed: false,
@@ -66,6 +68,40 @@ function fakeWindow() {
     },
   };
 }
+
+test("scheduled refresh serializes slow shell work and persists the final theme", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const scheduler = new WindowsTaskbarRefreshScheduler();
+  const window = fakeWindow();
+  const persisted: string[] = [];
+  const releases: (() => void)[] = [];
+  const taskbar = new WindowsTaskbarIcon("win32", false, (path) => {
+    persisted.push(path);
+    return path;
+  }, () => new Promise<void>((resolve) => releases.push(resolve)), async () => {});
+  const refresh = async () => { await taskbar.refresh(window); };
+  taskbar.select(fakeIcon(), "light.ico");
+  taskbar.apply(window);
+  scheduler.request(refresh);
+  t.mock.timers.tick(100);
+  taskbar.select(fakeIcon(), "dark.ico");
+  taskbar.apply(window);
+  scheduler.request(refresh);
+  // A slow Explorer cycle must stay exclusive even across multiple deadlines.
+  t.mock.timers.tick(1000);
+  assert.deepEqual(window.taskbarVisibility, [true]);
+  releases.shift()!();
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.deepEqual(window.taskbarVisibility, [true, false]);
+  t.mock.timers.tick(100);
+  assert.deepEqual(persisted, ["light.ico", "dark.ico"]);
+  releases.shift()!();
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.deepEqual(window.taskbarVisibility, [true, false, true, false]);
+  assert.equal(window.details.at(-1)?.appIconPath, "dark.ico");
+  t.mock.timers.tick(1000);
+  assert.equal(window.taskbarVisibility.length, 4);
+});
 
 test("caches the selected theme before opening and restores it for a replacement window", () => {
   const taskbar = new WindowsTaskbarIcon(DesktopPlatform.Windows, false);

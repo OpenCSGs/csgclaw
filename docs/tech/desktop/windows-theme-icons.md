@@ -20,6 +20,10 @@ refresh. Each active 100 ms window processes the latest selection, including
 changes during the 75 ms removal wait. No refresh repeats while idle. These are
 timer targets, not display latency guarantees. Button reconstruction can still
 cause visible movement; native Windows testing is required to assess smoothness.
+The lifecycle and window manager must both await the refresh promise: otherwise
+the scheduler considers a hide/restore cycle complete before Explorer restoration.
+The scheduler requires an asynchronous callback to catch missing return values
+at compile time. A pending selection is persisted in a subsequent serialized cycle.
 
 For installed Squirrel builds, Explorer can prefer the shortcut icon for the
 application's taskbar group over `BrowserWindow.setIcon()`. Theme changes update

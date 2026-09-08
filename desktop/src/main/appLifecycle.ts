@@ -438,8 +438,8 @@ export class AppLifecycle {
     if (process.platform !== DesktopPlatform.Windows) {
       return;
     }
-    this.windowsTaskbarRefreshScheduler.request(() => {
-      this.windowManager?.refreshWindowsIcon();
+    this.windowsTaskbarRefreshScheduler.request(async () => {
+      await this.windowManager?.refreshWindowsIcon();
     });
   }
 
