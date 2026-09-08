@@ -2661,6 +2661,7 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 	root := t.TempDir()
 	hostHome := t.TempDir()
 	t.Setenv("HOME", hostHome)
+	t.Setenv("CODEX_HOME", "")
 	if err := os.MkdirAll(filepath.Join(hostHome, ".codex"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -2674,9 +2675,10 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		`name = "Stale host proxy"`,
 		`base_url = "https://stale.example/v1"`,
 		``,
-		`[model_providers.preserved]`,
-		`name = "Preserved provider"`,
-		`base_url = "https://preserved.example/v1"`,
+		`[model_providers.dongfang]`,
+		`name = "Unused host provider"`,
+		`base_url = "https://unused.example/v1"`,
+		`api_key = "unused-test-key"`,
 		``,
 		`[[skills.config]]`,
 		`name = "superpowers:brainstorming"`,
@@ -2756,8 +2758,6 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 	}
 	for _, want := range []string{
 		`approval_policy = "on-request"`,
-		`[model_providers.preserved]`,
-		`base_url = "https://preserved.example/v1"`,
 		csgclawProviderBeginMarker,
 		csgclawSandboxBeginMarker,
 		csgclawMultiAgentBeginMarker,
@@ -2774,6 +2774,9 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 		}
 	}
 	for _, unwanted := range []string{
+		`dongfang`,
+		`unused-test-key`,
+		`https://unused.example/v1`,
 		`stale-host-model`,
 		`stale-catalog.json`,
 		`Stale host proxy`,
@@ -2796,6 +2799,13 @@ func TestRuntimeCreateCopiesAndSanitizesHostConfig(t *testing.T) {
 	}
 	if got := parsed["approval_policy"]; got != "on-request" {
 		t.Fatalf("root approval_policy = %#v, want on-request\n%s", got, configText)
+	}
+	hostRaw, err := os.ReadFile(filepath.Join(hostHome, ".codex", configFileName))
+	if err != nil {
+		t.Fatalf("read host config: %v", err)
+	}
+	if string(hostRaw) != hostConfig {
+		t.Fatal("runtime creation changed the host Codex config")
 	}
 }
 

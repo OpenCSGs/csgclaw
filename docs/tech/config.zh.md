@@ -136,6 +136,8 @@ Memory 文件属于自动生成的 runtime state，必须始终生效的 Agent �
 删除 Agent 时仍会删除完整 Agent home，包括 memory。
 
 对于完整的 Codex worker profile，CSGClaw 会写入 `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml`，其中 OpenAI 兼容代理 provider 始终使用 `wire_api = "responses"`，因为 Codex CLI 的 app-server 路径走的是 Responses API。
+当 profile 同时提供模型名称和 base URL 时，CSGClaw 会先清理 Agent 生成配置中继承的 `model_providers`，再写入自身管理的代理 provider。
+已有 Agent 重新生成配置时也会执行清理，避免未使用的宿主 provider 导致只读模式的严格配置检查失败，宿主 Codex 配置保持不变。
 启用 Codex 记忆时，CSGClaw 会设置 `memories.min_rollout_idle_hours = 1`，使用 Codex 支持的最短空闲窗口，让已结束的房间线程更早具备后台提取资格。
 由于 Codex 会跳过当前活跃线程，CSGClaw 会在房间对话轮次成功结束后创建不可见 checkpoint，每个会话每小时最多一次，同时保持原线程继续服务当前房间。
 Checkpoint 空闲满一小时后，CSGClaw 会在 Runtime 私有的 maintenance thread 上发送不可见维护轮次，因此即使用户始终不进入其他房间，也能启动记忆提取。
