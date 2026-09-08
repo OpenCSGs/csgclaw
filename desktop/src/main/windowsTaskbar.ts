@@ -46,6 +46,7 @@ export class WindowsTaskbarIcon {
   private selected: ThemeIcon | null = null;
   private readonly applied = new WeakMap<TaskbarWindow, ThemeIcon>();
   private refreshRevision = 0;
+  private persisted: ThemeIcon | null = null;
 
   constructor(
     private readonly platform: NodeJS.Platform,
@@ -70,17 +71,9 @@ export class WindowsTaskbarIcon {
     ) {
       return;
     }
-    let path = iconPath;
-    if (!this.windowsStore) {
-      try {
-        path = this.syncShortcutIcon(iconPath);
-      } catch {
-        path = iconPath;
-      }
-    }
     this.selected = {
       image,
-      path,
+      path: iconPath,
       sourcePath: iconPath,
     };
   }
@@ -107,6 +100,17 @@ export class WindowsTaskbarIcon {
   async refresh(window: TaskbarWindow): Promise<void> {
     if (!this.selected || window.isDestroyed()) {
       return;
+    }
+    // Shortcut enumeration and writes must never block the immediate icon path.
+    // The caller debounces refresh, so only the final selection is persisted.
+    if (!this.windowsStore && this.persisted !== this.selected) {
+      const icon = this.selected;
+      try {
+        icon.path = this.syncShortcutIcon(icon.sourcePath);
+        this.persisted = icon;
+      } catch {
+        // Keep the resource path and allow a later refresh to retry persistence.
+      }
     }
     if (this.windowsStore || !window.isVisible()) {
       this.apply(window, true);

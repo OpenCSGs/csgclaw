@@ -124,7 +124,7 @@ test("MSIX changes presentation without assigning Squirrel taskbar properties", 
   assert.deepEqual(window.taskbarVisibility, []);
 });
 
-test("coalesces repeated theme events but reapplies the icon when shown again", () => {
+test("coalesces repeated theme events but reapplies the icon when shown again", async () => {
   let syncs = 0;
   const taskbar = new WindowsTaskbarIcon(DesktopPlatform.Windows, false, () => {
     syncs++;
@@ -136,14 +136,40 @@ test("coalesces repeated theme events but reapplies the icon when shown again", 
   taskbar.select(fakeIcon(), "light.ico");
   taskbar.apply(window);
   assert.equal(window.icons.length, 1);
-  assert.equal(syncs, 1);
-  assert.equal(window.details[0]?.appIconPath, "persistent-light.ico");
+  assert.equal(syncs, 0);
+  assert.equal(window.details[0]?.appIconPath, "light.ico");
   taskbar.apply(window, true);
   assert.equal(window.icons.length, 2);
   assert.deepEqual(window.taskbarVisibility, []);
   window.destroyed = true;
   taskbar.apply(window, true);
   assert.equal(window.icons.length, 2);
+  window.destroyed = false;
+  window.visible = false;
+  await taskbar.refresh(window);
+  assert.equal(syncs, 1);
+  assert.equal(window.details.at(-1)?.appIconPath, "persistent-light.ico");
+  await taskbar.refresh(window);
+  assert.equal(syncs, 1);
+});
+
+test("rapid switches update live icons before persisting only the final shortcut", async () => {
+  const writes: string[] = [];
+  const window = fakeWindow();
+  const taskbar = new WindowsTaskbarIcon(DesktopPlatform.Windows, false, (path) => {
+    assert.equal(window.icons.length, 3);
+    writes.push(path);
+    return `persistent-${path}`;
+  }, async () => {});
+  for (const path of ["light.ico", "dark.ico", "light.ico"]) {
+    taskbar.select(fakeIcon(), path);
+    taskbar.apply(window);
+  }
+  assert.deepEqual(writes, []);
+  assert.deepEqual(window.taskbarVisibility, []);
+  await taskbar.refresh(window);
+  assert.deepEqual(writes, ["light.ico"]);
+  assert.equal(window.details.at(-1)?.appIconPath, "persistent-light.ico");
 });
 
 test("refreshes the final taskbar icon after rapid theme changes settle", async () => {
@@ -287,15 +313,23 @@ test("retries a failed native update instead of caching it as applied", () => {
   assert.deepEqual(window.taskbarVisibility, []);
 });
 
-test("keeps updating the live icon if shortcut icon persistence fails", () => {
+test("keeps updating the live icon if shortcut icon persistence fails", async () => {
+  let attempts = 0;
   const taskbar = new WindowsTaskbarIcon(DesktopPlatform.Windows, false, () => {
+    attempts++;
     throw new Error("Shortcut is locked");
   });
   const window = fakeWindow();
+  window.visible = false;
   taskbar.select(fakeIcon(), "dark.ico");
   taskbar.apply(window);
   assert.equal(window.icons.length, 1);
   assert.equal(window.details[0]?.appIconPath, "dark.ico");
+  await taskbar.refresh(window);
+  await taskbar.refresh(window);
+  assert.equal(attempts, 2);
+  assert.equal(window.icons.length, 3);
+  assert.equal(window.details.at(-1)?.appIconPath, "dark.ico");
 });
 
 test("does not add a taskbar button for a window hidden to the tray", () => {

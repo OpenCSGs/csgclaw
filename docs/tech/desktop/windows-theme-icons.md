@@ -11,6 +11,13 @@ The taskbar button is removed after its own 300 ms debounce, then restored with
 the latest icon after a separate 75 ms Explorer processing window. Superseded
 refreshes cannot restore the button early with an intermediate theme.
 
+Live window icon updates use the bundled icon immediately. Shortcut enumeration,
+icon persistence and shortcut writes run only for the final selection in the
+debounced taskbar refresh. Rapid intermediate themes no longer perform these
+synchronous disk operations before updating the live icon. The 300 ms / 75 ms
+button reconstruction remains a final refresh safeguard; native Windows testing
+is still required to measure visible responsiveness.
+
 For installed Squirrel builds, Explorer can prefer the shortcut icon for the
 application's taskbar group over `BrowserWindow.setIcon()`. Theme changes update
 the **entire shortcut icon**, not an overlay, in the current user's standard
