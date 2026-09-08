@@ -354,9 +354,10 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	}
 	defer live.removeAppServerTurnWaiter(sessionID, waiter)
 	turnCtx, cancelTurn := context.WithCancel(ctx)
+	live.setAppServerTurnContext(sessionID, waiter, turnCtx)
 	defer func() {
 		cancelTurn()
-		live.clearAppServerTurnContext(sessionID, waiter.currentTurnID())
+		live.clearAppServerTurnContext(sessionID, waiter)
 	}()
 
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
@@ -384,7 +385,6 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
-	live.setAppServerTurnContext(sessionID, waiter.currentTurnID(), turnCtx)
 	if req.OnAccepted != nil {
 		req.OnAccepted()
 	}
@@ -1432,14 +1432,13 @@ func (s *liveSession) removeAppServerTurnWaiter(threadID string, waiter *appServ
 }
 
 type appServerTurnContext struct {
-	turnID string
+	waiter *appServerTurnWaiter
 	ctx    context.Context
 }
 
-func (s *liveSession) setAppServerTurnContext(threadID, turnID string, ctx context.Context) {
+func (s *liveSession) setAppServerTurnContext(threadID string, waiter *appServerTurnWaiter, ctx context.Context) {
 	threadID = strings.TrimSpace(threadID)
-	turnID = strings.TrimSpace(turnID)
-	if s == nil || threadID == "" || turnID == "" || ctx == nil {
+	if s == nil || threadID == "" || waiter == nil || ctx == nil {
 		return
 	}
 	s.mu.Lock()
@@ -1447,10 +1446,10 @@ func (s *liveSession) setAppServerTurnContext(threadID, turnID string, ctx conte
 	if s.turnContexts == nil {
 		s.turnContexts = make(map[string]appServerTurnContext)
 	}
-	s.turnContexts[threadID] = appServerTurnContext{turnID: turnID, ctx: ctx}
+	s.turnContexts[threadID] = appServerTurnContext{waiter: waiter, ctx: ctx}
 }
 
-func (s *liveSession) clearAppServerTurnContext(threadID, turnID string) {
+func (s *liveSession) clearAppServerTurnContext(threadID string, waiter *appServerTurnWaiter) {
 	if s == nil {
 		return
 	}
@@ -1458,7 +1457,7 @@ func (s *liveSession) clearAppServerTurnContext(threadID, turnID string) {
 	defer s.mu.Unlock()
 	threadID = strings.TrimSpace(threadID)
 	active, ok := s.turnContexts[threadID]
-	if ok && active.turnID == strings.TrimSpace(turnID) {
+	if ok && active.waiter == waiter {
 		delete(s.turnContexts, threadID)
 	}
 }
@@ -1470,7 +1469,7 @@ func (s *liveSession) appServerTurnContext(threadID, turnID string) (context.Con
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	active, ok := s.turnContexts[strings.TrimSpace(threadID)]
-	if !ok || active.turnID != strings.TrimSpace(turnID) || active.ctx == nil {
+	if !ok || active.waiter == nil || active.ctx == nil || active.waiter.currentTurnID() != strings.TrimSpace(turnID) {
 		return nil, false
 	}
 	return active.ctx, true

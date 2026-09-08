@@ -2614,7 +2614,7 @@ func TestAppServerUploadFileDynamicToolUploadsToConfiguredMCPSameOrigin(t *testi
 	live := &liveSession{
 		spec:                  spec,
 		filePublishingThreads: map[string]bool{"thread-1": true},
-		turnContexts:          map[string]appServerTurnContext{"thread-1": {turnID: "turn-1", ctx: context.Background()}},
+		turnContexts:          testAppServerTurnContexts("thread-1", "turn-1", context.Background()),
 	}
 	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
 		Method: "item/tool/call",
@@ -2636,7 +2636,7 @@ func TestAppServerUploadFileDynamicToolRejectsReadOnlyMode(t *testing.T) {
 	live := &liveSession{
 		spec:                  SessionSpec{ExecutionMode: ExecutionModeReadOnly},
 		filePublishingThreads: map[string]bool{"thread-1": true},
-		turnContexts:          map[string]appServerTurnContext{"thread-1": {turnID: "turn-1", ctx: context.Background()}},
+		turnContexts:          testAppServerTurnContexts("thread-1", "turn-1", context.Background()),
 	}
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
 	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
@@ -2659,7 +2659,7 @@ func TestAppServerUploadFileDynamicToolRejectsMismatchedTurn(t *testing.T) {
 	live := &liveSession{
 		spec:                  testAppServerSessionSpec(t.TempDir()),
 		filePublishingThreads: map[string]bool{"thread-1": true},
-		turnContexts:          map[string]appServerTurnContext{"thread-1": {turnID: "turn-2", ctx: context.Background()}},
+		turnContexts:          testAppServerTurnContexts("thread-1", "turn-2", context.Background()),
 	}
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
 	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
@@ -2675,6 +2675,32 @@ func TestAppServerUploadFileDynamicToolRejectsMismatchedTurn(t *testing.T) {
 	result, _ := response.(map[string]any)
 	if result["success"] != false || !strings.Contains(fmt.Sprint(result), "outside an active turn") {
 		t.Fatalf("response = %#v, want mismatched-turn rejection", response)
+	}
+}
+
+func TestAppServerUploadContextBecomesAvailableOnTurnStarted(t *testing.T) {
+	waiter := &appServerTurnWaiter{threadID: "thread-1"}
+	live := &liveSession{}
+	ctx := context.Background()
+	live.setAppServerTurnContext("thread-1", waiter, ctx)
+	if _, ok := live.appServerTurnContext("thread-1", "turn-1"); ok {
+		t.Fatal("upload context became available before turn identity was established")
+	}
+	if !waiter.apply(&appServerTurnResult{started: true, turnID: "turn-1"}) {
+		t.Fatal("turn/started did not establish waiter identity")
+	}
+	got, ok := live.appServerTurnContext("thread-1", "turn-1")
+	if !ok || got != ctx {
+		t.Fatalf("upload context = (%v, %v), want active turn context", got, ok)
+	}
+	if _, ok := live.appServerTurnContext("thread-1", "turn-old"); ok {
+		t.Fatal("stale turn reused active upload context")
+	}
+}
+
+func testAppServerTurnContexts(threadID, turnID string, ctx context.Context) map[string]appServerTurnContext {
+	return map[string]appServerTurnContext{
+		threadID: {waiter: &appServerTurnWaiter{threadID: threadID, turnID: turnID}, ctx: ctx},
 	}
 }
 
@@ -2777,7 +2803,7 @@ func TestAppServerUploadFileDynamicToolCancelsWithActiveTurn(t *testing.T) {
 	live := &liveSession{
 		spec:                  spec,
 		filePublishingThreads: map[string]bool{"thread-1": true},
-		turnContexts:          map[string]appServerTurnContext{"thread-1": {turnID: "turn-1", ctx: turnCtx}},
+		turnContexts:          testAppServerTurnContexts("thread-1", "turn-1", turnCtx),
 	}
 	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
 	params := mustJSONRaw(t, map[string]any{
