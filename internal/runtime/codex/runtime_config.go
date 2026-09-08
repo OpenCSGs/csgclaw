@@ -444,6 +444,7 @@ func configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(
 ) string {
 	executionMode := options.ExecutionMode
 	memoryEnabled := options.MemoryMode != MemoryModeDisabled
+	providerBlock := buildProviderConfigBlock(profile)
 	content := sanitizeCopiedCodexConfigContent(existing)
 	content = strings.TrimLeft(content, "\n")
 
@@ -458,6 +459,9 @@ func configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(
 	content = stripManagedBlock(content, csgclawMemoryFeatureBeginMarker, csgclawMemoryFeatureEndMarker)
 	content = stripManagedBlock(content, csgclawMemoryConfigBeginMarker, csgclawMemoryConfigEndMarker)
 	content = stripManagedBlock(content, csgclawMCPBeginMarker, csgclawMCPEndMarker)
+	if providerBlock != "" {
+		content = stripModelProviders(content)
+	}
 	if mcpServers != nil || executionMode == ExecutionModeReadOnly {
 		content = stripTableBlocks(content, mcpServersTableHeaderRe)
 	}
@@ -517,8 +521,8 @@ func configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(
 			content = appendManagedBlock(content, "[windows]\n"+windowsSandboxBlock)
 		}
 	}
-	if block := buildProviderConfigBlock(profile); block != "" {
-		content = insertManagedBlockBeforeFirstTable(content, block)
+	if providerBlock != "" {
+		content = insertManagedBlockBeforeFirstTable(content, providerBlock)
 	}
 	if block, err := buildMCPServersBlockForExecutionMode(mcpServers, workspaceDir, executionMode); err == nil && block != "" {
 		content = appendManagedBlock(content, block)
@@ -528,6 +532,24 @@ func configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(
 		return ""
 	}
 	return strings.TrimRight(content, "\n") + "\n"
+}
+
+// stripModelProviders removes host providers when CSGClaw supplies the active
+// provider. Unused providers are still validated by Codex's strict config loader.
+func stripModelProviders(content string) string {
+	var cfg map[string]any
+	if err := toml.Unmarshal([]byte(content), &cfg); err != nil {
+		return content
+	}
+	if _, exists := cfg["model_providers"]; !exists {
+		return content
+	}
+	delete(cfg, "model_providers")
+	stripped, err := toml.Marshal(cfg)
+	if err != nil {
+		return content
+	}
+	return string(stripped)
 }
 
 func stripUserProviderDirectives(content string) string {

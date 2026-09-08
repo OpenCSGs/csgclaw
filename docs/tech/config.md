@@ -136,6 +136,8 @@ Recreation replaces generated configuration and model catalogs, process metadata
 Deleting the Agent still removes its complete Agent home, including memory.
 
 For complete Codex worker profiles, CSGClaw writes `~/.csgclaw/agents/<agent-name>/.codex/home/config.toml` with an OpenAI-compatible proxy provider and always sets `wire_api = "responses"` because the Codex CLI app-server path uses the Responses API.
+When the profile supplies both the model name and base URL, CSGClaw removes inherited `model_providers` from the Agent's generated configuration before adding its managed proxy provider.
+This also cleans existing Agent configuration when it is regenerated, preventing unused host providers from failing read-only mode's strict configuration checks while leaving the host Codex configuration unchanged.
 When Codex memory is enabled, CSGClaw sets `memories.min_rollout_idle_hours = 1`, the minimum supported idle window, so completed room threads become eligible for background extraction sooner.
 Because Codex skips the currently active thread, CSGClaw forks an invisible checkpoint after a successful room turn, at most once per conversation per hour, without changing the thread that continues serving the room.
 After the checkpoint has been idle for one hour, CSGClaw sends an invisible maintenance turn on the Runtime's private maintenance thread so memory extraction can run even when the user never opens another room.
