@@ -7,16 +7,19 @@ Repeated notifications for the same effective icon are ignored. Application
 theme changes update the tray before preference persistence and reapply the
 latest tray icon after a short 16 ms settle window. Rapid preference changes are
 persisted once after a separate 150 ms debounce, outside the icon update path.
-The taskbar button is removed after its own 300 ms debounce, then restored with
+The taskbar button is removed on a fixed 100 ms deadline, then restored with
 the latest icon after a separate 75 ms Explorer processing window. Superseded
 refreshes cannot restore the button early with an intermediate theme.
 
 Live window icon updates use the bundled icon immediately. Shortcut enumeration,
 icon persistence and shortcut writes run only for the final selection in the
-debounced taskbar refresh. Rapid intermediate themes no longer perform these
-synchronous disk operations before updating the live icon. The 300 ms / 75 ms
-button reconstruction remains a final refresh safeguard; native Windows testing
-is still required to measure visible responsiveness.
+scheduled taskbar refresh. Rapid intermediate themes no longer perform these
+synchronous disk operations before updating the live icon. New clicks update the
+selected icon without moving the deadline, so continuous input cannot starve
+refresh. Each active 100 ms window processes the latest selection, including
+changes during the 75 ms removal wait. No refresh repeats while idle. These are
+timer targets, not display latency guarantees. Button reconstruction can still
+cause visible movement; native Windows testing is required to assess smoothness.
 
 For installed Squirrel builds, Explorer can prefer the shortcut icon for the
 application's taskbar group over `BrowserWindow.setIcon()`. Theme changes update

@@ -25,7 +25,7 @@ import { registerIPCHandlers } from "./ipcHandlers";
 import { desktopIconResourcePath, isMacOSDesktop, windowsAppIconPath } from "./platform";
 import { SidecarSupervisor } from "./sidecar/SidecarSupervisor";
 import { DesktopUpdater } from "./updater";
-import { windowsThemeIconName } from "./windowsThemeIcon";
+import { windowsThemeIconName, WindowsTaskbarRefreshScheduler } from "./windowsThemeIcon";
 import { WindowManager } from "./windowManager";
 
 const desktopThemePreferenceWriteDelayMs = 150;
@@ -48,7 +48,7 @@ export class AppLifecycle {
   private windowManager: WindowManager | null = null;
   private lastThemeIconName: string | null = null;
   private pendingDesktopThemeSource: DesktopThemeSource | null = null;
-  private windowsTaskbarIconRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly windowsTaskbarRefreshScheduler = new WindowsTaskbarRefreshScheduler();
   private windowsTrayIconRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private windowsThemeIconRevision = 0;
 
@@ -338,7 +338,7 @@ export class AppLifecycle {
     this.updateWindowsTrayIcon();
     this.lastThemeIconName = iconName;
     this.scheduleWindowsTrayIconRefresh(revision);
-    this.scheduleWindowsTaskbarIconRefresh(revision);
+    this.scheduleWindowsTaskbarIconRefresh();
   }
 
   private updateDockThemeIcon(): void {
@@ -434,20 +434,13 @@ export class AppLifecycle {
     }, windowsTrayIconSettleDelayMs);
   }
 
-  private scheduleWindowsTaskbarIconRefresh(revision: number): void {
+  private scheduleWindowsTaskbarIconRefresh(): void {
     if (process.platform !== DesktopPlatform.Windows) {
       return;
     }
-    if (this.windowsTaskbarIconRefreshTimer) {
-      clearTimeout(this.windowsTaskbarIconRefreshTimer);
-    }
-    this.windowsTaskbarIconRefreshTimer = setTimeout(() => {
-      this.windowsTaskbarIconRefreshTimer = null;
-      if (revision !== this.windowsThemeIconRevision) {
-        return;
-      }
+    this.windowsTaskbarRefreshScheduler.request(() => {
       this.windowManager?.refreshWindowsIcon();
-    }, 300);
+    });
   }
 
   private updateWindowsTaskbarIcon(): void {
@@ -567,10 +560,7 @@ export class AppLifecycle {
       clearTimeout(this.windowsTrayIconRefreshTimer);
       this.windowsTrayIconRefreshTimer = null;
     }
-    if (this.windowsTaskbarIconRefreshTimer) {
-      clearTimeout(this.windowsTaskbarIconRefreshTimer);
-      this.windowsTaskbarIconRefreshTimer = null;
-    }
+    this.windowsTaskbarRefreshScheduler.cancel();
     this.cleanupThemeIcons?.();
     this.cleanupThemeIcons = null;
     this.cleanupIPC?.();

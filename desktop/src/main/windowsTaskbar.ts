@@ -102,7 +102,7 @@ export class WindowsTaskbarIcon {
       return;
     }
     // Shortcut enumeration and writes must never block the immediate icon path.
-    // The caller debounces refresh, so only the final selection is persisted.
+    // The caller coalesces refreshes, persisting the latest selection per window.
     if (!this.windowsStore && this.persisted !== this.selected) {
       const icon = this.selected;
       try {
