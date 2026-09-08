@@ -221,6 +221,12 @@ export function fetchAgentSkills(agentID: string, skillsPath = ""): Promise<Work
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/skills${query ? `?${query}` : ""}`);
 }
 
+export type AgentSkillSummary = { name: string; description?: string; error?: string };
+
+export function fetchAgentSkillSummaries(agentID: string, signal?: AbortSignal): Promise<AgentSkillSummary[]> {
+  return get(`api/v1/agents/${encodeURIComponent(agentID)}/skill-summaries`, { signal });
+}
+
 export function fetchAgentSkillsFile(agentID: string, skillsPath: string): Promise<WorkspaceFile> {
   const params = new URLSearchParams({ path: skillsPath });
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/skills/file?${params.toString()}`);

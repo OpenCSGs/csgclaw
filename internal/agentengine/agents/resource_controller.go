@@ -125,6 +125,18 @@ func (f *Controller) Create(ctx context.Context, request contract.AgentCreateReq
 }
 
 func (f *Controller) Get(ctx context.Context, agentID string, options contract.AgentGetOptions) (contract.Agent, error) {
+	if ctx != nil && ctx.Err() != nil {
+		return contract.Agent{}, ctx.Err()
+	}
+	item, err := f.get(ctx, agentID, options)
+	if err != nil || !options.IncludeSkillSummaries {
+		return item, err
+	}
+	item.Status.SkillSummaries, err = f.Workspace().SkillSummaries(ctx, item.ID)
+	return item, err
+}
+
+func (f *Controller) get(ctx context.Context, agentID string, options contract.AgentGetOptions) (contract.Agent, error) {
 	if f == nil {
 		return contract.Agent{}, &contract.TurnError{Code: contract.ErrorAgentUnavailable, Message: "agent service is unavailable"}
 	}

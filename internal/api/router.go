@@ -45,6 +45,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Get("/workspace", h.handleAgentWorkspace)
 				r.Get("/workspace/file", h.handleAgentWorkspaceFile)
 				r.Get("/skills", h.handleAgentSkills)
+				r.Get("/skill-summaries", h.handleAgentSkillSummaries)
 				r.Post("/skills:batchAdd", h.handleAgentSkillsBatchAdd)
 				r.Get("/skills/file", h.handleAgentSkillsFile)
 				r.Delete("/skills/{name}", h.handleAgentSkillDelete)

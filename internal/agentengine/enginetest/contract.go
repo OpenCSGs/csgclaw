@@ -21,6 +21,22 @@ type InterfaceFactory func(testing.TB, []agentengine.Agent, TurnBehavior) agente
 func RunInterfaceContract(t *testing.T, factory InterfaceFactory) {
 	t.Helper()
 	runDetachedInteractionContract(t, factory)
+	t.Run("skill summaries are opt-in and cancelable", func(t *testing.T) {
+		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, nil)
+		plain, err := client.Agents().Get(context.Background(), "agent-a", agentengine.AgentGetOptions{})
+		if err != nil || plain.Status.SkillSummaries != nil {
+			t.Fatalf("unexpected eager metadata: %+v %v", plain.Status.SkillSummaries, err)
+		}
+		with, err := client.Agents().Get(context.Background(), "agent-a", agentengine.AgentGetOptions{IncludeSkillSummaries: true})
+		if err != nil || with.Status.SkillSummaries == nil || len(with.Status.SkillSummaries) != 0 {
+			t.Fatalf("empty metadata read: %+v %v", with.Status.SkillSummaries, err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, err := client.Agents().Get(ctx, "agent-a", agentengine.AgentGetOptions{IncludeSkillSummaries: true}); !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled metadata read: %v", err)
+		}
+	})
 	t.Run("required unsupported extension blocks readiness", func(t *testing.T) {
 		client := factory(t, []agentengine.Agent{contractAgent("agent-a", agentengine.AgentStateRunning, "codex")}, nil)
 		extensions := client.RuntimeExtensions("agent-a")

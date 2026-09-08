@@ -17,7 +17,7 @@ import {
   fetchAgentProfile,
   fetchAgentProfileDefaults,
   fetchAgentProfileModels,
-  fetchAgentSkills,
+  fetchAgentSkillSummaries,
   fetchAgentSkillsFile,
   patchNotificationBotRequest,
   fetchAgentWorkspace,
@@ -91,7 +91,7 @@ vi.mock("@/api/agents", async () => {
     fetchAgentProfile: vi.fn(),
     fetchAgentProfileDefaults: vi.fn(),
     fetchAgentProfileModels: vi.fn(),
-    fetchAgentSkills: vi.fn(),
+    fetchAgentSkillSummaries: vi.fn(),
     fetchAgentSkillsFile: vi.fn(),
     patchNotificationBotRequest: vi.fn(),
     fetchAgentWorkspace: vi.fn(),
@@ -340,7 +340,7 @@ describe("useAgentController", () => {
     vi.mocked(fetchAgentMCPServerSourceStatus).mockReset();
     vi.mocked(fetchAgentWorkspace).mockReset();
     vi.mocked(createUserRequest).mockReset();
-    vi.mocked(fetchAgentSkills).mockReset();
+    vi.mocked(fetchAgentSkillSummaries).mockReset();
     vi.mocked(fetchAgentSkillsFile).mockReset();
     vi.mocked(patchNotificationBotRequest).mockReset();
     vi.mocked(fetchSkills).mockReset();
@@ -403,7 +403,7 @@ describe("useAgentController", () => {
     });
     vi.mocked(fetchAgentWorkspace).mockResolvedValue({ entries: [] });
     vi.mocked(createUserRequest).mockResolvedValue({ id: "u-worker", name: "worker" });
-    vi.mocked(fetchAgentSkills).mockResolvedValue({ entries: [] });
+    vi.mocked(fetchAgentSkillSummaries).mockResolvedValue([]);
     vi.mocked(fetchAgentSkillsFile).mockResolvedValue({ content: "", path: "SKILL.md", size: 0 });
     vi.mocked(patchNotificationBotRequest).mockImplementation(async (_agentID, payload) => ({
       bot_type: "notification",
@@ -668,14 +668,14 @@ describe("useAgentController", () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.agentViewProps.draft?.image).toBe(oldImage));
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       await result.current.agentViewProps.onUpgrade?.(oldAgent);
     });
 
     await waitFor(() => expect(result.current.agentViewProps.item?.image).toBe(latestImage));
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(2));
     expect(result.current.agentViewProps.draft?.image).toBe(latestImage);
     expect(result.current.agentViewProps.savedDraft?.image).toBe(latestImage);
     expect(runAgentActionRequest).toHaveBeenCalledWith("u-manager", "upgrade");
@@ -1142,7 +1142,7 @@ describe("useAgentController", () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.agentViewProps.draft?.image).toBe(oldImage));
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1));
     act(() => {
       const draft = result.current.agentViewProps.draft;
       result.current.agentViewProps.onDraftChange?.({
@@ -1156,7 +1156,7 @@ describe("useAgentController", () => {
       await result.current.agentViewProps.onSave?.();
     });
 
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(2));
     expect(updateAgentRequest).toHaveBeenCalledWith(
       "u-manager",
       expect.objectContaining({ instructions: "reply briefly" }),
@@ -1337,7 +1337,7 @@ describe("useAgentController", () => {
     );
 
     await waitFor(() => expect(result.current.controller.agentViewProps.draft?.model_id).toBe("MiniMax-M2.4"));
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1));
 
     act(() => {
       const draft = result.current.controller.agentViewProps.draft;
@@ -1361,7 +1361,7 @@ describe("useAgentController", () => {
       }),
     );
     expect(result.current.refreshWorkspaceBootstrap).not.toHaveBeenCalled();
-    expect(fetchAgentSkills).toHaveBeenCalledTimes(1);
+    expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1);
   });
 
   it("saves an edited UTF-8 agent display name from the profile modal", async () => {
@@ -1585,13 +1585,20 @@ describe("useAgentController", () => {
     await waitFor(() => expect(result.current.agentViewProps.savedDraft?.model_id).toBe("MiniMax-M2.5"));
   });
 
+  it("loads hundreds of descriptions with one summary request and no file requests", async () => {
+    const skills = Array.from({ length: 300 }, (_, index) => ({
+      name: `skill-${index}`,
+      description: `Description ${index}`,
+    }));
+    vi.mocked(fetchAgentSkillSummaries).mockResolvedValue(skills);
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.agentViewProps.skills).toEqual(skills));
+    expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1);
+    expect(fetchAgentSkillsFile).not.toHaveBeenCalled();
+  });
+
   it("loads global skill candidates and filters already-installed agent skills", async () => {
-    vi.mocked(fetchAgentSkills).mockResolvedValue({
-      entries: [
-        { name: "alpha", path: "alpha", type: "dir" },
-        { name: "SKILL.md", path: "alpha/SKILL.md", type: "file" },
-      ],
-    });
+    vi.mocked(fetchAgentSkillSummaries).mockResolvedValue([{ name: "alpha", description: "Alpha skill" }]);
     vi.mocked(fetchAgentSkillsFile).mockResolvedValue({
       content: "---\ndescription: Alpha skill\n---\n# Alpha\n",
       path: "alpha/SKILL.md",
@@ -1601,21 +1608,24 @@ describe("useAgentController", () => {
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
     await waitFor(() => expect(fetchSkills).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(result.current.agentViewProps.skills).toHaveLength(1));
 
     expect(result.current.agentViewProps.skillCandidates).toEqual([{ name: "beta", description: "Beta skill" }]);
   });
 
+  it("keeps skills visible when individual descriptions cannot be read", async () => {
+    vi.mocked(fetchAgentSkillSummaries).mockResolvedValue([{ name: "alpha", error: "invalid_metadata" }]);
+    const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.agentViewProps.skills).toHaveLength(1));
+    expect(result.current.agentViewProps.skillsError).toBeTruthy();
+    expect(fetchAgentSkillsFile).not.toHaveBeenCalled();
+  });
+
   it("adds selected global skills into the current agent runtime and refreshes skills", async () => {
-    vi.mocked(fetchAgentSkills)
-      .mockResolvedValueOnce({ entries: [] })
-      .mockResolvedValueOnce({
-        entries: [
-          { name: "alpha", path: "alpha", type: "dir" },
-          { name: "SKILL.md", path: "alpha/SKILL.md", type: "file" },
-        ],
-      });
+    vi.mocked(fetchAgentSkillSummaries)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ name: "alpha", description: "Alpha skill" }]);
     vi.mocked(fetchAgentSkillsFile).mockResolvedValue({
       content: "---\ndescription: Alpha skill\n---\n# Alpha\n",
       path: "alpha/SKILL.md",
@@ -1624,27 +1634,22 @@ describe("useAgentController", () => {
 
     const { result } = renderHook(() => useAgentControllerHarness().controller, { wrapper: createWrapper() });
 
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1));
 
     await act(async () => {
       await result.current.agentViewProps.onAddSkills?.(["alpha"]);
     });
 
     expect(batchAddAgentSkillsRequest).toHaveBeenCalledWith("u-manager", ["alpha"]);
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(2));
     expect(result.current.agentViewProps.skillAddError).toBe("");
     expect(result.current.agentViewProps.skills.map((item) => item.name)).toEqual(["alpha"]);
   });
 
   it("deletes an agent-scoped skill and refreshes the agent skill list", async () => {
-    vi.mocked(fetchAgentSkills)
-      .mockResolvedValueOnce({
-        entries: [
-          { name: "alpha", path: "alpha", type: "dir" },
-          { name: "SKILL.md", path: "alpha/SKILL.md", type: "file" },
-        ],
-      })
-      .mockResolvedValueOnce({ entries: [] });
+    vi.mocked(fetchAgentSkillSummaries)
+      .mockResolvedValueOnce([{ name: "alpha", description: "Alpha skill" }])
+      .mockResolvedValueOnce([]);
     vi.mocked(fetchAgentSkillsFile).mockResolvedValue({
       content: "---\ndescription: Alpha skill\n---\n# Alpha\n",
       path: "alpha/SKILL.md",
@@ -1660,7 +1665,7 @@ describe("useAgentController", () => {
     });
 
     expect(deleteAgentSkillRequest).toHaveBeenCalledWith("u-manager", "alpha");
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(2));
     expect(result.current.agentViewProps.skillDeleteError).toBe("");
     expect(result.current.agentViewProps.skills).toEqual([]);
   });

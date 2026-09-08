@@ -532,6 +532,7 @@ export const messages = {
     agentSkillsLoading: "正在加载 skills...",
     agentSkillsEmpty: "当前没有可用 skills。",
     agentSkillsLoadFailed: "Skills 加载失败，请稍后重试。",
+    agentSkillMetadataUnavailable: "部分 Skill 描述读取失败。",
     agentWorkspaceTitle: "Workspace",
     agentWorkspaceLoading: "正在加载 workspace...",
     agentWorkspaceEmpty: "Workspace 暂无文件。",
@@ -2092,6 +2093,7 @@ export const messages = {
     agentSkillsLoading: "Loading skills...",
     agentSkillsEmpty: "No skills available yet.",
     agentSkillsLoadFailed: "Failed to load skills. Please try again later.",
+    agentSkillMetadataUnavailable: "Some skill descriptions could not be read.",
     agentWorkspaceTitle: "Workspace",
     agentWorkspaceLoading: "Loading workspace...",
     agentWorkspaceEmpty: "No workspace files yet.",
@@ -3085,7 +3087,8 @@ export const messages = {
       "AGENT-ERR-22": "The template was published and is still under review. Check the template list again later.",
       "AGENT-ERR-23":
         "The template was published but did not pass sensitive-content review. Update the affected files and publish again.",
-      "AGENT-ERR-25": "This agent template is still undergoing sensitive-content review, so the agent cannot be created.",
+      "AGENT-ERR-25":
+        "This agent template is still undergoing sensitive-content review, so the agent cannot be created.",
       "RESOURCE-ERR-1":
         "The template was published, but community deployment resources are temporarily unavailable. Try deploying again later.",
       "SENSITIVE-ERR-0":
