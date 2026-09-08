@@ -28,9 +28,13 @@ import { DesktopUpdater } from "./updater";
 import { windowsThemeIconName } from "./windowsThemeIcon";
 import { WindowManager } from "./windowManager";
 
+const desktopThemePreferenceWriteDelayMs = 150;
+const windowsTrayIconSettleDelayMs = 16;
+
 export class AppLifecycle {
   private cleanupIPC: (() => void) | null = null;
   private cleanupThemeIcons: (() => void) | null = null;
+  private desktopThemePreferenceWriteTimer: ReturnType<typeof setTimeout> | null = null;
   private desktopThemeSource: DesktopThemeSource = "dark";
   private readonly deferredRelaunch = new DeferredRelaunch();
   private quitting = false;
@@ -42,7 +46,10 @@ export class AppLifecycle {
   private tray: Tray | null = null;
   private updater: DesktopUpdater | null = null;
   private windowManager: WindowManager | null = null;
-  private windowsThemeIconRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastThemeIconName: string | null = null;
+  private pendingDesktopThemeSource: DesktopThemeSource | null = null;
+  private windowsTaskbarIconRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private windowsTrayIconRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private windowsThemeIconRevision = 0;
 
   async start(): Promise<void> {
@@ -318,11 +325,20 @@ export class AppLifecycle {
   };
 
   private updateThemeIcons(): void {
+    const iconName = windowsThemeIconName(
+      this.desktopThemeSource,
+      nativeTheme.shouldUseDarkColors,
+    );
+    if (iconName === this.lastThemeIconName) {
+      return;
+    }
     const revision = ++this.windowsThemeIconRevision;
     this.updateDockThemeIcon();
     this.updateWindowsTaskbarIcon();
     this.updateWindowsTrayIcon();
-    this.scheduleWindowsThemeIconRefresh(revision);
+    this.lastThemeIconName = iconName;
+    this.scheduleWindowsTrayIconRefresh(revision);
+    this.scheduleWindowsTaskbarIconRefresh(revision);
   }
 
   private updateDockThemeIcon(): void {
@@ -346,15 +362,40 @@ export class AppLifecycle {
   }
 
   private setThemeSource(theme: DesktopThemeSource): void {
+    if (theme === this.desktopThemeSource && nativeTheme.themeSource === theme) {
+      return;
+    }
     this.desktopThemeSource = theme;
-    nativeTheme.themeSource = theme;
+    if (nativeTheme.themeSource !== theme) {
+      nativeTheme.themeSource = theme;
+    }
+    logDesktopInfo("desktop-theme-source-changed", { theme });
+    this.updateThemeIcons();
+    this.scheduleDesktopThemeSourcePreferenceWrite(theme);
+  }
+
+  private scheduleDesktopThemeSourcePreferenceWrite(theme: DesktopThemeSource): void {
+    this.pendingDesktopThemeSource = theme;
+    if (this.desktopThemePreferenceWriteTimer) {
+      clearTimeout(this.desktopThemePreferenceWriteTimer);
+    }
+    this.desktopThemePreferenceWriteTimer = setTimeout(() => {
+      this.desktopThemePreferenceWriteTimer = null;
+      this.flushDesktopThemeSourcePreference();
+    }, desktopThemePreferenceWriteDelayMs);
+  }
+
+  private flushDesktopThemeSourcePreference(): void {
+    const theme = this.pendingDesktopThemeSource;
+    if (!theme) {
+      return;
+    }
+    this.pendingDesktopThemeSource = null;
     try {
       writeDesktopThemeSourcePreference(app.getPath("userData"), theme);
     } catch (error) {
       logDesktopError("desktop-theme-source-write-failed", error);
     }
-    logDesktopInfo("desktop-theme-source-changed", { theme });
-    this.updateThemeIcons();
   }
 
   private updateWindowsTrayIcon(): void {
@@ -364,7 +405,7 @@ export class AppLifecycle {
     this.applyWindowsTrayIcon("immediate");
   }
 
-  private applyWindowsTrayIcon(reason: "immediate" | "deferred"): void {
+  private applyWindowsTrayIcon(reason: "immediate" | "settled"): void {
     if (process.platform !== DesktopPlatform.Windows || !this.tray) {
       return;
     }
@@ -377,20 +418,35 @@ export class AppLifecycle {
     });
   }
 
-  private scheduleWindowsThemeIconRefresh(revision: number): void {
+  private scheduleWindowsTrayIconRefresh(revision: number): void {
     if (process.platform !== DesktopPlatform.Windows) {
       return;
     }
-    if (this.windowsThemeIconRefreshTimer) {
-      clearTimeout(this.windowsThemeIconRefreshTimer);
+    if (this.windowsTrayIconRefreshTimer) {
+      clearTimeout(this.windowsTrayIconRefreshTimer);
     }
-    this.windowsThemeIconRefreshTimer = setTimeout(() => {
-      this.windowsThemeIconRefreshTimer = null;
+    this.windowsTrayIconRefreshTimer = setTimeout(() => {
+      this.windowsTrayIconRefreshTimer = null;
+      if (revision !== this.windowsThemeIconRevision) {
+        return;
+      }
+      this.applyWindowsTrayIcon("settled");
+    }, windowsTrayIconSettleDelayMs);
+  }
+
+  private scheduleWindowsTaskbarIconRefresh(revision: number): void {
+    if (process.platform !== DesktopPlatform.Windows) {
+      return;
+    }
+    if (this.windowsTaskbarIconRefreshTimer) {
+      clearTimeout(this.windowsTaskbarIconRefreshTimer);
+    }
+    this.windowsTaskbarIconRefreshTimer = setTimeout(() => {
+      this.windowsTaskbarIconRefreshTimer = null;
       if (revision !== this.windowsThemeIconRevision) {
         return;
       }
       this.windowManager?.refreshWindowsIcon();
-      this.applyWindowsTrayIcon("deferred");
     }, 300);
   }
 
@@ -502,9 +558,18 @@ export class AppLifecycle {
 
   private cleanup(): void {
     this.updater?.stopBackgroundChecks();
-    if (this.windowsThemeIconRefreshTimer) {
-      clearTimeout(this.windowsThemeIconRefreshTimer);
-      this.windowsThemeIconRefreshTimer = null;
+    if (this.desktopThemePreferenceWriteTimer) {
+      clearTimeout(this.desktopThemePreferenceWriteTimer);
+      this.desktopThemePreferenceWriteTimer = null;
+    }
+    this.flushDesktopThemeSourcePreference();
+    if (this.windowsTrayIconRefreshTimer) {
+      clearTimeout(this.windowsTrayIconRefreshTimer);
+      this.windowsTrayIconRefreshTimer = null;
+    }
+    if (this.windowsTaskbarIconRefreshTimer) {
+      clearTimeout(this.windowsTaskbarIconRefreshTimer);
+      this.windowsTaskbarIconRefreshTimer = null;
     }
     this.cleanupThemeIcons?.();
     this.cleanupThemeIcons = null;

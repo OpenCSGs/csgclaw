@@ -3,10 +3,12 @@
 The desktop window uses the selected light/dark icon, or follows the system when
 the selected theme is `system`. The effective icon is cached before window
 creation and restored when the window is recreated or shown from the tray.
-Repeated notifications for the same icon do not repeat shortcut writes.
-After rapid theme changes settle, the tray icon is applied again immediately.
-The taskbar button is removed after a 300 ms debounce, then restored with the
-latest icon after a separate 75 ms Explorer processing window. Superseded
+Repeated notifications for the same effective icon are ignored. Application
+theme changes update the tray before preference persistence and reapply the
+latest tray icon after a short 16 ms settle window. Rapid preference changes are
+persisted once after a separate 150 ms debounce, outside the icon update path.
+The taskbar button is removed after its own 300 ms debounce, then restored with
+the latest icon after a separate 75 ms Explorer processing window. Superseded
 refreshes cannot restore the button early with an intermediate theme.
 
 For installed Squirrel builds, Explorer can prefer the shortcut icon for the
