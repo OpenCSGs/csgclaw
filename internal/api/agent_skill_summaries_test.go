@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -133,5 +134,56 @@ func TestAgentSkillSummariesMemoryClientHTTP(t *testing.T) {
 	h.Routes().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/agents/missing/skill-summaries", nil))
 	if w.Code != 404 {
 		t.Fatalf("missing Agent HTTP=%d", w.Code)
+	}
+}
+
+func TestAgentSkillSummariesReadErrorsHTTP(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		invalidRoot bool
+		agentID     string
+		wantStatus  int
+		wantBody    string
+	}{
+		{name: "storage failure", invalidRoot: true, agentID: "agent-skills", wantStatus: http.StatusInternalServerError, wantBody: "Agent skill metadata is unavailable\n"},
+		{name: "missing skills directory", agentID: "agent-skills", wantStatus: http.StatusOK, wantBody: "[]\n"},
+		{name: "missing agent", agentID: "missing", wantStatus: http.StatusNotFound, wantBody: "agent not found\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item := completeWorkerAgent("agent-skills", "skills")
+			item.RuntimeKind = agent.RuntimeKindCodex
+			controller := mustNewSeededServiceWithOptions(t, []agent.Agent{item}, agent.WithRuntime(fakeCompatRuntime{kind: item.RuntimeKind}))
+			layout, err := controller.AgentLayout(item.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.invalidRoot {
+				if err := os.MkdirAll(filepath.Dir(layout.SkillsRoot), 0700); err != nil {
+					t.Fatal(err)
+				}
+				// A regular file reliably makes OpenRoot fail, even when tests run as root.
+				if err := os.WriteFile(layout.SkillsRoot, []byte("not a directory"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			h := NewHandler(AgentServices{}, agentengine.New(controller), nil, nil, nil, nil, nil)
+			server := httptest.NewServer(h.Routes())
+			defer server.Close()
+			resp, err := server.Client().Get(server.URL + "/api/v1/agents/" + tc.agentID + "/skill-summaries")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != tc.wantStatus || string(body) != tc.wantBody {
+				t.Fatalf("HTTP %d %q, want %d %q", resp.StatusCode, body, tc.wantStatus, tc.wantBody)
+			}
+			if strings.Contains(string(body), layout.SkillsRoot) {
+				t.Fatal("response leaked Runtime path")
+			}
+		})
 	}
 }

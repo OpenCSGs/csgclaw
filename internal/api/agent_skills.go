@@ -23,7 +23,7 @@ func (h *Handler) handleAgentSkillSummaries(w http.ResponseWriter, r *http.Reque
 	}
 	item, err := h.agentEngine.Agents().Get(r.Context(), pathValue(r, "id"), agentengine.AgentGetOptions{IncludeSkillSummaries: true})
 	if err != nil {
-		writeAgentSkillsMutationError(w, err)
+		writeAgentGetError(w, err)
 		return
 	}
 	items := item.Status.SkillSummaries
