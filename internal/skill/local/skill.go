@@ -22,6 +22,7 @@ var ErrSkillInvalid = errors.New("skill directory must contain SKILL.md")
 type SkillSummary struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 func SkillsRoot() (string, error) {
@@ -140,11 +141,19 @@ func skillDescription(path string) (string, error) {
 	if !ok {
 		return "", nil
 	}
+	description, err := parseSkillDescription(frontmatter)
+	if err != nil {
+		return "", fmt.Errorf("parse skill frontmatter %q: %w", path, err)
+	}
+	return description, nil
+}
+
+func parseSkillDescription(frontmatter []byte) (string, error) {
 	var meta struct {
 		Description string `yaml:"description"`
 	}
 	if err := yaml.Unmarshal(frontmatter, &meta); err != nil {
-		return "", fmt.Errorf("parse skill frontmatter %q: %w", path, err)
+		return "", err
 	}
 	return strings.TrimSpace(meta.Description), nil
 }

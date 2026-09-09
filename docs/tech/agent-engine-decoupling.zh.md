@@ -54,6 +54,10 @@ Profile/model、Skills、MCP、instructions 和 memory 的 HTTP 操作都翻译�
 增量 Extension reload 不重新执行它们。
 Workspace 浏览、日志、模板发布和模型配置由专门的支持接口提供。
 普通 Agent Get 读取已保存资源，只有 `ProbeRuntime` 显式要求实时探测。
+`Agents().Get` 的 `IncludeSkillSummaries` 选项按需返回 `Status.SkillSummaries`，包含名称、描述和单文件错误码。
+Profile 通过 `GET /api/v1/agents/{id}/skill-summaries` 一次获取摘要；完整 Skill 文件仍通过 Workspace 按需读取。
+既有 Skill/Workspace 服务只扫描顶层 `SKILL.md` 的 frontmatter，最多并发读取 8 个文件，元数据上限为 64 KiB。
+结果按名称稳定排序、支持取消，单文件不可读或格式错误不会影响其他条目，也不返回 Runtime 路径或文件正文。
 
 ## Conversations
 

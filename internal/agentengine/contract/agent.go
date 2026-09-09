@@ -33,6 +33,8 @@ type AgentGetOptions struct {
 	Reload           bool `json:"reload,omitempty"`
 	ProbeRuntime     bool `json:"probe_runtime,omitempty"`
 	IncludeDocuments bool `json:"include_documents,omitempty"`
+	// IncludeSkillSummaries reads bounded, Runtime-local metadata on demand.
+	IncludeSkillSummaries bool `json:"include_skill_summaries,omitempty"`
 	// AdoptMCPServers reads unmanaged Runtime MCP state for an explicit MCP
 	// administration operation. Runtime read failures are returned to the caller.
 	AdoptMCPServers bool `json:"adopt_mcp_servers,omitempty"`
@@ -164,6 +166,7 @@ type MCPServerConfig map[string]any
 
 // AgentStatus is observed lifecycle state and is never desired configuration.
 type AgentStatus struct {
+	SkillSummaries []SkillSummary       `json:"skill_summaries,omitempty"`
 	State          AgentState           `json:"state"`
 	RuntimeID      string               `json:"runtime_id,omitempty"`
 	RuntimeKind    string               `json:"runtime_kind,omitempty"`
@@ -176,6 +179,14 @@ type AgentStatus struct {
 	Capabilities   AgentCapabilities    `json:"capabilities,omitempty"`
 	Instructions   *InstructionsStatus  `json:"instructions,omitempty"`
 	Memory         *MemoryStatus        `json:"memory,omitempty"`
+}
+
+// SkillSummary is a read-only projection, independent of desired Skill names.
+// Error is a stable per-file code and never contains paths or file contents.
+type SkillSummary struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 type AgentCapabilities struct {

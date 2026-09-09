@@ -24,6 +24,7 @@ type ModelView = contract.ModelView
 type ProfileDetectionResult = contract.ProfileDetectionResult
 type MCPServerConfig = contract.MCPServerConfig
 type AgentStatus = contract.AgentStatus
+type SkillSummary = contract.SkillSummary
 type AgentCapabilities = contract.AgentCapabilities
 type InstructionsStatus = contract.InstructionsStatus
 type MemoryStatus = contract.MemoryStatus

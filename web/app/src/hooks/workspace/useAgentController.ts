@@ -18,8 +18,7 @@ import {
   fetchAgentProfile,
   fetchAgentProfileDefaults,
   fetchAgentMCPServers,
-  fetchAgentSkills,
-  fetchAgentSkillsFile,
+  fetchAgentSkillSummaries,
   finalizeFeishuRegistrationRequest,
   initAgentLarkCLIRequest,
   cleanupAgentLarkCLIRequest,
@@ -124,7 +123,6 @@ import {
 } from "@/models/modelProviders";
 import type { ModelProviderOption } from "@/models/modelProviders";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace } from "@/models/slashCommands";
 import { useCLIProxyAuthStatuses } from "./useCLIProxyAuthStatuses";
 import { workspaceQueryKeys } from "./workspaceQueries";
 import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
@@ -778,23 +776,7 @@ export function useAgentController({
   });
   const agentSkillsQuery = useQuery({
     queryKey: workspaceQueryKeys.agentSkills(agentDetailAgentID),
-    queryFn: async () => {
-      const skillsListing = await fetchAgentSkills(agentDetailAgentID);
-      const skills = skillOptionsFromWorkspace(skillsListing.entries || []);
-      return Promise.all(
-        skills.map(async (skill) => {
-          try {
-            const file = await fetchAgentSkillsFile(agentDetailAgentID, `${skill.name}/SKILL.md`);
-            return {
-              ...skill,
-              description: skillDescriptionFromMarkdown(file.content || "") || skill.description,
-            };
-          } catch {
-            return skill;
-          }
-        }),
-      );
-    },
+    queryFn: ({ signal }) => fetchAgentSkillSummaries(agentDetailAgentID, signal),
     enabled: Boolean(agentDetailAgentID),
   });
   const agentMCPServersQuery = useQuery({
@@ -804,7 +786,9 @@ export function useAgentController({
   });
   const agentSkillsError = agentSkillsQuery.error
     ? errorMessage(agentSkillsQuery.error, t("agentSkillsLoadFailed"))
-    : "";
+    : agentSkillsQuery.data?.some((skill) => skill.error)
+      ? t("agentSkillMetadataUnavailable")
+      : "";
   const agentSkillCandidates = useMemo(() => {
     const currentSkillNames = new Set((agentSkillsQuery.data ?? []).map((skill) => String(skill?.name || "").trim()));
     return (globalSkillsQuery.data ?? []).filter((skill) => {

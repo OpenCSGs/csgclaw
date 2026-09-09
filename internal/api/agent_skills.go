@@ -16,6 +16,23 @@ type batchAddAgentSkillsRequest struct {
 	Names []string `json:"names"`
 }
 
+func (h *Handler) handleAgentSkillSummaries(w http.ResponseWriter, r *http.Request) {
+	if h.agentEngine == nil {
+		http.Error(w, "agent engine is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	item, err := h.agentEngine.Agents().Get(r.Context(), pathValue(r, "id"), agentengine.AgentGetOptions{IncludeSkillSummaries: true})
+	if err != nil {
+		writeAgentGetError(w, err)
+		return
+	}
+	items := item.Status.SkillSummaries
+	if items == nil {
+		items = []agentengine.SkillSummary{}
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
 func (h *Handler) handleAgentSkillsBatchAdd(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

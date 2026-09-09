@@ -330,7 +330,10 @@ func (a *memoryAgents) Create(_ context.Context, request agentengine.AgentCreate
 	return cloneAgent(item), nil
 }
 
-func (a *memoryAgents) Get(_ context.Context, agentID string, _ agentengine.AgentGetOptions) (agentengine.Agent, error) {
+func (a *memoryAgents) Get(ctx context.Context, agentID string, options agentengine.AgentGetOptions) (agentengine.Agent, error) {
+	if ctx != nil && ctx.Err() != nil {
+		return agentengine.Agent{}, ctx.Err()
+	}
 	a.client.mu.Lock()
 	defer a.client.mu.Unlock()
 	item, ok := a.client.agents[strings.TrimSpace(agentID)]
@@ -345,7 +348,23 @@ func (a *memoryAgents) Get(_ context.Context, agentID string, _ agentengine.Agen
 	if !ok {
 		return agentengine.Agent{}, &agentengine.TurnError{Code: agentengine.ErrorAgentNotFound, Message: fmt.Sprintf("agent %q not found", agentID)}
 	}
-	return a.client.withExtensionReadinessLocked(item), nil
+	item = a.client.withExtensionReadinessLocked(item)
+	if !options.IncludeSkillSummaries {
+		item.Status.SkillSummaries = nil
+	} else {
+		metadata := make(map[string]agentengine.SkillSummary, len(item.Status.SkillSummaries))
+		for _, summary := range item.Status.SkillSummaries {
+			metadata[summary.Name] = summary
+		}
+		item.Status.SkillSummaries = make([]agentengine.SkillSummary, 0, len(item.Spec.Skills))
+		for _, name := range item.Spec.Skills {
+			summary := metadata[name]
+			summary.Name = name
+			item.Status.SkillSummaries = append(item.Status.SkillSummaries, summary)
+		}
+	}
+	sort.Slice(item.Status.SkillSummaries, func(i, j int) bool { return item.Status.SkillSummaries[i].Name < item.Status.SkillSummaries[j].Name })
+	return item, nil
 }
 
 func (a *memoryAgents) List(context.Context, agentengine.AgentListOptions) ([]agentengine.Agent, error) {
@@ -353,6 +372,7 @@ func (a *memoryAgents) List(context.Context, agentengine.AgentListOptions) ([]ag
 	defer a.client.mu.Unlock()
 	out := make([]agentengine.Agent, 0, len(a.client.agents))
 	for _, item := range a.client.agents {
+		item.Status.SkillSummaries = nil
 		out = append(out, a.client.withExtensionReadinessLocked(item))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -1135,6 +1155,7 @@ func failed(code agentengine.ErrorCode, message string) agentengine.TurnResult {
 }
 
 func cloneAgent(input agentengine.Agent) agentengine.Agent {
+	input.Status.SkillSummaries = append([]agentengine.SkillSummary(nil), input.Status.SkillSummaries...)
 	input.Spec = cloneSpec(input.Spec)
 	if input.Status.Instructions != nil {
 		status := *input.Status.Instructions

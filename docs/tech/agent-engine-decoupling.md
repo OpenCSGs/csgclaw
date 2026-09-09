@@ -54,6 +54,10 @@ Write-only credentials and model secrets are preserved when omitted, and never r
 Incremental Extension reload never reapplies them.
 Workspace browsing, logs, template publishing and model configuration use dedicated support interfaces.
 Ordinary Agent Get reads the stored resource; `ProbeRuntime` explicitly requests live observation.
+`Agents().Get` with `IncludeSkillSummaries` reads optional `Status.SkillSummaries` containing names, descriptions and per-file error codes.
+Profile uses `GET /api/v1/agents/{id}/skill-summaries` to fetch this projection in one request; full Skill files remain lazy workspace reads.
+The existing Skill/Workspace owners read top-level `SKILL.md` frontmatter with at most eight concurrent readers and a 64 KiB metadata limit.
+Results are name-sorted, cancelable, and tolerate individual unreadable or invalid metadata without exposing Runtime paths or file bodies.
 
 ## Conversations
 
