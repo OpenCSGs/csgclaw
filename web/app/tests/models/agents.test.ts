@@ -36,6 +36,7 @@ import {
   agentPageLLMProfileChanged,
   agentProfilePageSaveDisabled,
   isAgentProfileDraftComplete,
+  isBuiltinOpenClawWorkerTemplate,
   isAgentRunning,
   mergeAgentIntoList,
   isNotificationBotAgent,
@@ -761,6 +762,8 @@ describe("agent model helpers", () => {
       "Agentic/feishu-assistant",
       "local.review-worker",
     ]);
+    expect(isBuiltinOpenClawWorkerTemplate(templates[1])).toBe(true);
+    expect(isBuiltinOpenClawWorkerTemplate(templates[2])).toBe(false);
   });
 
   it("applies template image_env contracts to draft env rows", () => {

@@ -1473,7 +1473,11 @@ export function workerSelectableTemplates(
 export function createAgentSelectableTemplates(
   templates: readonly AgentTemplateLike[] | null | undefined,
 ): AgentTemplateLike[] {
-  return workerSelectableTemplates(templates).filter((item) => item.id !== "builtin.openclaw-worker");
+  return workerSelectableTemplates(templates).filter((item) => !isBuiltinOpenClawWorkerTemplate(item));
+}
+
+export function isBuiltinOpenClawWorkerTemplate(template: AgentTemplateLike | null | undefined): boolean {
+  return template?.id === "builtin.openclaw-worker";
 }
 
 export function pickDefaultAgentTemplate(

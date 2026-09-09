@@ -69,6 +69,7 @@ import {
   agentToDraft,
   isAgentProfileDraftComplete,
   isAgentProfileMarkedComplete,
+  isBuiltinOpenClawWorkerTemplate,
   createAgentSelectableTemplates,
   defaultWorkerImageForRuntime,
   draftMCPServersForSave,
@@ -1385,7 +1386,7 @@ export function useAgentController({
     const createWorkerTemplates = createAgentSelectableTemplates(hubTemplates);
     const preferredRuntimeKind = "codex";
     const selectedTemplate =
-      template === undefined
+      template === undefined || isBuiltinOpenClawWorkerTemplate(template)
         ? pickDefaultAgentTemplate(createWorkerTemplates, preferredRuntimeKind, effectiveBootstrapConfig)
         : normalizeTemplateSelection(template);
     try {

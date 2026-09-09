@@ -830,6 +830,31 @@ describe("HubDetailPane", () => {
     expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
   });
 
+  it("does not offer agent creation for the builtin OpenClaw worker template", () => {
+    renderHubDetailPane("template", {
+      selectedTemplate: {
+        ...template,
+        id: "builtin.openclaw-worker",
+        name: "generic-assistant-openclaw",
+      },
+    });
+
+    expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
+  });
+
+  it("allows agent creation for remote OpenClaw templates", () => {
+    renderHubDetailPane("template", {
+      selectedTemplate: {
+        ...template,
+        id: "Agentic/feishu-assistant",
+        name: "feishu-assistant",
+        source: { name: "official", kind: "remote" },
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+  });
+
   it("groups template details into runtime, instructions, memory, skills, and MCP tabs", async () => {
     const user = userEvent.setup();
     const { container } = renderHubDetailPane("template", {

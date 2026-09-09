@@ -36,7 +36,7 @@ import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } f
 import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
-import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
+import type { AgentLike, AgentProfileLike, AgentTemplateLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, TranslateFn } from "@/models/conversations";
 import type { MCPServer } from "@/models/mcp";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
@@ -218,6 +218,7 @@ function useAgentControllerHarness(
     catalogMCPServers?: MCPServer[];
     catalogMCPServersError?: string;
     catalogMCPServersLoading?: boolean;
+    hubTemplates?: AgentTemplateLike[];
     managerProfile?: AgentProfileLike | null;
     modelProviders?: ModelProviderCatalog | null;
     modelProvidersLoaded?: boolean;
@@ -279,7 +280,7 @@ function useAgentControllerHarness(
     catalogMCPServers: options.catalogMCPServers ?? [],
     catalogMCPServersError: options.catalogMCPServersError ?? "",
     catalogMCPServersLoading: options.catalogMCPServersLoading ?? false,
-    hubTemplates: [],
+    hubTemplates: options.hubTemplates ?? [],
     locale: "en",
     managerProfile: options.managerProfile ?? null,
     modelProviders: options.modelProviders ?? null,
@@ -1454,6 +1455,38 @@ describe("useAgentController", () => {
     await waitFor(() => expect(result.current.controller.agentProfileModalProps).not.toBeNull());
     expect(result.current.refreshWorkspaceBootstrapConfig).toHaveBeenCalled();
     expect(result.current.controller.agentProfileModalProps?.bootstrapConfig).toBe(refreshedConfig);
+  });
+
+  it("falls back to Codex when the builtin OpenClaw template is passed explicitly", async () => {
+    const codexTemplate: AgentTemplateLike = {
+      id: "builtin.codex-worker",
+      name: "generic-assistant-codex",
+      role: "worker",
+      runtime_kind: "codex",
+    };
+    const builtinOpenClawTemplate: AgentTemplateLike = {
+      id: "builtin.openclaw-worker",
+      name: "generic-assistant-openclaw",
+      role: "worker",
+      runtime_kind: "openclaw_sandbox",
+    };
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          hubTemplates: [codexTemplate, builtinOpenClawTemplate],
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.openCreateAgentModal(builtinOpenClawTemplate);
+    });
+
+    await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
+    expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+      from_template: "builtin.codex-worker",
+      runtime_kind: "codex",
+    });
   });
 
   it("initializes the profile modal MCP editor from the dedicated desired server map", async () => {
