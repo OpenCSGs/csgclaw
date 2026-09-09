@@ -6,6 +6,7 @@ import { documentPreviewKind, formatPreviewText } from "./previewTypes";
 import { syntaxLanguageForFile } from "./syntaxLanguages";
 
 const DocxPreview = lazy(() => import("./DocxPreview"));
+const HtmlPreview = lazy(() => import("./HtmlPreview"));
 const PdfPreview = lazy(() => import("./PdfPreview"));
 const PowerPointPreview = lazy(() => import("./PowerPointPreview"));
 const SpreadsheetPreview = lazy(() => import("./SpreadsheetPreview"));
@@ -28,7 +29,7 @@ export function DocumentPreviewContent({
 }) {
   const kind = documentPreviewKind(item, data);
   const text = useMemo(
-    () => (kind === "markdown" || kind === "text" ? formatPreviewText(data, item.mediaType) : ""),
+    () => (kind === "html" || kind === "markdown" || kind === "text" ? formatPreviewText(data, item.mediaType) : ""),
     [data, item.mediaType, kind],
   );
   const syntaxLanguage = useMemo(
@@ -51,6 +52,13 @@ export function DocumentPreviewContent({
   }
   if (kind === "markdown") {
     return <MarkdownPreview scale={scale} text={text} t={t} />;
+  }
+  if (kind === "html") {
+    return (
+      <Suspense fallback={loading}>
+        <HtmlPreview scale={scale} text={text} t={t} />
+      </Suspense>
+    );
   }
   if (kind === "text") {
     if (syntaxLanguage) {

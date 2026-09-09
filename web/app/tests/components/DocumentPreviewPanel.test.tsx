@@ -74,6 +74,7 @@ const t = (key: string, params?: Record<string, string | number>) => {
     attachmentPreviewFailed: "Preview failed",
     attachmentPreviewFit: "Fit",
     attachmentPreviewFullscreen: "Fullscreen",
+    attachmentPreviewHtmlDocument: "HTML preview document",
     attachmentPreviewExitFullscreen: "Exit fullscreen",
     attachmentPreviewLoading: "Loading preview",
     attachmentPreviewOutline: "Document outline",
@@ -89,6 +90,8 @@ const t = (key: string, params?: Record<string, string | number>) => {
     attachmentsScrollPrevious: "Previous file",
     close: "Close",
     downloadAttachment: "Download",
+    workspacePreviewCodeTab: "Code",
+    workspacePreviewPreviewTab: "Preview",
   };
   return labels[key] ?? `${key}${params ? JSON.stringify(params) : ""}`;
 };
@@ -202,6 +205,64 @@ describe("DocumentPreviewPanel", () => {
     );
     expect(container.querySelector(".document-preview-shiki")).toHaveAttribute("data-language", "toml");
     expect(screen.queryByText("Preview unavailable")).not.toBeInTheDocument();
+  });
+
+  it("renders HTML in an isolated frame and keeps executable content in source mode only", async () => {
+    const user = userEvent.setup();
+    const source = `<!doctype html>
+      <html>
+        <head><style>h1 { color: teal; background-image: url(https://tracker.example/pixel); }</style></head>
+        <body>
+          <h1 onclick="window.hacked = true">Safe report</h1>
+          <a href="#details" target="_blank" download ping="https://tracker.example/ping">Details</a>
+          <section id="details">Report details</section>
+          <a href="#forms">Forms</a><section id="forms">Form section</section>
+          <a href="data:text/html,unexpected">Unsupported navigation</a>
+          <img src="https://tracker.example/image.png" alt="remote">
+          <script>window.hacked = true</script>
+        </body>
+      </html>`;
+    const { container } = render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[
+          {
+            file: new File([source], "report.html", { type: "text/html" }),
+            id: "html",
+            mediaType: "text/html",
+            name: "report.html",
+            sizeBytes: source.length,
+          },
+        ]}
+        t={t}
+        onClose={() => {}}
+        onIndexChange={() => {}}
+      />,
+    );
+
+    const frame = await screen.findByTitle("HTML preview document");
+    const frameDocument = frame.getAttribute("srcdoc") ?? "";
+    const parsed = new DOMParser().parseFromString(frameDocument, "text/html");
+    expect(parsed.querySelector('a[href="about:srcdoc#details"]')?.getAttribute("target")).toBe("_self");
+    expect(parsed.querySelector('a[href="about:srcdoc#details"]')?.hasAttribute("download")).toBe(false);
+    expect(parsed.querySelector('a[href^="data:"]')).toBeNull();
+    expect(parsed.getElementById("forms")?.textContent).toBe("Form section");
+    expect(parsed.querySelector('a[href="about:srcdoc#forms"]')).not.toBeNull();
+    expect(frame).toHaveAttribute("sandbox", "");
+    expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(frameDocument).toContain("Content-Security-Policy");
+    expect(frameDocument).toContain("Safe report");
+    expect(frameDocument).toContain("color: teal");
+    expect(frameDocument).not.toContain('alt="remote"');
+    expect(frameDocument).not.toContain("window.hacked");
+    expect(frameDocument).not.toContain("tracker.example");
+
+    await user.click(screen.getByRole("tab", { name: "Code" }));
+    await waitFor(() =>
+      expect(container.querySelector('.document-preview-shiki[data-language="html"]')).toHaveTextContent(
+        "window.hacked = true",
+      ),
+    );
   });
 
   it("syntax-highlights Go source with dual light and dark theme tokens", async () => {

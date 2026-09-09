@@ -13,4 +13,13 @@ export type DocumentPreviewPanelProps = DocumentPreviewRequest & {
   t: (key: string, params?: Record<string, string | number>) => string;
 };
 
-export type PreviewKind = "docx" | "image" | "markdown" | "pdf" | "powerpoint" | "spreadsheet" | "text" | "unsupported";
+export type PreviewKind =
+  | "docx"
+  | "html"
+  | "image"
+  | "markdown"
+  | "pdf"
+  | "powerpoint"
+  | "spreadsheet"
+  | "text"
+  | "unsupported";

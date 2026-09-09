@@ -112,7 +112,11 @@ export function DocumentPreviewPanel({
     void load
       .then(async (blob) => {
         const initialKind = documentPreviewKind(item);
-        const limitTextBytes = initialKind === "markdown" || initialKind === "text" || initialKind === "unsupported";
+        const limitTextBytes =
+          initialKind === "html" ||
+          initialKind === "markdown" ||
+          initialKind === "text" ||
+          initialKind === "unsupported";
         const truncated = limitTextBytes && blob.size > MAX_TEXT_PREVIEW_BYTES;
         const previewBlob = limitTextBytes ? blob.slice(0, MAX_TEXT_PREVIEW_BYTES) : blob;
         const buffer = initialKind === "image" ? new ArrayBuffer(0) : await previewBlob.arrayBuffer();

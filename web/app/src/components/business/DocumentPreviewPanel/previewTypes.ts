@@ -2,6 +2,7 @@ import type { AttachmentPreviewItem } from "@/models/attachments";
 import type { PreviewKind } from "./types";
 
 const mediaKinds = new Map<string, PreviewKind>([
+  ["application/xhtml+xml", "html"],
   ["application/pdf", "pdf"],
   ["application/json", "text"],
   ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"],
@@ -9,6 +10,7 @@ const mediaKinds = new Map<string, PreviewKind>([
   ["application/vnd.ms-excel", "spreadsheet"],
   ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "powerpoint"],
   ["text/csv", "text"],
+  ["text/html", "html"],
   ["text/markdown", "markdown"],
   ["text/plain", "text"],
 ]);
@@ -16,6 +18,8 @@ const mediaKinds = new Map<string, PreviewKind>([
 const extensionKinds = new Map<string, PreviewKind>([
   ["csv", "text"],
   ["docx", "docx"],
+  ["htm", "html"],
+  ["html", "html"],
   ["jpeg", "image"],
   ["jpg", "image"],
   ["json", "text"],
@@ -29,6 +33,7 @@ const extensionKinds = new Map<string, PreviewKind>([
   ["webp", "image"],
   ["xls", "spreadsheet"],
   ["xlsx", "spreadsheet"],
+  ["xhtml", "html"],
 ]);
 
 type TextEncoding = "utf-16be" | "utf-16le" | "utf-8";

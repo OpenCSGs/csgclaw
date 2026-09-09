@@ -8,6 +8,9 @@ import {
 describe("document preview helpers", () => {
   it.each([
     ["application/pdf", "file.bin", "pdf"],
+    ["text/html", "file.bin", "html"],
+    ["application/xhtml+xml", "file.bin", "html"],
+    ["application/octet-stream", "report.html", "html"],
     ["application/octet-stream", "report.md", "markdown"],
     ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "file", "docx"],
     ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "file", "spreadsheet"],
