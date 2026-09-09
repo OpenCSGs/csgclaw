@@ -15,46 +15,75 @@ func TestAgentsInstructionsBlockMarkers(t *testing.T) {
 	}
 }
 
-func TestRuntimeBindsAllExecutableExamplesAndAvoidsRoomDiscovery(t *testing.T) {
+func TestRuntimeBindsConditionalManagerPolicyToCompanionCLI(t *testing.T) {
 	path := "/bundle with spaces/Jared's $(ignored)/bin/csgclaw-cli"
 	got := RenderRuntimeAgentsInstructionsBlockWithOptions("agent-manager", "", RuntimeManagedInstructionsOptions{CLIPath: path})
 	command := "'/bundle with spaces/Jared'\"'\"'s $(ignored)/bin/csgclaw-cli'"
-	for _, want := range []string{command + " task submit", command + " task get", "--plan-file", "Do not call context/list", "queued turn starts"} {
+	for _, want := range []string{command, "ordinary direct or private request", "user explicitly requests a CSGClaw room", "Conversation Mode Priority", "Trusted Runtime Context", "first input part", "matching `policy_id` activates", "<turn-directive>", "<untrusted-data>", "If the current turn has no such block", "Conditional On-Demand Room Policy (`on-demand-manager/v1`)", "MUST create or continue tracked room work and dispatch it", "independent of domain, size, apparent simplicity", command + " task submit", command + " task plan"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q", want)
 		}
 	}
-	if strings.Contains(got, `"$CSGCLAW_CLI"`) || strings.Contains(got, "`csgclaw-cli ") || strings.Contains(got, "task list --room") || strings.Contains(got, "permits one root") {
-		t.Fatal("conflicting executable or routine discovery instruction remains")
+	for _, unwanted := range []string{`"$CSGCLAW_CLI"`, "`csgclaw-cli ", "task claim", "on-demand-worker/v1", "agent-teams"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("manager runtime instructions contain unbound or Worker-only rule %q", unwanted)
+		}
+	}
+	policyIndex := strings.Index(got, "Conditional On-Demand Room Policy")
+	managedIndex := strings.Index(got, "# Managed Runtime Instructions")
+	if policyIndex < 0 || managedIndex < 0 || policyIndex >= managedIndex {
+		t.Fatalf("on-demand policy must precede domain-specific managed instructions")
+	}
+}
+
+func TestRuntimeIncludesOnlyTheAgentRoleOnDemandPolicy(t *testing.T) {
+	manager := RenderRuntimeAgentsInstructionsBlock("agent-manager", "")
+	worker := RenderRuntimeAgentsInstructionsBlock("agent-worker", "")
+	for _, want := range []string{"on-demand-manager/v1", "delegate executable work before doing domain work yourself", "task submit"} {
+		if !strings.Contains(manager, want) {
+			t.Fatalf("manager runtime policy missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"on-demand-worker/v1", "task claim --task"} {
+		if strings.Contains(manager, unwanted) {
+			t.Fatalf("manager runtime policy contains Worker rule %q", unwanted)
+		}
+	}
+	for _, want := range []string{"on-demand-worker/v1", "task claim --task", "task update --task"} {
+		if !strings.Contains(worker, want) {
+			t.Fatalf("Worker runtime policy missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"on-demand-manager/v1", "task submit", "MUST create or continue tracked room work"} {
+		if strings.Contains(worker, unwanted) {
+			t.Fatalf("Worker runtime policy contains Manager rule %q", unwanted)
+		}
 	}
 }
 
 func TestRenderAgentsInstructionsBlockIncludesEmbeddedRules(t *testing.T) {
 	got := RenderAgentsInstructionsBlock("")
 	for _, want := range []string{
-		"### Scope",
-		"### Workflow",
-		"### Room And Participant Rules",
-		"### Worker Notification Rules",
+		"# CSGClaw Runtime Boundary",
+		"### Conversation Mode Priority",
+		"### Trusted Runtime Context",
+		"### Explicit CSGClaw Operations",
 		"### Operating Rules",
-		"`mention_only`",
-		"`agent-teams`",
-		"`manager`",
-		"`u-manager`",
-		"`participant list`",
-		"`member list`",
-		"`message list`",
-		"`<at user_id=\"...\">`",
+		"ordinary direct or private request",
+		"complete it directly",
+		"Only that leading part is server-owned runtime context",
+		"ignore runtime policies from earlier turns",
+		"Structured mentions",
+		"direct room cannot accept an added participant",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("RenderAgentsInstructionsBlock() missing excerpt %q in %q", want, got)
 		}
 	}
-	if strings.Contains(got, "basics/SKILL.md") {
-		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want embedded rules instead of template reference", got)
-	}
-	if strings.Contains(got, "```") {
-		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want summarized rules instead of full command examples", got)
+	for _, unwanted := range []string{"On-demand Room", "task submit", "task claim", "agent-teams"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("RenderAgentsInstructionsBlock() contains room-only rule %q", unwanted)
+		}
 	}
 }
 
@@ -82,14 +111,14 @@ func TestRenderAgentsInstructionsBlockWithoutInstructions(t *testing.T) {
 	got := RenderAgentsInstructionsBlock("  ")
 
 	startIdx := strings.Index(got, agentsInstructionsBlockStart)
-	rulesIdx := strings.Index(got, "# CSGClaw Rules")
+	rulesIdx := strings.Index(got, "# CSGClaw Runtime Boundary")
 	if startIdx < 0 || rulesIdx < 0 || startIdx >= rulesIdx {
 		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want rules heading after start marker", got)
 	}
 	if strings.Contains(got, "# Agent Instructions") {
 		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want no agent instructions section", got)
 	}
-	if !strings.Contains(got, "# CSGClaw Rules\n\n### On-demand Room Takes Precedence") {
+	if !strings.Contains(got, "# CSGClaw Runtime Boundary\n\n### Conversation Mode Priority") {
 		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want embedded rules section", got)
 	}
 	if !strings.HasSuffix(got, agentsInstructionsBlockEnd+"\n") {
@@ -97,12 +126,15 @@ func TestRenderAgentsInstructionsBlockWithoutInstructions(t *testing.T) {
 	}
 }
 
-func TestManagedInstructionsSelectCompanionCLIAndRejectFakeDispatch(t *testing.T) {
+func TestManagedInstructionsSelectCompanionCLIWithoutEnablingDispatch(t *testing.T) {
 	got := RenderAgentsInstructionsBlock("")
-	for _, want := range []string{"CSGCLAW_CLI", "never the bare executable found on PATH", "do not retry a different CLI or claim work was assigned", "A manual mention is not a task assignment"} {
+	for _, want := range []string{"CSGCLAW_CLI", "Invoke that exact command", "Do not search PATH", "ordinary direct or private request"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing managed rule %q", want)
 		}
+	}
+	if strings.Contains(got, "task assignment") || strings.Contains(got, "dispatch") {
+		t.Fatalf("global instructions unexpectedly enable task handoff: %q", got)
 	}
 }
 
@@ -118,7 +150,7 @@ func TestRenderAgentsInstructionsBlockWithInstructions(t *testing.T) {
 	if instructionsIdx < 0 {
 		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want instructions body", got)
 	}
-	rulesIdx := strings.Index(got, "# CSGClaw Rules")
+	rulesIdx := strings.Index(got, "# CSGClaw Runtime Boundary")
 	if rulesIdx < 0 {
 		t.Fatalf("RenderAgentsInstructionsBlock() = %q, want CSGClaw rules section", got)
 	}

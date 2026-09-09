@@ -30,17 +30,46 @@ func TestPrivateRoomContextTracksDurableWorkWithoutDiscovery(t *testing.T) {
 	}
 	h := &Handler{im: messages, participantBridge: im.NewParticipantBridge("")}
 	h.SetRoomTaskCore(taskcore.NewService(taskcore.WithStore(store)))
+	projector := roomtask.NewContextProjector()
 	contextFor := func(actor, taskID string) string {
 		t.Helper()
-		text, err := h.participantBridge.RoomContext(room.ID, actor, "source", taskID)
+		key := room.ID + ":" + actor
+		if actor != "manager" {
+			key += ":" + taskID
+		}
+		current, err := h.participantBridge.RoomContext(roomtask.TurnContextRequest{
+			ConversationID: key, RoomID: room.ID, ParticipantID: actor, SourceID: "source", TaskID: taskID,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		text, err := projector.Project(key, current)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return text
 	}
 	initial := contextFor("manager", "")
-	if !strings.Contains(initial, `"tasks":[]`) || !strings.Contains(initial, `"has_tasks":false`) || !strings.Contains(initial, "pt-dev") || !strings.Contains(initial, "no startup") {
+	if !strings.Contains(initial, `mode="full"`) || !strings.Contains(initial, `room_type="on_demand"`) || !strings.Contains(initial, `role="manager"`) || !strings.Contains(initial, `policy_id="on-demand-manager/v1"`) || !strings.Contains(initial, `"tasks":[]`) || !strings.Contains(initial, `"has_tasks":false`) || !strings.Contains(initial, "pt-dev") {
 		t.Fatal(initial)
+	}
+	if strings.Contains(initial, "task claim --task") || !strings.Contains(initial, "task submit, task plan, and task dispatch") || !strings.Contains(initial, "not the direct executor") {
+		t.Fatal("dynamic context did not carry the compact Manager action gate", initial)
+	}
+	if strings.Contains(initial, "task_policy") || strings.Contains(initial, "as_of") {
+		t.Fatal("volatile or duplicated policy facts remain in projected context", initial)
+	}
+	unchanged := contextFor("manager", "")
+	if !strings.Contains(unchanged, `mode="steady"`) || !strings.Contains(unchanged, "task submit, task plan, and task dispatch") || strings.Contains(unchanged, `kind="room-scope"`) || strings.Contains(unchanged, `kind="task-snapshot"`) {
+		t.Fatal("unchanged Manager context omitted the action gate or repeated stable facts", unchanged)
+	}
+	freeRoom, err := messages.CreateRoom(im.CreateRoomRequest{Title: "Free", CreatorID: "admin", MemberIDs: []string{"dev"}, Type: apitypes.RoomTypeFree})
+	if err != nil {
+		t.Fatal(err)
+	}
+	freeContext, err := h.participantBridge.RoomContext(roomtask.TurnContextRequest{ConversationID: "free", RoomID: freeRoom.ID, ParticipantID: "manager", SourceID: "source-free"})
+	if got, projectErr := projector.Project("free", freeContext); err != nil || projectErr != nil || got != "" {
+		t.Fatalf("free room context = %q, provider error %v, projection error %v; want no room workflow instructions", got, err, projectErr)
 	}
 	root, err := h.roomTaskSvc.Create(room.ID, "source", "admin", "Build", "Parent goal")
 	if err != nil {
@@ -63,10 +92,10 @@ func TestPrivateRoomContextTracksDurableWorkWithoutDiscovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	worker := contextFor("pt-dev", dev.ID)
-	if !strings.Contains(worker, "Deliver page.html") || strings.Contains(worker, "Verify the page") {
+	if !strings.Contains(worker, `role="worker"`) || !strings.Contains(worker, `policy_id="on-demand-worker/v1"`) || !strings.Contains(worker, "Deliver page.html") || strings.Contains(worker, "Verify the page") || strings.Contains(worker, "task claim --task") || strings.Contains(worker, "task submit") {
 		t.Fatal(worker)
 	}
-	if _, err := h.participantBridge.RoomContext(room.ID, "pt-qa", "source", dev.ID); err == nil {
+	if _, err := h.participantBridge.RoomContext(roomtask.TurnContextRequest{ConversationID: "qa-wrong", RoomID: room.ID, ParticipantID: "pt-qa", SourceID: "source", TaskID: dev.ID}); err == nil {
 		t.Fatal("worker read another assignment")
 	}
 	for _, child := range []taskcore.Task{dev, qa} {

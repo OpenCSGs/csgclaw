@@ -1,6 +1,7 @@
 package im
 
 import (
+	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskmeta"
 	"encoding/json"
 	"fmt"
@@ -10,7 +11,7 @@ import (
 
 type ParticipantBridge struct {
 	mu          sync.Mutex
-	roomContext func(roomID, participantID, sourceID, taskID string) (string, error)
+	roomContext roomtask.TurnContextProvider
 	subscribers map[string]map[chan ParticipantEvent]struct{}
 	pending     map[string][]ParticipantEvent
 	inflight    map[string]map[string]ParticipantEvent
@@ -19,20 +20,20 @@ type ParticipantBridge struct {
 
 // SetRoomContextProvider installs a server-owned context reader. Read it when
 // a queued turn starts, not when the triggering message is persisted.
-func (b *ParticipantBridge) SetRoomContextProvider(provider func(string, string, string, string) (string, error)) {
+func (b *ParticipantBridge) SetRoomContextProvider(provider roomtask.TurnContextProvider) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.roomContext = provider
 }
 
-func (b *ParticipantBridge) RoomContext(roomID, participantID, sourceID, taskID string) (string, error) {
+func (b *ParticipantBridge) RoomContext(request roomtask.TurnContextRequest) (roomtask.PrivateTurnContext, error) {
 	b.mu.Lock()
 	provider := b.roomContext
 	b.mu.Unlock()
 	if provider == nil {
-		return "", nil
+		return roomtask.PrivateTurnContext{}, nil
 	}
-	return provider(roomID, participantID, sourceID, taskID)
+	return provider(request)
 }
 
 const maxPendingParticipantEventsPerParticipant = 64

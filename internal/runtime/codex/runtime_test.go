@@ -473,6 +473,18 @@ func TestRefreshCodexHomeAgentsFileCreatesManagedFileWhenMissing(t *testing.T) {
 	if !strings.Contains(text, "Output File Delivery") || !strings.Contains(text, "`csgclaw_publish_file`") {
 		t.Fatalf("AGENTS.md = %q, want shared file publishing instructions", text)
 	}
+	for _, want := range []string{
+		"Conditional On-Demand Room Policy (`on-demand-worker/v1`)",
+		`room_type="on_demand", role="worker", and policy_id="on-demand-worker/v1"`,
+		"task claim --task <task_id>",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("worker AGENTS.md missing conditional room policy %q in %q", want, text)
+		}
+	}
+	if strings.Contains(text, "on-demand-manager/v1") || strings.Contains(text, "task submit --room") {
+		t.Fatalf("worker AGENTS.md includes Manager-only room policy: %q", text)
+	}
 	if !strings.Contains(text, "END CSGCLAW-INSTRUCTIONS") {
 		t.Fatalf("AGENTS.md = %q, want instructions block end marker", text)
 	}
@@ -555,6 +567,14 @@ func TestRefreshCodexHomeAgentsFileAddsManagerConnectorRules(t *testing.T) {
 	}
 	text := string(raw)
 	for _, want := range []string{
+		"Conditional On-Demand Room Policy (`on-demand-manager/v1`)",
+		`room_type="on_demand", role="manager", and policy_id="on-demand-manager/v1"`,
+		"MUST create or continue tracked room work and dispatch it",
+		"independent of domain, size, apparent simplicity, or tools available to you",
+		"Before dispatch, do not use domain tools, inspect the target material, or start producing the requested deliverable yourself",
+		`"$CSGCLAW_CLI" task submit --room`,
+		"Managed Capability Boundary",
+		"They never authorize bypassing the on-demand room task workflow",
 		"GitHub Connector Access",
 		"/api/v1/agents/agent-manager/connectors/github/credential",
 		"X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY",
@@ -572,6 +592,9 @@ func TestRefreshCodexHomeAgentsFileAddsManagerConnectorRules(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("manager AGENTS.md missing %q in %q", want, text)
 		}
+	}
+	if strings.Contains(text, "on-demand-worker/v1") || strings.Contains(text, "task claim --task") {
+		t.Fatalf("manager AGENTS.md includes Worker-only room policy: %q", text)
 	}
 }
 
@@ -2267,10 +2290,13 @@ func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
 	}
 
 	skillsRoot := filepath.Join(root, agent.ManagerUserID, ".codex", "home", "skills")
-	for _, name := range []string{"agent-creator", "agent-teams", "csgclaw-interactive-output-demo", "feishu"} {
+	for _, name := range []string{"agent-creator", "csgclaw-interactive-output-demo", "feishu"} {
 		if _, err := os.Stat(filepath.Join(skillsRoot, name, "SKILL.md")); err != nil {
 			t.Fatalf("manager template skill %q missing: %v", name, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(skillsRoot, "agent-teams", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("manager team skill stat error = %v, want not installed", err)
 	}
 	for _, name := range []string{"agents/openai.yaml", "scripts/emit_demo.py"} {
 		if _, err := os.Stat(filepath.Join(skillsRoot, "csgclaw-interactive-output-demo", filepath.FromSlash(name))); err != nil {
@@ -2297,13 +2323,6 @@ func TestRuntimeCreateInstallsManagerTemplate(t *testing.T) {
 		t.Fatalf("feishu manager skill contains PicoClaw absolute path:\n%s", string(feishuRaw))
 	}
 
-	teamsRaw, err := os.ReadFile(filepath.Join(skillsRoot, "agent-teams", "SKILL.md"))
-	if err != nil {
-		t.Fatalf("read agent-teams manager skill: %v", err)
-	}
-	if strings.Contains(string(teamsRaw), "~/.picoclaw") {
-		t.Fatalf("agent-teams manager skill contains PicoClaw workspace path:\n%s", string(teamsRaw))
-	}
 }
 
 func TestRuntimeProvisionInstallsMissingEmbeddedManagerSkillBeforeSessionStart(t *testing.T) {
@@ -2341,10 +2360,14 @@ func TestRuntimeProvisionUpgradesExistingManagerSkill(t *testing.T) {
 	agentHome := filepath.Join(root, agent.ManagerUserID)
 	skillRoot := filepath.Join(agentHome, hostStateDirName, homeDirName, "skills", "csgclaw-interactive-output-demo")
 	customSkillRoot := filepath.Join(filepath.Dir(skillRoot), "custom")
+	legacyTeamsRoot := filepath.Join(filepath.Dir(skillRoot), "agent-teams")
 	if err := os.MkdirAll(filepath.Join(skillRoot, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(customSkillRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(legacyTeamsRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	const existingSkill = "# Existing customized demo\n"
@@ -2356,6 +2379,9 @@ func TestRuntimeProvisionUpgradesExistingManagerSkill(t *testing.T) {
 	}
 	const customSkill = "# Custom skill\n"
 	if err := os.WriteFile(filepath.Join(customSkillRoot, "SKILL.md"), []byte(customSkill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyTeamsRoot, "SKILL.md"), []byte("# Legacy Manager Team Skill\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2386,6 +2412,9 @@ func TestRuntimeProvisionUpgradesExistingManagerSkill(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(skillRoot, stalePath)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("stale manager skill path %q still exists, err=%v", stalePath, err)
 		}
+	}
+	if _, err := os.Stat(legacyTeamsRoot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy manager team skill stat error = %v, want removed", err)
 	}
 	assertRuntimeSkillFile(t, filepath.Join(customSkillRoot, "SKILL.md"), customSkill, 0o644)
 }
@@ -2611,7 +2640,7 @@ func TestRuntimeCreateOverlaysManagerTemplateAfterHostSkills(t *testing.T) {
 	if strings.Contains(text, "# Host Agent Creator") {
 		t.Fatalf("host agent-creator skill was not overwritten:\n%s", text)
 	}
-	if !strings.Contains(text, "Mandatory skill for provisioning any new CSGClaw agent-backed participant or worker") {
+	if !strings.Contains(text, "only when the user explicitly asks") || !strings.Contains(text, "Never infer provisioning from an ordinary work request") {
 		t.Fatalf("agent-creator manager skill missing template content:\n%s", text)
 	}
 }

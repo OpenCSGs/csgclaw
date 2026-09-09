@@ -161,5 +161,5 @@ func (h *Handler) roomContextFacts(meta roomtask.Roster) map[string]any {
 		}
 		members = append(members, item)
 	}
-	return map[string]any{"room_id": room.ID, "manager_id": meta.ManagerID, "members": members, "assignable_worker_ids": meta.WorkerIDs, "task_policy": "manager-created parent tasks queue per room; one-level worker children; explicit manager dispatch and review; dependencies require acceptance; same room only; QA defects require repair and regression children appended to the original parent with plan --append --request-id, not a new parent; accepting a defect report is not product success; close only after required work is accepted"}
+	return map[string]any{"room_id": room.ID, "manager_id": meta.ManagerID, "members": members, "assignable_worker_ids": meta.WorkerIDs}
 }

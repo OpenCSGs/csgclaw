@@ -2,6 +2,7 @@ package binding
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/execution"
+	"csgclaw/internal/roomtask"
 )
 
 func TestQueuedRoomTurnReadsContextAfterPreviousTurnFinishes(t *testing.T) {
@@ -17,7 +19,7 @@ func TestQueuedRoomTurnReadsContextAfterPreviousTurnFinishes(t *testing.T) {
 	var reads atomic.Int32
 	var completed atomic.Bool
 	engine := &fakeEngine{run: func(ctx context.Context, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
-		if request.Input[0].Text == "before acceptance" {
+		if strings.Contains(request.Input[0].Text, "before acceptance") {
 			close(started)
 			select {
 			case <-release:
@@ -30,15 +32,20 @@ func TestQueuedRoomTurnReadsContextAfterPreviousTurnFinishes(t *testing.T) {
 		}
 		return agentengine.TurnResult{Status: agentengine.TurnSucceeded}
 	}}
-	adapter, err := execution.New(engine, fakeRenderer{}, execution.WithRoomContextProvider(func(room, actor, source, task string) (string, error) {
+	adapter, err := execution.New(engine, fakeRenderer{}, execution.WithRoomContextProvider(func(request roomtask.TurnContextRequest) (roomtask.PrivateTurnContext, error) {
 		reads.Add(1)
-		if room != "r" || actor != "manager" {
-			t.Error(room, actor)
+		if request.RoomID != "r" || request.ParticipantID != "manager" || request.ConversationID == "" {
+			t.Error(request)
 		}
+		state := "before acceptance"
 		if completed.Load() {
-			return "accepted; next child eligible", nil
+			state = "accepted; next child eligible"
 		}
-		return "before acceptance", nil
+		return roomtask.PrivateTurnContext{
+			Role: roomtask.TurnRoleManager, PolicyID: roomtask.ManagerPolicyID,
+			ScopeJSON: `{"room_id":"r"}`, SnapshotJSON: `{"state":"` + state + `"}`,
+			TurnJSON: `{"source_message_id":"` + request.SourceID + `"}`,
+		}, nil
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +74,7 @@ func TestQueuedRoomTurnReadsContextAfterPreviousTurnFinishes(t *testing.T) {
 	close(release)
 	select {
 	case got := <-second:
-		if got != "accepted; next child eligible" {
+		if !strings.Contains(got, "accepted; next child eligible") {
 			t.Fatal(got)
 		}
 	case <-time.After(2 * time.Second):

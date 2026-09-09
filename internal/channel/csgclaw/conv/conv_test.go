@@ -84,8 +84,8 @@ func TestRoomManagerKeepsOneConversationAndRelatedTaskContext(t *testing.T) {
 			t.Fatal("manager room session fragmented", key, err)
 		}
 	}
-	other, _ := ConversationKey(binding, channel.Event{RoomID: "other", RoomManager: true})
-	if other == base {
-		t.Fatal("rooms shared manager context")
+	direct, _ := ConversationKey(binding, channel.Event{RoomID: "direct-admin-manager", RoomManager: true})
+	if direct == base {
+		t.Fatal("direct conversation shared the on-demand room context")
 	}
 }

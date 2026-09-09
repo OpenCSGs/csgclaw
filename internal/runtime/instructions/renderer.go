@@ -3,6 +3,7 @@ package instructions
 import (
 	"bytes"
 	"csgclaw/internal/identity"
+	"csgclaw/internal/roomtask"
 	_ "embed"
 	"strings"
 	"text/template"
@@ -41,17 +42,20 @@ func ExtractUserInstructionsFromAgentsDocument(document string) string {
 		return ""
 	}
 	body := block[bodyStart+len(heading):]
-	for _, nextHeading := range []string{"\n# Managed Runtime Instructions", "\n# CSGClaw Rules"} {
-		if idx := strings.Index(body, nextHeading); idx >= 0 {
-			body = body[:idx]
-			break
+	nextHeadingIndex := -1
+	for _, nextHeading := range []string{"\n# Managed Runtime Instructions", "\n# CSGClaw Runtime Boundary", "\n# CSGClaw Rules"} {
+		if idx := strings.Index(body, nextHeading); idx >= 0 && (nextHeadingIndex < 0 || idx < nextHeadingIndex) {
+			nextHeadingIndex = idx
 		}
+	}
+	if nextHeadingIndex >= 0 {
+		body = body[:nextHeadingIndex]
 	}
 	return strings.TrimSpace(body)
 }
 
 func RenderAgentsInstructionsBlock(instructions string) string {
-	return renderAgentsInstructionsBlock(instructions, "", `"$CSGCLAW_CLI"`)
+	return renderAgentsInstructionsBlock(instructions, "", `"$CSGCLAW_CLI"`, "")
 }
 
 type RuntimeManagedInstructionsOptions struct {
@@ -64,18 +68,21 @@ func RenderRuntimeAgentsInstructionsBlock(agentID, instructions string) string {
 }
 
 func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions string, options RuntimeManagedInstructionsOptions) string {
+	command := `"$CSGCLAW_CLI"`
+	if path := strings.TrimSpace(options.CLIPath); path != "" {
+		command = "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
+	}
 	managedInstructions := strings.TrimSpace(runtimeFilePublishingInstructions)
+	role := roomtask.TurnRoleWorker
 	if strings.TrimSpace(agentID) == identity.ManagerAgentID {
+		role = roomtask.TurnRoleManager
 		managedInstructions = joinManagedInstructions(managedInstructions, managerRuntimeConnectorInstructions)
 	}
 	for _, fragment := range options.Extensions {
 		managedInstructions = joinManagedInstructions(managedInstructions, fragment)
 	}
-	command := `"$CSGCLAW_CLI"`
-	if path := strings.TrimSpace(options.CLIPath); path != "" {
-		command = "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
-	}
-	return renderAgentsInstructionsBlock(instructions, managedInstructions, command)
+	policy := roomtask.OnDemandPolicySection(role, command)
+	return renderAgentsInstructionsBlock(instructions, managedInstructions, command, policy)
 }
 
 const runtimeFilePublishingInstructions = `### Output File Delivery
@@ -95,7 +102,12 @@ func joinManagedInstructions(values ...string) string {
 	return strings.Join(parts, "\n\n")
 }
 
-const managerRuntimeConnectorInstructions = `### GitHub Connector Access
+const managerRuntimeConnectorInstructions = `### Managed Capability Boundary
+
+- Capability-specific instructions below describe how to perform an operation only after the active conversation-mode policy permits direct execution.
+- They never authorize bypassing the on-demand room task workflow. In on-demand Manager mode, do not use a domain capability before required task planning and dispatch.
+
+### GitHub Connector Access
 
 - The Manager can request CSGClaw-managed connector credentials dynamically through the local CSGClaw API.
 - For GitHub repository, pull request, issue, or review workflows, request a fresh lease with ` + "`POST $CSGCLAW_BASE_URL/api/v1/agents/agent-manager/connectors/github/credential`" + ` using ` + "`Authorization: Bearer $CSGCLAW_ACCESS_TOKEN`" + ` and ` + "`X-CSGClaw-Connector-Capability: $CSGCLAW_CONNECTOR_CAPABILITY`" + `.
@@ -128,9 +140,10 @@ const managerRuntimeConnectorInstructions = `### GitHub Connector Access
 - Do not search the web for a referenced upload, rely only on ` + "`find`" + ` in the current workspace, or request a re-upload until durable CSGClaw history has been checked.
 - Never print, echo, or include ` + "`CSGCLAW_ACCESS_TOKEN`" + ` or a capability token in tool output, logs, prompts, or responses.`
 
-func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand string) string {
+func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand, onDemandPolicy string) string {
 	instructions = strings.TrimSpace(instructions)
 	managedInstructions = strings.TrimSpace(managedInstructions)
+	onDemandPolicy = strings.TrimSpace(onDemandPolicy)
 	managedInstructions = strings.ReplaceAll(managedInstructions, "`csgclaw-cli ", "`"+cliCommand+" ")
 	managedInstructions = strings.ReplaceAll(managedInstructions, `"$CSGCLAW_CLI"`, cliCommand)
 	data := struct {
@@ -141,6 +154,8 @@ func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand
 		HasInstructions        bool
 		ManagedInstructions    string
 		HasManagedInstructions bool
+		OnDemandPolicy         string
+		HasOnDemandPolicy      bool
 	}{
 		CLICommand:             cliCommand,
 		StartMarker:            agentsInstructionsBlockStart,
@@ -149,6 +164,8 @@ func renderAgentsInstructionsBlock(instructions, managedInstructions, cliCommand
 		HasInstructions:        instructions != "",
 		ManagedInstructions:    managedInstructions,
 		HasManagedInstructions: managedInstructions != "",
+		OnDemandPolicy:         onDemandPolicy,
+		HasOnDemandPolicy:      onDemandPolicy != "",
 	}
 	var b bytes.Buffer
 	if err := parsedAgentsInstructionsBlockTemplate.Execute(&b, data); err != nil {
