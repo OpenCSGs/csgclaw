@@ -69,7 +69,7 @@ import {
   agentToDraft,
   isAgentProfileDraftComplete,
   isAgentProfileMarkedComplete,
-  composeLegacyRuntimeKind,
+  createAgentSelectableTemplates,
   defaultWorkerImageForRuntime,
   draftMCPServersForSave,
   draftRuntimeOptionsForSave,
@@ -87,7 +87,6 @@ import {
   notifierFormIsComplete,
   mergeAgentIntoList,
   normalizeAuthProviderName,
-  normalizeRuntimeName,
   normalizeTemplateSelection,
   partitionWorkspaceAgentItems,
   pickDefaultAgentTemplate,
@@ -101,7 +100,6 @@ import {
   resolveAgentChannelUserID,
   shouldWaitForManagerRuntimeAfterProfileSave,
   startAgentCreateProgress,
-  workerSelectableTemplates,
 } from "@/models/agents";
 import type {
   AgentCreateProgressState,
@@ -1384,28 +1382,8 @@ export function useAgentController({
     const refreshedBootstrapConfig = await refreshWorkspaceBootstrapConfig();
     const effectiveBootstrapConfig = refreshedBootstrapConfig || bootstrapConfig;
     setAgentModalBootstrapConfig(effectiveBootstrapConfig);
-    const runtimeChoices = runtimeChoicesFromBootstrapConfig(effectiveBootstrapConfig);
-    const codexAvailable = runtimeChoices.some(
-      (item) => !item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "codex" && item?.installed !== false,
-    );
-    const isCSGHubSandboxProvider =
-      String(effectiveBootstrapConfig?.sandbox_provider || "")
-        .trim()
-        .toLowerCase() === "csghub";
-    const createWorkerTemplates = workerSelectableTemplates(hubTemplates).filter(
-      (item) => normalizeRuntimeKind(item.runtime_kind) !== "picoclaw_sandbox",
-    );
-    const preferredSandboxRuntimeName =
-      normalizeRuntimeName(
-        runtimeChoices.find((item) => item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "openclaw")?.name,
-      ) || normalizeRuntimeName(runtimeChoices.find((item) => item?.sandbox_enabled)?.name || "openclaw");
-    let preferredRuntimeKind =
-      normalizeRuntimeKind(composeLegacyRuntimeKind(preferredSandboxRuntimeName, true)) || "openclaw_sandbox";
-    if (isCSGHubSandboxProvider) {
-      preferredRuntimeKind = "codex";
-    } else if (!runtimeChoices.length && !codexAvailable) {
-      preferredRuntimeKind = "openclaw_sandbox";
-    }
+    const createWorkerTemplates = createAgentSelectableTemplates(hubTemplates);
+    const preferredRuntimeKind = "codex";
     const selectedTemplate =
       template === undefined
         ? pickDefaultAgentTemplate(createWorkerTemplates, preferredRuntimeKind, effectiveBootstrapConfig)

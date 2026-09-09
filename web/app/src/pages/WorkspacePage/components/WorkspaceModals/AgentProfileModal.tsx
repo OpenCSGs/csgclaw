@@ -21,6 +21,7 @@ import {
   agentCreateTemplateLocked,
   applyTemplateToDraft,
   composeLegacyRuntimeKind,
+  createAgentSelectableTemplates,
   formatRuntimeKindLabel,
   isNotificationBotDraftContext,
   normalizeRuntimeKind,
@@ -32,7 +33,6 @@ import {
   runtimeOptionSchemasForAgent,
   supportsMCPServers,
   templateMatchesRuntime,
-  workerSelectableTemplates,
 } from "@/models/agents";
 import type { AgentDraft, AgentLike, RuntimeBootstrapConfig } from "@/models/agents";
 import {
@@ -149,13 +149,7 @@ export function AgentProfileModal({
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
   const selectedProviderModels = selectedProvider?.models ?? [];
   const selectedModelValue = agentDraft.model_id || "";
-  const workerTemplates = useMemo(
-    () =>
-      workerSelectableTemplates(hubTemplates).filter(
-        (item) => normalizeRuntimeKind(item.runtime_kind) !== "picoclaw_sandbox",
-      ),
-    [hubTemplates],
-  );
+  const workerTemplates = useMemo(() => createAgentSelectableTemplates(hubTemplates), [hubTemplates]);
   const selectedWorkerTemplate = workerTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
   const isCSGHubSandboxProvider =
     String(bootstrapConfig?.sandbox_provider || "")
@@ -174,7 +168,6 @@ export function AgentProfileModal({
   const defaultSandboxRuntimeName =
     normalizeRuntimeName(sandboxRuntimeChoices.find((item) => normalizeRuntimeName(item?.name) === "openclaw")?.name) ||
     normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "openclaw");
-  const defaultSandboxRuntimeKind = composeLegacyRuntimeKind(defaultSandboxRuntimeName, true) || "openclaw_sandbox";
   const selectedRuntimeName = normalizeRuntimeName(
     agentDraft.runtime_name || (sandboxEnabled ? defaultSandboxRuntimeName : "codex"),
   );
@@ -286,7 +279,7 @@ export function AgentProfileModal({
       const nextTemplate = normalizeTemplateSelection(
         workerTemplates.find((item) => item.id === lastTemplateIDRef.current) ||
           workerTemplates.find((item) => item.id === agentDraft.from_template) ||
-          pickDefaultAgentTemplate(workerTemplates, defaultSandboxRuntimeKind, bootstrapConfig) ||
+          pickDefaultAgentTemplate(workerTemplates, "codex", bootstrapConfig) ||
           null,
       );
       onAgentDraftChange((current) => {
@@ -305,7 +298,7 @@ export function AgentProfileModal({
       return;
     }
     const nextTemplate = normalizeTemplateSelection(
-      pickDefaultAgentTemplate(workerTemplates, defaultSandboxRuntimeKind, bootstrapConfig),
+      pickDefaultAgentTemplate(workerTemplates, "codex", bootstrapConfig),
     );
     if (!nextTemplate) {
       return;
@@ -318,7 +311,6 @@ export function AgentProfileModal({
   }, [
     agentDraft.from_template,
     bootstrapConfig,
-    defaultSandboxRuntimeKind,
     isTemplateCreate,
     managerAgent?.image,
     onAgentDraftChange,

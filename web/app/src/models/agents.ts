@@ -1470,6 +1470,12 @@ export function workerSelectableTemplates(
   });
 }
 
+export function createAgentSelectableTemplates(
+  templates: readonly AgentTemplateLike[] | null | undefined,
+): AgentTemplateLike[] {
+  return workerSelectableTemplates(templates).filter((item) => item.id !== "builtin.openclaw-worker");
+}
+
 export function pickDefaultAgentTemplate(
   templates: readonly AgentTemplateLike[] | null | undefined,
   runtimeKind = "",
@@ -1501,6 +1507,14 @@ export function pickDefaultAgentTemplate(
       candidates.find((item) => item.id === "builtin.openclaw-worker") ||
       candidates.find((item) => item.name === "openclaw-worker") ||
       candidates.find((item) => String(item.id || "").endsWith(".openclaw-worker")) ||
+      candidates[0]
+    );
+  }
+  if (requestedRuntime === "codex") {
+    return (
+      candidates.find((item) => item.id === "builtin.codex-worker") ||
+      candidates.find((item) => item.name === "generic-assistant-codex") ||
+      candidates.find((item) => String(item.id || "").endsWith(".codex-worker")) ||
       candidates[0]
     );
   }
