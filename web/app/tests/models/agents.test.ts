@@ -36,6 +36,7 @@ import {
   agentPageLLMProfileChanged,
   agentProfilePageSaveDisabled,
   isAgentProfileDraftComplete,
+  isBuiltinOpenClawWorkerTemplate,
   isAgentRunning,
   mergeAgentIntoList,
   isNotificationBotAgent,
@@ -51,6 +52,7 @@ import {
   notificationPushWebhookPathForBot,
   parseJSONMap,
   pickDefaultAgentTemplate,
+  createAgentSelectableTemplates,
   providerNeedsAuth,
   resolvedNotifierWebhookOrigin,
   resolveRuntimeSelection,
@@ -634,6 +636,7 @@ describe("agent model helpers", () => {
   it("selects runtime-specific templates and images", () => {
     const templates = [
       { id: "builtin.manager-codex", name: "manager-codex", role: "manager", runtime_kind: "codex" },
+      { id: "builtin.codex-worker", name: "generic-assistant-codex", role: "worker", runtime_kind: "codex" },
       { id: "custom/worker", name: "custom-worker", runtime_kind: "picoclaw_sandbox" },
       { id: "builtin.openclaw-worker", name: "openclaw-worker", runtime_kind: "openclaw_sandbox" },
       { id: "builtin.picoclaw-worker", name: "picoclaw-worker", runtime_kind: "picoclaw_sandbox" },
@@ -653,6 +656,7 @@ describe("agent model helpers", () => {
       "builtin.openclaw-worker",
     );
     expect(pickDefaultAgentTemplate(templates, "notification", bootstrapConfig)).toBeNull();
+    expect(pickDefaultAgentTemplate(templates, "codex", bootstrapConfig)?.id).toBe("builtin.codex-worker");
     expect(runtimeImageForKind("openclaw_sandbox", bootstrapConfig, "fallback:worker")).toBe("openclaw:worker");
     expect(defaultWorkerImageForRuntime(templates, "openclaw_sandbox", bootstrapConfig, "fallback:worker")).toBe(
       "openclaw:worker",
@@ -676,7 +680,7 @@ describe("agent model helpers", () => {
           requestOptionsText: "{}",
           runtime_kind: "picoclaw_sandbox",
         },
-        templates[2],
+        templates[3],
         bootstrapConfig,
       ),
     ).toMatchObject({
@@ -733,6 +737,33 @@ describe("agent model helpers", () => {
       "custom/roleless",
     ]);
     expect(pickDefaultAgentTemplate(templates, "picoclaw_sandbox", null)?.id).toBe("builtin.picoclaw-worker");
+  });
+
+  it("excludes only the builtin OpenClaw template from create-agent template choices", () => {
+    const templates = [
+      { id: "builtin.codex-worker", name: "generic-assistant-codex", role: "worker", runtime_kind: "codex" },
+      {
+        id: "builtin.openclaw-worker",
+        name: "generic-assistant-openclaw",
+        role: "worker",
+        runtime_kind: "openclaw_sandbox",
+      },
+      {
+        id: "Agentic/feishu-assistant",
+        name: "feishu-assistant",
+        role: "worker",
+        runtime_kind: "openclaw_sandbox",
+      },
+      { id: "local.review-worker", name: "review-worker", role: "worker", runtime_kind: "codex" },
+    ];
+
+    expect(createAgentSelectableTemplates(templates).map((item) => item.id)).toEqual([
+      "builtin.codex-worker",
+      "Agentic/feishu-assistant",
+      "local.review-worker",
+    ]);
+    expect(isBuiltinOpenClawWorkerTemplate(templates[1])).toBe(true);
+    expect(isBuiltinOpenClawWorkerTemplate(templates[2])).toBe(false);
   });
 
   it("applies template image_env contracts to draft env rows", () => {

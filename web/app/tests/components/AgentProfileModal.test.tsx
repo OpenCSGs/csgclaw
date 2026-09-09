@@ -287,12 +287,12 @@ describe("AgentProfileModal", () => {
     function TestModal() {
       const [draft, setDraft] = useState<AgentDraft>({
         ...agentToDraft(worker),
-        from_template: "builtin.openclaw-worker",
-        template_name: "OpenClaw Worker",
-        name: "OpenClaw Worker",
-        runtime_name: "openclaw",
-        sandbox_enabled: true,
-        runtime_kind: "openclaw_sandbox",
+        from_template: "builtin.codex-worker",
+        template_name: "Codex Worker",
+        name: "Codex Worker",
+        runtime_name: "codex",
+        sandbox_enabled: false,
+        runtime_kind: "codex",
       });
       const [mode, setMode] = useState<"template" | "custom">("template");
       return (
@@ -310,10 +310,10 @@ describe("AgentProfileModal", () => {
           onAgentModelsReset={vi.fn()}
           hubTemplates={[
             {
-              id: "builtin.openclaw-worker",
-              name: "OpenClaw Worker",
+              id: "builtin.codex-worker",
+              name: "Codex Worker",
               role: "worker",
-              runtime_kind: "openclaw_sandbox",
+              runtime_kind: "codex",
               description: "Handles coding tasks.",
               image_env: [{ name: "OPENAI_API_KEY", secret: true }],
             },
@@ -369,13 +369,13 @@ describe("AgentProfileModal", () => {
       const [draft, setDraft] = useState<AgentDraft>({
         ...agentToDraft(worker),
         avatar: templateAvatar,
-        from_template: "builtin.openclaw-worker",
-        template_name: "OpenClaw Worker",
-        name: "generic-assistant-openclaw",
-        description: "通用型助手（OpenClaw 版）",
-        runtime_name: "openclaw",
-        sandbox_enabled: true,
-        runtime_kind: "openclaw_sandbox",
+        from_template: "builtin.codex-worker",
+        template_name: "Codex Worker",
+        name: "generic-assistant-codex",
+        description: "通用型助手（Codex 版）",
+        runtime_name: "codex",
+        sandbox_enabled: false,
+        runtime_kind: "codex",
       });
       const [mode, setMode] = useState<"template" | "custom">("template");
       return (
@@ -393,11 +393,11 @@ describe("AgentProfileModal", () => {
           onAgentModelsReset={vi.fn()}
           hubTemplates={[
             {
-              id: "builtin.openclaw-worker",
-              name: "OpenClaw Worker",
+              id: "builtin.codex-worker",
+              name: "Codex Worker",
               role: "worker",
-              runtime_kind: "openclaw_sandbox",
-              description: "通用型助手（OpenClaw 版）",
+              runtime_kind: "codex",
+              description: "通用型助手（Codex 版）",
             },
           ]}
           bootstrapConfig={{
@@ -446,13 +446,13 @@ describe("AgentProfileModal", () => {
     function TestModal() {
       const [draft, setDraft] = useState<AgentDraft>({
         ...agentToDraft(worker),
-        from_template: "builtin.openclaw-worker",
-        template_name: "OpenClaw Worker",
-        name: "generic-assistant-openclaw",
+        from_template: "builtin.codex-worker",
+        template_name: "Codex Worker",
+        name: "generic-assistant-codex",
         description: "Template worker",
-        runtime_name: "openclaw",
-        sandbox_enabled: true,
-        runtime_kind: "openclaw_sandbox",
+        runtime_name: "codex",
+        sandbox_enabled: false,
+        runtime_kind: "codex",
         envRows: [
           { key: "GITLAB_TOKEN", value: "" },
           { key: "GITLAB_BASE_URL", value: "https://git-devops.opencsg.com" },
@@ -474,10 +474,10 @@ describe("AgentProfileModal", () => {
           onAgentModelsReset={vi.fn()}
           hubTemplates={[
             {
-              id: "builtin.openclaw-worker",
-              name: "OpenClaw Worker",
+              id: "builtin.codex-worker",
+              name: "Codex Worker",
               role: "worker",
-              runtime_kind: "openclaw_sandbox",
+              runtime_kind: "codex",
               description: "Template worker",
               image_env: [
                 { name: "GITLAB_TOKEN", secret: true },
@@ -527,13 +527,13 @@ describe("AgentProfileModal", () => {
     function TestModal() {
       const [draft, setDraft] = useState<AgentDraft>({
         ...agentToDraft(worker),
-        from_template: "builtin.openclaw-worker",
-        template_name: "OpenClaw Worker",
-        name: "OpenClaw Worker",
-        description: "OpenClaw template",
-        runtime_name: "openclaw",
-        sandbox_enabled: true,
-        runtime_kind: "openclaw_sandbox",
+        from_template: "builtin.codex-worker",
+        template_name: "Codex Worker",
+        name: "Codex Worker",
+        description: "Codex template",
+        runtime_name: "codex",
+        sandbox_enabled: false,
+        runtime_kind: "codex",
       });
       const [mode, setMode] = useState<"template" | "custom">("template");
       return (
@@ -550,6 +550,13 @@ describe("AgentProfileModal", () => {
           }
           onAgentModelsReset={vi.fn()}
           hubTemplates={[
+            {
+              id: "builtin.codex-worker",
+              name: "Codex Worker",
+              role: "worker",
+              runtime_kind: "codex",
+              description: "Codex template",
+            },
             {
               id: "builtin.picoclaw-worker",
               name: "PicoClaw Worker",
@@ -595,12 +602,12 @@ describe("AgentProfileModal", () => {
 
     render(<TestModal />);
 
-    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("OpenClaw Worker");
+    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("Codex Worker");
 
     await user.click(screen.getByRole("tab", { name: /Custom/i }));
     await user.click(screen.getByRole("tab", { name: /From template/i }));
 
-    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("OpenClaw Worker");
+    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("Codex Worker");
   });
 
   it("hides manager templates from the worker template dropdown in create mode", async () => {
@@ -629,13 +636,6 @@ describe("AgentProfileModal", () => {
             runtime_kind: "picoclaw_sandbox",
             description: "Legacy sandbox template.",
           },
-          {
-            id: "builtin.openclaw-worker",
-            name: "OpenClaw Worker",
-            role: "worker",
-            runtime_kind: "openclaw_sandbox",
-            description: "Handles coding tasks.",
-          },
         ]}
         bootstrapConfig={{}}
         managerAgent={null}
@@ -658,16 +658,14 @@ describe("AgentProfileModal", () => {
     );
 
     await user.click(screen.getByRole("combobox", { name: "Template" }));
-    expect(screen.getByRole("option", { name: "OpenClaw Worker" })).toBeInTheDocument();
-    expect(screen.getByText("Handles coding tasks.")).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "PicoClaw Worker" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "PicoClaw Worker" })).toBeInTheDocument();
+    expect(screen.getByText("Legacy sandbox template.")).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Manager" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "No template" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Legacy sandbox template.")).not.toBeInTheDocument();
     expect(screen.queryByText("Coordinates workers.")).not.toBeInTheDocument();
   });
 
-  it("defaults template create to OpenClaw and excludes PicoClaw templates", async () => {
+  it("defaults template create to Codex from the templates returned by the API", async () => {
     function TestModal() {
       const [draft, setDraft] = useState<AgentDraft>({
         ...agentToDraft(worker),
@@ -699,18 +697,18 @@ describe("AgentProfileModal", () => {
               description: "Host runtime template.",
             },
             {
-              id: "builtin.picoclaw-worker",
-              name: "PicoClaw Worker",
-              role: "worker",
-              runtime_kind: "picoclaw_sandbox",
-              description: "Sandbox template.",
-            },
-            {
               id: "builtin.openclaw-worker",
               name: "OpenClaw Worker",
               role: "worker",
               runtime_kind: "openclaw_sandbox",
-              description: "OpenClaw sandbox template.",
+              description: "Sandbox runtime template.",
+            },
+            {
+              id: "Agentic/feishu-assistant",
+              name: "feishu-assistant",
+              role: "worker",
+              runtime_kind: "openclaw_sandbox",
+              description: "Remote OpenClaw template.",
             },
           ]}
           bootstrapConfig={{
@@ -742,9 +740,10 @@ describe("AgentProfileModal", () => {
 
     render(<TestModal />);
 
-    expect(await screen.findByRole("combobox", { name: "Template" })).toHaveTextContent("OpenClaw Worker");
+    expect(await screen.findByRole("combobox", { name: "Template" })).toHaveTextContent("Codex Worker");
     await userEvent.setup().click(screen.getByRole("combobox", { name: "Template" }));
-    expect(screen.queryByRole("option", { name: "PicoClaw Worker" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "OpenClaw Worker" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "feishu-assistant" })).toBeInTheDocument();
   });
 
   it("warns when the selected sandbox runtime is unavailable", () => {
@@ -888,7 +887,7 @@ describe("AgentProfileModal", () => {
               id: "custom/gitlab",
               name: "GitLab Assistant",
               role: "worker",
-              runtime_kind: "openclaw_sandbox",
+              runtime_kind: "codex",
               image_env: [{ name: "GITLAB_TOKEN", required: true, secret: true }],
             },
           ]}
