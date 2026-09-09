@@ -9,8 +9,10 @@ import (
 
 func TestRunUsesCancelableContext(t *testing.T) {
 	called := false
+	var runCtx context.Context
 	err := executeWithSignalContext([]string{"serve"}, func(ctx context.Context, _ []string) error {
 		called = true
+		runCtx = ctx
 		if ctx == context.Background() {
 			t.Fatal("executeWithSignalContext() passed context.Background(), want signal-aware context")
 		}
@@ -33,6 +35,9 @@ func TestRunUsesCancelableContext(t *testing.T) {
 	})
 	if !called {
 		t.Fatal("execFn was not called")
+	}
+	if runCtx.Err() != context.Canceled {
+		t.Fatal("command context was not canceled after executeWithSignalContext() returned")
 	}
 	if err == nil || err.Error() != "stop" {
 		t.Fatalf("executeWithSignalContext() error = %v, want stop", err)

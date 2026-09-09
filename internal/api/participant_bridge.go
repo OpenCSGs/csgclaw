@@ -449,6 +449,8 @@ func (h *Handler) handleParticipantEventsStream(w http.ResponseWriter, r *http.R
 		select {
 		case <-r.Context().Done():
 			return
+		case <-h.eventStreamShutdown:
+			return
 		case <-heartbeat.C:
 			if err := writeParticipantSSEComment(w, controller, flusher, "heartbeat"); err != nil {
 				return

@@ -11,13 +11,11 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -311,9 +309,6 @@ func (c internalServeCmd) Run(ctx context.Context, run *command.Context, args []
 	defer instanceLock.Release()
 	restoreAuthDetect := applyNoAuthDetectEnv(*noAuthDetect)
 	defer restoreAuthDetect()
-
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	if *pidPath != "" {
 		if err := writePIDFile(*pidPath, os.Getpid()); err != nil {

@@ -52,6 +52,7 @@ type Handler struct {
 	im                         *im.Service
 	csgclaw                    *csgclawchannel.Service
 	imBus                      *im.Bus
+	eventStreamShutdown        <-chan struct{}
 	workBus                    *worklease.Bus
 	workControlBus             *worklease.ControlBus
 	participantWork            worklease.ParticipantWorkReporter
@@ -812,6 +813,14 @@ func NewHandlerWithAuth(svc AgentServices, engine agentengine.Interface, imSvc *
 		upgradeApply:      upgrade.StartApplyHelper, workspace: svc.Workspace, agentModels: svc.Models, agentRuntime: svc.Runtime,
 	}
 	return h
+}
+
+// SetEventStreamShutdown supplies the shutdown notification for passive event
+// subscriptions. Configure it before serving requests.
+func (h *Handler) SetEventStreamShutdown(done <-chan struct{}) {
+	if h != nil {
+		h.eventStreamShutdown = done
+	}
 }
 
 func (h *Handler) SetNotificationDeliver(d notification.Fanouter) {
@@ -2989,6 +2998,8 @@ func (h *Handler) handleIMEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-h.eventStreamShutdown:
 			return
 		case <-ticker.C:
 			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
