@@ -428,6 +428,65 @@ func TestRoomParentStopTargetsOnlyItsCurrentExecution(t *testing.T) {
 	}
 }
 
+func TestRoomTaskRecoveryIgnoresManagerCoordinationLease(t *testing.T) {
+	messages := im.NewService()
+	if _, _, err := messages.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "dev", Name: "Dev", Role: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	room, err := messages.CreateRoom(im.CreateRoomRequest{Title: "Work", CreatorID: "admin", MemberIDs: []string{"dev"}, Type: apitypes.RoomTypeOnDemand})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{im: messages}
+	h.SetRoomTaskCore(taskcore.NewService())
+	root, err := h.roomTaskSvc.Create(room.ID, "goal", "manager", "Build", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.roomTaskSvc.Plan(room.ID, root.ID, "", []roomtask.PlanItem{{IDRef: "dev", Title: "Build", AssignedTo: "pt-dev"}}, true); err != nil {
+		t.Fatal(err)
+	}
+	var child taskcore.Task
+	for _, task := range h.roomTaskSvc.List(room.ID) {
+		if task.ParentID == root.ID {
+			child = task
+		}
+	}
+	if err := h.roomTaskSvc.Dispatch(room.ID, child.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.roomTaskSvc.UpdateExecution(room.ID, child.ID, "pt-dev", taskcore.StatusInProgress, "", "", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.roomTaskSvc.Recover(); err != nil {
+		t.Fatal(err)
+	}
+
+	control := &roomStopControl{leases: []apitypes.ParticipantWorkUpdate{
+		{ParticipantID: "pt-manager", RoomID: room.ID, RequestID: "manager-feedback-turn", TaskID: child.ID, TaskAttempt: 1, LeaseID: "manager"},
+		{ParticipantID: "pt-dev", RoomID: room.ID, RequestID: "worker-turn", TaskID: child.ID, TaskAttempt: 1, LeaseID: "worker"},
+	}}
+	h.participantWork = control
+	recoverTask := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/"+room.ID+"/tasks/"+child.ID+"/recover", strings.NewReader(`{"attempt":1,"assessment":"verified previous execution stopped"}`))
+		out := httptest.NewRecorder()
+		h.Routes().ServeHTTP(out, req)
+		return out
+	}
+	if out := recoverTask(); out.Code != http.StatusConflict {
+		t.Fatalf("recover with active Worker = %d %s", out.Code, out.Body.String())
+	}
+
+	control.leases = control.leases[:1]
+	if out := recoverTask(); out.Code != http.StatusOK {
+		t.Fatalf("recover with Manager coordination only = %d %s", out.Code, out.Body.String())
+	}
+	recovered, _ := h.roomTaskSvc.Get(room.ID, child.ID)
+	if recovered.RecoveryRequired {
+		t.Fatalf("recovery was not resolved: %+v", recovered)
+	}
+}
+
 func TestDeleteRoomRejectsUnfinishedRoomTasks(t *testing.T) {
 	messages := im.NewService()
 	if _, _, err := messages.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "dev", Name: "Dev", Role: "worker"}); err != nil {

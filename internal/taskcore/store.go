@@ -15,9 +15,11 @@ import (
 )
 
 const (
-	sequenceFileName = "sequence.json"
-	tasksFileName    = "tasks.json"
-	eventsFileName   = "events.jsonl"
+	sequenceFileName         = "sequence.json"
+	tasksFileName            = "tasks.json"
+	eventsFileName           = "events.jsonl"
+	currentTaskSchemaVersion = 2
+	currentSequenceVersion   = 1
 )
 
 type Store struct {
@@ -29,10 +31,11 @@ type Store struct {
 // taskRecord is the durable transaction boundary. Tasks are peers in one flat
 // list; parent_id is the only persisted hierarchy.
 type taskRecord struct {
-	Tasks     []Task         `json:"tasks"`
-	EventSeq  int64          `json:"event_seq,omitempty"`
-	Approvals []TaskApproval `json:"approvals,omitempty"`
-	Presence  []TaskPresence `json:"presence,omitempty"`
+	SchemaVersion int            `json:"schema_version"`
+	Tasks         []Task         `json:"tasks"`
+	EventSeq      int64          `json:"event_seq,omitempty"`
+	Approvals     []TaskApproval `json:"approvals,omitempty"`
+	Presence      []TaskPresence `json:"presence,omitempty"`
 }
 
 type IndexEntry struct {
@@ -44,13 +47,17 @@ type IndexEntry struct {
 }
 
 type taskSequenceState struct {
-	LastTask int64 `json:"last_task"`
+	SchemaVersion int   `json:"schema_version"`
+	LastTask      int64 `json:"last_task"`
 }
 
 func NewStore(root string) (*Store, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return nil, fmt.Errorf("task store root is required")
+	}
+	if err := migrateLegacyTaskRecords(root); err != nil {
+		return nil, err
 	}
 	taskIDs, err := newPersistentTaskIDAllocator(root)
 	if err != nil {
@@ -121,6 +128,9 @@ func (s *Store) LoadRoot(taskID string) (Snapshot, error) {
 	dir := s.taskDir(taskID)
 	var record taskRecord
 	if err := readJSONFile(filepath.Join(dir, tasksFileName), &record); err != nil {
+		return Snapshot{}, err
+	}
+	if err := validateTaskRecordVersion(&record); err != nil {
 		return Snapshot{}, err
 	}
 	snapshot, err := snapshotFromRecord(taskID, record)
@@ -233,10 +243,11 @@ func recordFromSnapshot(snapshot Snapshot) (taskRecord, error) {
 	tasks = append(tasks, snapshot.Root)
 	tasks = append(tasks, snapshot.Children...)
 	record := taskRecord{
-		Tasks:     tasks,
-		EventSeq:  latestEventSeq(snapshot.Events),
-		Approvals: snapshot.Approvals,
-		Presence:  snapshot.Presence,
+		SchemaVersion: currentTaskSchemaVersion,
+		Tasks:         tasks,
+		EventSeq:      latestEventSeq(snapshot.Events),
+		Approvals:     snapshot.Approvals,
+		Presence:      snapshot.Presence,
 	}
 	if _, err := snapshotFromRecord(snapshot.Root.ID, record); err != nil {
 		return taskRecord{}, err
@@ -329,6 +340,9 @@ func committedEventSeq(tasksPath string) (int64, error) {
 	}
 	var record taskRecord
 	if err := readJSONFile(tasksPath, &record); err != nil {
+		return 0, err
+	}
+	if err := validateTaskRecordVersion(&record); err != nil {
 		return 0, err
 	}
 	return record.EventSeq, nil
@@ -449,6 +463,9 @@ func buildTaskIndex(root string) ([]IndexEntry, error) {
 		if err := readJSONFile(tasksPath, &record); err != nil {
 			return nil, err
 		}
+		if err := validateTaskRecordVersion(&record); err != nil {
+			return nil, err
+		}
 		snapshot, err := snapshotFromRecord(entry.Name(), record)
 		if err != nil {
 			return nil, err
@@ -466,6 +483,24 @@ func buildTaskIndex(root string) ([]IndexEntry, error) {
 	return index, nil
 }
 
+func validateTaskRecordVersion(record *taskRecord) error {
+	if record == nil {
+		return fmt.Errorf("task record is required")
+	}
+	// Unversioned tasks.json files were written by development builds of this
+	// format before the schema marker was introduced. Their filename and flat
+	// tasks envelope make them unambiguous, so accept them and stamp v2 on the
+	// next write.
+	if record.SchemaVersion == 0 {
+		record.SchemaVersion = currentTaskSchemaVersion
+		return nil
+	}
+	if record.SchemaVersion != currentTaskSchemaVersion {
+		return fmt.Errorf("unsupported task schema version %d", record.SchemaVersion)
+	}
+	return nil
+}
+
 func readTaskSequence(path string) (taskSequenceState, bool, error) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return taskSequenceState{}, false, nil
@@ -479,6 +514,9 @@ func readTaskSequence(path string) (taskSequenceState, bool, error) {
 	if state.LastTask < 0 {
 		return taskSequenceState{}, false, fmt.Errorf("task id sequence is invalid: %d", state.LastTask)
 	}
+	if state.SchemaVersion != 0 && state.SchemaVersion != currentSequenceVersion {
+		return taskSequenceState{}, false, fmt.Errorf("unsupported task sequence schema version %d", state.SchemaVersion)
+	}
 	return state, true, nil
 }
 
@@ -486,7 +524,8 @@ func writeTaskSequence(path string, state taskSequenceState) error {
 	if state.LastTask < 0 {
 		return fmt.Errorf("task id sequence is invalid: %d", state.LastTask)
 	}
-	return writeJSONFile(path, state)
+	state.SchemaVersion = currentSequenceVersion
+	return writeJSONFileAtomic(path, state)
 }
 
 func readJSONFile(path string, target any) error {

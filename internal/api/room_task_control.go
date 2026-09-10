@@ -45,9 +45,17 @@ func (h *Handler) handleRoomTaskRecover(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	room, id := pathValue(r, "id"), pathValue(r, "task_id")
+	task, found := h.roomTaskSvc.Get(room, id)
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
 	if leases, ok := h.participantWork.(roomWorkReader); ok {
+		assignee := h.participantBridgeTargetForRoomMember(task.AssignedTo)
 		for _, l := range leases.ActiveWork(room) {
-			if h.roomTaskIdentityForWork(room, l) == id {
+			if h.roomTaskIdentityForWork(room, l) == id &&
+				h.roomTaskAttemptForWork(room, l) == req.Attempt &&
+				assignee.matches(l.ParticipantID) {
 				http.Error(w, "previous task still has an active execution; stop it first", http.StatusConflict)
 				return
 			}

@@ -1,6 +1,7 @@
 package taskcore
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -111,17 +112,27 @@ func (a *TaskIDAllocator) load() error {
 	if a.root == "" {
 		return nil
 	}
-	state, ok, err := readTaskSequence(filepath.Join(a.root, sequenceFileName))
+	sequencePath := filepath.Join(a.root, sequenceFileName)
+	state, ok, err := readTaskSequence(sequencePath)
 	if err != nil {
 		return err
-	}
-	if ok {
-		a.next = state.LastTask
-		return nil
 	}
 	next, err := persistedTaskSequence(a.root)
 	if err != nil {
 		return err
+	}
+	if ok && state.LastTask > next {
+		next = state.LastTask
+	}
+	// Persist the reconciled value during startup instead of waiting for the
+	// next task creation. sequence.json is therefore the canonical source as
+	// soon as this migration-capable version has opened the store. After the
+	// supported migration window, a later release can remove the legacy
+	// index/directory fallback safely.
+	if !ok || state.SchemaVersion != currentSequenceVersion || state.LastTask != next {
+		if err := writeTaskSequence(sequencePath, taskSequenceState{LastTask: next}); err != nil {
+			return err
+		}
 	}
 	a.next = next
 	return nil
@@ -138,10 +149,9 @@ func formatTaskIdentifier(value int64) string {
 	return fmt.Sprintf("task-%d", value)
 }
 
-// persistedTaskSequence preserves global task ID monotonicity without loading
-// legacy task records. This branch intentionally uses only tasks.json for task
-// data, but it must never write a new record into an existing legacy task-N
-// directory or reuse the counter recorded by the former index.json format.
+// persistedTaskSequence reconciles ID sources used before sequence.json became
+// canonical. It includes every numeric ID in current flat records because a
+// child task can have a higher ID than its task-N root directory.
 func persistedTaskSequence(root string) (int64, error) {
 	var next int64
 	entries, err := os.ReadDir(root)
@@ -149,8 +159,25 @@ func persistedTaskSequence(root string) (int64, error) {
 		return 0, err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() {
-			next = maxCounterFromIdentifier(entry.Name(), "task-", next)
+		if !entry.IsDir() {
+			continue
+		}
+		next = maxCounterFromIdentifier(entry.Name(), "task-", next)
+		tasksPath := filepath.Join(root, entry.Name(), tasksFileName)
+		if _, err := os.Stat(tasksPath); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return 0, err
+		}
+		var record taskRecord
+		if err := readJSONFile(tasksPath, &record); err != nil {
+			return 0, fmt.Errorf("read task IDs from %s: %w", tasksPath, err)
+		}
+		if err := validateTaskRecordVersion(&record); err != nil {
+			return 0, fmt.Errorf("read task IDs from %s: %w", tasksPath, err)
+		}
+		for _, task := range record.Tasks {
+			next = maxCounterFromIdentifier(task.ID, "task-", next)
 		}
 	}
 	legacyPath := filepath.Join(root, legacyTaskIndexFileName)

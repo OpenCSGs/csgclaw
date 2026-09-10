@@ -188,6 +188,9 @@ func TestStorePersistsFlatTaskRecords(t *testing.T) {
 	if err := json.Unmarshal(data, &record); err != nil {
 		t.Fatalf("decode typed tasks record: %v", err)
 	}
+	if record.SchemaVersion != currentTaskSchemaVersion {
+		t.Fatalf("schema version = %d, want %d", record.SchemaVersion, currentTaskSchemaVersion)
+	}
 	if len(record.Tasks) != 2 || record.Tasks[1].ID != child.ID || record.Tasks[1].ParentID != task.ID {
 		t.Fatalf("flat tasks = %+v", record.Tasks)
 	}
@@ -349,6 +352,38 @@ func TestPersistentTaskIDsDoNotCollideWithLegacyLayout(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "task-27", tasksFileName)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("legacy task directory was modified: %v", err)
+	}
+}
+
+func TestPersistentTaskIDUsesHighestCurrentOrLegacySequence(t *testing.T) {
+	resetTaskIDAllocatorsForTest()
+	root := t.TempDir()
+	// Simulate sequence.json written before it became the canonical, versioned
+	// task ID source.
+	if err := writeJSONFile(filepath.Join(root, sequenceFileName), map[string]any{"last_task": 5}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(root, legacyTaskIndexFileName), map[string]any{
+		"counters": map[string]any{"task": 41},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertTaskSequence(t, root, 41)
+	task, err := NewService(WithStore(store)).CreateRoot(CreateRootInput{
+		AssignmentType: AssignmentTypeAgent,
+		AssignmentID:   "agent-dev",
+		Title:          "New format task",
+		CreatedBy:      "user-admin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.ID != "task-42" {
+		t.Fatalf("new task id = %q, want task-42", task.ID)
 	}
 }
 

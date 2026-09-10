@@ -810,6 +810,7 @@ func TestServeRunRepeatedAutoBootstrapRemainsIdempotent(t *testing.T) {
 }
 
 func TestServeForegroundPassesContextToServer(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	origRunServer := RunServer
 	origNewAgentService := NewAgentService
 	origNewIMService := NewIMService
