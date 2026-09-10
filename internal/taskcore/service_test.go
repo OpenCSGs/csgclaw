@@ -317,6 +317,41 @@ func TestTaskIDCounterPersistsAcrossDeleteAndReload(t *testing.T) {
 	}
 }
 
+func TestPersistentTaskIDsDoNotCollideWithLegacyLayout(t *testing.T) {
+	resetTaskIDAllocatorsForTest()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "task-27"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(root, legacyTaskIndexFileName), map[string]any{
+		"counters": map[string]any{"task": 41},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := NewService(WithStore(store)).CreateRoot(CreateRootInput{
+		AssignmentType: AssignmentTypeAgent,
+		AssignmentID:   "agent-dev",
+		Title:          "New format task",
+		CreatedBy:      "user-admin",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.ID != "task-42" {
+		t.Fatalf("new task id = %q, want task-42", task.ID)
+	}
+	if _, err := os.Stat(filepath.Join(root, "task-42", tasksFileName)); err != nil {
+		t.Fatalf("new-format task was not persisted separately: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "task-27", tasksFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy task directory was modified: %v", err)
+	}
+}
+
 func resetTaskIDAllocatorsForTest() {
 	taskIDAllocators.Lock()
 	defer taskIDAllocators.Unlock()

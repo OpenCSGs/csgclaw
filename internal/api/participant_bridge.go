@@ -47,7 +47,15 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	if isParticipantControlRecord(*evt.Message) && h.roomTaskSvc != nil {
 		metadata, _ := evt.Message.Metadata["csgclaw"].(map[string]any)
 		if metadata["delivery_kind"] == "turn_stopped" {
-			if err := h.roomTaskSvc.WorkerStopped(evt.RoomID, h.roomTaskIDForSource(evt.RoomID, metadata["request_id"]), h.participantBridgeTargetForRoomMember(evt.Message.SenderID).bridgeID, h.roomTaskAttemptForSource(evt.RoomID, metadata["request_id"])); err != nil {
+			taskID := taskmeta.ID(evt.Message.Metadata)
+			attempt := taskmeta.Attempt(evt.Message.Metadata)
+			if taskID == "" {
+				taskID = h.roomTaskIDForSource(evt.RoomID, metadata["request_id"])
+			}
+			if attempt < 1 {
+				attempt = h.roomTaskAttemptForSource(evt.RoomID, metadata["request_id"])
+			}
+			if err := h.roomTaskSvc.WorkerStopped(evt.RoomID, taskID, h.participantBridgeTargetForRoomMember(evt.Message.SenderID).bridgeID, attempt); err != nil {
 				slog.Warn("record stopped room task", "room_id", evt.RoomID, "error", err)
 			}
 		}

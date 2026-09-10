@@ -78,6 +78,48 @@ func TestRoomRuntimeRejectsLegacyAndExternalRoutes(t *testing.T) {
 	}
 }
 
+func TestRoomRuntimeDoesNotRestrictFreeRoomWork(t *testing.T) {
+	messages := im.NewService()
+	if _, _, err := messages.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "dev", Name: "dev", Role: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := messages.CreateRoom(im.CreateRoomRequest{Title: "First", CreatorID: "admin", MemberIDs: []string{"dev"}, Type: apitypes.RoomTypeFree})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := messages.CreateRoom(im.CreateRoomRequest{Title: "Second", CreatorID: "admin", MemberIDs: []string{"dev"}, Type: apitypes.RoomTypeFree})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leases := &scopeLeaseReader{rooms: []string{first.ID, second.ID}}
+	h := &Handler{im: messages, participantWork: leases}
+	h.SetRoomTaskCore(taskcore.NewService())
+	request := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("X-CSGClaw-Caller-Agent", "agent-dev")
+		out := httptest.NewRecorder()
+		h.Routes().ServeHTTP(out, req)
+		return out
+	}
+	for _, path := range []string{
+		"/api/v1/channels/csgclaw/rooms",
+		"/api/v1/channels/csgclaw/messages?room_id=" + first.ID,
+		"/api/v1/channels/csgclaw/rooms/" + second.ID + "/members",
+	} {
+		if got := request(path); got.Code == http.StatusConflict || got.Code == http.StatusForbidden {
+			t.Fatalf("free-room request %s was scoped: %d %s", path, got.Code, got.Body.String())
+		}
+	}
+	onDemand, err := messages.CreateRoom(im.CreateRoomRequest{Title: "Managed", CreatorID: "admin", MemberIDs: []string{"dev"}, Type: apitypes.RoomTypeOnDemand})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leases.rooms = []string{first.ID, onDemand.ID}
+	if got := request("/api/v1/channels/csgclaw/messages?room_id=" + first.ID); got.Code == http.StatusConflict || got.Code == http.StatusForbidden {
+		t.Fatalf("explicit free-room request inherited on-demand scope: %d %s", got.Code, got.Body.String())
+	}
+}
+
 func TestRoomRuntimeOrdinaryWorkerMentionGoesThroughManager(t *testing.T) {
 	messages := im.NewService()
 	for _, id := range []string{"dev", "qa"} {

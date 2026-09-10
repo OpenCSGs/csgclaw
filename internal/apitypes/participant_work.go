@@ -46,6 +46,8 @@ type ParticipantWorkLeaseRequest struct {
 	RoomID       string `json:"room_id"`
 	ThreadRootID string `json:"thread_root_id,omitempty"`
 	RequestID    string `json:"request_id"`
+	TaskID       string `json:"task_id,omitempty"`
+	TaskAttempt  int    `json:"task_attempt,omitempty"`
 	Kind         string `json:"kind"`
 	TTLSeconds   *int   `json:"ttl_seconds,omitempty"`
 }
@@ -79,6 +81,8 @@ type ParticipantWorkUpdate struct {
 	RoomID          string                 `json:"room_id"`
 	ThreadRootID    string                 `json:"thread_root_id,omitempty"`
 	RequestID       string                 `json:"request_id"`
+	TaskID          string                 `json:"task_id,omitempty"`
+	TaskAttempt     int                    `json:"task_attempt,omitempty"`
 	Kind            string                 `json:"kind"`
 	State           string                 `json:"state"`
 	Reason          string                 `json:"reason"`
@@ -111,6 +115,8 @@ type ParticipantWorkStopResponse struct {
 	ThreadRootID  string    `json:"-"`
 	LeaseID       string    `json:"lease_id"`
 	RequestID     string    `json:"request_id"`
+	TaskID        string    `json:"task_id,omitempty"`
+	TaskAttempt   int       `json:"task_attempt,omitempty"`
 	State         string    `json:"state"`
 	RequestedAt   time.Time `json:"requested_at"`
 }

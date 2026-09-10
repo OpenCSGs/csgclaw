@@ -2365,6 +2365,17 @@ button.message-file-attachment {
   letter-spacing: 0;
 }
 
+.room-danger-error {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--error-200);
+  border-radius: 6px;
+  background: var(--error-50);
+  color: var(--error-700);
+  font-size: 11px;
+  line-height: 16px;
+}
+
 .room-danger-close.csg-dialog-close {
   width: 20px;
   min-width: 20px;

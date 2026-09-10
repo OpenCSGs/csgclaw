@@ -257,6 +257,48 @@ func TestFailureStopAndMembership(t *testing.T) {
 	if feedbackCount(core, root.ID) != 1 {
 		t.Fatal("duplicate member alert")
 	}
+
+	s, _, roster, _ = fixture(t)
+	root = rootTask(t, s)
+	if err := s.Plan("room-a", root.ID, "", standardPlan(), true); err != nil {
+		t.Fatal(err)
+	}
+	dev := childFor(t, s, "dev")
+	if err := s.Dispatch("room-a", dev.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	mustUpdate(t, s, dev.ID, "dev", taskcore.StatusInProgress, "", "")
+	mustUpdate(t, s, dev.ID, "dev", taskcore.StatusCompleted, "page.html", "")
+	roster.WorkerIDs = []string{"qa"}
+	if err := s.MembersChanged("room-a"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Get("room-a", dev.ID); got.Status != taskcore.StatusReview || got.Result != "page.html" {
+		t.Fatalf("submitted task changed after member removal: %+v", got)
+	}
+	if err := s.Review("room-a", dev.ID, 1, true, "submission remains reviewable"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRoomDeletionRequiresTerminalTasksAndBlocksMutations(t *testing.T) {
+	s, _, _, _ := fixture(t)
+	root := rootTask(t, s)
+	if release, err := s.BeginRoomDeletion("room-a"); err == nil {
+		release()
+		t.Fatal("deleted room with unfinished task")
+	}
+	if _, err := s.Report("room-a", root.ID, "stopped", "No work was started"); err != nil {
+		t.Fatal(err)
+	}
+	release, err := s.BeginRoomDeletion("room-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if _, err := s.Create("room-a", "source-2", "manager", "More work", ""); err == nil {
+		t.Fatal("created task while room deletion was in progress")
+	}
 }
 
 func TestProjectionAndMentionIdentity(t *testing.T) {

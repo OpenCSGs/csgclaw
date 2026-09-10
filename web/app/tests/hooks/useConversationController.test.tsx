@@ -9,6 +9,7 @@ import type { SendMessageRequestOptions } from "@/api/im";
 
 const subscribeIMEventsMock = vi.fn();
 const apiMocks = vi.hoisted(() => ({
+  deleteRoomRequest: vi.fn(),
   fetchThreadRequest: vi.fn(),
   sendMessageRequest: vi.fn(),
 }));
@@ -21,6 +22,7 @@ vi.mock("@/api/im", async () => {
   const actual = await vi.importActual<typeof import("@/api/im")>("@/api/im");
   return {
     ...actual,
+    deleteRoomRequest: apiMocks.deleteRoomRequest,
     fetchThreadRequest: apiMocks.fetchThreadRequest,
     sendMessageRequest: apiMocks.sendMessageRequest,
   };
@@ -171,6 +173,7 @@ describe("useConversationController", () => {
   beforeEach(() => {
     subscribeIMEventsMock.mockReset();
     subscribeIMEventsMock.mockReturnValue(() => {});
+    apiMocks.deleteRoomRequest.mockReset();
     apiMocks.fetchThreadRequest.mockReset();
     apiMocks.sendMessageRequest.mockReset();
   });
@@ -203,6 +206,18 @@ describe("useConversationController", () => {
 
     expect(result.current.activeThreadRootID).toBe("");
     expect(result.current.conversationViewProps.activeThreadView).toBeNull();
+  });
+
+  it("propagates room deletion failures to the confirmation dialog", async () => {
+    apiMocks.deleteRoomRequest.mockRejectedValue(
+      new Error("finish or stop active room tasks before deleting the room"),
+    );
+    const { result } = renderConversationController();
+
+    await expect(result.current.conversationViewProps.onDeleteRoom("room-1")).rejects.toThrow(
+      "finish or stop active room tasks before deleting the room",
+    );
+    expect(result.current.conversationViewProps.composerError).toBe("");
   });
 
   it("keeps the thread root anchored while the thread panel opens and closes", async () => {

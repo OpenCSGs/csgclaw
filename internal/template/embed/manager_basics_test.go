@@ -94,7 +94,7 @@ func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
 			}
 			instructions := string(data)
 			for _, want := range []string{
-				"csgclaw-cli task claim --task <task_id>",
+				"csgclaw-cli task claim --task <task_id> --actor-id <your_participant_id>",
 				"csgclaw-cli task update --task <task_id>",
 			} {
 				if !strings.Contains(instructions, want) {
@@ -105,6 +105,9 @@ func TestWorkerInstructionsMentionDirectAgentTaskCLI(t *testing.T) {
 				if strings.Contains(instructions, unwanted) {
 					t.Fatalf("worker static instructions contain room-only guidance %q", unwanted)
 				}
+			}
+			if strings.Contains(instructions, "task claim --task <task_id> --participant-id") {
+				t.Fatal("worker instructions contain the removed direct-task claim flag")
 			}
 		})
 	}

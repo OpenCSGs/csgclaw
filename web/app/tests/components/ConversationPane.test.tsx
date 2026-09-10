@@ -145,6 +145,12 @@ const t: TranslateFn = (key, params = {}) => {
     conversationWorkingThinking: "Thinking",
     conversationWorkingUsingTool: "Using tool",
     conversationWorkingWaiting: "Waiting",
+    deleteRoom: "deleteRoom",
+    deleteRoomConfirm: "deleteRoomConfirm",
+    deleteRoomConfirmBody: "deleteRoomConfirmBody",
+    deleteRoomFailed: "deleteRoomFailed",
+    "errors.finish or stop active room tasks before deleting the room":
+      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
     agentActivityEmpty: "No activity yet",
     agentActivityChronological: "Chronological",
     agentActivityEventsCount: "{count} events",
@@ -217,7 +223,7 @@ function renderThreadPane({
   mentionIndex?: number;
   onClearRoomMessages?: (id: string) => void;
   onCloseThread?: () => void;
-  onDeleteRoom?: (id: string) => void;
+  onDeleteRoom?: ConversationPaneProps["onDeleteRoom"];
   onApplyMention?: (user: IMUser) => void;
   onOpenAgentDetail?: NonNullable<ConversationPaneProps["onOpenAgentDetail"]>;
   onPreserveMessageAnchor?: NonNullable<ConversationPaneProps["onPreserveMessageAnchor"]>;
@@ -1312,5 +1318,23 @@ describe("ConversationPane", () => {
 
     expect(onDeleteRoom).toHaveBeenCalledWith("room-1");
     expect(onClearRoomMessages).not.toHaveBeenCalled();
+  });
+
+  it("keeps the delete dialog open and shows a localized error when deletion is blocked", async () => {
+    const user = userEvent.setup();
+    const onDeleteRoom = vi
+      .fn()
+      .mockRejectedValue(new Error("finish or stop active room tasks before deleting the room"));
+    renderThreadPane({ isDirect: false, onDeleteRoom });
+
+    await user.click(screen.getByRole("button", { name: "channelTools" }));
+    await user.click(screen.getByRole("button", { name: "deleteRoom" }));
+    await user.click(screen.getByRole("button", { name: "deleteRoomConfirm" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(onDeleteRoom).toHaveBeenCalledWith("room-1");
   });
 });

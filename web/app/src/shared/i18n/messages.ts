@@ -835,6 +835,7 @@ export const messages = {
     deleteRoom: "删除房间",
     deleteRoomConfirm: "确认删除",
     deleteRoomConfirmBody: "将删除该房间及其中的 IM 消息和话题状态；不会删除各 Agent 内部历史、记忆或 workspace 文件。",
+    deleteRoomFailed: "删除房间失败，请重试。",
     removeMemberTitle: "移除成员",
     removeMemberConfirm: "确认移除",
     removeMemberConfirmBody: "将把 {name} 从当前房间移除。",
@@ -1590,6 +1591,8 @@ export const messages = {
       "user not found": "用户不存在",
       "room_id is required": "缺少房间 ID",
       "room not found": "房间不存在",
+      "finish or stop active room tasks before deleting the room":
+        "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
       "inviter_id is required": "缺少邀请者",
       "inviter not found": "邀请者不存在",
       "inviter is not a room member": "邀请者不在当前房间中",
@@ -2462,6 +2465,7 @@ export const messages = {
     deleteRoomConfirm: "Delete room",
     deleteRoomConfirmBody:
       "This deletes the room, its IM messages, and thread state. Agent internal history, memory, and workspace files are not deleted.",
+    deleteRoomFailed: "Failed to delete the room. Try again.",
     removeMemberTitle: "Remove member",
     removeMemberConfirm: "Remove member",
     removeMemberConfirmBody: "This removes {name} from the current room.",
@@ -3270,6 +3274,8 @@ export const messages = {
       "user not found": "User not found",
       "room_id is required": "Room ID is required",
       "room not found": "Room not found",
+      "finish or stop active room tasks before deleting the room":
+        "This room still has unfinished tasks. Stop or complete them before deleting the room.",
       "inviter_id is required": "Inviter is required",
       "inviter not found": "Inviter not found",
       "inviter is not a room member": "Inviter is not a room member",

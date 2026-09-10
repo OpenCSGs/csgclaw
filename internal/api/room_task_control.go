@@ -47,7 +47,7 @@ func (h *Handler) handleRoomTaskRecover(w http.ResponseWriter, r *http.Request) 
 	room, id := pathValue(r, "id"), pathValue(r, "task_id")
 	if leases, ok := h.participantWork.(roomWorkReader); ok {
 		for _, l := range leases.ActiveWork(room) {
-			if h.roomTaskIDForSource(room, l.RequestID) == id {
+			if h.roomTaskIdentityForWork(room, l) == id {
 				http.Error(w, "previous task still has an active execution; stop it first", http.StatusConflict)
 				return
 			}
@@ -82,7 +82,7 @@ func (h *Handler) handleRoomTaskStop(w http.ResponseWriter, r *http.Request) {
 		}
 		found := false
 		for _, l := range reader.ActiveWork(room) {
-			if h.roomTaskIDForSource(room, l.RequestID) != t.ID || h.roomTaskAttemptForSource(room, l.RequestID) != t.Attempt {
+			if h.roomTaskIdentityForWork(room, l) != t.ID || h.roomTaskAttemptForWork(room, l) != t.Attempt {
 				continue
 			}
 			found = true
@@ -103,4 +103,18 @@ func (h *Handler) handleRoomTaskStop(w http.ResponseWriter, r *http.Request) {
 	}
 	t, _ := h.roomTaskSvc.Get(room, id)
 	writeJSON(w, http.StatusOK, h.apiRoomTask(t))
+}
+
+func (h *Handler) roomTaskIdentityForWork(room string, work apitypes.ParticipantWorkUpdate) string {
+	if id := strings.TrimSpace(work.TaskID); id != "" {
+		return id
+	}
+	return h.roomTaskIDForSource(room, work.RequestID)
+}
+
+func (h *Handler) roomTaskAttemptForWork(room string, work apitypes.ParticipantWorkUpdate) int {
+	if work.TaskAttempt > 0 {
+		return work.TaskAttempt
+	}
+	return h.roomTaskAttemptForSource(room, work.RequestID)
 }

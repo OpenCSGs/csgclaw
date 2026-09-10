@@ -249,7 +249,7 @@ func renderInitialMessage(task taskcore.Task) string {
 	b.WriteString("\n\nClaim it with:\n")
 	b.WriteString("csgclaw-cli task claim --task ")
 	b.WriteString(task.ID)
-	b.WriteString(" --participant-id <worker_participant_id>")
+	b.WriteString(" --actor-id <worker_participant_id>")
 	b.WriteString("\nIf blocked, claim it again when ready to resume.")
 	b.WriteString("\n\nWhen finished, update it with:\n")
 	b.WriteString("csgclaw-cli task update --task ")

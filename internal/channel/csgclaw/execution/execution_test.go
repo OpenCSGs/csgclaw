@@ -356,7 +356,7 @@ func TestAdapterRunReportsParticipantWorkLeaseLifecycle(t *testing.T) {
 	outcome, err := adapter.Run(context.Background(), channel.Binding{
 		ParticipantID: "pt-worker", AgentID: "agent-worker",
 	}, channel.Event{
-		MessageID: "message-work", RoomID: "room-work", ThreadRootID: "thread-work", Text: "handle this",
+		MessageID: "message-work", RoomID: "room-work", ThreadRootID: "thread-work", TaskID: "task-7", TaskAttempt: 2, Text: "handle this",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -371,7 +371,7 @@ func TestAdapterRunReportsParticipantWorkLeaseLifecycle(t *testing.T) {
 	}
 	lease := starts[0]
 	if lease.ParticipantID != "pt-worker" || lease.RoomID != "room-work" || lease.ThreadRootID != "thread-work" ||
-		lease.RequestID != "message-work" || lease.Kind != apitypes.ParticipantWorkKindAgentTurn ||
+		lease.RequestID != "message-work" || lease.TaskID != "task-7" || lease.TaskAttempt != 2 || lease.Kind != apitypes.ParticipantWorkKindAgentTurn ||
 		!lease.TTLExplicit || lease.TTLSeconds != defaultWorkLeaseTTL || !worklease.ValidID(lease.LeaseID) {
 		t.Fatalf("lease = %+v", lease)
 	}

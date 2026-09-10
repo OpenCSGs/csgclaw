@@ -1294,12 +1294,7 @@ export function useConversationController({
       return;
     }
 
-    try {
-      await deleteRoomRequest(roomID);
-    } catch (err) {
-      setComposerError(localizeError(errorMessage(err, ""), t), roomID);
-      return;
-    }
+    await deleteRoomRequest(roomID);
 
     const remainingRooms = rooms.filter((item) => item.id !== roomID);
     setBootstrapData((current) => removeConversationFromData(current, roomID));

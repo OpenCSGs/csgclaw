@@ -400,7 +400,7 @@ func TestRoomParentStopTargetsOnlyItsCurrentExecution(t *testing.T) {
 		t.Fatal("dispatch source missing")
 	}
 	control := &roomStopControl{leases: []apitypes.ParticipantWorkUpdate{
-		{ParticipantID: "pt-dev", RoomID: room.ID, RequestID: source, LeaseID: "current"},
+		{ParticipantID: "pt-dev", RoomID: room.ID, RequestID: "structured-user-input-answer", TaskID: child.ID, TaskAttempt: 1, LeaseID: "current"},
 		{ParticipantID: "pt-dev", RoomID: "other", RequestID: "other-task", LeaseID: "other"},
 	}}
 	control.confirm = func() {
@@ -425,6 +425,41 @@ func TestRoomParentStopTargetsOnlyItsCurrentExecution(t *testing.T) {
 	parent, _ := h.roomTaskSvc.Get(room.ID, root.ID)
 	if parent.Status != taskcore.StatusStopping || parent.Report != "" {
 		t.Fatal("Manager must summarize stopped work", parent)
+	}
+}
+
+func TestDeleteRoomRejectsUnfinishedRoomTasks(t *testing.T) {
+	messages := im.NewService()
+	if _, _, err := messages.EnsureAgentUser(im.EnsureAgentUserRequest{ID: "dev", Name: "Dev", Role: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	room, err := messages.CreateRoom(im.CreateRoomRequest{Title: "Work", CreatorID: "admin", MemberIDs: []string{"dev"}, Type: apitypes.RoomTypeOnDemand})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &Handler{im: messages}
+	h.SetRoomTaskCore(taskcore.NewService())
+	root, err := h.roomTaskSvc.Create(room.ID, "goal", "manager", "Build", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	remove := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/rooms/"+room.ID, nil)
+		out := httptest.NewRecorder()
+		h.Routes().ServeHTTP(out, req)
+		return out
+	}
+	if got := remove(); got.Code != http.StatusConflict {
+		t.Fatalf("delete unfinished room = %d %s", got.Code, got.Body.String())
+	}
+	if _, found := messages.Room(room.ID); !found {
+		t.Fatal("room was deleted despite unfinished work")
+	}
+	if _, err := h.roomTaskSvc.Report(room.ID, root.ID, "stopped", "No work was started"); err != nil {
+		t.Fatal(err)
+	}
+	if got := remove(); got.Code != http.StatusNoContent {
+		t.Fatalf("delete terminal room = %d %s", got.Code, got.Body.String())
 	}
 }
 

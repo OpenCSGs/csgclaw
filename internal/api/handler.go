@@ -2394,6 +2394,16 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 		if h.im != nil {
 			deletedRoom, hasDeletedRoom = h.im.Room(id)
 		}
+		releaseRoomDeletion := func() {}
+		if hasDeletedRoom && h.roomTaskSvc != nil {
+			var err error
+			releaseRoomDeletion, err = h.roomTaskSvc.BeginRoomDeletion(id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
+		}
+		defer releaseRoomDeletion()
 		if err := channel.DeleteRoom(id); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				http.Error(w, "room not found", http.StatusNotFound)

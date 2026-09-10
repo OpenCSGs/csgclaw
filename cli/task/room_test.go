@@ -63,3 +63,36 @@ func TestRoomActionRejectsMismatchedExplicitRoom(t *testing.T) {
 		t.Fatalf("calls = %d, want only assignment resolution", calls)
 	}
 }
+
+func TestClaimDirectAgentTaskAcceptsActorID(t *testing.T) {
+	paths := []string{}
+	run := &command.Context{
+		Program: "test", Stdout: io.Discard, Stderr: io.Discard,
+		HTTPClient: testTransport(func(request *http.Request) (*http.Response, error) {
+			paths = append(paths, request.Method+" "+request.URL.Path)
+			switch request.URL.Path {
+			case "/api/v1/tasks/task-8":
+				return testJSONResponse(`{"id":"task-8","assignment_type":"agent","assignment_id":"agent-dev"}`), nil
+			case "/api/v1/agent-tasks/task-8/claim":
+				body, err := io.ReadAll(request.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(body), `"participant_id":"pt-dev"`) {
+					t.Fatalf("claim body = %s", body)
+				}
+				return testJSONResponse(`{"id":"task-8","assignment_type":"agent","assignment_id":"agent-dev","status":"in_progress"}`), nil
+			default:
+				t.Fatalf("unexpected request %s %s", request.Method, request.URL.Path)
+				return nil, nil
+			}
+		}),
+	}
+	if err := NewCmd().Run(context.Background(), run, []string{"claim", "--task", "task-8", "--actor-id", "pt-dev"}, command.GlobalOptions{Endpoint: "http://example.test"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"GET /api/v1/tasks/task-8", "POST /api/v1/agent-tasks/task-8/claim"}
+	if strings.Join(paths, "|") != strings.Join(want, "|") {
+		t.Fatalf("requests = %v, want %v", paths, want)
+	}
+}

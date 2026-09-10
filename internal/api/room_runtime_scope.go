@@ -47,11 +47,14 @@ func (h *Handler) roomRuntimeScope(next http.Handler) http.Handler {
 		}
 		selectedRoom := ""
 		// Independent task sessions can be active in different rooms. An explicit
-		// room path or globally unique task id may narrow to one active lease,
-		// never to an inactive room.
+		// room path, message query, or globally unique task id may narrow to one
+		// active lease, never to an inactive room.
 		for _, id := range rooms {
 			base := "/api/v1/rooms/" + id
-			if r.URL.Path == base+"/task-context" || r.URL.Path == base+"/tasks" || strings.HasPrefix(r.URL.Path, base+"/tasks/") {
+			channelBase := "/api/v1/channels/csgclaw/rooms/" + id
+			if r.URL.Path == base+"/task-context" || r.URL.Path == base+"/tasks" || strings.HasPrefix(r.URL.Path, base+"/tasks/") ||
+				r.URL.Path == channelBase+"/members" ||
+				(r.Method == http.MethodGet && r.URL.Path == "/api/v1/channels/csgclaw/messages" && r.URL.Query().Get("room_id") == id) {
 				selectedRoom = id
 			}
 		}
@@ -68,8 +71,32 @@ func (h *Handler) roomRuntimeScope(next http.Handler) http.Handler {
 				}
 			}
 		}
-		if selectedRoom == "" && len(rooms) == 1 {
-			selectedRoom = rooms[0]
+		if selectedRoom != "" {
+			room, found := h.im.Room(selectedRoom)
+			if !found {
+				http.Error(w, "active room unavailable", http.StatusConflict)
+				return
+			}
+			if !room.IsOnDemand() {
+				next.ServeHTTP(w, r)
+				return
+			}
+		} else {
+			onDemandRooms := make([]string, 0, len(rooms))
+			for _, id := range rooms {
+				if room, found := h.im.Room(id); found && room.IsOnDemand() {
+					onDemandRooms = append(onDemandRooms, id)
+				}
+			}
+			if len(onDemandRooms) == 0 {
+				// Direct messages and free rooms never inherit collaboration
+				// restrictions merely because the Agent has concurrent work.
+				next.ServeHTTP(w, r)
+				return
+			}
+			if len(rooms) == 1 {
+				selectedRoom = rooms[0]
+			}
 		}
 		if selectedRoom == "" {
 			http.Error(w, "runtime execution scope missing or ambiguous; retry in the active task turn", http.StatusConflict)
@@ -78,10 +105,6 @@ func (h *Handler) roomRuntimeScope(next http.Handler) http.Handler {
 		room, found := h.im.Room(selectedRoom)
 		if !found {
 			http.Error(w, "active room unavailable", http.StatusConflict)
-			return
-		}
-		if !room.IsOnDemand() {
-			next.ServeHTTP(w, r)
 			return
 		}
 		meta, valid := h.roomSchedulingContext(room.ID)

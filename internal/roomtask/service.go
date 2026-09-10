@@ -30,14 +30,15 @@ type Projection struct {
 	Attempt                                                      int
 }
 type Service struct {
-	mu     sync.Mutex
-	core   *taskcore.Service
-	roster func(string) (Roster, bool)
-	send   func(Projection) error
+	mu           sync.Mutex
+	core         *taskcore.Service
+	roster       func(string) (Roster, bool)
+	send         func(Projection) error
+	closingRooms map[string]bool
 }
 
 func NewService(core *taskcore.Service, roster func(string) (Roster, bool), send func(Projection) error) *Service {
-	return &Service{core: core, roster: roster, send: send}
+	return &Service{core: core, roster: roster, send: send, closingRooms: make(map[string]bool)}
 }
 
 func (s *Service) List(roomID string) []taskcore.Task {
@@ -91,6 +92,9 @@ func Terminal(status string) bool {
 func (s *Service) Create(room, source, requester, title, body string) (taskcore.Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closingRooms[room] {
+		return taskcore.Task{}, fmt.Errorf("room is being deleted")
+	}
 	r, err := s.members(room)
 	if err != nil {
 		return taskcore.Task{}, err
@@ -176,7 +180,14 @@ func validatePlan(items []PlanItem, roster Roster, existing ...taskcore.Task) er
 // Delivery occurs after releasing the coordinator lock.
 func (s *Service) change(room, id string, fn func(Roster, []taskcore.Task, *taskcore.Snapshot, func() (string, error)) error) error {
 	s.mu.Lock()
-	roster, err := s.members(room)
+	var err error
+	if s.closingRooms[room] {
+		err = fmt.Errorf("room is being deleted")
+	}
+	var roster Roster
+	if err == nil {
+		roster, err = s.members(room)
+	}
 	if err == nil {
 		if _, ok := s.Get(room, id); !ok {
 			err = fmt.Errorf("room task not found")
@@ -193,6 +204,35 @@ func (s *Service) change(room, id string, fn func(Roster, []taskcore.Task, *task
 		return err
 	}
 	return s.RetryDelivery(room)
+}
+
+// BeginRoomDeletion prevents new room-task mutations while the caller removes
+// the room. A room with unfinished work must be stopped and reported first so
+// no persisted execution can become an orphan or retain global worker capacity.
+func (s *Service) BeginRoomDeletion(room string) (func(), error) {
+	room = strings.TrimSpace(room)
+	if room == "" {
+		return nil, fmt.Errorf("room is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closingRooms[room] {
+		return nil, fmt.Errorf("room is already being deleted")
+	}
+	for _, task := range s.List(room) {
+		if !Terminal(task.Status) || task.RecoveryRequired {
+			return nil, fmt.Errorf("finish or stop active room tasks before deleting the room")
+		}
+	}
+	s.closingRooms[room] = true
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.mu.Lock()
+			delete(s.closingRooms, room)
+			s.mu.Unlock()
+		})
+	}, nil
 }
 
 func firstParent(tasks []taskcore.Task, room string) string {
@@ -537,7 +577,7 @@ func (s *Service) MembersChanged(room string) error {
 		if err := s.change(room, root.ID, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
 			for i := range a.Children {
 				t := &a.Children[i]
-				if !Terminal(t.Status) && t.Status != taskcore.StatusBlocked && !worker(r, t.AssignedTo) {
+				if memberRemovalBlocks(t.Status) && !worker(r, t.AssignedTo) {
 					t.Status, t.Error = taskcore.StatusBlocked, "assigned worker is no longer a room member"
 					feedback(a, r, t, t.ID+": "+t.Error)
 				}
@@ -548,6 +588,15 @@ func (s *Service) MembersChanged(room string) error {
 		}
 	}
 	return nil
+}
+
+func memberRemovalBlocks(status string) bool {
+	switch status {
+	case taskcore.StatusPending, taskcore.StatusAssigned, taskcore.StatusInProgress:
+		return true
+	default:
+		return false
+	}
 }
 func (s *Service) WorkerStopped(room, id, actor string, attempt int) error {
 	if id == "" {

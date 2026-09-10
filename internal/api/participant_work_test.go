@@ -15,6 +15,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/taskmeta"
 	"csgclaw/internal/worklease"
 )
 
@@ -158,9 +159,11 @@ func TestParticipantWorkStatusAndStopAPI(t *testing.T) {
 	leaseID := worklease.NewID()
 	leasePath := "/api/v1/channels/csgclaw/participants/worker/work-leases/" + leaseID
 	started := performParticipantWorkRequest(t, handler, http.MethodPut, leasePath, map[string]any{
-		"room_id":    "room-1",
-		"request_id": "message-1",
-		"kind":       "agent_turn",
+		"room_id":      "room-1",
+		"request_id":   "message-1",
+		"task_id":      "task-7",
+		"task_attempt": 2,
+		"kind":         "agent_turn",
 	})
 	if started.Code != http.StatusOK {
 		t.Fatalf("start status = %d, body=%s", started.Code, started.Body.String())
@@ -205,7 +208,7 @@ func TestParticipantWorkStatusAndStopAPI(t *testing.T) {
 	if err := json.Unmarshal(stopped.Body.Bytes(), &stopResponse); err != nil {
 		t.Fatal(err)
 	}
-	if !stopResponse.Accepted || stopResponse.LeaseID != leaseID || stopResponse.State != "stop_requested" {
+	if !stopResponse.Accepted || stopResponse.LeaseID != leaseID || stopResponse.TaskID != "task-7" || stopResponse.TaskAttempt != 2 || stopResponse.State != "stop_requested" {
 		t.Fatalf("stop response = %#v", stopResponse)
 	}
 	messages, err := handler.im.ListMessages("room-1")
@@ -232,9 +235,11 @@ func TestParticipantWorkStatusAndStopAPI(t *testing.T) {
 	}
 
 	renewed := performParticipantWorkRequest(t, handler, http.MethodPut, leasePath, map[string]any{
-		"room_id":    "room-1",
-		"request_id": "message-1",
-		"kind":       "agent_turn",
+		"room_id":      "room-1",
+		"request_id":   "message-1",
+		"task_id":      "task-7",
+		"task_attempt": 2,
+		"kind":         "agent_turn",
 	})
 	if renewed.Code != http.StatusOK || !bytes.Contains(renewed.Body.Bytes(), []byte(`"stop_requested_at"`)) {
 		t.Fatalf("renew after stop status=%d body=%s", renewed.Code, renewed.Body.String())
@@ -258,6 +263,9 @@ func TestParticipantWorkStatusAndStopAPI(t *testing.T) {
 	csgclawMetadata, ok := messages[0].Metadata["csgclaw"].(map[string]any)
 	if !ok || csgclawMetadata["delivery_kind"] != "turn_stopped" || csgclawMetadata["lease_id"] != leaseID {
 		t.Fatalf("stop message metadata = %#v", messages[0].Metadata)
+	}
+	if taskmeta.ID(messages[0].Metadata) != "task-7" || taskmeta.Attempt(messages[0].Metadata) != 2 {
+		t.Fatalf("stop message task metadata = %#v", messages[0].Metadata)
 	}
 	repeatedRelease := performParticipantWorkRequest(t, handler, http.MethodDelete, leasePath, map[string]any{
 		"outcome": apitypes.ParticipantWorkOutcomeStopped,

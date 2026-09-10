@@ -22,6 +22,7 @@ import { useSearchParams } from "react-router-dom";
 import { ListTodo } from "lucide-react";
 import { type IMMessage } from "@/models/conversations";
 import { roomTaskParent, roomTaskMessageAnchors } from "@/models/roomTasks";
+import { localizeError } from "@/shared/i18n";
 import { useRoomTasks } from "../../useRoomTasks";
 import {
   conversationActivityAgents,
@@ -300,6 +301,8 @@ function ConversationPaneContent({
   const [focusedActivityEntryID, setFocusedActivityEntryID] = useState<string | null>(null);
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
+  const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
+  const [deleteRoomError, setDeleteRoomError] = useState("");
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
   const logAgentID = logAgent?.id || "";
   const logAgentName = logAgent?.name || conversation.title || "";
@@ -336,6 +339,8 @@ function ConversationPaneContent({
     setLogLoading(false);
     setClearMessagesDialogOpen(false);
     setDeleteRoomDialogOpen(false);
+    setDeleteRoomBusy(false);
+    setDeleteRoomError("");
     setDocumentPreview(null);
   }, [conversation.id, logAgentID]);
 
@@ -406,8 +411,22 @@ function ConversationPaneContent({
 
   const handleOpenDeleteRoomDialog = useCallback(() => {
     onToggleChannelTools(false);
+    setDeleteRoomError("");
     setDeleteRoomDialogOpen(true);
   }, [onToggleChannelTools]);
+
+  const handleConfirmDeleteRoom = useCallback(async () => {
+    setDeleteRoomBusy(true);
+    setDeleteRoomError("");
+    try {
+      await onDeleteRoom(conversation.id);
+      setDeleteRoomDialogOpen(false);
+    } catch (err) {
+      setDeleteRoomError(localizeError(errorMessage(err, t("deleteRoomFailed")), t));
+    } finally {
+      setDeleteRoomBusy(false);
+    }
+  }, [conversation.id, onDeleteRoom, t]);
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
@@ -612,17 +631,21 @@ function ConversationPaneContent({
       />
       {!isDirectConversation(conversation) ? (
         <Conversation.RoomDangerConfirmDialog
+          busy={deleteRoomBusy}
           cancelLabel={t("cancel")}
           closeLabel={t("close")}
           confirmLabel={t("deleteRoomConfirm")}
           description={t("deleteRoomConfirmBody")}
+          error={deleteRoomError}
           open={deleteRoomDialogOpen}
           title={t("deleteRoom")}
-          onConfirm={() => {
-            setDeleteRoomDialogOpen(false);
-            onDeleteRoom(conversation.id);
+          onConfirm={handleConfirmDeleteRoom}
+          onOpenChange={(open) => {
+            setDeleteRoomDialogOpen(open);
+            if (!open) {
+              setDeleteRoomError("");
+            }
           }}
-          onOpenChange={setDeleteRoomDialogOpen}
         />
       ) : null}
       {logModalOpen && logAgent ? (
