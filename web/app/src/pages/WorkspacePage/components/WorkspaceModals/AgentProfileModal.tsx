@@ -23,6 +23,7 @@ import {
   composeLegacyRuntimeKind,
   createAgentSelectableTemplates,
   formatRuntimeKindLabel,
+  isBuiltinOpenClawWorkerTemplate,
   isNotificationBotDraftContext,
   normalizeRuntimeKind,
   normalizeRuntimeName,
@@ -149,7 +150,16 @@ export function AgentProfileModal({
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
   const selectedProviderModels = selectedProvider?.models ?? [];
   const selectedModelValue = agentDraft.model_id || "";
-  const workerTemplates = useMemo(() => createAgentSelectableTemplates(hubTemplates), [hubTemplates]);
+  const workerTemplates = useMemo(() => {
+    const selectableTemplates = createAgentSelectableTemplates(hubTemplates);
+    const selectedBuiltinOpenClawTemplate = hubTemplates.find(
+      (item) =>
+        item.id === (agentDraft.from_template || lastTemplateIDRef.current) && isBuiltinOpenClawWorkerTemplate(item),
+    );
+    return selectedBuiltinOpenClawTemplate
+      ? [selectedBuiltinOpenClawTemplate, ...selectableTemplates]
+      : selectableTemplates;
+  }, [agentDraft.from_template, hubTemplates]);
   const selectedWorkerTemplate = workerTemplates.find((item) => item.id === agentDraft.from_template) ?? null;
   const isCSGHubSandboxProvider =
     String(bootstrapConfig?.sandbox_provider || "")

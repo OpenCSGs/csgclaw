@@ -527,13 +527,13 @@ describe("AgentProfileModal", () => {
     function TestModal() {
       const [draft, setDraft] = useState<AgentDraft>({
         ...agentToDraft(worker),
-        from_template: "builtin.codex-worker",
-        template_name: "Codex Worker",
-        name: "Codex Worker",
-        description: "Codex template",
-        runtime_name: "codex",
-        sandbox_enabled: false,
-        runtime_kind: "codex",
+        from_template: "builtin.openclaw-worker",
+        template_name: "OpenClaw Worker",
+        name: "OpenClaw Worker",
+        description: "OpenClaw template",
+        runtime_name: "openclaw",
+        sandbox_enabled: true,
+        runtime_kind: "openclaw_sandbox",
       });
       const [mode, setMode] = useState<"template" | "custom">("template");
       return (
@@ -602,12 +602,12 @@ describe("AgentProfileModal", () => {
 
     render(<TestModal />);
 
-    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("Codex Worker");
+    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("OpenClaw Worker");
 
     await user.click(screen.getByRole("tab", { name: /Custom/i }));
     await user.click(screen.getByRole("tab", { name: /From template/i }));
 
-    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("Codex Worker");
+    expect(screen.getByRole("combobox", { name: "Template" })).toHaveTextContent("OpenClaw Worker");
   });
 
   it("hides manager templates from the worker template dropdown in create mode", async () => {

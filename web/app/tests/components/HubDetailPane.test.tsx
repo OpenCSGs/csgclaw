@@ -830,7 +830,7 @@ describe("HubDetailPane", () => {
     expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
   });
 
-  it("does not offer agent creation for the builtin OpenClaw worker template", () => {
+  it("allows agent creation from the builtin OpenClaw worker Hub detail", () => {
     renderHubDetailPane("template", {
       selectedTemplate: {
         ...template,
@@ -839,7 +839,7 @@ describe("HubDetailPane", () => {
       },
     });
 
-    expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
   });
 
   it("allows agent creation for remote OpenClaw templates", () => {

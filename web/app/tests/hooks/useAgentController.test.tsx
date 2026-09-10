@@ -1457,7 +1457,7 @@ describe("useAgentController", () => {
     expect(result.current.controller.agentProfileModalProps?.bootstrapConfig).toBe(refreshedConfig);
   });
 
-  it("falls back to Codex when the builtin OpenClaw template is passed explicitly", async () => {
+  it("preserves the builtin OpenClaw template when it is passed explicitly from Hub", async () => {
     const codexTemplate: AgentTemplateLike = {
       id: "builtin.codex-worker",
       name: "generic-assistant-codex",
@@ -1484,8 +1484,8 @@ describe("useAgentController", () => {
 
     await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
     expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
-      from_template: "builtin.codex-worker",
-      runtime_kind: "codex",
+      from_template: "builtin.openclaw-worker",
+      runtime_kind: "openclaw_sandbox",
     });
   });
 
