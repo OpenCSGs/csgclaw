@@ -146,4 +146,40 @@ describe("configSettings model", () => {
     );
     expect(workerOptions).toEqual([{ value: "builtin.picoclaw-worker", label: "Worker" }]);
   });
+
+  it("excludes the builtin OpenClaw worker from default template settings", () => {
+    const templates = [
+      { id: "builtin.codex-worker", name: "Codex", role: "worker", runtime_kind: "codex" },
+      {
+        id: "builtin.openclaw-worker",
+        name: "OpenClaw",
+        role: "worker",
+        runtime_kind: "openclaw_sandbox",
+      },
+      {
+        id: "Agentic/feishu-assistant",
+        name: "Feishu",
+        role: "worker",
+        runtime_kind: "openclaw_sandbox",
+      },
+    ];
+
+    expect(configTemplateOptions(templates, "worker", "builtin.openclaw-worker")).toEqual([
+      { value: "builtin.codex-worker", label: "Codex" },
+      { value: "Agentic/feishu-assistant", label: "Feishu" },
+    ]);
+  });
+
+  it("migrates the builtin OpenClaw worker setting to Codex in the editable draft", () => {
+    const settings = normalizeConfigSettings({
+      path: "/tmp/config.toml",
+      listen_addr: "0.0.0.0:18080",
+      sandbox_provider: "boxlite",
+      hub_local_path: "/tmp/hub",
+      default_manager_template: "builtin.manager-codex",
+      default_worker_template: "builtin.openclaw-worker",
+    })!;
+
+    expect(configSettingsToDraft(settings).default_worker_template).toBe("builtin.codex-worker");
+  });
 });

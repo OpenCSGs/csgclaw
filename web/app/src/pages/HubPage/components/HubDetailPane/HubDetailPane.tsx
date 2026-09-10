@@ -19,7 +19,7 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
-import { formatRuntimeKindLabel, isBuiltinOpenClawWorkerTemplate } from "@/models/agents";
+import { formatRuntimeKindLabel } from "@/models/agents";
 import {
   canPublishHubTemplateToCommunity,
   formatHubDateTime,
@@ -1323,11 +1323,9 @@ export function HubDetailPane({
                     </div>
                   </div>
                   <div className={moduleClassNames("hub-template-actions")}>
-                    {!isBuiltinOpenClawWorkerTemplate(selectedTemplate) ? (
-                      <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
-                        <span>{t("createAgent")}</span>
-                      </Button>
-                    ) : null}
+                    <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
+                      <span>{t("createAgent")}</span>
+                    </Button>
                     {canPublishTemplate ? (
                       <Button
                         variant="secondaryGray"

@@ -1,4 +1,5 @@
 import { MANAGER_AGENT_ROLE, WORKER_AGENT_ROLE } from "@/shared/constants/agents";
+import { isBuiltinOpenClawWorkerTemplate } from "@/models/agents";
 import type { HubTemplate } from "@/models/hubWorkspace";
 
 export type ConfigSettings = {
@@ -148,7 +149,10 @@ export function configSettingsToDraft(settings: ConfigSettings): ConfigSettingsD
     sandbox_provider: settings.sandbox_provider,
     hub_local_path: settings.hub_local_path,
     default_manager_template: settings.default_manager_template,
-    default_worker_template: settings.default_worker_template,
+    default_worker_template:
+      settings.default_worker_template === "builtin.openclaw-worker"
+        ? "builtin.codex-worker"
+        : settings.default_worker_template,
   };
 }
 
@@ -188,7 +192,11 @@ export function configTemplateOptions(
       role === "manager"
         ? templateRole === MANAGER_AGENT_ROLE
         : templateRole === WORKER_AGENT_ROLE || templateRole === "";
-    return roleMatches && isValidConfigBootstrapTemplate(template, role);
+    return (
+      roleMatches &&
+      isValidConfigBootstrapTemplate(template, role) &&
+      !(role === "worker" && isBuiltinOpenClawWorkerTemplate(template))
+    );
   });
   const options = filtered
     .map((template) => {
@@ -201,7 +209,7 @@ export function configTemplateOptions(
     })
     .filter(Boolean) as ConfigTemplateOption[];
   const current = String(currentValue || "").trim();
-  if (current && !options.some((item) => item.value === current)) {
+  if (current && current !== "builtin.openclaw-worker" && !options.some((item) => item.value === current)) {
     options.unshift({ value: current, label: current });
   }
   return options;
