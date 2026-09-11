@@ -149,8 +149,7 @@ const t: TranslateFn = (key, params = {}) => {
     deleteRoomConfirm: "deleteRoomConfirm",
     deleteRoomConfirmBody: "deleteRoomConfirmBody",
     deleteRoomFailed: "deleteRoomFailed",
-    "errors.finish or stop active room tasks before deleting the room":
-      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
+    "errors.room_has_active_tasks": "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
     agentActivityEmpty: "No activity yet",
     agentActivityChronological: "Chronological",
     agentActivityEventsCount: "{count} events",
@@ -1322,9 +1321,11 @@ describe("ConversationPane", () => {
 
   it("keeps the delete dialog open and shows a localized error when deletion is blocked", async () => {
     const user = userEvent.setup();
-    const onDeleteRoom = vi
-      .fn()
-      .mockRejectedValue(new Error("finish or stop active room tasks before deleting the room"));
+    const onDeleteRoom = vi.fn().mockRejectedValue({
+      status: 409,
+      code: "room_has_active_tasks",
+      message: "finish or stop active room tasks before deleting the room",
+    });
     renderThreadPane({ isDirect: false, onDeleteRoom });
 
     await user.click(screen.getByRole("button", { name: "channelTools" }));

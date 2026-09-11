@@ -209,14 +209,16 @@ describe("useConversationController", () => {
   });
 
   it("propagates room deletion failures to the confirmation dialog", async () => {
-    apiMocks.deleteRoomRequest.mockRejectedValue(
-      new Error("finish or stop active room tasks before deleting the room"),
-    );
+    apiMocks.deleteRoomRequest.mockRejectedValue({
+      status: 409,
+      code: "room_has_active_tasks",
+      message: "finish or stop active room tasks before deleting the room",
+    });
     const { result } = renderConversationController();
 
-    await expect(result.current.conversationViewProps.onDeleteRoom("room-1")).rejects.toThrow(
-      "finish or stop active room tasks before deleting the room",
-    );
+    await expect(result.current.conversationViewProps.onDeleteRoom("room-1")).rejects.toMatchObject({
+      code: "room_has_active_tasks",
+    });
     expect(result.current.conversationViewProps.composerError).toBe("");
   });
 

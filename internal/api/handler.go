@@ -2197,7 +2197,7 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		roomID, err := roomIDFromQuery(r)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 
@@ -2206,10 +2206,10 @@ func (h *Handler) handleMessages(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				writeAPIError(w, err, http.StatusNotFound)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, messages)
@@ -2347,11 +2347,54 @@ func threadListOptionsFromQuery(r *http.Request) (im.ThreadListOptions, error) {
 }
 
 func writeIMError(w http.ResponseWriter, err error) {
+	if code, status := knownAPIError(err, http.StatusBadRequest); code != "" {
+		writeCodedAPIError(w, status, code, err.Error())
+		return
+	}
 	if strings.Contains(err.Error(), "not found") {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	http.Error(w, err.Error(), http.StatusBadRequest)
+}
+
+func writeAPIError(w http.ResponseWriter, err error, fallbackStatus int) {
+	if code, status := knownAPIError(err, fallbackStatus); code != "" {
+		writeCodedAPIError(w, status, code, err.Error())
+		return
+	}
+	http.Error(w, err.Error(), fallbackStatus)
+}
+
+func knownAPIError(err error, fallbackStatus int) (string, int) {
+	switch {
+	case errors.Is(err, im.ErrTitleRequired):
+		return "title_required", fallbackStatus
+	case errors.Is(err, im.ErrCreatorIDRequired):
+		return "creator_id_required", fallbackStatus
+	case errors.Is(err, im.ErrCreatorNotFound):
+		return "creator_not_found", fallbackStatus
+	case errors.Is(err, im.ErrUserNotFound):
+		return "user_not_found", fallbackStatus
+	case errors.Is(err, im.ErrRoomIDRequired):
+		return "room_id_required", fallbackStatus
+	case errors.Is(err, im.ErrRoomNotFound):
+		return "room_not_found", http.StatusNotFound
+	case errors.Is(err, roomtask.ErrRoomHasActiveTasks):
+		return "room_has_active_tasks", http.StatusConflict
+	case errors.Is(err, im.ErrInviterIDRequired):
+		return "inviter_id_required", fallbackStatus
+	case errors.Is(err, im.ErrInviterNotFound):
+		return "inviter_not_found", fallbackStatus
+	case errors.Is(err, im.ErrInviterNotRoomMember):
+		return "inviter_not_room_member", fallbackStatus
+	case errors.Is(err, im.ErrUserIDsRequired):
+		return "user_ids_required", fallbackStatus
+	case errors.Is(err, im.ErrNoNewUsersToInvite):
+		return "no_new_users_to_invite", fallbackStatus
+	default:
+		return "", fallbackStatus
+	}
 }
 
 func (h *Handler) handleRoomByID(w http.ResponseWriter, r *http.Request) {
@@ -2381,10 +2424,10 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 		room, err := channel.UpdateRoom(id, req)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, "room not found", http.StatusNotFound)
+				writeCodedAPIError(w, http.StatusNotFound, "room_not_found", im.ErrRoomNotFound.Error())
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, room)
@@ -2399,17 +2442,17 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 			var err error
 			releaseRoomDeletion, err = h.roomTaskSvc.BeginRoomDeletion(id)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusConflict)
+				writeAPIError(w, err, http.StatusConflict)
 				return
 			}
 		}
 		defer releaseRoomDeletion()
 		if err := channel.DeleteRoom(id); err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, "room not found", http.StatusNotFound)
+				writeCodedAPIError(w, http.StatusNotFound, "room_not_found", im.ErrRoomNotFound.Error())
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		if hasDeletedRoom {
@@ -2426,7 +2469,7 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 func (h *Handler) handleClearRoomMessages(w http.ResponseWriter, r *http.Request) {
 	roomID := strings.TrimSpace(pathValue(r, "id"))
 	if roomID == "" {
-		http.Error(w, "room_id is required", http.StatusBadRequest)
+		writeAPIError(w, im.ErrRoomIDRequired, http.StatusBadRequest)
 		return
 	}
 	if h == nil || h.im == nil {
@@ -2437,10 +2480,10 @@ func (h *Handler) handleClearRoomMessages(w http.ResponseWriter, r *http.Request
 	room, err := h.im.ClearRoomMessages(roomID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, "room not found", http.StatusNotFound)
+			writeCodedAPIError(w, http.StatusNotFound, "room_not_found", im.ErrRoomNotFound.Error())
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIError(w, err, http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, room)
@@ -2477,10 +2520,10 @@ func (h *Handler) handleRoomMembersByID(w http.ResponseWriter, r *http.Request, 
 	members, err := channel.ListRoomMembers(roomID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			http.Error(w, "room not found", http.StatusNotFound)
+			writeCodedAPIError(w, http.StatusNotFound, "room_not_found", im.ErrRoomNotFound.Error())
 			return
 		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, err, http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, http.StatusOK, members)
@@ -2528,7 +2571,7 @@ func (h *Handler) handleRoomMemberDeletePath(w http.ResponseWriter, r *http.Requ
 	}
 	room, err := channel.RemoveRoomMembers(serviceReq)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, err, http.StatusBadRequest)
 		return
 	}
 	if room.IsOnDemand() && h.roomTaskSvc != nil {
@@ -2559,7 +2602,7 @@ func (h *Handler) handleLocalUserByID(w http.ResponseWriter, r *http.Request, id
 	case http.MethodDelete:
 		if err := h.im.DeleteUser(id); err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, "user not found", http.StatusNotFound)
+				writeAPIError(w, err, http.StatusNotFound)
 				return
 			}
 			if strings.Contains(err.Error(), "cannot delete current user") {
@@ -2893,7 +2936,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 
 	serviceReq, err := req.toServiceRequest()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, err, http.StatusBadRequest)
 		return
 	}
 	serviceReq = h.resolveCSGClawParticipantMessageRequest(serviceReq)
@@ -2906,7 +2949,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 
 	message, created, err := channel.SendMessageOnce(serviceReq)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, err, http.StatusBadRequest)
 		return
 	}
 	if created {
@@ -2947,7 +2990,7 @@ func (h *Handler) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	room, err := channel.CreateRoom(req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, err, http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, http.StatusCreated, room)
@@ -2999,7 +3042,7 @@ func (h *Handler) handleAddRoomMembers(w http.ResponseWriter, r *http.Request, p
 
 	serviceReq, err := req.toServiceRequest()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, err, http.StatusBadRequest)
 		return
 	}
 	serviceReq.InviterID = h.resolveCSGClawParticipantUserID(serviceReq.InviterID)
@@ -3007,7 +3050,7 @@ func (h *Handler) handleAddRoomMembers(w http.ResponseWriter, r *http.Request, p
 
 	room, err := channel.AddRoomMembers(serviceReq)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, err, http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, http.StatusOK, room)
@@ -3121,7 +3164,7 @@ func displayRole(role string) string {
 func roomIDFromQuery(r *http.Request) (string, error) {
 	roomID := strings.TrimSpace(r.URL.Query().Get("room_id"))
 	if roomID == "" {
-		return "", fmt.Errorf("room_id is required")
+		return "", im.ErrRoomIDRequired
 	}
 	return roomID, nil
 }
@@ -3697,7 +3740,7 @@ func presentEvent(evt im.Event) imEventResponse {
 func (r createMessageRequest) toServiceRequest() (im.CreateMessageRequest, error) {
 	roomID := strings.TrimSpace(r.RoomID)
 	if roomID == "" {
-		return im.CreateMessageRequest{}, fmt.Errorf("room_id is required")
+		return im.CreateMessageRequest{}, im.ErrRoomIDRequired
 	}
 
 	return im.CreateMessageRequest{
@@ -3716,7 +3759,7 @@ func (r createMessageRequest) toServiceRequest() (im.CreateMessageRequest, error
 func (r addRoomMembersRequest) toServiceRequest() (im.AddRoomMembersRequest, error) {
 	roomID := strings.TrimSpace(r.RoomID)
 	if roomID == "" {
-		return im.AddRoomMembersRequest{}, fmt.Errorf("room_id is required")
+		return im.AddRoomMembersRequest{}, im.ErrRoomIDRequired
 	}
 
 	return im.AddRoomMembersRequest{

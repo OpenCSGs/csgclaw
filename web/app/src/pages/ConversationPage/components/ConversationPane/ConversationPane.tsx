@@ -22,7 +22,7 @@ import { useSearchParams } from "react-router-dom";
 import { ListTodo } from "lucide-react";
 import { type IMMessage } from "@/models/conversations";
 import { roomTaskParent, roomTaskMessageAnchors } from "@/models/roomTasks";
-import { localizeError } from "@/shared/i18n";
+import { localizeAPIError } from "@/shared/i18n";
 import { useRoomTasks } from "../../useRoomTasks";
 import {
   conversationActivityAgents,
@@ -422,7 +422,7 @@ function ConversationPaneContent({
       await onDeleteRoom(conversation.id);
       setDeleteRoomDialogOpen(false);
     } catch (err) {
-      setDeleteRoomError(localizeError(errorMessage(err, t("deleteRoomFailed")), t));
+      setDeleteRoomError(localizeAPIError(err, t, errorMessage(err, t("deleteRoomFailed"))));
     } finally {
       setDeleteRoomBusy(false);
     }

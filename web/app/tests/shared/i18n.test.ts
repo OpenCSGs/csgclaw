@@ -1,4 +1,5 @@
-import { createTranslator, localizeAPIError, localizeError, localizeTemplateSourceTag } from "@/shared/i18n";
+import { createTranslator, localizeAPIError, localizeTemplateSourceTag } from "@/shared/i18n";
+import { messages } from "@/shared/i18n/messages";
 
 describe("i18n messages", () => {
   it("keeps the human profile subtitle concise", () => {
@@ -64,6 +65,11 @@ describe("i18n messages", () => {
     );
   });
 
+  it("keeps error translation keys machine-readable", () => {
+    expect(Object.keys(messages.zh.errors)).toEqual(Object.keys(messages.en.errors));
+    expect(Object.keys(messages.zh.errors).filter((key) => /\s/.test(key))).toEqual([]);
+  });
+
   it("preserves the upstream reason for generic template publishing failures", () => {
     const message =
       'publish hub template to "official": remote hub request failed with status 500: failed to update repository path';
@@ -88,12 +94,16 @@ describe("i18n messages", () => {
   });
 
   it("localizes the unfinished-room-task deletion conflict", () => {
-    const error = "finish or stop active room tasks before deleting the room";
+    const error = {
+      status: 409,
+      code: "room_has_active_tasks",
+      message: "finish or stop active room tasks before deleting the room",
+    };
 
-    expect(localizeError(error, createTranslator("zh"))).toBe(
+    expect(localizeAPIError(error, createTranslator("zh"))).toBe(
       "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
     );
-    expect(localizeError(error, createTranslator("en"))).toBe(
+    expect(localizeAPIError(error, createTranslator("en"))).toBe(
       "This room still has unfinished tasks. Stop or complete them before deleting the room.",
     );
   });

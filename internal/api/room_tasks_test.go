@@ -535,9 +535,7 @@ func TestDeleteRoomRejectsUnfinishedRoomTasks(t *testing.T) {
 		h.Routes().ServeHTTP(out, req)
 		return out
 	}
-	if got := remove(); got.Code != http.StatusConflict {
-		t.Fatalf("delete unfinished room = %d %s", got.Code, got.Body.String())
-	}
+	assertAPIErrorCode(t, remove(), http.StatusConflict, "room_has_active_tasks")
 	if _, found := messages.Room(room.ID); !found {
 		t.Fatal("room was deleted despite unfinished work")
 	}

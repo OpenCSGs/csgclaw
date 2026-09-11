@@ -20,7 +20,7 @@ import {
   type TranslateFn,
 } from "@/models/conversations";
 import { classNames } from "@/shared/lib/classNames";
-import { localizeError } from "@/shared/i18n";
+import { localizeAPIError } from "@/shared/i18n";
 import { FloatingChatPromptSuggestions } from "./FloatingChatPromptSuggestions";
 import styles from "./FloatingChat.module.css";
 
@@ -229,7 +229,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       await onDeleteRoom(conversation.id);
       setDeleteRoomDialogOpen(false);
     } catch (err) {
-      setDeleteRoomError(localizeError(errorMessage(err, t("deleteRoomFailed")), t));
+      setDeleteRoomError(localizeAPIError(err, t, errorMessage(err, t("deleteRoomFailed"))));
     } finally {
       setDeleteRoomBusy(false);
     }
