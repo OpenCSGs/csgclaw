@@ -8,7 +8,6 @@ import (
 
 func (h *Handler) Routes() chi.Router {
 	router := chi.NewRouter()
-	router.Use(h.roomRuntimeScope)
 	h.registerCoreRoutes(router)
 	h.registerChannelRoutes(router)
 	return router

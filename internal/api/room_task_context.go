@@ -1,14 +1,51 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
+	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskcore"
 )
+
+func (h *Handler) handleRoomTaskContext(w http.ResponseWriter, r *http.Request) {
+	meta, ok := h.roomSchedulingContext(pathValue(r, "id"))
+	if !ok {
+		http.Error(w, "collaboration room unavailable", http.StatusConflict)
+		return
+	}
+	writeJSON(w, http.StatusOK, h.roomContextFacts(meta))
+}
+
+func (h *Handler) roomContextFacts(meta roomtask.Roster) map[string]any {
+	room, _ := h.im.Room(meta.RoomID)
+	type member struct {
+		ID          string `json:"participant_id"`
+		Name        string `json:"name"`
+		Role        string `json:"role"`
+		Description string `json:"description,omitempty"`
+	}
+	members := make([]member, 0, len(room.Members))
+	for _, id := range room.Members {
+		user, found := h.im.User(id)
+		if !found {
+			continue
+		}
+		participantID := h.participantBridgeTargetForRoomMember(id).bridgeID
+		item := member{ID: participantID, Name: user.Name, Role: user.Role, Description: user.Description}
+		if h.agentEngine != nil {
+			if profile, err := h.agentEngine.Agents().Get(context.Background(), h.runtimeAgentIDForBridgeID(participantID), agentengine.AgentGetOptions{}); err == nil {
+				item.Description = profile.Spec.Description
+			}
+		}
+		members = append(members, item)
+	}
+	return map[string]any{"room_id": room.ID, "manager_id": meta.ManagerID, "members": members, "assignable_worker_ids": meta.WorkerIDs}
+}
 
 // roomExecutionContext is read after the per-conversation ingress queue admits
 // a turn. Policy, room scope, task state, and the current event are separated so
@@ -36,12 +73,6 @@ func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roo
 		scope = h.roomContextFacts(roster)
 		scope["role"], scope["participant_id"] = "manager", actor.bridgeID
 		scope["room_type"] = apitypes.RoomTypeOnDemand
-		for _, message := range room.Messages {
-			if message.ID == sourceID {
-				turn["source_actor_id"] = h.participantBridgeTargetForRoomMember(message.SenderID).bridgeID
-				break
-			}
-		}
 		all := h.roomTaskSvc.List(roomID)
 		selected := map[string]bool{}
 		for _, task := range all {

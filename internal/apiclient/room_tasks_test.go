@@ -16,15 +16,15 @@ func TestRoomTaskRoutesDoNotRequireTeam(t *testing.T) {
 		{"context", `{}`, "GET /api/v1/rooms/room-1/task-context", func(c *Client) error { _, err := c.RoomTaskContext(ctx, "room-1"); return err }},
 		{"list", `[]`, "GET /api/v1/rooms/room-1/tasks", func(c *Client) error { _, err := c.ListRoomTasks(ctx, "room-1"); return err }},
 		{"submit", `{}`, "POST /api/v1/rooms/room-1/tasks", func(c *Client) error {
-			_, err := c.CreateRoomTask(ctx, "room-1", apitypes.CreateRoomTaskRequest{Title: "Build", CreatedBy: "admin", SourceMessageID: "message-1"})
+			_, err := c.CreateRoomTask(ctx, "room-1", apitypes.CreateRoomTaskRequest{Title: "Build", SourceMessageID: "message-1"})
 			return err
 		}},
 		{"plan", `{}`, "POST /api/v1/rooms/room-1/tasks/task-1/plan", func(c *Client) error { _, err := c.PlanRoomTask(ctx, "room-1", "task-1"); return err }},
 		{"start", `{}`, "POST /api/v1/rooms/room-1/tasks/task-1/start", func(c *Client) error { _, err := c.StartRoomTask(ctx, "room-1", "task-1"); return err }},
 		{"dispatch", `{}`, "POST /api/v1/rooms/room-1/tasks/task-2/dispatch", func(c *Client) error { _, err := c.DispatchRoomTask(ctx, "room-1", "task-2", "worker"); return err }},
-		{"claim", `{}`, "POST /api/v1/rooms/room-1/tasks/task-2/claim", func(c *Client) error { _, err := c.ClaimRoomTask(ctx, "room-1", "task-2", "worker", 1); return err }},
+		{"claim", `{}`, "POST /api/v1/rooms/room-1/tasks/task-2/claim", func(c *Client) error { _, err := c.ClaimRoomTask(ctx, "room-1", "task-2", 1); return err }},
 		{"update", `{}`, "PATCH /api/v1/rooms/room-1/tasks/task-2", func(c *Client) error {
-			_, err := c.UpdateRoomTask(ctx, "room-1", "task-2", "worker", apitypes.UpdateRoomTaskRequest{Attempt: 1, Status: "completed", Result: "Artifact"})
+			_, err := c.UpdateRoomTask(ctx, "room-1", "task-2", apitypes.UpdateRoomTaskRequest{Attempt: 1, Status: "completed", Result: "Artifact"})
 			return err
 		}},
 		{"review", `{}`, "POST /api/v1/rooms/room-1/tasks/task-2/review", func(c *Client) error {

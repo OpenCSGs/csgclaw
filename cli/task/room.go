@@ -16,11 +16,10 @@ func (c cmd) runRoomAction(ctx context.Context, run *command.Context, action str
 	fs := run.NewFlagSet("task "+action, run.Program+" task "+action+" [flags]", "Manage on-demand room work.")
 	roomID := fs.String("room", "", "room id; required only for room-level operations")
 	taskID := fs.String("task", "", "task id; its room is resolved automatically")
-	target := fs.String("target", "", "mentioned room participant")
+	target := fs.String("target", "", "replacement assignee for dispatch")
 	messageID := fs.String("message-id", "", "stable message id; reuse on retries")
 	appendPlan := fs.Bool("append", false, "append children without replacing the existing plan")
 	requestID := fs.String("request-id", "", "stable plan extension id; reuse on retries")
-	actorID := fs.String("actor-id", "", "requester or worker participant id")
 	sourceID := fs.String("source-message", "", "original user message id or stable Manager request id")
 	title := fs.String("title", "", "task title")
 	body := fs.String("body", "", "task requirements and deliverables")
@@ -73,11 +72,11 @@ func (c cmd) runRoomAction(ctx context.Context, run *command.Context, action str
 		}
 		return command.WriteJSON(run.Stdout, got)
 	case "submit":
-		if strings.TrimSpace(*sourceID) == "" || strings.TrimSpace(*actorID) == "" || strings.TrimSpace(*title) == "" {
-			return fmt.Errorf("source-message, actor-id and title are required")
+		if strings.TrimSpace(*sourceID) == "" || strings.TrimSpace(*title) == "" {
+			return fmt.Errorf("source-message and title are required")
 		}
 		got, err := client.CreateRoomTask(ctx, resolvedRoomID, apitypes.CreateRoomTaskRequest{
-			Title: *title, Body: *body, CreatedBy: *actorID, SourceMessageID: *sourceID,
+			Title: *title, Body: *body, SourceMessageID: *sourceID,
 		})
 		if err != nil {
 			return err
@@ -145,10 +144,10 @@ func (c cmd) runRoomAction(ctx context.Context, run *command.Context, action str
 		}
 		items = []apitypes.RoomTask{got}
 	case "message":
-		if strings.TrimSpace(*actorID) == "" || strings.TrimSpace(*target) == "" || strings.TrimSpace(*messageID) == "" || strings.TrimSpace(*body) == "" {
-			return fmt.Errorf("actor-id, target, message-id and body are required")
+		if strings.TrimSpace(*messageID) == "" || strings.TrimSpace(*body) == "" {
+			return fmt.Errorf("message-id and body are required")
 		}
-		got, err := client.SendRoomTaskMessage(ctx, resolvedRoomID, *taskID, apitypes.RoomTaskMessageRequest{ActorID: *actorID, TargetID: *target, MessageID: *messageID, Content: *body})
+		got, err := client.SendRoomTaskMessage(ctx, resolvedRoomID, *taskID, apitypes.RoomTaskMessageRequest{MessageID: *messageID, Content: *body})
 		if err != nil {
 			return err
 		}

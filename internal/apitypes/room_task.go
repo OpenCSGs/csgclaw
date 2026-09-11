@@ -17,7 +17,6 @@ type StartRoomTaskResponse struct {
 	Task RoomTask `json:"task"`
 }
 type UpdateRoomTaskRequest struct {
-	ActorID string `json:"actor_id"`
 	Attempt int    `json:"attempt"`
 	Status  string `json:"status"`
 	Result  string `json:"result"`
@@ -25,8 +24,7 @@ type UpdateRoomTaskRequest struct {
 	Reason  string `json:"reason"`
 }
 type ClaimRoomTaskRequest struct {
-	ParticipantID string `json:"participant_id"`
-	Attempt       int    `json:"attempt"`
+	Attempt int `json:"attempt"`
 }
 type ReviewRoomTaskRequest struct {
 	Attempt int    `json:"attempt"`
@@ -35,8 +33,6 @@ type ReviewRoomTaskRequest struct {
 }
 
 type RoomTaskMessageRequest struct {
-	ActorID   string `json:"actor_id"`
-	TargetID  string `json:"target_id"`
 	Content   string `json:"content"`
 	MessageID string `json:"message_id"`
 }

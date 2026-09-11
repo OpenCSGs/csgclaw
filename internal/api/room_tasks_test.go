@@ -37,7 +37,7 @@ func TestRoomTaskAPIWithoutTeam(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, _ := json.Marshal(apitypes.CreateRoomTaskRequest{Title: "Build", CreatedBy: "admin", SourceMessageID: source.ID})
+	payload, _ := json.Marshal(apitypes.CreateRoomTaskRequest{Title: "Build", SourceMessageID: source.ID})
 	routes := h.Routes()
 	for range 2 {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/"+room.ID+"/tasks", bytes.NewReader(payload))
@@ -50,7 +50,7 @@ func TestRoomTaskAPIWithoutTeam(t *testing.T) {
 		if err := json.Unmarshal(out.Body.Bytes(), &task); err != nil {
 			t.Fatal(err)
 		}
-		if task.TeamID != "" || task.AssignmentType != "room" || task.RoomID != room.ID {
+		if task.TeamID != "" || task.AssignmentType != "room" || task.RoomID != room.ID || task.CreatedBy != "pt-admin" {
 			t.Fatalf("wrong task ownership: %+v", task)
 		}
 	}
@@ -188,11 +188,16 @@ func TestRoomTaskStructuredPlanAndScopedMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	routes := h.Routes()
-	request := func(method, path string, payload any) *httptest.ResponseRecorder {
+	requestAs := func(method, path string, payload any, caller string) *httptest.ResponseRecorder {
 		data, _ := json.Marshal(payload)
 		out := httptest.NewRecorder()
-		routes.ServeHTTP(out, httptest.NewRequest(method, path, bytes.NewReader(data)))
+		req := httptest.NewRequest(method, path, bytes.NewReader(data))
+		req.Header.Set("X-CSGClaw-Caller-Agent", caller)
+		routes.ServeHTTP(out, req)
 		return out
+	}
+	request := func(method, path string, payload any) *httptest.ResponseRecorder {
+		return requestAs(method, path, payload, "")
 	}
 	base := "/api/v1/rooms/" + room.ID + "/tasks/"
 	plan := apitypes.PlanRoomTaskRequest{AutoStart: true, Summary: "Concrete work", Tasks: []apitypes.RoomTaskPlanItem{{IDRef: "dev", Title: "Build page", AssignedTo: "pt-dev"}, {IDRef: "qa", Title: "Test page", AssignedTo: "pt-qa", DependsOnRefs: []string{"dev"}}}}
@@ -213,8 +218,11 @@ func TestRoomTaskStructuredPlanAndScopedMessages(t *testing.T) {
 			childID = c.ID
 		}
 	}
-	msgReq := apitypes.RoomTaskMessageRequest{ActorID: "pt-dev", TargetID: "manager", MessageID: "task-question-1", Content: "Need clarification"}
-	got = request(http.MethodPost, base+childID+"/messages", msgReq)
+	msgReq := apitypes.RoomTaskMessageRequest{MessageID: "task-question-1", Content: "Need clarification"}
+	if got = request(http.MethodPost, base+childID+"/messages", msgReq); got.Code != http.StatusForbidden {
+		t.Fatalf("message without runtime caller = %d, want forbidden", got.Code)
+	}
+	got = requestAs(http.MethodPost, base+childID+"/messages", msgReq, "agent-dev")
 	if got.Code != http.StatusOK {
 		t.Fatalf("message: %d %s", got.Code, got.Body.String())
 	}
@@ -246,13 +254,12 @@ func TestRoomTaskStructuredPlanAndScopedMessages(t *testing.T) {
 		t.Fatal("tool activity woke manager")
 	default:
 	}
-	msgReq.TargetID = "pt-qa"
 	msgReq.MessageID = "worker-to-worker"
-	if got := request(http.MethodPost, base+childID+"/messages", msgReq); got.Code != http.StatusOK {
-		t.Fatalf("worker target should be forwarded: %d", got.Code)
+	if got := requestAs(http.MethodPost, base+childID+"/messages", msgReq, "agent-dev"); got.Code != http.StatusOK {
+		t.Fatalf("worker message should be routed to manager: %d", got.Code)
 	}
 
-	forwarded := request(http.MethodPost, base+childID+"/messages", msgReq)
+	forwarded := requestAs(http.MethodPost, base+childID+"/messages", msgReq, "agent-dev")
 	if err := json.Unmarshal(forwarded.Body.Bytes(), &msg); err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +314,7 @@ func TestRoomManagerActionsRejectWorkerAndCreateOwnParent(t *testing.T) {
 		routes.ServeHTTP(out, req)
 		return out
 	}
-	request := apitypes.CreateRoomTaskRequest{CreatedBy: "manager", SourceMessageID: "manager-coordination-1", Title: "Coordinate follow-up"}
+	request := apitypes.CreateRoomTaskRequest{SourceMessageID: "manager-coordination-1", Title: "Coordinate follow-up"}
 	if got := call("", "pt-dev", request); got.Code != http.StatusForbidden {
 		t.Fatal("worker created parent", got.Code)
 	}
@@ -318,6 +325,9 @@ func TestRoomManagerActionsRejectWorkerAndCreateOwnParent(t *testing.T) {
 	var parent apitypes.RoomTask
 	if err := json.Unmarshal(created.Body.Bytes(), &parent); err != nil {
 		t.Fatal(err)
+	}
+	if parent.CreatedBy != "pt-manager" {
+		t.Fatalf("synthetic Manager task creator = %q, want pt-manager", parent.CreatedBy)
 	}
 	for _, action := range []string{"plan", "start", "dispatch", "review", "report", "stop", "recover"} {
 		if got := call("/"+parent.ID+"/"+action, "pt-dev", map[string]any{}); got.Code != http.StatusForbidden {
@@ -351,10 +361,13 @@ func TestRoomManagerActionsRejectWorkerAndCreateOwnParent(t *testing.T) {
 	if got := call("/"+id+"/dispatch", "manager", map[string]any{}); got.Code != http.StatusOK {
 		t.Fatal(got.Body.String())
 	}
-	if got := call("/"+id+"/claim", "pt-dev", apitypes.ClaimRoomTaskRequest{ParticipantID: "pt-dev"}); got.Code != http.StatusConflict {
+	if got := call("/"+id+"/claim", "pt-dev", apitypes.ClaimRoomTaskRequest{}); got.Code != http.StatusConflict {
 		t.Fatal("claim accepted missing attempt", got.Code)
 	}
-	if got := call("/"+id+"/claim", "pt-dev", apitypes.ClaimRoomTaskRequest{ParticipantID: "pt-dev", Attempt: 1}); got.Code != http.StatusOK {
+	if got := call("/"+id+"/claim", "", apitypes.ClaimRoomTaskRequest{Attempt: 1}); got.Code != http.StatusForbidden {
+		t.Fatal("claim accepted missing runtime caller", got.Code)
+	}
+	if got := call("/"+id+"/claim", "pt-dev", apitypes.ClaimRoomTaskRequest{Attempt: 1}); got.Code != http.StatusOK {
 		t.Fatal(got.Body.String())
 	}
 }
@@ -400,18 +413,32 @@ func TestRoomParentStopTargetsOnlyItsCurrentExecution(t *testing.T) {
 		t.Fatal("dispatch source missing")
 	}
 	control := &roomStopControl{leases: []apitypes.ParticipantWorkUpdate{
-		{ParticipantID: "pt-dev", RoomID: room.ID, RequestID: "structured-user-input-answer", TaskID: child.ID, TaskAttempt: 1, LeaseID: "current"},
+		{ParticipantID: "pt-manager", RoomID: room.ID, RequestID: "manager-feedback-turn", TaskID: child.ID, TaskAttempt: 1, LeaseID: "manager"},
 		{ParticipantID: "pt-dev", RoomID: "other", RequestID: "other-task", LeaseID: "other"},
 	}}
+	h.participantWork = control
+	stop := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/"+room.ID+"/tasks/"+root.ID+"/stop", strings.NewReader(`{}`))
+		out := httptest.NewRecorder()
+		h.Routes().ServeHTTP(out, req)
+		return out
+	}
+	if out := stop(); out.Code != http.StatusConflict {
+		t.Fatalf("stop with Manager coordination only = %d %s", out.Code, out.Body.String())
+	}
+	if len(control.stops) != 0 {
+		t.Fatalf("Manager coordination was stopped: %+v", control.stops)
+	}
+
+	control.leases = append(control.leases,
+		apitypes.ParticipantWorkUpdate{ParticipantID: "pt-dev", RoomID: room.ID, RequestID: "structured-user-input-answer", TaskID: child.ID, TaskAttempt: 1, LeaseID: "current"},
+	)
 	control.confirm = func() {
 		if err := h.roomTaskSvc.WorkerStopped(room.ID, child.ID, "pt-dev", 1); err != nil {
 			t.Error(err)
 		}
 	}
-	h.participantWork = control
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/rooms/"+room.ID+"/tasks/"+root.ID+"/stop", strings.NewReader(`{}`))
-	out := httptest.NewRecorder()
-	h.Routes().ServeHTTP(out, req)
+	out := stop()
 	if out.Code != http.StatusOK {
 		t.Fatal(out.Code, out.Body.String())
 	}

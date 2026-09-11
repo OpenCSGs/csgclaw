@@ -2898,18 +2898,9 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	serviceReq = h.resolveCSGClawParticipantMessageRequest(serviceReq)
 	if caller := strings.TrimSpace(r.Header.Get("X-CSGClaw-Caller-Agent")); caller != "" {
-		if reader, ok := h.participantWork.(activeRoomReader); ok {
-			rooms := reader.ActiveRooms(h.participantBridgeTargetForRoomMember(caller).bridgeID)
-			if len(rooms) > 0 {
-				allowed := false
-				for _, roomID := range rooms {
-					allowed = allowed || roomID == serviceReq.RoomID
-				}
-				if !allowed || !h.participantBridgeTargetForRoomMember(serviceReq.SenderID).matches(caller) {
-					http.Error(w, "message must use the runtime caller and an active room", http.StatusForbidden)
-					return
-				}
-			}
+		if !h.participantBridgeTargetForRoomMember(serviceReq.SenderID).matches(caller) {
+			http.Error(w, "message sender must match runtime caller", http.StatusForbidden)
+			return
 		}
 	}
 

@@ -9,7 +9,7 @@ func TestOnDemandPolicyInstructionsAreRoleSpecific(t *testing.T) {
 	manager := OnDemandPolicyInstructions(TurnRoleManager, "csgclaw-cli")
 	worker := OnDemandPolicyInstructions(TurnRoleWorker, "csgclaw-cli")
 
-	for _, want := range []string{`room_type="on_demand", role="manager", and policy_id="on-demand-manager/v1"`, "MUST create or continue tracked room work and dispatch it", "independent of domain, size, apparent simplicity", "Never silently switch to direct execution", "Before dispatch, do not use domain tools", "task submit", "task plan", "Split independent requested items", "dispatch", "Review", "task report", "csgclaw-cli"} {
+	for _, want := range []string{`room_type="on_demand", role="manager", and policy_id="on-demand-manager/v1"`, "MUST create or continue tracked room work and dispatch it", "independent of domain, size, apparent simplicity", "Never silently switch to direct execution", "Before dispatch, do not use domain tools", "task submit --room <room_id>", "task plan --task", "task dispatch --task", "task review --task", "task report --task", "Split independent requested items", "csgclaw-cli"} {
 		if !strings.Contains(manager, want) {
 			t.Fatalf("manager instructions missing %q", want)
 		}
@@ -20,7 +20,7 @@ func TestOnDemandPolicyInstructionsAreRoleSpecific(t *testing.T) {
 		}
 	}
 
-	for _, want := range []string{`room_type="on_demand", role="worker", and policy_id="on-demand-worker/v1"`, "task claim --task", "task update", "pending Manager review", "csgclaw-cli"} {
+	for _, want := range []string{`room_type="on_demand", role="worker", and policy_id="on-demand-worker/v1"`, "task claim --task", "task update --task", "task message --task", "pending Manager review", "csgclaw-cli"} {
 		if !strings.Contains(worker, want) {
 			t.Fatalf("worker instructions missing %q", want)
 		}
@@ -29,6 +29,14 @@ func TestOnDemandPolicyInstructionsAreRoleSpecific(t *testing.T) {
 		if strings.Contains(worker, unwanted) {
 			t.Fatalf("worker instructions contain Manager-only rule %q", unwanted)
 		}
+	}
+	for _, unwanted := range []string{"task claim --task <task_id> --actor-id", "task update --task <task_id> --actor-id", "task message --task <task_id> --actor-id", "task message --task <task_id> --target"} {
+		if strings.Contains(worker, unwanted) {
+			t.Fatalf("worker instructions contain redundant caller parameter %q", unwanted)
+		}
+	}
+	if strings.Contains(manager, "task submit --room <room_id> --source-message <source_message_id> --actor-id") {
+		t.Fatal("manager submit instructions should derive the requester from the source message")
 	}
 }
 

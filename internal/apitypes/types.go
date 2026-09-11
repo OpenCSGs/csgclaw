@@ -209,7 +209,6 @@ type Room struct {
 type CreateRoomTaskRequest struct {
 	Title           string `json:"title"`
 	Body            string `json:"body"`
-	CreatedBy       string `json:"created_by"`
 	SourceMessageID string `json:"source_message_id"`
 }
 

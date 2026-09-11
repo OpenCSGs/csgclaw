@@ -39,10 +39,8 @@ func (h *Handler) handleRoomTaskMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	roomID, id := pathValue(r, "id"), pathValue(r, "task_id")
-	actor := h.participantBridgeTargetForRoomMember(req.ActorID)
-	target := h.participantBridgeTargetForRoomMember(req.TargetID)
-	if caller := strings.TrimSpace(r.Header.Get("X-CSGClaw-Caller-Agent")); caller != "" && !actor.matches(caller) {
-		http.Error(w, "actor must match runtime caller", http.StatusForbidden)
+	actor, ok := h.roomTaskRuntimeCaller(w, r)
+	if !ok {
 		return
 	}
 	roster, ok := h.roomSchedulingContext(roomID)
@@ -72,19 +70,19 @@ func (h *Handler) handleRoomTaskMessage(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 	}
+	effectiveTarget := h.participantBridgeTargetForRoomMember(roster.ManagerID)
+	if actor.matches(roster.ManagerID) {
+		effectiveTarget = h.participantBridgeTargetForRoomMember(task.AssignedTo)
+	}
 	targetMember := false
 	for _, m := range room.Members {
-		targetMember = targetMember || target.matches(m)
+		targetMember = targetMember || effectiveTarget.matches(m)
 	}
 	if !targetMember {
-		http.Error(w, "target is not a room member", http.StatusBadRequest)
+		http.Error(w, "task counterpart is not a room member", http.StatusConflict)
 		return
 	}
-	effectiveTarget := roster.ManagerID
-	if actor.matches(roster.ManagerID) {
-		effectiveTarget = target.bridgeID
-	}
-	if _, ok := h.roomTaskSvc.ResolveMention(roomID, id, effectiveTarget); !ok {
+	if _, ok := h.roomTaskSvc.ResolveMention(roomID, id, effectiveTarget.bridgeID); !ok {
 		http.Error(w, "target is not the manager or this task's active assignee", http.StatusConflict)
 		return
 	}
@@ -92,7 +90,7 @@ func (h *Handler) handleRoomTaskMessage(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "content and stable message_id are required", http.StatusBadRequest)
 		return
 	}
-	message, err := h.im.DeliverMessage(im.DeliverMessageRequest{RoomID: roomID, SenderID: h.resolveCSGClawParticipantUserID(actor.bridgeID), MentionID: h.resolveCSGClawParticipantUserID(target.bridgeID), Content: req.Content, MessageID: req.MessageID, Metadata: taskmeta.Set(nil, id, task.Attempt)})
+	message, err := h.im.DeliverMessage(im.DeliverMessageRequest{RoomID: roomID, SenderID: h.resolveCSGClawParticipantUserID(actor.bridgeID), MentionID: h.resolveCSGClawParticipantUserID(effectiveTarget.bridgeID), Content: req.Content, MessageID: req.MessageID, Metadata: taskmeta.Set(nil, id, task.Attempt)})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -163,24 +161,27 @@ func (h *Handler) handleCreateRoomTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	room, _ := h.im.Room(pathValue(r, "id"))
-	found := false
 	roster, _ := h.roomSchedulingContext(room.ID)
-	if h.participantBridgeTargetForRoomMember(req.CreatedBy).matches(roster.ManagerID) && strings.TrimSpace(req.SourceMessageID) != "" {
-		found = true
-	}
+	requester := ""
 	for _, msg := range room.Messages {
-		if msg.ID == strings.TrimSpace(req.SourceMessageID) && h.participantBridgeTargetForRoomMember(msg.SenderID).matches(req.CreatedBy) {
+		if msg.ID == strings.TrimSpace(req.SourceMessageID) {
 			if u, ok := h.im.User(msg.SenderID); ok && !strings.EqualFold(u.Role, "worker") && !strings.EqualFold(u.Role, "agent") && !strings.EqualFold(u.Role, "manager") {
-				found = true
+				requester = h.participantBridgeTargetForRoomMember(msg.SenderID).bridgeID
 			}
 			break
 		}
 	}
-	if !found {
+	if requester == "" {
+		caller := h.participantBridgeTargetForRoomMember(r.Header.Get("X-CSGClaw-Caller-Agent"))
+		if strings.TrimSpace(req.SourceMessageID) != "" && caller.matches(roster.ManagerID) {
+			requester = roster.ManagerID
+		}
+	}
+	if requester == "" {
 		http.Error(w, "source_message_id must identify the requesting user message or a stable Manager request", http.StatusBadRequest)
 		return
 	}
-	t, err := h.roomTaskSvc.Create(room.ID, strings.TrimSpace(req.SourceMessageID), req.CreatedBy, req.Title, req.Body)
+	t, err := h.roomTaskSvc.Create(room.ID, strings.TrimSpace(req.SourceMessageID), requester, req.Title, req.Body)
 	if err != nil {
 		roomTaskError(w, err)
 		return
@@ -244,7 +245,7 @@ func (h *Handler) handleClaimRoomTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	h.updateRoomTask(w, r, req.ParticipantID, taskcore.StatusInProgress, "", "", req.Attempt)
+	h.updateRoomTask(w, r, taskcore.StatusInProgress, "", "", req.Attempt)
 }
 func (h *Handler) handleUpdateRoomTask(w http.ResponseWriter, r *http.Request) {
 	if !h.requireRoomTasks(w, r) {
@@ -259,20 +260,28 @@ func (h *Handler) handleUpdateRoomTask(w http.ResponseWriter, r *http.Request) {
 	if reason == "" {
 		reason = req.Reason
 	}
-	h.updateRoomTask(w, r, req.ActorID, req.Status, req.Result, reason, req.Attempt)
+	h.updateRoomTask(w, r, req.Status, req.Result, reason, req.Attempt)
 }
-func (h *Handler) updateRoomTask(w http.ResponseWriter, r *http.Request, actor, status, result, reason string, attempt int) {
-	actor = h.participantBridgeTargetForRoomMember(actor).bridgeID
-	if caller := strings.TrimSpace(r.Header.Get("X-CSGClaw-Caller-Agent")); caller != "" && !h.participantBridgeTargetForRoomMember(actor).matches(caller) {
-		http.Error(w, "actor must match runtime caller", http.StatusForbidden)
+func (h *Handler) updateRoomTask(w http.ResponseWriter, r *http.Request, status, result, reason string, attempt int) {
+	actor, ok := h.roomTaskRuntimeCaller(w, r)
+	if !ok {
 		return
 	}
-	t, err := h.roomTaskSvc.UpdateExecution(pathValue(r, "id"), pathValue(r, "task_id"), actor, status, result, reason, attempt)
+	t, err := h.roomTaskSvc.UpdateExecution(pathValue(r, "id"), pathValue(r, "task_id"), actor.bridgeID, status, result, reason, attempt)
 	if err != nil {
 		roomTaskError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, h.apiRoomTask(t))
+}
+
+func (h *Handler) roomTaskRuntimeCaller(w http.ResponseWriter, r *http.Request) (participantBridgeTarget, bool) {
+	caller := h.participantBridgeTargetForRoomMember(r.Header.Get("X-CSGClaw-Caller-Agent"))
+	if strings.TrimSpace(caller.bridgeID) == "" {
+		http.Error(w, "runtime caller identity is required", http.StatusForbidden)
+		return participantBridgeTarget{}, false
+	}
+	return caller, true
 }
 func (h *Handler) handleReportRoomTask(w http.ResponseWriter, r *http.Request) {
 	if !h.requireRoomManager(w, r) {

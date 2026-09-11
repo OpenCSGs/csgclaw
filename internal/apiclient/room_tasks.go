@@ -61,16 +61,14 @@ func (c *Client) PlanRoomTask(ctx context.Context, roomID, taskID string, plans 
 	err := c.DoJSON(ctx, http.MethodPost, roomTasksPath(roomID)+"/"+url.PathEscape(taskID)+"/plan", req, &result)
 	return result, err
 }
-func (c *Client) ClaimRoomTask(ctx context.Context, roomID, taskID, participantID string, attempt int) (apitypes.RoomTask, error) {
+func (c *Client) ClaimRoomTask(ctx context.Context, roomID, taskID string, attempt int) (apitypes.RoomTask, error) {
 	var result apitypes.RoomTask
-	err := c.DoJSON(ctx, http.MethodPost, roomTasksPath(roomID)+"/"+url.PathEscape(taskID)+"/claim", apitypes.ClaimRoomTaskRequest{ParticipantID: participantID, Attempt: attempt}, &result)
+	err := c.DoJSON(ctx, http.MethodPost, roomTasksPath(roomID)+"/"+url.PathEscape(taskID)+"/claim", apitypes.ClaimRoomTaskRequest{Attempt: attempt}, &result)
 	return result, err
 }
-func (c *Client) UpdateRoomTask(ctx context.Context, roomID, taskID, actorID string, req apitypes.UpdateRoomTaskRequest) (apitypes.RoomTask, error) {
+func (c *Client) UpdateRoomTask(ctx context.Context, roomID, taskID string, req apitypes.UpdateRoomTaskRequest) (apitypes.RoomTask, error) {
 	var result apitypes.RoomTask
-	req.ActorID = actorID
-	body := req
-	err := c.DoJSON(ctx, http.MethodPatch, roomTasksPath(roomID)+"/"+url.PathEscape(taskID), body, &result)
+	err := c.DoJSON(ctx, http.MethodPatch, roomTasksPath(roomID)+"/"+url.PathEscape(taskID), req, &result)
 	return result, err
 }
 

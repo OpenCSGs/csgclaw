@@ -681,7 +681,7 @@ func taskSpec() CommandSpec {
 			{
 				Name:    "submit",
 				Summary: "Create a parent task in a room",
-				Flags:   []FlagSpec{roomID, {Name: "source-message", TakesValue: true}, {Name: "actor-id", TakesValue: true}, {Name: "title", TakesValue: true}, {Name: "body", TakesValue: true}},
+				Flags:   []FlagSpec{roomID, {Name: "source-message", TakesValue: true}, {Name: "title", TakesValue: true}, {Name: "body", TakesValue: true}},
 			},
 			{Name: "get", Summary: "Get assignment-specific task details", Flags: []FlagSpec{taskID}},
 			{
@@ -692,7 +692,7 @@ func taskSpec() CommandSpec {
 			{Name: "start", Summary: "Start a room parent task", Flags: []FlagSpec{taskID}},
 			{Name: "dispatch", Summary: "Dispatch a room child task", Flags: []FlagSpec{taskID, {Name: "target", TakesValue: true}}},
 			{Name: "review", Summary: "Review a room child task", Flags: []FlagSpec{taskID, {Name: "attempt", TakesValue: true}, {Name: "accept"}, {Name: "result", TakesValue: true}}},
-			{Name: "message", Summary: "Send a task-scoped message", Flags: []FlagSpec{taskID, {Name: "actor-id", TakesValue: true}, {Name: "target", TakesValue: true}, {Name: "message-id", TakesValue: true}, {Name: "body", TakesValue: true}}},
+			{Name: "message", Summary: "Send a task-scoped message", Flags: []FlagSpec{taskID, {Name: "message-id", TakesValue: true}, {Name: "body", TakesValue: true}}},
 			{Name: "stop", Summary: "Stop a room task", Flags: []FlagSpec{taskID}},
 			{Name: "recover", Summary: "Recover a room task", Flags: []FlagSpec{taskID, {Name: "attempt", TakesValue: true}, {Name: "result", TakesValue: true}}},
 			{Name: "report", Summary: "Report a room task outcome", Flags: []FlagSpec{taskID, {Name: "outcome", TakesValue: true}, {Name: "result", TakesValue: true}}},

@@ -70,7 +70,7 @@ Manager 策略规定：当前轮存在可信按需激活块时，只要用户要
 
 Manager 的私聊、每个群聊分别使用不同的 ConversationKey；按需房间内 Manager 继续共用该房间的一条会话，Worker 则按 Room + Task 隔离执行会话。上下文投影状态也按 ConversationKey 保存摘要，不保存完整提示词副本；不同房间、不同 Worker 任务互不复用。房间成员或任务状态变化时只更新对应摘要，普通本轮来源独立发送。
 
-首次空房间可直接 submit/plan。需要完整输入或交付内容时使用 `task get --task <id>`。命令先通过全局唯一任务 ID 解析 `assignment_type` 和 `assignment_id`，再转到对应 Room、Team 或 Agent 接口；模板与运行时规则使用程序提供的当前房间上下文。
+首次空房间可直接 submit/plan。创建父任务时任务尚不存在，因此 `task submit` 需要当前 `room_id`；创建成功后，任务已经记录 `assignment_type` 和 `assignment_id`。需要完整输入或交付内容时使用 `task get --task <id>`，后续任务命令也只传全局唯一的 task ID，由 CLI 解析对应 Room、Team 或 Agent 归属。
 
 `make build` 构建 `bin/csgclaw` 及 `bin/csgclaw-cli`。运行时 `AGENTS.md` 中的按需策略使用 Profile 注入的 companion CLI 路径生成经过 shell 安全引用的命令；OpenClaw Worker 模板使用镜像内配套的 `csgclaw-cli`。
 
@@ -103,7 +103,7 @@ Manager 的私聊、每个群聊分别使用不同的 ConversationKey；按需�
 
 ```bash
 # 根据用户目标创建父任务。
-csgclaw-cli task submit --room <room_id> --source-message <source_id> --actor-id <requester_id> --title "<目标>" --body "<要求与交付标准>"
+csgclaw-cli task submit --room <room_id> --source-message <source_id> --title "<目标>" --body "<要求与交付标准>"
 
 # 将工作拆分和依赖保存为 plan.json。tasks 按实际需要填写。
 cat > plan.json <<'JSON'
@@ -119,15 +119,15 @@ csgclaw-cli task plan --task <parent_id> --plan-file plan.json
 
 # Manager 派发当前可执行任务；Worker 使用派工返回的批次认领并提交。
 csgclaw-cli task dispatch --task <child_id>
-csgclaw-cli task claim --task <child_id> --actor-id <worker_id> --attempt <attempt>
-csgclaw-cli task update --task <child_id> --actor-id <worker_id> --attempt <attempt> --status completed --result "<交付物与完成情况>"
+csgclaw-cli task claim --task <child_id> --attempt <attempt>
+csgclaw-cli task update --task <child_id> --attempt <attempt> --status completed --result "<交付物与完成情况>"
 
 # Manager 验收后，按当前计划安排后续工作。
 csgclaw-cli task review --task <child_id> --attempt <attempt> --accept --result "<验收意见>"
 csgclaw-cli task dispatch --task <next_child_id>
 
 # 任一参与者可反馈已有交付与当前要求的差异，由 Manager 协调。
-csgclaw-cli task message --task <child_id> --actor-id <worker_id> --target <manager_id> --message-id <feedback_id> --body "<涉及的任务、要求差异、证据及当前影响>"
+csgclaw-cli task message --task <child_id> --message-id <feedback_id> --body "<涉及的任务、要求差异、证据及当前影响>"
 
 # Manager 需要补充工作时，在原父任务下追加所需子任务。
 # 新任务的依赖可引用已有子任务 ID，或同批新增任务的 id_ref。
@@ -157,7 +157,7 @@ csgclaw-cli task stop --task <parent_id>
 csgclaw-cli task recover --task <child_id> --attempt <n> --result "已核实旧执行退出，检查并保留了已有产物"
 ```
 
-运行时 CLI 按活跃房间及角色授权查询和操作：Manager 管理父任务和派工，Worker 更新自己的子任务。普通消息也校验调用者与房间。此处是工作流约束，持有服务全局凭据的宿主进程仍有管理员权限。
+按需运行时从服务端私有上下文取得当前房间、当前成员和已有任务；Manager 不需要在每轮开始时列举房间或成员。只有创建父任务以及 `context`、`retry-delivery` 这类房间级操作需要 `--room`，已有任务的归属由 task ID 解析。服务端继续校验 Manager、Worker assignee、执行批次和任务状态，但不再根据同一 Agent 的全部活跃房间限制全局 API。这是避免误操作的工作流约束；持有服务全局凭据的宿主进程仍有管理员权限。
 
 ## 验证与试用
 

@@ -121,7 +121,7 @@ func (c cmd) runCreate(ctx context.Context, run *command.Context, args []string,
 }
 
 func (c cmd) runClaim(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("task claim", run.Program+" task claim --task <id> --actor-id <participant> [--attempt <n>]", "Claim a task after resolving its assignment.")
+	fs := run.NewFlagSet("task claim", run.Program+" task claim --task <id> [--attempt <n>] [--actor-id <participant>]", "Claim a task; room tasks derive the actor from the runtime caller.")
 	taskID := fs.String("task", "", "task id")
 	actorID := fs.String("actor-id", "", "worker participant id")
 	attempt := fs.Int("attempt", 0, "room task execution attempt")
@@ -131,8 +131,8 @@ func (c cmd) runClaim(ctx context.Context, run *command.Context, args []string, 
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("task claim does not accept positional arguments")
 	}
-	if strings.TrimSpace(*taskID) == "" || strings.TrimSpace(*actorID) == "" {
-		return fmt.Errorf("task and actor_id are required")
+	if strings.TrimSpace(*taskID) == "" {
+		return fmt.Errorf("task is required")
 	}
 	client := run.APIClient(globals)
 	assignment, err := client.GetTask(ctx, *taskID)
@@ -144,18 +144,24 @@ func (c cmd) runClaim(ctx context.Context, run *command.Context, args []string, 
 		if *attempt < 1 {
 			return fmt.Errorf("attempt is required for room tasks")
 		}
-		item, err := client.ClaimRoomTask(ctx, assignment.AssignmentID, *taskID, strings.TrimSpace(*actorID), *attempt)
+		item, err := client.ClaimRoomTask(ctx, assignment.AssignmentID, *taskID, *attempt)
 		if err != nil {
 			return err
 		}
 		return command.WriteJSON(run.Stdout, item)
 	case taskcore.AssignmentTypeTeam:
+		if strings.TrimSpace(*actorID) == "" {
+			return fmt.Errorf("actor_id is required for team tasks")
+		}
 		item, err := client.ClaimTeamTask(ctx, assignment.AssignmentID, *taskID, strings.TrimSpace(*actorID))
 		if err != nil {
 			return err
 		}
 		return command.RenderTeamTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
 	case taskcore.AssignmentTypeAgent:
+		if strings.TrimSpace(*actorID) == "" {
+			return fmt.Errorf("actor_id is required for agent tasks")
+		}
 		item, err := client.ClaimAgentTask(ctx, *taskID, strings.TrimSpace(*actorID))
 		if err != nil {
 			return err
@@ -167,7 +173,7 @@ func (c cmd) runClaim(ctx context.Context, run *command.Context, args []string, 
 }
 
 func (c cmd) runUpdate(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
-	fs := run.NewFlagSet("task update", run.Program+" task update --task <id> --actor-id <participant> --status <status>", "Update an agent task status.")
+	fs := run.NewFlagSet("task update", run.Program+" task update --task <id> --status <status> [--attempt <n>] [--actor-id <participant>]", "Update a task; room tasks derive the actor from the runtime caller.")
 	taskID := fs.String("task", "", "task id")
 	actorID := fs.String("actor-id", "", "actor participant id")
 	status := fs.String("status", "", "new status: blocked, completed, or failed")
@@ -181,8 +187,8 @@ func (c cmd) runUpdate(ctx context.Context, run *command.Context, args []string,
 	if len(fs.Args()) != 0 {
 		return fmt.Errorf("task update does not accept positional arguments")
 	}
-	if strings.TrimSpace(*taskID) == "" || strings.TrimSpace(*actorID) == "" || strings.TrimSpace(*status) == "" {
-		return fmt.Errorf("task, actor_id, and status are required")
+	if strings.TrimSpace(*taskID) == "" || strings.TrimSpace(*status) == "" {
+		return fmt.Errorf("task and status are required")
 	}
 	if !isSupportedStatus(*status) {
 		return fmt.Errorf("status must be one of: blocked, completed, failed")
@@ -197,7 +203,7 @@ func (c cmd) runUpdate(ctx context.Context, run *command.Context, args []string,
 		if *attempt < 1 {
 			return fmt.Errorf("attempt is required for room tasks")
 		}
-		item, err := client.UpdateRoomTask(ctx, assignment.AssignmentID, *taskID, strings.TrimSpace(*actorID), apitypes.UpdateRoomTaskRequest{
+		item, err := client.UpdateRoomTask(ctx, assignment.AssignmentID, *taskID, apitypes.UpdateRoomTaskRequest{
 			Attempt: *attempt,
 			Status:  strings.TrimSpace(*status),
 			Result:  strings.TrimSpace(*result),
@@ -209,6 +215,9 @@ func (c cmd) runUpdate(ctx context.Context, run *command.Context, args []string,
 		}
 		return command.WriteJSON(run.Stdout, item)
 	case taskcore.AssignmentTypeTeam:
+		if strings.TrimSpace(*actorID) == "" {
+			return fmt.Errorf("actor_id is required for team tasks")
+		}
 		item, err := client.UpdateTeamTask(ctx, assignment.AssignmentID, *taskID, strings.TrimSpace(*actorID), apitypes.PatchTeamTaskRequest{
 			Status: strings.TrimSpace(*status), Result: strings.TrimSpace(*result), Error: strings.TrimSpace(*errorText), Reason: strings.TrimSpace(*reason),
 		})
@@ -217,6 +226,9 @@ func (c cmd) runUpdate(ctx context.Context, run *command.Context, args []string,
 		}
 		return command.RenderTeamTasks(globals.Output, run.Stdout, []apitypes.TeamTask{item})
 	case taskcore.AssignmentTypeAgent:
+		if strings.TrimSpace(*actorID) == "" {
+			return fmt.Errorf("actor_id is required for agent tasks")
+		}
 		item, err := client.UpdateAgentTask(ctx, *taskID, apitypes.PatchAgentTaskRequest{
 			ActorID: strings.TrimSpace(*actorID), Status: strings.TrimSpace(*status), Result: strings.TrimSpace(*result), Error: strings.TrimSpace(*errorText), Reason: strings.TrimSpace(*reason),
 		})

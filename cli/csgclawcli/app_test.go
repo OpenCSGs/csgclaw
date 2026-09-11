@@ -48,7 +48,8 @@ func TestRoomTaskPlanSendsManagerStructuredPlan(t *testing.T) {
 	}
 }
 
-func TestRoomTaskMessageSendsExplicitTaskAndTarget(t *testing.T) {
+func TestRoomTaskMessageUsesRuntimeCallerAndTaskCounterpart(t *testing.T) {
+	t.Setenv("CSGCLAW_CALLER_AGENT_ID", "agent-dev")
 	calls := 0
 	app := &App{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}, httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		calls++
@@ -62,12 +63,12 @@ func TestRoomTaskMessageSendsExplicitTaskAndTarget(t *testing.T) {
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if body.ActorID != "pt-dev" || body.TargetID != "manager" || body.MessageID != "question-1" {
+		if body.MessageID != "question-1" || req.Header.Get("X-CSGClaw-Caller-Agent") != "agent-dev" {
 			t.Fatal(body)
 		}
 		return jsonResponse(http.StatusOK, `{"id":"question-1"}`), nil
 	})}
-	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "task", "message", "--task", "task-2", "--actor-id", "pt-dev", "--target", "manager", "--message-id", "question-1", "--body", "Need help"}); err != nil {
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "task", "message", "--task", "task-2", "--message-id", "question-1", "--body", "Need help"}); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 2 {
