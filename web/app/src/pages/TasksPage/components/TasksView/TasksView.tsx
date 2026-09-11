@@ -1207,6 +1207,19 @@ type ParentTaskBoardCardProps = {
   task: WorkspaceTask;
 };
 
+function RoomTaskSummary({ task, t }: { task: WorkspaceTask; t: TranslateFn }) {
+  if (task.assignment_type !== "room" || task.parent_id || !["completed", "failed", "cancelled"].includes(task.status))
+    return null;
+  return (
+    <section className={styles.detailBlock}>
+      <h3>{t("roomTaskSummary")}</h3>
+      <p>{task.goal_outcome ? t("roomTaskOutcome." + task.goal_outcome) : t("roomTaskAwaitingSummary")}</p>
+      {task.report ? <p className="whitespace-pre-wrap">{task.report}</p> : null}
+      {task.report_status === "pending" ? <p>{t("roomTaskReportPending")}</p> : null}
+    </section>
+  );
+}
+
 function ParentTaskBoardCard({ task, children, agentNames, phase, t, onSelect }: ParentTaskBoardCardProps) {
   const description = task.body || task.plan_summary || task.result || task.error || t("tasksDetailPlaceholder");
   const activeWorker = taskActiveWorker(task, children, t, agentNames);
@@ -1335,6 +1348,7 @@ function GeneratedTaskInlineDetail({
               <h4>{t("taskDescriptionLabel")}</h4>
               <p>{task.body || t("tasksDetailPlaceholder")}</p>
             </section>
+            <RoomTaskSummary task={task} t={t} />
             <div className={styles.generatedTaskDetailGrid}>
               <section className={classNames(styles.detailBlock, styles.generatedTaskActivity)}>
                 <h4>{t("taskActivityLabel")}</h4>
@@ -1437,6 +1451,7 @@ function TaskDetailDialog({
                     <h3>{t("taskDescriptionLabel")}</h3>
                     <p>{task.body || t("tasksDetailPlaceholder")}</p>
                   </section>
+                  <RoomTaskSummary task={task} t={t} />
                   <section className={classNames(styles.detailBlock, styles.taskDetailActivityBlock)}>
                     <h3>{t("taskActivityLabel")}</h3>
                     {isParentDetail ? (

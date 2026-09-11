@@ -650,3 +650,20 @@ describe("conversation model helpers", () => {
     ).toBe(true);
   });
 });
+
+it("renders historical task feedback without raw mentions, full results or control instructions", () => {
+  const output = formatEventMessage(
+    {
+      id: "feedback",
+      sender_id: "dev",
+      metadata: { task_id: "task-12" },
+      content: '<at user_id="manager">manager</at> result details\nYou coordinate this whole Room. Read room-task list',
+      event: { key: "task_feedback", title: "task-12: pending_review. Long detailed result" },
+    },
+    new Map(),
+    "zh",
+  );
+  expect(output).toContain("task-12");
+  expect(output).toContain("交由 Manager 处理");
+  expect(output).not.toMatch(/<at|room-task|coordinate|Long detailed/);
+});

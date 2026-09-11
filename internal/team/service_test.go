@@ -827,43 +827,6 @@ func TestServicePersistsAndRecoversState(t *testing.T) {
 	}
 }
 
-func TestStoreTruncatesPartialFinalEvent(t *testing.T) {
-	store, _, statePath := newPersistentTestStore(t)
-	svc := NewService(WithStore(store), WithNowFunc(sequenceNow(time.Date(2026, 5, 29, 13, 0, 0, 0, time.UTC))))
-	teamID := createTestTeam(t, svc)
-	task, err := svc.CreateTask(CreateTaskInput{
-		TeamID:    teamID,
-		Title:     "Task",
-		CreatedBy: "manager",
-	})
-	if err != nil {
-		t.Fatalf("CreateTask() error = %v", err)
-	}
-
-	eventsPath := filepath.Join(defaultTaskStoreRoot(statePath), task.ID, "events.jsonl")
-	data, err := os.ReadFile(eventsPath)
-	if err != nil {
-		t.Fatalf("ReadFile(events) error = %v", err)
-	}
-	data = append(data, []byte(`{"seq":999`)...)
-	if err := os.WriteFile(eventsPath, data, 0o644); err != nil {
-		t.Fatalf("WriteFile(events) error = %v", err)
-	}
-
-	reloaded := NewService(WithStore(store), WithNowFunc(sequenceNow(time.Date(2026, 5, 29, 13, 1, 0, 0, time.UTC))))
-	events := reloaded.ListEvents(teamID)
-	if len(events) != 1 {
-		t.Fatalf("ListEvents() len = %d, want 1", len(events))
-	}
-	trimmed, err := os.ReadFile(eventsPath)
-	if err != nil {
-		t.Fatalf("ReadFile(trimmed events) error = %v", err)
-	}
-	if bytes.Contains(trimmed, []byte(`{"seq":999`)) {
-		t.Fatal("events.jsonl still contains truncated final line")
-	}
-}
-
 func TestRecoverBlocksStaleInProgressTask(t *testing.T) {
 	store, _, _ := newPersistentTestStore(t)
 	svc := NewService(
@@ -1003,12 +966,12 @@ func TestStoreWritesParticipantFields(t *testing.T) {
 	if !bytes.Contains(teamJSON, []byte(`"lead_agent_id"`)) || bytes.Contains(teamJSON, []byte(`"lead_bot_id"`)) {
 		t.Fatalf("root state = %s, want lead_agent_id without lead_bot_id", string(teamJSON))
 	}
-	presenceJSON, err := os.ReadFile(filepath.Join(defaultTaskStoreRoot(statePath), task.ID, "presence.json"))
+	presenceJSON, err := os.ReadFile(filepath.Join(defaultTaskStoreRoot(statePath), task.ID, "tasks.json"))
 	if err != nil {
-		t.Fatalf("read presence.json error = %v", err)
+		t.Fatalf("read tasks.json error = %v", err)
 	}
 	if !bytes.Contains(presenceJSON, []byte(`"participant_id"`)) || bytes.Contains(presenceJSON, []byte(`"bot_id"`)) {
-		t.Fatalf("presence.json = %s, want participant_id without bot_id", string(presenceJSON))
+		t.Fatalf("tasks.json = %s, want participant_id without bot_id", string(presenceJSON))
 	}
 }
 

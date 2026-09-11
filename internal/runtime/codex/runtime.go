@@ -1162,8 +1162,10 @@ func (r *Runtime) syncManagerTemplateSkills(agentID, runtimeCodexHome string) er
 	source := templateembed.FS()
 	sourceRoot := pathpkg.Join(templateembed.CodexManagerRoot, templateembed.SkillsDirName)
 	targetRoot := filepath.Join(runtimeCodexHome, "skills")
-	if err := r.removeAll(filepath.Join(targetRoot, "basics")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove legacy manager codex skill %q: %w", "basics", err)
+	for _, name := range []string{"basics", "agent-teams"} {
+		if err := r.removeAll(filepath.Join(targetRoot, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove legacy manager codex skill %q: %w", name, err)
+		}
 	}
 	for _, name := range skillNames {
 		target := filepath.Join(targetRoot, name)
@@ -1366,6 +1368,7 @@ func (r *Runtime) refreshCodexHomeAgentsFileWithFragments(h agentruntime.Handle,
 	}
 	block := runtimeinstructions.RenderRuntimeAgentsInstructionsBlockWithOptions(agentRef.ID, instructions, runtimeinstructions.RuntimeManagedInstructionsOptions{
 		Extensions: fragments,
+		CLIPath:    agentRef.Profile.Env["CSGCLAW_CLI"],
 	})
 	current, err := r.readFile(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {

@@ -15,21 +15,25 @@ import type { TranslateFn } from "@/models/conversations";
 import type { VoidOrPromise } from "./types";
 
 export type ConversationRoomDangerConfirmDialogProps = {
+  busy?: boolean;
   cancelLabel: string;
   closeLabel: string;
   confirmLabel: string;
   description: string;
+  error?: string;
   open: boolean;
   title: string;
-  onConfirm: () => void;
+  onConfirm: () => VoidOrPromise;
   onOpenChange: (open: boolean) => void;
 };
 
 export function ConversationRoomDangerConfirmDialog({
+  busy = false,
   cancelLabel,
   closeLabel,
   confirmLabel,
   description,
+  error = "",
   open,
   title,
   onConfirm,
@@ -45,11 +49,22 @@ export function ConversationRoomDangerConfirmDialog({
           </div>
           <DialogCloseButton className="room-danger-close" label={closeLabel} size="sm" variant="tertiaryGray" />
         </DialogHeader>
+        {error ? (
+          <div className="room-danger-error" role="alert">
+            {error}
+          </div>
+        ) : null}
         <div className="room-danger-actions">
-          <Button className="room-danger-button" size="sm" variant="secondaryGray" onClick={() => onOpenChange(false)}>
+          <Button
+            className="room-danger-button"
+            disabled={busy}
+            size="sm"
+            variant="secondaryGray"
+            onClick={() => onOpenChange(false)}
+          >
             {cancelLabel}
           </Button>
-          <Button className="room-danger-button" size="sm" variant="danger" onClick={onConfirm}>
+          <Button className="room-danger-button" disabled={busy} size="sm" variant="danger" onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

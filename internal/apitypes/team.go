@@ -14,6 +14,10 @@ type Team struct {
 }
 
 type TeamTask struct {
+	SourceMessageID     string     `json:"source_message_id,omitempty"`
+	GoalOutcome         string     `json:"goal_outcome,omitempty"`
+	Report              string     `json:"report,omitempty"`
+	ReportStatus        string     `json:"report_status,omitempty"`
 	ID                  string     `json:"id"`
 	AssignmentType      string     `json:"assignment_type,omitempty"`
 	AssignmentID        string     `json:"assignment_id,omitempty"`

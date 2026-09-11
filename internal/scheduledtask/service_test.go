@@ -2,6 +2,9 @@ package scheduledtask
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -190,6 +193,65 @@ func TestRunNowRejectsWhenGeneratedTaskIsActive(t *testing.T) {
 	}
 	if _, err := svc.RunNow(context.Background(), item.ID); err != ErrActiveTask {
 		t.Fatalf("RunNow(second) error = %v, want ErrActiveTask", err)
+	}
+}
+
+func TestMigratedGeneratedTaskPreventsScheduledDuplicate(t *testing.T) {
+	now := time.Date(2026, 8, 3, 10, 0, 0, 0, time.UTC)
+	taskRoot := t.TempDir()
+	taskID := "task-scheduled-run-1"
+	dir := filepath.Join(taskRoot, taskID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacyTask := taskcore.Task{
+		ID:             taskID,
+		AssignmentType: taskcore.AssignmentTypeAgent,
+		AssignmentID:   "agent-worker",
+		Title:          "Scheduled work",
+		Status:         taskcore.StatusInProgress,
+		CreatedBy:      schedulerCreatedBy,
+		AssignedTo:     "pt-worker",
+		CreatedAt:      now.Add(-time.Hour),
+		UpdatedAt:      now.Add(-time.Hour),
+	}
+	data, err := json.MarshalIndent(legacyTask, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "root.json"), append(data, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	taskStore, err := taskcore.NewStore(taskRoot)
+	if err != nil {
+		t.Fatalf("NewStore() legacy migration error = %v", err)
+	}
+	core := taskcore.NewService(taskcore.WithStore(taskStore))
+	agentTasks := agenttask.NewService(core, nil, nil, nil)
+	if tasks := agentTasks.List(); len(tasks) != 1 || tasks[0].ID != taskID {
+		t.Fatalf("migrated Agent tasks = %+v", tasks)
+	}
+
+	scheduledID := "scheduled-task-1"
+	scheduleStore := &flakyStore{state: state{
+		NextTaskID: 2,
+		NextRunID:  2,
+		Tasks: []Task{{
+			ID: scheduledID, Title: "Scheduled work", AgentID: "agent-worker",
+			Prompt: "Continue work", Recurrence: RecurrenceDaily, Enabled: true,
+			NextRunAt: now.Add(-time.Minute), CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour),
+		}},
+		Runs: []Run{{ID: "scheduled-run-1", ScheduledTaskID: scheduledID, TriggeredAt: now.Add(-time.Hour), Status: StatusTriggered, TaskID: taskID}},
+	}}
+	svc, err := NewService(scheduleStore, agentTasks, WithNowFunc(func() time.Time { return now }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runs := svc.TriggerDue(context.Background()); len(runs) != 0 {
+		t.Fatalf("TriggerDue() created duplicate runs after migration: %+v", runs)
+	}
+	if len(scheduleStore.state.Runs) != 1 {
+		t.Fatalf("stored runs = %+v, want original run only", scheduleStore.state.Runs)
 	}
 }
 

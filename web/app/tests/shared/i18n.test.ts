@@ -1,4 +1,4 @@
-import { createTranslator, localizeAPIError, localizeTemplateSourceTag } from "@/shared/i18n";
+import { createTranslator, localizeAPIError, localizeError, localizeTemplateSourceTag } from "@/shared/i18n";
 
 describe("i18n messages", () => {
   it("keeps the human profile subtitle concise", () => {
@@ -84,6 +84,17 @@ describe("i18n messages", () => {
     );
     expect(localizeAPIError(error, createTranslator("en"))).toBe(
       "Docker is not running or cannot be reached. Start Docker and try again.",
+    );
+  });
+
+  it("localizes the unfinished-room-task deletion conflict", () => {
+    const error = "finish or stop active room tasks before deleting the room";
+
+    expect(localizeError(error, createTranslator("zh"))).toBe(
+      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
+    );
+    expect(localizeError(error, createTranslator("en"))).toBe(
+      "This room still has unfinished tasks. Stop or complete them before deleting the room.",
     );
   });
 

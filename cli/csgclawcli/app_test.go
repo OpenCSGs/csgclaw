@@ -12,9 +12,69 @@ import (
 	"strings"
 	"testing"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/participant"
 	appversion "csgclaw/internal/version"
 )
+
+func TestRoomTaskPlanSendsManagerStructuredPlan(t *testing.T) {
+	calls := 0
+	app := &App{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}, httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			if req.Method != http.MethodGet || req.URL.Path != "/api/v1/tasks/task-1" {
+				t.Fatal(req.Method, req.URL.Path)
+			}
+			return jsonResponse(http.StatusOK, `{"id":"task-1","assignment_type":"room","assignment_id":"room-1"}`), nil
+		}
+		if req.Method != http.MethodPost || req.URL.Path != "/api/v1/rooms/room-1/tasks/task-1/plan" {
+			t.Fatal(req.Method, req.URL.Path)
+		}
+		var plan apitypes.PlanRoomTaskRequest
+		if err := json.NewDecoder(req.Body).Decode(&plan); err != nil {
+			t.Fatal(err)
+		}
+		if !plan.AutoStart || len(plan.Tasks) != 1 || plan.Tasks[0].AssignedTo != "pt-dev" || plan.Tasks[0].IDRef != "build" {
+			t.Fatalf("lost manager plan: %+v", plan)
+		}
+		return jsonResponse(http.StatusOK, `{"task":{"id":"task-1","assignment_type":"room","assignment_id":"room-1"},"created_tasks":[]}`), nil
+	})}
+	args := []string{"--endpoint", "http://example.test", "-o", "json", "task", "plan", "--task", "task-1", "--plan-json", `{"summary":"Build","tasks":[{"id_ref":"build","title":"Build page","assigned_to":"pt-dev"}]}`}
+	if err := app.Execute(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatal("plan not sent")
+	}
+}
+
+func TestRoomTaskMessageUsesRuntimeCallerAndTaskCounterpart(t *testing.T) {
+	t.Setenv("CSGCLAW_CALLER_AGENT_ID", "agent-dev")
+	calls := 0
+	app := &App{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}, httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return jsonResponse(http.StatusOK, `{"id":"task-2","assignment_type":"room","assignment_id":"room-1"}`), nil
+		}
+		if req.URL.Path != "/api/v1/rooms/room-1/tasks/task-2/messages" {
+			t.Fatal(req.URL.Path)
+		}
+		var body apitypes.RoomTaskMessageRequest
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.MessageID != "question-1" || req.Header.Get("X-CSGClaw-Caller-Agent") != "agent-dev" {
+			t.Fatal(body)
+		}
+		return jsonResponse(http.StatusOK, `{"id":"question-1"}`), nil
+	})}
+	if err := app.Execute(context.Background(), []string{"--endpoint", "http://example.test", "task", "message", "--task", "task-2", "--message-id", "question-1", "--body", "Need help"}); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatal("message not sent")
+	}
+}
 
 func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 	var stderr bytes.Buffer
@@ -38,7 +98,7 @@ func TestExecuteExposesOnlyLiteCommands(t *testing.T) {
 		"room         Manage IM rooms",
 		"member       Manage IM room members",
 		"message      Manage IM messages.",
-		"task         Manage agent tasks.",
+		"task         Manage tasks across rooms, teams, and agents.",
 		"team         Manage agent teams.",
 		"skill        Discover and install ClawHub skills.",
 		"completion   Generate shell completion scripts.",
@@ -390,7 +450,7 @@ func TestExecuteTaskClaimAndUpdateUseAgentTaskAPI(t *testing.T) {
 	}{
 		{
 			name:       "claim",
-			args:       []string{"--endpoint", "http://example.test", "task", "claim", "--task", "task-1", "--participant-id", "pt-qa"},
+			args:       []string{"--endpoint", "http://example.test", "task", "claim", "--task", "task-1", "--actor-id", "pt-qa"},
 			wantMethod: http.MethodPost,
 			wantURL:    "http://example.test/api/v1/agent-tasks/task-1/claim",
 			wantBody:   map[string]string{"participant_id": "pt-qa"},
@@ -406,10 +466,18 @@ func TestExecuteTaskClaimAndUpdateUseAgentTaskAPI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
 			app := &App{
 				stdout: &bytes.Buffer{},
 				stderr: &bytes.Buffer{},
 				httpClient: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					calls++
+					if calls == 1 {
+						if req.Method != http.MethodGet || req.URL.String() != "http://example.test/api/v1/tasks/task-1" {
+							t.Fatalf("resolve request = %s %s", req.Method, req.URL.String())
+						}
+						return jsonResponse(http.StatusOK, `{"id":"task-1","assignment_type":"agent","assignment_id":"agent-qa"}`), nil
+					}
 					if req.Method != tt.wantMethod {
 						t.Fatalf("method = %q, want %q", req.Method, tt.wantMethod)
 					}
@@ -435,6 +503,9 @@ func TestExecuteTaskClaimAndUpdateUseAgentTaskAPI(t *testing.T) {
 
 			if err := app.Execute(context.Background(), tt.args); err != nil {
 				t.Fatalf("Execute() error = %v", err)
+			}
+			if calls != 2 {
+				t.Fatalf("calls = %d, want resolve plus mutation", calls)
 			}
 		})
 	}

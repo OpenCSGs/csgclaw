@@ -11,20 +11,31 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const (
-	indexFileName     = "index.json"
-	rootFileName      = "root.json"
-	childrenFileName  = "children.json"
-	eventsFileName    = "events.jsonl"
-	approvalsFileName = "approvals.json"
-	presenceFileName  = "presence.json"
+	sequenceFileName         = "sequence.json"
+	tasksFileName            = "tasks.json"
+	eventsFileName           = "events.jsonl"
+	currentTaskSchemaVersion = 2
+	currentSequenceVersion   = 1
 )
 
 type Store struct {
 	root    string
 	taskIDs *TaskIDAllocator
+	locks   sync.Map
+}
+
+// taskRecord is the durable transaction boundary. Tasks are peers in one flat
+// list; parent_id is the only persisted hierarchy.
+type taskRecord struct {
+	SchemaVersion int            `json:"schema_version"`
+	Tasks         []Task         `json:"tasks"`
+	EventSeq      int64          `json:"event_seq,omitempty"`
+	Approvals     []TaskApproval `json:"approvals,omitempty"`
+	Presence      []TaskPresence `json:"presence,omitempty"`
 }
 
 type IndexEntry struct {
@@ -35,15 +46,18 @@ type IndexEntry struct {
 	Status         string `json:"status"`
 }
 
-type taskIndexState struct {
-	Counters taskCounterState `json:"counters"`
-	Tasks    []IndexEntry     `json:"tasks"`
+type taskSequenceState struct {
+	SchemaVersion int   `json:"schema_version"`
+	LastTask      int64 `json:"last_task"`
 }
 
 func NewStore(root string) (*Store, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return nil, fmt.Errorf("task store root is required")
+	}
+	if err := migrateLegacyTaskRecords(root); err != nil {
+		return nil, err
 	}
 	taskIDs, err := newPersistentTaskIDAllocator(root)
 	if err != nil {
@@ -70,18 +84,14 @@ func (s *Store) Load() ([]Snapshot, error) {
 	if s == nil {
 		return nil, fmt.Errorf("task store is required")
 	}
-	index, ok, err := readTaskIndex(filepath.Join(s.root, indexFileName))
+	// Root records are authoritative. The shared sequence file only allocates
+	// numeric task IDs and never serves as a task index.
+	entries, err := buildTaskIndex(s.root)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		index.Tasks, err = buildTaskIndex(s.root)
-		if err != nil {
-			return nil, err
-		}
-	}
-	out := make([]Snapshot, 0, len(index.Tasks))
-	for _, entry := range index.Tasks {
+	out := make([]Snapshot, 0, len(entries))
+	for _, entry := range entries {
 		snapshot, err := s.LoadRoot(entry.ID)
 		if err != nil {
 			return nil, err
@@ -116,33 +126,23 @@ func (s *Store) LoadRoot(taskID string) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("task id is required")
 	}
 	dir := s.taskDir(taskID)
-	var root Task
-	if err := readJSONFile(filepath.Join(dir, rootFileName), &root); err != nil {
+	var record taskRecord
+	if err := readJSONFile(filepath.Join(dir, tasksFileName), &record); err != nil {
 		return Snapshot{}, err
 	}
-	var children []Task
-	if err := readOptionalJSONFile(filepath.Join(dir, childrenFileName), &children); err != nil {
+	if err := validateTaskRecordVersion(&record); err != nil {
 		return Snapshot{}, err
 	}
-	var approvals []TaskApproval
-	if err := readOptionalJSONFile(filepath.Join(dir, approvalsFileName), &approvals); err != nil {
-		return Snapshot{}, err
-	}
-	var presence []TaskPresence
-	if err := readOptionalJSONFile(filepath.Join(dir, presenceFileName), &presence); err != nil {
-		return Snapshot{}, err
-	}
-	events, err := s.readEvents(taskID)
+	snapshot, err := snapshotFromRecord(taskID, record)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	return Snapshot{
-		Root:      root,
-		Children:  children,
-		Approvals: approvals,
-		Presence:  presence,
-		Events:    events,
-	}, nil
+	events, err := readCommittedEvents(filepath.Join(dir, eventsFileName), record.EventSeq, false)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	snapshot.Events = events
+	return snapshot, nil
 }
 
 func (s *Store) SaveSnapshot(snapshot Snapshot, newEvents []TaskEvent) error {
@@ -155,26 +155,33 @@ func (s *Store) SaveSnapshot(snapshot Snapshot, newEvents []TaskEvent) error {
 	if strings.TrimSpace(snapshot.Root.ParentID) != "" {
 		return fmt.Errorf("root task cannot have parent_id")
 	}
+	unlock := s.lockRoot(snapshot.Root.ID)
+	defer unlock()
+	record, err := recordFromSnapshot(snapshot)
+	if err != nil {
+		return err
+	}
 	dir := s.taskDir(snapshot.Root.ID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if err := s.appendEvents(snapshot.Root.ID, newEvents); err != nil {
+	committedSeq, err := committedEventSeq(filepath.Join(dir, tasksFileName))
+	if err != nil {
 		return err
 	}
-	if err := writeJSONFile(filepath.Join(dir, rootFileName), snapshot.Root); err != nil {
+	eventsPath := filepath.Join(dir, eventsFileName)
+	if _, err := readCommittedEvents(eventsPath, committedSeq, true); err != nil {
 		return err
 	}
-	if err := writeJSONFile(filepath.Join(dir, childrenFileName), snapshot.Children); err != nil {
+	if err := appendEvents(eventsPath, newEvents); err != nil {
 		return err
 	}
-	if err := writeJSONFile(filepath.Join(dir, approvalsFileName), snapshot.Approvals); err != nil {
+	// Task state and its event outbox commit together for every assignment type.
+	if err := writeJSONFileAtomic(filepath.Join(dir, tasksFileName), record); err != nil {
+		_, _ = readCommittedEvents(eventsPath, committedSeq, true)
 		return err
 	}
-	if err := writeJSONFile(filepath.Join(dir, presenceFileName), snapshot.Presence); err != nil {
-		return err
-	}
-	return s.writeIndex()
+	return nil
 }
 
 func (s *Store) DeleteRoot(taskID string) error {
@@ -185,10 +192,12 @@ func (s *Store) DeleteRoot(taskID string) error {
 	if taskID == "" {
 		return fmt.Errorf("task id is required")
 	}
+	unlock := s.lockRoot(taskID)
+	defer unlock()
 	if err := os.RemoveAll(s.taskDir(taskID)); err != nil {
 		return err
 	}
-	return s.writeIndex()
+	return nil
 }
 
 func (s *Store) DeleteAssignment(assignmentType, assignmentID string) error {
@@ -199,11 +208,11 @@ func (s *Store) DeleteAssignment(assignmentType, assignmentID string) error {
 		return err
 	}
 	for _, snapshot := range snapshots {
-		if err := os.RemoveAll(s.taskDir(snapshot.Root.ID)); err != nil {
+		if err := s.DeleteRoot(snapshot.Root.ID); err != nil {
 			return err
 		}
 	}
-	return s.writeIndex()
+	return nil
 }
 
 func (s *Store) ReplaceAssignment(assignmentType, assignmentID string, snapshots []Snapshot, eventsByRoot map[string][]TaskEvent) error {
@@ -222,93 +231,213 @@ func (s *Store) taskDir(taskID string) string {
 	return filepath.Join(s.root, taskID)
 }
 
-func (s *Store) appendEvents(taskID string, events []TaskEvent) error {
+func (s *Store) lockRoot(taskID string) func() {
+	value, _ := s.locks.LoadOrStore(strings.TrimSpace(taskID), &sync.Mutex{})
+	lock := value.(*sync.Mutex)
+	lock.Lock()
+	return lock.Unlock
+}
+
+func recordFromSnapshot(snapshot Snapshot) (taskRecord, error) {
+	tasks := make([]Task, 0, len(snapshot.Children)+1)
+	tasks = append(tasks, snapshot.Root)
+	tasks = append(tasks, snapshot.Children...)
+	record := taskRecord{
+		SchemaVersion: currentTaskSchemaVersion,
+		Tasks:         tasks,
+		EventSeq:      latestEventSeq(snapshot.Events),
+		Approvals:     snapshot.Approvals,
+		Presence:      snapshot.Presence,
+	}
+	if _, err := snapshotFromRecord(snapshot.Root.ID, record); err != nil {
+		return taskRecord{}, err
+	}
+	return record, nil
+}
+
+func snapshotFromRecord(expectedRootID string, record taskRecord) (Snapshot, error) {
+	expectedRootID = strings.TrimSpace(expectedRootID)
+	if len(record.Tasks) == 0 {
+		return Snapshot{}, fmt.Errorf("task record %q has no tasks", expectedRootID)
+	}
+
+	byID := make(map[string]Task, len(record.Tasks))
+	rootID := ""
+	for _, task := range record.Tasks {
+		task.ID = strings.TrimSpace(task.ID)
+		if task.ID == "" {
+			return Snapshot{}, fmt.Errorf("task record %q contains an empty task id", expectedRootID)
+		}
+		if _, exists := byID[task.ID]; exists {
+			return Snapshot{}, fmt.Errorf("task record %q contains duplicate task %q", expectedRootID, task.ID)
+		}
+		byID[task.ID] = task
+		if strings.TrimSpace(task.ParentID) == "" {
+			if rootID != "" {
+				return Snapshot{}, fmt.Errorf("task record %q contains multiple root tasks", expectedRootID)
+			}
+			rootID = task.ID
+		}
+	}
+	if rootID == "" {
+		return Snapshot{}, fmt.Errorf("task record %q has no root task", expectedRootID)
+	}
+	if rootID != expectedRootID {
+		return Snapshot{}, fmt.Errorf("task record directory %q does not match root task %q", expectedRootID, rootID)
+	}
+	root := byID[rootID]
+	children := make([]Task, 0, len(record.Tasks)-1)
+	for _, task := range record.Tasks {
+		if task.ID == rootID {
+			continue
+		}
+		if task.AssignmentType != root.AssignmentType || task.AssignmentID != root.AssignmentID {
+			return Snapshot{}, fmt.Errorf("task %q does not share root assignment", task.ID)
+		}
+		seen := map[string]bool{task.ID: true}
+		cursor := task
+		for strings.TrimSpace(cursor.ParentID) != "" {
+			parentID := strings.TrimSpace(cursor.ParentID)
+			if seen[parentID] {
+				return Snapshot{}, fmt.Errorf("task %q has a parent cycle", task.ID)
+			}
+			seen[parentID] = true
+			parent, ok := byID[parentID]
+			if !ok {
+				return Snapshot{}, fmt.Errorf("task %q references missing parent %q", task.ID, parentID)
+			}
+			cursor = parent
+		}
+		if cursor.ID != rootID {
+			return Snapshot{}, fmt.Errorf("task %q does not belong to root %q", task.ID, rootID)
+		}
+		children = append(children, task)
+	}
+	sort.Slice(children, func(i, j int) bool { return children[i].ID < children[j].ID })
+	return Snapshot{
+		Root:      root,
+		Children:  children,
+		Approvals: record.Approvals,
+		Presence:  record.Presence,
+	}, nil
+}
+
+func latestEventSeq(events []TaskEvent) int64 {
+	var latest int64
+	for _, event := range events {
+		if event.Seq > latest {
+			latest = event.Seq
+		}
+	}
+	return latest
+}
+
+func committedEventSeq(tasksPath string) (int64, error) {
+	if _, err := os.Stat(tasksPath); errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	}
+	var record taskRecord
+	if err := readJSONFile(tasksPath, &record); err != nil {
+		return 0, err
+	}
+	if err := validateTaskRecordVersion(&record); err != nil {
+		return 0, err
+	}
+	return record.EventSeq, nil
+}
+
+func appendEvents(path string, events []TaskEvent) error {
 	if len(events) == 0 {
 		return nil
 	}
-	path := filepath.Join(s.taskDir(taskID), eventsFileName)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	buf := bytes.NewBuffer(nil)
-	enc := json.NewEncoder(buf)
+	buffer := bytes.NewBuffer(nil)
+	encoder := json.NewEncoder(buffer)
 	for _, event := range events {
-		if err := enc.Encode(event); err != nil {
+		if err := encoder.Encode(event); err != nil {
 			return err
 		}
 	}
-	if _, err := file.Write(buf.Bytes()); err != nil {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
 		return err
 	}
-	return file.Sync()
+	if _, err := file.Write(buffer.Bytes()); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
 }
 
-func (s *Store) readEvents(taskID string) ([]TaskEvent, error) {
-	path := filepath.Join(s.taskDir(taskID), eventsFileName)
+// readCommittedEvents ignores and optionally removes an uncommitted tail. The
+// tasks.json event_seq is the commit marker for the append-only journal.
+func readCommittedEvents(path string, committedSeq int64, repair bool) ([]TaskEvent, error) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		if committedSeq > 0 {
+			return nil, fmt.Errorf("task event journal is missing through seq %d", committedSeq)
+		}
 		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
-
-	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	flag := os.O_RDONLY
+	if repair {
+		flag = os.O_RDWR
+	}
+	file, err := os.OpenFile(path, flag, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
 
 	reader := bufio.NewReader(file)
-	var (
-		events     []TaskEvent
-		validBytes int64
-	)
+	events := make([]TaskEvent, 0)
+	var committedBytes int64
+	var latestSeq int64
 	for {
-		line, err := reader.ReadBytes('\n')
-		if len(line) > 0 {
+		if latestSeq >= committedSeq {
+			break
+		}
+		line, readErr := reader.ReadBytes('\n')
+		if len(bytes.TrimSpace(line)) > 0 {
 			var event TaskEvent
-			if unmarshalErr := json.Unmarshal(bytes.TrimSpace(line), &event); unmarshalErr != nil {
-				if errors.Is(err, io.EOF) {
-					if truncateErr := file.Truncate(validBytes); truncateErr != nil {
-						return nil, truncateErr
-					}
-					if _, seekErr := file.Seek(validBytes, io.SeekStart); seekErr != nil {
-						return nil, seekErr
-					}
-					if syncErr := file.Sync(); syncErr != nil {
-						return nil, syncErr
-					}
-					return events, nil
+			if err := json.Unmarshal(bytes.TrimSpace(line), &event); err != nil {
+				if !repair || !errors.Is(readErr, io.EOF) {
+					return nil, fmt.Errorf("decode %s: %w", path, err)
 				}
-				return nil, fmt.Errorf("decode %s: %w", path, unmarshalErr)
+				break
+			}
+			if event.Seq > committedSeq {
+				break
 			}
 			events = append(events, event)
-			validBytes += int64(len(line))
+			if event.Seq > latestSeq {
+				latestSeq = event.Seq
+			}
+			committedBytes += int64(len(line))
 		}
-		if errors.Is(err, io.EOF) {
-			return events, nil
+		if errors.Is(readErr, io.EOF) {
+			break
 		}
-		if err != nil {
+		if readErr != nil {
+			return nil, readErr
+		}
+	}
+	if latestSeq < committedSeq {
+		return nil, fmt.Errorf("task event journal ends at seq %d, want %d", latestSeq, committedSeq)
+	}
+	if repair {
+		if err := file.Truncate(committedBytes); err != nil {
 			return nil, err
 		}
+		return events, file.Sync()
 	}
-}
-
-func (s *Store) writeIndex() error {
-	index, err := s.buildIndex()
-	if err != nil {
-		return err
-	}
-	if s.taskIDs != nil {
-		return s.taskIDs.writeIndex(index)
-	}
-	return writeTaskIndex(filepath.Join(s.root, indexFileName), taskIndexState{Tasks: index})
-}
-
-func (s *Store) buildIndex() ([]IndexEntry, error) {
-	return buildTaskIndex(s.root)
+	return events, nil
 }
 
 func buildTaskIndex(root string) ([]IndexEntry, error) {
@@ -324,16 +453,24 @@ func buildTaskIndex(root string) ([]IndexEntry, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		rootPath := filepath.Join(root, entry.Name(), rootFileName)
-		if _, err := os.Stat(rootPath); errors.Is(err, os.ErrNotExist) {
+		tasksPath := filepath.Join(root, entry.Name(), tasksFileName)
+		if _, err := os.Stat(tasksPath); errors.Is(err, os.ErrNotExist) {
 			continue
 		} else if err != nil {
 			return nil, err
 		}
-		var task Task
-		if err := readJSONFile(rootPath, &task); err != nil {
+		var record taskRecord
+		if err := readJSONFile(tasksPath, &record); err != nil {
 			return nil, err
 		}
+		if err := validateTaskRecordVersion(&record); err != nil {
+			return nil, err
+		}
+		snapshot, err := snapshotFromRecord(entry.Name(), record)
+		if err != nil {
+			return nil, err
+		}
+		task := snapshot.Root
 		index = append(index, IndexEntry{
 			ID:             task.ID,
 			AssignmentType: task.AssignmentType,
@@ -346,47 +483,49 @@ func buildTaskIndex(root string) ([]IndexEntry, error) {
 	return index, nil
 }
 
-func readTaskIndex(path string) (taskIndexState, bool, error) {
+func validateTaskRecordVersion(record *taskRecord) error {
+	if record == nil {
+		return fmt.Errorf("task record is required")
+	}
+	// Unversioned tasks.json files were written by development builds of this
+	// format before the schema marker was introduced. Their filename and flat
+	// tasks envelope make them unambiguous, so accept them and stamp v2 on the
+	// next write.
+	if record.SchemaVersion == 0 {
+		record.SchemaVersion = currentTaskSchemaVersion
+		return nil
+	}
+	if record.SchemaVersion != currentTaskSchemaVersion {
+		return fmt.Errorf("unsupported task schema version %d", record.SchemaVersion)
+	}
+	return nil
+}
+
+func readTaskSequence(path string) (taskSequenceState, bool, error) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return taskIndexState{}, false, nil
+		return taskSequenceState{}, false, nil
 	} else if err != nil {
-		return taskIndexState{}, false, err
+		return taskSequenceState{}, false, err
 	}
-	var state taskIndexState
+	var state taskSequenceState
 	if err := readJSONFile(path, &state); err != nil {
-		return taskIndexState{}, false, err
+		return taskSequenceState{}, false, err
 	}
-	if state.Counters.Task < 0 {
-		return taskIndexState{}, false, fmt.Errorf("task id counter is invalid: %d", state.Counters.Task)
+	if state.LastTask < 0 {
+		return taskSequenceState{}, false, fmt.Errorf("task id sequence is invalid: %d", state.LastTask)
 	}
-	state.Tasks = cloneIndexEntries(state.Tasks)
+	if state.SchemaVersion != 0 && state.SchemaVersion != currentSequenceVersion {
+		return taskSequenceState{}, false, fmt.Errorf("unsupported task sequence schema version %d", state.SchemaVersion)
+	}
 	return state, true, nil
 }
 
-func writeTaskIndex(path string, state taskIndexState) error {
-	if state.Counters.Task < 0 {
-		return fmt.Errorf("task id counter is invalid: %d", state.Counters.Task)
+func writeTaskSequence(path string, state taskSequenceState) error {
+	if state.LastTask < 0 {
+		return fmt.Errorf("task id sequence is invalid: %d", state.LastTask)
 	}
-	state.Tasks = cloneIndexEntries(state.Tasks)
-	return writeJSONFile(path, state)
-}
-
-func cloneIndexEntries(in []IndexEntry) []IndexEntry {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]IndexEntry, len(in))
-	copy(out, in)
-	return out
-}
-
-func readOptionalJSONFile(path string, target any) error {
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	return readJSONFile(path, target)
+	state.SchemaVersion = currentSequenceVersion
+	return writeJSONFileAtomic(path, state)
 }
 
 func readJSONFile(path string, target any) error {
@@ -398,6 +537,39 @@ func readJSONFile(path string, target any) error {
 		return nil
 	}
 	return json.Unmarshal(data, target)
+}
+
+func writeJSONFileAtomic(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(dir, ".tasks-*.tmp")
+	if err != nil {
+		return err
+	}
+	temporaryPath := file.Name()
+	defer os.Remove(temporaryPath)
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.Write(append(data, '\n')); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, path)
 }
 
 func writeJSONFile(path string, value any) error {

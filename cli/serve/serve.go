@@ -1370,6 +1370,7 @@ func newCSGClawAdapterSource(
 	}
 	rendererOptions := []delivery.RendererOption{delivery.WithInteractionProjector(interactionCoordinator)}
 	adapterOptions := []execution.Option{
+		execution.WithRoomContextProvider(participantBridge.RoomContext),
 		execution.WithAttachmentResolver(attachmentResolver),
 		execution.WithParticipantWorkReporter(workReporter),
 	}

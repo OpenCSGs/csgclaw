@@ -167,7 +167,30 @@ type EventPayload struct {
 	TargetIDs []string `json:"target_ids,omitempty"`
 }
 
+// RoomType controls how messages are routed inside a group room. An empty type
+// is read as RoomTypeFree so rooms created before this field existed keep their
+// mention-driven behavior.
+type RoomType string
+
+const (
+	RoomTypeFree     RoomType = "free"
+	RoomTypeOnDemand RoomType = "on_demand"
+)
+
+func NormalizeRoomType(value RoomType) RoomType {
+	if value == "" {
+		return RoomTypeFree
+	}
+	return value
+}
+
+func (room Room) IsOnDemand() bool {
+	return NormalizeRoomType(room.Type) == RoomTypeOnDemand
+}
+
 type Room struct {
+	Type            RoomType      `json:"type,omitempty"`
+	ManagerID       string        `json:"manager_id,omitempty"`
 	ID              string        `json:"id"`
 	Title           string        `json:"title"`
 	Subtitle        string        `json:"subtitle"`
@@ -183,7 +206,15 @@ type Room struct {
 	Threads         []ThreadState `json:"threads,omitempty"`
 }
 
+type CreateRoomTaskRequest struct {
+	Title           string `json:"title"`
+	Body            string `json:"body"`
+	SourceMessageID string `json:"source_message_id"`
+}
+
 type CreateRoomRequest struct {
+	Type        RoomType `json:"type"`
+	ManagerID   string   `json:"manager_id,omitempty"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	CreatorID   string   `json:"creator_id"`

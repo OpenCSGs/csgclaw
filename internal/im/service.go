@@ -231,6 +231,8 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
+	Type            apitypes.RoomType `json:"type,omitempty"`
+	ManagerID       string            `json:"manager_id,omitempty"`
 	ID              string            `json:"id"`
 	Title           string            `json:"title"`
 	Subtitle        string            `json:"subtitle"`
@@ -443,6 +445,8 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			return nil, err
 		}
 		loaded = append(loaded, Room{
+			Type:            apitypes.NormalizeRoomType(room.Type),
+			ManagerID:       room.ManagerID,
 			ID:              room.ID,
 			Title:           room.Title,
 			Subtitle:        room.Subtitle,
@@ -614,6 +618,8 @@ func saveRoomThreadsForState(statePath string, room Room) error {
 
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
+		Type:            apitypes.NormalizeRoomType(room.Type),
+		ManagerID:       room.ManagerID,
 		ID:              room.ID,
 		Title:           room.Title,
 		Subtitle:        room.Subtitle,
@@ -801,6 +807,12 @@ func normalizeBootstrap(state Bootstrap) Bootstrap {
 	state.Rooms = migrateLegacyAdminRoomRefs(cloneRooms(state.Rooms), adminAliases)
 	state.Rooms = migrateLegacyManagerRoomRefs(state.Rooms, managerAliases)
 	state.Rooms = migrateRoomRefsToUserIDs(state.Rooms)
+	for i := range state.Rooms {
+		state.Rooms[i].Type = apitypes.NormalizeRoomType(state.Rooms[i].Type)
+		if !state.Rooms[i].IsDirect && strings.TrimSpace(state.Rooms[i].SessionID) == "" {
+			state.Rooms[i].NotifyAllAgents = false
+		}
+	}
 	if !containsUserID(state.Users, state.CurrentUserID) {
 		state.CurrentUserID = migrateLegacyAdminID(state.CurrentUserID, adminAliases)
 		state.CurrentUserID = migrateLegacyManagerID(state.CurrentUserID, managerAliases)
@@ -1625,6 +1637,10 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 		s.mu.Unlock()
 		return Room{}, fmt.Errorf("direct rooms always notify their agent")
 	}
+	if strings.TrimSpace(room.SessionID) == "" {
+		s.mu.Unlock()
+		return Room{}, fmt.Errorf("group room delivery is controlled by its type and @mentions")
+	}
 	if room.NotifyAllAgents == *req.NotifyAllAgents {
 		presented := s.presentRoomLocked(*room, "")
 		s.mu.Unlock()
@@ -2205,6 +2221,16 @@ func publishRoomEvent(bus *Bus, eventType string, room Room) {
 }
 
 func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
+	req.Type = apitypes.NormalizeRoomType(req.Type)
+	if req.Type != apitypes.RoomTypeFree && req.Type != apitypes.RoomTypeOnDemand {
+		return Room{}, fmt.Errorf("unsupported room type")
+	}
+	if req.Type == apitypes.RoomTypeOnDemand {
+		if strings.TrimSpace(req.ManagerID) == "" {
+			req.ManagerID = ManagerUserID
+		}
+		req.MemberIDs = append(append([]string(nil), req.MemberIDs...), req.ManagerID)
+	}
 	title := strings.TrimSpace(req.Title)
 	description := strings.TrimSpace(req.Description)
 	creatorID := strings.TrimSpace(req.CreatorID)
@@ -2229,7 +2255,16 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		return Room{}, err
 	}
 
+	managerID := ""
+	if req.Type == apitypes.RoomTypeOnDemand {
+		managerID = s.resolveRoomUserIDLocked(req.ManagerID)
+		if _, ok := s.users[managerID]; !ok {
+			return Room{}, fmt.Errorf("room manager is unavailable")
+		}
+	}
 	room := Room{
+		Type:        req.Type,
+		ManagerID:   managerID,
 		ID:          fmt.Sprintf("room-%d", time.Now().UnixNano()),
 		Title:       title,
 		Subtitle:    formatRoomSubtitle(len(members)),
@@ -2382,6 +2417,13 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		return Room{}, fmt.Errorf("cannot remove members from agent session room")
 	}
 
+	if apitypes.NormalizeRoomType(room.Type) == apitypes.RoomTypeOnDemand {
+		for _, id := range req.UserIDs {
+			if s.resolveRoomUserIDLocked(id) == room.ManagerID {
+				return Room{}, fmt.Errorf("cannot remove the collaboration manager")
+			}
+		}
+	}
 	removing := make(map[string]struct{}, len(req.UserIDs))
 	for _, userID := range req.UserIDs {
 		userID = s.resolveRoomUserIDLocked(userID)

@@ -3,6 +3,7 @@ package taskcore
 import "time"
 
 const (
+	AssignmentTypeRoom  = "room"
 	AssignmentTypeTeam  = "team"
 	AssignmentTypeAgent = "agent"
 
@@ -13,6 +14,9 @@ const (
 	StatusCompleted  = "completed"
 	StatusFailed     = "failed"
 	StatusCancelled  = "cancelled"
+	StatusQueued     = "queued"
+	StatusReview     = "pending_review"
+	StatusStopping   = "stopping"
 
 	ApprovalStatusPending   = "pending"
 	ApprovalStatusApproved  = "approved"
@@ -33,6 +37,17 @@ const (
 )
 
 type Task struct {
+	// ParentID is a recursive relation, not a task type. Room orchestration
+	// currently exposes only one level of worker tasks below a manager task.
+	WaitingOnTaskID  string     `json:"waiting_on_task_id,omitempty"`
+	RecoveryRequired bool       `json:"recovery_required,omitempty"`
+	Attempt          int        `json:"attempt,omitempty"`
+	Review           string     `json:"review,omitempty"`
+	ReviewedBy       string     `json:"reviewed_by,omitempty"`
+	GoalOutcome      string     `json:"goal_outcome,omitempty"`
+	Report           string     `json:"report,omitempty"`
+	ReportStatus     string     `json:"report_status,omitempty"`
+	SourceMessageID  string     `json:"source_message_id,omitempty"`
 	ID               string     `json:"id"`
 	ParentID         string     `json:"parent_id,omitempty"`
 	AssignmentType   string     `json:"assignment_type"`
@@ -59,6 +74,9 @@ type Task struct {
 }
 
 type TaskEvent struct {
+	RequestID      string    `json:"request_id,omitempty"`
+	RequestHash    string    `json:"request_hash,omitempty"`
+	Attempt        int       `json:"attempt,omitempty"`
 	Seq            int64     `json:"seq,omitempty"`
 	AssignmentType string    `json:"assignment_type"`
 	AssignmentID   string    `json:"assignment_id"`

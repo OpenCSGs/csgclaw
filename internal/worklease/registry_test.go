@@ -76,6 +76,23 @@ func TestRegistryLeaseLifecycleAndTombstone(t *testing.T) {
 	}
 }
 
+func TestActiveRoomsExcludeExpiredLeasesBeforeSweep(t *testing.T) {
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	registry, _ := newTestRegistry(t, &now)
+	lease := testLease(NewID())
+	if _, err := registry.StartOrRenew(context.Background(), lease); err != nil {
+		t.Fatal(err)
+	}
+	rooms := registry.ActiveRooms("worker")
+	if len(rooms) != 1 || rooms[0] != lease.RoomID {
+		t.Fatalf("active rooms = %v", rooms)
+	}
+	now = now.Add(time.Minute)
+	if rooms := registry.ActiveRooms("worker"); len(rooms) != 0 {
+		t.Fatalf("stale scope survived: %v", rooms)
+	}
+}
+
 func TestRegistryUnknownDeleteAndExpiry(t *testing.T) {
 	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
 	registry, events := newTestRegistry(t, &now)

@@ -21,9 +21,17 @@ type HTTPClient interface {
 }
 
 type Client struct {
-	endpoint string
-	token    string
-	client   HTTPClient
+	callerAgentID string
+	endpoint      string
+	token         string
+	client        HTTPClient
+}
+
+// WithCallerAgentID identifies runtime CLI calls for active-room routing. This
+// is a workflow scope hint, not a substitute for API authentication.
+func (c *Client) WithCallerAgentID(id string) *Client {
+	c.callerAgentID = strings.TrimSpace(id)
+	return c
 }
 
 func DefaultAPIBaseURL() string {
@@ -345,6 +353,18 @@ func (c *Client) ListGlobalTasks(ctx context.Context) ([]apitypes.GlobalTask, er
 	return tasks, nil
 }
 
+func (c *Client) GetTask(ctx context.Context, taskID string) (apitypes.GlobalTask, error) {
+	var task apitypes.GlobalTask
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return task, fmt.Errorf("task id is required")
+	}
+	if err := c.GetJSON(ctx, "/api/v1/tasks/"+url.PathEscape(taskID), &task); err != nil {
+		return apitypes.GlobalTask{}, err
+	}
+	return task, nil
+}
+
 func (c *Client) ListAgentTasks(ctx context.Context) ([]apitypes.TeamTask, error) {
 	var tasks []apitypes.TeamTask
 	if err := c.GetJSON(ctx, "/api/v1/agent-tasks", &tasks); err != nil {
@@ -549,6 +569,9 @@ func (c *Client) Stream(ctx context.Context, path string, values url.Values, w i
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 
+	if c.callerAgentID != "" {
+		req.Header.Set("X-CSGClaw-Caller-Agent", c.callerAgentID)
+	}
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
@@ -591,6 +614,9 @@ func (c *Client) DoJSON(ctx context.Context, method, path string, body any, out 
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 
+	if c.callerAgentID != "" {
+		req.Header.Set("X-CSGClaw-Caller-Agent", c.callerAgentID)
+	}
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err

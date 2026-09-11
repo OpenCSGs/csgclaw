@@ -12,6 +12,7 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
+	"csgclaw/internal/roomtask"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/worklease"
 )
@@ -260,6 +261,85 @@ func TestAdapterRunBuildsRuntimeNeutralTurn(t *testing.T) {
 	}
 }
 
+func TestAdapterProjectsRoomContextOnceAndRefreshesAfterReset(t *testing.T) {
+	engine := &fakeEngine{}
+	inputs := []string{}
+	engine.run = func(_ context.Context, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+		inputs = append(inputs, request.Input[0].Text)
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded}
+	}
+	adapter, err := New(engine, &fakeRenderer{}, WithRoomContextProvider(func(request roomtask.TurnContextRequest) (roomtask.PrivateTurnContext, error) {
+		return roomtask.PrivateTurnContext{
+			Role: roomtask.TurnRoleManager, PolicyID: roomtask.ManagerPolicyID,
+			ScopeJSON: `{"room_id":"room-a"}`, SnapshotJSON: `{"tasks":[]}`,
+			TurnJSON: `{"source_message_id":"` + request.SourceID + `"}`,
+		}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := channel.Binding{ID: "manager", ParticipantID: "manager", AgentID: "agent-manager"}
+	var conversationKey agentengine.ConversationKey
+	for _, messageID := range []string{"message-one", "message-two"} {
+		outcome, runErr := adapter.Run(context.Background(), binding, channel.Event{
+			MessageID: messageID, RoomID: "room-a", RoomManager: true, Text: "continue",
+		})
+		if runErr != nil {
+			t.Fatal(runErr)
+		}
+		conversationKey = outcome.Turn.ConversationKey
+	}
+	if len(inputs) != 2 || !strings.Contains(inputs[0], `mode="full"`) || !strings.Contains(inputs[0], `room_type="on_demand"`) || !strings.Contains(inputs[0], `role="manager"`) || !strings.Contains(inputs[0], `policy_id="on-demand-manager/v1"`) {
+		t.Fatalf("first room context was not full: %#v", inputs)
+	}
+	if !strings.Contains(inputs[1], `mode="steady"`) || !strings.Contains(inputs[1], "task submit, task plan, and task dispatch") || strings.Contains(inputs[1], `kind="room-scope"`) || strings.Contains(inputs[1], `kind="task-snapshot"`) {
+		t.Fatalf("second room context omitted the action gate or repeated stable facts: %s", inputs[1])
+	}
+	if err := adapter.Reset(context.Background(), binding.AgentID, conversationKey); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adapter.Run(context.Background(), binding, channel.Event{
+		MessageID: "message-three", RoomID: "room-a", RoomManager: true, Text: "continue",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(inputs) != 3 || !strings.Contains(inputs[2], `mode="full"`) || !strings.Contains(inputs[2], `policy_id="on-demand-manager/v1"`) {
+		t.Fatalf("context after reset was not full: %#v", inputs)
+	}
+}
+
+func TestAdapterRefreshesRoomContextAfterFailedTurn(t *testing.T) {
+	inputs := []string{}
+	engine := &fakeEngine{run: func(_ context.Context, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+		inputs = append(inputs, request.Input[0].Text)
+		if len(inputs) == 1 {
+			return agentengine.TurnResult{Status: agentengine.TurnFailed}
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded}
+	}}
+	adapter, err := New(engine, &fakeRenderer{}, WithRoomContextProvider(func(request roomtask.TurnContextRequest) (roomtask.PrivateTurnContext, error) {
+		return roomtask.PrivateTurnContext{
+			Role: roomtask.TurnRoleManager, PolicyID: roomtask.ManagerPolicyID,
+			ScopeJSON: `{"room_id":"room-a"}`, SnapshotJSON: `{"tasks":[]}`,
+			TurnJSON: `{"source_message_id":"` + request.SourceID + `"}`,
+		}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := channel.Binding{ID: "manager", ParticipantID: "manager", AgentID: "agent-manager"}
+	for _, messageID := range []string{"failed", "retry"} {
+		if _, err := adapter.Run(context.Background(), binding, channel.Event{
+			MessageID: messageID, RoomID: "room-a", RoomManager: true, Text: "continue",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(inputs) != 2 || !strings.Contains(inputs[0], `mode="full"`) || !strings.Contains(inputs[1], `mode="full"`) {
+		t.Fatalf("failed turn did not force a full fact refresh: %#v", inputs)
+	}
+}
+
 func TestAdapterRunReportsParticipantWorkLeaseLifecycle(t *testing.T) {
 	reporter := newRecordingWorkReporter()
 	adapter, err := New(
@@ -276,7 +356,7 @@ func TestAdapterRunReportsParticipantWorkLeaseLifecycle(t *testing.T) {
 	outcome, err := adapter.Run(context.Background(), channel.Binding{
 		ParticipantID: "pt-worker", AgentID: "agent-worker",
 	}, channel.Event{
-		MessageID: "message-work", RoomID: "room-work", ThreadRootID: "thread-work", Text: "handle this",
+		MessageID: "message-work", RoomID: "room-work", ThreadRootID: "thread-work", TaskID: "task-7", TaskAttempt: 2, Text: "handle this",
 	})
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -291,7 +371,7 @@ func TestAdapterRunReportsParticipantWorkLeaseLifecycle(t *testing.T) {
 	}
 	lease := starts[0]
 	if lease.ParticipantID != "pt-worker" || lease.RoomID != "room-work" || lease.ThreadRootID != "thread-work" ||
-		lease.RequestID != "message-work" || lease.Kind != apitypes.ParticipantWorkKindAgentTurn ||
+		lease.RequestID != "message-work" || lease.TaskID != "task-7" || lease.TaskAttempt != 2 || lease.Kind != apitypes.ParticipantWorkKindAgentTurn ||
 		!lease.TTLExplicit || lease.TTLSeconds != defaultWorkLeaseTTL || !worklease.ValidID(lease.LeaseID) {
 		t.Fatalf("lease = %+v", lease)
 	}

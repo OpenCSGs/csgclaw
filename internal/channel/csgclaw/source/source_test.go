@@ -20,6 +20,13 @@ type fakeParticipants struct {
 	items []apitypes.Participant
 }
 
+func TestBotEventPreservesTrustedTaskIdentity(t *testing.T) {
+	got := botEvent(channel.Binding{ParticipantID: "dev"}, im.ParticipantEvent{RoomID: "room-1", MessageID: "dispatch-1", TaskID: "task-2"})
+	if got.TaskID != "task-2" || got.RoomID != "room-1" || got.ThreadRootID != "" {
+		t.Fatalf("task scope dropped at ingress: %+v", got)
+	}
+}
+
 func (f fakeParticipants) List(participant.ListOptions) []apitypes.Participant {
 	return append([]apitypes.Participant(nil), f.items...)
 }

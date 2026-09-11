@@ -257,6 +257,8 @@ func (c *Coordinator) Observe(turn channel.TurnContext, event agentengine.TurnEv
 	}
 	prompt := "The user answered the request_user_input emitted by the previous successful command. Continue the same workflow using this wire-compatible response JSON. Secret values are replaced with <redacted> before entering the model session:\n" + string(body)
 	err = submitter.Submit(channel.Binding{ID: string(turn.BindingID), Channel: channel.ChannelCSGClaw, ParticipantID: turn.ParticipantID, AgentID: turn.AgentID, Enabled: true}, channel.Event{
+		TaskID:      turn.TaskID,
+		RoomManager: turn.RoomManager, TaskAttempt: turn.TaskAttempt,
 		Channel: string(channel.ChannelCSGClaw), ParticipantID: turn.ParticipantID, MessageID: "structured-user-input-" + id, RoomID: turn.RoomID, Locale: turn.Locale, ChatType: turn.ChatType, Text: prompt, ThreadRootID: turn.ThreadRootID,
 	})
 	if err != nil {

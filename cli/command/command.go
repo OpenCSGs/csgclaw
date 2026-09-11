@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"unicode"
 
@@ -59,7 +60,7 @@ type Context struct {
 }
 
 func (c *Context) APIClient(globals GlobalOptions) *apiclient.Client {
-	return apiclient.New(globals.Endpoint, globals.Token, c.HTTPClient)
+	return apiclient.New(globals.Endpoint, globals.Token, c.HTTPClient).WithCallerAgentID(os.Getenv("CSGCLAW_CALLER_AGENT_ID"))
 }
 
 func (c *Context) UsageCommandGroup(cmd Command, usageLine string, subcommands []string) {

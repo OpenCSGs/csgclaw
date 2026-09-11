@@ -191,6 +191,56 @@ func TestManagerRunsIndependentConversationsConcurrently(t *testing.T) {
 	}
 }
 
+func TestWorkerTaskSessionsStartAsynchronouslyWithoutInterrupting(t *testing.T) {
+	startedA, startedB := make(chan struct{}), make(chan struct{})
+	releaseA := make(chan struct{})
+	var interrupted atomic.Bool
+	engine := &fakeEngine{run: func(ctx context.Context, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+		if strings.HasSuffix(string(request.ConversationKey), ":task:task-a") {
+			close(startedA)
+			select {
+			case <-releaseA:
+			case <-ctx.Done():
+				interrupted.Store(true)
+			}
+		} else if strings.HasSuffix(string(request.ConversationKey), ":task:task-b") {
+			close(startedB)
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded}
+	}}
+	adapter, err := execution.New(engine, fakeRenderer{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := NewManager(adapter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer manager.Close()
+	defer close(releaseA)
+	binding := channel.Binding{ParticipantID: "dev", AgentID: "agent-dev"}
+	ensureManagerBinding(t, manager, binding)
+	if err := manager.Submit(binding, channel.Event{MessageID: "dispatch-a", RoomID: "room-1", TaskID: "task-a", Text: "A"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-startedA:
+	case <-time.After(2 * time.Second):
+		t.Fatal("A did not start")
+	}
+	if err := manager.Submit(binding, channel.Event{MessageID: "dispatch-b", RoomID: "room-1", TaskID: "task-b", Text: "B"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-startedB:
+	case <-time.After(2 * time.Second):
+		t.Fatal("B was blocked by A's session")
+	}
+	if interrupted.Load() || engine.resets.Load() != 0 {
+		t.Fatal("new task interrupted or reset the previous session")
+	}
+}
+
 func TestManagerPreservesOrderWithinConversation(t *testing.T) {
 	firstStarted := make(chan struct{})
 	secondStarted := make(chan struct{})

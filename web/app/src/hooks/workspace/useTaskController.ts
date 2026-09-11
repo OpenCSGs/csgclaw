@@ -207,7 +207,7 @@ export function useTaskController({
   }, [activePane.id, activePane.type, refetchTasks, tasksDataUpdatedAt, tasksFetching]);
 
   useEffect(() => {
-    if (!selectedTask?.parent_id) {
+    if (!selectedTask?.parent_id || selectedTask.assignment_type === "room") {
       return;
     }
     onSelectTask(selectedTask.parent_id, { replace: true });

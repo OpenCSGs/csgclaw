@@ -289,8 +289,11 @@ func TestEnsureManagerWorkspaceCopiesEmbeddedTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensureAgentWorkspace(manager) error = %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(managerRoot, "skills", "agent-teams", "SKILL.md")); err != nil {
-		t.Fatalf("os.Stat(manager skill) error = %v", err)
+	if _, err := os.Stat(filepath.Join(managerRoot, "skills", "agent-creator", "SKILL.md")); err != nil {
+		t.Fatalf("os.Stat(manager creation skill) error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(managerRoot, "skills", "agent-teams", "SKILL.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("os.Stat(manager team skill) error = %v, want os.ErrNotExist", err)
 	}
 }
 

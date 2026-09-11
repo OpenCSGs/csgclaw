@@ -12,6 +12,7 @@ import (
 	"csgclaw/internal/channel/csgclaw/conv"
 	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/channel/csgclaw/files"
+	"csgclaw/internal/roomtask"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/slashcommand"
 	"csgclaw/internal/worklease"
@@ -39,6 +40,8 @@ type Adapter struct {
 	renderer    delivery.Renderer
 	newTurnID   idGenerator
 	work        workOptions
+	roomContext roomtask.TurnContextProvider
+	projector   *roomtask.ContextProjector
 }
 
 // builtInIMAdmissionPolicy deliberately preserves queued, in-order delivery
@@ -47,6 +50,12 @@ type Adapter struct {
 const builtInIMAdmissionPolicy = agentengine.AdmissionWait
 
 type Option func(*Adapter)
+
+// WithRoomContextProvider supplies fresh private collaboration facts after the
+// ingress queue admits this room's next turn. It never creates an IM message.
+func WithRoomContextProvider(provider roomtask.TurnContextProvider) Option {
+	return func(adapter *Adapter) { adapter.roomContext = provider }
+}
 
 func WithAttachmentResolver(resolver files.Resolver) Option {
 	return func(adapter *Adapter) {
@@ -84,9 +93,10 @@ func New(engine Engine, renderer delivery.Renderer, opts ...Option) (*Adapter, e
 		return nil, fmt.Errorf("agent engine is required")
 	}
 	adapter := &Adapter{
-		engine:   engine,
-		renderer: renderer,
-		work:     defaultWorkOptions(),
+		engine:    engine,
+		renderer:  renderer,
+		work:      defaultWorkOptions(),
+		projector: roomtask.NewContextProjector(),
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -131,7 +141,13 @@ func (a *Adapter) Reset(ctx context.Context, agentID string, key agentengine.Con
 	if err != nil {
 		return err
 	}
-	return conversation.Reset(ctx, key)
+	if err := conversation.Reset(ctx, key); err != nil {
+		return err
+	}
+	if a.projector != nil {
+		a.projector.Reset(string(key))
+	}
+	return nil
 }
 
 // Cancel stops exactly one Engine turn for the selected Agent conversation.
@@ -203,7 +219,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	ctx, finishWork := a.startWork(ctx, turn)
 	defer func() { finishWork(outcome.Result) }()
 
-	input, release, inputErr := a.input(ctx, binding, event)
+	input, release, inputErr := a.input(ctx, binding, event, turn)
 	if release != nil {
 		defer release()
 	}
@@ -229,6 +245,11 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		Continuation:    agentengine.ContinuationCreateOrResume,
 		Interaction:     agentengine.InteractionResolve,
 	}, rendererSink{renderer: a.renderer, turn: turn})
+	if result.Status != agentengine.TurnSucceeded && a.projector != nil {
+		// A failed/canceled Runtime call may not have retained its input. Prefer
+		// one safe full fact refresh on retry.
+		a.projector.Reset(string(turn.ConversationKey))
+	}
 	return a.complete(ctx, turn, result)
 }
 
@@ -257,6 +278,8 @@ func (a *Adapter) turnContext(binding channel.Binding, event channel.Event) (cha
 		return channel.TurnContext{}, fmt.Errorf("generated turn id is empty")
 	}
 	return channel.TurnContext{
+		TaskID:      strings.TrimSpace(event.TaskID),
+		RoomManager: event.RoomManager, TaskAttempt: event.TaskAttempt,
 		BindingID:       binding.StableID(),
 		ParticipantID:   participantID,
 		AgentID:         agentID,
@@ -270,7 +293,7 @@ func (a *Adapter) turnContext(binding channel.Binding, event channel.Event) (cha
 	}, nil
 }
 
-func (a *Adapter) input(ctx context.Context, binding channel.Binding, event channel.Event) ([]agentengine.InputPart, func(), error) {
+func (a *Adapter) input(ctx context.Context, binding channel.Binding, event channel.Event, turn channel.TurnContext) ([]agentengine.InputPart, func(), error) {
 	if a.attachments == nil && len(event.Attachments) > 0 {
 		return nil, nil, fmt.Errorf("attachment resolver is not configured")
 	}
@@ -300,6 +323,25 @@ func (a *Adapter) input(ctx context.Context, binding channel.Binding, event chan
 		}
 		releases = append(releases, release)
 		input = append(input, agentengine.InputPart{Kind: agentengine.InputPartFile, File: &file})
+	}
+	if a.roomContext != nil {
+		current, err := a.roomContext(roomtask.TurnContextRequest{
+			ConversationID: string(turn.ConversationKey),
+			RoomID:         event.RoomID, ParticipantID: binding.ParticipantID,
+			SourceID: event.MessageID, TaskID: event.TaskID,
+		})
+		if err != nil {
+			releaseAll()
+			return nil, nil, fmt.Errorf("resolve room context: %w", err)
+		}
+		hidden, err := a.projector.Project(string(turn.ConversationKey), current)
+		if err != nil {
+			releaseAll()
+			return nil, nil, fmt.Errorf("project room context: %w", err)
+		}
+		if hidden != "" {
+			input = append([]agentengine.InputPart{{Kind: agentengine.InputPartText, Text: hidden}}, input...)
+		}
 	}
 	if len(releases) == 0 {
 		return input, nil, nil

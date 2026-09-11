@@ -20,6 +20,7 @@ import {
   type TranslateFn,
 } from "@/models/conversations";
 import { classNames } from "@/shared/lib/classNames";
+import { localizeError } from "@/shared/i18n";
 import { FloatingChatPromptSuggestions } from "./FloatingChatPromptSuggestions";
 import styles from "./FloatingChat.module.css";
 
@@ -70,8 +71,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     messageActionBusy,
     messageActionFeedback,
     messageListRef,
-    notifyAllAgentsBusy = false,
-    notifyAllAgentsError = "",
     onApplyMention,
     onApplySlashCandidate = (_name) => {},
     onApplyThreadSlashCandidate = (_name) => {},
@@ -89,7 +88,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onDismissThreadSlashPicker = () => {},
     onInviteAction,
     onMessageAction,
-    onNotifyAllAgentsChange,
     onManageConnector,
     onOpenThread,
     onPreviewUser,
@@ -141,6 +139,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   const [logLoading, setLogLoading] = useState(false);
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
+  const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
+  const [deleteRoomError, setDeleteRoomError] = useState("");
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
   const logAgentID = logAgent?.id || "";
   const logAgentName = logAgent?.name || conversation.title || "";
@@ -178,6 +178,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     setLogLoading(false);
     setClearMessagesDialogOpen(false);
     setDeleteRoomDialogOpen(false);
+    setDeleteRoomBusy(false);
+    setDeleteRoomError("");
     setDocumentPreview(null);
   }, [conversation.id, logAgentID]);
 
@@ -216,8 +218,22 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
 
   const handleOpenDeleteRoomDialog = useCallback(() => {
     onToggleChannelTools(false);
+    setDeleteRoomError("");
     setDeleteRoomDialogOpen(true);
   }, [onToggleChannelTools]);
+
+  const handleConfirmDeleteRoom = useCallback(async () => {
+    setDeleteRoomBusy(true);
+    setDeleteRoomError("");
+    try {
+      await onDeleteRoom(conversation.id);
+      setDeleteRoomDialogOpen(false);
+    } catch (err) {
+      setDeleteRoomError(localizeError(errorMessage(err, t("deleteRoomFailed")), t));
+    } finally {
+      setDeleteRoomBusy(false);
+    }
+  }, [conversation.id, onDeleteRoom, t]);
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
@@ -267,8 +283,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         memberMenuRef={memberMenuRef}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={floatingVisibleMessages.length}
-        notifyAllAgentsBusy={notifyAllAgentsBusy}
-        notifyAllAgentsError={notifyAllAgentsError}
         showChannelTools={showChannelTools}
         showInviteAction={false}
         showMemberList={showMemberList}
@@ -277,7 +291,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
         onInviteAction={onInviteAction}
-        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onOpenAgentLogs={handleOpenAgentLogs}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}
@@ -410,17 +423,21 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       />
       {!isDirectConversation(conversation) ? (
         <Conversation.RoomDangerConfirmDialog
+          busy={deleteRoomBusy}
           cancelLabel={t("cancel")}
           closeLabel={t("close")}
           confirmLabel={t("deleteRoomConfirm")}
           description={t("deleteRoomConfirmBody")}
+          error={deleteRoomError}
           open={deleteRoomDialogOpen}
           title={t("deleteRoom")}
-          onConfirm={() => {
-            setDeleteRoomDialogOpen(false);
-            onDeleteRoom(conversation.id);
+          onConfirm={handleConfirmDeleteRoom}
+          onOpenChange={(open) => {
+            setDeleteRoomDialogOpen(open);
+            if (!open) {
+              setDeleteRoomError("");
+            }
           }}
-          onOpenChange={setDeleteRoomDialogOpen}
         />
       ) : null}
       {logModalOpen && logAgent ? (

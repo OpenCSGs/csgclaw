@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/assets"
 )
 
@@ -287,7 +288,7 @@ func TestCreateMessageOnceRestoresPersistedStateAfterPartialSave(t *testing.T) {
 	}
 }
 
-func TestUpdateRoomPersistsNotifyAllAgentsAndPublishesEvent(t *testing.T) {
+func TestUpdateRoomRejectsNotifyAllForGroupRoom(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "im", "state.json")
 	bus := NewBus()
 	events, cancel := bus.Subscribe()
@@ -310,29 +311,8 @@ func TestUpdateRoomPersistsNotifyAllAgentsAndPublishesEvent(t *testing.T) {
 	_ = mustReceiveEvent(t, events)
 
 	enabled := true
-	updated, err := svc.UpdateRoom(room.ID, UpdateRoomRequest{NotifyAllAgents: &enabled})
-	if err != nil {
-		t.Fatalf("UpdateRoom() error = %v", err)
-	}
-	if !updated.NotifyAllAgents {
-		t.Fatal("UpdateRoom() NotifyAllAgents = false, want true")
-	}
-	event := mustReceiveEvent(t, events)
-	if event.Type != EventTypeRoomUpdated || event.Room == nil || !event.Room.NotifyAllAgents {
-		t.Fatalf("event = %+v, want room.updated with notify_all_agents", event)
-	}
-
-	loaded, err := LoadBootstrap(statePath)
-	if err != nil {
-		t.Fatalf("LoadBootstrap() error = %v", err)
-	}
-	if len(loaded.Rooms) != 2 {
-		t.Fatalf("loaded rooms = %d, want bootstrap direct room and Ops room", len(loaded.Rooms))
-	}
-	for _, candidate := range loaded.Rooms {
-		if candidate.ID == room.ID && !candidate.NotifyAllAgents {
-			t.Fatal("persisted NotifyAllAgents = false, want true")
-		}
+	if _, err := svc.UpdateRoom(room.ID, UpdateRoomRequest{NotifyAllAgents: &enabled}); err == nil {
+		t.Fatal("UpdateRoom() error = nil, want group delivery policy rejection")
 	}
 }
 
@@ -712,6 +692,9 @@ func TestCreateRoomStoresStructuredEvent(t *testing.T) {
 	}
 	if room.IsDirect {
 		t.Fatalf("CreateRoom() room.IsDirect = %v, want false", room.IsDirect)
+	}
+	if room.Type != apitypes.RoomTypeFree {
+		t.Fatalf("CreateRoom() room.Type = %q, want %q", room.Type, apitypes.RoomTypeFree)
 	}
 	if room.Locale != "en" {
 		t.Fatalf("CreateRoom() locale = %q, want en", room.Locale)

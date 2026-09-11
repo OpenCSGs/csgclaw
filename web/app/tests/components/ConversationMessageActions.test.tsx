@@ -53,3 +53,17 @@ describe("ConversationMessageActions", () => {
     expect(onOpenThread).toHaveBeenCalledTimes(1);
   });
 });
+
+it("keeps the task reference in the same action strip as copy and reply", () => {
+  render(
+    <ConversationMessageActions
+      leading={<button>View task #11</button>}
+      content="Done"
+      onOpenThread={() => {}}
+      t={t}
+    />,
+  );
+  const strip = screen.getByRole("button", { name: "Copy" }).parentElement;
+  expect(strip).toContainElement(screen.getByRole("button", { name: "View task #11" }));
+  expect(strip).toContainElement(screen.getByRole("button", { name: "Reply in thread" }));
+});

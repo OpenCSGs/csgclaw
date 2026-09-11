@@ -20,6 +20,29 @@ import {
 } from "@/models/tasks";
 
 describe("tasks model", () => {
+  it("keeps room ownership and separates execution from manager assessment", () => {
+    const task = normalizeTask({
+      id: "task-1",
+      assignment_type: "room",
+      assignment_id: "room-1",
+      room_id: "room-1",
+      assigned_to_agent_name: "Manager",
+      status: "completed",
+      goal_outcome: "issues",
+      report: "Tests found defects",
+      report_status: "pending",
+    });
+    expect(task).toMatchObject({
+      team_id: "",
+      room_id: "room-1",
+      status: "completed",
+      goal_outcome: "issues",
+      report_status: "pending",
+      report: "Tests found defects",
+    });
+    expect(displayTaskAssignmentTarget(task!)).toBe("Manager");
+    expect(taskExecutionRoomID(task!, [])).toBe("room-1");
+  });
   it("formats task timestamps in locale-neutral numeric form", () => {
     const value = "2026-06-04T13:13:00Z";
     const formatted = formatTaskUpdatedAt(value, "en");

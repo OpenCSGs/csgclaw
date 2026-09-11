@@ -8,6 +8,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
+	"csgclaw/internal/taskmeta"
 	"csgclaw/internal/worklease"
 	"encoding/json"
 	"errors"
@@ -43,7 +44,23 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	if evt.Type != im.EventTypeMessageCreated || evt.Message == nil || evt.Sender == nil {
 		return
 	}
-	if isUserInputAnswerTranscript(evt.Message) || isParticipantControlRecord(*evt.Message) {
+	if isParticipantControlRecord(*evt.Message) && h.roomTaskSvc != nil {
+		metadata, _ := evt.Message.Metadata["csgclaw"].(map[string]any)
+		if metadata["delivery_kind"] == "turn_stopped" {
+			taskID := taskmeta.ID(evt.Message.Metadata)
+			attempt := taskmeta.Attempt(evt.Message.Metadata)
+			if taskID == "" {
+				taskID = h.roomTaskIDForSource(evt.RoomID, metadata["request_id"])
+			}
+			if attempt < 1 {
+				attempt = h.roomTaskAttemptForSource(evt.RoomID, metadata["request_id"])
+			}
+			if err := h.roomTaskSvc.WorkerStopped(evt.RoomID, taskID, h.participantBridgeTargetForRoomMember(evt.Message.SenderID).bridgeID, attempt); err != nil {
+				slog.Warn("record stopped room task", "room_id", evt.RoomID, "error", err)
+			}
+		}
+	}
+	if isUserInputAnswerTranscript(evt.Message) || isParticipantControlRecord(*evt.Message) || im.IsAgentActivityMessage(*evt.Message) {
 		return
 	}
 
@@ -141,11 +158,52 @@ func (h *Handler) enqueueParticipantMessageEventForBridgeTarget(room im.Room, se
 	if h == nil || h.participantBridge == nil || strings.TrimSpace(target.bridgeID) == "" {
 		return true
 	}
-	if target.matches(message.SenderID) {
+	if im.IsAgentActivityMessage(message) || isParticipantControlRecord(message) {
+		return true
+	}
+	feedback := room.IsOnDemand() && message.Event != nil && message.Event.Key == "task_feedback"
+	taskID := ""
+	if room.IsOnDemand() {
+		if message.Event != nil && (feedback || message.Event.Key == "task_assigned") {
+			if h.roomTaskSvc == nil {
+				return true
+			}
+			var valid bool
+			taskID, valid = h.roomTaskSvc.ResolveProjection(room.ID, message.ID, message.Event.Key, target.bridgeID)
+			if !valid {
+				return true
+			}
+		} else if selected := taskmeta.ID(message.Metadata); selected != "" {
+			if h.roomTaskSvc == nil {
+				return true
+			}
+			var valid bool
+			taskID, valid = h.roomTaskSvc.ResolveMention(room.ID, selected, target.bridgeID)
+			if !valid {
+				return true
+			}
+		}
+	}
+	if target.matches(message.SenderID) && !feedback {
 		return true
 	}
 	deliveryRoom := roomForParticipantBridgeTarget(room, target)
 	deliveryMessage := messageForParticipantBridgeTarget(message, target)
+	if room.IsOnDemand() {
+		// Never accept a model-authored task/session identity. Dispatch was checked
+		// above; reconstruct the identity from its durable event.
+		metadata := make(map[string]any, len(deliveryMessage.Metadata)+1)
+		for key, value := range deliveryMessage.Metadata {
+			metadata[key] = value
+		}
+		attempt := 0
+		if h.roomTaskSvc != nil && taskID != "" {
+			if task, ok := h.roomTaskSvc.Get(room.ID, taskID); ok {
+				attempt = task.Attempt
+			}
+		}
+		deliveryMessage.Metadata = taskmeta.Set(metadata, taskID, attempt)
+	}
 	deliveryMessage.Attachments = h.materializeAttachmentsForParticipant(deliveryMessage.Attachments, deliveryRoom.ID, deliveryMessage.ID, target.bridgeID)
 	deliveryRoom = h.materializeThreadContextAttachmentsForParticipant(deliveryRoom, deliveryMessage, target.bridgeID)
 	if strings.TrimSpace(text) != "" {
@@ -361,6 +419,9 @@ func roomForParticipantBridgeTarget(room im.Room, target participantBridgeTarget
 		return room
 	}
 	out := room
+	if target.matches(out.ManagerID) {
+		out.ManagerID = target.bridgeID
+	}
 	out.Members = make([]string, 0, len(room.Members))
 	seen := make(map[string]struct{}, len(room.Members))
 	for _, memberID := range room.Members {

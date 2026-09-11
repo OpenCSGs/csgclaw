@@ -145,6 +145,12 @@ const t: TranslateFn = (key, params = {}) => {
     conversationWorkingThinking: "Thinking",
     conversationWorkingUsingTool: "Using tool",
     conversationWorkingWaiting: "Waiting",
+    deleteRoom: "deleteRoom",
+    deleteRoomConfirm: "deleteRoomConfirm",
+    deleteRoomConfirmBody: "deleteRoomConfirmBody",
+    deleteRoomFailed: "deleteRoomFailed",
+    "errors.finish or stop active room tasks before deleting the room":
+      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
     agentActivityEmpty: "No activity yet",
     agentActivityChronological: "Chronological",
     agentActivityEventsCount: "{count} events",
@@ -199,8 +205,6 @@ function renderThreadPane({
   visibleMessages,
   memberActionBusyID = "",
   memberActionError = "",
-  notifyAllAgents = false,
-  onNotifyAllAgentsChange = vi.fn(),
   onClearMemberActionError = vi.fn(),
   onApplyMention = vi.fn(),
   agentDetailPanelProps = null,
@@ -219,7 +223,7 @@ function renderThreadPane({
   mentionIndex?: number;
   onClearRoomMessages?: (id: string) => void;
   onCloseThread?: () => void;
-  onDeleteRoom?: (id: string) => void;
+  onDeleteRoom?: ConversationPaneProps["onDeleteRoom"];
   onApplyMention?: (user: IMUser) => void;
   onOpenAgentDetail?: NonNullable<ConversationPaneProps["onOpenAgentDetail"]>;
   onPreserveMessageAnchor?: NonNullable<ConversationPaneProps["onPreserveMessageAnchor"]>;
@@ -227,8 +231,6 @@ function renderThreadPane({
   onRemoveMember?: (memberID: string) => void;
   memberActionBusyID?: string;
   memberActionError?: string;
-  notifyAllAgents?: boolean;
-  onNotifyAllAgentsChange?: (enabled: boolean) => void;
   onClearMemberActionError?: () => void;
   replies?: ThreadView["replies"];
   showToolCalls?: boolean;
@@ -246,7 +248,6 @@ function renderThreadPane({
     is_direct: isDirect,
     members: conversationMembers.map((user) => user.id),
     messages: timelineMessages,
-    notify_all_agents: notifyAllAgents,
     title: conversationTitle,
   };
   const thread: ThreadView = {
@@ -307,7 +308,6 @@ function renderThreadPane({
         onDeleteRoom={onDeleteRoom}
         onInviteAction={() => {}}
         onMessageAction={() => {}}
-        onNotifyAllAgentsChange={onNotifyAllAgentsChange}
         onOpenAgentDetail={onOpenAgentDetail}
         onPreserveMessageAnchor={onPreserveMessageAnchor}
         onOpenThread={() => {}}
@@ -1294,18 +1294,12 @@ describe("ConversationPane", () => {
     expect(onDeleteRoom).not.toHaveBeenCalled();
   });
 
-  it("toggles whether every human message notifies every room agent", async () => {
+  it("does not offer a notify-every-agent override for free rooms", async () => {
     const user = userEvent.setup();
-    const onNotifyAllAgentsChange = vi.fn();
-    renderThreadPane({ isDirect: false, onNotifyAllAgentsChange });
+    renderThreadPane({ isDirect: false });
 
     await user.click(screen.getByRole("button", { name: "channelTools" }));
-    const notificationSwitch = screen.getByRole("switch", { name: /notifyAllAgents/ });
-    expect(notificationSwitch).toHaveAttribute("aria-checked", "false");
-
-    await user.click(notificationSwitch);
-
-    expect(onNotifyAllAgentsChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("switch", { name: /notifyAllAgents/ })).not.toBeInTheDocument();
   });
 
   it("confirms before deleting a room from the tools menu", async () => {
@@ -1324,5 +1318,23 @@ describe("ConversationPane", () => {
 
     expect(onDeleteRoom).toHaveBeenCalledWith("room-1");
     expect(onClearRoomMessages).not.toHaveBeenCalled();
+  });
+
+  it("keeps the delete dialog open and shows a localized error when deletion is blocked", async () => {
+    const user = userEvent.setup();
+    const onDeleteRoom = vi
+      .fn()
+      .mockRejectedValue(new Error("finish or stop active room tasks before deleting the room"));
+    renderThreadPane({ isDirect: false, onDeleteRoom });
+
+    await user.click(screen.getByRole("button", { name: "channelTools" }));
+    await user.click(screen.getByRole("button", { name: "deleteRoom" }));
+    await user.click(screen.getByRole("button", { name: "deleteRoomConfirm" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(onDeleteRoom).toHaveBeenCalledWith("room-1");
   });
 });

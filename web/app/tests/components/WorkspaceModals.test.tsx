@@ -24,9 +24,11 @@ describe("WorkspaceModals", () => {
         onRoomTitleChange={() => {}}
         roomDescription=""
         roomMemberIDs={[]}
+        roomType="on_demand"
         roomTitle=""
         submitError=""
         t={t}
+        onRoomTypeChange={() => {}}
       />,
     );
 

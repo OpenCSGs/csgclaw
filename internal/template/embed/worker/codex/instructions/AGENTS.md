@@ -38,10 +38,9 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
   matching `SKILL.md`.
 - If the assignment is a direct agent task notification with
   `csgclaw-cli task claim --task <task_id>`, claim it with
-  `csgclaw-cli task claim --task <task_id> --participant-id <your_participant_id>`
+  `csgclaw-cli task claim --task <task_id> --actor-id <your_participant_id>`
   and report completion, failure, or blockage with
   `csgclaw-cli task update --task <task_id> --actor-id <your_participant_id> --status <completed|failed|blocked> ...`.
-  Do not use `team task` commands for direct agent tasks.
 - If a task begins with `<slash-command name="use-skill" arg="<slug>"></slash-command>`,
   treat `<slug>` as the required skill slug and the remaining text as the task instruction.
 - Prefer local workspace skills over external discovery.

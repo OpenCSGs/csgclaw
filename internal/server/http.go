@@ -75,6 +75,9 @@ func newHandler(opts Options) *api.Handler {
 	handler.SetMCPService(opts.MCP)
 	handler.SetTeamService(opts.Team)
 	handler.SetAgentTaskService(opts.AgentTask)
+	if opts.AgentTask != nil {
+		handler.SetRoomTaskCore(opts.AgentTask.Core())
+	}
 	handler.SetScheduledTaskService(opts.ScheduledTask)
 	handler.SetAgentRuntimeService(opts.AgentRuntimes)
 	if opts.TeamAdapters != nil {
@@ -116,6 +119,9 @@ func Run(opts Options) error {
 
 	handler := newHandler(opts)
 	handler.SetEventStreamShutdown(streamCtx.Done())
+	if err := handler.RecoverRoomTasks(); err != nil {
+		return fmt.Errorf("recover room tasks: %w", err)
+	}
 	router := handler.Routes()
 	router.Handle("/*", uiFallbackHandler())
 

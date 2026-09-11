@@ -62,6 +62,8 @@ func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (cont
 		RoomID:        strings.TrimSpace(turn.RoomID),
 		ThreadRootID:  strings.TrimSpace(turn.ThreadRootID),
 		RequestID:     strings.TrimSpace(turn.SourceMessageID),
+		TaskID:        strings.TrimSpace(turn.TaskID),
+		TaskAttempt:   turn.TaskAttempt,
 		Kind:          apitypes.ParticipantWorkKindAgentTurn,
 		TTLSeconds:    a.work.ttlSeconds,
 		TTLExplicit:   true,

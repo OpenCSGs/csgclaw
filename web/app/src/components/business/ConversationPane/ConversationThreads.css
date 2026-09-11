@@ -612,3 +612,22 @@ button.thread-message-avatar:focus-visible {
     padding-left: 12px;
   }
 }
+
+/* The task reference shares the existing action strip; it never adds a card
+   row or pushes Copy / Reply below the message. */
+.message-hover-actions.has-leading {
+  opacity: 1;
+}
+.message-action-leading {
+  display: flex;
+  min-width: 0;
+  margin-right: auto;
+}
+.message-hover-actions.has-leading > .message-action-button {
+  opacity: 0;
+  flex-shrink: 0;
+}
+.message-row:hover .message-hover-actions.has-leading > .message-action-button,
+.message-row:focus-within .message-hover-actions.has-leading > .message-action-button {
+  opacity: 1;
+}

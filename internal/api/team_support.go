@@ -277,11 +277,12 @@ func (p teamIdentityPresenter) agentDisplayName(id string) string {
 }
 
 func apiTask(item team.TeamTask, presenter teamIdentityPresenter) apitypes.TeamTask {
+	assignmentType, assignmentID, teamID := taskcore.AssignmentTypeTeam, item.TeamID, item.TeamID
 	return apitypes.TeamTask{
 		ID:                  item.ID,
-		AssignmentType:      taskcore.AssignmentTypeTeam,
-		AssignmentID:        item.TeamID,
-		TeamID:              item.TeamID,
+		AssignmentType:      assignmentType,
+		AssignmentID:        assignmentID,
+		TeamID:              teamID,
 		ExecutionChannel:    item.ExecutionChannel,
 		RoomID:              item.RoomID,
 		ParentID:            item.ParentID,
@@ -310,6 +311,7 @@ func apiTask(item team.TeamTask, presenter teamIdentityPresenter) apitypes.TeamT
 
 func apiCoreTask(item taskcore.Task, presenter teamIdentityPresenter) apitypes.TeamTask {
 	resp := apitypes.TeamTask{
+		GoalOutcome: item.GoalOutcome, Report: item.Report, ReportStatus: item.ReportStatus, SourceMessageID: item.SourceMessageID,
 		ID:                  item.ID,
 		AssignmentType:      item.AssignmentType,
 		AssignmentID:        item.AssignmentID,

@@ -115,6 +115,8 @@ export type IMMessage = {
 };
 
 export type IMConversation = {
+  type?: RoomType | null;
+  manager_id?: string;
   description?: string | null;
   id: string;
   is_direct?: boolean | null;
@@ -125,6 +127,13 @@ export type IMConversation = {
   threads?: ThreadState[] | null;
   title?: string | null;
 };
+
+export const RoomTypes = {
+  free: "free",
+  onDemand: "on_demand",
+} as const;
+
+export type RoomType = (typeof RoomTypes)[keyof typeof RoomTypes];
 
 export type IMData = {
   current_user_id?: string;
@@ -521,6 +530,15 @@ export function formatEventMessage(
   if (message.event?.key === "task_assigned") {
     return formatTaskAssignedEventMessage(message.event, usersById, locale);
   }
+  if (message.event?.key === "task_feedback") {
+    // Historical events contained raw mention tags and private CLI instructions.
+    // Render the structured identity, never their legacy control payload.
+    const id = typeof message.metadata?.task_id === "string" ? message.metadata.task_id : "";
+    const actor = userDisplayName(message.sender_id || message.event.actor_id || "", usersById);
+    return isChineseLocale(locale)
+      ? `${actor} 更新了任务${id ? ` ${id}` : ""}，交由 Manager 处理`
+      : `${actor} updated ${id || "a task"} for Manager review`;
+  }
   return message.content || "";
 }
 
@@ -732,6 +750,14 @@ export function normalizeComparable(value: unknown): string {
 
 export function isDirectConversation(conversation: { is_direct?: boolean | null } | null | undefined): boolean {
   return Boolean(conversation?.is_direct);
+}
+
+export function roomType(conversation: { type?: RoomType | null } | null | undefined): RoomType {
+  return conversation?.type === RoomTypes.onDemand ? RoomTypes.onDemand : RoomTypes.free;
+}
+
+export function isOnDemandConversation(conversation: { type?: RoomType | null } | null | undefined): boolean {
+  return roomType(conversation) === RoomTypes.onDemand;
 }
 
 export function resolveRoomInviterID(

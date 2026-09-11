@@ -217,6 +217,12 @@ func TestIMTranscriptStoreWritesFinalAndUpdatesToolActivity(t *testing.T) {
 	}
 	for _, message := range room.Messages {
 		assertChannelMetadata(t, message.Metadata)
+		if _, found := message.Metadata["task_id"]; found {
+			t.Fatalf("ordinary transcript contains task_id: %#v", message.Metadata)
+		}
+		if _, found := message.Metadata["task_attempt"]; found {
+			t.Fatalf("ordinary transcript contains task_attempt: %#v", message.Metadata)
+		}
 	}
 }
 

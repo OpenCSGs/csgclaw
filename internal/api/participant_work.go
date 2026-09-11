@@ -51,8 +51,9 @@ func (h *Handler) putParticipantWorkLease(w http.ResponseWriter, r *http.Request
 	request.RoomID = strings.TrimSpace(request.RoomID)
 	request.ThreadRootID = strings.TrimSpace(request.ThreadRootID)
 	request.RequestID = strings.TrimSpace(request.RequestID)
+	request.TaskID = strings.TrimSpace(request.TaskID)
 	request.Kind = strings.TrimSpace(request.Kind)
-	if request.RoomID == "" || request.RequestID == "" || request.Kind != apitypes.ParticipantWorkKindAgentTurn {
+	if request.RoomID == "" || request.RequestID == "" || request.TaskAttempt < 0 || (request.TaskID == "" && request.TaskAttempt != 0) || request.Kind != apitypes.ParticipantWorkKindAgentTurn {
 		http.Error(w, "room_id and request_id are required and kind must be agent_turn", http.StatusBadRequest)
 		return
 	}
@@ -72,6 +73,8 @@ func (h *Handler) putParticipantWorkLease(w http.ResponseWriter, r *http.Request
 		RoomID:        request.RoomID,
 		ThreadRootID:  request.ThreadRootID,
 		RequestID:     request.RequestID,
+		TaskID:        request.TaskID,
+		TaskAttempt:   request.TaskAttempt,
 		Kind:          request.Kind,
 		TTLSeconds:    ttl,
 		TTLExplicit:   ttlExplicit,

@@ -446,6 +446,7 @@ func roomSpec() CommandSpec {
 					FlagSpec{Name: "creator-id", TakesValue: true},
 					FlagSpec{Name: "member-ids", TakesValue: true},
 					FlagSpec{Name: "locale", TakesValue: true},
+					FlagSpec{Name: "type", TakesValue: true, Values: []string{"on_demand", "free"}},
 				),
 			},
 			{Name: "delete", Summary: "Delete a room", Flags: channelFlags()},
@@ -637,11 +638,13 @@ func teamSpec() CommandSpec {
 }
 
 func taskSpec() CommandSpec {
+	taskID := FlagSpec{Name: "task", TakesValue: true}
+	roomID := FlagSpec{Name: "room", TakesValue: true}
 	return CommandSpec{
 		Name:    "task",
-		Summary: "Manage agent tasks.",
+		Summary: "Manage tasks across rooms, teams, and agents.",
 		Children: []CommandSpec{
-			{Name: "list", Summary: "List global tasks"},
+			{Name: "list", Summary: "List global or room tasks", Flags: []FlagSpec{roomID}},
 			{
 				Name:    "create",
 				Summary: "Create an agent task",
@@ -654,24 +657,46 @@ func taskSpec() CommandSpec {
 			},
 			{
 				Name:    "claim",
-				Summary: "Claim an agent task",
+				Summary: "Claim a task",
 				Flags: []FlagSpec{
-					{Name: "task", TakesValue: true},
-					{Name: "participant-id", TakesValue: true},
+					taskID,
+					{Name: "actor-id", TakesValue: true},
+					{Name: "attempt", TakesValue: true},
 				},
 			},
 			{
 				Name:    "update",
 				Summary: "Update an agent task status",
 				Flags: []FlagSpec{
-					{Name: "task", TakesValue: true},
+					taskID,
 					{Name: "actor-id", TakesValue: true},
+					{Name: "attempt", TakesValue: true},
 					{Name: "status", TakesValue: true, Values: []string{"blocked", "completed", "failed"}},
 					{Name: "result", TakesValue: true},
 					{Name: "error", TakesValue: true},
 					{Name: "reason", TakesValue: true},
 				},
 			},
+			{Name: "context", Summary: "Inspect room task context", Flags: []FlagSpec{roomID}},
+			{
+				Name:    "submit",
+				Summary: "Create a parent task in a room",
+				Flags:   []FlagSpec{roomID, {Name: "source-message", TakesValue: true}, {Name: "title", TakesValue: true}, {Name: "body", TakesValue: true}},
+			},
+			{Name: "get", Summary: "Get assignment-specific task details", Flags: []FlagSpec{taskID}},
+			{
+				Name:    "plan",
+				Summary: "Plan room task children",
+				Flags:   []FlagSpec{taskID, {Name: "plan-file", TakesValue: true}, {Name: "plan-json", TakesValue: true}, {Name: "append"}, {Name: "request-id", TakesValue: true}},
+			},
+			{Name: "start", Summary: "Start a room parent task", Flags: []FlagSpec{taskID}},
+			{Name: "dispatch", Summary: "Dispatch a room child task", Flags: []FlagSpec{taskID, {Name: "target", TakesValue: true}}},
+			{Name: "review", Summary: "Review a room child task", Flags: []FlagSpec{taskID, {Name: "attempt", TakesValue: true}, {Name: "accept"}, {Name: "result", TakesValue: true}}},
+			{Name: "message", Summary: "Send a task-scoped message", Flags: []FlagSpec{taskID, {Name: "message-id", TakesValue: true}, {Name: "body", TakesValue: true}}},
+			{Name: "stop", Summary: "Stop a room task", Flags: []FlagSpec{taskID}},
+			{Name: "recover", Summary: "Recover a room task", Flags: []FlagSpec{taskID, {Name: "attempt", TakesValue: true}, {Name: "result", TakesValue: true}}},
+			{Name: "report", Summary: "Report a room task outcome", Flags: []FlagSpec{taskID, {Name: "outcome", TakesValue: true}, {Name: "result", TakesValue: true}}},
+			{Name: "retry-delivery", Summary: "Retry room task message delivery", Flags: []FlagSpec{roomID}},
 		},
 	}
 }

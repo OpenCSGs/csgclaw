@@ -79,3 +79,38 @@ func TestDetachedTranscriptFailureLeavesEngineRequestPending(t *testing.T) {
 		t.Fatalf("not pending: %+v", item)
 	}
 }
+
+type taskContinuationRecorder struct {
+	events []channel.Event
+}
+
+func (r *taskContinuationRecorder) Submit(_ channel.Binding, event channel.Event) error {
+	r.events = append(r.events, event)
+	return nil
+}
+
+func (*taskContinuationRecorder) IsCurrent(channel.BindingID, agentengine.ConversationKey, string) bool {
+	return true
+}
+
+func TestDetachedContinuationRetainsTaskSessionAfterEngineRefactor(t *testing.T) {
+	c, _, turn, request := detachedFixture(t)
+	turn.TaskID = "task-2"
+	if _, err := c.Bind(turn, request); err != nil {
+		t.Fatal(err)
+	}
+	recorder := &taskContinuationRecorder{}
+	c.SetSubmitter(recorder)
+	event := agentengine.TurnEvent{Activity: &agentengine.ActivityUpdate{
+		ID: request.ID, Kind: string(activity.RuntimeEventUserInputResolved),
+		Payload: activity.UserInputSnapshot{Status: activity.UserInputStatusAnswered},
+	}}
+	c.Observe(turn, event)
+	c.Observe(turn, event)
+	if len(recorder.events) != 1 {
+		t.Fatalf("continuations = %d, want exactly one", len(recorder.events))
+	}
+	if got := recorder.events[0]; got.TaskID != turn.TaskID || got.RoomID != turn.RoomID {
+		t.Fatalf("continuation lost task/room identity: %+v", got)
+	}
+}

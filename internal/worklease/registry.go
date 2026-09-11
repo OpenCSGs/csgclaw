@@ -47,6 +47,8 @@ type ParticipantWorkLease struct {
 	RoomID        string
 	ThreadRootID  string
 	RequestID     string
+	TaskID        string
+	TaskAttempt   int
 	Kind          string
 	TTLSeconds    int
 	TTLExplicit   bool
@@ -112,6 +114,8 @@ type activeLease struct {
 	roomID                string
 	threadRootID          string
 	requestID             string
+	taskID                string
+	taskAttempt           int
 	kind                  string
 	revision              uint64
 	expiresAt             time.Time
@@ -361,6 +365,8 @@ func (r *Registry) RequestStop(
 		ThreadRootID:  lease.threadRootID,
 		LeaseID:       lease.leaseID,
 		RequestID:     lease.requestID,
+		TaskID:        lease.taskID,
+		TaskAttempt:   lease.taskAttempt,
 		State:         "stop_requested",
 		RequestedAt:   requestedAt,
 	}
@@ -540,6 +546,39 @@ func (r *Registry) ActiveCount(roomID, participantID string) int {
 	return len(r.activeBySubject[strings.TrimSpace(roomID)][participantID])
 }
 
+// ActiveRooms returns current execution scope, excluding expired leases even
+// before the janitor runs. Multiple rooms are deliberately not guessed between.
+// ActiveWork returns exact, unexpired leases for task-scoped stop control.
+func (r *Registry) ActiveWork(roomID string) []apitypes.ParticipantWorkUpdate {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []apitypes.ParticipantWorkUpdate{}
+	for _, lease := range r.activeByKey {
+		if lease.roomID == roomID && lease.expiresAt.After(r.now()) {
+			out = append(out, r.updateFor(lease, apitypes.ParticipantWorkStateWorking, ""))
+		}
+	}
+	return out
+}
+
+func (r *Registry) ActiveRooms(participantID string) []string {
+	participantID = r.canonicalParticipantID(participantID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rooms := map[string]bool{}
+	for _, lease := range r.activeByKey {
+		if lease.participantID == participantID && lease.expiresAt.After(r.now()) {
+			rooms[lease.roomID] = true
+		}
+	}
+	out := make([]string, 0, len(rooms))
+	for id := range rooms {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
+}
+
 func (r *Registry) validate(request ParticipantWorkLease) (activeLease, error) {
 	item, ok := r.participants.Get(participant.ChannelCSGClaw, strings.TrimSpace(request.ParticipantID))
 	if !ok || item.Channel != participant.ChannelCSGClaw || item.Type != participant.TypeAgent || item.LifecycleStatus != participant.LifecycleStatusActive {
@@ -570,6 +609,8 @@ func (r *Registry) validate(request ParticipantWorkLease) (activeLease, error) {
 		roomID:        roomID,
 		threadRootID:  strings.TrimSpace(request.ThreadRootID),
 		requestID:     strings.TrimSpace(request.RequestID),
+		taskID:        strings.TrimSpace(request.TaskID),
+		taskAttempt:   request.TaskAttempt,
 		kind:          strings.TrimSpace(request.Kind),
 	}, nil
 }
@@ -619,6 +660,8 @@ func (r *Registry) updateFor(lease activeLease, state, reason string) apitypes.P
 		RoomID:          lease.roomID,
 		ThreadRootID:    lease.threadRootID,
 		RequestID:       lease.requestID,
+		TaskID:          lease.taskID,
+		TaskAttempt:     lease.taskAttempt,
 		Kind:            lease.kind,
 		State:           state,
 		Reason:          reason,
@@ -653,6 +696,8 @@ func sameMetadata(left, right activeLease) bool {
 		left.roomID == right.roomID &&
 		left.threadRootID == right.threadRootID &&
 		left.requestID == right.requestID &&
+		left.taskID == right.taskID &&
+		left.taskAttempt == right.taskAttempt &&
 		left.kind == right.kind
 }
 

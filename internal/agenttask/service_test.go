@@ -56,7 +56,7 @@ func TestCreateAgentTaskBindsDirectRoomAndSendsInitialMessage(t *testing.T) {
 		t.Fatalf("initial message content = %q, want task id and title", last.Content)
 	}
 	for _, want := range []string{
-		"csgclaw-cli task claim --task " + task.ID,
+		"csgclaw-cli task claim --task " + task.ID + " --actor-id <worker_participant_id>",
 		"If blocked, claim it again when ready to resume.",
 		"csgclaw-cli task update --task " + task.ID,
 	} {

@@ -34,6 +34,9 @@ const labels: Record<string, string> = {
   deleteRoom: "Delete room",
   deleteRoomConfirm: "Confirm delete",
   deleteRoomConfirmBody: "Delete this room.",
+  deleteRoomFailed: "Failed to delete the room. Try again.",
+  "errors.finish or stop active room tasks before deleting the room":
+    "This room still has unfinished tasks. Stop or complete them before deleting the room.",
   directMessagesSection: "Direct messages",
   enabled: "Enabled",
   floatingChatCollapse: "Collapse floating chat",
@@ -223,6 +226,31 @@ describe("FloatingChat manager guide", () => {
 });
 
 describe("FloatingChat manager prompts", () => {
+  it("keeps the delete dialog open when room deletion is blocked", async () => {
+    const user = userEvent.setup();
+    const onDeleteRoom = vi
+      .fn()
+      .mockRejectedValue(new Error("finish or stop active room tasks before deleting the room"));
+    renderOpenManagerFloatingChat(
+      {
+        id: "room-managed",
+        is_direct: false,
+        members: users.map((item) => item.id),
+        messages: [],
+        title: "Managed room",
+      },
+      { onDeleteRoom, showChannelTools: true },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete room" }));
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This room still has unfinished tasks. Stop or complete them before deleting the room.",
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
   it("shows the connected GitLab account from the shared conversation state", async () => {
     const user = userEvent.setup();
     const conversation: IMConversation = {
