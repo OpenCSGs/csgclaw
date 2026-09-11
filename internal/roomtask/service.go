@@ -3,6 +3,7 @@
 package roomtask
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -11,6 +12,8 @@ import (
 
 	"csgclaw/internal/taskcore"
 )
+
+var ErrRoomHasActiveTasks = errors.New("finish or stop active room tasks before deleting the room")
 
 const (
 	EventDispatched = "task.dispatched"
@@ -221,7 +224,7 @@ func (s *Service) BeginRoomDeletion(room string) (func(), error) {
 	}
 	for _, task := range s.List(room) {
 		if !Terminal(task.Status) || task.RecoveryRequired {
-			return nil, fmt.Errorf("finish or stop active room tasks before deleting the room")
+			return nil, ErrRoomHasActiveTasks
 		}
 	}
 	s.closingRooms[room] = true

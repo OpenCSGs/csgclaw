@@ -6348,9 +6348,7 @@ func TestHandleRoomsInviteRequiresRoomID(t *testing.T) {
 
 	srv.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
-	}
+	assertAPIErrorCode(t, rec, http.StatusBadRequest, "room_id_required")
 }
 
 func TestHandleRoomsReturnsConversationList(t *testing.T) {
@@ -7448,9 +7446,7 @@ func TestHandleMessagesPostRequiresRoomID(t *testing.T) {
 
 	srv.Routes().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
-	}
+	assertAPIErrorCode(t, rec, http.StatusBadRequest, "room_id_required")
 }
 
 func TestHandleIMEventsExposeRoomIDOnly(t *testing.T) {

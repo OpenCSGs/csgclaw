@@ -216,10 +216,10 @@ func (h *Handler) handleFeishuUserByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		if err := h.feishu.DeleteUser(userID); err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, "user not found", http.StatusNotFound)
+				writeAPIError(w, err, http.StatusNotFound)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -250,7 +250,7 @@ func (h *Handler) handleFeishuRooms(w http.ResponseWriter, r *http.Request) {
 		}
 		room, err := h.feishu.CreateRoom(req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusCreated, room)
@@ -269,16 +269,16 @@ func (h *Handler) handleFeishuMessages(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		roomID, err := roomIDFromQuery(r)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		messages, err := h.feishu.ListRoomMessages(roomID)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				writeAPIError(w, err, http.StatusNotFound)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, messages)
@@ -290,7 +290,7 @@ func (h *Handler) handleFeishuMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		message, err := h.feishu.SendMessage(req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusCreated, message)
@@ -314,10 +314,10 @@ func (h *Handler) handleFeishuRoomByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		if err := h.feishu.DeleteRoom(roomID); err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, "room not found", http.StatusNotFound)
+				writeCodedAPIError(w, http.StatusNotFound, "room_not_found", err.Error())
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -343,10 +343,10 @@ func (h *Handler) handleFeishuRoomMembersByID(w http.ResponseWriter, r *http.Req
 		members, err := h.feishu.ListRoomMembers(roomID)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, "room not found", http.StatusNotFound)
+				writeCodedAPIError(w, http.StatusNotFound, "room_not_found", err.Error())
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, members)
@@ -360,10 +360,10 @@ func (h *Handler) handleFeishuRoomMembersByID(w http.ResponseWriter, r *http.Req
 		room, err := h.feishu.AddRoomMembers(req)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
-				http.Error(w, err.Error(), http.StatusNotFound)
+				writeCodedAPIError(w, http.StatusNotFound, "room_not_found", err.Error())
 				return
 			}
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, err, http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, http.StatusOK, room)

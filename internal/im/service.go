@@ -156,6 +156,17 @@ type EnsureAgentSessionRoomRequest struct {
 }
 
 var (
+	ErrTitleRequired              = errors.New("title is required")
+	ErrCreatorIDRequired          = errors.New("creator_id is required")
+	ErrCreatorNotFound            = errors.New("creator not found")
+	ErrUserNotFound               = errors.New("user not found")
+	ErrRoomIDRequired             = errors.New("room_id is required")
+	ErrRoomNotFound               = errors.New("room not found")
+	ErrInviterIDRequired          = errors.New("inviter_id is required")
+	ErrInviterNotFound            = errors.New("inviter not found")
+	ErrInviterNotRoomMember       = errors.New("inviter is not a room member")
+	ErrUserIDsRequired            = errors.New("user_ids is required")
+	ErrNoNewUsersToInvite         = errors.New("no new users to invite")
 	ErrSessionRoomConflict        = errors.New("session room mapping is ambiguous")
 	ErrSessionAgentConflict       = errors.New("session is already bound to another agent")
 	ErrSessionRoomMembersConflict = errors.New("session room members do not match admin and agent")
@@ -1299,7 +1310,7 @@ func (s *Service) ListUsers() []User {
 func (s *Service) ListMembers(roomID string) ([]User, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return nil, fmt.Errorf("room_id is required")
+		return nil, ErrRoomIDRequired
 	}
 
 	s.mu.RLock()
@@ -1307,7 +1318,7 @@ func (s *Service) ListMembers(roomID string) ([]User, error) {
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return nil, fmt.Errorf("room not found")
+		return nil, ErrRoomNotFound
 	}
 
 	users := make([]User, 0, len(room.Members))
@@ -1346,7 +1357,7 @@ func (s *Service) ListMessages(roomID string) ([]Message, error) {
 func (s *Service) ListMessagesWithOptions(roomID string, opts ListMessagesOptions) ([]Message, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return nil, fmt.Errorf("room_id is required")
+		return nil, ErrRoomIDRequired
 	}
 
 	s.mu.RLock()
@@ -1354,7 +1365,7 @@ func (s *Service) ListMessagesWithOptions(roomID string, opts ListMessagesOption
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return nil, fmt.Errorf("room not found")
+		return nil, ErrRoomNotFound
 	}
 	return s.presentMessagesLocked(*room, opts.IncludeThreadReplies, opts.Locale), nil
 }
@@ -1363,7 +1374,7 @@ func (s *Service) StartThread(req StartThreadRequest) (ThreadView, bool, error) 
 	roomID := strings.TrimSpace(req.RoomID)
 	rootID := strings.TrimSpace(req.RootMessageID)
 	if roomID == "" {
-		return ThreadView{}, false, fmt.Errorf("room_id is required")
+		return ThreadView{}, false, ErrRoomIDRequired
 	}
 	if rootID == "" {
 		return ThreadView{}, false, fmt.Errorf("root_message_id is required")
@@ -1374,7 +1385,7 @@ func (s *Service) StartThread(req StartThreadRequest) (ThreadView, bool, error) 
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return ThreadView{}, false, fmt.Errorf("room not found")
+		return ThreadView{}, false, ErrRoomNotFound
 	}
 	rootIndex := messageIndexByID(room.Messages, rootID)
 	if rootIndex < 0 {
@@ -1403,7 +1414,7 @@ func (s *Service) StartThread(req StartThreadRequest) (ThreadView, bool, error) 
 func (s *Service) ListThreads(roomID string, opts ThreadListOptions) (ThreadListResponse, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return ThreadListResponse{}, fmt.Errorf("room_id is required")
+		return ThreadListResponse{}, ErrRoomIDRequired
 	}
 	include := strings.TrimSpace(strings.ToLower(opts.Include))
 	if include == "" {
@@ -1421,7 +1432,7 @@ func (s *Service) ListThreads(roomID string, opts ThreadListOptions) (ThreadList
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return ThreadListResponse{}, fmt.Errorf("room not found")
+		return ThreadListResponse{}, ErrRoomNotFound
 	}
 
 	views := make([]ThreadView, 0, len(room.Threads))
@@ -1464,7 +1475,7 @@ func (s *Service) GetThread(roomID, rootMessageID string) (ThreadView, error) {
 	roomID = strings.TrimSpace(roomID)
 	rootMessageID = strings.TrimSpace(rootMessageID)
 	if roomID == "" {
-		return ThreadView{}, fmt.Errorf("room_id is required")
+		return ThreadView{}, ErrRoomIDRequired
 	}
 	if rootMessageID == "" {
 		return ThreadView{}, fmt.Errorf("root_message_id is required")
@@ -1475,7 +1486,7 @@ func (s *Service) GetThread(roomID, rootMessageID string) (ThreadView, error) {
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return ThreadView{}, fmt.Errorf("room not found")
+		return ThreadView{}, ErrRoomNotFound
 	}
 	return s.threadViewLocked(*room, rootMessageID, true)
 }
@@ -1491,14 +1502,14 @@ func (s *Service) ListThreadRelations(roomID, rootMessageID string) (ThreadRelat
 func (s *Service) DeleteRoom(roomID string) error {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return fmt.Errorf("room_id is required")
+		return ErrRoomIDRequired
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if _, ok := s.rooms[roomID]; !ok {
-		return fmt.Errorf("room not found")
+		return ErrRoomNotFound
 	}
 	delete(s.rooms, roomID)
 	s.rebuildSessionRoomIndexLocked()
@@ -1621,7 +1632,7 @@ func sessionRoomMembersMatch(room Room, adminID, agentUserID string) bool {
 func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return Room{}, fmt.Errorf("room_id is required")
+		return Room{}, ErrRoomIDRequired
 	}
 	if req.NotifyAllAgents == nil {
 		return Room{}, fmt.Errorf("notify_all_agents is required")
@@ -1631,7 +1642,7 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 	room, ok := s.rooms[roomID]
 	if !ok {
 		s.mu.Unlock()
-		return Room{}, fmt.Errorf("room not found")
+		return Room{}, ErrRoomNotFound
 	}
 	if room.IsDirect {
 		s.mu.Unlock()
@@ -1668,14 +1679,14 @@ func (s *Service) DeleteConversation(conversationID string) error {
 func (s *Service) ClearRoomMessages(roomID string) (Room, error) {
 	roomID = strings.TrimSpace(roomID)
 	if roomID == "" {
-		return Room{}, fmt.Errorf("room_id is required")
+		return Room{}, ErrRoomIDRequired
 	}
 
 	s.mu.Lock()
 	room, ok := s.rooms[roomID]
 	if !ok {
 		s.mu.Unlock()
-		return Room{}, fmt.Errorf("room not found")
+		return Room{}, ErrRoomNotFound
 	}
 	room.Messages = []Message{}
 	room.Threads = []ThreadState{}
@@ -1702,7 +1713,7 @@ func (s *Service) DeleteUser(userID string) error {
 	user, ok := s.users[userID]
 	if !ok {
 		s.mu.Unlock()
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
 	}
 	if userID == s.currentUserID {
 		s.mu.Unlock()
@@ -1957,7 +1968,7 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 	senderID := strings.TrimSpace(req.SenderID)
 	clientMessageID := strings.TrimSpace(req.ClientMessageID)
 	if roomID == "" {
-		return Message{}, false, fmt.Errorf("room_id is required")
+		return Message{}, false, ErrRoomIDRequired
 	}
 	if senderID == "" {
 		return Message{}, false, fmt.Errorf("sender_id is required")
@@ -1981,7 +1992,7 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return Message{}, false, fmt.Errorf("room not found")
+		return Message{}, false, ErrRoomNotFound
 	}
 	if clientMessageID != "" {
 		for _, existing := range room.Messages {
@@ -2037,7 +2048,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	mentionID := strings.TrimSpace(req.MentionID)
 	content := strings.TrimSpace(req.Content)
 	if roomID == "" {
-		return Message{}, fmt.Errorf("room_id is required")
+		return Message{}, ErrRoomIDRequired
 	}
 	if content == "" && len(req.Attachments) == 0 {
 		return Message{}, fmt.Errorf("text is required")
@@ -2060,7 +2071,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	}
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return Message{}, fmt.Errorf("room not found")
+		return Message{}, ErrRoomNotFound
 	}
 	var relation *MessageRelation
 	if rootID := strings.TrimSpace(req.ThreadRootID); rootID != "" {
@@ -2121,7 +2132,7 @@ func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 	mentionID := strings.TrimSpace(req.MentionID)
 	content := strings.TrimSpace(req.Content)
 	if roomID == "" {
-		return Message{}, fmt.Errorf("room_id is required")
+		return Message{}, ErrRoomIDRequired
 	}
 	if content == "" && req.Event == nil {
 		return Message{}, fmt.Errorf("event content is required")
@@ -2144,7 +2155,7 @@ func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 	}
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return Message{}, fmt.Errorf("room not found")
+		return Message{}, ErrRoomNotFound
 	}
 	mentions := s.extractMentions(content)
 	if mentionID != "" {
@@ -2235,10 +2246,10 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 	description := strings.TrimSpace(req.Description)
 	creatorID := strings.TrimSpace(req.CreatorID)
 	if title == "" {
-		return Room{}, fmt.Errorf("title is required")
+		return Room{}, ErrTitleRequired
 	}
 	if creatorID == "" {
-		return Room{}, fmt.Errorf("creator_id is required")
+		return Room{}, ErrCreatorIDRequired
 	}
 
 	s.mu.Lock()
@@ -2246,7 +2257,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 
 	creatorUserID := s.resolveRoomUserIDLocked(creatorID)
 	if _, ok := s.users[creatorUserID]; !ok {
-		return Room{}, fmt.Errorf("creator not found")
+		return Room{}, ErrCreatorNotFound
 	}
 	creatorID = creatorUserID
 
@@ -2304,13 +2315,13 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	roomID := strings.TrimSpace(req.RoomID)
 	inviterID := strings.TrimSpace(req.InviterID)
 	if roomID == "" {
-		return Room{}, fmt.Errorf("room_id is required")
+		return Room{}, ErrRoomIDRequired
 	}
 	if inviterID == "" {
-		return Room{}, fmt.Errorf("inviter_id is required")
+		return Room{}, ErrInviterIDRequired
 	}
 	if len(req.UserIDs) == 0 {
-		return Room{}, fmt.Errorf("user_ids is required")
+		return Room{}, ErrUserIDsRequired
 	}
 
 	s.mu.Lock()
@@ -2318,15 +2329,15 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return Room{}, fmt.Errorf("room not found")
+		return Room{}, ErrRoomNotFound
 	}
 	inviterUserID := s.resolveRoomUserIDLocked(inviterID)
 	if _, ok := s.users[inviterUserID]; !ok {
-		return Room{}, fmt.Errorf("inviter not found")
+		return Room{}, ErrInviterNotFound
 	}
 	inviterID = inviterUserID
 	if !slices.Contains(room.Members, inviterID) {
-		return Room{}, fmt.Errorf("inviter is not a room member")
+		return Room{}, ErrInviterNotRoomMember
 	}
 	if room.IsDirect {
 		return Room{}, fmt.Errorf("cannot add members to direct room")
@@ -2347,7 +2358,7 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 			continue
 		}
 		if _, ok := s.users[userID]; !ok {
-			return Room{}, fmt.Errorf("user not found: %s", userID)
+			return Room{}, fmt.Errorf("%w: %s", ErrUserNotFound, userID)
 		}
 		if _, ok := existing[userID]; ok {
 			continue
@@ -2357,7 +2368,7 @@ func (s *Service) AddRoomMembers(req AddRoomMembersRequest) (Room, error) {
 		addedIDs = append(addedIDs, userID)
 	}
 	if len(addedIDs) == 0 {
-		return Room{}, fmt.Errorf("no new users to invite")
+		return Room{}, ErrNoNewUsersToInvite
 	}
 
 	room.Subtitle = formatRoomSubtitle(len(room.Members))
@@ -2386,13 +2397,13 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 	roomID := strings.TrimSpace(req.RoomID)
 	inviterID := strings.TrimSpace(req.InviterID)
 	if roomID == "" {
-		return Room{}, fmt.Errorf("room_id is required")
+		return Room{}, ErrRoomIDRequired
 	}
 	if inviterID == "" {
-		return Room{}, fmt.Errorf("inviter_id is required")
+		return Room{}, ErrInviterIDRequired
 	}
 	if len(req.UserIDs) == 0 {
-		return Room{}, fmt.Errorf("user_ids is required")
+		return Room{}, ErrUserIDsRequired
 	}
 
 	s.mu.Lock()
@@ -2400,15 +2411,15 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 
 	room, ok := s.rooms[roomID]
 	if !ok {
-		return Room{}, fmt.Errorf("room not found")
+		return Room{}, ErrRoomNotFound
 	}
 	inviterUserID := s.resolveRoomUserIDLocked(inviterID)
 	if _, ok := s.users[inviterUserID]; !ok {
-		return Room{}, fmt.Errorf("inviter not found")
+		return Room{}, ErrInviterNotFound
 	}
 	inviterID = inviterUserID
 	if !slices.Contains(room.Members, inviterID) {
-		return Room{}, fmt.Errorf("inviter is not a room member")
+		return Room{}, ErrInviterNotRoomMember
 	}
 	if room.IsDirect {
 		return Room{}, fmt.Errorf("cannot remove members from direct room")
@@ -2431,7 +2442,7 @@ func (s *Service) RemoveRoomMembers(req AddRoomMembersRequest) (Room, error) {
 			continue
 		}
 		if _, ok := s.users[userID]; !ok {
-			return Room{}, fmt.Errorf("user not found: %s", userID)
+			return Room{}, fmt.Errorf("%w: %s", ErrUserNotFound, userID)
 		}
 		if userID == inviterID {
 			continue
@@ -2485,7 +2496,7 @@ func (s *Service) AddConversationMembers(req AddConversationMembersRequest) (Con
 func (s *Service) AddAgentToRoom(req AddAgentToConversationRequest) (Room, error) {
 	roomID := strings.TrimSpace(req.RoomID)
 	if roomID == "" {
-		return Room{}, fmt.Errorf("room_id is required")
+		return Room{}, ErrRoomIDRequired
 	}
 
 	return s.AddRoomMembers(AddRoomMembersRequest{
@@ -2574,7 +2585,7 @@ func (s *Service) normalizeMembers(creatorID string, memberIDs []string) ([]stri
 			continue
 		}
 		if _, ok := s.users[userID]; !ok {
-			return nil, fmt.Errorf("user not found: %s", userID)
+			return nil, fmt.Errorf("%w: %s", ErrUserNotFound, userID)
 		}
 		if _, ok := seen[userID]; ok {
 			continue

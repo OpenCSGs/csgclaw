@@ -286,7 +286,9 @@ func TestRoomDeletionRequiresTerminalTasksAndBlocksMutations(t *testing.T) {
 	root := rootTask(t, s)
 	if release, err := s.BeginRoomDeletion("room-a"); err == nil {
 		release()
-		t.Fatal("deleted room with unfinished task")
+		t.Fatal("BeginRoomDeletion() error = nil, want ErrRoomHasActiveTasks")
+	} else if !errors.Is(err, ErrRoomHasActiveTasks) {
+		t.Fatalf("BeginRoomDeletion() error = %v, want ErrRoomHasActiveTasks", err)
 	}
 	if _, err := s.Report("room-a", root.ID, "stopped", "No work was started"); err != nil {
 		t.Fatal(err)

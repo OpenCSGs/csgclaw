@@ -74,7 +74,7 @@ import {
   type AttachmentDraft,
 } from "@/models/attachments";
 import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkillOption } from "@/models/slashCommands";
-import { localizeError } from "@/shared/i18n";
+import { localizeAPIError } from "@/shared/i18n";
 import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import { useLegacyOpenClawWorkingFallback } from "./legacyOpenClawWorking";
@@ -1203,7 +1203,7 @@ export function useConversationController({
       setComposerError("");
       setShowCreateRoom(false);
     } catch (err) {
-      setSubmitError(localizeError(errorMessage(err, ""), t));
+      setSubmitError(localizeAPIError(err, t, errorMessage(err, "")));
     }
   }
 
@@ -1260,7 +1260,7 @@ export function useConversationController({
       setComposerError("");
       setShowInvite(false);
     } catch (err) {
-      setSubmitError(localizeError(errorMessage(err, ""), t));
+      setSubmitError(localizeAPIError(err, t, errorMessage(err, "")));
     }
   }
 
@@ -1281,7 +1281,7 @@ export function useConversationController({
       setBootstrapData((current) => upsertConversationInData(current, updated));
       setComposerError("");
     } catch (err) {
-      const localized = localizeError(errorMessage(err, ""), t);
+      const localized = localizeAPIError(err, t, errorMessage(err, ""));
       setMemberActionError(localized);
       throw err;
     } finally {
@@ -1330,7 +1330,7 @@ export function useConversationController({
     try {
       clearedRoom = await clearRoomMessagesRequest(roomID);
     } catch (err) {
-      setComposerError(localizeError(errorMessage(err, ""), t), roomID);
+      setComposerError(localizeAPIError(err, t, errorMessage(err, "")), roomID);
       return;
     }
 

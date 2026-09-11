@@ -35,7 +35,7 @@ const labels: Record<string, string> = {
   deleteRoomConfirm: "Confirm delete",
   deleteRoomConfirmBody: "Delete this room.",
   deleteRoomFailed: "Failed to delete the room. Try again.",
-  "errors.finish or stop active room tasks before deleting the room":
+  "errors.room_has_active_tasks":
     "This room still has unfinished tasks. Stop or complete them before deleting the room.",
   directMessagesSection: "Direct messages",
   enabled: "Enabled",
@@ -228,9 +228,11 @@ describe("FloatingChat manager guide", () => {
 describe("FloatingChat manager prompts", () => {
   it("keeps the delete dialog open when room deletion is blocked", async () => {
     const user = userEvent.setup();
-    const onDeleteRoom = vi
-      .fn()
-      .mockRejectedValue(new Error("finish or stop active room tasks before deleting the room"));
+    const onDeleteRoom = vi.fn().mockRejectedValue({
+      status: 409,
+      code: "room_has_active_tasks",
+      message: "finish or stop active room tasks before deleting the room",
+    });
     renderOpenManagerFloatingChat(
       {
         id: "room-managed",

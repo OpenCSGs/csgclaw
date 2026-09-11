@@ -188,6 +188,8 @@ src/pages/WorkspacePage/components/
 ## Data Flow
 
 - Treat `src/api/` as the transport boundary. API modules should own endpoint paths, request payloads, response types, low-level error mapping, and OpenAPI/server shape compatibility. They should not own React state, rendering decisions, or page-specific defaults.
+- Return localizable API failures as `{"error":{"code":"stable_snake_case","message":"human-readable diagnostics"}}`. Treat `error.code` as the stable machine contract and `error.message` as diagnostic context; do not branch or translate by matching message text.
+- Preserve structured API errors through the controller layer and localize them with `localizeAPIError`; do not discard `error.code` before localization.
 - Convert raw API responses into app-facing shapes before they reach broad UI code when the conversion is reused, non-trivial, or needs regression coverage. Put those pure helpers in `src/models/<domain>.ts` or a focused model module.
 - Route pages or page-owned hooks should compose data loading, mutations, loading/error/empty state, and page-specific defaults. Keep this orchestration near the route until another page needs the same behavior.
 - Shared components should receive already-shaped props or focused callbacks. They may display business state, but they should not fetch directly unless they are intentionally app-aware components in `src/components/business/` with a documented cross-page use.
@@ -213,6 +215,7 @@ src/pages/WorkspacePage/components/
 ## i18n And Text
 
 - Keep user-facing strings in the existing i18n message structure when the text is translated.
+- Error translation keys must match stable API error codes. Use whitespace-free machine-readable keys, normally `snake_case`, while preserving externally defined codes verbatim; never use a full error sentence as a key.
 - Use translator functions passed into page-private components when that is the surrounding pattern.
 - Do not hardcode new bilingual UI strings in components unless the existing code path is already untranslated.
 - Keep internal code comments and developer docs in English unless a Chinese companion document is explicitly being maintained.
