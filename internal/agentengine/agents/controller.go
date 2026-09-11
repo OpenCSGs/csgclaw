@@ -28,6 +28,7 @@ import (
 	"csgclaw/internal/identity"
 	"csgclaw/internal/knowledgebase"
 	agentruntime "csgclaw/internal/runtime"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/sandbox"
 	hub "csgclaw/internal/template"
 	"csgclaw/internal/utils"
@@ -1044,11 +1045,13 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 	if strings.TrimSpace(workspace.Kind) == hub.WorkspaceKindDir {
 		if agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind() == RuntimeKindCodex {
 			// Template creation seeds only the template/base document. Profile
-			// instructions are introduced later through the managed block.
-			spec.Instructions = ""
+			// instructions are introduced later through the managed block. Persist
+			// the template's user-authored instructions so the first runtime refresh
+			// does not replace them with an empty managed block.
 			instructionsPath := filepath.Join(workspace.Path, "AGENTS.md")
 			if data, readErr := os.ReadFile(instructionsPath); readErr == nil {
 				spec.TemplateInstructions = string(data)
+				spec.Instructions = runtimeinstructions.ExtractUserInstructionsFromAgentsDocument(spec.TemplateInstructions)
 				if removeErr := os.Remove(instructionsPath); removeErr != nil {
 					return CreateAgentSpec{}, cleanup, fmt.Errorf("separate codex template instructions: %w", removeErr)
 				}

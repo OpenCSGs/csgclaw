@@ -22,6 +22,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/runtime/openclawsandbox"
 	"csgclaw/internal/runtime/picoclawsandbox"
 	"csgclaw/internal/runtime/sandboxgateway"
@@ -7223,6 +7224,11 @@ func TestResolveCodexTemplateCreateSpecSeparatesBaseFromProfileInstructions(t *t
 		RuntimeKind:    RuntimeNameCodex,
 		RuntimeOptions: map[string]any{"execution_mode": "read_only"},
 	})
+	templateInstructions := "# Template Base\n\nKeep this content.\n\n" +
+		runtimeinstructions.RenderAgentsInstructionsBlock("Prefer targeted tests.")
+	if err := hubSvc.WriteWorkspaceFile(context.Background(), "local.codex-worker", "instructions/AGENTS.md", templateInstructions); err != nil {
+		t.Fatalf("WriteWorkspaceFile(AGENTS.md) error = %v", err)
+	}
 	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "manager-image:1", "", WithHubService(hubSvc))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -7239,14 +7245,14 @@ func TestResolveCodexTemplateCreateSpecSeparatesBaseFromProfileInstructions(t *t
 	if err != nil {
 		t.Fatalf("resolveTemplateCreateSpec() error = %v", err)
 	}
-	if resolved.Instructions != "" {
-		t.Fatalf("Instructions = %q, want empty for Codex template creation", resolved.Instructions)
+	if got, want := resolved.Instructions, "Prefer targeted tests."; got != want {
+		t.Fatalf("Instructions = %q, want template user instructions %q", got, want)
 	}
 	if got, want := resolved.RuntimeOptions["execution_mode"], "read_only"; got != want {
 		t.Fatalf("RuntimeOptions[execution_mode] = %v, want %q", got, want)
 	}
-	if !strings.Contains(resolved.TemplateInstructions, "# Agent Instructions") {
-		t.Fatalf("TemplateInstructions = %q, want template base document", resolved.TemplateInstructions)
+	if got := resolved.TemplateInstructions; got != templateInstructions {
+		t.Fatalf("TemplateInstructions = %q, want complete template document %q", got, templateInstructions)
 	}
 	if _, err := os.Stat(filepath.Join(resolved.FromTemplate, "AGENTS.md")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("workspace AGENTS.md stat error = %v, want template instructions separated from overlay", err)
