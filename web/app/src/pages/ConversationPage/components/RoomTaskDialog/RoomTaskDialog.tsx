@@ -1,5 +1,13 @@
 import { ListTodo, CheckCircle2, Circle, Eye } from "lucide-react";
-import { Button, DialogRoot, DialogContent, DialogTitle, DialogDescription, DialogCloseButton } from "@/components/ui";
+import {
+  Button,
+  DialogRoot,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+  DialogCloseButton,
+  Tooltip,
+} from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceTask } from "@/models/tasks";
 import { roomTaskGroups, roomTaskParent, roomTaskState } from "@/models/roomTasks";
@@ -29,17 +37,17 @@ export function RoomTaskReference({
   if (compact) {
     const label = `${t("roomTaskView")} · ${task?.title || taskID}`;
     return (
-      <button
-        type="button"
-        className={styles.compactReference}
-        aria-label={label}
-        data-tooltip={label}
-        data-tooltip-side="top"
-        onClick={(event) => onOpen(event.currentTarget)}
-      >
-        <Eye size={13} aria-hidden="true" />
-        <span>{taskID ? taskNumber(taskID) : t("roomTaskView")}</span>
-      </button>
+      <Tooltip content={label} contentProps={{ side: "top" }}>
+        <button
+          type="button"
+          className={styles.compactReference}
+          aria-label={label}
+          onClick={(event) => onOpen(event.currentTarget)}
+        >
+          <Eye size={16} aria-hidden="true" />
+          <span>{taskID ? taskNumber(taskID) : t("roomTaskView")}</span>
+        </button>
+      </Tooltip>
     );
   }
   return (
