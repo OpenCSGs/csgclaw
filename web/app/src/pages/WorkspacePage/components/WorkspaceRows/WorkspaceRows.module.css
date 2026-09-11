@@ -385,6 +385,18 @@
   white-space: nowrap;
 }
 
+.conversationTail {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.conversationTail .time {
+  min-width: 5ch;
+  text-align: right;
+}
+
 .statusDot {
   width: 8px;
   height: 8px;
@@ -473,10 +485,42 @@
 .conversationRow {
   padding: 8px;
   grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 0;
+}
+
+.conversationRow > .icon {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.conversationRow > .main {
+  display: contents;
+}
+
+.conversationRow .titleLine {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.conversationRow .meta {
+  grid-column: 2 / -1;
+  grid-row: 2;
+}
+
+.conversationRow > .conversationTail {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 .directConversationRow {
+  grid-template-rows: auto;
   align-items: center;
+}
+
+.directConversationRow > .icon {
+  grid-row: 1;
 }
 
 .taskRow {

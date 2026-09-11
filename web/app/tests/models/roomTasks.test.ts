@@ -25,6 +25,46 @@ describe("room tasks", () => {
     expect(roomTaskGroups(tasks, "empty")).toEqual([]);
   });
 
+  it("keeps active parents first and orders each status group newest first", () => {
+    const tasks = normalizeTaskList([
+      {
+        id: "task-34",
+        assignment_type: "room",
+        assignment_id: "r",
+        status: "completed",
+        created_at: "2026-09-11T09:00:00Z",
+      },
+      {
+        id: "task-52",
+        assignment_type: "room",
+        assignment_id: "r",
+        status: "in_progress",
+        created_at: "2026-09-11T12:00:00Z",
+      },
+      {
+        id: "task-39",
+        assignment_type: "room",
+        assignment_id: "r",
+        status: "completed",
+        created_at: "2026-09-11T10:00:00Z",
+      },
+      {
+        id: "task-50",
+        assignment_type: "room",
+        assignment_id: "r",
+        status: "completed",
+        created_at: "2026-09-11T11:00:00Z",
+      },
+    ]);
+
+    expect(roomTaskGroups(tasks, "r").map((group) => group.task.id)).toEqual([
+      "task-52",
+      "task-50",
+      "task-39",
+      "task-34",
+    ]);
+  });
+
   it("does not confuse execution ending with a successful goal", () => {
     const [task] = normalizeTaskList([
       { id: "root", assignment_type: "room", assignment_id: "r", status: "completed", goal_outcome: "issues" },

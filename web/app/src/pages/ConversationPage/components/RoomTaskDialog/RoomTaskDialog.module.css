@@ -223,6 +223,9 @@
 .group + .group {
   margin-top: 12px;
 }
+.group > .headingRow + .children {
+  margin-top: 8px;
+}
 .children li:first-child {
   border-top: 0;
 }

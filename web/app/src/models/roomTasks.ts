@@ -8,7 +8,12 @@ export function roomTaskGroups(tasks: readonly WorkspaceTask[], roomID: string):
     .filter((task) => !task.parent_id)
     .sort((left, right) => {
       const rank = (t: WorkspaceTask) => (roomTaskExecutionEnded(t) ? 2 : t.status === "queued" ? 1 : 0);
-      return rank(left) - rank(right) || left.created_at.localeCompare(right.created_at);
+      return (
+        rank(left) - rank(right) ||
+        right.created_at.localeCompare(left.created_at) ||
+        right.id.length - left.id.length ||
+        right.id.localeCompare(left.id)
+      );
     })
     .map((task) => ({
       task,
