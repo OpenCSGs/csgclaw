@@ -260,7 +260,12 @@ export function workspaceTabForPane(pane: WorkspacePane | null | undefined): Wor
 }
 
 export function workspaceHasContextSidebar(pane: WorkspacePane | null | undefined): boolean {
-  return pane?.type !== WorkspacePaneTypes.task && pane?.type !== WorkspacePaneTypes.settings;
+  return (
+    pane?.type !== WorkspacePaneTypes.task &&
+    pane?.type !== WorkspacePaneTypes.settings &&
+    pane?.type !== WorkspacePaneTypes.hub &&
+    pane?.type !== WorkspacePaneTypes.modelProvider
+  );
 }
 
 export function workspaceShowsFloatingChat(pane: WorkspacePane | null | undefined): boolean {

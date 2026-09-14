@@ -11,7 +11,6 @@ import { displayTeam, resolveTeamAvatarMembers, teamMemberIDs } from "@/models/t
 import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { classNames } from "@/shared/lib/classNames";
 import { WORKSPACE_SECTION_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
-import { SkillUploadDialog } from "./SkillUploadDialog";
 import { WorkspaceContextSectionIds } from "./types";
 import styles from "./WorkspaceTabPanels.module.css";
 import rowStyles from "../WorkspaceRows/WorkspaceRows.module.css";
@@ -276,11 +275,7 @@ export function WorkspaceTabPanels({
   onSelectTaskBoardView = () => {},
   onSelectTask,
   onSkillUploadOpenChange,
-  skillUploadOpen,
 }: WorkspaceTabPanelsProps) {
-  const [internalSkillUploadOpen, setInternalSkillUploadOpen] = useState(false);
-  const resolvedSkillUploadOpen = skillUploadOpen ?? internalSkillUploadOpen;
-  const setResolvedSkillUploadOpen = onSkillUploadOpenChange ?? setInternalSkillUploadOpen;
   const normalizedContextQuery = normalizeSearchQuery(contextQuery);
   const resourcesTemplates = hub?.templates ?? [];
   const resourcesSkills = hub?.skills ?? [];
@@ -289,8 +284,6 @@ export function WorkspaceTabPanels({
   const resourcesError = hub?.listError ?? "";
   const resourcesSkillsError = hub?.skillsError ?? "";
   const resourcesMCPError = hub?.mcpStateError ?? "";
-  const resourcesUploadBusy = hub?.uploadBusy ?? false;
-  const resourcesUploadError = hub?.uploadError ?? "";
   const resourcesLoaded = hub?.loaded ?? false;
   const selectedHubResourceType = hub?.selectedHubResourceType ?? "template";
   const selectedMCPServerName = hub?.selectedMCPServerName ?? "";
@@ -987,7 +980,7 @@ export function WorkspaceTabPanels({
         count={resourcesSkills.length}
         collapsed={flat ? false : Boolean(collapsedWorkspaceGroups["hub-skills"])}
         onToggle={() => onToggleWorkspaceGroup("hub-skills")}
-        onAdd={() => setResolvedSkillUploadOpen(true)}
+        onAdd={() => onSkillUploadOpenChange?.(true)}
         addLabel={t("resourcesSkillUpload")}
         addIcon={<Plus size={15} strokeWidth={2.2} aria-hidden="true" />}
         presentation={presentation}
@@ -1027,33 +1020,6 @@ export function WorkspaceTabPanels({
     );
   }
 
-  function renderSkillUploadDialog() {
-    return (
-      <SkillUploadDialog
-        open={resolvedSkillUploadOpen}
-        onOpenChange={setResolvedSkillUploadOpen}
-        onSubmit={(file) => hub?.uploadSkill?.(file)}
-        busy={resourcesUploadBusy}
-        error={resourcesUploadError}
-        installedSkills={resourcesSkills}
-        onInstallRemoteSkill={hub?.installRemoteSkill}
-        onLoadMoreRemoteSkills={hub?.loadMoreRemoteSkills}
-        remoteInstallBusy={hub?.remoteInstallBusy || ""}
-        remoteInstallError={hub?.remoteInstallError || ""}
-        remoteSkillsHasMore={Boolean(hub?.remoteSkillsHasMore)}
-        remoteSkills={hub?.remoteSkills ?? []}
-        remoteSkillsLoading={Boolean(hub?.remoteSkillsLoading)}
-        remoteSkillsLoadingMore={Boolean(hub?.remoteSkillsLoadingMore)}
-        remoteSkillsSearch={hub?.remoteSkillsSearch || ""}
-        remoteSkillsError={hub?.remoteSkillsError || ""}
-        onRefreshRemoteSkills={hub?.refetchRemoteSkills}
-        onRemoteSkillsSearchChange={hub?.setRemoteSkillsSearch}
-        onRemoteVisibleChange={hub?.setRemoteSkillsEnabled}
-        t={t}
-      />
-    );
-  }
-
   function renderContextSectionPanel(sectionId: WorkspaceContextSectionId) {
     if (isAgentSectionId(sectionId)) {
       return (
@@ -1078,7 +1044,6 @@ export function WorkspaceTabPanels({
           {sectionId === HubSectionIds.mcpServers ? renderMCPSection("flat") : null}
           {sectionId === HubSectionIds.skills ? renderHubSkillSection("flat") : null}
           {sectionId === HubSectionIds.models ? renderModelProviderSection("flat") : null}
-          {renderSkillUploadDialog()}
         </div>
       );
     }
@@ -1204,7 +1169,6 @@ export function WorkspaceTabPanels({
           {renderKnowledgeBaseSection()}
           {renderMCPSection()}
           {renderModelProviderSection()}
-          {renderSkillUploadDialog()}
         </div>
       ) : workspaceTab === WorkspaceTabs.tasks ? (
         <div className={styles.panel} role="tabpanel" aria-label={t("tasksTab")}>

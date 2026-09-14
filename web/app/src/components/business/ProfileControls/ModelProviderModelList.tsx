@@ -38,17 +38,17 @@ export function ModelProviderModelList({
           placeholder={searchLabel}
         />
       </label>
-      <div className="model-provider-model-list" role="list" aria-label={modelListLabel}>
-        {visibleModels.length ? (
-          visibleModels.map(({ index, model }) => (
-            <div className="model-provider-model-row" role="listitem" key={`${model}-${index}`}>
+      {visibleModels.length ? (
+        <div className="model-provider-model-grid" role="list" aria-label={modelListLabel}>
+          {visibleModels.map(({ index, model }) => (
+            <div className="model-provider-model-card" role="listitem" key={`${model}-${index}`}>
               <span className="model-provider-model-name">{model}</span>
             </div>
-          ))
-        ) : (
-          <div className="model-provider-model-empty">{emptyLabel}</div>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="model-provider-model-empty">{emptyLabel}</div>
+      )}
     </div>
   );
 }

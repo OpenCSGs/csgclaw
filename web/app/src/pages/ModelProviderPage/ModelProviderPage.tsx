@@ -1,14 +1,17 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, LogIn, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
+import { TextInput } from "@/components/ui";
 import {
   Button,
+  DialogBody,
   DialogCloseButton,
   DialogContent,
   DialogHeader,
   DialogRoot,
+  DialogFooter,
   DialogTitle,
   Tooltip,
 } from "@/components/ui";
@@ -73,6 +76,8 @@ export function ModelProviderPage() {
   const [saveStatus, setSaveStatus] = useState("");
   const [error, setError] = useState("");
   const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [providerSearch, setProviderSearch] = useState("");
+  const [detailOpen, setDetailOpen] = useState(false);
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
   const isOpenCSG = provider?.id === "opencsg";
   const canEditEndpoint = Boolean(provider && !isBuiltinCLI && !isOpenCSG);
@@ -181,6 +186,18 @@ export function ModelProviderPage() {
     runCheckForDraft,
   ]);
 
+  const providerCards = useMemo(() => modelProviders?.providers ?? [], [modelProviders?.providers]);
+  const filteredProviderCards = useMemo(() => {
+    const q = providerSearch.trim().toLowerCase();
+    if (!q) return providerCards;
+    return providerCards.filter(
+      (item) =>
+        (item.display_name || item.id).toLowerCase().includes(q) ||
+        (item.kind || "").toLowerCase().includes(q) ||
+        (item.base_url || "").toLowerCase().includes(q),
+    );
+  }, [providerCards, providerSearch]);
+
   if (!controller.ready) {
     return null;
   }
@@ -200,6 +217,7 @@ export function ModelProviderPage() {
   const effectiveTone = isOpenCSG && !opencsgSignedIn ? "warning" : providerStatusTone(checkState.status, provider);
   const providerSubtitle = isBuiltinCLI ? provider.kind : provider.base_url || draft.baseURL || provider.kind;
   const modelList = parseModelProviderModelsText(draft.modelsText);
+
   const showOpenCSGSignIn = isOpenCSG && !opencsgSignedIn;
   const checkMessage =
     showOpenCSGSignIn || !checkState.status
@@ -266,24 +284,208 @@ export function ModelProviderPage() {
   return (
     <Fragment>
       <section className="model-provider-page">
-        <header className="model-provider-header">
-          <img
-            className="model-provider-header-avatar"
-            src={modelProviderAvatarPath(provider)}
-            alt=""
-            aria-hidden="true"
-          />
+        <header className="model-provider-header model-provider-list-header">
           <div className="model-provider-header-main">
             <div className="model-provider-title-row">
-              <h1>{provider.display_name || provider.id}</h1>
+              <h1>{t("resourcesModelProvidersSection")}</h1>
+              <span className="model-provider-list-count-badge">{filteredProviderCards.length}</span>
             </div>
-            <p>{providerSubtitle}</p>
-          </div>
-          <div className={`model-provider-status-pill ${effectiveTone}`}>
-            <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
-            <span>{statusLabel}</span>
+            <p>{t("modelProviderCreateSubtitle")}</p>
           </div>
           <div className="model-provider-actions">
+            <Button variant="primary" onClick={() => void controller.sidebarProps?.onCreateModelProvider?.()}>
+              <Plus size={16} aria-hidden="true" />
+              {t("modelProviderAdd")}
+            </Button>
+          </div>
+        </header>
+
+        <label className="model-provider-search">
+          <span className="sr-only">{t("modelProviderSearchPlaceholder")}</span>
+          <TextInput
+            className="model-provider-search-input"
+            type="search"
+            value={providerSearch}
+            placeholder={t("modelProviderSearchPlaceholder")}
+            aria-label={t("modelProviderSearchPlaceholder")}
+            onChange={(event) => setProviderSearch(event.currentTarget.value)}
+          />
+        </label>
+
+        <section className="model-provider-list-section" aria-label={t("resourcesModelProvidersSection")}>
+          <div className="model-provider-provider-grid">
+            {filteredProviderCards.map((item) => {
+              const itemTone = providerStatusTone(item.status || "unknown", item);
+              const active = item.id === provider.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`model-provider-provider-card${active ? " active" : ""}`}
+                  onClick={() => {
+                    controller.sidebarProps?.onSelectModelProvider?.(item);
+                    setDetailOpen(true);
+                  }}
+                >
+                  <img
+                    className="model-provider-provider-icon"
+                    src={modelProviderAvatarPath(item)}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                  <span className="model-provider-provider-copy">
+                    <span className="model-provider-provider-title">{item.display_name || item.id}</span>
+                    <span className="model-provider-provider-description">
+                      {item.kind || item.base_url || t("resourcesModelProvidersSection")}
+                    </span>
+                  </span>
+                  <span className={`model-provider-provider-status ${itemTone}`} aria-hidden="true">
+                    <span className={`workspace-status-dot ${itemTone}`}></span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </section>
+
+      <DialogRoot open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="model-provider-detail-dialog" overlayClassName="model-provider-detail-backdrop">
+          <DialogHeader className="model-provider-detail-header">
+            <img
+              className="model-provider-header-avatar"
+              src={modelProviderAvatarPath(provider)}
+              alt=""
+              aria-hidden="true"
+            />
+            <div className="model-provider-header-main">
+              <DialogTitle>{provider.display_name || provider.id}</DialogTitle>
+              <p>{providerSubtitle}</p>
+            </div>
+            <div className={`model-provider-status-pill ${effectiveTone}`}>
+              <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
+              <span>{statusLabel}</span>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+          </DialogHeader>
+
+          <DialogBody className="model-provider-detail-body">
+            {error ? <div className="form-error">{error}</div> : null}
+            {saveStatus ? <div className="model-provider-save-status">{saveStatus}</div> : null}
+            {showOpenCSGSignIn ? (
+              <div className="model-provider-notice warning opencsg-signin-warning">
+                <AlertCircle size={16} aria-hidden="true" />
+                <span>{t("modelProviderOpenCSGSignInRequired")}</span>
+              </div>
+            ) : null}
+            {checkMessage ? (
+              <div className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`}>
+                {effectiveTone === "warning" ? (
+                  <AlertCircle size={16} aria-hidden="true" />
+                ) : (
+                  <CheckCircle2 size={16} aria-hidden="true" />
+                )}
+                <span>{checkMessage}</span>
+              </div>
+            ) : null}
+
+            <div className="model-provider-grid">
+              <section className="model-provider-card">
+                <div className="model-provider-card-heading">
+                  <h2>{t("modelProviderConfiguration")}</h2>
+                  <p>
+                    {isOpenCSG
+                      ? t("modelProviderOpenCSGSettings")
+                      : provider.builtin
+                        ? t("modelProviderBuiltinSettings")
+                        : t("modelProviderCustomSettings")}
+                  </p>
+                </div>
+                {isOpenCSG ? (
+                  <div className="opencsg-gateway-panel">
+                    <div className="opencsg-gateway-address">
+                      <span>{t("modelProviderAIGatewayAddress")}</span>
+                      <code>{provider.base_url || draft.baseURL}</code>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="model-provider-form-grid">
+                    {!provider.builtin ? (
+                      <label className="field">
+                        <span>{t("agentName")}</span>
+                        <input
+                          value={draft.displayName}
+                          onInput={(event) => {
+                            const value = event.currentTarget.value;
+                            setDraft((current) => ({ ...current, displayName: value }));
+                          }}
+                        />
+                      </label>
+                    ) : null}
+                    {canEditEndpoint ? (
+                      <>
+                        <label className="field">
+                          {t("profileBaseURL")}
+                          <input
+                            value={draft.baseURL}
+                            onInput={(event) => {
+                              const value = event.currentTarget.value;
+                              setDraft((current) => ({ ...current, baseURL: value }));
+                            }}
+                            placeholder="https://api.openai.com/v1"
+                          />
+                        </label>
+                        <APIKeyField
+                          t={t}
+                          value={draft.apiKey}
+                          profile={provider}
+                          unchangedHint={t("modelProviderStoredAPIKeyHint")}
+                          onInput={(event) => {
+                            const value = event.currentTarget.value;
+                            setDraft((current) => ({ ...current, apiKey: value }));
+                          }}
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                )}
+              </section>
+
+              <section className="model-provider-card model-provider-models-card">
+                <div className="model-provider-card-heading">
+                  <h2>{t("profileModel")}</h2>
+                  <p>
+                    {modelList.length
+                      ? t("modelProviderModelCount", { count: modelList.length })
+                      : t("modelProviderNoModels")}
+                  </p>
+                </div>
+                <ModelProviderModelList
+                  emptyLabel={t("modelProviderNoModels")}
+                  modelListLabel={t("modelProviderModels")}
+                  models={modelList}
+                  searchLabel={t("modelProviderModelSearch")}
+                />
+              </section>
+            </div>
+          </DialogBody>
+
+          <DialogFooter>
+            {!provider.builtin ? (
+              <Tooltip content={t("agentDelete")}>
+                <span>
+                  <Button
+                    variant="outlineDanger"
+                    aria-label={t("agentDelete")}
+                    onClick={removeProvider}
+                    disabled={Boolean(busy)}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : null}
+            <div style={{ flex: 1 }} />
             <Button variant="secondaryGray" onClick={runCheck} disabled={Boolean(busy)}>
               <RefreshCw size={16} aria-hidden="true" />
               {busy === "check" ? t("profileLoadingModels") : t("modelProviderCheck")}
@@ -300,122 +502,9 @@ export function ModelProviderPage() {
                 {authPending ? t("csghubReauthorize") : t("csghubSignIn")}
               </Button>
             ) : null}
-            {!provider.builtin ? (
-              <Tooltip content={t("agentDelete")}>
-                <span>
-                  <Button
-                    variant="outlineDanger"
-                    aria-label={t("agentDelete")}
-                    onClick={removeProvider}
-                    disabled={Boolean(busy)}
-                  >
-                    <Trash2 size={16} aria-hidden="true" />
-                  </Button>
-                </span>
-              </Tooltip>
-            ) : null}
-          </div>
-        </header>
-
-        {error ? <div className="form-error">{error}</div> : null}
-        {saveStatus ? <div className="model-provider-save-status">{saveStatus}</div> : null}
-        {showOpenCSGSignIn ? (
-          <div className="model-provider-notice warning opencsg-signin-warning">
-            <AlertCircle size={16} aria-hidden="true" />
-            <span>{t("modelProviderOpenCSGSignInRequired")}</span>
-          </div>
-        ) : null}
-        {checkMessage ? (
-          <div className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`}>
-            {effectiveTone === "warning" ? (
-              <AlertCircle size={16} aria-hidden="true" />
-            ) : (
-              <CheckCircle2 size={16} aria-hidden="true" />
-            )}
-            <span>{checkMessage}</span>
-          </div>
-        ) : null}
-
-        <div className="model-provider-grid">
-          <section className="model-provider-card">
-            <div className="model-provider-card-heading">
-              <h2>{t("modelProviderConfiguration")}</h2>
-              <p>
-                {isOpenCSG
-                  ? t("modelProviderOpenCSGSettings")
-                  : provider.builtin
-                    ? t("modelProviderBuiltinSettings")
-                    : t("modelProviderCustomSettings")}
-              </p>
-            </div>
-            {isOpenCSG ? (
-              <div className="opencsg-gateway-panel">
-                <div className="opencsg-gateway-address">
-                  <span>{t("modelProviderAIGatewayAddress")}</span>
-                  <code>{provider.base_url || draft.baseURL}</code>
-                </div>
-              </div>
-            ) : (
-              <div className="model-provider-form-grid">
-                {!provider.builtin ? (
-                  <label className="field">
-                    <span>{t("agentName")}</span>
-                    <input
-                      value={draft.displayName}
-                      onInput={(event) => {
-                        const value = event.currentTarget.value;
-                        setDraft((current) => ({ ...current, displayName: value }));
-                      }}
-                    />
-                  </label>
-                ) : null}
-                {canEditEndpoint ? (
-                  <>
-                    <label className="field">
-                      {t("profileBaseURL")}
-                      <input
-                        value={draft.baseURL}
-                        onInput={(event) => {
-                          const value = event.currentTarget.value;
-                          setDraft((current) => ({ ...current, baseURL: value }));
-                        }}
-                        placeholder="https://api.openai.com/v1"
-                      />
-                    </label>
-                    <APIKeyField
-                      t={t}
-                      value={draft.apiKey}
-                      profile={provider}
-                      unchangedHint={t("modelProviderStoredAPIKeyHint")}
-                      onInput={(event) => {
-                        const value = event.currentTarget.value;
-                        setDraft((current) => ({ ...current, apiKey: value }));
-                      }}
-                    />
-                  </>
-                ) : null}
-              </div>
-            )}
-          </section>
-
-          <section className="model-provider-card model-provider-models-card">
-            <div className="model-provider-card-heading">
-              <h2>{t("profileModel")}</h2>
-              <p>
-                {modelList.length
-                  ? t("modelProviderModelCount", { count: modelList.length })
-                  : t("modelProviderNoModels")}
-              </p>
-            </div>
-            <ModelProviderModelList
-              emptyLabel={t("modelProviderNoModels")}
-              modelListLabel={t("modelProviderModels")}
-              models={modelList}
-              searchLabel={t("modelProviderModelSearch")}
-            />
-          </section>
-        </div>
-      </section>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
 
       <DialogRoot
         open={deleteSuccess}

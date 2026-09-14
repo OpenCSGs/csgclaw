@@ -79,6 +79,7 @@ export type WorkspaceSidebarProps = {
   onCreateNotificationParticipant: () => void | Promise<void>;
   onCreateRoom: () => void;
   onExpandSidebar: () => void;
+  onSkillUploadOpenChange?: (open: boolean) => void;
   onOpenUpgrade: () => void;
   onRefreshUpgradeStatus: () => Promise<UpgradeStatus | null>;
   onUpgradeChannelChange: (channel: UpgradeChannel) => Promise<boolean>;
@@ -118,6 +119,7 @@ export type WorkspaceSidebarProps = {
   roomCount: number;
   runningAgentCount: number;
   showHubNewBadge: boolean;
+  skillUploadOpen?: boolean;
   t: TranslateFn;
   theme: ThemeMode;
   threadCount: number;

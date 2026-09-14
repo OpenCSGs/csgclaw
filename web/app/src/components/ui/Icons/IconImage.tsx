@@ -77,6 +77,10 @@ export function ModelsIcon(): ReactElement {
   return IconImage("models");
 }
 
+export function WorkspaceTemplatesIcon(): ReactElement {
+  return IconImage("workspace-templates");
+}
+
 export function PlayIcon(): ReactElement {
   return IconImage("play");
 }

@@ -308,6 +308,7 @@ export function useWorkspaceController() {
     setSelectedHubTemplateId,
     setSelectedKnowledgeBaseID,
   } = hub;
+  const [skillUploadOpen, setSkillUploadOpen] = useState(false);
   const upgrade = useUpgradeController({
     appVersion,
     refreshWorkspaceAppVersion,
@@ -852,11 +853,23 @@ export function useWorkspaceController() {
           selectHubSkill(name ? ({ name, description: "" } as SkillSummary) : null),
         onSelectMCP: (name: string | null | undefined) =>
           selectMCPServer(name ? ({ name, config: {} } as MCPServer) : null),
+        onSelectKnowledgeBase: selectKnowledgeBase,
         onCreateMCP: createMCPServerAndNavigate,
+        onOpenSkillUpload: () => setSkillUploadOpen(true),
+        onTrySkill: conversation.openManagerConversationWithSkill,
         onKnowledgeBaseLogin: () => loginOpenCSG(),
       },
     }),
-    [createMCPServerAndNavigate, hub, loginOpenCSG, selectMCPServer, selectHubSkill, selectHubTemplate],
+    [
+      conversation.openManagerConversationWithSkill,
+      createMCPServerAndNavigate,
+      hub,
+      loginOpenCSG,
+      selectKnowledgeBase,
+      selectMCPServer,
+      selectHubSkill,
+      selectHubTemplate,
+    ],
   );
 
   if (!displayData) {
@@ -908,6 +921,8 @@ export function useWorkspaceController() {
       isSidebarCollapsed,
       onCollapseSidebar: () => setIsSidebarCollapsed(true),
       onExpandSidebar: () => setIsSidebarCollapsed(false),
+      skillUploadOpen,
+      onSkillUploadOpenChange: setSkillUploadOpen,
       theme,
       onThemeChange: setTheme,
       turnNotificationMode,

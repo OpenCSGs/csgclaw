@@ -250,6 +250,7 @@ export const ConversationComposer = memo(function ConversationComposer({
             ref={editorRef}
             className={`composer-editor ${interactionDisabled ? "disabled" : ""}`}
             contentEditable={interactionDisabled ? "false" : "true"}
+            tabIndex={interactionDisabled ? -1 : 0}
             suppressContentEditableWarning={true}
             role="textbox"
             aria-multiline="true"

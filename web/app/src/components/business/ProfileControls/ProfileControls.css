@@ -586,3 +586,55 @@
   border-color: var(--line);
   background: var(--panel-strong);
 }
+
+/* ── Model cards grid layout (skill page style) ── */
+.model-provider-model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 0 16px;
+  scrollbar-gutter: stable;
+}
+
+.model-provider-model-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  min-height: 56px;
+  padding: 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: default;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.model-provider-model-card:hover {
+  background: var(--gray-100);
+}
+
+.model-provider-model-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme="dark"] .model-provider-model-card {
+  background: transparent;
+}
+
+:root[data-theme="dark"] .model-provider-model-card:hover {
+  background: var(--gray-800);
+}

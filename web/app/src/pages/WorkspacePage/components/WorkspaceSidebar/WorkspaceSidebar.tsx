@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, PanelLeftOpen, Plus, Search } from "lucide-react";
+import { PanelLeftOpen, Plus, Search } from "lucide-react";
 import {
   SidebarAlertTriangleIcon,
   SidebarBoxIcon,
   SidebarGrid07Icon,
   SidebarLaptopIcon,
   SidebarListUnordered4Icon,
+  SidebarKnowledgeBaseIcon,
   SidebarMcpIcon,
   SidebarMessageIcon,
   SidebarPuzzlePiece02Icon,
@@ -18,6 +19,7 @@ import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
 import { KnowledgeBaseDiscoveryDialog } from "./KnowledgeBaseDiscoveryDialog";
 import { LogoMark, LogoWordmark } from "./WorkspaceSidebarBrand";
+import { SkillUploadDialog } from "./SkillUploadDialog";
 import { WorkspacePrimaryNavigation } from "./WorkspacePrimaryNavigation";
 import { WorkspaceTabPanels } from "./WorkspaceTabPanels";
 import { WorkspaceContextSectionIds } from "./types";
@@ -118,15 +120,19 @@ export function WorkspaceSidebar({
   onCollapseSidebar,
   onAuthEnvironmentChange,
   onExpandSidebar,
+  onSkillUploadOpenChange,
   onLogin,
   onLogout,
+  skillUploadOpen,
   taskItems,
   teams,
   planningTaskID = "",
   startingTaskID = "",
 }: WorkspaceSidebarProps) {
   const [contextQuery, setContextQuery] = useState("");
-  const [skillUploadOpen, setSkillUploadOpen] = useState(false);
+  const [internalSkillUploadOpen, setInternalSkillUploadOpen] = useState(false);
+  const resolvedSkillUploadOpen = skillUploadOpen ?? internalSkillUploadOpen;
+  const setResolvedSkillUploadOpen = onSkillUploadOpenChange ?? setInternalSkillUploadOpen;
   const [knowledgeBaseDiscoveryOpen, setKnowledgeBaseDiscoveryOpen] = useState(false);
   const contextNavRef = useRef<HTMLElement | null>(null);
   const currentUser = usersById.get(currentUserID);
@@ -139,6 +145,7 @@ export function WorkspaceSidebar({
   const firstKnowledgeBase = hub?.knowledgeBases?.items?.[0] ?? null;
   const firstHubSkill = hub?.skills[0] ?? null;
   const firstModelProvider = modelProviders?.providers[0] ?? null;
+  const resourcesSkills = hub?.skills ?? [];
   const isSettingsPane = activePane.type === WorkspacePaneTypes.settings;
   const isPrimaryNavigationActive = useCallback((active: boolean) => !isSettingsPane && active, [isSettingsPane]);
   const notificationAgentIds = useMemo(
@@ -313,7 +320,7 @@ export function WorkspaceSidebar({
           {
             active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.knowledgeBases),
             groupId: WorkspaceContextSectionIds.knowledgeBases,
-            icon: navigationIcon(BookOpen),
+            icon: navigationIcon(SidebarKnowledgeBaseIcon),
             id: "knowledge-bases",
             label: t("resourcesKnowledgeBasesLabel"),
             onSelect: () => onSelectKnowledgeBase?.(firstKnowledgeBase),
@@ -409,7 +416,7 @@ export function WorkspaceSidebar({
         void hub?.knowledgeBases?.discoveryRefetch();
       }
     },
-    setSkillUploadOpen,
+    setSkillUploadOpen: setResolvedSkillUploadOpen,
     t,
     activeTaskBoardView,
   });
@@ -584,12 +591,34 @@ export function WorkspaceSidebar({
               onSelectAgent={onSelectAgent}
               onSelectModelProvider={onSelectModelProvider}
               onSelectComputer={onSelectComputer}
-              skillUploadOpen={skillUploadOpen}
-              onSkillUploadOpenChange={setSkillUploadOpen}
+              skillUploadOpen={resolvedSkillUploadOpen}
+              onSkillUploadOpenChange={setResolvedSkillUploadOpen}
             />
           </nav>
         </aside>
       ) : null}
+      <SkillUploadDialog
+        open={resolvedSkillUploadOpen}
+        onOpenChange={setResolvedSkillUploadOpen}
+        onSubmit={(file) => hub?.uploadSkill?.(file)}
+        busy={Boolean(hub?.uploadBusy)}
+        error={hub?.uploadError || ""}
+        installedSkills={resourcesSkills}
+        onInstallRemoteSkill={hub?.installRemoteSkill}
+        onLoadMoreRemoteSkills={hub?.loadMoreRemoteSkills}
+        remoteInstallBusy={hub?.remoteInstallBusy || ""}
+        remoteInstallError={hub?.remoteInstallError || ""}
+        remoteSkillsHasMore={Boolean(hub?.remoteSkillsHasMore)}
+        remoteSkills={hub?.remoteSkills ?? []}
+        remoteSkillsLoading={Boolean(hub?.remoteSkillsLoading)}
+        remoteSkillsLoadingMore={Boolean(hub?.remoteSkillsLoadingMore)}
+        remoteSkillsSearch={hub?.remoteSkillsSearch || ""}
+        remoteSkillsError={hub?.remoteSkillsError || ""}
+        onRefreshRemoteSkills={hub?.refetchRemoteSkills}
+        onRemoteSkillsSearchChange={hub?.setRemoteSkillsSearch}
+        onRemoteVisibleChange={hub?.setRemoteSkillsEnabled}
+        t={t}
+      />
       {hub?.knowledgeBases ? (
         <KnowledgeBaseDiscoveryDialog
           open={knowledgeBaseDiscoveryOpen}

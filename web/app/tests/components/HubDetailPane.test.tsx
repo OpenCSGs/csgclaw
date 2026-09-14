@@ -21,10 +21,22 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesDeleteSkill: "Delete skill",
     resourcesDeleteSkillConfirmAction: "Delete",
     resourcesDeleteSkillConfirmMessage: 'Delete skill "{name}"? This action cannot be undone.',
+    resourcesSkillAdd: "Add",
+    resourcesSkillAllFilter: "All",
+    resourcesSkillEnabled: "Enabled",
+    resourcesSkillInstalledTitle: "Installed",
+    resourcesSkillListSubtitle: "Extend CSGClaw with task-specific skills.",
+    resourcesSkillLocalFilter: "Local",
+    resourcesSkillOptions: "More actions",
+    resourcesSkillRemoteFilter: "Remote",
+    resourcesSkillSearchPlaceholder: "Search skills",
+    resourcesSkillTryNow: "Try now",
     resourcesAllTab: "All",
     resourcesEmpty: "No templates",
     resourcesImageLabel: "Image",
     resourcesTemplateEnvLabel: "Environment variables",
+    resourcesTemplateListSubtitle: "Create reusable CSGClaw agents from templates.",
+    resourcesTemplateSearchPlaceholder: "Search templates by name, description, or source",
     resourcesTemplateEnvNotRequired: "Not required",
     resourcesTemplateEnvOptional: "Optional",
     resourcesTemplateEnvRequired: "Required",
@@ -39,6 +51,8 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesMCPServerDocumentInvalid: "MCP server definition must be valid JSON.",
     resourcesMCPServerDocumentJSONLabel: "MCP server JSON",
     resourcesMCPServerDocumentLabel: "MCP server definition",
+    resourcesMCPListSubtitle: "Manage MCP server configurations that agents can use.",
+    resourcesMCPSearchPlaceholder: "Search MCP servers by name, description, or config",
     resourcesMCPServerDocumentObjectRequired: "MCP server definition must be a JSON object.",
     resourcesMCPServerDocumentInvalidShape:
       "MCP server definition must be an mcpServers JSON object with exactly one server.",
@@ -74,6 +88,7 @@ function t(key: string, params: Record<string, string | number> = {}) {
     resourcesMCPRemoteServersSearchPlaceholder: "Search remote MCP servers",
     resourcesKnowledgeBasesLabel: "Knowledge bases",
     resourcesKnowledgeBasesDescription: "Remote knowledge bases",
+    resourcesKnowledgeBaseSearchPlaceholder: "Search knowledge bases by name or description",
     resourcesKnowledgeBaseAdded: "Added to MCP",
     resourcesKnowledgeBaseAddMCP: "Add to MCP",
     resourcesKnowledgeBaseAgenticHub: "AgenticHub knowledge base",
@@ -647,6 +662,18 @@ function renderKnowledgeBaseDetail(configured: boolean) {
   };
 }
 
+async function openKnowledgeBaseDetail(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /Investment handbook/i }));
+}
+
+async function openTemplateDetail(user: ReturnType<typeof userEvent.setup>, name = /demo-template/i) {
+  await user.click(screen.getByRole("button", { name }));
+}
+
+async function openMCPDetail(user: ReturnType<typeof userEvent.setup>, name = /grafana/i) {
+  await user.click(screen.getByRole("button", { name }));
+}
+
 describe("HubDetailPane", () => {
   it("renders the initial resource loading state as an accessible status", () => {
     renderHubDetailPane("template", { loaded: false });
@@ -661,6 +688,7 @@ describe("HubDetailPane", () => {
     const user = userEvent.setup();
     const { confirmMCPConfig, requestMCPConfig } = renderKnowledgeBaseDetail(false);
 
+    await openKnowledgeBaseDetail(user);
     await user.click(screen.getByRole("button", { name: "Add to MCP" }));
 
     expect(requestMCPConfig).toHaveBeenCalledWith("143");
@@ -678,6 +706,7 @@ describe("HubDetailPane", () => {
     const user = userEvent.setup();
     const { mcp, onDeleteMCP, onSelectMCP } = renderKnowledgeBaseDetail(true);
 
+    await openKnowledgeBaseDetail(user);
     expect(screen.getByText("kb-investment")).toBeInTheDocument();
     const preview = screen.getByLabelText("Knowledge base MCP configuration");
     expect(preview).toHaveTextContent("Bearer ${OPENCSG_TOKEN}");
@@ -707,6 +736,7 @@ describe("HubDetailPane", () => {
     };
     renderHubDetailPane("template", { selectedTemplate: localTemplate, onPublishTemplate });
 
+    await openTemplateDetail(user);
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
     expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Publish template only" })).toBeInTheDocument();
@@ -735,6 +765,7 @@ describe("HubDetailPane", () => {
       onPublishTemplate: vi.fn().mockResolvedValue(null),
     });
 
+    await openTemplateDetail(user);
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
     await user.click(screen.getByRole("button", { name: "Publish template only" }));
 
@@ -753,6 +784,7 @@ describe("HubDetailPane", () => {
     };
     renderHubDetailPane("template", { selectedTemplate: localTemplate, onPublishTemplate });
 
+    await openTemplateDetail(user);
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
     await user.click(screen.getByRole("checkbox", { name: "Include agent memory" }));
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
@@ -774,6 +806,7 @@ describe("HubDetailPane", () => {
       onPublishTemplate: vi.fn().mockResolvedValue({ status: "partial", message: "Review failed\nUnsafe content" }),
     });
 
+    await openTemplateDetail(user);
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
 
@@ -798,13 +831,14 @@ describe("HubDetailPane", () => {
       publishError: "Template was published, but deployment failed.",
     });
 
+    await openTemplateDetail(user);
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
 
     expect(screen.getByRole("dialog", { name: "Publish agent template" })).toBeInTheDocument();
     expect(screen.getByText("Template was published, but deployment failed.")).toBeInTheDocument();
   });
 
-  it("requires sign-in before publishing a local template to the community", () => {
+  it("requires sign-in before publishing a local template to the community", async () => {
     const localTemplate = {
       ...template,
       id: "local.demo-template",
@@ -814,6 +848,7 @@ describe("HubDetailPane", () => {
     };
     renderHubDetailPane("template", { selectedTemplate: localTemplate, publishDisabled: true });
 
+    await openTemplateDetail(userEvent.setup());
     const publish = screen.getByRole("button", { name: "Publish to community" });
     expect(publish).toBeDisabled();
     expect(publish).toHaveAttribute("title", "Sign in first");
@@ -830,7 +865,8 @@ describe("HubDetailPane", () => {
     expect(screen.queryByRole("button", { name: "Publish to community" })).not.toBeInTheDocument();
   });
 
-  it("allows agent creation from the builtin OpenClaw worker Hub detail", () => {
+  it("does not offer agent creation for the builtin OpenClaw worker template", async () => {
+    const user = userEvent.setup();
     renderHubDetailPane("template", {
       selectedTemplate: {
         ...template,
@@ -838,11 +874,12 @@ describe("HubDetailPane", () => {
         name: "generic-assistant-openclaw",
       },
     });
-
-    expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
+    await openTemplateDetail(user, /generic-assistant-openclaw/i);
+    expect(screen.queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
   });
 
-  it("allows agent creation for remote OpenClaw templates", () => {
+  it("allows agent creation for remote OpenClaw templates", async () => {
+    const user = userEvent.setup();
     renderHubDetailPane("template", {
       selectedTemplate: {
         ...template,
@@ -852,6 +889,7 @@ describe("HubDetailPane", () => {
       },
     });
 
+    await openTemplateDetail(user, /feishu-assistant/i);
     expect(screen.getByRole("button", { name: "Create" })).toBeInTheDocument();
   });
 
@@ -861,6 +899,7 @@ describe("HubDetailPane", () => {
       selectedTemplate: { ...template, runtime_kind: "codex" },
     });
 
+    await openTemplateDetail(user);
     expect(screen.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-current", "location");
     expect(screen.getByDisplayValue("demo:latest")).toBeInTheDocument();
     expect(screen.getAllByText("Environment variables").length).toBeGreaterThan(0);
@@ -897,6 +936,7 @@ describe("HubDetailPane", () => {
       lazyMemory: true,
     });
 
+    await openTemplateDetail(user);
     await user.click(screen.getByRole("button", { name: "Memory" }));
 
     expect(await screen.findByRole("textbox", { name: "Read-only memory summary" })).toHaveValue(
@@ -915,6 +955,7 @@ describe("HubDetailPane", () => {
     const user = userEvent.setup();
     renderHubDetailPane();
 
+    await openTemplateDetail(user);
     await user.click(screen.getByRole("button", { name: "Instructions" }));
     expect(screen.getByText("No custom instructions")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "View complete AGENTS.md" }));
@@ -925,38 +966,46 @@ describe("HubDetailPane", () => {
     expect(screen.queryByText("AGENTS.md")).not.toBeInTheDocument();
   });
 
-  it("renders the selected skill with file tree but without template details", () => {
+  it("renders the skill list and opens selected skill details in a dialog", async () => {
+    const user = userEvent.setup();
     renderHubSkillDetailPane();
 
-    expect(screen.getAllByRole("heading", { name: "demo-skill" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Skills" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Installed" })).toBeInTheDocument();
     expect(screen.getAllByText("Demo skill").length).toBeGreaterThan(0);
     expect(screen.queryByText("demo-template")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete skill" })).toBeInTheDocument();
-    expect(screen.getAllByText("SKILL.md").length).toBeGreaterThan(0);
+    expect(screen.queryByText("# Skill", { exact: false })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /demo-skill/i }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "demo-skill" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete skill" })).not.toBeInTheDocument();
     expect(screen.getByText("# Skill", { exact: false })).toBeInTheDocument();
     expect(screen.queryByText("Description")).not.toBeInTheDocument();
   });
 
-  it("opens a confirmation dialog before deleting a skill", async () => {
+  it("does not expose skill deletion from the skill detail dialog", async () => {
     const user = userEvent.setup();
     renderHubSkillDetailPane();
 
-    await user.click(screen.getByRole("button", { name: "Delete skill" }));
+    await user.click(screen.getByRole("button", { name: /demo-skill/i }));
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText('Delete skill "demo-skill"? This action cannot be undone.')).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Delete" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Delete skill" })).not.toBeInTheDocument();
+    expect(screen.queryByText('Delete skill "demo-skill"? This action cannot be undone.')).not.toBeInTheDocument();
   });
 
   it("highlights and validates MCP JSON configs before saving", async () => {
     const user = userEvent.setup();
-    const { container, onUpdateMCP } = renderMCPDetailPane();
+    const { onUpdateMCP } = renderMCPDetailPane();
 
-    expect(container.querySelector(".cm-editor")).toBeInTheDocument();
-    expect(container.textContent).toContain("mcpServers");
-    expect(container.textContent).toContain("grafana-mcp");
+    await openMCPDetail(user);
+    const editor = await screen.findByRole("textbox", { name: "MCP server definition" });
+    expect(document.querySelector(".cm-editor")).toBeInTheDocument();
+    expect(document.body.textContent).toContain("mcpServers");
+    expect(document.body.textContent).toContain("grafana-mcp");
 
-    const editor = screen.getByRole("textbox", { name: "MCP server definition" });
     await user.click(editor);
     await user.keyboard("{Control>}a{/Control}");
     await user.keyboard("not json");
@@ -993,6 +1042,7 @@ describe("HubDetailPane", () => {
       },
     });
 
+    await openMCPDetail(user);
     expect(screen.getByText("Connection successful")).toBeInTheDocument();
     expect(screen.getByText("Search dashboards")).toBeInTheDocument();
     expect(screen.getByText("search_dashboards")).toBeInTheDocument();
@@ -1017,6 +1067,7 @@ describe("HubDetailPane", () => {
       sourceUpdateAvailable: true,
     });
 
+    await openMCPDetail(user, /kb-investment/i);
     expect(screen.getByText("resourcesKnowledgeMCPBadge")).toBeInTheDocument();
     expect(screen.getByText("resourcesKnowledgeMCPUpdateAvailable")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "resourcesMCPSourceRetry" })).not.toBeInTheDocument();
@@ -1026,9 +1077,11 @@ describe("HubDetailPane", () => {
     expect(onSyncMCPSource).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps a healthy knowledge base MCP status out of the way", () => {
+  it("keeps a healthy knowledge base MCP status out of the way", async () => {
+    const user = userEvent.setup();
     renderMCPDetailPane({ managedSource: true });
 
+    await openMCPDetail(user, /kb-investment/i);
     expect(screen.getByText("resourcesKnowledgeMCPBadge")).toBeInTheDocument();
     expect(screen.queryByText("resourcesKnowledgeMCPUpdateAvailable")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "resourcesMCPSourceUpdate" })).not.toBeInTheDocument();
