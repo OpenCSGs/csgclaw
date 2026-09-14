@@ -812,9 +812,7 @@ export function WorkspaceTabPanels({
         onToggle={() => onToggleWorkspaceGroup("hub-templates")}
         presentation={presentation}
       >
-        {resourcesError ? (
-          <div className={styles.empty}>{resourcesError}</div>
-        ) : resourcesLoaded &&
+        {resourcesLoaded &&
           resourcesTemplates.length === 0 &&
           resourcesMCPServers.length === 0 &&
           resourcesSkills.length === 0 ? (
@@ -1164,6 +1162,7 @@ export function WorkspaceTabPanels({
         </div>
       ) : workspaceTab === WorkspaceTabs.hub ? (
         <div className={styles.panel} role="tabpanel" aria-label={t("resourcesTab")}>
+          {resourcesError ? <div className={styles.resourcesError}>{resourcesError}</div> : null}
           {renderHubTemplateSection()}
           {renderHubSkillSection()}
           {renderKnowledgeBaseSection()}

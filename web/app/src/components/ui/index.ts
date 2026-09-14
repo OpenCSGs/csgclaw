@@ -1,4 +1,5 @@
 export * from "./AppLayout";
+export * from "./DismissibleAlert";
 export * from "./Button";
 export * from "./Checkbox";
 export * from "./Dialog";

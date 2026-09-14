@@ -726,6 +726,8 @@ export function useWorkspaceController() {
   const selectHubTemplate = useCallback(
     (item: HubTemplate | null | undefined) => {
       if (!item?.id) {
+        setSelectedHubResourceType("template");
+        setSelectedHubTemplateId("");
         selectHub();
         return;
       }
@@ -739,6 +741,8 @@ export function useWorkspaceController() {
   const selectHubSkill = useCallback(
     (item: SkillSummary | null | undefined) => {
       if (!item?.name) {
+        setSelectedHubResourceType("skill");
+        setSelectedHubSkillName("");
         selectHub();
         return;
       }

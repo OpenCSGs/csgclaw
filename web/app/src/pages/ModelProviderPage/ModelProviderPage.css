@@ -33,6 +33,12 @@
   align-items: center;
 }
 
+.model-provider-list-header .btn {
+  --btn-min-width: 0;
+  --btn-padding-x: 16px;
+  border-radius: 6px;
+}
+
 .model-provider-search {
   display: block;
   width: 100%;
@@ -97,6 +103,7 @@
 }
 
 .model-provider-status-pill {
+  min-width: 0;
   min-height: 32px;
   display: inline-flex;
   align-items: center;
@@ -110,6 +117,15 @@
   font-weight: 500;
   line-height: 18px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-provider-status-pill > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .model-provider-status-pill.online {
@@ -149,9 +165,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
+}
+
+.model-provider-list-count-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #17b26a;
 }
 
 .model-provider-notice,
@@ -269,7 +294,7 @@
 
 .model-provider-detail-header {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto 44px;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(0, auto) auto;
   align-items: center;
   gap: 12px;
   padding: 20px 24px;
@@ -345,7 +370,7 @@
 
 .model-provider-card-heading p {
   margin: 0;
-  color: var(--gray-500);
+  color: var(--gray-600);
   font-size: 14px;
   font-weight: 300;
   line-height: 22px;
@@ -545,13 +570,17 @@
 
 :root[data-theme="dark"] .model-provider-header-main p,
 :root[data-theme="dark"] .model-provider-card-heading p {
-  color: var(--gray-400);
+  color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .model-provider-list-count-badge {
-  border-color: var(--line);
-  background: var(--gray-800);
+  border-color: color-mix(in srgb, var(--success-600) 36%, var(--line));
+  background: color-mix(in srgb, var(--success-600) 14%, var(--surface));
   color: var(--gray-200);
+}
+
+:root[data-theme="dark"] .model-provider-list-count-badge::before {
+  background: var(--success-500);
 }
 
 :root[data-theme="dark"] .model-provider-status-pill.online,

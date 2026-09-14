@@ -9,6 +9,7 @@ import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import {
+  AlertCircle,
   BookOpen,
   CheckCircle2,
   CloudDownload,
@@ -20,6 +21,8 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
+import { SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
+import { KnowledgeBaseDiscoveryDialog } from "@/pages/WorkspacePage/components/WorkspaceSidebar/KnowledgeBaseDiscoveryDialog";
 import { formatRuntimeKindLabel, isBuiltinOpenClawWorkerTemplate } from "@/models/agents";
 import {
   canPublishHubTemplateToCommunity,
@@ -44,6 +47,7 @@ import { WorkspaceTemplatesIcon } from "@/components/ui/Icons";
 import {
   Button,
   Checkbox,
+  DismissibleAlert,
   DialogBody,
   DialogCloseButton,
   DialogContent,
@@ -79,6 +83,7 @@ const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
 type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp";
 type MCPCreateMode = "manual" | "remote";
 type SkillFilterTabID = "all" | "remote" | "local";
+type TemplateFilterTabID = SkillFilterTabID | "builtin";
 type KnowledgeFilterTabID = "all" | "available" | "added";
 
 type TemplateSkillSummary = {
@@ -267,6 +272,19 @@ function skillFilterLabel(filter: SkillFilterTabID, t: TranslateFn): string {
   }
 }
 
+function templateFilterLabel(filter: TemplateFilterTabID, t: TranslateFn): string {
+  switch (filter) {
+    case "remote":
+      return t("resourcesSkillRemoteFilter");
+    case "local":
+      return t("resourcesSkillLocalFilter");
+    case "builtin":
+      return t("resourcesTemplateBuiltinFilter");
+    default:
+      return t("resourcesSkillAllFilter");
+  }
+}
+
 function templateMatchesQuery(template: HubTemplate, query: string): boolean {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   if (!normalizedQuery) {
@@ -289,7 +307,7 @@ function templateMatchesQuery(template: HubTemplate, query: string): boolean {
   );
 }
 
-function templateMatchesFilter(template: HubTemplate, filter: SkillFilterTabID): boolean {
+function templateMatchesFilter(template: HubTemplate, filter: TemplateFilterTabID): boolean {
   if (filter === "all") {
     return true;
   }
@@ -299,7 +317,10 @@ function templateMatchesFilter(template: HubTemplate, filter: SkillFilterTabID):
   if (filter === "local") {
     return sourceKind === "local";
   }
-  return sourceKind !== "local";
+  if (filter === "builtin") {
+    return sourceKind === "builtin";
+  }
+  return sourceKind === "remote";
 }
 
 function mcpMatchesQuery(server: MCPServer, query: string): boolean {
@@ -371,7 +392,7 @@ function ResourceFeaturedIcon({ children }: { children: ReactNode }) {
 function SkillFeaturedIcon() {
   return (
     <ResourceFeaturedIcon>
-      <FileCode2 size={16} strokeWidth={2} />
+      <SidebarPuzzlePiece02Icon size={16} aria-hidden="true" />
     </ResourceFeaturedIcon>
   );
 }
@@ -581,6 +602,13 @@ type HubDetailPaneHub = {
       confirmMCPConfig: () => Promise<boolean>;
       copyBusyID: string;
       copyError: string;
+      discoveryHasMore: boolean;
+      discoveryItems: readonly RemoteKnowledgeBase[];
+      discoveryLoadError: string;
+      discoveryLoadMore: () => Promise<unknown>;
+      discoveryLoading: boolean;
+      discoveryLoadingMore: boolean;
+      discoveryRefetch: () => Promise<unknown>;
       items: readonly RemoteKnowledgeBase[];
       loginRequired: boolean;
       loading: boolean;
@@ -1075,6 +1103,7 @@ export function HubDetailPane({
   const [publishTemplateIncludeMemory, setPublishTemplateIncludeMemory] = useState(false);
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [knowledgeBaseDeleteDialogOpen, setKnowledgeBaseDeleteDialogOpen] = useState(false);
+  const [knowledgeBaseDiscoveryOpen, setKnowledgeBaseDiscoveryOpen] = useState(false);
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
   const [mcpDetailError, setMCPDetailError] = useState("");
@@ -1084,7 +1113,7 @@ export function HubDetailPane({
   const [skillFilter, setSkillFilter] = useState<SkillFilterTabID>("all");
   const [skillSearch, setSkillSearch] = useState("");
   const [templateDetailDialogOpen, setTemplateDetailDialogOpen] = useState(false);
-  const [templateFilter, setTemplateFilter] = useState<SkillFilterTabID>("all");
+  const [templateFilter, setTemplateFilter] = useState<TemplateFilterTabID>("all");
   const [templateSearch, setTemplateSearch] = useState("");
   const [mcpDetailDialogOpen, setMCPDetailDialogOpen] = useState(false);
   const [mcpFilter, setMCPFilter] = useState<SkillFilterTabID>("all");
@@ -1105,6 +1134,14 @@ export function HubDetailPane({
     [t],
   );
   const resourceFilterTabs = skillFilterTabs;
+  const templateFilterTabs = useMemo(
+    () =>
+      (["all", "remote", "local", "builtin"] as const).map((id) => ({
+        id,
+        label: templateFilterLabel(id, t),
+      })),
+    [t],
+  );
   const knowledgeBaseFilterTabs = useMemo(
     () =>
       (["all", "available", "added"] as const).map((id) => ({
@@ -1422,7 +1459,6 @@ export function HubDetailPane({
 
   return (
     <section className={moduleClassNames("entity-pane hub-detail-pane")}>
-      {error ? <div className={moduleClassNames("form-error")}>{error}</div> : null}
       {!loaded && !error ? (
         <div className={moduleClassNames("hub-loading-state")} role="status" aria-live="polite">
           <LoaderCircle className={moduleClassNames("hub-loading-spinner")} size={24} aria-hidden="true" />
@@ -1449,6 +1485,14 @@ export function HubDetailPane({
                   </ResourceListTitle>
                   <p>{t("resourcesKnowledgeBasesDescription")}</p>
                 </div>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={() => setKnowledgeBaseDiscoveryOpen(true)}
+                >
+                  <span aria-hidden="true">+</span>
+                  {t("resourcesMCPAdd")}
+                </Button>
               </header>
 
               <ResourceSearchField
@@ -1482,6 +1526,13 @@ export function HubDetailPane({
                   })}
                 </div>
 
+                {error || knowledgeBases?.loadError ? (
+                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error || knowledgeBases?.loadError} closeLabel={t("close")}>
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error || knowledgeBases?.loadError}</span>
+                  </DismissibleAlert>
+                ) : null}
+
                 {knowledgeBases?.loading ? (
                   <div className={moduleClassNames("workspace-empty")}>{t("resourcesKnowledgeBasesLoading")}</div>
                 ) : filteredKnowledgeBases.length ? (
@@ -1510,10 +1561,6 @@ export function HubDetailPane({
                         </button>
                       );
                     })}
-                  </div>
-                ) : knowledgeBases?.loadError ? (
-                  <div className={moduleClassNames("empty-state shell-empty-state hub-empty-state")}>
-                    <strong>{knowledgeBases.loadError}</strong>
                   </div>
                 ) : knowledgeBases?.items.length ? (
                   <div className={moduleClassNames("empty-state shell-empty-state hub-empty-state")}>
@@ -1680,7 +1727,7 @@ export function HubDetailPane({
                   role="tablist"
                   aria-label={t("resourcesTemplatesSection")}
                 >
-                  {resourceFilterTabs.map((tab) => {
+                  {templateFilterTabs.map((tab) => {
                     const active = tab.id === templateFilter;
                     return (
                       <button
@@ -1696,6 +1743,13 @@ export function HubDetailPane({
                     );
                   })}
                 </div>
+
+                {error ? (
+                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error} closeLabel={t("close")}>
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </DismissibleAlert>
+                ) : null}
 
                 {filteredTemplates.length ? (
                   <div className={moduleClassNames("hub-skill-card-grid")}>
@@ -2232,6 +2286,13 @@ export function HubDetailPane({
                   })}
                 </div>
 
+                {error ? (
+                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error} closeLabel={t("close")}>
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </DismissibleAlert>
+                ) : null}
+
                 {filteredSkills.length ? (
                   <div className={moduleClassNames("hub-skill-card-grid")}>
                     {filteredSkills.map((skill) => {
@@ -2317,6 +2378,13 @@ export function HubDetailPane({
                   })}
                 </div>
 
+                {error || mcpMutationError || mcpProbeError ? (
+                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error || mcpMutationError || mcpProbeError} closeLabel={t("close")}>
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error || mcpMutationError || mcpProbeError}</span>
+                  </DismissibleAlert>
+                ) : null}
+
                 {filteredMCPServers.length ? (
                   <div className={moduleClassNames("hub-skill-card-grid")}>
                     {filteredMCPServers.map((server) => {
@@ -2329,7 +2397,7 @@ export function HubDetailPane({
                           onClick={() => openMCPDetail(server)}
                         >
                           <ResourceFeaturedIcon>
-                            <Server size={16} strokeWidth={2} />
+                            <SidebarMcpIcon size={16} aria-hidden="true" />
                           </ResourceFeaturedIcon>
                           <span className={moduleClassNames("hub-skill-card-copy")}>
                             <span className={moduleClassNames("hub-skill-card-title")}>{server.name}</span>
@@ -2343,10 +2411,6 @@ export function HubDetailPane({
                         </button>
                       );
                     })}
-                  </div>
-                ) : mcpStateError || mcpMutationError || mcpProbeError ? (
-                  <div className={moduleClassNames("empty-state shell-empty-state hub-empty-state")}>
-                    <strong>{mcpStateError || mcpMutationError || mcpProbeError}</strong>
                   </div>
                 ) : mcpServers.length ? (
                   <div className={moduleClassNames("empty-state shell-empty-state hub-empty-state")}>
@@ -2419,9 +2483,10 @@ export function HubDetailPane({
               </div>
 
               {mcpStateError || mcpMutationError || mcpProbeError ? (
-                <div className={moduleClassNames("form-error")} aria-live="polite">
-                  {mcpStateError || mcpMutationError || mcpProbeError}
-                </div>
+                <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={mcpStateError || mcpMutationError || mcpProbeError} closeLabel={t("close")}>
+                  <AlertCircle size={16} aria-hidden="true" />
+                  <span>{mcpStateError || mcpMutationError || mcpProbeError}</span>
+                </DismissibleAlert>
               ) : null}
               {mcpStateLoading ? (
                 <div className={moduleClassNames("workspace-empty")}>{t("resourcesMCPLoading")}</div>
@@ -2504,7 +2569,7 @@ export function HubDetailPane({
           )}
         </div>
       )}
-      <DialogRoot open={skillDetailDialogOpen && Boolean(selectedSkill)} onOpenChange={setSkillDetailDialogOpen}>
+      <DialogRoot open={skillDetailDialogOpen && Boolean(selectedSkill)} onOpenChange={(open) => { setSkillDetailDialogOpen(open); if (!open) onSelectSkill?.(null); }}>
         <DialogContent className={moduleClassNames("hub-standard-skill-dialog")}>
           {selectedSkill ? (
             <>
@@ -2558,7 +2623,7 @@ export function HubDetailPane({
       </DialogRoot>
       <DialogRoot
         open={templateDetailDialogOpen && Boolean(selectedTemplate)}
-        onOpenChange={setTemplateDetailDialogOpen}
+        onOpenChange={(open) => { setTemplateDetailDialogOpen(open); if (!open) onSelectTemplate?.(null); }}
       >
         <DialogContent className={moduleClassNames("hub-standard-skill-dialog")}>
           {selectedTemplate ? (
@@ -2735,7 +2800,7 @@ export function HubDetailPane({
                         <p>{t("resourcesTemplateInstructionsEmptyDescription")}</p>
                         <Button
                           variant="secondaryGray"
-                          size="sm"
+                          size="md"
                           onClick={() => setTemplateInstructionsMode("advanced")}
                         >
                           {t("resourcesTemplateInstructionsViewAdvancedAction")}
@@ -2743,7 +2808,7 @@ export function HubDetailPane({
                       </div>
                     )}
                     {!templateInstructionsReadonly ? (
-                      <Button size="sm" loading={templateInstructionsSaving} onClick={saveTemplateInstructions}>
+                      <Button size="md" loading={templateInstructionsSaving} onClick={saveTemplateInstructions}>
                         {t("save")}
                       </Button>
                     ) : null}
@@ -2840,7 +2905,7 @@ export function HubDetailPane({
                 {canDeleteTemplate ? (
                   <Button
                     variant="danger"
-                    size="sm"
+                    size="md"
                     loading={deleteBusy}
                     disabled={deleteBusy}
                     onClick={() => onDeleteTemplate?.(selectedTemplate)}
@@ -2876,7 +2941,7 @@ export function HubDetailPane({
       </DialogRoot>
       <DialogRoot
         open={knowledgeBaseDetailDialogOpen && Boolean(knowledgeBases?.selected)}
-        onOpenChange={setKnowledgeBaseDetailDialogOpen}
+        onOpenChange={(open) => { setKnowledgeBaseDetailDialogOpen(open); if (!open) onSelectKnowledgeBase?.(null); }}
       >
         <DialogContent className={moduleClassNames("hub-standard-skill-dialog")}>
           {knowledgeBases?.selected ? (
@@ -2892,14 +2957,16 @@ export function HubDetailPane({
               </DialogHeader>
               <DialogBody className={moduleClassNames("hub-standard-skill-dialog-body hub-standard-resource-dialog-body")}>
                 {knowledgeBases.selected.unavailableReason ? (
-                  <div className={moduleClassNames("form-error")}>
-                    {knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)}
-                  </div>
+                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)} closeLabel={t("close")}>
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)}</span>
+                  </DismissibleAlert>
                 ) : null}
                 {knowledgeBases.copyError || knowledgeBases.loadError ? (
-                  <div className={moduleClassNames("form-error")}>
-                    {knowledgeBases.copyError || knowledgeBases.loadError}
-                  </div>
+                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={knowledgeBases.copyError || knowledgeBases.loadError} closeLabel={t("close")}>
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{knowledgeBases.copyError || knowledgeBases.loadError}</span>
+                  </DismissibleAlert>
                 ) : null}
                 {knowledgeBases.selected.configuredMCPName ? (
                   <div className={moduleClassNames("knowledge-base-configured")}>
@@ -2962,7 +3029,7 @@ export function HubDetailPane({
           ) : null}
         </DialogContent>
       </DialogRoot>
-      <DialogRoot open={mcpDetailDialogOpen && Boolean(selectedMCPServer)} onOpenChange={setMCPDetailDialogOpen}>
+      <DialogRoot open={mcpDetailDialogOpen && Boolean(selectedMCPServer)} onOpenChange={(open) => { setMCPDetailDialogOpen(open); if (!open) onSelectMCP?.(null); }}>
         <DialogContent className={moduleClassNames("hub-standard-skill-dialog")}>
           {selectedMCPServer ? (
             <>
@@ -2984,9 +3051,10 @@ export function HubDetailPane({
                   </span>
                 ) : null}
                 {mcpStateError || mcpMutationError || mcpProbeError ? (
-                  <div className={moduleClassNames("form-error")} aria-live="polite">
-                    {mcpStateError || mcpMutationError || mcpProbeError}
-                  </div>
+                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={mcpStateError || mcpMutationError || mcpProbeError} closeLabel={t("close")}>
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{mcpStateError || mcpMutationError || mcpProbeError}</span>
+                  </DismissibleAlert>
                 ) : null}
                 {mcpStateLoading ? (
                   <div className={moduleClassNames("workspace-empty")}>{t("resourcesMCPLoading")}</div>
@@ -3344,6 +3412,25 @@ export function HubDetailPane({
           </DialogFooter>
         </DialogContent>
       </DialogRoot>
+      <KnowledgeBaseDiscoveryDialog
+        open={knowledgeBaseDiscoveryOpen}
+        onOpenChange={setKnowledgeBaseDiscoveryOpen}
+        items={knowledgeBases?.discoveryItems ?? []}
+        hasMore={knowledgeBases?.discoveryHasMore ?? false}
+        loading={knowledgeBases?.discoveryLoading ?? false}
+        loadingMore={knowledgeBases?.discoveryLoadingMore ?? false}
+        loadError={knowledgeBases?.discoveryLoadError ?? ""}
+        loginRequired={knowledgeBases?.loginRequired ?? false}
+        copyBusyID={knowledgeBases?.copyBusyID ?? ""}
+        copyError={knowledgeBases?.copyError ?? ""}
+        onAdd={async (id) => (await knowledgeBases?.requestMCPConfig?.(id)) ?? false}
+        onLogin={() => onKnowledgeBaseLogin?.()}
+        onLoadMore={() => void (knowledgeBases?.discoveryLoadMore?.() ?? Promise.resolve())}
+        onRetry={() => void (knowledgeBases?.discoveryRefetch?.())}
+        onSearchChange={knowledgeBases?.setSearch ?? (() => {})}
+        search={knowledgeBases?.search ?? ""}
+        t={t}
+      />
       <DialogRoot open={knowledgeBaseDeleteDialogOpen} onOpenChange={setKnowledgeBaseDeleteDialogOpen}>
         <DialogContent className={moduleClassNames("hub-skill-delete-dialog")}>
           <DialogHeader className={moduleClassNames("hub-skill-delete-dialog-header")}>
@@ -3357,7 +3444,12 @@ export function HubDetailPane({
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          {mcpMutationError ? <div className={moduleClassNames("form-error")}>{mcpMutationError}</div> : null}
+          {mcpMutationError ? (
+            <DismissibleAlert className={moduleClassNames("mcp-error-notice")} messageKey={mcpMutationError} closeLabel={t("close")}>
+              <AlertCircle size={16} aria-hidden="true" />
+              <span>{mcpMutationError}</span>
+            </DismissibleAlert>
+          ) : null}
           <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
             <Button
               variant="secondaryGray"
@@ -3390,7 +3482,12 @@ export function HubDetailPane({
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
-          {mcpMutationError ? <div className={moduleClassNames("form-error")}>{mcpMutationError}</div> : null}
+          {mcpMutationError ? (
+            <DismissibleAlert className={moduleClassNames("mcp-error-notice")} messageKey={mcpMutationError} closeLabel={t("close")}>
+              <AlertCircle size={16} aria-hidden="true" />
+              <span>{mcpMutationError}</span>
+            </DismissibleAlert>
+          ) : null}
           <DialogFooter className={moduleClassNames("hub-skill-delete-dialog-actions")}>
             <Button
               variant="secondaryGray"

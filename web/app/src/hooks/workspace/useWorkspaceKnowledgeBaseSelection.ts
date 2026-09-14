@@ -7,6 +7,39 @@ import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import { formatMCPServerDocument } from "@/models/mcp";
 import { useWorkspaceKnowledgeBasesQuery } from "./workspaceQueries";
 
+// TODO: remove mock data before production
+const MOCK_KNOWLEDGE_BASES: RemoteKnowledgeBase[] = [
+  {
+    id: "mock-kb-1",
+    contentID: "mock-content-1",
+    name: "OpenCSG 文档中心",
+    description: "OpenCSG 平台核心文档与 API 参考知识库",
+    availability: "available",
+  },
+  {
+    id: "mock-kb-2",
+    contentID: "mock-content-2",
+    name: "Go 语言规范",
+    description: "Go 编程语言完整规范与最佳实践",
+    availability: "available",
+  },
+  {
+    id: "mock-kb-3",
+    contentID: "mock-content-3",
+    name: "React 18 设计模式",
+    description: "React 18 并发特性、Suspense 与 Server Components 实战指南",
+    availability: "available",
+  },
+  {
+    id: "mock-kb-4",
+    contentID: "mock-content-4",
+    name: "MCP 协议手册",
+    description: "Model Context Protocol 服务端与客户端开发完整参考",
+    availability: "unavailable",
+    unavailableReason: "需要升级到专业版",
+  },
+];
+
 type KnowledgeBaseIDSetter = (value: string | ((current: string) => string)) => void;
 
 type UseWorkspaceKnowledgeBaseSelectionArgs = {
@@ -41,7 +74,15 @@ export function useWorkspaceKnowledgeBaseSelection({
     () => mergeRemoteKnowledgeBasePages(discoveryQuery.data?.pages ?? []),
     [discoveryQuery.data?.pages],
   );
-  const items = useMemo(() => configuredKnowledgeBases(catalogItems), [catalogItems]);
+  const items = useMemo(
+    () => {
+      const real = configuredKnowledgeBases(catalogItems);
+      // TODO: remove mock injection before production
+      if (real.length) return real;
+      return MOCK_KNOWLEDGE_BASES;
+    },
+    [catalogItems],
+  );
   const selected = useMemo(
     () => resolveHubListSelection(items, selectedKnowledgeBaseID, (item) => item.id),
     [items, selectedKnowledgeBaseID],
@@ -77,7 +118,7 @@ export function useWorkspaceKnowledgeBaseSelection({
       setSelectedKnowledgeBaseID("");
       return;
     }
-    setSelectedKnowledgeBaseID((current) => (items.some((item) => item.id === current) ? current : items[0]?.id || ""));
+    setSelectedKnowledgeBaseID((current) => (items.some((item) => item.id === current) ? current : ""));
   }, [items, setSelectedKnowledgeBaseID]);
 
   const prepareMCPConfig = useCallback(

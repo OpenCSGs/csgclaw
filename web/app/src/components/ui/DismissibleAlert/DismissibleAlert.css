@@ -1,0 +1,28 @@
+.dismissible-alert-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 150ms ease, background 150ms ease;
+}
+
+.dismissible-alert-close-btn:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.dismissible-alert-close-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--brand-300);
+  outline-offset: 1px;
+}

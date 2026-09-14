@@ -123,7 +123,7 @@ export function useWorkspaceMCPSelection({
       return;
     }
     setSelectedMCPServerName((current) =>
-      mcpServers.some((item) => item.name === current) ? current : mcpServers[0]?.name || "",
+      mcpServers.some((item) => item.name === current) ? current : "",
     );
   }, [mcpServers, setSelectedMCPServerName]);
 

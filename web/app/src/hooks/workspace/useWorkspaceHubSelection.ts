@@ -73,7 +73,7 @@ export function resolveHubTemplateSelection(
   if (templates.some((item) => item.id === current) || (current && preserveMissing)) {
     return current;
   }
-  return templates[0]?.id || "";
+  return "";
 }
 
 export function useWorkspaceHubSelection({
@@ -142,9 +142,9 @@ export function useWorkspaceHubSelection({
   }, [officialSkillsQuery.data]);
   const selectedHubTemplate = useMemo(
     () =>
-      resourcesTemplates.find((item) => item.id === selectedHubTemplateId) ||
-      (selectedHubTemplateId ? null : resourcesTemplates[0]) ||
-      null,
+      selectedHubTemplateId
+        ? resourcesTemplates.find((item) => item.id === selectedHubTemplateId) ?? null
+        : null,
     [resourcesTemplates, selectedHubTemplateId],
   );
   const selectedHubSkill = useMemo(
@@ -206,7 +206,7 @@ export function useWorkspaceHubSelection({
       setSelectedHubSkillPath("");
       return;
     }
-    setSelectedHubSkillName((current) => (hasSkillName(skills, current) ? current : (skills[0]?.name ?? "")));
+    setSelectedHubSkillName((current) => (hasSkillName(skills, current) ? current : ""));
   }, [setSelectedHubSkillName, setSelectedHubSkillPath, skills]);
 
   useEffect(() => {

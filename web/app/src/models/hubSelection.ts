@@ -3,9 +3,8 @@ export function resolveHubListSelection<T>(
   selectedID: string,
   itemID: (item: T) => string,
 ): T | null {
-  const selected = items.find((item) => itemID(item) === selectedID);
-  if (selected) {
-    return selected;
+  if (!selectedID) {
+    return null;
   }
-  return selectedID ? null : (items[0] ?? null);
+  return items.find((item) => itemID(item) === selectedID) ?? null;
 }

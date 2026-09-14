@@ -140,10 +140,6 @@ export function WorkspaceSidebar({
   const firstWorkerAgent = workerAgentItems[0] ?? agentItems[0] ?? null;
   const firstNotificationAgent = notificationAgentItems[0] ?? null;
   const firstTeam = teams[0] ?? null;
-  const firstHubTemplate = hub?.templates[0] ?? null;
-  const firstMCPServer = hub?.mcpServers?.[0] ?? null;
-  const firstKnowledgeBase = hub?.knowledgeBases?.items?.[0] ?? null;
-  const firstHubSkill = hub?.skills[0] ?? null;
   const firstModelProvider = modelProviders?.providers[0] ?? null;
   const resourcesSkills = hub?.skills ?? [];
   const isSettingsPane = activePane.type === WorkspacePaneTypes.settings;
@@ -295,13 +291,7 @@ export function WorkspaceSidebar({
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.templates),
             id: "templates",
             label: t("resourcesTemplatesSection"),
-            onSelect: () => {
-              if (firstHubTemplate) {
-                onSelectHubTemplate(firstHubTemplate);
-                return;
-              }
-              onSelectHub();
-            },
+            onSelect: () => onSelectHubTemplate(null),
           },
           {
             active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.hubSkills),
@@ -309,13 +299,7 @@ export function WorkspaceSidebar({
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.skills),
             id: "skills",
             label: t("resourcesSkillsLabel"),
-            onSelect: () => {
-              if (firstHubSkill) {
-                onSelectHubSkill(firstHubSkill);
-                return;
-              }
-              onSelectHub();
-            },
+            onSelect: () => onSelectHubSkill(null),
           },
           {
             active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.knowledgeBases),
@@ -323,7 +307,7 @@ export function WorkspaceSidebar({
             icon: navigationIcon(SidebarKnowledgeBaseIcon),
             id: "knowledge-bases",
             label: t("resourcesKnowledgeBasesLabel"),
-            onSelect: () => onSelectKnowledgeBase?.(firstKnowledgeBase),
+            onSelect: () => onSelectKnowledgeBase?.(null),
           },
           {
             active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.mcpServers),
@@ -331,13 +315,7 @@ export function WorkspaceSidebar({
             icon: navigationIcon(SidebarMcpIcon),
             id: "mcp-servers",
             label: t("resourcesMCPLabel"),
-            onSelect: () => {
-              if (onSelectMCPServer) {
-                onSelectMCPServer(firstMCPServer);
-                return;
-              }
-              onSelectHub();
-            },
+            onSelect: () => onSelectMCPServer?.(null),
           },
           {
             active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.models),
@@ -361,10 +339,6 @@ export function WorkspaceSidebar({
       activePane.type,
       activeTaskBoardView,
       currentUser,
-      firstMCPServer,
-      firstKnowledgeBase,
-      firstHubSkill,
-      firstHubTemplate,
       firstModelProvider,
       firstNotificationAgent,
       firstTeam,

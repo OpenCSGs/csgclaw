@@ -1,11 +1,12 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, LogIn, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2 } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
 import { TextInput } from "@/components/ui";
 import {
   Button,
+  DismissibleAlert,
   DialogBody,
   DialogCloseButton,
   DialogContent,
@@ -292,12 +293,10 @@ export function ModelProviderPage() {
             </div>
             <p>{t("modelProviderCreateSubtitle")}</p>
           </div>
-          <div className="model-provider-actions">
-            <Button variant="primary" onClick={() => void controller.sidebarProps?.onCreateModelProvider?.()}>
-              <Plus size={16} aria-hidden="true" />
-              {t("modelProviderAdd")}
-            </Button>
-          </div>
+          <Button variant="primary" size="md" onClick={() => void controller.sidebarProps?.onCreateModelProvider?.()}>
+            <span aria-hidden="true">+</span>
+            {t("modelProviderAdd")}
+          </Button>
         </header>
 
         <label className="model-provider-search">
@@ -366,27 +365,32 @@ export function ModelProviderPage() {
               <span className={`workspace-status-dot ${effectiveTone}`} aria-hidden="true"></span>
               <span>{statusLabel}</span>
             </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
+            <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
           </DialogHeader>
 
           <DialogBody className="model-provider-detail-body">
-            {error ? <div className="form-error">{error}</div> : null}
+            {error ? (
+              <DismissibleAlert className="model-provider-notice warning" messageKey={error} closeLabel={t("close")}>
+                <AlertCircle size={16} aria-hidden="true" />
+                <span>{error}</span>
+              </DismissibleAlert>
+            ) : null}
             {saveStatus ? <div className="model-provider-save-status">{saveStatus}</div> : null}
             {showOpenCSGSignIn ? (
-              <div className="model-provider-notice warning opencsg-signin-warning">
+              <DismissibleAlert className="model-provider-notice warning opencsg-signin-warning" messageKey={t("modelProviderOpenCSGSignInRequired")} closeLabel={t("close")}>
                 <AlertCircle size={16} aria-hidden="true" />
                 <span>{t("modelProviderOpenCSGSignInRequired")}</span>
-              </div>
+              </DismissibleAlert>
             ) : null}
             {checkMessage ? (
-              <div className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`}>
+              <DismissibleAlert className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`} messageKey={checkMessage} closeLabel={t("close")}>
                 {effectiveTone === "warning" ? (
                   <AlertCircle size={16} aria-hidden="true" />
                 ) : (
                   <CheckCircle2 size={16} aria-hidden="true" />
                 )}
                 <span>{checkMessage}</span>
-              </div>
+              </DismissibleAlert>
             ) : null}
 
             <div className="model-provider-grid">

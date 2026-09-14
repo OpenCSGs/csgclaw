@@ -164,3 +164,18 @@ button.hubSkillRow {
 :global(:root[data-theme="dark"]) .teamRow:global(.active) * {
   color: var(--white);
 }
+
+.resourcesError {
+  margin: 4px 8px 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--error-50, #fef3f2);
+  color: var(--error-700, #b42318);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+:global(:root[data-theme="dark"]) .resourcesError {
+  background: rgba(185, 28, 28, 0.15);
+  color: var(--error-400, #f97066);
+}
