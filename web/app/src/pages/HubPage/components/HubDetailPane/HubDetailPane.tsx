@@ -16,7 +16,6 @@ import {
   ExternalLink,
   FileCode2,
   LoaderCircle,
-  MessageSquare,
   RefreshCw,
   Server,
   Trash2,
@@ -2613,7 +2612,6 @@ export function HubDetailPane({
               </DialogBody>
               <DialogFooter>
                 <Button variant="primary" size="md" onClick={trySelectedSkill}>
-                  <MessageSquare size={16} strokeWidth={2} aria-hidden="true" />
                   {t("resourcesSkillTryNow")}
                 </Button>
               </DialogFooter>
@@ -2930,7 +2928,6 @@ export function HubDetailPane({
                 ) : null}
                 {!isBuiltinOpenClawWorkerTemplate(selectedTemplate) ? (
                   <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
-                    <MessageSquare size={16} strokeWidth={2} aria-hidden="true" />
                     {t("createAgent")}
                   </Button>
                 ) : null}
