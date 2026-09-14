@@ -1109,8 +1109,8 @@
 
 .hub-skill-featured-icon-shadow {
   position: absolute;
-  top: -7px;
-  left: 1px;
+  top: -4px;
+  left: 4px;
   width: 32px;
   height: 32px;
   border-radius: 6px;
@@ -1124,11 +1124,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgb(255 255 255 / 0.6);
+  border: 0.75px solid rgb(255 255 255 / 0.6);
   border-radius: 6px;
   background: rgb(255 255 255 / 0.6);
-  color: var(--brand-700);
-  box-shadow: var(--shadow-xs);
+  color: #fff;
+  /* Figma BACKGROUND_BLUR radius 16 exports as CSS blur(8px). */
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .hub-skill-featured-icon svg,
