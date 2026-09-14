@@ -154,8 +154,9 @@ export function WorkspaceSidebar({
         activePane,
         notificationAgentIds,
         workspaceTab,
+        hubResourceType: hub?.selectedHubResourceType,
       }),
-    [activePane, notificationAgentIds, workspaceTab],
+    [activePane, hub?.selectedHubResourceType, notificationAgentIds, workspaceTab],
   );
   const [activeContextSectionId, setActiveContextSectionId] = useState<WorkspaceContextSectionId>(
     () => routeContextSectionId ?? defaultContextSectionIdForTab(workspaceTab),
@@ -626,10 +627,12 @@ function contextSectionIdForPane({
   activePane,
   notificationAgentIds,
   workspaceTab,
+  hubResourceType,
 }: {
   activePane: WorkspaceSidebarProps["activePane"];
   notificationAgentIds: ReadonlySet<string>;
   workspaceTab: WorkspaceSidebarProps["workspaceTab"];
+  hubResourceType?: string;
 }): WorkspaceContextSectionId | null {
   if (activePane.type === WorkspacePaneTypes.settings) {
     return null;
@@ -652,6 +655,15 @@ function contextSectionIdForPane({
     }
     if (activePane.resourceType === "template") {
       return WorkspaceContextSectionIds.hubTemplates;
+    }
+    if (hubResourceType === "skill") {
+      return WorkspaceContextSectionIds.hubSkills;
+    }
+    if (hubResourceType === "mcp") {
+      return WorkspaceContextSectionIds.mcpServers;
+    }
+    if (hubResourceType === "knowledge") {
+      return WorkspaceContextSectionIds.knowledgeBases;
     }
     return null;
   }
