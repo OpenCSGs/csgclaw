@@ -14,3 +14,4 @@ export const AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY = "csgclaw.im.agentProfileActi
 export const LAST_CREATED_AGENT_MODEL_STORAGE_KEY = "csgclaw.im.lastCreatedAgentModel" as const;
 export const SESSION_DEMO_STORAGE_KEY = "csgclaw.session-demo.v1" as const;
 export const TURN_NOTIFICATION_MODE_STORAGE_KEY = "csgclaw.im.turnNotificationMode" as const;
+export const HUB_RESOURCE_TYPE_STORAGE_KEY = "csgclaw.im.hubResourceType" as const;

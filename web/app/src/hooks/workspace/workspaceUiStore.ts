@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { detectInitialLocale } from "@/shared/i18n";
 import { detectInitialTheme } from "@/shared/theme/theme";
 import { readStoredTurnNotificationMode, writeStoredTurnNotificationMode } from "@/shared/storage/turnNotifications";
-import { SIDEBAR_COLLAPSED_STORAGE_KEY } from "@/shared/storage/keys";
+import { SIDEBAR_COLLAPSED_STORAGE_KEY, HUB_RESOURCE_TYPE_STORAGE_KEY } from "@/shared/storage/keys";
 import {
   WorkspacePaneTypes,
   paneFromLocation,
@@ -24,6 +24,31 @@ export const HubResourceTypes = {
 } as const;
 
 export type HubResourceType = (typeof HubResourceTypes)[keyof typeof HubResourceTypes];
+
+const HUB_RESOURCE_TYPE_VALUES = new Set<string>(Object.values(HubResourceTypes));
+
+function readStoredHubResourceType(): HubResourceType {
+  if (typeof window === "undefined") {
+    return HubResourceTypes.template;
+  }
+  try {
+    const value = window.localStorage.getItem(HUB_RESOURCE_TYPE_STORAGE_KEY);
+    return value && HUB_RESOURCE_TYPE_VALUES.has(value) ? (value as HubResourceType) : HubResourceTypes.template;
+  } catch {
+    return HubResourceTypes.template;
+  }
+}
+
+function writeStoredHubResourceType(value: HubResourceType): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(HUB_RESOURCE_TYPE_STORAGE_KEY, value);
+  } catch {
+    // Local storage can be unavailable in restricted browser contexts.
+  }
+}
 
 export type WorkspaceUiState = {
   activeConversationId: string;
@@ -72,7 +97,7 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   activeConversationId: initialPane.type === WorkspacePaneTypes.conversation ? String(initialPane.id ?? "") : "",
   floatingChatOpen: false,
   workspaceTab: workspaceTabForPane(initialPane),
-  selectedHubResourceType: HubResourceTypes.template,
+  selectedHubResourceType: readStoredHubResourceType(),
   selectedKnowledgeBaseID: "",
   selectedMCPServerName: "",
   selectedHubSkillName: "",
@@ -105,9 +130,11 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   setActiveConversationId: (activeConversationId) => set({ activeConversationId }),
   setWorkspaceTab: (workspaceTab) => set({ workspaceTab }),
   setSelectedHubResourceType: (value) =>
-    set((state) => ({
-      selectedHubResourceType: typeof value === "function" ? value(state.selectedHubResourceType) : value,
-    })),
+    set((state) => {
+      const next = typeof value === "function" ? value(state.selectedHubResourceType) : value;
+      writeStoredHubResourceType(next);
+      return { selectedHubResourceType: next };
+    }),
   setSelectedKnowledgeBaseID: (value) =>
     set((state) => ({
       selectedKnowledgeBaseID: typeof value === "function" ? value(state.selectedKnowledgeBaseID) : value,
