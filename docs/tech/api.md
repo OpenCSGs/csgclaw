@@ -118,7 +118,7 @@ Returns `503 Service Unavailable` if the upgrade manager is not configured.
 
 ### `GET /api/v1/skills/remote`
 
-Lists remote Skills from the effective OpenCSG Hub. The browser only calls CSGClaw; the server resolves the Hub using the current login environment or an explicitly configured official Hub URL.
+Lists remote Skills from the effective OpenCSG Hub. The browser only calls CSGClaw; the server resolves the Hub using the current login environment or an explicitly configured official Hub URL. When the user is signed in, CSGClaw forwards the current OpenCSG access token to the matching Hub so the catalog can include private Skills visible to that user. Signed-out requests remain anonymous and list only public Skills.
 
 Optional query parameters:
 
@@ -152,7 +152,7 @@ The server keeps the current Hub catalog ordering and returns normalized Skill s
 
 ### `POST /api/v1/skills:install`
 
-Installs one remote Skill from the same effective OpenCSG Hub. The server downloads the repository archive in one request when the Hub supports it and falls back to the legacy tree/blob APIs for compatibility. Set `replace` to overwrite an existing local Skill with the same name.
+Installs one remote Skill from the same effective OpenCSG Hub. For a signed-in user, the server sends the matching OpenCSG access token with the archive request and with every legacy tree/blob fallback request, allowing installation of private Skills visible to that user. Signed-out installs remain limited to public Skills. Set `replace` to overwrite an existing local Skill with the same name.
 
 ```json
 {

@@ -19,6 +19,8 @@ const (
 
 var errOfficialHubURLNotConfigured = errors.New("official Hub URL is not configured")
 
+var remoteSkillsHubAccessToken = currentOpenCSGAccessToken
+
 type remoteSkillsListResponse struct {
 	Items    []remoteSkillSummary `json:"items"`
 	NextPage *int                 `json:"next_page,omitempty"`
@@ -53,15 +55,16 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	baseURL, err := h.remoteSkillsHubBaseURL(r)
+	baseURL, token, err := h.remoteSkillsHubConnection(r)
 	if err != nil {
 		writeRemoteSkillsHubError(w, err)
 		return
 	}
 	list, err := skillremote.ListAgenticHubSkills(r.Context(), baseURL, skillremote.AgenticHubSkillListOptions{
-		Page:   page,
-		Per:    per,
-		Search: r.URL.Query().Get("search"),
+		AccessToken: token,
+		Page:        page,
+		Per:         per,
+		Search:      r.URL.Query().Get("search"),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -114,12 +117,12 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	baseURL, err := h.remoteSkillsHubBaseURL(r)
+	baseURL, token, err := h.remoteSkillsHubConnection(r)
 	if err != nil {
 		writeRemoteSkillsHubError(w, err)
 		return
 	}
-	archive, err := skillremote.FetchAgenticHubSkillArchive(r.Context(), baseURL, remotePath, ref)
+	archive, err := skillremote.FetchAgenticHubSkillArchive(r.Context(), baseURL, token, remotePath, ref)
 	if err != nil {
 		if skillremote.IsInvalidAgenticHubRequest(err) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -141,16 +144,27 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, item)
 }
 
-func (h *Handler) remoteSkillsHubBaseURL(r *http.Request) (string, error) {
+func (h *Handler) remoteSkillsHubConnection(r *http.Request) (string, string, error) {
 	registry, err := h.remoteHubRegistryForRequest(r)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(registry.URL), "/")
 	if baseURL == "" {
-		return "", errOfficialHubURLNotConfigured
+		return "", "", errOfficialHubURLNotConfigured
 	}
-	return baseURL, nil
+	status, err := appAuthStatus(r)
+	if err != nil {
+		return "", "", err
+	}
+	if !status.Authenticated || !hubRegistryMatchesAuthenticatedEnvironment(registry, status) {
+		return baseURL, "", nil
+	}
+	token, err := remoteSkillsHubAccessToken()
+	if err != nil {
+		return "", "", err
+	}
+	return baseURL, strings.TrimSpace(token), nil
 }
 
 func writeRemoteSkillsHubError(w http.ResponseWriter, err error) {

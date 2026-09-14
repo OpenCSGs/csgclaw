@@ -5208,6 +5208,9 @@ func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
 		return currentStatus, nil
 	})
 	defer restore()
+	previousAccessToken := remoteSkillsHubAccessToken
+	remoteSkillsHubAccessToken = func() (string, error) { return "private-skill-token", nil }
+	t.Cleanup(func() { remoteSkillsHubAccessToken = previousAccessToken })
 
 	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/skills" {
@@ -5227,6 +5230,13 @@ func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
 		}
 		if got := r.URL.Query().Get("source"); got != "" {
 			t.Fatalf("source = %q, want empty", got)
+		}
+		wantAuthorization := ""
+		if currentStatus.Authenticated {
+			wantAuthorization = "Bearer private-skill-token"
+		}
+		if got := r.Header.Get("Authorization"); got != wantAuthorization {
+			t.Fatalf("Authorization = %q, want %q", got, wantAuthorization)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]any{{
@@ -5360,6 +5370,9 @@ enabled = true
 func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	previousAccessToken := remoteSkillsHubAccessToken
+	remoteSkillsHubAccessToken = func() (string, error) { return "private-skill-token", nil }
+	t.Cleanup(func() { remoteSkillsHubAccessToken = previousAccessToken })
 
 	archiveRequests := 0
 	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5369,6 +5382,9 @@ func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
 			if got := r.Header.Get("Accept"); got != "application/zip" {
 				t.Errorf("Accept = %q, want application/zip", got)
 			}
+			if got, want := r.Header.Get("Authorization"), "Bearer private-skill-token"; got != want {
+				t.Errorf("Authorization = %q, want %q", got, want)
+			}
 			w.Header().Set("Content-Type", "application/zip")
 			_, _ = w.Write(mustZipBytes(t, map[string]string{
 				"SKILL.md":       "---\ndescription: Build agents\n---\n# Agent Builder\n",
@@ -5376,6 +5392,9 @@ func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
 			}))
 		case "/api/v1/skills/AIWizards/agent-builder/download_archive/refs/broken":
 			archiveRequests++
+			if got, want := r.Header.Get("Authorization"), "Bearer private-skill-token"; got != want {
+				t.Errorf("Authorization = %q, want %q", got, want)
+			}
 			w.Header().Set("Content-Type", "text/html")
 			_, _ = io.WriteString(w, "<html>not a zip</html>")
 		default:
@@ -5384,7 +5403,13 @@ func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
 	}))
 	defer officialHub.Close()
 	t.Setenv("CSGHUB_API_BASE_URL", officialHub.URL)
-	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
+	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) {
+		return auth.Status{
+			Authenticated:  true,
+			OpenCSGBaseURL: officialHub.URL,
+			BaseURL:        officialHub.URL,
+		}, nil
+	}))
 
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	content := `[server]
