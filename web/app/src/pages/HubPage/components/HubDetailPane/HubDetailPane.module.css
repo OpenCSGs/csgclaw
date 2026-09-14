@@ -2547,6 +2547,10 @@
   min-height: 220px;
 }
 
+.hub-empty-state:global(.shell-empty-state) {
+  background: none;
+}
+
 .hub-skill-delete-dialog {
   width: min(480px, calc(100vw - 32px));
 }
