@@ -1554,9 +1554,6 @@ export function HubDetailPane({
                               {item.description || item.name}
                             </span>
                           </span>
-                          <span className={moduleClassNames("hub-skill-card-check")} aria-hidden="true">
-                            <CheckCircle2 size={14} strokeWidth={2.2} />
-                          </span>
                         </button>
                       );
                     })}
@@ -2310,9 +2307,6 @@ export function HubDetailPane({
                               {skill.description || skill.name}
                             </span>
                           </span>
-                          <span className={moduleClassNames("hub-skill-card-check")} aria-hidden="true">
-                            <CheckCircle2 size={14} strokeWidth={2.2} />
-                          </span>
                         </button>
                       );
                     })}
@@ -2403,9 +2397,6 @@ export function HubDetailPane({
                             <span className={moduleClassNames("hub-skill-card-description")}>
                               {server.description || mcpServerDescription(server.config) || server.name}
                             </span>
-                          </span>
-                          <span className={moduleClassNames("hub-skill-card-check")} aria-hidden="true">
-                            <CheckCircle2 size={14} strokeWidth={2.2} />
                           </span>
                         </button>
                       );
