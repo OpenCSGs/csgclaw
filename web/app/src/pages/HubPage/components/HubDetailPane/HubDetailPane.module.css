@@ -2866,7 +2866,10 @@
   padding: 0 0 10px;
 }
 
-.hub-template-instructions-section .hub-template-instructions-preview pre,
+.hub-template-instructions-section .hub-template-instructions-preview pre {
+  padding: 14px 16px;
+}
+
 .hub-template-memory-panel .hub-template-memory-document {
   padding: 0;
 }
