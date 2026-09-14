@@ -24,12 +24,17 @@ func TestFetchAgenticHubSkillArchivePrefersArchiveDownload(t *testing.T) {
 		if got := r.Header.Get("Accept"); got != "application/zip" {
 			t.Fatalf("Accept = %q, want application/zip", got)
 		}
+		if got, want := r.Header.Get("Authorization"), "Bearer private-skill-token"; got != want {
+			t.Fatalf("Authorization = %q, want %q", got, want)
+		}
 		w.Header().Set("Content-Type", "application/zip")
 		_, _ = w.Write(want)
 	}))
 	defer server.Close()
 
-	got, err := FetchAgenticHubSkillArchive(context.Background(), server.URL, "AIWizards/agent-builder", "")
+	got, err := FetchAgenticHubSkillArchive(
+		context.Background(), server.URL, "private-skill-token", "AIWizards/agent-builder", "",
+	)
 	if err != nil {
 		t.Fatalf("FetchAgenticHubSkillArchive() error = %v", err)
 	}
@@ -42,6 +47,9 @@ func TestFetchAgenticHubSkillArchiveFallsBackToTreeCursorPages(t *testing.T) {
 	archiveRequests := 0
 	treeRequests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.Header.Get("Authorization"), "Bearer private-skill-token"; got != want {
+			t.Fatalf("Authorization = %q, want %q", got, want)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/v1/skills/AIWizards/agent-builder/download_archive/refs/main":
@@ -66,7 +74,9 @@ func TestFetchAgenticHubSkillArchiveFallsBackToTreeCursorPages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	archive, err := FetchAgenticHubSkillArchive(context.Background(), server.URL, "AIWizards/agent-builder", "")
+	archive, err := FetchAgenticHubSkillArchive(
+		context.Background(), server.URL, "private-skill-token", "AIWizards/agent-builder", "",
+	)
 	if err != nil {
 		t.Fatalf("FetchAgenticHubSkillArchive() error = %v", err)
 	}
@@ -102,7 +112,7 @@ func TestFetchAgenticHubSkillArchiveDoesNotFallbackAfterArchiveFailure(t *testin
 	}))
 	defer server.Close()
 
-	_, err := FetchAgenticHubSkillArchive(context.Background(), server.URL, "AIWizards/agent-builder", "")
+	_, err := FetchAgenticHubSkillArchive(context.Background(), server.URL, "", "AIWizards/agent-builder", "")
 	if err == nil {
 		t.Fatal("FetchAgenticHubSkillArchive() error = nil, want archive failure")
 	}
@@ -118,7 +128,7 @@ func TestFetchAgenticHubSkillArchiveRejectsInvalidArchive(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := FetchAgenticHubSkillArchive(context.Background(), server.URL, "AIWizards/agent-builder", "")
+	_, err := FetchAgenticHubSkillArchive(context.Background(), server.URL, "", "AIWizards/agent-builder", "")
 	if err == nil {
 		t.Fatal("FetchAgenticHubSkillArchive() error = nil, want invalid archive error")
 	}
@@ -201,6 +211,9 @@ func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
 		if got := r.URL.Query().Get("source"); got != "" {
 			t.Fatalf("source = %q, want empty", got)
 		}
+		if got, want := r.Header.Get("Authorization"), "Bearer private-skill-token"; got != want {
+			t.Fatalf("Authorization = %q, want %q", got, want)
+		}
 		_, _ = io.WriteString(w, `{
 			"data":[
 				{"name":"Skill","path":"AIWizards/agent-builder","description":"Build agents","default_branch":"dev"},
@@ -212,9 +225,10 @@ func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
 	defer server.Close()
 
 	page, err := ListAgenticHubSkills(context.Background(), server.URL+"/hub", AgenticHubSkillListOptions{
-		Page:   2,
-		Per:    16,
-		Search: " agent ",
+		AccessToken: "private-skill-token",
+		Page:        2,
+		Per:         16,
+		Search:      " agent ",
 	})
 	if err != nil {
 		t.Fatalf("ListAgenticHubSkills() error = %v", err)
