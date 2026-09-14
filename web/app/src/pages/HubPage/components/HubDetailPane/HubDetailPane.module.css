@@ -1708,10 +1708,10 @@
 }
 
 .hub-template-profile-shell :global(.profile-section),
-.hub-detail-pane .hub-template-instructions-section,
-.hub-detail-pane .hub-template-memory-panel,
-.hub-detail-pane .hub-template-skills-panel,
-.hub-detail-pane .hub-template-mcp-panel {
+.hub-standard-skill-dialog-body .hub-template-instructions-section,
+.hub-standard-skill-dialog-body .hub-template-memory-panel,
+.hub-standard-skill-dialog-body .hub-template-skills-panel,
+.hub-standard-skill-dialog-body .hub-template-mcp-panel {
   align-content: start;
   gap: 20px;
   padding: 0;
@@ -1721,10 +1721,10 @@
 }
 
 :root[data-theme="dark"] .hub-template-profile-shell :global(.profile-section),
-:root[data-theme="dark"] .hub-detail-pane .hub-template-instructions-section,
-:root[data-theme="dark"] .hub-detail-pane .hub-template-memory-panel,
-:root[data-theme="dark"] .hub-detail-pane .hub-template-skills-panel,
-:root[data-theme="dark"] .hub-detail-pane .hub-template-mcp-panel {
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-instructions-section,
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-memory-panel,
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-skills-panel,
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-mcp-panel {
   background: transparent;
 }
 
@@ -1774,7 +1774,7 @@
   grid-column: 1 / -1;
 }
 
-.hub-detail-pane .hub-template-instructions-section {
+.hub-standard-skill-dialog-body .hub-template-instructions-section {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -2826,11 +2826,11 @@
   }
 }
 
-.hub-detail-pane .hub-standard-skill-dialog-body .hub-template-profile-shell :global(.profile-section),
-.hub-detail-pane .hub-standard-skill-dialog-body .hub-template-instructions-section,
-.hub-detail-pane .hub-standard-skill-dialog-body .hub-template-memory-panel,
-.hub-detail-pane .hub-standard-skill-dialog-body .hub-template-skills-panel,
-.hub-detail-pane .hub-standard-skill-dialog-body .hub-template-mcp-panel {
+.hub-standard-skill-dialog-body .hub-template-profile-shell :global(.profile-section),
+.hub-standard-skill-dialog-body .hub-template-instructions-section,
+.hub-standard-skill-dialog-body .hub-template-memory-panel,
+.hub-standard-skill-dialog-body .hub-template-skills-panel,
+.hub-standard-skill-dialog-body .hub-template-mcp-panel {
   padding: 0;
   border: 0;
   background: transparent;
@@ -2838,11 +2838,11 @@
 }
 
 
-:root[data-theme="dark"] .hub-detail-pane .hub-standard-skill-dialog-body .hub-template-profile-shell :global(.profile-section),
-:root[data-theme="dark"] .hub-detail-pane .hub-standard-skill-dialog-body .hub-template-instructions-section,
-:root[data-theme="dark"] .hub-detail-pane .hub-standard-skill-dialog-body .hub-template-memory-panel,
-:root[data-theme="dark"] .hub-detail-pane .hub-standard-skill-dialog-body .hub-template-skills-panel,
-:root[data-theme="dark"] .hub-detail-pane .hub-standard-skill-dialog-body .hub-template-mcp-panel {
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-profile-shell :global(.profile-section),
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-instructions-section,
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-memory-panel,
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-skills-panel,
+:root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-mcp-panel {
   background: transparent;
 }
 
