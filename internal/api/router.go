@@ -29,6 +29,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Get("/", h.listAgents)
 			r.Post("/", h.createAgent)
 			r.Route("/{id}", func(r chi.Router) {
+				r.Handle("/mcp-file-bridge/{server}", http.HandlerFunc(h.handleMCPFileBridge))
 				r.Get("/", h.getAgent)
 				r.Patch("/", h.updateAgent)
 				r.Delete("/", h.deleteAgent)
@@ -82,6 +83,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		r.Get("/knowledge-bases/remote", h.handleRemoteKnowledgeBases)
 		r.Get("/knowledge-bases/remote/{id}/mcp-config", h.handleRemoteKnowledgeBaseMCPConfig)
 		r.Handle("/knowledge-bases/{content_id}/mcp", http.HandlerFunc(h.handleKnowledgeBaseMCPProxy))
+		r.Handle("/opencsg-mcp-gateway/mcp", http.HandlerFunc(h.handleOpenCSGMCPGatewayProxy))
 		r.Post("/mcp-servers", h.handleMCPServers)
 		r.Post("/mcp-servers:probe", h.probeMCPServer)
 		r.Get("/mcp-servers/{name}/source", h.handleMCPServerSourceByName)

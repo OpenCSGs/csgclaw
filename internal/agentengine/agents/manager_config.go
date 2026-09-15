@@ -77,6 +77,13 @@ func ResolveManagerBaseURLForSandboxProvider(server config.ServerConfig, sandbox
 	return ResolveManagerBaseURL(server)
 }
 
+// ResolveLocalRuntimeBaseURL returns the loopback address used by runtimes
+// executing directly on the CSGClaw host. Using a Docker host alias or LAN
+// address here can accidentally route the request through HTTP_PROXY.
+func ResolveLocalRuntimeBaseURL(server config.ServerConfig) string {
+	return fmt.Sprintf("http://127.0.0.1:%s", config.ListenPort(server.ListenAddr))
+}
+
 func localIPv4() string {
 	return defaultLocalIPDetector.localIPv4()
 }

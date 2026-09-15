@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"net/url"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"csgclaw/internal/activity"
 	"csgclaw/internal/codexmodel"
 	"csgclaw/internal/identity"
+	"csgclaw/internal/opencsgmcp"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/runtime/sandboxgateway"
@@ -146,13 +148,14 @@ type BinaryProvider interface {
 }
 
 type Dependencies struct {
-	BinaryProvider BinaryProvider
-	ResolveAgent   func(h agentruntime.Handle) (AgentRef, error)
-	AgentHome      func(agentID string) (string, error)
-	Manager        Manager
-	EventSink      SessionEventSink
-	Permission     PermissionBroker
-	UserInput      UserInputBroker
+	BinaryProvider        BinaryProvider
+	ResolveAgent          func(h agentruntime.Handle) (AgentRef, error)
+	MaterializeMCPServers func(context.Context, map[string]any) (map[string]any, error)
+	AgentHome             func(agentID string) (string, error)
+	Manager               Manager
+	EventSink             SessionEventSink
+	Permission            PermissionBroker
+	UserInput             UserInputBroker
 
 	MkdirAll     func(string, os.FileMode) error
 	ReadFile     func(string) ([]byte, error)
@@ -163,6 +166,40 @@ type Dependencies struct {
 	RunInitShell func(context.Context, string, string, []string) error
 
 	StopRuntimeProcesses func(string) ([]int, error)
+}
+
+func (r *Runtime) runtimeMCPServers(ctx context.Context, agentID string, servers map[string]any) (map[string]any, error) {
+	if r.deps.MaterializeMCPServers == nil {
+		return servers, nil
+	}
+	materialized, err := r.deps.MaterializeMCPServers(ctx, servers)
+	if err != nil {
+		return nil, err
+	}
+	return codexMCPFileBridgeServers(materialized, agentID), nil
+}
+
+func codexMCPFileBridgeServers(servers map[string]any, agentID string) map[string]any {
+	for serverName, raw := range servers {
+		entry, _ := raw.(map[string]any)
+		bindings, _ := entry[opencsgmcp.RuntimeFileBindingsKey].(map[string]any)
+		if len(bindings) == 0 {
+			continue
+		}
+		urlText, _ := entry["url"].(string)
+		marker := "/api/v1/opencsg-mcp-gateway/mcp"
+		if !strings.HasSuffix(strings.TrimRight(urlText, "/"), marker) {
+			continue
+		}
+		base := strings.TrimSuffix(strings.TrimRight(urlText, "/"), marker)
+		entry["url"] = base + "/api/v1/agents/" + url.PathEscape(agentID) + "/mcp-file-bridge/" + url.PathEscape(serverName)
+		headers, _ := entry["headers"].(map[string]any)
+		authorization, _ := headers["Authorization"].(string)
+		rootToken := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
+		headers["Authorization"] = "Bearer " + opencsgmcp.FileBridgeToken(rootToken, agentID, serverName)
+		delete(entry, opencsgmcp.RuntimeFileBindingsKey)
+	}
+	return servers
 }
 
 type Runtime struct {
@@ -716,7 +753,11 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
 	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
-	spec.MCPServers = agentRef.MCPServers
+	runtimeMCPServers, err := r.runtimeMCPServers(ctx, spec.AgentID, agentRef.MCPServers)
+	if err != nil {
+		return nil, fmt.Errorf("materialize Codex MCP servers: %w", err)
+	}
+	spec.MCPServers = runtimeMCPServers
 	manager := r.sessionManager()
 	tracker, tracksSessions := manager.(interface{ hasSession(string) bool })
 	if !tracksSessions || !tracker.hasSession(runtimeID) {
@@ -730,7 +771,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, agentRef.MCPServers); err != nil {
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers); err != nil {
 		return nil, err
 	}
 	if err := r.seedCodexHomeSkillsForExecutionMode(spec.CodexHomeDir, spec.ExecutionMode); err != nil {
@@ -817,7 +858,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		CodexHomeDir:                dirs.CodexHome,
 		StderrPath:                  dirs.StderrLog,
 		Profile:                     agentRef.Profile.Normalized(),
-		MCPServers:                  agentRef.MCPServers,
+		MCPServers:                  nil,
 		ExecutionMode:               ExecutionModeStandard,
 		ConversationSessions:        cloneConversationSessions(sessionMeta.ConversationSessions),
 		FilePublishingConversations: cloneFilePublishingConversations(sessionMeta.FilePublishingConversations),
@@ -828,13 +869,17 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 	}
 	spec.ExecutionMode = runtimeOptions.ExecutionMode
 	spec.MemoryEnabled = runtimeOptions.MemoryMode != MemoryModeDisabled
+	spec.MCPServers, err = r.runtimeMCPServers(ctx, agentID, agentRef.MCPServers)
+	if err != nil {
+		return nil, fmt.Errorf("materialize Codex MCP servers: %w", err)
+	}
 	if err := r.mkdirAll(spec.WorkspaceDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create codex workspace dir %s: %w", spec.WorkspaceDir, err)
 	}
 	if err := r.seedCodexHomeAuth(spec.CodexHomeDir, spec.Profile); err != nil {
 		return nil, err
 	}
-	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, agentRef.MCPServers); err != nil {
+	if err := r.seedCodexHomeConfig(spec.CodexHomeDir, spec.WorkspaceDir, spec.Profile, agentRef.RuntimeOptions, spec.MCPServers); err != nil {
 		return nil, err
 	}
 	if err := r.seedCodexHomeSkillsForExecutionMode(spec.CodexHomeDir, spec.ExecutionMode); err != nil {

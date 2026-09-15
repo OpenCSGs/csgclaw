@@ -149,3 +149,25 @@ AgenticHub 当前配置 ──────────────────�
 已有 Agent 的 MCP 是可运行的配置副本，不是每次启动都解析的远端引用。这样 Agent 配置可以独立保存、复制和发布，也能在暂时无法访问 AgenticHub 时继续使用原有配置或删除 MCP。
 
 社区模板是例外：发布时已经移除凭证，因此从模板创建 Agent 时会尝试访问 AgenticHub，并用当前使用者的 URL 和 Token 生成一份新的可运行配置副本。这个刷新过程是 best-effort：知识库未就绪、查询失败或 Token 不可用时，创建流程保留模板中已脱敏的 MCP 配置并继续创建 Agent，不让外部知识库状态阻塞云端部署。保留的知识库来源标记仍用于标识和后续模板发布；失败时不会向模板携带的 URL 注入当前使用者的 Token。
+
+## OpenCSG MCP Gateway
+
+普通 OpenCSG MCP 可以通过受信任的统一 Gateway 暴露工具。模板使用以下来源标记：
+
+```json
+{
+  "_meta": {
+    "com.opencsg/mcp": {
+      "type": "opencsg_mcp_gateway",
+      "auth_type": "csghub_access_token",
+      "required_tools": ["parse_file_content"]
+    }
+  }
+}
+```
+
+模板仍需提供一个非空 `url` 以满足通用 MCP schema，但该 URL 不会进入 Runtime。CSGClaw 在运行时将配置改写到本机 `/api/v1/opencsg-mcp-gateway/mcp` 代理，并使用 CSGClaw 服务 Token 保护该连接。代理在每个请求上读取当前 OpenCSG 登录凭据，只把用户 Token 转发到当前登录环境配置的 `{AIGatewayBaseURL}/gateway/mcp`，不转发浏览器 Cookie，也不跟随上游重定向。
+
+发布模板时，通用模板清洗仍会删除 `headers` 与 `env`，但保留 `_meta`。因此发布者凭据和使用者凭据都不会写入社区模板，模板提供的 URL 也不能改变携带用户 Token 的上游目标。
+
+对于带本地文件输入的工具，模板通过受管 MCP 元数据中的 `file_bindings` 声明允许调用的工具，以及内容、文件名和 MIME 参数映射。Codex 实际连接每个 Agent 独立的 CSGClaw MCP File Facade；Facade 通过原生 `tools/list` 向模型暴露 `path` 参数，并在收到 `tools/call` 后校验和读取工作区文件，在模型上下文之外完成 Base64 编码，再调用目标 MCP。模型侧仍表现为标准 `mcp_tool_call`，不会出现 CSGClaw 专用文件解析工具。

@@ -121,7 +121,7 @@ func (r *Runtime) MCPServersRestartRequired(change agentruntime.MCPServersChange
 	return agentruntime.MCPServersNeedsRestart(change.Previous.Servers, change.Current.Servers)
 }
 
-func (r *Runtime) ReconcileMCPServers(_ context.Context, h agentruntime.Handle, _ agentruntime.MCPServersChange) error {
+func (r *Runtime) ReconcileMCPServers(_ context.Context, h agentruntime.Handle, change agentruntime.MCPServersChange) error {
 	agentRef, err := r.resolveAgent(h)
 	if err != nil {
 		return err
@@ -134,7 +134,8 @@ func (r *Runtime) ReconcileMCPServers(_ context.Context, h agentruntime.Handle, 
 	if err != nil {
 		return err
 	}
-	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.RuntimeOptions, agentRef.MCPServers)
+	servers := codexMCPFileBridgeServers(change.Current.Servers, agentRef.ID)
+	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.RuntimeOptions, servers)
 }
 
 func (r *Runtime) ListMCPServers(_ context.Context, h agentruntime.Handle, _ agentruntime.MCPServersSnapshot) (agentruntime.MCPServersSnapshot, error) {

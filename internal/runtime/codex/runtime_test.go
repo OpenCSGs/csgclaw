@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/opencsgmcp"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/sandbox"
@@ -2543,6 +2544,75 @@ func TestRuntimeCreateWritesManagerMCPServers(t *testing.T) {
 	} {
 		if !strings.Contains(config, want) {
 			t.Fatalf("manager codex config missing %q:\n%s", want, config)
+		}
+	}
+}
+
+func TestRuntimeCreateMaterializesPersistedMCPServersForSession(t *testing.T) {
+	root := t.TempDir()
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+
+	rt := New(Dependencies{
+		BinaryProvider: fakeBinaryProvider{path: "/tmp/codex"},
+		AgentHome: func(agentID string) (string, error) {
+			return filepath.Join(root, agentID), nil
+		},
+		ResolveAgent: func(h agentruntime.Handle) (AgentRef, error) {
+			return AgentRef{
+				ID:        "agent-alice",
+				Name:      "alice",
+				RuntimeID: h.RuntimeID,
+				Profile:   agentruntime.Profile{ModelID: "gpt-5.5"},
+				MCPServers: map[string]any{"file-parser": map[string]any{
+					"url":   "https://gateway.example/mcp",
+					"_meta": map[string]any{"managed": true},
+				}},
+			}, nil
+		},
+		MaterializeMCPServers: func(_ context.Context, servers map[string]any) (map[string]any, error) {
+			return map[string]any{"file-parser": map[string]any{
+				"url":     "http://127.0.0.1:18080/api/v1/opencsg-mcp-gateway/mcp",
+				"headers": map[string]any{"Authorization": "Bearer internal-test-token"},
+				opencsgmcp.RuntimeFileBindingsKey: map[string]any{"parse_file_content": map[string]any{
+					"encoding": "base64", "content_argument": "content_base64", "filename_argument": "filename",
+				}},
+			}}, nil
+		},
+		Manager: fakeManager{start: func(_ context.Context, spec SessionSpec) (*Session, error) {
+			return &Session{
+				RuntimeID: spec.RuntimeID, AgentID: spec.AgentID, AgentName: spec.AgentName,
+				SessionID: "session-materialized", WorkspaceDir: spec.WorkspaceDir,
+				HomeDir: spec.HomeDir, CodexHomeDir: spec.CodexHomeDir,
+				CreatedAt: time.Now().UTC(), StartedAt: time.Now().UTC(),
+			}, nil
+		}},
+	})
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{
+		RuntimeID: "rt-agent-alice",
+		AgentID:   "agent-alice",
+		AgentName: "alice",
+		Profile:   agentruntime.Profile{ModelID: "gpt-5.5"},
+	}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	configPath := filepath.Join(root, "agent-alice", ".codex", "home", "config.toml")
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Codex config: %v", err)
+	}
+	config := string(raw)
+	if strings.Contains(config, "https://gateway.example/mcp") || strings.Contains(config, "_meta") {
+		t.Fatalf("Codex config retained template MCP declaration:\n%s", config)
+	}
+	for _, want := range []string{
+		`url = "http://127.0.0.1:18080/api/v1/agents/agent-alice/mcp-file-bridge/file-parser"`,
+		`"Authorization" = "Bearer ` + opencsgmcp.FileBridgeToken("internal-test-token", "agent-alice", "file-parser") + `"`,
+	} {
+		if !strings.Contains(config, want) {
+			t.Fatalf("Codex config missing materialized MCP value %q:\n%s", want, config)
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package runtimewiring
 
 import (
+	"context"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/codexcli"
 	agentruntime "csgclaw/internal/runtime"
@@ -21,6 +22,9 @@ func WithCodexRuntime() agent.ControllerOption {
 		userInputs := runtimecodex.NewUserInputBroker(events)
 		rt := runtimecodex.New(runtimecodex.Dependencies{
 			BinaryProvider: codexcli.Provider{},
+			MaterializeMCPServers: func(ctx context.Context, servers map[string]any) (map[string]any, error) {
+				return s.MaterializeRuntimeMCPServers(ctx, agent.RuntimeKindCodex, servers)
+			},
 			ResolveAgent: func(h agentruntime.Handle) (runtimecodex.AgentRef, error) {
 				got, err := host.ResolveAgent(h)
 				if err != nil {

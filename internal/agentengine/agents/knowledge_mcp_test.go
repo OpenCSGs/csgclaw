@@ -12,6 +12,7 @@ import (
 
 	"csgclaw/internal/config"
 	"csgclaw/internal/knowledgebase"
+	"csgclaw/internal/opencsgmcp"
 	agentruntime "csgclaw/internal/runtime"
 	hub "csgclaw/internal/template"
 )
@@ -20,6 +21,33 @@ type agentKnowledgeBaseRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn agentKnowledgeBaseRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
+}
+
+func TestOpenCSGGatewayMCPUsesLoopbackForHostCodexRuntime(t *testing.T) {
+	svc := &Controller{
+		server: config.ServerConfig{ListenAddr: "0.0.0.0:18080", AccessToken: "internal-token"},
+	}
+	servers := map[string]any{"file-parser": map[string]any{
+		"url": "https://untrusted.example/mcp",
+		opencsgmcp.ManagedMetaKey: map[string]any{
+			opencsgmcp.ManagedMetaNamespace: map[string]any{
+				"type": opencsgmcp.GatewayMCPType, "auth_type": opencsgmcp.CSGHubAuthType,
+			},
+		},
+	}}
+
+	got, err := svc.materializeRuntimeMCPServers(context.Background(), RuntimeKindCodex, servers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := got["file-parser"].(map[string]any)
+	if want := "http://127.0.0.1:18080/api/v1/opencsg-mcp-gateway/mcp"; entry["url"] != want {
+		t.Fatalf("runtime URL = %#v, want %q", entry["url"], want)
+	}
+	headers := entry["headers"].(map[string]any)
+	if headers["Authorization"] != "Bearer internal-token" {
+		t.Fatalf("runtime headers = %#v", headers)
+	}
 }
 
 func installAgentKnowledgeBaseResponse(t *testing.T, endpoint, token string) string {

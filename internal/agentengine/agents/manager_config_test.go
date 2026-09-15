@@ -153,6 +153,16 @@ func TestResolveManagerBaseURLForDockerUsesHostAliasWhenAdvertiseURLIsImplicit(t
 	}
 }
 
+func TestResolveLocalRuntimeBaseURLAlwaysUsesLoopback(t *testing.T) {
+	got := ResolveLocalRuntimeBaseURL(config.ServerConfig{
+		ListenAddr:       "0.0.0.0:18080",
+		AdvertiseBaseURL: "https://public.example.test",
+	})
+	if want := "http://127.0.0.1:18080"; got != want {
+		t.Fatalf("ResolveLocalRuntimeBaseURL() = %q, want %q", got, want)
+	}
+}
+
 func TestResolveManagerBaseURLForLinuxDockerUsesHostLANAddress(t *testing.T) {
 	origDockerHostAliasEnabled := dockerHostAliasEnabled
 	origLocalIPv4Resolver := localIPv4Resolver

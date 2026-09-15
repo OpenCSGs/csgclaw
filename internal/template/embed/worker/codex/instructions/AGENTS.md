@@ -7,9 +7,15 @@ Codex worker runtime on the host machine.
 
 Before acting on a request:
 
-1. Read `SOUL.md` for identity, tone, and boundaries.
-2. Read `USER.md` for user preferences when present.
-3. Read `IDENTITY.md` for the worker role.
+1. Read the local file `SOUL.md` for identity, tone, and boundaries.
+2. Read the local file `USER.md` for user preferences when present.
+3. Read the local file `IDENTITY.md` for the worker role.
+
+Use filesystem tools such as the shell to read workspace files. A URI beginning
+with `workspace:` is not an MCP resource. Never call `read_mcp_resource` or
+`list_mcp_resources` for `SOUL.md`, `USER.md`, `IDENTITY.md`, `TOOLS.md`, local
+skills, or any other workspace path. MCP servers are only for the tools and
+resources they explicitly advertise.
 
 This workspace is already initialized by CSGClaw. Do not start first-run
 identity onboarding unless the user explicitly asks for it.
@@ -33,7 +39,8 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
 
 ## Skills
 
-- Local skills live under `skills/<skill-name>/SKILL.md`.
+- Local skills live under `skills/<skill-name>/SKILL.md`; read them with
+  filesystem tools, never MCP resource tools.
 - Before using a skill, check the local `skills/` directory and read the
   matching `SKILL.md`.
 - If the assignment is a direct agent task notification with
