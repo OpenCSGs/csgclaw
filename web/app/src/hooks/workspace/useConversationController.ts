@@ -78,6 +78,7 @@ import { localizeAPIError } from "@/shared/i18n";
 import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 import { useLegacyOpenClawWorkingFallback } from "./legacyOpenClawWorking";
+import { useAttachmentWarning } from "./useAttachmentWarning";
 import type { UseConversationControllerArgs } from "./types";
 import { messageListScrollKey, useMessageListAutoScroll } from "./useMessageListAutoScroll";
 import { handleSlashPickerNavigation } from "@/components/business/ConversationPane";
@@ -321,7 +322,7 @@ export function useConversationController({
   const [memberActionBusyID, setMemberActionBusyID] = useState("");
   const [memberActionError, setMemberActionError] = useState("");
   const [composerErrorsByConversationId, setComposerErrorsByConversationId] = useState<ComposerErrorsByKey>({});
-  const [attachmentErrorsByConversationId, setAttachmentErrorsByConversationId] = useState<ComposerErrorsByKey>({});
+  const [attachmentWarning, setAttachmentWarning] = useAttachmentWarning(activeConversationId);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const sendAbortControllersRef = useRef<Record<string, AbortController>>({});
   const sendLocksRef = useRef<Record<string, boolean>>({});
@@ -360,25 +361,7 @@ export function useConversationController({
     },
     [activeConversationId],
   );
-  const setAttachmentError = useCallback((error: string, conversationID: string) => {
-    if (!conversationID) {
-      return;
-    }
-    setAttachmentErrorsByConversationId((current) => {
-      if (current[conversationID] === error) {
-        return current;
-      }
-      if (!error) {
-        const { [conversationID]: _cleared, ...rest } = current;
-        return rest;
-      }
-      return { ...current, [conversationID]: error };
-    });
-  }, []);
-  const composerError =
-    composerErrorsByConversationId[activeConversationId] ??
-    attachmentErrorsByConversationId[activeConversationId] ??
-    "";
+  const composerError = composerErrorsByConversationId[activeConversationId] ?? attachmentWarning;
 
   const usersById = useMemo(() => buildUsersById(data?.users), [data]);
   const activeConversation = useMemo(
@@ -567,6 +550,7 @@ export function useConversationController({
   const slashPickerActive = slashPickerState.active;
   const slashCandidates = slashPickerState.candidates;
   const activeThreadDraftKey = activeThreadRootID ? threadKey(activeConversationId, activeThreadRootID) : "";
+  const [threadAttachmentWarning, setThreadAttachmentWarning] = useAttachmentWarning(activeThreadDraftKey);
   const activeThreadDraftSegments = useMemo(() => {
     if (!activeThreadDraftKey) {
       return [];
@@ -652,10 +636,6 @@ export function useConversationController({
     setSlashIndex(0);
     setSlashPickerDismissed(false);
     setComposerSlashQuery(null);
-  }, [activeConversationId]);
-
-  useEffect(() => {
-    setAttachmentErrorsByConversationId({});
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -1582,7 +1562,7 @@ export function useConversationController({
       return;
     }
     const selection = selectAttachmentFiles(files, attachmentDrafts);
-    setAttachmentError(attachmentSelectionError(selection, t), activeConversationId);
+    setAttachmentWarning(attachmentSelectionError(selection, t));
     if (selection.files.length === 0) {
       return;
     }
@@ -1605,7 +1585,7 @@ export function useConversationController({
     if (index < 0) {
       return;
     }
-    setAttachmentError("", activeConversationId);
+    setAttachmentWarning("");
     setRemovedAttachmentsByConversationId((current) => {
       const existing = current[activeConversationId]?.attachments ?? [];
       return {
@@ -1656,7 +1636,7 @@ export function useConversationController({
       return;
     }
     const selection = selectAttachmentFiles(files, activeThreadAttachmentDrafts);
-    setThreadError(attachmentSelectionError(selection, t));
+    setThreadAttachmentWarning(attachmentSelectionError(selection, t));
     if (selection.files.length === 0) {
       return;
     }
@@ -1671,6 +1651,7 @@ export function useConversationController({
     if (!activeThreadDraftKey) {
       return;
     }
+    setThreadAttachmentWarning("");
     setThreadAttachmentDraftsByKey((current) =>
       updateAttachmentDrafts(
         current,
@@ -1682,7 +1663,7 @@ export function useConversationController({
 
   function clearComposerError() {
     setComposerError("");
-    setAttachmentError("", activeConversationId);
+    setAttachmentWarning("");
   }
 
   function clearMemberActionError() {
@@ -1796,7 +1777,7 @@ export function useConversationController({
       activeThreadRootID,
       activeThreadView,
       threadLoading,
-      threadError,
+      threadError: threadError || threadAttachmentWarning,
       threadDraftSegments: activeThreadDraftSegments,
       threadAttachmentDrafts: activeThreadAttachmentDrafts,
       onOpenThread: openThread,

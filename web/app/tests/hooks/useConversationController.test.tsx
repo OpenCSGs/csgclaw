@@ -2,6 +2,7 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
 import { WorkspacePaneTypes } from "@/models/routing";
+import { MAX_ATTACHMENT_FILE_BYTES } from "@/models/attachments";
 import type { IMConversation, IMData, IMMessage, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import type { AgentLike } from "@/models/agents";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
@@ -804,6 +805,134 @@ describe("useConversationController", () => {
 
     rerender({ activeConversationId: directConversation.id, data, messageListActive: true });
     expect(result.current.conversationViewProps.composerError).toBe("");
+  });
+
+  describe("attachment warnings", () => {
+    const root: IMMessage = { id: "msg-root", content: "Start here", sender_id: "u-admin" };
+
+    function oversizedFile(): File {
+      const file = new File(["large"], "large.txt", { type: "text/plain" });
+      Object.defineProperty(file, "size", { value: MAX_ATTACHMENT_FILE_BYTES + 1 });
+      return file;
+    }
+
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("expires a composer warning after five seconds and restarts the timeout for the same warning", () => {
+      const { result } = renderConversationController();
+      const file = oversizedFile();
+
+      act(() => result.current.conversationViewProps.onAddAttachments?.([file]));
+      expect(result.current.conversationViewProps.composerError).toBe("attachmentTooLarge");
+      act(() => vi.advanceTimersByTime(5000));
+      expect(result.current.conversationViewProps.composerError).toBe("");
+
+      act(() => result.current.conversationViewProps.onAddAttachments?.([file]));
+      act(() => vi.advanceTimersByTime(4000));
+      act(() => result.current.conversationViewProps.onAddAttachments?.([file]));
+      act(() => vi.advanceTimersByTime(1000));
+      expect(result.current.conversationViewProps.composerError).toBe("attachmentTooLarge");
+      act(() => vi.advanceTimersByTime(4000));
+      expect(result.current.conversationViewProps.composerError).toBe("");
+      expect(result.current.conversationViewProps.attachmentDrafts).toHaveLength(0);
+    });
+
+    it("clears a warning on room changes without expiring the next room's warning early", () => {
+      const data: IMData = {
+        ...dataWithMessages([]),
+        rooms: [directConversation, { ...directConversation, id: "room-2" }],
+      };
+      const { result, rerender, unmount } = renderConversationController({ data });
+      const file = oversizedFile();
+
+      act(() => result.current.conversationViewProps.onAddAttachments?.([file]));
+      act(() => vi.advanceTimersByTime(4000));
+      rerender({ activeConversationId: "room-2", data });
+      expect(result.current.conversationViewProps.composerError).toBe("");
+      act(() => result.current.conversationViewProps.onAddAttachments?.([file]));
+      act(() => vi.advanceTimersByTime(1000));
+      expect(result.current.conversationViewProps.composerError).toBe("attachmentTooLarge");
+
+      rerender({ activeConversationId: directConversation.id, data });
+      expect(result.current.conversationViewProps.composerError).toBe("");
+      act(() => result.current.conversationViewProps.onAddAttachments?.([file]));
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("expires thread warnings and clears them when the thread changes or closes", async () => {
+      const secondRoot: IMMessage = { id: "msg-second", content: "Another thread", sender_id: "u-admin" };
+      const { result, unmount } = renderConversationController({ data: dataWithMessages([root, secondRoot]) });
+      const file = oversizedFile();
+      await act(async () => result.current.conversationViewProps.onOpenThread(root));
+
+      act(() => result.current.conversationViewProps.onAddThreadAttachments?.([file]));
+      expect(result.current.conversationViewProps.threadError).toBe("attachmentTooLarge");
+      act(() => vi.advanceTimersByTime(5000));
+      expect(result.current.conversationViewProps.threadError).toBe("");
+
+      act(() => result.current.conversationViewProps.onAddThreadAttachments?.([file]));
+      act(() => vi.advanceTimersByTime(4000));
+      await act(async () => result.current.conversationViewProps.onOpenThread(secondRoot));
+      expect(result.current.conversationViewProps.threadError).toBe("");
+      act(() => result.current.conversationViewProps.onAddThreadAttachments?.([file]));
+      act(() => vi.advanceTimersByTime(1000));
+      expect(result.current.conversationViewProps.threadError).toBe("attachmentTooLarge");
+      act(() => result.current.conversationViewProps.onCloseThread());
+      await act(async () => result.current.conversationViewProps.onOpenThread(secondRoot));
+      expect(result.current.conversationViewProps.threadError).toBe("");
+
+      act(() => result.current.conversationViewProps.onAddThreadAttachments?.([file]));
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(["composer", "thread"])("preserves a %s send failure when an attachment warning expires", async (scope) => {
+      apiMocks.sendMessageRequest.mockRejectedValue(new Error("Upload failed. Try again."));
+      const { result } = renderConversationController({ data: dataWithMessages([root]) });
+      const file = new File(["valid"], "valid.txt", { type: "text/plain" });
+      if (scope === "thread") {
+        await act(async () => result.current.conversationViewProps.onOpenThread(root));
+      }
+      const addAttachments = () => {
+        const props = result.current.conversationViewProps;
+        return scope === "thread" ? props.onAddThreadAttachments : props.onAddAttachments;
+      };
+      const displayedError = () => {
+        const props = result.current.conversationViewProps;
+        return scope === "thread" ? props.threadError : props.composerError;
+      };
+      act(() => addAttachments()?.([oversizedFile()]));
+      expect(displayedError()).toBe("attachmentTooLarge");
+      act(() => addAttachments()?.([file]));
+      expect(displayedError()).toBe("");
+      act(() => addAttachments()?.([oversizedFile()]));
+      expect(displayedError()).toBe("attachmentTooLarge");
+      act(() => {
+        const props = result.current.conversationViewProps;
+        if (scope === "thread") {
+          props.onRemoveThreadAttachment?.(props.threadAttachmentDrafts?.[0]?.id ?? "");
+        } else {
+          props.onRemoveAttachment?.(props.attachmentDrafts?.[0]?.id ?? "");
+        }
+      });
+      expect(displayedError()).toBe("");
+      act(() => addAttachments()?.([file]));
+      act(() => addAttachments()?.([oversizedFile()]));
+
+      await act(async () => {
+        const props = result.current.conversationViewProps;
+        await (scope === "thread" ? props.onSendThreadReply() : props.onSendMessage());
+      });
+      expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+      expect(displayedError()).toBe("Upload failed. Try again.");
+      act(() => vi.advanceTimersByTime(5000));
+      expect(displayedError()).toBe("Upload failed. Try again.");
+      act(() => addAttachments()?.([oversizedFile()]));
+      act(() => vi.advanceTimersByTime(5000));
+      expect(displayedError()).toBe("Upload failed. Try again.");
+    });
   });
 
   it("does not derive working participants from recent message history", () => {

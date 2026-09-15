@@ -22,6 +22,7 @@ import (
 	"unicode/utf8"
 
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/utils/filebrowse"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -31,7 +32,6 @@ const (
 	defaultRemoteMaxFileBytes   = 50 * 1024 * 1024
 	officialTemplateNamespace   = "Agentic"
 	remoteManifestFileName      = "agent.toml"
-	remoteFilePreviewMaxBytes   = 256 * 1024
 	remoteAgentTemplatesPerPage = 20
 )
 
@@ -624,8 +624,8 @@ func (s *RemoteStore) ReadWorkspaceFile(
 	}
 	file := apitypes.WorkspaceFile{Path: cleanPath, Size: int64(len(data))}
 	preview := data
-	if len(preview) > remoteFilePreviewMaxBytes {
-		preview = preview[:remoteFilePreviewMaxBytes]
+	if len(preview) > filebrowse.FilePreviewMaxBytes {
+		preview = preview[:filebrowse.FilePreviewMaxBytes]
 		file.Truncated = true
 		validPreview := false
 		for trim := 0; trim < utf8.UTFMax && trim < len(preview); trim++ {
@@ -741,7 +741,9 @@ func (s *RemoteStore) fetchWorkspaceTree(
 
 func (s *RemoteStore) fetchBlob(ctx context.Context, id, filePath, branch string) ([]byte, error) {
 	var payload remoteBlobResponse
-	if err := s.getJSON(ctx, s.blobURL(id, filePath, branch), &payload); err != nil {
+	// Blob responses include base64 file content in addition to ordinary JSON metadata.
+	maxBlobJSON := int64(base64.StdEncoding.EncodedLen(int(s.maxWorkspace))) + s.maxJSON
+	if err := s.getJSONWithLimit(ctx, s.blobURL(id, filePath, branch), &payload, maxBlobJSON); err != nil {
 		return nil, err
 	}
 	data, err := base64.StdEncoding.DecodeString(payload.Data.Content)
@@ -865,12 +867,16 @@ func (s *RemoteStore) blobURL(id, filePath, branch string) string {
 }
 
 func (s *RemoteStore) getJSON(ctx context.Context, endpoint string, out any) error {
-	body, status, err := s.request(ctx, http.MethodGet, endpoint, s.maxJSON+1)
+	return s.getJSONWithLimit(ctx, endpoint, out, s.maxJSON)
+}
+
+func (s *RemoteStore) getJSONWithLimit(ctx context.Context, endpoint string, out any, maxBytes int64) error {
+	body, status, err := s.request(ctx, http.MethodGet, endpoint, maxBytes+1)
 	if err != nil {
 		return err
 	}
-	if int64(len(body)) > s.maxJSON {
-		return fmt.Errorf("remote hub response exceeds %d bytes", s.maxJSON)
+	if int64(len(body)) > maxBytes {
+		return fmt.Errorf("remote hub response exceeds %d bytes", maxBytes)
 	}
 	if status == http.StatusNotFound {
 		return fmt.Errorf("%w", ErrTemplateNotFound)

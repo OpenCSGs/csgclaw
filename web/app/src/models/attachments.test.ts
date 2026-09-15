@@ -30,6 +30,19 @@ describe("attachment drafts", () => {
     expect(formatAttachmentSize(2 * 1024 * 1024)).toBe("2.0 MiB");
   });
 
+  it("accepts 100 MiB files up to a combined 256 MiB", () => {
+    const files = [
+      fileWithSize("first.bin", 100 * 1024 * 1024),
+      fileWithSize("second.bin", 100 * 1024 * 1024),
+      fileWithSize("third.bin", 56 * 1024 * 1024),
+    ];
+    expect(selectAttachmentFiles(files)).toMatchObject({ files, fileTooLarge: false, totalTooLarge: false });
+    expect(selectAttachmentFiles([...files, fileWithSize("extra.bin", 1)])).toMatchObject({
+      files,
+      totalTooLarge: true,
+    });
+  });
+
   it("enforces count, per-file, and total selection limits", () => {
     const oversized = fileWithSize("large.bin", MAX_ATTACHMENT_FILE_BYTES + 1);
     expect(selectAttachmentFiles([oversized])).toMatchObject({ files: [], fileTooLarge: true });

@@ -32,8 +32,8 @@ const (
 	attachmentKindFile         = "file"
 	attachmentKindImage        = "image"
 	MaxAttachmentsPerMessage   = 10
-	MaxAttachmentFileBytes     = 25 * 1024 * 1024
-	MaxAttachmentMessageBytes  = 64 * 1024 * 1024
+	MaxAttachmentFileBytes     = 100 * 1024 * 1024
+	MaxAttachmentMessageBytes  = 256 * 1024 * 1024
 	maxSafeAttachmentNameBytes = 160
 )
 

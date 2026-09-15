@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/utils/filebrowse"
 )
 
 const remoteTestManifest = `name = "gitlab-assistant"
@@ -481,6 +482,55 @@ func TestRemoteStoreListPaginatesAgentTemplates(t *testing.T) {
 	if got, want := strings.Join(requestedPages, ","), "1,2"; got != want {
 		t.Fatalf("agent template pages = %q, want %q", got, want)
 	}
+}
+
+func TestRemoteStoreLargeFilePreview(t *testing.T) {
+	content := bytes.Repeat([]byte("x"), 4*1024*1024)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/codes/Agentic/large-preview":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"default_branch": "main"}})
+		case "/api/v1/codes/Agentic/large-preview/blob/instructions/AGENTS.md":
+			writeRemoteBlob(t, w, "instructions/AGENTS.md", content)
+		case "/api/v1/codes/Agentic/large-preview/blob/instructions/LARGE.md":
+			writeRemoteBlob(t, w, "instructions/LARGE.md", bytes.Repeat([]byte("x"), filebrowse.FilePreviewMaxBytes+1))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	t.Run("file above former limit is returned in full", func(t *testing.T) {
+		store := NewRemoteStore(srv.URL, "")
+		file, err := store.ReadWorkspaceFile(context.Background(), "large-preview", "instructions/AGENTS.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if file.Size != int64(len(content)) || file.Truncated || file.Binary || file.Content != string(content) {
+			t.Fatalf("size=%d, truncated=%t, binary=%t, preview bytes=%d, want complete 4 MiB file", file.Size, file.Truncated, file.Binary, len(file.Content))
+		}
+	})
+
+	t.Run("truncated preview retains original size", func(t *testing.T) {
+		store := NewRemoteStore(srv.URL, "")
+		file, err := store.ReadWorkspaceFile(context.Background(), "large-preview", "instructions/LARGE.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if file.Size != int64(filebrowse.FilePreviewMaxBytes+1) || !file.Truncated || file.Binary || len(file.Content) != filebrowse.FilePreviewMaxBytes || strings.Trim(file.Content, "x") != "" {
+			t.Fatalf("size=%d, truncated=%t, binary=%t, preview bytes=%d, want full size and 32 MiB text preview", file.Size, file.Truncated, file.Binary, len(file.Content))
+		}
+	})
+
+	t.Run("decoded size limit remains enforced", func(t *testing.T) {
+		store := NewRemoteStore(srv.URL, "")
+		store.maxWorkspace = int64(len(content) - 1)
+		_, err := store.ReadWorkspaceFile(context.Background(), "large-preview", "instructions/AGENTS.md")
+		want := fmt.Sprintf("remote hub blob %q exceeds %d bytes", "instructions/AGENTS.md", store.maxWorkspace)
+		if err == nil || err.Error() != want {
+			t.Fatalf("ReadWorkspaceFile() error=%v, want %q", err, want)
+		}
+	})
 }
 
 func TestRemoteStoreListGetAndFetchWorkspace(t *testing.T) {

@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTranslator } from "@/shared/i18n";
+import { TooltipProvider } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import { normalizeTaskList } from "@/models/tasks";
 import { RoomTaskDialog, RoomTaskReference } from "./RoomTaskDialog";
@@ -147,10 +148,19 @@ it("shows a partial outcome in the header while leaving reports out of the check
 
 it("uses a compact task number without long titles or progress in the message action area", async () => {
   const onOpen = vi.fn();
-  render(<RoomTaskReference compact task={tasks[0]} tasks={tasks} t={t} onOpen={onOpen} />);
+  const user = userEvent.setup();
+  render(
+    <TooltipProvider delayDuration={0}>
+      <RoomTaskReference compact task={tasks[0]} tasks={tasks} t={t} onOpen={onOpen} />
+    </TooltipProvider>,
+  );
   const button = screen.getByRole("button", { name: /roomTaskView/ });
   expect(button.textContent).toBe(`#${tasks[0].id}`);
   expect(button.textContent).not.toContain("0/2");
-  await userEvent.click(button);
+  await user.hover(button);
+  const tooltip = await screen.findByRole("tooltip");
+  expect(tooltip).toHaveTextContent(`roomTaskView · ${tasks[0].title}`);
+  expect(button).not.toContainElement(tooltip);
+  await user.click(button);
   expect(onOpen).toHaveBeenCalledWith(button);
 });

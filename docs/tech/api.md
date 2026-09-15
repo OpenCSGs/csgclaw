@@ -803,7 +803,7 @@ Response fields:
 Notes:
 
 - Non-UTF-8 files return `binary=true`
-- Text content larger than `256 KiB` is truncated and returned with `truncated=true`
+- Text content larger than `32 MiB` is truncated and returned with `truncated=true`
 - Absolute paths and `..` traversal are rejected
 
 ## CLIProxy Auth API
@@ -1094,6 +1094,7 @@ Notes:
 - A thread reply also publishes `thread.updated`
 - To send attachments, use `multipart/form-data` with a `payload` JSON part containing the same fields and one or more `files` parts.
 - Attachment-only messages are valid when at least one file is present.
+- A message accepts up to 10 attachments, with a maximum of `100 MiB` per file and `256 MiB` in total.
 - Each returned message can include `attachments` with `id`, `name`, `kind`, `media_type`, `size_bytes`, `sha256`, `created_at`, `download_url`, optional `preview_url`, optional image dimensions, and optional `workspace_path` for agent-facing deliveries.
 
 Multipart example:
@@ -1112,6 +1113,8 @@ The `download_url` returned in attachment metadata includes an attachment-scoped
 Callers may instead request the bare path with the configured server Bearer token.
 
 The endpoint serves the original bytes with the stored media type and `X-Content-Type-Options: nosniff`.
+
+Downloads return the complete stored file without an additional size limit and support HTTP Range requests.
 
 Treat the capability URL as a secret and avoid sharing it outside the room context.
 

@@ -958,6 +958,21 @@ describe("HubDetailPane", () => {
     expect(screen.queryByText("demo-template")).not.toBeInTheDocument();
   });
 
+  it("presents managed MCP source check failures as an actionable alert", async () => {
+    const user = userEvent.setup();
+    const { onCheckMCPSource } = renderMCPDetailPane({
+      managedSource: true,
+      sourceError: "Source check failed",
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("resourcesKnowledgeMCPCheckFailed");
+    expect(alert).toHaveTextContent("resourcesKnowledgeMCPCheckFailedHint");
+
+    await user.click(screen.getByRole("button", { name: "resourcesMCPSourceRetry" }));
+    expect(onCheckMCPSource).toHaveBeenCalledTimes(1);
+  });
+
   it("shows template profile instructions as a readonly preview", async () => {
     const user = userEvent.setup();
     renderHubDetailPane();

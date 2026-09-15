@@ -171,7 +171,9 @@ describe("WorkspaceRows", () => {
       />,
     );
 
-    expect(screen.getByText("onDemandCollaborationTag")).toBeInTheDocument();
+    const onDemandBadge = screen.getByText("onDemandCollaborationTag");
+    expect(onDemandBadge).toBeInTheDocument();
+    expect(onDemandBadge.parentElement).toBe(screen.getByRole("button").lastElementChild);
 
     rerender(
       <WorkspaceConversationRow
@@ -185,7 +187,9 @@ describe("WorkspaceRows", () => {
       />,
     );
 
-    expect(screen.getByText("freeCollaborationTag")).toBeInTheDocument();
+    const freeBadge = screen.getByText("freeCollaborationTag");
+    expect(freeBadge).toBeInTheDocument();
+    expect(freeBadge.parentElement).toBe(screen.getByRole("button").lastElementChild);
   });
 
   it("renders thread rows without markdown code-fence language prefixes", () => {

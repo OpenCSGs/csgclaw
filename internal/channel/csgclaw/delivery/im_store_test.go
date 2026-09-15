@@ -66,13 +66,16 @@ func TestTranscriptRendererPersistsGeneratedFilesWithFinalMessage(t *testing.T) 
 	}
 	fileStore := agentengine.NewFileStore()
 	files := fileStore.Scope("agent-worker")
-	markdown := []byte("# Generated report\n")
+	// Generated files above the former 25 MiB limit must reach the chat transcript.
+	line := []byte("# Generated report\n")
+	markdown := bytes.Repeat(line, (26*1024*1024)/len(line))
 	created, err := files.Create(context.Background(), agentengine.FileCreateRequest{
 		Name: "report.md", MIMEType: "text/markdown", SizeBytes: int64(len(markdown)),
 	}, bytes.NewReader(markdown))
 	if err != nil {
 		t.Fatalf("Create(output file) error = %v", err)
 	}
+	t.Cleanup(func() { _ = files.Delete(context.Background(), created.ID) })
 	store, err := NewIMTranscriptStore(imService, fixedParticipantResolver{item: apitypes.Participant{
 		ID: "pt-worker", ChannelUserRef: "user-worker",
 	}}, fixedOutputFileSource{files: files})
@@ -128,7 +131,7 @@ func TestTranscriptRendererPersistsGeneratedFilesWithFinalMessage(t *testing.T) 
 	}
 	content, err := os.ReadFile(file.Path)
 	if err != nil || !bytes.Equal(content, markdown) {
-		t.Fatalf("persisted attachment content = %q, error = %v", content, err)
+		t.Fatalf("persisted attachment bytes = %d, want %d original bytes; error = %v", len(content), len(markdown), err)
 	}
 
 	root, err := imService.CreateMessage(im.CreateMessageRequest{

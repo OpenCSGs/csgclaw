@@ -47,7 +47,7 @@ func TestReadFileTrimsIncompleteUTF8Preview(t *testing.T) {
 		t.Fatal("Binary = true, want false")
 	}
 	if got.Content != prefix {
-		t.Fatalf("content = %q, want %q", got.Content, prefix)
+		t.Fatalf("content bytes = %d, want %d original prefix bytes", len(got.Content), len(prefix))
 	}
 }
 

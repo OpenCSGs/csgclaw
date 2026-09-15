@@ -13,7 +13,7 @@ import (
 	"csgclaw/internal/apitypes"
 )
 
-const FilePreviewMaxBytes = 256 * 1024
+const FilePreviewMaxBytes = 32 * 1024 * 1024
 
 func List(root, relativePath string) (apitypes.WorkspaceListing, error) {
 	root = strings.TrimSpace(root)

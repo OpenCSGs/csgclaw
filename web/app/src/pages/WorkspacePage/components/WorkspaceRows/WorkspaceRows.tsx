@@ -349,11 +349,6 @@ export function WorkspaceConversationRow({
       <span className={styles.main}>
         <span className={styles.titleLine}>
           <span className={classNames(styles.title, "truncate")}>{title}</span>
-          {isDirect ? null : (
-            <span className={classNames(styles.roomModeBadge, onDemand && styles.roomModeBadgeOnDemand)}>
-              {t(onDemand ? "onDemandCollaborationTag" : "freeCollaborationTag")}
-            </span>
-          )}
           {questionCount > 0 ? (
             <span
               className={styles.pendingQuestionBadge}
@@ -375,7 +370,14 @@ export function WorkspaceConversationRow({
           </span>
         )}
       </span>
-      <span className={styles.time}>{formatSidebarTime(lastMessage?.created_at, locale, t)}</span>
+      <span className={styles.conversationTail}>
+        {isDirect ? null : (
+          <span className={classNames(styles.roomModeBadge, onDemand && styles.roomModeBadgeOnDemand)}>
+            {t(onDemand ? "onDemandCollaborationTag" : "freeCollaborationTag")}
+          </span>
+        )}
+        <span className={styles.time}>{formatSidebarTime(lastMessage?.created_at, locale, t)}</span>
+      </span>
     </button>
   );
 }

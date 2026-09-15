@@ -613,13 +613,19 @@ button.thread-message-avatar:focus-visible {
   }
 }
 
-/* The task reference shares the existing action strip; it never adds a card
-   row or pushes Copy / Reply below the message. */
+/* Keep task references in the shared action strip and reserve enough room so
+   the following message cannot overlap it. */
 .message-hover-actions.has-leading {
+  position: static;
+  inset: auto;
+  width: 100%;
+  box-sizing: border-box;
+  padding-block: 4px;
   opacity: 1;
 }
 .message-action-leading {
   display: flex;
+  align-items: center;
   min-width: 0;
   margin-right: auto;
 }

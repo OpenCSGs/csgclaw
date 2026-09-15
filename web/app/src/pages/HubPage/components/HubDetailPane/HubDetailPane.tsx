@@ -10,6 +10,7 @@ import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lin
 import { tags } from "@lezer/highlight";
 import {
   AlertCircle,
+  AlertTriangle,
   BookOpen,
   CheckCircle2,
   CloudDownload,
@@ -2516,19 +2517,28 @@ export function HubDetailPane({
                     mcpSourceStatus?.updateAvailable ? "update-available" : "",
                     mcpSourceError && !mcpSourceStatus?.updateAvailable ? "check-failed" : "",
                   )}
-                  role="status"
+                  role={mcpSourceStatus?.updateAvailable ? "status" : "alert"}
                 >
-                  <div className={moduleClassNames("mcp-source-notice-copy")}>
-                    <strong>
-                      {mcpSourceStatus?.updateAvailable
-                        ? t("resourcesKnowledgeMCPUpdateAvailable")
-                        : t("resourcesKnowledgeMCPCheckFailed")}
-                    </strong>
-                    <span>
-                      {mcpSourceStatus?.updateAvailable
-                        ? t("resourcesKnowledgeMCPUpdateHint")
-                        : t("resourcesKnowledgeMCPCheckFailedHint")}
+                  <div className={moduleClassNames("mcp-source-notice-content")}>
+                    <span className={moduleClassNames("mcp-source-notice-icon")} aria-hidden="true">
+                      {mcpSourceStatus?.updateAvailable ? (
+                        <CloudDownload size={18} strokeWidth={2.2} />
+                      ) : (
+                        <AlertTriangle size={18} strokeWidth={2.2} />
+                      )}
                     </span>
+                    <div className={moduleClassNames("mcp-source-notice-copy")}>
+                      <strong>
+                        {mcpSourceStatus?.updateAvailable
+                          ? t("resourcesKnowledgeMCPUpdateAvailable")
+                          : t("resourcesKnowledgeMCPCheckFailed")}
+                      </strong>
+                      <span>
+                        {mcpSourceStatus?.updateAvailable
+                          ? t("resourcesKnowledgeMCPUpdateHint")
+                          : t("resourcesKnowledgeMCPCheckFailedHint")}
+                      </span>
+                    </div>
                   </div>
                   <div className={moduleClassNames("mcp-source-notice-actions")}>
                     {mcpSourceStatus?.updateAvailable ? (
@@ -2543,12 +2553,13 @@ export function HubDetailPane({
                       </Button>
                     ) : (
                       <Button
-                        variant="secondaryGray"
+                        variant="outlineDanger"
                         size="sm"
                         loading={mcpSourceBusy}
                         disabled={mcpSourceSyncBusy}
                         onClick={handleCheckMCPSource}
                       >
+                        <RefreshCw size={14} strokeWidth={2.2} aria-hidden="true" />
                         {t("resourcesMCPSourceRetry")}
                       </Button>
                     )}

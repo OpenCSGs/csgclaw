@@ -80,7 +80,7 @@ const t = (key: string, params?: Record<string, string | number>) => {
     attachmentPreviewOutline: "Document outline",
     attachmentPreviewPageCount: `Page ${params?.page ?? 0} of ${params?.count ?? 0}`,
     attachmentPreviewSlideCount: `Slide ${params?.page ?? 0} of ${params?.count ?? 0}`,
-    attachmentPreviewTruncated: "Only the first 256 KiB is shown",
+    attachmentPreviewTruncated: "Only the first 32 MiB is shown",
     attachmentPreviewResetZoom: "Reset zoom",
     attachmentPreviewResize: "Resize preview",
     attachmentPreviewUnavailable: "Preview unavailable",
@@ -404,6 +404,30 @@ describe("DocumentPreviewPanel", () => {
     expect(screen.queryByText("Slide 10 of 3")).not.toBeInTheDocument();
   });
 
+  it("previews text past the old 2 MiB limit without truncating", async () => {
+    const fullText = `${"x".repeat(4 * 1024 * 1024)}TAIL`;
+    const { container } = render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[
+          {
+            file: new File([fullText], "report.txt", { type: "text/plain" }),
+            id: "complete-text",
+            mediaType: "text/plain",
+            name: "report.txt",
+            sizeBytes: fullText.length,
+          },
+        ]}
+        t={t}
+        onClose={() => {}}
+        onIndexChange={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(container.querySelector(".document-preview-text")?.textContent).toBe(fullText));
+    expect(screen.queryByText("Only the first 32 MiB is shown")).not.toBeInTheDocument();
+  });
+
   it("bounds large text previews and keeps the complete file downloadable", async () => {
     const fullText = `${"x".repeat(MAX_TEXT_PREVIEW_BYTES + 32)}TAIL`;
     const { container } = render(
@@ -424,7 +448,7 @@ describe("DocumentPreviewPanel", () => {
       />,
     );
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Only the first 256 KiB is shown");
+    expect(await screen.findByRole("status")).toHaveTextContent("Only the first 32 MiB is shown");
     const preview = container.querySelector(".document-preview-text");
     expect(preview?.textContent).toHaveLength(MAX_TEXT_PREVIEW_BYTES);
     expect(preview).not.toHaveTextContent("TAIL");

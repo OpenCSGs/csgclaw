@@ -1,8 +1,8 @@
 export type AttachmentKind = "image" | "file";
 
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
-export const MAX_ATTACHMENT_FILE_BYTES = 25 * 1024 * 1024;
-export const MAX_ATTACHMENT_MESSAGE_BYTES = 64 * 1024 * 1024;
+export const MAX_ATTACHMENT_FILE_BYTES = 100 * 1024 * 1024;
+export const MAX_ATTACHMENT_MESSAGE_BYTES = 256 * 1024 * 1024;
 
 let attachmentDraftSequence = 0;
 

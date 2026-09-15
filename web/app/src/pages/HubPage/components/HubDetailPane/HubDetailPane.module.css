@@ -777,13 +777,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--muted);
   font-size: 13px;
   line-height: 20px;
+  box-shadow: var(--shadow-xs);
 }
 
 .mcp-source-notice.update-available {
@@ -793,8 +794,38 @@
 }
 
 .mcp-source-notice.check-failed {
-  border-color: color-mix(in srgb, var(--error-600) 32%, var(--line));
-  background: color-mix(in srgb, var(--error-50) 62%, var(--surface) 38%);
+  border-color: var(--error-200);
+  background: var(--error-25);
+  color: var(--error-700);
+}
+
+.mcp-source-notice-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mcp-source-notice-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  background: var(--gray-100);
+  color: var(--muted);
+}
+
+.mcp-source-notice.update-available .mcp-source-notice-icon {
+  background: var(--warning-100);
+  color: var(--warning-700);
+}
+
+.mcp-source-notice.check-failed .mcp-source-notice-icon {
+  background: var(--error-100);
+  color: var(--error-600);
 }
 
 .mcp-source-notice-copy {
@@ -805,6 +836,15 @@
 
 .mcp-source-notice-copy strong {
   color: var(--text);
+  font-weight: 600;
+}
+
+.mcp-source-notice.update-available .mcp-source-notice-copy strong {
+  color: var(--warning-800);
+}
+
+.mcp-source-notice.check-failed .mcp-source-notice-copy strong {
+  color: var(--error-800);
 }
 
 .mcp-source-notice-actions {
@@ -833,6 +873,52 @@
   border-color: color-mix(in oklab, var(--warning-700) 38%, var(--line));
   background: color-mix(in oklab, var(--warning-700) 14%, transparent);
   color: color-mix(in oklab, var(--warning-700) 78%, var(--text));
+}
+
+:root[data-theme="dark"] .mcp-source-notice.update-available {
+  border-color: color-mix(in srgb, var(--warning-700) 72%, var(--line));
+  background: color-mix(in srgb, var(--warning-950) 46%, var(--surface));
+  color: var(--warning-200);
+}
+
+:root[data-theme="dark"] .mcp-source-notice.check-failed {
+  border-color: color-mix(in srgb, var(--error-700) 72%, var(--line));
+  background: color-mix(in srgb, var(--error-950) 46%, var(--surface));
+  color: var(--error-200);
+}
+
+:root[data-theme="dark"] .mcp-source-notice.update-available .mcp-source-notice-icon {
+  background: color-mix(in srgb, var(--warning-800) 48%, transparent);
+  color: var(--warning-300);
+}
+
+:root[data-theme="dark"] .mcp-source-notice.check-failed .mcp-source-notice-icon {
+  background: color-mix(in srgb, var(--error-800) 48%, transparent);
+  color: var(--error-300);
+}
+
+:root[data-theme="dark"] .mcp-source-notice.update-available .mcp-source-notice-copy strong {
+  color: var(--warning-100);
+}
+
+:root[data-theme="dark"] .mcp-source-notice.check-failed .mcp-source-notice-copy strong {
+  color: var(--error-100);
+}
+
+@container (max-width: 560px) {
+  .mcp-source-notice {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mcp-source-notice-actions {
+    padding-left: 46px;
+  }
+
+  .mcp-source-notice-actions :global(.btn) {
+    width: 100%;
+  }
+}
 }
 
 .hub-publish-partial-message {
