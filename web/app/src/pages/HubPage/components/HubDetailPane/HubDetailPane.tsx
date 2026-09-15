@@ -1763,14 +1763,8 @@ export function HubDetailPane({
                             <WorkspaceTemplatesIcon />
                           </ResourceFeaturedIcon>
                           <span className={moduleClassNames("hub-skill-card-copy")}>
-                            <span className={moduleClassNames("hub-skill-card-title-row")}>
-                              <span className={moduleClassNames("hub-skill-card-title")}>
-                                {hubTemplateFullName(template)}
-                              </span>
-                              <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
-                                <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
-                                {localizeTemplateSourceTag(template.source?.name, locale)}
-                              </span>
+                            <span className={moduleClassNames("hub-skill-card-title")}>
+                              {hubTemplateFullName(template)}
                             </span>
                             <span className={moduleClassNames("hub-skill-card-description")}>
                               {review
@@ -1779,6 +1773,10 @@ export function HubDetailPane({
                                   : t("resourcesTemplateReviewFailed")
                                 : template.description || template.id}
                             </span>
+                          </span>
+                          <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
+                            <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
+                            {localizeTemplateSourceTag(template.source?.name, locale)}
                           </span>
                         </button>
                       );
@@ -2303,7 +2301,7 @@ export function HubDetailPane({
                         <button
                           key={skill.name}
                           type="button"
-                          className={moduleClassNames("hub-skill-list-card", active && "active")}
+                          className={moduleClassNames("hub-skill-list-card", "hub-skill-list-card--no-check", active && "active")}
                           onClick={() => openSkillDetail(skill)}
                         >
                           <SkillFeaturedIcon />
@@ -2312,6 +2310,10 @@ export function HubDetailPane({
                             <span className={moduleClassNames("hub-skill-card-description")}>
                               {skill.description || skill.name}
                             </span>
+                          </span>
+                          <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
+                            <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
+                            {skillSourceBadgeName(skill) === "local" ? t("resourcesSkillLocalFilter") : t("resourcesSkillRemoteFilter")}
                           </span>
                         </button>
                       );
@@ -2392,7 +2394,7 @@ export function HubDetailPane({
                         <button
                           key={server.name}
                           type="button"
-                          className={moduleClassNames("hub-skill-list-card", active && "active")}
+                          className={moduleClassNames("hub-skill-list-card", "hub-skill-list-card--no-check", active && "active")}
                           onClick={() => openMCPDetail(server)}
                         >
                           <ResourceFeaturedIcon>
@@ -2403,6 +2405,14 @@ export function HubDetailPane({
                             <span className={moduleClassNames("hub-skill-card-description")}>
                               {server.description || mcpServerDescription(server.config) || server.name}
                             </span>
+                          </span>
+                          <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
+                            <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
+                            {(() => {
+                              const configType = String(server.config?.type || server.config?.transport || "").trim().toLocaleLowerCase();
+                              const isRemote = configType.includes("remote") || Boolean(server.config?.url);
+                              return isRemote ? t("resourcesSkillRemoteFilter") : t("resourcesSkillLocalFilter");
+                            })()}
                           </span>
                         </button>
                       );

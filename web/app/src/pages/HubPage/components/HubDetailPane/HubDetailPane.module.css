@@ -1095,7 +1095,7 @@
 }
 
 .hub-skill-list-card--no-check {
-  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   gap: 12px;
 }
 
@@ -1155,14 +1155,8 @@
   white-space: nowrap;
 }
 
-.hub-skill-card-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
 .hub-template-source-badge {
+  align-self: center;
   flex: 0 0 auto;
   max-width: 88px;
   min-height: 20px;
