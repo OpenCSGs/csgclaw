@@ -79,11 +79,6 @@ export function ModelProviderPage() {
   const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
-
-  // Restore detail dialog visibility from route-driven provider on initial load / refresh
-  useEffect(() => {
-    if (provider) setDetailOpen(true);
-  }, [provider]);
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
   const isOpenCSG = provider?.id === "opencsg";
   const canEditEndpoint = Boolean(provider && !isBuiltinCLI && !isOpenCSG);
