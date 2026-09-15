@@ -89,6 +89,14 @@ runtime_kind = "picoclaw_sandbox"
 provider = "boxlite"
 ```
 
+### 图片生成模型
+
+Agent 可以在档案中单独选择可选的图片生成服务商和模型，与对话模型分开配置。
+当前接入 Codex Runtime 的 CSGClaw 网页对话生图工具，并复用所选服务商的凭证。
+服务商声明的 `text-to-image` 模型单独缓存在 `image_models` 中；缺少任务元数据时，也会识别已适配的 GPT Image 型号。
+连接检查会刷新该缓存，但目录声明不代表当前账号或上游适配器已通过真实生图请求。
+图片适配器使用 OpenAI Images API 并请求 base64 输出；仅暴露其他原生请求格式的服务商需要由兼容网关完成适配。
+
 ### 动态 Codex 或 Claude Code Profile
 
 ```toml

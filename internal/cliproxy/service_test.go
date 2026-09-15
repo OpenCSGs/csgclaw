@@ -105,7 +105,7 @@ func TestRegisteredModelsUsesCLIProxyProviderRegistry(t *testing.T) {
 
 func TestFallbackModelsCoverEmbeddedCLIProviders(t *testing.T) {
 	for provider, wantFirst := range map[string]string{
-		"codex":  "gpt-5.5",
+		"codex":  "gpt-6-astra",
 		"claude": "claude-opus-4-7",
 	} {
 		models := fallbackModels(provider)

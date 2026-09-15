@@ -1,3 +1,5 @@
+import { isImageAttachment } from "@/models/attachments";
+import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { Fragment, memo, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
@@ -131,7 +133,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
           <Fragment key={message.id || `message-${index}`}>
             {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
             <div
-              className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""}`.trim()}
+              className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""} ${message.metadata?.image_generation ? "image-generation-message" : ""}`.trim()}
               data-message-id={message.id || undefined}
             >
               <button
@@ -156,7 +158,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                   <span className="message-author">{user.name}</span>
                   <MessageTimestamp parts={timestampParts} />
                 </div>
-                {message.content ? (
+                {message.content && !message.metadata?.image_generation ? (
                   <div className="message-bubble">
                     <MessageContent
                       key={`${message.id}:${theme}`}
@@ -181,6 +183,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                     />
                   </div>
                 ) : null}
+                <ImageGenerationStatus message={message} roomID={conversation.id} t={t} />
                 <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
                 {threadSummary ? (
                   <div className="message-thread-actions has-thread-summary">
@@ -210,7 +213,8 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                 <ConversationMessageActions
                   className="message-hover-actions"
                   leading={renderMessageFooter?.(message)}
-                  content={message.content}
+                  content={message.metadata?.image_generation ? null : message.content}
+                  image={message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined}
                   onOpenThread={() => onOpenThread(message)}
                   t={t}
                 />

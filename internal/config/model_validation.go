@@ -19,6 +19,7 @@ type ProviderConfig struct {
 	APIKey          string            `json:"api_key,omitempty"`
 	Headers         map[string]string `json:"headers,omitempty"`
 	Models          []string          `json:"models,omitempty"`
+	ImageModels     []string          `json:"image_models,omitempty"`
 	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
 	Status          string            `json:"status,omitempty"`
 	Message         string            `json:"message,omitempty"`
@@ -123,6 +124,7 @@ func (c ProviderConfig) Resolved() ProviderConfig {
 	out.Headers = normalizeHeaderMap(out.Headers)
 	out.ReasoningEffort = NormalizeReasoningEffort(out.ReasoningEffort)
 	out.Models = normalizeModelIDs(out.Models)
+	out.ImageModels = normalizeModelIDs(out.ImageModels)
 	out.Status = strings.ToLower(strings.TrimSpace(out.Status))
 	out.Message = strings.TrimSpace(out.Message)
 	out.LastCheckedAt = strings.TrimSpace(out.LastCheckedAt)
@@ -138,7 +140,7 @@ func (c ProviderConfig) MissingFields() []string {
 	if cfg.APIKey == "" {
 		missing = append(missing, "api_key")
 	}
-	if len(cfg.Models) == 0 {
+	if len(cfg.Models) == 0 && len(cfg.ImageModels) == 0 {
 		missing = append(missing, "model_id")
 	}
 	return missing

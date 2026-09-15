@@ -3,6 +3,7 @@ package agentengine
 import (
 	"context"
 	"csgclaw/internal/activity"
+	"csgclaw/internal/agentengine/contract"
 	"fmt"
 	"reflect"
 	"strings"
@@ -26,11 +27,12 @@ type conversationRuntimeAdapter interface {
 // identity, pending interactions, replay-safe event delivery, and terminal
 // result idempotency.
 type Engine struct {
-	agents       AgentInterface
-	runtimes     conversationRuntimeResolver
-	files        *FileStore
-	extensions   runtimeExtensionScopes
-	interactions InteractionCoordinator
+	generateImage imageGenerator
+	agents        AgentInterface
+	runtimes      conversationRuntimeResolver
+	files         *FileStore
+	extensions    runtimeExtensionScopes
+	interactions  InteractionCoordinator
 
 	mu             sync.Mutex
 	active         map[conversationIdentity]*activeTurn
@@ -66,6 +68,7 @@ type pendingInteraction struct {
 }
 
 type activeTurn struct {
+	emitMu              sync.Mutex
 	agentID             string
 	structuredUserInput *activity.RequestUserInputArgs
 	request             TurnRequest
@@ -168,6 +171,30 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		return *admissionResult
 	}
 	turn.agentID = c.agentID
+	if request.ImageGeneration != nil {
+		if request.ImageGeneration.Model == nil && c.engine.agents != nil {
+			selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
+			if err == nil {
+				task := *request.ImageGeneration
+				task.Model = selected.Spec.Model.ImageGeneration
+				request.ImageGeneration = &task
+			}
+		}
+		err := c.generateImage(turn.ctx, turn, sink, *request.ImageGeneration)
+		result := TurnResult{Status: TurnSucceeded}
+		if err != nil {
+			result = failedResult(ErrorRuntimeFailed, err.Error())
+		}
+		turn.cancel()
+		c.engine.complete(identity, turn, result)
+		return result
+	}
+	if c.engine.agents != nil {
+		selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
+		if err == nil {
+			turn.ctx = contract.WithImageGenerationHandler(turn.ctx, c.imageHandler(turn, sink, selected.Spec.Model.ImageGeneration))
+		}
+	}
 	c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
 	runtimeAdapter, releaseRuntime, resolveErr := c.engine.runtimes.conversationRuntime(turn.ctx, c.agentID)
 	if resolveErr != nil {
@@ -500,6 +527,8 @@ func (e *Engine) endControl(identity conversationIdentity, control *conversation
 }
 
 func (e *Engine) recordAndEmit(ctx context.Context, turn *activeTurn, sink EventSink, event TurnEvent) error {
+	turn.emitMu.Lock()
+	defer turn.emitMu.Unlock()
 	e.mu.Lock()
 	turn.sequence++
 	event.TurnID = turn.request.ID
@@ -602,6 +631,10 @@ func cloneCompletedTurn(input completedTurn) completedTurn {
 }
 
 func cloneTurnRequest(input TurnRequest) TurnRequest {
+	if input.ImageGeneration != nil {
+		task := contract.CloneImageGenerationTask(*input.ImageGeneration)
+		input.ImageGeneration = &task
+	}
 	input.Input = append([]InputPart(nil), input.Input...)
 	for index := range input.Input {
 		if input.Input[index].File != nil {
@@ -635,6 +668,9 @@ func cloneTurnEvent(input TurnEvent) TurnEvent {
 	}
 	if input.Output != nil {
 		copy := *input.Output
+		if task, ok := copy.Payload.(contract.ImageGenerationTask); ok {
+			copy.Payload = contract.CloneImageGenerationTask(task)
+		}
 		input.Output = &copy
 	}
 	return input

@@ -3868,6 +3868,7 @@ func TestRuntimeNewRestoresPersistedConversationMappings(t *testing.T) {
 		RuntimeID:                   "rt-u-alice",
 		SessionID:                   "main-thread",
 		ConversationSessions:        map[string]string{"room-1": "room-thread"},
+		DynamicToolsVersion:         engineDynamicToolsVersion,
 		FilePublishingConversations: map[string]bool{"room-1": true},
 	}); err != nil {
 		t.Fatalf("write session metadata: %v", err)
@@ -3960,6 +3961,7 @@ func TestRuntimeStartRestoresPersistedConversationMappings(t *testing.T) {
 		RuntimeID:                   "rt-u-alice",
 		SessionID:                   "main-thread",
 		ConversationSessions:        map[string]string{"room-1": "room-thread"},
+		DynamicToolsVersion:         engineDynamicToolsVersion,
 		FilePublishingConversations: map[string]bool{"room-1": true},
 	}); err != nil {
 		t.Fatalf("write session metadata: %v", err)

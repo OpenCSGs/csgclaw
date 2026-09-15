@@ -108,6 +108,7 @@ const (
 	InteractionUserInput             = contract.InteractionUserInput
 	OutputItemRequestUserInput       = contract.OutputItemRequestUserInput
 	OutputItemResourceLink           = contract.OutputItemResourceLink
+	OutputItemImageGeneration        = contract.OutputItemImageGeneration
 	TurnSucceeded                    = contract.TurnSucceeded
 	TurnFailed                       = contract.TurnFailed
 	TurnCanceled                     = contract.TurnCanceled

@@ -9,8 +9,10 @@ import (
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/channel"
 	channelrender "csgclaw/internal/channel/csgclaw/render"
+	"fmt"
 )
 
 const (
@@ -159,6 +161,16 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 		}
 		return nil
 	case agentengine.TurnEventOutputItem:
+		if event.Output != nil && event.Output.Kind == contract.OutputItemImageGeneration {
+			task, ok := event.Output.Payload.(contract.ImageGenerationTask)
+			store, supported := r.store.(interface {
+				DeliverImageGeneration(context.Context, channel.TurnContext, contract.ImageGenerationTask) error
+			})
+			if !ok || !supported {
+				return fmt.Errorf("image delivery is unavailable")
+			}
+			return store.DeliverImageGeneration(ctx, turn, task)
+		}
 		return r.captureOutputItem(state, event)
 	case agentengine.TurnEventInteractionRequest:
 		bound, err := r.bindInteraction(turn, event)

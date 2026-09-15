@@ -198,6 +198,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		})
 		r.Route("/messages", func(r chi.Router) {
 			r.Get("/", h.listMessages)
+			r.Post("/{message_id}/image-generation/retry", h.retryImageGeneration)
 			r.Post("/", h.createMessage)
 		})
 		r.Route("/teams", func(r chi.Router) {
@@ -303,6 +304,7 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 		})
 		r.Route("/csgclaw/messages", func(r chi.Router) {
 			r.Get("/", h.listMessages)
+			r.Post("/{message_id}/image-generation/retry", h.retryImageGeneration)
 			r.Post("/", h.createMessage)
 		})
 

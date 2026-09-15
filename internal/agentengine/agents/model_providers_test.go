@@ -279,3 +279,33 @@ func TestClearModelProviderCachedStateRemovesModelsAndCheckMetadata(t *testing.T
 		t.Fatal("stale generated OpenCSG profile was not removed")
 	}
 }
+
+func TestImageModelDiscoveryCachesAndClearsNonGPTModels(t *testing.T) {
+	includeImages := true
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if includeImages {
+			_, _ = w.Write([]byte(`{"data":[{"id":"chat-vision","task":"text-generation,image-text-to-text"},{"id":"vendor-image","task":"text-to-image"}]}`))
+		} else {
+			_, _ = w.Write([]byte(`{"data":[{"id":"chat-vision","task":"text-generation"}]}`))
+		}
+	}))
+	defer upstream.Close()
+	llm := config.LLMConfig{Providers: map[string]config.ProviderConfig{"custom": {BaseURL: upstream.URL, APIKey: "key"}}}
+	for _, include := range []bool{true, false} {
+		includeImages = include
+		result := CheckModelProvider(context.Background(), ModelProviderCheckInput{ID: "custom", BaseURL: upstream.URL, APIKey: "key"})
+		if result.Status != ModelProviderStatusConnected || (len(result.ImageModels) > 0) != include {
+			t.Fatalf("discovery=%+v", result)
+		}
+		llm, _ = ApplyModelProviderCheckResult(llm, "custom", result)
+		if (len(llm.Providers["custom"].ImageModels) > 0) != include {
+			t.Fatal("image catalog cache was not updated")
+		}
+		catalog := ModelProviderCatalogFromLLM(llm)
+		for _, provider := range catalog.Providers {
+			if provider.ID == "custom" && (len(provider.ImageModels) > 0) != include {
+				t.Fatal("API catalog lost image models")
+			}
+		}
+	}
+}

@@ -195,6 +195,7 @@ func serviceAgentFromEngine(item agentengine.Agent) agent.Agent {
 func engineModelFromProfile(profile agent.AgentProfile) agentengine.ModelSpec {
 	return agentengine.ModelSpec{
 		Name:            profile.Name,
+		ImageGeneration: profile.ImageGeneration,
 		Description:     profile.Description,
 		Provider:        profile.Provider,
 		ProviderID:      profile.ModelProviderID,
@@ -212,6 +213,7 @@ func engineModelFromProfile(profile agent.AgentProfile) agentengine.ModelSpec {
 func serviceProfileFromEngine(view agentengine.ModelView) agent.AgentProfile {
 	profile := agent.AgentProfile{
 		Name:                 view.Name,
+		ImageGeneration:      view.ImageGeneration,
 		Description:          view.Description,
 		Provider:             view.Provider,
 		ModelProviderID:      view.ProviderID,
@@ -238,6 +240,7 @@ func serviceProfileFromEngine(view agentengine.ModelView) agent.AgentProfile {
 func serviceProfileViewFromEngine(view agentengine.ModelView) agent.AgentProfileView {
 	return agent.AgentProfileView{
 		Name:                 view.Name,
+		ImageGeneration:      view.ImageGeneration,
 		Description:          view.Description,
 		Provider:             view.Provider,
 		ModelProviderID:      view.ProviderID,

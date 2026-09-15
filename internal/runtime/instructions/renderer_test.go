@@ -169,6 +169,11 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsSharedFilePublishingRules(t *te
 	for _, agentID := range []string{"agent-manager", "agent-worker"} {
 		rendered := RenderRuntimeAgentsInstructionsBlock(agentID, "Stay concise.")
 		for _, want := range []string{
+			"Compose the tool prompt faithfully",
+			"Do not invent restrictions",
+			"Expand creative details only when the user explicitly asks",
+			"pass that prompt unchanged",
+			"A provider rejection does not establish",
 			"Output File Delivery",
 			"When `csgclaw_publish_file` is available",
 			"workspace-relative path immediately after creating it",

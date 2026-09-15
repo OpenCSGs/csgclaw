@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Copy, MessageSquareReply } from "lucide-react";
+import { resolveRequestPath } from "@/api/client";
+import type { MessageAttachment } from "@/models/attachments";
 import { flattenMentionText } from "@/components/business/MessageContent";
 import type { TranslateFn } from "@/models/conversations";
 import { renderSlashCommandPreviewText } from "@/models/slashCommands";
@@ -9,6 +11,7 @@ export type ConversationMessageActionsProps = {
   className?: string;
   leading?: ReactNode;
   content?: string | null;
+  image?: MessageAttachment | null;
   onOpenThread?: () => VoidOrPromise;
   t: TranslateFn;
 };
@@ -16,15 +19,25 @@ export type ConversationMessageActionsProps = {
 export function ConversationMessageActions({
   className = "",
   content,
+  image,
   leading,
   onOpenThread,
   t,
 }: ConversationMessageActionsProps) {
   const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState("");
   const copiedTimerRef = useRef<number | null>(null);
   const copyText = flattenMentionText(renderSlashCommandPreviewText(content));
-  const canCopy = Boolean(copyText.replace(/\u200b/g, ""));
-  const copyLabel = copied ? t("copiedToClipboard") : t("copyToClipboard");
+  const imageURL = image?.download_url || image?.preview_url || "";
+  const canCopy = Boolean(imageURL || copyText.replace(/\u200b/g, ""));
+  const copyLabel = copied
+    ? t("copiedToClipboard")
+    : copying && imageURL
+      ? t("copyingImage")
+      : imageURL
+        ? t("copyImage")
+        : t("copyToClipboard");
 
   useEffect(
     () => () => {
@@ -36,8 +49,21 @@ export function ConversationMessageActions({
   );
 
   async function copyMessage() {
-    if (!canCopy || !(await writeTextToClipboard(copyText))) {
+    if (!canCopy || copying) return;
+    setCopyError("");
+    setCopied(false);
+    setCopying(true);
+    try {
+      if (imageURL) {
+        await writeImageToClipboard(imageURL);
+      } else if (!(await writeTextToClipboard(copyText))) {
+        throw new Error("copy_failed");
+      }
+    } catch {
+      setCopyError(t(imageURL ? "copyImageFailed" : "copyTextFailed"));
       return;
+    } finally {
+      setCopying(false);
     }
     setCopied(true);
     if (copiedTimerRef.current != null) {
@@ -63,10 +89,16 @@ export function ConversationMessageActions({
           aria-label={copyLabel}
           data-tooltip={copyLabel}
           data-tooltip-side="bottom"
+          disabled={copying}
           onClick={() => void copyMessage()}
         >
           {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
         </button>
+      ) : null}
+      {copyError ? (
+        <span className="message-copy-error" role="alert">
+          {copyError}
+        </span>
       ) : null}
       {onOpenThread ? (
         <button
@@ -102,5 +134,34 @@ async function writeTextToClipboard(text: string): Promise<boolean> {
     } finally {
       textarea.remove();
     }
+  }
+}
+
+async function writeImageToClipboard(url: string): Promise<void> {
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") throw new Error("clipboard_unavailable");
+  // Start the clipboard write during the click gesture. Safari requires this;
+  // fetching/decoding first can lose user activation before clipboard.write.
+  const item = new ClipboardItem({ "image/png": loadClipboardPNG(url) });
+  await navigator.clipboard.write([item]);
+}
+
+async function loadClipboardPNG(url: string): Promise<Blob> {
+  const response = await fetch(resolveRequestPath(url), { credentials: "same-origin", referrerPolicy: "no-referrer" });
+  if (!response.ok) throw new Error("image_download_failed");
+  const blob = await response.blob();
+  if (blob.type === "image/png") return blob;
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("image_decode_failed");
+    context.drawImage(bitmap, 0, 0);
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((png) => (png ? resolve(png) : reject(new Error("image_encode_failed"))), "image/png"),
+    );
+  } finally {
+    bitmap.close();
   }
 }
