@@ -79,7 +79,7 @@ func serveIndex(w http.ResponseWriter, r *http.Request, fsys fs.FS) {
 
 func setAssetCacheHeaders(w http.ResponseWriter, name string) {
 	if strings.HasPrefix(name, "assets/") {
-		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		return
 	}
 	if name == "index.html" {

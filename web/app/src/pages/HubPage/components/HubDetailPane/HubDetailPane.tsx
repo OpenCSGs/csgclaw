@@ -1124,6 +1124,20 @@ export function HubDetailPane({
   const [knowledgeBaseDetailDialogOpen, setKnowledgeBaseDetailDialogOpen] = useState(false);
   const [knowledgeBaseFilter, setKnowledgeBaseFilter] = useState<KnowledgeFilterTabID>("all");
   const [knowledgeBaseSearch, setKnowledgeBaseSearch] = useState("");
+
+  // Restore detail dialog visibility from route-driven selection on initial load / refresh
+  useEffect(() => {
+    if (selectedSkill) setSkillDetailDialogOpen(true);
+  }, [selectedSkill]);
+  useEffect(() => {
+    if (selectedTemplate) setTemplateDetailDialogOpen(true);
+  }, [selectedTemplate]);
+  useEffect(() => {
+    if (selectedMCPServer) setMCPDetailDialogOpen(true);
+  }, [selectedMCPServer]);
+  useEffect(() => {
+    if (knowledgeBases?.selected) setKnowledgeBaseDetailDialogOpen(true);
+  }, [knowledgeBases?.selected]);
   const filteredSkills = useMemo(
     () => skills.filter((skill) => skillMatchesFilter(skill, skillFilter) && skillMatchesQuery(skill, skillSearch)),
     [skillFilter, skillSearch, skills],
