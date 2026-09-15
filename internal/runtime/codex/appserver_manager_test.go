@@ -3,6 +3,7 @@ package codex
 import (
 	"bufio"
 	"context"
+	"csgclaw/internal/agentengine/contract"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -2559,8 +2560,8 @@ func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	params := appServerThreadStartParams(spec, true)
 	tools, ok := params["dynamicTools"].([]map[string]any)
-	if !ok || len(tools) != 2 {
-		t.Fatalf("dynamicTools = %#v, want publish and upload tools", params["dynamicTools"])
+	if !ok || len(tools) != 3 {
+		t.Fatalf("dynamicTools = %#v, want publish, image, and upload tools", params["dynamicTools"])
 	}
 	tool := tools[0]
 	description := strings.TrimSpace(fmt.Sprint(tool["description"]))
@@ -3212,7 +3213,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 					}
 					return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 				}
-				if len(tools) != 2 {
+				if len(tools) != 3 {
 					t.Fatalf("thread/start dynamicTools = %#v", params["dynamicTools"])
 				}
 				tool, _ := tools[0].(map[string]any)
@@ -3752,4 +3753,42 @@ func assertServerRequestResponse(t *testing.T, msg map[string]any, wantID int, a
 		t.Fatalf("server request response result = %#v, want object", msg["result"])
 	}
 	assertResult(result)
+}
+
+func TestGenerateImageToolUsesActiveTurnHandler(t *testing.T) {
+	called := 0
+	ctx := contract.WithImageGenerationHandler(context.Background(), func(_ context.Context, id, prompt string) error {
+		called++
+		if id != "call-image" || prompt != "blue sky" {
+			t.Fatalf("wrong request %s %s", id, prompt)
+		}
+		return nil
+	})
+	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
+	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
+	for _, turnID := range []string{"turn-other", "turn-1"} {
+		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{"threadId": "thread-1", "turnId": turnID, "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"}})})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := response.(map[string]any)
+		if result["success"] != (turnID == "turn-1") {
+			t.Fatalf("wrong result: %v", result)
+		}
+	}
+	if called != 1 {
+		t.Fatalf("handler invoked %d times", called)
+	}
+}
+
+func TestImagePromptPolicyAppliesToStartedAndResumedThreads(t *testing.T) {
+	spec := testAppServerSessionSpec(t.TempDir())
+	for _, params := range []map[string]any{appServerThreadStartParams(spec, true), appServerThreadResumeParams(spec, "existing-thread")} {
+		policy, _ := params["developerInstructions"].(string)
+		for _, rule := range []string{"use a self-contained image description unchanged", "Expand creative details only when the user explicitly asks", "Preserve the requested subjects"} {
+			if !strings.Contains(policy, rule) {
+				t.Fatalf("missing image policy %q", rule)
+			}
+		}
+	}
 }

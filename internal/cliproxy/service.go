@@ -245,11 +245,16 @@ func fallbackModels(provider string) []string {
 	switch provider {
 	case ProviderCodex:
 		return []string{
+			"gpt-6-astra",
 			"gpt-5.5",
 			"gpt-5.4",
 			"gpt-5.4-mini",
 			"gpt-5.3-codex-spark",
+			"gpt-image-1.5",
 			"gpt-image-2",
+			"gpt-image-2.5",
+			"gpt-image-2.5-flare",
+			"gpt-image-2.5-sunburst",
 			"codex-auto-review",
 		}
 	case "claude":
@@ -379,6 +384,11 @@ func buildConfig() (*sdkconfig.Config, string, string, error) {
 				BootstrapRetries: embeddedCLIProxyStreamingBootstrapRetries,
 			},
 		},
+	}
+	// Keep image generation on the explicit Images API; automatic injection into
+	// chat bypasses Agent image-model selection and channel attachment delivery.
+	if err := cfg.DisableImageGeneration.UnmarshalJSON([]byte(`"chat"`)); err != nil {
+		return nil, "", "", err
 	}
 	cfg.ProxyURL = configuredProxyURL()
 	cfg.RemoteManagement.AllowRemote = false

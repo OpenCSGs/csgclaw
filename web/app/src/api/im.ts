@@ -207,3 +207,10 @@ export function stopParticipantWorkRequest(
 ): Promise<StopParticipantWorkResponse> {
   return post(`api/v1/channels/csgclaw/participants/${encodeURIComponent(participantID)}/work:stop`, payload);
 }
+
+export function retryImageGenerationRequest(
+  messageID: string,
+  roomID: string,
+): Promise<{ status: string; error?: { code?: string; message?: string } }> {
+  return post(`api/v1/messages/${encodeURIComponent(messageID)}/image-generation/retry`, { room_id: roomID });
+}

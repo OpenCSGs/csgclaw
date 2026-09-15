@@ -3,6 +3,7 @@ package codex
 import (
 	"bytes"
 	"context"
+	"csgclaw/internal/agentengine/contract"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"csgclaw/internal/codexcli"
 	"csgclaw/internal/config"
 	agentruntime "csgclaw/internal/runtime"
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
 )
 
 const (
@@ -771,11 +773,12 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		"cwd":                    spec.WorkspaceDir,
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
+		"developerInstructions":  runtimeinstructions.ImageGenerationPromptPolicy,
 	}
 	if publishFiles {
 		tools := []map[string]any{appServerPublishFileToolSpec()}
 		if spec.ExecutionMode != ExecutionModeReadOnly {
-			tools = append(tools, appServerUploadFileToolSpec())
+			tools = append(tools, appServerGenerateImageToolSpec(), appServerUploadFileToolSpec())
 		}
 		params["dynamicTools"] = tools
 	}
@@ -838,8 +841,9 @@ func appServerPublishFileToolSpec() map[string]any {
 func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]any {
 	spec.Profile = spec.Profile.Normalized()
 	params := map[string]any{
-		"threadId": strings.TrimSpace(threadID),
-		"cwd":      spec.WorkspaceDir,
+		"threadId":              strings.TrimSpace(threadID),
+		"cwd":                   spec.WorkspaceDir,
+		"developerInstructions": runtimeinstructions.ImageGenerationPromptPolicy,
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -982,11 +986,30 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 	if params.ThreadID == "" || params.TurnID == "" || params.CallID == "" {
 		return nil, fmt.Errorf("dynamic tool thread ID, turn ID, and call ID are required")
 	}
-	if params.Tool != appServerPublishFileToolName && params.Tool != appServerUploadFileToolName {
+	if params.Tool != appServerPublishFileToolName && params.Tool != appServerUploadFileToolName && params.Tool != "csgclaw_generate_image" {
 		return nil, fmt.Errorf("unsupported dynamic tool %q", params.Tool)
 	}
 	if live == nil || !live.appServerPublishesFilesForThread(params.ThreadID) {
 		return nil, fmt.Errorf("dynamic file tool references unknown or unsupported thread %q", params.ThreadID)
+	}
+	if params.Tool == "csgclaw_generate_image" {
+		if live.spec.ExecutionMode == ExecutionModeReadOnly {
+			return appServerDynamicToolResponse(false, "image generation is unavailable in read-only mode"), nil
+		}
+		var args struct {
+			Prompt string `json:"prompt"`
+		}
+		if json.Unmarshal(params.Arguments, &args) != nil {
+			return appServerDynamicToolResponse(false, "invalid image generation arguments"), nil
+		}
+		ctx, ok := live.appServerTurnContext(params.ThreadID, params.TurnID)
+		if !ok {
+			return appServerDynamicToolResponse(false, "image generation requires an active turn"), nil
+		}
+		if err := contract.GenerateImage(ctx, params.CallID, args.Prompt); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		return appServerDynamicToolResponse(true, "Image generated and delivered to the current conversation. Do not generate again or publish another copy. Continue responding using the original chat model."), nil
 	}
 	if params.Tool == appServerUploadFileToolName {
 		if live.spec.ExecutionMode == ExecutionModeReadOnly {
@@ -2082,4 +2105,12 @@ func redactSecretishLine(line string) string {
 		}
 	}
 	return "[redacted]"
+}
+
+func appServerGenerateImageToolSpec() map[string]any {
+	return map[string]any{
+		"name":        "csgclaw_generate_image",
+		"description": "Generate one image from the user's requested description using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
+		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
+	}
 }

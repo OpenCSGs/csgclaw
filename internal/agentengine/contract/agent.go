@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"csgclaw/internal/modelprovider"
 	"time"
 )
 
@@ -127,18 +128,19 @@ type RuntimeSpec struct {
 
 // ModelSpec selects model behavior without embedding provider credentials.
 type ModelSpec struct {
-	Selector        string            `json:"selector,omitempty"`
-	Name            string            `json:"name,omitempty"`
-	Description     string            `json:"description,omitempty"`
-	Provider        string            `json:"provider,omitempty"`
-	ProviderID      string            `json:"provider_id,omitempty"`
-	BaseURL         string            `json:"base_url,omitempty"`
-	APIKey          string            `json:"api_key,omitempty"`
-	ModelID         string            `json:"model_id,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
-	FastMode        bool              `json:"fast_mode,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	Env             map[string]string `json:"env,omitempty"`
+	ImageGeneration *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
+	Selector        string                               `json:"selector,omitempty"`
+	Name            string                               `json:"name,omitempty"`
+	Description     string                               `json:"description,omitempty"`
+	Provider        string                               `json:"provider,omitempty"`
+	ProviderID      string                               `json:"provider_id,omitempty"`
+	BaseURL         string                               `json:"base_url,omitempty"`
+	APIKey          string                               `json:"api_key,omitempty"`
+	ModelID         string                               `json:"model_id,omitempty"`
+	ReasoningEffort string                               `json:"reasoning_effort,omitempty"`
+	FastMode        bool                                 `json:"fast_mode,omitempty"`
+	Headers         map[string]string                    `json:"headers,omitempty"`
+	Env             map[string]string                    `json:"env,omitempty"`
 	// Options must contain only JSON-compatible values.
 	Options map[string]any `json:"options,omitempty"`
 }

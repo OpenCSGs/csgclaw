@@ -2891,3 +2891,67 @@ button.message-file-attachment {
     max-width: 94%;
   }
 }
+
+.image-generation-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-block: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.image-generation-prompt {
+  width: 100%;
+  color: var(--text-muted);
+}
+
+.image-generation-prompt summary {
+  cursor: pointer;
+}
+
+.image-generation-prompt p {
+  max-width: 600px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.image-generation-message .message-attachments,
+.image-generation-message .message-attachment-grid {
+  width: 600px;
+  max-width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.image-generation-message .message-image-attachment {
+  aspect-ratio: auto;
+}
+
+.image-generation-message .message-image-attachment img {
+  display: block;
+  height: auto;
+  max-height: 600px;
+  object-fit: contain;
+}
+
+.image-generation-error-details {
+  width: 100%;
+  max-width: 600px;
+  overflow-wrap: anywhere;
+}
+
+.image-generation-error-details p {
+  margin: 0 0 0.5rem;
+  white-space: pre-wrap;
+}
+
+.image-generation-error-details small {
+  color: var(--text-muted);
+}
+
+.message-copy-error {
+  max-width: min(360px, 60vw);
+  font-size: 12px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}

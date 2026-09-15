@@ -21,6 +21,7 @@ const (
 type ModelDiscoveryResult struct {
 	ResolvedBaseURL string
 	Models          []string
+	ImageModels     []string
 }
 
 // ListCSGHubLiteModels lists models using the default discovery client.
@@ -62,11 +63,12 @@ func ListCSGHubLiteModelsWithClient(
 	candidates := csgHubLiteEndpointCandidates(baseURL)
 	var lastErr error
 	for _, candidate := range candidates {
-		models, err := ListOpenAIModelsWithClient(ctx, client, candidate, apiKey, headers)
+		directory, err := ListOpenAIModelDirectoryWithClient(ctx, client, candidate, apiKey, headers)
 		if err == nil {
 			return ModelDiscoveryResult{
 				ResolvedBaseURL: candidate,
-				Models:          models,
+				Models:          directory.Models,
+				ImageModels:     directory.ImageModels,
 			}, nil
 		}
 		lastErr = err

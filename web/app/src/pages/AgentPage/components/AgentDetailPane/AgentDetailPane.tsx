@@ -1706,6 +1706,20 @@ function AgentModelPanel({
   updateDraft,
 }: AgentModelPanelProps) {
   const selectedProviderOption = providerOptions.find((option) => option.id === selectedProviderID);
+  const imageProviderID = draft.image_generation?.provider_id || "";
+  const imageModelID = draft.image_generation?.model_id || "";
+  const imageProviders = providerOptions.filter(
+    (provider) => (provider.imageModels?.length ?? 0) > 0 || provider.id === imageProviderID,
+  );
+  const selectedImageProvider = imageProviders.find((provider) => provider.id === imageProviderID);
+  const imageModels = selectedImageProvider?.imageModels ?? [];
+  const imageProviderLabel = imageProviderID ? (
+    <ModelOptionLabel
+      avatar={selectedImageProvider?.avatar || modelProviderAvatarPath(imageProviderID)}
+      model={selectedImageProvider?.displayName || imageProviderID}
+    />
+  ) : undefined;
+
   return (
     <section id="agent-profile-model" className="profile-section agent-profile-scroll-target">
       <div className="profile-section-heading">
@@ -1811,6 +1825,72 @@ function AgentModelPanel({
                 />
                 <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
               </label>
+            </div>
+            <label className="field agent-image-provider-field">
+              <span>{t("profileImageModelProvider")}</span>
+              <Select
+                value={imageProviderID}
+                selectedLabel={imageProviderLabel}
+                onValueChange={(value) => {
+                  const provider = imageProviders.find((option) => option.id === value);
+                  updateDraft({
+                    image_generation: provider?.imageModels?.length
+                      ? { provider_id: provider.id, model_id: provider.imageModels[0] }
+                      : null,
+                  });
+                }}
+                triggerProps={{ "aria-label": t("profileImageModelProvider") }}
+                contentProps={{ side: "bottom", align: "start", avoidCollisions: false }}
+                options={[
+                  { value: "", label: t("profileImageModelNone") },
+                  ...imageProviders.map((provider) => ({
+                    value: provider.id,
+                    label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
+                    textValue: provider.displayName,
+                  })),
+                  ...(imageProviderID && !selectedImageProvider
+                    ? [{ value: imageProviderID, label: imageProviderLabel, textValue: imageProviderID }]
+                    : []),
+                ]}
+              />
+            </label>
+            <label className="field">
+              <span>{t("profileImageModel")}</span>
+              <Select
+                value={imageModelID}
+                disabled={!imageProviderID || !imageModels.length}
+                onValueChange={(value) => {
+                  updateDraft({ image_generation: value ? { provider_id: imageProviderID, model_id: value } : null });
+                }}
+                searchable
+                searchPlaceholder={t("modelProviderModelSearch")}
+                emptyLabel={t("modelProviderNoModels")}
+                triggerProps={{ "aria-label": t("profileImageModel") }}
+                options={[
+                  ...(!imageModelID
+                    ? [
+                        {
+                          value: "",
+                          label: imageProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
+                        },
+                      ]
+                    : []),
+                  ...imageModels.map((model) => ({
+                    value: model,
+                    label: <ModelOptionLabel model={model} showAvatar={false} />,
+                    textValue: model,
+                  })),
+                  ...(imageModelID && !imageModels.includes(imageModelID)
+                    ? [{ value: imageModelID, label: `${imageModelID} (${t("profileImageModelUnavailable")})` }]
+                    : []),
+                ]}
+              />
+            </label>
+            <div className="agent-image-model-help">
+              <small>{t("profileImageModelHelp")}</small>
+              {!imageProviders.some((provider) => provider.imageModels?.length) ? (
+                <small>{t("profileImageModelEmpty")}</small>
+              ) : null}
             </div>
             {modelError ? (
               <div className="agent-model-load-error" role="alert">
