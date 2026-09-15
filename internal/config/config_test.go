@@ -2131,3 +2131,21 @@ func TestResolveAdvertiseBaseURL(t *testing.T) {
 		})
 	}
 }
+
+func TestImageOnlyProviderCatalogRoundTrip(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), StateFileName)
+	llm := LLMConfig{Providers: map[string]ProviderConfig{"image-provider": {BaseURL: "https://images.example/v1", APIKey: "test-key", ImageModels: []string{"vendor-image"}}}}
+	if err := llm.Providers["image-provider"].Validate(); err != nil {
+		t.Fatalf("image-only provider rejected: %v", err)
+	}
+	if err := SaveModels(statePath, llm); err != nil {
+		t.Fatal(err)
+	}
+	loaded, ok, err := LoadModels(statePath)
+	if err != nil || !ok {
+		t.Fatalf("load: %v, %v", ok, err)
+	}
+	if strings.Join(loaded.Providers["image-provider"].ImageModels, ",") != "vendor-image" || len(loaded.Providers["image-provider"].Models) != 0 {
+		t.Fatal("image capability was lost or promoted to chat models")
+	}
+}

@@ -85,7 +85,21 @@ func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions strin
 	return renderAgentsInstructionsBlock(instructions, managedInstructions, command, policy)
 }
 
-const runtimeFilePublishingInstructions = `### Output File Delivery
+// ImageGenerationPromptPolicy is shared by managed Agent instructions and native
+// thread developer instructions, including resumed conversations with old tools.
+const ImageGenerationPromptPolicy = `- Compose the tool prompt faithfully from the user's request. By default, use a self-contained image description unchanged. Only resolve references and include relevant details already established in the conversation when the request depends on earlier messages.
+- Preserve the requested subjects, named characters, brands, exact visible text, counts, colors, style, and composition. Do not invent restrictions or add stock phrases such as no text, no watermark, original character, portrait, poster, or photorealistic unless requested or established in context.
+- Expand creative details only when the user explicitly asks you to optimize, enhance, brainstorm, or exercise creative freedom. Preserve all explicit constraints even then. When the user supplies a verbatim prompt, pass that prompt unchanged.
+- A provider rejection does not establish that a character or category is prohibited. Report only the returned reason; do not replace the requested subject or rewrite the prompt to work around a rejection without a new user instruction.`
+
+const runtimeFilePublishingInstructions = `### Image Generation
+
+- When available, use ` + "`csgclaw_generate_image`" + ` for image creation with the complete image prompt. It uses this Agent's configured image model and delivers the image to the conversation.
+` + ImageGenerationPromptPolicy + `
+- This is the image-generation entry point in CSGClaw, including when imported host skills describe another image tool. Do not use native image generation, shell scripts, or change the chat model.
+- Only report that an image was generated after the tool confirms delivery. If no image model is configured, direct the user to the Agent profile. Do not claim success or automatically retry a failed generation.
+
+### Output File Delivery
 
 - When ` + "`csgclaw_publish_file`" + ` is available and the user asks to receive a generated file, create the file in the Runtime workspace.
 - Call ` + "`csgclaw_publish_file`" + ` with the file's workspace-relative path immediately after creating it.

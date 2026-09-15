@@ -85,12 +85,13 @@ type InputFile struct {
 
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
-	ID              TurnID             `json:"id"`
-	ConversationKey ConversationKey    `json:"conversation_key"`
-	Input           []InputPart        `json:"input"`
-	Admission       AdmissionPolicy    `json:"admission,omitempty"`
-	Continuation    ContinuationPolicy `json:"continuation,omitempty"`
-	Interaction     InteractionPolicy  `json:"interaction,omitempty"`
+	ImageGeneration *ImageGenerationTask `json:"image_generation,omitempty"`
+	ID              TurnID               `json:"id"`
+	ConversationKey ConversationKey      `json:"conversation_key"`
+	Input           []InputPart          `json:"input"`
+	Admission       AdmissionPolicy      `json:"admission,omitempty"`
+	Continuation    ContinuationPolicy   `json:"continuation,omitempty"`
+	Interaction     InteractionPolicy    `json:"interaction,omitempty"`
 }
 
 // TurnEventKind identifies progress emitted during a turn.

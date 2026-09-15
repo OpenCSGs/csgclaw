@@ -93,6 +93,7 @@ func (s *Controller) EffectiveAgentProfileForUpdate(id string, req UpdateRequest
 			selected.EnableFastMode = current.AgentProfile.EnableFastMode
 			selected.RequestOptions = current.AgentProfile.RequestOptions
 			selected.Env = current.AgentProfile.Env
+			selected.ImageGeneration = current.AgentProfile.ImageGeneration
 			return selected, nil
 		}
 	}
@@ -405,6 +406,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 			selected.EnableFastMode = current.AgentProfile.EnableFastMode
 			selected.RequestOptions = current.AgentProfile.RequestOptions
 			selected.Env = current.AgentProfile.Env
+			selected.ImageGeneration = current.AgentProfile.ImageGeneration
 			req.AgentProfile = &selected
 			agentProfileUpdated = true
 		}

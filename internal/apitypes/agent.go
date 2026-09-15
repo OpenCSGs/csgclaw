@@ -1,6 +1,7 @@
 package apitypes
 
 import (
+	"csgclaw/internal/modelprovider"
 	"encoding/json"
 	"strings"
 	"time"
@@ -60,20 +61,21 @@ type RuntimeAvailability struct {
 }
 
 type AgentProfile struct {
-	ModelProviderID      string                   `json:"model_provider_id,omitempty"`
-	BaseURL              string                   `json:"base_url,omitempty"`
-	APIKey               string                   `json:"api_key,omitempty"`
-	APIKeySet            bool                     `json:"api_key_set,omitempty"`
-	APIKeyPreview        string                   `json:"api_key_preview,omitempty"`
-	Headers              map[string]string        `json:"headers,omitempty"`
-	ModelID              string                   `json:"model_id,omitempty"`
-	ReasoningEffort      string                   `json:"reasoning_effort,omitempty"`
-	EnableFastMode       bool                     `json:"enable_fast_mode,omitempty"`
-	RequestOptions       map[string]any           `json:"request_options,omitempty"`
-	Env                  map[string]string        `json:"env,omitempty"`
-	EnvRestartRequired   bool                     `json:"env_restart_required,omitempty"`
-	ImageUpgradeRequired bool                     `json:"image_upgrade_required,omitempty"`
-	DetectionResults     []ProfileDetectionResult `json:"detection_results,omitempty"`
+	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation"`
+	ModelProviderID      string                               `json:"model_provider_id,omitempty"`
+	BaseURL              string                               `json:"base_url,omitempty"`
+	APIKey               string                               `json:"api_key,omitempty"`
+	APIKeySet            bool                                 `json:"api_key_set,omitempty"`
+	APIKeyPreview        string                               `json:"api_key_preview,omitempty"`
+	Headers              map[string]string                    `json:"headers,omitempty"`
+	ModelID              string                               `json:"model_id,omitempty"`
+	ReasoningEffort      string                               `json:"reasoning_effort,omitempty"`
+	EnableFastMode       bool                                 `json:"enable_fast_mode,omitempty"`
+	RequestOptions       map[string]any                       `json:"request_options,omitempty"`
+	Env                  map[string]string                    `json:"env,omitempty"`
+	EnvRestartRequired   bool                                 `json:"env_restart_required,omitempty"`
+	ImageUpgradeRequired bool                                 `json:"image_upgrade_required,omitempty"`
+	DetectionResults     []ProfileDetectionResult             `json:"detection_results,omitempty"`
 }
 
 type ProfileDetectionResult struct {
@@ -403,13 +405,14 @@ func (r *CreateAgentRequest) UnmarshalJSON(data []byte) error {
 }
 
 type CreateAgentProfile struct {
-	ModelProviderID string            `json:"model_provider_id,omitempty"`
-	BaseURL         string            `json:"base_url,omitempty"`
-	APIKey          string            `json:"api_key,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	ModelID         string            `json:"model_id,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
-	EnableFastMode  bool              `json:"enable_fast_mode,omitempty"`
-	RequestOptions  map[string]any    `json:"request_options,omitempty"`
-	Env             map[string]string `json:"env,omitempty"`
+	ImageGeneration *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
+	ModelProviderID string                               `json:"model_provider_id,omitempty"`
+	BaseURL         string                               `json:"base_url,omitempty"`
+	APIKey          string                               `json:"api_key,omitempty"`
+	Headers         map[string]string                    `json:"headers,omitempty"`
+	ModelID         string                               `json:"model_id,omitempty"`
+	ReasoningEffort string                               `json:"reasoning_effort,omitempty"`
+	EnableFastMode  bool                                 `json:"enable_fast_mode,omitempty"`
+	RequestOptions  map[string]any                       `json:"request_options,omitempty"`
+	Env             map[string]string                    `json:"env,omitempty"`
 }

@@ -157,7 +157,7 @@ func buildExecutionFeaturesConfigBlock(inFeaturesTable bool, executionMode strin
 	var b strings.Builder
 	b.WriteString(csgclawExecutionBeginMarker)
 	b.WriteString("\n")
-	values := map[string]bool{"shell_tool": true, "unified_exec": true}
+	values := map[string]bool{"shell_tool": true, "unified_exec": true, "image_generation": false}
 	if executionMode == ExecutionModeReadOnly {
 		values = map[string]bool{
 			"apps":                         false,

@@ -1,6 +1,8 @@
+import { isImageAttachment } from "@/models/attachments";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
+import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, Tooltip } from "@/components/ui";
@@ -571,7 +573,9 @@ function ThreadMessage({
   const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
 
   return (
-    <div className={`thread-message ${compact ? "compact" : ""}`.trim()}>
+    <div
+      className={`thread-message ${compact ? "compact" : ""} ${message.metadata?.image_generation ? "image-generation-message" : ""}`.trim()}
+    >
       {user ? (
         <button
           type="button"
@@ -597,7 +601,7 @@ function ThreadMessage({
           <span className="message-author">{name}</span>
           <MessageTimestamp parts={timestampParts} />
         </div>
-        {message.content ? (
+        {message.content && !message.metadata?.image_generation ? (
           <div className="thread-message-bubble">
             <MessageContent
               key={`${message.id}:${theme}`}
@@ -608,8 +612,14 @@ function ThreadMessage({
             />
           </div>
         ) : null}
+        <ImageGenerationStatus message={message} t={t} />
         <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
-        <ConversationMessageActions className="thread-message-actions" content={message.content} t={t} />
+        <ConversationMessageActions
+          className="thread-message-actions"
+          content={message.metadata?.image_generation ? null : message.content}
+          image={message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined}
+          t={t}
+        />
       </div>
     </div>
   );

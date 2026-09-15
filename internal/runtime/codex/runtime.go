@@ -1520,6 +1520,11 @@ func (r *Runtime) readSessionMetadata(runtimeID string) (sessionMetadata, error)
 	if err := readJSONFile(r.readFile, path, &meta); err != nil {
 		return sessionMetadata{}, err
 	}
+	// Native dynamic tools are persisted at thread creation and cannot be added
+	// by thread/resume. Reuse the existing capability-upgrade path for older sets.
+	if meta.DynamicToolsVersion != engineDynamicToolsVersion {
+		meta.FilePublishingConversations = nil
+	}
 	return normalizeSessionMetadata(meta), nil
 }
 
@@ -1936,7 +1941,10 @@ type runtimeMetadata struct {
 	ExitCode   int                `json:"exit_code,omitempty"`
 }
 
+const engineDynamicToolsVersion = 2
+
 type sessionMetadata struct {
+	DynamicToolsVersion         int               `json:"dynamic_tools_version,omitempty"`
 	RuntimeID                   string            `json:"runtime_id"`
 	SessionID                   string            `json:"session_id"`
 	WorkspaceDir                string            `json:"workspace_dir"`
@@ -1963,6 +1971,7 @@ func sessionToRuntimeMetadata(session *Session) runtimeMetadata {
 
 func sessionToSessionMetadata(session *Session) sessionMetadata {
 	return normalizeSessionMetadata(sessionMetadata{
+		DynamicToolsVersion:  engineDynamicToolsVersion,
 		RuntimeID:            session.RuntimeID,
 		SessionID:            session.SessionID,
 		WorkspaceDir:         session.WorkspaceDir,
