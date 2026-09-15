@@ -1155,6 +1155,42 @@
   white-space: nowrap;
 }
 
+.hub-skill-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hub-template-source-badge {
+  flex: 0 0 auto;
+  max-width: 88px;
+  min-height: 20px;
+  padding: 1px 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--gray-700);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-template-source-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  flex: 0 0 auto;
+}
+
 .hub-skill-card-description {
   overflow: hidden;
   color: var(--gray-600);
@@ -1424,6 +1460,12 @@
 :root[data-theme="dark"] .hub-skill-list-heading h1,
 :root[data-theme="dark"] .hub-skill-card-title {
   color: var(--gray-100);
+}
+
+:root[data-theme="dark"] .hub-template-source-badge {
+  border-color: var(--gray-700);
+  background: var(--panel-strong);
+  color: var(--gray-300);
 }
 
 :root[data-theme="dark"] .hub-skill-list-count-badge {

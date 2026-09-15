@@ -1763,8 +1763,14 @@ export function HubDetailPane({
                             <WorkspaceTemplatesIcon />
                           </ResourceFeaturedIcon>
                           <span className={moduleClassNames("hub-skill-card-copy")}>
-                            <span className={moduleClassNames("hub-skill-card-title")}>
-                              {hubTemplateFullName(template)}
+                            <span className={moduleClassNames("hub-skill-card-title-row")}>
+                              <span className={moduleClassNames("hub-skill-card-title")}>
+                                {hubTemplateFullName(template)}
+                              </span>
+                              <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
+                                <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
+                                {localizeTemplateSourceTag(template.source?.name, locale)}
+                              </span>
                             </span>
                             <span className={moduleClassNames("hub-skill-card-description")}>
                               {review
