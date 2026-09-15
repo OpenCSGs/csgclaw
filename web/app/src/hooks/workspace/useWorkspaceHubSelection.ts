@@ -118,7 +118,7 @@ export function useWorkspaceHubSelection({
   const [remoteSkillsEnabled, setRemoteSkillsEnabled] = useState(false);
   const [remoteSkillsSearch, setRemoteSkillsSearch] = useState("");
   const [remoteSkillsSearchQuery, setRemoteSkillsSearchQuery] = useState("");
-  const skillsQuery = useWorkspaceSkillsQuery();
+  const skillsQuery = useWorkspaceSkillsQuery({ enabled: selectedHubResourceType === "skill" });
   const officialSkillsQuery = useWorkspaceOfficialSkillsQuery(remoteSkillsSearchQuery, {
     enabled: remoteSkillsEnabled,
   });
@@ -412,6 +412,7 @@ export function useWorkspaceHubSelection({
     loadMoreRemoteMCPServers,
     mcpServers,
     mcpServersFetching,
+    mcpServersLoaded,
     mcpCreateError,
     mcpCreateDialogOpen,
     mcpCreateInitialDocument,
@@ -448,8 +449,11 @@ export function useWorkspaceHubSelection({
     setSelectedMCPServerName,
     setSelectedHubResourceType,
     skillCount: skills.length,
+    skillsLoaded: skillsQuery.isFetched,
     t,
     templateCount: resourcesTemplates.length,
+    templatesLoaded: templatesQuery?.isFetched ?? false,
+    enabled: selectedHubResourceType === "mcp",
   });
 
   const knowledgeBases = useWorkspaceKnowledgeBaseSelection({
@@ -624,7 +628,14 @@ export function useWorkspaceHubSelection({
       onRemoteMCPServersSearchChange: setRemoteMCPServersSearch,
       onRemoteMCPVisibleChange: setRemoteMCPServersEnabled,
       selectedResourceType: selectedHubResourceType,
-      loaded,
+      loaded:
+        selectedHubResourceType === "skill"
+          ? skillsQuery.isFetched
+          : selectedHubResourceType === "mcp"
+            ? mcpServersLoaded
+            : selectedHubResourceType === "knowledge"
+              ? !knowledgeBases.loading
+              : loaded,
       mcpStateError,
       mcpStateLoading: mcpServersFetching,
       error:

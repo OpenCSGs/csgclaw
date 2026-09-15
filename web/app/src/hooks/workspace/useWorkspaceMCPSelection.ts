@@ -25,8 +25,11 @@ type UseWorkspaceMCPSelectionArgs = {
   setSelectedMCPServerName: MCPServerNameSetter;
   setSelectedHubResourceType: (value: HubResourceType) => void;
   skillCount: number;
+  skillsLoaded?: boolean;
   t: (key: string) => string;
   templateCount: number;
+  templatesLoaded?: boolean;
+  enabled?: boolean;
 };
 
 export function useWorkspaceMCPSelection({
@@ -35,8 +38,11 @@ export function useWorkspaceMCPSelection({
   setSelectedMCPServerName,
   setSelectedHubResourceType,
   skillCount,
+  skillsLoaded = false,
   t,
   templateCount,
+  templatesLoaded = false,
+  enabled = true,
 }: UseWorkspaceMCPSelectionArgs) {
   const queryClient = useQueryClient();
   const [mcpCreateDialogOpen, setMCPCreateDialogOpen] = useState(false);
@@ -57,7 +63,7 @@ export function useWorkspaceMCPSelection({
   const [remoteMCPServersSearch, setRemoteMCPServersSearch] = useState("");
   const [remoteMCPServersSearchQuery, setRemoteMCPServersSearchQuery] = useState("");
   const [remoteMCPInstallBusy, setRemoteMCPInstallBusy] = useState("");
-  const mcpServersQuery = useWorkspaceMCPServersQuery();
+  const mcpServersQuery = useWorkspaceMCPServersQuery({ enabled });
   const remoteMCPServersQuery = useWorkspaceRemoteMCPServersQuery(remoteMCPServersSearchQuery, {
     enabled: remoteMCPServersEnabled,
   });
@@ -146,14 +152,14 @@ export function useWorkspaceMCPSelection({
   }, [checkMCPServerSource, selectedMCPServerName, selectedMCPSource]);
 
   useEffect(() => {
-    if (selectedHubResourceType === "skill" && !skillCount) {
+    if (selectedHubResourceType === "skill" && skillsLoaded && !skillCount) {
       setSelectedHubResourceType(mcpServers.length ? "mcp" : "template");
       return;
     }
-    if (selectedHubResourceType === "template" && !templateCount) {
+    if (selectedHubResourceType === "template" && templatesLoaded && !templateCount) {
       setSelectedHubResourceType(mcpServers.length ? "mcp" : skillCount ? "skill" : "template");
     }
-  }, [mcpServers.length, selectedHubResourceType, setSelectedHubResourceType, skillCount, templateCount]);
+  }, [mcpServers.length, selectedHubResourceType, setSelectedHubResourceType, skillCount, skillsLoaded, templateCount, templatesLoaded]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -360,6 +366,7 @@ export function useWorkspaceMCPSelection({
     deleteMCPServer,
     installRemoteMCPServer,
     mcpServersFetching: mcpServersQuery.isFetching,
+    mcpServersLoaded: mcpServersQuery.isFetched,
     mcpServers,
     mcpCreateError,
     mcpCreateDialogOpen,

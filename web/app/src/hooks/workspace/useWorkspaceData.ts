@@ -26,6 +26,7 @@ import type { HubTemplate } from "@/models/hubWorkspace";
 import type { ModelProviderCatalog } from "@/models/modelProviders";
 import type { UpgradeStatus } from "@/models/upgradeStatus";
 import type { WorkspaceQueryData } from "./types";
+import { useWorkspaceUiStore } from "./workspaceUiStore";
 
 export function useWorkspaceData() {
   const queryClient = useQueryClient();
@@ -34,7 +35,10 @@ export function useWorkspaceData() {
   const managerProfileQuery = useWorkspaceManagerProfileQuery();
   const agentsQuery = useWorkspaceAgentsQuery();
   const modelProvidersQuery = useWorkspaceModelProvidersQuery();
-  const hubTemplatesQuery = useWorkspaceHubTemplatesQuery();
+  const storedHubResourceType = useWorkspaceUiStore((state) => state.selectedHubResourceType);
+  const hubTemplatesQuery = useWorkspaceHubTemplatesQuery({
+    enabled: storedHubResourceType === "template",
+  });
   const appVersionQuery = useWorkspaceAppVersionQuery();
   const upgradeStatusQuery = useWorkspaceUpgradeStatusQuery();
 

@@ -163,6 +163,7 @@ export function useWorkspaceController() {
   const showToolCalls = useWorkspaceUiStore((state) => state.showToolCalls);
   const setShowToolCalls = useWorkspaceUiStore((state) => state.setShowToolCalls);
   const floatingChatOpen = useWorkspaceUiStore((state) => state.floatingChatOpen);
+  const storedHubResourceType = useWorkspaceUiStore((state) => state.selectedHubResourceType);
   const setFloatingChatOpen = useWorkspaceUiStore((state) => state.setFloatingChatOpen);
   const isSidebarCollapsed = useWorkspaceUiStore((state) => state.isSidebarCollapsed);
   const setIsSidebarCollapsed = useWorkspaceUiStore((state) => state.setIsSidebarCollapsed);
@@ -876,10 +877,22 @@ export function useWorkspaceController() {
     ],
   );
 
+  const hubResourceType = activePane.type === WorkspacePaneTypes.hub && activePane.resourceType
+    ? activePane.resourceType
+    : storedHubResourceType;
+  const resourceLoadingText =
+    hubResourceType === "skill"
+      ? t("resourcesSkillsLoading")
+      : hubResourceType === "mcp"
+        ? t("resourcesMCPLoading")
+        : hubResourceType === "knowledge"
+          ? t("resourcesKnowledgeBasesLoading")
+          : t("resourcesLoading");
+
   if (!displayData) {
     return {
       ready: false,
-      loadingText: loadingError || t("loading"),
+      loadingText: loadingError || resourceLoadingText,
       activePane,
       mainPanelHasThread: false,
       modelProviders,

@@ -276,20 +276,22 @@ export function useWorkspaceRuntimeImagesQuery(): UseQueryResult<string[]> {
   });
 }
 
-export function useWorkspaceHubTemplatesQuery(): UseQueryResult<HubTemplate[]> {
+export function useWorkspaceHubTemplatesQuery(options: { enabled?: boolean } = {}): UseQueryResult<HubTemplate[]> {
   return useQuery<HubTemplate[]>({
     queryKey: workspaceQueryKeys.hubTemplates(),
     queryFn: async () => {
       const payload = await fetchHubTemplates();
       return Array.isArray(payload) ? payload : [];
     },
+    enabled: options.enabled !== false,
   });
 }
 
-export function useWorkspaceMCPServersQuery(): UseQueryResult<JSONRecord> {
+export function useWorkspaceMCPServersQuery(options: { enabled?: boolean } = {}): UseQueryResult<JSONRecord> {
   return useQuery<JSONRecord>({
     queryKey: workspaceQueryKeys.mcpServers(),
     queryFn: fetchMCPServers,
+    enabled: options.enabled !== false,
   });
 }
 
@@ -349,13 +351,14 @@ export function useWorkspaceHubWorkspaceFileQuery(
   });
 }
 
-export function useWorkspaceSkillsQuery(): UseQueryResult<SkillSummary[]> {
+export function useWorkspaceSkillsQuery(options: { enabled?: boolean } = {}): UseQueryResult<SkillSummary[]> {
   return useQuery<SkillSummary[]>({
     queryKey: workspaceQueryKeys.skills(),
     queryFn: async () => {
       const payload = await fetchSkills();
       return Array.isArray(payload) ? payload : [];
     },
+    enabled: options.enabled !== false,
   });
 }
 

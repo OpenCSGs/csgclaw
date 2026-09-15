@@ -1084,6 +1084,9 @@ export function HubDetailPane({
     if (selectedResourceType === "skill") {
       return "skill";
     }
+    if (selectedResourceType === "template") {
+      return "template";
+    }
     if (templates.length) {
       return "template";
     }
@@ -1461,7 +1464,15 @@ export function HubDetailPane({
       {!loaded && !error ? (
         <div className={moduleClassNames("hub-loading-state")} role="status" aria-live="polite">
           <LoaderCircle className={moduleClassNames("hub-loading-spinner")} size={24} aria-hidden="true" />
-          <span>{t("resourcesLoading")}</span>
+          <span>
+              {activeResourceType === "skill"
+                ? t("resourcesSkillsLoading")
+                : activeResourceType === "mcp"
+                  ? t("resourcesMCPLoading")
+                  : activeResourceType === "knowledge"
+                    ? t("resourcesKnowledgeBasesLoading")
+                    : t("resourcesLoading")}
+            </span>
         </div>
       ) : activeResourceType !== "knowledge" &&
         templates.length === 0 &&
@@ -1933,7 +1944,7 @@ export function HubDetailPane({
                           disabled
                         />
                       </label>
-                      <label className={moduleClassNames("field span-2")}>
+                      <label className={moduleClassNames("field")}>
                         <span>{t("resourcesImageLabel")}</span>
                         <input value={selectedTemplate.image || "-"} readOnly disabled />
                       </label>
@@ -2703,7 +2714,7 @@ export function HubDetailPane({
                             disabled
                           />
                         </label>
-                        <label className={moduleClassNames("field span-2")}>
+                        <label className={moduleClassNames("field")}>
                           <span>{t("resourcesImageLabel")}</span>
                           <input value={selectedTemplate.image || "-"} readOnly disabled />
                         </label>
