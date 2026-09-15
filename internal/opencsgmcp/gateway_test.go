@@ -59,3 +59,46 @@ func TestIsGatewayServerRequiresTypeAndAuth(t *testing.T) {
 		t.Fatal("unexpected match for unsupported auth type")
 	}
 }
+
+func TestFileBindingsExpandsSimpleToolList(t *testing.T) {
+	config := map[string]any{ManagedMetaKey: map[string]any{ManagedMetaNamespace: map[string]any{
+		"file_bindings": []any{"parse_file_content"},
+	}}}
+	bindings, err := FileBindings(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := bindings["parse_file_content"].(map[string]any)
+	if binding["content_argument"] != "content_base64" || binding["filename_argument"] != "filename" || binding["content_type_argument"] != "content_type" {
+		t.Fatalf("binding = %#v", binding)
+	}
+}
+
+func TestFileBindingsRejectsConflictingArguments(t *testing.T) {
+	config := map[string]any{ManagedMetaKey: map[string]any{ManagedMetaNamespace: map[string]any{
+		"file_bindings": map[string]any{"parse": map[string]any{
+			"encoding": "base64", "content_argument": "file", "filename_argument": "file",
+		}},
+	}}}
+	if _, err := FileBindings(config); err == nil {
+		t.Fatal("FileBindings() error = nil")
+	}
+}
+
+func TestRuntimeServersRequiresInternalAccessToken(t *testing.T) {
+	servers := map[string]any{"managed": map[string]any{
+		"url": "https://placeholder.invalid/mcp",
+		ManagedMetaKey: map[string]any{ManagedMetaNamespace: map[string]any{
+			"type": GatewayMCPType, "auth_type": CSGHubAuthType,
+		}},
+	}}
+	if _, err := RuntimeServers(servers, "http://127.0.0.1:18080", ""); err == nil {
+		t.Fatal("RuntimeServers() error = nil")
+	}
+}
+
+func TestValidFileBridgeTokenRejectsEmptyInputs(t *testing.T) {
+	if ValidFileBridgeToken(FileBridgeToken("", "agent", "server"), "", "agent", "server") {
+		t.Fatal("empty HMAC key was accepted")
+	}
+}

@@ -16,11 +16,11 @@ import (
 	"csgclaw/internal/opencsgmcp"
 
 	"github.com/go-chi/chi/v5"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const mcpFileBridgeMaxBytes = 10 << 20
-
-var callMCPFileBridgeTool = internalmcp.CallTool
+var callMCPFileBridgeTool = internalmcp.CallAdvertisedToolWithoutRedirects
+var listMCPFileBridgeTools = internalmcp.ListToolDefinitionsWithoutRedirects
 
 type mcpFileBridgeRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -51,7 +51,11 @@ func (h *Handler) handleMCPFileBridge(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "managed MCP server not found", http.StatusNotFound)
 		return
 	}
-	bindings := opencsgmcp.FileBindings(serverConfig)
+	bindings, err := opencsgmcp.FileBindings(serverConfig)
+	if err != nil {
+		http.Error(w, "invalid MCP file bindings", http.StatusUnprocessableEntity)
+		return
+	}
 	if len(bindings) == 0 {
 		http.Error(w, "MCP file bindings are not configured", http.StatusNotFound)
 		return
@@ -76,38 +80,59 @@ func (h *Handler) handleMCPFileBridge(w http.ResponseWriter, r *http.Request) {
 	case "notifications/initialized":
 		w.WriteHeader(http.StatusAccepted)
 	case "tools/list":
-		h.writeMCPFileBridgeResult(w, request.ID, map[string]any{"tools": mcpFileBridgeTools(bindings)})
+		h.handleMCPFileBridgeList(w, r.Context(), request.ID, serverName, serverConfig, bindings)
 	case "tools/call":
-		h.handleMCPFileBridgeCall(w, r.Context(), request.ID, agentID, serverName, bindings, request.Params)
+		h.handleMCPFileBridgeCall(w, r.Context(), request.ID, agentID, serverName, serverConfig, bindings, request.Params)
 	default:
 		h.writeMCPFileBridgeError(w, request.ID, -32601, "method not found")
 	}
 }
 
-func mcpFileBridgeTools(bindings map[string]any) []map[string]any {
-	tools := make([]map[string]any, 0, len(bindings))
-	for name, raw := range bindings {
-		binding, _ := raw.(map[string]any)
-		if !validMCPFileBinding(binding) {
+func (h *Handler) handleMCPFileBridgeList(w http.ResponseWriter, ctx context.Context, id json.RawMessage, serverName string, serverConfig, bindings map[string]any) {
+	connection, err := loadKnowledgeBaseConnection(ctx)
+	if err != nil {
+		h.writeMCPFileBridgeError(w, id, -32603, err.Error())
+		return
+	}
+	tools, err := listMCPFileBridgeTools(ctx, serverName, mcpFileBridgeUpstreamConfig(connection, serverConfig))
+	if err != nil {
+		h.writeMCPFileBridgeError(w, id, -32603, err.Error())
+		return
+	}
+	h.writeMCPFileBridgeResult(w, id, map[string]any{"tools": mcpFileBridgeToolDefinitions(tools, bindings)})
+}
+
+func mcpFileBridgeToolDefinitions(upstream []*mcpsdk.Tool, bindings map[string]any) []map[string]any {
+	tools := make([]map[string]any, 0, len(upstream))
+	for _, tool := range upstream {
+		if tool == nil {
 			continue
 		}
-		tools = append(tools, map[string]any{
-			"name":        name,
-			"description": "Process a Runtime workspace file through the configured MCP service. Pass only a workspace-relative path; CSGClaw transfers the bytes outside model context.",
-			"inputSchema": map[string]any{
+		encoded, err := json.Marshal(tool)
+		if err != nil {
+			continue
+		}
+		var definition map[string]any
+		if err := json.Unmarshal(encoded, &definition); err != nil {
+			continue
+		}
+		if _, bound := bindings[tool.Name]; bound {
+			definition["description"] = "Process a Runtime workspace file through the configured MCP service. Pass only a workspace-relative path; CSGClaw transfers the bytes outside model context. " + tool.Description
+			definition["inputSchema"] = map[string]any{
 				"type": "object", "additionalProperties": false,
 				"properties": map[string]any{
 					"path":         map[string]any{"type": "string", "description": "Runtime workspace-relative file path."},
 					"content_type": map[string]any{"type": "string", "description": "Optional MIME type."},
 				},
 				"required": []string{"path"},
-			},
-		})
+			}
+		}
+		tools = append(tools, definition)
 	}
 	return tools
 }
 
-func (h *Handler) handleMCPFileBridgeCall(w http.ResponseWriter, ctx context.Context, id json.RawMessage, agentID, serverName string, bindings map[string]any, rawParams json.RawMessage) {
+func (h *Handler) handleMCPFileBridgeCall(w http.ResponseWriter, ctx context.Context, id json.RawMessage, agentID, serverName string, serverConfig, bindings map[string]any, rawParams json.RawMessage) {
 	var params struct {
 		Name      string         `json:"name"`
 		Arguments map[string]any `json:"arguments"`
@@ -116,9 +141,16 @@ func (h *Handler) handleMCPFileBridgeCall(w http.ResponseWriter, ctx context.Con
 		h.writeMCPFileBridgeError(w, id, -32602, "invalid tool arguments")
 		return
 	}
+	connection, err := loadKnowledgeBaseConnection(ctx)
+	if err != nil {
+		h.writeMCPFileBridgeToolFailure(w, id, err.Error())
+		return
+	}
+	upstreamConfig := mcpFileBridgeUpstreamConfig(connection, serverConfig)
 	binding, _ := bindings[strings.TrimSpace(params.Name)].(map[string]any)
-	if !validMCPFileBinding(binding) {
-		h.writeMCPFileBridgeError(w, id, -32602, "tool is not declared as an MCP file binding")
+	if binding == nil {
+		result, callErr := callMCPFileBridgeTool(ctx, serverName, upstreamConfig, params.Name, params.Arguments)
+		h.writeMCPFileBridgeCallResult(w, id, result, callErr)
 		return
 	}
 	path, _ := params.Arguments["path"].(string)
@@ -134,11 +166,6 @@ func (h *Handler) handleMCPFileBridgeCall(w http.ResponseWriter, ctx context.Con
 		h.writeMCPFileBridgeToolFailure(w, id, "content_type is invalid")
 		return
 	}
-	connection, err := loadKnowledgeBaseConnection(ctx)
-	if err != nil {
-		h.writeMCPFileBridgeToolFailure(w, id, err.Error())
-		return
-	}
 	arguments := map[string]any{
 		mcpBindingString(binding, "filename_argument"): filename,
 		mcpBindingString(binding, "content_argument"):  base64.StdEncoding.EncodeToString(content),
@@ -146,20 +173,29 @@ func (h *Handler) handleMCPFileBridgeCall(w http.ResponseWriter, ctx context.Con
 	if key := mcpBindingString(binding, "content_type_argument"); key != "" {
 		arguments[key] = contentType
 	}
-	result, err := callMCPFileBridgeTool(ctx, serverName, map[string]any{
+	result, err := callMCPFileBridgeTool(ctx, serverName, upstreamConfig, params.Name, arguments)
+	h.writeMCPFileBridgeCallResult(w, id, result, err)
+}
+
+func mcpFileBridgeUpstreamConfig(connection knowledgeBaseConnection, serverConfig map[string]any) map[string]any {
+	config := map[string]any{
 		"url":     strings.TrimRight(connection.AIGatewayBaseURL, "/") + "/gateway/mcp",
 		"headers": map[string]any{"Authorization": "Bearer " + connection.CSGHubAccessToken},
-	}, params.Name, arguments)
+	}
+	for _, key := range []string{"startup_timeout_sec", "tool_timeout_sec"} {
+		if value, ok := serverConfig[key]; ok {
+			config[key] = value
+		}
+	}
+	return config
+}
+
+func (h *Handler) writeMCPFileBridgeCallResult(w http.ResponseWriter, id json.RawMessage, result *mcpsdk.CallToolResult, err error) {
 	if err != nil {
 		h.writeMCPFileBridgeToolFailure(w, id, err.Error())
 		return
 	}
-	encoded, _ := json.Marshal(result)
-	h.writeMCPFileBridgeResult(w, id, map[string]any{
-		"content":           []map[string]any{{"type": "text", "text": string(encoded)}},
-		"structuredContent": result,
-		"isError":           false,
-	})
+	h.writeMCPFileBridgeResult(w, id, result)
 }
 
 func (h *Handler) readMCPBridgeWorkspaceFile(agentID, path string, binding map[string]any) (string, []byte, error) {
@@ -185,7 +221,7 @@ func (h *Handler) readMCPBridgeWorkspaceFile(agentID, path string, binding map[s
 	if err != nil || !info.Mode().IsRegular() {
 		return "", nil, fmt.Errorf("path must reference a regular file")
 	}
-	limit := int64(mcpFileBridgeMaxBytes)
+	limit := opencsgmcp.DefaultMaxFileBytes
 	if declared := mcpBindingMaxBytes(binding); declared > 0 && declared < limit {
 		limit = declared
 	}
@@ -196,12 +232,10 @@ func (h *Handler) readMCPBridgeWorkspaceFile(agentID, path string, binding map[s
 	if err != nil {
 		return "", nil, fmt.Errorf("read file: %w", err)
 	}
+	if int64(len(content)) > limit {
+		return "", nil, fmt.Errorf("file exceeds %d bytes", limit)
+	}
 	return filepath.Base(cleaned), content, nil
-}
-
-func validMCPFileBinding(binding map[string]any) bool {
-	return strings.EqualFold(mcpBindingString(binding, "encoding"), "base64") &&
-		mcpBindingString(binding, "content_argument") != "" && mcpBindingString(binding, "filename_argument") != ""
 }
 
 func mcpBindingString(binding map[string]any, key string) string {

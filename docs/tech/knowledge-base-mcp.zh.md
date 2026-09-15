@@ -160,13 +160,13 @@ AgenticHub 当前配置 ──────────────────�
     "com.opencsg/mcp": {
       "type": "opencsg_mcp_gateway",
       "auth_type": "csghub_access_token",
-      "required_tools": ["parse_file_content"]
+      "file_bindings": ["parse_file_content"]
     }
   }
 }
 ```
 
-模板仍需提供一个非空 `url` 以满足通用 MCP schema，但该 URL 不会进入 Runtime。CSGClaw 在运行时将配置改写到本机 `/api/v1/opencsg-mcp-gateway/mcp` 代理，并使用 CSGClaw 服务 Token 保护该连接。代理在每个请求上读取当前 OpenCSG 登录凭据，只把用户 Token 转发到当前登录环境配置的 `{AIGatewayBaseURL}/gateway/mcp`，不转发浏览器 Cookie，也不跟随上游重定向。
+模板仍需提供非空 `url` 以兼容通用 MCP schema，但运行时不会信任或直接连接该地址。CSGClaw 将配置改写为本机 `/api/v1/opencsg-mcp-gateway/mcp` 代理，并使用 CSGClaw 服务 Token 保护该连接。代理在每个请求上读取当前 OpenCSG 登录凭据，只把用户 Token 转发到当前登录环境配置的 `{AIGatewayBaseURL}/gateway/mcp`，不转发浏览器 Cookie，也不跟随上游重定向。
 
 发布模板时，通用模板清洗仍会删除 `headers` 与 `env`，但保留 `_meta`。因此发布者凭据和使用者凭据都不会写入社区模板，模板提供的 URL 也不能改变携带用户 Token 的上游目标。
 

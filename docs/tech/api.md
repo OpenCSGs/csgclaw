@@ -710,6 +710,8 @@ Memory is included only when each publish request explicitly sets `include_memor
 With the same explicit publish opt-in, supported non-Codex runtimes preserve and overlay optional template memories according to that Runtime's workspace convention.
 During agent creation, skills are installed under `skills/`, and MCP servers from `mcp.json` are applied unless the create request explicitly supplies `mcpServers`.
 
+See [MCP Configuration](mcp-config.md) for common fields, OpenCSG Gateway declarations, file bindings, and security rules for `mcps/mcp.json`.
+
 Codex worker templates may persist their execution mode in `agent.toml`:
 
 ```toml

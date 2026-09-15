@@ -691,6 +691,8 @@ catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec
 在同样显式发布 opt-in 的前提下，受支持的非 Codex Runtime 会按对应 Runtime 的 workspace 约定保留并叠加可选模板 memories。
 根据模板创建 Agent 时，skills 会安装到 `skills/`，`mcp.json` 中的 MCP server 会自动应用；如果创建请求显式传入 `mcpServers`，则以请求内容为准。
 
+`mcps/mcp.json` 的通用字段、OpenCSG Gateway、文件绑定和安全规则见 [MCP 配置规范](mcp-config.zh.md)。
+
 Codex Worker 模板可在 `agent.toml` 中保存运行模式：
 
 ```toml

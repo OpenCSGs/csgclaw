@@ -134,7 +134,10 @@ func (r *Runtime) ReconcileMCPServers(_ context.Context, h agentruntime.Handle, 
 	if err != nil {
 		return err
 	}
-	servers := codexMCPFileBridgeServers(change.Current.Servers, agentRef.ID)
+	servers, err := codexMCPFileBridgeServers(change.Current.Servers, agentRef.ID)
+	if err != nil {
+		return err
+	}
 	return r.seedCodexHomeConfig(codexHomeDir, workspaceDir, agentRef.Profile.Normalized(), agentRef.RuntimeOptions, servers)
 }
 

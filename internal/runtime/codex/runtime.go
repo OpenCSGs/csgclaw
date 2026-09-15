@@ -176,10 +176,10 @@ func (r *Runtime) runtimeMCPServers(ctx context.Context, agentID string, servers
 	if err != nil {
 		return nil, err
 	}
-	return codexMCPFileBridgeServers(materialized, agentID), nil
+	return codexMCPFileBridgeServers(materialized, agentID)
 }
 
-func codexMCPFileBridgeServers(servers map[string]any, agentID string) map[string]any {
+func codexMCPFileBridgeServers(servers map[string]any, agentID string) (map[string]any, error) {
 	for serverName, raw := range servers {
 		entry, _ := raw.(map[string]any)
 		bindings, _ := entry[opencsgmcp.RuntimeFileBindingsKey].(map[string]any)
@@ -194,12 +194,18 @@ func codexMCPFileBridgeServers(servers map[string]any, agentID string) map[strin
 		base := strings.TrimSuffix(strings.TrimRight(urlText, "/"), marker)
 		entry["url"] = base + "/api/v1/agents/" + url.PathEscape(agentID) + "/mcp-file-bridge/" + url.PathEscape(serverName)
 		headers, _ := entry["headers"].(map[string]any)
+		if headers == nil {
+			return nil, fmt.Errorf("materialize MCP file bridge %q: internal authorization header is unavailable", serverName)
+		}
 		authorization, _ := headers["Authorization"].(string)
 		rootToken := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
+		if rootToken == "" || !strings.HasPrefix(strings.TrimSpace(authorization), "Bearer ") {
+			return nil, fmt.Errorf("materialize MCP file bridge %q: internal authorization token is unavailable", serverName)
+		}
 		headers["Authorization"] = "Bearer " + opencsgmcp.FileBridgeToken(rootToken, agentID, serverName)
 		delete(entry, opencsgmcp.RuntimeFileBindingsKey)
 	}
-	return servers
+	return servers, nil
 }
 
 type Runtime struct {

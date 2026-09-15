@@ -7,6 +7,7 @@ import (
 
 	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcpschema"
+	"csgclaw/internal/opencsgmcp"
 )
 
 const ServersKey = mcpschema.MCPServersKey
@@ -33,6 +34,11 @@ func normalizeServerInput(name string, config map[string]any) (string, map[strin
 	}
 	if metadata, managed := knowledgebase.ManagedMetadataFromServer(normalizedServer); managed && name != metadata.ContentID {
 		return "", nil, fmt.Errorf("managed knowledge-base MCP server name must match content_id %q", metadata.ContentID)
+	}
+	if opencsgmcp.IsGatewayServer(normalizedServer) {
+		if _, err := opencsgmcp.FileBindings(normalizedServer); err != nil {
+			return "", nil, fmt.Errorf("managed OpenCSG MCP server %q: %w", name, err)
+		}
 	}
 	return name, cloneMap(normalizedServer), nil
 }

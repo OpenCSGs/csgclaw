@@ -144,53 +144,27 @@ func (defaultServerProber) Probe(ctx context.Context, name string, config map[st
 }
 
 func listProbeTools(ctx context.Context, session *mcpsdk.ClientSession) ([]ProbeTool, bool, error) {
-	tools := make([]ProbeTool, 0)
-	cursor := ""
-	seenCursors := map[string]struct{}{}
-	for page := 0; page < maximumProbePages; page++ {
-		response, err := session.ListTools(ctx, &mcpsdk.ListToolsParams{Cursor: cursor})
-		if err != nil {
-			return nil, false, err
+	definitions, truncated, err := listSDKTools(ctx, session)
+	if err != nil {
+		return nil, false, err
+	}
+	tools := make([]ProbeTool, 0, len(definitions))
+	for _, tool := range definitions {
+		title := strings.TrimSpace(tool.Title)
+		if title == "" && tool.Annotations != nil {
+			title = strings.TrimSpace(tool.Annotations.Title)
 		}
-		if response == nil {
-			return nil, false, errors.New("tools/list returned an empty response")
-		}
-		for _, tool := range response.Tools {
-			if tool == nil || strings.TrimSpace(tool.Name) == "" {
-				continue
-			}
-			title := strings.TrimSpace(tool.Title)
-			if title == "" && tool.Annotations != nil {
-				title = strings.TrimSpace(tool.Annotations.Title)
-			}
-			tools = append(tools, ProbeTool{
-				Description:  strings.TrimSpace(tool.Description),
-				InputSchema:  tool.InputSchema,
-				Name:         strings.TrimSpace(tool.Name),
-				OutputSchema: tool.OutputSchema,
-				Title:        title,
-			})
-			if len(tools) >= maximumProbeTools {
-				sort.SliceStable(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
-				return tools, true, nil
-			}
-		}
-		nextCursor := strings.TrimSpace(response.NextCursor)
-		if nextCursor == "" {
-			sort.SliceStable(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
-			return tools, false, nil
-		}
-		if _, exists := seenCursors[nextCursor]; exists {
-			return nil, false, fmt.Errorf("tools/list returned a repeated cursor %q", nextCursor)
-		}
-		seenCursors[nextCursor] = struct{}{}
-		cursor = nextCursor
+		tools = append(tools, ProbeTool{Description: strings.TrimSpace(tool.Description), InputSchema: tool.InputSchema, Name: strings.TrimSpace(tool.Name), OutputSchema: tool.OutputSchema, Title: title})
 	}
 	sort.SliceStable(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
-	return tools, true, nil
+	return tools, truncated, nil
 }
 
 func probeTransport(config map[string]any) (mcpsdk.Transport, error) {
+	return probeTransportWithRedirectPolicy(config, nil)
+}
+
+func probeTransportWithRedirectPolicy(config map[string]any, checkRedirect func(*http.Request, []*http.Request) error) (mcpsdk.Transport, error) {
 	command := stringField(config, "command")
 	endpoint := stringField(config, "url")
 	transportName := normalizeTransportName(stringField(config, "transport"))
@@ -220,14 +194,14 @@ func probeTransport(config map[string]any) (mcpsdk.Transport, error) {
 		if err := validateProbeEndpoint(endpoint); err != nil {
 			return nil, err
 		}
-		return &mcpsdk.SSEClientTransport{Endpoint: endpoint, HTTPClient: probeHTTPClient(config, endpoint)}, nil
+		return &mcpsdk.SSEClientTransport{Endpoint: endpoint, HTTPClient: probeHTTPClient(config, endpoint, checkRedirect)}, nil
 	case "http", "remote", "streamable", "streamable_http", "streamablehttp":
 		if err := validateProbeEndpoint(endpoint); err != nil {
 			return nil, err
 		}
 		return &mcpsdk.StreamableClientTransport{
 			Endpoint:             endpoint,
-			HTTPClient:           probeHTTPClient(config, endpoint),
+			HTTPClient:           probeHTTPClient(config, endpoint, checkRedirect),
 			MaxRetries:           -1,
 			DisableStandaloneSSE: true,
 		}, nil
@@ -249,7 +223,7 @@ func validateProbeEndpoint(endpoint string) error {
 	return nil
 }
 
-func probeHTTPClient(config map[string]any, endpoint string) *http.Client {
+func probeHTTPClient(config map[string]any, endpoint string, checkRedirect func(*http.Request, []*http.Request) error) *http.Client {
 	headers := http.Header{}
 	if rawHeaders, ok := config["headers"].(map[string]any); ok {
 		for name, rawValue := range rawHeaders {
@@ -259,7 +233,7 @@ func probeHTTPClient(config map[string]any, endpoint string) *http.Client {
 		}
 	}
 	parsed, _ := url.Parse(endpoint)
-	return &http.Client{Transport: probeHeaderTransport{
+	return &http.Client{CheckRedirect: checkRedirect, Transport: probeHeaderTransport{
 		base:          http.DefaultTransport,
 		headers:       headers,
 		allowedScheme: strings.ToLower(parsed.Scheme),

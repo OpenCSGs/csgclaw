@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"csgclaw/internal/opencsgmcp"
 )
 
 type DesktopOptions struct {
@@ -91,13 +93,31 @@ func desktopSandboxSecurityHandler(next http.Handler, listenerAddr net.Addr, opt
 		got := r.Header.Get("Authorization")
 		serverAuthorized := expectedServerAuthorization != "" &&
 			subtle.ConstantTimeCompare([]byte(got), []byte(expectedServerAuthorization)) == 1
-		if !serverAuthorized {
+		bridgeAuthorized := desktopFileBridgeAuthorized(r, got, opts.ServerAccessToken)
+		if !serverAuthorized && !bridgeAuthorized {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="csgclaw-desktop"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
 	}), nil
+}
+
+func desktopFileBridgeAuthorized(r *http.Request, authorization, serverAccessToken string) bool {
+	if r.Method != http.MethodPost || strings.TrimSpace(serverAccessToken) == "" {
+		return false
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) != 6 || parts[0] != "api" || parts[1] != "v1" || parts[2] != "agents" || parts[4] != "mcp-file-bridge" {
+		return false
+	}
+	agentID := strings.TrimSpace(parts[3])
+	serverName := strings.TrimSpace(parts[5])
+	if agentID == "" || serverName == "" {
+		return false
+	}
+	token := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
+	return opencsgmcp.ValidFileBridgeToken(token, serverAccessToken, agentID, serverName)
 }
 
 func normalizeDesktopServerAccessHosts(hosts []string, expectedPort string) (map[string]struct{}, error) {

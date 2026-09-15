@@ -2617,6 +2617,16 @@ func TestRuntimeCreateMaterializesPersistedMCPServersForSession(t *testing.T) {
 	}
 }
 
+func TestCodexMCPFileBridgeServersRejectsMissingAuthorization(t *testing.T) {
+	_, err := codexMCPFileBridgeServers(map[string]any{"file-parser": map[string]any{
+		"url":                             "http://127.0.0.1:18080/api/v1/opencsg-mcp-gateway/mcp",
+		opencsgmcp.RuntimeFileBindingsKey: map[string]any{"parse_file_content": map[string]any{}},
+	}}, "agent-a")
+	if err == nil {
+		t.Fatal("codexMCPFileBridgeServers() error = nil")
+	}
+}
+
 func TestRuntimeProvisionSyncsCodexOverlaySkills(t *testing.T) {
 	root := t.TempDir()
 	hostHome := t.TempDir()

@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"csgclaw/internal/opencsgmcp"
 )
 
 func TestDesktopSecurityHeadersAllowOnlyHashedInlineBootstrap(t *testing.T) {
@@ -66,10 +68,55 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 		sandbox       bool
 		host          string
 		path          string
+		method        string
 		authorization string
 		origin        string
 		wantStatus    int
 	}{
+		{
+			name:          "sandbox accepts scoped file bridge token for matching route",
+			sandbox:       true,
+			host:          sandboxHost,
+			path:          "/api/v1/agents/agent-a/mcp-file-bridge/file-parser",
+			method:        http.MethodPost,
+			authorization: "Bearer " + opencsgmcp.FileBridgeToken(serverToken, "agent-a", "file-parser"),
+			wantStatus:    http.StatusNoContent,
+		},
+		{
+			name:          "sandbox rejects scoped file bridge token for another agent",
+			sandbox:       true,
+			host:          sandboxHost,
+			path:          "/api/v1/agents/agent-b/mcp-file-bridge/file-parser",
+			method:        http.MethodPost,
+			authorization: "Bearer " + opencsgmcp.FileBridgeToken(serverToken, "agent-a", "file-parser"),
+			wantStatus:    http.StatusUnauthorized,
+		},
+		{
+			name:          "sandbox rejects scoped file bridge token for another server",
+			sandbox:       true,
+			host:          sandboxHost,
+			path:          "/api/v1/agents/agent-a/mcp-file-bridge/other-parser",
+			method:        http.MethodPost,
+			authorization: "Bearer " + opencsgmcp.FileBridgeToken(serverToken, "agent-a", "file-parser"),
+			wantStatus:    http.StatusUnauthorized,
+		},
+		{
+			name:          "sandbox rejects scoped file bridge token for non-post request",
+			sandbox:       true,
+			host:          sandboxHost,
+			path:          "/api/v1/agents/agent-a/mcp-file-bridge/file-parser",
+			authorization: "Bearer " + opencsgmcp.FileBridgeToken(serverToken, "agent-a", "file-parser"),
+			wantStatus:    http.StatusUnauthorized,
+		},
+		{
+			name:          "sandbox rejects scoped file bridge token for ordinary API",
+			sandbox:       true,
+			host:          sandboxHost,
+			path:          "/api/v1/messages",
+			method:        http.MethodPost,
+			authorization: "Bearer " + opencsgmcp.FileBridgeToken(serverToken, "agent-a", "file-parser"),
+			wantStatus:    http.StatusUnauthorized,
+		},
 		{
 			name:       "renderer accepts external loopback browser",
 			host:       rendererHost,
@@ -158,7 +205,11 @@ func TestDesktopSecuritySeparatesRendererAndSandboxAuthentication(t *testing.T) 
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "http://"+tt.host+tt.path, nil)
+			method := tt.method
+			if method == "" {
+				method = http.MethodGet
+			}
+			req := httptest.NewRequest(method, "http://"+tt.host+tt.path, nil)
 			req.Host = tt.host
 			if tt.authorization != "" {
 				req.Header.Set("Authorization", tt.authorization)
