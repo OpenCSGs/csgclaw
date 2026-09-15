@@ -316,6 +316,11 @@ export function ModelProviderPage() {
             {filteredProviderCards.map((item) => {
               const itemTone = providerStatusTone(item.status || "unknown", item);
               const active = item.id === provider.id;
+              const itemModelCount = item.models.length;
+              const itemMetaParts = [
+                itemModelCount ? t("modelProviderModelCount", { count: itemModelCount }) : t("modelProviderNoModels"),
+                item.message || (item.status === "connected" ? t("modelProviderConnected") : ""),
+              ].filter(Boolean);
               return (
                 <button
                   key={item.id}
@@ -335,7 +340,7 @@ export function ModelProviderPage() {
                   <span className="model-provider-provider-copy">
                     <span className="model-provider-provider-title">{item.display_name || item.id}</span>
                     <span className="model-provider-provider-description">
-                      {item.kind || item.base_url || t("resourcesModelProvidersSection")}
+                      {itemMetaParts.join(" · ") || item.kind || item.base_url || t("resourcesModelProvidersSection")}
                     </span>
                   </span>
                   <span className={`model-provider-provider-status ${itemTone}`} aria-hidden="true">
