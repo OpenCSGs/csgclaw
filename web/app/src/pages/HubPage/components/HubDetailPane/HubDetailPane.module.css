@@ -1138,7 +1138,7 @@
 .hub-skill-card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(56px, max-content);
+  grid-auto-rows: max-content;
   align-content: start;
   column-gap: 16px;
   row-gap: 16px;
