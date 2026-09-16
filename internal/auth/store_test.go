@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,37 @@ import (
 	"testing"
 	"time"
 )
+
+func TestRecordStatusRejectsExpiredJWT(t *testing.T) {
+	now := time.Now()
+	record := Record{
+		Tokens:  Tokens{AccessToken: testJWTWithExpiration(t, now.Add(-time.Minute))},
+		Account: Account{UserID: "alice", UserUUID: "user-1"},
+	}
+	if status := record.Status(); status.Authenticated {
+		t.Fatalf("Status().Authenticated = true for an expired access token")
+	}
+	if !accessTokenExpiredAt(record.Tokens.AccessToken, now) {
+		t.Fatalf("accessTokenExpiredAt() = false, want true")
+	}
+	record.Tokens.AccessToken = testJWTWithExpiration(t, now.Add(time.Minute))
+	if accessTokenExpiredAt(record.Tokens.AccessToken, now) {
+		t.Fatalf("accessTokenExpiredAt() = true for a future expiration")
+	}
+}
+
+func testJWTWithExpiration(t *testing.T, expiration time.Time) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"current_user": "alice",
+		"uuid":         "user-1",
+		"exp":          expiration.Unix(),
+	})
+	if err != nil {
+		t.Fatalf("marshal JWT payload: %v", err)
+	}
+	return "header." + base64.RawURLEncoding.EncodeToString(payload) + ".signature"
+}
 
 func TestStoreSaveLoadStatusAndDelete(t *testing.T) {
 	store := newTestStore(t)

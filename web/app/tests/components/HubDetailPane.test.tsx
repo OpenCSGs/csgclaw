@@ -682,6 +682,73 @@ async function openMCPDetail(user: ReturnType<typeof userEvent.setup>, name = /g
 }
 
 describe("HubDetailPane", () => {
+  it("opens the shared login flow instead of knowledge-base discovery while signed out", async () => {
+    const user = userEvent.setup();
+    const onKnowledgeBaseLogin = vi.fn();
+    render(
+      <HubDetailPane
+        locale="en"
+        t={t}
+        hub={{
+          detailPaneProps: {
+            detailLoading: false,
+            error: "",
+            knowledgeBases: {
+              cancelMCPConfig: vi.fn(),
+              confirmMCPConfig: async () => false,
+              copyBusyID: "",
+              copyError: "",
+              discoveryHasMore: false,
+              discoveryItems: [],
+              discoveryLoadError: "",
+              discoveryLoadMore: async () => {},
+              discoveryLoading: false,
+              discoveryLoadingMore: false,
+              discoveryRefetch: async () => {},
+              items: [],
+              loadError: "",
+              loading: false,
+              loginRequired: true,
+              pendingMCPKnowledgeBase: null,
+              requestMCPConfig: async () => false,
+              search: "",
+              selected: null,
+              setSearch: vi.fn(),
+            },
+            loaded: true,
+            mcpServers: [],
+            onKnowledgeBaseLogin,
+            onRetry: vi.fn(),
+            onSelectWorkspaceFile: vi.fn(),
+            selectedMCPServer: null,
+            selectedMCPServerName: "",
+            selectedResourceType: "knowledge",
+            selectedSkill: null,
+            selectedSkillPath: "",
+            selectedTemplate: null,
+            selectedTemplateId: "",
+            selectedWorkspacePath: "",
+            skillFile: null,
+            skillFileError: "",
+            skillFileLoading: false,
+            skills: [],
+            skillTree: null,
+            skillTreeError: "",
+            skillTreeLoading: false,
+            templates: [],
+            workspaceFile: null,
+            workspaceFileError: "",
+            workspaceFileLoading: false,
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /resourcesMCPAdd/i }));
+
+    expect(onKnowledgeBaseLogin).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
   it("renders the initial resource loading state as an accessible status", () => {
     renderHubDetailPane("template", { loaded: false });
 
@@ -1128,6 +1195,8 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("tab", { name: "Remote install" }));
 
     expect(onRemoteMCPVisibleChange).toHaveBeenCalledWith(true);
+    await user.click(screen.getByRole("tab", { name: "Remote install" }));
+    expect(onRemoteMCPVisibleChange.mock.calls.filter(([visible]) => visible)).toHaveLength(2);
     expect(screen.getByText("calendar")).toBeInTheDocument();
     expect(screen.getByText("Calendar tools")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Install" }));

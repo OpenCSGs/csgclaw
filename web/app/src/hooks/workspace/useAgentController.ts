@@ -27,6 +27,7 @@ import {
   startFeishuRegistrationRequest,
   updateAgentRequest,
 } from "@/api/agents";
+import { fetchAgentMCPServerSourceStatus, syncAgentMCPServerSource } from "@/api/mcp";
 import type {
   AgentUpdatePayload,
   FeishuRegistration,
@@ -110,12 +111,14 @@ import type {
   RuntimeBootstrapConfig,
 } from "@/models/agents";
 import { isDirectConversation, localIdentitiesMatch, upsertUserInData } from "@/models/conversations";
-import { mcpServersFromMap } from "@/models/mcp";
+import { mcpManagedKnowledgeBaseSource, mcpServersFromMap } from "@/models/mcp";
+import type { MCPServer, MCPServerSourceStatus } from "@/models/mcp";
 import { displayTeam, teamMemberIDs } from "@/models/tasks";
 import type { WorkspaceTeam } from "@/models/tasks";
 import {
   modelProviderCatalogForAgentAvailability,
   modelProviderCatalogWithModels,
+  modelProviderConfigUsesOpenCSG,
   modelProviderOptionsFromCatalog,
   providerNameForProviderID,
 } from "@/models/modelProviders";
@@ -521,7 +524,7 @@ export function useAgentController({
   managerProfile,
   modelProviders = null,
   modelProvidersLoaded = false,
-  openCSGAuthenticated = false,
+  openCSGAuthGuard,
   onAgentDeleted,
   profileDetailAgentID = "",
   refreshMCPServers = async () => null,
@@ -544,6 +547,11 @@ export function useAgentController({
   setSelectedHubTemplateId,
   t,
 }: UseAgentControllerArgs) {
+  const {
+    authenticated: openCSGAuthenticated,
+    handleAuthenticationError: handleOpenCSGAuthenticationError,
+    requireAuthentication: requireOpenCSGAuthentication,
+  } = openCSGAuthGuard;
   const errorMessage = useCallback(
     (error: unknown, fallback = "") => localizeAPIError(error, t, apiErrorMessage(error, fallback) || fallback),
     [t],
@@ -800,6 +808,78 @@ export function useAgentController({
   const agentMCPServers = useMemo(() => {
     return mcpServersFromMap(agentMCPServersQuery.data?.servers);
   }, [agentMCPServersQuery.data]);
+  const [agentMCPSourceStatuses, setAgentMCPSourceStatuses] = useState<Record<string, MCPServerSourceStatus>>({});
+  const [agentMCPSourceBusyNames, setAgentMCPSourceBusyNames] = useState<ReadonlySet<string>>(new Set());
+  const [agentMCPSourceSyncBusyName, setAgentMCPSourceSyncBusyName] = useState("");
+  const managedAgentMCPServerNames = useMemo(
+    () =>
+      agentMCPServers
+        .filter((server) => Boolean(mcpManagedKnowledgeBaseSource(server.config)))
+        .map((server) => server.name),
+    [agentMCPServers],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const names = managedAgentMCPServerNames;
+    setAgentMCPSourceStatuses((current) =>
+      Object.fromEntries(Object.entries(current).filter(([name]) => names.includes(name))),
+    );
+    if (!agentDetailAgentID || !names.length || !openCSGAuthenticated) {
+      setAgentMCPSourceBusyNames(new Set());
+      return () => {
+        cancelled = true;
+      };
+    }
+    setAgentMCPSourceBusyNames(new Set(names));
+    void Promise.all(
+      names.map(async (name) => {
+        try {
+          const status = await fetchAgentMCPServerSourceStatus(agentDetailAgentID, name);
+          return { name, status };
+        } catch (error) {
+          handleOpenCSGAuthenticationError(error, { openDialog: false });
+          return null;
+        }
+      }),
+    ).then((results) => {
+      if (cancelled) {
+        return;
+      }
+      setAgentMCPSourceStatuses(
+        Object.fromEntries(results.filter((result) => result !== null).map((result) => [result.name, result.status])),
+      );
+      setAgentMCPSourceBusyNames(new Set());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentDetailAgentID, handleOpenCSGAuthenticationError, managedAgentMCPServerNames, openCSGAuthenticated]);
+
+  const updateAgentMCPServerSource = useCallback(
+    async (server: MCPServer | string) => {
+      const name = typeof server === "string" ? server.trim() : String(server?.name || "").trim();
+      if (!agentDetailAgentID || !name || !requireOpenCSGAuthentication()) {
+        return false;
+      }
+      setAgentMCPSourceSyncBusyName(name);
+      setAgentMCPAddError("");
+      try {
+        const result = await syncAgentMCPServerSource(agentDetailAgentID, name);
+        queryClient.setQueryData(workspaceQueryKeys.agentMCPServers(agentDetailAgentID), result.agent);
+        setAgentMCPSourceStatuses((current) => ({ ...current, [name]: result.source }));
+        return true;
+      } catch (error) {
+        if (!handleOpenCSGAuthenticationError(error)) {
+          setAgentMCPAddError(errorMessage(error, t("resourcesMCPSourceSyncFailed")));
+        }
+        return false;
+      } finally {
+        setAgentMCPSourceSyncBusyName("");
+      }
+    },
+    [agentDetailAgentID, errorMessage, handleOpenCSGAuthenticationError, queryClient, requireOpenCSGAuthentication, t],
+  );
   const agentMCPCandidates = useMemo(() => {
     const currentNames = new Set(agentMCPServers.map((server) => server.name));
     return catalogMCPServers.filter((server) => server.name && !currentNames.has(server.name));
@@ -848,6 +928,11 @@ export function useAgentController({
     () => modelProviderOptionsFromCatalog(agentPageModelProviders),
     [agentPageModelProviders],
   );
+  useEffect(() => {
+    if (agentPageModelError && modelProviderConfigUsesOpenCSG(agentPageDraft)) {
+      handleOpenCSGAuthenticationError(agentPageModelError);
+    }
+  }, [agentPageDraft, agentPageModelError, handleOpenCSGAuthenticationError]);
   const agentModelBusy = Boolean(showAgentModal && !modelProvidersLoaded);
   const agentPageModelBusy = Boolean(selectedAgentForPage && (!modelProvidersLoaded || agentPageModelProbeBusy));
   const resetAgentModels = useCallback(() => {
@@ -1185,11 +1270,18 @@ export function useAgentController({
     await refreshWorkspaceBootstrapConfig();
   }
 
-  async function rebuildManagerFromBrowser(): Promise<{ billingURL: string; message: string } | null> {
+  async function rebuildManagerFromBrowser(): Promise<{
+    authenticationRequired?: boolean;
+    billingURL: string;
+    message: string;
+  } | null> {
     try {
       await requestManagerRebuild();
       return null;
     } catch (err) {
+      if (modelProviderConfigUsesOpenCSG(managerProfile) && handleOpenCSGAuthenticationError(err)) {
+        return { authenticationRequired: true, billingURL: "", message: "" };
+      }
       return {
         billingURL: apiErrorBillingURL(err),
         message: errorMessage(err, t("agentActionFailed")),
@@ -1199,6 +1291,9 @@ export function useAgentController({
 
   async function handleMessageAction(action: MessageAction | null | undefined, message?: MessageLike | null) {
     if (!action || action.id !== ACTION_REBUILD_MANAGER) {
+      return;
+    }
+    if (modelProviderConfigUsesOpenCSG(managerProfile) && !requireOpenCSGAuthentication()) {
       return;
     }
     const managerActionAgentID = String(managerAgent?.id || MANAGER_AGENT_ID).trim();
@@ -1214,7 +1309,9 @@ export function useAgentController({
     setMessageActionFeedback({ key, message: t("managerRecreateInProgress"), tone: "info" });
     try {
       const rebuildError = await rebuildManagerFromBrowser();
-      if (rebuildError) {
+      if (rebuildError?.authenticationRequired) {
+        setMessageActionFeedback({});
+      } else if (rebuildError) {
         setMessageActionFeedback({ key, message: rebuildError.message, tone: "error" });
       } else {
         setMessageActionFeedback({ key, message: t("managerRecreateSucceeded"), tone: "success" });
@@ -1567,6 +1664,9 @@ export function useAgentController({
     if (!agentID || !agentPageDraft || agentPageBusy) {
       return;
     }
+    if (modelProviderConfigUsesOpenCSG(agentPageDraft) && !requireOpenCSGAuthentication()) {
+      return;
+    }
     const payload: AgentUpdatePayload = {};
     const isManagerDraft =
       isManagerAgent(selectedAgentForPage) ||
@@ -1617,7 +1717,9 @@ export function useAgentController({
         };
       });
     } catch (err) {
-      setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
+      if (!(modelProviderConfigUsesOpenCSG(agentPageDraft) && handleOpenCSGAuthenticationError(err))) {
+        setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
+      }
     } finally {
       setAgentPageBusy(false);
     }
@@ -1626,6 +1728,9 @@ export function useAgentController({
   async function saveAgentPage(): Promise<void> {
     const draftToSave = agentPageDraft;
     if (!draftToSave || !selectedAgentForPage?.id) {
+      return;
+    }
+    if (modelProviderConfigUsesOpenCSG(draftToSave) && !requireOpenCSGAuthentication()) {
       return;
     }
     setAgentPageBusy(true);
@@ -1741,7 +1846,9 @@ export function useAgentController({
         showAgentPageNotice(t("profileSetupIncompleteAfterSave"), "warning", 5000, saved.id);
       }
     } catch (err) {
-      setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
+      if (!(modelProviderConfigUsesOpenCSG(draftToSave) && handleOpenCSGAuthenticationError(err))) {
+        setAgentPageSaveError(errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
+      }
     } finally {
       setAgentPageBusy(false);
     }
@@ -1756,16 +1863,15 @@ export function useAgentController({
     if (!selectedAgentForPage?.id || agentPagePublishBusy) {
       return false;
     }
-    if (target !== "local" && !openCSGAuthenticated) {
-      setAgentPageSaveError(t("agentPublishLoginRequired"));
+    setAgentPagePublishError("");
+    setAgentPageSaveError("");
+    if (target !== "local" && !requireOpenCSGAuthentication()) {
       return false;
     }
     if (target !== "local" && agentRuntimeKind(selectedAgentForPage) !== "codex") {
       return false;
     }
     setAgentPagePublishBusy(true);
-    setAgentPagePublishError("");
-    setAgentPageSaveError("");
     try {
       const published = await publishAgentTemplateRequest(
         selectedAgentForPage.id,
@@ -1783,6 +1889,9 @@ export function useAgentController({
       }
       return true;
     } catch (err) {
+      if (target !== "local" && handleOpenCSGAuthenticationError(err)) {
+        return false;
+      }
       const errorCode = hubTemplateErrorCode(err);
       const deploySensitiveCheckFailed = errorCode === HubTemplateErrorCodes.reviewFailed;
       const deployReviewPending = errorCode === HubTemplateErrorCodes.reviewPending;
@@ -1818,6 +1927,17 @@ export function useAgentController({
 
   async function saveAgent(): Promise<void> {
     if (!agentDraft) {
+      return;
+    }
+    const remoteTemplate = hubTemplates.some(
+      (template) =>
+        template.id === agentDraft.from_template &&
+        String(template.source?.kind || "")
+          .trim()
+          .toLowerCase() === "remote",
+    );
+    const requiresOpenCSGAuthentication = modelProviderConfigUsesOpenCSG(agentDraft) || remoteTemplate;
+    if (requiresOpenCSGAuthentication && !requireOpenCSGAuthentication()) {
       return;
     }
     setAgentBusy(true);
@@ -1979,8 +2099,10 @@ export function useAgentController({
       setAgentProgress(null);
     } catch (err) {
       setAgentProgress((current) => (current ? { ...current, status: "failed" } : current));
-      setAgentError(errorMessage(err, t("agentActionFailed")));
-      setAgentBillingURL(apiErrorBillingURL(err));
+      if (!(requiresOpenCSGAuthentication && handleOpenCSGAuthenticationError(err))) {
+        setAgentError(errorMessage(err, t("agentActionFailed")));
+        setAgentBillingURL(apiErrorBillingURL(err));
+      }
     } finally {
       setAgentBusy(false);
     }
@@ -1988,6 +2110,12 @@ export function useAgentController({
 
   async function runAgentAction(item: AgentLike | null | undefined, action: AgentAction): Promise<void> {
     if (!item?.id || isAgentActionBusy(item.id)) {
+      return;
+    }
+    const actionUsesOpenCSG =
+      action === "recreate" &&
+      modelProviderConfigUsesOpenCSG(isManagerAgent(item) ? (managerProfile ?? agentToDraft(item)) : agentToDraft(item));
+    if (actionUsesOpenCSG && !requireOpenCSGAuthentication()) {
       return;
     }
     if (
@@ -2005,7 +2133,9 @@ export function useAgentController({
       showAgentPageNotice(t("managerRecreateInProgress"), "info", 0, item.id);
       try {
         const rebuildError = await rebuildManagerFromBrowser();
-        if (rebuildError) {
+        if (rebuildError?.authenticationRequired) {
+          clearAgentPageNotice(item.id);
+        } else if (rebuildError) {
           clearAgentPageNotice(item.id);
           setAgentOperationError(item, rebuildError.message, rebuildError.billingURL);
         } else {
@@ -2067,7 +2197,9 @@ export function useAgentController({
       if (showRecreateNotice) {
         clearAgentPageNotice(item.id);
       }
-      setAgentOperationError(item, errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
+      if (!(actionUsesOpenCSG && handleOpenCSGAuthenticationError(err))) {
+        setAgentOperationError(item, errorMessage(err, t("agentActionFailed")), apiErrorBillingURL(err));
+      }
     } finally {
       releaseAgentAction(item.id, busyKey);
     }
@@ -2694,7 +2826,12 @@ export function useAgentController({
       modelProviders: agentPageModelProviders,
       modelBusy: agentPageModelBusy,
       modelError: agentPageModelError,
-      onRetryModels: retryAgentPageModels,
+      onRetryModels: () => {
+        if (modelProviderConfigUsesOpenCSG(agentPageDraft) && !requireOpenCSGAuthentication()) {
+          return;
+        }
+        retryAgentPageModels();
+      },
       saving: agentPageBusy,
       publishBusy: agentPagePublishBusy,
       publishDisabled: !openCSGAuthenticated,
@@ -2721,6 +2858,18 @@ export function useAgentController({
       mcpCandidatesLoading: catalogMCPServersLoading,
       mcpCandidatesError: catalogMCPServersError,
       mcpServers: agentMCPServers,
+      mcpSourceBusyNames: agentMCPSourceBusyNames,
+      mcpSourceUnavailableNames: new Set(
+        Object.entries(agentMCPSourceStatuses)
+          .filter(([, status]) => !status.sourceAvailable)
+          .map(([name]) => name),
+      ),
+      mcpSourceSyncBusyName: agentMCPSourceSyncBusyName,
+      mcpUpdateAvailableNames: new Set(
+        Object.entries(agentMCPSourceStatuses)
+          .filter(([, status]) => status.agentUpdateAvailable || status.updateAvailable)
+          .map(([name]) => name),
+      ),
       mcpAddBusy: agentMCPAddBusy,
       mcpAddError: agentMCPAddError,
       mcpDeleteBusy: agentMCPDeleteBusy,
@@ -2741,6 +2890,7 @@ export function useAgentController({
       },
       onPublish: publishAgentPage,
       onProviderLogin: loginCLIProxyProvider,
+      onRequireOpenCSGAuth: requireOpenCSGAuthentication,
       onStart: (item: AgentLike | null | undefined) => runAgentAction(item, "start"),
       onStop: (item: AgentLike | null | undefined) => runAgentAction(item, "stop"),
       onRecreate: (item: AgentLike | null | undefined) => runAgentAction(item, "recreate"),
@@ -2758,6 +2908,7 @@ export function useAgentController({
       onDeleteSkill: deleteAgentSkill,
       onInstallMCPServers: installAgentMCPServers,
       onDeleteMCPServer: deleteAgentMCPServer,
+      onUpdateMCPServer: updateAgentMCPServerSource,
       onRetryMCPServers: refreshMCPServers,
       teamActionBusy,
       teamActionError,
@@ -2796,6 +2947,7 @@ export function useAgentController({
             authBusyProvider: cliproxyAuthBusy,
             notifierWebhookPublicOrigin,
             onProviderLogin: loginCLIProxyProvider,
+            onRequireOpenCSGAuth: requireOpenCSGAuthentication,
             agentError,
             agentBillingURL,
             agentProgress,

@@ -570,7 +570,7 @@ export function WorkspaceTabPanels({
           styles.modelProviderRow,
           activePane.type === WorkspacePaneTypes.modelProvider && activePane.id === provider.id && rowStyles.active,
         )}
-        onClick={() => onSelectModelProvider(provider)}
+        onClick={() => onSelectModelProvider(provider, { requireAuthentication: true })}
       >
         <span className={classNames(rowStyles.icon, styles.modelProviderIconShell)}>
           <img

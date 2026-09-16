@@ -194,7 +194,13 @@ export function SkillUploadDialog({
               role="tab"
               size="sm"
               variant={mode === "remote" ? "primary" : "secondaryGray"}
-              onClick={() => setMode("remote")}
+              onClick={() => {
+                if (mode === "remote") {
+                  onRemoteVisibleChange?.(true);
+                  return;
+                }
+                setMode("remote");
+              }}
             >
               <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
               {t("resourcesSkillRemoteInstallTab")}

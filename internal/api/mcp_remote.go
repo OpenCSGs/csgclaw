@@ -64,7 +64,7 @@ func (h *Handler) handleRemoteMCPServers(w http.ResponseWriter, r *http.Request)
 		Search: r.URL.Query().Get("search"),
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		writeRemoteMCPHubUpstreamError(w, err)
 		return
 	}
 	items := make([]remoteMCPServerSummary, 0, len(list.Items))
@@ -110,7 +110,7 @@ func (h *Handler) handleInstallRemoteMCPServer(w http.ResponseWriter, r *http.Re
 	}
 	server, err := mcp.GetRemoteServer(r.Context(), baseURL, token, id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		writeRemoteMCPHubUpstreamError(w, err)
 		return
 	}
 	name, err := h.mcp.InstallRemoteServer(r.Context(), server)
@@ -121,6 +121,15 @@ func (h *Handler) handleInstallRemoteMCPServer(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, remoteMCPServerInstallResponse{
 		Name: name,
 	})
+}
+
+func writeRemoteMCPHubUpstreamError(w http.ResponseWriter, err error) {
+	var upstreamError *mcp.RemoteServerHTTPError
+	if errors.As(err, &upstreamError) && upstreamError.StatusCode == http.StatusUnauthorized {
+		http.Error(w, errRemoteMCPHubSignInRequired.Error(), http.StatusUnauthorized)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusBadGateway)
 }
 
 func writeRemoteMCPHubError(w http.ResponseWriter, err error) {

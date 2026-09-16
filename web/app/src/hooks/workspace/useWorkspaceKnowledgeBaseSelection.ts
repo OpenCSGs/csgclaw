@@ -6,12 +6,13 @@ import { configuredKnowledgeBases, mergeRemoteKnowledgeBasePages } from "@/model
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import { formatMCPServerDocument } from "@/models/mcp";
 import { useWorkspaceKnowledgeBasesQuery } from "./workspaceQueries";
+import { isOpenCSGAuthenticationError, type OpenCSGAuthGuard } from "./useOpenCSGAuthGuard";
 
 type KnowledgeBaseIDSetter = (value: string | ((current: string) => string)) => void;
 
 type UseWorkspaceKnowledgeBaseSelectionArgs = {
-  authenticated: boolean;
   enabled: boolean;
+  openCSGAuthGuard: OpenCSGAuthGuard;
   openCreateMCPDialog: (initialDocument?: string) => void;
   selectedKnowledgeBaseID: string;
   setSelectedKnowledgeBaseID: KnowledgeBaseIDSetter;
@@ -19,13 +20,18 @@ type UseWorkspaceKnowledgeBaseSelectionArgs = {
 };
 
 export function useWorkspaceKnowledgeBaseSelection({
-  authenticated,
   enabled,
+  openCSGAuthGuard,
   openCreateMCPDialog,
   selectedKnowledgeBaseID,
   setSelectedKnowledgeBaseID,
   t,
 }: UseWorkspaceKnowledgeBaseSelectionArgs) {
+  const {
+    authenticated,
+    handleAuthenticationError: handleOpenCSGAuthenticationError,
+    requireAuthentication: requireOpenCSGAuthentication,
+  } = openCSGAuthGuard;
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [copyBusyID, setCopyBusyID] = useState("");
@@ -41,10 +47,7 @@ export function useWorkspaceKnowledgeBaseSelection({
     () => mergeRemoteKnowledgeBasePages(discoveryQuery.data?.pages ?? []),
     [discoveryQuery.data?.pages],
   );
-  const items = useMemo(
-    () => configuredKnowledgeBases(catalogItems),
-    [catalogItems],
-  );
+  const items = useMemo(() => configuredKnowledgeBases(catalogItems), [catalogItems]);
   const selected = useMemo(
     () => resolveHubListSelection(items, selectedKnowledgeBaseID, (item) => item.id),
     [items, selectedKnowledgeBaseID],
@@ -54,6 +57,13 @@ export function useWorkspaceKnowledgeBaseSelection({
     const timer = window.setTimeout(() => setSearchQuery(search.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    const authError = catalogQuery.error || discoveryQuery.error;
+    if (authError) {
+      handleOpenCSGAuthenticationError(authError);
+    }
+  }, [catalogQuery.error, discoveryQuery.error, handleOpenCSGAuthenticationError]);
 
   const catalogPageCount = catalogQuery.data?.pages.length ?? 0;
   const fetchNextCatalogPage = catalogQuery.fetchNextPage;
@@ -89,6 +99,9 @@ export function useWorkspaceKnowledgeBaseSelection({
       if (!normalizedID) {
         return false;
       }
+      if (!requireOpenCSGAuthentication()) {
+        return false;
+      }
       setCopyBusyID(normalizedID);
       setCopyError("");
       try {
@@ -96,6 +109,9 @@ export function useWorkspaceKnowledgeBaseSelection({
         openCreateMCPDialog(formatMCPServerDocument(result.name, result.config));
         return true;
       } catch (error) {
+        if (handleOpenCSGAuthenticationError(error)) {
+          return false;
+        }
         setCopyError(errorMessage(error, t("resourcesKnowledgeBaseConfigFailed")));
         await Promise.all([catalogQuery.refetch(), discoveryQuery.refetch()]);
         return false;
@@ -103,7 +119,14 @@ export function useWorkspaceKnowledgeBaseSelection({
         setCopyBusyID("");
       }
     },
-    [catalogQuery, discoveryQuery, openCreateMCPDialog, t],
+    [
+      catalogQuery,
+      discoveryQuery,
+      handleOpenCSGAuthenticationError,
+      openCreateMCPDialog,
+      requireOpenCSGAuthentication,
+      t,
+    ],
   );
 
   const requestMCPConfig = useCallback(
@@ -113,11 +136,14 @@ export function useWorkspaceKnowledgeBaseSelection({
       if (!item || item.availability !== "available" || item.configuredMCPName) {
         return false;
       }
+      if (!requireOpenCSGAuthentication()) {
+        return false;
+      }
       setCopyError("");
       setPendingMCPKnowledgeBase(item);
       return true;
     },
-    [catalogItems, discoveryItems],
+    [catalogItems, discoveryItems, requireOpenCSGAuthentication],
   );
 
   const cancelMCPConfig = useCallback(() => {
@@ -141,11 +167,33 @@ export function useWorkspaceKnowledgeBaseSelection({
   const discoveryHasNextPage = discoveryQuery.hasNextPage;
   const discoveryIsFetchingNextPage = discoveryQuery.isFetchingNextPage;
   const loadMoreDiscovery = useCallback(async () => {
-    if (!discoveryHasNextPage || discoveryIsFetchingNextPage) {
+    if (!requireOpenCSGAuthentication() || !discoveryHasNextPage || discoveryIsFetchingNextPage) {
       return;
     }
     await fetchNextDiscoveryPage();
-  }, [discoveryHasNextPage, discoveryIsFetchingNextPage, fetchNextDiscoveryPage]);
+  }, [discoveryHasNextPage, discoveryIsFetchingNextPage, fetchNextDiscoveryPage, requireOpenCSGAuthentication]);
+
+  const refetchDiscovery = useCallback(async () => {
+    if (!requireOpenCSGAuthentication()) {
+      return;
+    }
+    const result = await discoveryQuery.refetch();
+    if (result.error) {
+      handleOpenCSGAuthenticationError(result.error);
+    }
+    return result;
+  }, [discoveryQuery, handleOpenCSGAuthenticationError, requireOpenCSGAuthentication]);
+
+  const refetchCatalog = useCallback(async () => {
+    if (!requireOpenCSGAuthentication()) {
+      return;
+    }
+    const result = await catalogQuery.refetch();
+    if (result.error) {
+      handleOpenCSGAuthenticationError(result.error);
+    }
+    return result;
+  }, [catalogQuery, handleOpenCSGAuthenticationError, requireOpenCSGAuthentication]);
 
   return {
     copyBusyID,
@@ -156,19 +204,23 @@ export function useWorkspaceKnowledgeBaseSelection({
     discoveryHasMore: Boolean(discoveryHasNextPage),
     discoveryLoadError:
       loginError ||
-      (discoveryQuery.error ? errorMessage(discoveryQuery.error, t("resourcesKnowledgeBasesLoadFailed")) : ""),
+      (discoveryQuery.error && !isOpenCSGAuthenticationError(discoveryQuery.error)
+        ? errorMessage(discoveryQuery.error, t("resourcesKnowledgeBasesLoadFailed"))
+        : ""),
     discoveryLoading: enabled && authenticated && discoveryQuery.isFetching && !discoveryIsFetchingNextPage,
     discoveryLoadingMore: discoveryIsFetchingNextPage,
     discoveryLoadMore: loadMoreDiscovery,
-    discoveryRefetch: discoveryQuery.refetch,
+    discoveryRefetch: refetchDiscovery,
     items,
     loginRequired,
     loading: enabled && authenticated && catalogQuery.isFetching,
     loadError:
       loginError ||
-      (catalogQuery.error ? errorMessage(catalogQuery.error, t("resourcesKnowledgeBasesLoadFailed")) : ""),
+      (catalogQuery.error && !isOpenCSGAuthenticationError(catalogQuery.error)
+        ? errorMessage(catalogQuery.error, t("resourcesKnowledgeBasesLoadFailed"))
+        : ""),
     pendingMCPKnowledgeBase,
-    refetch: catalogQuery.refetch,
+    refetch: refetchCatalog,
     requestMCPConfig,
     search,
     selected,

@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
 import { patchCsgclawUserRequest } from "@/api/participants";
-import { isAuthenticated } from "@/models/auth";
 import { createTranslator } from "@/shared/i18n";
 import {
   agentMatchesUser,
@@ -14,7 +13,10 @@ import {
 import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
 import { MANAGER_AGENT_ID, MANAGER_AGENT_NAME, MANAGER_PARTICIPANT_ID } from "@/shared/constants/agents";
 import { WorkspacePaneTypes, WorkspaceTabs, paneFromLocation } from "@/models/routing";
-import { modelProviderCatalogForOpenCSGState } from "@/models/modelProviders";
+import {
+  MODEL_PROVIDER_IDS,
+  modelProviderCatalogForOpenCSGState,
+} from "@/models/modelProviders";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
@@ -23,6 +25,7 @@ import { useWorkspaceHubController } from "./useWorkspaceHubController";
 import { useUpgradeController } from "./useUpgradeController";
 import { useConfigController } from "./useConfigController";
 import { useAuthController } from "./useAuthController";
+import { useOpenCSGAuthGuard } from "./useOpenCSGAuthGuard";
 import { useConnectorController } from "./useConnectorController";
 import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
@@ -36,6 +39,7 @@ import type { AgentLike } from "@/models/agents";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { MCPServer, MCPServerPayload } from "@/models/mcp";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
+import type { ModelProvider } from "@/models/modelProviders";
 import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
 import { TurnNotificationModes } from "@/models/turnNotifications";
@@ -271,13 +275,15 @@ export function useWorkspaceController() {
   });
   const auth = useAuthController(t);
   const loginOpenCSG = auth.login;
+  const openCSGAuthGuard = useOpenCSGAuthGuard({ login: loginOpenCSG, status: auth.status });
   const modelProviders = useMemo(
     () =>
       modelProviderCatalogForOpenCSGState(rawModelProviders, {
         aiGatewayBaseURL: auth.environment.aiGatewayBaseURL,
-        authenticated: isAuthenticated(auth.status),
+        authenticationRequiredMessage: t("modelProviderOpenCSGAuthenticationRequired"),
+        authenticated: openCSGAuthGuard.authenticated,
       }),
-    [auth.environment.aiGatewayBaseURL, auth.status, rawModelProviders],
+    [auth.environment.aiGatewayBaseURL, openCSGAuthGuard.authenticated, rawModelProviders, t],
   );
   const connectors = useConnectorController(t);
   const navigateAfterSkillDelete = useCallback(
@@ -298,7 +304,7 @@ export function useWorkspaceController() {
     hubTemplates,
     hubTemplatesQuery,
     onSkillDeleted: navigateAfterSkillDelete,
-    openCSGAuthenticated: isAuthenticated(auth.status),
+    openCSGAuthGuard,
     refreshWorkspaceHubTemplates,
     t,
   });
@@ -340,7 +346,7 @@ export function useWorkspaceController() {
     managerProfile,
     modelProviders,
     modelProvidersLoaded,
-    openCSGAuthenticated: isAuthenticated(auth.status),
+    openCSGAuthGuard,
     onAgentDeleted: handleAgentDeleted,
     profileDetailAgentID: conversationProfileDetailAgentID,
     refreshMCPServers: hub.refetchMCPServers,
@@ -426,6 +432,7 @@ export function useWorkspaceController() {
     navigatePane,
     onMessageAction: agent.handleMessageAction,
     onProviderLogin: agent.loginCLIProxyProvider,
+    openCSGAuthGuard,
     preferredFallbackConversationId: managerDirectConversation?.id ?? "",
     rooms,
     selectComputer,
@@ -504,6 +511,7 @@ export function useWorkspaceController() {
     navigatePane: ignoreFloatingChatNavigation,
     onMessageAction: agent.handleMessageAction,
     onProviderLogin: agent.loginCLIProxyProvider,
+    openCSGAuthGuard,
     rooms: floatingChatRooms,
     selectComputer: ignoreFloatingChatNavigation,
     selectConversation: ignoreFloatingChatNavigation,
@@ -777,6 +785,27 @@ export function useWorkspaceController() {
     [navigatePane, rooms, setSelectedHubResourceType, setSelectedKnowledgeBaseID],
   );
 
+  const openCreateAgentModal = agent.openCreateAgentModal;
+  const requireOpenCSGAuthentication = openCSGAuthGuard.requireAuthentication;
+  const openCreateAgentFromTemplate = useCallback(
+    (template: HubTemplate) => openCreateAgentModal(template),
+    [openCreateAgentModal],
+  );
+  const selectModelProviderWithAuthentication = useCallback(
+    (item: ModelProvider | null | undefined, options?: { requireAuthentication?: boolean }): boolean => {
+      if (
+        options?.requireAuthentication &&
+        item?.id === MODEL_PROVIDER_IDS.OpenCSG &&
+        !requireOpenCSGAuthentication()
+      ) {
+        return false;
+      }
+      selectModelProvider(item);
+      return true;
+    },
+    [requireOpenCSGAuthentication, selectModelProvider],
+  );
+
   const createMCPServerAndNavigate = useCallback(
     (payload: MCPServerPayload) =>
       saveMCPServerAndSelect(payload, hub.detailPaneProps.onCreateMCP, (name) => {
@@ -862,14 +891,16 @@ export function useWorkspaceController() {
         onCreateMCP: createMCPServerAndNavigate,
         onOpenSkillUpload: () => setSkillUploadOpen(true),
         onTrySkill: conversation.openManagerConversationWithSkill,
-        onKnowledgeBaseLogin: () => loginOpenCSG(),
+        onKnowledgeBaseLogin: () => {
+          requireOpenCSGAuthentication();
+        },
       },
     }),
     [
       conversation.openManagerConversationWithSkill,
       createMCPServerAndNavigate,
       hub,
-      loginOpenCSG,
+      requireOpenCSGAuthentication,
       selectKnowledgeBase,
       selectMCPServer,
       selectHubSkill,
@@ -877,9 +908,10 @@ export function useWorkspaceController() {
     ],
   );
 
-  const hubResourceType = activePane.type === WorkspacePaneTypes.hub && activePane.resourceType
-    ? activePane.resourceType
-    : storedHubResourceType;
+  const hubResourceType =
+    activePane.type === WorkspacePaneTypes.hub && activePane.resourceType
+      ? activePane.resourceType
+      : storedHubResourceType;
   const resourceLoadingText =
     hubResourceType === "skill"
       ? t("resourcesSkillsLoading")
@@ -1007,7 +1039,8 @@ export function useWorkspaceController() {
       onSelectThread: openThreadInConversation,
       onPreviewUser: profilePreview.openParticipantPreview,
       onSelectAgent: selectAgent,
-      onSelectModelProvider: selectModelProvider,
+      onSelectModelProvider: selectModelProviderWithAuthentication,
+      onRequireOpenCSGAuthentication: requireOpenCSGAuthentication,
       onSelectHuman: selectHuman,
       onSelectComputer: selectComputer,
       appVersion,
@@ -1036,11 +1069,27 @@ export function useWorkspaceController() {
     },
     authNotice: auth.notice,
     onDismissAuthNotice: auth.dismissNotice,
+    openCSGLoginRequiredDialogProps: openCSGAuthGuard.dialogOpen
+      ? {
+          busy: auth.busy || auth.pending,
+          environment: auth.environment,
+          error: auth.error,
+          onConnect: openCSGAuthGuard.login,
+          onOpenChange: (open: boolean) => {
+            if (!open) {
+              openCSGAuthGuard.closeDialog();
+            }
+          },
+          open: true,
+          t,
+          variant: "authentication-required" as const,
+        }
+      : null,
     hubViewProps: {
       t,
       locale,
       hub: hubViewHub,
-      onCreateFromTemplate: agent.openCreateAgentModal,
+      onCreateFromTemplate: openCreateAgentFromTemplate,
     },
     agentViewProps: {
       ...agent.agentViewProps,

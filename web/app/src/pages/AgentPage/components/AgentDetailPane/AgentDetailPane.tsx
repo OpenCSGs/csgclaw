@@ -72,6 +72,7 @@ import {
 } from "@/models/agents";
 import type { AgentDraft, AgentLike } from "@/models/agents";
 import {
+  MODEL_PROVIDER_IDS,
   modelProviderAvatarPath,
   modelProviderSelectOptionsFromCatalog,
   providerNameForProviderID,
@@ -168,6 +169,7 @@ export type AgentDetailPaneProps = {
   onOpenDM: AgentActionHandler;
   onRetryModels?: () => void | Promise<unknown>;
   onProviderLogin?: (provider: string) => VoidOrPromise;
+  onRequireOpenCSGAuth?: () => boolean;
   onPublish?: (
     target: AgentTemplatePublishTarget,
     name: string,
@@ -311,6 +313,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     onUpdateMCPServer,
     onDeleteMCPServer,
     onRetryMCPServers,
+    onRequireOpenCSGAuth = () => true,
   },
   ref,
 ) {
@@ -923,6 +926,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                     modelBusy={modelBusy}
                     modelError={modelError}
                     onRetryModels={onRetryModels}
+                    onRequireOpenCSGAuth={onRequireOpenCSGAuth}
                     providerOptions={providerOptions}
                     selectedModelValue={selectedModelValue}
                     selectedProviderID={selectedProviderID}
@@ -1685,6 +1689,7 @@ type AgentModelPanelProps = {
   modelBusy: boolean;
   modelError: unknown;
   onRetryModels?: () => void | Promise<unknown>;
+  onRequireOpenCSGAuth: () => boolean;
   providerOptions: readonly ModelProviderSelectOption[];
   selectedModelValue: string;
   selectedProviderID: string;
@@ -1698,6 +1703,7 @@ function AgentModelPanel({
   modelBusy,
   modelError,
   onRetryModels,
+  onRequireOpenCSGAuth,
   providerOptions,
   selectedModelValue,
   selectedProviderID,
@@ -1732,6 +1738,12 @@ function AgentModelPanel({
                   const nextProvider = providerOptions.find((option) => option.id === value);
                   if (!nextProvider) {
                     updateDraft({ model_id: "", model_provider_id: "" });
+                    return;
+                  }
+                  if (
+                    nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG &&
+                    !onRequireOpenCSGAuth()
+                  ) {
                     return;
                   }
                   updateDraft({

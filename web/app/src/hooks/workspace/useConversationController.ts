@@ -57,6 +57,7 @@ import {
 import { WorkspacePaneTypes } from "@/models/routing";
 import {
   agentOfflineReasonLabel,
+  agentProfileConfig,
   agentRuntimeState,
   isAgentLifecycleRunning,
   normalizeAuthProviderName,
@@ -73,7 +74,12 @@ import {
   selectAttachmentFiles,
   type AttachmentDraft,
 } from "@/models/attachments";
-import { skillDescriptionFromMarkdown, skillOptionsFromWorkspace, type SlashSkillOption } from "@/models/slashCommands";
+import {
+  parseSlashCommand,
+  skillDescriptionFromMarkdown,
+  skillOptionsFromWorkspace,
+  type SlashSkillOption,
+} from "@/models/slashCommands";
 import { localizeAPIError } from "@/shared/i18n";
 import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
@@ -82,6 +88,8 @@ import { useAttachmentWarning } from "./useAttachmentWarning";
 import type { UseConversationControllerArgs } from "./types";
 import { messageListScrollKey, useMessageListAutoScroll } from "./useMessageListAutoScroll";
 import { handleSlashPickerNavigation } from "@/components/business/ConversationPane";
+import { modelProviderConfigUsesOpenCSG } from "@/models/modelProviders";
+import { isOpenCSGRuntimeAuthenticationError } from "./useOpenCSGAuthGuard";
 
 const slashSkillOptionsCache = new Map<string, SlashSkillOption[]>();
 const slashSkillOptionsRequests = new Map<string, Promise<SlashSkillOption[]>>();
@@ -237,6 +245,128 @@ function conversationAgentForMember(
   );
 }
 
+function uniqueAgents(items: readonly (AgentLike | null | undefined)[]): AgentLike[] {
+  const seen = new Set<string>();
+  return items.filter((item): item is AgentLike => {
+    const id = String(item?.id ?? "").trim();
+    if (!id || seen.has(id)) {
+      return false;
+    }
+    seen.add(id);
+    return true;
+  });
+}
+
+function conversationAgentPeers(
+  conversation: IMConversation | null | undefined,
+  currentUserID: string | null | undefined,
+  agents: readonly AgentLike[],
+  usersById: Map<string, IMUser>,
+): AgentLike[] {
+  return uniqueAgents(
+    (conversation?.members || [])
+      .filter((memberID) => !localIdentitiesMatch(memberID, currentUserID))
+      .map((memberID) => conversationAgentForMember(memberID, agents, usersById)),
+  );
+}
+
+function mentionedConversationAgents(
+  segments: readonly ComposerSegment[],
+  peers: readonly AgentLike[],
+  agents: readonly AgentLike[],
+  usersById: Map<string, IMUser>,
+): AgentLike[] {
+  const peerIDs = new Set(peers.map((agent) => String(agent.id ?? "").trim()).filter(Boolean));
+  return uniqueAgents(
+    segments
+      .flatMap((segment) =>
+        segment.type === "mention" && segment.userId
+          ? [conversationAgentForMember(segment.userId, agents, usersById)]
+          : [],
+      )
+      .filter((agent) => peerIDs.has(String(agent?.id ?? "").trim())),
+  );
+}
+
+function conversationManagerAgent(
+  conversation: IMConversation,
+  peers: readonly AgentLike[],
+  agents: readonly AgentLike[],
+  usersById: Map<string, IMUser>,
+): AgentLike | null {
+  const managerID = String(conversation.manager_id ?? "").trim();
+  if (managerID) {
+    const manager = conversationAgentForMember(managerID, agents, usersById);
+    if (manager && peers.some((peer) => peer.id === manager.id)) {
+      return manager;
+    }
+  }
+  return (
+    peers.find((agent) => {
+      if (String(agent.role ?? "").trim().toLowerCase() === "manager") {
+        return true;
+      }
+      const user = resolveUserByLocalIdentity(String(agent.user_id || agent.id || ""), usersById);
+      return String(user?.role ?? "").trim().toLowerCase() === "manager";
+    }) ?? null
+  );
+}
+
+function isNewConversationMessage(segments: readonly ComposerSegment[]): boolean {
+  const content = normalizeSlashShorthandForPayload(serializeComposerSegments(segments));
+  const command = parseSlashCommand(content);
+  return command?.name === "new" && (command.arg === "" || command.arg === "conversation");
+}
+
+// Keep this in sync with the participant routing in participant_bridge.go and
+// the special /new targeting in conversation_command.go. Authentication and
+// availability checks must cover only agents that will receive this message.
+function outgoingMessageRecipientAgents({
+  agents,
+  conversation,
+  currentUserID,
+  segments,
+  usersById,
+}: {
+  agents: readonly AgentLike[];
+  conversation: IMConversation | null | undefined;
+  currentUserID: string | null | undefined;
+  segments: readonly ComposerSegment[];
+  usersById: Map<string, IMUser>;
+}): AgentLike[] {
+  if (!conversation || !currentUserID) {
+    return [];
+  }
+  const peers = conversationAgentPeers(conversation, currentUserID, agents, usersById);
+  if (isDirectConversation(conversation)) {
+    return peers;
+  }
+
+  const mentionedAgents = mentionedConversationAgents(segments, peers, agents, usersById);
+  const senderAgent = conversationAgentForMember(currentUserID, agents, usersById);
+  if (isNewConversationMessage(segments)) {
+    return conversation.notify_all_agents && !senderAgent ? peers : mentionedAgents;
+  }
+
+  if (conversation.type === RoomTypes.onDemand) {
+    const manager = conversationManagerAgent(conversation, peers, agents, usersById);
+    if (!manager) {
+      return [];
+    }
+    const sender = resolveUserByLocalIdentity(currentUserID, usersById);
+    const senderRole = String(sender?.role || senderAgent?.role || "")
+      .trim()
+      .toLowerCase();
+    if (["admin", "human", "user"].includes(senderRole)) {
+      return [manager];
+    }
+    const senderIsManager = localIdentitiesMatch(senderAgent?.id, manager.id);
+    return !senderIsManager && segments.some((segment) => segment.type === "mention") ? [manager] : [];
+  }
+
+  return conversation.notify_all_agents && !senderAgent ? peers : mentionedAgents;
+}
+
 export function useConversationController({
   activeConversationId,
   activePane,
@@ -263,6 +393,7 @@ export function useConversationController({
   onDisconnectGitLabConnector,
   onManageConnector,
   onProviderLogin,
+  openCSGAuthGuard,
   onSaveConnectorConfig,
   onSaveGitLabConnectorConfig,
   preferredFallbackConversationId = "",
@@ -282,6 +413,11 @@ export function useConversationController({
   stopWorkingTurn,
   workingParticipantsForRoom,
 }: UseConversationControllerArgs) {
+  const {
+    handleAuthenticationError: handleOpenCSGAuthenticationError,
+    markAuthenticationExpired: markOpenCSGAuthenticationExpired,
+    requireAuthentication: requireOpenCSGAuthentication,
+  } = openCSGAuthGuard;
   const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
   const [threadDraftsByKey, setThreadDraftsByKey] = useState<DraftsByThreadKey>({});
   const [attachmentDraftsByConversationId, setAttachmentDraftsByConversationId] = useState<AttachmentDraftsByKey>({});
@@ -327,7 +463,29 @@ export function useConversationController({
   const sendAbortControllersRef = useRef<Record<string, AbortController>>({});
   const sendLocksRef = useRef<Record<string, boolean>>({});
   const pendingClientMessagesRef = useRef<Record<string, PendingClientMessage>>({});
+  const observedRuntimeAuthMessageIDsRef = useRef<Set<string> | null>(null);
   const composerIsComposingRef = useRef(false);
+
+  useEffect(() => {
+    const runtimeAuthMessages = rooms.flatMap((room) =>
+      room.messages
+        .map((message, index) => ({
+          key: String(message.id || `${room.id}:${message.created_at || index}`),
+          message,
+        }))
+        .filter(({ message }) => isOpenCSGRuntimeAuthenticationError(message)),
+    );
+    const observed = observedRuntimeAuthMessageIDsRef.current;
+    if (!observed) {
+      observedRuntimeAuthMessageIDsRef.current = new Set(runtimeAuthMessages.map(({ key }) => key));
+      return;
+    }
+    const hasNewAuthenticationError = runtimeAuthMessages.some(({ key }) => !observed.has(key));
+    runtimeAuthMessages.forEach(({ key }) => observed.add(key));
+    if (hasNewAuthenticationError) {
+      markOpenCSGAuthenticationExpired({ openDialog: false });
+    }
+  }, [markOpenCSGAuthenticationExpired, rooms]);
   const composerJustEndedCompositionRef = useRef(false);
   const messageListRef = useRef<HTMLElement | null>(null);
   const memberMenuRef = useRef<HTMLDivElement | null>(null);
@@ -440,28 +598,45 @@ export function useConversationController({
       .map((entry) => entry.memberId);
   }, [agents, data?.current_user_id, selectedConversation, usersById]);
   const activeConversationAgents = useMemo(() => {
-    if (!selectedConversation) {
-      return [];
-    }
-    const seen = new Set<string>();
-    return selectedConversation.members
-      .filter((memberID) => !localIdentitiesMatch(memberID, data?.current_user_id))
-      .map((memberID) => conversationAgentForMember(memberID, agents, usersById))
-      .filter((agent): agent is AgentLike => {
-        const id = String(agent?.id ?? "").trim();
-        if (!id || seen.has(id)) {
-          return false;
-        }
-        seen.add(id);
-        return true;
-      });
+    return conversationAgentPeers(selectedConversation, data?.current_user_id, agents, usersById);
   }, [agents, data?.current_user_id, selectedConversation, usersById]);
+  const activeConversationManagerAgent = useMemo(
+    () =>
+      selectedConversation
+        ? conversationManagerAgent(selectedConversation, activeConversationAgents, agents, usersById)
+        : null,
+    [activeConversationAgents, agents, selectedConversation, usersById],
+  );
+  const recipientAgentsForSegments = useCallback(
+    (segments: readonly ComposerSegment[]) =>
+      outgoingMessageRecipientAgents({
+        agents,
+        conversation: selectedConversation,
+        currentUserID: data?.current_user_id,
+        segments,
+        usersById,
+      }),
+    [agents, data?.current_user_id, selectedConversation, usersById],
+  );
+  const outgoingSegmentsUseOpenCSG = useCallback(
+    (segments: readonly ComposerSegment[]) =>
+      recipientAgentsForSegments(segments).some((agent) => {
+        const isManager = Boolean(
+          activeConversationManagerAgent &&
+            localIdentitiesMatch(activeConversationManagerAgent.id, agent.id),
+        );
+        const profile = isManager && managerProfile ? managerProfile : agentProfileConfig(agent);
+        return modelProviderConfigUsesOpenCSG(profile);
+      }),
+    [activeConversationManagerAgent, managerProfile, recipientAgentsForSegments],
+  );
   const managerRuntimeErrorMessage = managerRuntimeWarning || t("managerCodexMissingWarning");
-  function activeConversationAgentOfflineMessage(): string {
-    if (activeConversationAgents.length === 0 || activeConversationAgents.some(isAgentLifecycleRunning)) {
+  function activeConversationAgentOfflineMessage(segments: readonly ComposerSegment[]): string {
+    const recipients = recipientAgentsForSegments(segments);
+    if (recipients.length === 0 || recipients.some(isAgentLifecycleRunning)) {
       return "";
     }
-    const agent = activeConversationAgents[0];
+    const agent = recipients[0];
     const name = String(agent.name || agent.id || "").trim();
     const reason = agentOfflineReasonLabel(agentRuntimeState(agent), t);
     return t("conversationAgentOffline", { name, reason });
@@ -959,7 +1134,11 @@ export function useConversationController({
     if (composerSendState.status === "sending") {
       return;
     }
-    const agentOfflineMessage = activeConversationAgentOfflineMessage();
+    const messageUsesOpenCSG = outgoingSegmentsUseOpenCSG(draftSegments);
+    if (messageUsesOpenCSG && !requireOpenCSGAuthentication()) {
+      return;
+    }
+    const agentOfflineMessage = activeConversationAgentOfflineMessage(draftSegments);
     if (agentOfflineMessage) {
       setComposerError(agentOfflineMessage);
       return;
@@ -1018,6 +1197,14 @@ export function useConversationController({
         [roomID]: idleComposerSendState,
       }));
     } catch (err) {
+      if (messageUsesOpenCSG && handleOpenCSGAuthenticationError(err)) {
+        setComposerError("", roomID);
+        setComposerSendStatesByConversationId((current) => ({
+          ...current,
+          [roomID]: idleComposerSendState,
+        }));
+        return;
+      }
       const message = isAbortError(err) ? t("sendStopped") : errorMessage(err, t("sendFailed"));
       setComposerError(message, roomID);
       setComposerSendStatesByConversationId((current) => ({
@@ -1148,7 +1335,11 @@ export function useConversationController({
     ) {
       return;
     }
-    const agentOfflineMessage = activeConversationAgentOfflineMessage();
+    const messageUsesOpenCSG = outgoingSegmentsUseOpenCSG(activeThreadDraftSegments);
+    if (messageUsesOpenCSG && !requireOpenCSGAuthentication()) {
+      return;
+    }
+    const agentOfflineMessage = activeConversationAgentOfflineMessage(activeThreadDraftSegments);
     if (agentOfflineMessage) {
       setThreadError(agentOfflineMessage);
       return;
@@ -1186,6 +1377,12 @@ export function useConversationController({
       setBootstrapData((current) => appendMessageToData(current, activeConversation.id, created));
       await refreshThreadView(selection);
     } catch (err) {
+      if (messageUsesOpenCSG && handleOpenCSGAuthenticationError(err)) {
+        if (activeThreadSelectionRef.current === selection) {
+          setThreadError("");
+        }
+        return;
+      }
       if (activeThreadSelectionRef.current === selection) {
         setThreadError(errorMessage(err, t("sendFailed")));
       }

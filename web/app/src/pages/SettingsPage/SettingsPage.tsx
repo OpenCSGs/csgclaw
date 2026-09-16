@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
+import { OpenCSGConnectionDialog, OpenCSGSwitchDialog } from "@/components/business/OpenCSGConnectionDialog";
 import { Button, Select, Tooltip } from "@/components/ui";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
@@ -27,7 +28,6 @@ import {
 } from "@/models/turnNotifications";
 import { readStoredAuthEnvironmentDraft, writeStoredAuthEnvironmentDraft } from "@/shared/storage/authEnvironment";
 import type { ThemeMode } from "@/shared/theme/theme";
-import { OpenCSGConnectionDialog, OpenCSGSwitchDialog } from "./components/OpenCSGConnectionDialog";
 import { SwitchVersionDialog } from "./components/SwitchVersionDialog";
 import styles from "./SettingsPage.module.css";
 
@@ -121,10 +121,10 @@ export function SettingsPage() {
     setConnectionOpen(true);
   }
 
-  function handleLogin() {
-    updateAuthEnvironment(connectionDraft);
+  function handleLogin(environment: AuthEnvironmentDraft) {
+    updateAuthEnvironment(environment);
     setConnectionOpen(false);
-    void onLogin(connectionDraft);
+    void onLogin(environment);
   }
 
   async function handleSwitchEnvironment() {
@@ -393,11 +393,10 @@ export function SettingsPage() {
 
       <OpenCSGConnectionDialog
         busy={sidebar.authBusy}
-        draft={connectionDraft}
+        environment={connectionDraft}
         open={connectionOpen}
         t={sidebar.t}
         onConnect={handleLogin}
-        onDraftChange={setConnectionDraft}
         onOpenChange={setConnectionOpen}
       />
       <OpenCSGSwitchDialog

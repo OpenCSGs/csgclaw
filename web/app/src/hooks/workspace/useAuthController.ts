@@ -65,6 +65,7 @@ export function useAuthController(t: TranslateFn): AuthController {
   const [loginPending, setLoginPending] = useState(false);
   const [selectedEnvironment, setSelectedEnvironment] = useState<AuthEnvironmentDraft>(readStoredAuthEnvironmentDraft);
   const environmentFingerprintRef = useRef("");
+  const loginBaselineRef = useRef("");
 
   const statusQuery = useQuery({
     queryKey: workspaceQueryKeys.authStatus(),
@@ -115,6 +116,7 @@ export function useAuthController(t: TranslateFn): AuthController {
       }
       setBusyAction("login");
       setAuthError("");
+      loginBaselineRef.current = status.logged_in_at;
       clearPendingAuthLogin();
       setLoginPending(false);
       const navigation = prepareOAuthNavigation("opencsg-auth");
@@ -141,7 +143,7 @@ export function useAuthController(t: TranslateFn): AuthController {
         setBusyAction("");
       }
     },
-    [busyAction, environment, t],
+    [busyAction, environment, status.logged_in_at, t],
   );
 
   const logout = useCallback(async () => {
@@ -232,7 +234,7 @@ export function useAuthController(t: TranslateFn): AuthController {
         if (cancelled) {
           return;
         }
-        if (isAuthenticated(next)) {
+        if (isAuthenticated(next) && (!loginBaselineRef.current || next.logged_in_at !== loginBaselineRef.current)) {
           setLoginPending(false);
           setAuthError("");
           return;

@@ -25,6 +25,7 @@ import {
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { WorkspacePane } from "@/models/routing";
 import type { UseWorkspaceHubSelectionArgs } from "./types";
+import { isOpenCSGAuthenticationError } from "./useOpenCSGAuthGuard";
 
 type TemplateWorkspaceFilesState = {
   files: Record<string, HubWorkspaceFile>;
@@ -82,10 +83,15 @@ export function useWorkspaceHubSelection({
   templatesQuery,
   loaded,
   manualError = "",
-  openCSGAuthenticated = false,
+  openCSGAuthGuard,
   refreshTemplates,
   t,
 }: UseWorkspaceHubSelectionArgs) {
+  const {
+    authenticated: openCSGAuthenticated,
+    handleAuthenticationError: handleOpenCSGAuthenticationError,
+    requireAuthentication: requireOpenCSGAuthentication,
+  } = openCSGAuthGuard;
   const queryClient = useQueryClient();
   const resourcesTemplates = useMemo(() => templates ?? [], [templates]);
   const storedSelectedHubTemplateId = useWorkspaceUiStore((state) => state.selectedHubTemplateId);
@@ -120,7 +126,7 @@ export function useWorkspaceHubSelection({
   const [remoteSkillsSearchQuery, setRemoteSkillsSearchQuery] = useState("");
   const skillsQuery = useWorkspaceSkillsQuery({ enabled: selectedHubResourceType === "skill" });
   const officialSkillsQuery = useWorkspaceOfficialSkillsQuery(remoteSkillsSearchQuery, {
-    enabled: remoteSkillsEnabled,
+    enabled: remoteSkillsEnabled && openCSGAuthenticated,
   });
   const skills = useMemo(
     () => (skillsQuery.data ?? []).filter((item) => !isOfficialSkill(item) && !isPersonalSkill(item)),
@@ -142,9 +148,7 @@ export function useWorkspaceHubSelection({
   }, [officialSkillsQuery.data]);
   const selectedHubTemplate = useMemo(
     () =>
-      selectedHubTemplateId
-        ? resourcesTemplates.find((item) => item.id === selectedHubTemplateId) ?? null
-        : null,
+      selectedHubTemplateId ? (resourcesTemplates.find((item) => item.id === selectedHubTemplateId) ?? null) : null,
     [resourcesTemplates, selectedHubTemplateId],
   );
   const selectedHubSkill = useMemo(
@@ -227,11 +231,43 @@ export function useWorkspaceHubSelection({
   const refetchRemoteSkills = officialSkillsQuery.refetch;
   const refetchSkillTree = skillTreeQuery.refetch;
   const loadMoreRemoteSkills = useCallback(async () => {
-    if (!remoteSkillsEnabled || !officialSkillsQuery.hasNextPage || officialSkillsQuery.isFetchingNextPage) {
+    if (
+      !remoteSkillsEnabled ||
+      !requireOpenCSGAuthentication() ||
+      !officialSkillsQuery.hasNextPage ||
+      officialSkillsQuery.isFetchingNextPage
+    ) {
       return;
     }
     await officialSkillsQuery.fetchNextPage();
-  }, [officialSkillsQuery, remoteSkillsEnabled]);
+  }, [officialSkillsQuery, remoteSkillsEnabled, requireOpenCSGAuthentication]);
+
+  const changeRemoteSkillsEnabled = useCallback(
+    (enabled: boolean) => {
+      if (enabled && !requireOpenCSGAuthentication()) {
+        return;
+      }
+      setRemoteSkillsEnabled(enabled);
+    },
+    [requireOpenCSGAuthentication],
+  );
+
+  const refreshRemoteSkills = useCallback(async () => {
+    if (!requireOpenCSGAuthentication()) {
+      return;
+    }
+    const result = await refetchRemoteSkills();
+    if (result.error) {
+      handleOpenCSGAuthenticationError(result.error);
+    }
+    return result;
+  }, [handleOpenCSGAuthenticationError, refetchRemoteSkills, requireOpenCSGAuthentication]);
+
+  useEffect(() => {
+    if (officialSkillsQuery.error) {
+      handleOpenCSGAuthenticationError(officialSkillsQuery.error);
+    }
+  }, [handleOpenCSGAuthenticationError, officialSkillsQuery.error]);
 
   const selectedHubTemplateView = mergeHubTemplateDetail(
     hubTemplateDetailQuery.data?.id === selectedHubTemplateId ? hubTemplateDetailQuery.data : null,
@@ -394,7 +430,7 @@ export function useWorkspaceHubSelection({
     : "";
   const skillsError = skillsQuery.error ? errorMessage(skillsQuery.error, t("resourcesSkillsLoadFailed")) : "";
   const remoteSkillsError =
-    remoteSkillsEnabled && officialSkillsQuery.error
+    remoteSkillsEnabled && officialSkillsQuery.error && !isOpenCSGAuthenticationError(officialSkillsQuery.error)
       ? errorMessage(officialSkillsQuery.error, t("resourcesSkillRemoteSkillsLoadFailed"))
       : "";
   const skillTreeError = skillTreeQuery.error
@@ -454,10 +490,11 @@ export function useWorkspaceHubSelection({
     templateCount: resourcesTemplates.length,
     templatesLoaded: templatesQuery?.isFetched ?? false,
     enabled: selectedHubResourceType === "mcp",
+    openCSGAuthGuard,
   });
 
   const knowledgeBases = useWorkspaceKnowledgeBaseSelection({
-    authenticated: openCSGAuthenticated,
+    openCSGAuthGuard,
     enabled: selectedHubResourceType === "knowledge",
     openCreateMCPDialog,
     selectedKnowledgeBaseID,
@@ -501,8 +538,8 @@ export function useWorkspaceHubSelection({
     remoteSkillsSearch,
     remoteSkillsError,
     loadMoreRemoteSkills,
-    refetchRemoteSkills,
-    setRemoteSkillsEnabled,
+    refetchRemoteSkills: refreshRemoteSkills,
+    setRemoteSkillsEnabled: changeRemoteSkillsEnabled,
     setRemoteSkillsSearch,
     loaded,
     listError,

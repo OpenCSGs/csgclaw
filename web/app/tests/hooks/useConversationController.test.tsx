@@ -2,11 +2,22 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
 import { WorkspacePaneTypes } from "@/models/routing";
+import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 import { MAX_ATTACHMENT_FILE_BYTES } from "@/models/attachments";
-import type { IMConversation, IMData, IMMessage, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
+import {
+  RoomTypes,
+  type IMConversation,
+  type IMData,
+  type IMMessage,
+  type IMUser,
+  type ThreadView,
+  type TranslateFn,
+} from "@/models/conversations";
 import type { AgentLike } from "@/models/agents";
+import type { AgentProfileLike } from "@/models/agents";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
 import type { SendMessageRequestOptions } from "@/api/im";
+import type { OpenCSGAuthGuard } from "@/hooks/workspace/useOpenCSGAuthGuard";
 
 const subscribeIMEventsMock = vi.fn();
 const apiMocks = vi.hoisted(() => ({
@@ -94,6 +105,38 @@ function dataWithMessages(messages: IMMessage[]): IMData {
   };
 }
 
+function groupConversationData(conversation: IMConversation): IMData {
+  return {
+    current_user_id: "u-admin",
+    rooms: [conversation],
+    users: [
+      users[0],
+      { id: "u-manager", name: "manager", role: "manager", avatar: "MG", accent_hex: "#2563eb" },
+      { id: "u-dev", name: "dev", role: "worker", avatar: "DV", accent_hex: "#16a34a" },
+      { id: "u-qa", name: "qa", role: "worker", avatar: "QA", accent_hex: "#9333ea" },
+    ],
+  };
+}
+
+function successfulMessage(content = "hello"): IMMessage {
+  return {
+    id: "msg-user",
+    content,
+    created_at: "2026-09-16T10:00:00Z",
+    sender_id: "u-admin",
+  };
+}
+
+function composerEditorWithMention(userID: string, userName: string, text: string): HTMLDivElement {
+  const editor = document.createElement("div");
+  const mention = document.createElement("span");
+  mention.dataset.userId = userID;
+  mention.dataset.userName = userName;
+  mention.textContent = `@${userName}`;
+  editor.append(mention, document.createTextNode(text));
+  return editor;
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: Error) => void;
@@ -109,9 +152,11 @@ function renderConversationController(
     activeConversationId?: string;
     agents?: AgentLike[];
     data?: IMData;
+    managerProfile?: AgentProfileLike | null;
     managerRuntimeUnavailable?: boolean;
     managerRuntimeWarning?: string;
     messageListActive?: boolean;
+    openCSGAuthGuard?: OpenCSGAuthGuard;
     setBootstrapData?: (updater: unknown) => void;
     workingParticipantsForRoom?: (roomID: string | null | undefined) => ConversationWorkingParticipant[];
   } = {},
@@ -138,7 +183,7 @@ function renderConversationController(
         authStatuses: {},
         data,
         locale: "en",
-        managerProfile: null,
+        managerProfile: options.managerProfile ?? null,
         managerProfileIncomplete: false,
         managerRuntimeUnavailable: options.managerRuntimeUnavailable,
         managerRuntimeWarning: options.managerRuntimeWarning,
@@ -149,6 +194,7 @@ function renderConversationController(
         navigatePane: vi.fn(),
         onMessageAction: vi.fn(),
         onProviderLogin: vi.fn(),
+        openCSGAuthGuard: options.openCSGAuthGuard ?? openCSGAuthGuardStub(),
         rooms: data.rooms,
         selectComputer: vi.fn(),
         selectConversation: vi.fn(),
@@ -581,6 +627,331 @@ describe("useConversationController", () => {
     });
 
     expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the draft and opens login instead of sending with an unauthenticated OpenCSG profile", async () => {
+    const openCSGAuthGuard = openCSGAuthGuardStub(false);
+    openCSGAuthGuard.requireAuthentication = vi.fn(() => false);
+    const { result } = renderConversationController({
+      agents: [
+        {
+          id: "u-demo",
+          model_config: { model_provider_id: "opencsg" },
+          name: "demo",
+          role: "worker",
+          status: "running",
+        },
+      ],
+      openCSGAuthGuard,
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "keep this draft";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(openCSGAuthGuard.requireAuthentication).toHaveBeenCalledOnce();
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    expect(result.current.conversationViewProps.draftText).toBe("keep this draft");
+  });
+
+  it("does not require OpenCSG login when the direct-message agent uses another model provider", async () => {
+    apiMocks.sendMessageRequest.mockResolvedValue({
+      id: "msg-user",
+      content: "hello",
+      created_at: "2026-09-16T10:00:00Z",
+      sender_id: "u-admin",
+    });
+    const openCSGAuthGuard = openCSGAuthGuardStub(false);
+    openCSGAuthGuard.requireAuthentication = vi.fn(() => false);
+    const { result } = renderConversationController({
+      agents: [
+        {
+          id: "u-demo",
+          model_provider_id: "default",
+          model_id: "qwen3.8-flash",
+          name: "demo",
+          role: "worker",
+          status: "running",
+        },
+      ],
+      managerProfile: { model_provider_id: "opencsg" },
+      openCSGAuthGuard,
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "hello";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(openCSGAuthGuard.requireAuthentication).not.toHaveBeenCalled();
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+  });
+
+  it("does not infer OpenCSG authentication from the legacy profile provider", async () => {
+    apiMocks.sendMessageRequest.mockResolvedValue(successfulMessage());
+    const openCSGAuthGuard = openCSGAuthGuardStub(false);
+    openCSGAuthGuard.requireAuthentication = vi.fn(() => false);
+    const { result } = renderConversationController({
+      agents: [
+        {
+          id: "u-demo",
+          model_config: { provider: "csghub" },
+          name: "demo",
+          role: "worker",
+          status: "running",
+        },
+      ],
+      openCSGAuthGuard,
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "hello";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(openCSGAuthGuard.requireAuthentication).not.toHaveBeenCalled();
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+  });
+
+  it("checks only the manager for a human message in an on-demand group", async () => {
+    apiMocks.sendMessageRequest.mockResolvedValue(successfulMessage());
+    const openCSGAuthGuard = openCSGAuthGuardStub(false);
+    openCSGAuthGuard.requireAuthentication = vi.fn(() => false);
+    const conversation: IMConversation = {
+      id: "room-on-demand",
+      type: RoomTypes.onDemand,
+      manager_id: "u-manager",
+      members: ["u-admin", "u-manager", "u-dev", "u-qa"],
+      messages: [],
+      title: "on-demand team",
+    };
+    const { result } = renderConversationController({
+      activeConversationId: conversation.id,
+      agents: [
+        {
+          id: "u-manager",
+          model_config: { model_provider_id: "opencsg" },
+          name: "manager",
+          role: "manager",
+          status: "running",
+        },
+        {
+          id: "u-dev",
+          model_config: { model_provider_id: "opencsg" },
+          name: "dev",
+          role: "worker",
+          status: "running",
+        },
+        {
+          id: "u-qa",
+          model_config: { model_provider_id: "opencsg" },
+          name: "qa",
+          role: "worker",
+          status: "running",
+        },
+      ],
+      data: groupConversationData(conversation),
+      managerProfile: { model_provider_id: "default", model_id: "qwen3.8-flash" },
+      openCSGAuthGuard,
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "please plan this work";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(openCSGAuthGuard.requireAuthentication).not.toHaveBeenCalled();
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+  });
+
+  it("requires OpenCSG login when the on-demand manager handling the message uses OpenCSG", async () => {
+    const openCSGAuthGuard = openCSGAuthGuardStub(false);
+    openCSGAuthGuard.requireAuthentication = vi.fn(() => false);
+    const conversation: IMConversation = {
+      id: "room-on-demand",
+      type: RoomTypes.onDemand,
+      manager_id: "u-manager",
+      members: ["u-admin", "u-manager", "u-dev"],
+      messages: [],
+      title: "on-demand team",
+    };
+    const { result } = renderConversationController({
+      activeConversationId: conversation.id,
+      agents: [
+        {
+          id: "u-manager",
+          model_provider_id: "default",
+          name: "manager",
+          role: "manager",
+          status: "running",
+        },
+        {
+          id: "u-dev",
+          model_provider_id: "default",
+          name: "dev",
+          role: "worker",
+          status: "running",
+        },
+      ],
+      data: groupConversationData(conversation),
+      managerProfile: { model_provider_id: "opencsg" },
+      openCSGAuthGuard,
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "please plan this work";
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(openCSGAuthGuard.requireAuthentication).toHaveBeenCalledOnce();
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+  });
+
+  it("checks only mentioned agents in a free group", async () => {
+    apiMocks.sendMessageRequest.mockResolvedValue(successfulMessage());
+    const openCSGAuthGuard = openCSGAuthGuardStub(false);
+    openCSGAuthGuard.requireAuthentication = vi.fn(() => false);
+    const conversation: IMConversation = {
+      id: "room-free",
+      type: RoomTypes.free,
+      members: ["u-admin", "u-dev", "u-qa"],
+      messages: [],
+      notify_all_agents: false,
+      title: "free team",
+    };
+    const agents: AgentLike[] = [
+      {
+        id: "u-dev",
+        model_provider_id: "default",
+        name: "dev",
+        role: "worker",
+        status: "running",
+      },
+      {
+        id: "u-qa",
+        model_config: { model_provider_id: "opencsg" },
+        name: "qa",
+        role: "worker",
+        status: "running",
+      },
+    ];
+    const { result } = renderConversationController({
+      activeConversationId: conversation.id,
+      agents,
+      data: groupConversationData(conversation),
+      openCSGAuthGuard,
+    });
+    const editor = composerEditorWithMention("u-dev", "dev", " please review this");
+
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(openCSGAuthGuard.requireAuthentication).not.toHaveBeenCalled();
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+  });
+
+  it("requires OpenCSG login for a mentioned OpenCSG agent or an OpenCSG agent notified by the room", async () => {
+    const openCSGAuthGuard = openCSGAuthGuardStub(false);
+    openCSGAuthGuard.requireAuthentication = vi.fn(() => false);
+    const agents: AgentLike[] = [
+      {
+        id: "u-dev",
+        model_provider_id: "default",
+        name: "dev",
+        role: "worker",
+        status: "running",
+      },
+      {
+        id: "u-qa",
+        model_config: { model_provider_id: "opencsg" },
+        name: "qa",
+        role: "worker",
+        status: "running",
+      },
+    ];
+    const mentionedConversation: IMConversation = {
+      id: "room-free-mentioned",
+      type: RoomTypes.free,
+      members: ["u-admin", "u-dev", "u-qa"],
+      messages: [],
+      notify_all_agents: false,
+      title: "free team",
+    };
+    const mentioned = renderConversationController({
+      activeConversationId: mentionedConversation.id,
+      agents,
+      data: groupConversationData(mentionedConversation),
+      openCSGAuthGuard,
+    });
+    const mentionedEditor = composerEditorWithMention("u-qa", "qa", " please test this");
+
+    act(() => {
+      mentioned.result.current.conversationViewProps.editorRef.current = mentionedEditor;
+      mentioned.result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await mentioned.result.current.conversationViewProps.onSendMessage();
+    });
+    expect(openCSGAuthGuard.requireAuthentication).toHaveBeenCalledOnce();
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+
+    mentioned.unmount();
+    openCSGAuthGuard.requireAuthentication.mockClear();
+    const notifyAllConversation: IMConversation = {
+      ...mentionedConversation,
+      id: "room-free-notify-all",
+      notify_all_agents: true,
+    };
+    const notifyAll = renderConversationController({
+      activeConversationId: notifyAllConversation.id,
+      agents,
+      data: groupConversationData(notifyAllConversation),
+      openCSGAuthGuard,
+    });
+    const notifyAllEditor = document.createElement("div");
+    notifyAllEditor.textContent = "please review this";
+
+    act(() => {
+      notifyAll.result.current.conversationViewProps.editorRef.current = notifyAllEditor;
+      notifyAll.result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await notifyAll.result.current.conversationViewProps.onSendMessage();
+    });
+
+    expect(openCSGAuthGuard.requireAuthentication).toHaveBeenCalledOnce();
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
   });
 
   it("shows the specific manager runtime warning when sending is blocked", async () => {

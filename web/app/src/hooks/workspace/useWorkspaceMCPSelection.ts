@@ -14,6 +14,7 @@ import { resolveHubListSelection } from "@/models/hubSelection";
 import { mcpManagedKnowledgeBaseSource, mcpServersFromCatalogResponse } from "@/models/mcp";
 import type { MCPProbeResult, MCPServer, MCPServerPayload, MCPServerSourceStatus, RemoteMCPServer } from "@/models/mcp";
 import { workspaceQueryKeys, useWorkspaceMCPServersQuery, useWorkspaceRemoteMCPServersQuery } from "./workspaceQueries";
+import { isOpenCSGAuthenticationError, type OpenCSGAuthGuard } from "./useOpenCSGAuthGuard";
 
 type HubResourceType = "knowledge" | "template" | "skill" | "mcp";
 
@@ -30,6 +31,7 @@ type UseWorkspaceMCPSelectionArgs = {
   templateCount: number;
   templatesLoaded?: boolean;
   enabled?: boolean;
+  openCSGAuthGuard: OpenCSGAuthGuard;
 };
 
 export function useWorkspaceMCPSelection({
@@ -43,7 +45,13 @@ export function useWorkspaceMCPSelection({
   templateCount,
   templatesLoaded = false,
   enabled = true,
+  openCSGAuthGuard,
 }: UseWorkspaceMCPSelectionArgs) {
+  const {
+    authenticated: openCSGAuthenticated,
+    handleAuthenticationError: handleOpenCSGAuthenticationError,
+    requireAuthentication: requireOpenCSGAuthentication,
+  } = openCSGAuthGuard;
   const queryClient = useQueryClient();
   const [mcpCreateDialogOpen, setMCPCreateDialogOpen] = useState(false);
   const [mcpCreateInitialDocument, setMCPCreateInitialDocument] = useState("");
@@ -65,7 +73,7 @@ export function useWorkspaceMCPSelection({
   const [remoteMCPInstallBusy, setRemoteMCPInstallBusy] = useState("");
   const mcpServersQuery = useWorkspaceMCPServersQuery({ enabled });
   const remoteMCPServersQuery = useWorkspaceRemoteMCPServersQuery(remoteMCPServersSearchQuery, {
-    enabled: remoteMCPServersEnabled,
+    enabled: remoteMCPServersEnabled && openCSGAuthenticated,
   });
 
   const mcpServers = useMemo(() => mcpServersFromCatalogResponse(mcpServersQuery.data ?? null), [mcpServersQuery.data]);
@@ -93,9 +101,15 @@ export function useWorkspaceMCPSelection({
   );
 
   const checkMCPServerSource = useCallback(
-    async (name: string) => {
+    async (name: string, options: { prompt?: boolean } = {}) => {
       const normalizedName = String(name || "").trim();
       if (!normalizedName) {
+        return null;
+      }
+      if (!openCSGAuthenticated) {
+        if (options.prompt !== false) {
+          requireOpenCSGAuthentication();
+        }
         return null;
       }
       const requestID = mcpSourceRequestID.current + 1;
@@ -111,7 +125,13 @@ export function useWorkspaceMCPSelection({
       } catch (error) {
         if (mcpSourceRequestID.current === requestID) {
           setMCPSourceStatus(null);
-          setMCPSourceError(errorMessage(error, t("resourcesMCPSourceCheckFailed")));
+          if (
+            !handleOpenCSGAuthenticationError(error, {
+              openDialog: options.prompt !== false,
+            })
+          ) {
+            setMCPSourceError(errorMessage(error, t("resourcesMCPSourceCheckFailed")));
+          }
         }
         return null;
       } finally {
@@ -120,7 +140,7 @@ export function useWorkspaceMCPSelection({
         }
       }
     },
-    [t],
+    [handleOpenCSGAuthenticationError, openCSGAuthenticated, requireOpenCSGAuthentication, t],
   );
 
   useEffect(() => {
@@ -128,9 +148,7 @@ export function useWorkspaceMCPSelection({
       setSelectedMCPServerName("");
       return;
     }
-    setSelectedMCPServerName((current) =>
-      mcpServers.some((item) => item.name === current) ? current : "",
-    );
+    setSelectedMCPServerName((current) => (mcpServers.some((item) => item.name === current) ? current : ""));
   }, [mcpServers, setSelectedMCPServerName]);
 
   useEffect(() => {
@@ -145,11 +163,11 @@ export function useWorkspaceMCPSelection({
     setMCPSourceBusy(false);
     setMCPSourceError("");
     setMCPSourceStatus(null);
-    if (!selectedMCPServerName || !selectedMCPSource) {
+    if (!selectedMCPServerName || !selectedMCPSource || !openCSGAuthenticated) {
       return;
     }
-    void checkMCPServerSource(selectedMCPServerName);
-  }, [checkMCPServerSource, selectedMCPServerName, selectedMCPSource]);
+    void checkMCPServerSource(selectedMCPServerName, { prompt: false });
+  }, [checkMCPServerSource, openCSGAuthenticated, selectedMCPServerName, selectedMCPSource]);
 
   useEffect(() => {
     if (selectedHubResourceType === "skill" && skillsLoaded && !skillCount) {
@@ -159,7 +177,15 @@ export function useWorkspaceMCPSelection({
     if (selectedHubResourceType === "template" && templatesLoaded && !templateCount) {
       setSelectedHubResourceType(mcpServers.length ? "mcp" : skillCount ? "skill" : "template");
     }
-  }, [mcpServers.length, selectedHubResourceType, setSelectedHubResourceType, skillCount, skillsLoaded, templateCount, templatesLoaded]);
+  }, [
+    mcpServers.length,
+    selectedHubResourceType,
+    setSelectedHubResourceType,
+    skillCount,
+    skillsLoaded,
+    templateCount,
+    templatesLoaded,
+  ]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -236,6 +262,9 @@ export function useWorkspaceMCPSelection({
         setMCPMutationError(t("resourcesMCPRemoteInstallFailed"));
         return false;
       }
+      if (!requireOpenCSGAuthentication()) {
+        return false;
+      }
       setMCPMutationBusy(true);
       setMCPMutationError("");
       setRemoteMCPInstallBusy(id);
@@ -250,14 +279,23 @@ export function useWorkspaceMCPSelection({
         setMCPCreateDialogOpen(false);
         return true;
       } catch (error) {
-        setMCPMutationError(errorMessage(error, t("resourcesMCPRemoteInstallFailed")));
+        if (!handleOpenCSGAuthenticationError(error)) {
+          setMCPMutationError(errorMessage(error, t("resourcesMCPRemoteInstallFailed")));
+        }
         return false;
       } finally {
         setRemoteMCPInstallBusy("");
         setMCPMutationBusy(false);
       }
     },
-    [queryClient, setSelectedMCPServerName, setSelectedHubResourceType, t],
+    [
+      handleOpenCSGAuthenticationError,
+      queryClient,
+      requireOpenCSGAuthentication,
+      setSelectedMCPServerName,
+      setSelectedHubResourceType,
+      t,
+    ],
   );
 
   const deleteMCPServer = useCallback(
@@ -289,6 +327,9 @@ export function useWorkspaceMCPSelection({
     if (!name || !selectedMCPSource) {
       return false;
     }
+    if (!requireOpenCSGAuthentication()) {
+      return false;
+    }
     setMCPSourceSyncBusy(true);
     setMCPSourceError("");
     try {
@@ -301,12 +342,22 @@ export function useWorkspaceMCPSelection({
       await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
       return true;
     } catch (error) {
-      setMCPSourceError(errorMessage(error, t("resourcesMCPSourceSyncFailed")));
+      if (!handleOpenCSGAuthenticationError(error)) {
+        setMCPSourceError(errorMessage(error, t("resourcesMCPSourceSyncFailed")));
+      }
       return false;
     } finally {
       setMCPSourceSyncBusy(false);
     }
-  }, [queryClient, selectedMCPServer?.name, selectedMCPSource, setSelectedMCPServerName, t]);
+  }, [
+    handleOpenCSGAuthenticationError,
+    queryClient,
+    requireOpenCSGAuthentication,
+    selectedMCPServer?.name,
+    selectedMCPSource,
+    setSelectedMCPServerName,
+    t,
+  ]);
 
   const clearMCPProbe = useCallback(() => {
     mcpProbeRequestID.current += 1;
@@ -317,6 +368,10 @@ export function useWorkspaceMCPSelection({
 
   const probeMCPServer = useCallback(
     async (payload: MCPServerPayload) => {
+      const knowledgeBaseSource = mcpManagedKnowledgeBaseSource(payload.config);
+      if (knowledgeBaseSource && !requireOpenCSGAuthentication()) {
+        return null;
+      }
       const requestID = mcpProbeRequestID.current + 1;
       mcpProbeRequestID.current = requestID;
       setMCPProbeBusy(true);
@@ -329,11 +384,14 @@ export function useWorkspaceMCPSelection({
         }
         return result;
       } catch (error) {
+        const intercepted = Boolean(knowledgeBaseSource && handleOpenCSGAuthenticationError(error));
         if (mcpProbeRequestID.current === requestID) {
-          setMCPProbeError(errorMessage(error, t("resourcesMCPTestFailed")));
+          if (!intercepted) {
+            setMCPProbeError(errorMessage(error, t("resourcesMCPTestFailed")));
+          }
         }
-        if (mcpManagedKnowledgeBaseSource(payload.config)) {
-          void checkMCPServerSource(payload.name);
+        if (knowledgeBaseSource && !intercepted) {
+          void checkMCPServerSource(payload.name, { prompt: false });
         }
         return null;
       } finally {
@@ -342,7 +400,7 @@ export function useWorkspaceMCPSelection({
         }
       }
     },
-    [checkMCPServerSource, t],
+    [checkMCPServerSource, handleOpenCSGAuthenticationError, requireOpenCSGAuthentication, t],
   );
 
   const rawMCPServersError = mcpServersQuery.error
@@ -350,15 +408,47 @@ export function useWorkspaceMCPSelection({
     : "";
   const mcpStateError = selectedHubResourceType === "mcp" ? rawMCPServersError : "";
   const remoteMCPServersError =
-    remoteMCPServersEnabled && remoteMCPServersQuery.error
+    remoteMCPServersEnabled && remoteMCPServersQuery.error && !isOpenCSGAuthenticationError(remoteMCPServersQuery.error)
       ? errorMessage(remoteMCPServersQuery.error, t("resourcesMCPRemoteServersLoadFailed"))
       : "";
   const loadMoreRemoteMCPServers = useCallback(async () => {
-    if (!remoteMCPServersEnabled || !remoteMCPServersQuery.hasNextPage || remoteMCPServersQuery.isFetchingNextPage) {
+    if (
+      !remoteMCPServersEnabled ||
+      !requireOpenCSGAuthentication() ||
+      !remoteMCPServersQuery.hasNextPage ||
+      remoteMCPServersQuery.isFetchingNextPage
+    ) {
       return;
     }
     await remoteMCPServersQuery.fetchNextPage();
-  }, [remoteMCPServersEnabled, remoteMCPServersQuery]);
+  }, [remoteMCPServersEnabled, remoteMCPServersQuery, requireOpenCSGAuthentication]);
+
+  const changeRemoteMCPServersEnabled = useCallback(
+    (visible: boolean) => {
+      if (visible && !requireOpenCSGAuthentication()) {
+        return;
+      }
+      setRemoteMCPServersEnabled(visible);
+    },
+    [requireOpenCSGAuthentication],
+  );
+
+  const refreshRemoteMCPServers = useCallback(async () => {
+    if (!requireOpenCSGAuthentication()) {
+      return;
+    }
+    const result = await remoteMCPServersQuery.refetch();
+    if (result.error) {
+      handleOpenCSGAuthenticationError(result.error);
+    }
+    return result;
+  }, [handleOpenCSGAuthenticationError, remoteMCPServersQuery, requireOpenCSGAuthentication]);
+
+  useEffect(() => {
+    if (remoteMCPServersQuery.error) {
+      handleOpenCSGAuthenticationError(remoteMCPServersQuery.error);
+    }
+  }, [handleOpenCSGAuthenticationError, remoteMCPServersQuery.error]);
 
   return {
     clearMCPProbe,
@@ -383,7 +473,7 @@ export function useWorkspaceMCPSelection({
     mcpStateError,
     openCreateMCPDialog,
     loadMoreRemoteMCPServers,
-    refetchRemoteMCPServers: remoteMCPServersQuery.refetch,
+    refetchRemoteMCPServers: refreshRemoteMCPServers,
     refetchMCPServers: mcpServersQuery.refetch,
     remoteMCPInstallBusy,
     remoteMCPServers,
@@ -393,7 +483,7 @@ export function useWorkspaceMCPSelection({
       remoteMCPServersEnabled && remoteMCPServersQuery.isFetching && !remoteMCPServersQuery.isFetchingNextPage,
     remoteMCPServersLoadingMore: remoteMCPServersQuery.isFetchingNextPage,
     remoteMCPServersSearch,
-    setRemoteMCPServersEnabled,
+    setRemoteMCPServersEnabled: changeRemoteMCPServersEnabled,
     setRemoteMCPServersSearch,
     selectedMCPServer,
     setMCPCreateDialogOpen: changeMCPCreateDialogOpen,

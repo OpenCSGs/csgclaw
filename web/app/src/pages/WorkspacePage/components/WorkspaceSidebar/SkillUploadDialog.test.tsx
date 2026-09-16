@@ -44,4 +44,35 @@ describe("SkillUploadDialog", () => {
     expect(onSubmit).toHaveBeenCalledWith(file);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it("requests remote access again when the selected remote tab is clicked again", async () => {
+    const user = userEvent.setup();
+    const onRemoteVisibleChange = vi.fn();
+    render(
+      <SkillUploadDialog
+        open
+        busy={false}
+        error=""
+        installedSkills={[]}
+        onOpenChange={() => undefined}
+        onRemoteVisibleChange={onRemoteVisibleChange}
+        onSubmit={vi.fn()}
+        remoteInstallBusy=""
+        remoteInstallError=""
+        remoteSkills={[]}
+        remoteSkillsError=""
+        remoteSkillsHasMore={false}
+        remoteSkillsLoading={false}
+        remoteSkillsLoadingMore={false}
+        remoteSkillsSearch=""
+        t={(key) => key}
+      />,
+    );
+
+    const remoteTab = screen.getByRole("tab", { name: "resourcesSkillRemoteInstallTab" });
+    await user.click(remoteTab);
+    await user.click(remoteTab);
+
+    expect(onRemoteVisibleChange.mock.calls.filter(([visible]) => visible)).toHaveLength(2);
+  });
 });

@@ -1,3 +1,4 @@
+import { OpenCSGConnectionDialog } from "@/components/business/OpenCSGConnectionDialog";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { workspaceShowsFloatingChat } from "@/models/routing";
 import { AuthLoginNotice } from "../AuthLoginNotice";
@@ -25,6 +26,9 @@ export function WorkspaceOverlays() {
         closeLabel={closeLabel}
         onDismiss={controller.onDismissAuthNotice}
       />
+      {controller.openCSGLoginRequiredDialogProps ? (
+        <OpenCSGConnectionDialog {...controller.openCSGLoginRequiredDialogProps} />
+      ) : null}
       {showFloatingChat && controller.floatingChatProps ? <FloatingChat {...controller.floatingChatProps} /> : null}
       {controller.profilePreviewProps ? <ProfilePreviewPopover {...controller.profilePreviewProps} /> : null}
       {controller.createRoomModalProps ? <CreateRoomModal {...controller.createRoomModalProps} /> : null}

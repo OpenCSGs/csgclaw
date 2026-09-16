@@ -20,6 +20,7 @@ import type { CLIProxyAuthStatusMap } from "./useCLIProxyAuthStatuses";
 import type { ConfigPhase } from "./useConfigController";
 import type { WorkspaceUiState } from "./workspaceUiStore";
 import type { ParticipantWorkStatus } from "./useParticipantWorkStatus";
+import type { OpenCSGAuthGuard } from "./useOpenCSGAuthGuard";
 
 export type WorkspaceQueryData<T> = T | ((current: T) => T);
 export type WorkspaceQuerySetter<T> = (value: WorkspaceQueryData<T>) => void;
@@ -85,7 +86,7 @@ export type UseWorkspaceHubSelectionArgs = {
   activePane: WorkspacePane;
   loaded: boolean;
   manualError?: string;
-  openCSGAuthenticated?: boolean;
+  openCSGAuthGuard: OpenCSGAuthGuard;
   refreshTemplates?: () => Promise<unknown>;
   t: TranslateFn;
   templates: readonly HubTemplate[] | null | undefined;
@@ -98,7 +99,7 @@ export type UseWorkspaceHubControllerArgs = {
   hubTemplates: HubTemplate[];
   hubTemplatesQuery: UseQueryResult<HubTemplate[]>;
   onSkillDeleted?: (nextSkill: SkillSummary | null) => void;
-  openCSGAuthenticated?: boolean;
+  openCSGAuthGuard: OpenCSGAuthGuard;
   refreshWorkspaceHubTemplates: () => Promise<HubTemplate[]>;
   t: TranslateFn;
 };
@@ -234,6 +235,7 @@ export type UseConversationControllerArgs = {
   onDisconnectGitLabConnector?: () => Promise<void>;
   onManageConnector?: () => Promise<void>;
   onProviderLogin: (provider: string | null | undefined) => Promise<void>;
+  openCSGAuthGuard: OpenCSGAuthGuard;
   onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => Promise<void>;
   onSaveGitLabConnectorConfig?: (draft: GitLabConnectorConfigDraft) => Promise<void>;
   preferredFallbackConversationId?: string;
@@ -264,7 +266,7 @@ export type UseAgentControllerArgs = {
   managerProfile: AgentProfileLike | null;
   modelProviders?: ModelProviderCatalog | null;
   modelProvidersLoaded?: boolean;
-  openCSGAuthenticated?: boolean;
+  openCSGAuthGuard: OpenCSGAuthGuard;
   onAgentDeleted?: (item: AgentLike) => void;
   profileDetailAgentID?: string;
   refreshMCPServers?: () => Promise<unknown>;
