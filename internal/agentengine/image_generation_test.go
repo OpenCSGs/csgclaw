@@ -3,6 +3,7 @@ package agentengine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"csgclaw/internal/agentengine/contract"
@@ -54,5 +55,56 @@ func TestImageGenerationRequiresChannelDeliverySupport(t *testing.T) {
 	err := conversation.generateImage(context.Background(), &activeTurn{}, EventSinkFunc(func(context.Context, TurnEvent) error { return nil }), contract.ImageGenerationTask{ID: "call-1", Prompt: "blue sky"})
 	if err == nil || calls != 0 {
 		t.Fatal("generated an image without a channel capable of delivering it")
+	}
+}
+
+func TestSuccessfulImageRetryParticipatesInCompletedTurnEviction(t *testing.T) {
+	ctx := context.Background()
+	fail := true
+	calls := 0
+	engine := &Engine{files: NewFileStore(), runtimes: directConversationResolver{}, generateImage: func(context.Context, *modelprovider.ImageGenerationConfig, string) (modelprovider.GeneratedImage, error) {
+		calls++
+		if fail {
+			return modelprovider.GeneratedImage{}, errors.New("provider unavailable")
+		}
+		return modelprovider.GeneratedImage{Data: []byte("image snapshot"), MediaType: "image/png"}, nil
+	}}
+	t.Cleanup(func() { engine.files.DeleteAgent("agent-image") })
+	conversation := engine.Conversations("agent-image")
+	request := TurnRequest{ID: "image-retry", ConversationKey: "room-image", Input: []InputPart{{Kind: InputPartText, Text: "blue sky"}}, ImageGeneration: &contract.ImageGenerationTask{ID: "image-call", Prompt: "blue sky"}}
+	var fileID string
+	sink := contract.ImageGenerationSink{EventSink: EventSinkFunc(func(_ context.Context, event TurnEvent) error {
+		if task, ok := event.Output.Payload.(contract.ImageGenerationTask); ok && task.State == "completed" {
+			fileID = task.File.ID
+		}
+		return nil
+	})}
+	result := conversation.Run(ctx, request, sink)
+	if result.Status != TurnFailed || result.Dispatched || len(engine.completed) != 0 {
+		t.Fatalf("provider failure was cached: %+v", result)
+	}
+	fail = false
+	result = conversation.Run(ctx, request, sink)
+	if result.Status != TurnSucceeded || !result.Dispatched || len(engine.completed) != 1 {
+		t.Fatalf("successful retry not retained for cleanup: %+v", result)
+	}
+	snapshot, release, err := engine.files.Resolve("agent-image", fileID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release()
+	if replay := conversation.Run(ctx, request, sink); replay.Status != TurnSucceeded || calls != 2 {
+		t.Fatalf("successful retry was regenerated: %+v, calls=%d", replay, calls)
+	}
+	identity := conversationIdentity{agentID: "agent-image", key: "room-image"}
+	for i := 0; i < maxCompletedTurns; i++ {
+		engine.complete(identity, &activeTurn{request: TurnRequest{ID: TurnID(fmt.Sprintf("later-%d", i))}, done: make(chan struct{})}, TurnResult{Status: TurnSucceeded, Dispatched: true})
+	}
+	if _, err := conversation.Files().Get(ctx, fileID); err == nil {
+		t.Fatal("evicted image remains registered")
+	}
+	if reader, err := snapshot.Open(ctx); err == nil {
+		reader.Close()
+		t.Fatal("evicted image snapshot remains readable on disk")
 	}
 }

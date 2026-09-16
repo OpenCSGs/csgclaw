@@ -114,7 +114,7 @@ func TestImageRetryHTTPUsesCapturedModelAndPersistsAttachment(t *testing.T) {
 			if err := json.Unmarshal(response.Body.Bytes(), &outcome); err != nil {
 				t.Fatal(err)
 			}
-			if outcome.Status != agentengine.TurnFailed {
+			if outcome.Status != agentengine.TurnFailed || outcome.Dispatched {
 				t.Fatalf("expected provider failure: %s", response.Body.String())
 			}
 			listed := httptest.NewRecorder()
@@ -140,6 +140,15 @@ func TestImageRetryHTTPUsesCapturedModelAndPersistsAttachment(t *testing.T) {
 		}
 		if wantStatus == 200 && !strings.Contains(response.Body.String(), `"status":"succeeded"`) {
 			t.Fatalf("retry failed: %s", response.Body.String())
+		}
+		if wantStatus == http.StatusOK {
+			var outcome agentengine.TurnResult
+			if err := json.Unmarshal(response.Body.Bytes(), &outcome); err != nil {
+				t.Fatal(err)
+			}
+			if !outcome.Dispatched {
+				t.Fatal("successful image retry bypassed completed-turn cleanup")
+			}
 		}
 	}
 	messages, _ = imSvc.ListMessages(room.ID)

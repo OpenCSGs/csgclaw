@@ -181,7 +181,9 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 			}
 		}
 		err := c.generateImage(turn.ctx, turn, sink, *request.ImageGeneration)
-		result := TurnResult{Status: TurnSucceeded}
+		// Successful image-only turns must enter the replay cache so eviction
+		// releases their temporary output snapshots. Failures remain retryable.
+		result := TurnResult{Status: TurnSucceeded, Dispatched: true}
 		if err != nil {
 			result = failedResult(ErrorRuntimeFailed, err.Error())
 		}
