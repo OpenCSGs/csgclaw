@@ -13,10 +13,7 @@ import {
 import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
 import { MANAGER_AGENT_ID, MANAGER_AGENT_NAME, MANAGER_PARTICIPANT_ID } from "@/shared/constants/agents";
 import { WorkspacePaneTypes, WorkspaceTabs, paneFromLocation } from "@/models/routing";
-import {
-  MODEL_PROVIDER_IDS,
-  modelProviderCatalogForOpenCSGState,
-} from "@/models/modelProviders";
+import { MODEL_PROVIDER_IDS, modelProviderCatalogForOpenCSGState } from "@/models/modelProviders";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
 import { useWorkspaceData } from "./useWorkspaceData";
 import { useWorkspaceNavigation } from "./useWorkspaceNavigation";
@@ -193,6 +190,7 @@ export function useWorkspaceController() {
     appVersion,
     upgradeStatus,
     setBootstrapData,
+    setManagerProfileData,
     setAgentsData,
     setUpgradeStatusData,
     setAppVersionData,
@@ -365,6 +363,7 @@ export function useWorkspaceController() {
     selectModelProvider,
     setAgentsData,
     setBootstrapData,
+    setManagerProfileData,
     setHubPublishError: hub.setPublishError,
     setSelectedHubTemplateId,
     t,

@@ -61,6 +61,7 @@ import {
   applyTemplateToDraft,
   advanceAgentProgress,
   agentOfflineReasonLabel,
+  agentProfileConfig,
   agentRuntimeKind,
   agentRuntimeState,
   agentDraftMissingRequiredEnv,
@@ -543,6 +544,7 @@ export function useAgentController({
   selectModelProvider = noopSelectModelProvider,
   setAgentsData,
   setBootstrapData,
+  setManagerProfileData,
   setHubPublishError = () => undefined,
   setSelectedHubTemplateId,
   t,
@@ -711,6 +713,22 @@ export function useAgentController({
   }
 
   const managerAgent = agentItems.find((item) => item.role === MANAGER_AGENT_ROLE || item.id === MANAGER_AGENT_ID);
+  const syncManagerProfileFromAgent = useCallback(
+    (item: AgentLike | null | undefined) => {
+      if (!isManagerAgent(item)) {
+        return;
+      }
+      const profile = agentProfileConfig(item);
+      if (!profile) {
+        return;
+      }
+      setManagerProfileData((current) => ({
+        ...(current ?? {}),
+        ...profile,
+      }));
+    },
+    [setManagerProfileData],
+  );
   const { workerAgentItems, notificationAgentItems } = partitionWorkspaceAgentItems(agentItems, MANAGER_AGENT_ID);
   const createTeamCandidates = useMemo(
     () => [...workerAgentItems, ...notificationAgentItems].filter((item) => Boolean(item?.id)),
@@ -1794,7 +1812,7 @@ export function useAgentController({
         await saveLinkedAgentUserAvatar(selectedAgentForPage, draft.avatar);
         await refreshAgents();
         await refreshWorkspaceBootstrap();
-        if (savedMetaOnly.id === MANAGER_AGENT_ID) {
+        if (isManagerAgent(savedMetaOnly)) {
           await refreshManagerProfile();
         }
         await refreshAgentSkills(savedMetaOnly.id || selectedAgentForPage.id);
@@ -1812,6 +1830,7 @@ export function useAgentController({
       const managerBeforeSave = selectedAgentForPage;
       const profileIncompleteBeforeSave = !isAgentProfileMarkedComplete(agentPageSavedDraft);
       const saved = await updateAgentRequest(selectedAgentForPage.id, payload);
+      syncManagerProfileFromAgent(saved);
       await saveLinkedAgentUserAvatar(selectedAgentForPage, draft.avatar);
       if (mcpServersChanged) {
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(selectedAgentForPage.id) });
@@ -1829,9 +1848,6 @@ export function useAgentController({
         void syncManagerRuntimeAfterProfileSave(managerBeforeSave, profileIncompleteBeforeSave);
       }
       await refreshWorkspaceBootstrap();
-      if (saved.id === MANAGER_AGENT_ID) {
-        await refreshManagerProfile();
-      }
       await refreshAgentSkills(saved.id || selectedAgentForPage.id);
       const { draft: savedDraft } = await agentDraftFromItem({ ...saved, avatar: draft.avatar });
       setAgentPageDraft(savedDraft);
@@ -2073,6 +2089,7 @@ export function useAgentController({
             ...(payload.runtime_options !== undefined ? { runtime_options: payload.runtime_options } : {}),
             ...(payload.mcpServers !== undefined ? { mcpServers: payload.mcpServers } : {}),
           });
+      syncManagerProfileFromAgent(saved);
       await saveLinkedAgentUserAvatar(saved?.participants?.length ? saved : editingAgent || saved, agentDraft.avatar);
       if (!isCreate && mcpServersChanged) {
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentMCPServers(editingAgentID) });
@@ -2082,9 +2099,6 @@ export function useAgentController({
       }
       await refreshAgents();
       await refreshWorkspaceBootstrap();
-      if (saved.id === MANAGER_AGENT_ID) {
-        await refreshManagerProfile();
-      }
       await refreshAgentSkills(saved.id || editingAgentID);
       if (isCreate) {
         setAgentProgress((current) =>
@@ -2114,7 +2128,9 @@ export function useAgentController({
     }
     const actionUsesOpenCSG =
       action === "recreate" &&
-      modelProviderConfigUsesOpenCSG(isManagerAgent(item) ? (managerProfile ?? agentToDraft(item)) : agentToDraft(item));
+      modelProviderConfigUsesOpenCSG(
+        isManagerAgent(item) ? (managerProfile ?? agentToDraft(item)) : agentToDraft(item),
+      );
     if (actionUsesOpenCSG && !requireOpenCSGAuthentication()) {
       return;
     }

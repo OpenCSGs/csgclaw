@@ -14,6 +14,7 @@ export type OpenCSGAuthGuard = {
   closeDialog: () => void;
   dialogOpen: boolean;
   handleAuthenticationError: (error: unknown, options?: MarkAuthenticationExpiredOptions) => boolean;
+  handleRuntimeAuthenticationError: (message: unknown, options?: MarkAuthenticationExpiredOptions) => boolean;
   login: (environment?: AuthEnvironmentDraft) => Promise<void>;
   markAuthenticationExpired: (options?: MarkAuthenticationExpiredOptions) => void;
   requireAuthentication: () => boolean;
@@ -65,6 +66,17 @@ export function useOpenCSGAuthGuard({ login, status }: UseOpenCSGAuthGuardArgs):
     [markAuthenticationExpired],
   );
 
+  const handleRuntimeAuthenticationError = useCallback(
+    (message: unknown, options?: MarkAuthenticationExpiredOptions) => {
+      if (!isUnresolvedOpenCSGRuntimeAuthenticationError(message, status)) {
+        return false;
+      }
+      markAuthenticationExpired({ openDialog: options?.openDialog ?? false });
+      return true;
+    },
+    [markAuthenticationExpired, status],
+  );
+
   const requireAuthentication = useCallback(() => {
     if (authenticated) {
       return true;
@@ -96,6 +108,7 @@ export function useOpenCSGAuthGuard({ login, status }: UseOpenCSGAuthGuardArgs):
       closeDialog,
       dialogOpen,
       handleAuthenticationError,
+      handleRuntimeAuthenticationError,
       login,
       markAuthenticationExpired,
       requireAuthentication,
@@ -105,6 +118,7 @@ export function useOpenCSGAuthGuard({ login, status }: UseOpenCSGAuthGuardArgs):
       closeDialog,
       dialogOpen,
       handleAuthenticationError,
+      handleRuntimeAuthenticationError,
       login,
       markAuthenticationExpired,
       requireAuthentication,
@@ -138,4 +152,21 @@ export function isOpenCSGRuntimeAuthenticationError(message: unknown): boolean {
   const details = csgclaw as Record<string, unknown>;
   const code = typeof details.error_code === "string" ? details.error_code.trim().toLowerCase() : "";
   return details.runtime_error === true && OPENCSG_AUTH_ERROR_CODES.has(code);
+}
+
+export function isUnresolvedOpenCSGRuntimeAuthenticationError(message: unknown, status: AuthStatus): boolean {
+  if (!isOpenCSGRuntimeAuthenticationError(message)) {
+    return false;
+  }
+  const failedAt = timestampFromUnknown((message as { created_at?: unknown }).created_at);
+  const loggedInAt = timestampFromUnknown(status.logged_in_at);
+  return failedAt === null || loggedInAt === null || failedAt > loggedInAt;
+}
+
+function timestampFromUnknown(value: unknown): number | null {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
 }

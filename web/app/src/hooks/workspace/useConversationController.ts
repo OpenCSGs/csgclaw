@@ -63,6 +63,7 @@ import {
   normalizeAuthProviderName,
   providerNeedsAuth,
   type AgentLike,
+  type AgentProfileLike,
 } from "@/models/agents";
 import {
   type AttachmentSelectionResult,
@@ -303,11 +304,19 @@ function conversationManagerAgent(
   }
   return (
     peers.find((agent) => {
-      if (String(agent.role ?? "").trim().toLowerCase() === "manager") {
+      if (
+        String(agent.role ?? "")
+          .trim()
+          .toLowerCase() === "manager"
+      ) {
         return true;
       }
       const user = resolveUserByLocalIdentity(String(agent.user_id || agent.id || ""), usersById);
-      return String(user?.role ?? "").trim().toLowerCase() === "manager";
+      return (
+        String(user?.role ?? "")
+          .trim()
+          .toLowerCase() === "manager"
+      );
     }) ?? null
   );
 }
@@ -367,6 +376,30 @@ function outgoingMessageRecipientAgents({
   return conversation.notify_all_agents && !senderAgent ? peers : mentionedAgents;
 }
 
+function runtimeAuthenticationErrorUsesOpenCSG(
+  room: IMConversation,
+  message: IMMessage,
+  agents: readonly AgentLike[],
+  usersById: Map<string, IMUser>,
+  managerProfile: AgentProfileLike | null | undefined,
+): boolean | null {
+  const senderAgent = conversationAgentForMember(String(message.sender_id ?? ""), agents, usersById);
+  if (!senderAgent) {
+    return null;
+  }
+  const senderUser = resolveUserByLocalIdentity(String(message.sender_id ?? ""), usersById);
+  const senderIsManager =
+    localIdentitiesMatch(message.sender_id, room.manager_id) ||
+    String(senderAgent.role || senderUser?.role || "")
+      .trim()
+      .toLowerCase() === "manager";
+  const profile = senderIsManager && managerProfile ? managerProfile : agentProfileConfig(senderAgent);
+  if (!String(profile?.model_provider_id ?? "").trim()) {
+    return null;
+  }
+  return modelProviderConfigUsesOpenCSG(profile);
+}
+
 export function useConversationController({
   activeConversationId,
   activePane,
@@ -415,7 +448,7 @@ export function useConversationController({
 }: UseConversationControllerArgs) {
   const {
     handleAuthenticationError: handleOpenCSGAuthenticationError,
-    markAuthenticationExpired: markOpenCSGAuthenticationExpired,
+    handleRuntimeAuthenticationError: handleOpenCSGRuntimeAuthenticationError,
     requireAuthentication: requireOpenCSGAuthentication,
   } = openCSGAuthGuard;
   const [draftsByConversationId, setDraftsByConversationId] = useState<DraftsByConversationId>({});
@@ -466,26 +499,6 @@ export function useConversationController({
   const observedRuntimeAuthMessageIDsRef = useRef<Set<string> | null>(null);
   const composerIsComposingRef = useRef(false);
 
-  useEffect(() => {
-    const runtimeAuthMessages = rooms.flatMap((room) =>
-      room.messages
-        .map((message, index) => ({
-          key: String(message.id || `${room.id}:${message.created_at || index}`),
-          message,
-        }))
-        .filter(({ message }) => isOpenCSGRuntimeAuthenticationError(message)),
-    );
-    const observed = observedRuntimeAuthMessageIDsRef.current;
-    if (!observed) {
-      observedRuntimeAuthMessageIDsRef.current = new Set(runtimeAuthMessages.map(({ key }) => key));
-      return;
-    }
-    const hasNewAuthenticationError = runtimeAuthMessages.some(({ key }) => !observed.has(key));
-    runtimeAuthMessages.forEach(({ key }) => observed.add(key));
-    if (hasNewAuthenticationError) {
-      markOpenCSGAuthenticationExpired({ openDialog: false });
-    }
-  }, [markOpenCSGAuthenticationExpired, rooms]);
   const composerJustEndedCompositionRef = useRef(false);
   const messageListRef = useRef<HTMLElement | null>(null);
   const memberMenuRef = useRef<HTMLDivElement | null>(null);
@@ -522,6 +535,30 @@ export function useConversationController({
   const composerError = composerErrorsByConversationId[activeConversationId] ?? attachmentWarning;
 
   const usersById = useMemo(() => buildUsersById(data?.users), [data]);
+
+  useEffect(() => {
+    const observed = observedRuntimeAuthMessageIDsRef.current ?? new Set<string>();
+    observedRuntimeAuthMessageIDsRef.current = observed;
+    rooms.forEach((room) => {
+      room.messages.forEach((message, index) => {
+        if (!isOpenCSGRuntimeAuthenticationError(message)) {
+          return;
+        }
+        const key = String(message.id || `${room.id}:${message.created_at || index}`);
+        if (observed.has(key)) {
+          return;
+        }
+        const usesOpenCSG = runtimeAuthenticationErrorUsesOpenCSG(room, message, agents, usersById, managerProfile);
+        if (usesOpenCSG === null) {
+          return;
+        }
+        observed.add(key);
+        if (usesOpenCSG) {
+          handleOpenCSGRuntimeAuthenticationError(message);
+        }
+      });
+    });
+  }, [agents, handleOpenCSGRuntimeAuthenticationError, managerProfile, rooms, usersById]);
   const activeConversation = useMemo(
     () => data?.rooms.find((item) => item.id === activeConversationId) ?? null,
     [data, activeConversationId],
@@ -622,8 +659,7 @@ export function useConversationController({
     (segments: readonly ComposerSegment[]) =>
       recipientAgentsForSegments(segments).some((agent) => {
         const isManager = Boolean(
-          activeConversationManagerAgent &&
-            localIdentitiesMatch(activeConversationManagerAgent.id, agent.id),
+          activeConversationManagerAgent && localIdentitiesMatch(activeConversationManagerAgent.id, agent.id),
         );
         const profile = isManager && managerProfile ? managerProfile : agentProfileConfig(agent);
         return modelProviderConfigUsesOpenCSG(profile);

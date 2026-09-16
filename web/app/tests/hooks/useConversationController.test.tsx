@@ -833,6 +833,68 @@ describe("useConversationController", () => {
     expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
   });
 
+  it("handles an unresolved OpenCSG runtime authentication failure already present when the room loads", async () => {
+    const runtimeError: IMMessage = {
+      id: "runtime-auth-error",
+      content: "Model service authentication failed.",
+      created_at: "2026-09-16T08:10:00Z",
+      sender_id: "u-manager",
+      metadata: { csgclaw: { error_code: "authentication_error", runtime_error: true } },
+    };
+    const conversation: IMConversation = {
+      id: "room-on-demand",
+      type: RoomTypes.onDemand,
+      manager_id: "u-manager",
+      members: ["u-admin", "u-manager"],
+      messages: [runtimeError],
+      title: "on-demand team",
+    };
+    const openCSGAuthGuard = openCSGAuthGuardStub();
+    openCSGAuthGuard.handleRuntimeAuthenticationError = vi.fn(() => true);
+
+    renderConversationController({
+      activeConversationId: conversation.id,
+      agents: [{ id: "u-manager", name: "manager", role: "manager", status: "running" }],
+      data: groupConversationData(conversation),
+      managerProfile: { model_provider_id: "opencsg" },
+      openCSGAuthGuard,
+    });
+
+    await waitFor(() => {
+      expect(openCSGAuthGuard.handleRuntimeAuthenticationError).toHaveBeenCalledWith(runtimeError);
+    });
+  });
+
+  it("does not treat another provider's runtime authentication failure as an OpenCSG logout", () => {
+    const runtimeError: IMMessage = {
+      id: "runtime-auth-error",
+      content: "Model service authentication failed.",
+      created_at: "2026-09-16T08:10:00Z",
+      sender_id: "u-manager",
+      metadata: { csgclaw: { error_code: "authentication_error", runtime_error: true } },
+    };
+    const conversation: IMConversation = {
+      id: "room-on-demand",
+      type: RoomTypes.onDemand,
+      manager_id: "u-manager",
+      members: ["u-admin", "u-manager"],
+      messages: [runtimeError],
+      title: "on-demand team",
+    };
+    const openCSGAuthGuard = openCSGAuthGuardStub();
+    openCSGAuthGuard.handleRuntimeAuthenticationError = vi.fn(() => true);
+
+    renderConversationController({
+      activeConversationId: conversation.id,
+      agents: [{ id: "u-manager", name: "manager", role: "manager", status: "running" }],
+      data: groupConversationData(conversation),
+      managerProfile: { model_provider_id: "default" },
+      openCSGAuthGuard,
+    });
+
+    expect(openCSGAuthGuard.handleRuntimeAuthenticationError).not.toHaveBeenCalled();
+  });
+
   it("checks only mentioned agents in a free group", async () => {
     apiMocks.sendMessageRequest.mockResolvedValue(successfulMessage());
     const openCSGAuthGuard = openCSGAuthGuardStub(false);

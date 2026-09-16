@@ -6,6 +6,7 @@ export function openCSGAuthGuardStub(authenticated = true): OpenCSGAuthGuard {
     closeDialog: () => {},
     dialogOpen: false,
     handleAuthenticationError: () => false,
+    handleRuntimeAuthenticationError: () => false,
     login: async () => {},
     markAuthenticationExpired: () => {},
     requireAuthentication: () => authenticated,

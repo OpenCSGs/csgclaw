@@ -4,6 +4,7 @@ import { emptyAuthStatus } from "@/models/auth";
 import {
   isOpenCSGAuthenticationError,
   isOpenCSGRuntimeAuthenticationError,
+  isUnresolvedOpenCSGRuntimeAuthenticationError,
   useOpenCSGAuthGuard,
 } from "@/hooks/workspace/useOpenCSGAuthGuard";
 
@@ -98,5 +99,43 @@ describe("useOpenCSGAuthGuard", () => {
         },
       }),
     ).toBe(true);
+  });
+
+  it("keeps only runtime authentication failures newer than the last login unresolved", () => {
+    const status = authenticatedStatus("2026-09-16T08:05:00Z");
+    const message = {
+      created_at: "2026-09-16T08:10:00Z",
+      metadata: { csgclaw: { error_code: "authentication_error", runtime_error: true } },
+    };
+
+    expect(isUnresolvedOpenCSGRuntimeAuthenticationError(message, status)).toBe(true);
+    expect(
+      isUnresolvedOpenCSGRuntimeAuthenticationError({ ...message, created_at: "2026-09-16T08:00:00Z" }, status),
+    ).toBe(false);
+  });
+
+  it("silently expires the session until an OpenCSG-protected action requires login", () => {
+    const login = vi.fn(async () => {});
+    const { result } = renderHook(() =>
+      useOpenCSGAuthGuard({ login, status: authenticatedStatus("2026-09-16T08:05:00Z") }),
+    );
+
+    act(() => {
+      expect(
+        result.current.handleRuntimeAuthenticationError({
+          created_at: "2026-09-16T08:10:00Z",
+          metadata: { csgclaw: { error_code: "authentication_error", runtime_error: true } },
+        }),
+      ).toBe(true);
+    });
+
+    expect(result.current.authenticated).toBe(false);
+    expect(result.current.dialogOpen).toBe(false);
+
+    act(() => {
+      expect(result.current.requireAuthentication()).toBe(false);
+    });
+
+    expect(result.current.dialogOpen).toBe(true);
   });
 });
