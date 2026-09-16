@@ -91,8 +91,8 @@ func TestHandlerSetsCacheHeaders(t *testing.T) {
 		}
 		assetRec := httptest.NewRecorder()
 		handler.ServeHTTP(assetRec, httptest.NewRequest(http.MethodGet, asset, nil))
-		if got := assetRec.Header().Get("Cache-Control"); got != "no-cache" {
-			t.Fatalf("%s Cache-Control = %q, want no-cache", asset, got)
+		if got := assetRec.Header().Get("Cache-Control"); got != "public, max-age=31536000, immutable" {
+			t.Fatalf("%s Cache-Control = %q, want immutable asset caching", asset, got)
 		}
 		return
 	}
