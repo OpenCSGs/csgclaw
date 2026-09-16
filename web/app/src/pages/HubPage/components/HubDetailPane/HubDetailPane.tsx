@@ -62,7 +62,7 @@ import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { MCPServer } from "@/models/mcp";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
-import { skillSourceBadgeName } from "@/models/skillhub";
+import { isReadonlySkill, skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillFile, SkillSummary, SkillTree } from "@/models/skillhub";
 import type { WorkspaceEntry, WorkspaceFile } from "@/models/workspace";
 import { RemoteMCPList } from "./RemoteMCPList";
@@ -2654,6 +2654,18 @@ export function HubDetailPane({
                 </div>
               </DialogBody>
               <DialogFooter>
+                {!isReadonlySkill(selectedSkill) && onDeleteSkill ? (
+                  <Button
+                    className="mr-auto"
+                    variant="danger"
+                    size="md"
+                    disabled={skillDeleteBusy}
+                    onClick={() => setDeleteSkillDialogOpen(true)}
+                  >
+                    <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
+                    {t("resourcesDeleteSkill")}
+                  </Button>
+                ) : null}
                 <Button variant="primary" size="md" onClick={trySelectedSkill}>
                   {t("resourcesSkillTryNow")}
                 </Button>
