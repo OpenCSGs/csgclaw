@@ -168,6 +168,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Route("/{id}", func(r chi.Router) {
 				r.Patch("/", h.updateRoom)
 				r.Delete("/", h.deleteRoom)
+				r.Get("/attachments", h.handleRoomAttachments)
+				r.Get("/attachments/{attachment_id}", h.handleRoomAttachmentDownload)
 				r.Get("/tasks", h.handleListRoomTasks)
 				r.Get("/tasks/{task_id}", h.handleGetRoomTask)
 				r.Get("/task-context", h.handleRoomTaskContext)
@@ -198,6 +200,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		})
 		r.Route("/messages", func(r chi.Router) {
 			r.Get("/", h.listMessages)
+			r.Post("/{message_id}/image-generation/retry", h.retryImageGeneration)
 			r.Post("/", h.createMessage)
 		})
 		r.Route("/teams", func(r chi.Router) {
@@ -303,6 +306,7 @@ func (h *Handler) registerChannelRoutes(router chi.Router) {
 		})
 		r.Route("/csgclaw/messages", func(r chi.Router) {
 			r.Get("/", h.listMessages)
+			r.Post("/{message_id}/image-generation/retry", h.retryImageGeneration)
 			r.Post("/", h.createMessage)
 		})
 

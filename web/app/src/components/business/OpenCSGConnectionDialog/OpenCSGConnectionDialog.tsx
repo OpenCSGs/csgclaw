@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { X } from "lucide-react";
 import {
   Button,
@@ -21,34 +21,48 @@ import type { AuthEnvironmentDraft, AuthEnvironmentPresetID } from "@/models/aut
 import type { TranslateFn } from "@/models/conversations";
 import styles from "./OpenCSGConnectionDialog.module.css";
 
-type OpenCSGConnectionDialogProps = {
+export type OpenCSGConnectionDialogProps = {
   busy: boolean;
-  draft: AuthEnvironmentDraft;
+  environment: AuthEnvironmentDraft;
+  error?: string;
   open: boolean;
   t: TranslateFn;
-  onConnect: () => void;
-  onDraftChange: (draft: AuthEnvironmentDraft) => void;
+  variant?: "connect" | "authentication-required";
+  onConnect: (environment: AuthEnvironmentDraft) => void;
   onOpenChange: (open: boolean) => void;
 };
 
 export function OpenCSGConnectionDialog({
   busy,
-  draft,
+  environment,
+  error = "",
   open,
   t,
+  variant = "connect",
   onConnect,
-  onDraftChange,
   onOpenChange,
 }: OpenCSGConnectionDialogProps) {
   const customFieldErrorID = useId();
+  const environmentFieldName = useId();
+  const previousOpenRef = useRef(false);
+  const [draft, setDraft] = useState(environment);
   const [customFieldTouched, setCustomFieldTouched] = useState(false);
   const ready = authEnvironmentLoginReady(draft);
   const showCustomFieldError = draft.preset === "custom" && customFieldTouched && !ready;
+  const authenticationRequired = variant === "authentication-required";
+
+  useEffect(() => {
+    if (open && !previousOpenRef.current) {
+      setDraft(environment);
+      setCustomFieldTouched(false);
+    }
+    previousOpenRef.current = open;
+  }, [environment, open]);
 
   function selectPreset(preset: AuthEnvironmentPresetID) {
     if (preset === "custom") {
       setCustomFieldTouched(false);
-      onDraftChange({
+      setDraft({
         preset: "custom",
         opencsgBaseURL: draft.preset === "custom" ? draft.opencsgBaseURL : "",
         csgHubBaseURL: "",
@@ -57,10 +71,13 @@ export function OpenCSGConnectionDialog({
       return;
     }
     setCustomFieldTouched(false);
-    onDraftChange(authEnvironmentDraftFromPreset(preset));
+    setDraft(authEnvironmentDraftFromPreset(preset));
   }
 
   function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen && busy) {
+      return;
+    }
     if (!nextOpen) {
       setCustomFieldTouched(false);
     }
@@ -72,10 +89,12 @@ export function OpenCSGConnectionDialog({
       <DialogContent className={styles.dialog}>
         <DialogHeader className={styles.header}>
           <div className={styles.copy}>
-            <DialogTitle>{t("csghubConnectTitle")}</DialogTitle>
-            <DialogDescription>{t("csghubConnectDescription")}</DialogDescription>
+            <DialogTitle>{t(authenticationRequired ? "openCSGLoginRequiredTitle" : "csghubConnectTitle")}</DialogTitle>
+            <DialogDescription>
+              {t(authenticationRequired ? "openCSGLoginRequiredDescription" : "csghubConnectDescription")}
+            </DialogDescription>
           </div>
-          <OpenCSGDialogCloseButton label={t("close")} />
+          <OpenCSGDialogCloseButton disabled={busy} label={t("close")} />
         </DialogHeader>
         <DialogBody className={styles.body}>
           <fieldset className={styles.options}>
@@ -85,6 +104,7 @@ export function OpenCSGConnectionDialog({
                 key={preset.id}
                 checked={draft.preset === preset.id}
                 description={preset.label}
+                name={environmentFieldName}
                 label={preset.id === "prod" ? t("csghubEnvProduction") : t("csghubEnvStage")}
                 value={preset.id}
                 onChange={selectPreset}
@@ -93,6 +113,7 @@ export function OpenCSGConnectionDialog({
             <EnvironmentOption
               checked={draft.preset === "custom"}
               description={t("csghubEnvCustomDescription")}
+              name={environmentFieldName}
               label={t("csghubEnvCustom")}
               value="custom"
               onChange={selectPreset}
@@ -110,7 +131,7 @@ export function OpenCSGConnectionDialog({
                 placeholder="https://openeast.opencsg.com"
                 onChange={(event) => {
                   setCustomFieldTouched(true);
-                  onDraftChange({
+                  setDraft({
                     preset: "custom",
                     opencsgBaseURL: event.currentTarget.value,
                     csgHubBaseURL: "",
@@ -126,14 +147,17 @@ export function OpenCSGConnectionDialog({
             </label>
           ) : null}
 
-          <p className={styles.returnHint}>{t("csghubConnectReturnHint")}</p>
+          <p className={styles.returnHint}>
+            {t(authenticationRequired ? "openCSGLoginRequiredHint" : "csghubConnectReturnHint")}
+          </p>
+          {error ? <div className="form-error">{error}</div> : null}
         </DialogBody>
         <DialogFooter className={styles.actions}>
-          <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => onOpenChange(false)}>
+          <Button variant="secondaryGray" size="md" disabled={busy} onClick={() => handleOpenChange(false)}>
             {t("cancel")}
           </Button>
-          <Button variant="primary" size="md" loading={busy} disabled={!ready} onClick={onConnect}>
-            {t("csghubConnectContinue")}
+          <Button variant="primary" size="md" loading={busy} disabled={!ready} onClick={() => onConnect(draft)}>
+            {t(authenticationRequired ? "csghubSignIn" : "csghubConnectContinue")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -192,14 +216,15 @@ type EnvironmentOptionProps = {
   checked: boolean;
   description: string;
   label: string;
+  name: string;
   value: AuthEnvironmentPresetID;
   onChange: (value: AuthEnvironmentPresetID) => void;
 };
 
-function EnvironmentOption({ checked, description, label, value, onChange }: EnvironmentOptionProps) {
+function EnvironmentOption({ checked, description, label, name, value, onChange }: EnvironmentOptionProps) {
   return (
     <label className={styles.option}>
-      <input checked={checked} name="opencsg-environment" type="radio" value={value} onChange={() => onChange(value)} />
+      <input checked={checked} name={name} type="radio" value={value} onChange={() => onChange(value)} />
       <span>
         <strong>{label}</strong>
         <small>{description}</small>
@@ -208,11 +233,11 @@ function EnvironmentOption({ checked, description, label, value, onChange }: Env
   );
 }
 
-function OpenCSGDialogCloseButton({ label }: { label: string }) {
+function OpenCSGDialogCloseButton({ disabled = false, label }: { disabled?: boolean; label: string }) {
   return (
     <Tooltip content={label}>
       <DialogClose asChild>
-        <button type="button" className={styles.closeButton} aria-label={label}>
+        <button type="button" className={styles.closeButton} aria-label={label} disabled={disabled}>
           <X size={18} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </DialogClose>

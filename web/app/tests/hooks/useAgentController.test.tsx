@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -32,6 +32,7 @@ import { publishAgentTemplateRequest } from "@/api/hub";
 import { fetchAgentMCPServerSourceStatus } from "@/api/mcp";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
+import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
 import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
@@ -232,6 +233,7 @@ function useAgentControllerHarness(
   } = {},
 ) {
   const [agents, setAgents] = useState<AgentLike[]>(options.agents ?? [oldAgent]);
+  const [managerProfile, setManagerProfile] = useState<AgentProfileLike | null>(options.managerProfile ?? null);
   const agentsPropRef = useRef<AgentLike[] | null>(options.agents ?? null);
   const refreshWorkspaceAgentsRef = useRef(vi.fn(async () => options.agents ?? [oldAgent]));
   const refreshWorkspaceBootstrapRef = useRef(vi.fn(async () => null));
@@ -249,6 +251,10 @@ function useAgentControllerHarness(
   const navigatePaneRef = useRef(vi.fn());
   const setSelectedHubTemplateIdRef = useRef(vi.fn());
   const [data, setData] = useState<IMData | null>(() => options.data ?? null);
+  const openCSGAuthGuard = useMemo(
+    () => openCSGAuthGuardStub(options.openCSGAuthenticated ?? false),
+    [options.openCSGAuthenticated],
+  );
 
   useEffect(() => {
     if (options.agents) {
@@ -282,11 +288,11 @@ function useAgentControllerHarness(
     catalogMCPServersLoading: options.catalogMCPServersLoading ?? false,
     hubTemplates: options.hubTemplates ?? [],
     locale: "en",
-    managerProfile: options.managerProfile ?? null,
+    managerProfile,
     modelProviders: options.modelProviders ?? null,
     modelProvidersLoaded: options.modelProvidersLoaded ?? false,
     onAgentDeleted: options.onAgentDeleted,
-    openCSGAuthenticated: options.openCSGAuthenticated ?? false,
+    openCSGAuthGuard,
     refreshMCPServers: options.refreshMCPServers ?? vi.fn(async () => null),
     refreshHubTemplates: refreshHubTemplatesRef.current,
     refreshWorkspaceAgents,
@@ -303,6 +309,9 @@ function useAgentControllerHarness(
     setBootstrapData: (value) => {
       setData((current) => (typeof value === "function" ? value(current) : value));
     },
+    setManagerProfileData: (value) => {
+      setManagerProfile((current) => (typeof value === "function" ? value(current) : value));
+    },
     setHubPublishError: options.setHubPublishError,
     setSelectedHubTemplateId: setSelectedHubTemplateIdRef.current,
     t: options.t ?? t,
@@ -310,6 +319,7 @@ function useAgentControllerHarness(
 
   return {
     controller,
+    managerProfile,
     refreshWorkspaceAgents,
     refreshWorkspaceBootstrap,
     refreshWorkspaceBootstrapConfig,
@@ -1166,6 +1176,62 @@ describe("useAgentController", () => {
     expect(payload).not.toHaveProperty("name");
   });
 
+  it("updates the live manager profile after changing its model provider", async () => {
+    const openCSGManager: AgentLike = {
+      ...oldAgent,
+      agent_profile: {
+        ...oldAgent.agent_profile,
+        model_id: "qwen3.7-plus",
+        model_provider_id: "opencsg",
+        provider: "api",
+      },
+      model_id: "qwen3.7-plus",
+      model_provider_id: "opencsg",
+      provider: "api",
+    };
+    const savedManager: AgentLike = {
+      ...openCSGManager,
+      model_config: {
+        ...openCSGManager.agent_profile,
+        model_id: "deepseek-v4-pro",
+        model_provider_id: "ds",
+      },
+      model_id: "deepseek-v4-pro",
+      model_provider_id: "ds",
+    };
+    vi.mocked(fetchAgent).mockReset();
+    vi.mocked(fetchAgent).mockResolvedValueOnce(openCSGManager).mockResolvedValue(savedManager);
+    vi.mocked(fetchAgentProfile).mockResolvedValue(openCSGManager.agent_profile ?? {});
+    vi.mocked(updateAgentRequest).mockResolvedValue(savedManager);
+
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          agents: [openCSGManager],
+          managerProfile: openCSGManager.agent_profile,
+          openCSGAuthenticated: true,
+        }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.controller.agentViewProps.draft?.model_provider_id).toBe("opencsg"));
+    act(() => {
+      result.current.controller.agentViewProps.onDraftChange?.({
+        ...result.current.controller.agentViewProps.draft!,
+        model_id: "deepseek-v4-pro",
+        model_provider_id: "ds",
+      });
+    });
+
+    await act(async () => {
+      await result.current.controller.agentViewProps.onSave?.();
+    });
+
+    await waitFor(() => expect(result.current.managerProfile?.model_provider_id).toBe("ds"));
+    expect(result.current.managerProfile?.model_id).toBe("deepseek-v4-pro");
+    expect(result.current.refreshWorkspaceManagerProfile).not.toHaveBeenCalled();
+  });
+
   it("exposes the billing URL when saving the Agent page fails for insufficient balance", async () => {
     vi.mocked(updateAgentRequest).mockRejectedValueOnce({
       status: 402,
@@ -1194,7 +1260,7 @@ describe("useAgentController", () => {
       await result.current.agentViewProps.onPublish?.("official", "manager", "manager template", false);
     });
 
-    expect(result.current.agentViewProps.saveError).toBe("agentPublishLoginRequired");
+    expect(result.current.agentViewProps.saveError).toBe("");
     expect(result.current.agentViewProps.saveBillingURL).toBe("");
   });
 
@@ -2751,6 +2817,30 @@ describe("useAgentController", () => {
     const createPayload = vi.mocked(createBotRequest).mock.calls[0]?.[0];
     expect(createPayload).not.toHaveProperty("avatar");
     expect(patchCsgclawUserRequest).toHaveBeenCalledWith("user-worker", { avatar: selectedAvatar });
+  });
+
+  it("requires OpenCSG login before creating a template worker that uses OpenCSG models", async () => {
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValue({
+      model_provider_id: "opencsg",
+      model_id: "deepseek-v4",
+      profile_complete: true,
+      provider: "csghub",
+    });
+    const { result } = renderHook(() => useAgentControllerHarness().controller, {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent();
+    });
+    await waitFor(() => expect(result.current.agentProfileModalProps).not.toBeNull());
+
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+
+    expect(createBotRequest).not.toHaveBeenCalled();
+    expect(result.current.agentProfileModalProps).not.toBeNull();
   });
 
   it("keeps a migrated worker avatar after saving through its canonical IM user", async () => {

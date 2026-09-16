@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, UIEvent } from "react";
-import { AlertCircle, FileCode2, RefreshCw, UploadCloud } from "lucide-react";
+import { AlertCircle, CloudDownload, FileCode2, RefreshCw, UploadCloud } from "lucide-react";
 import {
   Button,
   DialogBody,
@@ -178,29 +178,37 @@ export function SkillUploadDialog({
         </DialogHeader>
         <DialogBody className={styles.body}>
           <div className={styles.mode} role="tablist" aria-label={t("resourcesSkillUpload")}>
-            {(["zip", "remote"] as const).map((value, index) => (
-              <button
-                key={value}
-                type="button"
-                className={styles.modeTab}
-                id={`${tabsId}-${value}`}
-                aria-controls={`${tabsId}-panel`}
-                aria-selected={mode === value}
-                role="tab"
-                tabIndex={mode === value ? 0 : -1}
-                onClick={() => setMode(value)}
-                onKeyDown={(event) => {
-                  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-                  event.preventDefault();
-                  const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
-                  setMode(nextIndex === 0 ? "zip" : "remote");
-                  const tabs = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
-                  tabs?.[nextIndex]?.focus();
-                }}
-              >
-                {t(value === "zip" ? "resourcesSkillUploadZipTab" : "resourcesSkillRemoteInstallTab")}
-              </button>
-            ))}
+            <Button
+              active={mode === "zip"}
+              aria-selected={mode === "zip"}
+              role="tab"
+              size="sm"
+              variant={mode === "zip" ? "primary" : "secondaryGray"}
+              onClick={() => {
+                setMode("zip");
+                inputRef.current?.click();
+              }}
+            >
+              <UploadCloud size={15} strokeWidth={2} aria-hidden="true" />
+              {t("resourcesSkillUploadZipTab")}
+            </Button>
+            <Button
+              active={mode === "remote"}
+              aria-selected={mode === "remote"}
+              role="tab"
+              size="sm"
+              variant={mode === "remote" ? "primary" : "secondaryGray"}
+              onClick={() => {
+                if (mode === "remote") {
+                  onRemoteVisibleChange?.(true);
+                  return;
+                }
+                setMode("remote");
+              }}
+            >
+              <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
+              {t("resourcesSkillRemoteInstallTab")}
+            </Button>
           </div>
           <input
             ref={inputRef}

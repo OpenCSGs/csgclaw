@@ -5,12 +5,24 @@ import {
   type ModelProviderPreset,
 } from "@/models/modelProviderPresets";
 
-export const BUILTIN_MODEL_PROVIDER_IDS = ["opencsg", "csghub-lite", "codex", "claude_code"] as const;
+export const MODEL_PROVIDER_IDS = {
+  OpenCSG: "opencsg",
+  CSGHubLite: "csghub-lite",
+  Codex: "codex",
+  ClaudeCode: "claude_code",
+} as const;
+
+export const BUILTIN_MODEL_PROVIDER_IDS = [
+  MODEL_PROVIDER_IDS.OpenCSG,
+  MODEL_PROVIDER_IDS.CSGHubLite,
+  MODEL_PROVIDER_IDS.Codex,
+  MODEL_PROVIDER_IDS.ClaudeCode,
+] as const;
 const MODEL_PROVIDER_AVATARS: Record<string, string> = {
-  opencsg: "model-providers/opencsg.svg",
-  "csghub-lite": "model-providers/csghub-lite.png",
-  codex: "model-providers/codex.svg",
-  claude_code: "model-providers/claude-code.svg",
+  [MODEL_PROVIDER_IDS.OpenCSG]: "model-providers/opencsg.svg",
+  [MODEL_PROVIDER_IDS.CSGHubLite]: "model-providers/csghub-lite.png",
+  [MODEL_PROVIDER_IDS.Codex]: "model-providers/codex.svg",
+  [MODEL_PROVIDER_IDS.ClaudeCode]: "model-providers/claude-code.svg",
   openai: "model-providers/openai-api.svg",
   zhipu: "model-providers/zhipu.svg",
   deepseek: "model-providers/deepseek.svg",
@@ -32,6 +44,7 @@ export type ModelProvider = {
   api_key_preview?: string;
   headers?: Record<string, unknown>;
   models: string[];
+  imageModels?: string[];
   reasoning_effort?: string;
   status: ModelProviderStatus;
   message?: string;
@@ -60,6 +73,7 @@ export type ModelProviderSelectOption = {
   displayName: string;
   id: string;
   models: string[];
+  imageModels?: string[];
   value: string;
 };
 
@@ -67,10 +81,21 @@ export type AgentModelProviderAvailability = {
   codexAvailable?: boolean;
 };
 
+export type ModelProviderConfigLike = {
+  model_provider_id?: string | null;
+};
+
 export type OpenCSGModelProviderViewState = {
   aiGatewayBaseURL: string;
+  authenticationRequiredMessage?: string;
   authenticated: boolean;
 };
+
+export function modelProviderConfigUsesOpenCSG(
+  config: ModelProviderConfigLike | null | undefined,
+): boolean {
+  return String(config?.model_provider_id ?? "").trim() === MODEL_PROVIDER_IDS.OpenCSG;
+}
 
 type RawCatalog = {
   providers?: unknown;
@@ -97,7 +122,7 @@ export function modelProviderCatalogForOpenCSGState(
   }
   const aiGatewayBaseURL = state.aiGatewayBaseURL.trim().replace(/\/+$/, "");
   const providers = catalog.providers.map((provider) => {
-    if (provider.id !== "opencsg") {
+    if (provider.id !== MODEL_PROVIDER_IDS.OpenCSG) {
       return provider;
     }
     return {
@@ -106,7 +131,7 @@ export function modelProviderCatalogForOpenCSGState(
       ...(!state.authenticated
         ? {
             last_checked_at: undefined,
-            message: "OpenCSG sign-in is required",
+            message: state.authenticationRequiredMessage || "OpenCSG sign-in is required",
             models: [],
             status: "failed",
           }
@@ -129,6 +154,7 @@ function normalizeModelProvider(raw: unknown): ModelProvider {
   return {
     id,
     kind,
+    imageModels: normalizeModelIDs(record.image_models),
     display_name: displayName,
     preset: normalizeModelProviderPreset(record.preset ?? inferModelProviderPreset(id, record.base_url)),
     builtin: Boolean(record.builtin) || builtinRank.has(id),
@@ -154,14 +180,14 @@ export function normalizeModelProviderID(value: unknown): string {
   if (!raw) {
     return "";
   }
-  if (raw === "opencsg" || raw === "open-csg" || raw === "csghub") {
-    return "opencsg";
+  if (raw === MODEL_PROVIDER_IDS.OpenCSG || raw === "open-csg" || raw === "csghub") {
+    return MODEL_PROVIDER_IDS.OpenCSG;
   }
   if (raw === "csghub_lite" || raw === "csghublite") {
-    return "csghub-lite";
+    return MODEL_PROVIDER_IDS.CSGHubLite;
   }
   if (raw === "claude-code" || raw === "claude") {
-    return "claude_code";
+    return MODEL_PROVIDER_IDS.ClaudeCode;
   }
   const normalized = Array.from(raw)
     .map((char) => {
@@ -185,13 +211,13 @@ export function normalizeModelProviderID(value: unknown): string {
 export function providerIDForProvider(provider: ProviderName | null | undefined): string {
   switch (String(provider ?? "").trim()) {
     case "csghub":
-      return "opencsg";
+      return MODEL_PROVIDER_IDS.OpenCSG;
     case "csghub_lite":
-      return "csghub-lite";
-    case "codex":
-      return "codex";
-    case "claude_code":
-      return "claude_code";
+      return MODEL_PROVIDER_IDS.CSGHubLite;
+    case MODEL_PROVIDER_IDS.Codex:
+      return MODEL_PROVIDER_IDS.Codex;
+    case MODEL_PROVIDER_IDS.ClaudeCode:
+      return MODEL_PROVIDER_IDS.ClaudeCode;
     case "api":
       return "";
     default:
@@ -201,14 +227,14 @@ export function providerIDForProvider(provider: ProviderName | null | undefined)
 
 export function providerNameForProviderID(providerID: string): ProviderName {
   switch (normalizeModelProviderID(providerID)) {
-    case "opencsg":
+    case MODEL_PROVIDER_IDS.OpenCSG:
       return "csghub";
-    case "csghub-lite":
+    case MODEL_PROVIDER_IDS.CSGHubLite:
       return "csghub_lite";
-    case "codex":
-      return "codex";
-    case "claude_code":
-      return "claude_code";
+    case MODEL_PROVIDER_IDS.Codex:
+      return MODEL_PROVIDER_IDS.Codex;
+    case MODEL_PROVIDER_IDS.ClaudeCode:
+      return MODEL_PROVIDER_IDS.ClaudeCode;
     default:
       return "api";
   }
@@ -315,7 +341,7 @@ export function modelProviderAvailableForAgent(
   providerID: string,
   availability: AgentModelProviderAvailability = {},
 ): boolean {
-  if (normalizeModelProviderID(providerID) === "codex" && availability.codexAvailable === false) {
+  if (normalizeModelProviderID(providerID) === MODEL_PROVIDER_IDS.Codex && availability.codexAvailable === false) {
     return false;
   }
   return true;
@@ -356,6 +382,7 @@ export function modelProviderSelectOptionsFromCatalog(
         displayName: provider.display_name || provider.id,
         id: provider.id,
         models: [...provider.models],
+        imageModels: provider.imageModels ?? [],
         value: provider.id,
       });
     }
@@ -426,7 +453,7 @@ export function providerStatusTone(
     case "failed":
       return "warning";
     default:
-      if (normalizeModelProviderID(provider?.id) === "opencsg") {
+      if (normalizeModelProviderID(provider?.id) === MODEL_PROVIDER_IDS.OpenCSG) {
         return "warning";
       }
       return provider?.builtin ? "online" : "neutral";

@@ -34,15 +34,6 @@ describe("SkillUploadDialog", () => {
     }
     const openPicker = vi.spyOn(HTMLInputElement.prototype, "click");
     await user.click(screen.getByRole("tab", { name: "resourcesSkillUploadZipTab" }));
-    expect(openPicker).not.toHaveBeenCalled();
-    await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("tab", { name: "resourcesSkillRemoteInstallTab" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    await user.keyboard("{ArrowLeft}");
-    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("resourcesSkillUploadZipTab");
-    await user.click(screen.getByRole("button", { name: /resourcesSkillUploadDropTitle/ }));
     expect(openPicker).toHaveBeenCalledOnce();
     const input = document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();
@@ -77,9 +68,6 @@ describe("SkillUploadDialog", () => {
       />,
     );
 
-    // Ensure we are on the zip tab
-    await user.click(screen.getByRole("tab", { name: "resourcesSkillUploadZipTab" }));
-
     // No file selected yet — button should be disabled
     const uploadButton = screen.getByRole("button", { name: "resourcesSkillUploadSubmit" });
     expect(uploadButton).toBeDisabled();
@@ -94,5 +82,36 @@ describe("SkillUploadDialog", () => {
     const file = new File(["skill archive"], "example.zip", { type: "application/zip" });
     await user.upload(input!, file);
     expect(uploadButton).not.toBeDisabled();
+  });
+
+  it("requests remote access again when the selected remote tab is clicked again", async () => {
+    const user = userEvent.setup();
+    const onRemoteVisibleChange = vi.fn();
+    render(
+      <SkillUploadDialog
+        open
+        busy={false}
+        error=""
+        installedSkills={[]}
+        onOpenChange={() => undefined}
+        onRemoteVisibleChange={onRemoteVisibleChange}
+        onSubmit={vi.fn()}
+        remoteInstallBusy=""
+        remoteInstallError=""
+        remoteSkills={[]}
+        remoteSkillsError=""
+        remoteSkillsHasMore={false}
+        remoteSkillsLoading={false}
+        remoteSkillsLoadingMore={false}
+        remoteSkillsSearch=""
+        t={(key) => key}
+      />,
+    );
+
+    const remoteTab = screen.getByRole("tab", { name: "resourcesSkillRemoteInstallTab" });
+    await user.click(remoteTab);
+    await user.click(remoteTab);
+
+    expect(onRemoteVisibleChange.mock.calls.filter(([visible]) => visible)).toHaveLength(2);
   });
 });

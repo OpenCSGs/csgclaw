@@ -178,6 +178,7 @@ jobs:
           name: web-static-dist
           path: web/static-dist/
           if-no-files-found: error
+          retention-days: 1
 
   build:
     if: ${{ github.event_name == 'push' }}
@@ -247,6 +248,7 @@ jobs:
           name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
           if-no-files-found: error
+          retention-days: 1
 
   desktop-build:
     needs: [prepare]
@@ -479,6 +481,7 @@ jobs:
           name: desktop-dist-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
           if-no-files-found: error
+          retention-days: 1
 
   merge-and-release:
     if: ${{ github.event_name == 'push' }}
@@ -518,6 +521,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
+      actions: write
       contents: read
     environment:
       name: oss-publish
@@ -584,12 +588,45 @@ jobs:
             DESKTOP_OSS_RELEASE_DIR=desktop-release \
             DESKTOP_OSS_REQUIRE_PACKAGES=1
 
+      - name: Delete artifacts from successful workflow run
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          mapfile -t artifact_ids < <(
+            gh api --paginate \
+              "repos/${GH_REPO}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
+              --jq '.artifacts[].id'
+          )
+
+          printf 'Deleting %d artifacts from workflow run %s\n' "${#artifact_ids[@]}" "${RUN_ID}"
+          for artifact_id in "${artifact_ids[@]}"; do
+            deleted=false
+            for attempt in 1 2 3; do
+              if gh api --method DELETE --silent \
+                "repos/${GH_REPO}/actions/artifacts/${artifact_id}"; then
+                deleted=true
+                break
+              fi
+              sleep $((attempt * 2))
+            done
+
+            if [[ "${deleted}" != true ]]; then
+              echo "::warning::Failed to delete artifact ${artifact_id} after 3 attempts. It will expire through the one-day retention policy."
+              exit 1
+            fi
+          done
+
   publish-manual-desktop-packages:
     if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: [prepare, desktop-build]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
+      actions: write
       contents: read
     environment:
       name: oss-publish
@@ -645,3 +682,35 @@ jobs:
             VERSION="${{ needs.prepare.outputs.version }}" \
             DESKTOP_OSS_TARGETS="${{ github.event.inputs.desktop_target }}" \
             DESKTOP_OSS_RELEASE_DIR=desktop-release
+
+      - name: Delete artifacts from successful workflow run
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          mapfile -t artifact_ids < <(
+            gh api --paginate \
+              "repos/${GH_REPO}/actions/runs/${RUN_ID}/artifacts?per_page=100" \
+              --jq '.artifacts[].id'
+          )
+
+          printf 'Deleting %d artifacts from workflow run %s\n' "${#artifact_ids[@]}" "${RUN_ID}"
+          for artifact_id in "${artifact_ids[@]}"; do
+            deleted=false
+            for attempt in 1 2 3; do
+              if gh api --method DELETE --silent \
+                "repos/${GH_REPO}/actions/artifacts/${artifact_id}"; then
+                deleted=true
+                break
+              fi
+              sleep $((attempt * 2))
+            done
+
+            if [[ "${deleted}" != true ]]; then
+              echo "::warning::Failed to delete artifact ${artifact_id} after 3 attempts. It will expire through the one-day retention policy."
+              exit 1
+            fi
+          done

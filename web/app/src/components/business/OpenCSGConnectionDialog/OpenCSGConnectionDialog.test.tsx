@@ -1,9 +1,7 @@
-import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@/components/ui";
 import { defaultAuthEnvironmentDraft } from "@/models/authEnvironment";
-import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
 import type { TranslateFn } from "@/models/conversations";
 import { OpenCSGConnectionDialog } from "./OpenCSGConnectionDialog";
 
@@ -13,25 +11,18 @@ describe("OpenCSGConnectionDialog", () => {
   it("keeps custom login disabled until the site URL is valid", async () => {
     const user = userEvent.setup();
     const onConnect = vi.fn();
-
-    function Harness() {
-      const [draft, setDraft] = useState<AuthEnvironmentDraft>(defaultAuthEnvironmentDraft);
-      return (
-        <TooltipProvider delayDuration={0}>
-          <OpenCSGConnectionDialog
-            busy={false}
-            draft={draft}
-            open
-            t={t}
-            onConnect={onConnect}
-            onDraftChange={setDraft}
-            onOpenChange={() => undefined}
-          />
-        </TooltipProvider>
-      );
-    }
-
-    render(<Harness />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <OpenCSGConnectionDialog
+          busy={false}
+          environment={defaultAuthEnvironmentDraft()}
+          open
+          t={t}
+          onConnect={onConnect}
+          onOpenChange={() => undefined}
+        />
+      </TooltipProvider>,
+    );
 
     await user.click(screen.getByRole("radio", { name: /csghubEnvCustom/ }));
     const continueButton = screen.getByRole("button", { name: "csghubConnectContinue" });
@@ -56,6 +47,41 @@ describe("OpenCSGConnectionDialog", () => {
     expect(reopenedCustomURLInput).not.toHaveAttribute("aria-invalid");
 
     await user.click(continueButton);
-    expect(onConnect).toHaveBeenCalledOnce();
+    expect(onConnect).toHaveBeenCalledWith({
+      preset: "custom",
+      opencsgBaseURL: "https://east.example.com",
+      csgHubBaseURL: "",
+      aiGatewayBaseURL: "",
+    });
+  });
+
+  it("uses the same site selection flow when authentication is required", async () => {
+    const user = userEvent.setup();
+    const onConnect = vi.fn();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <OpenCSGConnectionDialog
+          busy={false}
+          environment={defaultAuthEnvironmentDraft()}
+          open
+          t={t}
+          variant="authentication-required"
+          onConnect={onConnect}
+          onOpenChange={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText("openCSGLoginRequiredTitle")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /csghubEnvProduction/ })).toBeChecked();
+    await user.click(screen.getByRole("radio", { name: /csghubEnvStage/ }));
+    await user.click(screen.getByRole("button", { name: "csghubSignIn" }));
+
+    expect(onConnect).toHaveBeenCalledWith({
+      preset: "stage",
+      opencsgBaseURL: "https://opencsg-stg.com",
+      csgHubBaseURL: "https://opencsg-stg.com",
+      aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1",
+    });
   });
 });

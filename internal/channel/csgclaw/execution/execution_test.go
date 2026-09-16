@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -670,4 +671,45 @@ func TestAdapterHandleSkipsEmptyEvents(t *testing.T) {
 
 func (fakeConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
 	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
+}
+
+func TestAdapterIncludesInheritedFilesAndDeduplicates(t *testing.T) {
+	for _, current := range []bool{false, true} {
+		t.Run(fmt.Sprint(current), func(t *testing.T) {
+			engine := &fakeEngine{}
+			resolver := &fakeAttachmentResolver{}
+			adapter, err := New(engine, &fakeRenderer{}, WithAttachmentResolver(resolver))
+			if err != nil {
+				t.Fatal(err)
+			}
+			image := channel.MessageAttachment{ID: "image", Name: "drawing.png", MediaType: "image/png"}
+			doc := channel.MessageAttachment{ID: "document", Name: "contract.docx"}
+			event := channel.Event{RoomID: "room", MessageID: "reply", Text: "Read the attachments", ThreadContext: &channel.ThreadContext{Context: []channel.ThreadContextMessage{{ID: "root", Attachments: []channel.MessageAttachment{image, doc}}, {ID: "other", Attachments: []channel.MessageAttachment{image}}}}}
+			if current {
+				event.Attachments = []channel.MessageAttachment{image}
+			}
+			out, err := adapter.Run(context.Background(), channel.Binding{ID: "binding", AgentID: "worker", ParticipantID: "worker"}, event)
+			if err != nil || out.Result.Status != agentengine.TurnSucceeded {
+				t.Fatalf("run: %+v %v", out, err)
+			}
+			var ids []string
+			for _, part := range engine.request.Input {
+				if part.Kind == agentengine.InputPartFile {
+					ids = append(ids, part.File.ID)
+				}
+			}
+			if strings.Join(ids, ",") != "image,document" || resolver.released != 2 {
+				t.Fatalf("file inputs: %v releases: %d", ids, resolver.released)
+			}
+		})
+	}
+}
+
+func TestAdapterRejectsInheritedFilesWithoutResolver(t *testing.T) {
+	engine := &fakeEngine{}
+	adapter, _ := New(engine, &fakeRenderer{})
+	out, err := adapter.Run(context.Background(), channel.Binding{ID: "binding", AgentID: "worker", ParticipantID: "worker"}, channel.Event{RoomID: "room", MessageID: "reply", Text: "Read", ThreadContext: &channel.ThreadContext{Context: []channel.ThreadContextMessage{{ID: "root", Attachments: []channel.MessageAttachment{{ID: "file"}}}}}})
+	if err != nil || out.Result.Status != agentengine.TurnFailed || len(engine.request.Input) != 0 {
+		t.Fatalf("missing resolver silently ignored inherited file: %+v %v", out, err)
+	}
 }

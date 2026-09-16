@@ -1,4 +1,6 @@
 import {
+  MODEL_PROVIDER_IDS,
+  modelProviderConfigUsesOpenCSG,
   modelProviderDisplayNameExists,
   modelProviderCatalogForAgentAvailability,
   modelProviderCatalogWithModels,
@@ -11,6 +13,15 @@ import {
 } from "@/models/modelProviders";
 
 describe("model provider catalog helpers", () => {
+  it("uses only the canonical OpenCSG model provider id for authentication guards", () => {
+    expect(MODEL_PROVIDER_IDS.OpenCSG).toBe("opencsg");
+    expect(modelProviderConfigUsesOpenCSG({ model_provider_id: "opencsg" })).toBe(true);
+    expect(modelProviderConfigUsesOpenCSG({ model_provider_id: " opencsg " })).toBe(true);
+    expect(modelProviderConfigUsesOpenCSG({ model_provider_id: "csghub" })).toBe(false);
+    expect(modelProviderConfigUsesOpenCSG({ model_provider_id: "open-csg" })).toBe(false);
+    expect(modelProviderConfigUsesOpenCSG(undefined)).toBe(false);
+  });
+
   it("normalizes builtins before custom OpenAI-compatible providers", () => {
     const catalog = normalizeModelProviderCatalog({
       default_selector: "openai.gpt-4.1",
@@ -145,6 +156,7 @@ describe("model provider catalog helpers", () => {
 
     const signedOut = modelProviderCatalogForOpenCSGState(catalog, {
       aiGatewayBaseURL: "https://aigateway.opencsg-stg.com/v1/",
+      authenticationRequiredMessage: "需要登录 OpenCSG",
       authenticated: false,
     });
 
@@ -152,7 +164,7 @@ describe("model provider catalog helpers", () => {
       base_url: "https://aigateway.opencsg-stg.com/v1",
       models: [],
       status: "failed",
-      message: "OpenCSG sign-in is required",
+      message: "需要登录 OpenCSG",
     });
     expect(signedOut?.providers[0]?.last_checked_at).toBeUndefined();
     expect(signedOut?.builtinProviders[0]).toBe(signedOut?.providers[0]);

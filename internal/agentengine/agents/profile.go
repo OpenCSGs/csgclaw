@@ -56,41 +56,43 @@ var (
 )
 
 type AgentProfile struct {
-	Name                 string            `json:"name,omitempty"`
-	Description          string            `json:"description,omitempty"`
-	Provider             string            `json:"provider,omitempty"`
-	ModelProviderID      string            `json:"model_provider_id,omitempty"`
-	BaseURL              string            `json:"base_url,omitempty"`
-	APIKey               string            `json:"api_key,omitempty"`
-	Headers              map[string]string `json:"headers,omitempty"`
-	ModelID              string            `json:"model_id,omitempty"`
-	ReasoningEffort      string            `json:"reasoning_effort,omitempty"`
-	EnableFastMode       bool              `json:"enable_fast_mode,omitempty"`
-	RequestOptions       map[string]any    `json:"request_options,omitempty"`
-	Env                  map[string]string `json:"env,omitempty"`
-	ProfileComplete      bool              `json:"profile_complete,omitempty"`
-	EnvRestartRequired   bool              `json:"env_restart_required,omitempty"`
-	ImageUpgradeRequired bool              `json:"image_upgrade_required,omitempty"`
+	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
+	Name                 string                               `json:"name,omitempty"`
+	Description          string                               `json:"description,omitempty"`
+	Provider             string                               `json:"provider,omitempty"`
+	ModelProviderID      string                               `json:"model_provider_id,omitempty"`
+	BaseURL              string                               `json:"base_url,omitempty"`
+	APIKey               string                               `json:"api_key,omitempty"`
+	Headers              map[string]string                    `json:"headers,omitempty"`
+	ModelID              string                               `json:"model_id,omitempty"`
+	ReasoningEffort      string                               `json:"reasoning_effort,omitempty"`
+	EnableFastMode       bool                                 `json:"enable_fast_mode,omitempty"`
+	RequestOptions       map[string]any                       `json:"request_options,omitempty"`
+	Env                  map[string]string                    `json:"env,omitempty"`
+	ProfileComplete      bool                                 `json:"profile_complete,omitempty"`
+	EnvRestartRequired   bool                                 `json:"env_restart_required,omitempty"`
+	ImageUpgradeRequired bool                                 `json:"image_upgrade_required,omitempty"`
 }
 
 type AgentProfileView struct {
-	Name                 string                   `json:"name,omitempty"`
-	Description          string                   `json:"description,omitempty"`
-	Provider             string                   `json:"provider,omitempty"`
-	ModelProviderID      string                   `json:"model_provider_id,omitempty"`
-	BaseURL              string                   `json:"base_url,omitempty"`
-	APIKeySet            bool                     `json:"api_key_set,omitempty"`
-	APIKeyPreview        string                   `json:"api_key_preview,omitempty"`
-	Headers              map[string]string        `json:"headers,omitempty"`
-	ModelID              string                   `json:"model_id,omitempty"`
-	ReasoningEffort      string                   `json:"reasoning_effort,omitempty"`
-	EnableFastMode       bool                     `json:"enable_fast_mode"`
-	RequestOptions       map[string]any           `json:"request_options,omitempty"`
-	Env                  map[string]string        `json:"env,omitempty"`
-	ProfileComplete      bool                     `json:"profile_complete"`
-	EnvRestartRequired   bool                     `json:"env_restart_required,omitempty"`
-	ImageUpgradeRequired bool                     `json:"image_upgrade_required,omitempty"`
-	DetectionResults     []ProfileDetectionResult `json:"detection_results,omitempty"`
+	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
+	Name                 string                               `json:"name,omitempty"`
+	Description          string                               `json:"description,omitempty"`
+	Provider             string                               `json:"provider,omitempty"`
+	ModelProviderID      string                               `json:"model_provider_id,omitempty"`
+	BaseURL              string                               `json:"base_url,omitempty"`
+	APIKeySet            bool                                 `json:"api_key_set,omitempty"`
+	APIKeyPreview        string                               `json:"api_key_preview,omitempty"`
+	Headers              map[string]string                    `json:"headers,omitempty"`
+	ModelID              string                               `json:"model_id,omitempty"`
+	ReasoningEffort      string                               `json:"reasoning_effort,omitempty"`
+	EnableFastMode       bool                                 `json:"enable_fast_mode"`
+	RequestOptions       map[string]any                       `json:"request_options,omitempty"`
+	Env                  map[string]string                    `json:"env,omitempty"`
+	ProfileComplete      bool                                 `json:"profile_complete"`
+	EnvRestartRequired   bool                                 `json:"env_restart_required,omitempty"`
+	ImageUpgradeRequired bool                                 `json:"image_upgrade_required,omitempty"`
+	DetectionResults     []ProfileDetectionResult             `json:"detection_results,omitempty"`
 }
 
 type ProfileDetectionResult struct {
@@ -238,6 +240,7 @@ func normalizeRequestOptions(values map[string]any) map[string]any {
 
 func cloneProfile(profile AgentProfile) AgentProfile {
 	out := profile
+	out.ImageGeneration = modelprovider.CloneImageGeneration(profile.ImageGeneration)
 	if len(profile.Headers) > 0 {
 		out.Headers = make(map[string]string, len(profile.Headers))
 		for key, value := range profile.Headers {
@@ -263,6 +266,7 @@ func profileViewWithAgentRuntimeOptions(profile AgentProfile, _ map[string]any, 
 	profile = cloneProfile(profile)
 	v := AgentProfileView{
 		Name:                 profile.Name,
+		ImageGeneration:      modelprovider.CloneImageGeneration(profile.ImageGeneration),
 		Description:          profile.Description,
 		Provider:             profile.Provider,
 		ModelProviderID:      profile.ModelProviderID,

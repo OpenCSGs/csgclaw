@@ -122,6 +122,7 @@ export function WorkspaceSidebar({
   onExpandSidebar,
   onSkillUploadOpenChange,
   onLogin,
+  onRequireOpenCSGAuthentication,
   onLogout,
   skillUploadOpen,
   taskItems,
@@ -384,12 +385,14 @@ export function WorkspaceSidebar({
     onOpenCreateScheduledTask,
     hub,
     openKnowledgeBaseDiscovery: () => {
+      if (hub?.knowledgeBases?.loginRequired) {
+        onRequireOpenCSGAuthentication?.();
+        return;
+      }
       setContextQuery("");
       hub?.knowledgeBases?.setSearch("");
       setKnowledgeBaseDiscoveryOpen(true);
-      if (!hub?.knowledgeBases?.loginRequired) {
-        void hub?.knowledgeBases?.discoveryRefetch();
-      }
+      void hub?.knowledgeBases?.discoveryRefetch();
     },
     setSkillUploadOpen: setResolvedSkillUploadOpen,
     t,
@@ -607,7 +610,10 @@ export function WorkspaceSidebar({
           copyBusyID={hub.knowledgeBases.copyBusyID}
           copyError={hub.knowledgeBases.copyError}
           onAdd={hub.knowledgeBases.requestMCPConfig}
-          onLogin={() => onLogin()}
+          onLogin={() => {
+            setKnowledgeBaseDiscoveryOpen(false);
+            onRequireOpenCSGAuthentication?.();
+          }}
           onLoadMore={hub.knowledgeBases.discoveryLoadMore}
           onRetry={hub.knowledgeBases.discoveryRefetch}
           onSearchChange={hub.knowledgeBases.setSearch}

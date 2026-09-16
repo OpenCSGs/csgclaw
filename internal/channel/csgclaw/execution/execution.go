@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/conv"
 	"csgclaw/internal/channel/csgclaw/delivery"
@@ -244,7 +245,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		Admission:       builtInIMAdmissionPolicy,
 		Continuation:    agentengine.ContinuationCreateOrResume,
 		Interaction:     agentengine.InteractionResolve,
-	}, rendererSink{renderer: a.renderer, turn: turn})
+	}, contract.ImageGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn}})
 	if result.Status != agentengine.TurnSucceeded && a.projector != nil {
 		// A failed/canceled Runtime call may not have retained its input. Prefer
 		// one safe full fact refresh on retry.
@@ -294,11 +295,12 @@ func (a *Adapter) turnContext(binding channel.Binding, event channel.Event) (cha
 }
 
 func (a *Adapter) input(ctx context.Context, binding channel.Binding, event channel.Event, turn channel.TurnContext) ([]agentengine.InputPart, func(), error) {
-	if a.attachments == nil && len(event.Attachments) > 0 {
+	attachments := files.EventAttachments(event)
+	if a.attachments == nil && len(attachments) > 0 {
 		return nil, nil, fmt.Errorf("attachment resolver is not configured")
 	}
 
-	releases := make([]func(), 0, len(event.Attachments))
+	releases := make([]func(), 0, len(attachments))
 	releaseAll := func() {
 		for index := len(releases) - 1; index >= 0; index-- {
 			if releases[index] != nil {
@@ -306,16 +308,8 @@ func (a *Adapter) input(ctx context.Context, binding channel.Binding, event chan
 			}
 		}
 	}
-	if contextResolver, ok := a.attachments.(files.ContextResolver); ok {
-		resolved, release, err := contextResolver.ResolveContext(ctx, binding, event)
-		if err != nil {
-			return nil, nil, err
-		}
-		event = resolved
-		releases = append(releases, release)
-	}
 	input := conv.TextInput(binding, event)
-	for _, attachment := range event.Attachments {
+	for _, attachment := range attachments {
 		file, release, err := a.attachments.Resolve(ctx, binding, event, attachment)
 		if err != nil {
 			releaseAll()

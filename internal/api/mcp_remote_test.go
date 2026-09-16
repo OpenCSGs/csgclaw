@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/auth"
@@ -130,6 +131,30 @@ enabled = true
 	}
 	if response.NextPage == nil || *response.NextPage != 2 {
 		t.Fatalf("NextPage = %#v, want 2", response.NextPage)
+	}
+}
+
+func TestHandleRemoteMCPServersMapsUpstreamUnauthorizedToLoginRequired(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "expired token", http.StatusUnauthorized)
+	}))
+	t.Cleanup(remote.Close)
+	t.Setenv("CSGHUB_API_BASE_URL", remote.URL)
+	previousToken := remoteMCPHubAccessToken
+	remoteMCPHubAccessToken = func() (string, error) { return "expired-token", nil }
+	t.Cleanup(func() { remoteMCPHubAccessToken = previousToken })
+	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
+
+	handler := &Handler{}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/mcp-servers/remote", nil)
+	handler.Routes().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+	}
+	if got, want := strings.TrimSpace(recorder.Body.String()), errRemoteMCPHubSignInRequired.Error(); got != want {
+		t.Fatalf("body = %q, want %q", got, want)
 	}
 }
 

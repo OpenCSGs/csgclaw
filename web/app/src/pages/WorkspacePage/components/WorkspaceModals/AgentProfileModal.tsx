@@ -37,6 +37,7 @@ import {
 } from "@/models/agents";
 import type { AgentDraft, AgentLike, RuntimeBootstrapConfig } from "@/models/agents";
 import {
+  MODEL_PROVIDER_IDS,
   modelProviderAvatarPath,
   modelProviderSelectOptionsFromCatalog,
   providerNameForProviderID,
@@ -80,6 +81,7 @@ export type AgentProfileModalProps = {
   onAgentModelsReset: () => void;
   onClose: () => void;
   onProviderLogin?: (provider: string) => VoidOrPromise;
+  onRequireOpenCSGAuth?: () => boolean;
   onSave: () => VoidOrPromise;
   locale: LocaleCode;
   t: TranslateFn;
@@ -109,6 +111,7 @@ export function AgentProfileModal({
   agentBusy = false,
   locale,
   onClose,
+  onRequireOpenCSGAuth = () => true,
   onSave,
 }: AgentProfileModalProps) {
   const [mcpServersInvalid, setMCPServersInvalid] = useState(false);
@@ -650,6 +653,12 @@ export function AgentProfileModal({
                             const nextProvider = providerOptions.find((option) => option.id === value);
                             if (!nextProvider) {
                               onAgentDraftChange({ ...agentDraft, model_id: "", model_provider_id: "" });
+                              return;
+                            }
+                            if (
+                              nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG &&
+                              !onRequireOpenCSGAuth()
+                            ) {
                               return;
                             }
                             onAgentDraftChange({

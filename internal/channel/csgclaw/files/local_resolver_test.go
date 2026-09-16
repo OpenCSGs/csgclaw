@@ -149,3 +149,61 @@ func TestResolveManagedAttachmentSourcePathRejectsOutsideWorkspace(t *testing.T)
 func (staticConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
 	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }
+
+func TestInheritedAttachmentConcurrentResolutionsOwnTheirFiles(t *testing.T) {
+	service, err := im.NewServiceFromPath(filepath.Join(t.TempDir(), "im", "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	room, err := service.CreateRoom(im.CreateRoomRequest{Title: "Files", CreatorID: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := service.CreateMessage(im.CreateMessageRequest{RoomID: room.ID, SenderID: "admin", Attachments: []im.MessageAttachmentUpload{{Name: "contract.txt", Data: []byte("independent bytes")}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := t.TempDir()
+	store := agentengine.NewFileStore().Scope("worker")
+	resolver, err := NewLocalResolver(service, staticWorkspaceResolver{root: workspace}, staticEngine{files: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attachment := message.Attachments[0]
+	attachment.WorkspacePath = ".csgclaw/attachments/old-turn/missing.txt"
+	event := channel.Event{RoomID: room.ID, MessageID: "same-source", ThreadContext: &channel.ThreadContext{Context: []channel.ThreadContextMessage{{ID: message.ID, Attachments: []channel.MessageAttachment{attachment}}}}}
+	type result struct {
+		file    agentengine.InputFile
+		release func()
+		err     error
+	}
+	results := make(chan result, 2)
+	for range 2 {
+		go func() {
+			f, release, err := resolver.Resolve(context.Background(), channel.Binding{AgentID: "worker"}, event, attachment)
+			results <- result{f, release, err}
+		}()
+	}
+	first, second := <-results, <-results
+	if first.err != nil || second.err != nil {
+		t.Fatalf("resolve: %v %v", first.err, second.err)
+	}
+	defer second.release()
+	first.release()
+	resource, err := store.Get(context.Background(), second.file.ID)
+	if err != nil {
+		t.Fatal("one turn deleted another turn's file:", err)
+	}
+	defer resource.Content.Close()
+	bytes, err := io.ReadAll(resource.Content)
+	if err != nil || string(bytes) != "independent bytes" {
+		t.Fatalf("content: %q %v", bytes, err)
+	}
+	event.ThreadContext = nil
+	if _, release, err := resolver.Resolve(context.Background(), channel.Binding{AgentID: "worker"}, event, attachment); err == nil {
+		if release != nil {
+			release()
+		}
+		t.Fatal("accepted file outside source event")
+	}
+}

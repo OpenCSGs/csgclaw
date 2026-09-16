@@ -86,6 +86,7 @@ export type WorkspaceSidebarProps = {
   onOpenConfigSettings: () => void;
   onOpenSettings: () => void;
   onLogin: (environment?: AuthEnvironmentDraft) => void | Promise<void>;
+  onRequireOpenCSGAuthentication?: () => boolean;
   onLogout: () => void | Promise<void>;
   onPreviewUser: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;
   onSelectAgent: (item: AgentLike | null | undefined) => void;
@@ -97,7 +98,10 @@ export type WorkspaceSidebarProps = {
   onSelectMCPServer?: (item: MCPServer | null | undefined) => void;
   onSelectHubSkill: (item: SkillSummary | null | undefined) => void;
   onSelectHubTemplate: (item: HubTemplate | null | undefined) => void;
-  onSelectModelProvider?: (item: ModelProvider | null | undefined) => void;
+  onSelectModelProvider?: (
+    item: ModelProvider | null | undefined,
+    options?: { requireAuthentication?: boolean },
+  ) => boolean | void;
   onSelectNotificationSection: () => void;
   onSelectTeam: (item: WorkspaceTeam | null | undefined) => void;
   onSelectTeamSection: () => void;

@@ -167,8 +167,16 @@ func (h *Handler) handleAttachmentByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
+	serveAttachment(w, r, file, true)
+}
+
+func serveAttachment(w http.ResponseWriter, r *http.Request, file im.AttachmentFile, immutable bool) {
 	w.Header().Set("Content-Type", file.MediaType)
-	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	if immutable {
+		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'")
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 	w.Header().Set("Referrer-Policy", "no-referrer")

@@ -23,6 +23,20 @@ const (
 
 var remoteServersHTTPClient = &http.Client{Timeout: 20 * time.Second}
 
+// RemoteServerHTTPError preserves the upstream status so API handlers can map
+// authentication failures separately from other Hub failures.
+type RemoteServerHTTPError struct {
+	StatusCode int
+	message    string
+}
+
+func (e *RemoteServerHTTPError) Error() string {
+	if e == nil {
+		return "remote MCP Hub request failed"
+	}
+	return fmt.Sprintf("remote MCP Hub request failed with status %d: %s", e.StatusCode, e.message)
+}
+
 // RemoteServerListOptions describes the supported marketplace list filters.
 type RemoteServerListOptions struct {
 	Page   int
@@ -202,11 +216,10 @@ func requestRemoteServers(req *http.Request) ([]byte, error) {
 		return nil, fmt.Errorf("remote MCP Hub response exceeds %d bytes", remoteServersRequestLimit)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf(
-			"remote MCP Hub request failed with status %d: %s",
-			resp.StatusCode,
-			truncateRemoteServerBody(body),
-		)
+		return nil, &RemoteServerHTTPError{
+			StatusCode: resp.StatusCode,
+			message:    truncateRemoteServerBody(body),
+		}
 	}
 	return body, nil
 }

@@ -19,6 +19,7 @@ import {
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
+  MODEL_PROVIDER_IDS,
   modelProviderAvatarPath,
   parseModelProviderModelsText,
   providerStatusTone,
@@ -80,7 +81,7 @@ export function ModelProviderPage() {
   const [providerSearch, setProviderSearch] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
   const isBuiltinCLI = provider?.id === "codex" || provider?.id === "claude_code";
-  const isOpenCSG = provider?.id === "opencsg";
+  const isOpenCSG = provider?.id === MODEL_PROVIDER_IDS.OpenCSG;
   const canEditEndpoint = Boolean(provider && !isBuiltinCLI && !isOpenCSG);
   const opencsgAuthenticatedForCheck = controller.ready && isAuthenticated(controller.sidebarProps?.authStatus);
   const opencsgModelsLoaded = isOpenCSG && providerStatus === "connected" && Boolean(provider?.models.length);
@@ -327,7 +328,12 @@ export function ModelProviderPage() {
                   type="button"
                   className={`model-provider-provider-card${active ? " active" : ""}`}
                   onClick={() => {
-                    controller.sidebarProps?.onSelectModelProvider?.(item);
+                    const selected = controller.sidebarProps?.onSelectModelProvider?.(item, {
+                      requireAuthentication: true,
+                    });
+                    if (selected === false) {
+                      return;
+                    }
                     setDetailOpen(true);
                   }}
                 >

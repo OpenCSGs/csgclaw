@@ -7,6 +7,7 @@ import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMData, IMUser, TranslateFn } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
 import { FloatingChat } from "@/pages/WorkspacePage/components/FloatingChat";
+import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 
 vi.mock("@/api/agents", async () => {
   const actual = await vi.importActual<typeof import("@/api/agents")>("@/api/agents");
@@ -112,6 +113,7 @@ function useConversationControllerHarness(fixture: SkillHarnessFixture = default
     navigatePane: vi.fn(),
     onMessageAction: vi.fn(),
     onProviderLogin: vi.fn(),
+    openCSGAuthGuard: openCSGAuthGuardStub(),
     rooms: [fixture.conversation],
     selectComputer: vi.fn(),
     selectConversation: vi.fn(),

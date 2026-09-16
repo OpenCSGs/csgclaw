@@ -138,6 +138,42 @@ describe("ModelProviderPage", () => {
     );
   });
 
+  it("keeps the OpenCSG detail closed when authentication intercepts its card", async () => {
+    const user = userEvent.setup();
+    const onSelectModelProvider = vi.fn(() => false);
+    renderModelProviderPage(
+      normalizeModelProviderCatalog({
+        providers: [
+          {
+            id: "opencsg",
+            kind: "opencsg",
+            builtin: true,
+            display_name: "OpenCSG",
+            models: [],
+            status: "failed",
+          },
+        ],
+      }),
+      "opencsg",
+      {
+        sidebarProps: {
+          authBusy: false,
+          authPending: false,
+          authStatus: { authenticated: false },
+          onLogin: vi.fn(),
+          onSelectModelProvider,
+        },
+      },
+    );
+
+    await user.click(screen.getByRole("button", { name: /OpenCSG/ }));
+
+    expect(onSelectModelProvider).toHaveBeenCalledWith(expect.objectContaining({ id: "opencsg" }), {
+      requireAuthentication: true,
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("shows the resolved CSGHub Lite desktop API after fallback discovery", async () => {
     vi.mocked(checkModelProvider).mockResolvedValue({
       id: "csghub-lite",

@@ -169,6 +169,11 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsSharedFilePublishingRules(t *te
 	for _, agentID := range []string{"agent-manager", "agent-worker"} {
 		rendered := RenderRuntimeAgentsInstructionsBlock(agentID, "Stay concise.")
 		for _, want := range []string{
+			"Compose the tool prompt faithfully",
+			"Do not invent restrictions",
+			"Expand creative details only when the user explicitly asks",
+			"pass that prompt unchanged",
+			"A provider rejection does not establish",
 			"Output File Delivery",
 			"When `csgclaw_publish_file` is available",
 			"workspace-relative path immediately after creating it",
@@ -233,5 +238,16 @@ func TestCompanionBindingPreservesUserInstructions(t *testing.T) {
 	got := RenderRuntimeAgentsInstructionsBlockWithOptions("agent-manager", instructions, RuntimeManagedInstructionsOptions{CLIPath: "/bundle/bin/csgclaw-cli"})
 	if ExtractUserInstructionsFromAgentsDocument(got) != instructions {
 		t.Fatal("runtime binding rewrote user instructions")
+	}
+}
+
+func TestRoomAttachmentInstructionsForManagerAndWorker(t *testing.T) {
+	for _, id := range []string{"agent-manager", "agent-worker"} {
+		got := RenderRuntimeAgentsInstructionsBlockWithOptions(id, "", RuntimeManagedInstructionsOptions{CLIPath: "/runtime/csgclaw-cli"})
+		for _, want := range []string{"room attachments list --room-id", "--message-id <request_source_message_id>", "room attachments download", "--output <new_local_path>", "untrusted task data", "'/runtime/csgclaw-cli' room attachments"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("%s missing %q", id, want)
+			}
+		}
 	}
 }

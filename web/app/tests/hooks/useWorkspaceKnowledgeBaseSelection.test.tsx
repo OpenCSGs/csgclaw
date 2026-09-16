@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fetchRemoteKnowledgeBaseMCPConfig, fetchRemoteKnowledgeBases } from "@/api/knowledgeBases";
 import { useWorkspaceKnowledgeBaseSelection } from "@/hooks/workspace/useWorkspaceKnowledgeBaseSelection";
+import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 
 vi.mock("@/api/knowledgeBases", () => ({
   fetchRemoteKnowledgeBaseMCPConfig: vi.fn(),
@@ -66,8 +67,8 @@ describe("useWorkspaceKnowledgeBaseSelection", () => {
     const { result } = renderHook(
       () =>
         useWorkspaceKnowledgeBaseSelection({
-          authenticated: true,
           enabled: true,
+          openCSGAuthGuard: openCSGAuthGuardStub(),
           openCreateMCPDialog: vi.fn(),
           selectedKnowledgeBaseID: "",
           setSelectedKnowledgeBaseID: vi.fn(),
@@ -103,8 +104,8 @@ describe("useWorkspaceKnowledgeBaseSelection", () => {
     const { result } = renderHook(
       () =>
         useWorkspaceKnowledgeBaseSelection({
-          authenticated: true,
           enabled: true,
+          openCSGAuthGuard: openCSGAuthGuardStub(),
           openCreateMCPDialog,
           selectedKnowledgeBaseID: "42",
           setSelectedKnowledgeBaseID: vi.fn(),

@@ -78,7 +78,6 @@ function moduleClassNames(...values: ModuleClassValue[]): string {
     .map((value) => styles[value] || value)
     .join(" ");
 }
-
 const EMPTY_WORKSPACE_ENTRIES: readonly WorkspaceEntry[] = [];
 type TemplateDetailTabID = "profile" | "instructions" | "memory" | "skills" | "mcp";
 type MCPCreateMode = "manual" | "remote";
@@ -1105,6 +1104,13 @@ export function HubDetailPane({
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [knowledgeBaseDeleteDialogOpen, setKnowledgeBaseDeleteDialogOpen] = useState(false);
   const [knowledgeBaseDiscoveryOpen, setKnowledgeBaseDiscoveryOpen] = useState(false);
+  function openKnowledgeBaseDiscovery(): void {
+    if (knowledgeBases?.loginRequired) {
+      void onKnowledgeBaseLogin?.();
+      return;
+    }
+    setKnowledgeBaseDiscoveryOpen(true);
+  }
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
   const [mcpDetailError, setMCPDetailError] = useState("");
@@ -1508,11 +1514,7 @@ export function HubDetailPane({
                   </ResourceListTitle>
                   <p>{t("resourcesKnowledgeBasesDescription")}</p>
                 </div>
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={() => setKnowledgeBaseDiscoveryOpen(true)}
-                >
+                <Button variant="primary" size="md" onClick={openKnowledgeBaseDiscovery}>
                   <span aria-hidden="true">+</span>
                   {t("resourcesMCPAdd")}
                 </Button>
@@ -3408,7 +3410,13 @@ export function HubDetailPane({
                 role="tab"
                 size="sm"
                 variant={mcpCreateMode === "remote" ? "primary" : "secondaryGray"}
-                onClick={() => setMCPCreateMode("remote")}
+                onClick={() => {
+                  if (mcpCreateMode === "remote") {
+                    onRemoteMCPVisibleChange?.(true);
+                    return;
+                  }
+                  setMCPCreateMode("remote");
+                }}
               >
                 <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
                 {t("resourcesMCPRemoteInstallTab")}
@@ -3473,7 +3481,10 @@ export function HubDetailPane({
         copyBusyID={knowledgeBases?.copyBusyID ?? ""}
         copyError={knowledgeBases?.copyError ?? ""}
         onAdd={async (id) => (await knowledgeBases?.requestMCPConfig?.(id)) ?? false}
-        onLogin={() => onKnowledgeBaseLogin?.()}
+        onLogin={() => {
+          setKnowledgeBaseDiscoveryOpen(false);
+          return onKnowledgeBaseLogin?.();
+        }}
         onLoadMore={() => void (knowledgeBases?.discoveryLoadMore?.() ?? Promise.resolve())}
         onRetry={() => void (knowledgeBases?.discoveryRefetch?.())}
         onSearchChange={knowledgeBases?.setSearch ?? (() => {})}

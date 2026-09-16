@@ -45,6 +45,7 @@ func New(controller *agent.Controller) *Engine {
 	controller.AttachEngine(files, &engine.interactions, extensions)
 	controller.RuntimeRegistry().Seal()
 	engine.agents = controller
+	engine.generateImage = controller.Models().GenerateImage
 	return engine
 }
 

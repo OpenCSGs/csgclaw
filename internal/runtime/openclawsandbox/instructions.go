@@ -1,6 +1,7 @@
 package openclawsandbox
 
 import (
+	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"errors"
 	"fmt"
 	"os"
@@ -24,20 +25,8 @@ func refreshWorkspaceAgentsFile(path, instructions string) error {
 		return fmt.Errorf("read openclaw workspace AGENTS.md %s: %w", path, err)
 	}
 
-	var merged string
-	if instructions == "" {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		var changed bool
-		merged, changed = removeWorkspaceInstructionsBlock(string(current))
-		if !changed {
-			return nil
-		}
-	} else {
-		block := renderWorkspaceInstructionsBlock(instructions)
-		merged = mergeWorkspaceInstructionsBlock(string(current), block)
-	}
+	block := renderWorkspaceInstructionsBlock(instructions)
+	merged := mergeWorkspaceInstructionsBlock(string(current), block)
 	if err == nil && string(current) == merged {
 		return nil
 	}
@@ -51,16 +40,12 @@ func refreshWorkspaceAgentsFile(path, instructions string) error {
 }
 
 func renderWorkspaceInstructionsBlock(instructions string) string {
-	instructions = strings.TrimSpace(instructions)
-	if instructions == "" {
-		return ""
+	sections := []string{workspaceInstructionsBlockStart}
+	if instructions = strings.TrimSpace(instructions); instructions != "" {
+		sections = append(sections, "# Agent Instructions", instructions)
 	}
-	return strings.Join([]string{
-		workspaceInstructionsBlockStart,
-		"# Agent Instructions",
-		instructions,
-		workspaceInstructionsBlockEnd,
-	}, "\n\n") + "\n"
+	sections = append(sections, runtimeinstructions.RoomAttachmentInstructions("csgclaw-cli"), workspaceInstructionsBlockEnd)
+	return strings.Join(sections, "\n\n") + "\n"
 }
 
 func mergeWorkspaceInstructionsBlock(current, block string) string {
@@ -89,20 +74,6 @@ func replaceWorkspaceInstructionsBlock(current, block string) (string, bool) {
 	}
 	endPos := startIdx + endIdx + len(workspaceInstructionsBlockEnd)
 	return joinWorkspaceInstructionsSections(current[:startIdx], block, current[endPos:]), true
-}
-
-func removeWorkspaceInstructionsBlock(current string) (string, bool) {
-	current = strings.ReplaceAll(current, "\r\n", "\n")
-	startIdx := strings.Index(current, workspaceInstructionsBlockStart)
-	if startIdx < 0 {
-		return "", false
-	}
-	endIdx := strings.Index(current[startIdx:], workspaceInstructionsBlockEnd)
-	if endIdx < 0 {
-		return joinWorkspaceInstructionsSections(current[:startIdx]), true
-	}
-	endPos := startIdx + endIdx + len(workspaceInstructionsBlockEnd)
-	return joinWorkspaceInstructionsSections(current[:startIdx], current[endPos:]), true
 }
 
 func joinWorkspaceInstructionsSections(parts ...string) string {

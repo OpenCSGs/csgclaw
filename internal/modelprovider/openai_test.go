@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -431,5 +432,29 @@ func TestCheckResponsesOrChatCompletionsAPIWithClientRejectsBadBaseURL(t *testin
 	}
 	if !strings.Contains(err.Error(), "chat completions fallback") || !strings.Contains(err.Error(), "404") {
 		t.Fatalf("CheckResponsesOrChatCompletionsAPIWithClient() error = %v, want chat fallback 404", err)
+	}
+}
+
+func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[
+   {"id":"chat-vision","task":"text-generation,image-text-to-text"},
+   {"id":"image-one","task":"text-to-image"},
+   {"id":"image-two","task":["text-to-image","image-to-image"]},
+   {"id":"editor-only","task":"image-to-image"},
+   {"id":"image-offline","task":"text-to-image","availability":{"is_available":false}},
+   {"id":"gpt-image-2"}, {"id":"image-one","task":"text-to-image"}
+  ]}`))
+	}))
+	defer server.Close()
+	directory, err := ListOpenAIModelDirectoryWithClient(context.Background(), server.Client(), server.URL, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(directory.ImageModels, []string{"image-one", "image-two", "gpt-image-2"}) {
+		t.Fatalf("image models: %v", directory.ImageModels)
+	}
+	if !reflect.DeepEqual(directory.Models, []string{"chat-vision", "gpt-image-2"}) {
+		t.Fatalf("chat models: %v", directory.Models)
 	}
 }

@@ -11,6 +11,7 @@ import {
 } from "@/hooks/workspace/useConversationController";
 import type { IMData, LocaleCode, TranslateFn } from "@/models/conversations";
 import { WorkspacePaneTypes } from "@/models/routing";
+import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 
 vi.mock("@/shared/realtime/imEvents", () => ({
   subscribeIMEvents: () => () => {},
@@ -68,6 +69,7 @@ function useConversationControllerTestHarness() {
     navigatePane: () => {},
     onMessageAction: () => {},
     onProviderLogin: async () => {},
+    openCSGAuthGuard: openCSGAuthGuardStub(),
     rooms: data?.rooms ?? [],
     selectComputer: () => {},
     selectConversation: () => {},
@@ -124,6 +126,7 @@ describe("useConversationController slash skill helpers", () => {
         navigatePane,
         onMessageAction: () => {},
         onProviderLogin: async () => {},
+        openCSGAuthGuard: openCSGAuthGuardStub(),
         preferredFallbackConversationId: "dm-manager",
         rooms: managerData.rooms,
         selectComputer: () => {},

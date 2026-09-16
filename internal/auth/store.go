@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -320,7 +321,7 @@ func (s Store) AIGatewayCredentials() (baseURL, apiKey string, ok bool, err erro
 
 func (r Record) Status() Status {
 	r = normalizeRecord(r)
-	if r.Tokens.AccessToken == "" {
+	if r.Tokens.AccessToken == "" || accessTokenExpiredAt(r.Tokens.AccessToken, time.Now()) {
 		return Status{}
 	}
 	status := Status{
@@ -338,6 +339,37 @@ func (r Record) Status() Status {
 		status.LoggedInAt = &loggedInAt
 	}
 	return status
+}
+
+func accessTokenExpiredAt(token string, now time.Time) bool {
+	claims, err := JWTClaims(token)
+	if err != nil {
+		return false
+	}
+	raw, ok := claims["exp"]
+	if !ok {
+		return false
+	}
+	var expiresAt int64
+	parsed := false
+	switch value := raw.(type) {
+	case float64:
+		expiresAt = int64(value)
+		parsed = true
+	case json.Number:
+		parsedExpiresAt, err := value.Int64()
+		if err == nil {
+			expiresAt = parsedExpiresAt
+			parsed = true
+		}
+	case string:
+		parsedExpiresAt, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err == nil {
+			expiresAt = parsedExpiresAt
+			parsed = true
+		}
+	}
+	return parsed && now.Unix() >= expiresAt
 }
 
 func normalizeRecord(record Record) Record {

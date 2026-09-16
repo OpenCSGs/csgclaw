@@ -78,9 +78,22 @@ func ListOpenAIModels(ctx context.Context, baseURL, apiKey string) ([]string, er
 }
 
 func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseURL, apiKey string, headers map[string]string) ([]string, error) {
+	directory, err := ListOpenAIModelDirectoryWithClient(ctx, client, baseURL, apiKey, headers)
+	if err != nil {
+		return nil, err
+	}
+	if len(directory.Models) == 0 {
+		return nil, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no text models returned")}
+	}
+	return directory.Models, nil
+}
+
+// ListOpenAIModelDirectoryWithClient separates declared image generation tasks
+// from chat models without probing or generating images.
+func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client, baseURL, apiKey string, headers map[string]string) (ModelDiscoveryResult, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
-		return nil, fmt.Errorf("base URL is required")
+		return ModelDiscoveryResult{}, fmt.Errorf("base URL is required")
 	}
 	if client == nil {
 		client = &http.Client{Timeout: 2 * time.Second}
@@ -88,12 +101,12 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 
 	resp, err := requestOpenAIModels(ctx, client, baseURL+"/models", apiKey, headers)
 	if err != nil {
-		return nil, err
+		return ModelDiscoveryResult{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, &ResponsesAPIStatusError{
+		return ModelDiscoveryResult{}, &ResponsesAPIStatusError{
 			Operation:  "models",
 			BaseURL:    baseURL,
 			Status:     resp.Status,
@@ -104,10 +117,11 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 
 	var payload openAIModelsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: err}
+		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: err}
 	}
 
 	models := make([]string, 0, len(payload.Data))
+	imageModels := []string{}
 	seen := make(map[string]struct{}, len(payload.Data))
 	for _, item := range payload.Data {
 		id := strings.TrimSpace(item.ID)
@@ -117,19 +131,21 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 		if item.Availability != nil && item.Availability.IsAvailable != nil && !*item.Availability.IsAvailable {
 			continue
 		}
-		if taskPresent(item.Task) && !taskSupportsTextGeneration(item.Task) {
-			continue
-		}
 		if _, ok := seen[id]; ok {
 			continue
 		}
 		seen[id] = struct{}{}
-		models = append(models, id)
+		if taskSupportsImageGeneration(item.Task) || (!taskPresent(item.Task) && IsGPTImageModel(id)) {
+			imageModels = append(imageModels, id)
+		}
+		if !taskPresent(item.Task) || taskSupportsTextGeneration(item.Task) {
+			models = append(models, id)
+		}
 	}
-	if len(models) == 0 {
-		return nil, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
+	if len(models) == 0 && len(imageModels) == 0 {
+		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
-	return models, nil
+	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels}, nil
 }
 
 func taskPresent(task any) bool {
@@ -474,4 +490,25 @@ func scanOpenAIProbeSSE(r io.Reader, visit func(eventType, data string) (bool, e
 		return false, err
 	}
 	return flush()
+}
+
+func taskSupportsImageGeneration(task any) bool {
+	var values []string
+	switch v := task.(type) {
+	case string:
+		values = strings.Split(v, ",")
+	case []any:
+		for _, item := range v {
+			if text, ok := item.(string); ok {
+				values = append(values, text)
+			}
+		}
+	}
+	for _, value := range values {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "text-to-image", "text2image", "image-generation":
+			return true
+		}
+	}
+	return false
 }

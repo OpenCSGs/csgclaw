@@ -105,10 +105,15 @@ export function useWorkspaceHubController({
   hubTemplates,
   hubTemplatesQuery,
   onSkillDeleted,
-  openCSGAuthenticated = false,
+  openCSGAuthGuard,
   refreshWorkspaceHubTemplates,
   t,
 }: UseWorkspaceHubControllerArgs): WorkspaceHubController {
+  const {
+    authenticated: openCSGAuthenticated,
+    handleAuthenticationError: handleOpenCSGAuthenticationError,
+    requireAuthentication: requireOpenCSGAuthentication,
+  } = openCSGAuthGuard;
   const errorMessage = useCallback(
     (error: unknown, fallback = "") => localizeAPIError(error, t, apiErrorMessage(error, fallback) || fallback),
     [t],
@@ -153,7 +158,7 @@ export function useWorkspaceHubController({
     templatesQuery: hubTemplatesQuery,
     loaded: hubLoaded,
     manualError: resourcesManualError,
-    openCSGAuthenticated,
+    openCSGAuthGuard,
     refreshTemplates: refreshHubTemplates,
     t,
   });
@@ -253,7 +258,7 @@ export function useWorkspaceHubController({
       deploy = false,
       includeMemory = false,
     ): Promise<PublishHubTemplateResult> => {
-      if (!template?.id || !isDeletableHubTemplate(template) || !openCSGAuthenticated) {
+      if (!template?.id || !isDeletableHubTemplate(template) || !requireOpenCSGAuthentication()) {
         return null;
       }
       setResourcesPublishBusy(true);
@@ -266,6 +271,9 @@ export function useWorkspaceHubController({
         }
         return { status: "success" };
       } catch (err) {
+        if (handleOpenCSGAuthenticationError(err)) {
+          return null;
+        }
         const errorCode = hubTemplateErrorCode(err);
         const deploySensitiveCheckFailed = errorCode === HubTemplateErrorCodes.reviewFailed;
         const deployReviewPending = errorCode === HubTemplateErrorCodes.reviewPending;
@@ -299,8 +307,9 @@ export function useWorkspaceHubController({
     },
     [
       errorMessage,
-      openCSGAuthenticated,
+      handleOpenCSGAuthenticationError,
       queryClient,
+      requireOpenCSGAuthentication,
       refreshHubTemplates,
       setSelectedHubResourceType,
       setSelectedHubTemplateId,
@@ -342,6 +351,9 @@ export function useWorkspaceHubController({
         setResourcesRemoteInstallError(t("resourcesSkillRemoteInstallFailed"));
         return null;
       }
+      if (!requireOpenCSGAuthentication()) {
+        return null;
+      }
       setResourcesRemoteInstallBusy(remotePath);
       setResourcesRemoteInstallError("");
       try {
@@ -355,13 +367,24 @@ export function useWorkspaceHubController({
         setSelectedHubSkillPath("");
         return installed;
       } catch (err) {
-        setResourcesRemoteInstallError(errorMessage(err, t("resourcesSkillRemoteInstallFailed")));
+        if (!handleOpenCSGAuthenticationError(err)) {
+          setResourcesRemoteInstallError(errorMessage(err, t("resourcesSkillRemoteInstallFailed")));
+        }
         return null;
       } finally {
         setResourcesRemoteInstallBusy("");
       }
     },
-    [errorMessage, queryClient, setSelectedHubResourceType, setSelectedHubSkillName, setSelectedHubSkillPath, t],
+    [
+      errorMessage,
+      handleOpenCSGAuthenticationError,
+      queryClient,
+      requireOpenCSGAuthentication,
+      setSelectedHubResourceType,
+      setSelectedHubSkillName,
+      setSelectedHubSkillPath,
+      t,
+    ],
   );
 
   return {

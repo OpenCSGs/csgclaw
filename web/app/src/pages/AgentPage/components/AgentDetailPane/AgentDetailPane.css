@@ -2051,6 +2051,18 @@
   min-width: 0;
 }
 
+.agent-detail-pane .agent-model-config-grid > .agent-image-provider-field {
+  grid-column: 1;
+}
+
+.agent-detail-pane .agent-image-model-help {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  color: var(--text-muted);
+  font-weight: normal;
+}
+
 .agent-detail-pane .agent-model-load-error {
   grid-column: 1 / -1;
   display: grid;
