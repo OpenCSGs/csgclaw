@@ -1081,9 +1081,11 @@
 
 .hub-skill-filter-tabs {
   display: flex;
+  flex: 0 0 32px;
   align-items: flex-start;
   gap: 12px;
   min-width: 0;
+  min-height: 32px;
   height: 32px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1101,6 +1103,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  min-height: 32px;
   height: 32px;
   padding: 0 4px 10px;
   border: 0;
