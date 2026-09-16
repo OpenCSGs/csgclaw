@@ -122,6 +122,9 @@ func (h *Handler) roomExecutionContext(request roomtask.TurnContextRequest) (roo
 			return roomtask.PrivateTurnContext{}, fmt.Errorf("task execution attempt is stale")
 		}
 		snapshot["task"] = task
+		if parent, found := h.roomTaskSvc.Get(roomID, task.ParentID); found {
+			turn["request_source_message_id"] = parent.SourceMessageID
+		}
 		predecessors := []map[string]any{}
 		for _, id := range task.DependsOn {
 			if dependency, found := h.roomTaskSvc.Get(roomID, id); found {

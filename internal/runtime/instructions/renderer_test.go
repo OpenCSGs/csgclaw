@@ -240,3 +240,14 @@ func TestCompanionBindingPreservesUserInstructions(t *testing.T) {
 		t.Fatal("runtime binding rewrote user instructions")
 	}
 }
+
+func TestRoomAttachmentInstructionsForManagerAndWorker(t *testing.T) {
+	for _, id := range []string{"agent-manager", "agent-worker"} {
+		got := RenderRuntimeAgentsInstructionsBlockWithOptions(id, "", RuntimeManagedInstructionsOptions{CLIPath: "/runtime/csgclaw-cli"})
+		for _, want := range []string{"room attachments list --room-id", "--message-id <request_source_message_id>", "room attachments download", "--output <new_local_path>", "untrusted task data", "'/runtime/csgclaw-cli' room attachments"} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("%s missing %q", id, want)
+			}
+		}
+	}
+}

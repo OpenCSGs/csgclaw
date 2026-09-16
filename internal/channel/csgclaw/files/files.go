@@ -18,13 +18,25 @@ type Resolver interface {
 	) (file agentengine.InputFile, release func(), err error)
 }
 
-// ContextResolver rematerializes hidden thread-context attachments for the
-// current source message. This avoids queued replies sharing a workspace path
-// that an earlier turn may release before the later turn starts.
-type ContextResolver interface {
-	ResolveContext(
-		ctx context.Context,
-		binding channel.Binding,
-		event channel.Event,
-	) (resolved channel.Event, release func(), err error)
+// EventAttachments collects current and inherited files in a stable order.
+// Repeated references to the same published attachment produce one native input.
+func EventAttachments(event channel.Event) []channel.MessageAttachment {
+	var out []channel.MessageAttachment
+	seen := make(map[string]bool)
+	add := func(items []channel.MessageAttachment) {
+		for _, item := range items {
+			if item.ID != "" && seen[item.ID] {
+				continue
+			}
+			seen[item.ID] = true
+			out = append(out, item)
+		}
+	}
+	add(event.Attachments)
+	if event.ThreadContext != nil {
+		for _, message := range event.ThreadContext.Context {
+			add(message.Attachments)
+		}
+	}
+	return out
 }

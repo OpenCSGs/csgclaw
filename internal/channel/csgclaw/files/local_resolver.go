@@ -2,6 +2,7 @@ package files
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -57,15 +58,27 @@ func (r *LocalResolver) Resolve(
 	if err != nil {
 		return agentengine.InputFile{}, nil, fmt.Errorf("resolve agent workspace: %w", err)
 	}
-	resolved := attachment
-	if strings.TrimSpace(resolved.WorkspacePath) == "" {
-		relativeDir := filepath.ToSlash(filepath.Join(".csgclaw", "attachments", strings.TrimSpace(event.RoomID), strings.TrimSpace(event.MessageID)))
-		resolved, err = r.im.MaterializeAttachment(attachmentID, workspaceRoot, relativeDir)
-		if err != nil {
-			return agentengine.InputFile{}, nil, err
+	// Each resolution owns its staging path. Queued or concurrent turns must not
+	// depend on a previous turn's WorkspacePath or delete another turn's input.
+	relativeDir := filepath.ToSlash(filepath.Join(".csgclaw", "attachments", strings.TrimSpace(event.RoomID), strings.TrimSpace(event.MessageID), rand.Text()))
+	resolved, err := r.im.MaterializeAttachment(attachmentID, workspaceRoot, relativeDir)
+	if err != nil {
+		return agentengine.InputFile{}, nil, err
+	}
+	stagedRelease := managedAttachmentRelease(workspaceRoot, resolved.WorkspacePath)
+	priorRelease := managedAttachmentRelease(workspaceRoot, attachment.WorkspacePath)
+	release := func() {
+		if stagedRelease != nil {
+			stagedRelease()
+		}
+		if root, err := os.OpenRoot(workspaceRoot); err == nil {
+			_ = root.Remove(filepath.FromSlash(relativeDir))
+			_ = root.Close()
+		}
+		if priorRelease != nil {
+			priorRelease()
 		}
 	}
-	release := managedAttachmentRelease(workspaceRoot, resolved.WorkspacePath)
 	sourcePath, err := resolveManagedAttachmentSourcePath(workspaceRoot, resolved.WorkspacePath)
 	if err != nil {
 		if release != nil {
@@ -126,66 +139,6 @@ func (r *LocalResolver) Resolve(
 			}
 		})
 	}, nil
-}
-
-func (r *LocalResolver) ResolveContext(
-	ctx context.Context,
-	binding channel.Binding,
-	event channel.Event,
-) (channel.Event, func(), error) {
-	if event.ThreadContext == nil || len(event.ThreadContext.Context) == 0 {
-		return event, nil, nil
-	}
-	if err := contextError(ctx); err != nil {
-		return channel.Event{}, nil, err
-	}
-	workspaceRoot, err := r.workspaces.WorkspaceRootByID(strings.TrimSpace(binding.AgentID))
-	if err != nil {
-		return channel.Event{}, nil, fmt.Errorf("resolve agent workspace for thread context: %w", err)
-	}
-	thread := *event.ThreadContext
-	thread.Context = append([]channel.ThreadContextMessage(nil), event.ThreadContext.Context...)
-	var releases []func()
-	releaseAll := func() {
-		for index := len(releases) - 1; index >= 0; index-- {
-			if releases[index] != nil {
-				releases[index]()
-			}
-		}
-	}
-	for messageIndex := range thread.Context {
-		message := &thread.Context[messageIndex]
-		message.Attachments = append([]channel.MessageAttachment(nil), message.Attachments...)
-		for attachmentIndex := range message.Attachments {
-			attachment := &message.Attachments[attachmentIndex]
-			if release := managedAttachmentRelease(workspaceRoot, attachment.WorkspacePath); release != nil {
-				releases = append(releases, release)
-			}
-			attachmentID := strings.TrimSpace(attachment.ID)
-			if attachmentID == "" {
-				continue
-			}
-			relativeDir := filepath.ToSlash(filepath.Join(
-				".csgclaw", "attachments",
-				strings.TrimSpace(event.RoomID),
-				strings.TrimSpace(event.MessageID),
-				"thread-context",
-				strings.TrimSpace(message.ID),
-			))
-			resolved, resolveErr := r.im.MaterializeAttachment(attachmentID, workspaceRoot, relativeDir)
-			if resolveErr != nil {
-				releaseAll()
-				return channel.Event{}, nil, fmt.Errorf("materialize thread context attachment %q: %w", attachmentID, resolveErr)
-			}
-			*attachment = resolved
-			releases = append(releases, managedAttachmentRelease(workspaceRoot, resolved.WorkspacePath))
-		}
-	}
-	event.ThreadContext = &thread
-	if len(releases) == 0 {
-		return event, nil, nil
-	}
-	return event, releaseAll, nil
 }
 
 // resolveManagedAttachmentSourcePath converts the API-facing workspace path
@@ -279,7 +232,7 @@ func managedAttachmentRelease(workspaceRoot, sourcePath string) func() {
 }
 
 func eventContainsAttachment(event channel.Event, attachmentID string) bool {
-	for _, candidate := range event.Attachments {
+	for _, candidate := range EventAttachments(event) {
 		if strings.TrimSpace(candidate.ID) == attachmentID {
 			return true
 		}

@@ -35,6 +35,8 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	}
 
 	switch args[0] {
+	case "attachments":
+		return c.runAttachments(ctx, run, args[1:], globals)
 	case "list":
 		return c.runList(ctx, run, args[1:], globals)
 	case "create":
@@ -50,6 +52,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 func (c cmd) usage(run *command.Context) {
 	run.UsageCommandGroup(c, run.Program+" room <subcommand> [flags]", []string{
 		"list               List rooms",
+		"attachments        List or download room attachments",
 		"create             Create a room",
 		"delete <id>        Delete a room",
 	})

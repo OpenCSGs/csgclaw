@@ -126,6 +126,7 @@ func hiddenContext(binding channel.Binding, event channel.Event) string {
 		channelContext.WriteString(participantID)
 	}
 	channelContext.WriteString("\nUse these values when a skill asks for <current_channel>, <target_room_id>, or message create/list channel flags.")
+	channelContext.WriteString("\nRoom attachments are available through the CLI room attachments list/download commands. When task inputs are missing, first list by request_source_message_id (when supplied), then search this room by filename before asking for another upload. Download to your own workspace and read the file with local tools.\n")
 	parts = append(parts, channelContext.String())
 
 	if thread := formatThreadContext(event.ThreadContext); thread != "" {

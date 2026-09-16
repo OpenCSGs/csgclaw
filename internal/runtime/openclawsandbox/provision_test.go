@@ -228,3 +228,23 @@ func TestWorkspaceLayoutForNonWindowsMountsOpenClawHome(t *testing.T) {
 		t.Fatalf("linux ExtraMounts = %+v, want none", layout.ExtraMounts)
 	}
 }
+
+func TestRefreshExistingWorkspaceKeepsRoomFileInstructionsWithoutCustomInstructions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "AGENTS.md")
+	if err := os.WriteFile(path, []byte("# User rules\nKeep this.\n"+renderWorkspaceInstructionsBlock("Old custom instructions.")), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := refreshWorkspaceAgentsFile(path, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "Keep this.") || strings.Contains(got, "Old custom instructions.") || !strings.Contains(got, "csgclaw-cli room attachments list") || !strings.Contains(got, "csgclaw-cli room attachments download") || strings.Count(got, workspaceInstructionsBlockStart) != 1 {
+		t.Fatalf("managed refresh: %s", got)
+	}
+}
