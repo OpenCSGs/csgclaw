@@ -8,13 +8,36 @@
 }
 
 .mode {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
 }
 
-.mode :global(.btn-content) {
-  gap: 6px;
+.modeTab {
+  padding: 0 4px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--gray-500);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  cursor: pointer;
+}
+
+.modeTab:hover,
+.modeTab[aria-selected="true"] {
+  color: var(--brand-700);
+}
+
+.modeTab[aria-selected="true"] {
+  border-bottom-color: var(--brand-600);
+}
+
+.modeTab:focus-visible {
+  outline: 2px solid var(--brand-300);
+  outline-offset: -2px;
 }
 
 .dropzone {
@@ -195,4 +218,38 @@
 :global(:root[data-theme="dark"]) .remoteRow {
   border-color: var(--line);
   background: var(--surface);
+}
+
+.errorNotice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 13px;
+  border: 1px solid color-mix(in oklab, var(--warning-700) 30%, var(--line));
+  border-radius: 12px;
+  background: var(--warning-50);
+  color: var(--warning-700);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 18px;
+}
+
+:global(:root[data-theme="dark"]) .errorNotice {
+  border-color: color-mix(in oklab, var(--warning-700) 38%, var(--line));
+  background: color-mix(in oklab, var(--warning-700) 14%, transparent);
+  color: color-mix(in oklab, var(--warning-700) 78%, var(--text));
+}
+
+:global(:root[data-theme="dark"]) .modeTab {
+  color: #85888e;
+}
+
+:global(:root[data-theme="dark"]) .modeTab:hover,
+:global(:root[data-theme="dark"]) .modeTab[aria-selected="true"] {
+  color: var(--gray-300);
+}
+
+:global(:root[data-theme="dark"]) .modeTab[aria-selected="true"] {
+  border-bottom-color: var(--gray-300);
 }

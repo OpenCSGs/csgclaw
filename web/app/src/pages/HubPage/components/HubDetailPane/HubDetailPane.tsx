@@ -560,7 +560,6 @@ type HubDetailPaneHub = {
     onClearMCPProbe?: () => void;
     onDeleteMCP?: (item: MCPServer | null | undefined) => Promise<boolean> | boolean;
     onDeleteTemplate?: (item: HubTemplate | null | undefined) => unknown;
-    onTrySkill?: (name: string | null | undefined) => void;
     onPublishTemplate?: (
       item: HubTemplate | null | undefined,
       deploy?: boolean,
@@ -1053,7 +1052,6 @@ export function HubDetailPane({
     onSelectSkill,
     onSelectSkillFile,
     onSelectTemplate,
-    onTrySkill,
     onMCPCreateDialogOpenChange,
     onKnowledgeBaseLogin,
     onInstallRemoteMCP,
@@ -1146,11 +1144,19 @@ export function HubDetailPane({
     () =>
       (["all", "remote", "local"] as const).map((id) => ({
         id,
-        label: skillFilterLabel(id, t),
+        label:
+          id === "remote"
+            ? t("resourcesSkillSystemBadge")
+            : id === "local"
+              ? t("resourcesSkillInstalledTitle")
+              : skillFilterLabel(id, t),
       })),
     [t],
   );
-  const resourceFilterTabs = skillFilterTabs;
+  const resourceFilterTabs = useMemo(
+    () => (["all", "remote", "local"] as const).map((id) => ({ id, label: skillFilterLabel(id, t) })),
+    [t],
+  );
   const templateFilterTabs = useMemo(
     () =>
       (["all", "remote", "local", "builtin"] as const).map((id) => ({
@@ -1449,14 +1455,6 @@ export function HubDetailPane({
   function openSkillDetail(skill: SkillSummary) {
     onSelectSkill?.(skill.name);
     setSkillDetailDialogOpen(true);
-  }
-
-  function trySelectedSkill() {
-    if (!selectedSkill) {
-      return;
-    }
-    onTrySkill?.(selectedSkill.name);
-    setSkillDetailDialogOpen(false);
   }
 
   function openTemplateDetail(template: HubTemplate) {
@@ -2339,7 +2337,9 @@ export function HubDetailPane({
                           </span>
                           <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
                             <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
-                            {skillSourceBadgeName(skill) === "local" ? t("resourcesSkillLocalFilter") : t("resourcesSkillRemoteFilter")}
+                            {skillSourceBadgeName(skill) === "local"
+                              ? t("resourcesSkillInstalledTitle")
+                              : t("resourcesSkillSystemBadge")}
                           </span>
                         </button>
                       );
@@ -2653,8 +2653,8 @@ export function HubDetailPane({
                   />
                 </div>
               </DialogBody>
-              <DialogFooter>
-                {!isReadonlySkill(selectedSkill) && onDeleteSkill ? (
+              {!isReadonlySkill(selectedSkill) && onDeleteSkill ? (
+                <DialogFooter>
                   <Button
                     className="mr-auto"
                     variant="danger"
@@ -2665,11 +2665,8 @@ export function HubDetailPane({
                     <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
                     {t("resourcesDeleteSkill")}
                   </Button>
-                ) : null}
-                <Button variant="primary" size="md" onClick={trySelectedSkill}>
-                  {t("resourcesSkillTryNow")}
-                </Button>
-              </DialogFooter>
+                </DialogFooter>
+              ) : null}
             </>
           ) : null}
         </DialogContent>
@@ -2982,7 +2979,7 @@ export function HubDetailPane({
                   </Button>
                 ) : null}
                 {!isBuiltinOpenClawWorkerTemplate(selectedTemplate) ? (
-                  <Button variant="primary" size="md" onClick={() => onCreateFromTemplate?.(selectedTemplate)}>
+                  <Button variant="primary" size="md" onClick={() => { setTemplateDetailDialogOpen(false); void onCreateFromTemplate?.(selectedTemplate); }}>
                     {t("createAgent")}
                   </Button>
                 ) : null}

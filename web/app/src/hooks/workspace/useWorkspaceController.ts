@@ -861,12 +861,10 @@ export function useWorkspaceController() {
         onSelectKnowledgeBase: selectKnowledgeBase,
         onCreateMCP: createMCPServerAndNavigate,
         onOpenSkillUpload: () => setSkillUploadOpen(true),
-        onTrySkill: conversation.openManagerConversationWithSkill,
         onKnowledgeBaseLogin: () => loginOpenCSG(),
       },
     }),
     [
-      conversation.openManagerConversationWithSkill,
       createMCPServerAndNavigate,
       hub,
       loginOpenCSG,

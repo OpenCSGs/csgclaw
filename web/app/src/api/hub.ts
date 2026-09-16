@@ -17,6 +17,9 @@ type PublishAgentTemplatePayload = {
 };
 
 export function fetchHubTemplates(): Promise<HubTemplate[]> {
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("mockTemplates") === "30") {
+    return import("./hubTemplates.mock").then(({ mockHubTemplates }) => mockHubTemplates);
+  }
   return get<HubTemplate[]>(HUB_TEMPLATES_PATH);
 }
 

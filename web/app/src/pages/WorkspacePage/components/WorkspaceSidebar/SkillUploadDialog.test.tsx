@@ -34,6 +34,15 @@ describe("SkillUploadDialog", () => {
     }
     const openPicker = vi.spyOn(HTMLInputElement.prototype, "click");
     await user.click(screen.getByRole("tab", { name: "resourcesSkillUploadZipTab" }));
+    expect(openPicker).not.toHaveBeenCalled();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "resourcesSkillRemoteInstallTab" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.getByRole("tabpanel")).toHaveAccessibleName("resourcesSkillUploadZipTab");
+    await user.click(screen.getByRole("button", { name: /resourcesSkillUploadDropTitle/ }));
     expect(openPicker).toHaveBeenCalledOnce();
     const input = document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();
@@ -43,5 +52,47 @@ describe("SkillUploadDialog", () => {
     await user.click(screen.getByRole("button", { name: "resourcesSkillUploadSubmit" }));
     expect(onSubmit).toHaveBeenCalledWith(file);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("disables the upload button when no file is selected in zip mode", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    render(
+      <SkillUploadDialog
+        open
+        busy={false}
+        error=""
+        installedSkills={[]}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+        remoteInstallBusy=""
+        remoteInstallError=""
+        remoteSkills={[]}
+        remoteSkillsError=""
+        remoteSkillsHasMore={false}
+        remoteSkillsLoading={false}
+        remoteSkillsLoadingMore={false}
+        remoteSkillsSearch=""
+        t={(key) => key}
+      />,
+    );
+
+    // Ensure we are on the zip tab
+    await user.click(screen.getByRole("tab", { name: "resourcesSkillUploadZipTab" }));
+
+    // No file selected yet — button should be disabled
+    const uploadButton = screen.getByRole("button", { name: "resourcesSkillUploadSubmit" });
+    expect(uploadButton).toBeDisabled();
+
+    // Clicking a disabled button should not trigger submit
+    await user.click(uploadButton);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    // Now select a file — button should become enabled
+    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    const file = new File(["skill archive"], "example.zip", { type: "application/zip" });
+    await user.upload(input!, file);
+    expect(uploadButton).not.toBeDisabled();
   });
 });
