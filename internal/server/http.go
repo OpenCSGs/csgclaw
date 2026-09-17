@@ -57,6 +57,7 @@ type Options struct {
 	ChannelBindings    api.ChannelBindingReconciler
 	SessionBindings    *agentsession.Store
 	ConfigPath         string
+	AppsStatePath      string
 	AccessToken        string
 	NoAuth             bool
 	AdvertiseBaseURL   string
@@ -118,6 +119,13 @@ func Run(opts Options) error {
 	}
 
 	handler := newHandler(opts)
+	if opts.AppsStatePath != "" {
+		if err := handler.EnableApps(opts.AppsStatePath); err != nil {
+			_ = listener.Close()
+			return fmt.Errorf("initialize Apps: %w", err)
+		}
+		defer handler.CloseApps()
+	}
 	handler.SetEventStreamShutdown(streamCtx.Done())
 	if err := handler.RecoverRoomTasks(); err != nil {
 		return fmt.Errorf("recover room tasks: %w", err)
@@ -145,7 +153,9 @@ func Run(opts Options) error {
 			_ = listener.Close()
 			return fmt.Errorf("desktop sandbox listener is required")
 		}
-		sandboxHandler, err := desktopSandboxSecurityHandler(router, opts.SandboxListener.Addr(), *opts.Desktop)
+		sandboxOptions := *opts.Desktop
+		sandboxOptions.ValidateAgentAccessToken = handler.ValidateAgentAccessToken
+		sandboxHandler, err := desktopSandboxSecurityHandler(router, opts.SandboxListener.Addr(), sandboxOptions)
 		if err != nil {
 			_ = listener.Close()
 			_ = opts.SandboxListener.Close()
@@ -225,6 +235,9 @@ func Run(opts Options) error {
 
 	if opts.OnReady != nil {
 		go opts.OnReady(handler, router)
+	}
+	if opts.AppsStatePath != "" {
+		go handler.RestoreApps(runCtx)
 	}
 
 	firstErr := <-errCh

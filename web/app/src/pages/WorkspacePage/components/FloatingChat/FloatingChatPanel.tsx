@@ -60,7 +60,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     inviteActionLabel,
     locale,
     logAgent,
-    gitlabConnectorStatus,
     managerProfile,
     managerProfileIncomplete,
     managerRuntimeUnavailable,
@@ -84,10 +83,10 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onConnectConnector,
     onDeleteRoom,
     onDisconnectConnector,
-    onDisconnectGitLabConnector,
     onDismissThreadSlashPicker = () => {},
     onInviteAction,
     onMessageAction,
+    onManageApps,
     onManageConnector,
     onOpenThread,
     onPreviewUser,
@@ -100,7 +99,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onUndoRemoveAttachment,
     onSendThreadReply,
     onSaveConnectorConfig,
-    onSaveGitLabConnectorConfig,
     onSetThreadSlashIndex = (_index) => {},
     onSyncComposer,
     onStopWorkingTurn,
@@ -324,7 +322,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
           connectorStatus={connectorStatus}
-          gitlabConnectorStatus={gitlabConnectorStatus}
           connectorBusyAction={connectorBusyAction}
           connectorBusyProvider={connectorBusyProvider}
           connectorError={connectorError}
@@ -360,13 +357,12 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           onComposerKeyDown={onComposerKeyDown}
           onConnectConnector={onConnectConnector}
           onDisconnectConnector={onDisconnectConnector}
-          onDisconnectGitLabConnector={onDisconnectGitLabConnector}
+          onManageApps={onManageApps}
           onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
           onPreviewAttachment={handlePreviewAttachment}
           onRetrySend={onRetrySend}
           onSaveConnectorConfig={onSaveConnectorConfig}
-          onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}
           onSendMessage={onSendMessage}
           onStopSend={onStopSend}
           onUndoRemoveAttachment={onUndoRemoveAttachment}

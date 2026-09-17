@@ -283,3 +283,7 @@ export function readCollapsedWorkspaceGroups(): CollapsedWorkspaceGroups {
     return { ...DEFAULT_COLLAPSED_WORKSPACE_GROUPS };
   }
 }
+
+export function pathForAgentApps(agentID: string): string {
+  return `${pathForPane({ type: WorkspacePaneTypes.agent, id: agentID })}?tab=apps`;
+}

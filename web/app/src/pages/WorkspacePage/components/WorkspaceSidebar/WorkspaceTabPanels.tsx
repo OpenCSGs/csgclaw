@@ -813,9 +813,9 @@ export function WorkspaceTabPanels({
         presentation={presentation}
       >
         {resourcesLoaded &&
-          resourcesTemplates.length === 0 &&
-          resourcesMCPServers.length === 0 &&
-          resourcesSkills.length === 0 ? (
+        resourcesTemplates.length === 0 &&
+        resourcesMCPServers.length === 0 &&
+        resourcesSkills.length === 0 ? (
           <div className={styles.empty}>{t("resourcesEmpty")}</div>
         ) : resourcesLoaded && resourcesTemplates.length > 0 && !visibleTemplates.length ? (
           <div className={styles.empty}>{t("workspaceSearchNoResults")}</div>

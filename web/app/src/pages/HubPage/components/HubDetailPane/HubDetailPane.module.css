@@ -1605,7 +1605,6 @@
   border-bottom-color: var(--gray-300);
 }
 
-
 :root[data-theme="dark"] .hub-skill-filter-tab {
   color: #85888e;
 }
@@ -2961,7 +2960,6 @@
   background: transparent;
   box-shadow: none;
 }
-
 
 :root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-profile-shell :global(.profile-section),
 :root[data-theme="dark"] .hub-standard-skill-dialog-body .hub-template-instructions-section,

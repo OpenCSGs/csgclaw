@@ -344,6 +344,39 @@ describe("AgentDetailPane memory", () => {
 });
 
 describe("AgentDetailPane MCP snapshots", () => {
+  it("distinguishes manually added MCP servers from app-managed services", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        Response.json({
+          items: String(url).includes("/agents/")
+            ? [
+                {
+                  installation_id: "app-1",
+                  agent_id: "agent-1",
+                  app_id: "gitlab",
+                  name: "Work GitLab",
+                  enabled: true,
+                  disconnected: false,
+                  status: "connected",
+                  config: {},
+                  credentials_set: {},
+                  tools: [],
+                  created_at: "",
+                  updated_at: "",
+                },
+              ]
+            : [],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<Harness workspaceSupported />);
+    await user.click(screen.getByRole("button", { name: "agentProfileMCPTab" }));
+    expect(await screen.findByText("appManualMCPTitle")).toBeVisible();
+    expect(screen.getByText("appManualMCPEmpty")).toBeVisible();
+    expect(screen.queryByText("agentMCPEmpty")).not.toBeInTheDocument();
+  });
   it("offers a manual update when the agent snapshot differs from the global MCP", async () => {
     const user = userEvent.setup();
     const onUpdateMCPServer = vi.fn().mockResolvedValue(true);

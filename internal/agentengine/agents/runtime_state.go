@@ -219,6 +219,8 @@ func (s *Controller) runtimeProfileForKind(runtimeKind, agentID, fallbackName, f
 		if env == nil {
 			env = make(map[string]string)
 		}
+		delete(env, "CSGCLAW_ACCESS_TOKEN")
+		delete(env, ConnectorCapabilityEnv)
 		env["CSGCLAW_CALLER_AGENT_ID"] = canonicalAgentID(agentID)
 		env["CSGCLAW_CLI"] = runtimeassets.HostCLIPath()
 		managerBaseURL := config.ResolveLocalBaseURL(s.server)
@@ -229,20 +231,12 @@ func (s *Controller) runtimeProfileForKind(runtimeKind, agentID, fallbackName, f
 			}
 			env["CSGCLAW_BASE_URL"] = managerBaseURL
 		}
-		if token := strings.TrimSpace(s.server.AccessToken); token != "" {
+		if token := s.agentAccessToken(agentID); token != "" {
 			apiKey = token
 			if env == nil {
 				env = make(map[string]string)
 			}
 			env["CSGCLAW_ACCESS_TOKEN"] = token
-		}
-		if canonicalAgentID(agentID) == ManagerUserID {
-			if capability := s.connectorCapability(agentID); capability != "" {
-				if env == nil {
-					env = make(map[string]string)
-				}
-				env[ConnectorCapabilityEnv] = capability
-			}
 		}
 	}
 

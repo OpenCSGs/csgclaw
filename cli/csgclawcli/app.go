@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	appscmd "csgclaw/cli/apps"
 	"csgclaw/cli/command"
 	completioncmd "csgclaw/cli/completion"
 	"csgclaw/cli/member"
@@ -69,6 +70,7 @@ func (a *App) AddCommand(commands ...command.Command) {
 
 func (a *App) registerDefaultCommands() {
 	a.AddCommand(
+		appscmd.NewCmd(),
 		participantcmd.NewCmd(),
 		participantcmd.NewAliasCmd("pt"),
 		templatecmd.NewCmd(),

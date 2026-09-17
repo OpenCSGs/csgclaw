@@ -1,5 +1,11 @@
 import { useCallback, useEffect } from "react";
-import { DefaultWorkspacePaneIds, WorkspacePaneTypes, paneFromLocation, pathForPane } from "@/models/routing";
+import {
+  DefaultWorkspacePaneIds,
+  WorkspacePaneTypes,
+  paneFromLocation,
+  pathForPane,
+  pathForAgentApps,
+} from "@/models/routing";
 import type { WorkspacePane } from "@/models/routing";
 import type { NavigatePaneOptions, UseWorkspaceNavigationArgs, WorkspaceNavigationController } from "./types";
 
@@ -28,6 +34,13 @@ export function useWorkspaceNavigation({
       navigatePane(next, options.rooms ?? rooms, options);
     },
     [navigatePane, rooms, setActiveConversationId],
+  );
+
+  const selectAgentApps = useCallback(
+    (agentID: string) => {
+      if (agentID) navigate(pathForAgentApps(agentID));
+    },
+    [navigate],
   );
 
   const selectAgent = useCallback(
@@ -144,6 +157,7 @@ export function useWorkspaceNavigation({
   }, [dataReady, location.pathname, navigate, rooms]);
 
   return {
+    selectAgentApps,
     navigatePane,
     selectConversation,
     selectAgent,

@@ -388,13 +388,21 @@ export function ModelProviderPage() {
             ) : null}
             {saveStatus ? <div className="model-provider-save-status">{saveStatus}</div> : null}
             {showOpenCSGSignIn ? (
-              <DismissibleAlert className="model-provider-notice warning opencsg-signin-warning" messageKey={t("modelProviderOpenCSGSignInRequired")} closeLabel={t("close")}>
+              <DismissibleAlert
+                className="model-provider-notice warning opencsg-signin-warning"
+                messageKey={t("modelProviderOpenCSGSignInRequired")}
+                closeLabel={t("close")}
+              >
                 <AlertCircle size={16} aria-hidden="true" />
                 <span>{t("modelProviderOpenCSGSignInRequired")}</span>
               </DismissibleAlert>
             ) : null}
             {checkMessage ? (
-              <DismissibleAlert className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`} messageKey={checkMessage} closeLabel={t("close")}>
+              <DismissibleAlert
+                className={`model-provider-notice ${effectiveTone === "warning" ? "warning" : "success"}`}
+                messageKey={checkMessage}
+                closeLabel={t("close")}
+              >
                 {effectiveTone === "warning" ? (
                   <AlertCircle size={16} aria-hidden="true" />
                 ) : (

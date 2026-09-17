@@ -232,6 +232,7 @@ export function useWorkspaceController() {
   }, []);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
   const {
+    selectAgentApps,
     navigatePane,
     selectConversation,
     selectAgent,
@@ -406,7 +407,6 @@ export function useWorkspaceController() {
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
     connectorStatus: connectors.github,
-    gitlabConnectorStatus: connectors.gitlab,
     connectorBusyAction: connectors.busyAction,
     connectorBusyProvider: connectors.busyProvider,
     connectorError: connectors.error,
@@ -414,9 +414,11 @@ export function useWorkspaceController() {
     onSaveConnectorConfig: connectors.saveGitHubConfig,
     onConnectConnector: connectors.connectGitHub,
     onDisconnectConnector: connectors.disconnectGitHub,
-    onDisconnectGitLabConnector: connectors.disconnectGitLab,
     onManageConnector: connectors.manageGitHub,
-    onSaveGitLabConnectorConfig: connectors.saveGitLabConfig,
+    onManageApps: (id) => {
+      setFloatingChatOpen(false);
+      selectAgentApps(id || agent.managerAgent?.id || MANAGER_AGENT_ID);
+    },
     data: displayData,
     locale,
     managerProfile,
@@ -484,7 +486,6 @@ export function useWorkspaceController() {
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
     connectorStatus: connectors.github,
-    gitlabConnectorStatus: connectors.gitlab,
     connectorBusyAction: connectors.busyAction,
     connectorBusyProvider: connectors.busyProvider,
     connectorError: connectors.error,
@@ -492,9 +493,11 @@ export function useWorkspaceController() {
     onSaveConnectorConfig: connectors.saveGitHubConfig,
     onConnectConnector: connectors.connectGitHub,
     onDisconnectConnector: connectors.disconnectGitHub,
-    onDisconnectGitLabConnector: connectors.disconnectGitLab,
     onManageConnector: connectors.manageGitHub,
-    onSaveGitLabConnectorConfig: connectors.saveGitLabConfig,
+    onManageApps: (id) => {
+      setFloatingChatOpen(false);
+      selectAgentApps(id || agent.managerAgent?.id || MANAGER_AGENT_ID);
+    },
     data: displayData,
     locale,
     managerProfile,

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
@@ -94,6 +94,12 @@ function renderModelProviderPage(
   );
 
   const view = render(renderPage());
+  const card = view.container.querySelector(".model-provider-provider-card.active");
+  if (
+    card &&
+    !(controllerOverrides.sidebarProps as { onSelectModelProvider?: unknown } | undefined)?.onSelectModelProvider
+  )
+    fireEvent.click(card);
 
   return {
     container: view.container,
@@ -265,7 +271,7 @@ describe("ModelProviderPage", () => {
   it("shows the OpenCSG built-in model page with sign-in guidance and AI Gateway address", async () => {
     const user = userEvent.setup();
     const onLogin = vi.fn();
-    const { container } = renderModelProviderPage(
+    renderModelProviderPage(
       normalizeModelProviderCatalog({
         providers: [
           {
@@ -299,7 +305,7 @@ describe("ModelProviderPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("AI Gateway address")).toBeInTheDocument();
     expect(screen.getAllByText("https://ai.space.opencsg.com/v1")).toHaveLength(2);
-    expect(container.querySelector(".model-provider-header-avatar")).toHaveAttribute(
+    expect(document.querySelector(".model-provider-header-avatar")).toHaveAttribute(
       "src",
       "model-providers/opencsg.svg",
     );
@@ -461,6 +467,6 @@ describe("ModelProviderPage", () => {
     );
 
     await waitFor(() => expect(screen.queryByText("stale-model")).not.toBeInTheDocument());
-    expect(screen.getAllByText("No models")).toHaveLength(2);
+    expect(screen.getAllByText("No models")).toHaveLength(3);
   });
 });
