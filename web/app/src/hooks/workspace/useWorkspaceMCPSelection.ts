@@ -211,7 +211,9 @@ export function useWorkspaceMCPSelection({
 
   const changeMCPCreateDialogOpen = useCallback((open: boolean) => {
     setMCPCreateError("");
-    if (!open) {
+    if (open) {
+      setMCPCreateSource("mcp");
+    } else {
       setMCPCreateInitialDocument("");
     }
     setMCPCreateDialogOpen(open);
@@ -278,13 +280,13 @@ export function useWorkspaceMCPSelection({
       setMCPMutationError("");
       setRemoteMCPInstallBusy(id);
       try {
-        const name = await installRemoteMCPServerRequest(id);
+        await installRemoteMCPServerRequest(id);
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.mcpServers() }),
           queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() }),
         ]);
         setSelectedHubResourceType("mcp");
-        setSelectedMCPServerName(name);
+        setSelectedMCPServerName("");
         setMCPCreateDialogOpen(false);
         return true;
       } catch (error) {

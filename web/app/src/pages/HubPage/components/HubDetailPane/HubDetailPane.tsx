@@ -594,6 +594,7 @@ type HubDetailPaneHub = {
     mcpSourceSyncBusy?: boolean;
     knowledgeBaseAdded?: boolean;
     mcpCreateError?: string;
+    mcpCreateSource?: "mcp" | "knowledge";
     mcpCreateDialogOpen?: boolean;
     mcpCreateInitialDocument?: string;
     knowledgeBases?: {
@@ -677,6 +678,7 @@ const EMPTY_HUB_DETAIL_PROPS: HubDetailPaneHub["detailPaneProps"] = {
   mcpProbeError: "",
   mcpProbeResult: null,
   mcpCreateError: "",
+  mcpCreateSource: "mcp",
   mcpCreateDialogOpen: false,
   mcpCreateInitialDocument: "",
   remoteMCPInstallBusy: "",
@@ -1028,6 +1030,7 @@ export function HubDetailPane({
     knowledgeBaseAdded = false,
     mcpCreateError = "",
     mcpCreateDialogOpen = false,
+    mcpCreateSource = "mcp",
     mcpCreateInitialDocument = "",
     knowledgeBases,
     remoteMCPInstallBusy = "",
@@ -1106,6 +1109,15 @@ export function HubDetailPane({
   const [mcpDeleteDialogOpen, setMCPDeleteDialogOpen] = useState(false);
   const [knowledgeBaseDeleteDialogOpen, setKnowledgeBaseDeleteDialogOpen] = useState(false);
   const [knowledgeBaseDiscoveryOpen, setKnowledgeBaseDiscoveryOpen] = useState(false);
+  const [showKnowledgeBaseAddedAlert, setShowKnowledgeBaseAddedAlert] = useState(false);
+  useEffect(() => {
+    if (knowledgeBaseAdded) {
+      setShowKnowledgeBaseAddedAlert(true);
+      const timer = window.setTimeout(() => setShowKnowledgeBaseAddedAlert(false), 4000);
+      return () => window.clearTimeout(timer);
+    }
+    setShowKnowledgeBaseAddedAlert(false);
+  }, [knowledgeBaseAdded]);
   function openKnowledgeBaseDiscovery(): void {
     if (knowledgeBases?.loginRequired) {
       void onKnowledgeBaseLogin?.();
@@ -1553,14 +1565,11 @@ export function HubDetailPane({
                   })}
                 </div>
 
-                {knowledgeBaseAdded ? (
-                  <DismissibleAlert
-                    className="flex items-center gap-2 rounded-lg border p-3 text-sm"
-                    messageKey="knowledge-base-added"
-                    closeLabel={t("close")}
-                  >
+                {showKnowledgeBaseAddedAlert ? (
+                  <div className={moduleClassNames("kb-added-alert")} aria-live="polite">
+                    <CheckCircle2 size={16} aria-hidden="true" />
                     <span>{t("resourcesKnowledgeBaseAddSuccess")}</span>
-                  </DismissibleAlert>
+                  </div>
                 ) : null}
 
                 {error || knowledgeBases?.loadError ? (
@@ -3069,7 +3078,7 @@ export function HubDetailPane({
                     </Button>
                     <Button
                       variant="danger"
-                      size="sm"
+                      size="md"
                       disabled={!configuredKnowledgeBaseMCP}
                       onClick={() => setKnowledgeBaseDeleteDialogOpen(true)}
                     >
@@ -3404,34 +3413,36 @@ export function HubDetailPane({
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           <DialogBody className={moduleClassNames("mcp-form")}>
-            <div className={moduleClassNames("mcp-form-mode")} role="tablist" aria-label={t("resourcesMCPCreateTitle")}>
-              <button
-                type="button"
-                className={moduleClassNames("mcp-form-tab", mcpCreateMode === "manual" && "active")}
-                aria-selected={mcpCreateMode === "manual"}
-                role="tab"
-                onClick={() => setMCPCreateMode("manual")}
-              >
-                <Server size={15} strokeWidth={2} aria-hidden="true" />
-                {t("resourcesMCPManualTab")}
-              </button>
-              <button
-                type="button"
-                className={moduleClassNames("mcp-form-tab", mcpCreateMode === "remote" && "active")}
-                aria-selected={mcpCreateMode === "remote"}
-                role="tab"
-                onClick={() => {
-                  if (mcpCreateMode === "remote") {
-                    onRemoteMCPVisibleChange?.(true);
-                    return;
-                  }
-                  setMCPCreateMode("remote");
-                }}
-              >
-                <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
-                {t("resourcesMCPRemoteInstallTab")}
-              </button>
-            </div>
+            {mcpCreateSource !== "knowledge" ? (
+              <div className={moduleClassNames("mcp-form-mode")} role="tablist" aria-label={t("resourcesMCPCreateTitle")}>
+                <button
+                  type="button"
+                  className={moduleClassNames("mcp-form-tab", mcpCreateMode === "manual" && "active")}
+                  aria-selected={mcpCreateMode === "manual"}
+                  role="tab"
+                  onClick={() => setMCPCreateMode("manual")}
+                >
+                  <Server size={15} strokeWidth={2} aria-hidden="true" />
+                  {t("resourcesMCPManualTab")}
+                </button>
+                <button
+                  type="button"
+                  className={moduleClassNames("mcp-form-tab", mcpCreateMode === "remote" && "active")}
+                  aria-selected={mcpCreateMode === "remote"}
+                  role="tab"
+                  onClick={() => {
+                    if (mcpCreateMode === "remote") {
+                      onRemoteMCPVisibleChange?.(true);
+                      return;
+                    }
+                    setMCPCreateMode("remote");
+                  }}
+                >
+                  <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
+                  {t("resourcesMCPRemoteInstallTab")}
+                </button>
+              </div>
+            ) : null}
             {mcpCreateMode === "manual" ? (
               <>
                 <JSONConfigEditor

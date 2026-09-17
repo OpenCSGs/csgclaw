@@ -99,7 +99,7 @@ export function RemoteMCPList({
                 </div>
                 <Button
                   size="sm"
-                  variant="primary"
+                  variant={installed ? "secondaryGray" : "primary"}
                   loading={installBusy === installKey}
                   disabled={!onInstall || Boolean(installBusy)}
                   onClick={() => void onInstall?.(item)}

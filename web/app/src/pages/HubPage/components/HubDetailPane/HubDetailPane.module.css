@@ -929,6 +929,27 @@
   color: var(--warning-200);
 }
 
+.kb-added-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 13px;
+  border: 1px solid color-mix(in oklab, var(--success-500) 30%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--success-500) 9%, var(--surface));
+  color: color-mix(in oklab, var(--success-600) 86%, var(--text));
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 18px;
+}
+
+:root[data-theme="dark"] .kb-added-alert {
+  border-color: color-mix(in oklab, var(--success-500) 38%, var(--line));
+  background: color-mix(in oklab, var(--success-500) 14%, transparent);
+  color: color-mix(in oklab, var(--success-400) 78%, var(--text));
+}
+
 :root[data-theme="dark"] .mcp-source-notice.check-failed {
   border-color: color-mix(in srgb, var(--error-700) 72%, var(--line));
   background: color-mix(in srgb, var(--error-950) 46%, var(--surface));
