@@ -57,6 +57,7 @@ export function useWorkspaceMCPSelection({
   const [mcpCreateInitialDocument, setMCPCreateInitialDocument] = useState("");
   const [mcpCreateSource, setMCPCreateSource] = useState<"mcp" | "knowledge">("mcp");
   const [knowledgeBaseAdded, setKnowledgeBaseAdded] = useState(false);
+  const [mcpAdded, setMCPAdded] = useState(false);
   const [mcpCreateError, setMCPCreateError] = useState("");
   const [mcpMutationBusy, setMCPMutationBusy] = useState(false);
   const [mcpMutationError, setMCPMutationError] = useState("");
@@ -200,6 +201,7 @@ export function useWorkspaceMCPSelection({
     (initialDocument = "", source: "mcp" | "knowledge" = "mcp") => {
       setMCPCreateSource(source);
       setKnowledgeBaseAdded(false);
+      setMCPAdded(false);
       setSelectedHubResourceType(source);
       if (source === "knowledge") setSelectedMCPServerName("");
       setMCPCreateInitialDocument(initialDocument);
@@ -213,6 +215,7 @@ export function useWorkspaceMCPSelection({
     setMCPCreateError("");
     if (open) {
       setMCPCreateSource("mcp");
+      setMCPAdded(false);
     } else {
       setMCPCreateInitialDocument("");
     }
@@ -231,7 +234,8 @@ export function useWorkspaceMCPSelection({
         if (mcpCreateSource === "knowledge") {
           setKnowledgeBaseAdded(true);
         } else {
-          setSelectedMCPServerName(payload.name);
+          setSelectedMCPServerName("");
+          setMCPAdded(true);
         }
         setMCPCreateDialogOpen(false);
         return true;
@@ -287,6 +291,7 @@ export function useWorkspaceMCPSelection({
         ]);
         setSelectedHubResourceType("mcp");
         setSelectedMCPServerName("");
+        setMCPAdded(true);
         setMCPCreateDialogOpen(false);
         return true;
       } catch (error) {
@@ -472,6 +477,7 @@ export function useWorkspaceMCPSelection({
     mcpCreateError,
     mcpCreateSource,
     knowledgeBaseAdded,
+    mcpAdded,
     mcpCreateDialogOpen,
     mcpCreateInitialDocument,
     mcpMutationBusy,
