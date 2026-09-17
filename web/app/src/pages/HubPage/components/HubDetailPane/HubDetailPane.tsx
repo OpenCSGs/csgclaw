@@ -593,6 +593,7 @@ type HubDetailPaneHub = {
     mcpSourceStatus?: MCPServerSourceStatus | null;
     mcpSourceSyncBusy?: boolean;
     knowledgeBaseAdded?: boolean;
+    mcpAdded?: boolean;
     mcpCreateError?: string;
     mcpCreateSource?: "mcp" | "knowledge";
     mcpCreateDialogOpen?: boolean;
@@ -1028,6 +1029,7 @@ export function HubDetailPane({
     mcpSourceStatus = null,
     mcpSourceSyncBusy = false,
     knowledgeBaseAdded = false,
+    mcpAdded = false,
     mcpCreateError = "",
     mcpCreateDialogOpen = false,
     mcpCreateSource = "mcp",
@@ -1118,6 +1120,15 @@ export function HubDetailPane({
     }
     setShowKnowledgeBaseAddedAlert(false);
   }, [knowledgeBaseAdded]);
+  const [showMCPAddedAlert, setShowMCPAddedAlert] = useState(false);
+  useEffect(() => {
+    if (mcpAdded) {
+      setShowMCPAddedAlert(true);
+      const timer = window.setTimeout(() => setShowMCPAddedAlert(false), 4000);
+      return () => window.clearTimeout(timer);
+    }
+    setShowMCPAddedAlert(false);
+  }, [mcpAdded]);
   function openKnowledgeBaseDiscovery(): void {
     if (knowledgeBases?.loginRequired) {
       void onKnowledgeBaseLogin?.();
@@ -2404,6 +2415,13 @@ export function HubDetailPane({
                   {t("resourcesMCPAdd")}
                 </Button>
               </header>
+
+              {showMCPAddedAlert ? (
+                <div className={moduleClassNames("kb-added-alert")} aria-live="polite">
+                  <CheckCircle2 size={16} aria-hidden="true" />
+                  <span>{t("resourcesMCPAddSuccess")}</span>
+                </div>
+              ) : null}
 
               <ResourceSearchField
                 value={mcpSearch}

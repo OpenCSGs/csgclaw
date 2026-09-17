@@ -451,6 +451,8 @@ export function useWorkspaceHubSelection({
     mcpServersLoaded,
     mcpCreateSource,
     knowledgeBaseAdded,
+
+    mcpAdded,
     mcpCreateError,
     mcpCreateDialogOpen,
     mcpCreateInitialDocument,
@@ -559,6 +561,8 @@ export function useWorkspaceHubSelection({
     mcpSourceSyncBusy,
     mcpCreateSource,
     knowledgeBaseAdded,
+
+    mcpAdded,
     mcpCreateError,
     mcpCreateDialogOpen,
     mcpCreateInitialDocument,
@@ -651,6 +655,8 @@ export function useWorkspaceHubSelection({
       mcpSourceSyncBusy,
       mcpCreateSource,
       knowledgeBaseAdded,
+
+      mcpAdded,
       mcpCreateError,
       mcpCreateDialogOpen,
       mcpCreateInitialDocument,
