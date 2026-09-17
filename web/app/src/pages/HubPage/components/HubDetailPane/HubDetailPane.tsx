@@ -1138,6 +1138,7 @@ export function HubDetailPane({
   }
   const [mcpDraftDocument, setMCPDraftDocument] = useState(DEFAULT_MCP_SERVER_DOCUMENT);
   const [mcpDetailDocument, setMCPDetailDocument] = useState("");
+  const [mcpDetailInitialDocument, setMCPDetailInitialDocument] = useState("");
   const [mcpDetailError, setMCPDetailError] = useState("");
   const [mcpFormError, setMCPFormError] = useState("");
   const [mcpCreateMode, setMCPCreateMode] = useState<MCPCreateMode>("manual");
@@ -1348,12 +1349,16 @@ export function HubDetailPane({
   useEffect(() => {
     if (!selectedMCPServer) {
       setMCPDetailDocument("");
+      setMCPDetailInitialDocument("");
       setMCPDetailError("");
       return;
     }
-    setMCPDetailDocument(formatMCPServerDocument(selectedMCPServer.name, selectedMCPServer.config));
+    const formatted = formatMCPServerDocument(selectedMCPServer.name, selectedMCPServer.config);
+    setMCPDetailDocument(formatted);
+    setMCPDetailInitialDocument(formatted);
     setMCPDetailError("");
   }, [selectedMCPServer]);
+  const mcpDetailDirty = mcpDetailDocument !== mcpDetailInitialDocument;
   async function handleDeleteSkillConfirm() {
     const deleted = await onDeleteSkill?.(selectedSkill);
     if (deleted) {
@@ -1386,6 +1391,7 @@ export function HubDetailPane({
     const saved = await onUpdateMCP?.(selectedMCPServer.name, result.payload);
     if (saved) {
       setMCPDetailError("");
+      setMCPDetailInitialDocument(mcpDetailDocument);
     }
   }
 
@@ -2533,15 +2539,17 @@ export function HubDetailPane({
                       <RefreshCw size={16} strokeWidth={2} aria-hidden="true" />
                       {mcpProbeBusy ? t("resourcesMCPTesting") : t("resourcesMCPTest")}
                     </Button>
-                    <Button
-                      variant="primary"
-                      size="md"
-                      loading={mcpMutationBusy}
-                      disabled={mcpProbeBusy}
-                      onClick={handleSaveMCPDetail}
-                    >
-                      {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
-                    </Button>
+                    {mcpDetailDirty ? (
+                      <Button
+                        variant="primary"
+                        size="md"
+                        loading={mcpMutationBusy}
+                        disabled={mcpProbeBusy}
+                        onClick={handleSaveMCPDetail}
+                      >
+                        {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
+                      </Button>
+                    ) : null}
                     <Button
                       variant="outlineDanger"
                       size="md"
@@ -3230,15 +3238,17 @@ export function HubDetailPane({
                   <RefreshCw size={16} strokeWidth={2} aria-hidden="true" />
                   {mcpProbeBusy ? t("resourcesMCPTesting") : t("resourcesMCPTest")}
                 </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  loading={mcpMutationBusy}
-                  disabled={mcpProbeBusy}
-                  onClick={handleSaveMCPDetail}
-                >
-                  {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
-                </Button>
+                {mcpDetailDirty ? (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    loading={mcpMutationBusy}
+                    disabled={mcpProbeBusy}
+                    onClick={handleSaveMCPDetail}
+                  >
+                    {mcpMutationBusy ? t("resourcesMCPSaving") : t("resourcesMCPSave")}
+                  </Button>
+                ) : null}
               </DialogFooter>
             </>
           ) : null}
