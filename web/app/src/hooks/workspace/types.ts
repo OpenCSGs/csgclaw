@@ -99,6 +99,7 @@ export type UseWorkspaceHubControllerArgs = {
   hubTemplates: HubTemplate[];
   hubTemplatesQuery: UseQueryResult<HubTemplate[]>;
   onSkillDeleted?: (nextSkill: SkillSummary | null) => void;
+  onTemplateDeleteStarted?: (templateID: string) => void;
   openCSGAuthGuard: OpenCSGAuthGuard;
   refreshWorkspaceHubTemplates: () => Promise<HubTemplate[]>;
   t: TranslateFn;

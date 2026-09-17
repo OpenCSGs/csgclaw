@@ -2,6 +2,8 @@ import { createElement, type ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
+import { deleteHubTemplateRequest } from "@/api/hub";
+import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { deleteSkillRequest, installRemoteSkillRequest } from "@/api/skills";
 import {
   nextWorkspaceSkillAfterDelete,
@@ -13,6 +15,11 @@ import { useWorkspaceHubSelection } from "@/hooks/workspace/useWorkspaceHubSelec
 import type { HubTemplate } from "@/models/hubWorkspace";
 import type { SkillSummary } from "@/models/skillhub";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
+
+vi.mock("@/api/hub", async () => ({
+  ...(await vi.importActual<typeof import("@/api/hub")>("@/api/hub")),
+  deleteHubTemplateRequest: vi.fn(),
+}));
 
 vi.mock("@/api/skills", async () => {
   const actual = await vi.importActual<typeof import("@/api/skills")>("@/api/skills");
@@ -158,4 +165,57 @@ describe("useWorkspaceHubController skill deletion", () => {
     expect(openCSGAuthGuard.requireAuthentication).toHaveBeenCalledOnce();
     expect(installRemoteSkillRequest).not.toHaveBeenCalled();
   });
+});
+
+describe("useWorkspaceHubController template deletion", () => {
+  it.each([false, true])(
+    "leaves detail before deletion and removes cached item (refresh failure: %s)",
+    async (refreshFails) => {
+      const template: HubTemplate = { id: "local.codex-211", source: { kind: "local" } };
+      const remaining: HubTemplate = { id: "local.other", source: { kind: "local" } };
+      const setSelectedHubTemplateId = vi.fn();
+      const onTemplateDeleteStarted = vi.fn();
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(workspaceQueryKeys.hubTemplates(), [template, remaining]);
+      queryClient.setQueryData(workspaceQueryKeys.hubTemplate(template.id), template);
+      vi.mocked(useWorkspaceHubSelection).mockReturnValue({
+        detailPaneProps: { error: "" },
+        error: "",
+        selectedHubResourceType: "template",
+        setSelectedHubTemplateId,
+        skills: [],
+      } as unknown as ReturnType<typeof useWorkspaceHubSelection>);
+      vi.mocked(deleteHubTemplateRequest).mockImplementation(async () => {
+        expect(setSelectedHubTemplateId).toHaveBeenCalledWith("");
+        expect(onTemplateDeleteStarted).toHaveBeenCalledWith(template.id);
+      });
+      const wrapper = ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client: queryClient }, children);
+      const { result } = renderHook(
+        () =>
+          useWorkspaceHubController({
+            activePane: { type: "hub", resourceType: "template", id: "local.codex-211" },
+            hubLoaded: true,
+            hubTemplates: [template, remaining],
+            hubTemplatesQuery: {} as UseQueryResult<HubTemplate[]>,
+            onTemplateDeleteStarted,
+            openCSGAuthGuard: openCSGAuthGuardStub(),
+            refreshWorkspaceHubTemplates: async () => {
+              if (refreshFails) throw new Error("offline");
+              return [remaining];
+            },
+            t: (key) => key,
+          }),
+        { wrapper },
+      );
+      await act(async () => {
+        await expect(result.current.hub.deleteHubTemplate(template)).resolves.toBe(true);
+      });
+      expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplates())).toEqual([remaining]);
+      expect(queryClient.getQueryData(workspaceQueryKeys.hubTemplate(template.id))).toBeUndefined();
+      confirm.mockRestore();
+      queryClient.clear();
+    },
+  );
 });

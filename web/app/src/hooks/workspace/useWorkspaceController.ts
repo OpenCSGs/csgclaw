@@ -296,12 +296,25 @@ export function useWorkspaceController() {
     },
     [navigatePane, rooms, selectHub],
   );
+  const navigateBeforeTemplateDelete = useCallback(
+    (templateID: string) => {
+      if (
+        activePane.type === WorkspacePaneTypes.hub &&
+        activePane.resourceType === "template" &&
+        activePane.id === templateID
+      ) {
+        navigatePane({ type: WorkspacePaneTypes.hub, id: "", resourceType: "template" }, rooms, { replace: true });
+      }
+    },
+    [activePane, navigatePane, rooms],
+  );
   const { hub, refreshHubTemplates } = useWorkspaceHubController({
     activePane,
     hubLoaded,
     hubTemplates,
     hubTemplatesQuery,
     onSkillDeleted: navigateAfterSkillDelete,
+    onTemplateDeleteStarted: navigateBeforeTemplateDelete,
     openCSGAuthGuard,
     refreshWorkspaceHubTemplates,
     t,

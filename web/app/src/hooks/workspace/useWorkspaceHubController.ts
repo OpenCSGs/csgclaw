@@ -105,6 +105,7 @@ export function useWorkspaceHubController({
   hubTemplates,
   hubTemplatesQuery,
   onSkillDeleted,
+  onTemplateDeleteStarted,
   openCSGAuthGuard,
   refreshWorkspaceHubTemplates,
   t,
@@ -199,6 +200,7 @@ export function useWorkspaceHubController({
       setResourcesDeleteError("");
       setDeletingTemplateID(template.id);
       setSelectedHubTemplateId("");
+      onTemplateDeleteStarted?.(template.id);
       try {
         await Promise.all([
           queryClient.cancelQueries({ queryKey: workspaceQueryKeys.hubTemplate(template.id) }),
@@ -206,6 +208,9 @@ export function useWorkspaceHubController({
           queryClient.cancelQueries({ queryKey: workspaceQueryKeys.hubWorkspaceFileScope(template.id) }),
         ]);
         await deleteHubTemplateRequest(template.id);
+        queryClient.setQueryData<HubTemplate[]>(workspaceQueryKeys.hubTemplates(), (templates) =>
+          templates?.filter((item) => item.id !== template.id),
+        );
         queryClient.removeQueries({ queryKey: workspaceQueryKeys.hubTemplate(template.id) });
         queryClient.removeQueries({ queryKey: workspaceQueryKeys.hubWorkspaceScope(template.id) });
         queryClient.removeQueries({ queryKey: workspaceQueryKeys.hubWorkspaceFileScope(template.id) });
@@ -219,7 +224,7 @@ export function useWorkspaceHubController({
         setResourcesDeleteBusy(false);
       }
     },
-    [errorMessage, queryClient, refreshHubTemplates, setSelectedHubTemplateId, t],
+    [errorMessage, onTemplateDeleteStarted, queryClient, refreshHubTemplates, setSelectedHubTemplateId, t],
   );
 
   const deleteSkill = useCallback(
