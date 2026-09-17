@@ -34,14 +34,14 @@ describe("resolveRouteDrivenHubSelection", () => {
 describe("resolveHubTemplateSelection", () => {
   const templates = [{ id: "template-1" }, { id: "template-2" }] as Parameters<typeof resolveHubTemplateSelection>[0];
 
-  it("defaults an empty selection to the first listed template", () => {
-    expect(resolveHubTemplateSelection(templates, "")).toBe("template-1");
+  it("keeps the list visible when no template is selected", () => {
+    expect(resolveHubTemplateSelection(templates, "")).toBe("");
   });
 
   it("preserves a direct-detail selection only while it can still resolve", () => {
     expect(resolveHubTemplateSelection(templates, "pending-template", true)).toBe("pending-template");
     expect(resolveHubTemplateSelection([], "pending-template", true)).toBe("pending-template");
-    expect(resolveHubTemplateSelection(templates, "missing-template")).toBe("template-1");
+    expect(resolveHubTemplateSelection(templates, "missing-template")).toBe("");
     expect(resolveHubTemplateSelection([], "missing-template")).toBe("");
   });
 });

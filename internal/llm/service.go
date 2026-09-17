@@ -120,6 +120,7 @@ func bridgeModelMetadata(profile agent.AgentProfile) map[string]any {
 	caps := modelcap.ForProviderModel(profile.Provider, profile.ModelID)
 	if caps.UseCodexMetadata {
 		return codexmodel.Metadata(codexmodel.Profile{
+			Provider:        profile.Provider,
 			ModelID:         profile.ModelID,
 			ReasoningEffort: profile.ReasoningEffort,
 		})
@@ -807,7 +808,7 @@ func responsesCapabilityKey(profile agent.AgentProfile, baseURL string) string {
 
 func responsesPayloadToChatPayload(payload map[string]any) (map[string]any, error) {
 	if responsesPayloadHasToolSemantics(payload) {
-		return nil, fmt.Errorf("this session contains Responses tool-use history that cannot be converted to chat completions; start a new session after changing model/provider")
+		return nil, fmt.Errorf("this request contains Responses tool definitions or tool-use history that cannot be preserved by text-only Chat Completions; select a provider/model with native Responses tool support")
 	}
 
 	messages := make([]map[string]any, 0, 4)
@@ -852,6 +853,11 @@ func responsesPayloadToChatPayload(payload map[string]any) (map[string]any, erro
 }
 
 func responsesPayloadHasToolSemantics(payload map[string]any) bool {
+	// Advertising tools changes what the model may do even before the first
+	// invocation. A text-only fallback must not silently discard this contract.
+	if payloadValuePresent(payload["tools"]) {
+		return true
+	}
 	if toolChoiceRequestsTools(payload["tool_choice"]) {
 		return true
 	}
@@ -896,6 +902,7 @@ func responseValueHasToolSemantics(value any) bool {
 		itemType := strings.ToLower(strings.TrimSpace(stringValue(v["type"])))
 		switch {
 		case strings.Contains(itemType, "tool"),
+			itemType == "namespace",
 			itemType == "function_call",
 			itemType == "function_call_output",
 			strings.HasSuffix(itemType, "_call"),

@@ -251,3 +251,17 @@ func TestRoomAttachmentInstructionsForManagerAndWorker(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentMCPInstructionsReplaceGlobalCredentialRules(t *testing.T) {
+	got := RenderRuntimeAgentsInstructionsBlockWithOptions("agent-manager", "", RuntimeManagedInstructionsOptions{AgentMCP: true})
+	for _, want := range []string{"app_setup", "assigned work", "Follow the existing bundled Skills", "exactly one matching App", "ask which one to use before calling their business tools", "no matching App is connected"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing scoped instruction %q", want)
+		}
+	}
+	for _, forbidden := range []string{"/connectors/github/credential", "/connectors/gitlab/credential", "X-CSGClaw-Connector-Capability", "instead of running feishu_register.py", "take precedence over older"} {
+		if strings.Contains(got, forbidden) {
+			t.Errorf("obsolete global credential rule %q remains", forbidden)
+		}
+	}
+}

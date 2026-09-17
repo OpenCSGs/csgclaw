@@ -781,6 +781,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		ChannelBindings:    channelBindings,
 		SessionBindings:    sessionBindings,
 		ConfigPath:         configPath,
+		AppsStatePath:      legacyStatePath,
 		AccessToken:        cfg.Server.AccessToken,
 		NoAuth:             cfg.Server.NoAuth,
 		AdvertiseBaseURL:   apiURL,

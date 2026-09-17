@@ -223,7 +223,7 @@ describe("WorkspaceSidebar", () => {
     expect(onSelectMCPServer).toHaveBeenCalledWith(null);
   });
 
-  it("uses primary resource navigation to show the selected resource list", () => {
+  it("uses resource navigation without duplicating the main resource list", () => {
     const onToggleWorkspaceGroup = vi.fn();
     const onSelectModelProvider = vi.fn();
 
@@ -233,17 +233,17 @@ describe("WorkspaceSidebar", () => {
       onToggleWorkspaceGroup,
     });
 
-    expect(document.querySelector('[data-workspace-section="hub-templates"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-workspace-section="hub-templates"]')).not.toBeInTheDocument();
     expect(document.querySelector('[data-workspace-section="models"]')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Models" }));
 
     expect(onSelectModelProvider).toHaveBeenCalledWith(props.modelProviders?.providers[0]);
-    expect(document.querySelector('[data-workspace-section="models"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-workspace-section="models"]')).not.toBeInTheDocument();
     expect(onToggleWorkspaceGroup).toHaveBeenCalledWith("models");
   });
 
-  it("forwards knowledge base row selection from the context sidebar", () => {
+  it("opens the knowledge base list from the resource rail", () => {
     const knowledgeBase = {
       availability: "available" as const,
       configuredMCPName: "kb-investment",
@@ -291,14 +291,14 @@ describe("WorkspaceSidebar", () => {
       onSelectKnowledgeBase,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Investment handbook/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Knowledge bases" }));
 
-    expect(onSelectKnowledgeBase).toHaveBeenCalledWith(knowledgeBase);
-    expect(screen.getByText("Investment knowledge base")).toBeInTheDocument();
+    expect(onSelectKnowledgeBase).toHaveBeenCalledWith(null);
+    expect(screen.queryByText("Investment knowledge base")).not.toBeInTheDocument();
     expect(screen.queryByText("Added to MCP")).not.toBeInTheDocument();
   });
 
-  it("searches configured knowledge bases by name and description", () => {
+  it("keeps knowledge base search and rows in the main resource page", () => {
     renderSidebar({
       activePane: { type: WorkspacePaneTypes.hub, id: "143", resourceType: "knowledge" },
       hub: {
@@ -352,13 +352,8 @@ describe("WorkspaceSidebar", () => {
       } as unknown as WorkspaceSidebarProps["hub"],
     });
 
-    const search = screen.getByRole("searchbox", { name: "Search" });
-    fireEvent.change(search, { target: { value: "investment" } });
-    expect(screen.getByRole("button", { name: /招商知识库/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /旅游知识库/ })).not.toBeInTheDocument();
-
-    fireEvent.change(search, { target: { value: "旅游" } });
-    expect(screen.getByRole("button", { name: /旅游知识库/ })).toBeInTheDocument();
+    expect(screen.queryByRole("searchbox", { name: "Search" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Knowledge bases" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /招商知识库/ })).not.toBeInTheDocument();
   });
 
@@ -434,7 +429,11 @@ describe("WorkspaceSidebar", () => {
   });
 
   it("keeps the contextual sidebar visible when the primary rail is collapsed", () => {
-    renderSidebar({ isSidebarCollapsed: true });
+    renderSidebar({
+      isSidebarCollapsed: true,
+      workspaceTab: WorkspaceTabs.agents,
+      activePane: { type: WorkspacePaneTypes.agent, id: "" },
+    });
 
     const searchInput = screen.getByRole("searchbox", { name: "Search" });
     const contextAside = searchInput.closest("aside");

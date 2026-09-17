@@ -112,6 +112,8 @@ import {
   Select,
   Tooltip,
 } from "@/components/ui";
+import { AgentAppsPanel, AppManagedMCPRows, useAgentApps } from "../AgentAppsPanel";
+
 type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
 type AgentMetadataSavePatch = Pick<Partial<AgentDraft>, "description" | "name">;
@@ -125,7 +127,7 @@ const LARK_CLI_INSTALL_COMMAND = "npm install -g @larksuite/cli@latest";
 const LARK_CLI_INSTALL_DOCS_URL = "https://github.com/larksuite/cli#installation--quick-start";
 const LARK_CLI_RELEASES_URL = "https://github.com/larksuite/cli/releases/latest";
 const NODEJS_DOWNLOAD_URL = "https://nodejs.org/en/download";
-const AGENT_PROFILE_TAB_IDS = ["profile", "channels", "instructions", "memory", "skills", "mcp"] as const;
+const AGENT_PROFILE_TAB_IDS = ["profile", "channels", "instructions", "memory", "skills", "apps", "mcp"] as const;
 type AgentProfileTabID = (typeof AGENT_PROFILE_TAB_IDS)[number];
 type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
 type RuntimeOptionSchemaList = ReturnType<typeof runtimeOptionSchemasForAgent>;
@@ -142,6 +144,10 @@ type FeishuPendingRegistrationView = {
 } | null;
 
 export type AgentDetailPaneProps = {
+  requestedProfileTab?: string;
+  requestedAppID?: string;
+  requestedAddAppID?: string;
+  onProfileTabChange?: (tab: string, appID?: string) => void;
   activeRoom?: IMConversation | null;
   authBusyProvider?: string;
   authStatuses?: unknown;
@@ -239,6 +245,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   {
     item,
     t,
+    requestedProfileTab,
+    requestedAppID,
+    requestedAddAppID,
+    onProfileTabChange,
     activeRoom = null,
     busyKey = "",
     dialogPortalContainer = null,
@@ -320,6 +330,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>(() => readAgentProfileActiveTab());
+  const [appSettingsID, setAppSettingsID] = useState<string | undefined>();
   const [addSkillsDialogOpen, setAddSkillsDialogOpen] = useState(false);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
@@ -487,6 +498,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const showMCPServers = Boolean(
     draft && !isNotifierDraft && supportsMCPServers(draft.runtime_kind || item.runtime_kind),
   );
+  const showApps = runtimeKind === "codex" && !isNotifierDraft;
   const profileTabs = useMemo(
     () =>
       draft
@@ -497,15 +509,26 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             ...(workspaceSupported
               ? [{ id: "skills" as const, label: t("agentProfileSkillsTab"), count: skills.length }]
               : []),
+            ...(showApps ? [{ id: "apps" as const, label: t("agentAppsTab") }] : []),
             ...(showMCPServers ? [{ id: "mcp" as const, label: t("agentProfileMCPTab") }] : []),
             ...(!isNotificationBotAgent(item) ? [{ id: "channels" as const, label: t("agentChannelsTitle") }] : []),
           ]
         : [],
-    [draft, isNotifierDraft, item, showMCPServers, skills.length, t, workspaceSupported],
+    [draft, isNotifierDraft, item, showApps, showMCPServers, skills.length, t, workspaceSupported],
   );
-  const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === activeProfileTab)
-    ? activeProfileTab
+  const selectedProfileTab = requestedProfileTab || activeProfileTab;
+  const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === selectedProfileTab)
+    ? selectedProfileTab
     : profileTabs[0]?.id;
+  const appsController = useAgentApps(
+    String(item.id || ""),
+    showApps && (visibleActiveProfileTab === "apps" || visibleActiveProfileTab === "mcp"),
+  );
+  function selectAppSettings(id: string | undefined) {
+    setAppSettingsID(id);
+    setActiveProfileTab("apps");
+    onProfileTabChange?.("apps", id);
+  }
 
   useEffect(() => {
     if (!draft) {
@@ -620,6 +643,8 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   function selectProfileTab(tabID: AgentProfileTabID): void {
     setActiveProfileTab(tabID);
     saveAgentProfileActiveTab(tabID);
+    setAppSettingsID(undefined);
+    onProfileTabChange?.(tabID);
   }
 
   return (
@@ -986,25 +1011,42 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               />
             ) : null}
 
-            {showMCPServers && visibleActiveProfileTab === "mcp" ? (
-              <AgentMCPPanel
-                addBusy={mcpAddBusy}
-                addError={mcpAddError}
-                deleteBusy={mcpDeleteBusy}
-                deleteError={mcpDeleteError}
-                servers={mcpServers}
-                sourceBusyNames={mcpSourceBusyNames}
-                sourceUnavailableNames={mcpSourceUnavailableNames}
-                sourceSyncBusyName={mcpSourceSyncBusyName}
-                updateAvailableNames={mcpUpdateAvailableNames}
+            {showApps && visibleActiveProfileTab === "apps" ? (
+              <AgentAppsPanel
+                key={String(item.id)}
+                agentID={String(item.id || "")}
+                controller={appsController}
+                hasFeishuChannel={appsController.feishuChannelAvailable ?? hasConnectedAgentChannel(item, "feishu")}
                 t={t}
-                onOpenAddMCP={() => setAddMCPDialogOpen(true)}
-                onRequestDeleteMCP={(server) => {
-                  setMCPPendingDelete(server);
-                  setDeleteMCPDialogOpen(true);
-                }}
-                onUpdateMCP={onUpdateMCPServer}
+                portalContainer={dialogPortalContainer}
+                selectedID={onProfileTabChange ? requestedAppID : requestedAppID || appSettingsID}
+                addAppID={requestedAddAppID}
+                onSelect={selectAppSettings}
               />
+            ) : null}
+            {showMCPServers && visibleActiveProfileTab === "mcp" ? (
+              <>
+                {showApps ? <AppManagedMCPRows controller={appsController} t={t} onSelect={selectAppSettings} /> : null}
+                <AgentMCPPanel
+                  addBusy={mcpAddBusy}
+                  addError={mcpAddError}
+                  deleteBusy={mcpDeleteBusy}
+                  deleteError={mcpDeleteError}
+                  servers={mcpServers}
+                  hasManagedApps={appsController.items.length > 0}
+                  sourceBusyNames={mcpSourceBusyNames}
+                  sourceUnavailableNames={mcpSourceUnavailableNames}
+                  sourceSyncBusyName={mcpSourceSyncBusyName}
+                  updateAvailableNames={mcpUpdateAvailableNames}
+                  t={t}
+                  onOpenAddMCP={() => setAddMCPDialogOpen(true)}
+                  onRequestDeleteMCP={(server) => {
+                    setMCPPendingDelete(server);
+                    setDeleteMCPDialogOpen(true);
+                  }}
+                  onUpdateMCP={onUpdateMCPServer}
+                />
+              </>
             ) : null}
           </div>
         ) : null}
@@ -1538,6 +1580,7 @@ function AgentRuntimePanel({
 }
 
 type AgentMCPPanelProps = {
+  hasManagedApps?: boolean;
   addBusy: boolean;
   addError: string;
   deleteBusy: boolean;
@@ -1554,6 +1597,7 @@ type AgentMCPPanelProps = {
 };
 
 function AgentMCPPanel({
+  hasManagedApps = false,
   addBusy,
   addError,
   deleteBusy,
@@ -1575,8 +1619,10 @@ function AgentMCPPanel({
     >
       <div className="agent-skills-summary-heading">
         <div className="profile-section-heading">
-          <div className="profile-section-title">{t("profileMCPServers")}</div>
-          <p className="profile-section-description">{t("profileMCPServersHubHint")}</p>
+          <div className="profile-section-title">{t(hasManagedApps ? "appManualMCPTitle" : "profileMCPServers")}</div>
+          <p className="profile-section-description">
+            {t(hasManagedApps ? "appManualMCPDescription" : "profileMCPServersHubHint")}
+          </p>
         </div>
         <div className="agent-skills-summary-actions">
           <span className="agent-skills-summary-count">{t("agentMCPCount", { count: servers.length })}</span>
@@ -1604,7 +1650,7 @@ function AgentMCPPanel({
             <Server size={18} strokeWidth={1.8} />
           </span>
           <div className="agent-skills-summary-empty-copy">
-            <strong>{t("agentMCPEmpty")}</strong>
+            <strong>{t(hasManagedApps ? "appManualMCPEmpty" : "agentMCPEmpty")}</strong>
             <p>{t("agentMCPEmptyHint")}</p>
           </div>
           <Button variant="secondaryGray" size="sm" disabled={addBusy} onClick={onOpenAddMCP}>
@@ -1754,10 +1800,7 @@ function AgentModelPanel({
                     updateDraft({ model_id: "", model_provider_id: "" });
                     return;
                   }
-                  if (
-                    nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG &&
-                    !onRequireOpenCSGAuth()
-                  ) {
+                  if (nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) {
                     return;
                   }
                   updateDraft({

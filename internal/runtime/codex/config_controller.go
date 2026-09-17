@@ -77,6 +77,9 @@ func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, ch
 }
 
 func (r *Runtime) ValidateMCPServers(_ context.Context, current agentruntime.MCPServersSnapshot) error {
+	if _, exists := current.Servers[AgentMCPServerName]; exists {
+		return fmt.Errorf("MCP server %q is managed by CSGClaw", AgentMCPServerName)
+	}
 	return validateCodexMCPServers(current.Servers)
 }
 
@@ -162,6 +165,7 @@ func (r *Runtime) ListMCPServers(_ context.Context, h agentruntime.Handle, _ age
 	if err != nil {
 		return agentruntime.MCPServersSnapshot{}, err
 	}
+	delete(config, AgentMCPServerName)
 	return agentruntime.MCPServersSnapshot{Servers: config}, nil
 }
 

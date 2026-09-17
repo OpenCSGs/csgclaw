@@ -17,6 +17,8 @@ type liveSession struct {
 	conversationPersistMu sync.Mutex
 	memoryCheckpointMu    sync.Mutex
 	memoryMaintenanceMu   sync.Mutex
+	mcpReloadMu           sync.Mutex
+	mcpCatalogRevision    uint64
 	session               *Session
 	appClient             *appServerClient
 	cmd                   *exec.Cmd
@@ -111,6 +113,11 @@ func buildSessionEnv(spec SessionSpec) []string {
 			envMap[key] = value
 		}
 	}
+	// The built-in MCP is also available to read-only runtimes. Only the scoped
+	// credential projected by the Controller may be used, never inherited state.
+	if token := strings.TrimSpace(spec.Profile.Env[agentAccessTokenEnv]); token != "" {
+		envMap[agentAccessTokenEnv] = token
+	}
 	keys := make([]string, 0, len(envMap))
 	for key := range envMap {
 		keys = append(keys, key)
@@ -124,7 +131,7 @@ func buildSessionEnv(spec SessionSpec) []string {
 
 func shouldOmitInheritedSessionEnvKey(key string) bool {
 	switch strings.ToUpper(strings.TrimSpace(key)) {
-	case "ZDOTDIR", "BASH_ENV", "ENV", "LARKSUITE_CLI_CONFIG_DIR", "LARK_CHANNEL", "LARK_CHANNEL_HOME", "LARK_CHANNEL_PROFILE", "LARK_CHANNEL_CONFIG":
+	case "CSGCLAW_ACCESS_TOKEN", "CSGCLAW_CONNECTOR_CAPABILITY", "OPENAI_API_KEY", "ZDOTDIR", "BASH_ENV", "ENV", "LARKSUITE_CLI_CONFIG_DIR", "LARK_CHANNEL", "LARK_CHANNEL_HOME", "LARK_CHANNEL_PROFILE", "LARK_CHANNEL_CONFIG":
 		return true
 	default:
 		return false
@@ -133,7 +140,7 @@ func shouldOmitInheritedSessionEnvKey(key string) bool {
 
 func isReservedSessionEnvKey(key string) bool {
 	switch strings.ToUpper(strings.TrimSpace(key)) {
-	case "HOME", "CODEX_HOME", "OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_MODEL", "LARKSUITE_CLI_CONFIG_DIR", "LARK_CHANNEL", "LARK_CHANNEL_HOME", "LARK_CHANNEL_PROFILE", "LARK_CHANNEL_CONFIG":
+	case "CSGCLAW_ACCESS_TOKEN", "CSGCLAW_CONNECTOR_CAPABILITY", "HOME", "CODEX_HOME", "OPENAI_BASE_URL", "OPENAI_API_KEY", "OPENAI_MODEL", "LARKSUITE_CLI_CONFIG_DIR", "LARK_CHANNEL", "LARK_CHANNEL_HOME", "LARK_CHANNEL_PROFILE", "LARK_CHANNEL_CONFIG":
 		return true
 	default:
 		return false

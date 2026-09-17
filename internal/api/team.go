@@ -18,7 +18,17 @@ func (h *Handler) handleListTeams(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, apiTeamsWithPresenter(svc.ListTeams(), h.newTeamIdentityPresenter()))
+	teams := svc.ListTeams()
+	if agentID := appRequestAgentID(r); agentID != "" {
+		visible := teams[:0]
+		for _, meta := range teams {
+			if _, err := h.appTaskTeam(agentID, meta.ID, false); err == nil {
+				visible = append(visible, meta)
+			}
+		}
+		teams = visible
+	}
+	writeJSON(w, http.StatusOK, apiTeamsWithPresenter(teams, h.newTeamIdentityPresenter()))
 }
 
 func (h *Handler) handleCreateTeam(w http.ResponseWriter, r *http.Request) {

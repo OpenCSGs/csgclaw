@@ -29,6 +29,11 @@ func (h *Handler) handleListAgentTasks(w http.ResponseWriter, r *http.Request) {
 	tasks := svc.List()
 	resp := make([]apitypes.TeamTask, 0, len(tasks))
 	for _, task := range tasks {
+		if agentID := appRequestAgentID(r); agentID != "" {
+			if _, err := h.appDirectTask(agentID, task.ID, false); err != nil {
+				continue
+			}
+		}
 		resp = append(resp, apiCoreTask(task, presenter))
 	}
 	writeJSON(w, http.StatusOK, resp)

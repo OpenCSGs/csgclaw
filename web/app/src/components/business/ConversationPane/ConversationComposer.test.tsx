@@ -2,7 +2,6 @@ import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { emptyGitLabConnectorStatus } from "@/models/connectors";
 import { ConversationComposer } from "./ConversationComposer";
 import { ConversationWorkingActions, type ConversationWorkingParticipant } from "./types";
 
@@ -48,7 +47,6 @@ function renderConversationComposer(overrideProps: Partial<React.ComponentProps<
       slashPickerLoading={false}
       slashPickerOpen={false}
       t={defaultTranslate}
-      gitlabConnectorStatus={emptyGitLabConnectorStatus()}
       onAddAttachments={vi.fn()}
       onApplyMention={vi.fn()}
       onApplySlashCandidate={vi.fn()}
@@ -212,38 +210,24 @@ describe("ConversationComposer working activity", () => {
   });
 });
 
-describe("ConversationComposer GitLab connector feedback", () => {
-  it("shows a success status in the GitLab dialog after saving", async () => {
+describe("ConversationComposer Apps entry", () => {
+  it("opens agent Apps instead of collecting a global GitLab token", async () => {
     const user = userEvent.setup();
-    const onSaveGitLabConnectorConfig = vi.fn().mockResolvedValue(undefined);
-
-    renderConversationComposer({ onSaveGitLabConnectorConfig });
-
+    const onManageApps = vi.fn();
+    renderConversationComposer({ onManageApps });
     await user.click(screen.getByRole("button", { name: "添加内容" }));
-    await user.click(screen.getAllByRole("button", { name: "连接" })[1]);
-    await user.type(screen.getByRole("textbox", { name: "GitLab 地址" }), "https://gitlab.example.com");
-    await user.type(screen.getByLabelText("Personal Access Token"), "glpat-test");
-    await user.click(screen.getByRole("button", { name: "保存" }));
-
-    expect(onSaveGitLabConnectorConfig).toHaveBeenCalledWith({
-      access_token: "glpat-test",
-      base_url: "https://gitlab.example.com",
-    });
-    expect(await screen.findByRole("status")).toHaveTextContent("GitLab 连接配置已保存。");
+    await user.click(screen.getByRole("button", { name: "appOpenApps" }));
+    expect(onManageApps).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText("Personal Access Token")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("shows an error status in the GitLab dialog after a failed save", async () => {
+  it("preserves the GitHub connection action", async () => {
     const user = userEvent.setup();
-    const onSaveGitLabConnectorConfig = vi.fn().mockRejectedValue(new Error("boom"));
-
-    renderConversationComposer({ onSaveGitLabConnectorConfig });
-
+    const onConnectConnector = vi.fn();
+    renderConversationComposer({ onConnectConnector });
     await user.click(screen.getByRole("button", { name: "添加内容" }));
-    await user.click(screen.getAllByRole("button", { name: "连接" })[1]);
-    await user.type(screen.getByRole("textbox", { name: "GitLab 地址" }), "https://gitlab.example.com");
-    await user.type(screen.getByLabelText("Personal Access Token"), "glpat-test");
-    await user.click(screen.getByRole("button", { name: "保存" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("保存 GitLab 连接器失败。请检查地址和 Token。");
+    await user.click(screen.getByRole("button", { name: "连接" }));
+    expect(onConnectConnector).toHaveBeenCalledOnce();
   });
 });
