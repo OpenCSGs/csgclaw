@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	feishutransport "csgclaw/internal/channel/feishu/transport"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -70,24 +71,23 @@ type Definition struct {
 // Config contains only displayable configuration. Secret headers and environment
 // values belong in Credentials and are never returned by the service.
 type Config struct {
-	Transport         string            `json:"transport,omitempty"`
-	URL               string            `json:"url,omitempty"`
-	Command           string            `json:"command,omitempty"`
-	Args              []string          `json:"args,omitempty"`
-	CWD               string            `json:"cwd,omitempty"`
-	Env               map[string]string `json:"env,omitempty"`
-	Headers           map[string]string `json:"headers,omitempty"`
-	AuthMode          string            `json:"auth_mode,omitempty"`
-	CredentialSource  string            `json:"credential_source,omitempty"`
-	TokenHeader       string            `json:"token_header,omitempty"`
-	TokenPrefix       string            `json:"token_prefix,omitempty"`
-	TokenEnv          string            `json:"token_env,omitempty"`
-	AppIDHeader       string            `json:"app_id_header,omitempty"`
-	AppSecretHeader   string            `json:"app_secret_header,omitempty"`
-	AppIDEnv          string            `json:"app_id_env,omitempty"`
-	AppSecretEnv      string            `json:"app_secret_env,omitempty"`
-	StartupTimeoutSec int               `json:"startup_timeout_sec,omitempty"`
-	ToolTimeoutSec    int               `json:"tool_timeout_sec,omitempty"`
+	PlatformCredentialSource string            `json:"platform_credential_source,omitempty"`
+	Transport                string            `json:"transport,omitempty"`
+	URL                      string            `json:"url,omitempty"`
+	Command                  string            `json:"command,omitempty"`
+	Args                     []string          `json:"args,omitempty"`
+	CWD                      string            `json:"cwd,omitempty"`
+	Env                      map[string]string `json:"env,omitempty"`
+	Headers                  map[string]string `json:"headers,omitempty"`
+	AuthMode                 string            `json:"auth_mode,omitempty"`
+	CredentialSource         string            `json:"credential_source,omitempty"`
+	TokenHeader              string            `json:"token_header,omitempty"`
+	TokenPrefix              string            `json:"token_prefix,omitempty"`
+	TokenEnv                 string            `json:"token_env,omitempty"`
+	AppIDEnv                 string            `json:"app_id_env,omitempty"`
+	AppSecretEnv             string            `json:"app_secret_env,omitempty"`
+	StartupTimeoutSec        int               `json:"startup_timeout_sec,omitempty"`
+	ToolTimeoutSec           int               `json:"tool_timeout_sec,omitempty"`
 }
 
 type Credentials struct {
@@ -101,19 +101,21 @@ type Credentials struct {
 func (Credentials) String() string { return "[redacted]" }
 
 type Installation struct {
-	InstallationID string          `json:"installation_id"`
-	AgentID        string          `json:"agent_id"`
-	AppID          string          `json:"app_id"`
-	Name           string          `json:"name"`
-	Enabled        bool            `json:"enabled"`
-	Disconnected   bool            `json:"disconnected"`
-	Status         string          `json:"status"`
-	LastError      string          `json:"last_error,omitempty"`
-	Config         Config          `json:"config"`
-	CredentialsSet map[string]bool `json:"credentials_set"`
-	Tools          []*mcp.Tool     `json:"tools"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	InstallationID      string          `json:"installation_id"`
+	AgentID             string          `json:"agent_id"`
+	AppID               string          `json:"app_id"`
+	Name                string          `json:"name"`
+	Enabled             bool            `json:"enabled"`
+	Disconnected        bool            `json:"disconnected"`
+	Status              string          `json:"status"`
+	LastErrorCode       string          `json:"last_error_code,omitempty"`
+	LastErrorHTTPStatus int             `json:"last_error_http_status,omitempty"`
+	LastError           string          `json:"last_error,omitempty"`
+	Config              Config          `json:"config"`
+	CredentialsSet      map[string]bool `json:"credentials_set"`
+	Tools               []*mcp.Tool     `json:"tools"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
 }
 
 type CreateRequest struct {
@@ -150,7 +152,9 @@ type FeishuCredentials struct{ AppID, AppSecret string }
 func (FeishuCredentials) String() string { return "[redacted]" }
 
 type Options struct {
-	ReadOnly         func(string) bool
-	ResolveFeishu    func(context.Context, string) (FeishuCredentials, error)
-	OnCatalogChanged func(string, uint64)
+	OpenCSGCredentials func(context.Context) (OpenCSGCredentials, error)
+	FeishuTokenSource  func(string, string) feishutransport.TenantTokenSource
+	ReadOnly           func(string) bool
+	ResolveFeishu      func(context.Context, string) (FeishuCredentials, error)
+	OnCatalogChanged   func(string, uint64)
 }

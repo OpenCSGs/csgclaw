@@ -418,7 +418,7 @@ func TestAddKeepsFailedConnectionAsEditableInstallation(t *testing.T) {
 	unauthorized := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "bad credential", http.StatusUnauthorized) }))
 	defer unauthorized.Close()
 	item, err := s.Create(context.Background(), "agent", CreateRequest{AppID: "gitlab", Name: "Failed connection", Config: Config{URL: unauthorized.URL}, Credentials: Credentials{Token: "fixture"}, Connect: true})
-	if err != nil || item.InstallationID == "" || item.Status != "error" || item.LastError == "" {
+	if err != nil || item.InstallationID == "" || item.Status != "authorization_required" || item.LastErrorCode != "app_platform_unauthorized" || item.LastErrorHTTPStatus != 401 || item.LastError == "" {
 		t.Fatalf("missing repairable installation: %+v %v", item, err)
 	}
 	items, _ := s.List(context.Background(), "agent")

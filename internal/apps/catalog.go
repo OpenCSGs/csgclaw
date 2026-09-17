@@ -91,6 +91,7 @@ func configSchema(appID string) map[string]any {
 		"command":   field("Command", false), "cwd": field("Working directory", false),
 	}
 	if appID == "feishu" {
+		props["token"] = field("Platform access token (optional)", true)
 		props["app_id"] = field("App ID", true)
 		props["app_secret"] = field("App Secret", true)
 		props["credential_source"] = map[string]any{"type": "string", "enum": []string{"feishu_channel", "manual"}, "default": "feishu_channel"}

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import { localizeAPIError } from "@/shared/i18n";
-import { appDescription, appName, appStatus } from "./appForm";
+import { appConnectionError, appDescription, appName, appStatus } from "./appForm";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { AppToolList } from "./AppToolList";
 import type { AgentAppsController } from "./useAgentApps";
@@ -131,7 +131,7 @@ export function AgentAppsPanel({
                 {appStatus(app, t)}
               </span>
             </div>
-            {app.last_error ? <p className={styles.cardError}>{app.last_error}</p> : null}
+            {app.last_error ? <p className={styles.cardError}>{appConnectionError(app, t)}</p> : null}
             {app.disconnected ? <p className={styles.hint}>{t("appDisconnectedHint")}</p> : null}
             <AppToolList tools={app.tools} t={t} />
             <div className={styles.actions}>

@@ -27,6 +27,14 @@ export const messages = {
     appAuthBearer: "Bearer Token",
     appAuthHeader: "API Key / 自定义 Header",
     appAuthFeishu: "飞书应用凭据",
+    appPlatformToken: "平台访问 Token（可选）",
+    appPlatformCredentialSource: "平台凭据来源",
+    appManualPlatformToken: "手动填写平台 Token",
+    appUseOpenCSGLogin: "复用当前 OpenCSG 登录",
+    appOpenCSGLoginHint:
+      "每次请求使用 CSGClaw 最新的 OpenCSG 登录凭据，不复制 Token。只支持与当前登录环境匹配的 OpenCSG HTTPS 服务地址。",
+    appFeishuTokenHint:
+      "填写 OpenCSG 等平台的入口 Token。CSGClaw 会自动获取并刷新飞书应用 Token，无需填写飞书 Token 或 Header 名称。",
     appAuthEnvironment: "环境变量 Token",
     appAuthNone: "无需鉴权",
     appAuthOAuth: "OAuth2",
@@ -45,8 +53,6 @@ export const messages = {
     appAdvancedSettings: "高级连接设置",
     appIDEnvironment: "App ID 环境变量",
     appSecretEnvironment: "App Secret 环境变量",
-    appIDHeader: "App ID Header 名称",
-    appSecretHeader: "App Secret Header 名称",
     appStartupTimeout: "连接超时（秒）",
     appToolTimeout: "工具调用超时（秒）",
     appExtraEnvironment: "其他环境变量",
@@ -1692,6 +1698,26 @@ export const messages = {
       app_not_found: "找不到此 App，请刷新列表。",
       app_name_conflict: "当前 Agent 已有同名 App，请使用其他实例名称。",
       app_oauth_unsupported: "当前版本暂不支持 OAuth2 授权。",
+      app_platform_header_conflict:
+        "OpenCSG 使用 Authorization Header。请将业务 API Key 放入独立的 Header，例如 PRIVATE-TOKEN 或 X-API-Key。",
+      app_platform_token_expired: "平台访问 Token 已过期。请更新 Token，或在设置中选择“复用当前 OpenCSG 登录”。",
+      app_platform_unauthorized:
+        "MCP 平台拒绝了访问凭据。请更新平台 Token，或复用当前 OpenCSG 登录；这不是飞书应用 Token 的错误。",
+      app_opencsg_login_required: "CSGClaw 尚未登录 OpenCSG，或登录已过期。请在设置中登录正确环境，然后重新连接 App。",
+      app_opencsg_login_rejected: "OpenCSG 拒绝了当前登录凭据。请在设置中重新登录，然后重新连接 App。",
+      app_opencsg_environment_mismatch:
+        "当前 OpenCSG 登录环境与 MCP 地址不匹配。请切换到对应的正式或 staging 环境，或改用手动 Token。",
+      app_opencsg_endpoint_untrusted:
+        "不能向此地址发送 OpenCSG 登录凭据。请使用匹配环境的 OpenCSG HTTPS 服务地址，或改用手动 Token。",
+      app_platform_access_denied:
+        "MCP 平台拒绝访问。请确认当前账号有权访问此服务，并检查 Token 权限；403 不一定表示 Token 过期。",
+      app_mcp_network_error: "无法连接 MCP 服务。请检查服务地址、网络连接，以及服务是否正在运行。",
+      app_mcp_not_found: "MCP 服务地址不存在。请检查 URL 和 MCP 路径（通常为 /mcp）。",
+      app_mcp_backend_unavailable: "MCP 服务没有可用的后端，可能已休眠或停止。请启动上游服务后重新连接。",
+      app_mcp_http_error: "上游 MCP 服务返回 HTTP 错误。请检查该服务的运行状态后重试。",
+      app_feishu_token_failed:
+        "获取飞书应用 Token 失败。请检查所选 Channel 或 App ID/App Secret、应用状态及飞书网络连接。",
+      app_feishu_token_rejected: "飞书拒绝了刷新后的应用 Token。请检查飞书应用凭据后重新连接。",
       app_invalid_configuration: "App 配置无效，请检查服务地址、启动参数及鉴权设置。",
       app_connection_failed: "App 连接失败，请检查服务是否可达及凭据是否有效。",
       "AGENT-ERR-22": "模板已发布，当前仍在审核中。请稍后在模板列表中查看最新状态。",
@@ -1786,6 +1812,14 @@ export const messages = {
     appAuthBearer: "Bearer token",
     appAuthHeader: "API key / custom header",
     appAuthFeishu: "Feishu app credentials",
+    appPlatformToken: "Platform access token (optional)",
+    appPlatformCredentialSource: "Platform credential source",
+    appManualPlatformToken: "Enter a platform token manually",
+    appUseOpenCSGLogin: "Use current OpenCSG login",
+    appOpenCSGLoginHint:
+      "Each request uses the latest CSGClaw OpenCSG login without copying its token. Only matching OpenCSG HTTPS service addresses are allowed.",
+    appFeishuTokenHint:
+      "For OpenCSG or another gateway. CSGClaw obtains and refreshes the Feishu application token automatically; no Feishu token or header names are needed.",
     appAuthEnvironment: "Token environment variable",
     appAuthNone: "No authentication",
     appAuthOAuth: "OAuth2",
@@ -1805,8 +1839,6 @@ export const messages = {
     appAdvancedSettings: "Advanced connection settings",
     appIDEnvironment: "App ID environment variable",
     appSecretEnvironment: "App Secret environment variable",
-    appIDHeader: "App ID header name",
-    appSecretHeader: "App Secret header name",
     appStartupTimeout: "Connection timeout (seconds)",
     appToolTimeout: "Tool timeout (seconds)",
     appExtraEnvironment: "Additional environment variables",
@@ -3525,6 +3557,32 @@ export const messages = {
       app_not_found: "This app was not found. Refresh the list.",
       app_name_conflict: "This agent already has an app with that name. Choose another instance name.",
       app_oauth_unsupported: "OAuth2 authorization is not supported in this version.",
+      app_platform_header_conflict:
+        "OpenCSG uses Authorization. Put the service API key in a separate header, such as PRIVATE-TOKEN or X-API-Key.",
+      app_platform_token_expired:
+        "The platform token has expired. Update it or select Use current OpenCSG login in App settings.",
+      app_platform_unauthorized:
+        "The MCP platform rejected its access credential. Update the platform token or use your current OpenCSG login; this is not a Feishu application-token error.",
+      app_opencsg_login_required:
+        "CSGClaw is not signed in to OpenCSG or its login has expired. Sign in to the matching environment in Settings, then reconnect the App.",
+      app_opencsg_login_rejected:
+        "OpenCSG rejected the current login. Sign in again in Settings, then reconnect the App.",
+      app_opencsg_environment_mismatch:
+        "The OpenCSG login environment does not match the MCP address. Select the matching production or staging environment, or use a manual token.",
+      app_opencsg_endpoint_untrusted:
+        "OpenCSG login credentials cannot be sent to this address. Use a matching OpenCSG HTTPS service address or a manual token.",
+      app_platform_access_denied:
+        "The MCP platform denied access. Check this account’s access to the service and token permissions; HTTP 403 does not necessarily mean expiry.",
+      app_mcp_network_error:
+        "Cannot reach the MCP service. Check the address, network connection, and whether the service is running.",
+      app_mcp_not_found: "MCP endpoint not found. Check the service URL and MCP path (usually /mcp).",
+      app_mcp_backend_unavailable:
+        "The MCP service has no available backend and may be sleeping or stopped. Start the upstream service and reconnect.",
+      app_mcp_http_error: "The upstream MCP service returned an HTTP error. Check its service status and retry.",
+      app_feishu_token_failed:
+        "Could not obtain a Feishu application token. Check the selected Channel or App ID/App Secret, application status, and Feishu connectivity.",
+      app_feishu_token_rejected:
+        "Feishu rejected the refreshed application token. Check the application credentials and reconnect.",
       app_invalid_configuration:
         "Invalid app configuration. Check the service URL, command arguments, and authentication settings.",
       app_connection_failed:

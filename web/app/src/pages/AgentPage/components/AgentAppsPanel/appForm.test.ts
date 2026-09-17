@@ -62,3 +62,40 @@ describe("App settings payload", () => {
     expect(appStatus({ ...existing, enabled: false }, (key) => key)).toBe("appStatusDisabled");
   });
 });
+
+describe("Shared OpenCSG platform credentials", () => {
+  it.each(["gitlab", "feishu", "llm-wiki"])("defaults %s to login for OpenCSG URLs", (appID) => {
+    const form = initialAppForm({ ...definition, app_id: appID }, null, false);
+    form.config.url = "https://demo.public.opencsg-stg.com/mcp";
+    expect(appFormPayload(form).config.platform_credential_source).toBe("opencsg_login");
+    form.config.platform_credential_source = "manual";
+    form.credentials.token = "explicit-token";
+    expect(appFormPayload(form).credentials.token).toBe("explicit-token");
+    expect(appFormPayload(form).config.platform_credential_source).toBe("manual");
+  });
+
+  it.each([
+    "http://localhost/mcp",
+    "https://example.com/mcp",
+    "https://demo.public.opencsg-stg.com.evil.example/mcp",
+    "https://demo.public.opencsg-stg.com:8443/mcp",
+  ])("does not send login to %s", (url) => {
+    const form = initialAppForm(definition, null, false);
+    form.config.url = url;
+    expect(appFormPayload(form).config.platform_credential_source).toBe("manual");
+  });
+
+  it("preserves a business API key alongside platform login", () => {
+    const form = initialAppForm(definition, null, false);
+    form.config = {
+      transport: "http",
+      auth_mode: "header",
+      token_header: "PRIVATE-TOKEN",
+      url: "https://demo.public.opencsg-stg.com/mcp",
+    };
+    form.credentials.token = "business-fixture";
+    const result = appFormPayload(form);
+    expect(result.config.platform_credential_source).toBe("opencsg_login");
+    expect(result.credentials.token).toBe("business-fixture");
+  });
+});
