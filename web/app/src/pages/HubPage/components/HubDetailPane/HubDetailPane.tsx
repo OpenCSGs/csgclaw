@@ -592,6 +592,7 @@ type HubDetailPaneHub = {
     mcpSourceError?: string;
     mcpSourceStatus?: MCPServerSourceStatus | null;
     mcpSourceSyncBusy?: boolean;
+    knowledgeBaseAdded?: boolean;
     mcpCreateError?: string;
     mcpCreateDialogOpen?: boolean;
     mcpCreateInitialDocument?: string;
@@ -1024,6 +1025,7 @@ export function HubDetailPane({
     mcpSourceError = "",
     mcpSourceStatus = null,
     mcpSourceSyncBusy = false,
+    knowledgeBaseAdded = false,
     mcpCreateError = "",
     mcpCreateDialogOpen = false,
     mcpCreateInitialDocument = "",
@@ -1550,6 +1552,16 @@ export function HubDetailPane({
                     );
                   })}
                 </div>
+
+                {knowledgeBaseAdded ? (
+                  <DismissibleAlert
+                    className="flex items-center gap-2 rounded-lg border p-3 text-sm"
+                    messageKey="knowledge-base-added"
+                    closeLabel={t("close")}
+                  >
+                    <span>{t("resourcesKnowledgeBaseAddSuccess")}</span>
+                  </DismissibleAlert>
+                ) : null}
 
                 {error || knowledgeBases?.loadError ? (
                   <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error || knowledgeBases?.loadError} closeLabel={t("close")}>
@@ -3393,23 +3405,21 @@ export function HubDetailPane({
           </DialogHeader>
           <DialogBody className={moduleClassNames("mcp-form")}>
             <div className={moduleClassNames("mcp-form-mode")} role="tablist" aria-label={t("resourcesMCPCreateTitle")}>
-              <Button
-                active={mcpCreateMode === "manual"}
+              <button
+                type="button"
+                className={moduleClassNames("mcp-form-tab", mcpCreateMode === "manual" && "active")}
                 aria-selected={mcpCreateMode === "manual"}
                 role="tab"
-                size="sm"
-                variant={mcpCreateMode === "manual" ? "primary" : "secondaryGray"}
                 onClick={() => setMCPCreateMode("manual")}
               >
                 <Server size={15} strokeWidth={2} aria-hidden="true" />
                 {t("resourcesMCPManualTab")}
-              </Button>
-              <Button
-                active={mcpCreateMode === "remote"}
+              </button>
+              <button
+                type="button"
+                className={moduleClassNames("mcp-form-tab", mcpCreateMode === "remote" && "active")}
                 aria-selected={mcpCreateMode === "remote"}
                 role="tab"
-                size="sm"
-                variant={mcpCreateMode === "remote" ? "primary" : "secondaryGray"}
                 onClick={() => {
                   if (mcpCreateMode === "remote") {
                     onRemoteMCPVisibleChange?.(true);
@@ -3420,7 +3430,7 @@ export function HubDetailPane({
               >
                 <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
                 {t("resourcesMCPRemoteInstallTab")}
-              </Button>
+              </button>
             </div>
             {mcpCreateMode === "manual" ? (
               <>

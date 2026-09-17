@@ -178,26 +178,21 @@ export function SkillUploadDialog({
         </DialogHeader>
         <DialogBody className={styles.body}>
           <div className={styles.mode} role="tablist" aria-label={t("resourcesSkillUpload")}>
-            <Button
-              active={mode === "zip"}
+            <button
+              type="button"
+              className={styles.modeTab}
               aria-selected={mode === "zip"}
               role="tab"
-              size="sm"
-              variant={mode === "zip" ? "primary" : "secondaryGray"}
-              onClick={() => {
-                setMode("zip");
-                inputRef.current?.click();
-              }}
+              onClick={() => setMode("zip")}
             >
               <UploadCloud size={15} strokeWidth={2} aria-hidden="true" />
               {t("resourcesSkillUploadZipTab")}
-            </Button>
-            <Button
-              active={mode === "remote"}
+            </button>
+            <button
+              type="button"
+              className={styles.modeTab}
               aria-selected={mode === "remote"}
               role="tab"
-              size="sm"
-              variant={mode === "remote" ? "primary" : "secondaryGray"}
               onClick={() => {
                 if (mode === "remote") {
                   onRemoteVisibleChange?.(true);
@@ -208,7 +203,7 @@ export function SkillUploadDialog({
             >
               <CloudDownload size={15} strokeWidth={2} aria-hidden="true" />
               {t("resourcesSkillRemoteInstallTab")}
-            </Button>
+            </button>
           </div>
           <input
             ref={inputRef}

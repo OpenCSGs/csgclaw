@@ -130,6 +130,7 @@ describe("useWorkspaceKnowledgeBaseSelection", () => {
     expect(fetchRemoteKnowledgeBaseMCPConfig).toHaveBeenCalledWith("42");
     expect(openCreateMCPDialog).toHaveBeenCalledWith(
       '{\n  "mcpServers": {\n    "kb-investment": {\n      "type": "remote",\n      "url": "https://example.test/mcp"\n    }\n  }\n}',
+      "knowledge",
     );
     expect(result.current.pendingMCPKnowledgeBase).toBeNull();
   });

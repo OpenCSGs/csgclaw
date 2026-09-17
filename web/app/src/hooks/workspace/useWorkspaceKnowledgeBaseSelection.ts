@@ -13,7 +13,7 @@ type KnowledgeBaseIDSetter = (value: string | ((current: string) => string)) => 
 type UseWorkspaceKnowledgeBaseSelectionArgs = {
   enabled: boolean;
   openCSGAuthGuard: OpenCSGAuthGuard;
-  openCreateMCPDialog: (initialDocument?: string) => void;
+  openCreateMCPDialog: (initialDocument?: string, source?: "mcp" | "knowledge") => void;
   selectedKnowledgeBaseID: string;
   setSelectedKnowledgeBaseID: KnowledgeBaseIDSetter;
   t: (key: string) => string;
@@ -106,7 +106,7 @@ export function useWorkspaceKnowledgeBaseSelection({
       setCopyError("");
       try {
         const result = await fetchRemoteKnowledgeBaseMCPConfig(normalizedID);
-        openCreateMCPDialog(formatMCPServerDocument(result.name, result.config));
+        openCreateMCPDialog(formatMCPServerDocument(result.name, result.config), "knowledge");
         return true;
       } catch (error) {
         if (handleOpenCSGAuthenticationError(error)) {

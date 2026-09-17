@@ -821,9 +821,14 @@ export function useWorkspaceController() {
   const createMCPServerAndNavigate = useCallback(
     (payload: MCPServerPayload) =>
       saveMCPServerAndSelect(payload, hub.detailPaneProps.onCreateMCP, (name) => {
-        navigatePane({ type: WorkspacePaneTypes.hub, id: name, resourceType: "mcp" }, rooms);
+        if (hub.mcpCreateSource === "knowledge") {
+          setSelectedKnowledgeBaseID("");
+          navigatePane({ type: WorkspacePaneTypes.hub, id: "", resourceType: "knowledge" }, rooms, { replace: true });
+        } else {
+          navigatePane({ type: WorkspacePaneTypes.hub, id: name, resourceType: "mcp" }, rooms);
+        }
       }),
-    [hub.detailPaneProps.onCreateMCP, navigatePane, rooms],
+    [hub.detailPaneProps.onCreateMCP, hub.mcpCreateSource, navigatePane, rooms, setSelectedKnowledgeBaseID],
   );
 
   function openCreateModelProviderModal() {

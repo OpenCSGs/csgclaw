@@ -696,13 +696,61 @@
 }
 
 .mcp-form-mode {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
 }
 
-.mcp-form-mode :global(.btn-content) {
+.mcp-form-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 4px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--gray-500);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mcp-form-tab:hover,
+.mcp-form-tab.active {
+  background: transparent;
+  color: var(--brand-700);
+}
+
+.mcp-form-tab.active {
+  border-bottom-color: var(--brand-600);
+}
+
+.mcp-form-tab:focus-visible {
+  outline: 2px solid var(--brand-300);
+  outline-offset: -2px;
+}
+
+:root[data-theme="dark"] .mcp-form-tab {
+  color: #85888e;
+}
+
+:root[data-theme="dark"] .mcp-form-tab:hover,
+:root[data-theme="dark"] .mcp-form-tab.active {
+  background: transparent;
+  color: var(--gray-300);
+}
+
+:root[data-theme="dark"] .mcp-form-tab.active {
+  border-bottom-color: var(--gray-300);
 }
 
 .hub-template-card-meta {

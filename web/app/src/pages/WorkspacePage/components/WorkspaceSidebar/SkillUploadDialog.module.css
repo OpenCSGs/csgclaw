@@ -14,16 +14,26 @@
 }
 
 .modeTab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  height: 32px;
   padding: 0 4px 10px;
   border: 0;
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--gray-500);
   font: inherit;
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;
+  white-space: nowrap;
   cursor: pointer;
+  user-select: none;
 }
 
 .modeTab:hover,
