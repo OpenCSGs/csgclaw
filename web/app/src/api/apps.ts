@@ -12,6 +12,7 @@ export type AppDefinition = {
 };
 
 export type AppConfig = {
+  platform_credential_source?: "manual" | "opencsg_login";
   transport?: "http" | "stdio";
   url?: string;
   command?: string;
@@ -24,8 +25,6 @@ export type AppConfig = {
   token_header?: string;
   token_prefix?: string;
   token_env?: string;
-  app_id_header?: string;
-  app_secret_header?: string;
   app_id_env?: string;
   app_secret_env?: string;
   startup_timeout_sec?: number;
@@ -57,6 +56,8 @@ export type AppInstallation = {
     | "disconnected"
     | "disabled";
   last_error?: string;
+  last_error_code?: string;
+  last_error_http_status?: number;
   config: AppConfig;
   credentials_set: Record<string, boolean>;
   tools: AppTool[];

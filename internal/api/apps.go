@@ -310,7 +310,13 @@ func decodeAppRequest(w http.ResponseWriter, r *http.Request, target any) bool {
 
 func writeAppError(w http.ResponseWriter, err error) {
 	status, code, message := http.StatusBadGateway, "app_connection_failed", "App connection failed; check its settings and credentials"
+	var detail *apps.ConnectionError
 	switch {
+	case errors.As(err, &detail):
+		code, message = detail.Code, detail.Message
+		if errors.Is(err, apps.ErrInvalid) {
+			status = http.StatusBadRequest
+		}
 	case errors.Is(err, apps.ErrNotFound):
 		status, code, message = http.StatusNotFound, "app_not_found", "App not found"
 	case errors.Is(err, apps.ErrConflict):
@@ -321,4 +327,15 @@ func writeAppError(w http.ResponseWriter, err error) {
 		status, code, message = http.StatusBadRequest, "app_invalid_configuration", "Invalid App configuration"
 	}
 	writeCodedAPIError(w, status, code, message)
+}
+
+func (h *Handler) refreshAppPlatformAuthentication() {
+	if h.apps == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		_ = h.apps.RefreshPlatformCredentials(ctx)
+	}()
 }

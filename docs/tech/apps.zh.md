@@ -31,14 +31,28 @@ Agent MCP 继续使用系统自动配置的专属 Token，按 Agent 校验工具
 App CLI 无需额外登录，服务地址通过 `CSGCLAW_BASE_URL` 指定。
 原有受保护 API 的服务 Token 校验保持独立，`server.no_auth` 不作为页面登录开关。
 
+## OpenCSG 平台鉴权
+
+所有 HTTP App，包括 GitLab、飞书和 llm-wiki，均支持通用的 OpenCSG 平台凭据来源。
+新增 OpenCSG HTTPS 地址时，默认“复用当前 OpenCSG 登录”，每次请求读取最新凭据，不复制 Token 到 App。
+用户明确选择手动模式或提供手动 Bearer Token 时，保留该选择。
+业务凭据可通过 `PRIVATE-TOKEN`、`X-API-Key` 等独立 Header 同时发送；如果与平台凭据同时占用 `Authorization`，会明确提示冲突。
+第三方地址、本地地址和 stdio 进程不会自动携带 OpenCSG 登录凭据。
+仅向与当前登录环境匹配的 OpenCSG HTTPS 地址发送该凭据；正式环境与 staging、外部域名之间不会混用。
+也可选择手动填写平台 Token；已过期的手动 Token 会明确提示更新或切换登录引用。
+退出登录后引用连接需要重新授权，登录后会刷新未停用、未手动断开的引用连接。
+前端分别显示平台 401/403、未登录、环境不匹配、飞书 Token 获取失败、MCP 地址错误或后端休眠/不可用，并保留 HTTP 状态信息。
 ## 飞书远端 Passthrough 服务
 
-对于入口使用 OpenCSG Token、业务调用透传飞书 Token 的 MCP，选择 HTTP 和 Bearer Token 鉴权。
-Token 字段填写 OpenCSG Access Token，在高级 Header 中填写 `lark-access-token`（原始飞书访问 Token，不带 `Bearer`）和 `X-Lark-Token-Type`（`user_access_token` 或 `tenant_access_token`）。
-这些 Header 随上游 MCP 请求发送，并按实例作为凭据保存，不会回显原值。
-该模式的上游服务不接收 App Secret，因此不要选择把 App ID/App Secret 直接映射到 Header 的鉴权方式。
-当前支持手动提供已有的飞书 Token，尚未实现此模式下的 Token 换取、自动刷新或用户 OAuth 授权。
-App ID/App Secret 换取的应用凭据通常是 tenant access token；user access token 还需要用户授权。
+HTTP 飞书 App 选择“飞书应用凭据”，填写 MCP URL，并选择当前 Agent 的飞书 Channel 或手动填写 App ID/App Secret。
+Connector 复用飞书 Token 获取实现，按连接实例缓存 tenant access token，并在有效期结束前按需重新获取。
+调用 MCP 时自动注入 `lark-access-token` 和 `X-Lark-Token-Type: tenant_access_token`，平台 Token 单独放入 `Authorization: Bearer ...`。
+不需要填写 Header 名称或临时飞书 Token，App Secret 不会发给 passthrough MCP。
+只有上游明确返回 `lark_token_invalid` 时才刷新 Token 并重试一次；权限不足、网络错误或其他业务错误不自动重试。
+重复拒绝刷新后的 Token 会将连接标记为需要重新授权。
+Channel 凭据变化后，引用连接重新建立并使用新的 Token 缓存；断开、停用和移除遵守原有生命周期规则。
+stdio 模式继续将应用凭据注入本地 MCP 进程的环境变量。
+用户身份的 UAT 和浏览器 OAuth 不属于该应用身份流程，当前仍不支持自动用户授权；已有 UAT 可通过 Bearer/自定义 Header 模式手动配置。
 
 ## 对话中选择 App
 
