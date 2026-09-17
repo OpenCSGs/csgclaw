@@ -218,6 +218,7 @@ type Controller struct {
 	lifecycle                     *lifecycle.Coordinator
 	startupProfileDetectOff       bool
 	connectorCapabilityKey        []byte
+	agentResourceCleanup          func(context.Context, string) error
 
 	// gatewayWorkPhase is set by createGatewayBox for bootstrap progress logs (best-effort if concurrent).
 	gatewayWorkPhase atomic.Uint32
@@ -1762,6 +1763,17 @@ func (s *Controller) DeleteRecord(ctx context.Context, id string) error {
 
 	if err := s.removeAgentRuntime(ctx, existing); err != nil {
 		return err
+	}
+	s.mu.RLock()
+	cleanup := s.agentResourceCleanup
+	s.mu.RUnlock()
+	if cleanup != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		err := cleanup(cleanupCtx, existing.ID)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("remove Agent resources: %w", err)
+		}
 	}
 
 	s.mu.Lock()

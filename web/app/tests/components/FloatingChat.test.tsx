@@ -2,7 +2,6 @@ import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";
-import { emptyGitLabConnectorStatus } from "@/models/connectors";
 import { FloatingChat } from "@/pages/WorkspacePage/components/FloatingChat";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
@@ -29,6 +28,7 @@ const labels: Record<string, string> = {
   connectorDisconnect: "Disconnect",
   connectorGitHub: "GitHub",
   connectorGitLab: "GitLab",
+  appOpenApps: "Open Apps",
   connectorManage: "Manage",
   connectorNotConnected: "Not connected",
   deleteRoom: "Delete room",
@@ -253,7 +253,8 @@ describe("FloatingChat manager prompts", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("shows the connected GitLab account from the shared conversation state", async () => {
+  it("opens Manager Apps from the floating chat GitLab entry", async () => {
+    const onManageApps = vi.fn();
     const user = userEvent.setup();
     const conversation: IMConversation = {
       id: "room-manager",
@@ -266,19 +267,7 @@ describe("FloatingChat manager prompts", () => {
       <FloatingChat
         avatarFallback="M"
         chatProps={managerChatProps(conversation, {
-          gitlabConnectorStatus: {
-            ...emptyGitLabConnectorStatus(),
-            account: {
-              avatar_url: "",
-              email: "",
-              html_url: "",
-              id: 1,
-              login: "hjwang",
-              name: "",
-            },
-            configured: true,
-            connected: true,
-          },
+          onManageApps,
         })}
         locale="en"
         open={true}
@@ -290,8 +279,9 @@ describe("FloatingChat manager prompts", () => {
 
     await user.click(screen.getByRole("button", { name: "Add content" }));
 
-    expect(screen.getByText("hjwang")).toBeInTheDocument();
-    expect(screen.getByText("Connected")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Apps" }));
+    expect(onManageApps).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText("Personal Access Token")).not.toBeInTheDocument();
   });
 
   it("uses answer mode and preserves selected options while navigating", async () => {

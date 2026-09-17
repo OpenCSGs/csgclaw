@@ -256,3 +256,51 @@ func TestDesktopSecurityRejectsInvalidSandboxHosts(t *testing.T) {
 		})
 	}
 }
+
+func TestDesktopSandboxAuthenticatesScopedAgentsWithoutRelaxingOrigin(t *testing.T) {
+	calls := 0
+	handler, err := desktopSandboxSecurityHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Header.Get("Authorization") == "Bearer signed-agent" && r.URL.Path == "/api/v1/admin" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}), &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 18081}, DesktopOptions{
+		ServerAccessToken: "admin-token", ServerAccessHosts: []string{"127.0.0.1:18081"},
+		ValidateAgentAccessToken: func(token string) bool { return token == "signed-agent" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name, token, host, origin, path string
+		status                          int
+		downstream                      bool
+	}{
+		{"scoped Agent", "signed-agent", "127.0.0.1:18081", "", "/api/v1/agents/agent-alice/mcp", 204, true},
+		{"administrator", "admin-token", "127.0.0.1:18081", "", "/api/v1/admin", 204, true},
+		{"invalid Agent", "forged-agent", "127.0.0.1:18081", "", "/api/v1/agents/agent-alice/mcp", 401, false},
+		{"missing credential", "", "127.0.0.1:18081", "", "/api/v1/agents/agent-alice/mcp", 401, false},
+		{"foreign origin", "signed-agent", "127.0.0.1:18081", "https://evil.example", "/api/v1/agents/agent-alice/mcp", 403, false},
+		{"foreign host", "signed-agent", "evil.example:18081", "", "/api/v1/agents/agent-alice/mcp", 400, false},
+		{"downstream scope preserved", "signed-agent", "127.0.0.1:18081", "", "/api/v1/admin", 403, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			before := calls
+			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:18081"+test.path, nil)
+			req.Host = test.host
+			if test.token != "" {
+				req.Header.Set("Authorization", "Bearer "+test.token)
+			}
+			if test.origin != "" {
+				req.Header.Set("Origin", test.origin)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != test.status || (calls > before) != test.downstream {
+				t.Fatalf("status=%d reached downstream=%v", rec.Code, calls > before)
+			}
+		})
+	}
+}

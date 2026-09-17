@@ -4,7 +4,6 @@
 }
 
 .model-provider-page {
-
   height: auto;
   min-height: 100%;
   display: flex;
@@ -336,7 +335,6 @@
 .model-provider-detail-body > .form-error {
   width: 100%;
 }
-
 
 .model-provider-grid {
   display: grid;
@@ -771,7 +769,9 @@
   background: transparent;
   text-align: left;
   cursor: default;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .model-provider-model-card:hover {

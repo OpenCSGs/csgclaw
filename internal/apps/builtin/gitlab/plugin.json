@@ -1,0 +1,16 @@
+{
+  "name": "gitlab",
+  "version": "0.1.0",
+  "description": "Connect to an existing GitLab MCP service.",
+  "author": {"name": "OpenCSG"},
+  "keywords": ["gitlab"],
+  "apps": "./apps.json",
+  "interface": {
+    "displayName": "GitLab",
+    "shortDescription": "Access your authorized GitLab resources",
+    "developerName": "OpenCSG",
+    "category": "Developer Tools",
+    "brandColor": "#FC6D26",
+    "capabilities": ["Read", "Write"]
+  }
+}

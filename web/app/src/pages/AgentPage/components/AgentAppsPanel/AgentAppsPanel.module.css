@@ -1,0 +1,270 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.heading,
+.cardHeader,
+.actions,
+.managedRow,
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.heading {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.heading > :first-child {
+  flex: 1;
+}
+.list,
+.fields,
+.catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--panel);
+}
+.icon {
+  color: var(--primary);
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 10px;
+  background: var(--panel-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cardTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.cardTitle strong {
+  font-size: 14px;
+  color: var(--text);
+}
+.cardTitle > span {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.status {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.status[data-status="connected"] {
+  color: var(--success-700);
+  background: var(--success-50);
+  border-color: var(--success-200);
+}
+.status[data-status="error"] {
+  color: var(--error-700);
+}
+.actions {
+  flex-wrap: wrap;
+}
+.empty {
+  padding: 38px 20px;
+  background: var(--panel-soft);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+  color: var(--muted);
+}
+.empty strong {
+  color: var(--text);
+}
+.empty p,
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+.cardError {
+  color: var(--error-700);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.catalogDialog {
+  width: min(560px, calc(100vw - 32px));
+}
+.catalogItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.catalogItem:hover {
+  background: var(--panel-soft);
+}
+.catalogItem:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.catalogItem > div {
+  flex: 1;
+}
+.catalogItem strong {
+  font-size: 14px;
+}
+.catalogItem p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.settingsDialog {
+  width: min(720px, calc(100vw - 32px));
+}
+.settingsBody {
+  overflow-y: auto;
+  max-height: min(70vh, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+fieldset.fields {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.fields :global(.field) {
+  margin-top: 0;
+}
+.fields textarea {
+  resize: vertical;
+}
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.advanced {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.advanced > summary,
+.tools > summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.advanced > .fields {
+  margin-top: 16px;
+}
+.valueRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.valueRow input,
+.searchRow input {
+  min-width: 0;
+}
+.smallTitle {
+  font-size: 13px;
+  color: var(--text);
+}
+.addValue {
+  align-self: flex-start;
+}
+.footer {
+  flex-wrap: wrap;
+}
+.probeResult {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--panel-soft);
+  border-radius: 10px;
+}
+.probeResult > strong {
+  color: var(--success-700);
+  font-size: 13px;
+}
+.tools ul {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.tools li {
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--panel-soft);
+  overflow-wrap: anywhere;
+}
+.tools li strong {
+  font-size: 12px;
+  color: var(--text);
+}
+.tools li p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.managedList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 0 20px;
+}
+.managedRow {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+}
+@media (max-width: 600px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+  .cardHeader {
+    flex-wrap: wrap;
+  }
+  .heading {
+    flex-wrap: wrap;
+  }
+  .footer > button {
+    flex: 1 1 40%;
+  }
+}

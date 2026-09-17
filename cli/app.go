@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	agentcmd "csgclaw/cli/agent"
+	appscmd "csgclaw/cli/apps"
 	"csgclaw/cli/command"
 	completioncmd "csgclaw/cli/completion"
 	"csgclaw/cli/member"
@@ -77,6 +78,7 @@ func (a *App) registerDefaultCommands() {
 		servecmd.NewServeCmd(),
 		servecmd.NewStopCmd(),
 		agentcmd.NewCmd(),
+		appscmd.NewCmd(),
 		templatecmd.NewCmd(),
 		skillcmd.NewCmd(),
 		modelcmd.NewCmd(),

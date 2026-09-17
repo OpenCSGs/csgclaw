@@ -1,0 +1,16 @@
+{
+  "name": "llm-wiki",
+  "version": "0.1.0",
+  "description": "Connect to an existing llm-wiki knowledge base MCP service.",
+  "author": {"name": "OpenCSG"},
+  "keywords": ["knowledge-base", "llm-wiki"],
+  "apps": "./apps.json",
+  "interface": {
+    "displayName": "llm-wiki",
+    "shortDescription": "Search your authorized knowledge bases",
+    "developerName": "OpenCSG",
+    "category": "Knowledge",
+    "brandColor": "#7C3AED",
+    "capabilities": ["Read", "Write"]
+  }
+}

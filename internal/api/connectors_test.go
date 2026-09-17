@@ -193,7 +193,7 @@ func TestConnectorGitLabPATAPIFlowAndManagerLease(t *testing.T) {
 	}
 }
 
-func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
+func TestAgentConnectorCredentialAPIDeniesScopedRuntimes(t *testing.T) {
 	var sawTokenExchange bool
 	github := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -290,11 +290,16 @@ func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
 
 	handler := &Handler{svc: agentSvc, serverAccessToken: "server-token", agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	handler.SetConnectorService(connectorSvc)
+	if err := handler.EnableApps(filepath.Join(t.TempDir(), "apps.json")); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = handler.CloseApps() })
 	routes := handler.Routes()
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/connectors/github/config", strings.NewReader(`{"client_id":"client-id","client_secret":"client-secret"}`))
 	req.Host = "127.0.0.1:18080"
+	req.Header.Set("Authorization", "Bearer server-token")
 	routes.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("config status = %d, want 200: %s", rec.Code, rec.Body.String())
@@ -303,6 +308,7 @@ func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/connectors/github/oauth/start", strings.NewReader(`{"return_url":"http://127.0.0.1:18080/#/workspace"}`))
 	req.Host = "127.0.0.1:18080"
+	req.Header.Set("Authorization", "Bearer server-token")
 	routes.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("start status = %d, want 200: %s", rec.Code, rec.Body.String())
@@ -328,58 +334,38 @@ func TestAgentConnectorCredentialAPIReturnsDynamicManagerLease(t *testing.T) {
 			t.Fatalf("runtime spec %d GITHUB_TOKEN = %q, want empty", i, got)
 		}
 	}
-	managerCapability := ""
 	for _, spec := range specs {
-		if spec.AgentID == agent.ManagerUserID {
-			managerCapability = spec.Profile.Env[agent.ConnectorCapabilityEnv]
+		if spec.Profile.Env[agent.ConnectorCapabilityEnv] != "" {
+			t.Fatal("runtime received a global Connector capability")
+		}
+		token := spec.Profile.Env["CSGCLAW_ACCESS_TOKEN"]
+		if token == "" || token == "server-token" || !agentSvc.AuthorizesAgentAccessToken(spec.AgentID, token) {
+			t.Fatal("runtime did not receive a scoped Agent credential")
+		}
+		for _, noAuth := range []bool{false, true} {
+			handler.serverNoAuth = noAuth
+			for _, target := range []string{spec.AgentID, agent.ManagerUserID} {
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+target+"/connectors/github/credential", nil)
+				req.Header.Set("Authorization", "Bearer "+token)
+				req.Header.Set(agent.ConnectorCapabilityHeader, "forged-capability")
+				rec := httptest.NewRecorder()
+				routes.ServeHTTP(rec, req)
+				if rec.Code != http.StatusForbidden {
+					t.Fatalf("runtime global credential status=%d, want forbidden", rec.Code)
+				}
+				if strings.Contains(rec.Body.String(), "gh-token") {
+					t.Fatal("runtime response leaked global Connector credential")
+				}
+			}
 		}
 	}
-	if managerCapability == "" {
-		t.Fatal("manager runtime connector capability is empty")
-	}
-
-	rec = httptest.NewRecorder()
+	handler.serverNoAuth = false
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/connectors/github/credential", nil)
 	req.Header.Set("Authorization", "Bearer server-token")
-	req.Header.Set(agent.ConnectorCapabilityHeader, managerCapability)
-	routes.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("manager credential status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	if got := rec.Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
-		t.Fatalf("Cache-Control = %q, want no-store", got)
-	}
-	var lease struct {
-		Provider    string              `json:"provider"`
-		AccessToken string              `json:"access_token"`
-		TokenType   string              `json:"token_type"`
-		Account     *connectors.Account `json:"account"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&lease); err != nil {
-		t.Fatalf("decode manager credential lease: %v", err)
-	}
-	if lease.Provider != connectors.ProviderGitHub || lease.AccessToken != "gh-token" || lease.TokenType != "bearer" {
-		t.Fatalf("manager credential lease = %+v, want github bearer token", lease)
-	}
-	if lease.Account == nil || lease.Account.Login != "octocat" {
-		t.Fatalf("manager credential account = %+v, want octocat", lease.Account)
-	}
-
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-worker/connectors/github/credential", nil)
-	req.Header.Set("Authorization", "Bearer server-token")
-	req.Header.Set(agent.ConnectorCapabilityHeader, managerCapability)
 	routes.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("worker credential status = %d, want 403: %s", rec.Code, rec.Body.String())
-	}
-
-	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/agent-manager/connectors/github/credential", nil)
-	req.Header.Set("Authorization", "Bearer server-token")
-	routes.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("manager credential without capability status = %d, want 403: %s", rec.Code, rec.Body.String())
+		t.Fatalf("global credential without capability status=%d, want forbidden", rec.Code)
 	}
 }
 

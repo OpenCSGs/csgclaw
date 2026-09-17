@@ -655,10 +655,7 @@ export function AgentProfileModal({
                               onAgentDraftChange({ ...agentDraft, model_id: "", model_provider_id: "" });
                               return;
                             }
-                            if (
-                              nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG &&
-                              !onRequireOpenCSGAuth()
-                            ) {
+                            if (nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) {
                               return;
                             }
                             onAgentDraftChange({

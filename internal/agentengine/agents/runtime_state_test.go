@@ -62,7 +62,7 @@ func TestRuntimeProfileForAgentUsesBridgeForCodex(t *testing.T) {
 	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
 		t.Fatalf("runtimeProfileForAgent().BaseURL = %q, want %q", got, want)
 	}
-	if got, want := profile.APIKey, "shared-token"; got != want {
+	if got, want := profile.APIKey, svc.agentAccessToken("u-alice"); got != want {
 		t.Fatalf("runtimeProfileForAgent().APIKey = %q, want %q", got, want)
 	}
 	if got, want := profile.ModelID, "gpt-5.5"; got != want {
@@ -74,7 +74,7 @@ func TestRuntimeProfileForAgentUsesBridgeForCodex(t *testing.T) {
 	if got, want := profile.Env["CSGCLAW_BASE_URL"], "http://127.0.0.1:18080"; got != want {
 		t.Fatalf("runtimeProfileForAgent().Env[CSGCLAW_BASE_URL] = %q, want %q", got, want)
 	}
-	if got, want := profile.Env["CSGCLAW_ACCESS_TOKEN"], "shared-token"; got != want {
+	if got, want := profile.Env["CSGCLAW_ACCESS_TOKEN"], svc.agentAccessToken("u-alice"); got != want {
 		t.Fatalf("runtimeProfileForAgent().Env[CSGCLAW_ACCESS_TOKEN] = %q, want %q", got, want)
 	}
 	if got := profile.Env[ConnectorCapabilityEnv]; got != "" {
@@ -113,7 +113,7 @@ func TestRuntimeProfileForAgentIgnoresPublicAdvertiseURLForCodex(t *testing.T) {
 	}
 }
 
-func TestRuntimeProfileInjectsConnectorCapabilityOnlyForManager(t *testing.T) {
+func TestRuntimeProfileUsesScopedTokensWithoutGlobalConnectorCapability(t *testing.T) {
 	svc, err := NewController(config.ModelConfig{}, config.ServerConfig{AdvertiseBaseURL: "http://127.0.0.1:18080", AccessToken: "shared-token"}, "manager-image:test", "")
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -125,8 +125,8 @@ func TestRuntimeProfileInjectsConnectorCapabilityOnlyForManager(t *testing.T) {
 	if manager.Env["CSGCLAW_CALLER_AGENT_ID"] != ManagerUserID {
 		t.Fatal("manager CLI caller identity missing")
 	}
-	if got := manager.Env[ConnectorCapabilityEnv]; got == "" {
-		t.Fatal("manager runtime connector capability is empty")
+	if got := manager.Env[ConnectorCapabilityEnv]; got != "" {
+		t.Fatal("manager runtime must not receive the global connector capability")
 	}
 	worker := svc.runtimeProfileForKind(RuntimeKindCodex, "agent-worker", "worker", "", AgentProfile{})
 	if worker.Env["CSGCLAW_CLI"] != manager.Env["CSGCLAW_CLI"] {
@@ -164,7 +164,7 @@ func TestRuntimeProfileForKindUsesBridgeForCodexRuntime(t *testing.T) {
 	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-alice/llm"; got != want {
 		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want %q", got, want)
 	}
-	if got, want := profile.APIKey, "shared-token"; got != want {
+	if got, want := profile.APIKey, svc.agentAccessToken("u-alice"); got != want {
 		t.Fatalf("runtimeProfileForKind().APIKey = %q, want %q", got, want)
 	}
 	if got, want := profile.ModelID, "gpt-4.1"; got != want {
@@ -176,7 +176,7 @@ func TestRuntimeProfileForKindUsesBridgeForCodexRuntime(t *testing.T) {
 	if got, want := profile.Env["CSGCLAW_BASE_URL"], "http://127.0.0.1:18080"; got != want {
 		t.Fatalf("runtimeProfileForKind().Env[CSGCLAW_BASE_URL] = %q, want %q", got, want)
 	}
-	if got, want := profile.Env["CSGCLAW_ACCESS_TOKEN"], "shared-token"; got != want {
+	if got, want := profile.Env["CSGCLAW_ACCESS_TOKEN"], svc.agentAccessToken("u-alice"); got != want {
 		t.Fatalf("runtimeProfileForKind().Env[CSGCLAW_ACCESS_TOKEN] = %q, want %q", got, want)
 	}
 }
@@ -213,7 +213,7 @@ func TestRuntimeProfileForKindUsesHostReachableBridgeForCodexRuntime(t *testing.
 	if got, want := profile.Env["CSGCLAW_BASE_URL"], "http://127.0.0.1:18080"; got != want {
 		t.Fatalf("runtimeProfileForKind().Env[CSGCLAW_BASE_URL] = %q, want %q", got, want)
 	}
-	if got, want := profile.Env["CSGCLAW_ACCESS_TOKEN"], "shared-token"; got != want {
+	if got, want := profile.Env["CSGCLAW_ACCESS_TOKEN"], svc.agentAccessToken("u-developer"); got != want {
 		t.Fatalf("runtimeProfileForKind().Env[CSGCLAW_ACCESS_TOKEN] = %q, want %q", got, want)
 	}
 }

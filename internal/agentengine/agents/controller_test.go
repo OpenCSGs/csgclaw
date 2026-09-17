@@ -876,8 +876,8 @@ func TestCreateWorkerUsesCodexRuntimeWhenRequested(t *testing.T) {
 				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
 					t.Fatalf("Create() profile base url = %q, want %q", got, want)
 				}
-				if got, want := spec.Profile.APIKey, "shared-token"; got != want {
-					t.Fatalf("Create() profile api key = %q, want %q", got, want)
+				if got := spec.Profile.APIKey; !strings.HasPrefix(got, "agent.") || got != spec.Profile.Env["CSGCLAW_ACCESS_TOKEN"] {
+					t.Fatal("runtime must use its scoped Agent credential")
 				}
 				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "codex-session-alice"}, nil
 			},
@@ -2728,8 +2728,8 @@ func TestCreateWorkerProvisionsRuntimeBeforeNew(t *testing.T) {
 				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
-				if got, want := req.Profile.APIKey, "shared-token"; got != want {
-					t.Fatalf("Provision() profile api key = %q, want %q", got, want)
+				if got := req.Profile.APIKey; !strings.HasPrefix(got, "agent.") || got != req.Profile.Env["CSGCLAW_ACCESS_TOKEN"] {
+					t.Fatal("runtime must use its scoped Agent credential")
 				}
 				if req.WorkspaceOverlay != "" {
 					t.Fatalf("Provision() workspace overlay = %q, want empty", req.WorkspaceOverlay)
@@ -3140,8 +3140,8 @@ func TestRecreateProvisionsRuntimeBeforeDeleteAndNew(t *testing.T) {
 				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
 					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
 				}
-				if got, want := req.Profile.APIKey, "shared-token"; got != want {
-					t.Fatalf("Provision() profile api key = %q, want %q", got, want)
+				if got := req.Profile.APIKey; !strings.HasPrefix(got, "agent.") || got != req.Profile.Env["CSGCLAW_ACCESS_TOKEN"] {
+					t.Fatal("runtime must use its scoped Agent credential")
 				}
 				if req.WorkspaceOverlay != "" {
 					t.Fatalf("Provision() workspace overlay = %q, want empty", req.WorkspaceOverlay)

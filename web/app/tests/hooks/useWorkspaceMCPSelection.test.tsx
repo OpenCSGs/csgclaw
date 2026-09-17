@@ -60,7 +60,9 @@ describe("MCP creation source", () => {
       await result.current.createMCPServer(payload);
     });
     expect(selectType).toHaveBeenLastCalledWith("mcp");
-    expect(selectMCP).toHaveBeenCalledWith("kb-docs");
+    expect(selectMCP).toHaveBeenLastCalledWith("");
+    expect(result.current.mcpAdded).toBe(true);
+    expect(result.current.mcpCreateDialogOpen).toBe(false);
     client.clear();
   });
 

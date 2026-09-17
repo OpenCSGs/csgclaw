@@ -8,6 +8,7 @@ import (
 
 func (h *Handler) Routes() chi.Router {
 	router := chi.NewRouter()
+	router.Use(h.authorizeAppPlatformRequests)
 	h.registerCoreRoutes(router)
 	h.registerChannelRoutes(router)
 	return router
@@ -16,6 +17,8 @@ func (h *Handler) Routes() chi.Router {
 func (h *Handler) registerCoreRoutes(router chi.Router) {
 	router.Get("/healthz", h.handleHealthz)
 	router.Route("/api/v1", func(r chi.Router) {
+		r.Get("/apps", h.handleApps)
+		r.Get("/apps/{app_id}", h.handleApps)
 		r.Get("/version", h.getVersion)
 		r.Route("/upgrade", func(r chi.Router) {
 			r.Get("/status", h.getUpgradeStatus)
@@ -30,6 +33,15 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/", h.createAgent)
 			r.Route("/{id}", func(r chi.Router) {
 				r.Handle("/mcp-file-bridge/{server}", http.HandlerFunc(h.handleMCPFileBridge))
+				r.Get("/apps", h.handleAgentApps)
+				r.Post("/apps", h.handleAgentApps)
+				r.Post("/apps:probe", h.handleAgentAppsProbe)
+				r.Get("/apps/{installation_id}", h.handleAgentApp)
+				r.Patch("/apps/{installation_id}", h.handleAgentApp)
+				r.Delete("/apps/{installation_id}", h.handleAgentApp)
+				r.Post("/apps/{installation_id}/{app_action:connect|disconnect}", h.handleAgentApp)
+				r.Post("/apps/{installation_id}/oauth/start", h.handleAppOAuthUnsupported)
+				r.Handle("/mcp", http.HandlerFunc(h.handleAgentAppMCP))
 				r.Get("/", h.getAgent)
 				r.Patch("/", h.updateAgent)
 				r.Delete("/", h.deleteAgent)
