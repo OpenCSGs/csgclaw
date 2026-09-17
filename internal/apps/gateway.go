@@ -151,6 +151,9 @@ func (s *Service) attachLocked(e *entry) uint64 {
 		tool := *upstream
 		tool.Name = toolName(e.record.InstallationID, upstream.Name)
 		tool.Description = strings.TrimSpace(upstream.Description + fmt.Sprintf("\n\nApp instance: %q; service: %s; installation ID: %s.", e.record.Name, e.record.AppID, e.record.InstallationID))
+		if conn.tokens != nil {
+			tool.Description += " Uses Feishu application identity (tenant_access_token); user identity and user OAuth are unavailable in this mode."
+		}
 		id, agentID, name, generation := e.record.InstallationID, e.record.AgentID, upstream.Name, e.generation
 		g.server.AddTool(&tool, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return s.call(ctx, agentID, id, generation, name, req)
@@ -206,8 +209,16 @@ func (s *Service) call(ctx context.Context, agentID, id string, generation uint6
 	callCtx, cancel := context.WithTimeout(ctx, time.Duration(config.ToolTimeoutSec)*time.Second)
 	defer cancel()
 	params := req.Params
-	result, err := conn.session.CallTool(callCtx, &mcp.CallToolParams{Meta: params.Meta, Name: name, Arguments: params.Arguments, InputResponses: params.InputResponses, RequestState: params.RequestState})
+	result, err := callAppTool(callCtx, conn, &mcp.CallToolParams{Meta: params.Meta, Name: name, Arguments: params.Arguments, InputResponses: params.InputResponses, RequestState: params.RequestState})
+	if conn.tokens != nil && (feishuTokenRejected(result) || feishuRPCTokenRejected(err)) {
+		s.failConnectionDetail(agentID, id, conn, connectionError("app_feishu_token_rejected", "Feishu rejected the refreshed application token. Check application credentials and reconnect.", 0, true))
+	}
 	if err != nil {
+		var detail *ConnectionError
+		if errors.As(err, &detail) {
+			s.failConnectionDetail(agentID, id, conn, detail)
+			return nil, detail
+		}
 		if errors.Is(err, errAuthentication) {
 			s.failConnection(agentID, id, conn, "authorization_required", "App authorization is no longer valid; reconnect the App")
 			return nil, errAuthentication
@@ -215,6 +226,10 @@ func (s *Service) call(ctx context.Context, agentID, id string, generation uint6
 		var rpcErr *jsonrpc.Error
 		if errors.As(err, &rpcErr) {
 			return nil, &jsonrpc.Error{Code: rpcErr.Code, Message: "Upstream App rejected the tool call"}
+		}
+		if detail := conn.httpAuth.latestFailure(); detail != nil {
+			s.failConnectionDetail(agentID, id, conn, detail)
+			return nil, detail
 		}
 		if ctx.Err() == nil && callCtx.Err() == nil {
 			s.failConnection(agentID, id, conn, "error", "MCP connection failed; reconnect the App")
@@ -224,7 +239,13 @@ func (s *Service) call(ctx context.Context, agentID, id string, generation uint6
 	return result, nil
 }
 
-func (s *Service) failConnection(agentID, id string, conn *connection, status, message string) {
+func (s *Service) failConnectionDetail(agentID, id string, conn *connection, err error) {
+	item := Installation{}
+	setConnectionError(&item, err)
+	s.failConnection(agentID, id, conn, item.Status, item.LastError, err)
+}
+
+func (s *Service) failConnection(agentID, id string, conn *connection, status, message string, cause ...error) {
 	s.mu.Lock()
 	e, err := s.findLocked(agentID, id)
 	if err != nil || e.connection != conn {
@@ -235,6 +256,11 @@ func (s *Service) failConnection(agentID, id string, conn *connection, status, m
 	e.generation++
 	e.record.Status = status
 	e.record.LastError = message
+	e.record.LastErrorCode = ""
+	e.record.LastErrorHTTPStatus = 0
+	if len(cause) > 0 {
+		setConnectionError(&e.record.Installation, cause[0])
+	}
 	e.record.UpdatedAt = time.Now().UTC()
 	_ = s.persistLocked(id, &e.record)
 	s.mu.Unlock()
@@ -243,7 +269,7 @@ func (s *Service) failConnection(agentID, id string, conn *connection, status, m
 }
 
 func (s *Service) watch(agentID, id string, conn *connection) {
-	_ = conn.session.Wait()
+	waitErr := conn.session.Wait()
 	s.mu.Lock()
 	e, err := s.findLocked(agentID, id)
 	if err != nil || e.connection != conn || s.ctx.Err() != nil {
@@ -254,6 +280,15 @@ func (s *Service) watch(agentID, id string, conn *connection) {
 	e.generation++
 	e.record.Status = "error"
 	e.record.LastError = "MCP connection closed; reconnect the App"
+	e.record.LastErrorCode = ""
+	e.record.LastErrorHTTPStatus = 0
+	var detail *ConnectionError
+	if !errors.As(waitErr, &detail) {
+		detail = conn.httpAuth.latestFailure()
+	}
+	if detail != nil {
+		setConnectionError(&e.record.Installation, detail)
+	}
 	_ = s.persistLocked(id, &e.record)
 	s.mu.Unlock()
 	conn.cancel()

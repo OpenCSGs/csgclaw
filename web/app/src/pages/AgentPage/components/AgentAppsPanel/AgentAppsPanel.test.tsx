@@ -209,3 +209,80 @@ describe("Agent Apps", () => {
     expect(probe.mock.calls[0][0].credentials).not.toHaveProperty("app_secret");
   });
 });
+
+describe("Feishu managed authentication", () => {
+  it("uses channel credentials and a platform token without requesting header names", async () => {
+    const user = userEvent.setup();
+    const onProbe = vi.fn().mockResolvedValue({ connected: true, tools: [] });
+    render(
+      <AppSettingsDialog
+        definition={{ ...definition, app_id: "feishu", name: "Feishu" }}
+        existing={null}
+        hasFeishuChannel={true}
+        t={t}
+        onClose={vi.fn()}
+        onProbe={onProbe}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.queryByLabelText("App ID header name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("App Secret header name")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("App Secret")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("MCP service URL"), "https://passthrough.example/mcp");
+    await user.type(screen.getByLabelText("Platform access token (optional)"), "platform-secret-test");
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() =>
+      expect(onProbe).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({ auth_mode: "feishu", credential_source: "feishu_channel" }),
+          credentials: expect.objectContaining({ token: "platform-secret-test" }),
+        }),
+      ),
+    );
+  });
+});
+
+describe("Platform login and connection errors", () => {
+  it("reuses OpenCSG login without submitting a copied platform token", async () => {
+    const user = userEvent.setup();
+    const onProbe = vi.fn().mockResolvedValue({ connected: true, tools: [] });
+    render(
+      <AppSettingsDialog
+        definition={{ ...definition, app_id: "feishu", name: "Feishu" }}
+        existing={null}
+        hasFeishuChannel={true}
+        t={t}
+        onClose={vi.fn()}
+        onProbe={onProbe}
+        onSave={vi.fn()}
+      />,
+    );
+    await user.type(screen.getByLabelText("MCP service URL"), "https://demo.public.opencsg-stg.com/mcp");
+    expect(screen.queryByLabelText("Platform access token (optional)")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Platform credential source" }));
+    await user.click(screen.getByRole("option", { name: "Enter a platform token manually" }));
+    await user.type(screen.getByLabelText("Platform access token (optional)"), "stale-platform-secret");
+    await user.click(screen.getByRole("combobox", { name: "Platform credential source" }));
+    await user.click(screen.getByRole("option", { name: "Use current OpenCSG login" }));
+    expect(screen.queryByLabelText("Platform access token (optional)")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() => expect(onProbe).toHaveBeenCalled());
+    const body = onProbe.mock.calls[0][0];
+    expect(body.config.platform_credential_source).toBe("opencsg_login");
+    expect(body.credentials.token).toBeUndefined();
+  });
+  it("shows token expiry and upstream status instead of a generic failure", async () => {
+    mockServer([
+      {
+        ...installation,
+        status: "authorization_required",
+        last_error: "App authorization is no longer valid",
+        last_error_code: "app_platform_token_expired",
+        last_error_http_status: 401,
+      },
+    ]);
+    render(<Harness />);
+    expect(await screen.findByText(/The platform token has expired/)).toHaveTextContent("HTTP 401");
+    expect(screen.queryByText("App authorization is no longer valid")).not.toBeInTheDocument();
+  });
+});

@@ -18,7 +18,14 @@ import {
 } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import { localizeAPIError } from "@/shared/i18n";
-import { appFormPayload, appName, initialAppForm, type AppForm, type AppValueRow } from "./appForm";
+import {
+  appFormPayload,
+  defaultPlatformCredentialSource,
+  appName,
+  initialAppForm,
+  type AppForm,
+  type AppValueRow,
+} from "./appForm";
 import { AppToolList } from "./AppToolList";
 import { AppKnowledgePicker } from "./AppKnowledgePicker";
 import styles from "./AgentAppsPanel.module.css";
@@ -57,6 +64,7 @@ export function AppSettingsDialog({
   const config = form.config;
   const stdio = config.transport === "stdio";
   const feishu = definition.app_id === "feishu";
+  const platformSource = config.platform_credential_source || defaultPlatformCredentialSource(config);
   const appCredentials = config.auth_mode === "feishu";
   const channelCredentials = appCredentials && config.credential_source === "feishu_channel";
   const oauthUnsupported = config.auth_mode === "oauth2" && !definition.oauth_supported;
@@ -127,6 +135,7 @@ export function AppSettingsDialog({
                 onValueChange={(value) =>
                   updateConfig({
                     transport: value === "stdio" ? "stdio" : "http",
+                    platform_credential_source: value === "stdio" ? "manual" : undefined,
                     auth_mode:
                       config.auth_mode === "feishu" || config.auth_mode === "none" || config.auth_mode === "oauth2"
                         ? config.auth_mode
@@ -191,6 +200,8 @@ export function AppSettingsDialog({
                 onValueChange={(value) =>
                   updateConfig({
                     auth_mode: value as AppConfig["auth_mode"],
+                    platform_credential_source:
+                      value === "env" || value === "oauth2" ? "manual" : config.platform_credential_source,
                     credential_source: value === "feishu" ? config.credential_source || "manual" : "manual",
                   })
                 }
@@ -251,7 +262,9 @@ export function AppSettingsDialog({
                   </>
                 ) : null}
               </>
-            ) : config.auth_mode !== "none" && config.auth_mode !== "oauth2" ? (
+            ) : config.auth_mode !== "none" &&
+              config.auth_mode !== "oauth2" &&
+              (config.auth_mode === "header" || platformSource !== "opencsg_login") ? (
               <Field label={t("appToken")} hint={t("appSecretHint")}>
                 <TextInput
                   aria-label={t("appToken")}
@@ -260,7 +273,15 @@ export function AppSettingsDialog({
                   value={form.credentials.token || ""}
                   placeholder={credentialPlaceholder("token")}
                   onChange={(event) =>
-                    setForm({ ...form, credentials: { ...form.credentials, token: event.target.value } })
+                    setForm({
+                      ...form,
+                      config: {
+                        ...form.config,
+                        platform_credential_source:
+                          config.auth_mode === "header" ? form.config.platform_credential_source : "manual",
+                      },
+                      credentials: { ...form.credentials, token: event.target.value },
+                    })
                   }
                 />
               </Field>
@@ -291,20 +312,58 @@ export function AppSettingsDialog({
                 />
               </Field>
             ) : null}
-            {appCredentials ? (
+            {!stdio && config.auth_mode !== "oauth2" ? (
+              <Field
+                label={t("appPlatformCredentialSource")}
+                hint={platformSource === "opencsg_login" ? t("appOpenCSGLoginHint") : undefined}
+              >
+                <Select
+                  value={platformSource}
+                  triggerProps={{ "aria-label": t("appPlatformCredentialSource") }}
+                  options={[
+                    { value: "manual", label: t("appManualPlatformToken") },
+                    { value: "opencsg_login", label: t("appUseOpenCSGLogin") },
+                  ]}
+                  onValueChange={(value) =>
+                    updateConfig({ platform_credential_source: value as AppConfig["platform_credential_source"] })
+                  }
+                />
+              </Field>
+            ) : null}
+            {appCredentials && !stdio && platformSource !== "opencsg_login" ? (
+              <Field label={t("appPlatformToken")} hint={t("appFeishuTokenHint")}>
+                <TextInput
+                  aria-label={t("appPlatformToken")}
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.credentials.token || ""}
+                  placeholder={credentialPlaceholder("token")}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      config: {
+                        ...form.config,
+                        platform_credential_source:
+                          config.auth_mode === "header" ? form.config.platform_credential_source : "manual",
+                      },
+                      credentials: { ...form.credentials, token: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+            ) : null}
+            {appCredentials && stdio ? (
               <div className={styles.columns}>
-                <Field label={stdio ? t("appIDEnvironment") : t("appIDHeader")}>
+                <Field label={t("appIDEnvironment")}>
                   <TextInput
-                    value={(stdio ? config.app_id_env : config.app_id_header) || ""}
-                    onChange={(event) => updateConfig({ [stdio ? "app_id_env" : "app_id_header"]: event.target.value })}
+                    value={config.app_id_env || ""}
+                    onChange={(event) => updateConfig({ app_id_env: event.target.value })}
                   />
                 </Field>
-                <Field label={stdio ? t("appSecretEnvironment") : t("appSecretHeader")}>
+                <Field label={t("appSecretEnvironment")}>
                   <TextInput
-                    value={(stdio ? config.app_secret_env : config.app_secret_header) || ""}
-                    onChange={(event) =>
-                      updateConfig({ [stdio ? "app_secret_env" : "app_secret_header"]: event.target.value })
-                    }
+                    value={config.app_secret_env || ""}
+                    onChange={(event) => updateConfig({ app_secret_env: event.target.value })}
                   />
                 </Field>
               </div>

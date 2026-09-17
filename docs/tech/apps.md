@@ -31,14 +31,28 @@ Agent MCP endpoints continue to validate automatically provisioned Agent-scoped 
 The App CLI requires no additional login; set `CSGCLAW_BASE_URL` to select the service address.
 Existing protected APIs retain their service-token checks; `server.no_auth` is not a Web UI login switch.
 
+## OpenCSG platform authentication
+
+All HTTP Apps, including GitLab, Feishu, and llm-wiki, support a shared OpenCSG platform credential source.
+New OpenCSG HTTPS endpoints default to Use current OpenCSG login, reading the latest credential on every request without copying it into the App.
+Explicit manual selections and supplied manual Bearer tokens are preserved.
+Custom business headers such as `PRIVATE-TOKEN` or `X-API-Key` remain independent of the platform `Authorization` header; using `Authorization` for both is rejected.
+External and local URLs and stdio processes do not receive the OpenCSG login automatically.
+Credentials are restricted to matching OpenCSG HTTPS environments; they are not sent across production/staging or to external domains.
+Manual platform tokens remain supported, with explicit expiry messages and a linkable choice to use the current login.
+Logout requires reauthorization; login refreshes opted-in connections while preserving explicit disconnects and disabled Apps.
+Connection errors distinguish platform 401/403, missing login, environment mismatch, Feishu token issuance, missing endpoints, and unavailable/sleeping backends, with the HTTP status retained.
 ## Remote Feishu passthrough services
 
-For MCP services using OpenCSG ingress authentication and forwarded Feishu credentials, select HTTP with Bearer Token authentication.
-Set the Token field to the OpenCSG access token, then add `lark-access-token` (the raw Feishu token without a Bearer prefix) and `X-Lark-Token-Type` (`user_access_token` or `tenant_access_token`) in the advanced headers.
-Headers are sent with upstream MCP requests and stored as per-instance credentials without echoing their values.
-Do not use direct App ID/App Secret header mapping for a passthrough service that does not accept those credentials.
-Existing Feishu tokens can be supplied manually; token issuance, automatic refresh, and user OAuth are not implemented for this mode.
-App credentials normally obtain a tenant access token; a user access token additionally requires user authorization.
+For HTTP Feishu Apps, select Feishu app credentials, enter the MCP URL, and use the Agent's Feishu channel or supply an App ID/App Secret manually.
+The Connector reuses Feishu token issuance with a private per-connection cache and refreshes the tenant token on demand before expiry.
+MCP requests receive `lark-access-token` and `X-Lark-Token-Type: tenant_access_token` automatically, while the platform credential uses `Authorization: Bearer ...`.
+Users do not need to enter header names or temporary Feishu tokens, and App Secrets are never sent to the passthrough MCP server.
+Only an explicit `lark_token_invalid` rejection triggers one refresh and retry; scope failures, network failures, and other business errors are not retried automatically.
+A repeated rejection marks the connection as requiring authorization.
+Channel credential changes replace the connection and its token cache; disconnect, disable, and removal retain their existing lifecycle behavior.
+Local stdio MCP services continue receiving application credentials through environment variables.
+User access tokens require user authorization; automatic browser OAuth remains unsupported, while existing UATs can still be configured manually with Bearer/custom-header authentication.
 
 ## Selecting an App in conversation
 

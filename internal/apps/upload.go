@@ -2,6 +2,7 @@ package apps
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,10 +67,15 @@ func (s *Service) Upload(ctx context.Context, agentID, installationID, uploadURI
 	if err != nil {
 		return nil, err
 	}
-	client, err := connectorHTTPClient(config, credentials)
+	if config.CredentialSource == "feishu_channel" && sha256.Sum256([]byte(credentials.AppID+"\x00"+credentials.AppSecret)) != conn.credentialHash {
+		_ = s.RefreshCredentials(ctx, agentID)
+		return nil, fmt.Errorf("App credentials changed; retry after reconnecting")
+	}
+	client, err := connectorHTTPClient(config, credentials, conn.tokens)
 	if err != nil {
 		return nil, err
 	}
+	s.bindPlatformLogin(config, client)
 	timeout := time.Duration(config.ToolTimeoutSec) * time.Second
 	if timeout <= 0 || timeout > 90*time.Second {
 		timeout = 90 * time.Second
@@ -102,6 +108,11 @@ func (s *Service) Upload(ctx context.Context, agentID, installationID, uploadURI
 	}
 	response, err := client.Do(request)
 	if err != nil {
+		var detail *ConnectionError
+		if errors.As(err, &detail) {
+			s.failConnectionDetail(agentID, installationID, conn, detail)
+			return nil, detail
+		}
 		if errors.Is(err, errAuthentication) {
 			s.failConnection(agentID, installationID, conn, "authorization_required", "App authorization is no longer valid; reconnect the App")
 		}

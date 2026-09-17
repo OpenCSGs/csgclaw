@@ -261,8 +261,9 @@ func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) 
 		return Installation{}, ErrInvalid
 	}
 	in.Name = strings.TrimSpace(in.Name)
-	in.Config = normalizeConfig(in.Config, in.AppID)
+	in.Config = normalizeConfig(in.Config, in.AppID, in.Credentials)
 	protect(&in.Config, &in.Credentials)
+	clearReferencedPlatformCredentials(in.Config, &in.Credentials)
 	if in.Config.AuthMode == "oauth2" {
 		return Installation{}, ErrUnsupportedOAuth
 	}
@@ -324,13 +325,19 @@ func (s *Service) Update(ctx context.Context, agentID, id string, in UpdateReque
 	if in.Enabled != nil {
 		next.Enabled = *in.Enabled
 	}
-	if in.Config != nil {
-		next.Config = normalizeConfig(*in.Config, next.AppID)
-	}
 	if in.Credentials != nil {
 		next.Credentials = mergeCredentials(next.Credentials, *in.Credentials)
 	}
+	if in.Config != nil {
+		next.Config = normalizeConfig(*in.Config, next.AppID, next.Credentials)
+	}
+	if in.Config != nil || in.Credentials != nil || in.Enabled != nil {
+		next.LastError = ""
+		next.LastErrorCode = ""
+		next.LastErrorHTTPStatus = 0
+	}
 	protect(&next.Config, &next.Credentials)
+	clearReferencedPlatformCredentials(next.Config, &next.Credentials)
 	if next.Config.AuthMode == "oauth2" {
 		s.mu.Unlock()
 		return Installation{}, ErrUnsupportedOAuth
@@ -403,6 +410,8 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 	}
 	r.Status = "connecting"
 	r.LastError = ""
+	r.LastErrorCode = ""
+	r.LastErrorHTTPStatus = 0
 	r.UpdatedAt = time.Now().UTC()
 	if err := s.persistLocked(id, &r); err != nil {
 		s.mu.Unlock()
@@ -429,8 +438,7 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 	}
 	e.pendingCancel = nil
 	if connectErr != nil {
-		e.record.Status = "error"
-		e.record.LastError = connectErr.Error()
+		setConnectionError(&e.record.Installation, connectErr)
 		e.record.UpdatedAt = time.Now().UTC()
 		persistErr := s.persistLocked(id, &e.record)
 		out := view(e)
@@ -446,6 +454,8 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 	e.credentialHash = conn.credentialHash
 	e.record.Status = "connected"
 	e.record.LastError = ""
+	e.record.LastErrorCode = ""
+	e.record.LastErrorHTTPStatus = 0
 	e.record.UpdatedAt = time.Now().UTC()
 	if err := s.persistLocked(id, &e.record); err != nil {
 		e.connection = nil
@@ -476,6 +486,8 @@ func (s *Service) Disconnect(_ context.Context, agentID, id string) (Installatio
 	r.ConnectRequested = false
 	r.Status = "disconnected"
 	r.LastError = ""
+	r.LastErrorCode = ""
+	r.LastErrorHTTPStatus = 0
 	r.UpdatedAt = time.Now().UTC()
 	if err := s.persistLocked(id, &r); err != nil {
 		s.mu.Unlock()
@@ -546,7 +558,7 @@ func (s *Service) Probe(ctx context.Context, agentID string, in ProbeRequest) (P
 	if _, ok := s.packages[in.AppID]; !ok {
 		return ProbeResult{}, ErrNotFound
 	}
-	in.Config = normalizeConfig(in.Config, in.AppID)
+	in.Config = normalizeConfig(in.Config, in.AppID, in.Credentials)
 	protect(&in.Config, &in.Credentials)
 	if err := validateConfig(in.Config, in.AppID); err != nil {
 		return ProbeResult{}, err

@@ -1,4 +1,5 @@
 import type { AppConfig, AppCredentials, AppDefinition, AppInstallation } from "@/api/apps";
+import { localizeAPIError } from "@/shared/i18n";
 import type { TranslateFn } from "@/models/conversations";
 
 export type AppValueRow = { key: string; value: string };
@@ -65,8 +66,26 @@ export function initialAppForm(
   };
 }
 
+export function defaultPlatformCredentialSource(config: AppConfig): "manual" | "opencsg_login" {
+  if (config.transport === "stdio" || config.auth_mode === "env" || config.auth_mode === "oauth2") return "manual";
+  try {
+    const url = new URL(config.url || "");
+    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) return "manual";
+    return ["opencsg.com", "opencsg-stg.com"].some(
+      (host) => url.hostname === host || url.hostname.endsWith(`.public.${host}`),
+    )
+      ? "opencsg_login"
+      : "manual";
+  } catch {
+    return "manual";
+  }
+}
+
 export function appFormPayload(form: AppForm): { name: string; config: AppConfig; credentials: AppCredentials } {
-  const config: AppConfig = { ...form.config };
+  const config: AppConfig = {
+    ...form.config,
+    platform_credential_source: form.config.platform_credential_source || defaultPlatformCredentialSource(form.config),
+  };
   const credentials: AppCredentials = { ...form.credentials };
   if (config.transport === "stdio") {
     delete config.url;
@@ -81,6 +100,11 @@ export function appFormPayload(form: AppForm): { name: string; config: AppConfig
   }
   // Custom values can contain credentials, so submit them to the secret store.
   credentials.headers = rowsToValues(form.headers);
+  if (config.platform_credential_source === "opencsg_login") {
+    if (config.auth_mode !== "header") delete credentials.token;
+    for (const key of Object.keys(credentials.headers))
+      if (key.toLowerCase() === "authorization") delete credentials.headers[key];
+  }
   credentials.env = rowsToValues(form.env);
   delete config.headers;
   delete config.env;
@@ -94,4 +118,11 @@ function rowsToValues(rows: AppValueRow[]): Record<string, string> {
   return Object.fromEntries(
     rows.filter((row) => row.key.trim() && row.value).map((row) => [row.key.trim(), row.value]),
   );
+}
+
+export function appConnectionError(app: AppInstallation, t: TranslateFn): string {
+  const message = localizeAPIError({ code: app.last_error_code, message: app.last_error }, t);
+  return app.last_error_code && app.last_error_http_status
+    ? `${message} (HTTP ${app.last_error_http_status})`
+    : message;
 }
