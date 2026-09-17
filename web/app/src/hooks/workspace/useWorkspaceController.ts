@@ -907,7 +907,6 @@ export function useWorkspaceController() {
         onSelectKnowledgeBase: selectKnowledgeBase,
         onCreateMCP: createMCPServerAndNavigate,
         onOpenSkillUpload: () => setSkillUploadOpen(true),
-        onTrySkill: conversation.openManagerConversationWithSkill,
         onKnowledgeBaseLogin: () => {
           requireOpenCSGAuthentication();
         },

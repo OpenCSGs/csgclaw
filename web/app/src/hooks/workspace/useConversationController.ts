@@ -1612,19 +1612,6 @@ export function useConversationController({
     onCommit(parseComposerSegments(editor));
   }
 
-  function openManagerConversationWithSkill(name: string | null | undefined) {
-    const skillName = String(name || "").trim();
-    const conversationID = preferredFallbackConversationId || activeConversationId;
-    if (!skillName || !conversationID) {
-      return;
-    }
-    const segments = slashCommandInputSegments(skillName);
-    setDraftsByConversationId((current) => updateDrafts(current, conversationID, segments));
-    setComposerSlashQuery(null);
-    setSlashIndex(0);
-    navigatePane({ type: WorkspacePaneTypes.conversation, id: conversationID }, rooms);
-  }
-
   function onComposerKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (
       isComposerKeyboardEventComposing(event) ||
@@ -1882,7 +1869,6 @@ export function useConversationController({
     visibleMessages,
     clearComposerError,
     openCreateRoomModal,
-    openManagerConversationWithSkill,
     conversationViewProps: {
       conversation: selectedConversation,
       visibleMessages,
