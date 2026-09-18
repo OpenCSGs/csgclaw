@@ -20,6 +20,7 @@ func TestAgentRuntimesListReportsBundledCodex(t *testing.T) {
 	handler := &Handler{}
 	handler.SetAgentRuntimeService(runtimecatalog.NewService(
 		runtimecatalog.WithCodexResolver(bundledCodexResolver{}),
+		runtimecatalog.WithDSHResolver(bundledCodexResolver{}),
 	))
 
 	recorder := httptest.NewRecorder()
@@ -34,8 +35,8 @@ func TestAgentRuntimesListReportsBundledCodex(t *testing.T) {
 	if err := json.NewDecoder(recorder.Body).Decode(&runtimes); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(runtimes) != 2 {
-		t.Fatalf("runtimes = %+v, want Codex and Claude Code", runtimes)
+	if len(runtimes) != 3 {
+		t.Fatalf("runtimes = %+v, want Codex, DSH, and Claude Code", runtimes)
 	}
 	if got := runtimes[0]; got.Name != runtimecatalog.RuntimeCodex || !got.Installed || got.Installable || got.Status != "installed" || got.Path != "/opt/csgclaw/bin/codex" {
 		t.Fatalf("Codex runtime = %+v, want bundled installed runtime", got)

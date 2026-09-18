@@ -17,15 +17,19 @@ const labels: Record<string, string> = {
   computerRuntimesTitle: "Agent runtimes",
   computerRuntimeClaudeDescription: "Anthropic runtime",
   computerRuntimeCodexDescription: "OpenAI runtime",
+  computerRuntimeDSHDescription: "DeepSeek Harness runtime",
   computerRuntimeComingSoon: "Coming soon",
   computerRuntimeComingSoonHint: "Installation support will arrive later.",
   computerRuntimeExecutable: "Executable",
+  computerRuntimeVersion: "Version",
+  computerRuntimeDocs: "Installation guide",
   computerRuntimeFailed: "Install failed",
   computerRuntimeInstalled: "Installed",
   computerRuntimeInstalling: "Installing...",
   computerRuntimeInstallingHint: "Downloading in the background.",
   computerRuntimeInstall: "Install",
   computerRuntimeInstallHint: "Install with one click.",
+  computerRuntimeExternalInstallHint: "Install a compatible version using the guide, then retry detection.",
   computerRuntimeBundleMissingHint: "Codex CLI is missing from this CSGClaw bundle. Reinstall CSGClaw.",
   computerRuntimeNotInstalled: "Not installed",
   computerRuntimeReadyHint: "Ready for local agents.",
@@ -63,6 +67,17 @@ const claudeCode: AgentRuntime = {
   status: "coming_soon",
   os: "darwin",
   arch: "arm64",
+};
+
+const dsh: AgentRuntime = {
+  name: "dsh",
+  label: "DeepSeek Harness",
+  supported: true,
+  installed: true,
+  installable: false,
+  status: "installed",
+  path: "/usr/local/bin/dsh",
+  version: "0.1.6-alpha.2",
 };
 
 describe("AgentRuntimeSection", () => {
@@ -104,6 +119,37 @@ describe("AgentRuntimeSection", () => {
     expect(screen.getByText("Installed")).toBeInTheDocument();
     expect(screen.getByText(path)).not.toHaveAttribute("title");
     expect(screen.queryByRole("button", { name: "Install" })).not.toBeInTheDocument();
+  });
+
+  it("shows the detected DSH version and links to installation guidance when missing", () => {
+    const { rerender } = render(<AgentRuntimeSection runtimes={[dsh]} t={t} />);
+
+    expect(screen.getByText("0.1.6-alpha.2")).toBeInTheDocument();
+    expect(screen.getByText("/usr/local/bin/dsh")).toBeInTheDocument();
+
+    rerender(
+      <AgentRuntimeSection
+        runtimes={[
+          {
+            ...dsh,
+            installed: false,
+            status: "not_installed",
+            path: undefined,
+            version: undefined,
+            docsURL: "https://github.com/deepseek-ai/deepseek-harness",
+            message: "DSH CLI is unavailable",
+          },
+        ]}
+        t={t}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("DSH CLI is unavailable");
+    expect(screen.getByText("Install a compatible version using the guide, then retry detection.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Installation guide" })).toHaveAttribute(
+      "href",
+      "https://github.com/deepseek-ai/deepseek-harness",
+    );
   });
 
   it("explains when a required bundled Codex binary is missing", () => {

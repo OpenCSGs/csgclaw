@@ -162,7 +162,7 @@ func (s *Controller) UpdateAgentProfile(id string, profile AgentProfile) (AgentP
 		return AgentProfileView{}, err
 	}
 	s.mu.Unlock()
-	if restartRequired && runtimeRunning && strings.EqualFold(runtimeKind, RuntimeKindCodex) {
+	if restartRequired && runtimeRunning && isHostRuntimeKind(runtimeKind) {
 		if _, err := s.restartRuntime(context.Background(), id); err != nil {
 			return AgentProfileView{}, err
 		}
@@ -551,7 +551,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 			}
 		}
 	}
-	if restartRequired && runtimeRunning && strings.EqualFold(runtimeKind, RuntimeKindCodex) {
+	if restartRequired && runtimeRunning && isHostRuntimeKind(runtimeKind) {
 		if _, err := s.restartRuntime(ctx, id); err != nil {
 			return Agent{}, err
 		}
@@ -1114,7 +1114,11 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 			InitShell:            runtimeInitShell,
 		})
 	}
-	provisionBeforeDelete := strings.EqualFold(runtimeKind, RuntimeKindCodex)
+	// Codex preserves selected runtime state while replacing its private
+	// directory, so its replacement must be provisioned before Delete. DSH
+	// removes the complete .dsh directory in Delete and must be provisioned
+	// afterwards before New opens its log and settings files.
+	provisionBeforeDelete := runtimeKind == RuntimeKindCodex
 	if provisionBeforeDelete {
 		if err := provision(); err != nil {
 			return Agent{}, fmt.Errorf("provision agent runtime: %w", err)

@@ -2,24 +2,19 @@ package delivery
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/channel"
 	channelrender "csgclaw/internal/channel/csgclaw/render"
-	"fmt"
 )
 
-const (
-	completedTurnWindow = 1024
-	thoughtTailBytes    = 1536
-	thoughtFlushEvery   = 400 * time.Millisecond
-)
+const completedTurnWindow = 1024
 
 // Renderer owns channel-specific event rendering and transcript delivery.
 // Returning an error from Emit causes Agent Engine to cancel the active turn.
@@ -53,10 +48,6 @@ type renderedActivityStore interface {
 	DeliverRenderedActivity(context.Context, channel.TurnContext, ActivityDelivery) error
 }
 
-type thoughtStore interface {
-	DeliverThought(context.Context, channel.TurnContext, string) error
-}
-
 type failureStore interface {
 	DeliverFailure(context.Context, channel.TurnContext, string) error
 }
@@ -85,16 +76,10 @@ type TranscriptRenderer struct {
 	turns          map[turnBufferKey]*turnRenderState
 	completed      map[turnBufferKey]uint64
 	completedOrder []turnBufferKey
-	now            func() time.Time
-	thoughtLimit   int
-	thoughtEvery   time.Duration
 }
 
 type turnRenderState struct {
 	renderer            *channelrender.TurnRenderer
-	thought             string
-	thoughtDirty        bool
-	lastThoughtFlush    time.Time
 	lastSequence        uint64
 	hasText             bool
 	structuredUserInput *activity.RequestUserInputArgs
@@ -110,10 +95,7 @@ type turnBufferKey struct {
 
 func NewTranscriptRenderer(store TranscriptStore, opts ...RendererOption) *TranscriptRenderer {
 	renderer := &TranscriptRenderer{
-		store:        store,
-		now:          time.Now,
-		thoughtLimit: thoughtTailBytes,
-		thoughtEvery: thoughtFlushEvery,
+		store: store,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -149,16 +131,8 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 		r.mu.Unlock()
 		return nil
 	case agentengine.TurnEventThoughtDelta:
-		if event.Thought == "" {
-			return nil
-		}
-		thought, flush := r.appendThought(state, event.Thought)
-		if store, ok := r.store.(thoughtStore); ok && flush && thought != "" {
-			if err := store.DeliverThought(ctx, turn, thought); err != nil {
-				r.markThoughtDirty(state)
-				return err
-			}
-		}
+		// Thought deltas are projected through participant work status by the
+		// execution adapter. They are transient progress, not chat transcript.
 		return nil
 	case agentengine.TurnEventOutputItem:
 		if event.Output != nil && event.Output.Kind == contract.OutputItemImageGeneration {
@@ -218,13 +192,6 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 	}
 	if state == nil {
 		state = newTurnRenderState(turn.Locale)
-	}
-	if store, ok := r.store.(thoughtStore); ok {
-		if thought := r.pendingThought(state); thought != "" {
-			if err := store.DeliverThought(ctx, turn, thought); err != nil {
-				return err
-			}
-		}
 	}
 	if result.Status == agentengine.TurnFailed {
 		state.renderer.DiscardStructuredOutput()
@@ -301,58 +268,6 @@ func newTurnRenderState(locale string) *turnRenderState {
 	renderer := channelrender.NewTurnRenderer()
 	renderer.SetLocale(locale)
 	return &turnRenderState{renderer: renderer}
-}
-
-func (r *TranscriptRenderer) appendThought(state *turnRenderState, delta string) (string, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	limit := r.thoughtLimit
-	if limit <= 0 {
-		limit = thoughtTailBytes
-	}
-	state.thought = tailUTF8(state.thought+delta, limit)
-	state.thoughtDirty = true
-	now := time.Now()
-	if r.now != nil {
-		now = r.now()
-	}
-	interval := r.thoughtEvery
-	if interval <= 0 {
-		interval = thoughtFlushEvery
-	}
-	if !state.lastThoughtFlush.IsZero() && now.Sub(state.lastThoughtFlush) < interval {
-		return "", false
-	}
-	state.lastThoughtFlush = now
-	state.thoughtDirty = false
-	return strings.TrimSpace(state.thought), true
-}
-
-func (r *TranscriptRenderer) markThoughtDirty(state *turnRenderState) {
-	r.mu.Lock()
-	state.thoughtDirty = true
-	r.mu.Unlock()
-}
-
-func (r *TranscriptRenderer) pendingThought(state *turnRenderState) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if state == nil || !state.thoughtDirty {
-		return ""
-	}
-	state.thoughtDirty = false
-	return strings.TrimSpace(state.thought)
-}
-
-func tailUTF8(value string, limit int) string {
-	if limit <= 0 || len(value) <= limit {
-		return value
-	}
-	start := len(value) - limit
-	for start < len(value) && !utf8.RuneStart(value[start]) {
-		start++
-	}
-	return value[start:]
 }
 
 func (r *TranscriptRenderer) captureOutputItem(state *turnRenderState, event agentengine.TurnEvent) error {

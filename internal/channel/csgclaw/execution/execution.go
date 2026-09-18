@@ -192,7 +192,7 @@ func (a *Adapter) reset(ctx context.Context, binding channel.Binding, event chan
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, finishWork := a.startWork(ctx, turn)
+	ctx, finishWork, _ := a.startWork(ctx, turn)
 	defer func() { finishWork(outcome.Result) }()
 	if err := a.Reset(ctx, turn.AgentID, turn.ConversationKey); err != nil {
 		code := agentengine.ErrorCodeOf(err)
@@ -217,7 +217,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, finishWork := a.startWork(ctx, turn)
+	ctx, finishWork, observeWork := a.startWork(ctx, turn)
 	defer func() { finishWork(outcome.Result) }()
 
 	input, release, inputErr := a.input(ctx, binding, event, turn)
@@ -245,7 +245,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		Admission:       builtInIMAdmissionPolicy,
 		Continuation:    agentengine.ContinuationCreateOrResume,
 		Interaction:     agentengine.InteractionResolve,
-	}, contract.ImageGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn}})
+	}, contract.ImageGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn, observeWork: observeWork}})
 	if result.Status != agentengine.TurnSucceeded && a.projector != nil {
 		// A failed/canceled Runtime call may not have retained its input. Prefer
 		// one safe full fact refresh on retry.
@@ -368,11 +368,15 @@ func sourceTurnID(binding channel.Binding, event channel.Event) agentengine.Turn
 }
 
 type rendererSink struct {
-	renderer delivery.Renderer
-	turn     channel.TurnContext
+	renderer    delivery.Renderer
+	turn        channel.TurnContext
+	observeWork func(context.Context, agentengine.TurnEvent)
 }
 
 func (s rendererSink) Emit(ctx context.Context, event agentengine.TurnEvent) error {
+	if s.observeWork != nil {
+		s.observeWork(ctx, event)
+	}
 	if s.renderer == nil {
 		return nil
 	}

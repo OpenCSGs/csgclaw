@@ -2,10 +2,7 @@ package delivery
 
 import (
 	"context"
-	"strings"
 	"testing"
-	"time"
-	"unicode/utf8"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
@@ -56,16 +53,6 @@ func TestTranscriptRendererPreservesStructuredQuestionText(t *testing.T) {
 type deliveredMessage struct {
 	turn channel.TurnContext
 	text string
-}
-
-type thoughtRecordingStore struct {
-	recordingStore
-	thoughts []string
-}
-
-func (s *thoughtRecordingStore) DeliverThought(_ context.Context, _ channel.TurnContext, text string) error {
-	s.thoughts = append(s.thoughts, text)
-	return nil
 }
 
 func (s *recordingStore) DeliverMessage(_ context.Context, turn channel.TurnContext, text string) error {
@@ -170,65 +157,25 @@ func TestTranscriptRendererIsolatesInterleavedTurns(t *testing.T) {
 	}
 }
 
-func TestTranscriptRendererCoalescesAndBoundsThoughts(t *testing.T) {
-	store := &thoughtRecordingStore{}
+func TestTranscriptRendererExcludesThoughtsFromChatTranscript(t *testing.T) {
+	store := &recordingStore{}
 	renderer := NewTranscriptRenderer(store)
-	now := time.Unix(100, 0)
-	renderer.now = func() time.Time { return now }
 	turn := channel.TurnContext{TurnID: "turn-thought", SourceMessageID: "message-thought"}
 
 	if err := renderer.Emit(context.Background(), turn, agentengine.TurnEvent{
-		Kind: agentengine.TurnEventThoughtDelta, Thought: "start ",
+		Kind: agentengine.TurnEventThoughtDelta, Thought: "internal reasoning",
 	}); err != nil {
-		t.Fatalf("first Emit() error = %v", err)
+		t.Fatalf("thought Emit() error = %v", err)
 	}
-	now = now.Add(100 * time.Millisecond)
 	if err := renderer.Emit(context.Background(), turn, agentengine.TurnEvent{
-		Kind: agentengine.TurnEventThoughtDelta, Thought: strings.Repeat("界", 800),
+		Kind: agentengine.TurnEventTextDelta, Text: "final answer",
 	}); err != nil {
-		t.Fatalf("coalesced Emit() error = %v", err)
-	}
-	if len(store.thoughts) != 1 {
-		t.Fatalf("thought deliveries = %d, want 1 before flush interval", len(store.thoughts))
-	}
-
-	now = now.Add(thoughtFlushEvery)
-	if err := renderer.Emit(context.Background(), turn, agentengine.TurnEvent{
-		Kind: agentengine.TurnEventThoughtDelta, Thought: " end",
-	}); err != nil {
-		t.Fatalf("flush Emit() error = %v", err)
-	}
-	if len(store.thoughts) != 2 {
-		t.Fatalf("thought deliveries = %d, want 2", len(store.thoughts))
-	}
-	got := store.thoughts[1]
-	if len(got) > thoughtTailBytes || !utf8.ValidString(got) || !strings.HasSuffix(got, " end") {
-		t.Fatalf("bounded thought len=%d valid=%v suffix=%v", len(got), utf8.ValidString(got), strings.HasSuffix(got, " end"))
-	}
-}
-
-func TestTranscriptRendererFlushesPendingThoughtOnComplete(t *testing.T) {
-	store := &thoughtRecordingStore{}
-	renderer := NewTranscriptRenderer(store)
-	now := time.Unix(100, 0)
-	renderer.now = func() time.Time { return now }
-	turn := channel.TurnContext{TurnID: "turn-thought", SourceMessageID: "message-thought"}
-
-	if err := renderer.Emit(context.Background(), turn, agentengine.TurnEvent{
-		Kind: agentengine.TurnEventThoughtDelta, Thought: "first",
-	}); err != nil {
-		t.Fatalf("first Emit() error = %v", err)
-	}
-	now = now.Add(100 * time.Millisecond)
-	if err := renderer.Emit(context.Background(), turn, agentengine.TurnEvent{
-		Kind: agentengine.TurnEventThoughtDelta, Thought: " second",
-	}); err != nil {
-		t.Fatalf("second Emit() error = %v", err)
+		t.Fatalf("text Emit() error = %v", err)
 	}
 	if err := renderer.Complete(context.Background(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded}); err != nil {
 		t.Fatalf("Complete() error = %v", err)
 	}
-	if len(store.thoughts) != 2 || store.thoughts[1] != "first second" {
-		t.Fatalf("thoughts = %#v, want final coalesced flush", store.thoughts)
+	if len(store.messages) != 1 || store.messages[0].text != "final answer" {
+		t.Fatalf("messages = %#v, want final answer only", store.messages)
 	}
 }

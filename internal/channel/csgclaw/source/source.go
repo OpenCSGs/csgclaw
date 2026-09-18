@@ -108,7 +108,7 @@ func newSource(
 	}, nil
 }
 
-// Start ensures workers and event subscriptions for persisted Codex bindings,
+// Start ensures workers and event subscriptions for persisted host-runtime bindings,
 // then follows Participant events and periodically reconciles Agent eligibility.
 func (s *Source) Start(ctx context.Context) error {
 	if s == nil {
@@ -389,7 +389,7 @@ func (s *Source) currentBinding(ctx context.Context, bindingID channel.BindingID
 		return channel.Binding{}, false
 	}
 	selected, err := s.agents.Get(ctx, value.AgentID, agentengine.AgentGetOptions{})
-	if err != nil || !usesHostCodex(selected) {
+	if err != nil || !usesHostRuntime(selected) {
 		return channel.Binding{}, false
 	}
 	return value, true
@@ -406,7 +406,7 @@ func (s *Source) binding(ctx context.Context, item apitypes.Participant) (channe
 		return channel.Binding{}, false
 	}
 	selected, err := s.agents.Get(ctx, agentID, agentengine.AgentGetOptions{})
-	if err != nil || !usesHostCodex(selected) {
+	if err != nil || !usesHostRuntime(selected) {
 		return channel.Binding{}, false
 	}
 	return channel.Binding{
@@ -418,9 +418,11 @@ func (s *Source) binding(ctx context.Context, item apitypes.Participant) (channe
 	}, true
 }
 
-func usesHostCodex(selected agentengine.Agent) bool {
-	return strings.EqualFold(strings.TrimSpace(selected.Spec.Runtime.Adapter), agentruntime.NameCodex) &&
-		!selected.Spec.Runtime.Sandboxed
+func usesHostRuntime(selected agentengine.Agent) bool {
+	return (agentruntime.RuntimeConfig{
+		Name:      selected.Spec.Runtime.Adapter,
+		Sandboxed: selected.Spec.Runtime.Sandboxed,
+	}).IsHostRuntime()
 }
 
 func botEvent(value channel.Binding, event im.ParticipantEvent) channel.Event {

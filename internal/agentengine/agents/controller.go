@@ -1043,7 +1043,8 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 	spec = applyTemplateDefaults(spec, item)
 	spec = applyTemplateEnvDefaults(spec, item)
 	if strings.TrimSpace(workspace.Kind) == hub.WorkspaceKindDir {
-		if agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind() == RuntimeKindCodex {
+		templateRuntimeKind := agentruntime.RuntimeConfigForKind(item.RuntimeKind).LegacyKind()
+		if isHostRuntimeKind(templateRuntimeKind) {
 			// Template creation seeds only the template/base document. Profile
 			// instructions are introduced later through the managed block. Persist
 			// the template's user-authored instructions so the first runtime refresh
@@ -1053,12 +1054,12 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 				spec.TemplateInstructions = string(data)
 				spec.Instructions = runtimeinstructions.ExtractUserInstructionsFromAgentsDocument(spec.TemplateInstructions)
 				if removeErr := os.Remove(instructionsPath); removeErr != nil {
-					return CreateAgentSpec{}, cleanup, fmt.Errorf("separate codex template instructions: %w", removeErr)
+					return CreateAgentSpec{}, cleanup, fmt.Errorf("separate host runtime template instructions: %w", removeErr)
 				}
 			} else if !errors.Is(readErr, os.ErrNotExist) {
-				return CreateAgentSpec{}, cleanup, fmt.Errorf("read codex template instructions: %w", readErr)
+				return CreateAgentSpec{}, cleanup, fmt.Errorf("read host runtime template instructions: %w", readErr)
 			}
-			if memoryPath := strings.TrimSpace(workspace.MemoryPath); memoryPath != "" {
+			if memoryPath := strings.TrimSpace(workspace.MemoryPath); templateRuntimeKind == RuntimeKindCodex && memoryPath != "" {
 				memoryPath, pathErr := validatedCodexTemplateMemoryPath(workspace.Path, memoryPath)
 				if pathErr != nil {
 					return CreateAgentSpec{}, cleanup, pathErr
@@ -1647,7 +1648,7 @@ func (s *Controller) Start(ctx context.Context, id string) (Agent, error) {
 	if !ok {
 		return Agent{}, fmt.Errorf("agent %q not found", id)
 	}
-	if got.AgentProfile.EnvRestartRequired && !got.AgentProfile.ImageUpgradeRequired && strings.EqualFold(strings.TrimSpace(got.RuntimeKind), RuntimeKindCodex) {
+	if got.AgentProfile.EnvRestartRequired && !got.AgentProfile.ImageUpgradeRequired && isHostRuntimeKind(got.RuntimeKind) {
 		return s.restartRuntimeLocked(ctx, id)
 	}
 	if got.AgentProfile.EnvRestartRequired || got.AgentProfile.ImageUpgradeRequired {
@@ -1927,8 +1928,8 @@ func (s *Controller) StartConfiguredAgents(ctx context.Context) error {
 			return err
 		}
 		live := s.hydrateAgentStatus(ctx, a)
-		if strings.EqualFold(strings.TrimSpace(live.RuntimeKind), RuntimeKindCodex) {
-			if strings.EqualFold(strings.TrimSpace(live.Status), string(agentruntime.StateStopped)) {
+		if isHostRuntimeKind(live.RuntimeKind) {
+			if !shouldRestoreConfiguredHostRuntime(live) {
 				continue
 			}
 		} else if isRuntimeRunning(live) {
@@ -2065,7 +2066,22 @@ func isConfiguredAgentStartupCandidate(a Agent) bool {
 	return !strings.EqualFold(normalizeRole(a.Role), RoleWorker) ||
 		runtimeKind == "" ||
 		isGatewayRuntimeKind(runtimeKind) ||
-		strings.EqualFold(runtimeKind, RuntimeKindCodex)
+		isHostRuntimeKind(runtimeKind)
+}
+
+func shouldRestoreConfiguredHostRuntime(a Agent) bool {
+	switch strings.ToLower(strings.TrimSpace(a.DesiredState)) {
+	case DesiredStateRunning:
+		return true
+	case DesiredStateStopped:
+		return false
+	default:
+		// Records created before desired_state was introduced used the observed
+		// runtime status as their lifecycle intent. Preserve that compatibility
+		// while allowing current records to distinguish a service shutdown from
+		// an explicit user stop.
+		return !strings.EqualFold(strings.TrimSpace(a.Status), string(agentruntime.StateStopped))
+	}
 }
 
 func (s *Controller) withConfiguredAgentStartupStatus(a Agent) Agent {
@@ -2172,14 +2188,14 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 	switch {
 	case runtimeName == "":
 		return Agent{}, fmt.Errorf("runtime_kind is required")
-	case !sandboxed && runtimeName != RuntimeNameCodex:
+	case !sandboxed && runtimeName != RuntimeNameCodex && runtimeName != RuntimeNameDSH:
 		return Agent{}, fmt.Errorf("runtime_name %q requires sandbox_enabled=true", runtimeName)
 	case sandboxed && runtimeName != RuntimeNameOpenClaw && runtimeName != RuntimeNamePicoClaw:
 		return Agent{}, fmt.Errorf("runtime_name %q is not supported with sandbox_enabled=true", runtimeName)
 	}
 	if !sandboxed {
 		if err := s.checkRuntimeAvailability(ctx, runtimeKind); err != nil {
-			return Agent{}, fmt.Errorf("codex cli not installed: %w", err)
+			return Agent{}, fmt.Errorf("runtime %q is unavailable: %w", runtimeName, err)
 		}
 		image = ""
 	} else if image == "" {
@@ -2269,7 +2285,7 @@ func (s *Controller) createWorker(ctx context.Context, spec CreateAgentSpec, rep
 			CreatedAt: info.CreatedAt.UTC(),
 		})
 	}
-	if runtimeKind == RuntimeKindCodex && !replacing {
+	if !sandboxed && !replacing {
 		if err := s.persistStartingWorker(ctx, id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxed, resolvedProfile, spec.RuntimeOptions, spec.MCPServers, spec.RuntimeCredentials, spec.RuntimeInitShell, false); err != nil {
 			return Agent{}, err
 		}

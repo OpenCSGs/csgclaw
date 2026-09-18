@@ -268,6 +268,13 @@ func (f fakeAgentRuntime) Layout(agentHome string) agentruntime.Layout {
 			SkillsRoot:       filepath.Join(agentHome, ".codex", "home", "skills"),
 			HostLogPaths:     []string{filepath.Join(agentHome, ".codex", "home", "stderr.log")},
 		}
+	case RuntimeKindDSH:
+		return agentruntime.Layout{
+			WorkspaceRoot:    filepath.Join(agentHome, ".dsh", "workspace"),
+			InstructionsPath: filepath.Join(agentHome, ".dsh", "workspace", "AGENTS.md"),
+			SkillsRoot:       filepath.Join(agentHome, ".dsh", "home", "skills"),
+			HostLogPaths:     []string{filepath.Join(agentHome, ".dsh", "stderr.log")},
+		}
 	default:
 		return agentruntime.Layout{}
 	}
@@ -969,6 +976,54 @@ func TestCreateWorkerPersistsCodexProfileBeforeRuntimeNew(t *testing.T) {
 	}
 	if got.Status != string(agentruntime.StateRunning) {
 		t.Fatalf("CreateWorker().Status = %q, want running", got.Status)
+	}
+}
+
+func TestCreateWorkerUsesDSHRuntimeAndPersistsBeforeNew(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	var svc *Controller
+	svc, err := NewController(
+		testModelConfig(),
+		config.ServerConfig{ListenAddr: "127.0.0.1:18080", AccessToken: "shared-token"},
+		"manager-image:test",
+		"",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindDSH,
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				persisted, ok := svc.Agent(spec.AgentID)
+				if !ok {
+					t.Fatalf("Agent(%q) was not persisted before DSH New", spec.AgentID)
+				}
+				if persisted.RuntimeKind != RuntimeKindDSH || persisted.RuntimeName != RuntimeNameDSH || persisted.SandboxEnabled {
+					t.Fatalf("persisted DSH selection = %q/%q/%t", persisted.RuntimeKind, persisted.RuntimeName, persisted.SandboxEnabled)
+				}
+				if got, want := spec.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-dsh/llm"; got != want {
+					t.Fatalf("DSH profile base URL = %q, want %q", got, want)
+				}
+				if got, want := spec.Profile.APIKey, "shared-token"; got != want {
+					t.Fatalf("DSH profile API key = %q, want server access token", got)
+				}
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "dsh-agent"}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+
+	got, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+		ID: "agent-dsh", Name: "dsh-worker", RuntimeKind: RuntimeKindDSH,
+		AgentProfile: AgentProfile{
+			Name: "dsh-worker", Provider: ProviderAPI, BaseURL: "https://api.example/v1",
+			APIKey: "api-key", ModelID: "deepseek-chat", ReasoningEffort: DefaultReasoningEffort, ProfileComplete: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorker() error = %v", err)
+	}
+	if got.RuntimeKind != RuntimeKindDSH || got.BoxID != "dsh-agent" {
+		t.Fatalf("CreateWorker() = %+v", got)
 	}
 }
 
@@ -3190,6 +3245,73 @@ func TestRecreateProvisionsRuntimeBeforeDeleteAndNew(t *testing.T) {
 		t.Fatalf("Recreate() error = %v", err)
 	}
 	if got, want := strings.Join(callOrder, ","), "provision,delete,new"; got != want {
+		t.Fatalf("call order = %q, want %q", got, want)
+	}
+}
+
+func TestRecreateDSHDeletesBeforeProvisionAndNew(t *testing.T) {
+	var callOrder []string
+	svc, err := NewController(
+		config.ModelConfig{},
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		}, "manager-image:test", "",
+		WithRuntime(fakeAgentRuntime{
+			kind: RuntimeKindDSH,
+			del: func(context.Context, agentruntime.Handle) error {
+				callOrder = append(callOrder, "delete")
+				return nil
+			},
+			provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
+				callOrder = append(callOrder, "provision")
+				if got, want := req.RuntimeID, "rt-agent-alice"; got != want {
+					t.Fatalf("Provision() runtime id = %q, want %q", got, want)
+				}
+				if got, want := req.Profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/agent-alice/llm"; got != want {
+					t.Fatalf("Provision() profile base url = %q, want %q", got, want)
+				}
+				if got, want := req.Profile.APIKey, "shared-token"; got != want {
+					t.Fatalf("Provision() profile api key = %q, want %q", got, want)
+				}
+				return nil
+			},
+			new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+				callOrder = append(callOrder, "new")
+				return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "dsh-session-alice-new"}, nil
+			},
+			info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+				return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+			},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+	svc.agents["agent-alice"] = Agent{
+		ID:          "agent-alice",
+		Name:        "alice",
+		Role:        RoleWorker,
+		RuntimeID:   "rt-agent-alice",
+		RuntimeKind: RuntimeKindDSH,
+		BoxID:       "dsh-session-alice-old",
+		Status:      string(agentruntime.StateRunning),
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        ProviderAPI,
+			BaseURL:         "https://api.example/v1",
+			APIKey:          "api-key",
+			ModelID:         "qwen3.7-plus",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	if _, err := svc.RecreateRecord(context.Background(), "agent-alice"); err != nil {
+		t.Fatalf("Recreate() error = %v", err)
+	}
+	if got, want := strings.Join(callOrder, ","), "delete,provision,new"; got != want {
 		t.Fatalf("call order = %q, want %q", got, want)
 	}
 }
@@ -9113,6 +9235,58 @@ func TestStartConfiguredAgentsRestoresRunningCodexWorker(t *testing.T) {
 	}
 }
 
+func TestStartConfiguredAgentsRestoresDesiredRunningDSHWorker(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	startCalls := 0
+	rt := fakeAgentRuntime{
+		kind: RuntimeKindDSH,
+		start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+			startCalls++
+			return agentruntime.StateRunning, nil
+		},
+		info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+			return agentruntime.Info{
+				HandleID: h.HandleID,
+				State:    agentruntime.StateStopped,
+			}, nil
+		},
+	}
+	svc, err := NewController(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(rt),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:           "u-alice",
+		Name:         "alice",
+		Role:         RoleWorker,
+		RuntimeKind:  RuntimeKindDSH,
+		RuntimeID:    "rt-u-alice",
+		BoxID:        "rt-u-alice",
+		Status:       string(agentruntime.StateRunning),
+		DesiredState: DesiredStateRunning,
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        "default",
+			ModelID:         "qwen3.7-plus",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	if err := svc.StartConfiguredAgents(context.Background()); err != nil {
+		t.Fatalf("StartConfiguredAgents() error = %v", err)
+	}
+	if startCalls != 1 {
+		t.Fatalf("DSH runtime Start() calls = %d, want 1 when desired state remains running", startCalls)
+	}
+}
+
 func TestConfiguredAgentStartupStatusMarksOnlyRestoreCandidates(t *testing.T) {
 	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "manager-image:test", "")
 	if err != nil {
@@ -9129,6 +9303,13 @@ func TestConfiguredAgentStartupStatusMarksOnlyRestoreCandidates(t *testing.T) {
 			name: "configured codex worker",
 			agent: Agent{
 				ID: "u-alice", Name: "alice", Role: RoleWorker, RuntimeKind: RuntimeKindCodex, ProfileComplete: true,
+			},
+			want: true,
+		},
+		{
+			name: "configured DSH worker",
+			agent: Agent{
+				ID: "u-dsh", Name: "dsh", Role: RoleWorker, RuntimeKind: RuntimeKindDSH, ProfileComplete: true,
 			},
 			want: true,
 		},
@@ -9218,6 +9399,58 @@ func TestStartConfiguredAgentsLeavesStoppedCodexWorkerStopped(t *testing.T) {
 	}
 	if startCalls != 0 {
 		t.Fatalf("Codex runtime Start() calls = %d, want 0 for explicitly stopped worker", startCalls)
+	}
+}
+
+func TestStartConfiguredAgentsLeavesDesiredStoppedDSHWorkerStopped(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	startCalls := 0
+	rt := fakeAgentRuntime{
+		kind: RuntimeKindDSH,
+		start: func(context.Context, agentruntime.Handle) (agentruntime.State, error) {
+			startCalls++
+			return agentruntime.StateRunning, nil
+		},
+		info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+			return agentruntime.Info{
+				HandleID: h.HandleID,
+				State:    agentruntime.StateExited,
+			}, nil
+		},
+	}
+	svc, err := NewController(
+		testModelConfig(),
+		config.ServerConfig{},
+		"manager-image:test",
+		"",
+		WithRuntime(rt),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.agents["u-alice"] = Agent{
+		ID:           "u-alice",
+		Name:         "alice",
+		Role:         RoleWorker,
+		RuntimeKind:  RuntimeKindDSH,
+		RuntimeID:    "rt-u-alice",
+		BoxID:        "rt-u-alice",
+		Status:       string(agentruntime.StateRunning),
+		DesiredState: DesiredStateStopped,
+		AgentProfile: AgentProfile{
+			Name:            "alice",
+			Provider:        "default",
+			ModelID:         "qwen3.7-plus",
+			ProfileComplete: true,
+		},
+		ProfileComplete: true,
+	}
+
+	if err := svc.StartConfiguredAgents(context.Background()); err != nil {
+		t.Fatalf("StartConfiguredAgents() error = %v", err)
+	}
+	if startCalls != 0 {
+		t.Fatalf("DSH runtime Start() calls = %d, want 0 when desired state is stopped", startCalls)
 	}
 }
 

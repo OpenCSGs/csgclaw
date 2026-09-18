@@ -15,6 +15,7 @@ func TestLookupBuiltin(t *testing.T) {
 	}{
 		{id: "manager-codex", runtimeKind: runtime.KindCodex, role: roleManager, root: CodexManagerRoot},
 		{id: "codex-worker", runtimeKind: runtime.KindCodex, role: roleWorker, root: CodexWorkerRoot},
+		{id: "dsh-worker", runtimeKind: runtime.KindDSH, role: roleWorker, root: DSHWorkerRoot},
 		{id: "openclaw-worker", runtimeKind: runtime.KindOpenClawSandbox, role: roleWorker, root: OpenClawWorkerRoot},
 	}
 

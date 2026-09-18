@@ -17,6 +17,7 @@ export type AgentRuntime = {
   installable: boolean;
   status: AgentRuntimeStatus;
   path?: string;
+  version?: string;
   os?: string;
   arch?: string;
   docsURL?: string;
@@ -25,7 +26,8 @@ export type AgentRuntime = {
 
 const runtimeOrder = new Map([
   ["codex", 0],
-  ["claude_code", 1],
+  ["dsh", 1],
+  ["claude_code", 2],
 ]);
 
 const knownStatuses = new Set<AgentRuntimeStatus>(Object.values(AgentRuntimeStatuses));
@@ -45,7 +47,7 @@ export function normalizeAgentRuntime(value: unknown): AgentRuntime | null {
   }
 
   const installed = Boolean(record.installed);
-  const supported = typeof record.supported === "boolean" ? record.supported : name === "codex";
+  const supported = typeof record.supported === "boolean" ? record.supported : name === "codex" || name === "dsh";
   const rawStatus = String(record.status ?? "").trim() as AgentRuntimeStatus;
   const status = installed
     ? AgentRuntimeStatuses.installed
@@ -63,6 +65,7 @@ export function normalizeAgentRuntime(value: unknown): AgentRuntime | null {
     installable: Boolean(record.installable),
     status,
     path: stringValue(record.path) || undefined,
+    version: stringValue(record.version) || undefined,
     os: stringValue(record.os) || undefined,
     arch: stringValue(record.arch) || undefined,
     docsURL: stringValue(record.docs_url) || undefined,
@@ -112,6 +115,8 @@ function fallbackRuntimeLabel(name: string): string {
   switch (name) {
     case "codex":
       return "Codex CLI";
+    case "dsh":
+      return "DeepSeek Harness";
     case "claude_code":
       return "Claude Code";
     default:

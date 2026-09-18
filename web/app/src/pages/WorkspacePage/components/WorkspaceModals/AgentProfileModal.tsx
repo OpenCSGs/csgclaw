@@ -175,24 +175,32 @@ export function AgentProfileModal({
   const codexChoice = runtimeChoices.find(
     (item) => !item?.sandbox_enabled && normalizeRuntimeName(item?.name) === "codex",
   );
+  const hostRuntimeChoices = runtimeChoices.filter((item) => !item?.sandbox_enabled);
   const sandboxRuntimeChoices = runtimeChoices.filter(
     (item) => item?.sandbox_enabled && normalizeRuntimeName(item?.name) !== "picoclaw",
   );
   const defaultSandboxRuntimeName =
     normalizeRuntimeName(sandboxRuntimeChoices.find((item) => normalizeRuntimeName(item?.name) === "openclaw")?.name) ||
     normalizeRuntimeName(sandboxRuntimeChoices[0]?.name || "openclaw");
-  const selectedRuntimeName = normalizeRuntimeName(
+  const requestedRuntimeName = normalizeRuntimeName(
     agentDraft.runtime_name || (sandboxEnabled ? defaultSandboxRuntimeName : "codex"),
   );
+  const selectedRuntimeName =
+    !sandboxEnabled &&
+    hostRuntimeChoices.length > 0 &&
+    !hostRuntimeChoices.some((item) => normalizeRuntimeName(item?.name) === requestedRuntimeName)
+      ? normalizeRuntimeName(codexChoice?.name || hostRuntimeChoices[0]?.name || "codex")
+      : requestedRuntimeName;
   const selectedRuntimeChoice = runtimeChoices.find((item) => {
     const choiceSandboxEnabled = Boolean(item?.sandbox_enabled);
     const choiceRuntimeName = normalizeRuntimeName(item?.name);
     return choiceSandboxEnabled === sandboxEnabled && choiceRuntimeName === selectedRuntimeName;
   });
-  const selectedRuntimeUnavailable = isWorkerCreate && selectedRuntimeChoice?.installed === false;
+  const selectedRuntimeMissing = isWorkerCreate && selectedRuntimeChoice?.installed === false;
+  const selectedRuntimeUnavailable = selectedRuntimeMissing && selectedRuntimeName !== "dsh";
   const runtimeMessageKey = String(selectedRuntimeChoice?.message_code || "").trim();
   const localizedRuntimeMessage = runtimeMessageKey ? t(`errors.${runtimeMessageKey}`) : "";
-  const selectedRuntimeUnavailableMessage = selectedRuntimeUnavailable
+  const selectedRuntimeUnavailableMessage = selectedRuntimeMissing
     ? sandboxEnabled
       ? t("runtimeSandboxUnavailable", {
           reason:
@@ -264,12 +272,17 @@ export function AgentProfileModal({
       onAgentModelsReset();
       return;
     }
+    const hostRuntimeName = hostRuntimeChoices.some(
+      (item) => normalizeRuntimeName(item?.name) === selectedRuntimeName && item?.installed !== false,
+    )
+      ? selectedRuntimeName
+      : "codex";
     onAgentDraftChange({
       ...agentDraft,
       bot_type: BOT_TYPE_NORMAL,
       sandbox_enabled: false,
-      runtime_name: "codex",
-      runtime_kind: "codex",
+      runtime_name: hostRuntimeName,
+      runtime_kind: composeLegacyRuntimeKind(hostRuntimeName, false) || "codex",
       image: "",
       from_template: "",
       template_name: "",
@@ -512,31 +525,26 @@ export function AgentProfileModal({
                         <span>{t("profileRuntimeKind")}</span>
                         {!sandboxEnabled ? (
                           <Select
-                            value="codex"
+                            value={selectedRuntimeName || "codex"}
                             onValueChange={(value) => {
                               onAgentDraftChange({
                                 ...agentDraft,
                                 bot_type: BOT_TYPE_NORMAL,
                                 sandbox_enabled: false,
                                 runtime_name: normalizeRuntimeName(value) || "codex",
-                                runtime_kind: "codex",
+                                runtime_kind: composeLegacyRuntimeKind(value, false) || "codex",
                                 image: "",
                                 from_template: "",
                                 template_name: "",
                               });
                             }}
                             triggerProps={{ "aria-label": t("profileRuntimeKind") }}
-                            options={[
-                              {
-                                value: "codex",
-                                label:
-                                  codexChoice?.installed === false
-                                    ? t("runtimeCodexCLIUnavailable")
-                                    : t("runtimeCodexCLI"),
-                                disabled: codexChoice?.installed === false,
-                                description: codexChoice?.message || undefined,
-                              },
-                            ]}
+                            options={hostRuntimeChoices.map((option) => ({
+                              value: normalizeRuntimeName(option.name) || "",
+                              label: option.label || normalizeRuntimeName(option.name) || "",
+                              disabled: option.installed === false && normalizeRuntimeName(option.name) !== "dsh",
+                              description: option.message || undefined,
+                            }))}
                           />
                         ) : templateLocked ? (
                           <input
@@ -655,10 +663,7 @@ export function AgentProfileModal({
                               onAgentDraftChange({ ...agentDraft, model_id: "", model_provider_id: "" });
                               return;
                             }
-                            if (
-                              nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG &&
-                              !onRequireOpenCSGAuth()
-                            ) {
+                            if (nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) {
                               return;
                             }
                             onAgentDraftChange({

@@ -989,7 +989,8 @@ describe("AgentProfileModal", () => {
     expect(screen.queryByRole("option", { name: "Codex CLI" })).not.toBeInTheDocument();
   });
 
-  it("hides sandbox controls and only exposes Codex for CSGHub custom creation", async () => {
+  it("hides sandbox controls and exposes host runtimes for CSGHub custom creation", async () => {
+    const user = userEvent.setup();
     render(
       <AgentProfileModal
         t={t}
@@ -1006,7 +1007,10 @@ describe("AgentProfileModal", () => {
         hubTemplates={[]}
         bootstrapConfig={{
           sandbox_provider: "csghub",
-          worker_runtime_choices: [{ name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" }],
+          worker_runtime_choices: [
+            { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
+            { name: "dsh", sandbox_enabled: false, installed: true, label: "DeepSeek Harness" },
+          ],
         }}
         managerAgent={null}
         agentModels={[]}
@@ -1028,7 +1032,10 @@ describe("AgentProfileModal", () => {
     );
 
     expect(screen.queryByRole("checkbox", { name: "Sandbox" })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Runtime" })).toHaveTextContent("Codex CLI");
+    const runtime = screen.getByRole("combobox", { name: "Runtime" });
+    expect(runtime).toHaveTextContent("Codex CLI");
+    await user.click(runtime);
+    expect(screen.getByRole("option", { name: "DeepSeek Harness" })).toBeInTheDocument();
   });
 
   it("uses the matching worker template image when switching blank drafts to OpenClaw", async () => {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
@@ -16,9 +17,10 @@ import (
 )
 
 const (
-	defaultWorkLeaseTTL      = worklease.DefaultTTLSeconds
-	defaultWorkRenewEvery    = 5 * time.Second
-	defaultWorkFinishTimeout = 2 * time.Second
+	defaultWorkLeaseTTL        = worklease.DefaultTTLSeconds
+	defaultWorkRenewEvery      = 5 * time.Second
+	defaultWorkFinishTimeout   = 2 * time.Second
+	defaultThinkingUpdateEvery = 400 * time.Millisecond
 )
 
 type workOptions struct {
@@ -38,18 +40,29 @@ func defaultWorkOptions() workOptions {
 }
 
 type activeWorkTurn struct {
-	lease    worklease.ParticipantWorkLease
-	cancel   context.CancelFunc
-	stop     func(context.Context) error
-	finished bool
-	stopping bool
+	lease          worklease.ParticipantWorkLease
+	cancel         context.CancelFunc
+	stop           func(context.Context) error
+	statusReporter worklease.ParticipantWorkStatusReporter
+	capabilities   []string
+	statusSequence uint64
+	statusStage    string
+	thinking       string
+	truncated      bool
+	lastThinking   time.Time
+	finished       bool
+	stopping       bool
 
 	mu sync.Mutex
 }
 
-func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (context.Context, func(agentengine.TurnResult)) {
+func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (
+	context.Context,
+	func(agentengine.TurnResult),
+	func(context.Context, agentengine.TurnEvent),
+) {
 	if a == nil || a.work.reporter == nil {
-		return ctx, func(agentengine.TurnResult) {}
+		return ctx, func(agentengine.TurnResult) {}, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -84,20 +97,33 @@ func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (cont
 		}
 	}
 
+	statusReporter, reportsStatus := a.work.reporter.(worklease.ParticipantWorkStatusReporter)
+	if reportsStatus {
+		active.statusReporter = statusReporter
+		active.capabilities = []string{
+			apitypes.ParticipantWorkCapabilityThinkingStatusV1,
+			apitypes.ParticipantWorkCapabilityStageV1,
+		}
+		if advertiseStop {
+			active.capabilities = append(active.capabilities, apitypes.ParticipantWorkCapabilityTurnStopV1)
+		}
+		active.statusSequence = 1
+		active.statusStage = apitypes.ParticipantWorkStagePreparingReply
+	}
+
 	closed := false
 	if _, err := a.work.reporter.StartOrRenew(turnCtx, lease); err != nil {
 		closed = errors.Is(err, worklease.ErrClosed)
 		logWorkFailure("start", lease, err)
 	}
-	if !closed && advertiseStop {
-		if statusReporter, ok := a.work.reporter.(worklease.ParticipantWorkStatusReporter); ok {
-			if _, _, err := statusReporter.UpdateStatus(turnCtx, lease.ParticipantID, lease.LeaseID, apitypes.ParticipantWorkStatusPatchRequest{
-				Capabilities: []string{apitypes.ParticipantWorkCapabilityTurnStopV1},
-				Sequence:     1,
-				Phase:        apitypes.ParticipantWorkPhaseWorking,
-			}); err != nil {
-				logWorkFailure("advertise stop capability", lease, err)
-			}
+	if !closed && reportsStatus {
+		if _, _, err := statusReporter.UpdateStatus(turnCtx, lease.ParticipantID, lease.LeaseID, apitypes.ParticipantWorkStatusPatchRequest{
+			Capabilities: append([]string(nil), active.capabilities...),
+			Sequence:     active.statusSequence,
+			Phase:        apitypes.ParticipantWorkPhaseThinking,
+			Stage:        active.statusStage,
+		}); err != nil {
+			logWorkFailure("publish initial status", lease, err)
 		}
 	}
 
@@ -138,7 +164,87 @@ func (a *Adapter) startWork(ctx context.Context, turn channel.TurnContext) (cont
 				logWorkFailure("finish", lease, err)
 			}
 		})
+	}, active.observeEvent
+}
+
+func (t *activeWorkTurn) observeEvent(ctx context.Context, event agentengine.TurnEvent) {
+	if t == nil {
+		return
 	}
+	t.mu.Lock()
+	if t.finished || t.statusReporter == nil {
+		t.mu.Unlock()
+		return
+	}
+
+	now := time.Now()
+	request := apitypes.ParticipantWorkStatusPatchRequest{}
+	switch event.Kind {
+	case agentengine.TurnEventThoughtDelta:
+		if event.Thought == "" {
+			t.mu.Unlock()
+			return
+		}
+		t.thinking, t.truncated = appendThinkingTail(t.thinking, event.Thought, t.truncated)
+		if strings.TrimSpace(t.thinking) == "" ||
+			(t.statusStage == apitypes.ParticipantWorkStageThinking &&
+				!t.lastThinking.IsZero() && now.Sub(t.lastThinking) < defaultThinkingUpdateEvery) {
+			t.mu.Unlock()
+			return
+		}
+		t.statusStage = apitypes.ParticipantWorkStageThinking
+		t.lastThinking = now
+		request.Phase = apitypes.ParticipantWorkPhaseThinking
+		request.Stage = t.statusStage
+		request.Thinking = &apitypes.ParticipantThinkingStatus{
+			Format:    apitypes.ParticipantThinkingFormatPlainText,
+			Text:      t.thinking,
+			Truncated: t.truncated,
+		}
+	case agentengine.TurnEventToolCallStart, agentengine.TurnEventToolCallUpdate:
+		if t.statusStage == apitypes.ParticipantWorkStageRunningTool {
+			t.mu.Unlock()
+			return
+		}
+		t.statusStage = apitypes.ParticipantWorkStageRunningTool
+		request.Phase = apitypes.ParticipantWorkPhaseWorking
+		request.Stage = t.statusStage
+	case agentengine.TurnEventTextDelta:
+		if event.Text == "" || t.statusStage == apitypes.ParticipantWorkStageGeneratingReply {
+			t.mu.Unlock()
+			return
+		}
+		t.statusStage = apitypes.ParticipantWorkStageGeneratingReply
+		request.Phase = apitypes.ParticipantWorkPhaseWorking
+		request.Stage = t.statusStage
+	default:
+		t.mu.Unlock()
+		return
+	}
+
+	t.statusSequence++
+	request.Sequence = t.statusSequence
+	request.Capabilities = append([]string(nil), t.capabilities...)
+	reporter := t.statusReporter
+	lease := t.lease
+	t.mu.Unlock()
+
+	if _, _, err := reporter.UpdateStatus(ctx, lease.ParticipantID, lease.LeaseID, request); err != nil {
+		logWorkFailure("publish runtime status", lease, err)
+	}
+}
+
+func appendThinkingTail(current, delta string, alreadyTruncated bool) (string, bool) {
+	value := current + delta
+	limit := worklease.MaxThinkingBytes
+	if len(value) <= limit {
+		return value, alreadyTruncated
+	}
+	start := len(value) - limit
+	for start < len(value) && !utf8.RuneStart(value[start]) {
+		start++
+	}
+	return value[start:], true
 }
 
 func renewWorkLease(

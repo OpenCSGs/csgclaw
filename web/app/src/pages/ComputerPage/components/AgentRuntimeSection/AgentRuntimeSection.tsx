@@ -90,7 +90,7 @@ export function AgentRuntimeSection({
 function RuntimeCard({ runtime, t }: { runtime: AgentRuntime; t: TranslateFn }) {
   const status = runtimeStatus(runtime);
   const statusMeta = runtimeStatusMeta(status, t);
-  const visibleError = status === AgentRuntimeStatuses.failed ? runtime.message || "" : "";
+  const visibleError = runtime.installed ? "" : runtime.message || "";
   const logo = runtimeLogos[runtime.name];
 
   return (
@@ -125,6 +125,12 @@ function RuntimeCard({ runtime, t }: { runtime: AgentRuntime; t: TranslateFn }) 
             </Tooltip>
           </div>
         ) : null}
+        {runtime.installed && runtime.version ? (
+          <div className={styles.pathRow}>
+            <span>{t("computerRuntimeVersion")}</span>
+            <code>{runtime.version}</code>
+          </div>
+        ) : null}
         {visibleError ? (
           <div className={styles.runtimeError} role="alert">
             <AlertCircle size={16} aria-hidden="true" />
@@ -134,7 +140,12 @@ function RuntimeCard({ runtime, t }: { runtime: AgentRuntime; t: TranslateFn }) 
       </div>
 
       <footer className={styles.cardFooter}>
-        <span>{runtimeHint(status, t)}</span>
+        <span>{runtimeHint(runtime, status, t)}</span>
+        {!runtime.installed && runtime.docsURL ? (
+          <a href={runtime.docsURL} target="_blank" rel="noreferrer">
+            {t("computerRuntimeDocs")}
+          </a>
+        ) : null}
       </footer>
     </li>
   );
@@ -195,6 +206,8 @@ function runtimeDescription(runtimeName: string, t: TranslateFn): string {
   switch (runtimeName) {
     case "codex":
       return t("computerRuntimeCodexDescription");
+    case "dsh":
+      return t("computerRuntimeDSHDescription");
     case "claude_code":
       return t("computerRuntimeClaudeDescription");
     default:
@@ -202,7 +215,7 @@ function runtimeDescription(runtimeName: string, t: TranslateFn): string {
   }
 }
 
-function runtimeHint(status: AgentRuntimeStatus, t: TranslateFn): string {
+function runtimeHint(runtime: AgentRuntime, status: AgentRuntimeStatus, t: TranslateFn): string {
   switch (status) {
     case AgentRuntimeStatuses.installed:
       return t("computerRuntimeReadyHint");
@@ -215,6 +228,6 @@ function runtimeHint(status: AgentRuntimeStatus, t: TranslateFn): string {
     case AgentRuntimeStatuses.unsupported:
       return t("computerRuntimeUnsupportedHint");
     default:
-      return t("computerRuntimeInstallHint");
+      return runtime.installable ? t("computerRuntimeInstallHint") : t("computerRuntimeExternalInstallHint");
   }
 }

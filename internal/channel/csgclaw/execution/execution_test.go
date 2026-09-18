@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/apitypes"
@@ -376,8 +377,11 @@ func TestAdapterRunReportsParticipantWorkLeaseLifecycle(t *testing.T) {
 		!lease.TTLExplicit || lease.TTLSeconds != defaultWorkLeaseTTL || !worklease.ValidID(lease.LeaseID) {
 		t.Fatalf("lease = %+v", lease)
 	}
-	if len(statuses) != 1 || statuses[0].Sequence != 1 || statuses[0].Phase != apitypes.ParticipantWorkPhaseWorking ||
-		len(statuses[0].Capabilities) != 1 || statuses[0].Capabilities[0] != apitypes.ParticipantWorkCapabilityTurnStopV1 {
+	if len(statuses) != 1 || statuses[0].Sequence != 1 || statuses[0].Phase != apitypes.ParticipantWorkPhaseThinking ||
+		statuses[0].Stage != apitypes.ParticipantWorkStagePreparingReply || len(statuses[0].Capabilities) != 3 ||
+		statuses[0].Capabilities[0] != apitypes.ParticipantWorkCapabilityThinkingStatusV1 ||
+		statuses[0].Capabilities[1] != apitypes.ParticipantWorkCapabilityStageV1 ||
+		statuses[0].Capabilities[2] != apitypes.ParticipantWorkCapabilityTurnStopV1 {
 		t.Fatalf("status updates = %#v", statuses)
 	}
 	if len(finishes) != 1 || finishes[0] != apitypes.ParticipantWorkOutcomeReleased {
@@ -385,6 +389,63 @@ func TestAdapterRunReportsParticipantWorkLeaseLifecycle(t *testing.T) {
 	}
 	if controller != nil || unregisters != 1 {
 		t.Fatalf("controller = %T, unregisters = %d", controller, unregisters)
+	}
+}
+
+func TestAdapterMapsRuntimeThoughtsToParticipantWorkStatus(t *testing.T) {
+	reporter := newRecordingWorkReporter()
+	engine := &fakeEngine{run: func(ctx context.Context, _ agentengine.TurnRequest, sink agentengine.EventSink) agentengine.TurnResult {
+		if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventThoughtDelta, Thought: "checking configuration"}); err != nil {
+			t.Fatalf("emit thought: %v", err)
+		}
+		if err := sink.Emit(ctx, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Text: "done"}); err != nil {
+			t.Fatalf("emit text: %v", err)
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "done"}
+	}}
+	adapter, err := New(
+		engine,
+		&fakeRenderer{},
+		WithParticipantWorkReporter(reporter),
+		WithTurnIDGenerator(func() (agentengine.TurnID, error) { return "turn-thinking", nil }),
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	outcome, err := adapter.Run(context.Background(), channel.Binding{
+		ParticipantID: "pt-worker", AgentID: "agent-worker",
+	}, channel.Event{MessageID: "message-thinking", RoomID: "room-thinking", Text: "inspect"})
+	if err != nil || outcome.Result.Status != agentengine.TurnSucceeded {
+		t.Fatalf("Run() = %+v, %v", outcome, err)
+	}
+
+	_, statuses, _, _, _ := reporter.snapshot()
+	if len(statuses) != 3 {
+		t.Fatalf("status updates = %#v, want preparing, thinking, and generating", statuses)
+	}
+	if status := statuses[0]; status.Sequence != 1 || status.Phase != apitypes.ParticipantWorkPhaseThinking ||
+		status.Stage != apitypes.ParticipantWorkStagePreparingReply || status.Thinking != nil {
+		t.Fatalf("preparing status = %#v", status)
+	}
+	if status := statuses[1]; status.Sequence != 2 || status.Phase != apitypes.ParticipantWorkPhaseThinking ||
+		status.Stage != apitypes.ParticipantWorkStageThinking || status.Thinking == nil ||
+		status.Thinking.Text != "checking configuration" || status.Thinking.Truncated {
+		t.Fatalf("thinking status = %#v", status)
+	}
+	if status := statuses[2]; status.Sequence != 3 || status.Phase != apitypes.ParticipantWorkPhaseWorking ||
+		status.Stage != apitypes.ParticipantWorkStageGeneratingReply || status.Thinking != nil {
+		t.Fatalf("generating status = %#v", status)
+	}
+}
+
+func TestAppendThinkingTailPreservesUTF8AndTruncation(t *testing.T) {
+	text, truncated := appendThinkingTail("prefix", strings.Repeat("界", worklease.MaxThinkingBytes), false)
+	if !truncated {
+		t.Fatal("appendThinkingTail() did not report truncation")
+	}
+	if len(text) > worklease.MaxThinkingBytes || !utf8.ValidString(text) {
+		t.Fatalf("thinking tail bytes = %d, valid UTF-8 = %v", len(text), utf8.ValidString(text))
 	}
 }
 

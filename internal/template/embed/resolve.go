@@ -36,6 +36,12 @@ var builtinTemplates = []BuiltinTemplate{
 		Root:        CodexWorkerRoot,
 	},
 	{
+		ID:          "dsh-worker",
+		RuntimeKind: runtimepkg.KindDSH,
+		Role:        roleWorker,
+		Root:        DSHWorkerRoot,
+	},
+	{
 		ID:          "openclaw-worker",
 		RuntimeKind: runtimepkg.KindOpenClawSandbox,
 		Role:        roleWorker,

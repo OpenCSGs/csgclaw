@@ -7,7 +7,7 @@ import {
 } from "@/models/agentRuntimes";
 
 describe("agent runtimes", () => {
-  it("normalizes the API list and keeps Codex before Claude Code", () => {
+  it("normalizes the API list and keeps Codex and DSH before Claude Code", () => {
     const runtimes = normalizeAgentRuntimeList([
       {
         name: "claude-code",
@@ -19,6 +19,15 @@ describe("agent runtimes", () => {
         docs_url: "https://example.com/claude",
       },
       { name: "", label: "Invalid" },
+      {
+        name: "dsh",
+        label: "DeepSeek Harness",
+        supported: true,
+        installed: true,
+        status: "installed",
+        path: "/tmp/dsh",
+        version: "0.1.6-alpha.2",
+      },
       {
         name: "codex",
         label: "Codex CLI",
@@ -32,13 +41,17 @@ describe("agent runtimes", () => {
       },
     ]);
 
-    expect(runtimes.map((runtime) => runtime.name)).toEqual(["codex", "claude_code"]);
+    expect(runtimes.map((runtime) => runtime.name)).toEqual(["codex", "dsh", "claude_code"]);
     expect(runtimes[0]).toMatchObject({
       installed: true,
       path: "/tmp/codex",
       status: AgentRuntimeStatuses.installed,
     });
     expect(runtimes[1]).toMatchObject({
+      path: "/tmp/dsh",
+      version: "0.1.6-alpha.2",
+    });
+    expect(runtimes[2]).toMatchObject({
       docsURL: "https://example.com/claude",
       status: AgentRuntimeStatuses.comingSoon,
     });

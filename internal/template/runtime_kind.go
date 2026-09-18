@@ -12,8 +12,8 @@ func normalizeTemplateRuntimeKind(kind string) string {
 		return runtime.NamePicoClaw
 	case runtime.NameOpenClaw:
 		return runtime.NameOpenClaw
-	case runtime.KindCodex:
-		return runtime.KindCodex
+	case runtime.KindCodex, runtime.KindDSH:
+		return strings.ToLower(strings.TrimSpace(kind))
 	default:
 		return strings.ToLower(strings.TrimSpace(kind))
 	}
@@ -27,6 +27,8 @@ func templateLegacyRuntimeKind(kind string) string {
 		return runtime.KindOpenClawSandbox
 	case runtime.KindCodex:
 		return runtime.KindCodex
+	case runtime.KindDSH:
+		return runtime.KindDSH
 	default:
 		return ""
 	}

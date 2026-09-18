@@ -235,7 +235,7 @@ func resolveAgentSkillSource(root, name string) (fs.FS, string, error) {
 }
 
 func (s *Controller) installDefaultSystemSkills(agentID, runtimeKind string) error {
-	if !isGatewayRuntimeKind(strings.TrimSpace(runtimeKind)) {
+	if !isGatewayRuntimeKind(strings.TrimSpace(runtimeKind)) && !strings.EqualFold(strings.TrimSpace(runtimeKind), RuntimeKindDSH) {
 		return nil
 	}
 	names, err := defaultSystemSkillNames()

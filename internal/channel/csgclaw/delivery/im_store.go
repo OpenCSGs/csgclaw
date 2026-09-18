@@ -269,27 +269,6 @@ func (s *IMTranscriptStore) DeliverRenderedActivity(ctx context.Context, turn ch
 	return err
 }
 
-// DeliverThought updates one turn-scoped commentary message. A stable ID
-// prevents streaming deltas from creating an unbounded message list.
-func (s *IMTranscriptStore) DeliverThought(ctx context.Context, turn channel.TurnContext, text string) error {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil
-	}
-	if err := contextError(ctx); err != nil {
-		return err
-	}
-	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{
-		RoomID:       strings.TrimSpace(turn.RoomID),
-		SenderID:     s.senderID(turn.ParticipantID),
-		Content:      text,
-		MessageID:    thoughtMessageID(turn),
-		ThreadRootID: strings.TrimSpace(turn.ThreadRootID),
-		Metadata:     transcriptMetadata("thought", turn, nil),
-	})
-	return err
-}
-
 func (s *IMTranscriptStore) senderID(participantID string) string {
 	participantID = strings.TrimSpace(participantID)
 	if item, ok := s.participants.Get(participant.ChannelCSGClaw, participantID); ok {
@@ -342,17 +321,6 @@ func finalMessageID(turn channel.TurnContext) string {
 		return ""
 	}
 	return turnID + "-final"
-}
-
-func thoughtMessageID(turn channel.TurnContext) string {
-	turnID := strings.TrimSpace(string(turn.TurnID))
-	if turnID == "" {
-		turnID = strings.TrimSpace(turn.SourceMessageID)
-	}
-	if turnID == "" {
-		return ""
-	}
-	return turnID + "-thought"
 }
 
 func activityRootMessageID(turn channel.TurnContext) string {

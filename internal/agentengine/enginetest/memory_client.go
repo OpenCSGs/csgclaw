@@ -17,6 +17,7 @@ import (
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentengine/interactionstate"
 	"csgclaw/internal/agentengine/lifecycle"
+	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/runtime/extensionstate"
 )
 
@@ -680,7 +681,10 @@ func (c *memoryConversations) Run(ctx context.Context, request agentengine.TurnR
 		c.completeMemoryTurn(key, turn, result)
 		return result
 	}
-	if !strings.EqualFold(strings.TrimSpace(agentItem.Spec.Runtime.Adapter), "codex") {
+	if !(agentruntime.RuntimeConfig{
+		Name:      agentItem.Spec.Runtime.Adapter,
+		Sandboxed: agentItem.Spec.Runtime.Sandboxed,
+	}).IsHostRuntime() {
 		c.client.mu.Unlock()
 		result := failed(agentengine.ErrorRuntimeAdapterUnavailable, fmt.Sprintf("runtime adapter %q is unavailable", agentItem.Spec.Runtime.Adapter))
 		turn.cancel()

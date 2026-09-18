@@ -3935,6 +3935,7 @@ func TestFilterHubTemplatesForConfiguredProvider(t *testing.T) {
 	items := []hub.Template{
 		{ID: "codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindRemote}},
 		{ID: "codex-manager", Role: hub.TemplateRoleManager, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindBuiltin}},
+		{ID: "dsh-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindDSH, Source: hub.RegistryRef{Kind: hub.RegistryKindBuiltin}},
 		{ID: "openclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "openclaw", Source: hub.RegistryRef{Kind: hub.RegistryKindRemote}},
 		{ID: "local-codex-worker", Role: hub.TemplateRoleWorker, RuntimeKind: agent.RuntimeKindCodex, Source: hub.RegistryRef{Kind: hub.RegistryKindLocal}},
 		{ID: "local-openclaw-worker", Role: hub.TemplateRoleWorker, RuntimeKind: "openclaw", Source: hub.RegistryRef{Kind: hub.RegistryKindLocal}},
@@ -3945,8 +3946,8 @@ func TestFilterHubTemplatesForConfiguredProvider(t *testing.T) {
 		provider string
 		wantIDs  []string
 	}{
-		{name: "csghub lists only codex workers including local templates", provider: config.CSGHubProvider, wantIDs: []string{"codex-worker", "local-codex-worker"}},
-		{name: "other providers are unchanged", provider: config.DockerProvider, wantIDs: []string{"codex-worker", "codex-manager", "openclaw-worker", "local-codex-worker", "local-openclaw-worker", "picoclaw-worker"}},
+		{name: "csghub lists only host runtime workers including local templates", provider: config.CSGHubProvider, wantIDs: []string{"codex-worker", "dsh-worker", "local-codex-worker"}},
+		{name: "other providers are unchanged", provider: config.DockerProvider, wantIDs: []string{"codex-worker", "codex-manager", "dsh-worker", "openclaw-worker", "local-codex-worker", "local-openclaw-worker", "picoclaw-worker"}},
 	}
 
 	for _, tt := range tests {
@@ -3974,7 +3975,7 @@ func TestFilterHubTemplatesForConfiguredProvider(t *testing.T) {
 	}
 }
 
-func TestBootstrapConfigViewRestrictsCSGHubToCodexRuntime(t *testing.T) {
+func TestBootstrapConfigViewRestrictsCSGHubToHostRuntimes(t *testing.T) {
 	got := bootstrapConfigView(context.Background(), config.Config{
 		Sandbox: config.SandboxConfig{Provider: config.CSGHubProvider},
 	}, nil, nil)
@@ -3982,12 +3983,16 @@ func TestBootstrapConfigViewRestrictsCSGHubToCodexRuntime(t *testing.T) {
 	if got.SandboxProvider != config.CSGHubProvider {
 		t.Fatalf("sandbox provider = %q, want %q", got.SandboxProvider, config.CSGHubProvider)
 	}
-	if len(got.WorkerRuntimeChoices) != 1 {
-		t.Fatalf("worker runtime choices = %#v, want only Codex", got.WorkerRuntimeChoices)
+	if len(got.WorkerRuntimeChoices) != 2 {
+		t.Fatalf("worker runtime choices = %#v, want Codex and DSH", got.WorkerRuntimeChoices)
 	}
 	choice := got.WorkerRuntimeChoices[0]
 	if choice.Name != agent.RuntimeNameCodex || choice.SandboxEnabled {
 		t.Fatalf("worker runtime choice = %#v, want non-sandbox Codex", choice)
+	}
+	choice = got.WorkerRuntimeChoices[1]
+	if choice.Name != agent.RuntimeNameDSH || choice.SandboxEnabled {
+		t.Fatalf("worker runtime choice = %#v, want non-sandbox DSH", choice)
 	}
 }
 

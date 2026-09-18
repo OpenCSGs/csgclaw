@@ -1,0 +1,5 @@
+name = "generic-assistant-dsh"
+description = "通用型助手（DSH 版）"
+runtime_kind = "dsh"
+updated_at = "2026-09-18T00:00:00Z"
+version = "0.1.0"

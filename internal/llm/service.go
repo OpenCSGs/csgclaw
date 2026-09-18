@@ -1498,6 +1498,10 @@ func responseInputItemIsReasoning(item any) bool {
 const (
 	gatewayReasoningThinkingBudget = 32768
 	reasoningCompletionHeadroom    = 1024
+	// Some agent runtimes use a provider-level default that is larger than many
+	// selected models accept. Apply a conservative bridge ceiling while keeping
+	// smaller explicit limits unchanged.
+	maxForwardedCompletionTokens = 131072
 )
 
 func normalizeCompletionTokenLimits(payload map[string]any) {
@@ -1513,6 +1517,11 @@ func normalizeCompletionTokenLimits(payload map[string]any) {
 	}
 	if effectiveMax <= 0 {
 		return
+	}
+	if effectiveMax > maxForwardedCompletionTokens {
+		effectiveMax = maxForwardedCompletionTokens
+		setPayloadInt(payload, "max_completion_tokens", effectiveMax)
+		setPayloadInt(payload, "max_tokens", effectiveMax)
 	}
 
 	thinkingFloor := thinkingBudget

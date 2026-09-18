@@ -9,6 +9,7 @@ const (
 	NamePicoClaw = "picoclaw"
 	NameOpenClaw = "openclaw"
 	NameCodex    = "codex"
+	NameDSH      = "dsh"
 )
 
 // RuntimeConfig is the internal runtime selection model shared by higher-level
@@ -39,6 +40,10 @@ func (c RuntimeConfig) LegacyKind() string {
 		if !c.Sandboxed {
 			return KindCodex
 		}
+	case NameDSH:
+		if !c.Sandboxed {
+			return KindDSH
+		}
 	}
 	return ""
 }
@@ -57,8 +62,27 @@ func (c RuntimeConfig) Kind() string {
 		if !c.Sandboxed {
 			return KindCodex
 		}
+	case NameDSH:
+		if !c.Sandboxed {
+			return KindDSH
+		}
 	}
 	return ""
+}
+
+// IsHostRuntime reports whether the runtime executes as a supported local
+// process managed by CSGClaw rather than inside a sandbox.
+func (c RuntimeConfig) IsHostRuntime() bool {
+	c = c.Normalized()
+	if c.Sandboxed {
+		return false
+	}
+	switch c.Name {
+	case NameCodex, NameDSH:
+		return true
+	default:
+		return false
+	}
 }
 
 func NormalizeRuntimeName(name string) string {
@@ -67,8 +91,8 @@ func NormalizeRuntimeName(name string) string {
 		return NamePicoClaw
 	case NameOpenClaw, KindOpenClawSandbox:
 		return NameOpenClaw
-	case NameCodex:
-		return NameCodex
+	case NameCodex, NameDSH:
+		return strings.ToLower(strings.TrimSpace(name))
 	case "":
 		return ""
 	default:
@@ -84,6 +108,8 @@ func RuntimeConfigForKind(kind string) RuntimeConfig {
 		return RuntimeConfig{Name: NameOpenClaw, Sandboxed: true}
 	case NameCodex:
 		return RuntimeConfig{Name: NameCodex, Sandboxed: false}
+	case NameDSH:
+		return RuntimeConfig{Name: NameDSH, Sandboxed: false}
 	default:
 		return RuntimeConfig{
 			Name:      NormalizeRuntimeName(kind),

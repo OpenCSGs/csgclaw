@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"csgclaw/internal/agentengine"
+	agentruntime "csgclaw/internal/runtime"
 )
 
 const agentSessionResponseBodyLimit = 1024 * 1024
@@ -111,7 +112,10 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		writeAgentSessionError(w, http.StatusServiceUnavailable, "session_service_unavailable", "session conversation service is not configured", nil)
 		return
 	}
-	if !strings.EqualFold(strings.TrimSpace(selected.Spec.Runtime.Adapter), "codex") {
+	if !(agentruntime.RuntimeConfig{
+		Name:      selected.Spec.Runtime.Adapter,
+		Sandboxed: selected.Spec.Runtime.Sandboxed,
+	}).IsHostRuntime() {
 		writeAgentSessionError(w, http.StatusServiceUnavailable, "runtime_adapter_unavailable", fmt.Sprintf("runtime adapter %q is unavailable", selected.Spec.Runtime.Adapter), "agent")
 		return
 	}

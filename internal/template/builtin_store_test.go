@@ -24,17 +24,20 @@ func TestBuiltinStoreListGetAndFetchWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if got, want := len(items), 3; got != want {
+	if got, want := len(items), 4; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
 	if got, want := items[0].ID, "codex-worker"; got != want {
 		t.Fatalf("List()[0].ID = %q, want %q", got, want)
 	}
-	if got, want := items[1].ID, "manager-codex"; got != want {
+	if got, want := items[1].ID, "dsh-worker"; got != want {
 		t.Fatalf("List()[1].ID = %q, want %q", got, want)
 	}
-	if got, want := items[2].ID, "openclaw-worker"; got != want {
+	if got, want := items[2].ID, "manager-codex"; got != want {
 		t.Fatalf("List()[2].ID = %q, want %q", got, want)
+	}
+	if got, want := items[3].ID, "openclaw-worker"; got != want {
+		t.Fatalf("List()[3].ID = %q, want %q", got, want)
 	}
 
 	openclawItem, err := store.Get(context.Background(), "openclaw-worker")
@@ -142,19 +145,22 @@ func TestServiceListAggregatesBuiltinAndLocalWithDefaultStoreFactory(t *testing.
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if got, want := len(items), 4; got != want {
+	if got, want := len(items), 5; got != want {
 		t.Fatalf("len(List()) = %d, want %d", got, want)
 	}
 	if got, want := items[0].ID, "builtin.codex-worker"; got != want {
 		t.Fatalf("List()[0].ID = %q, want %q", got, want)
 	}
-	if got, want := items[1].ID, "builtin.manager-codex"; got != want {
+	if got, want := items[1].ID, "builtin.dsh-worker"; got != want {
 		t.Fatalf("List()[1].ID = %q, want %q", got, want)
 	}
-	if got, want := items[2].ID, "builtin.openclaw-worker"; got != want {
+	if got, want := items[2].ID, "builtin.manager-codex"; got != want {
 		t.Fatalf("List()[2].ID = %q, want %q", got, want)
 	}
-	if got, want := items[3].ID, "local.team-helper"; got != want {
+	if got, want := items[3].ID, "builtin.openclaw-worker"; got != want {
 		t.Fatalf("List()[3].ID = %q, want %q", got, want)
+	}
+	if got, want := items[4].ID, "local.team-helper"; got != want {
+		t.Fatalf("List()[4].ID = %q, want %q", got, want)
 	}
 }

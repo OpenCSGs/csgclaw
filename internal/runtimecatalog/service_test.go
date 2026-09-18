@@ -4,11 +4,24 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"csgclaw/internal/dshcli"
 )
 
 type fakeCodexResolver struct {
 	path string
 	err  error
+}
+
+type fakeDSHResolver struct {
+	path    string
+	version string
+}
+
+func (f fakeDSHResolver) Ensure(context.Context) (string, error) { return f.path, nil }
+
+func (f fakeDSHResolver) Resolve(context.Context) (dshcli.Info, error) {
+	return dshcli.Info{Path: f.path, Version: f.version}, nil
 }
 
 func (f fakeCodexResolver) Ensure(context.Context) (string, error) {
@@ -18,17 +31,21 @@ func (f fakeCodexResolver) Ensure(context.Context) (string, error) {
 func TestServiceListReportsBundledCodex(t *testing.T) {
 	service := NewService(
 		WithCodexResolver(fakeCodexResolver{path: "/opt/csgclaw/bin/codex"}),
+		WithDSHResolver(fakeDSHResolver{path: "/usr/local/bin/dsh", version: "0.1.6-alpha.2"}),
 		WithPlatform("darwin", "arm64"),
 	)
 
 	runtimes := service.List()
-	if len(runtimes) != 2 {
-		t.Fatalf("List() length = %d, want 2: %+v", len(runtimes), runtimes)
+	if len(runtimes) != 3 {
+		t.Fatalf("List() length = %d, want 3: %+v", len(runtimes), runtimes)
 	}
 	if got := runtimes[0]; got.Name != RuntimeCodex || !got.Supported || !got.Installed || got.Installable || got.Status != "installed" || got.Path != "/opt/csgclaw/bin/codex" {
 		t.Fatalf("Codex runtime = %+v, want installed bundled Codex", got)
 	}
-	if got := runtimes[1]; got.Name != RuntimeClaudeCode || got.Supported || got.Installed || got.Installable || got.Status != StatusComingSoon {
+	if got := runtimes[1]; got.Name != RuntimeDSH || !got.Supported || !got.Installed || got.Path != "/usr/local/bin/dsh" || got.Version != "0.1.6-alpha.2" {
+		t.Fatalf("DSH runtime = %+v, want installed external DSH", got)
+	}
+	if got := runtimes[2]; got.Name != RuntimeClaudeCode || got.Supported || got.Installed || got.Installable || got.Status != StatusComingSoon {
 		t.Fatalf("Claude Code runtime = %+v, want coming soon", got)
 	}
 	for _, got := range runtimes {

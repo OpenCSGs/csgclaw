@@ -24,7 +24,7 @@ func (s *Controller) materializeRuntimeMCPServers(ctx context.Context, runtimeKi
 }
 
 func (s *Controller) mcpProxyBaseURL(runtimeKind string) string {
-	if strings.EqualFold(strings.TrimSpace(runtimeKind), RuntimeKindCodex) {
+	if isHostRuntimeKind(runtimeKind) {
 		return ResolveLocalRuntimeBaseURL(s.server)
 	}
 	return s.resolveManagerBaseURL(s.server)

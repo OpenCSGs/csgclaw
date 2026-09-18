@@ -22,6 +22,7 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 
 	var gotModel string
 	var gotReasoningEffort string
+	var gotMaxTokens int
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Fatalf("path = %q, want %q", r.URL.Path, "/v1/chat/completions")
@@ -32,6 +33,7 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 		}
 		gotModel, _ = payload["model"].(string)
 		gotReasoningEffort, _ = payload["reasoning_effort"].(string)
+		gotMaxTokens = payloadInt(payload, "max_tokens")
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"remote result"},"finish_reason":"stop"}]}`))
 	}))
@@ -65,7 +67,7 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 	})
 
 	svc := NewService(config.ModelConfig{}, agentSvc)
-	body, status, _, err := svc.ChatCompletions(context.Background(), agent.ManagerUserID, []byte(`{"model":"client-model","messages":[{"role":"user","content":"hello"}]}`))
+	body, status, _, err := svc.ChatCompletions(context.Background(), agent.ManagerUserID, []byte(`{"model":"client-model","messages":[{"role":"user","content":"hello"}],"max_tokens":256000}`))
 	if err != nil {
 		t.Fatalf("ChatCompletions() error = %v", err)
 	}
@@ -77,6 +79,9 @@ func TestChatCompletionsLLMAPIOverridesModelAndProxiesUpstream(t *testing.T) {
 	}
 	if gotReasoningEffort != "medium" {
 		t.Fatalf("upstream reasoning_effort = %q, want %q", gotReasoningEffort, "medium")
+	}
+	if gotMaxTokens != maxForwardedCompletionTokens {
+		t.Fatalf("upstream max_tokens = %d, want %d", gotMaxTokens, maxForwardedCompletionTokens)
 	}
 	if !strings.Contains(string(body), "remote result") {
 		t.Fatalf("body = %s, want remote result", body)
@@ -1527,6 +1532,20 @@ func TestNormalizeCompletionTokenLimitsLeavesSmallNonReasoningLimits(t *testing.
 	normalizeCompletionTokenLimits(payload)
 	if got, want := payloadInt(payload, "max_tokens"), 4096; got != want {
 		t.Fatalf("max_tokens = %d, want %d", got, want)
+	}
+}
+
+func TestNormalizeCompletionTokenLimitsCapsExcessiveRuntimeDefault(t *testing.T) {
+	payload := map[string]any{
+		"model":      "qwen3.7-plus",
+		"max_tokens": float64(256000),
+	}
+	normalizeCompletionTokenLimits(payload)
+	if got, want := payloadInt(payload, "max_tokens"), maxForwardedCompletionTokens; got != want {
+		t.Fatalf("max_tokens = %d, want %d", got, want)
+	}
+	if got, want := payloadInt(payload, "max_completion_tokens"), maxForwardedCompletionTokens; got != want {
+		t.Fatalf("max_completion_tokens = %d, want %d", got, want)
 	}
 }
 

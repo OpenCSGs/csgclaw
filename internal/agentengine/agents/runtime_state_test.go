@@ -181,6 +181,38 @@ func TestRuntimeProfileForKindUsesBridgeForCodexRuntime(t *testing.T) {
 	}
 }
 
+func TestRuntimeProfileForKindUsesBridgeForDSHRuntime(t *testing.T) {
+	svc, err := NewController(
+		config.ModelConfig{},
+		config.ServerConfig{
+			ListenAddr:       "0.0.0.0:18080",
+			AdvertiseBaseURL: "http://127.0.0.1:18080",
+			AccessToken:      "shared-token",
+		}, "manager-image:test", "",
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	profile := svc.runtimeProfileForKind(RuntimeKindDSH, "u-dsh", "dsh", "", AgentProfile{
+		Name:     "dsh",
+		Provider: ProviderAPI,
+		ModelID:  "qwen3.7-plus",
+		BaseURL:  "https://dashscope.aliyuncs.com/compatible-mode/v1",
+		APIKey:   "dashscope-key",
+	})
+
+	if got, want := profile.BaseURL, "http://127.0.0.1:18080/api/v1/agents/u-dsh/llm"; got != want {
+		t.Fatalf("runtimeProfileForKind().BaseURL = %q, want %q", got, want)
+	}
+	if got, want := profile.APIKey, "shared-token"; got != want {
+		t.Fatalf("runtimeProfileForKind().APIKey = %q, want %q", got, want)
+	}
+	if got, want := profile.ModelID, "qwen3.7-plus"; got != want {
+		t.Fatalf("runtimeProfileForKind().ModelID = %q, want %q", got, want)
+	}
+}
+
 func TestRuntimeProfileForKindUsesHostReachableBridgeForCodexRuntime(t *testing.T) {
 	orig := localIPv4Resolver
 	localIPv4Resolver = func() string {

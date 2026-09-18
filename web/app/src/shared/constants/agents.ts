@@ -30,6 +30,7 @@ export const RUNTIME_KIND_OPTIONS = [
   { value: "picoclaw_sandbox", label: "picoclaw_sandbox" },
   { value: "openclaw_sandbox", label: "openclaw_sandbox" },
   { value: "codex", label: "codex" },
+  { value: "dsh", label: "dsh" },
 ];
 /** Worker create flow only (excludes legacy notifier runtime_kind). */
 export const WORKER_RUNTIME_KIND_OPTIONS = RUNTIME_KIND_OPTIONS;

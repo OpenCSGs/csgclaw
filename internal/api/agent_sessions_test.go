@@ -124,6 +124,25 @@ func TestAgentSessionResponsesSupportsMessageInput(t *testing.T) {
 	}
 }
 
+func TestAgentSessionResponsesSupportsDSHRuntime(t *testing.T) {
+	var calls atomic.Int32
+	engine := &fakeSessionEngine{run: func(_ context.Context, agentID string, request agentengine.TurnRequest, _ agentengine.EventSink) agentengine.TurnResult {
+		calls.Add(1)
+		if agentID != "agent-dsh" || sessionTurnText(request) != "hello" {
+			t.Fatalf("Run() agent = %q, request = %+v", agentID, request)
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "hello from dsh", Dispatched: true}
+	}}
+	handler, _, _, _ := newAgentSessionTestHandler(t, []agent.Agent{sessionDSHAgent("agent-dsh", "DSH")}, engine, "")
+	recorder := performAgentSessionRequest(t, handler, "agent-dsh", "dsh-session", map[string]any{"input": "hello"})
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "hello from dsh") {
+		t.Fatalf("response = %d %s", recorder.Code, recorder.Body.String())
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("engine calls = %d, want 1", calls.Load())
+	}
+}
+
 func TestAgentSessionResponsesRejectsOverlapAndScopesBusyByAgent(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -491,6 +510,12 @@ func sessionCodexAgent(id, name string) agent.Agent {
 	return item
 }
 
+func sessionDSHAgent(id, name string) agent.Agent {
+	item := completeWorkerAgent(id, name)
+	item.RuntimeKind = agent.RuntimeKindDSH
+	return item
+}
+
 func sessionTurnText(request agentengine.TurnRequest) string {
 	text := make([]string, 0, len(request.Input))
 	for _, part := range request.Input {
@@ -521,6 +546,7 @@ func newAgentSessionTestHandler(
 		config.ModelConfig{}, config.ServerConfig{}, "manager:test", agentPath,
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindPicoClawSandbox}),
 		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
+		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindDSH}),
 	)
 	if err != nil {
 		t.Fatal(err)

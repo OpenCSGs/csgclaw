@@ -19,8 +19,8 @@ import type { LocaleCode } from "@/models/conversations";
 import { providerIDForProvider, providerNameForProviderID, selectorForProviderModel } from "@/models/modelProviders";
 import { normalizeReasoningEffort } from "@/models/reasoning";
 
-export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | string;
-export type RuntimeName = "picoclaw" | "openclaw" | "codex" | string;
+export type RuntimeKind = "picoclaw_sandbox" | "openclaw_sandbox" | "codex" | "dsh" | string;
+export type RuntimeName = "picoclaw" | "openclaw" | "codex" | "dsh" | string;
 export type BotType = typeof BOT_TYPE_NORMAL | typeof BOT_TYPE_NOTIFICATION | string;
 export type ProviderName = "csghub_lite" | "csghub" | "codex" | "claude_code" | "api" | string;
 export type JSONRecord = Record<string, unknown>;
@@ -205,6 +205,8 @@ export function normalizeRuntimeName(name: unknown): RuntimeName {
       return "openclaw";
     case "codex":
       return "codex";
+    case "dsh":
+      return "dsh";
     default:
       return value;
   }
@@ -214,7 +216,7 @@ export function composeLegacyRuntimeKind(runtimeName: unknown, sandboxEnabled: u
   const name = normalizeRuntimeName(runtimeName);
   const sandbox = Boolean(sandboxEnabled);
   if (!sandbox) {
-    return name === "codex" || !name ? "codex" : "";
+    return name === "codex" || name === "dsh" ? name : !name ? "codex" : "";
   }
   switch (name) {
     case "openclaw":
@@ -235,6 +237,8 @@ function runtimeNameForKind(kind: unknown): RuntimeName {
       return "picoclaw";
     case "codex":
       return "codex";
+    case "dsh":
+      return "dsh";
     default:
       return normalizeRuntimeName(value);
   }
@@ -645,7 +649,12 @@ function isJSONRecord(value: unknown): value is JSONRecord {
 
 export function supportsMCPServers(runtimeKind: unknown): boolean {
   const normalized = normalizeRuntimeKind(runtimeKind);
-  return normalized === "openclaw_sandbox" || normalized === "picoclaw_sandbox" || normalized === "codex";
+  return (
+    normalized === "openclaw_sandbox" ||
+    normalized === "picoclaw_sandbox" ||
+    normalized === "codex" ||
+    normalized === "dsh"
+  );
 }
 
 export function mcpServersText(mcpServers: JSONRecord | null | undefined): string {
@@ -2081,7 +2090,7 @@ export function agentRuntimePollSettled(item: AgentLike | null | undefined): boo
 }
 
 export function isAgentUpgradeNeeded(item: AgentLike | null | undefined): boolean {
-  if (agentRuntimeKind(item) === "codex") {
+  if (agentRuntimeKind(item) === "codex" || agentRuntimeKind(item) === "dsh") {
     return false;
   }
   const profile = agentProfileConfig(item);
@@ -2154,6 +2163,8 @@ export function normalizeRuntimeKind(kind: unknown): RuntimeKind {
       return "picoclaw_sandbox";
     case "codex":
       return "codex";
+    case "dsh":
+      return "dsh";
     case "picoclaw_sandbox":
       return "picoclaw_sandbox";
     default:
@@ -2229,7 +2240,7 @@ export function runtimeImageForKind(
   if (!runtimeKind) {
     runtimeKind = DEFAULT_RUNTIME_KIND;
   }
-  if (runtimeKind === "codex" || runtimeKind === BOT_TYPE_NOTIFICATION) {
+  if (runtimeKind === "codex" || runtimeKind === "dsh" || runtimeKind === BOT_TYPE_NOTIFICATION) {
     return "";
   }
   const images = normalizeRuntimeImageMap(bootstrapConfig?.runtime_default_images);
@@ -2413,6 +2424,8 @@ export function formatRuntimeKindLabel(kind: unknown, t: TranslateFn): string {
       return t("runtimeOpenclaw");
     case "codex":
       return t("runtimeCodexCLI");
+    case "dsh":
+      return t("runtimeDSH");
     case "picoclaw_sandbox":
       return t("runtimePicoclaw");
     default:

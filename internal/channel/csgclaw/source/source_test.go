@@ -116,6 +116,29 @@ func (a *mutableAgents) set(item agentengine.Agent) {
 	a.mu.Unlock()
 }
 
+func TestSourceBindingSupportsHostDSH(t *testing.T) {
+	source := &Source{agents: fakeAgents{items: map[string]agentengine.Agent{
+		"agent-worker": {
+			ID: "agent-worker",
+			Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{
+				Adapter: "dsh",
+			}},
+		},
+	}}}
+	got, ok := source.binding(context.Background(), apitypes.Participant{
+		ID:      "pt-worker",
+		Channel: participant.ChannelCSGClaw,
+		Type:    participant.TypeAgent,
+		AgentID: "agent-worker",
+	})
+	if !ok {
+		t.Fatal("binding() rejected a host DSH Agent")
+	}
+	if got.ParticipantID != "pt-worker" || got.AgentID != "agent-worker" {
+		t.Fatalf("binding() = %+v", got)
+	}
+}
+
 func TestSourceForwardsInProcessParticipantEventsToBindingWorker(t *testing.T) {
 	bridge := im.NewParticipantBridge("")
 	workers := &fakeWorkers{

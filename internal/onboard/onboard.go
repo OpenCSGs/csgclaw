@@ -161,6 +161,7 @@ func createManagerParticipant(ctx context.Context, agentsPath, imStatePath strin
 		runtimewiring.WithPicoClawSandboxRuntime(nil),
 		runtimewiring.WithOpenClawSandboxRuntime(nil),
 		runtimewiring.WithCodexRuntime(),
+		runtimewiring.WithDSHRuntime(),
 		agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		agent.WithHubService(hubSvc),
 	)

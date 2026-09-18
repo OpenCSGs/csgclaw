@@ -25,6 +25,7 @@ var (
 			runtimewiring.WithPicoClawSandboxRuntime(nil),
 			runtimewiring.WithOpenClawSandboxRuntime(nil),
 			runtimewiring.WithCodexRuntime(),
+			runtimewiring.WithDSHRuntime(),
 			agent.WithBootstrapDefaultTemplates(cfg.Bootstrap),
 		)
 	}

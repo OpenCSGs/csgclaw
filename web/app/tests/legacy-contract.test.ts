@@ -95,9 +95,9 @@ describe("legacy UI contract", () => {
     expect(source).toContain('className="agent-actions-menu"');
     expect(source).toContain('onSelect={() => onPublish?.("local")}');
     expect(source).toContain('onSelect={() => onPublish?.("official")}');
-    expect(source).toContain(
-      'const canPublishLocal = !isManager && (runtimeKind === "codex" || runtimeKind === "openclaw_sandbox");',
-    );
+    expect(source).toContain("const canPublishLocal =");
+    expect(source).toContain('runtimeKind === "dsh"');
+    expect(source).toContain('runtimeKind === "openclaw_sandbox"');
     expect(source).toContain('const canPublishCommunity = !isManager && runtimeKind === "codex";');
   });
 
