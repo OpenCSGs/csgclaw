@@ -1159,9 +1159,11 @@ export function HubDetailPane({
   useEffect(() => {
     if (selectedSkill) setSkillDetailDialogOpen(true);
   }, [selectedSkill]);
+  const selectedTemplateID = selectedTemplate?.id;
   useEffect(() => {
-    if (selectedTemplate) setTemplateDetailDialogOpen(true);
-  }, [selectedTemplate]);
+    // Refreshing the same template must not reopen details over the agent creation form.
+    setTemplateDetailDialogOpen(Boolean(selectedTemplateID));
+  }, [selectedTemplateID]);
   useEffect(() => {
     if (selectedMCPServer) setMCPDetailDialogOpen(true);
   }, [selectedMCPServer]);

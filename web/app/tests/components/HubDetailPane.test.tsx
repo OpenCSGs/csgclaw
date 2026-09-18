@@ -682,6 +682,68 @@ async function openMCPDetail(user: ReturnType<typeof userEvent.setup>, name = /g
 }
 
 describe("HubDetailPane", () => {
+  it.each(["local", "remote"])("keeps %s template details closed while creating an agent", async (kind) => {
+    const user = userEvent.setup();
+    const selectedTemplate: HubTemplate = {
+      ...template,
+      id: `${kind}/demo`,
+      source: { name: kind, kind },
+    };
+    const onCreate = vi.fn();
+    function Harness() {
+      const [creating, setCreating] = useState(false);
+      return (
+        <>
+          <HubDetailPane
+            t={t}
+            onCreateFromTemplate={async (item) => {
+              onCreate(item);
+              await Promise.resolve();
+              setCreating(true);
+            }}
+            hub={{
+              detailPaneProps: {
+                selectedResourceType: "template",
+                selectedTemplate: { ...selectedTemplate },
+                selectedTemplateId: selectedTemplate.id || "",
+                error: "",
+                onRetry: vi.fn(),
+                onSelectWorkspaceFile: vi.fn(),
+                skills: [],
+                selectedSkill: null,
+                selectedSkillPath: "",
+                selectedWorkspacePath: "",
+                skillFile: null,
+                skillFileError: "",
+                skillFileLoading: false,
+                skillTree: null,
+                skillTreeError: "",
+                skillTreeLoading: false,
+                workspaceFile: null,
+                workspaceFileError: "",
+                workspaceFileLoading: false,
+                workspaceEntries: [],
+                templates: [selectedTemplate],
+                loaded: true,
+              },
+            }}
+          />
+          {creating && <input aria-label="Agent name" />}
+        </>
+      );
+    }
+    render(<Harness />);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    const name = await screen.findByRole("textbox", { name: "Agent name" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onCreate).toHaveBeenCalledWith(selectedTemplate);
+    await user.type(name, "New agent");
+    expect(name).toHaveValue("New agent");
+    await openTemplateDetail(user, /demo-template/i);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
   it("opens the shared login flow instead of knowledge-base discovery while signed out", async () => {
     const user = userEvent.setup();
     const onKnowledgeBaseLogin = vi.fn();
