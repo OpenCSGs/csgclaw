@@ -118,7 +118,7 @@ ok
 
 ### `GET /api/v1/skills/remote`
 
-从有效的 OpenCSG Hub 列出远端 Skill。浏览器只请求 CSGClaw；Server 按当前登录环境或显式配置的 official Hub URL 解析 Hub 地址。
+从有效的 OpenCSG Hub 列出远端 Skill。浏览器只请求 CSGClaw；Server 按当前登录环境或显式配置的 official Hub URL 解析 Hub 地址。用户已登录时，CSGClaw 会把当前 OpenCSG Access Token 传给匹配的 Hub，因此 catalog 可以包含该用户有权查看的私有 Skill；未登录请求仍保持匿名，只列出公开 Skill。
 
 可选查询参数：
 
@@ -152,7 +152,7 @@ Server 保持当前 Hub catalog 的排序，并返回归一化后的 Skill 摘�
 
 ### `POST /api/v1/skills:install`
 
-从同一个有效 OpenCSG Hub 安装远端 Skill。Hub 支持时，Server 通过单个请求下载仓库压缩包；旧版 Hub 则兼容回退到 tree/blob API。设置 `replace` 可覆盖同名本地 Skill。
+从同一个有效 OpenCSG Hub 安装远端 Skill。用户已登录时，Server 会在仓库压缩包请求以及旧版 Hub 的每个 tree/blob 回退请求中携带匹配环境的 OpenCSG Access Token，从而安装该用户有权查看的私有 Skill；未登录时仍只能安装公开 Skill。设置 `replace` 可覆盖同名本地 Skill。
 
 ```json
 {
