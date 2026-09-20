@@ -101,21 +101,24 @@ type Credentials struct {
 func (Credentials) String() string { return "[redacted]" }
 
 type Installation struct {
-	InstallationID      string          `json:"installation_id"`
-	AgentID             string          `json:"agent_id"`
-	AppID               string          `json:"app_id"`
-	Name                string          `json:"name"`
-	Enabled             bool            `json:"enabled"`
-	Disconnected        bool            `json:"disconnected"`
-	Status              string          `json:"status"`
-	LastErrorCode       string          `json:"last_error_code,omitempty"`
-	LastErrorHTTPStatus int             `json:"last_error_http_status,omitempty"`
-	LastError           string          `json:"last_error,omitempty"`
-	Config              Config          `json:"config"`
-	CredentialsSet      map[string]bool `json:"credentials_set"`
-	Tools               []*mcp.Tool     `json:"tools"`
-	CreatedAt           time.Time       `json:"created_at"`
-	UpdatedAt           time.Time       `json:"updated_at"`
+	ResourceID          string           `json:"resource_id,omitempty"`
+	ResourceEnabled     bool             `json:"resource_enabled"`
+	Bindings            []BindingSummary `json:"bindings,omitempty"`
+	InstallationID      string           `json:"installation_id"`
+	AgentID             string           `json:"agent_id"`
+	AppID               string           `json:"app_id"`
+	Name                string           `json:"name"`
+	Enabled             bool             `json:"enabled"`
+	Disconnected        bool             `json:"disconnected"`
+	Status              string           `json:"status"`
+	LastErrorCode       string           `json:"last_error_code,omitempty"`
+	LastErrorHTTPStatus int              `json:"last_error_http_status,omitempty"`
+	LastError           string           `json:"last_error,omitempty"`
+	Config              Config           `json:"config"`
+	CredentialsSet      map[string]bool  `json:"credentials_set"`
+	Tools               []*mcp.Tool      `json:"tools"`
+	CreatedAt           time.Time        `json:"created_at"`
+	UpdatedAt           time.Time        `json:"updated_at"`
 }
 
 type CreateRequest struct {
@@ -157,4 +160,21 @@ type Options struct {
 	ReadOnly           func(string) bool
 	ResolveFeishu      func(context.Context, string) (FeishuCredentials, error)
 	OnCatalogChanged   func(string, uint64)
+}
+
+// BindingSummary describes use of a global resource without exposing credentials.
+type BindingSummary struct {
+	AgentName      string `json:"agent_name,omitempty"`
+	InstallationID string `json:"installation_id"`
+	AgentID        string `json:"agent_id"`
+	Enabled        bool   `json:"enabled"`
+	Status         string `json:"status"`
+	ToolCount      int    `json:"tool_count"`
+}
+type BindRequest struct {
+	ResourceID string `json:"resource_id"`
+	Connect    bool   `json:"connect"`
+}
+type BindingUpdateRequest struct {
+	Enabled *bool `json:"enabled"`
 }

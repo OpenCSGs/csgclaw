@@ -173,8 +173,8 @@ func TestPersistedDisconnectAndProtectedConfiguration(t *testing.T) {
 		t.Fatalf("disconnect intent was lost: %+v", current)
 	}
 	data, _ = os.ReadFile(s.path)
-	if bytes.Contains(data, []byte("hidden")) {
-		t.Fatal("disconnect retained authorization data")
+	if !bytes.Contains(data, []byte("hidden")) {
+		t.Fatal("disconnect removed credentials owned by the global resource")
 	}
 }
 
@@ -536,7 +536,11 @@ func TestGatewayAppIdentityAndRenameRefresh(t *testing.T) {
 	check("Work GitLab")
 	before := s.Revision("agent")
 	updated := "Company GitLab"
-	got, err := s.Update(context.Background(), "agent", work.InstallationID, UpdateRequest{Name: &updated})
+	_, err := s.Update(context.Background(), "", work.ResourceID, UpdateRequest{Name: &updated})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get(context.Background(), "agent", work.InstallationID)
 	if err != nil {
 		t.Fatal(err)
 	}

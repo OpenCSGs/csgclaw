@@ -44,7 +44,7 @@ func (s *Service) Upload(ctx context.Context, agentID, installationID, uploadURI
 		s.mu.Unlock()
 		return nil, err
 	}
-	if !e.record.Enabled || e.record.Disconnected || e.connection == nil {
+	if !e.record.active() || e.record.Disconnected || e.connection == nil {
 		s.mu.Unlock()
 		return nil, fmt.Errorf("App is not connected or enabled")
 	}
@@ -101,7 +101,7 @@ func (s *Service) Upload(ctx context.Context, agentID, installationID, uploadURI
 	}
 	s.mu.Lock()
 	e, err = s.findLocked(agentID, installationID)
-	allowed := err == nil && e.connection == conn && e.record.Enabled && !e.record.Disconnected
+	allowed := err == nil && e.connection == conn && e.record.active() && !e.record.Disconnected
 	s.mu.Unlock()
 	if !allowed || s.isReadOnly(agentID) {
 		return nil, fmt.Errorf("App upload is no longer authorized")

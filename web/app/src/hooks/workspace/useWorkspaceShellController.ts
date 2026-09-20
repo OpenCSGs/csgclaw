@@ -51,6 +51,8 @@ function currentWorkspaceLabelForPane(
       return t("teamOverview");
     case WorkspacePaneTypes.computer:
       return t("computerOverview");
+    case WorkspacePaneTypes.apps:
+      return t("agentAppsTab");
     case WorkspacePaneTypes.hub:
       return t("resourcesOverview");
     case WorkspacePaneTypes.task:

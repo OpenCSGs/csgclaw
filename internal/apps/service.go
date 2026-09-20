@@ -2,9 +2,7 @@ package apps
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -85,16 +83,11 @@ func NewService(statePath string, options Options) (*Service, error) {
 		cancel()
 		return nil, err
 	}
-	for id, value := range stored {
-		value.Tools = []*mcp.Tool{}
-		value.CredentialsSet = nil
-		if value.Disconnected {
-			value.Status = "disconnected"
-		} else {
-			value.Status = "needs_configuration"
-		}
-		s.entries[id] = &entry{record: value}
+	if err := s.loadResources(stored); err != nil {
+		cancel()
+		return nil, err
 	}
+
 	return s, nil
 }
 
@@ -107,7 +100,7 @@ func (s *Service) persistLocked(id string, r *record) error {
 		copy := *r
 		copy.Tools = nil
 		copy.CredentialsSet = nil
-		raw, err := json.Marshal(copy)
+		raw, err := json.Marshal(persistedRecord(copy))
 		if err != nil {
 			return err
 		}
@@ -159,7 +152,7 @@ func (s *Service) List(_ context.Context, agentID string) ([]Installation, error
 	items := []Installation{}
 	for _, e := range s.entries {
 		if e.record.AgentID == agentID {
-			items = append(items, view(e))
+			items = append(items, s.viewLocked(e))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
@@ -173,7 +166,7 @@ func (s *Service) Get(_ context.Context, agentID, id string) (Installation, erro
 	if err != nil {
 		return Installation{}, err
 	}
-	return view(e), nil
+	return s.viewLocked(e), nil
 }
 
 func (s *Service) uniqueNameLocked(agentID, name, except string) error {
@@ -252,13 +245,27 @@ func mergeCredentials(old, next Credentials) Credentials {
 	return out
 }
 
+// Create is a convenience for creating a resource and optionally binding it.
+// Public Agent management uses Bind so it cannot implicitly change shared resources.
 func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) (Installation, error) {
+	if agentID != "" {
+		s.mu.Lock()
+		err := s.uniqueNameLocked(agentID, strings.TrimSpace(in.Name), "")
+		s.mu.Unlock()
+		if err != nil {
+			return Installation{}, err
+		}
+		connect := in.Connect
+		in.Connect = false
+		resource, err := s.Create(ctx, "", in)
+		if err != nil {
+			return Installation{}, err
+		}
+		return s.Bind(ctx, agentID, BindRequest{ResourceID: resource.InstallationID, Connect: connect})
+	}
 	pkg, ok := s.packages[in.AppID]
 	if !ok {
 		return Installation{}, ErrNotFound
-	}
-	if strings.TrimSpace(agentID) == "" {
-		return Installation{}, ErrInvalid
 	}
 	in.Name = strings.TrimSpace(in.Name)
 	in.Config = normalizeConfig(in.Config, in.AppID, in.Credentials)
@@ -272,20 +279,14 @@ func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) 
 			return Installation{}, err
 		}
 	}
-	random := make([]byte, 16)
-	if _, err := rand.Read(random); err != nil {
+	id, err := newInstallationID()
+	if err != nil {
 		return Installation{}, err
 	}
-	id := hex.EncodeToString(random)
 	now := time.Now().UTC()
-	r := record{Installation: Installation{InstallationID: id, AgentID: agentID, AppID: in.AppID, Name: in.Name, Enabled: true, Status: "needs_configuration", Config: in.Config, CreatedAt: now, UpdatedAt: now}, Package: pkg, Credentials: in.Credentials}
+	r := record{Installation: Installation{InstallationID: id, AgentID: agentID, ResourceEnabled: true, AppID: in.AppID, Name: in.Name, Enabled: true, Status: "needs_configuration", Config: in.Config, CreatedAt: now, UpdatedAt: now}, Package: pkg, Credentials: in.Credentials}
 	s.mu.Lock()
 	if err := s.uniqueNameLocked(agentID, in.Name, ""); err != nil {
-		s.mu.Unlock()
-		return Installation{}, err
-	}
-	if _, err := s.prepareInstallation(r); err != nil {
-		_ = s.removeInstallationData(id)
 		s.mu.Unlock()
 		return Installation{}, err
 	}
@@ -295,80 +296,48 @@ func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) 
 		return Installation{}, err
 	}
 	s.entries[id] = &entry{record: r}
-	result := view(s.entries[id])
+	result := s.viewLocked(s.entries[id])
 	s.mu.Unlock()
-	if in.Connect {
-		connected, err := s.Connect(ctx, agentID, id)
-		if err != nil && connected.InstallationID != "" {
-			return connected, nil
-		}
-		return connected, err
-	}
 	return result, nil
 }
 
 func (s *Service) Update(ctx context.Context, agentID, id string, in UpdateRequest) (Installation, error) {
+	if agentID == "" {
+		return s.updateResource(ctx, id, in)
+	}
+	if in.Name != nil || in.Config != nil || in.Credentials != nil {
+		return Installation{}, fmt.Errorf("%w: change shared settings on the global App resource", ErrInvalid)
+	}
+
 	s.mu.Lock()
 	e, err := s.findLocked(agentID, id)
 	if err != nil {
 		s.mu.Unlock()
 		return Installation{}, err
 	}
-	next := copyJSON(e.record)
-	if in.Name != nil {
-		next.Name = strings.TrimSpace(*in.Name)
-		if err := s.uniqueNameLocked(agentID, next.Name, id); err != nil {
-			s.mu.Unlock()
-			return Installation{}, err
-		}
-	}
-	if in.Enabled != nil {
-		next.Enabled = *in.Enabled
-	}
-	if in.Credentials != nil {
-		next.Credentials = mergeCredentials(next.Credentials, *in.Credentials)
-	}
-	if in.Config != nil {
-		next.Config = normalizeConfig(*in.Config, next.AppID, next.Credentials)
-	}
-	if in.Config != nil || in.Credentials != nil || in.Enabled != nil {
-		next.LastError = ""
-		next.LastErrorCode = ""
-		next.LastErrorHTTPStatus = 0
-	}
-	protect(&next.Config, &next.Credentials)
-	clearReferencedPlatformCredentials(next.Config, &next.Credentials)
-	if next.Config.AuthMode == "oauth2" {
+	if in.Enabled == nil {
+		out := s.viewLocked(e)
 		s.mu.Unlock()
-		return Installation{}, ErrUnsupportedOAuth
+		return out, nil
+	}
+	next := copyJSON(e.record)
+	next.Enabled = *in.Enabled
+	next.LastError, next.LastErrorCode, next.LastErrorHTTPStatus = "", "", 0
+	next.Status = "needs_configuration"
+	if next.Disconnected {
+		next.Status = "disconnected"
 	}
 	next.UpdatedAt = time.Now().UTC()
 	if err := s.persistLocked(id, &next); err != nil {
 		s.mu.Unlock()
 		return Installation{}, err
 	}
-	changed := in.Config != nil || in.Credentials != nil || in.Enabled != nil
-	var old *connection
-	var revision uint64
-	if changed {
-		old = e.connection
-		revision = s.detachLocked(e)
-		e.generation++
-	}
-	renamed := e.record.Name != next.Name
+	old := e.connection
+	revision := s.detachLocked(e)
+	e.generation++
 	e.record = next
-	if !changed && renamed && e.connection != nil {
-		revision = s.attachLocked(e)
-	}
-	if changed {
-		if next.Disconnected {
-			e.record.Status = "disconnected"
-		} else {
-			e.record.Status = "needs_configuration"
-		}
-	}
-	reconnect := changed && next.Enabled && !next.Disconnected && next.ConnectRequested
-	result := view(e)
+	reconnect := next.active() && !next.Disconnected && next.ConnectRequested
+	result := s.viewLocked(e)
 	s.mu.Unlock()
 	old.close()
 	s.notify(agentID, revision)
@@ -383,14 +352,22 @@ func (s *Service) Connect(ctx context.Context, agentID, id string) (Installation
 }
 
 func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool) (Installation, error) {
+	if agentID == "" {
+		return Installation{}, ErrInvalid
+	}
 	s.mu.Lock()
 	e, err := s.findLocked(agentID, id)
 	if err != nil {
 		s.mu.Unlock()
 		return Installation{}, err
 	}
-	if !explicit && (e.record.Disconnected || !e.record.Enabled || !e.record.ConnectRequested) {
-		out := view(e)
+	if !e.record.ResourceEnabled {
+		out := s.viewLocked(e)
+		s.mu.Unlock()
+		return out, connectionError("app_resource_disabled", "This App is disabled in global resources.", 0, false)
+	}
+	if !explicit && (e.record.Disconnected || !e.record.active() || !e.record.ConnectRequested) {
+		out := s.viewLocked(e)
 		s.mu.Unlock()
 		return out, nil
 	}
@@ -441,7 +418,7 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 		setConnectionError(&e.record.Installation, connectErr)
 		e.record.UpdatedAt = time.Now().UTC()
 		persistErr := s.persistLocked(id, &e.record)
-		out := view(e)
+		out := s.viewLocked(e)
 		s.mu.Unlock()
 		conn.close()
 		if persistErr != nil {
@@ -463,10 +440,10 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 		conn.close()
 		return Installation{}, err
 	}
-	if e.record.Enabled {
+	if e.record.active() {
 		revision = s.attachLocked(e)
 	}
-	out := view(e)
+	out := s.viewLocked(e)
 	s.mu.Unlock()
 	s.notify(agentID, revision)
 	go s.watch(agentID, id, conn)
@@ -481,7 +458,6 @@ func (s *Service) Disconnect(_ context.Context, agentID, id string) (Installatio
 		return Installation{}, err
 	}
 	r := copyJSON(e.record)
-	r.Credentials = Credentials{}
 	r.Disconnected = true
 	r.ConnectRequested = false
 	r.Status = "disconnected"
@@ -497,14 +473,17 @@ func (s *Service) Disconnect(_ context.Context, agentID, id string) (Installatio
 	revision := s.detachLocked(e)
 	e.generation++
 	e.record = r
-	out := view(e)
+	out := s.viewLocked(e)
 	s.mu.Unlock()
 	old.close()
 	s.notify(agentID, revision)
 	return out, nil
 }
 
-func (s *Service) Delete(_ context.Context, agentID, id string) error {
+func (s *Service) Delete(ctx context.Context, agentID, id string) error {
+	if agentID == "" {
+		return s.deleteResource(ctx, id)
+	}
 	s.mu.Lock()
 	e, err := s.findLocked(agentID, id)
 	if err != nil {
@@ -598,7 +577,9 @@ func (s *Service) RestoreAll(ctx context.Context) error {
 	s.mu.Lock()
 	agents := map[string]bool{}
 	for _, e := range s.entries {
-		agents[e.record.AgentID] = true
+		if e.record.AgentID != "" {
+			agents[e.record.AgentID] = true
+		}
 	}
 	s.mu.Unlock()
 	var errs []error
@@ -625,7 +606,7 @@ func (s *Service) RefreshCredentials(ctx context.Context, agentID string) error 
 	s.mu.Lock()
 	ids := []string{}
 	for id, e := range s.entries {
-		if e.record.AgentID == agentID && e.record.Config.CredentialSource == "feishu_channel" && e.record.Enabled && !e.record.Disconnected && e.record.ConnectRequested {
+		if e.record.AgentID == agentID && e.record.Config.CredentialSource == "feishu_channel" && e.record.active() && !e.record.Disconnected && e.record.ConnectRequested {
 			ids = append(ids, id)
 		}
 	}

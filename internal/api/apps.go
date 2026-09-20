@@ -182,7 +182,7 @@ func (h *Handler) handleAgentApps(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"items": items, "feishu_channel_available": channelErr == nil})
 		return
 	}
-	var req apps.CreateRequest
+	var req apps.BindRequest
 	if !decodeAppRequest(w, r, &req) {
 		return
 	}
@@ -194,7 +194,7 @@ func (h *Handler) handleAgentApps(w http.ResponseWriter, r *http.Request) {
 			return apps.ErrNotFound
 		}
 		var err error
-		item, err = h.apps.Create(ctx, agentID, req)
+		item, err = h.apps.Bind(ctx, agentID, req)
 		return err
 	}
 	var err error
@@ -223,11 +223,11 @@ func (h *Handler) handleAgentApp(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		item, err = h.apps.Get(r.Context(), agentID, id)
 	case http.MethodPatch:
-		var req apps.UpdateRequest
+		var req apps.BindingUpdateRequest
 		if !decodeAppRequest(w, r, &req) {
 			return
 		}
-		item, err = h.apps.Update(r.Context(), agentID, id, req)
+		item, err = h.apps.Update(r.Context(), agentID, id, apps.UpdateRequest{Enabled: req.Enabled})
 	case http.MethodDelete:
 		if err = h.apps.Delete(r.Context(), agentID, id); err == nil {
 			w.WriteHeader(http.StatusNoContent)
@@ -338,4 +338,92 @@ func (h *Handler) refreshAppPlatformAuthentication() {
 		defer cancel()
 		_ = h.apps.RefreshPlatformCredentials(ctx)
 	}()
+}
+
+// Global App resources own configuration and secrets. Agent endpoints only bind
+// them and control per-Agent execution state.
+func (h *Handler) handleAppResources(w http.ResponseWriter, r *http.Request) {
+	if h.apps == nil {
+		writeCodedAPIError(w, http.StatusServiceUnavailable, "apps_unavailable", "App service is unavailable")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	id := pathValue(r, "resource_id")
+	var result any
+	var err error
+	status := http.StatusOK
+	switch r.Method {
+	case http.MethodGet:
+		if id == "" {
+			var items []apps.Installation
+			items, err = h.apps.List(r.Context(), "")
+			for i := range items {
+				items[i] = h.appResourceNames(items[i])
+			}
+			result = map[string]any{"items": items}
+		} else {
+			result, err = h.apps.Get(r.Context(), "", id)
+		}
+	case http.MethodPost:
+		var req apps.CreateRequest
+		if !decodeAppRequest(w, r, &req) {
+			return
+		}
+		req.Connect = false
+		result, err = h.apps.Create(r.Context(), "", req)
+		status = http.StatusCreated
+	case http.MethodPatch:
+		var req apps.UpdateRequest
+		if !decodeAppRequest(w, r, &req) {
+			return
+		}
+		result, err = h.apps.Update(r.Context(), "", id, req)
+	case http.MethodDelete:
+		err = h.apps.Delete(r.Context(), "", id)
+		if err == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	if resource, ok := result.(apps.Installation); ok {
+		result = h.appResourceNames(resource)
+	}
+	writeJSON(w, status, result)
+}
+func (h *Handler) handleAppResourceProbe(w http.ResponseWriter, r *http.Request) {
+	if h.apps == nil {
+		writeCodedAPIError(w, http.StatusServiceUnavailable, "apps_unavailable", "App service is unavailable")
+		return
+	}
+	var req apps.ProbeRequest
+	if !decodeAppRequest(w, r, &req) {
+		return
+	}
+	if req.Config.CredentialSource == "feishu_channel" {
+		writeCodedAPIError(w, http.StatusBadRequest, "app_agent_identity_required", "Add this App to an Agent to test its Feishu channel identity.")
+		return
+	}
+	result, err := h.apps.Probe(r.Context(), "", req)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) appResourceNames(item apps.Installation) apps.Installation {
+	if h.svc == nil {
+		return item
+	}
+	for i, binding := range item.Bindings {
+		if a, ok := h.svc.Agent(binding.AgentID); ok {
+			item.Bindings[i].AgentName = a.Name
+		}
+	}
+	return item
 }

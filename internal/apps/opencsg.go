@@ -107,7 +107,7 @@ func (s *Service) RefreshPlatformCredentials(ctx context.Context) error {
 	s.mu.Lock()
 	var refs [][2]string
 	for id, e := range s.entries {
-		if e.record.Config.PlatformCredentialSource == "opencsg_login" && e.record.Enabled && !e.record.Disconnected && e.record.ConnectRequested {
+		if e.record.Config.PlatformCredentialSource == "opencsg_login" && e.record.active() && !e.record.Disconnected && e.record.ConnectRequested {
 			refs = append(refs, [2]string{e.record.AgentID, id})
 		}
 	}

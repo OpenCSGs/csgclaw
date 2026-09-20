@@ -92,6 +92,8 @@ export function useWorkspaceNavigation({
     [navigatePane, rooms],
   );
 
+  const selectApps = useCallback(() => navigatePane({ type: WorkspacePaneTypes.apps }), [navigatePane]);
+
   const selectHuman = useCallback(
     (item: { id?: string | null } | null | undefined, options: NavigatePaneOptions = {}) => {
       if (!item?.id) {
@@ -163,6 +165,7 @@ export function useWorkspaceNavigation({
     selectAgent,
     selectHuman,
     selectModelProvider,
+    selectApps,
     selectTeam,
     selectTeamSection,
     selectNotificationSection,

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   connectAgentApp,
-  createAgentApp,
+  bindAgentApp,
+  fetchAppResources,
   deleteAgentApp,
   disconnectAgentApp,
   fetchAgentApps,
   fetchAppDefinitions,
   updateAgentApp,
-  type AppCreateRequest,
   type AppDefinition,
   type AppInstallation,
   type AppUpdateRequest,
@@ -18,11 +18,13 @@ export function useAgentApps(agentID: string, active: boolean) {
     agentID: string;
     items: AppInstallation[];
     definitions: AppDefinition[];
+    resources: AppInstallation[];
     feishuChannelAvailable?: boolean;
   }>({
     agentID: "",
     items: [],
     definitions: [],
+    resources: [],
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -42,11 +44,16 @@ export function useAgentApps(agentID: string, active: boolean) {
       const sequence = ++requestSequence.current;
       if (!silent) setLoading(true);
       try {
-        const [definitions, apps] = await Promise.all([fetchAppDefinitions(signal), fetchAgentApps(agentID, signal)]);
+        const [definitions, apps, resources] = await Promise.all([
+          fetchAppDefinitions(signal),
+          fetchAgentApps(agentID, signal),
+          fetchAppResources(signal),
+        ]);
         if (!signal?.aborted && sequence === requestSequence.current) {
           setSnapshot({
             agentID,
             definitions,
+            resources,
             items: apps.items,
             feishuChannelAvailable: apps.feishu_channel_available,
           });
@@ -89,13 +96,15 @@ export function useAgentApps(agentID: string, active: boolean) {
   return {
     items: snapshot.agentID === agentID ? snapshot.items : [],
     definitions: snapshot.definitions,
+    resources: snapshot.resources,
     feishuChannelAvailable: snapshot.agentID === agentID ? snapshot.feishuChannelAvailable : undefined,
     loading,
     error,
     busyID,
     reload: () => reload(),
-    create: (payload: AppCreateRequest) => mutate("new", () => createAgentApp(agentID, payload)),
-    update: (id: string, payload: AppUpdateRequest) => mutate(id, () => updateAgentApp(agentID, id, payload)),
+    bind: (resourceID: string) => mutate(resourceID, () => bindAgentApp(agentID, resourceID)),
+    update: (id: string, payload: Pick<AppUpdateRequest, "enabled">) =>
+      mutate(id, () => updateAgentApp(agentID, id, payload)),
     connect: (id: string) => mutate(id, () => connectAgentApp(agentID, id)),
     disconnect: (id: string) => mutate(id, () => disconnectAgentApp(agentID, id)),
     remove: (id: string) => mutate(id, () => deleteAgentApp(agentID, id)),

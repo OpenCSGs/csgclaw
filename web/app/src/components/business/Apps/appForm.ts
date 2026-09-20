@@ -27,9 +27,11 @@ export function appDescription(app: AppDefinition, t: TranslateFn): string {
 }
 
 export function appStatus(app: AppInstallation, t: TranslateFn): string {
-  if (!app.enabled) return t("appStatusDisabled");
+  if (!app.enabled || app.resource_enabled === false) return t("appStatusDisabled");
   if (app.disconnected) return t("appStatusDisconnected");
   const keys = {
+    configured: "appStatusConfigured",
+    agent_identity_required: "appStatusAgentIdentity",
     needs_configuration: "appStatusNeedsConfiguration",
     connecting: "appStatusConnecting",
     connected: "appStatusConnected",
@@ -41,26 +43,61 @@ export function appStatus(app: AppInstallation, t: TranslateFn): string {
   return t(keys[app.status] ?? "appStatusNeedsConfiguration");
 }
 
+// Only connection settings may become defaults. Credentials never come from a catalog.
+function appConfigDefaults(definition: AppDefinition): AppConfig {
+  const properties = definition.config_schema.properties;
+  if (!properties || typeof properties !== "object") return {};
+  const types: Record<string, string> = {
+    transport: "string",
+    url: "string",
+    command: "string",
+    cwd: "string",
+    auth_mode: "string",
+    credential_source: "string",
+    platform_credential_source: "string",
+    token_header: "string",
+    token_prefix: "string",
+    token_env: "string",
+    app_id_env: "string",
+    app_secret_env: "string",
+    startup_timeout_sec: "number",
+    tool_timeout_sec: "number",
+  };
+  const defaults: AppConfig = {};
+  for (const [key, field] of Object.entries(properties)) {
+    if (!Object.hasOwn(types, key) || !field || typeof field !== "object") continue;
+    const schema = field as Record<string, unknown>;
+    if (schema.writeOnly || typeof schema.default !== types[key]) continue;
+    if (Array.isArray(schema.enum) && !schema.enum.includes(schema.default)) continue;
+    Object.assign(defaults, { [key]: schema.default });
+  }
+  return defaults;
+}
+
 export function initialAppForm(
   definition: AppDefinition,
   existing: AppInstallation | null,
   hasFeishuChannel: boolean,
 ): AppForm {
   const feishu = definition.app_id === "feishu";
+  const defaults = appConfigDefaults(definition);
   return {
     name: existing?.name ?? definition.interface?.displayName ?? definition.name,
     config: existing?.config ?? {
       transport: "http",
       auth_mode: feishu ? "feishu" : "bearer",
-      credential_source: feishu && hasFeishuChannel ? "feishu_channel" : "manual",
       token_header: "Authorization",
       token_prefix: "Bearer ",
       token_env: definition.app_id === "gitlab" ? "GITLAB_PERSONAL_ACCESS_TOKEN" : "MCP_ACCESS_TOKEN",
       app_id_env: "FEISHU_APP_ID",
       app_secret_env: "FEISHU_APP_SECRET",
+      startup_timeout_sec: 30,
+      tool_timeout_sec: 60,
+      ...defaults,
+      credential_source: feishu && hasFeishuChannel ? defaults.credential_source || "feishu_channel" : "manual",
     },
     credentials: {},
-    args: existing?.config.args?.join("\n") ?? "",
+    args: (existing?.config ?? defaults).args?.join("\n") ?? "",
     headers: Object.entries(existing?.config.headers ?? {}).map(([key, value]) => ({ key, value })),
     env: Object.entries(existing?.config.env ?? {}).map(([key, value]) => ({ key, value })),
   };

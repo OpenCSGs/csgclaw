@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("Agent App deep links", () => {
-  it("opens the requested App configuration directly and clears add_app when closed", async () => {
+  it("opens the global resource picker and clears add_app when closed", async () => {
     const agent: AgentLike = { id: "agent-1", name: "Assistant", runtime_kind: "codex", role: "assistant" };
     mocked.controller = {
       ready: true,
@@ -70,12 +70,10 @@ describe("Agent App deep links", () => {
         <Location />
       </MemoryRouter>,
     );
-    expect(await screen.findByRole("dialog", { name: "Add GitLab" })).toBeVisible();
-    expect(screen.getByLabelText("Instance name")).toHaveValue("GitLab");
-    expect(
-      screen.queryByText("Choose a service for this agent. You can add multiple instances of the same app."),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("dialog", { name: "Add from resources" })).toBeVisible();
+    expect(screen.queryByLabelText("Instance name")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage global Apps" })).toHaveAttribute("href", "#/apps?add_app=gitlab");
+    await user.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByTestId("location")).toHaveTextContent("/agents/agent-1?tab=apps");
     expect(screen.getByTestId("location")).not.toHaveTextContent("add_app");

@@ -148,11 +148,11 @@ func validateConfig(c Config, appID string) error {
 func (s *Service) resolve(ctx context.Context, agentID string, c Config, credentials Credentials) (Credentials, error) {
 	if c.CredentialSource == "feishu_channel" {
 		if s.options.ResolveFeishu == nil {
-			return Credentials{}, fmt.Errorf("%w: no Feishu channel is configured", ErrInvalid)
+			return Credentials{}, connectionError("app_feishu_channel_required", "Configure this Agent’s Feishu channel before connecting this App.", 0, true)
 		}
 		value, err := s.options.ResolveFeishu(ctx, agentID)
 		if err != nil || value.AppID == "" || value.AppSecret == "" {
-			return Credentials{}, fmt.Errorf("%w: Feishu channel credentials are unavailable", ErrInvalid)
+			return Credentials{}, connectionError("app_feishu_channel_required", "Configure this Agent’s Feishu channel before connecting this App.", 0, true)
 		}
 		credentials.AppID = value.AppID
 		credentials.AppSecret = value.AppSecret

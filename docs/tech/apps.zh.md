@@ -2,26 +2,26 @@
 
 [English](apps.md) | 中文
 
-每个 Agent 独立管理自己的 GitLab、飞书和 llm-wiki App。
-同一个 App 可以添加多份，各自保存名称、服务地址和凭据。
+在 **资源 > Apps** 中统一配置 GitLab、飞书和 llm-wiki 连接。
+每个全局实例有独立名称、服务地址和受保护的凭据或凭据引用，同一种 App 可以配置多个账户或服务实例。
 
-## 添加与连接
+## 配置资源与添加到 Agent
 
-在 Agent 的 **Apps** 页签点击 **添加 App**，填写服务配置、测试连接，再完成添加。
-App 连接已有的 HTTP 或 stdio MCP 服务，CSGClaw 不负责部署上游服务。
-HTTP 连接需要填写 MCP URL 和该服务要求的鉴权方式。
-stdio 连接需要填写命令、参数、工作目录及必要环境变量。
+先创建并测试全局资源，再在 Agent 的 **Apps** 页选择 **从资源添加**。
+Agent 绑定仅保存资源引用和自己的启停、断开意图，不复制秘密凭据。
+每个绑定保留独立的 MCP 会话、本地进程目录和 Agent 工具名称。
+修改全局资源会撤下旧工具，并重连之前已连接且启用的绑定；已手动断开或停用的绑定不会被恢复。
+全局停用影响所有绑定，Agent 停用只影响自己。
+移除绑定或删除 Agent 不会删除全局资源或其他 Agent 的绑定。
+删除全局资源时展示受影响的 Agent，并移除该资源的所有绑定。
 
-GitLab 使用上游要求的 Token/PAT 或自定义鉴权 Header。
-飞书可以引用当前 Agent 的渠道 App ID 和 App Secret，也可以单独填写凭据。
-渠道凭据在连接时解析，并在变更后刷新，不复制渠道 Secret 到安装记录。
-llm-wiki 使用知识库 MCP 地址和 Token，知识库选择器可以辅助填写地址。
-当前版本不支持浏览器 OAuth2 授权。
-
-**停用**保留配置和凭据，但禁止工具调用。
-**断开**清除安装实例托管的凭据，保留名称和普通配置。
-手动断开后，渠道更新和服务重启都不会自动重连，只有显式连接才恢复。
-**移除**删除安装记录和私有数据，不删除引用的飞书渠道。
+飞书资源可以选择使用绑定 Agent 的飞书渠道。
+此时全局页显示“绑定 Agent 后验证身份”，允许先保存，再由各个 Agent 连接验证。
+渠道凭据在连接时按 Agent 解析，不复制到全局资源中。
+使用独立凭据的资源可以直接在全局页测试连接。
+App 连接已有的 HTTP 或 stdio MCP 服务，CSGClaw 不负责部署该服务。
+浏览器 OAuth2 仍未实现。
+已有本地安装记录会一次性转换为全局资源与绑定，保留绑定 ID、连接意图和工具名称。
 
 ## 访问方式
 
@@ -68,6 +68,9 @@ stdio 模式继续将应用凭据注入本地 MCP 进程的环境变量。
 
 ```sh
 csgclaw app catalog
+csgclaw app list --global
+csgclaw app add --global --file resource.json
+csgclaw app update --global --id RESOURCE_ID --file changes.json
 csgclaw app list --agent agent-dev
 csgclaw app get --agent agent-dev --id INSTALLATION_ID
 csgclaw app probe --agent agent-dev --file probe.json
@@ -84,7 +87,7 @@ App 凭据不提供命令行参数。
 CLI 只输出 API 已脱敏的结果，不回显请求文件及其凭据。
 需要完整响应字段时，在 `app` 前加全局参数 `--output json`。
 
-添加 App 的 `request.json` 示例：
+创建全局 App 的 `resource.json` 示例：
 
 ```json
 {
@@ -96,25 +99,28 @@ CLI 只输出 API 已脱敏的结果，不回显请求文件及其凭据。
     "auth_mode": "bearer"
   },
   "credentials": {"token": "<上游服务Token>"},
-  "connect": true
+  "connect": false
 }
 ```
 
 `probe` 请求去掉 `name` 和 `connect`，只保留 `app_id`、`config`、`credentials` 和可选的 `installation_id`。
 `update` 只提供待修改字段，例如 `{"enabled":false}`，不包含 `app_id` 和 `connect`。
-添加后连接失败时，接口仍返回已创建的安装记录及错误状态，方便继续修改配置。
+Agent 添加请求使用 `{"resource_id":"RESOURCE_ID","connect":true}`；连接失败时保留绑定及诊断状态，供用户修复全局配置或该 Agent 的身份。
 Agent 运行环境中的 CLI 只允许目录、列表和详情读取，并提供 App 设置链接；修改连接设置与凭据请使用 App 页面。
 
 ## API 与运行行为
 
 | 接口 | 用途 |
 |---|---|
-| `GET /api/v1/apps` | 内置目录 |
-| `GET /api/v1/apps/{app_id}` | App 定义和配置字段 |
-| `GET/POST /api/v1/agents/{agent_id}/apps` | 列出或添加实例 |
-| `GET/PATCH/DELETE /api/v1/agents/{agent_id}/apps/{installation_id}` | 读取、修改或移除实例 |
-| `POST /api/v1/agents/{agent_id}/apps:probe` | 测试未保存的连接配置 |
-| `POST .../{installation_id}/connect` 或 `/disconnect` | 连接或显式断开 |
+| `GET /api/v1/apps` | 内置 App 类型目录 |
+| `GET /api/v1/apps/{app_id}` | 定义和连接默认值 |
+| `GET/POST /api/v1/app-resources` | 列出或创建全局资源 |
+| `GET/PATCH/DELETE /api/v1/app-resources/{resource_id}` | 管理全局资源并查看受影响的 Agent |
+| `POST /api/v1/app-resources:probe` | 使用独立凭据测试全局资源 |
+| `GET/POST /api/v1/agents/{agent_id}/apps` | 列出或添加资源绑定 |
+| `GET/PATCH/DELETE /api/v1/agents/{agent_id}/apps/{installation_id}` | 读取、启停或移除一个绑定 |
+| `POST /api/v1/agents/{agent_id}/apps:probe` | 使用 Agent 身份测试连接 |
+| `POST .../{installation_id}/connect` 或 `/disconnect` | 连接或断开一个绑定 |
 
 Codex 通过该 Agent 的受管 `/api/v1/agents/{agent_id}/mcp` 入口使用 App 工具。
 已有手动 MCP 继续独立工作，由 App 管理的记录跳转到 App 设置。
@@ -125,3 +131,15 @@ Codex 通过该 Agent 的受管 `/api/v1/agents/{agent_id}/mcp` 入口使用 App
 内部包使用根目录 `plugin.json` 和 `apps.json`，三个内置 App 不需要 `mcp.json`。
 凭据保存在私有本地状态中，每个 stdio 安装实例拥有独立的 `HOME`、`PLUGIN_DATA` 和 `PLUGIN_ROOT` 目录。
 插件市场、任意包导入、Skills/Hooks 执行和浏览器 OAuth2 不属于当前版本的 App 流程。
+
+## 安装默认值与设置表单
+
+新增 App 表单读取目录中 `config_schema.properties.*.default` 声明的非秘密连接默认值。
+GitLab 和飞书预填已配置的 staging MCP 地址，并自动选择对应环境的 OpenCSG 登录引用。
+llm-wiki 暂时预填本地测试服务 `http://127.0.0.1:19093/mcp`，可以手动替换地址或通过知识库选择器填写。
+本机地址指运行 CSGClaw 的机器。
+默认值不包含凭据，已安装实例继续使用已保存的配置。
+表单分为服务连接、MCP 服务鉴权、飞书应用身份；超时和附加 Header/环境变量放在高级设置中。
+
+Agent 添加接口使用 `{"resource_id":"RESOURCE_ID","connect":true}`，Agent 更新接口仅接受 `enabled`。
+全局资源通过 `/api/v1/app-resources` 管理，通过 `/api/v1/app-resources:probe` 测试。

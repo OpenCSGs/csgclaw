@@ -114,3 +114,14 @@ describe("task routing", () => {
     expect(workspaceShowsFloatingChat({ type: WorkspacePaneTypes.agent, id: "agent-1" })).toBe(true);
   });
 });
+
+describe("global App resource routing", () => {
+  it("keeps global resources in the resource area without a context sidebar", () => {
+    const pane = paneFromLocation("/apps/shared-1");
+    expect(pane).toEqual({ type: WorkspacePaneTypes.apps, id: "shared-1" });
+    expect(pathForPane(pane)).toBe("/apps/shared-1");
+    expect(workspaceTabForPane(pane)).toBe(WorkspaceTabs.hub);
+    expect(workspaceHasContextSidebar(pane)).toBe(false);
+    expect(pathForPane({ type: WorkspacePaneTypes.apps })).toBe("/apps");
+  });
+});

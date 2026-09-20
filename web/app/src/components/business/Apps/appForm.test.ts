@@ -99,3 +99,39 @@ describe("Shared OpenCSG platform credentials", () => {
     expect(result.credentials.token).toBe("business-fixture");
   });
 });
+
+describe("Catalog connection defaults", () => {
+  const configured: AppDefinition = {
+    ...definition,
+    config_schema: {
+      properties: {
+        url: { type: "string", default: "https://mcp.example.test/gitlab" },
+        auth_mode: { type: "string", default: "header" },
+        token_header: { type: "string", default: "PRIVATE-TOKEN" },
+        token_prefix: { type: "string", default: "" },
+        startup_timeout_sec: { type: "integer", default: 45 },
+        token: { type: "string", writeOnly: true, default: "not-a-default-secret" },
+        env: { default: { TOKEN: "not-a-default-secret" } },
+      },
+    },
+  };
+  it("fills non-secret connection defaults and submits edited values", () => {
+    const form = initialAppForm(configured, null, false);
+    expect(form.config).toMatchObject({
+      url: "https://mcp.example.test/gitlab",
+      auth_mode: "header",
+      token_header: "PRIVATE-TOKEN",
+      token_prefix: "",
+      startup_timeout_sec: 45,
+      tool_timeout_sec: 60,
+    });
+    expect(form.credentials).toEqual({});
+    expect(form.config).not.toHaveProperty("token");
+    expect(form.config.env).toBeUndefined();
+    form.config.url = "http://localhost:9999/mcp";
+    expect(appFormPayload(form).config.url).toBe("http://localhost:9999/mcp");
+  });
+  it("does not replace saved configuration with newer catalog defaults", () => {
+    expect(initialAppForm(configured, installation, false).config).toEqual(installation.config);
+  });
+});

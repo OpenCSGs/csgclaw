@@ -81,7 +81,11 @@ func TestAppPlatformAuthHonorsNoAuthAndRejectsCrossAgentAccess(t *testing.T) {
 	if rec := appAuthRequest(t, h, http.MethodGet, "/api/v1/agents/"+alice.ID+"/apps", "", aliceToken, nil); rec.Code != http.StatusOK {
 		t.Fatalf("own apps status=%d body=%s", rec.Code, rec.Body)
 	}
-	body := `{"app_id":"gitlab","name":"Work GitLab"}`
+	resource, err := h.apps.Create(context.Background(), "", apps.CreateRequest{AppID: "gitlab", Name: "Work GitLab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"resource_id":"` + resource.InstallationID + `"}`
 	if rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/apps", body, aliceToken, nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("Agent configured credentials through REST: status=%d", rec.Code)
 	}
@@ -107,7 +111,11 @@ func TestAppManagementWithoutLogin(t *testing.T) {
 	h, alice, _, _, _ := newAppPlatformAuthFixture(t)
 	h.serverNoAuth = false
 	path := "/api/v1/agents/" + alice.ID + "/apps"
-	rec := appAuthRequest(t, h, http.MethodPost, path, `{"app_id":"gitlab","name":"Personal GitLab"}`, "", nil)
+	resource, err := h.apps.Create(context.Background(), "", apps.CreateRequest{AppID: "gitlab", Name: "Personal GitLab"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := appAuthRequest(t, h, http.MethodPost, path, `{"resource_id":"`+resource.InstallationID+`"}`, "", nil)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create without login: %d %s", rec.Code, rec.Body)
 	}
@@ -238,11 +246,16 @@ func TestAgentMCPRejectsForeignTokensAndSessions(t *testing.T) {
 func TestAppInstallationsSurviveStopAndAreRemovedWithAgent(t *testing.T) {
 	h, alice, bob, aliceToken, _ := newAppPlatformAuthFixture(t)
 	ctx := context.Background()
+	resource, err := h.apps.Create(ctx, "", apps.CreateRequest{AppID: "gitlab", Name: "Work GitLab"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, owner := range []agent.Agent{alice, bob} {
-		if _, err := h.apps.Create(ctx, owner.ID, apps.CreateRequest{AppID: "gitlab", Name: "Work GitLab"}); err != nil {
+		if _, err := h.apps.Bind(ctx, owner.ID, apps.BindRequest{ResourceID: resource.InstallationID}); err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	controller := h.svc.(*agent.Controller)
 	if _, err := controller.Stop(ctx, alice.ID); err != nil {
 		t.Fatal(err)

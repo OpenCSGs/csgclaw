@@ -21,6 +21,8 @@ const definition: AppDefinition = {
 };
 const installation: AppInstallation = {
   installation_id: "install-1",
+  resource_id: "resource-1",
+  resource_enabled: true,
   agent_id: "agent-1",
   app_id: "gitlab",
   name: "Work GitLab",
@@ -57,6 +59,8 @@ function mockServer(initial: AppInstallation[] = []) {
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const path = String(url);
     if (path === "api/v1/apps") return Response.json({ items: [definition] });
+    if (path === "api/v1/app-resources")
+      return Response.json({ items: [{ ...installation, installation_id: "resource-1", agent_id: "", bindings: [] }] });
     if (init?.method === "POST" && path.endsWith("apps:probe"))
       return Response.json({ connected: true, tools: installation.tools });
     if (init?.method === "POST" && path.endsWith("/disconnect")) {
@@ -71,7 +75,7 @@ function mockServer(initial: AppInstallation[] = []) {
     }
     if (init?.method === "POST" && path.endsWith("/apps")) {
       const body = JSON.parse(String(init.body));
-      const saved = { ...installation, name: body.name, config: body.config };
+      const saved = { ...installation, resource_id: body.resource_id };
       items = [...items, saved];
       return Response.json(saved);
     }
@@ -84,38 +88,20 @@ function mockServer(initial: AppInstallation[] = []) {
 }
 
 describe("Agent Apps", () => {
-  it("adds a service through its credential form, tests tools, and keeps secrets out of the returned card", async () => {
+  it("binds a global resource without asking for or copying credentials", async () => {
     const fetch = mockServer();
     const user = userEvent.setup();
     render(<Harness />);
     await screen.findByText("Connect the services your agent needs");
-    await user.click(screen.getAllByRole("button", { name: "Add app" })[0]);
-    await user.click(screen.getByRole("button", { name: /GitLab Connect GitLab/ }));
-    const dialog = screen.getByRole("dialog");
-    await user.clear(within(dialog).getByLabelText("Instance name"));
-    await user.type(within(dialog).getByLabelText("Instance name"), "Personal GitLab");
-    await user.type(within(dialog).getByLabelText("MCP service URL"), "http://localhost:8888/mcp");
-    await user.type(within(dialog).getByLabelText("Token / API key"), "private-token-value");
-    expect(within(dialog).getByRole("button", { name: "Add and connect" })).toBeDisabled();
-    await user.click(within(dialog).getByRole("button", { name: "Test connection" }));
-    await within(dialog).findByText("Connection successful, 1 tools found");
-    await user.click(within(dialog).getByText("Available tools (1)"));
-    expect(within(dialog).getByText("Read projects")).toBeVisible();
-    await user.click(within(dialog).getByRole("button", { name: "Add and connect" }));
-    await screen.findByText("Personal GitLab");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.queryByDisplayValue("private-token-value")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add from resources" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Work GitLab" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await screen.findByText("Work GitLab")).toBeVisible();
     const create = fetch.mock.calls.find(
       ([url, init]) => url === "api/v1/agents/agent-1/apps" && init?.method === "POST",
     );
-    expect(JSON.parse(String(create?.[1]?.body))).toMatchObject({
-      app_id: "gitlab",
-      name: "Personal GitLab",
-      connect: true,
-      credentials: { token: "private-token-value" },
-    });
-    const probe = fetch.mock.calls.find(([url]) => url.endsWith("apps:probe"));
-    expect(Object.keys(JSON.parse(String(probe?.[1]?.body))).sort()).toEqual(["app_id", "config", "credentials"]);
+    expect(JSON.parse(String(create?.[1]?.body))).toEqual({ resource_id: "resource-1", connect: true });
+    expect(screen.queryByLabelText("Token / API key")).not.toBeInTheDocument();
   });
 
   it("disconnects explicitly and never reconnects when the list is fetched again", async () => {
@@ -124,7 +110,6 @@ describe("Agent Apps", () => {
     const view = render(<Harness />);
     await screen.findByText("Work GitLab");
     await user.click(screen.getByRole("button", { name: "Disconnect" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Disconnect" }));
     await screen.findByText("Disconnected");
     view.unmount();
     render(<Harness />);
@@ -260,7 +245,7 @@ describe("Platform login and connection errors", () => {
     await user.type(screen.getByLabelText("MCP service URL"), "https://demo.public.opencsg-stg.com/mcp");
     expect(screen.queryByLabelText("Platform access token (optional)")).not.toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: "Platform credential source" }));
-    await user.click(screen.getByRole("option", { name: "Enter a platform token manually" }));
+    await user.click(screen.getByRole("option", { name: "Manual configuration" }));
     await user.type(screen.getByLabelText("Platform access token (optional)"), "stale-platform-secret");
     await user.click(screen.getByRole("combobox", { name: "Platform credential source" }));
     await user.click(screen.getByRole("option", { name: "Use current OpenCSG login" }));
@@ -284,5 +269,29 @@ describe("Platform login and connection errors", () => {
     render(<Harness />);
     expect(await screen.findByText(/The platform token has expired/)).toHaveTextContent("HTTP 401");
     expect(screen.queryByText("App authorization is no longer valid")).not.toBeInTheDocument();
+  });
+});
+
+describe("App connection form layout", () => {
+  it("separates the MCP endpoint, platform access, and Feishu identity", () => {
+    render(
+      <AppSettingsDialog
+        definition={{ ...definition, app_id: "feishu" }}
+        existing={null}
+        hasFeishuChannel={false}
+        t={t}
+        onClose={vi.fn()}
+        onProbe={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    const connection = screen.getByRole("region", { name: "Service connection" });
+    const access = screen.getByRole("region", { name: "MCP service authentication" });
+    const identity = screen.getByRole("region", { name: "Feishu application identity" });
+    expect(within(connection).getByLabelText("MCP service URL")).toBeInTheDocument();
+    expect(within(access).getByLabelText("Platform access token (optional)")).toBeInTheDocument();
+    expect(within(identity).getByLabelText("App Secret")).toBeInTheDocument();
+    expect(within(access).queryByLabelText("App Secret")).not.toBeInTheDocument();
+    expect(within(identity).queryByLabelText("Platform access token (optional)")).not.toBeInTheDocument();
   });
 });

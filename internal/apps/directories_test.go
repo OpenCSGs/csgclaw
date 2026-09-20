@@ -73,7 +73,7 @@ func TestAppInstanceDirectoriesArePrivatePersistentAndRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	name := "Renamed"
-	if _, err := s.Update(context.Background(), "agent", one.InstallationID, UpdateRequest{Name: &name}); err != nil {
+	if _, err := s.Update(context.Background(), "", one.ResourceID, UpdateRequest{Name: &name}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Connect(context.Background(), "agent", one.InstallationID); err != nil {

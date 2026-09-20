@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/apps"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -90,9 +91,13 @@ func TestAppCreationCannotOutliveAgentDeletion(t *testing.T) {
 	}
 	observed := &appRegressionRecords{Controller: controller, seen: make(chan struct{})}
 	h.svc = observed
+	resource, resourceErr := h.apps.Create(context.Background(), "", apps.CreateRequest{AppID: "gitlab", Name: "late"})
+	if resourceErr != nil {
+		t.Fatal(resourceErr)
+	}
 	result := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
-		r := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+target.ID+"/apps", strings.NewReader(`{"app_id":"gitlab","name":"late","config":{"url":"http://127.0.0.1:1","auth_mode":"none"}}`))
+		r := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+target.ID+"/apps", strings.NewReader(`{"resource_id":"`+resource.InstallationID+`"}`))
 		r.Header.Set("Authorization", "Bearer test-admin-secret")
 		w := httptest.NewRecorder()
 		h.Routes().ServeHTTP(w, r)

@@ -18,6 +18,12 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 	router.Get("/healthz", h.handleHealthz)
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/apps", h.handleApps)
+		r.Get("/app-resources", h.handleAppResources)
+		r.Post("/app-resources", h.handleAppResources)
+		r.Post("/app-resources:probe", h.handleAppResourceProbe)
+		r.Get("/app-resources/{resource_id}", h.handleAppResources)
+		r.Patch("/app-resources/{resource_id}", h.handleAppResources)
+		r.Delete("/app-resources/{resource_id}", h.handleAppResources)
 		r.Get("/apps/{app_id}", h.handleApps)
 		r.Get("/version", h.getVersion)
 		r.Route("/upgrade", func(r chi.Router) {

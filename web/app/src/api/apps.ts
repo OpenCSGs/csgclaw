@@ -41,6 +41,9 @@ export type AppCredentials = {
 
 export type AppTool = { name: string; title?: string; description?: string; inputSchema?: Record<string, unknown> };
 export type AppInstallation = {
+  resource_id?: string;
+  resource_enabled?: boolean;
+  bindings?: AppBindingSummary[];
   installation_id: string;
   agent_id: string;
   app_id: string;
@@ -48,6 +51,8 @@ export type AppInstallation = {
   enabled: boolean;
   disconnected: boolean;
   status:
+    | "configured"
+    | "agent_identity_required"
     | "needs_configuration"
     | "connecting"
     | "connected"
@@ -103,14 +108,10 @@ export async function fetchAgentApps(
   return { ...result, items: (result.items ?? []).map(normalizeInstallation) };
 }
 
-export async function createAgentApp(agentID: string, payload: AppCreateRequest): Promise<AppInstallation> {
-  return normalizeInstallation(await post<AppInstallation>(agentAppsPath(agentID), payload));
-}
-
 export async function updateAgentApp(
   agentID: string,
   installationID: string,
-  payload: AppUpdateRequest,
+  payload: Pick<AppUpdateRequest, "enabled">,
 ): Promise<AppInstallation> {
   return normalizeInstallation(await patch<AppInstallation>(appPath(agentID, installationID), payload));
 }
@@ -134,4 +135,37 @@ export async function probeAgentApp(agentID: string, payload: AppProbeRequest): 
 
 function normalizeInstallation(value: AppInstallation): AppInstallation {
   return { ...value, tools: value.tools ?? [], credentials_set: value.credentials_set ?? {} };
+}
+
+export type AppBindingSummary = {
+  agent_name?: string;
+  installation_id: string;
+  agent_id: string;
+  enabled: boolean;
+  status: AppInstallation["status"];
+  tool_count: number;
+};
+export async function fetchAppResources(signal?: AbortSignal): Promise<AppInstallation[]> {
+  const result = await get<{ items: AppInstallation[] }>("/api/v1/app-resources", { signal });
+  return (result.items ?? []).map(normalizeInstallation);
+}
+export async function createAppResource(payload: AppCreateRequest): Promise<AppInstallation> {
+  return normalizeInstallation(await post<AppInstallation>("/api/v1/app-resources", payload));
+}
+export async function updateAppResource(id: string, payload: AppUpdateRequest): Promise<AppInstallation> {
+  return normalizeInstallation(
+    await patch<AppInstallation>(`/api/v1/app-resources/${encodeURIComponent(id)}`, payload),
+  );
+}
+export function deleteAppResource(id: string): Promise<void> {
+  return del(`/api/v1/app-resources/${encodeURIComponent(id)}`);
+}
+export async function probeAppResource(payload: AppProbeRequest): Promise<AppProbeResult> {
+  const result = await post<AppProbeResult>("/api/v1/app-resources:probe", payload);
+  return { ...result, tools: result.tools ?? [] };
+}
+export async function bindAgentApp(agentID: string, resourceID: string): Promise<AppInstallation> {
+  return normalizeInstallation(
+    await post<AppInstallation>(agentAppsPath(agentID), { resource_id: resourceID, connect: true }),
+  );
 }

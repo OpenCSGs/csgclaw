@@ -68,6 +68,7 @@ export function WorkspaceSidebar({
   directMessages,
   threadGroups,
   activePane,
+  onSelectApps,
   activeThreadRootID,
   currentUserID,
   authBusy,
@@ -320,6 +321,14 @@ export function WorkspaceSidebar({
             onSelect: () => onSelectMCPServer?.(null),
           },
           {
+            active: activePane.type === WorkspacePaneTypes.apps,
+            groupId: WorkspaceContextSectionIds.apps,
+            icon: navigationIcon(SidebarBoxIcon),
+            id: "apps",
+            label: t("agentAppsTab"),
+            onSelect: () => onSelectApps?.(),
+          },
+          {
             active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.models),
             groupId: WorkspaceContextSectionIds.models,
             icon: navigationIcon(WORKSPACE_NAVIGATION_ICONS.models),
@@ -354,6 +363,7 @@ export function WorkspaceSidebar({
       onSelectHubTemplate,
       onSelectHuman,
       onSelectModelProvider,
+      onSelectApps,
       onSelectNotificationSection,
       onSelectTask,
       onSelectTaskBoardView,
@@ -640,6 +650,7 @@ function contextSectionIdForPane({
   workspaceTab: WorkspaceSidebarProps["workspaceTab"];
   hubResourceType?: string;
 }): WorkspaceContextSectionId | null {
+  if (activePane.type === WorkspacePaneTypes.apps) return WorkspaceContextSectionIds.apps;
   if (activePane.type === WorkspacePaneTypes.settings) {
     return null;
   }

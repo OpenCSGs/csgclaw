@@ -76,20 +76,44 @@ func (s *Service) Definition(appID string) (Definition, error) {
 	if !ok {
 		return Definition{}, ErrNotFound
 	}
+	authMethods := []string{"none", "bearer", "header", "env"}
+	if appID == "feishu" {
+		authMethods = append(authMethods, "feishu")
+	}
 	return Definition{AppID: appID, Name: pkg.Manifest.Interface.DisplayName, Description: pkg.Manifest.Description,
 		Version: pkg.Manifest.Version, Interface: pkg.Manifest.Interface, ConfigSchema: configSchema(appID),
-		AuthMethods: []string{"none", "bearer", "header", "env", "feishu"}, OAuthSupported: false}, nil
+		AuthMethods: authMethods, OAuthSupported: false}, nil
 }
 
 func configSchema(appID string) map[string]any {
 	field := func(title string, secret bool) map[string]any {
 		return map[string]any{"type": "string", "title": title, "writeOnly": secret}
 	}
+	config := normalizeConfig(Config{}, appID)
+	if appID == "feishu" {
+		config.AuthMode = "feishu"
+	}
 	props := map[string]any{
 		"url": field("MCP URL", false), "token": field("Token / API Key", true),
 		"transport": map[string]any{"type": "string", "enum": []string{"http", "stdio"}, "default": "http"},
 		"command":   field("Command", false), "cwd": field("Working directory", false),
 	}
+	// Editable installation defaults. Local knowledge bases may instead be selected
+	// through the knowledge picker; no credentials are embedded in these defaults.
+	props["url"].(map[string]any)["default"] = map[string]string{
+		"feishu":   "https://u-ryandraco-lark-mcp-passthrough-15s.public.opencsg-stg.com/mcp",
+		"gitlab":   "https://u-wanghj-gitlab-mcp-161.public.opencsg-stg.com/mcp",
+		"llm-wiki": "http://127.0.0.1:19093/mcp",
+	}[appID]
+	for key, value := range map[string]string{
+		"auth_mode": config.AuthMode, "token_header": config.TokenHeader,
+		"token_prefix": "Bearer ", "token_env": config.TokenEnv,
+		"app_id_env": config.AppIDEnv, "app_secret_env": config.AppSecretEnv,
+	} {
+		props[key] = map[string]any{"type": "string", "default": value}
+	}
+	props["startup_timeout_sec"] = map[string]any{"type": "integer", "default": config.StartupTimeoutSec}
+	props["tool_timeout_sec"] = map[string]any{"type": "integer", "default": config.ToolTimeoutSec}
 	if appID == "feishu" {
 		props["token"] = field("Platform access token (optional)", true)
 		props["app_id"] = field("App ID", true)

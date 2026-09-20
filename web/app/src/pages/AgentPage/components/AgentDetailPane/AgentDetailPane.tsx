@@ -112,7 +112,7 @@ import {
   Select,
   Tooltip,
 } from "@/components/ui";
-import { AgentAppsPanel, AppManagedMCPRows, useAgentApps } from "../AgentAppsPanel";
+import { AgentAppsPanel, AppManagedMCPRows, useAgentApps } from "@/components/business/Apps";
 
 type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;

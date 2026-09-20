@@ -88,7 +88,7 @@ func (s *Service) refreshReadOnly(agentID string) {
 		if e.record.AgentID == agentID && e.connection != nil {
 			g.server.RemoveTools(e.connection.toolNames...)
 			e.connection.toolNames = nil
-			if e.record.Enabled && !e.record.Disconnected {
+			if e.record.active() && !e.record.Disconnected {
 				s.attachLocked(e)
 			}
 		}
@@ -168,7 +168,7 @@ func (s *Service) call(ctx context.Context, agentID, id string, generation uint6
 	readOnly := s.isReadOnly(agentID)
 	s.mu.Lock()
 	e, err := s.findLocked(agentID, id)
-	if err != nil || e.generation != generation || !e.record.Enabled || e.record.Disconnected || e.connection == nil {
+	if err != nil || e.generation != generation || !e.record.active() || e.record.Disconnected || e.connection == nil {
 		s.mu.Unlock()
 		return nil, fmt.Errorf("App is no longer connected or enabled")
 	}
@@ -201,7 +201,7 @@ func (s *Service) call(ctx context.Context, agentID, id string, generation uint6
 	// call can use a disconnected, removed or replaced session.
 	s.mu.Lock()
 	e, err = s.findLocked(agentID, id)
-	allowed := err == nil && e.generation == generation && e.record.Enabled && !e.record.Disconnected && e.connection == conn
+	allowed := err == nil && e.generation == generation && e.record.active() && !e.record.Disconnected && e.connection == conn
 	s.mu.Unlock()
 	if !allowed {
 		return nil, fmt.Errorf("App is no longer connected or enabled")
@@ -336,7 +336,7 @@ func (s *Service) refreshTools(agentID, id string, generation uint64) {
 	conn.tools = tools
 	conn.toolNames = nil
 	var revision uint64
-	if e.record.Enabled && !e.record.Disconnected {
+	if e.record.active() && !e.record.Disconnected {
 		revision = s.attachLocked(e)
 	}
 	s.mu.Unlock()

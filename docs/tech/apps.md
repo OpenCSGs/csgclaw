@@ -2,26 +2,28 @@
 
 English | [中文](apps.zh.md)
 
-Each Agent manages its own GitLab, Feishu, and llm-wiki Apps.
-You can add the same App more than once, with a separate name, service address, and credentials for each installation.
+Configure GitLab, Feishu, and llm-wiki connections once in **Resources > Apps**.
+Each resource has a unique name, service address, and protected credentials or credential references.
+Multiple instances of one App type can represent different accounts or deployments.
 
-## Add and connect
+## Add and bind
 
-Open an Agent's **Apps** tab, choose **Add app**, configure the service, test the connection, and finish adding it.
-An App connects to an existing HTTP or stdio MCP service; CSGClaw does not deploy that service.
-For HTTP, supply its MCP URL and the authentication mode required by that service.
-For stdio, supply its command, arguments, working directory, and required environment variables.
+Create and test a resource, then open an Agent's **Apps** tab and choose **Add from resources**.
+Agent bindings store a resource reference and their own enabled/disconnected intent, never copied credentials.
+Each binding has an isolated MCP session, private stdio directories, and Agent-scoped tool names.
+Updating a resource revokes the previous tools and reconnects its enabled, previously connected bindings.
+Explicitly disconnected or disabled bindings remain inactive.
+Global disable stops every binding; Agent disable affects only that Agent.
+Removing a binding or deleting an Agent keeps the global resource and other Agent bindings.
+Deleting a global resource shows the affected Agents and removes all of its bindings.
 
-GitLab accepts the service's Token/PAT or custom authentication header.
-Feishu can reference the current Agent's channel App ID and App Secret or use separately supplied credentials.
-Channel credentials are resolved when connecting and are refreshed after changes, without copying the channel secret into the installation.
-llm-wiki accepts a knowledge-base MCP address and its Token; the knowledge-base picker can fill the address.
-Browser OAuth2 authorization is not supported in this version.
-
-**Disable** preserves settings and credentials while blocking calls.
-**Disconnect** clears the installation's managed credentials and keeps its name and ordinary settings.
-A manual disconnect remains in effect after channel updates and server restarts until you explicitly connect again.
-**Remove** deletes the installation and its private data; it does not delete a referenced Feishu channel.
+Feishu resources may reference each bound Agent's Feishu channel.
+The global page shows that identity will be checked after binding and allows saving without a misleading global authentication test.
+Channel credentials are resolved per Agent at connection time and are never copied into the resource.
+Resources using explicit credentials can be tested directly from the global page.
+App resources connect to existing HTTP or stdio MCP services; CSGClaw does not deploy them.
+Browser OAuth2 remains unsupported.
+Existing local installations are converted once to global resources and bindings, preserving binding IDs, connection intent, and tool names.
 
 ## Access
 
@@ -68,6 +70,9 @@ Both `csgclaw` and `csgclaw-cli` provide the following commands:
 
 ```sh
 csgclaw app catalog
+csgclaw app list --global
+csgclaw app add --global --file resource.json
+csgclaw app update --global --id RESOURCE_ID --file changes.json
 csgclaw app list --agent agent-dev
 csgclaw app get --agent agent-dev --id INSTALLATION_ID
 csgclaw app probe --agent agent-dev --file probe.json
@@ -84,7 +89,7 @@ Keep credential files private, for example with permission `0600`, and exclude t
 The CLI prints the API's redacted result and does not echo the request file or its credentials.
 Use the global `--output json` flag before `app` for complete response fields.
 
-Example `request.json` for adding an App:
+Example `resource.json` for creating a global App:
 
 ```json
 {
@@ -96,25 +101,29 @@ Example `request.json` for adding an App:
     "auth_mode": "bearer"
   },
   "credentials": {"token": "<upstream-service-token>"},
-  "connect": true
+  "connect": false
 }
 ```
 
 For `probe`, omit `name` and `connect`; only `app_id`, `config`, `credentials`, and an optional `installation_id` are accepted.
 For `update`, provide the fields to change, such as `{"enabled":false}`; omit `app_id` and `connect`.
-An add request whose connection fails still returns the newly created installation with an error status so it can be repaired.
+Agent add requests use `{"resource_id":"RESOURCE_ID","connect":true}`; Agent updates only accept `enabled`.
+An unsuccessful connection keeps the binding with a diagnostic status so it can be repaired.
 Inside an Agent runtime, the CLI permits catalog/list/get and supplies an App settings link for the user; connection and credential changes are made in App settings.
 
 ## API and runtime behavior
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/v1/apps` | Built-in catalog |
-| `GET /api/v1/apps/{app_id}` | App definition and configuration fields |
-| `GET/POST /api/v1/agents/{agent_id}/apps` | List or add installations |
-| `GET/PATCH/DELETE /api/v1/agents/{agent_id}/apps/{installation_id}` | Read, change, or remove an installation |
-| `POST /api/v1/agents/{agent_id}/apps:probe` | Test unsaved connection settings |
-| `POST .../{installation_id}/connect` or `/disconnect` | Connect or explicitly disconnect |
+| `GET /api/v1/apps` | Built-in definitions |
+| `GET /api/v1/apps/{app_id}` | Definition and connection defaults |
+| `GET/POST /api/v1/app-resources` | List or create global resources |
+| `GET/PATCH/DELETE /api/v1/app-resources/{resource_id}` | Manage a resource and inspect affected Agents |
+| `POST /api/v1/app-resources:probe` | Test a resource using explicit credentials |
+| `GET/POST /api/v1/agents/{agent_id}/apps` | List or add resource bindings |
+| `GET/PATCH/DELETE /api/v1/agents/{agent_id}/apps/{installation_id}` | Read, enable/disable, or remove one binding |
+| `POST /api/v1/agents/{agent_id}/apps:probe` | Test with the Agent's resolved identity |
+| `POST .../{installation_id}/connect` or `/disconnect` | Connect or disconnect one binding |
 
 Codex accesses App tools through the Agent's managed `/api/v1/agents/{agent_id}/mcp` endpoint.
 Existing manually configured MCP servers continue to work independently; App-owned rows link to App settings.
@@ -125,3 +134,12 @@ Tool search belongs to Codex; requests containing tool definitions or tool histo
 Internal packages use root-level `plugin.json` and `apps.json`; the three built-ins do not require `mcp.json`.
 Credentials remain in private local state, and each stdio installation receives independent `HOME`, `PLUGIN_DATA`, and `PLUGIN_ROOT` directories.
 Plugin markets, arbitrary package imports, Skills/Hooks execution, and browser OAuth2 are outside this version's App flow.
+
+## Installation defaults and settings
+
+New App forms read non-secret connection defaults from the catalog's `config_schema.properties.*.default` values.
+GitLab and Feishu prefill the configured staging MCP endpoints and infer the matching OpenCSG login reference.
+llm-wiki currently prefills the local test service at `http://127.0.0.1:19093/mcp`; the address can be replaced manually or filled by the knowledge-base picker.
+Loopback addresses refer to the machine running CSGClaw.
+Credentials are never included in catalog defaults, and existing installations keep their saved settings.
+The form separates service connection, MCP service authentication, and Feishu application identity; timeouts and extra headers/environment values remain under advanced settings.

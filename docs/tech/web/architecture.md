@@ -63,6 +63,9 @@ Chinese companion: `architecture.zh.md`.
   |     +-- WorkspacePage
   |     |     Main shell: sidebar, layout, modals, overlays, nested outlet
   |     |
+  |     +-- AppsPage (/apps, /apps/:resourceId)
+  |     |     Global App resources; Agent pages bind selected resources
+  |     |
   |     +-- ConversationPage
   |     |     Conversation route content and conversation-private components
   |     |

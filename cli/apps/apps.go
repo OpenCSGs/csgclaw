@@ -24,7 +24,7 @@ func (cmd) Summary() string   { return "List and manage an Agent's Apps." }
 
 func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
 	if len(args) == 0 || command.IsHelpArg(args[0]) {
-		run.UsageCommandGroup(c, run.Program+" app <subcommand> [flags]", []string{"catalog                 List built-in App definitions", "list --agent ID         List an Agent's Apps", "get --agent ID --id ID  Show one installation", "add --agent ID --file FILE", "update --agent ID --id ID --file FILE", "probe --agent ID --file FILE", "connect --agent ID --id ID", "disconnect --agent ID --id ID", "remove --agent ID --id ID"})
+		run.UsageCommandGroup(c, run.Program+" app <subcommand> [flags]", []string{"catalog                 List built-in App definitions", "list --global          List global App resources", "add --global --file FILE", "add --agent ID --file FILE  Bind a resource_id", "list --agent ID         List an Agent's Apps", "get --agent ID --id ID  Show one installation", "add --agent ID --file FILE", "update --agent ID --id ID --file FILE", "probe --agent ID --file FILE", "connect --agent ID --id ID", "disconnect --agent ID --id ID", "remove --agent ID --id ID"})
 		return flag.ErrHelp
 	}
 	action := args[0]
@@ -36,6 +36,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	fs := run.NewFlagSet("app "+action, run.Program+" app "+action+" [flags]", c.Summary())
 	caller := strings.TrimSpace(os.Getenv("CSGCLAW_CALLER_AGENT_ID"))
 	agentID := fs.String("agent", caller, "Agent ID")
+	global := fs.Bool("global", false, "Manage global App resources")
 	installationID := fs.String("id", "", "installation ID; App definition ID for catalog")
 	var file *string
 	if action == "add" || action == "update" || action == "probe" {
@@ -49,7 +50,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	}
 	*agentID = strings.TrimSpace(*agentID)
 	*installationID = strings.TrimSpace(*installationID)
-	if action != "catalog" && *agentID == "" {
+	if action != "catalog" && !*global && *agentID == "" {
 		return fmt.Errorf("app %s requires --agent", action)
 	}
 	if action == "get" || action == "update" || action == "connect" || action == "disconnect" || action == "remove" {
@@ -63,8 +64,17 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 	if file != nil && strings.TrimSpace(*file) == "" {
 		return fmt.Errorf("app %s requires --file (use - for standard input)", action)
 	}
+	if *global && caller != "" {
+		return fmt.Errorf("Global App resources are managed in the UI")
+	}
+	if *global && (action == "connect" || action == "disconnect") {
+		return fmt.Errorf("Connect an Agent binding; use update --global to enable or disable a resource")
+	}
 	client := run.APIClient(globals)
 	collection := "/api/v1/agents/" + url.PathEscape(*agentID) + "/apps"
+	if *global {
+		collection = "/api/v1/app-resources"
+	}
 	instance := collection + "/" + url.PathEscape(*installationID)
 	var result map[string]any
 	var err error
