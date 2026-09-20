@@ -98,6 +98,39 @@ func TestGlobalResourceBindingsRefreshAndRevokeIndependently(t *testing.T) {
 	}
 }
 
+func TestUpdateResourceToConnectorClearsAppOwnedCredentials(t *testing.T) {
+	ctx := context.Background()
+	upstream := upstreamServer(t)
+	s := newTestService(t, Options{ResolveConnectorHTTP: func(context.Context, string, string, Config) (ConnectorHTTPConfig, error) {
+		return ConnectorHTTPConfig{Endpoint: upstream.URL, Token: "managed-pat", TokenHeader: "Authorization", TokenPrefix: "Bearer "}, nil
+	}})
+	resource, err := s.Create(ctx, "", CreateRequest{
+		AppID: "gitlab", Name: "GitLab", Config: Config{URL: upstream.URL, AuthMode: "bearer"},
+		Credentials: Credentials{Token: "stale-app-token", AppID: "stale-app-id", AppSecret: "stale-secret", Env: map[string]string{"TOKEN": "stale-env"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectorConfig := Config{Transport: "http", URL: upstream.URL, GitLabBaseURL: "https://gitlab.example.com", AuthMode: "connector", ConnectorID: "gitlab"}
+	updated, err := s.Update(ctx, "", resource.InstallationID, UpdateRequest{Config: &connectorConfig})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"token", "app_id", "app_secret", "env.TOKEN"} {
+		if updated.CredentialsSet[key] {
+			t.Fatalf("connector resource retained App-owned credential %q: %+v", key, updated.CredentialsSet)
+		}
+	}
+	binding, err := s.Bind(ctx, "agent", BindRequest{ResourceID: resource.InstallationID, Connect: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := gatewayClient(t, s, "agent").CallTool(ctx, &mcp.CallToolParams{Name: toolName(binding.InstallationID, "inspect"), Arguments: map[string]any{}})
+	if err != nil || result.Content[0].(*mcp.TextContent).Text != "Bearer managed-pat" {
+		t.Fatalf("connector binding used stale App credential: result=%+v err=%v", result, err)
+	}
+}
+
 func TestExistingInstallationBecomesResourceWithoutChangingToolIdentity(t *testing.T) {
 	ctx := context.Background()
 	s := newTestService(t, Options{})

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -28,6 +29,7 @@ type connectorOAuthStartRequest struct {
 type gitLabConnectorConfigRequest struct {
 	BaseURL     string  `json:"base_url"`
 	AccessToken *string `json:"access_token,omitempty"`
+	AuthMethod  string  `json:"auth_method,omitempty"`
 }
 
 func (h *Handler) handleConnectors(w http.ResponseWriter, r *http.Request) {
@@ -39,12 +41,17 @@ func (h *Handler) handleConnectors(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	statuses, err := svc.List(r.Context(), connectorLocalCallbackURL(r))
+	github, err := svc.Status(r.Context(), connectors.ProviderGitHub, connectorLocalCallbackURL(r, connectors.ProviderGitHub))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, statuses)
+	gitlab, err := svc.GitLabStatus()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, []connectors.Status{github, gitlab})
 }
 
 func (h *Handler) handleGitHubConnector(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +63,7 @@ func (h *Handler) handleGitHubConnector(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	status, err := svc.Status(r.Context(), connectors.ProviderGitHub, connectorLocalCallbackURL(r))
+	status, err := svc.Status(r.Context(), connectors.ProviderGitHub, connectorLocalCallbackURL(r, connectors.ProviderGitHub))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -90,7 +97,7 @@ func (h *Handler) handleGitHubConnectorConfig(w http.ResponseWriter, r *http.Req
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	status.CallbackURL = connectorLocalCallbackURL(r)
+	status.CallbackURL = connectorLocalCallbackURL(r, connectors.ProviderGitHub)
 	writeJSON(w, http.StatusOK, status)
 }
 
@@ -112,7 +119,7 @@ func (h *Handler) handleGitHubConnectorOAuthStart(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	callbackURL := connectorLocalCallbackURL(r)
+	callbackURL := connectorLocalCallbackURL(r, connectors.ProviderGitHub)
 	if callbackURL == "" {
 		http.Error(w, "local callback url is required", http.StatusBadRequest)
 		return
@@ -203,7 +210,7 @@ func (h *Handler) handleGitHubConnectorDisconnect(w http.ResponseWriter, r *http
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	status.CallbackURL = connectorLocalCallbackURL(r)
+	status.CallbackURL = connectorLocalCallbackURL(r, connectors.ProviderGitHub)
 	writeJSON(w, http.StatusOK, status)
 }
 
@@ -229,21 +236,15 @@ func (h *Handler) handleGitHubConnectorCredential(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, credential)
 }
 
-func (h *Handler) handleGitLabConnector(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+func (h *Handler) handleAgentGitLabConnectorConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	svc, ok := h.requireConnectorService(w)
-	if !ok {
+	if _, ok := h.requireAppAgent(w, r); !ok {
 		return
 	}
-	status, err := svc.Status(r.Context(), connectors.ProviderGitLab, "")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, http.StatusOK, status)
+	h.handleGitLabConnectorConfig(w, r)
 }
 
 func (h *Handler) handleGitLabConnectorConfig(w http.ResponseWriter, r *http.Request) {
@@ -260,32 +261,66 @@ func (h *Handler) handleGitLabConnectorConfig(w http.ResponseWriter, r *http.Req
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
 	}
+	if requestedMethod := strings.TrimSpace(req.AuthMethod); requestedMethod != "" &&
+		!strings.EqualFold(requestedMethod, connectors.AuthMethodPAT) {
+		http.Error(w, "GitLab connectors require personal access token authentication", http.StatusBadRequest)
+		return
+	}
 	config := connectors.Config{BaseURL: req.BaseURL}
 	if req.AccessToken != nil {
 		config.AccessToken = *req.AccessToken
 	}
+	h.gitLabConnectorMu.Lock()
+	defer h.gitLabConnectorMu.Unlock()
 	status, err := svc.SaveGitLabConfig(r.Context(), config)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if h.apps != nil {
+		if refreshErr := h.apps.RefreshConnector(r.Context(), connectors.ProviderGitLab); refreshErr != nil {
+			slog.Warn("refresh GitLab Apps after Connector update", "error", refreshErr)
+		}
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, status)
 }
 
-func (h *Handler) handleGitLabConnectorDisconnect(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+func (h *Handler) handleAgentGitLabConnector(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAppAgent(w, r); !ok {
 		return
+	}
+	h.handleGitLabConnector(w, r)
+}
+
+func (h *Handler) handleGitLabConnector(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		h.gitLabConnectorMu.Lock()
+		defer h.gitLabConnectorMu.Unlock()
 	}
 	svc, ok := h.requireConnectorService(w)
 	if !ok {
 		return
 	}
-	status, err := svc.Disconnect(r.Context(), connectors.ProviderGitLab)
+	var (
+		status connectors.Status
+		err    error
+	)
+	switch r.Method {
+	case http.MethodGet:
+		status, err = svc.GitLabStatus()
+	case http.MethodPost:
+		status, err = svc.DisconnectGitLab()
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if r.Method == http.MethodPost && h.apps != nil {
+		h.apps.InvalidateConnector(connectors.ProviderGitLab)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, status)
@@ -360,7 +395,7 @@ func (h *Handler) connectorService() (*connectors.Service, error) {
 	return connectors.NewService(store), nil
 }
 
-func connectorLocalCallbackURL(r *http.Request) string {
+func connectorLocalCallbackURL(r *http.Request, _ string) string {
 	if r == nil {
 		return ""
 	}

@@ -79,6 +79,8 @@ func (s *Service) Definition(appID string) (Definition, error) {
 	authMethods := []string{"none", "bearer", "header", "env"}
 	if appID == "feishu" {
 		authMethods = append(authMethods, "feishu")
+	} else if appID == "gitlab" {
+		authMethods = []string{"connector"}
 	}
 	return Definition{AppID: appID, Name: pkg.Manifest.Interface.DisplayName, Description: pkg.Manifest.Description,
 		Version: pkg.Manifest.Version, Interface: pkg.Manifest.Interface, ConfigSchema: configSchema(appID),
@@ -95,8 +97,9 @@ func configSchema(appID string) map[string]any {
 	}
 	props := map[string]any{
 		"url": field("MCP URL", false), "token": field("Token / API Key", true),
-		"transport": map[string]any{"type": "string", "enum": []string{"http", "stdio"}, "default": "http"},
-		"command":   field("Command", false), "cwd": field("Working directory", false),
+		"connector_id": field("Connector ID", false),
+		"transport":    map[string]any{"type": "string", "enum": []string{"http", "stdio"}, "default": "http"},
+		"command":      field("Command", false), "cwd": field("Working directory", false),
 	}
 	// Editable installation defaults. Local knowledge bases may instead be selected
 	// through the knowledge picker; no credentials are embedded in these defaults.
@@ -119,6 +122,9 @@ func configSchema(appID string) map[string]any {
 		props["app_id"] = field("App ID", true)
 		props["app_secret"] = field("App Secret", true)
 		props["credential_source"] = map[string]any{"type": "string", "enum": []string{"feishu_channel", "manual"}, "default": "feishu_channel"}
+	}
+	if appID == "gitlab" {
+		props["gitlab_base_url"] = field("GitLab instance URL", false)
 	}
 	return map[string]any{"type": "object", "properties": props}
 }

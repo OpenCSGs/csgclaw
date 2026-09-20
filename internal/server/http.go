@@ -15,6 +15,7 @@ import (
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/api"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/connectors"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/mcp"
@@ -48,6 +49,7 @@ type Options struct {
 	Team               *team.Service
 	AgentTask          *agenttask.Service
 	ScheduledTask      *scheduledtask.Service
+	Connectors         *connectors.Service
 	AgentRuntimes      *runtimecatalog.Service
 	TeamAdapters       *team.AdapterRegistry
 	Upgrade            *upgrade.Manager
@@ -80,6 +82,7 @@ func newHandler(opts Options) *api.Handler {
 		handler.SetRoomTaskCore(opts.AgentTask.Core())
 	}
 	handler.SetScheduledTaskService(opts.ScheduledTask)
+	handler.SetConnectorService(opts.Connectors)
 	handler.SetAgentRuntimeService(opts.AgentRuntimes)
 	if opts.TeamAdapters != nil {
 		handler.SetTeamAdapterRegistry(opts.TeamAdapters)

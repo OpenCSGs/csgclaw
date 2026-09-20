@@ -12,6 +12,8 @@ const (
 
 var DefaultGitHubScopes = []string{"repo", "read:user", "user:email"}
 
+const AuthMethodPAT = "personal_access_token"
+
 type Config struct {
 	ClientID     string   `json:"client_id,omitempty"`
 	ClientSecret string   `json:"client_secret,omitempty"`
@@ -66,6 +68,7 @@ type Status struct {
 	ClientSecretSet bool       `json:"client_secret_set"`
 	BaseURL         string     `json:"base_url,omitempty"`
 	AccessTokenSet  bool       `json:"access_token_set,omitempty"`
+	AuthMethod      string     `json:"auth_method,omitempty"`
 	Scopes          []string   `json:"scopes,omitempty"`
 	Account         *Account   `json:"account,omitempty"`
 	CallbackURL     string     `json:"callback_url,omitempty"`
@@ -75,15 +78,17 @@ type Status struct {
 
 func (s State) GitLabStatus() Status {
 	config := NormalizeGitLabConfig(s.Config)
+	connected := config.AccessToken != "" && s.Account != nil
 	status := Status{
 		Provider:       ProviderGitLab,
 		Name:           "GitLab",
 		Configured:     config.BaseURL != "" && config.AccessToken != "",
-		Connected:      config.BaseURL != "" && config.AccessToken != "" && s.Account != nil,
+		Connected:      config.BaseURL != "" && connected,
 		BaseURL:        config.BaseURL,
 		AccessTokenSet: config.AccessToken != "",
+		AuthMethod:     AuthMethodPAT,
 	}
-	if status.Connected {
+	if status.Connected && s.Account != nil {
 		account := normalizeAccount(*s.Account)
 		status.Account = &account
 	}
@@ -171,9 +176,33 @@ func NormalizeConfig(config Config) Config {
 }
 
 func NormalizeGitLabConfig(config Config) Config {
+	config.ClientID = strings.TrimSpace(config.ClientID)
+	config.ClientSecret = strings.TrimSpace(config.ClientSecret)
+	config.Scopes = normalizeScopes(config.Scopes)
 	config.BaseURL = strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
 	config.AccessToken = strings.TrimSpace(config.AccessToken)
 	return config
+}
+
+func normalizeGitLabState(state State) State {
+	state.Config = NormalizeGitLabConfig(state.Config)
+	if state.Pending != nil {
+		pending := *state.Pending
+		pending.State = strings.TrimSpace(pending.State)
+		pending.CodeVerifier = strings.TrimSpace(pending.CodeVerifier)
+		pending.CallbackURL = strings.TrimSpace(pending.CallbackURL)
+		pending.ReturnURL = strings.TrimSpace(pending.ReturnURL)
+		pending.CreatedAt = pending.CreatedAt.UTC()
+		state.Pending = &pending
+	}
+	state.Token = normalizeToken(state.Token)
+	if state.Account != nil {
+		account := normalizeAccount(*state.Account)
+		state.Account = &account
+	}
+	state.ConnectedAt = state.ConnectedAt.UTC()
+	state.UpdatedAt = state.UpdatedAt.UTC()
+	return state
 }
 
 func normalizeState(state State) State {

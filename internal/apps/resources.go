@@ -223,6 +223,7 @@ func (s *Service) updateResource(ctx context.Context, id string, in UpdateReques
 	if in.Config != nil {
 		next.Config = normalizeConfig(*in.Config, next.AppID, next.Credentials)
 	}
+	clearConnectorOwnedCredentials(next.Config, &next.Credentials)
 	protect(&next.Config, &next.Credentials)
 	clearReferencedPlatformCredentials(next.Config, &next.Credentials)
 	if next.Config.AuthMode == "oauth2" {

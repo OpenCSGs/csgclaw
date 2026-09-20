@@ -71,6 +71,97 @@ func addHTTP(t *testing.T, s *Service, agentID, appID, name, endpoint, token str
 	return item
 }
 
+func TestCatalogAdvertisesGitLabPATConnector(t *testing.T) {
+	s := newTestService(t, Options{})
+	gitlab, err := s.Definition("gitlab")
+	if err != nil || gitlab.OAuthSupported || !contains(gitlab.AuthMethods, "connector") {
+		t.Fatalf("GitLab PAT Connector capability missing: %+v %v", gitlab, err)
+	}
+	wiki, err := s.Definition("llm-wiki")
+	if err != nil || wiki.OAuthSupported || contains(wiki.AuthMethods, "oauth2") {
+		t.Fatalf("unexpected wiki OAuth capability: %+v %v", wiki, err)
+	}
+}
+
+func TestGitLabPATUsesConfiguredMCPAndManagedCredential(t *testing.T) {
+	upstream := upstreamServer(t)
+	var resolved bool
+	s := newTestService(t, Options{ResolveConnectorHTTP: func(_ context.Context, agentID, appID string, cfg Config) (ConnectorHTTPConfig, error) {
+		resolved = agentID == "agent" && appID == "gitlab" && cfg.AuthMode == "connector" && cfg.ConnectorID == "gitlab" && cfg.URL == upstream.URL && cfg.GitLabBaseURL == "https://gitlab.example.com"
+		return ConnectorHTTPConfig{Endpoint: upstream.URL, Token: "connector-managed", TokenHeader: "Authorization", TokenPrefix: "Bearer "}, nil
+	}})
+	result, err := s.Probe(context.Background(), "agent", ProbeRequest{AppID: "gitlab", Config: Config{Transport: "http", URL: upstream.URL, GitLabBaseURL: "https://gitlab.example.com", AuthMode: "connector"}})
+	if err != nil || !result.Connected || len(result.Tools) != 1 || !resolved {
+		t.Fatalf("managed OAuth probe = %+v, resolved=%v, err=%v", result, resolved, err)
+	}
+}
+
+func TestRefreshConnectorRotatesAllAgentSessionsAndInvalidatesOnDisconnect(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "connector-rotation", Version: "1"}, &mcp.ServerOptions{Logger: quietLogger})
+	server.AddTool(&mcp.Tool{Name: "token", InputSchema: map[string]any{"type": "object"}}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: req.Extra.Header.Get("PRIVATE-TOKEN")}}}, nil
+	})
+	upstream := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{JSONResponse: true, Logger: quietLogger}))
+	t.Cleanup(upstream.Close)
+
+	var token atomic.Value
+	token.Store("token-one")
+	s := newTestService(t, Options{ResolveConnectorHTTP: func(context.Context, string, string, Config) (ConnectorHTTPConfig, error) {
+		return ConnectorHTTPConfig{Endpoint: upstream.URL, Token: token.Load().(string), TokenHeader: "PRIVATE-TOKEN"}, nil
+	}})
+	resource, err := s.Create(context.Background(), "", CreateRequest{
+		AppID: "gitlab", Name: "GitLab", Connect: true,
+		Config: Config{Transport: "http", URL: upstream.URL, GitLabBaseURL: "https://gitlab.example", AuthMode: "connector"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	create := func(agentID string) Installation {
+		item, err := s.Bind(context.Background(), agentID, BindRequest{ResourceID: resource.InstallationID, Connect: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return item
+	}
+	a := create("agent-a")
+	b := create("agent-b")
+	clientA := gatewayClient(t, s, "agent-a")
+	clientB := gatewayClient(t, s, "agent-b")
+	call := func(client *mcp.ClientSession, item Installation, want string) {
+		t.Helper()
+		result, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: toolName(item.InstallationID, "token")})
+		if err != nil || len(result.Content) != 1 || result.Content[0].(*mcp.TextContent).Text != want {
+			t.Fatalf("connector token = %+v, want %q (err=%v)", result, want, err)
+		}
+	}
+	call(clientA, a, "token-one")
+	call(clientB, b, "token-one")
+
+	token.Store("token-two")
+	if err := s.RefreshConnector(context.Background(), "gitlab"); err != nil {
+		t.Fatal(err)
+	}
+	call(clientA, a, "token-two")
+	call(clientB, b, "token-two")
+
+	s.InvalidateConnector("gitlab")
+	for _, client := range []*mcp.ClientSession{clientA, clientB} {
+		listed, err := client.ListTools(context.Background(), nil)
+		if err != nil || len(listed.Tools) != 0 {
+			t.Fatalf("invalidated connector tools = %+v, err=%v", listed, err)
+		}
+	}
+}
+
+func contains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestHTTPAppsGatewayIsolationAndRevocation(t *testing.T) {
 	upstream := upstreamServer(t)
 	var changes atomic.Int32
@@ -396,20 +487,35 @@ func TestFeishuStdioChannelRotationAndManualDisconnect(t *testing.T) {
 	}
 }
 
-func TestUnsupportedOAuthAndProbeDoesNotPersist(t *testing.T) {
+func TestGitLabPATConfigurationAndProbeDoesNotPersist(t *testing.T) {
 	s := newTestService(t, Options{})
-	_, err := s.Create(context.Background(), "agent", CreateRequest{AppID: "gitlab", Name: "OAuth", Config: Config{AuthMode: "oauth2"}})
-	if !errors.Is(err, ErrUnsupportedOAuth) {
-		t.Fatalf("OAuth not rejected: %v", err)
+	item, err := s.Create(context.Background(), "agent", CreateRequest{
+		AppID: "gitlab", Name: "PAT",
+		Config:      Config{Transport: "http", URL: "https://mcp.example.com/mcp", GitLabBaseURL: "https://gitlab.example.com", AuthMode: "connector"},
+		Credentials: Credentials{Token: "transient-pat", Headers: map[string]string{"X-Custom-Auth": "secret"}},
+	})
+	if err != nil || item.Config.AuthMode != "connector" || item.Config.ConnectorID != "gitlab" {
+		t.Fatalf("GitLab PAT configuration rejected: %+v %v", item, err)
 	}
+	if item.Config.URL != "https://mcp.example.com/mcp" || item.Config.GitLabBaseURL != "https://gitlab.example.com" {
+		t.Fatalf("GitLab endpoints changed: %+v", item.Config)
+	}
+	if item.CredentialsSet["token"] || !item.CredentialsSet["headers.X-Custom-Auth"] {
+		t.Fatalf("PAT must be Connector-owned while custom headers remain App-owned: %+v", item.CredentialsSet)
+	}
+	_, err = s.Create(context.Background(), "agent", CreateRequest{AppID: "llm-wiki", Name: "OAuth", Config: Config{Transport: "http", URL: "https://example.com/mcp", AuthMode: "oauth2"}, Connect: true})
+	if !errors.Is(err, ErrUnsupportedOAuth) {
+		t.Fatalf("unsupported App OAuth not rejected: %v", err)
+	}
+	before, _ := s.List(context.Background(), "agent")
 	upstream := upstreamServer(t)
 	result, err := s.Probe(context.Background(), "agent", ProbeRequest{AppID: "llm-wiki", Config: Config{URL: upstream.URL}, Credentials: Credentials{Token: "probe-token"}})
 	if err != nil || !result.Connected || len(result.Tools) != 1 {
 		t.Fatalf("probe: %+v %v", result, err)
 	}
 	items, _ := s.List(context.Background(), "agent")
-	if len(items) != 0 {
-		t.Fatal("probe saved an installation")
+	if len(items) != len(before) || items[0].InstallationID != item.InstallationID {
+		t.Fatal("probe changed persisted installations")
 	}
 }
 

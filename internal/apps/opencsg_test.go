@@ -1,18 +1,21 @@
 package apps
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type platformRoundTripper func(*http.Request) (*http.Response, error)
@@ -253,5 +256,59 @@ func TestPlatformLoginPreservesBusinessHeader(t *testing.T) {
 	var conflict *ConnectionError
 	if err := validateConfig(config, "gitlab"); !errors.As(err, &conflict) || conflict.Code != "app_platform_header_conflict" {
 		t.Fatal("Authorization conflict not rejected")
+	}
+}
+
+func TestRedactMCPLogMessage(t *testing.T) {
+	config := Config{URL: "https://example.test/mcp?gateway=secret-query"}
+	credentials := Credentials{
+		Token:   "secret-token",
+		Headers: map[string]string{"X-API-Key": "secret-header"},
+	}
+	got := redactMCPLogMessage(
+		"request https://example.test/mcp?gateway=secret-query token=secret-token header=secret-header failed",
+		config,
+		credentials,
+	)
+	for _, secret := range []string{"secret-query", "secret-token", "secret-header"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("log message leaked %q: %q", secret, got)
+		}
+	}
+}
+
+func TestConnectionFailureLogDoesNotIncludeUntrustedUpstreamError(t *testing.T) {
+	const managedPAT = "glpat-managed-secret"
+	var output bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&output, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	logMCPConnectionFailure("tools_list", "agent", "gitlab", Config{URL: "https://mcp.example/mcp", AuthMode: "connector"}, Credentials{}, fmt.Errorf("upstream echoed PRIVATE-TOKEN=%s", managedPAT), nil)
+	if strings.Contains(output.String(), managedPAT) || strings.Contains(output.String(), "PRIVATE-TOKEN") {
+		t.Fatalf("connection log leaked untrusted upstream error: %s", output.String())
+	}
+}
+
+func TestOpenCSGLoginPreservesConnectorBusinessToken(t *testing.T) {
+	credentials := Credentials{
+		Token: "gitlab-pat",
+		Headers: map[string]string{
+			"Authorization": "Bearer stale-platform-token",
+			"X-Custom":      "custom-value",
+		},
+	}
+	clearReferencedPlatformCredentials(Config{
+		AuthMode:                 "connector",
+		PlatformCredentialSource: "opencsg_login",
+	}, &credentials)
+	if credentials.Token != "gitlab-pat" {
+		t.Fatal("connector business token was cleared with the platform credential")
+	}
+	if _, ok := credentials.Headers["Authorization"]; ok {
+		t.Fatal("stale platform Authorization header was retained")
+	}
+	if credentials.Headers["X-Custom"] != "custom-value" {
+		t.Fatal("business header was removed")
 	}
 }

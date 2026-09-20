@@ -679,7 +679,7 @@ function ComposerAddMenu({
                 </span>
                 <div className="connector-provider-copy">
                   <strong>{t("connectorGitLab")}</strong>
-                  <span>{t("appManageInAgent")}</span>
+                  <span>{t("appManageGlobally")}</span>
                 </div>
               </div>
               <Button

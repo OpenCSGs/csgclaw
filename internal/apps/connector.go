@@ -64,6 +64,13 @@ func normalizeConfig(c Config, appID string, supplied ...Credentials) Config {
 	if c.CredentialSource == "" {
 		c.CredentialSource = "manual"
 	}
+	if (c.AuthMode == "oauth2" || c.AuthMode == "connector") && c.ConnectorID == "" && appID == "gitlab" {
+		c.ConnectorID = "gitlab"
+	}
+	if (c.AuthMode == "oauth2" || c.AuthMode == "connector") && appID == "gitlab" {
+		c.AuthMode = "connector"
+		c.GitLabBaseURL = strings.TrimRight(strings.TrimSpace(c.GitLabBaseURL), "/")
+	}
 	if c.AuthMode == "" {
 		c.AuthMode = "bearer"
 	}
@@ -106,8 +113,14 @@ func validateConfig(c Config, appID string) error {
 	if c.AuthMode == "feishu" && appID != "feishu" {
 		return fmt.Errorf("%w: Feishu application authentication is only available for the Feishu App", ErrInvalid)
 	}
-	if c.AuthMode == "oauth2" {
-		return ErrUnsupportedOAuth
+	if c.AuthMode == "oauth2" || c.AuthMode == "connector" {
+		if appID != "gitlab" || c.Transport != "http" || strings.TrimSpace(c.ConnectorID) == "" || strings.TrimSpace(c.GitLabBaseURL) == "" {
+			return ErrUnsupportedOAuth
+		}
+		base, err := url.Parse(c.GitLabBaseURL)
+		if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" || base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+			return fmt.Errorf("%w: GitLab base URL must be an absolute HTTP(S) URL", ErrInvalid)
+		}
 	}
 	if c.StartupTimeoutSec > 120 || c.ToolTimeoutSec > 600 {
 		return fmt.Errorf("%w: timeout is too large", ErrInvalid)
@@ -119,7 +132,7 @@ func validateConfig(c Config, appID string) error {
 		return fmt.Errorf("%w: channel credentials are only available for Feishu", ErrInvalid)
 	}
 	switch c.AuthMode {
-	case "none", "bearer", "header", "env", "feishu":
+	case "none", "bearer", "header", "env", "feishu", "oauth2", "connector":
 	default:
 		return fmt.Errorf("%w: authentication mode is unsupported", ErrInvalid)
 	}
@@ -157,7 +170,8 @@ func (s *Service) resolve(ctx context.Context, agentID string, c Config, credent
 		credentials.AppID = value.AppID
 		credentials.AppSecret = value.AppSecret
 	}
-	if c.AuthMode != "none" && c.AuthMode != "feishu" && (c.PlatformCredentialSource != "opencsg_login" || c.AuthMode == "header") && credentials.Token == "" {
+	if c.AuthMode != "none" && c.AuthMode != "feishu" && c.AuthMode != "oauth2" && c.AuthMode != "connector" &&
+		(c.PlatformCredentialSource != "opencsg_login" || c.AuthMode == "header") && credentials.Token == "" {
 		return Credentials{}, fmt.Errorf("%w: token is required", ErrInvalid)
 	}
 	if c.AuthMode == "feishu" && (credentials.AppID == "" || credentials.AppSecret == "") {
@@ -167,7 +181,7 @@ func (s *Service) resolve(ctx context.Context, agentID string, c Config, credent
 	return credentials, nil
 }
 
-func buildTransport(c Config, credentials Credentials, dirs processDirs, tokenSources ...feishutransport.TenantTokenSource) (mcp.Transport, error) {
+func (s *Service) buildTransport(ctx context.Context, agentID, appID string, c Config, credentials Credentials, dirs processDirs, tokenSources ...feishutransport.TenantTokenSource) (mcp.Transport, error) {
 	if c.Transport == "stdio" {
 		vars := map[string]string{}
 		// Deliberately inherit only process essentials, never the host's secrets.
@@ -220,11 +234,58 @@ func buildTransport(c Config, credentials Credentials, dirs processDirs, tokenSo
 		cmd.Stderr = io.Discard
 		return &mcp.CommandTransport{Command: cmd, TerminateDuration: time.Second}, nil
 	}
+	if c.AuthMode == "connector" {
+		var resolved ConnectorHTTPConfig
+		if appID == "gitlab" && strings.TrimSpace(credentials.Token) != "" {
+			resolved = ConnectorHTTPConfig{
+				Endpoint: c.URL, Token: credentials.Token, TokenHeader: "PRIVATE-TOKEN",
+				Headers: http.Header{"X-GitLab-Base-URL": []string{c.GitLabBaseURL}},
+			}
+		} else {
+			if s.options.ResolveConnectorHTTP == nil {
+				return nil, ErrUnsupportedOAuth
+			}
+			var err error
+			resolved, err = s.options.ResolveConnectorHTTP(ctx, agentID, appID, c)
+			if err != nil {
+				return nil, err
+			}
+		}
+		direct := c
+		direct.URL = resolved.Endpoint
+		direct.AuthMode = "none"
+		direct.Headers = make(map[string]string, len(resolved.Headers)+len(credentials.Headers)+1)
+		for key, values := range resolved.Headers {
+			if len(values) > 0 {
+				setHeaderValue(direct.Headers, key, values[0])
+			}
+		}
+		if resolved.TokenHeader != "" {
+			setHeaderValue(direct.Headers, resolved.TokenHeader, resolved.TokenPrefix+resolved.Token)
+		}
+		for key, value := range credentials.Headers {
+			setHeaderValue(direct.Headers, key, value)
+		}
+		client, err := connectorHTTPClient(direct, Credentials{})
+		if err != nil {
+			return nil, err
+		}
+		return &mcp.StreamableClientTransport{Endpoint: resolved.Endpoint, HTTPClient: client, MaxRetries: -1}, nil
+	}
 	client, err := connectorHTTPClient(c, credentials, tokenSources...)
 	if err != nil {
 		return nil, err
 	}
 	return &mcp.StreamableClientTransport{Endpoint: c.URL, HTTPClient: client, MaxRetries: -1}, nil
+}
+
+func setHeaderValue(headers map[string]string, name, value string) {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			delete(headers, key)
+		}
+	}
+	headers[name] = value
 }
 
 func connectorHTTPClient(c Config, credentials Credentials, tokenSources ...feishutransport.TenantTokenSource) (*http.Client, error) {
@@ -356,9 +417,10 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return response, err
 }
 
-func (s *Service) open(ctx context.Context, agentID string, c Config, credentials Credentials, dirs processDirs, onToolsChanged func()) (*connection, *ProbeResult, error) {
+func (s *Service) open(ctx context.Context, agentID, appID string, c Config, credentials Credentials, dirs processDirs, onToolsChanged func()) (*connection, *ProbeResult, error) {
 	if c.PlatformCredentialSource == "opencsg_login" {
 		if _, err := s.openCSGToken(ctx, c.URL); err != nil {
+			logMCPConnectionFailure("platform_auth", agentID, appID, c, credentials, err, nil)
 			return nil, nil, err
 		}
 	}
@@ -367,6 +429,7 @@ func (s *Service) open(ctx context.Context, agentID string, c Config, credential
 	}
 	resolved, err := s.resolve(ctx, agentID, c, credentials)
 	if err != nil {
+		logMCPConnectionFailure("resolve_credentials", agentID, appID, c, credentials, err, nil)
 		return nil, nil, err
 	}
 	var tokens feishutransport.TenantTokenSource
@@ -386,8 +449,9 @@ func (s *Service) open(ctx context.Context, agentID string, c Config, credential
 			return nil, nil, connectionError("app_feishu_token_failed", "Cannot obtain a Feishu application token. Check the selected Channel or App ID/App Secret, application status and Feishu connectivity.", 0, true)
 		}
 	}
-	transport, err := buildTransport(c, resolved, dirs, tokens)
+	transport, err := s.buildTransport(ctx, agentID, appID, c, resolved, dirs, tokens)
 	if err != nil {
+		logMCPConnectionFailure("build_transport", agentID, appID, c, credentials, err, nil)
 		return nil, nil, err
 	}
 	s.bindTransportPlatformLogin(c, transport)
@@ -407,7 +471,9 @@ func (s *Service) open(ctx context.Context, agentID string, c Config, credential
 	stopRequest()
 	if err != nil {
 		cancel()
-		if detail := transportFailure(transport, err); detail != nil {
+		detail := transportFailure(transport, err)
+		logMCPConnectionFailure("initialize", agentID, appID, c, credentials, err, detail)
+		if detail != nil {
 			return nil, nil, detail
 		}
 		if errors.Is(err, errAuthentication) {
@@ -428,7 +494,9 @@ func (s *Service) open(ctx context.Context, agentID string, c Config, credential
 	tools, err := listTools(listCtx, session)
 	if err != nil {
 		conn.close()
-		if detail := transportFailure(transport, err); detail != nil {
+		detail := transportFailure(transport, err)
+		logMCPConnectionFailure("tools_list", agentID, appID, c, credentials, err, detail)
+		if detail != nil {
 			return nil, nil, detail
 		}
 		return nil, nil, fmt.Errorf("MCP tool discovery failed; verify the service permissions")
@@ -440,6 +508,54 @@ func (s *Service) open(ctx context.Context, agentID string, c Config, credential
 		result.ProtocolVersion = init.ProtocolVersion
 	}
 	return conn, result, nil
+}
+
+// logMCPConnectionFailure records enough context to diagnose connection stages
+// without logging URLs with query strings, credentials, or header values.
+func logMCPConnectionFailure(stage, agentID, appID string, c Config, credentials Credentials, err error, detail *ConnectionError) {
+	host := ""
+	if endpoint, parseErr := url.Parse(c.URL); parseErr == nil {
+		host = endpoint.Hostname()
+	}
+	attrs := []any{
+		"stage", stage,
+		"agent_id", agentID,
+		"app_id", appID,
+		"mcp_host", host,
+		"transport", c.Transport,
+		"auth_mode", c.AuthMode,
+		"platform_credential_source", c.PlatformCredentialSource,
+		"error_type", fmt.Sprintf("%T", err),
+		"credential_token_set", credentials.Token != "",
+		"custom_header_count", len(credentials.Headers),
+	}
+	if detail != nil {
+		attrs = append(attrs,
+			"error_code", detail.Code,
+			"upstream_status", detail.HTTPStatus,
+			"authentication_error", detail.Authentication,
+		)
+	} else {
+		// SDK/upstream errors are untrusted and may echo request headers. The
+		// actual Connector and platform credentials are resolved below the
+		// persisted Credentials object, so logging the raw error cannot be made
+		// reliably safe here.
+		attrs = append(attrs, "error", "MCP connection failed")
+	}
+	slog.Warn("Agent App MCP connection failed", attrs...)
+}
+
+func redactMCPLogMessage(message string, c Config, credentials Credentials) string {
+	secrets := []string{credentials.Token, c.URL}
+	for _, value := range credentials.Headers {
+		secrets = append(secrets, value)
+	}
+	for _, secret := range secrets {
+		if secret != "" {
+			message = strings.ReplaceAll(message, secret, "[redacted]")
+		}
+	}
+	return message
 }
 
 func listTools(ctx context.Context, session *mcp.ClientSession) ([]*mcp.Tool, error) {

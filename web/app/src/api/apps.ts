@@ -15,12 +15,14 @@ export type AppConfig = {
   platform_credential_source?: "manual" | "opencsg_login";
   transport?: "http" | "stdio";
   url?: string;
+  gitlab_base_url?: string;
+  connector_id?: string;
   command?: string;
   args?: string[];
   cwd?: string;
   env?: Record<string, string>;
   headers?: Record<string, string>;
-  auth_mode?: "none" | "bearer" | "header" | "env" | "feishu" | "oauth2";
+  auth_mode?: "none" | "bearer" | "header" | "env" | "feishu" | "oauth2" | "connector";
   credential_source?: "manual" | "feishu_channel";
   token_header?: string;
   token_prefix?: string;

@@ -33,7 +33,7 @@ func TestConcurrentConnectorAndAccountSavesPreserveAllCredentials(t *testing.T) 
 				return err
 			},
 			func() error {
-				_, err := service.SaveGitLabConfig(context.Background(), Config{BaseURL: gitlab.URL, AccessToken: "test-gitlab-token"})
+				_, err := service.SaveGitLabConfigForAgent(context.Background(), "agent-a", Config{BaseURL: gitlab.URL, AccessToken: "test-gitlab-token"})
 				return err
 			},
 			func() error {
@@ -48,7 +48,7 @@ func TestConcurrentConnectorAndAccountSavesPreserveAllCredentials(t *testing.T) 
 		if err != nil || !found || github.Config.ClientID != "test-github-id" {
 			t.Fatalf("round %d: GitHub config lost after successful saves, found=%v, err=%v", round, found, err)
 		}
-		gitlabState, found, err := connectorStore.LoadGitLab()
+		gitlabState, found, err := connectorStore.LoadGitLabForAgent("agent-a")
 		if err != nil || !found || gitlabState.Config.AccessToken != "test-gitlab-token" || gitlabState.Account == nil || gitlabState.Account.Login != "test-user" {
 			t.Fatalf("round %d: GitLab credentials lost after successful saves, found=%v, err=%v", round, found, err)
 		}

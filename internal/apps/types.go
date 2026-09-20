@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"time"
 
 	feishutransport "csgclaw/internal/channel/feishu/transport"
@@ -74,6 +75,8 @@ type Config struct {
 	PlatformCredentialSource string            `json:"platform_credential_source,omitempty"`
 	Transport                string            `json:"transport,omitempty"`
 	URL                      string            `json:"url,omitempty"`
+	GitLabBaseURL            string            `json:"gitlab_base_url,omitempty"`
+	ConnectorID              string            `json:"connector_id,omitempty"`
 	Command                  string            `json:"command,omitempty"`
 	Args                     []string          `json:"args,omitempty"`
 	CWD                      string            `json:"cwd,omitempty"`
@@ -84,6 +87,8 @@ type Config struct {
 	TokenHeader              string            `json:"token_header,omitempty"`
 	TokenPrefix              string            `json:"token_prefix,omitempty"`
 	TokenEnv                 string            `json:"token_env,omitempty"`
+	AppIDHeader              string            `json:"app_id_header,omitempty"`
+	AppSecretHeader          string            `json:"app_secret_header,omitempty"`
 	AppIDEnv                 string            `json:"app_id_env,omitempty"`
 	AppSecretEnv             string            `json:"app_secret_env,omitempty"`
 	StartupTimeoutSec        int               `json:"startup_timeout_sec,omitempty"`
@@ -154,12 +159,21 @@ type FeishuCredentials struct{ AppID, AppSecret string }
 
 func (FeishuCredentials) String() string { return "[redacted]" }
 
+type ConnectorHTTPConfig struct {
+	Endpoint    string
+	Token       string
+	TokenHeader string
+	TokenPrefix string
+	Headers     http.Header
+}
+
 type Options struct {
-	OpenCSGCredentials func(context.Context) (OpenCSGCredentials, error)
-	FeishuTokenSource  func(string, string) feishutransport.TenantTokenSource
-	ReadOnly           func(string) bool
-	ResolveFeishu      func(context.Context, string) (FeishuCredentials, error)
-	OnCatalogChanged   func(string, uint64)
+	OpenCSGCredentials   func(context.Context) (OpenCSGCredentials, error)
+	FeishuTokenSource    func(string, string) feishutransport.TenantTokenSource
+	ReadOnly             func(string) bool
+	ResolveFeishu        func(context.Context, string) (FeishuCredentials, error)
+	ResolveConnectorHTTP func(context.Context, string, string, Config) (ConnectorHTTPConfig, error)
+	OnCatalogChanged     func(string, uint64)
 }
 
 // BindingSummary describes use of a global resource without exposing credentials.

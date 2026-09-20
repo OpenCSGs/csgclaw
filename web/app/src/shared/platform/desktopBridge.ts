@@ -1,5 +1,5 @@
 export type DesktopPlatform = "darwin" | "win32" | "linux";
-export type DesktopOAuthPurpose = "opencsg-auth" | "github-connector";
+export type DesktopOAuthPurpose = "opencsg-auth" | "github-connector" | "gitlab-connector";
 export type DesktopThemeSource = "system" | "light" | "dark";
 export type DesktopUpdateChannel = "release" | "beta";
 

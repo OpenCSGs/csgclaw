@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/apps"
+	"csgclaw/internal/connectors"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
@@ -23,6 +25,25 @@ import (
 func (h *Handler) EnableApps(statePath string) error {
 	service, err := apps.NewService(statePath, apps.Options{
 		ReadOnly: h.appReadOnlyAgent,
+		ResolveConnectorHTTP: func(ctx context.Context, agentID string, appID string, cfg apps.Config) (apps.ConnectorHTTPConfig, error) {
+			if appID != "gitlab" || h.connectors == nil || strings.TrimSpace(cfg.ConnectorID) != connectors.ProviderGitLab {
+				return apps.ConnectorHTTPConfig{}, apps.ErrUnsupportedOAuth
+			}
+			credential, err := h.connectors.CredentialForAgent(ctx, agentID, connectors.ProviderGitLab)
+			if err != nil {
+				return apps.ConnectorHTTPConfig{}, err
+			}
+			if credential.TokenType != "private-token" {
+				return apps.ConnectorHTTPConfig{}, fmt.Errorf("GitLab Connector requires a personal access token")
+			}
+			if !sameNormalizedURL(cfg.GitLabBaseURL, credential.BaseURL) {
+				return apps.ConnectorHTTPConfig{}, fmt.Errorf("GitLab App instance does not match the connected GitLab Connector")
+			}
+			return apps.ConnectorHTTPConfig{
+				Endpoint: cfg.URL, Token: credential.AccessToken, TokenHeader: "PRIVATE-TOKEN",
+				Headers: http.Header{"X-GitLab-Base-URL": []string{credential.BaseURL}},
+			}, nil
+		},
 		ResolveFeishu: func(ctx context.Context, agentID string) (apps.FeishuCredentials, error) {
 			if err := ctx.Err(); err != nil {
 				return apps.FeishuCredentials{}, err
@@ -250,6 +271,50 @@ func (h *Handler) handleAgentApp(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (h *Handler) lockGitLabConnectorForApp(appID string, config apps.Config, credentials *apps.Credentials) func() {
+	if appID != "gitlab" || config.AuthMode != "connector" || credentials == nil || strings.TrimSpace(credentials.Token) == "" {
+		return func() {}
+	}
+	h.gitLabConnectorMu.Lock()
+	return h.gitLabConnectorMu.Unlock
+}
+
+func (h *Handler) saveGitLabConnectorForApp(ctx context.Context, agentID, appID string, config apps.Config, credentials *apps.Credentials) (func(), error) {
+	noop := func() {}
+	if appID != "gitlab" || config.AuthMode != "connector" || credentials == nil || strings.TrimSpace(credentials.Token) == "" {
+		return noop, nil
+	}
+	if h.connectors == nil {
+		return noop, fmt.Errorf("GitLab Connector service is unavailable")
+	}
+	previous, existed, err := h.connectors.SnapshotGitLab()
+	if err != nil {
+		return noop, err
+	}
+	if _, err := h.connectors.SaveGitLabConfig(ctx, connectors.Config{
+		BaseURL: config.GitLabBaseURL, AccessToken: credentials.Token,
+	}); err != nil {
+		return noop, err
+	}
+	if h.apps != nil {
+		if err := h.apps.RefreshConnector(ctx, connectors.ProviderGitLab); err != nil {
+			slog.Warn("refresh GitLab Apps after Connector update", "agent_id", agentID, "error", err)
+		}
+	}
+	credentials.Token = ""
+	return func() {
+		if err := h.connectors.RestoreGitLab(previous, existed); err != nil {
+			slog.Error("rollback GitLab Connector after App save failure", "agent_id", agentID, "error", err)
+			return
+		}
+		if h.apps != nil {
+			if err := h.apps.RefreshConnector(context.Background(), connectors.ProviderGitLab); err != nil {
+				slog.Warn("refresh GitLab Apps after Connector rollback", "agent_id", agentID, "error", err)
+			}
+		}
+	}, nil
+}
+
 func (h *Handler) handleAgentAppsProbe(w http.ResponseWriter, r *http.Request) {
 	agentID, ok := h.requireAppAgent(w, r)
 	if !ok {
@@ -268,7 +333,7 @@ func (h *Handler) handleAgentAppsProbe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-func (h *Handler) handleAppOAuthUnsupported(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleAppOAuthStart(w http.ResponseWriter, r *http.Request) {
 	agentID, ok := h.requireAppAgent(w, r)
 	if !ok {
 		return
@@ -278,6 +343,20 @@ func (h *Handler) handleAppOAuthUnsupported(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeAppError(w, apps.ErrUnsupportedOAuth)
+}
+
+func sameNormalizedURL(left, right string) bool {
+	normalize := func(raw string) string {
+		u, err := url.Parse(strings.TrimSpace(raw))
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return ""
+		}
+		u.RawQuery = ""
+		u.Fragment = ""
+		u.Path = strings.TrimRight(u.Path, "/")
+		return strings.TrimRight(u.String(), "/")
+	}
+	return normalize(left) != "" && normalize(left) == normalize(right)
 }
 
 func (h *Handler) handleAgentAppMCP(w http.ResponseWriter, r *http.Request) {
@@ -370,14 +449,43 @@ func (h *Handler) handleAppResources(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		req.Connect = false
+		unlockConnector := h.lockGitLabConnectorForApp(req.AppID, req.Config, &req.Credentials)
+		defer unlockConnector()
+		rollbackConnector, saveErr := h.saveGitLabConnectorForApp(r.Context(), "", req.AppID, req.Config, &req.Credentials)
+		if saveErr != nil {
+			writeAppError(w, saveErr)
+			return
+		}
 		result, err = h.apps.Create(r.Context(), "", req)
+		if err != nil {
+			rollbackConnector()
+		}
 		status = http.StatusCreated
 	case http.MethodPatch:
 		var req apps.UpdateRequest
 		if !decodeAppRequest(w, r, &req) {
 			return
 		}
+		current, getErr := h.apps.Get(r.Context(), "", id)
+		if getErr != nil {
+			writeAppError(w, getErr)
+			return
+		}
+		config := current.Config
+		if req.Config != nil {
+			config = *req.Config
+		}
+		unlockConnector := h.lockGitLabConnectorForApp(current.AppID, config, req.Credentials)
+		defer unlockConnector()
+		rollbackConnector, saveErr := h.saveGitLabConnectorForApp(r.Context(), "", current.AppID, config, req.Credentials)
+		if saveErr != nil {
+			writeAppError(w, saveErr)
+			return
+		}
 		result, err = h.apps.Update(r.Context(), "", id, req)
+		if err != nil {
+			rollbackConnector()
+		}
 	case http.MethodDelete:
 		err = h.apps.Delete(r.Context(), "", id)
 		if err == nil {

@@ -91,7 +91,10 @@ func clearReferencedPlatformCredentials(config Config, credentials *Credentials)
 	if config.PlatformCredentialSource != "opencsg_login" {
 		return
 	}
-	if config.AuthMode != "header" {
+	// Connector tokens are business credentials (for example a GitLab PAT),
+	// not a copied OpenCSG platform token. They must remain available while
+	// Authorization is supplied independently from the current platform login.
+	if config.AuthMode != "header" && config.AuthMode != "connector" {
 		credentials.Token = ""
 	}
 	for key := range credentials.Headers {

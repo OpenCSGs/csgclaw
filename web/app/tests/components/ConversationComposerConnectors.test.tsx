@@ -27,7 +27,7 @@ const t: TranslateFn = (key, params) => {
     connectorScopes: "Scopes",
     connectorSetUp: "Set up",
     appOpenApps: "Open Apps",
-    appManageInAgent: "Configure in agent Apps",
+    appManageGlobally: "Configure in global Apps",
     composerAdd: "Add",
     composerAddContent: "Add content",
     composerFiles: "Files",

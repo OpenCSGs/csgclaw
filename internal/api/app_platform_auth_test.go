@@ -8,12 +8,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apps"
 	"csgclaw/internal/config"
+	"csgclaw/internal/connectors"
 	agentruntime "csgclaw/internal/runtime"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func newAppPlatformAuthFixture(t *testing.T) (*Handler, agent.Agent, agent.Agent, string, string) {
@@ -64,6 +67,117 @@ func appAuthRequest(t *testing.T, h *Handler, method, path, body, token string, 
 	rec := httptest.NewRecorder()
 	h.Routes().ServeHTTP(rec, req)
 	return rec
+}
+
+func TestGitLabPATAppCallsConfiguredMCPByConnectorID(t *testing.T) {
+	h, alice, _, _, _ := newAppPlatformAuthFixture(t)
+	upstreamMCP := mcp.NewServer(&mcp.Implementation{Name: "gitlab-fixture", Version: "1"}, nil)
+	upstreamMCP.AddTool(&mcp.Tool{Name: "list_projects", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "ok"}}}, nil
+	})
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		if r.Header.Get("PRIVATE-TOKEN") != "custom-gitlab-token" || r.Header.Get("X-GitLab-Base-URL") != "https://custom.gitlab.example.com" || r.Header.Get("X-MCP-Deployment") != "fixture-secret" {
+			t.Errorf("unexpected upstream headers: %v", r.Header)
+		}
+		return upstreamMCP
+	}, nil)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v4/user" {
+			writeJSON(w, http.StatusOK, map[string]any{"id": 1, "username": "fixture"})
+			return
+		}
+		mcpHandler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+
+	store := connectors.NewStore(filepath.Join(t.TempDir(), "connectors.json"))
+	if err := store.SaveGitLab(connectors.State{Config: connectors.Config{BaseURL: upstream.URL, AccessToken: "connector-token"}, Account: &connectors.Account{Login: "fixture"}, ConnectedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	h.SetConnectorService(connectors.NewService(store))
+	body := `{"app_id":"gitlab","config":{"transport":"http","url":"` + upstream.URL + `","gitlab_base_url":"` + upstream.URL + `","connector_id":"gitlab","auth_mode":"connector"},"credentials":{"headers":{"PRIVATE-TOKEN":"custom-gitlab-token","X-GitLab-Base-URL":"https://custom.gitlab.example.com","X-MCP-Deployment":"fixture-secret"}}}`
+	rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/apps:probe", body, "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("probe status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result apps.ProbeResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || !result.Connected || len(result.Tools) != 1 || result.Tools[0].Name != "list_projects" {
+		t.Fatalf("probe result=%+v err=%v", result, err)
+	}
+}
+
+func TestGitLabResourceSaveRollsBackConnectorWhenPersistenceFails(t *testing.T) {
+	h, _, _, _, _ := newAppPlatformAuthFixture(t)
+	gitlab := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"id": 1, "username": "fixture"})
+	}))
+	t.Cleanup(gitlab.Close)
+	store := connectors.NewStore(filepath.Join(t.TempDir(), "connectors.json"))
+	svc := connectors.NewService(store)
+	svc.HTTPClient = gitlab.Client()
+	h.SetConnectorService(svc)
+	if _, err := h.apps.Create(context.Background(), "", apps.CreateRequest{AppID: "gitlab", Name: "duplicate"}); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"app_id":"gitlab","name":"duplicate","config":{"transport":"http","url":"https://mcp.example.com/mcp","gitlab_base_url":"` + gitlab.URL + `","connector_id":"gitlab","auth_mode":"connector"},"credentials":{"token":"temporary-pat"}}`
+	rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/app-resources", body, "", nil)
+	if rec.Code < 400 {
+		t.Fatalf("invalid resource save status=%d", rec.Code)
+	}
+	if _, ok, err := store.LoadGitLab(); err != nil || ok {
+		t.Fatalf("failed resource save retained Connector: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestConcurrentGitLabResourceRollbackDoesNotOverwriteSuccessfulUpdate(t *testing.T) {
+	h, _, _, _, _ := newAppPlatformAuthFixture(t)
+	firstValidation, releaseFirst, secondValidation := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	gitlab := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Header.Get("PRIVATE-TOKEN") {
+		case "token-a":
+			close(firstValidation)
+			<-releaseFirst
+		case "token-b":
+			close(secondValidation)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": 1, "username": "fixture"})
+	}))
+	t.Cleanup(gitlab.Close)
+	store := connectors.NewStore(filepath.Join(t.TempDir(), "connectors.json"))
+	svc := connectors.NewService(store)
+	svc.HTTPClient = gitlab.Client()
+	h.SetConnectorService(svc)
+	if _, err := h.apps.Create(context.Background(), "", apps.CreateRequest{AppID: "gitlab", Name: "duplicate"}); err != nil {
+		t.Fatal(err)
+	}
+	body := func(name, token string) string {
+		return `{"app_id":"gitlab","name":"` + name + `","config":{"transport":"http","url":"https://mcp.example.com/mcp","gitlab_base_url":"` + gitlab.URL + `","connector_id":"gitlab","auth_mode":"connector"},"credentials":{"token":"` + token + `"}}`
+	}
+	firstDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		firstDone <- appAuthRequest(t, h, http.MethodPost, "/api/v1/app-resources", body("duplicate", "token-a"), "", nil)
+	}()
+	<-firstValidation
+	secondDone := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		secondDone <- appAuthRequest(t, h, http.MethodPost, "/api/v1/app-resources", body("work", "token-b"), "", nil)
+	}()
+	select {
+	case <-secondValidation:
+		t.Fatal("second global Connector update entered before the first transaction completed")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(releaseFirst)
+	if rec := <-firstDone; rec.Code < 400 {
+		t.Fatalf("first resource save status=%d", rec.Code)
+	}
+	if rec := <-secondDone; rec.Code != http.StatusCreated {
+		t.Fatalf("second resource save status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	state, ok, err := store.LoadGitLab()
+	if err != nil || !ok || state.Config.AccessToken != "token-b" {
+		t.Fatalf("global Connector after concurrent rollback=%+v ok=%v err=%v", state, ok, err)
+	}
 }
 
 func TestAppPlatformAuthHonorsNoAuthAndRejectsCrossAgentAccess(t *testing.T) {
@@ -159,6 +273,17 @@ func TestAppNoAuthRejectsInvalidAgentAndCrossOriginRequests(t *testing.T) {
 	h.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("cross-origin accepted: %d", rec.Code)
+	}
+}
+
+func TestAppNoAuthAllowsCrossSiteConnectorOAuthCallbacks(t *testing.T) {
+	h, _, _, _, _ := newAppPlatformAuthFixture(t)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:18080"+githubConnectorCallbackPath+"?state=missing-code", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	rec := httptest.NewRecorder()
+	h.Routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("cross-site OAuth callback status=%d, want callback validation 400: %s", rec.Code, rec.Body.String())
 	}
 }
 

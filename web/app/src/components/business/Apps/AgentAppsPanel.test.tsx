@@ -136,10 +136,17 @@ describe("Agent Apps", () => {
   it("requires a fresh connection test after changing settings and never prefills saved secrets", async () => {
     const user = userEvent.setup();
     const probe = vi.fn().mockResolvedValue({ connected: true, tools: installation.tools });
+    const wikiDefinition = { ...definition, app_id: "llm-wiki", name: "LLM Wiki" };
+    const wikiInstallation = {
+      ...installation,
+      app_id: "llm-wiki",
+      name: "Work Wiki",
+      config: { transport: "http" as const, url: "http://localhost:8888/mcp", auth_mode: "bearer" as const },
+    };
     render(
       <AppSettingsDialog
-        definition={definition}
-        existing={installation}
+        definition={wikiDefinition}
+        existing={wikiInstallation}
         hasFeishuChannel={false}
         t={t}
         onClose={vi.fn()}
@@ -156,6 +163,32 @@ describe("Agent Apps", () => {
     expect(screen.getByRole("button", { name: "Save and connect" })).toBeDisabled();
     expect(screen.getByText("Settings changed. Test the connection again.")).toBeVisible();
     expect(probe.mock.calls[0][0].credentials.token).toBeUndefined();
+  });
+
+  it("shows the GitLab MCP endpoint and global PAT Connector configuration", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppSettingsDialog
+        globalResource
+        definition={{ ...definition, auth_methods: ["connector"] }}
+        existing={null}
+        hasFeishuChannel={false}
+        t={t}
+        onClose={vi.fn()}
+        onProbe={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    const instanceURL = screen.getByLabelText("GitLab instance URL");
+    expect(instanceURL).toHaveAttribute("placeholder", "https://gitlab.example.com");
+    await user.type(instanceURL, "https://gitlab.example.com");
+    expect(screen.queryByRole("combobox", { name: "Connection type" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Authentication" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("GitLab Personal Access Token")).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Platform credential source" })).toBeVisible();
+    expect(screen.queryByText("OAuth2 authorization is not supported in this version.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
   });
 
   it("uses the Feishu channel reference and keeps local command arguments separate", async () => {

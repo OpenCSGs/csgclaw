@@ -51,6 +51,13 @@ func appRequestSameOrigin(r *http.Request) bool {
 	return true
 }
 
+func isConnectorOAuthCallback(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	return r.URL.Path == githubConnectorCallbackPath
+}
+
 func (h *Handler) authorizeAppPlatformRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h.apps == nil {
@@ -76,6 +83,13 @@ func (h *Handler) authorizeAppPlatformRequests(next http.Handler) http.Handler {
 		// are handled above and never gain management permissions from NoAuth.
 		if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer agent.") {
 			writeCodedAPIError(w, http.StatusUnauthorized, "unauthorized", "Invalid Agent credential")
+			return
+		}
+		// OAuth providers return through a cross-site top-level navigation. The
+		// callback handlers validate the one-time state value before exchanging
+		// the authorization code, so these exact GET routes must reach them.
+		if isConnectorOAuthCallback(r) {
+			next.ServeHTTP(w, r)
 			return
 		}
 		// The personal Web UI has no service-token login. Existing handlers

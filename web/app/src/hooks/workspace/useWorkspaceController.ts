@@ -232,7 +232,6 @@ export function useWorkspaceController() {
   }, []);
   const loadingError = bootstrapQuery.isError ? t("loadingFailed") : "";
   const {
-    selectAgentApps,
     navigatePane,
     selectConversation,
     selectAgent,
@@ -429,9 +428,9 @@ export function useWorkspaceController() {
     onConnectConnector: connectors.connectGitHub,
     onDisconnectConnector: connectors.disconnectGitHub,
     onManageConnector: connectors.manageGitHub,
-    onManageApps: (id) => {
+    onManageApps: () => {
       setFloatingChatOpen(false);
-      selectAgentApps(id || agent.managerAgent?.id || MANAGER_AGENT_ID);
+      selectApps("gitlab");
     },
     data: displayData,
     locale,
@@ -508,9 +507,9 @@ export function useWorkspaceController() {
     onConnectConnector: connectors.connectGitHub,
     onDisconnectConnector: connectors.disconnectGitHub,
     onManageConnector: connectors.manageGitHub,
-    onManageApps: (id) => {
+    onManageApps: () => {
       setFloatingChatOpen(false);
-      selectAgentApps(id || agent.managerAgent?.id || MANAGER_AGENT_ID);
+      selectApps("gitlab");
     },
     data: displayData,
     locale,

@@ -29,8 +29,24 @@ const installation: AppInstallation = {
 };
 
 describe("App settings payload", () => {
+  it("keeps the GitLab MCP endpoint separate from the transient Connector PAT", () => {
+    const form = initialAppForm(definition, installation, false);
+    form.config.gitlab_base_url = "https://gitlab.example.com";
+    form.credentials = { token: "new-pat", headers: { Authorization: "legacy" } };
+    form.headers = [{ key: "X-Custom-Auth", value: "mcp-secret" }];
+    const payload = appFormPayload(form);
+    expect(payload.config).toMatchObject({
+      transport: "http",
+      auth_mode: "connector",
+      connector_id: "gitlab",
+      url: "http://localhost/mcp",
+      gitlab_base_url: "https://gitlab.example.com",
+    });
+    expect(payload.credentials).toEqual({ token: "new-pat", headers: { "X-Custom-Auth": "mcp-secret" } });
+  });
+
   it("keeps secret values out of the displayable configuration and preserves argument boundaries", () => {
-    const form = initialAppForm(definition, null, false);
+    const form = initialAppForm({ ...definition, app_id: "llm-wiki" }, null, false);
     form.config = { ...form.config, transport: "stdio", url: "https://previous.example/mcp", command: "npx" };
     form.args = "--endpoint\nhttps://service.example/a b\n--label=team one\n";
     form.env = [{ key: "API_KEY", value: "private-key" }];
@@ -64,7 +80,7 @@ describe("App settings payload", () => {
 });
 
 describe("Shared OpenCSG platform credentials", () => {
-  it.each(["gitlab", "feishu", "llm-wiki"])("defaults %s to login for OpenCSG URLs", (appID) => {
+  it.each(["feishu", "llm-wiki"])("defaults %s to login for OpenCSG URLs", (appID) => {
     const form = initialAppForm({ ...definition, app_id: appID }, null, false);
     form.config.url = "https://demo.public.opencsg-stg.com/mcp";
     expect(appFormPayload(form).config.platform_credential_source).toBe("opencsg_login");
@@ -103,6 +119,8 @@ describe("Shared OpenCSG platform credentials", () => {
 describe("Catalog connection defaults", () => {
   const configured: AppDefinition = {
     ...definition,
+    app_id: "llm-wiki",
+    name: "LLM Wiki",
     config_schema: {
       properties: {
         url: { type: "string", default: "https://mcp.example.test/gitlab" },

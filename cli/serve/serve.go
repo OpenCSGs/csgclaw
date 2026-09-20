@@ -718,7 +718,12 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 	}
 	ensureBootstrapManager := EnsureBootstrapManager
 	startConfiguredAgents := StartConfiguredAgents
-	agentManagerSvc, err := newAgentManagerService(svc, ensureBootstrapManager)
+	connectorStore, err := connectors.DefaultStore()
+	if err != nil {
+		return err
+	}
+	connectorSvc := connectors.NewService(connectorStore)
+	agentManagerSvc, err := newAgentManagerService(svc, ensureBootstrapManager, connectorSvc)
 	if err != nil {
 		return err
 	}
@@ -772,6 +777,7 @@ func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg co
 		Team:               teamSvc,
 		AgentTask:          agentTaskSvc,
 		ScheduledTask:      scheduledTaskSvc,
+		Connectors:         connectorSvc,
 		AgentRuntimes:      agentRuntimeSvc,
 		TeamAdapters:       teamAdapters,
 		Upgrade:            upgradeManager,
@@ -1251,23 +1257,12 @@ func (s bootstrapManagerAgentService) EnsureManager(ctx context.Context, _ bool)
 	return manager, nil
 }
 
-func newAgentManagerService(svc *agent.Controller, ensure func(context.Context, *agent.Controller) error) (*agentmanager.Service, error) {
+func newAgentManagerService(svc *agent.Controller, ensure func(context.Context, *agent.Controller) error, connectorSvc *connectors.Service) (*agentmanager.Service, error) {
 	if svc == nil {
 		return nil, nil
 	}
-	credentialProvider, err := newManagerConnectorCredentialProvider()
-	if err != nil {
-		return nil, err
-	}
+	credentialProvider := agentmanager.NewConnectorServiceCredentialProvider(connectorSvc, agentmanager.DefaultConnectorGrantPolicy{})
 	return agentmanager.NewService(bootstrapManagerAgentService{svc: svc, ensure: ensure}, credentialProvider), nil
-}
-
-func newManagerConnectorCredentialProvider() (*agentmanager.ConnectorServiceCredentialProvider, error) {
-	connectorStore, err := connectors.DefaultStore()
-	if err != nil {
-		return nil, err
-	}
-	return agentmanager.NewConnectorServiceCredentialProvider(connectors.NewService(connectorStore), agentmanager.DefaultConnectorGrantPolicy{}), nil
 }
 
 func newAgentTemplateHubService(cfg config.HubConfig) (*hub.Service, error) {

@@ -92,7 +92,10 @@ export function useWorkspaceNavigation({
     [navigatePane, rooms],
   );
 
-  const selectApps = useCallback(() => navigatePane({ type: WorkspacePaneTypes.apps }), [navigatePane]);
+  const selectApps = useCallback(
+    (addAppID?: string) => navigate(addAppID ? `/apps?add_app=${encodeURIComponent(addAppID)}` : "/apps"),
+    [navigate],
+  );
 
   const selectHuman = useCallback(
     (item: { id?: string | null } | null | undefined, options: NavigatePaneOptions = {}) => {

@@ -15,14 +15,14 @@ func TestStoreConcurrentProviderSavesPreserveBoth(t *testing.T) {
 		runConcurrentStoreChanges(t,
 			func() error { return githubStore.SaveGitHub(State{Config: Config{ClientID: "test-github-id"}}) },
 			func() error {
-				return gitlabStore.SaveGitLab(State{Config: Config{BaseURL: "https://gitlab.example", AccessToken: "test-gitlab-token"}})
+				return gitlabStore.SaveGitLabForAgent("agent-a", State{Config: Config{BaseURL: "https://gitlab.example", AccessToken: "test-gitlab-token"}})
 			},
 		)
 		github, foundGitHub, err := githubStore.LoadGitHub()
 		if err != nil {
 			t.Fatal(err)
 		}
-		gitlab, foundGitLab, err := gitlabStore.LoadGitLab()
+		gitlab, foundGitLab, err := gitlabStore.LoadGitLabForAgent("agent-a")
 		if err != nil {
 			t.Fatal(err)
 		}

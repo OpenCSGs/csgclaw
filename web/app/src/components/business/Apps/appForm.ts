@@ -80,25 +80,44 @@ export function initialAppForm(
   hasFeishuChannel: boolean,
 ): AppForm {
   const feishu = definition.app_id === "feishu";
+  const gitlab = definition.app_id === "gitlab";
   const defaults = appConfigDefaults(definition);
+  const config = existing?.config ?? {
+    transport: "http",
+    auth_mode: feishu ? "feishu" : "bearer",
+    token_header: "Authorization",
+    token_prefix: "Bearer ",
+    token_env: gitlab ? "GITLAB_PERSONAL_ACCESS_TOKEN" : "MCP_ACCESS_TOKEN",
+    app_id_env: "FEISHU_APP_ID",
+    app_secret_env: "FEISHU_APP_SECRET",
+    startup_timeout_sec: 30,
+    tool_timeout_sec: 60,
+    ...defaults,
+    credential_source: feishu && hasFeishuChannel ? defaults.credential_source || "feishu_channel" : "manual",
+  };
+  const savedHeaderNames = Object.keys(existing?.credentials_set ?? {})
+    .filter((key) => key.startsWith("headers."))
+    .map((key) => key.slice("headers.".length));
+  const defaultHeaderNames = gitlab && !existing ? ["PRIVATE-TOKEN", "X-GitLab-Base-URL"] : [];
+  const headerNames = new Set([
+    ...defaultHeaderNames,
+    ...Object.keys(existing?.config.headers ?? {}),
+    ...savedHeaderNames,
+  ]);
   return {
     name: existing?.name ?? definition.interface?.displayName ?? definition.name,
-    config: existing?.config ?? {
-      transport: "http",
-      auth_mode: feishu ? "feishu" : "bearer",
-      token_header: "Authorization",
-      token_prefix: "Bearer ",
-      token_env: definition.app_id === "gitlab" ? "GITLAB_PERSONAL_ACCESS_TOKEN" : "MCP_ACCESS_TOKEN",
-      app_id_env: "FEISHU_APP_ID",
-      app_secret_env: "FEISHU_APP_SECRET",
-      startup_timeout_sec: 30,
-      tool_timeout_sec: 60,
-      ...defaults,
-      credential_source: feishu && hasFeishuChannel ? defaults.credential_source || "feishu_channel" : "manual",
-    },
+    config: gitlab
+      ? {
+          ...config,
+          transport: "http",
+          auth_mode: "connector",
+          connector_id: "gitlab",
+          platform_credential_source: config.platform_credential_source,
+        }
+      : config,
     credentials: {},
-    args: (existing?.config ?? defaults).args?.join("\n") ?? "",
-    headers: Object.entries(existing?.config.headers ?? {}).map(([key, value]) => ({ key, value })),
+    args: config.args?.join("\n") ?? "",
+    headers: [...headerNames].map((key) => ({ key, value: existing?.config.headers?.[key] ?? "" })),
     env: Object.entries(existing?.config.env ?? {}).map(([key, value]) => ({ key, value })),
   };
 }
@@ -124,6 +143,35 @@ export function appFormPayload(form: AppForm): { name: string; config: AppConfig
     platform_credential_source: form.config.platform_credential_source || defaultPlatformCredentialSource(form.config),
   };
   const credentials: AppCredentials = { ...form.credentials };
+  if (config.auth_mode === "connector") {
+    config.transport = "http";
+    config.connector_id = "gitlab";
+    config.platform_credential_source = config.platform_credential_source || defaultPlatformCredentialSource(config);
+    delete config.command;
+    delete config.args;
+    delete config.cwd;
+    delete config.credential_source;
+    delete config.token_header;
+    delete config.token_prefix;
+    delete config.token_env;
+    delete config.app_id_env;
+    delete config.app_secret_env;
+    delete config.headers;
+    delete config.env;
+    credentials.headers = rowsToValues(form.headers);
+    if (config.platform_credential_source === "opencsg_login") {
+      for (const key of Object.keys(credentials.headers))
+        if (key.toLowerCase() === "authorization") delete credentials.headers[key];
+    }
+    return {
+      name: form.name.trim(),
+      config,
+      credentials: {
+        ...(form.credentials.token ? { token: form.credentials.token } : {}),
+        ...(Object.keys(credentials.headers).length ? { headers: credentials.headers } : {}),
+      },
+    };
+  }
   if (config.transport === "stdio") {
     delete config.url;
     config.args = form.args

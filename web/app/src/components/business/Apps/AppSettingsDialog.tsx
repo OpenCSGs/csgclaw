@@ -68,6 +68,7 @@ export function AppSettingsDialog({
   const config = form.config;
   const stdio = config.transport === "stdio";
   const feishu = definition.app_id === "feishu";
+  const gitlab = definition.app_id === "gitlab";
   const platformSource = config.platform_credential_source || defaultPlatformCredentialSource(config);
   const appCredentials = config.auth_mode === "feishu";
   const channelCredentials = appCredentials && config.credential_source === "feishu_channel";
@@ -132,28 +133,32 @@ export function AppSettingsDialog({
                     onChange={(event) => setForm({ ...form, name: event.target.value })}
                   />
                 </Field>
-                <Field label={t("appTransport")}>
-                  <Select
-                    value={config.transport || "http"}
-                    triggerProps={{ "aria-label": t("appTransport") }}
-                    options={[
-                      { value: "http", label: t("appTransportHTTP") },
-                      { value: "stdio", label: t("appTransportStdio") },
-                    ]}
-                    onValueChange={(value) =>
-                      updateConfig({
-                        transport: value === "stdio" ? "stdio" : "http",
-                        platform_credential_source: value === "stdio" ? "manual" : undefined,
-                        auth_mode:
-                          config.auth_mode === "feishu" || config.auth_mode === "none" || config.auth_mode === "oauth2"
-                            ? config.auth_mode
-                            : value === "stdio"
-                              ? "env"
-                              : "bearer",
-                      })
-                    }
-                  />
-                </Field>
+                {!gitlab ? (
+                  <Field label={t("appTransport")}>
+                    <Select
+                      value={config.transport || "http"}
+                      triggerProps={{ "aria-label": t("appTransport") }}
+                      options={[
+                        { value: "http", label: t("appTransportHTTP") },
+                        { value: "stdio", label: t("appTransportStdio") },
+                      ]}
+                      onValueChange={(value) =>
+                        updateConfig({
+                          transport: value === "stdio" ? "stdio" : "http",
+                          platform_credential_source: value === "stdio" ? "manual" : undefined,
+                          auth_mode:
+                            config.auth_mode === "feishu" ||
+                            config.auth_mode === "none" ||
+                            config.auth_mode === "oauth2"
+                              ? config.auth_mode
+                              : value === "stdio"
+                                ? "env"
+                                : "bearer",
+                        })
+                      }
+                    />
+                  </Field>
+                ) : null}
               </div>
               {stdio ? (
                 <>
@@ -189,10 +194,22 @@ export function AppSettingsDialog({
                     type="url"
                     value={config.url || ""}
                     onChange={(event) => updateConfig({ url: event.target.value })}
-                    placeholder="https://example.com/mcp"
+                    placeholder={gitlab ? "https://service.public.opencsg.com/mcp" : "https://example.com/mcp"}
                   />
                 </Field>
               )}
+              {gitlab ? (
+                <Field label={t("appGitLabInstanceURL")} hint={t("appGitLabInstanceURLHint")}>
+                  <TextInput
+                    aria-label={t("appGitLabInstanceURL")}
+                    required
+                    type="url"
+                    value={config.gitlab_base_url || ""}
+                    onChange={(event) => updateConfig({ gitlab_base_url: event.target.value })}
+                    placeholder="https://gitlab.example.com"
+                  />
+                </Field>
+              ) : null}
               {!stdio && definition.app_id === "llm-wiki" ? (
                 <AppKnowledgePicker t={t} onSelect={(url) => updateConfig({ url, transport: "http" })} />
               ) : null}
@@ -203,32 +220,34 @@ export function AppSettingsDialog({
                 <p>{t("appAccessSectionHint")}</p>
               </header>
               <div className={styles.columns}>
-                <Field label={t("appAuthentication")}>
-                  <Select
-                    value={config.auth_mode || "none"}
-                    triggerProps={{ "aria-label": t("appAuthentication") }}
-                    options={[
-                      ...(!stdio
-                        ? [
-                            { value: "bearer", label: t("appAuthBearer") },
-                            { value: "header", label: t("appAuthHeader") },
-                          ]
-                        : []),
-                      ...(feishu ? [{ value: "feishu", label: t("appAuthFeishu") }] : []),
-                      ...(stdio ? [{ value: "env", label: t("appAuthEnvironment") }] : []),
-                      { value: "none", label: t("appAuthNone") },
-                      ...(!stdio ? [{ value: "oauth2", label: t("appAuthOAuth") }] : []),
-                    ]}
-                    onValueChange={(value) =>
-                      updateConfig({
-                        auth_mode: value as AppConfig["auth_mode"],
-                        platform_credential_source:
-                          value === "env" || value === "oauth2" ? "manual" : config.platform_credential_source,
-                        credential_source: value === "feishu" ? config.credential_source || "manual" : "manual",
-                      })
-                    }
-                  />
-                </Field>
+                {!gitlab ? (
+                  <Field label={t("appAuthentication")}>
+                    <Select
+                      value={config.auth_mode || "none"}
+                      triggerProps={{ "aria-label": t("appAuthentication") }}
+                      options={[
+                        ...(!stdio
+                          ? [
+                              { value: "bearer", label: t("appAuthBearer") },
+                              { value: "header", label: t("appAuthHeader") },
+                            ]
+                          : []),
+                        ...(feishu ? [{ value: "feishu", label: t("appAuthFeishu") }] : []),
+                        ...(stdio ? [{ value: "env", label: t("appAuthEnvironment") }] : []),
+                        { value: "none", label: t("appAuthNone") },
+                        ...(!stdio ? [{ value: "oauth2", label: t("appAuthOAuth") }] : []),
+                      ]}
+                      onValueChange={(value) =>
+                        updateConfig({
+                          auth_mode: value as AppConfig["auth_mode"],
+                          platform_credential_source:
+                            value === "env" || value === "oauth2" ? "manual" : config.platform_credential_source,
+                          credential_source: value === "feishu" ? config.credential_source || "manual" : "manual",
+                        })
+                      }
+                    />
+                  </Field>
+                ) : null}
                 {!stdio && config.auth_mode !== "oauth2" ? (
                   <Field
                     label={t("appPlatformCredentialSource")}
@@ -248,7 +267,7 @@ export function AppSettingsDialog({
                   </Field>
                 ) : null}
               </div>
-              {oauthUnsupported ? (
+              {!gitlab && oauthUnsupported ? (
                 <p className="form-warning" role="status">
                   {t("appOAuthUnsupported")}
                 </p>
@@ -275,10 +294,23 @@ export function AppSettingsDialog({
                   />
                 </Field>
               ) : null}
-              {!appCredentials &&
-              config.auth_mode !== "none" &&
-              config.auth_mode !== "oauth2" &&
-              (config.auth_mode === "header" || platformSource !== "opencsg_login") ? (
+              {gitlab ? (
+                <Field label={t("connectorGitLabToken")} hint={t("connectorGitLabTokenKeep")}>
+                  <TextInput
+                    aria-label={t("connectorGitLabToken")}
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.credentials.token || ""}
+                    onChange={(event) =>
+                      setForm({ ...form, credentials: { ...form.credentials, token: event.target.value } })
+                    }
+                  />
+                </Field>
+              ) : !appCredentials &&
+                config.auth_mode !== "none" &&
+                config.auth_mode !== "oauth2" &&
+                config.auth_mode !== "connector" &&
+                (config.auth_mode === "header" || platformSource !== "opencsg_login") ? (
                 <Field label={t("appToken")} hint={t("appSecretHint")}>
                   <TextInput
                     aria-label={t("appToken")}
@@ -436,6 +468,7 @@ export function AppSettingsDialog({
                   t={t}
                   onChange={(rows) => setForm({ ...form, [stdio ? "env" : "headers"]: rows })}
                 />
+                {gitlab ? <small className={styles.hint}>{t("appGitLabHeadersHint")}</small> : null}
                 {existing &&
                 Object.keys(existing.credentials_set).some(
                   (key) => key.startsWith("env") || key.startsWith("header"),
@@ -476,7 +509,8 @@ export function AppSettingsDialog({
               Boolean(busy) ||
               needsAgentIdentity ||
               oauthUnsupported ||
-              !(stdio ? config.command?.trim() : config.url?.trim())
+              !(stdio ? config.command?.trim() : config.url?.trim()) ||
+              (gitlab && !config.gitlab_base_url?.trim())
             }
             loading={busy === "probe"}
             onClick={() => void execute("probe")}
@@ -485,7 +519,13 @@ export function AppSettingsDialog({
           </Button>
           <Button
             variant="primary"
-            disabled={Boolean(busy) || !form.name.trim() || (!globalResource && !tested) || oauthUnsupported}
+            disabled={
+              Boolean(busy) ||
+              !form.name.trim() ||
+              (!globalResource && !tested) ||
+              oauthUnsupported ||
+              (gitlab && !config.gitlab_base_url?.trim())
+            }
             loading={busy === "connect"}
             onClick={() => void execute(globalResource ? "save" : "connect")}
           >

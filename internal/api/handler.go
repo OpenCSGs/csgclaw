@@ -72,6 +72,7 @@ type Handler struct {
 	connectors                 *connectors.Service
 	apps                       *apps.Service
 	appPlatformMu              sync.Mutex
+	gitLabConnectorMu          sync.Mutex
 	appPlatformAgents          map[string]string
 	agentRuntimes              *runtimecatalog.Service
 	teamAdapters               *team.AdapterRegistry

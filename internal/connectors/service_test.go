@@ -186,31 +186,52 @@ func TestServiceGitLabPATFlow(t *testing.T) {
 
 	service := NewService(NewStore(filepath.Join(t.TempDir(), "state.json")))
 	service.HTTPClient = gitlab.Client()
-	status, err := service.SaveGitLabConfig(context.Background(), Config{BaseURL: gitlab.URL + "/", AccessToken: "glpat-secret"})
+	status, err := service.SaveGitLabConfigForAgent(context.Background(), "agent-a", Config{BaseURL: gitlab.URL + "/", AccessToken: "glpat-secret"})
 	if err != nil {
 		t.Fatalf("SaveGitLabConfig() error = %v", err)
 	}
 	if !status.Configured || !status.Connected || status.BaseURL != gitlab.URL || !status.AccessTokenSet {
 		t.Fatalf("status = %+v", status)
 	}
-	credential, err := service.Credential(context.Background(), ProviderGitLab)
+	credential, err := service.CredentialForAgent(context.Background(), "agent-a", ProviderGitLab)
 	if err != nil {
 		t.Fatalf("Credential() error = %v", err)
 	}
 	if credential.BaseURL != gitlab.URL || credential.AccessToken != "glpat-secret" || credential.TokenType != "private-token" {
 		t.Fatalf("credential = %+v", credential)
 	}
-	disconnected, err := service.Disconnect(context.Background(), ProviderGitLab)
+	disconnected, err := service.DisconnectGitLabForAgent("agent-a")
 	if err != nil {
 		t.Fatalf("Disconnect() error = %v", err)
 	}
 	if disconnected.Connected || disconnected.AccessTokenSet || disconnected.BaseURL != gitlab.URL {
 		t.Fatalf("disconnected status = %+v", disconnected)
 	}
+	stored, ok, err := service.Store.LoadGitLab()
+	if err != nil || !ok || stored.Config.BaseURL != gitlab.URL || stored.Config.AccessToken != "" || stored.Account != nil || !stored.ConnectedAt.IsZero() {
+		t.Fatalf("stored disconnected state = %+v, ok=%v, err=%v", stored, ok, err)
+	}
 }
 
 func gitlabURL(r *http.Request) string {
 	return "http://" + r.Host
+}
+
+func TestGitLabConnectorStateIsSharedByAgents(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "state.json"))
+	if err := store.SaveGitLabForAgent("agent-a", State{Config: Config{BaseURL: "https://a.example", AccessToken: "token-a"}}); err != nil {
+		t.Fatal(err)
+	}
+	a, ok, err := store.LoadGitLabForAgent("agent-b")
+	if err != nil || !ok || a.Config.AccessToken != "token-a" || a.Config.BaseURL != "https://a.example" {
+		t.Fatalf("shared state = %+v, ok=%v, err=%v", a, ok, err)
+	}
+	if err := store.DeleteGitLabForAgent("agent-b"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := store.LoadGitLabForAgent("agent-a"); ok {
+		t.Fatal("shared connector still exists after deletion")
+	}
 }
 
 func TestServiceCredentialRejectsInvalidGitHubTokenWithoutLeakingIt(t *testing.T) {

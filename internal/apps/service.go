@@ -245,6 +245,16 @@ func mergeCredentials(old, next Credentials) Credentials {
 	return out
 }
 
+func clearConnectorOwnedCredentials(config Config, credentials *Credentials) {
+	if config.AuthMode != "connector" {
+		return
+	}
+	credentials.Token = ""
+	credentials.AppID = ""
+	credentials.AppSecret = ""
+	credentials.Env = nil
+}
+
 // Create is a convenience for creating a resource and optionally binding it.
 // Public Agent management uses Bind so it cannot implicitly change shared resources.
 func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) (Installation, error) {
@@ -269,11 +279,9 @@ func (s *Service) Create(ctx context.Context, agentID string, in CreateRequest) 
 	}
 	in.Name = strings.TrimSpace(in.Name)
 	in.Config = normalizeConfig(in.Config, in.AppID, in.Credentials)
+	clearConnectorOwnedCredentials(in.Config, &in.Credentials)
 	protect(&in.Config, &in.Credentials)
 	clearReferencedPlatformCredentials(in.Config, &in.Credentials)
-	if in.Config.AuthMode == "oauth2" {
-		return Installation{}, ErrUnsupportedOAuth
-	}
 	if in.Connect {
 		if err := validateConfig(in.Config, in.AppID); err != nil {
 			return Installation{}, err
@@ -405,7 +413,7 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 	old.close()
 	s.notify(agentID, revision)
 	defer cancelOperation()
-	conn, _, connectErr := s.open(operationCtx, agentID, r.Config, r.Credentials, dirs, func() { go s.refreshTools(agentID, id, generation) })
+	conn, _, connectErr := s.open(operationCtx, agentID, r.AppID, r.Config, r.Credentials, dirs, func() { go s.refreshTools(agentID, id, generation) })
 	s.mu.Lock()
 	e, err = s.findLocked(agentID, id)
 	if err != nil || e.generation != generation || s.ctx.Err() != nil {
@@ -554,7 +562,7 @@ func (s *Service) Probe(ctx context.Context, agentID string, in ProbeRequest) (P
 			return ProbeResult{}, err
 		}
 	}
-	conn, result, err := s.open(ctx, agentID, in.Config, in.Credentials, dirs, nil)
+	conn, result, err := s.open(ctx, agentID, in.AppID, in.Config, in.Credentials, dirs, nil)
 	if err != nil {
 		return ProbeResult{}, err
 	}
@@ -625,6 +633,72 @@ func (s *Service) RefreshCredentials(ctx context.Context, agentID string) error 
 			if _, err := s.connect(ctx, agentID, id, false); err != nil {
 				errs = append(errs, err)
 			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// InvalidateConnector closes every live App session backed by connectorID.
+// Connector credentials are copied into HTTP transports, so those transports
+// must never survive a credential rotation or disconnect.
+func (s *Service) InvalidateConnector(connectorID string) {
+	connectorID = strings.TrimSpace(connectorID)
+	if connectorID == "" {
+		return
+	}
+	type detached struct {
+		conn *connection
+	}
+	var connections []detached
+	revisions := map[string]uint64{}
+	s.mu.Lock()
+	for id, e := range s.entries {
+		if e.record.Config.AuthMode != "connector" || !strings.EqualFold(strings.TrimSpace(e.record.Config.ConnectorID), connectorID) {
+			continue
+		}
+		conn := e.connection
+		revision := s.detachLocked(e)
+		e.generation++
+		e.record.Status = "needs_configuration"
+		e.record.LastError = ""
+		e.record.LastErrorCode = ""
+		e.record.LastErrorHTTPStatus = 0
+		e.record.UpdatedAt = time.Now().UTC()
+		_ = s.persistLocked(id, &e.record)
+		if conn != nil {
+			connections = append(connections, detached{conn: conn})
+		}
+		if revision != 0 {
+			revisions[e.record.AgentID] = revision
+		}
+	}
+	s.mu.Unlock()
+	for _, item := range connections {
+		item.conn.close()
+	}
+	for agentID, revision := range revisions {
+		s.notify(agentID, revision)
+	}
+}
+
+// RefreshConnector invalidates cached transports and reconnects every App that
+// was configured to stay connected, across all Agents.
+func (s *Service) RefreshConnector(ctx context.Context, connectorID string) error {
+	s.InvalidateConnector(connectorID)
+	type target struct{ agentID, id string }
+	var targets []target
+	s.mu.Lock()
+	for id, e := range s.entries {
+		if e.record.Config.AuthMode == "connector" && strings.EqualFold(strings.TrimSpace(e.record.Config.ConnectorID), strings.TrimSpace(connectorID)) &&
+			e.record.Enabled && !e.record.Disconnected && e.record.ConnectRequested {
+			targets = append(targets, target{agentID: e.record.AgentID, id: id})
+		}
+	}
+	s.mu.Unlock()
+	var errs []error
+	for _, item := range targets {
+		if _, err := s.connect(ctx, item.agentID, item.id, false); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
