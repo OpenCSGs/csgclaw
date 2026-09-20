@@ -235,16 +235,14 @@ function ConversationPaneContent({
   authStatuses,
   authBusyProvider,
   connectorStatus,
-  gitlabConnectorStatus,
   connectorBusyAction,
   connectorBusyProvider,
   connectorError,
   connectorPending,
   onSaveConnectorConfig,
-  onSaveGitLabConnectorConfig,
   onConnectConnector,
   onDisconnectConnector,
-  onDisconnectGitLabConnector,
+  onManageApps,
   onManageConnector,
   onProviderLogin,
   draftSegments,
@@ -563,7 +561,6 @@ function ConversationPaneContent({
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
           connectorStatus={connectorStatus}
-          gitlabConnectorStatus={gitlabConnectorStatus}
           connectorBusyAction={connectorBusyAction}
           connectorBusyProvider={connectorBusyProvider}
           connectorError={connectorError}
@@ -599,13 +596,12 @@ function ConversationPaneContent({
           onComposerKeyDown={onComposerKeyDown}
           onConnectConnector={onConnectConnector}
           onDisconnectConnector={onDisconnectConnector}
-          onDisconnectGitLabConnector={onDisconnectGitLabConnector}
+          onManageApps={onManageApps}
           onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
           onPreviewAttachment={handlePreviewAttachment}
           onRetrySend={onRetrySend}
           onSaveConnectorConfig={onSaveConnectorConfig}
-          onSaveGitLabConnectorConfig={onSaveGitLabConnectorConfig}
           onSendMessage={onSendMessage}
           onStopSend={onStopSend}
           onUndoRemoveAttachment={onUndoRemoveAttachment}

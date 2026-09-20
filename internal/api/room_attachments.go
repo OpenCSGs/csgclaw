@@ -9,7 +9,7 @@ import (
 )
 
 func (h *Handler) authorizeRoomAttachments(w http.ResponseWriter, r *http.Request) bool {
-	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
+	if appRequestAgentID(r) == "" && !h.validateServerAccessToken(r.Header.Get("Authorization")) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return false
 	}

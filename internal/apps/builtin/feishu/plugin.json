@@ -1,0 +1,16 @@
+{
+  "name": "feishu",
+  "version": "0.1.0",
+  "description": "Connect to an existing Feishu MCP service.",
+  "author": {"name": "OpenCSG"},
+  "keywords": ["feishu"],
+  "apps": "./apps.json",
+  "interface": {
+    "displayName": "Feishu",
+    "shortDescription": "Access your authorized Feishu resources",
+    "developerName": "OpenCSG",
+    "category": "Productivity",
+    "brandColor": "#3370FF",
+    "capabilities": ["Read", "Write"]
+  }
+}

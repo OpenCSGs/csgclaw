@@ -157,6 +157,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		}
 	}
 	live := &liveSession{
+		mcpCatalogRevision:    spec.MCPCatalogRevision,
 		cmd:                   cmd,
 		stdin:                 stdin,
 		stderr:                stderrFile,
@@ -336,6 +337,11 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 	live, err := m.ensureLiveSession(ctx, handle)
 	if err != nil {
 		return PromptResponse{}, err
+	}
+	if m.deps.BeforePrompt != nil {
+		if err := m.deps.BeforePrompt(ctx, handle); err != nil {
+			return PromptResponse{}, err
+		}
 	}
 
 	sessionID := strings.TrimSpace(req.SessionID)
@@ -1076,48 +1082,33 @@ func uploadAppServerWorkspaceFile(ctx context.Context, spec SessionSpec, args ap
 	if err != nil || target.Scheme != base.Scheme || !strings.EqualFold(target.Host, base.Host) || target.User != nil {
 		return fmt.Errorf("upload URI must be same-origin with MCP server %q", strings.TrimSpace(args.Server))
 	}
-	root, err := os.OpenRoot(spec.WorkspaceDir)
-	if err != nil {
-		return fmt.Errorf("open Runtime workspace: %w", err)
-	}
-	defer root.Close()
-	file, err := openAppServerUploadFile(root, cleaned)
-	if err != nil {
-		return fmt.Errorf("open upload file: %w", err)
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("upload path must reference a regular file")
-	}
-	if info.Size() > appServerMaxUploadBytes {
-		return fmt.Errorf("upload file exceeds %d bytes", appServerMaxUploadBytes)
-	}
-	request, err := newAppServerUploadRequest(ctx, target.String(), file, info.Size())
-	if err != nil {
-		return fmt.Errorf("create upload request: %w", err)
-	}
-	if contentType := strings.TrimSpace(args.ContentType); contentType != "" {
-		if _, _, err := mime.ParseMediaType(contentType); err != nil {
-			return fmt.Errorf("contentType is invalid")
+	return withAppServerUploadFile(spec, cleaned, func(file *os.File, size int64) error {
+		request, err := newAppServerUploadRequest(ctx, target.String(), file, size)
+		if err != nil {
+			return fmt.Errorf("create upload request: %w", err)
 		}
-		request.Header.Set("Content-Type", contentType)
-	}
-	client := &http.Client{
-		Timeout: 90 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return errors.New("upload redirects are not allowed")
-		},
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return fmt.Errorf("upload file: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("upload endpoint returned HTTP %d", response.StatusCode)
-	}
-	return nil
+		if contentType := strings.TrimSpace(args.ContentType); contentType != "" {
+			if _, _, err := mime.ParseMediaType(contentType); err != nil {
+				return fmt.Errorf("contentType is invalid")
+			}
+			request.Header.Set("Content-Type", contentType)
+		}
+		client := &http.Client{
+			Timeout: 90 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return errors.New("upload redirects are not allowed")
+			},
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			return fmt.Errorf("upload file: %w", err)
+		}
+		defer response.Body.Close()
+		if response.StatusCode < 200 || response.StatusCode >= 300 {
+			return fmt.Errorf("upload endpoint returned HTTP %d", response.StatusCode)
+		}
+		return nil
+	})
 }
 
 func newAppServerUploadRequest(ctx context.Context, target string, file *os.File, size int64) (*http.Request, error) {
@@ -1486,13 +1477,16 @@ func (s *liveSession) clearAppServerTurnContext(threadID string, waiter *appServ
 }
 
 func (s *liveSession) appServerTurnContext(threadID, turnID string) (context.Context, bool) {
-	if s == nil {
+	if s == nil || strings.TrimSpace(threadID) == "" || strings.TrimSpace(turnID) == "" {
 		return nil, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	active, ok := s.turnContexts[strings.TrimSpace(threadID)]
 	if !ok || active.waiter == nil || active.ctx == nil || active.waiter.currentTurnID() != strings.TrimSpace(turnID) {
+		return nil, false
+	}
+	if _, terminal := active.waiter.terminalResult(); terminal || active.ctx.Err() != nil {
 		return nil, false
 	}
 	return active.ctx, true

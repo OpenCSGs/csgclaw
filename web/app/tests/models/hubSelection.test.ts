@@ -3,8 +3,8 @@ import { resolveHubListSelection } from "@/models/hubSelection";
 const resources = [{ id: "first" }, { id: "addressed" }];
 
 describe("resolveHubListSelection", () => {
-  it("uses the first item only when no resource is addressed", () => {
-    expect(resolveHubListSelection(resources, "", (item) => item.id)).toBe(resources[0]);
+  it("keeps the resource list open when no item is addressed", () => {
+    expect(resolveHubListSelection(resources, "", (item) => item.id)).toBeNull();
   });
 
   it("resolves an addressed resource", () => {

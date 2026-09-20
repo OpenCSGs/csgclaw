@@ -59,6 +59,7 @@ func RenderAgentsInstructionsBlock(instructions string) string {
 }
 
 type RuntimeManagedInstructionsOptions struct {
+	AgentMCP   bool
 	Extensions []string
 	CLIPath    string
 }
@@ -76,7 +77,12 @@ func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions strin
 	role := roomtask.TurnRoleWorker
 	if strings.TrimSpace(agentID) == identity.ManagerAgentID {
 		role = roomtask.TurnRoleManager
-		managedInstructions = joinManagedInstructions(managedInstructions, managerRuntimeConnectorInstructions)
+		if !options.AgentMCP {
+			managedInstructions = joinManagedInstructions(managedInstructions, managerRuntimeConnectorInstructions)
+		}
+	}
+	if options.AgentMCP {
+		managedInstructions = joinManagedInstructions(managedInstructions, agentMCPPlatformInstructions)
 	}
 	for _, fragment := range options.Extensions {
 		managedInstructions = joinManagedInstructions(managedInstructions, fragment)
@@ -118,6 +124,20 @@ const runtimeFilePublishingInstructions = `### Image Generation
 - Call ` + "`csgclaw_publish_file`" + ` with the file's workspace-relative path immediately after creating it.
 - Do not search for or use ` + "`csgclaw-cli`" + `, ` + "`curl`" + `, HTTP APIs, channel-specific APIs, or other upload methods for output file delivery.
 - Calling the tool publishes the file through the active channel. Mention the file in the final answer only after the tool succeeds.`
+
+const agentMCPPlatformInstructions = `### Agent Platform Access
+
+- Built-in csgclaw MCP tools are available for platform operations. Discover their exact names with tool_search when available.
+- CSGCLAW_ACCESS_TOKEN identifies only this Agent. It is not an administrator credential. Never request global Connector credential leases, read the host's administrator token, or retry a denied operation with another identity.
+- App services are available through their registered tools. Use apps_list to inspect this Agent's Apps and app_setup to return a configuration link; the user enters credentials in the management UI.
+- Users do not need to name an App installation. Resolve requests such as "list GitLab issues" against this Agent's currently enabled, connected Apps using apps_list when needed. If exactly one matching App supports the requested operation, use it directly without asking which App.
+- Before asking the user to choose an App, refresh apps_list and use its current available_app_counts and instances. This result replaces all previous App inventories in conversation history; do not list removed or unavailable instances.
+- If several Apps match, use an explicit App/account choice, resource URL or project identifier, or an established choice in the current task only when it uniquely identifies one installation. If the target remains ambiguous, list the matching App names and ask which one to use before calling their business tools. Do not choose the first installation, query all accounts, or reuse a choice from an unrelated task. An explicit request to query all matching Apps authorizes that scope.
+- If no matching App is connected and usable, use app_setup to help configure one. Never request an App name solely because the user omitted it, and never ask for raw credentials in chat.
+- Use rooms_list, room_get, messages_list, message_send, room_create and room_members_add for explicit room operations. Identity is supplied by the server.
+- Direct task notifications may use csgclaw-cli task claim/update; team notifications may use csgclaw-cli team task claim/update. These commands are restricted to this Agent's assigned work. Use a concrete team ID for team operations.
+- An App connection is configured through app_setup and does not create a Feishu bot channel.
+- Follow the existing bundled Skills for Agent creation and Feishu channel setup, and the trusted on-demand room planning and dispatch policy.`
 
 func joinManagedInstructions(values ...string) string {
 	var parts []string

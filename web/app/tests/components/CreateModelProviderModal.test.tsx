@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CreateModelProviderModal } from "@/pages/WorkspacePage/components/WorkspaceModals";
 import { normalizeModelProviderCatalog } from "@/models/modelProviders";
@@ -51,9 +51,8 @@ describe("CreateModelProviderModal", () => {
     expect(screen.getByLabelText(/Base URL/)).toHaveValue("https://api.openai.com/v1");
     expect(screen.getByLabelText(/API Key/)).toHaveValue("");
     expect(screen.getByLabelText(/API Key/)).toHaveAttribute("type", "password");
-    const modelList = screen.getByRole("list", { name: "Models" });
-    expect(modelList).toBeInTheDocument();
-    expect(within(modelList).getByText("Not checked")).toBeInTheDocument();
+    expect(screen.getAllByText("Not checked").length).toBeGreaterThan(0);
+    expect(screen.getByRole("textbox", { name: "Search models" })).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Models" })).not.toBeInTheDocument();
   });
 

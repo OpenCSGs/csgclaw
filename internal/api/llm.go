@@ -47,7 +47,7 @@ func (h *Handler) requireAgentLLMID(w http.ResponseWriter, r *http.Request) (str
 		http.NotFound(w, r)
 		return "", false
 	}
-	if !h.validateServerAccessToken(r.Header.Get("Authorization")) {
+	if !h.validateServerAccessToken(r.Header.Get("Authorization")) && !h.authorizesAgentToken(agentID, r.Header.Get("Authorization")) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return "", false
 	}

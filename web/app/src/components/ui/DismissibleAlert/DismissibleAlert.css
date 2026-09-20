@@ -13,7 +13,9 @@
   color: inherit;
   cursor: pointer;
   opacity: 0.6;
-  transition: opacity 150ms ease, background 150ms ease;
+  transition:
+    opacity 150ms ease,
+    background 150ms ease;
 }
 
 .dismissible-alert-close-btn:hover {

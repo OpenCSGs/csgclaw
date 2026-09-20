@@ -20,6 +20,15 @@ func TestCompleteLiteTopLevel(t *testing.T) {
 	assertContainsNone(t, got, "bot", "channel", "serve", "agent", "model", "user", "_serve", "__complete")
 }
 
+func TestCompleteAppCommandsAndPrivateInputFlags(t *testing.T) {
+	for _, spec := range []CommandSpec{FullSpec(), LiteSpec()} {
+		got := Complete(spec, spec.Name, []string{spec.Name, "app", ""})
+		assertContainsAll(t, got, "catalog", "list", "get", "add", "update", "probe", "connect", "disconnect", "remove")
+		got = Complete(spec, spec.Name, []string{spec.Name, "app", "add", "--"})
+		assertContainsAll(t, got, "--agent", "--file")
+	}
+}
+
 func TestCompleteSubcommandsAndFlags(t *testing.T) {
 	got := Complete(FullSpec(), "csgclaw", []string{"csgclaw", "agent", ""})
 	assertContainsAll(t, got, "list", "create", "start", "stop", "delete", "logs", "--help")

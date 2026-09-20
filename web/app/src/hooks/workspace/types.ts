@@ -15,7 +15,7 @@ import type { SkillSummary } from "@/models/skillhub";
 import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { ThemeMode } from "@/shared/theme/theme";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
-import type { ConnectorConfigDraft, ConnectorStatus, GitLabConnectorConfigDraft } from "@/models/connectors";
+import type { ConnectorConfigDraft, ConnectorStatus } from "@/models/connectors";
 import type { CLIProxyAuthStatusMap } from "./useCLIProxyAuthStatuses";
 import type { ConfigPhase } from "./useConfigController";
 import type { WorkspaceUiState } from "./workspaceUiStore";
@@ -39,6 +39,7 @@ export type UseWorkspaceNavigationArgs = {
 };
 
 export type WorkspaceNavigationController = {
+  selectAgentApps: (agentID: string) => void;
   navigatePane: (pane: WorkspacePane, roomList?: IMConversation[], options?: NavigatePaneOptions) => void;
   selectAgent: (item: { id?: string | null } | null | undefined, options?: NavigatePaneOptions) => void;
   selectComputer: (options?: NavigatePaneOptions) => void;
@@ -213,7 +214,6 @@ export type UseConversationControllerArgs = {
   connectorError?: string;
   connectorPending?: boolean;
   connectorStatus?: ConnectorStatus;
-  gitlabConnectorStatus?: ConnectorStatus;
   data: IMData | null;
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
@@ -233,12 +233,11 @@ export type UseConversationControllerArgs = {
   ) => void | Promise<void>;
   onConnectConnector?: () => Promise<void>;
   onDisconnectConnector?: () => Promise<void>;
-  onDisconnectGitLabConnector?: () => Promise<void>;
+  onManageApps?: (agentID?: string) => void;
   onManageConnector?: () => Promise<void>;
   onProviderLogin: (provider: string | null | undefined) => Promise<void>;
   openCSGAuthGuard: OpenCSGAuthGuard;
   onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => Promise<void>;
-  onSaveGitLabConnectorConfig?: (draft: GitLabConnectorConfigDraft) => Promise<void>;
   preferredFallbackConversationId?: string;
   rooms: IMConversation[];
   selectComputer: WorkspaceNavigationController["selectComputer"];
