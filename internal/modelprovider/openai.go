@@ -283,7 +283,7 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 	var probe openAIResponsesProbeResponse
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
 	if mediaType == "text/event-stream" {
-		probe, err = decodeOpenAIResponsesProbeStream(resp.Body)
+		return validateOpenAIResponsesProbeStream(resp.Body)
 	} else {
 		err = json.NewDecoder(resp.Body).Decode(&probe)
 	}
@@ -299,8 +299,7 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 	return nil
 }
 
-func decodeOpenAIResponsesProbeStream(r io.Reader) (openAIResponsesProbeResponse, error) {
-	var completed openAIResponsesProbeResponse
+func validateOpenAIResponsesProbeStream(r io.Reader) error {
 	found, err := scanOpenAIProbeSSE(r, func(sseEventType string, data string) (bool, error) {
 		if data == "" || data == "[DONE]" {
 			return false, nil
@@ -317,26 +316,23 @@ func decodeOpenAIResponsesProbeStream(r io.Reader) (openAIResponsesProbeResponse
 			eventType = strings.TrimSpace(sseEventType)
 		}
 		switch eventType {
-		case "response.completed":
-			if strings.TrimSpace(event.Response.Object) != "response" || strings.TrimSpace(event.Response.Status) != "completed" {
-				return false, fmt.Errorf("response.completed event contains an incomplete response")
-			}
-			completed = event.Response
-			return true, nil
 		case "response.failed", "error":
 			code := UpstreamErrorCode([]byte(data))
 			status := UpstreamStatusForErrorCode(code)
 			return false, &ResponsesAPIStatusError{Operation: "responses", Status: http.StatusText(status), StatusCode: status, Body: data}
 		}
-		return false, nil
+		if eventType == "" {
+			return false, nil
+		}
+		return true, nil
 	})
 	if err != nil {
-		return openAIResponsesProbeResponse{}, err
+		return err
 	}
 	if found {
-		return completed, nil
+		return nil
 	}
-	return openAIResponsesProbeResponse{}, fmt.Errorf("stream ended before response.completed")
+	return fmt.Errorf("stream ended before the first responses event")
 }
 
 func CheckChatCompletionsAPIWithClient(ctx context.Context, client *http.Client, baseURL, apiKey, modelID string, headers map[string]string) error {

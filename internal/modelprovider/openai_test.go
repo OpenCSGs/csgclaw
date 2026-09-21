@@ -179,16 +179,15 @@ func TestCheckResponsesAPIWithClientAcceptsStreamingResponse(t *testing.T) {
 	}
 }
 
-func TestCheckResponsesAPIWithClientRejectsCreatedWithoutCompletion(t *testing.T) {
+func TestCheckResponsesAPIWithClientAcceptsFirstStreamingEventWithoutCompletion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = w.Write([]byte("event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"object\":\"response\",\"status\":\"in_progress\"}}\n\n"))
 	}))
 	defer srv.Close()
 
-	err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil)
-	if err == nil || !strings.Contains(err.Error(), "before response.completed") {
-		t.Fatalf("error = %v, want incomplete stream rejection", err)
+	if err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil); err != nil {
+		t.Fatalf("CheckResponsesAPIWithClient() error = %v", err)
 	}
 }
 
