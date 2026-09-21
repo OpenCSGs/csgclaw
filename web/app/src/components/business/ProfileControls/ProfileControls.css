@@ -612,7 +612,9 @@
   background: transparent;
   text-align: left;
   cursor: default;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .model-provider-model-card:hover {

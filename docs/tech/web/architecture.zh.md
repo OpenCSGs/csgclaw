@@ -63,6 +63,9 @@
   |     +-- WorkspacePage
   |     |     主工作区外壳: sidebar、layout、modals、overlays、nested outlet
   |     |
+  |     +-- AppsPage (/apps, /apps/:resourceId)
+  |     |     全局 App 资源；Agent 页面引用所选资源
+  |     |
   |     +-- ConversationPage
   |     |     会话页面内容和会话页私有组件
   |     |

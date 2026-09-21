@@ -2,25 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   disconnectGitHubConnectorRequest,
-  disconnectGitLabConnectorRequest,
   fetchConnectors,
   saveGitHubConnectorConfigRequest,
-  saveGitLabConnectorConfigRequest,
   startGitHubConnectorAppInstallRequest,
   startGitHubConnectorOAuthRequest,
 } from "@/api/connectors";
 import { errorMessage } from "@/api/client";
 import {
   GITHUB_CONNECTOR_PROVIDER,
-  GITLAB_CONNECTOR_PROVIDER,
   emptyGitHubConnectorStatus,
-  emptyGitLabConnectorStatus,
   normalizeAppInstallStartResponse,
   normalizeConnectorList,
   normalizeConnectorStatus,
   normalizeOAuthStartResponse,
 } from "@/models/connectors";
-import type { ConnectorConfigDraft, ConnectorStatus, GitLabConnectorConfigDraft } from "@/models/connectors";
+import type { ConnectorConfigDraft, ConnectorStatus } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 import { prepareOAuthNavigation } from "@/shared/platform/externalNavigation";
 import { workspaceQueryKeys } from "./workspaceQueries";
@@ -39,19 +35,16 @@ export type ConnectorController = {
   disconnectGitHub: () => Promise<void>;
   error: string;
   github: ConnectorStatus;
-  gitlab: ConnectorStatus;
   manageGitHub: () => Promise<void>;
   pending: boolean;
   refresh: () => Promise<ConnectorStatus[]>;
   saveGitHubConfig: (draft: ConnectorConfigDraft) => Promise<void>;
-  saveGitLabConfig: (draft: GitLabConnectorConfigDraft) => Promise<void>;
-  disconnectGitLab: () => Promise<void>;
 };
 
 export function useConnectorController(t: TranslateFn): ConnectorController {
   const queryClient = useQueryClient();
   const [busyAction, setBusyAction] = useState<ConnectorBusyAction>("");
-  const [busyProvider, setBusyProvider] = useState("");
+  const busyProvider = busyAction ? GITHUB_CONNECTOR_PROVIDER : "";
   const [connectorError, setConnectorError] = useState("");
   const [loginPending, setLoginPending] = useState(false);
 
@@ -67,12 +60,6 @@ export function useConnectorController(t: TranslateFn): ConnectorController {
     );
   }, [connectorsQuery.data]);
 
-  const gitlab = useMemo(
-    () =>
-      connectorsQuery.data?.find((item) => item.provider === GITLAB_CONNECTOR_PROVIDER) ?? emptyGitLabConnectorStatus(),
-    [connectorsQuery.data],
-  );
-
   const setGitHubStatus = useCallback(
     (next: ConnectorStatus) => {
       queryClient.setQueryData(workspaceQueryKeys.connectors(), (current: ConnectorStatus[] | undefined) => {
@@ -83,52 +70,6 @@ export function useConnectorController(t: TranslateFn): ConnectorController {
     },
     [queryClient],
   );
-
-  const setGitLabStatus = useCallback(
-    (next: ConnectorStatus) => {
-      queryClient.setQueryData(workspaceQueryKeys.connectors(), (current: ConnectorStatus[] | undefined) => {
-        const statuses = Array.isArray(current) ? current : [];
-        return [...statuses.filter((item) => item.provider !== GITLAB_CONNECTOR_PROVIDER), next];
-      });
-    },
-    [queryClient],
-  );
-
-  const saveGitLabConfig = useCallback(
-    async (draft: GitLabConnectorConfigDraft) => {
-      if (busyAction) return;
-      setBusyProvider(GITLAB_CONNECTOR_PROVIDER);
-      setBusyAction("save");
-      setConnectorError("");
-      try {
-        await queryClient.cancelQueries({ queryKey: workspaceQueryKeys.connectors() });
-        setGitLabStatus(normalizeConnectorStatus(await saveGitLabConnectorConfigRequest(draft)));
-      } catch (err) {
-        setConnectorError(errorMessage(err, t("connectorGitLabSaveFailed")));
-        throw err;
-      } finally {
-        setBusyAction("");
-        setBusyProvider("");
-      }
-    },
-    [busyAction, queryClient, setGitLabStatus, t],
-  );
-
-  const disconnectGitLab = useCallback(async () => {
-    if (busyAction) return;
-    setBusyProvider(GITLAB_CONNECTOR_PROVIDER);
-    setBusyAction("disconnect");
-    setConnectorError("");
-    try {
-      await queryClient.cancelQueries({ queryKey: workspaceQueryKeys.connectors() });
-      setGitLabStatus(normalizeConnectorStatus(await disconnectGitLabConnectorRequest()));
-    } catch (err) {
-      setConnectorError(errorMessage(err, t("connectorGitLabDisconnectFailed")));
-    } finally {
-      setBusyAction("");
-      setBusyProvider("");
-    }
-  }, [busyAction, queryClient, setGitLabStatus, t]);
 
   const refresh = useCallback(async () => {
     return queryClient.fetchQuery({
@@ -314,13 +255,10 @@ export function useConnectorController(t: TranslateFn): ConnectorController {
       connectorError ||
       (connectorsQuery.isError ? errorMessage(connectorsQuery.error, t("connectorStatusFailed")) : ""),
     github,
-    gitlab,
     manageGitHub,
     pending: loginPending,
     refresh,
     saveGitHubConfig,
-    saveGitLabConfig,
-    disconnectGitLab,
   };
 }
 

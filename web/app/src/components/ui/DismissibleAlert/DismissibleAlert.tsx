@@ -10,12 +10,7 @@ type DismissibleAlertProps = {
   closeLabel?: string;
 };
 
-export function DismissibleAlert({
-  children,
-  className,
-  messageKey,
-  closeLabel = "Close",
-}: DismissibleAlertProps) {
+export function DismissibleAlert({ children, className, messageKey, closeLabel = "Close" }: DismissibleAlertProps) {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {

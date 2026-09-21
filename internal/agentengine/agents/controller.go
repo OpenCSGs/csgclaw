@@ -218,6 +218,7 @@ type Controller struct {
 	lifecycle                     *lifecycle.Coordinator
 	startupProfileDetectOff       bool
 	connectorCapabilityKey        []byte
+	agentResourceCleanup          func(context.Context, string) error
 
 	// gatewayWorkPhase is set by createGatewayBox for bootstrap progress logs (best-effort if concurrent).
 	gatewayWorkPhase atomic.Uint32
@@ -432,6 +433,9 @@ func NewControllerWithLLM(llmCfg config.LLMConfig, server config.ServerConfig, m
 	if err := svc.Reload(); err != nil {
 		return nil, err
 	}
+	if err := svc.recoverWorkspaceSkillsTransactions(); err != nil {
+		return nil, fmt.Errorf("recover interrupted workspace skills transactions: %w", err)
+	}
 	return svc, nil
 }
 
@@ -502,7 +506,7 @@ func validateCodexManagerRuntimeOverride(runtimeOverride string) error {
 	return fmt.Errorf("manager runtime is fixed to codex")
 }
 
-func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool) (Agent, error) {
+func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool) (_ Agent, err error) {
 	managerDisplayName, managerDescription, managerInstructions, managerAvatar, managerCreatedAt := s.managerMetadata()
 	managerMCPServers := s.managerMCPServers()
 	startProfile, detectionResults := s.managerStartupProfile(ctx)
@@ -551,15 +555,73 @@ func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool)
 		PreviousCredentials: sortedStringKeys(managerCredentials),
 		InitShell:           managerInitShell,
 	}
+	var (
+		skillsPreservation *workspaceSkillsPreservation
+		handle             agentruntime.Handle
+		replacementCreated bool
+		oldRuntimeStopped  bool
+		oldRuntimeDeleted  bool
+		committed          bool
+	)
+	defer func() {
+		if committed {
+			return
+		}
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if replacementCreated && skillsPreservation != nil && skillsPreservation.appliedRoot != "" {
+			if _, stopErr := runtimeImpl.Stop(cleanupCtx, handle); stopErr != nil && !sandbox.IsNotFound(stopErr) && !errors.Is(stopErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("stop replacement manager runtime before skills recovery: %w", stopErr))
+			}
+		}
+		skillsReverted := true
+		if skillsPreservation != nil {
+			if revertErr := skillsPreservation.RevertRestore(); revertErr != nil {
+				skillsReverted = false
+				err = errors.Join(err, fmt.Errorf("return restored manager skills to preservation dir: %w", revertErr))
+			}
+		}
+		if replacementCreated && skillsReverted {
+			deleteErr := runtimeImpl.Delete(cleanupCtx, handle)
+			if deleteErr != nil && !sandbox.IsNotFound(deleteErr) && !errors.Is(deleteErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("cleanup replacement manager runtime: %w", deleteErr))
+			}
+		}
+		if skillsPreservation != nil {
+			if rollbackErr := skillsPreservation.Rollback(); rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf("recover original manager skills: %w", rollbackErr))
+			}
+		}
+		if oldRuntimeStopped && !oldRuntimeDeleted {
+			if _, restartErr := runtimeImpl.Start(cleanupCtx, runtimeHandleForAgent(existing)); restartErr != nil {
+				err = errors.Join(err, fmt.Errorf("restart original manager runtime: %w", restartErr))
+			}
+		}
+	}()
+	if forceRecreate && strings.TrimSpace(existing.RuntimeID) != "" {
+		_, stopErr := runtimeImpl.Stop(ctx, runtimeHandleForAgent(existing))
+		if stopErr != nil && !sandbox.IsNotFound(stopErr) && !errors.Is(stopErr, os.ErrNotExist) {
+			return Agent{}, fmt.Errorf("stop existing manager runtime: %w", stopErr)
+		}
+		oldRuntimeStopped = stopErr == nil && strings.EqualFold(strings.TrimSpace(existing.Status), string(agentruntime.StateRunning))
+	}
 	if err := s.provisionRuntime(ctx, runtimeImpl, RuntimeKindCodex, provisionReq); err != nil {
 		return Agent{}, fmt.Errorf("provision manager runtime: %w", err)
 	}
 	if forceRecreate {
-		// The Agent mutation lease has drained active Engine Turns.
+		sourceRuntimeKind := strings.TrimSpace(existing.RuntimeKind)
+		if sourceRuntimeKind == "" {
+			sourceRuntimeKind = RuntimeKindCodex
+		}
+		skillsPreservation, err = s.prepareWorkspaceSkillsPreservation(ManagerUserID, sourceRuntimeKind, RuntimeKindCodex, RoleManager)
+		if err != nil {
+			return Agent{}, fmt.Errorf("preserve manager runtime skills: %w", err)
+		}
 		if strings.TrimSpace(existing.RuntimeID) != "" {
 			if err := runtimeImpl.Delete(ctx, runtimeHandleForAgent(existing)); err != nil && !sandbox.IsNotFound(err) {
 				return Agent{}, fmt.Errorf("remove existing manager runtime: %w", err)
 			}
+			oldRuntimeDeleted = true
 		}
 	}
 	if _, err := s.persistManagerAgent(ctx, runtimeAgent, false); err != nil {
@@ -569,7 +631,7 @@ func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool)
 	if err := s.prepareExtensions(ctx, ManagerUserID); err != nil {
 		return Agent{}, err
 	}
-	handle, err := runtimeImpl.New(ctx, agentruntime.Spec{
+	handle, err = runtimeImpl.New(ctx, agentruntime.Spec{
 		RuntimeID: runtimeIDForAgentID(ManagerUserID),
 		AgentID:   ManagerUserID,
 		AgentName: managerDisplayName,
@@ -578,6 +640,12 @@ func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool)
 	})
 	if err != nil {
 		return Agent{}, fmt.Errorf("create manager runtime: %w", err)
+	}
+	replacementCreated = true
+	if skillsPreservation != nil {
+		if err := skillsPreservation.Restore(); err != nil {
+			return Agent{}, fmt.Errorf("restore manager runtime skills: %w", err)
+		}
 	}
 	if err := s.observeStartedExtensions(ctx, ManagerUserID); err != nil {
 		return Agent{}, err
@@ -610,6 +678,15 @@ func (s *Controller) ensureCodexManager(ctx context.Context, forceRecreate bool)
 			return Agent{}, err
 		}
 	}
+	if skillsPreservation != nil {
+		if commitErr := skillsPreservation.Commit(); commitErr != nil {
+			if skillsPreservation.phase != workspaceSkillsStateCommitted {
+				return Agent{}, fmt.Errorf("commit manager skills restoration: %w", commitErr)
+			}
+			slog.WarnContext(context.WithoutCancel(ctx), "failed to clean committed manager skills transaction", "agent_id", ManagerUserID, "error", commitErr)
+		}
+	}
+	committed = true
 	return persisted, nil
 }
 
@@ -769,69 +846,6 @@ func (s *Controller) persistManagerAgent(ctx context.Context, manager Agent, run
 	}
 	_ = runtimeApplied
 	return created, nil
-}
-
-func (s *Controller) cleanupBootstrapManagerForRecreate(ctx context.Context, rt sandbox.Runtime, runtimeHome, runtimeKind string) (sandbox.Runtime, error) {
-	log.Printf("force recreating bootstrap manager box %q", ManagerName)
-	removed := false
-	for _, managerBoxIDOrName := range s.bootstrapManagerLookupKeys() {
-		if err := s.forceRemoveBox(ctx, rt, managerBoxIDOrName); err != nil {
-			if sandbox.IsNotFound(err) {
-				log.Printf("bootstrap manager box %q (%q) does not exist yet; continuing", ManagerName, managerBoxIDOrName)
-				continue
-			}
-			return rt, fmt.Errorf("force remove bootstrap manager box %q (%q): %w", ManagerName, managerBoxIDOrName, err)
-		}
-		log.Printf("bootstrap manager box %q (%q) removed", ManagerName, managerBoxIDOrName)
-		removed = true
-		break
-	}
-	if !removed {
-		log.Printf("bootstrap manager box %q not found under known identifiers; continuing", ManagerName)
-	}
-	if err := s.closeRuntime(runtimeHome, rt); err != nil {
-		return rt, fmt.Errorf("close bootstrap manager runtime before recreate: %w", err)
-	}
-	rt = nil
-	managerHome, err := s.agentHomeDir(ManagerUserID)
-	if err != nil {
-		return nil, err
-	}
-	sourceRuntimeKind := s.managerSkillPreservationSourceRuntimeKind(runtimeKind)
-	restoreSkills, cleanupSkills, err := s.prepareWorkspaceSkillsPreservation(ManagerUserID, sourceRuntimeKind, runtimeKind, RoleManager)
-	if err != nil {
-		return nil, fmt.Errorf("prepare bootstrap manager skills preservation: %w", err)
-	}
-	if cleanupSkills != nil {
-		defer cleanupSkills()
-	}
-	if err := removeAll(managerHome); err != nil {
-		return nil, fmt.Errorf("remove bootstrap manager home: %w", err)
-	}
-	if restoreSkills != nil {
-		if err := restoreSkills(); err != nil {
-			return nil, fmt.Errorf("restore bootstrap manager skills: %w", err)
-		}
-	}
-	rt, err = s.ensureRuntimeAtHome(runtimeHome)
-	if err != nil {
-		return nil, err
-	}
-	return rt, nil
-}
-
-func (s *Controller) managerSkillPreservationSourceRuntimeKind(targetRuntimeKind string) string {
-	targetRuntimeKind = strings.TrimSpace(targetRuntimeKind)
-	if s == nil {
-		return targetRuntimeKind
-	}
-	s.mu.RLock()
-	existing := s.agents[ManagerUserID]
-	s.mu.RUnlock()
-	if source := strings.TrimSpace(existing.RuntimeKind); isGatewayRuntimeKind(source) {
-		return source
-	}
-	return targetRuntimeKind
 }
 
 func (s *Controller) managerStartupProfile(ctx context.Context) (AgentProfile, []ProfileDetectionResult) {
@@ -1763,6 +1777,17 @@ func (s *Controller) DeleteRecord(ctx context.Context, id string) error {
 
 	if err := s.removeAgentRuntime(ctx, existing); err != nil {
 		return err
+	}
+	s.mu.RLock()
+	cleanup := s.agentResourceCleanup
+	s.mu.RUnlock()
+	if cleanup != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		err := cleanup(cleanupCtx, existing.ID)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("remove Agent resources: %w", err)
+		}
 	}
 
 	s.mu.Lock()

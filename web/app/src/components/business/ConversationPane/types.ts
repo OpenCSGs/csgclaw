@@ -5,7 +5,7 @@ import type { DocumentPreviewRequest } from "@/components/business/DocumentPrevi
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
 import type { ComposerMentionUser, ComposerSegment } from "@/models/composer";
-import type { ConnectorConfigDraft, ConnectorStatus, GitLabConnectorConfigDraft } from "@/models/connectors";
+import type { ConnectorConfigDraft, ConnectorStatus } from "@/models/connectors";
 import type {
   IMConversation,
   IMMessage,
@@ -78,7 +78,6 @@ export type ConversationPaneProps = {
   connectorError?: string;
   connectorPending?: boolean;
   connectorStatus?: ConnectorStatus;
-  gitlabConnectorStatus?: ConnectorStatus;
   conversation: IMConversation;
   conversationMembers: IMUser[];
   currentUserID?: string;
@@ -119,7 +118,7 @@ export type ConversationPaneProps = {
   onComposerKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
   onConnectConnector?: () => VoidOrPromise;
   onDisconnectConnector?: () => VoidOrPromise;
-  onDisconnectGitLabConnector?: () => VoidOrPromise;
+  onManageApps?: () => void;
   onManageConnector?: () => VoidOrPromise;
   onDeleteRoom: (id: string) => VoidOrPromise;
   onDismissThreadSlashPicker?: () => void;
@@ -136,7 +135,6 @@ export type ConversationPaneProps = {
   onProviderLogin: (provider: string) => VoidOrPromise;
   onRetrySend?: () => VoidOrPromise;
   onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => VoidOrPromise;
-  onSaveGitLabConnectorConfig?: (draft: GitLabConnectorConfigDraft) => VoidOrPromise;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;

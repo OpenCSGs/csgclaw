@@ -3,22 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { ArrowUp, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
-import {
-  Button,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogRoot,
-  DialogTitle,
-  PopoverClose,
-  PopoverContent,
-  PopoverRoot,
-  PopoverTrigger,
-  TextInput,
-  Tooltip,
-} from "@/components/ui";
+import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, Tooltip } from "@/components/ui";
 import { ConnectorGitLabIcon, IconImage } from "@/components/ui/Icons";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentProfileLike } from "@/models/agents";
@@ -31,12 +16,8 @@ import {
   type ComposerMentionUser,
   type ComposerSegment,
 } from "@/models/composer";
-import {
-  emptyGitHubConnectorStatus,
-  emptyGitLabConnectorStatus,
-  gitLabConnectorDraftFromStatus,
-} from "@/models/connectors";
-import type { ConnectorConfigDraft, ConnectorStatus, GitLabConnectorConfigDraft } from "@/models/connectors";
+import { emptyGitHubConnectorStatus } from "@/models/connectors";
+import type { ConnectorConfigDraft, ConnectorStatus } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 import { composerActionSuggestions, type SlashPickerCandidate } from "@/models/slashCommands";
 import { classNames } from "@/shared/lib/classNames";
@@ -61,7 +42,6 @@ export type ConversationComposerProps = {
   connectorError?: string;
   connectorPending?: boolean;
   connectorStatus?: ConnectorStatus;
-  gitlabConnectorStatus?: ConnectorStatus;
   composerDisabled: boolean;
   composerDisabledReason?: string;
   composerError: string;
@@ -87,13 +67,12 @@ export type ConversationComposerProps = {
   onComposerKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
   onConnectConnector?: () => VoidOrPromise;
   onDisconnectConnector?: () => VoidOrPromise;
-  onDisconnectGitLabConnector?: () => VoidOrPromise;
   onManageConnector?: () => VoidOrPromise;
+  onManageApps?: () => void;
   onProviderLogin: (provider: string) => VoidOrPromise;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onRetrySend?: () => VoidOrPromise;
   onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => VoidOrPromise;
-  onSaveGitLabConnectorConfig?: (draft: GitLabConnectorConfigDraft) => VoidOrPromise;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;
@@ -117,7 +96,6 @@ export const ConversationComposer = memo(function ConversationComposer({
   connectorError = "",
   connectorPending = false,
   connectorStatus,
-  gitlabConnectorStatus,
   composerDisabled,
   composerDisabledReason = "",
   composerError,
@@ -149,12 +127,11 @@ export const ConversationComposer = memo(function ConversationComposer({
   onComposerKeyDown,
   onConnectConnector,
   onDisconnectConnector,
-  onDisconnectGitLabConnector,
   onManageConnector,
+  onManageApps,
   onProviderLogin,
   onPreviewAttachment,
   onRetrySend,
-  onSaveGitLabConnectorConfig,
   onRemoveAttachment = () => {},
   onSendMessage,
   onStopSend,
@@ -165,8 +142,6 @@ export const ConversationComposer = memo(function ConversationComposer({
 }: ConversationComposerProps) {
   const defaultConnectorStatus = useMemo(() => emptyGitHubConnectorStatus(), []);
   const githubStatus = connectorStatus ?? defaultConnectorStatus;
-  const defaultGitLabStatus = useMemo(() => emptyGitLabConnectorStatus(), []);
-  const gitlabStatus = gitlabConnectorStatus ?? defaultGitLabStatus;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerHelpId = useId();
   const isSending = sendStatus === "sending";
@@ -310,14 +285,12 @@ export const ConversationComposer = memo(function ConversationComposer({
             error={connectorError}
             pending={connectorPending}
             status={githubStatus}
-            gitlabStatus={gitlabStatus}
             t={t}
             onAddFiles={() => fileInputRef.current?.click()}
             onConnect={onConnectConnector}
             onDisconnect={onDisconnectConnector}
-            onDisconnectGitLab={onDisconnectGitLabConnector}
             onManage={onManageConnector}
-            onSaveGitLab={onSaveGitLabConnectorConfig}
+            onManageApps={onManageApps}
           />
           <input
             ref={fileInputRef}
@@ -559,14 +532,12 @@ type ComposerAddMenuProps = {
   error: string;
   pending: boolean;
   status: ConnectorStatus;
-  gitlabStatus: ConnectorStatus;
   t: TranslateFn;
   onAddFiles: () => void;
   onConnect?: () => VoidOrPromise;
   onDisconnect?: () => VoidOrPromise;
-  onDisconnectGitLab?: () => VoidOrPromise;
   onManage?: () => VoidOrPromise;
-  onSaveGitLab?: (draft: GitLabConnectorConfigDraft) => VoidOrPromise;
+  onManageApps?: () => void;
 };
 
 function ComposerAddMenu({
@@ -576,19 +547,14 @@ function ComposerAddMenu({
   error,
   pending,
   status,
-  gitlabStatus,
   t,
   onAddFiles,
   onConnect,
   onDisconnect,
-  onDisconnectGitLab,
   onManage,
-  onSaveGitLab,
+  onManageApps,
 }: ComposerAddMenuProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const [gitlabFormOpen, setGitLabFormOpen] = useState(false);
-  const [gitlabDraft, setGitLabDraft] = useState(() => gitLabConnectorDraftFromStatus(gitlabStatus));
-  const [gitlabFeedback, setGitLabFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const accountLabel = status.account?.login || status.account?.name || "";
   const connectorStateLabel =
     status.connected && accountLabel
@@ -596,9 +562,8 @@ function ComposerAddMenu({
       : status.connected
         ? t("connectorConnected")
         : t("connectorNotConnected");
-  const hasConnectedConnector = status.connected || gitlabStatus.connected;
+  const hasConnectedConnector = status.connected;
   const githubBusy = pending || (busyProvider !== "gitlab" && busyAction === "connect");
-  const gitlabBusy = busyProvider === "gitlab" && Boolean(busyAction);
 
   function handleConnectGitHub() {
     void onConnect?.();
@@ -610,25 +575,6 @@ function ComposerAddMenu({
 
   function handleManageGitHub() {
     void onManage?.();
-  }
-
-  function handleOpenGitLabForm() {
-    setGitLabDraft(gitLabConnectorDraftFromStatus(gitlabStatus));
-    setGitLabFeedback(null);
-    setPopoverOpen(false);
-    setGitLabFormOpen(true);
-  }
-
-  async function handleSaveGitLab() {
-    if (!gitlabDraft.base_url.trim() || (!gitlabStatus.access_token_set && !gitlabDraft.access_token.trim())) return;
-    setGitLabFeedback(null);
-    try {
-      await onSaveGitLab?.(gitlabDraft);
-      setGitLabFeedback({ tone: "success", message: t("connectorGitLabSaveSuccess") });
-      setGitLabDraft((current) => ({ ...current, access_token: "" }));
-    } catch (_) {
-      setGitLabFeedback({ tone: "error", message: error || t("connectorGitLabSaveFailed") });
-    }
   }
 
   return (
@@ -733,45 +679,21 @@ function ComposerAddMenu({
                 </span>
                 <div className="connector-provider-copy">
                   <strong>{t("connectorGitLab")}</strong>
-                  <span>
-                    {gitlabStatus.account?.login ||
-                      (gitlabStatus.connected ? t("connectorConnected") : t("connectorNotConnected"))}
-                  </span>
+                  <span>{t("appManageGlobally")}</span>
                 </div>
               </div>
-              {gitlabStatus.connected ? (
-                <div className="connector-provider-actions">
-                  <span className="connector-connected-state">{t("connectorConnected")}</span>
-                  <div className="connector-provider-action-buttons">
-                    <Button
-                      className="connector-manage-button"
-                      size="sm"
-                      variant="secondaryGray"
-                      onClick={handleOpenGitLabForm}
-                    >
-                      {t("connectorEdit")}
-                    </Button>
-                    <Button
-                      className="connector-disconnect-button connector-disconnect-button-danger"
-                      loading={gitlabBusy && busyAction === "disconnect"}
-                      size="sm"
-                      variant="outlineDanger"
-                      onClick={() => void onDisconnectGitLab?.()}
-                    >
-                      {t("connectorDisconnect")}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <Button
-                  className="connector-connect-button"
-                  size="sm"
-                  variant="tertiaryGray"
-                  onClick={handleOpenGitLabForm}
-                >
-                  {t("connectorConnect")}
-                </Button>
-              )}
+              <Button
+                className="connector-connect-button"
+                size="sm"
+                variant="tertiaryGray"
+                disabled={!onManageApps}
+                onClick={() => {
+                  setPopoverOpen(false);
+                  onManageApps?.();
+                }}
+              >
+                {t("appOpenApps")}
+              </Button>
             </div>
             {pending ? (
               <div className="connector-pending" role="status">
@@ -782,77 +704,6 @@ function ComposerAddMenu({
           </section>
         </PopoverContent>
       </PopoverRoot>
-      <DialogRoot open={gitlabFormOpen} onOpenChange={setGitLabFormOpen}>
-        <DialogContent className="connector-config-dialog">
-          <DialogHeader className="connector-config-dialog-header">
-            <div className="connector-config-dialog-heading">
-              <DialogTitle>{t("connectorGitLab")}</DialogTitle>
-            </div>
-            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
-          </DialogHeader>
-          <DialogBody className="connector-config-dialog-body">
-            <label className="connector-config-field">
-              <span>{t("connectorGitLabBaseURL")}</span>
-              <TextInput
-                aria-label={t("connectorGitLabBaseURL")}
-                autoComplete="url"
-                placeholder="https://gitlab.example.com"
-                value={gitlabDraft.base_url}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  setGitLabFeedback(null);
-                  setGitLabDraft((current) => ({ ...current, base_url: value }));
-                }}
-              />
-            </label>
-            <label className="connector-config-field">
-              <span>{t("connectorGitLabToken")}</span>
-              <TextInput
-                aria-label={t("connectorGitLabToken")}
-                autoComplete="off"
-                placeholder={gitlabStatus.access_token_set ? t("connectorGitLabTokenKeep") : "glpat-…"}
-                type="password"
-                value={gitlabDraft.access_token}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  setGitLabFeedback(null);
-                  setGitLabDraft((current) => ({ ...current, access_token: value }));
-                }}
-              />
-            </label>
-            {gitlabFeedback ? (
-              <div
-                className={`connector-config-feedback${gitlabFeedback.tone === "success" ? " success" : ""}`}
-                role={gitlabFeedback.tone === "success" ? "status" : "alert"}
-              >
-                {gitlabFeedback.message}
-              </div>
-            ) : null}
-          </DialogBody>
-          <DialogFooter className="connector-config-dialog-actions">
-            <Button
-              size="sm"
-              variant="tertiaryGray"
-              onClick={() => {
-                setGitLabFeedback(null);
-                setGitLabFormOpen(false);
-              }}
-            >
-              {t("cancel")}
-            </Button>
-            <Button
-              loading={gitlabBusy && busyAction === "save"}
-              size="sm"
-              disabled={
-                !gitlabDraft.base_url.trim() || (!gitlabStatus.access_token_set && !gitlabDraft.access_token.trim())
-              }
-              onClick={() => void handleSaveGitLab()}
-            >
-              {t("connectorSave")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </DialogRoot>
     </>
   );
 }

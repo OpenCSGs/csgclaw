@@ -14,7 +14,7 @@ export const DesktopIPC = {
   updateStatus: "csgclaw:desktop:update-status",
 } as const;
 
-export type OAuthPurpose = "opencsg-auth" | "github-connector";
+export type OAuthPurpose = "opencsg-auth" | "github-connector" | "gitlab-connector";
 export type DesktopThemeSource = "system" | "light" | "dark";
 export type DesktopUpdateChannel = "release" | "beta";
 

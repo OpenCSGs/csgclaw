@@ -1,0 +1,537 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/apitypes"
+	"csgclaw/internal/apps"
+	"csgclaw/internal/connectors"
+	"csgclaw/internal/participant"
+	agentruntime "csgclaw/internal/runtime"
+	runtimecodex "csgclaw/internal/runtime/codex"
+)
+
+// EnableApps wires the same installation service into HTTP administration and
+// the Agent-scoped MCP endpoint. Call before accepting requests.
+func (h *Handler) EnableApps(statePath string) error {
+	service, err := apps.NewService(statePath, apps.Options{
+		ReadOnly: h.appReadOnlyAgent,
+		ResolveConnectorHTTP: func(ctx context.Context, agentID string, appID string, cfg apps.Config) (apps.ConnectorHTTPConfig, error) {
+			if appID != "gitlab" || h.connectors == nil || strings.TrimSpace(cfg.ConnectorID) != connectors.ProviderGitLab {
+				return apps.ConnectorHTTPConfig{}, apps.ErrUnsupportedOAuth
+			}
+			credential, err := h.connectors.CredentialForAgent(ctx, agentID, connectors.ProviderGitLab)
+			if err != nil {
+				return apps.ConnectorHTTPConfig{}, err
+			}
+			if credential.TokenType != "private-token" {
+				return apps.ConnectorHTTPConfig{}, fmt.Errorf("GitLab Connector requires a personal access token")
+			}
+			if !sameNormalizedURL(cfg.GitLabBaseURL, credential.BaseURL) {
+				return apps.ConnectorHTTPConfig{}, fmt.Errorf("GitLab App instance does not match the connected GitLab Connector")
+			}
+			return apps.ConnectorHTTPConfig{
+				Endpoint: cfg.URL, Token: credential.AccessToken, TokenHeader: "PRIVATE-TOKEN",
+				Headers: http.Header{"X-GitLab-Base-URL": []string{credential.BaseURL}},
+			}, nil
+		},
+		ResolveFeishu: func(ctx context.Context, agentID string) (apps.FeishuCredentials, error) {
+			if err := ctx.Err(); err != nil {
+				return apps.FeishuCredentials{}, err
+			}
+			info, err := h.feishuBotAppInfoForAgent(agentID)
+			if err != nil {
+				return apps.FeishuCredentials{}, fmt.Errorf("Feishu channel credentials are unavailable")
+			}
+			return apps.FeishuCredentials{AppID: info.AppID, AppSecret: info.AppSecret}, nil
+		},
+		OnCatalogChanged: func(agentID string, revision uint64) {
+			// Never make an app-server RPC while answering its MCP request.
+			// Every prompt also checks the revision source before admission.
+			go func() {
+				if rt := h.appCodexRuntime(); rt != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+					defer cancel()
+					if err := rt.RefreshAgentMCP(ctx, agentID, revision); err != nil {
+						slog.Warn("refresh Agent App tools", "agent_id", agentID, "error", err)
+					}
+				}
+			}()
+		},
+	})
+	if err != nil {
+		return err
+	}
+	h.apps = service
+	h.appPlatformAgents = make(map[string]string)
+	if rt := h.appCodexRuntime(); rt != nil {
+		rt.SetAgentMCPRevisionSource(service.Revision)
+	}
+	if owner, ok := h.svc.(interface {
+		SetAgentResourceCleanup(func(context.Context, string) error)
+	}); ok {
+		owner.SetAgentResourceCleanup(func(ctx context.Context, agentID string) error {
+			if err := service.DeleteAgent(ctx, agentID); err != nil {
+				return err
+			}
+			h.appPlatformMu.Lock()
+			delete(h.appPlatformAgents, agentID)
+			h.appPlatformMu.Unlock()
+			return nil
+		})
+	}
+	return nil
+}
+
+func (h *Handler) appReadOnlyAgent(agentID string) bool {
+	if h.svc == nil {
+		return false
+	}
+	a, ok := h.svc.Agent(agentID)
+	if !ok || a.RuntimeKind != agent.RuntimeKindCodex {
+		return false
+	}
+	options, err := runtimecodex.DecodeRuntimeOptions(a.RuntimeOptions)
+	return err != nil || options.ExecutionMode == runtimecodex.ExecutionModeReadOnly
+}
+
+func (h *Handler) appCodexRuntime() *runtimecodex.Runtime {
+	owner, ok := h.svc.(interface {
+		Runtime(string) (agentruntime.Runtime, error)
+	})
+	if !ok {
+		return nil
+	}
+	rt, err := owner.Runtime(agent.RuntimeKindCodex)
+	if err != nil {
+		return nil
+	}
+	result, _ := rt.(*runtimecodex.Runtime)
+	return result
+}
+
+func (h *Handler) RestoreApps(ctx context.Context) {
+	if h.apps == nil {
+		return
+	}
+	if err := h.apps.RestoreAll(ctx); err != nil && ctx.Err() == nil {
+		slog.Warn("restore Agent Apps", "error", err)
+	}
+}
+
+func (h *Handler) CloseApps() error {
+	if h.apps == nil {
+		return nil
+	}
+	if rt := h.appCodexRuntime(); rt != nil {
+		rt.SetAgentMCPRevisionSource(nil)
+	}
+	return h.apps.Close()
+}
+
+func (h *Handler) refreshAppChannelCredentials(item apitypes.Participant) {
+	if h.apps == nil || item.Channel != participant.ChannelFeishu || item.AgentID == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := h.apps.RefreshCredentials(ctx, item.AgentID); err != nil {
+			slog.Warn("refresh App channel credentials", "agent_id", item.AgentID)
+		}
+	}()
+}
+
+func (h *Handler) requireAppAgent(w http.ResponseWriter, r *http.Request) (string, bool) {
+	if h.apps == nil {
+		writeCodedAPIError(w, http.StatusServiceUnavailable, "apps_unavailable", "App service is unavailable")
+		return "", false
+	}
+	id := strings.TrimSpace(pathValue(r, "id"))
+	if h.svc == nil {
+		writeCodedAPIError(w, http.StatusServiceUnavailable, "apps_unavailable", "Agent service is unavailable")
+		return "", false
+	}
+	a, ok := h.svc.Agent(id)
+	if !ok {
+		writeCodedAPIError(w, http.StatusNotFound, "agent_not_found", "Agent not found")
+		return "", false
+	}
+	return a.ID, true
+}
+
+func (h *Handler) handleApps(w http.ResponseWriter, r *http.Request) {
+	if h.apps == nil {
+		writeCodedAPIError(w, http.StatusServiceUnavailable, "apps_unavailable", "App service is unavailable")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	if id := pathValue(r, "app_id"); id != "" {
+		item, err := h.apps.Definition(id)
+		if err != nil {
+			writeAppError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": h.apps.Catalog()})
+}
+
+func (h *Handler) handleAgentApps(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAppAgent(w, r)
+	if !ok {
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == http.MethodGet {
+		items, err := h.apps.List(r.Context(), agentID)
+		if err != nil {
+			writeAppError(w, err)
+			return
+		}
+		_, channelErr := h.feishuBotAppInfoForAgent(agentID)
+		writeJSON(w, http.StatusOK, map[string]any{"items": items, "feishu_channel_available": channelErr == nil})
+		return
+	}
+	var req apps.BindRequest
+	if !decodeAppRequest(w, r, &req) {
+		return
+	}
+	var item apps.Installation
+	create := func(ctx context.Context) error {
+		// App creation shares the Agent deletion lease and rechecks existence
+		// after acquiring it, so deletion cannot leave a late installation.
+		if _, exists := h.svc.Agent(agentID); !exists {
+			return apps.ErrNotFound
+		}
+		var err error
+		item, err = h.apps.Bind(ctx, agentID, req)
+		return err
+	}
+	var err error
+	if h.agentRuntime != nil {
+		err = h.agentRuntime.WithAgentLifecycle(r.Context(), agentID, create)
+	} else {
+		err = create(r.Context())
+	}
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (h *Handler) handleAgentApp(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAppAgent(w, r)
+	if !ok {
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	id := pathValue(r, "installation_id")
+	var item apps.Installation
+	var err error
+	switch r.Method {
+	case http.MethodGet:
+		item, err = h.apps.Get(r.Context(), agentID, id)
+	case http.MethodPatch:
+		var req apps.BindingUpdateRequest
+		if !decodeAppRequest(w, r, &req) {
+			return
+		}
+		item, err = h.apps.Update(r.Context(), agentID, id, apps.UpdateRequest{Enabled: req.Enabled})
+	case http.MethodDelete:
+		if err = h.apps.Delete(r.Context(), agentID, id); err == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	case http.MethodPost:
+		switch pathValue(r, "app_action") {
+		case "connect":
+			item, err = h.apps.Connect(r.Context(), agentID, id)
+		case "disconnect":
+			item, err = h.apps.Disconnect(r.Context(), agentID, id)
+		default:
+			err = apps.ErrInvalid
+		}
+	}
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) lockGitLabConnectorForApp(appID string, config apps.Config, credentials *apps.Credentials) func() {
+	if appID != "gitlab" || config.AuthMode != "connector" || credentials == nil || strings.TrimSpace(credentials.Token) == "" {
+		return func() {}
+	}
+	h.gitLabConnectorMu.Lock()
+	return h.gitLabConnectorMu.Unlock
+}
+
+func (h *Handler) saveGitLabConnectorForApp(ctx context.Context, agentID, appID string, config apps.Config, credentials *apps.Credentials) (func(), error) {
+	noop := func() {}
+	if appID != "gitlab" || config.AuthMode != "connector" || credentials == nil || strings.TrimSpace(credentials.Token) == "" {
+		return noop, nil
+	}
+	if h.connectors == nil {
+		return noop, fmt.Errorf("GitLab Connector service is unavailable")
+	}
+	previous, existed, err := h.connectors.SnapshotGitLab()
+	if err != nil {
+		return noop, err
+	}
+	if _, err := h.connectors.SaveGitLabConfig(ctx, connectors.Config{
+		BaseURL: config.GitLabBaseURL, AccessToken: credentials.Token,
+	}); err != nil {
+		return noop, err
+	}
+	if h.apps != nil {
+		if err := h.apps.RefreshConnector(ctx, connectors.ProviderGitLab); err != nil {
+			slog.Warn("refresh GitLab Apps after Connector update", "agent_id", agentID, "error", err)
+		}
+	}
+	credentials.Token = ""
+	return func() {
+		if err := h.connectors.RestoreGitLab(previous, existed); err != nil {
+			slog.Error("rollback GitLab Connector after App save failure", "agent_id", agentID, "error", err)
+			return
+		}
+		if h.apps != nil {
+			if err := h.apps.RefreshConnector(context.Background(), connectors.ProviderGitLab); err != nil {
+				slog.Warn("refresh GitLab Apps after Connector rollback", "agent_id", agentID, "error", err)
+			}
+		}
+	}, nil
+}
+
+func (h *Handler) handleAgentAppsProbe(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAppAgent(w, r)
+	if !ok {
+		return
+	}
+	var req apps.ProbeRequest
+	if !decodeAppRequest(w, r, &req) {
+		return
+	}
+	item, err := h.apps.Probe(r.Context(), agentID, req)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (h *Handler) handleAppOAuthStart(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAppAgent(w, r)
+	if !ok {
+		return
+	}
+	if _, err := h.apps.Get(r.Context(), agentID, pathValue(r, "installation_id")); err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeAppError(w, apps.ErrUnsupportedOAuth)
+}
+
+func sameNormalizedURL(left, right string) bool {
+	normalize := func(raw string) string {
+		u, err := url.Parse(strings.TrimSpace(raw))
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return ""
+		}
+		u.RawQuery = ""
+		u.Fragment = ""
+		u.Path = strings.TrimRight(u.Path, "/")
+		return strings.TrimRight(u.String(), "/")
+	}
+	return normalize(left) != "" && normalize(left) == normalize(right)
+}
+
+func (h *Handler) handleAgentAppMCP(w http.ResponseWriter, r *http.Request) {
+	agentID, ok := h.requireAppAgent(w, r)
+	if !ok {
+		return
+	}
+	if !h.authorizesAgentToken(agentID, r.Header.Get("Authorization")) {
+		writeCodedAPIError(w, http.StatusUnauthorized, "unauthorized", "Agent credential required")
+		return
+	}
+	h.registerAppPlatformTools(agentID)
+	h.apps.Handler(agentID).ServeHTTP(w, r)
+}
+
+func decodeAppRequest(w http.ResponseWriter, r *http.Request, target any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		writeCodedAPIError(w, http.StatusBadRequest, "app_invalid_configuration", "Invalid App request")
+		return false
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		writeCodedAPIError(w, http.StatusBadRequest, "app_invalid_configuration", "Invalid App request")
+		return false
+	}
+	return true
+}
+
+func writeAppError(w http.ResponseWriter, err error) {
+	status, code, message := http.StatusBadGateway, "app_connection_failed", "App connection failed; check its settings and credentials"
+	var detail *apps.ConnectionError
+	switch {
+	case errors.As(err, &detail):
+		code, message = detail.Code, detail.Message
+		if errors.Is(err, apps.ErrInvalid) {
+			status = http.StatusBadRequest
+		}
+	case errors.Is(err, apps.ErrNotFound):
+		status, code, message = http.StatusNotFound, "app_not_found", "App not found"
+	case errors.Is(err, apps.ErrConflict):
+		status, code, message = http.StatusConflict, "app_name_conflict", "App name already exists"
+	case errors.Is(err, apps.ErrUnsupportedOAuth):
+		status, code, message = http.StatusNotImplemented, "app_oauth_unsupported", "OAuth2 is not supported in this version"
+	case errors.Is(err, apps.ErrInvalid):
+		status, code, message = http.StatusBadRequest, "app_invalid_configuration", "Invalid App configuration"
+	}
+	writeCodedAPIError(w, status, code, message)
+}
+
+func (h *Handler) refreshAppPlatformAuthentication() {
+	if h.apps == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		_ = h.apps.RefreshPlatformCredentials(ctx)
+	}()
+}
+
+// Global App resources own configuration and secrets. Agent endpoints only bind
+// them and control per-Agent execution state.
+func (h *Handler) handleAppResources(w http.ResponseWriter, r *http.Request) {
+	if h.apps == nil {
+		writeCodedAPIError(w, http.StatusServiceUnavailable, "apps_unavailable", "App service is unavailable")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	id := pathValue(r, "resource_id")
+	var result any
+	var err error
+	status := http.StatusOK
+	switch r.Method {
+	case http.MethodGet:
+		if id == "" {
+			var items []apps.Installation
+			items, err = h.apps.List(r.Context(), "")
+			for i := range items {
+				items[i] = h.appResourceNames(items[i])
+			}
+			result = map[string]any{"items": items}
+		} else {
+			result, err = h.apps.Get(r.Context(), "", id)
+		}
+	case http.MethodPost:
+		var req apps.CreateRequest
+		if !decodeAppRequest(w, r, &req) {
+			return
+		}
+		req.Connect = false
+		unlockConnector := h.lockGitLabConnectorForApp(req.AppID, req.Config, &req.Credentials)
+		defer unlockConnector()
+		rollbackConnector, saveErr := h.saveGitLabConnectorForApp(r.Context(), "", req.AppID, req.Config, &req.Credentials)
+		if saveErr != nil {
+			writeAppError(w, saveErr)
+			return
+		}
+		result, err = h.apps.Create(r.Context(), "", req)
+		if err != nil {
+			rollbackConnector()
+		}
+		status = http.StatusCreated
+	case http.MethodPatch:
+		var req apps.UpdateRequest
+		if !decodeAppRequest(w, r, &req) {
+			return
+		}
+		current, getErr := h.apps.Get(r.Context(), "", id)
+		if getErr != nil {
+			writeAppError(w, getErr)
+			return
+		}
+		config := current.Config
+		if req.Config != nil {
+			config = *req.Config
+		}
+		unlockConnector := h.lockGitLabConnectorForApp(current.AppID, config, req.Credentials)
+		defer unlockConnector()
+		rollbackConnector, saveErr := h.saveGitLabConnectorForApp(r.Context(), "", current.AppID, config, req.Credentials)
+		if saveErr != nil {
+			writeAppError(w, saveErr)
+			return
+		}
+		result, err = h.apps.Update(r.Context(), "", id, req)
+		if err != nil {
+			rollbackConnector()
+		}
+	case http.MethodDelete:
+		err = h.apps.Delete(r.Context(), "", id)
+		if err == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	if resource, ok := result.(apps.Installation); ok {
+		result = h.appResourceNames(resource)
+	}
+	writeJSON(w, status, result)
+}
+func (h *Handler) handleAppResourceProbe(w http.ResponseWriter, r *http.Request) {
+	if h.apps == nil {
+		writeCodedAPIError(w, http.StatusServiceUnavailable, "apps_unavailable", "App service is unavailable")
+		return
+	}
+	var req apps.ProbeRequest
+	if !decodeAppRequest(w, r, &req) {
+		return
+	}
+	if req.Config.CredentialSource == "feishu_channel" {
+		writeCodedAPIError(w, http.StatusBadRequest, "app_agent_identity_required", "Add this App to an Agent to test its Feishu channel identity.")
+		return
+	}
+	result, err := h.apps.Probe(r.Context(), "", req)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) appResourceNames(item apps.Installation) apps.Installation {
+	if h.svc == nil {
+		return item
+	}
+	for i, binding := range item.Bindings {
+		if a, ok := h.svc.Agent(binding.AgentID); ok {
+			item.Bindings[i].AgentName = a.Name
+		}
+	}
+	return item
+}

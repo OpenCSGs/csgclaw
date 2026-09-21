@@ -19,6 +19,7 @@ export type ConnectorStatus = {
   client_secret_set: boolean;
   base_url: string;
   access_token_set: boolean;
+  auth_method: string;
   configured: boolean;
   connected: boolean;
   connected_at: string;
@@ -32,6 +33,7 @@ export type ConnectorStatus = {
 export type GitLabConnectorConfigDraft = {
   base_url: string;
   access_token: string;
+  auth_method?: "oauth" | "personal_access_token";
 };
 
 export type ConnectorConfigDraft = {
@@ -59,6 +61,7 @@ export function emptyGitHubConnectorStatus(): ConnectorStatus {
     client_secret_set: false,
     base_url: "",
     access_token_set: false,
+    auth_method: "oauth",
     configured: false,
     connected: false,
     connected_at: "",
@@ -98,6 +101,7 @@ export function normalizeConnectorStatus(source: unknown): ConnectorStatus {
     client_secret_set: Boolean(item.client_secret_set),
     base_url: cleanString(item.base_url),
     access_token_set: Boolean(item.access_token_set),
+    auth_method: cleanString(item.auth_method) || base.auth_method,
     configured: Boolean(item.configured),
     connected,
     connected_at: cleanString(item.connected_at),
@@ -127,7 +131,11 @@ export function gitLabConnectorDraftFromStatus(status: ConnectorStatus | null | 
 }
 
 export function normalizeGitLabConnectorConfigDraft(source: GitLabConnectorConfigDraft): GitLabConnectorConfigDraft {
-  return { base_url: cleanString(source.base_url).replace(/\/+$/, ""), access_token: cleanString(source.access_token) };
+  return {
+    base_url: cleanString(source.base_url).replace(/\/+$/, ""),
+    access_token: cleanString(source.access_token),
+    auth_method: source.auth_method,
+  };
 }
 
 export function normalizeOAuthStartResponse(source: unknown): OAuthStartResponse {

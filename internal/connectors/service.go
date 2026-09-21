@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -42,6 +43,7 @@ type Service struct {
 	GitHubAppSlug      string
 	Now                func() time.Time
 	GenerateOAuthState func() (OAuthState, error)
+	gitLabMu           sync.Mutex
 }
 
 type callbackValidationError struct {
@@ -66,23 +68,15 @@ func (s *Service) List(ctx context.Context, callbackURL string) ([]Status, error
 	if err != nil {
 		return nil, err
 	}
-	gitlab, err := s.Status(ctx, ProviderGitLab, "")
-	if err != nil {
-		return nil, err
-	}
-	return []Status{status, gitlab}, nil
+	return []Status{status}, nil
 }
 
 func (s *Service) Status(_ context.Context, provider, callbackURL string) (Status, error) {
 	if err := validateProvider(provider); err != nil {
 		return Status{}, err
 	}
-	if strings.EqualFold(strings.TrimSpace(provider), ProviderGitLab) {
-		state, _, err := s.store().LoadGitLab()
-		if err != nil {
-			return Status{}, err
-		}
-		return state.GitLabStatus(), nil
+	if !strings.EqualFold(strings.TrimSpace(provider), ProviderGitHub) {
+		return Status{}, fmt.Errorf("global connector status is only available for GitHub")
 	}
 	state, _, err := s.store().LoadGitHub()
 	if err != nil {
@@ -101,16 +95,18 @@ func (s *Service) Status(_ context.Context, provider, callbackURL string) (Statu
 	return status, nil
 }
 
+// SaveGitLabConfig validates and stores the workspace-wide GitLab PAT connector.
 func (s *Service) SaveGitLabConfig(ctx context.Context, config Config) (Status, error) {
+	s.gitLabMu.Lock()
+	defer s.gitLabMu.Unlock()
 	store := s.store()
 	state, _, err := store.LoadGitLab()
 	if err != nil {
 		return Status{}, err
 	}
 	next := NormalizeGitLabConfig(config)
-	existing := NormalizeGitLabConfig(state.Config)
 	if next.AccessToken == "" {
-		next.AccessToken = existing.AccessToken
+		next.AccessToken = NormalizeGitLabConfig(state.Config).AccessToken
 	}
 	if err := validateGitLabBaseURL(next.BaseURL); err != nil {
 		return Status{}, err
@@ -131,6 +127,89 @@ func (s *Service) SaveGitLabConfig(ctx context.Context, config Config) (Status, 
 		return Status{}, err
 	}
 	return state.GitLabStatus(), nil
+}
+
+func (s *Service) GitLabStatus() (Status, error) {
+	s.gitLabMu.Lock()
+	defer s.gitLabMu.Unlock()
+	state, _, err := s.store().LoadGitLab()
+	if err != nil {
+		return Status{}, err
+	}
+	return state.GitLabStatus(), nil
+}
+
+func (s *Service) CredentialForAgent(ctx context.Context, agentID, provider string) (Credential, error) {
+	if !strings.EqualFold(strings.TrimSpace(provider), ProviderGitLab) {
+		return s.Credential(ctx, provider)
+	}
+	s.gitLabMu.Lock()
+	defer s.gitLabMu.Unlock()
+	store := s.store()
+	state, ok, err := store.LoadGitLab()
+	if err != nil {
+		return Credential{}, err
+	}
+	config := NormalizeGitLabConfig(state.Config)
+	if !ok || config.AccessToken == "" {
+		return Credential{}, fmt.Errorf("gitlab connector is not connected")
+	}
+	account, err := s.fetchGitLabAccount(ctx, config)
+	if err != nil {
+		return Credential{}, fmt.Errorf("gitlab connector credential is invalid; reconnect GitLab: %w", err)
+	}
+	state.Account = &account
+	state.UpdatedAt = s.now()
+	if err := store.SaveGitLab(state); err != nil {
+		return Credential{}, err
+	}
+	return Credential{Provider: ProviderGitLab, AccessToken: config.AccessToken, TokenType: "private-token", BaseURL: config.BaseURL}, nil
+}
+
+func (s *Service) DisconnectGitLab() (Status, error) {
+	s.gitLabMu.Lock()
+	defer s.gitLabMu.Unlock()
+	store := s.store()
+	state, _, err := store.LoadGitLab()
+	if err != nil {
+		return Status{}, err
+	}
+	state = State{
+		Config:    Config{BaseURL: NormalizeGitLabConfig(state.Config).BaseURL},
+		UpdatedAt: s.now(),
+	}
+	if err := store.SaveGitLab(state); err != nil {
+		return Status{}, err
+	}
+	return state.GitLabStatus(), nil
+}
+
+func (s *Service) SnapshotGitLab() (State, bool, error) {
+	s.gitLabMu.Lock()
+	defer s.gitLabMu.Unlock()
+	return s.store().LoadGitLab()
+}
+
+func (s *Service) RestoreGitLab(state State, existed bool) error {
+	s.gitLabMu.Lock()
+	defer s.gitLabMu.Unlock()
+	if !existed {
+		return s.store().DeleteGitLab()
+	}
+	return s.store().SaveGitLab(state)
+}
+
+// Deprecated agent-scoped helpers now operate on the shared connector.
+func (s *Service) SaveGitLabConfigForAgent(ctx context.Context, _ string, config Config) (Status, error) {
+	return s.SaveGitLabConfig(ctx, config)
+}
+func (s *Service) GitLabStatusForAgent(string) (Status, error) { return s.GitLabStatus() }
+func (s *Service) DisconnectGitLabForAgent(string) (Status, error) {
+	return s.DisconnectGitLab()
+}
+func (s *Service) SnapshotGitLabForAgent(string) (State, bool, error) { return s.SnapshotGitLab() }
+func (s *Service) RestoreGitLabForAgent(_ string, state State, existed bool) error {
+	return s.RestoreGitLab(state, existed)
 }
 
 func (s *Service) fetchGitLabAccount(ctx context.Context, config Config) (Account, error) {
@@ -209,9 +288,12 @@ func (s *Service) SaveConfig(ctx context.Context, provider string, config Config
 	return s.Status(ctx, provider, "")
 }
 
-func (s *Service) StartOAuth(_ context.Context, provider string, opts OAuthStartOptions) (OAuthStartResponse, error) {
+func (s *Service) StartOAuth(ctx context.Context, provider string, opts OAuthStartOptions) (OAuthStartResponse, error) {
 	if err := validateProvider(provider); err != nil {
 		return OAuthStartResponse{}, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(provider), ProviderGitHub) {
+		return OAuthStartResponse{}, fmt.Errorf("OAuth is only supported for GitHub")
 	}
 	callbackURL := strings.TrimSpace(opts.CallbackURL)
 	if callbackURL == "" {
@@ -254,6 +336,9 @@ func (s *Service) StartOAuth(_ context.Context, provider string, opts OAuthStart
 func (s *Service) CompleteOAuth(ctx context.Context, provider string, values url.Values) (Status, error) {
 	if err := validateProvider(provider); err != nil {
 		return Status{}, err
+	}
+	if !strings.EqualFold(strings.TrimSpace(provider), ProviderGitHub) {
+		return Status{}, fmt.Errorf("OAuth is only supported for GitHub")
 	}
 	code := strings.TrimSpace(values.Get("code"))
 	if code == "" {
@@ -303,21 +388,10 @@ func (s *Service) Disconnect(ctx context.Context, provider string) (Status, erro
 	if err := validateProvider(provider); err != nil {
 		return Status{}, err
 	}
-	store := s.store()
-	if strings.EqualFold(strings.TrimSpace(provider), ProviderGitLab) {
-		state, _, err := store.LoadGitLab()
-		if err != nil {
-			return Status{}, err
-		}
-		state.Config.AccessToken = ""
-		state.Account = nil
-		state.ConnectedAt = time.Time{}
-		state.UpdatedAt = s.now()
-		if err := store.SaveGitLab(state); err != nil {
-			return Status{}, err
-		}
-		return state.GitLabStatus(), nil
+	if !strings.EqualFold(strings.TrimSpace(provider), ProviderGitHub) {
+		return Status{}, fmt.Errorf("global disconnect is only supported for GitHub")
 	}
+	store := s.store()
 	state, _, err := store.LoadGitHub()
 	if err != nil {
 		return Status{}, err
@@ -337,27 +411,10 @@ func (s *Service) Credential(ctx context.Context, provider string) (Credential, 
 	if err := validateProvider(provider); err != nil {
 		return Credential{}, err
 	}
-	store := s.store()
-	if strings.EqualFold(strings.TrimSpace(provider), ProviderGitLab) {
-		state, ok, err := store.LoadGitLab()
-		if err != nil {
-			return Credential{}, err
-		}
-		config := NormalizeGitLabConfig(state.Config)
-		if !ok || config.AccessToken == "" {
-			return Credential{}, fmt.Errorf("gitlab connector is not connected")
-		}
-		account, err := s.fetchGitLabAccount(ctx, config)
-		if err != nil {
-			return Credential{}, fmt.Errorf("gitlab connector credential is invalid; reconnect GitLab: %w", err)
-		}
-		state.Account = &account
-		state.UpdatedAt = s.now()
-		if err := store.SaveGitLab(state); err != nil {
-			return Credential{}, err
-		}
-		return Credential{Provider: ProviderGitLab, AccessToken: config.AccessToken, TokenType: "private-token", BaseURL: config.BaseURL}, nil
+	if !strings.EqualFold(strings.TrimSpace(provider), ProviderGitHub) {
+		return Credential{}, fmt.Errorf("global credentials are only supported for GitHub")
 	}
+	store := s.store()
 	state, ok, err := store.LoadGitHub()
 	if err != nil {
 		return Credential{}, err

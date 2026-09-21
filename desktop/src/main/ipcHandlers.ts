@@ -117,7 +117,8 @@ function parseOAuthInput(input: unknown): DesktopOAuthInput {
   const source = input as Record<string, unknown>;
   if (
     source.purpose !== "opencsg-auth" &&
-    source.purpose !== "github-connector"
+    source.purpose !== "github-connector" &&
+    source.purpose !== "gitlab-connector"
   ) {
     throw new Error("OAuth purpose is invalid.");
   }
@@ -139,6 +140,24 @@ async function authorizeOAuthHost(
     if (hostname !== "github.com") {
       throw new Error("GitHub OAuth must use github.com.");
     }
+    return true;
+  }
+  if (purpose === "gitlab-connector") {
+    if (confirmedCustomOAuthHosts.has(hostname)) {
+      return true;
+    }
+    const result = await dialog.showMessageBox(window, {
+      type: "question",
+      buttons: ["Open in Browser", "Cancel"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      title: "Open GitLab authentication site?",
+      message: `CSGClaw wants to open ${hostname} in your browser.`,
+      detail: "Only continue if this is the GitLab instance you configured.",
+    });
+    if (result.response !== 0) return false;
+    confirmedCustomOAuthHosts.add(hostname);
     return true;
   }
   if (isKnownOpenCSGHost(hostname) || confirmedCustomOAuthHosts.has(hostname)) {

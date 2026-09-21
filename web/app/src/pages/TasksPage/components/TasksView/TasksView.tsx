@@ -1072,14 +1072,27 @@ function TaskActionStrip({
       className={classNames(styles.headerRow, styles.justifyEnd, styles.tasksToolbar)}
       aria-label={t("tasksActionsLabel")}
     >
-      <TaskToolbarButton label={t("tasksRefreshShort")} title={t("tasksRefresh")} onClick={onRefresh} />
+      <TaskToolbarButton
+        label={t("tasksRefreshShort")}
+        title={t("tasksRefresh")}
+        tooltipContentProps={{ side: "bottom", sideOffset: 6 }}
+        onClick={onRefresh}
+      />
       {onCreateTask ? (
-        <TaskToolbarButton label={t("taskCreate")} title={t("taskCreate")} onClick={onCreateTask} />
+        <TaskToolbarButton
+          label={t("taskCreate")}
+          title={t("taskCreate")}
+          variant="primary"
+          tooltipContentProps={{ side: "bottom", sideOffset: 6 }}
+          onClick={onCreateTask}
+        />
       ) : null}
       {onCreateScheduledTask ? (
         <TaskToolbarButton
           label={t("scheduledTaskCreate")}
           title={t("scheduledTaskCreate")}
+          variant="primary"
+          tooltipContentProps={{ side: "bottom", sideOffset: 6 }}
           onClick={onCreateScheduledTask}
         />
       ) : null}
@@ -1118,13 +1131,20 @@ function TaskActionStrip({
 
 type TaskToolbarButtonProps = {
   label: string;
+  tooltipContentProps?: ComponentProps<typeof Tooltip>["contentProps"];
   title?: string;
   variant?: ButtonVariant;
 } & ComponentProps<typeof Button>;
 
-function TaskToolbarButton({ label, title = label, variant = "secondaryGray", ...props }: TaskToolbarButtonProps) {
+function TaskToolbarButton({
+  label,
+  tooltipContentProps,
+  title = label,
+  variant = "secondaryGray",
+  ...props
+}: TaskToolbarButtonProps) {
   return (
-    <Tooltip content={title}>
+    <Tooltip content={title} contentProps={tooltipContentProps}>
       <span>
         <Button
           className={classNames(

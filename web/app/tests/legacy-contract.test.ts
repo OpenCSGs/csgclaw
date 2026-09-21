@@ -45,7 +45,7 @@ describe("legacy UI contract", () => {
 
   it("keeps hub template creation behavior", () => {
     expect(source).toContain("onCreateFromTemplate: openCreateAgentFromTemplate");
-    expect(source).toContain("remote && !requireOpenCSGAuthentication()");
+    expect(source).toContain("requiresOpenCSGAuthentication && !requireOpenCSGAuthentication()");
     expect(source).toContain('from_template: agentDraft.from_template || ""');
     expect(source).toContain('templateLabel: "模板"');
     expect(source).toContain("onClick={() => onCreateFromTemplate?.(selectedTemplate)}");

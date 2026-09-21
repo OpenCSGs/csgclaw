@@ -240,6 +240,7 @@ export function useWorkspaceController() {
     selectTeamSection,
     selectNotificationSection,
     selectModelProvider,
+    selectApps,
     selectComputer,
     selectHub,
     selectSettings,
@@ -419,7 +420,6 @@ export function useWorkspaceController() {
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
     connectorStatus: connectors.github,
-    gitlabConnectorStatus: connectors.gitlab,
     connectorBusyAction: connectors.busyAction,
     connectorBusyProvider: connectors.busyProvider,
     connectorError: connectors.error,
@@ -427,9 +427,11 @@ export function useWorkspaceController() {
     onSaveConnectorConfig: connectors.saveGitHubConfig,
     onConnectConnector: connectors.connectGitHub,
     onDisconnectConnector: connectors.disconnectGitHub,
-    onDisconnectGitLabConnector: connectors.disconnectGitLab,
     onManageConnector: connectors.manageGitHub,
-    onSaveGitLabConnectorConfig: connectors.saveGitLabConfig,
+    onManageApps: () => {
+      setFloatingChatOpen(false);
+      selectApps("gitlab");
+    },
     data: displayData,
     locale,
     managerProfile,
@@ -497,7 +499,6 @@ export function useWorkspaceController() {
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
     connectorStatus: connectors.github,
-    gitlabConnectorStatus: connectors.gitlab,
     connectorBusyAction: connectors.busyAction,
     connectorBusyProvider: connectors.busyProvider,
     connectorError: connectors.error,
@@ -505,9 +506,11 @@ export function useWorkspaceController() {
     onSaveConnectorConfig: connectors.saveGitHubConfig,
     onConnectConnector: connectors.connectGitHub,
     onDisconnectConnector: connectors.disconnectGitHub,
-    onDisconnectGitLabConnector: connectors.disconnectGitLab,
     onManageConnector: connectors.manageGitHub,
-    onSaveGitLabConnectorConfig: connectors.saveGitLabConfig,
+    onManageApps: () => {
+      setFloatingChatOpen(false);
+      selectApps("gitlab");
+    },
     data: displayData,
     locale,
     managerProfile,
@@ -1055,6 +1058,7 @@ export function useWorkspaceController() {
       onPreviewUser: profilePreview.openParticipantPreview,
       onSelectAgent: selectAgent,
       onSelectModelProvider: selectModelProviderWithAuthentication,
+      onSelectApps: selectApps,
       onRequireOpenCSGAuthentication: requireOpenCSGAuthentication,
       onSelectHuman: selectHuman,
       onSelectComputer: selectComputer,

@@ -85,6 +85,7 @@ func FullSpec() CommandSpec {
 				},
 			},
 			agentSpec(),
+			appSpec(),
 			templateSpec(),
 			skillSpec(),
 			modelSpec(),
@@ -106,6 +107,7 @@ func LiteSpec() CommandSpec {
 		Name:  "csgclaw-cli",
 		Flags: liteGlobalFlags(),
 		Children: []CommandSpec{
+			appSpec(),
 			participantSpec("participant"),
 			participantSpec("pt"),
 			templateSpec(),
@@ -122,6 +124,18 @@ func LiteSpec() CommandSpec {
 
 func (cmd) Name() string {
 	return CommandName
+}
+
+func appSpec() CommandSpec {
+	root := CommandSpec{Name: "app", Summary: "List and manage an Agent's Apps."}
+	for _, name := range []string{"catalog", "list", "get", "add", "update", "probe", "connect", "disconnect", "remove"} {
+		child := CommandSpec{Name: name, Flags: []FlagSpec{{Name: "agent", TakesValue: true}, {Name: "id", TakesValue: true}}}
+		if name == "add" || name == "update" || name == "probe" {
+			child.Flags = append(child.Flags, FlagSpec{Name: "file", TakesValue: true})
+		}
+		root.Children = append(root.Children, child)
+	}
+	return root
 }
 
 func (cmd) Summary() string {

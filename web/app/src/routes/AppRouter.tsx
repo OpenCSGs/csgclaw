@@ -5,6 +5,10 @@ import type { RouteObject } from "react-router-dom";
 import { WorkspacePage } from "@/pages/WorkspacePage/WorkspacePage";
 import { loadRouteModule } from "./loadRouteModule";
 
+const AppsPage = lazy(() =>
+  loadRouteModule(() => import("@/pages/AppsPage/AppsPage").then((module) => ({ default: module.AppsPage }))),
+);
+
 const AgentPage = lazy(() =>
   loadRouteModule(() => import("@/pages/AgentPage").then((module) => ({ default: module.AgentPage }))),
 );
@@ -64,6 +68,8 @@ const routes: RouteObject[] = [
       { path: "teams", element: routeElement(TeamPage) },
       { path: "teams/:teamId", element: routeElement(TeamPage) },
       { path: "team/:teamId", element: routeElement(TeamPage) },
+      { path: "apps", element: routeElement(AppsPage) },
+      { path: "apps/:resourceId", element: routeElement(AppsPage) },
       { path: "resources", element: routeElement(HubPage) },
       { path: "hub", element: routeElement(HubPage) },
       { path: "templates/:templateId", element: routeElement(HubPage) },

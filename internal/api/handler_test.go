@@ -3205,8 +3205,8 @@ func TestAgentMCPServersDedicatedEndpointsUseDirectRawMaps(t *testing.T) {
 	legacyGet := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+created.ID+"/mcp", nil)
 	legacyGetRec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(legacyGetRec, legacyGet)
-	if legacyGetRec.Code != http.StatusNotFound {
-		t.Fatalf("legacy GET /mcp status = %d, want %d", legacyGetRec.Code, http.StatusNotFound)
+	if legacyGetRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("Agent MCP without App service status = %d, want %d", legacyGetRec.Code, http.StatusServiceUnavailable)
 	}
 
 	legacyPost := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/mcp-servers", strings.NewReader(`{"names":["context7"]}`))

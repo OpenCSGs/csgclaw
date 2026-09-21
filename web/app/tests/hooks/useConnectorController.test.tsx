@@ -216,18 +216,18 @@ describe("useConnectorController", () => {
     expect(window.sessionStorage.getItem(connectorPendingStorageKey)).toBeNull();
   });
 
-  it("refreshes GitLab status when the page regains focus", async () => {
+  it("refreshes GitHub status when the page regains focus", async () => {
     vi.mocked(fetchConnectors)
       .mockResolvedValueOnce({
-        connectors: [{ provider: "gitlab", configured: true, connected: false }],
+        connectors: [{ provider: "github", configured: true, connected: false }],
       })
       .mockResolvedValueOnce({
         connectors: [
           {
-            provider: "gitlab",
+            provider: "github",
             configured: true,
             connected: true,
-            base_url: "https://gitlab.example.com/",
+            base_url: "https://github.example.com/",
             account: { login: "octocat" },
           },
         ],
@@ -235,13 +235,13 @@ describe("useConnectorController", () => {
 
     const { result } = renderHook(() => useConnectorController(t), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(result.current.gitlab.connected).toBe(false));
+    await waitFor(() => expect(result.current.github.connected).toBe(false));
     act(() => {
       window.dispatchEvent(new Event("focus"));
     });
 
-    await waitFor(() => expect(result.current.gitlab.connected).toBe(true));
-    expect(result.current.gitlab.account?.login).toBe("octocat");
+    await waitFor(() => expect(result.current.github.connected).toBe(true));
+    expect(result.current.github.account?.login).toBe("octocat");
     expect(fetchConnectors).toHaveBeenCalledTimes(2);
   });
 

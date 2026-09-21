@@ -16,6 +16,9 @@ type DesktopOptions struct {
 	SessionToken      string
 	ServerAccessToken string
 	ServerAccessHosts []string
+	// ValidateAgentAccessToken authenticates scoped runtime credentials. Route
+	// and resource authorization remains with the downstream API middleware.
+	ValidateAgentAccessToken func(string) bool
 }
 
 // SHA-256 of the exact inline #document-bootstrap script in web/app/index.html.
@@ -94,7 +97,11 @@ func desktopSandboxSecurityHandler(next http.Handler, listenerAddr net.Addr, opt
 		serverAuthorized := expectedServerAuthorization != "" &&
 			subtle.ConstantTimeCompare([]byte(got), []byte(expectedServerAuthorization)) == 1
 		bridgeAuthorized := desktopFileBridgeAuthorized(r, got, opts.ServerAccessToken)
-		if !serverAuthorized && !bridgeAuthorized {
+		agentAuthorized := false
+		if !serverAuthorized && opts.ValidateAgentAccessToken != nil && strings.HasPrefix(got, "Bearer ") {
+			agentAuthorized = opts.ValidateAgentAccessToken(strings.TrimPrefix(got, "Bearer "))
+		}
+		if !serverAuthorized && !bridgeAuthorized && !agentAuthorized {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="csgclaw-desktop"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

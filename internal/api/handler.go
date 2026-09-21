@@ -8,6 +8,7 @@ import (
 	"csgclaw/internal/agentsession"
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/apps"
 	"csgclaw/internal/auth"
 	csgclawchannel "csgclaw/internal/channel/csgclaw"
 	"csgclaw/internal/channel/csgclaw/notification"
@@ -70,6 +71,10 @@ type Handler struct {
 	agentTaskSvc               *agenttask.Service
 	scheduledTaskSvc           *scheduledtask.Service
 	connectors                 *connectors.Service
+	apps                       *apps.Service
+	appPlatformMu              sync.Mutex
+	gitLabConnectorMu          sync.Mutex
+	appPlatformAgents          map[string]string
 	agentRuntimes              *runtimecatalog.Service
 	teamAdapters               *team.AdapterRegistry
 	teamPlanJobsMu             sync.Mutex
@@ -1040,6 +1045,9 @@ func (h *Handler) SetDesktopSessionToken(token string) {
 }
 
 func (h *Handler) validateServerAccessToken(authHeader string) bool {
+	if h.apps != nil && strings.HasPrefix(authHeader, "Bearer agent.") {
+		return false
+	}
 	if h.serverNoAuth {
 		return true
 	}
@@ -1201,6 +1209,16 @@ func (h *Handler) handleAgents(w http.ResponseWriter, r *http.Request) {
 		items, err := agents.List(ctx, agentengine.AgentListOptions{Reload: true, ProbeRuntime: true})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if caller := appRequestAgentID(r); caller != "" {
+			public := []map[string]any{}
+			for _, item := range items {
+				if h.platformVisibleAgent(caller, item.ID) {
+					public = append(public, platformAgentSummary(serviceAgentFromEngine(item)))
+				}
+			}
+			writeJSON(w, http.StatusOK, public)
 			return
 		}
 		writeJSON(w, http.StatusOK, h.presentEngineAgentsForRequest(r, items))
@@ -3894,6 +3912,7 @@ func (h *Handler) publishUserEvent(eventType string, user im.User) {
 }
 
 func (h *Handler) publishParticipantEvent(eventType string, item apitypes.Participant) {
+	h.refreshAppChannelCredentials(item)
 	if h.imBus == nil {
 		return
 	}

@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ConversationComposer } from "@/components/business/ConversationPane/ConversationComposer";
 import type { ConversationComposerProps } from "@/components/business/ConversationPane/ConversationComposer";
 import { createAttachmentDrafts } from "@/models/attachments";
-import { emptyGitHubConnectorStatus, emptyGitLabConnectorStatus } from "@/models/connectors";
+import { emptyGitHubConnectorStatus } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 
 const t: TranslateFn = (key, params) => {
@@ -26,6 +26,8 @@ const t: TranslateFn = (key, params) => {
     connectorSave: "Save",
     connectorScopes: "Scopes",
     connectorSetUp: "Set up",
+    appOpenApps: "Open Apps",
+    appManageGlobally: "Configure in global Apps",
     composerAdd: "Add",
     composerAddContent: "Add content",
     composerFiles: "Files",
@@ -135,33 +137,23 @@ describe("ConversationComposer connectors", () => {
     expect(within(dialog).getByText("Connectors")).toBeInTheDocument();
     expect(screen.getByText("GitHub")).toBeInTheDocument();
     expect(screen.getByText("GitLab")).toBeInTheDocument();
-    expect(screen.getAllByText("Not connected")).toHaveLength(2);
-    expect(within(dialog).getAllByRole("button", { name: "Connect" })).toHaveLength(2);
+    expect(screen.getAllByText("Not connected")).toHaveLength(1);
+    expect(within(dialog).getAllByRole("button", { name: "Connect" })).toHaveLength(1);
     expect(screen.queryByLabelText("Client ID")).not.toBeInTheDocument();
     expect(screen.queryByText("Save")).not.toBeInTheDocument();
     expect(screen.queryByText("Set up")).not.toBeInTheDocument();
   });
 
-  it("configures GitLab from the connector menu", async () => {
+  it("routes GitLab configuration to the current agent's Apps", async () => {
     const user = userEvent.setup();
-    const onSaveGitLabConnectorConfig = vi.fn().mockResolvedValue(undefined);
-    renderComposer({
-      gitlabConnectorStatus: emptyGitLabConnectorStatus(),
-      onSaveGitLabConnectorConfig,
-    });
-
+    const onManageApps = vi.fn();
+    renderComposer({ onManageApps });
     await user.click(screen.getByRole("button", { name: "Add content" }));
     const gitlabRow = screen.getByText("GitLab").closest(".connector-provider-row") as HTMLElement;
-    await user.click(within(gitlabRow).getByRole("button", { name: "Connect" }));
-    await user.type(screen.getByLabelText("GitLab Base URL"), "https://gitlab.example.com/");
-    await user.type(screen.getByLabelText("Personal Access Token"), "glpat-secret");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-
-    expect(onSaveGitLabConnectorConfig).toHaveBeenCalledWith({
-      base_url: "https://gitlab.example.com/",
-      access_token: "glpat-secret",
-    });
-    expect(screen.queryByDisplayValue("glpat-secret")).not.toBeInTheDocument();
+    await user.click(within(gitlabRow).getByRole("button", { name: "Open Apps" }));
+    expect(onManageApps).toHaveBeenCalledOnce();
+    expect(screen.queryByLabelText("GitLab Base URL")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Personal Access Token")).not.toBeInTheDocument();
   });
 
   it("places the add and send controls in one composer toolbar without visible shortcut copy", () => {

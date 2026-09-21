@@ -39,6 +39,7 @@ export const WorkspaceContextSectionIds = {
   mcpServers: "mcp-servers",
   hubSkills: "hub-skills",
   models: "models",
+  apps: "apps",
   tasks: "tasks",
 } as const;
 
@@ -46,6 +47,7 @@ export type WorkspaceContextSectionId = ValueOf<typeof WorkspaceContextSectionId
 
 export type WorkspaceSidebarProps = {
   activePane: WorkspacePane;
+  onSelectApps?: () => void;
   activeThreadRootID: string;
   agentItems: AgentLike[];
   agentsError: string;

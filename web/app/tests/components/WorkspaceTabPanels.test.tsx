@@ -349,7 +349,8 @@ describe("WorkspaceTabPanels", () => {
     expect(onOpenCreateScheduledTask).toHaveBeenCalledTimes(1);
   });
 
-  it("shows remote skills in the upload dialog remote mode", () => {
+  it("forwards skill upload opening to the sidebar dialog owner", () => {
+    const onSkillUploadOpenChange = vi.fn();
     const installRemoteSkill = vi.fn(async () => ({ name: "agent-builder" }));
     const loadMoreRemoteSkills = vi.fn(async () => undefined);
     const setRemoteSkillsEnabled = vi.fn();
@@ -387,6 +388,7 @@ describe("WorkspaceTabPanels", () => {
         currentUserID="u-admin"
         directMessages={[]}
         hub={remoteHub}
+        onSkillUploadOpenChange={onSkillUploadOpenChange}
         locale="en"
         notificationAgentItems={[]}
         onCreateAgent={() => {}}
@@ -418,41 +420,7 @@ describe("WorkspaceTabPanels", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Upload skill" }));
-    expect(screen.getByRole("tab", { name: /Upload zip/ })).toHaveAttribute("aria-selected", "true");
-    expect(setRemoteSkillsEnabled).not.toHaveBeenCalledWith(true);
-
-    fireEvent.click(screen.getByRole("tab", { name: /Community install/ }));
-
-    expect(setRemoteSkillsEnabled).toHaveBeenCalledWith(true);
-    expect(screen.getAllByText("agent-builder").length).toBeGreaterThan(0);
-    expect(screen.getByText("Build agents")).toBeInTheDocument();
-    expect(screen.queryByText("official")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /agent-builder/ })).toHaveAttribute(
-      "href",
-      "https://opencsg.com/skills/AIWizards/agent-builder",
-    );
-    fireEvent.change(screen.getByRole("searchbox", { name: "Search community skills" }), {
-      target: { value: "sa" },
-    });
-    expect(setRemoteSkillsSearch).toHaveBeenCalledWith("sa");
-
-    const remoteList = Array.from(document.querySelectorAll<HTMLDivElement>("[class]")).find((element) => {
-      const className = element.getAttribute("class") || "";
-      return className.includes("remoteList") && !className.includes("remoteListState");
-    });
-    if (!remoteList) {
-      throw new Error("Expected the remote skill list to render");
-    }
-    Object.defineProperty(remoteList, "scrollHeight", { configurable: true, value: 1000 });
-    Object.defineProperty(remoteList, "clientHeight", { configurable: true, value: 300 });
-    Object.defineProperty(remoteList, "scrollTop", { configurable: true, value: 650 });
-    fireEvent.scroll(remoteList);
-    expect(loadMoreRemoteSkills).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
-    expect(installRemoteSkill).toHaveBeenCalledWith(
-      expect.objectContaining({ remotePath: "AIWizards/agent-builder" }),
-      { replace: true },
-    );
+    expect(onSkillUploadOpenChange).toHaveBeenCalledWith(true);
+    expect(setRemoteSkillsEnabled).not.toHaveBeenCalled();
   });
 });

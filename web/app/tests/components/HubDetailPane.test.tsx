@@ -314,8 +314,7 @@ function renderHubDetailPane(
   return render(<Harness />);
 }
 
-function renderHubSkillDetailPane() {
-  const onDeleteSkill = vi.fn().mockResolvedValue(true);
+function renderHubSkillDetailPane(onDeleteSkill = vi.fn().mockResolvedValue(true)) {
   return render(
     <HubDetailPane
       locale="en"
@@ -670,18 +669,83 @@ function renderKnowledgeBaseDetail(configured: boolean) {
 }
 
 async function openKnowledgeBaseDetail(user: ReturnType<typeof userEvent.setup>) {
+  if (screen.queryByRole("dialog")) return;
   await user.click(screen.getByRole("button", { name: /Investment handbook/i }));
 }
 
 async function openTemplateDetail(user: ReturnType<typeof userEvent.setup>, name = /demo-template/i) {
+  if (screen.queryByRole("dialog")) return;
   await user.click(screen.getByRole("button", { name }));
 }
 
 async function openMCPDetail(user: ReturnType<typeof userEvent.setup>, name = /grafana/i) {
+  if (screen.queryByRole("dialog")) return;
   await user.click(screen.getByRole("button", { name }));
 }
 
 describe("HubDetailPane", () => {
+  it.each(["local", "remote"])("keeps %s template details closed while creating an agent", async (kind) => {
+    const user = userEvent.setup();
+    const selectedTemplate: HubTemplate = {
+      ...template,
+      id: `${kind}/demo`,
+      source: { name: kind, kind },
+    };
+    const onCreate = vi.fn();
+    function Harness() {
+      const [creating, setCreating] = useState(false);
+      return (
+        <>
+          <HubDetailPane
+            t={t}
+            onCreateFromTemplate={async (item) => {
+              onCreate(item);
+              await Promise.resolve();
+              setCreating(true);
+            }}
+            hub={{
+              detailPaneProps: {
+                selectedResourceType: "template",
+                selectedTemplate: { ...selectedTemplate },
+                selectedTemplateId: selectedTemplate.id || "",
+                error: "",
+                onRetry: vi.fn(),
+                onSelectWorkspaceFile: vi.fn(),
+                skills: [],
+                selectedSkill: null,
+                selectedSkillPath: "",
+                selectedWorkspacePath: "",
+                skillFile: null,
+                skillFileError: "",
+                skillFileLoading: false,
+                skillTree: null,
+                skillTreeError: "",
+                skillTreeLoading: false,
+                workspaceFile: null,
+                workspaceFileError: "",
+                workspaceFileLoading: false,
+                workspaceEntries: [],
+                templates: [selectedTemplate],
+                loaded: true,
+              },
+            }}
+          />
+          {creating && <input aria-label="Agent name" />}
+        </>
+      );
+    }
+    render(<Harness />);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    const name = await screen.findByRole("textbox", { name: "Agent name" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onCreate).toHaveBeenCalledWith(selectedTemplate);
+    await user.type(name, "New agent");
+    expect(name).toHaveValue("New agent");
+    await openTemplateDetail(user, /demo-template/i);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
   it("opens the shared login flow instead of knowledge-base discovery while signed out", async () => {
     const user = userEvent.setup();
     const onKnowledgeBaseLogin = vi.fn();
@@ -766,7 +830,7 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Add to MCP" }));
 
     expect(requestMCPConfig).toHaveBeenCalledWith("143");
-    expect(screen.getByRole("dialog")).toHaveTextContent(
+    expect(screen.getAllByRole("dialog").at(-1)!).toHaveTextContent(
       'MCP management will open with "Investment handbook" filled in automatically. After adding it, you can enable the knowledge base from an agent\'s MCP configuration.',
     );
     expect(confirmMCPConfig).not.toHaveBeenCalled();
@@ -792,7 +856,7 @@ describe("HubDetailPane", () => {
     expect(onSelectMCP).toHaveBeenCalledWith("kb-investment");
 
     await user.click(screen.getByRole("button", { name: "Remove from MCP" }));
-    expect(screen.getByRole("dialog")).toHaveTextContent('Remove "kb-investment" from MCP?');
+    expect(screen.getAllByRole("dialog").at(-1)!).toHaveTextContent('Remove "kb-investment" from MCP?');
     await user.click(screen.getAllByRole("button", { name: "Remove from MCP" }).at(-1)!);
 
     expect(onDeleteMCP).toHaveBeenCalledWith(mcp);
@@ -1032,6 +1096,7 @@ describe("HubDetailPane", () => {
       sourceError: "Source check failed",
     });
 
+    await openMCPDetail(user, /kb-investment/i);
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("resourcesKnowledgeMCPCheckFailed");
     expect(alert).toHaveTextContent("resourcesKnowledgeMCPCheckFailedHint");
@@ -1058,31 +1123,36 @@ describe("HubDetailPane", () => {
   it("renders the skill list and opens selected skill details in a dialog", async () => {
     const user = userEvent.setup();
     renderHubSkillDetailPane();
+    await user.click(screen.getByRole("button", { name: "Close" }));
 
     expect(screen.getByRole("heading", { name: "Skills" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Installed" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Skills" })).toBeInTheDocument();
     expect(screen.getAllByText("Demo skill").length).toBeGreaterThan(0);
     expect(screen.queryByText("demo-template")).not.toBeInTheDocument();
     expect(screen.queryByText("# Skill", { exact: false })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /demo-skill/i }));
 
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getAllByRole("dialog").at(-1)!).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "demo-skill" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete skill" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete skill" })).toBeInTheDocument();
     expect(screen.getByText("# Skill", { exact: false })).toBeInTheDocument();
     expect(screen.queryByText("Description")).not.toBeInTheDocument();
   });
 
-  it("does not expose skill deletion from the skill detail dialog", async () => {
+  it("requires confirmation before deleting a skill from its detail dialog", async () => {
     const user = userEvent.setup();
-    renderHubSkillDetailPane();
+    const onDeleteSkill = vi.fn().mockResolvedValue(true);
+    renderHubSkillDetailPane(onDeleteSkill);
 
-    await user.click(screen.getByRole("button", { name: /demo-skill/i }));
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Delete skill" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog").at(-1)!).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete skill" })).toBeInTheDocument();
     expect(screen.queryByText('Delete skill "demo-skill"? This action cannot be undone.')).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete skill" }));
+    expect(screen.getByText('Delete skill "demo-skill"? This action cannot be undone.')).toBeInTheDocument();
+    expect(onDeleteSkill).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onDeleteSkill).toHaveBeenCalledWith(expect.objectContaining({ name: "demo-skill" }));
   });
 
   it("highlights and validates MCP JSON configs before saving", async () => {
@@ -1183,7 +1253,7 @@ describe("HubDetailPane", () => {
       mcpCreateError: "mcp server already exists: filesystem",
     });
 
-    expect(screen.getByRole("dialog")).toHaveTextContent("mcp server already exists: filesystem");
+    expect(screen.getAllByRole("dialog").at(-1)!).toHaveTextContent("mcp server already exists: filesystem");
     expect(screen.getAllByText("mcp server already exists: filesystem")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
   });

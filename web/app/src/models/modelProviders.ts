@@ -91,9 +91,7 @@ export type OpenCSGModelProviderViewState = {
   authenticated: boolean;
 };
 
-export function modelProviderConfigUsesOpenCSG(
-  config: ModelProviderConfigLike | null | undefined,
-): boolean {
+export function modelProviderConfigUsesOpenCSG(config: ModelProviderConfigLike | null | undefined): boolean {
   return String(config?.model_provider_id ?? "").trim() === MODEL_PROVIDER_IDS.OpenCSG;
 }
 

@@ -8,6 +8,7 @@ import (
 
 func (h *Handler) Routes() chi.Router {
 	router := chi.NewRouter()
+	router.Use(h.authorizeAppPlatformRequests)
 	h.registerCoreRoutes(router)
 	h.registerChannelRoutes(router)
 	return router
@@ -16,6 +17,14 @@ func (h *Handler) Routes() chi.Router {
 func (h *Handler) registerCoreRoutes(router chi.Router) {
 	router.Get("/healthz", h.handleHealthz)
 	router.Route("/api/v1", func(r chi.Router) {
+		r.Get("/apps", h.handleApps)
+		r.Get("/app-resources", h.handleAppResources)
+		r.Post("/app-resources", h.handleAppResources)
+		r.Post("/app-resources:probe", h.handleAppResourceProbe)
+		r.Get("/app-resources/{resource_id}", h.handleAppResources)
+		r.Patch("/app-resources/{resource_id}", h.handleAppResources)
+		r.Delete("/app-resources/{resource_id}", h.handleAppResources)
+		r.Get("/apps/{app_id}", h.handleApps)
 		r.Get("/version", h.getVersion)
 		r.Route("/upgrade", func(r chi.Router) {
 			r.Get("/status", h.getUpgradeStatus)
@@ -30,6 +39,18 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Post("/", h.createAgent)
 			r.Route("/{id}", func(r chi.Router) {
 				r.Handle("/mcp-file-bridge/{server}", http.HandlerFunc(h.handleMCPFileBridge))
+				r.Get("/connectors/gitlab", h.handleAgentGitLabConnector)
+				r.Put("/connectors/gitlab/config", h.handleAgentGitLabConnectorConfig)
+				r.Post("/connectors/gitlab/disconnect", h.handleAgentGitLabConnector)
+				r.Get("/apps", h.handleAgentApps)
+				r.Post("/apps", h.handleAgentApps)
+				r.Post("/apps:probe", h.handleAgentAppsProbe)
+				r.Get("/apps/{installation_id}", h.handleAgentApp)
+				r.Patch("/apps/{installation_id}", h.handleAgentApp)
+				r.Delete("/apps/{installation_id}", h.handleAgentApp)
+				r.Post("/apps/{installation_id}/{app_action:connect|disconnect}", h.handleAgentApp)
+				r.Post("/apps/{installation_id}/oauth/start", h.handleAppOAuthStart)
+				r.Handle("/mcp", http.HandlerFunc(h.handleAgentAppMCP))
 				r.Get("/", h.getAgent)
 				r.Patch("/", h.updateAgent)
 				r.Delete("/", h.deleteAgent)
@@ -128,6 +149,11 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 		})
 		r.Route("/connectors", func(r chi.Router) {
 			r.Get("/", h.handleConnectors)
+			r.Route("/gitlab", func(r chi.Router) {
+				r.Get("/", h.handleGitLabConnector)
+				r.Put("/config", h.handleGitLabConnectorConfig)
+				r.Post("/disconnect", h.handleGitLabConnector)
+			})
 			r.Route("/github", func(r chi.Router) {
 				r.Get("/", h.handleGitHubConnector)
 				r.Put("/config", h.handleGitHubConnectorConfig)
@@ -137,11 +163,6 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Get("/oauth/callback", h.handleGitHubConnectorOAuthCallback)
 				r.Post("/disconnect", h.handleGitHubConnectorDisconnect)
 				r.Post("/credential", h.handleGitHubConnectorCredential)
-			})
-			r.Route("/gitlab", func(r chi.Router) {
-				r.Get("/", h.handleGitLabConnector)
-				r.Put("/config", h.handleGitLabConnectorConfig)
-				r.Post("/disconnect", h.handleGitLabConnectorDisconnect)
 			})
 		})
 		r.Post("/agent-profiles/models", h.handleAgentProfileModels)

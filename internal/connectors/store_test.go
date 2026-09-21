@@ -134,6 +134,37 @@ func TestStoreDeleteGitHubPreservesOtherAuth(t *testing.T) {
 	}
 }
 
+func TestStoreMigratesAgentGitLabStateToGlobal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	writeJSON(t, path, map[string]any{
+		"auth": map[string]any{
+			gitLabAgentsAuthStateName: map[string]any{
+				"agent-worker":  State{Config: Config{BaseURL: "https://worker.example", AccessToken: "worker-token"}},
+				"agent-manager": State{Config: Config{BaseURL: "https://gitlab.example", AccessToken: "manager-token"}},
+			},
+		},
+	})
+
+	store := NewStore(path)
+	state, ok, err := store.LoadGitLab()
+	if err != nil || !ok {
+		t.Fatalf("LoadGitLab() ok=%v err=%v", ok, err)
+	}
+	if state.Config.AccessToken != "manager-token" || state.Config.BaseURL != "https://gitlab.example" {
+		t.Fatalf("migrated state = %+v", state)
+	}
+
+	var root map[string]any
+	readJSON(t, path, &root)
+	authState := root["auth"].(map[string]any)
+	if _, ok := authState[ProviderGitLab]; !ok {
+		t.Fatalf("auth.gitlab missing after migration: %#v", authState)
+	}
+	if _, ok := authState[gitLabAgentsAuthStateName]; ok {
+		t.Fatalf("legacy auth.%s remains after migration: %#v", gitLabAgentsAuthStateName, authState)
+	}
+}
+
 func writeJSON(t *testing.T, path string, value any) {
 	t.Helper()
 	data, err := json.MarshalIndent(value, "", "  ")

@@ -34,7 +34,7 @@ func (*recreateExtensionObserver) RuntimeReady(string) error                    
 // in-memory container. Every failure is injected after New returns a live handle.
 func TestRecreateAPIRemovesUncommittedReplacement(t *testing.T) {
 	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindOpenClawSandbox, agent.RuntimeKindPicoClawSandbox} {
-		for _, failure := range []string{"observation", "skills", "info", "persist", "canceled", "cleanup", "none"} {
+		for _, failure := range []string{"observation", "info", "persist", "canceled", "cleanup", "none"} {
 			t.Run(kind+"/"+failure, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
@@ -63,14 +63,6 @@ func TestRecreateAPIRemovesUncommittedReplacement(t *testing.T) {
 						return agentruntime.Handle{}, err
 					}
 					newID = info.ID
-					if failure == "skills" {
-						if err := os.Rename(skillsRoot, skillsRoot+".saved"); err != nil {
-							t.Fatal(err)
-						}
-						if err := os.WriteFile(skillsRoot, []byte("blocks restoration"), 0600); err != nil {
-							t.Fatal(err)
-						}
-					}
 					if failure == "canceled" {
 						cancel()
 					}
@@ -156,6 +148,10 @@ func TestRecreateAPIRemovesUncommittedReplacement(t *testing.T) {
 				}
 				if failure == "info" && !strings.Contains(w.Body.String(), "injected replacement info failure") {
 					t.Fatalf("lost original failure: %s", w.Body)
+				}
+				content, err := os.ReadFile(filepath.Join(skillsRoot, "user-skill", "SKILL.md"))
+				if err != nil || string(content) != "user content" {
+					t.Fatalf("custom skill was not restored after recreation: %q %v", content, err)
 				}
 				if failure != "persist" {
 					if err := controller.Reload(); err != nil {

@@ -1195,7 +1195,7 @@ func TestResponsesLLMAPIFallsBackToStreamingChatCompletionsWhenUnsupported(t *te
 	}
 }
 
-func TestResponsesLLMAPIFallbackAllowsAdvertisedToolsForTextOnlyRequests(t *testing.T) {
+func TestResponsesLLMAPIFallbackRejectsAdvertisedToolsBeforeFirstCall(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	var gotChatPayload map[string]any
@@ -1234,20 +1234,14 @@ func TestResponsesLLMAPIFallbackAllowsAdvertisedToolsForTextOnlyRequests(t *test
 
 	svc := NewService(config.ModelConfig{}, agentSvc)
 	resp, err := svc.Responses(context.Background(), agent.ManagerUserID, []byte(`{"model":"client-model","input":"hi","tools":[{"type":"function","name":"shell","description":"run shell"}],"stream":false}`))
-	if err != nil {
-		t.Fatalf("Responses() error = %v", err)
+	if resp != nil {
+		resp.Body.Close()
 	}
-	defer resp.Body.Close()
-
-	if _, ok := gotChatPayload["tools"]; ok {
-		t.Fatalf("chat fallback payload includes tools: %#v", gotChatPayload["tools"])
+	if err == nil || !strings.Contains(err.Error(), "native Responses tool support") {
+		t.Fatalf("Responses() error = %v, want explicit unsupported tool request", err)
 	}
-	messages, _ := gotChatPayload["messages"].([]any)
-	if len(messages) != 1 {
-		t.Fatalf("chat messages = %#v, want single text message", messages)
-	}
-	if msg, _ := messages[0].(map[string]any); msg["role"] != "user" || msg["content"] != "hi" {
-		t.Fatalf("chat messages = %#v, want user hi", messages)
+	if gotChatPayload != nil {
+		t.Fatalf("tool-bearing request reached text-only Chat fallback: %#v", gotChatPayload)
 	}
 }
 
@@ -1315,7 +1309,7 @@ func TestResponsesLLMAPIFallbackRejectsActiveToolSemantics(t *testing.T) {
 			if httpErr.Status != http.StatusBadRequest {
 				t.Fatalf("HTTP status = %d, want %d", httpErr.Status, http.StatusBadRequest)
 			}
-			if !strings.Contains(httpErr.Message, "Responses tool-use history") || !strings.Contains(httpErr.Message, "start a new session") {
+			if !strings.Contains(httpErr.Message, "Responses tool definitions or tool-use history") || !strings.Contains(httpErr.Message, "native Responses tool support") {
 				t.Fatalf("error message = %q, want actionable tool-use fallback rejection", httpErr.Message)
 			}
 			if chatCalls != 0 {

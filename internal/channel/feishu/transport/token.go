@@ -119,3 +119,27 @@ func (s *cachedTenantTokenSource) Invalidate(token string) {
 }
 
 var _ invalidatableTenantTokenSource = (*cachedTenantTokenSource)(nil)
+
+// TenantTokenSource is a private, refreshable application credential source.
+// Each caller owns its cache; it must not be shared across App installations.
+type TenantTokenSource interface {
+	Token(context.Context) (string, error)
+	Invalidate(string)
+}
+
+// NewTenantTokenSource obtains application tokens from Feishu, never from the
+// configured MCP endpoint. It uses the same cache and expiry handling as IM.
+func NewTenantTokenSource(appID, appSecret string) TenantTokenSource {
+	client := lark.NewClient(appID, appSecret,
+		lark.WithSource(larkTransportSource), lark.WithEnableTokenCache(false),
+		lark.WithHttpClient(newSingleAttemptHTTPClient()), lark.WithLogger(quietTenantTokenLogger{}))
+	return newCachedTenantTokenSource(client, appID, appSecret).(TenantTokenSource)
+}
+
+// Token exchange payloads must never be emitted by the SDK logger.
+type quietTenantTokenLogger struct{}
+
+func (quietTenantTokenLogger) Debug(context.Context, ...interface{}) {}
+func (quietTenantTokenLogger) Info(context.Context, ...interface{})  {}
+func (quietTenantTokenLogger) Warn(context.Context, ...interface{})  {}
+func (quietTenantTokenLogger) Error(context.Context, ...interface{}) {}

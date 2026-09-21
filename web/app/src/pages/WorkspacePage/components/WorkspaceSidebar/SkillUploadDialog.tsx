@@ -252,7 +252,11 @@ export function SkillUploadDialog({
                   </span>
                 </button>
                 {localError || error ? (
-                  <DismissibleAlert className={styles.errorNotice} messageKey={localError || error} closeLabel={t("close")}>
+                  <DismissibleAlert
+                    className={styles.errorNotice}
+                    messageKey={localError || error}
+                    closeLabel={t("close")}
+                  >
                     <AlertCircle size={16} aria-hidden="true" />
                     <span>{localError || error}</span>
                   </DismissibleAlert>
@@ -336,7 +340,11 @@ export function SkillUploadDialog({
                       ) : null}
                     </div>
                     {remoteInstallError ? (
-                      <DismissibleAlert className={styles.errorNotice} messageKey={remoteInstallError} closeLabel={t("close")}>
+                      <DismissibleAlert
+                        className={styles.errorNotice}
+                        messageKey={remoteInstallError}
+                        closeLabel={t("close")}
+                      >
                         <AlertCircle size={16} aria-hidden="true" />
                         <span>{remoteInstallError}</span>
                       </DismissibleAlert>
@@ -353,7 +361,13 @@ export function SkillUploadDialog({
               {t("close")}
             </Button>
             {mode === "zip" ? (
-              <Button variant="primary" size="md" onClick={() => void handleSubmit()} loading={busy} disabled={busy || !selectedFile}>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => void handleSubmit()}
+                loading={busy}
+                disabled={busy || !selectedFile}
+              >
                 {busy ? t("resourcesSkillUploadSubmitting") : t("resourcesSkillUploadSubmit")}
               </Button>
             ) : null}

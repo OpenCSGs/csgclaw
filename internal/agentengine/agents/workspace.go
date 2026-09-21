@@ -111,73 +111,37 @@ func overlayWorkspaceTree(srcRoot, dstRoot string) error {
 	return copyWorkspaceFS(os.DirFS(srcRoot), ".", dstRoot, "workspace", true)
 }
 
-func (s *Controller) prepareWorkspaceSkillsPreservation(agentID, sourceRuntimeKind, targetRuntimeKind, role string) (func() error, func(), error) {
-	sourceRuntimeKind = strings.TrimSpace(sourceRuntimeKind)
-	targetRuntimeKind = strings.TrimSpace(targetRuntimeKind)
-	if sourceRuntimeKind == "" {
-		sourceRuntimeKind = targetRuntimeKind
-	}
-	if targetRuntimeKind == "" {
-		targetRuntimeKind = sourceRuntimeKind
-	}
-	sourceSkills, err := s.agentSkillsRoot(agentID, sourceRuntimeKind)
-	if err != nil {
-		return nil, nil, err
-	}
-	info, err := os.Stat(sourceSkills)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil, nil
-	}
-	if err != nil {
-		return nil, nil, fmt.Errorf("stat workspace skills: %w", err)
-	}
-	if !info.IsDir() {
-		return nil, nil, nil
-	}
-
-	tempDir, err := os.MkdirTemp("", "csgclaw-preserve-skills-*")
-	if err != nil {
-		return nil, nil, fmt.Errorf("create skills preservation dir: %w", err)
-	}
-	cleanup := func() {
-		_ = os.RemoveAll(tempDir)
-	}
-
-	preservedSkills := filepath.Join(tempDir, "skills")
-	if err := copyWorkspaceFS(os.DirFS(sourceSkills), ".", preservedSkills, "workspace skills", true); err != nil {
-		cleanup()
-		if errors.Is(err, ErrWorkspaceEmpty) {
-			return nil, nil, nil
+func validateWorkspaceSkillsTree(root string) (int, error) {
+	count := 0
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return fmt.Errorf("walk workspace skills %q: %w", root, walkErr)
 		}
-		return nil, nil, err
-	}
-
-	templateNames, err := managedWorkspaceSkillNames(targetRuntimeKind, role)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-	for name := range templateNames {
-		if err := os.RemoveAll(filepath.Join(preservedSkills, name)); err != nil {
-			cleanup()
-			return nil, nil, fmt.Errorf("drop template skill %q from preservation set: %w", name, err)
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: %s", ErrWorkspaceSymlinkDenied, path)
 		}
-	}
-
-	restore := func() error {
-		if empty, err := directoryEmpty(preservedSkills); err != nil || empty {
-			return err
+		if path == root {
+			return nil
 		}
-		targetSkills, err := s.agentSkillsRoot(agentID, targetRuntimeKind)
+		rel, err := filepath.Rel(root, path)
 		if err != nil {
+			return fmt.Errorf("resolve workspace skills path %q: %w", path, err)
+		}
+		if err := validateWorkspaceRelativePath(rel); err != nil {
 			return err
 		}
-		if err := os.MkdirAll(targetSkills, 0o755); err != nil {
-			return fmt.Errorf("create target workspace skills dir: %w", err)
-		}
-		return overlayWorkspaceTree(preservedSkills, targetSkills)
+		count++
+		return nil
+	})
+	return count, err
+}
+
+func validateWorkspaceSkillEntryName(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" || filepath.Base(name) != name {
+		return fmt.Errorf("%w: %s", ErrWorkspacePathUnsafe, name)
 	}
-	return restore, cleanup, nil
+	return validateWorkspaceRelativePath(name)
 }
 
 func (s *Controller) refreshGatewayTemplateSkills(agentID, runtimeKind, role string) error {
@@ -250,17 +214,6 @@ func managedWorkspaceSkillNames(runtimeKind, role string) (map[string]struct{}, 
 		names[name] = struct{}{}
 	}
 	return names, nil
-}
-
-func directoryEmpty(path string) (bool, error) {
-	entries, err := os.ReadDir(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return true, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return len(entries) == 0, nil
 }
 
 func copyWorkspaceFS(srcFS fs.FS, root, dstRoot, label string, overwrite bool) error {

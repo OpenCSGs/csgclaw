@@ -12,6 +12,7 @@ export const WorkspacePaneTypes = {
   team: "team",
   computer: "computer",
   modelProvider: "model_provider",
+  apps: "apps",
   hub: "hub",
   task: "task",
   settings: "settings",
@@ -58,6 +59,7 @@ export const WorkspaceRouteSegments = {
   templates: "templates",
   skills: "skills",
   mcpServers: "mcp-servers",
+  apps: "apps",
   knowledgeBases: "knowledge-bases",
   tasks: "tasks",
   channels: "channels",
@@ -108,6 +110,7 @@ export function paneFromLocation(pathname = window.location.pathname): Workspace
   const section = parts[0] || "";
   const id = parts[1] || "";
 
+  if (section === WorkspaceRouteSegments.apps) return { type: WorkspacePaneTypes.apps, id };
   if (!section) {
     return { type: WorkspacePaneTypes.conversation, id: "" };
   }
@@ -177,6 +180,7 @@ export function pathForPane(
   pane: WorkspacePane | null | undefined,
   rooms: readonly Pick<IMConversation, "id" | "is_direct">[] = [],
 ): string {
+  if (pane?.type === WorkspacePaneTypes.apps) return pane.id ? `/apps/${encodeURIComponent(pane.id)}` : "/apps";
   if (!pane || pane.type === WorkspacePaneTypes.computer) {
     return `/${WorkspaceRouteSegments.computer}`;
   }
@@ -241,7 +245,11 @@ export function decodePathSegment(value: string): string {
 }
 
 export function workspaceTabForPane(pane: WorkspacePane | null | undefined): WorkspaceTab {
-  if (pane?.type === WorkspacePaneTypes.hub || pane?.type === WorkspacePaneTypes.modelProvider) {
+  if (
+    pane?.type === WorkspacePaneTypes.apps ||
+    pane?.type === WorkspacePaneTypes.hub ||
+    pane?.type === WorkspacePaneTypes.modelProvider
+  ) {
     return WorkspaceTabs.hub;
   }
   if (pane?.type === WorkspacePaneTypes.task) {
@@ -264,6 +272,7 @@ export function workspaceHasContextSidebar(pane: WorkspacePane | null | undefine
     pane?.type !== WorkspacePaneTypes.task &&
     pane?.type !== WorkspacePaneTypes.settings &&
     pane?.type !== WorkspacePaneTypes.hub &&
+    pane?.type !== WorkspacePaneTypes.apps &&
     pane?.type !== WorkspacePaneTypes.modelProvider
   );
 }
@@ -282,4 +291,8 @@ export function readCollapsedWorkspaceGroups(): CollapsedWorkspaceGroups {
   } catch (_) {
     return { ...DEFAULT_COLLAPSED_WORKSPACE_GROUPS };
   }
+}
+
+export function pathForAgentApps(agentID: string): string {
+  return `${pathForPane({ type: WorkspacePaneTypes.agent, id: agentID })}?tab=apps`;
 }

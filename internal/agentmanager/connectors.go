@@ -80,6 +80,9 @@ func (p *ConnectorServiceCredentialProvider) ConnectorStatus(ctx context.Context
 	if !p.policy.AllowsConnectorCredential(ctx, ref, provider) {
 		return connectors.Status{}, ErrConnectorCredentialAccessDenied
 	}
+	if strings.EqualFold(strings.TrimSpace(provider), connectors.ProviderGitLab) {
+		return p.service.GitLabStatus()
+	}
 	return p.service.Status(ctx, provider, callbackURL)
 }
 
@@ -90,7 +93,7 @@ func (p *ConnectorServiceCredentialProvider) ManagedCredentialLease(ctx context.
 	if !p.policy.AllowsConnectorCredential(ctx, ref, provider) {
 		return ManagedCredentialLease{}, ErrConnectorCredentialAccessDenied
 	}
-	credential, err := p.service.Credential(ctx, provider)
+	credential, err := p.service.CredentialForAgent(ctx, ref.AgentID, provider)
 	if err != nil {
 		return ManagedCredentialLease{}, err
 	}
@@ -101,7 +104,7 @@ func (p *ConnectorServiceCredentialProvider) ManagedCredentialLease(ctx context.
 		TokenType:   strings.TrimSpace(credential.TokenType),
 		Scopes:      append([]string(nil), credential.Scopes...),
 	}
-	status, statusErr := p.service.Status(ctx, provider, "")
+	status, statusErr := p.ConnectorStatus(ctx, ref, provider, "")
 	if statusErr == nil && status.Account != nil {
 		account := *status.Account
 		lease.Account = &account

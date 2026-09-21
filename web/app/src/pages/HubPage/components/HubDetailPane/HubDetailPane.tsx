@@ -1159,9 +1159,11 @@ export function HubDetailPane({
   useEffect(() => {
     if (selectedSkill) setSkillDetailDialogOpen(true);
   }, [selectedSkill]);
+  const selectedTemplateID = selectedTemplate?.id;
   useEffect(() => {
-    if (selectedTemplate) setTemplateDetailDialogOpen(true);
-  }, [selectedTemplate]);
+    // Refreshing the same template must not reopen details over the agent creation form.
+    setTemplateDetailDialogOpen(Boolean(selectedTemplateID));
+  }, [selectedTemplateID]);
   useEffect(() => {
     if (selectedMCPServer) setMCPDetailDialogOpen(true);
   }, [selectedMCPServer]);
@@ -1515,14 +1517,14 @@ export function HubDetailPane({
         <div className={moduleClassNames("hub-loading-state")} role="status" aria-live="polite">
           <LoaderCircle className={moduleClassNames("hub-loading-spinner")} size={24} aria-hidden="true" />
           <span>
-              {activeResourceType === "skill"
-                ? t("resourcesSkillsLoading")
-                : activeResourceType === "mcp"
-                  ? t("resourcesMCPLoading")
-                  : activeResourceType === "knowledge"
-                    ? t("resourcesKnowledgeBasesLoading")
-                    : t("resourcesLoading")}
-            </span>
+            {activeResourceType === "skill"
+              ? t("resourcesSkillsLoading")
+              : activeResourceType === "mcp"
+                ? t("resourcesMCPLoading")
+                : activeResourceType === "knowledge"
+                  ? t("resourcesKnowledgeBasesLoading")
+                  : t("resourcesLoading")}
+          </span>
         </div>
       ) : activeResourceType !== "knowledge" &&
         templates.length === 0 &&
@@ -1557,9 +1559,7 @@ export function HubDetailPane({
                 onChange={setKnowledgeBaseSearch}
               />
 
-              <section
-                className={moduleClassNames("hub-skill-list-section")}
-              >
+              <section className={moduleClassNames("hub-skill-list-section")}>
                 <div
                   className={moduleClassNames("hub-skill-filter-tabs")}
                   role="tablist"
@@ -1590,7 +1590,12 @@ export function HubDetailPane({
                 ) : null}
 
                 {error || knowledgeBases?.loadError ? (
-                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error || knowledgeBases?.loadError} closeLabel={t("close")}>
+                  <DismissibleAlert
+                    className={moduleClassNames("mcp-error-notice")}
+                    aria-live="polite"
+                    messageKey={error || knowledgeBases?.loadError}
+                    closeLabel={t("close")}
+                  >
                     <AlertCircle size={16} aria-hidden="true" />
                     <span>{error || knowledgeBases?.loadError}</span>
                   </DismissibleAlert>
@@ -1805,7 +1810,12 @@ export function HubDetailPane({
                 </div>
 
                 {error ? (
-                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error} closeLabel={t("close")}>
+                  <DismissibleAlert
+                    className={moduleClassNames("mcp-error-notice")}
+                    aria-live="polite"
+                    messageKey={error}
+                    closeLabel={t("close")}
+                  >
                     <AlertCircle size={16} aria-hidden="true" />
                     <span>{error}</span>
                   </DismissibleAlert>
@@ -1820,7 +1830,11 @@ export function HubDetailPane({
                         <button
                           key={template.id}
                           type="button"
-                          className={moduleClassNames("hub-skill-list-card", "hub-skill-list-card--no-check", active && "active")}
+                          className={moduleClassNames(
+                            "hub-skill-list-card",
+                            "hub-skill-list-card--no-check",
+                            active && "active",
+                          )}
                           onClick={() => openTemplateDetail(template)}
                         >
                           <ResourceFeaturedIcon>
@@ -2351,7 +2365,12 @@ export function HubDetailPane({
                 </div>
 
                 {error ? (
-                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error} closeLabel={t("close")}>
+                  <DismissibleAlert
+                    className={moduleClassNames("mcp-error-notice")}
+                    aria-live="polite"
+                    messageKey={error}
+                    closeLabel={t("close")}
+                  >
                     <AlertCircle size={16} aria-hidden="true" />
                     <span>{error}</span>
                   </DismissibleAlert>
@@ -2365,7 +2384,11 @@ export function HubDetailPane({
                         <button
                           key={skill.name}
                           type="button"
-                          className={moduleClassNames("hub-skill-list-card", "hub-skill-list-card--no-check", active && "active")}
+                          className={moduleClassNames(
+                            "hub-skill-list-card",
+                            "hub-skill-list-card--no-check",
+                            active && "active",
+                          )}
                           onClick={() => openSkillDetail(skill)}
                         >
                           <SkillFeaturedIcon />
@@ -2453,7 +2476,12 @@ export function HubDetailPane({
                 </div>
 
                 {error || mcpMutationError || mcpProbeError ? (
-                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={error || mcpMutationError || mcpProbeError} closeLabel={t("close")}>
+                  <DismissibleAlert
+                    className={moduleClassNames("mcp-error-notice")}
+                    aria-live="polite"
+                    messageKey={error || mcpMutationError || mcpProbeError}
+                    closeLabel={t("close")}
+                  >
                     <AlertCircle size={16} aria-hidden="true" />
                     <span>{error || mcpMutationError || mcpProbeError}</span>
                   </DismissibleAlert>
@@ -2467,7 +2495,11 @@ export function HubDetailPane({
                         <button
                           key={server.name}
                           type="button"
-                          className={moduleClassNames("hub-skill-list-card", "hub-skill-list-card--no-check", active && "active")}
+                          className={moduleClassNames(
+                            "hub-skill-list-card",
+                            "hub-skill-list-card--no-check",
+                            active && "active",
+                          )}
                           onClick={() => openMCPDetail(server)}
                         >
                           <ResourceFeaturedIcon>
@@ -2482,7 +2514,9 @@ export function HubDetailPane({
                           <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
                             <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
                             {(() => {
-                              const configType = String(server.config?.type || server.config?.transport || "").trim().toLocaleLowerCase();
+                              const configType = String(server.config?.type || server.config?.transport || "")
+                                .trim()
+                                .toLocaleLowerCase();
                               const isRemote = configType.includes("remote") || Boolean(server.config?.url);
                               return isRemote ? t("resourcesSkillRemoteFilter") : t("resourcesSkillLocalFilter");
                             })()}
@@ -2564,7 +2598,12 @@ export function HubDetailPane({
               </div>
 
               {mcpStateError || mcpMutationError || mcpProbeError ? (
-                <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={mcpStateError || mcpMutationError || mcpProbeError} closeLabel={t("close")}>
+                <DismissibleAlert
+                  className={moduleClassNames("mcp-error-notice")}
+                  aria-live="polite"
+                  messageKey={mcpStateError || mcpMutationError || mcpProbeError}
+                  closeLabel={t("close")}
+                >
                   <AlertCircle size={16} aria-hidden="true" />
                   <span>{mcpStateError || mcpMutationError || mcpProbeError}</span>
                 </DismissibleAlert>
@@ -2660,7 +2699,13 @@ export function HubDetailPane({
           )}
         </div>
       )}
-      <DialogRoot open={skillDetailDialogOpen && Boolean(selectedSkill)} onOpenChange={(open) => { setSkillDetailDialogOpen(open); if (!open) onSelectSkill?.(null); }}>
+      <DialogRoot
+        open={activeResourceType === "skill" && skillDetailDialogOpen && Boolean(selectedSkill)}
+        onOpenChange={(open) => {
+          setSkillDetailDialogOpen(open);
+          if (!open) onSelectSkill?.(null);
+        }}
+      >
         <DialogContent className={moduleClassNames("hub-standard-skill-dialog")}>
           {selectedSkill ? (
             <>
@@ -2721,8 +2766,11 @@ export function HubDetailPane({
         </DialogContent>
       </DialogRoot>
       <DialogRoot
-        open={templateDetailDialogOpen && Boolean(selectedTemplate)}
-        onOpenChange={(open) => { setTemplateDetailDialogOpen(open); if (!open) onSelectTemplate?.(null); }}
+        open={activeResourceType === "template" && templateDetailDialogOpen && Boolean(selectedTemplate)}
+        onOpenChange={(open) => {
+          setTemplateDetailDialogOpen(open);
+          if (!open) onSelectTemplate?.(null);
+        }}
       >
         <DialogContent className={moduleClassNames("hub-standard-skill-dialog")}>
           {selectedTemplate ? (
@@ -2734,7 +2782,9 @@ export function HubDetailPane({
                 </div>
                 <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
               </DialogHeader>
-              <DialogBody className={moduleClassNames("hub-standard-skill-dialog-body hub-standard-resource-dialog-body")}>
+              <DialogBody
+                className={moduleClassNames("hub-standard-skill-dialog-body hub-standard-resource-dialog-body")}
+              >
                 {templateReview ? (
                   <div className={moduleClassNames(`hub-template-review-alert ${templateReview.kind}`)} role="status">
                     <strong>
@@ -3028,7 +3078,14 @@ export function HubDetailPane({
                   </Button>
                 ) : null}
                 {!isBuiltinOpenClawWorkerTemplate(selectedTemplate) ? (
-                  <Button variant="primary" size="md" onClick={() => { setTemplateDetailDialogOpen(false); void onCreateFromTemplate?.(selectedTemplate); }}>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    onClick={() => {
+                      setTemplateDetailDialogOpen(false);
+                      void onCreateFromTemplate?.(selectedTemplate);
+                    }}
+                  >
                     {t("createAgent")}
                   </Button>
                 ) : null}
@@ -3038,8 +3095,11 @@ export function HubDetailPane({
         </DialogContent>
       </DialogRoot>
       <DialogRoot
-        open={knowledgeBaseDetailDialogOpen && Boolean(knowledgeBases?.selected)}
-        onOpenChange={(open) => { setKnowledgeBaseDetailDialogOpen(open); if (!open) onSelectKnowledgeBase?.(null); }}
+        open={activeResourceType === "knowledge" && knowledgeBaseDetailDialogOpen && Boolean(knowledgeBases?.selected)}
+        onOpenChange={(open) => {
+          setKnowledgeBaseDetailDialogOpen(open);
+          if (!open) onSelectKnowledgeBase?.(null);
+        }}
       >
         <DialogContent className={moduleClassNames("hub-standard-skill-dialog")}>
           {knowledgeBases?.selected ? (
@@ -3053,15 +3113,27 @@ export function HubDetailPane({
                 </div>
                 <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
               </DialogHeader>
-              <DialogBody className={moduleClassNames("hub-standard-skill-dialog-body hub-standard-resource-dialog-body")}>
+              <DialogBody
+                className={moduleClassNames("hub-standard-skill-dialog-body hub-standard-resource-dialog-body")}
+              >
                 {knowledgeBases.selected.unavailableReason ? (
-                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)} closeLabel={t("close")}>
+                  <DismissibleAlert
+                    className={moduleClassNames("mcp-error-notice")}
+                    aria-live="polite"
+                    messageKey={knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)}
+                    closeLabel={t("close")}
+                  >
                     <AlertCircle size={16} aria-hidden="true" />
                     <span>{knowledgeBaseUnavailableText(knowledgeBases.selected.unavailableReason, t)}</span>
                   </DismissibleAlert>
                 ) : null}
                 {knowledgeBases.copyError || knowledgeBases.loadError ? (
-                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={knowledgeBases.copyError || knowledgeBases.loadError} closeLabel={t("close")}>
+                  <DismissibleAlert
+                    className={moduleClassNames("mcp-error-notice")}
+                    aria-live="polite"
+                    messageKey={knowledgeBases.copyError || knowledgeBases.loadError}
+                    closeLabel={t("close")}
+                  >
                     <AlertCircle size={16} aria-hidden="true" />
                     <span>{knowledgeBases.copyError || knowledgeBases.loadError}</span>
                   </DismissibleAlert>
@@ -3127,7 +3199,13 @@ export function HubDetailPane({
           ) : null}
         </DialogContent>
       </DialogRoot>
-      <DialogRoot open={mcpDetailDialogOpen && Boolean(selectedMCPServer)} onOpenChange={(open) => { setMCPDetailDialogOpen(open); if (!open) onSelectMCP?.(null); }}>
+      <DialogRoot
+        open={activeResourceType === "mcp" && !mcpCreateDialogOpen && mcpDetailDialogOpen && Boolean(selectedMCPServer)}
+        onOpenChange={(open) => {
+          setMCPDetailDialogOpen(open);
+          if (!open) onSelectMCP?.(null);
+        }}
+      >
         <DialogContent className={moduleClassNames("hub-standard-skill-dialog")}>
           {selectedMCPServer ? (
             <>
@@ -3142,14 +3220,21 @@ export function HubDetailPane({
                 </div>
                 <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
               </DialogHeader>
-              <DialogBody className={moduleClassNames("hub-standard-skill-dialog-body hub-standard-resource-dialog-body")}>
+              <DialogBody
+                className={moduleClassNames("hub-standard-skill-dialog-body hub-standard-resource-dialog-body")}
+              >
                 {selectedManagedMCPSource ? (
                   <span className={moduleClassNames("mini-badge mcp-knowledge-badge")}>
                     {t("resourcesKnowledgeMCPBadge")}
                   </span>
                 ) : null}
                 {mcpStateError || mcpMutationError || mcpProbeError ? (
-                  <DismissibleAlert className={moduleClassNames("mcp-error-notice")} aria-live="polite" messageKey={mcpStateError || mcpMutationError || mcpProbeError} closeLabel={t("close")}>
+                  <DismissibleAlert
+                    className={moduleClassNames("mcp-error-notice")}
+                    aria-live="polite"
+                    messageKey={mcpStateError || mcpMutationError || mcpProbeError}
+                    closeLabel={t("close")}
+                  >
                     <AlertCircle size={16} aria-hidden="true" />
                     <span>{mcpStateError || mcpMutationError || mcpProbeError}</span>
                   </DismissibleAlert>
@@ -3164,7 +3249,7 @@ export function HubDetailPane({
                       mcpSourceStatus?.updateAvailable ? "update-available" : "",
                       mcpSourceError && !mcpSourceStatus?.updateAvailable ? "check-failed" : "",
                     )}
-                    role="status"
+                    role={mcpSourceStatus?.updateAvailable ? "status" : "alert"}
                   >
                     <div className={moduleClassNames("mcp-source-notice-copy")}>
                       <strong>
@@ -3442,7 +3527,11 @@ export function HubDetailPane({
           </DialogHeader>
           <DialogBody className={moduleClassNames("mcp-form")}>
             {mcpCreateSource !== "knowledge" ? (
-              <div className={moduleClassNames("mcp-form-mode")} role="tablist" aria-label={t("resourcesMCPCreateTitle")}>
+              <div
+                className={moduleClassNames("mcp-form-mode")}
+                role="tablist"
+                aria-label={t("resourcesMCPCreateTitle")}
+              >
                 <button
                   type="button"
                   className={moduleClassNames("mcp-form-tab", mcpCreateMode === "manual" && "active")}
@@ -3535,7 +3624,7 @@ export function HubDetailPane({
           return onKnowledgeBaseLogin?.();
         }}
         onLoadMore={() => void (knowledgeBases?.discoveryLoadMore?.() ?? Promise.resolve())}
-        onRetry={() => void (knowledgeBases?.discoveryRefetch?.())}
+        onRetry={() => void knowledgeBases?.discoveryRefetch?.()}
         onSearchChange={knowledgeBases?.setSearch ?? (() => {})}
         search={knowledgeBases?.search ?? ""}
         t={t}
@@ -3554,7 +3643,11 @@ export function HubDetailPane({
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           {mcpMutationError ? (
-            <DismissibleAlert className={moduleClassNames("mcp-error-notice")} messageKey={mcpMutationError} closeLabel={t("close")}>
+            <DismissibleAlert
+              className={moduleClassNames("mcp-error-notice")}
+              messageKey={mcpMutationError}
+              closeLabel={t("close")}
+            >
               <AlertCircle size={16} aria-hidden="true" />
               <span>{mcpMutationError}</span>
             </DismissibleAlert>
@@ -3592,7 +3685,11 @@ export function HubDetailPane({
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
           </DialogHeader>
           {mcpMutationError ? (
-            <DismissibleAlert className={moduleClassNames("mcp-error-notice")} messageKey={mcpMutationError} closeLabel={t("close")}>
+            <DismissibleAlert
+              className={moduleClassNames("mcp-error-notice")}
+              messageKey={mcpMutationError}
+              closeLabel={t("close")}
+            >
               <AlertCircle size={16} aria-hidden="true" />
               <span>{mcpMutationError}</span>
             </DismissibleAlert>

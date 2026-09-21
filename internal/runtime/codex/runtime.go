@@ -13,6 +13,7 @@ import (
 	pathpkg "path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -67,6 +68,7 @@ type AgentRef struct {
 }
 
 type SessionSpec struct {
+	MCPCatalogRevision          uint64
 	RuntimeID                   string
 	AgentID                     string
 	AgentName                   string
@@ -209,7 +211,12 @@ func codexMCPFileBridgeServers(servers map[string]any, agentID string) (map[stri
 }
 
 type Runtime struct {
-	deps Dependencies
+	deps                     Dependencies
+	managerMu                sync.Mutex
+	configMu                 sync.Mutex
+	mcpCatalogMu             sync.RWMutex
+	mcpCatalogRevisions      map[string]uint64
+	mcpCatalogRevisionSource func(string) uint64
 }
 
 var (
@@ -234,10 +241,10 @@ func (r *Runtime) Kind() string {
 }
 
 func (r *Runtime) Close() error {
-	if r == nil || r.deps.Manager == nil {
+	if r == nil {
 		return nil
 	}
-	closer, ok := r.deps.Manager.(io.Closer)
+	closer, ok := r.currentSessionManager().(io.Closer)
 	if !ok {
 		return nil
 	}
@@ -669,16 +676,19 @@ func (r *Runtime) StreamLogs(ctx context.Context, h agentruntime.Handle, opts ag
 }
 
 func (r *Runtime) sessionManager() Manager {
+	r.managerMu.Lock()
+	defer r.managerMu.Unlock()
 	if r.deps.Manager != nil {
 		return r.deps.Manager
 	}
 	manager := newAppServerManager(managerDeps{
-		EventSink:  r.deps.EventSink,
-		Permission: r.permissionBroker(),
-		UserInput:  r.userInputBroker(),
-		OpenFile:   r.openFile,
-		WriteFile:  r.writeFile,
-		ReadFile:   r.readFile,
+		BeforePrompt: r.refreshSessionMCP,
+		EventSink:    r.deps.EventSink,
+		Permission:   r.permissionBroker(),
+		UserInput:    r.userInputBroker(),
+		OpenFile:     r.openFile,
+		WriteFile:    r.writeFile,
+		ReadFile:     r.readFile,
 		OnExit: func(session *Session, exitCode int) {
 			if session == nil {
 				return
@@ -708,6 +718,12 @@ func (r *Runtime) sessionManager() Manager {
 		return r.hydratePersistedSession(ctx, manager, handle)
 	}
 	r.deps.Manager = manager
+	return r.deps.Manager
+}
+
+func (r *Runtime) currentSessionManager() Manager {
+	r.managerMu.Lock()
+	defer r.managerMu.Unlock()
 	return r.deps.Manager
 }
 
@@ -764,6 +780,7 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec) (*Session
 		return nil, fmt.Errorf("materialize Codex MCP servers: %w", err)
 	}
 	spec.MCPServers = runtimeMCPServers
+	spec.MCPCatalogRevision = r.agentMCPRevision(spec.AgentID)
 	manager := r.sessionManager()
 	tracker, tracksSessions := manager.(interface{ hasSession(string) bool })
 	if !tracksSessions || !tracker.hasSession(runtimeID) {
@@ -865,6 +882,7 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		StderrPath:                  dirs.StderrLog,
 		Profile:                     agentRef.Profile.Normalized(),
 		MCPServers:                  nil,
+		MCPCatalogRevision:          r.agentMCPRevision(agentID),
 		ExecutionMode:               ExecutionModeStandard,
 		ConversationSessions:        cloneConversationSessions(sessionMeta.ConversationSessions),
 		FilePublishingConversations: cloneFilePublishingConversations(sessionMeta.FilePublishingConversations),
@@ -967,6 +985,8 @@ func (r *Runtime) seedCodexHomeAuth(runtimeCodexHome string, profile agentruntim
 }
 
 func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, profile agentruntime.Profile, runtimeOptions, mcpServers map[string]any) error {
+	r.configMu.Lock()
+	defer r.configMu.Unlock()
 	runtimeCodexHome = strings.TrimSpace(runtimeCodexHome)
 	if runtimeCodexHome == "" {
 		return fmt.Errorf("codex home dir is required")
@@ -991,6 +1011,10 @@ func (r *Runtime) seedCodexHomeConfig(runtimeCodexHome, workspaceDir string, pro
 		} else if !errors.Is(hostErr, os.ErrNotExist) {
 			return fmt.Errorf("read host codex config: %w", hostErr)
 		}
+	}
+	mcpServers, err = r.projectAgentMCP(profile, mcpServers, string(configRaw))
+	if err != nil {
+		return err
 	}
 
 	if profile.BaseURL != "" && profile.ModelID != "" {
@@ -1256,6 +1280,7 @@ func managerTemplateSkillNames() ([]string, error) {
 func (r *Runtime) writeModelCatalog(runtimeCodexHome string, profile agentruntime.Profile) error {
 	catalogPath := filepath.Join(runtimeCodexHome, modelCatalogFileName)
 	body, err := json.MarshalIndent(codexmodel.Catalog(codexmodel.Profile{
+		Provider:        profile.Provider,
 		ModelID:         profile.ModelID,
 		ReasoningEffort: profile.ReasoningEffort,
 	}), "", "  ")
@@ -1418,6 +1443,7 @@ func (r *Runtime) refreshCodexHomeAgentsFileWithFragments(h agentruntime.Handle,
 		instructions = strings.TrimSpace(instructions + "\n\n" + readOnlyRuntimeInstructions)
 	}
 	block := runtimeinstructions.RenderRuntimeAgentsInstructionsBlockWithOptions(agentRef.ID, instructions, runtimeinstructions.RuntimeManagedInstructionsOptions{
+		AgentMCP:   strings.TrimSpace(agentRef.Profile.Env[agentAccessTokenEnv]) != "",
 		Extensions: fragments,
 		CLIPath:    agentRef.Profile.Env["CSGCLAW_CLI"],
 	})
@@ -2136,6 +2162,7 @@ func writeJSONFile(writeFile func(string, []byte, os.FileMode) error, path strin
 }
 
 type managerDeps struct {
+	BeforePrompt                 func(context.Context, SessionHandle) error
 	EventSink                    SessionEventSink
 	Permission                   PermissionBroker
 	UserInput                    UserInputBroker

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"reflect"
 	"strings"
@@ -1041,14 +1042,6 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 			return Agent{}, fmt.Errorf("preserve runtime instructions: %w", readErr)
 		}
 	}
-	restoreSkills, cleanupSkills, err := s.prepareWorkspaceSkillsPreservation(got.ID, runtimeKind, runtimeKind, recreateTemplateRole(got))
-	if err != nil {
-		return Agent{}, fmt.Errorf("preserve runtime skills: %w", err)
-	}
-	if cleanupSkills != nil {
-		defer cleanupSkills()
-	}
-
 	if testCreateGatewayBoxHook != nil {
 		rt, err := s.ensureRuntime(got.ID)
 		if err != nil {
@@ -1094,9 +1087,6 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 		Image:     image,
 		Profile:   runtimeProfile,
 	}
-	if err := s.refreshGatewayTemplateSkills(got.ID, runtimeKind, recreateTemplateRole(got)); err != nil {
-		return Agent{}, fmt.Errorf("refresh gateway template skills: %w", err)
-	}
 	runtimeCredentials, runtimeInitShell := got.RuntimeProvision()
 	provision := func() error {
 		return s.provisionRuntime(ctx, runtimeImpl, runtimeKind, agentruntime.ProvisionRequest{
@@ -1114,21 +1104,89 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 			InitShell:            runtimeInitShell,
 		})
 	}
-	// Codex preserves selected runtime state while replacing its private
-	// directory, so its replacement must be provisioned before Delete. DSH
-	// removes the complete .dsh directory in Delete and must be provisioned
-	// afterwards before New opens its log and settings files.
-	provisionBeforeDelete := runtimeKind == RuntimeKindCodex
+	// DSH replaces its complete private runtime directory during Delete, so
+	// provisioning must run afterwards. Other runtimes provision first while
+	// the workspace skills transaction protects user-owned skill content.
+	provisionBeforeDelete := runtimeKind != RuntimeKindDSH
+	deleteHandle := runtimeHandleForAgent(got)
+	var (
+		skillsPreservation *workspaceSkillsPreservation
+		handle             agentruntime.Handle
+		replacementCreated bool
+		oldRuntimeDeleted  bool
+		oldRuntimeStopped  bool
+		committed          bool
+	)
+	defer func() {
+		if committed {
+			return
+		}
+
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if replacementCreated && skillsPreservation != nil && skillsPreservation.appliedRoot != "" {
+			if _, stopErr := runtimeImpl.Stop(cleanupCtx, handle); stopErr != nil && !sandbox.IsNotFound(stopErr) && !errors.Is(stopErr, os.ErrNotExist) {
+				err = errors.Join(err, fmt.Errorf("stop replacement runtime before skills recovery: %w", stopErr))
+			}
+		}
+
+		skillsReverted := true
+		if skillsPreservation != nil {
+			if revertErr := skillsPreservation.RevertRestore(); revertErr != nil {
+				skillsReverted = false
+				err = errors.Join(err, fmt.Errorf("return restored runtime skills to preservation dir: %w", revertErr))
+			}
+		}
+		if replacementCreated && skillsReverted {
+			cleanupErr := runtimeImpl.Delete(cleanupCtx, handle)
+			if sandbox.IsNotFound(cleanupErr) {
+				cleanupErr = nil
+			}
+			if cleanupErr != nil {
+				err = errors.Join(err, fmt.Errorf("cleanup replacement runtime: %w", cleanupErr))
+			} else if stoppedErr := s.observeStoppedExtensions(cleanupCtx, id); stoppedErr != nil {
+				err = errors.Join(err, fmt.Errorf("clear replacement extension observations: %w", stoppedErr))
+			}
+		}
+		if skillsPreservation != nil {
+			if rollbackErr := skillsPreservation.Rollback(); rollbackErr != nil {
+				err = errors.Join(err, fmt.Errorf("recover original runtime skills: %w", rollbackErr))
+			}
+		}
+		if oldRuntimeStopped && !oldRuntimeDeleted {
+			if _, restartErr := runtimeImpl.Start(cleanupCtx, deleteHandle); restartErr != nil {
+				err = errors.Join(err, fmt.Errorf("restart original runtime after recreate failure: %w", restartErr))
+			}
+		}
+		if replacementCreated {
+			if _, saveErr := s.updateRuntimeState(id, agentruntime.Info{HandleID: handle.HandleID, State: agentruntime.StateFailed}); saveErr != nil {
+				err = errors.Join(err, fmt.Errorf("record failed runtime replacement: %w", saveErr))
+			}
+		}
+	}()
+
+	_, stopErr := runtimeImpl.Stop(ctx, deleteHandle)
+	if stopErr != nil && !sandbox.IsNotFound(stopErr) && !errors.Is(stopErr, os.ErrNotExist) {
+		return Agent{}, fmt.Errorf("stop existing agent runtime: %w", stopErr)
+	}
+	oldRuntimeStopped = stopErr == nil && strings.EqualFold(strings.TrimSpace(got.Status), string(agentruntime.StateRunning))
+	if err := s.refreshGatewayTemplateSkills(got.ID, runtimeKind, recreateTemplateRole(got)); err != nil {
+		return Agent{}, fmt.Errorf("refresh gateway template skills: %w", err)
+	}
 	if provisionBeforeDelete {
 		if err := provision(); err != nil {
 			return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
 		}
 	}
-	deleteHandle := runtimeHandleForAgent(got)
+	skillsPreservation, err = s.prepareWorkspaceSkillsPreservation(got.ID, runtimeKind, runtimeKind, recreateTemplateRole(got))
+	if err != nil {
+		return Agent{}, fmt.Errorf("preserve runtime skills: %w", err)
+	}
 	deleteErr := runtimeImpl.Delete(ctx, deleteHandle)
 	if deleteErr != nil && !sandbox.IsNotFound(deleteErr) {
 		return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
 	}
+	oldRuntimeDeleted = true
 	if !provisionBeforeDelete {
 		if err := provision(); err != nil {
 			return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
@@ -1137,44 +1195,19 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 	if err := s.prepareExtensions(ctx, id); err != nil {
 		return Agent{}, err
 	}
-	handle, err := runtimeImpl.New(ctx, createSpec)
+	handle, err = runtimeImpl.New(ctx, createSpec)
 	if err != nil {
 		return Agent{}, fmt.Errorf("create agent box: %w", err)
 	}
-	committed := false
-	defer func() {
-		if committed {
-			return
-		}
-		// New owns a live process before observation and persistence finish.
-		// Keep its exact handle reachable and clean it up even if the HTTP
-		// request was canceled. The Agent mutation lease still excludes retries.
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
-		defer cancel()
-		cleanupErr := runtimeImpl.Delete(cleanupCtx, handle)
-		if sandbox.IsNotFound(cleanupErr) {
-			cleanupErr = nil
-		}
-		if cleanupErr != nil {
-			err = errors.Join(err, fmt.Errorf("cleanup replacement runtime: %w", cleanupErr))
-		} else if stoppedErr := s.observeStoppedExtensions(cleanupCtx, id); stoppedErr != nil {
-			err = errors.Join(err, fmt.Errorf("clear replacement extension observations: %w", stoppedErr))
-		}
-		// Preserve desired configuration for retry. If cleanup itself failed,
-		// retain the new handle rather than leaving an untracked instance.
-		if _, saveErr := s.updateRuntimeState(id, agentruntime.Info{HandleID: handle.HandleID, State: agentruntime.StateFailed}); saveErr != nil {
-			err = errors.Join(err, fmt.Errorf("record failed runtime replacement: %w", saveErr))
-		}
-	}()
-	if err := s.observeStartedExtensions(ctx, id); err != nil {
-		return Agent{}, err
-	}
-	if restoreSkills != nil {
-		if err := restoreSkills(); err != nil {
+	replacementCreated = true
+	if skillsPreservation != nil {
+		if err := skillsPreservation.Restore(); err != nil {
 			return Agent{}, fmt.Errorf("restore runtime skills: %w", err)
 		}
 	}
-
+	if err := s.observeStartedExtensions(ctx, id); err != nil {
+		return Agent{}, err
+	}
 	info, err := s.runtimeInfo(ctx, runtimeImpl, handle)
 	if err != nil {
 		return Agent{}, fmt.Errorf("read agent runtime info: %w", err)
@@ -1183,6 +1216,14 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 	recreated, err := s.persistRecreatedAgent(ctx, id, image, info)
 	if err != nil {
 		return Agent{}, err
+	}
+	if skillsPreservation != nil {
+		if commitErr := skillsPreservation.Commit(); commitErr != nil {
+			if skillsPreservation.phase != workspaceSkillsStateCommitted {
+				return Agent{}, fmt.Errorf("commit workspace skills restoration: %w", commitErr)
+			}
+			slog.WarnContext(context.WithoutCancel(ctx), "failed to clean committed workspace skills transaction", "agent_id", id, "error", commitErr)
+		}
 	}
 	committed = true
 	return recreated, nil

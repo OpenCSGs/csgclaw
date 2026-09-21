@@ -32,10 +32,17 @@ function NavigationHarness() {
   return (
     <>
       <div data-testid="path">{location.pathname}</div>
+      <div data-testid="search">{location.search}</div>
       <div data-testid="pane">
         {activePane.type}:{activePane.id}
       </div>
       <div data-testid="conversation">{activeConversationId}</div>
+      <button type="button" onClick={() => navigation.selectAgentApps("agent-1")}>
+        Open agent apps
+      </button>
+      <button type="button" onClick={() => navigation.selectApps("gitlab")}>
+        Configure GitLab app
+      </button>
       <button type="button" onClick={() => navigation.selectAgent({ id: "agent-1" })}>
         Open agent
       </button>
@@ -50,6 +57,30 @@ function NavigationHarness() {
 }
 
 describe("useWorkspaceNavigation", () => {
+  it("opens the Apps section even when the target agent page is already selected", async () => {
+    window.history.replaceState({}, "", "/agents/agent-1?tab=profile");
+    render(
+      <BrowserRouter>
+        <NavigationHarness />
+      </BrowserRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open agent apps" }));
+    await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("?tab=apps"));
+    expect(screen.getByTestId("path")).toHaveTextContent("/agents/agent-1");
+  });
+
+  it("opens the global Apps page with the requested App configuration", async () => {
+    window.history.replaceState({}, "", "/agents/agent-1?tab=apps");
+    render(
+      <BrowserRouter>
+        <NavigationHarness />
+      </BrowserRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Configure GitLab app" }));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/apps"));
+    expect(screen.getByTestId("search")).toHaveTextContent("?add_app=gitlab");
+  });
+
   afterEach(() => {
     window.history.replaceState({}, "", "/");
   });

@@ -34,6 +34,8 @@ describe("SkillUploadDialog", () => {
     }
     const openPicker = vi.spyOn(HTMLInputElement.prototype, "click");
     await user.click(screen.getByRole("tab", { name: "resourcesSkillUploadZipTab" }));
+    expect(openPicker).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /resourcesSkillUploadDropTitle/ }));
     expect(openPicker).toHaveBeenCalledOnce();
     const input = document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();

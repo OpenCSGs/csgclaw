@@ -4,9 +4,11 @@ import (
 	"strings"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
 )
 
 type Profile struct {
+	Provider        string
 	ModelID         string
 	ReasoningEffort string
 }
@@ -59,7 +61,7 @@ func Metadata(profile Profile) map[string]any {
 		"upgrade":                      nil,
 		"base_instructions":            baseInstructions,
 		"model_messages":               modelMessages(baseInstructions),
-		"supports_search_tool":         false,
+		"supports_search_tool":         modelcap.ForProviderModel(profile.Provider, modelID).SupportsSearchTool,
 		"supports_reasoning_summaries": false,
 		"default_reasoning_summary":    "auto",
 		"support_verbosity":            false,

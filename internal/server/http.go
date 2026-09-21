@@ -15,6 +15,7 @@ import (
 	"csgclaw/internal/agenttask"
 	"csgclaw/internal/api"
 	"csgclaw/internal/channel/feishu"
+	"csgclaw/internal/connectors"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
 	"csgclaw/internal/mcp"
@@ -48,6 +49,7 @@ type Options struct {
 	Team               *team.Service
 	AgentTask          *agenttask.Service
 	ScheduledTask      *scheduledtask.Service
+	Connectors         *connectors.Service
 	AgentRuntimes      *runtimecatalog.Service
 	TeamAdapters       *team.AdapterRegistry
 	Upgrade            *upgrade.Manager
@@ -57,6 +59,7 @@ type Options struct {
 	ChannelBindings    api.ChannelBindingReconciler
 	SessionBindings    *agentsession.Store
 	ConfigPath         string
+	AppsStatePath      string
 	AccessToken        string
 	NoAuth             bool
 	AdvertiseBaseURL   string
@@ -79,6 +82,7 @@ func newHandler(opts Options) *api.Handler {
 		handler.SetRoomTaskCore(opts.AgentTask.Core())
 	}
 	handler.SetScheduledTaskService(opts.ScheduledTask)
+	handler.SetConnectorService(opts.Connectors)
 	handler.SetAgentRuntimeService(opts.AgentRuntimes)
 	if opts.TeamAdapters != nil {
 		handler.SetTeamAdapterRegistry(opts.TeamAdapters)
@@ -118,6 +122,13 @@ func Run(opts Options) error {
 	}
 
 	handler := newHandler(opts)
+	if opts.AppsStatePath != "" {
+		if err := handler.EnableApps(opts.AppsStatePath); err != nil {
+			_ = listener.Close()
+			return fmt.Errorf("initialize Apps: %w", err)
+		}
+		defer handler.CloseApps()
+	}
 	handler.SetEventStreamShutdown(streamCtx.Done())
 	if err := handler.RecoverRoomTasks(); err != nil {
 		return fmt.Errorf("recover room tasks: %w", err)
@@ -145,7 +156,9 @@ func Run(opts Options) error {
 			_ = listener.Close()
 			return fmt.Errorf("desktop sandbox listener is required")
 		}
-		sandboxHandler, err := desktopSandboxSecurityHandler(router, opts.SandboxListener.Addr(), *opts.Desktop)
+		sandboxOptions := *opts.Desktop
+		sandboxOptions.ValidateAgentAccessToken = handler.ValidateAgentAccessToken
+		sandboxHandler, err := desktopSandboxSecurityHandler(router, opts.SandboxListener.Addr(), sandboxOptions)
 		if err != nil {
 			_ = listener.Close()
 			_ = opts.SandboxListener.Close()
@@ -225,6 +238,9 @@ func Run(opts Options) error {
 
 	if opts.OnReady != nil {
 		go opts.OnReady(handler, router)
+	}
+	if opts.AppsStatePath != "" {
+		go handler.RestoreApps(runCtx)
 	}
 
 	firstErr := <-errCh
