@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
 )
 
@@ -313,15 +315,22 @@ func (r *Runtime) handleServerRequest(proc *process, request serverRequest) {
 	r.mu.Lock()
 	r.nextPerm++
 	interactionID := fmt.Sprintf("dsh-permission-%d", r.nextPerm)
-	options := make([]map[string]string, 0, len(params.Options))
+	options := make([]activity.ActionOptionSnapshot, 0, len(params.Options))
 	allowed := make(map[string]bool, len(params.Options))
 	for _, option := range params.Options {
-		options = append(options, map[string]string{"id": option.OptionID, "name": option.Name, "kind": option.Kind})
+		options = append(options, activity.ActionOptionSnapshot{ID: option.OptionID, Label: option.Name, Kind: option.Kind})
 		allowed[option.OptionID] = true
 	}
+	title := strings.TrimSpace(params.ToolCall.Title)
+	if title == "" {
+		title = "Run tool"
+	}
+	snapshot := activity.ActivitySnapshot{
+		ID: interactionID, Kind: activity.ActionKindPermission, Title: title,
+		Status: activity.ActionStatusPending, RequestedAt: time.Now().UTC(), Options: options,
+	}
 	interaction := contract.InteractionRequest{
-		ID: interactionID, Kind: contract.InteractionPermission, Title: params.ToolCall.Title,
-		Payload: map[string]any{"tool_call_id": params.ToolCall.ToolCallID, "tool_kind": params.ToolCall.Kind, "options": options},
+		ID: interactionID, Kind: contract.InteractionPermission, Title: title, Payload: snapshot,
 	}
 	r.pending[interactionID] = &pendingPermission{runtimeID: proc.meta.RuntimeID, conversation: turn.request.ConversationKey, request: interaction, requestID: request.ID, client: proc.client, allowedOptions: allowed}
 	r.mu.Unlock()

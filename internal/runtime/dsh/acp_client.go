@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 )
 
 type rpcError struct {
@@ -83,22 +84,75 @@ func (c *acpClient) call(ctx context.Context, method string, params any, result 
 	}
 	select {
 	case reply := <-replies:
-		if reply.err != nil {
-			return reply.err
-		}
-		if result == nil || len(reply.result) == 0 || string(reply.result) == "null" {
-			return nil
-		}
-		if err := json.Unmarshal(reply.result, result); err != nil {
-			return fmt.Errorf("decode ACP %s response: %w", method, err)
-		}
-		return nil
+		return decodeACPReply(method, result, reply)
 	case <-ctx.Done():
 		c.removePending(id)
 		return ctx.Err()
 	case <-c.closed:
 		return c.closeError()
 	}
+}
+
+var errACPCancellationTimeout = errors.New("timed out waiting for ACP request cancellation")
+
+// callRetainingOnCancel keeps the request registered after ctx is canceled so
+// the caller can hold its conversation slot until the ACP peer sends the
+// terminal response. This prevents late updates from a canceled prompt from
+// being attributed to a replacement turn using the same session.
+func (c *acpClient) callRetainingOnCancel(
+	ctx context.Context,
+	method string,
+	params any,
+	result any,
+	accepted func(),
+	cancelWait time.Duration,
+	onCancel func() error,
+) error {
+	id, replies, err := c.sendRequest(method, params)
+	if err != nil {
+		return err
+	}
+	if accepted != nil {
+		accepted()
+	}
+	select {
+	case reply := <-replies:
+		return decodeACPReply(method, result, reply)
+	case <-ctx.Done():
+		var cancelErr error
+		if onCancel != nil {
+			cancelErr = onCancel()
+		}
+		if cancelWait <= 0 {
+			cancelWait = time.Second
+		}
+		timer := time.NewTimer(cancelWait)
+		defer timer.Stop()
+		select {
+		case <-replies:
+			return errors.Join(ctx.Err(), cancelErr)
+		case <-c.closed:
+			return errors.Join(ctx.Err(), cancelErr)
+		case <-timer.C:
+			c.removePending(id)
+			return errors.Join(ctx.Err(), cancelErr, errACPCancellationTimeout)
+		}
+	case <-c.closed:
+		return c.closeError()
+	}
+}
+
+func decodeACPReply(method string, result any, reply rpcReply) error {
+	if reply.err != nil {
+		return reply.err
+	}
+	if result == nil || len(reply.result) == 0 || string(reply.result) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(reply.result, result); err != nil {
+		return fmt.Errorf("decode ACP %s response: %w", method, err)
+	}
+	return nil
 }
 
 func (c *acpClient) notify(method string, params any) error {

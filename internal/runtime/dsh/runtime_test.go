@@ -15,7 +15,9 @@ import (
 	"sync"
 	"testing"
 
+	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/agentengine/interactionstate"
 	"csgclaw/internal/dshcli"
 	agentruntime "csgclaw/internal/runtime"
 )
@@ -701,14 +703,35 @@ func TestPermissionRequestCanBeResolved(t *testing.T) {
 	if event.Kind != contract.TurnEventInteractionRequest || event.Interaction == nil || event.Interaction.Kind != contract.InteractionPermission {
 		t.Fatalf("permission event = %+v", event)
 	}
+	snapshot, ok := event.Interaction.Payload.(activity.ActivitySnapshot)
+	if !ok {
+		t.Fatalf("permission payload type = %T, want activity.ActivitySnapshot", event.Interaction.Payload)
+	}
+	if snapshot.ID != event.Interaction.ID || snapshot.Kind != activity.ActionKindPermission || snapshot.Status != activity.ActionStatusPending || snapshot.Title != "Run command" || snapshot.RequestedAt.IsZero() {
+		t.Fatalf("permission snapshot = %+v", snapshot)
+	}
+	if len(snapshot.Options) != 2 || snapshot.Options[0].ID != "allow-once" || snapshot.Options[0].Label != "Allow once" || snapshot.Options[0].Kind != "allow_once" {
+		t.Fatalf("permission options = %+v", snapshot.Options)
+	}
 
-	resolveErr := rt.Conversation("rt-agent-test").Resolve(context.Background(), *event.Interaction, contract.InteractionResolution{
+	var coordinator interactionstate.Coordinator
+	conversation := rt.Conversation("rt-agent-test")
+	coordinator.Register("agent-test", "room-1", "turn-1", *event.Interaction, conversation.Resolve, nil)
+	resolveErr := coordinator.Resolve(context.Background(), "agent-test", contract.InteractionResolution{
 		ConversationKey: "room-1",
 		InteractionID:   event.Interaction.ID,
 		OptionID:        "allow-once",
 	})
 	if resolveErr != nil {
-		t.Fatalf("Resolve() error = %v", resolveErr)
+		t.Fatalf("channel-style Resolve() error = %v", resolveErr)
+	}
+	resolved, err := coordinator.Get("agent-test", "room-1", event.Interaction.ID)
+	if err != nil {
+		t.Fatalf("Get() resolved interaction error = %v", err)
+	}
+	resolvedSnapshot, ok := resolved.Payload.(activity.ActivitySnapshot)
+	if !ok || resolvedSnapshot.Status != activity.ActionStatusAllowed || resolvedSnapshot.Decision == nil || resolvedSnapshot.Decision.OptionID != "allow-once" {
+		t.Fatalf("resolved permission snapshot = %#v", resolved.Payload)
 	}
 	var response struct {
 		ID     int64 `json:"id"`

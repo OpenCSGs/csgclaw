@@ -3,11 +3,19 @@ package dsh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/config"
+	agentruntime "csgclaw/internal/runtime"
+)
+
+const (
+	dshPromptCancellationTimeout = 5 * time.Second
+	dshHungProcessStopTimeout    = 5 * time.Second
 )
 
 type conversation struct {
@@ -49,10 +57,14 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	var response struct {
 		StopReason string `json:"stopReason"`
 	}
-	err = proc.client.call(ctx, "session/prompt", map[string]any{
+	err = proc.client.callRetainingOnCancel(ctx, "session/prompt", map[string]any{
 		"sessionId": sessionID,
 		"prompt":    prompt,
-	}, &response, func() { dispatched = true })
+	}, &response, func() { dispatched = true }, dshPromptCancellationTimeout, func() error {
+		notifyErr := proc.client.notify("session/cancel", map[string]any{"sessionId": sessionID})
+		c.runtime.cancelPendingPermissions(c.runtimeID, request.ConversationKey)
+		return notifyErr
+	})
 	proc.mu.Lock()
 	interactionErr := turn.interactionError
 	output := turn.output.String()
@@ -63,8 +75,16 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	}
 	if err != nil {
 		if ctx.Err() != nil {
-			_ = proc.client.notify("session/cancel", map[string]any{"sessionId": sessionID})
-			return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: ctx.Err().Error()}}
+			message := ctx.Err().Error()
+			if errors.Is(err, errACPCancellationTimeout) {
+				stopCtx, cancel := context.WithTimeout(context.Background(), dshHungProcessStopTimeout)
+				_, stopErr := c.runtime.Stop(stopCtx, agentruntime.Handle{RuntimeID: c.runtimeID})
+				cancel()
+				if stopErr != nil {
+					message = fmt.Sprintf("%s; stop unresponsive DSH process: %v", message, stopErr)
+				}
+			}
+			return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: message}}
 		}
 		result := failed(err)
 		result.Output = output
