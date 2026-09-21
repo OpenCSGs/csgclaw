@@ -244,6 +244,7 @@ func (s *Controller) runtimeProfileForKind(runtimeKind, agentID, fallbackName, f
 		BaseURL:         baseURL,
 		APIKey:          apiKey,
 		ModelID:         profile.ModelID,
+		InputModalities: append([]string(nil), profile.InputModalities...),
 		ReasoningEffort: profile.ReasoningEffort,
 		Env:             env,
 	}).Normalized()
@@ -785,6 +786,7 @@ func runtimeProfileFromAgent(profile AgentProfile) agentruntime.Profile {
 		BaseURL:         strings.TrimSpace(profile.BaseURL),
 		APIKey:          strings.TrimSpace(profile.APIKey),
 		ModelID:         strings.TrimSpace(profile.ModelID),
+		InputModalities: append([]string(nil), profile.InputModalities...),
 		ReasoningEffort: strings.TrimSpace(profile.ReasoningEffort),
 		Env:             normalizeStringMap(profile.Env),
 	}).Normalized()

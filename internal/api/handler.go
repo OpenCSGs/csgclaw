@@ -181,6 +181,7 @@ type workerRuntimeChoiceResponse struct {
 	Label          string `json:"label"`
 	SandboxEnabled bool   `json:"sandbox_enabled"`
 	Installed      bool   `json:"installed"`
+	Installable    bool   `json:"installable,omitempty"`
 	Message        string `json:"message,omitempty"`
 	MessageCode    string `json:"message_code,omitempty"`
 }
@@ -631,6 +632,7 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 			Name:           agent.RuntimeNameDSH,
 			Label:          "DeepSeek Harness",
 			SandboxEnabled: false,
+			Installable:    true,
 		},
 		{
 			Name:           agent.RuntimeNameOpenClaw,
@@ -655,7 +657,8 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 	}
 	if _, err := (dshcli.Provider{}).Ensure(ctx); err != nil {
 		choices[1].Installed = false
-		choices[1].Message = "DSH CLI is unavailable; install the current @deepseek-ai/dsh release or set " + dshcli.PathEnv
+		choices[1].Message = "DeepSeek Harness is not installed"
+		choices[1].MessageCode = "dsh_not_installed"
 	} else {
 		choices[1].Installed = true
 	}

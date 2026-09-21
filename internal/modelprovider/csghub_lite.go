@@ -22,6 +22,7 @@ type ModelDiscoveryResult struct {
 	ResolvedBaseURL string
 	Models          []string
 	ImageModels     []string
+	VisionModels    []string
 }
 
 // ListCSGHubLiteModels lists models using the default discovery client.
@@ -69,6 +70,7 @@ func ListCSGHubLiteModelsWithClient(
 				ResolvedBaseURL: candidate,
 				Models:          directory.Models,
 				ImageModels:     directory.ImageModels,
+				VisionModels:    directory.VisionModels,
 			}, nil
 		}
 		lastErr = err

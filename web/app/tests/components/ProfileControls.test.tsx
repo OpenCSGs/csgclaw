@@ -95,6 +95,51 @@ describe("ProfileControls", () => {
     delete (window as Window & { showDirectoryPicker?: unknown }).showDirectoryPicker;
   });
 
+  it("renders runtime-provided DSH permission modes without Codex-specific help", async () => {
+    const onDraftChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <RuntimeOptionsFields
+          draft={{ runtime_options: {} } as AgentDraft}
+          locale="zh"
+          schemas={[
+            {
+              key: "permission_mode",
+              path: "permission_mode",
+              type: "select",
+              label: "Permission Mode",
+              label_zh: "运行模式",
+              options: ["workspace-write", "read-only", "danger-full-access"],
+              choices: [
+                {
+                  value: "workspace-write",
+                  label_zh: "工作区模式",
+                  description_zh: "使用自动管理的 Agent 工作区，无需额外配置。",
+                },
+                { value: "read-only", label_zh: "只读模式", description_zh: "不能修改本地文件。" },
+                { value: "danger-full-access", label_zh: "完全访问", description_zh: "可修改工作区外文件。" },
+              ],
+              default_value: "workspace-write",
+              presentation: "dsh_permission_mode",
+            },
+          ]}
+          onDraftChange={onDraftChange}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole("combobox", { name: "运行模式" })).toHaveTextContent("工作区模式");
+    expect(screen.getByText("使用自动管理的 Agent 工作区，无需额外配置。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看运行模式权限" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "运行模式" }));
+    await user.click(screen.getByRole("option", { name: "完全访问" }));
+    expect(onDraftChange).toHaveBeenCalledWith(
+      expect.objectContaining({ runtime_options: { permission_mode: "danger-full-access" } }),
+    );
+  });
+
   it("keeps the directory action visible in the desktop runtime", () => {
     window.csgclawDesktop = {} as Window["csgclawDesktop"];
 

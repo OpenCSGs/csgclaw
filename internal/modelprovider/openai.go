@@ -122,6 +122,7 @@ func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 
 	models := make([]string, 0, len(payload.Data))
 	imageModels := []string{}
+	visionModels := []string{}
 	seen := make(map[string]struct{}, len(payload.Data))
 	for _, item := range payload.Data {
 		id := strings.TrimSpace(item.ID)
@@ -138,6 +139,9 @@ func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 		if taskSupportsImageGeneration(item.Task) || (!taskPresent(item.Task) && IsGPTImageModel(id)) {
 			imageModels = append(imageModels, id)
 		}
+		if taskSupportsVisionInput(item.Task) {
+			visionModels = append(visionModels, id)
+		}
 		if !taskPresent(item.Task) || taskSupportsTextGeneration(item.Task) {
 			models = append(models, id)
 		}
@@ -145,7 +149,7 @@ func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 	if len(models) == 0 && len(imageModels) == 0 {
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
-	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels}, nil
+	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, VisionModels: visionModels}, nil
 }
 
 func taskPresent(task any) bool {
@@ -177,6 +181,32 @@ func taskSupportsTextGeneration(task any) bool {
 		}
 	}
 	return false
+}
+
+func taskSupportsVisionInput(task any) bool {
+	values := taskValues(task)
+	for _, value := range values {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "image-text-to-text", "image-to-text", "vision":
+			return true
+		}
+	}
+	return false
+}
+
+func taskValues(task any) []string {
+	var values []string
+	switch value := task.(type) {
+	case string:
+		values = strings.Split(value, ",")
+	case []any:
+		for _, entry := range value {
+			if text, ok := entry.(string); ok {
+				values = append(values, text)
+			}
+		}
+	}
+	return values
 }
 
 func requestOpenAIModels(ctx context.Context, client *http.Client, modelsURL, apiKey string, headers map[string]string) (*http.Response, error) {
@@ -489,17 +519,7 @@ func scanOpenAIProbeSSE(r io.Reader, visit func(eventType, data string) (bool, e
 }
 
 func taskSupportsImageGeneration(task any) bool {
-	var values []string
-	switch v := task.(type) {
-	case string:
-		values = strings.Split(v, ",")
-	case []any:
-		for _, item := range v {
-			if text, ok := item.(string); ok {
-				values = append(values, text)
-			}
-		}
-	}
+	values := taskValues(task)
 	for _, value := range values {
 		switch strings.ToLower(strings.TrimSpace(value)) {
 		case "text-to-image", "text2image", "image-generation":

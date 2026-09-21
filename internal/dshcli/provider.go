@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -14,6 +15,7 @@ const (
 	BinaryName       = "dsh"
 	PathEnv          = "CSGCLAW_DSH_PATH"
 	DocumentationURL = "https://github.com/deepseek-ai/deepseek-harness"
+	InstallCommand   = "npm install -g @deepseek-ai/dsh@latest --registry=https://registry.npmmirror.com"
 )
 
 var versionPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])v?(\d+)\.(\d+)\.(\d+)(?:-([0-9a-z.-]+))?`)
@@ -26,11 +28,17 @@ type Provider struct {
 	ExplicitPath string
 	LookPath     func(string) (string, error)
 	Run          CommandRunner
+	UserHomeDir  func() (string, error)
+	GOOS         string
 }
 
 type Info struct {
 	Path    string
 	Version string
+}
+
+func InstallGuidance() string {
+	return fmt.Sprintf("run %q, then retry, or set %s", InstallCommand, PathEnv)
 }
 
 func (p Provider) Ensure(ctx context.Context) (string, error) {
@@ -70,10 +78,54 @@ func (p Provider) resolvePath() (string, error) {
 		lookPath = exec.LookPath
 	}
 	path, err := lookPath(BinaryName)
-	if err != nil {
-		return "", fmt.Errorf("DSH CLI not found; install the current @deepseek-ai/dsh release or set %s: %w", PathEnv, err)
+	if err == nil {
+		return filepath.Clean(path), nil
 	}
-	return filepath.Clean(path), nil
+	for _, candidate := range p.fallbackPaths() {
+		if resolved, validateErr := validateExecutable(candidate); validateErr == nil {
+			return resolved, nil
+		}
+	}
+	return "", fmt.Errorf("DSH CLI not found; %s: %w", InstallGuidance(), err)
+}
+
+func (p Provider) fallbackPaths() []string {
+	homeDir := p.UserHomeDir
+	if homeDir == nil {
+		homeDir = os.UserHomeDir
+	}
+	home, _ := homeDir()
+	goos := strings.TrimSpace(p.GOOS)
+	if goos == "" {
+		goos = runtime.GOOS
+	}
+	if goos == "windows" {
+		installRoot := strings.TrimSpace(os.Getenv(InstallRootEnv))
+		if installRoot == "" && home != "" {
+			installRoot = filepath.Join(home, ".local", "share", "deepseek-harness")
+		}
+		paths := make([]string, 0, 2)
+		if home != "" {
+			paths = append(paths, filepath.Join(home, ".local", "bin", "dsh.cmd"))
+		}
+		if installRoot != "" {
+			paths = append(paths, filepath.Join(installRoot, "dsh.cmd"))
+		}
+		return paths
+	}
+
+	installRoot := strings.TrimSpace(os.Getenv(InstallRootEnv))
+	if installRoot == "" && home != "" {
+		installRoot = filepath.Join(home, ".local", "share", "deepseek-harness")
+	}
+	paths := make([]string, 0, 4)
+	if home != "" {
+		paths = append(paths, filepath.Join(home, ".local", "bin", BinaryName))
+	}
+	if installRoot != "" {
+		paths = append(paths, filepath.Join(installRoot, "bin", BinaryName))
+	}
+	return append(paths, "/usr/local/bin/dsh", "/opt/homebrew/bin/dsh")
 }
 
 func validateExecutable(path string) (string, error) {

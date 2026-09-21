@@ -217,6 +217,26 @@
   overflow-wrap: anywhere;
 }
 
+.installNotice {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in oklab, var(--brand-500) 24%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--brand-500) 8%, var(--field));
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.installNotice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--brand-500);
+}
+
 .runtimeError svg {
   flex: 0 0 auto;
   margin-top: 1px;
@@ -233,6 +253,13 @@
   color: var(--muted);
   font-size: 12px;
   line-height: 17px;
+}
+
+.footerActions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .loadingState,
@@ -349,6 +376,10 @@
   .cardFooter {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .footerActions {
+    justify-content: space-between;
   }
 
   .refreshing {

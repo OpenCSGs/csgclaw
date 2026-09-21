@@ -29,6 +29,12 @@ const labels: Record<string, string> = {
   computerRuntimeInstallingHint: "Downloading in the background.",
   computerRuntimeInstall: "Install",
   computerRuntimeInstallHint: "Install with one click.",
+  computerRuntimeManagedInstallDescription: "Installs DeepSeek Harness 0.1.5-rc.2 for you.",
+  computerRuntimeInstallProgressLabel: "DeepSeek Harness installation progress",
+  computerRuntimeInstallStageInstalling: "Downloading and installing dependencies",
+  computerRuntimeInstallActivity: "Processed {count} npm requests",
+  computerRuntimeInstallElapsed: "{seconds}s elapsed",
+  computerRuntimeInstallFirstRunHint: "The first installation usually takes 20–60 seconds.",
   computerRuntimeExternalInstallHint: "Install a compatible version using the guide, then retry detection.",
   computerRuntimeBundleMissingHint: "Codex CLI is missing from this CSGClaw bundle. Reinstall CSGClaw.",
   computerRuntimeNotInstalled: "Not installed",
@@ -44,7 +50,8 @@ const labels: Record<string, string> = {
   online: "online",
 };
 
-const t: TranslateFn = (key) => labels[key] ?? key;
+const t: TranslateFn = (key, params = {}) =>
+  (labels[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => `${params[name] ?? ""}`);
 
 const bundledCodex: AgentRuntime = {
   name: "codex",
@@ -74,7 +81,7 @@ const dsh: AgentRuntime = {
   label: "DeepSeek Harness",
   supported: true,
   installed: true,
-  installable: false,
+  installable: true,
   status: "installed",
   path: "/usr/local/bin/dsh",
   version: "0.1.6-alpha.2",
@@ -121,7 +128,9 @@ describe("AgentRuntimeSection", () => {
     expect(screen.queryByRole("button", { name: "Install" })).not.toBeInTheDocument();
   });
 
-  it("shows the detected DSH version and links to installation guidance when missing", () => {
+  it("shows the detected DSH version and offers a productized install action when missing", async () => {
+    const user = userEvent.setup();
+    const onInstallRuntime = vi.fn();
     const { rerender } = render(<AgentRuntimeSection runtimes={[dsh]} t={t} />);
 
     expect(screen.getByText("0.1.6-alpha.2")).toBeInTheDocument();
@@ -129,6 +138,7 @@ describe("AgentRuntimeSection", () => {
 
     rerender(
       <AgentRuntimeSection
+        onInstallRuntime={onInstallRuntime}
         runtimes={[
           {
             ...dsh,
@@ -138,18 +148,56 @@ describe("AgentRuntimeSection", () => {
             version: undefined,
             docsURL: "https://github.com/deepseek-ai/deepseek-harness",
             message: "DSH CLI is unavailable",
+            messageCode: "dsh_not_installed",
           },
         ]}
         t={t}
       />,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent("DSH CLI is unavailable");
-    expect(screen.getByText("Install a compatible version using the guide, then retry detection.")).toBeInTheDocument();
+    expect(screen.queryByText("DSH CLI is unavailable")).not.toBeInTheDocument();
+    expect(screen.getByText("Installs DeepSeek Harness 0.1.5-rc.2 for you.")).toBeInTheDocument();
+    expect(screen.getByText("Install with one click.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Installation guide" })).toHaveAttribute(
       "href",
       "https://github.com/deepseek-ai/deepseek-harness",
     );
+    await user.click(screen.getByRole("button", { name: "Install" }));
+    expect(onInstallRuntime).toHaveBeenCalledWith("dsh");
+  });
+
+  it("shows truthful staged progress and live npm activity while DSH installs", () => {
+    render(
+      <AgentRuntimeSection
+        installingRuntime="dsh"
+        installProgress={{
+          name: "dsh",
+          status: "running",
+          stage: "installing_packages",
+          activityCount: 120,
+          startedAt: new Date(Date.now() - 8_000).toISOString(),
+          updatedAt: new Date().toISOString(),
+        }}
+        runtimes={[
+          {
+            ...dsh,
+            installed: false,
+            status: "not_installed",
+            path: undefined,
+            version: undefined,
+          },
+        ]}
+        t={t}
+      />,
+    );
+
+    expect(screen.getByRole("progressbar", { name: "DeepSeek Harness installation progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "1",
+    );
+    expect(screen.getByText("Downloading and installing dependencies")).toBeInTheDocument();
+    expect(screen.getByText(/Processed 120 npm requests/)).toHaveTextContent(/\d+s elapsed/);
+    expect(screen.getByText("The first installation usually takes 20–60 seconds.")).toBeInTheDocument();
   });
 
   it("explains when a required bundled Codex binary is missing", () => {

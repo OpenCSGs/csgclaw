@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fetchAgentRuntimes } from "@/api/agentRuntimes";
+import { fetchAgentRuntimes, installAgentRuntime } from "@/api/agentRuntimes";
 import { useAgentRuntimes } from "@/pages/ComputerPage/useAgentRuntimes";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import type { TranslateFn } from "@/models/conversations";
 
-vi.mock("@/api/agentRuntimes", () => ({ fetchAgentRuntimes: vi.fn() }));
+vi.mock("@/api/agentRuntimes", () => ({ fetchAgentRuntimes: vi.fn(), installAgentRuntime: vi.fn() }));
 
 const t: TranslateFn = (key) => {
   if (key === "computerRuntimesLoadFailed") {
@@ -52,6 +52,54 @@ function createHarness() {
 describe("useAgentRuntimes", () => {
   beforeEach(() => {
     vi.mocked(fetchAgentRuntimes).mockReset();
+    vi.mocked(installAgentRuntime).mockReset();
+  });
+
+  it("installs DSH and updates the runtime catalog", async () => {
+    vi.mocked(fetchAgentRuntimes).mockResolvedValue([
+      {
+        name: "dsh",
+        label: "DeepSeek Harness",
+        supported: true,
+        installed: false,
+        installable: true,
+        status: "missing",
+      },
+    ]);
+    vi.mocked(installAgentRuntime).mockImplementation(async (_name, onProgress) => {
+      onProgress?.({
+        name: "dsh",
+        status: "running",
+        stage: "installing_packages",
+        activityCount: 42,
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      return {
+        name: "dsh",
+        label: "DeepSeek Harness",
+        supported: true,
+        installed: true,
+        installable: true,
+        status: "installed",
+        path: "/home/test/.local/bin/dsh",
+      };
+    });
+    const { wrapper } = createHarness();
+    const { result } = renderHook(() => useAgentRuntimes(t), { wrapper });
+
+    await waitFor(() => expect(result.current.runtimes).toHaveLength(1));
+    await act(() => result.current.install("dsh"));
+
+    expect(installAgentRuntime).toHaveBeenCalledWith("dsh", expect.any(Function));
+    expect(result.current.installProgress).toMatchObject({
+      stage: "installing_packages",
+      activityCount: 42,
+    });
+    expect(result.current.runtimes[0]).toMatchObject({
+      installed: true,
+      path: "/home/test/.local/bin/dsh",
+    });
   });
 
   it("loads the bundled runtime and refreshes bootstrap readiness", async () => {

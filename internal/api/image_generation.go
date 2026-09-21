@@ -72,7 +72,7 @@ func (h *Handler) retryImageGeneration(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "agent unavailable", http.StatusNotFound)
 		return
 	}
-	if selected.Spec.Runtime.Options["execution_mode"] == "read_only" {
+	if readOnlyRuntime(selected.Spec.Runtime.Adapter, selected.Spec.Runtime.Options) {
 		http.Error(w, "image generation is unavailable in read-only mode", http.StatusForbidden)
 		return
 	}

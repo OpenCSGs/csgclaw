@@ -32,7 +32,7 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	if err != nil {
 		return failed(err)
 	}
-	prompt, cleanupInput, inputErr := preparePromptInput(ctx, request.ID, proc.workspace, request.Input)
+	prompt, cleanupInput, inputErr := preparePromptInput(ctx, request.ID, proc.workspace, request.Input, proc.imagePrompts)
 	if inputErr != nil {
 		return contract.TurnResult{Status: contract.TurnFailed, Error: inputErr}
 	}

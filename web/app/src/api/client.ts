@@ -124,6 +124,14 @@ export function errorMessage(error: unknown, fallback = ""): string {
   return fallback;
 }
 
+export function apiErrorCode(error: unknown): string {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return "";
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code.trim() : "";
+}
+
 export function apiErrorBillingURL(error: unknown): string {
   if (!error || typeof error !== "object" || !("billingURL" in error)) {
     return "";

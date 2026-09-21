@@ -85,6 +85,46 @@ func TestProviderResolveAllowsUnknownVersionOutput(t *testing.T) {
 	}
 }
 
+func TestProviderResolveMissingIncludesDomesticInstallCommand(t *testing.T) {
+	_, err := (Provider{
+		LookPath:    func(string) (string, error) { return "", os.ErrNotExist },
+		UserHomeDir: func() (string, error) { return t.TempDir(), nil },
+	}).Resolve(context.Background())
+	if err == nil {
+		t.Fatal("Resolve() error = nil, want missing DSH guidance")
+	}
+	for _, want := range []string{InstallCommand, "registry.npmmirror.com", PathEnv} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Resolve() error = %q, want %q", err, want)
+		}
+	}
+}
+
+func TestProviderResolveFindsManagedUserInstallOutsidePATH(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".local", "share", "deepseek-harness", "bin", "dsh")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("test"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := (Provider{
+		LookPath:    func(string) (string, error) { return "", os.ErrNotExist },
+		UserHomeDir: func() (string, error) { return home, nil },
+		Run: func(context.Context, string, ...string) ([]byte, error) {
+			return []byte("dsh 0.1.5-rc.2"), nil
+		},
+	}).Resolve(context.Background())
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if info.Path != path || info.Version != "0.1.5-rc.2" {
+		t.Fatalf("Resolve() = %+v, want managed user install", info)
+	}
+}
+
 func TestValidateExecutableRequiresAbsolutePath(t *testing.T) {
 	if _, err := validateExecutable("dsh"); err == nil || !strings.Contains(err.Error(), "absolute") {
 		t.Fatalf("validateExecutable() error = %v", err)

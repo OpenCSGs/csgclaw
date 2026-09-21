@@ -20,6 +20,7 @@ type ProviderConfig struct {
 	Headers         map[string]string `json:"headers,omitempty"`
 	Models          []string          `json:"models,omitempty"`
 	ImageModels     []string          `json:"image_models,omitempty"`
+	VisionModels    []string          `json:"vision_models,omitempty"`
 	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
 	Status          string            `json:"status,omitempty"`
 	Message         string            `json:"message,omitempty"`
@@ -125,6 +126,7 @@ func (c ProviderConfig) Resolved() ProviderConfig {
 	out.ReasoningEffort = NormalizeReasoningEffort(out.ReasoningEffort)
 	out.Models = normalizeModelIDs(out.Models)
 	out.ImageModels = normalizeModelIDs(out.ImageModels)
+	out.VisionModels = normalizeModelIDs(out.VisionModels)
 	out.Status = strings.ToLower(strings.TrimSpace(out.Status))
 	out.Message = strings.TrimSpace(out.Message)
 	out.LastCheckedAt = strings.TrimSpace(out.LastCheckedAt)

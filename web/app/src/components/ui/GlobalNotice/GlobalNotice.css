@@ -1,0 +1,107 @@
+.global-notice-viewport {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  z-index: var(--z-tooltip);
+  display: flex;
+  flex-direction: column;
+  width: min(520px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  transform: translateX(-50%);
+  outline: none;
+}
+
+.global-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--gray-900) 18%, transparent);
+}
+
+.global-notice.warning {
+  border-color: var(--warning-300);
+  background: color-mix(in srgb, var(--warning-50) 82%, var(--panel));
+}
+
+.global-notice-icon {
+  margin-top: 1px;
+  color: var(--brand-600);
+}
+
+.global-notice.warning .global-notice-icon {
+  color: var(--warning-700);
+}
+
+.global-notice-content {
+  min-width: 0;
+}
+
+.global-notice-title {
+  margin-bottom: 2px;
+  font: var(--text-sm-semibold);
+}
+
+.global-notice-description {
+  color: var(--gray-600);
+  font: var(--text-sm-normal);
+}
+
+.global-notice-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-500);
+  cursor: pointer;
+}
+
+.global-notice-close:hover,
+.global-notice-close:focus-visible {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: var(--text);
+}
+
+.global-notice-close:focus-visible {
+  outline: 2px solid var(--brand-300);
+  outline-offset: 1px;
+}
+
+.global-notice[data-state="open"] {
+  animation: global-notice-in 160ms ease-out;
+}
+
+.global-notice[data-state="closed"] {
+  animation: global-notice-out 120ms ease-in;
+}
+
+@keyframes global-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes global-notice-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+:root[data-theme="dark"] .global-notice.warning {
+  border-color: color-mix(in srgb, var(--warning-500) 55%, var(--line));
+  background: color-mix(in srgb, var(--warning-950) 35%, var(--panel));
+}

@@ -100,6 +100,7 @@ type Profile struct {
 	BaseURL         string
 	APIKey          string
 	ModelID         string
+	InputModalities []string
 	ReasoningEffort string
 	Env             map[string]string
 }
@@ -110,6 +111,7 @@ func (p Profile) Normalized() Profile {
 	p.BaseURL = strings.TrimRight(strings.TrimSpace(p.BaseURL), "/")
 	p.APIKey = strings.TrimSpace(p.APIKey)
 	p.ReasoningEffort = config.NormalizeReasoningEffort(p.ReasoningEffort)
+	p.InputModalities = normalizeInputModalities(p.InputModalities)
 	if len(p.Env) == 0 {
 		p.Env = nil
 		return p
@@ -128,6 +130,23 @@ func (p Profile) Normalized() Profile {
 	}
 	p.Env = env
 	return p
+}
+
+func normalizeInputModalities(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if (value != "text" && value != "image") || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 type Spec struct {

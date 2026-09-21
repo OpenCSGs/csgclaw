@@ -48,6 +48,7 @@ type ModelProviderCatalog struct {
 
 type ModelProviderSummary struct {
 	ImageModels     []string          `json:"image_models"`
+	VisionModels    []string          `json:"vision_models"`
 	ID              string            `json:"id"`
 	Kind            string            `json:"kind"`
 	DisplayName     string            `json:"display_name"`
@@ -67,6 +68,7 @@ type ModelProviderSummary struct {
 
 type ModelProviderCheckResult struct {
 	ImageModels     []string `json:"image_models"`
+	VisionModels    []string `json:"vision_models"`
 	ID              string   `json:"id"`
 	ResolvedBaseURL string   `json:"base_url,omitempty"`
 	Status          string   `json:"status"`
@@ -218,6 +220,7 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 		Builtin:       true,
 		Models:        append([]string(nil), provider.Models...),
 		ImageModels:   imageModels(id, provider.Models, provider.ImageModels),
+		VisionModels:  append([]string(nil), provider.VisionModels...),
 		Status:        ModelProviderStatusUnknown,
 		APIKeySet:     true,
 		APIKeyPreview: apiKeyPreview(defaultCSGHubLiteAPIKey),
@@ -283,6 +286,7 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		Headers:         cloneStringMap(provider.Headers),
 		Models:          append([]string(nil), provider.Models...),
 		ImageModels:     imageModels(id, provider.Models, provider.ImageModels),
+		VisionModels:    append([]string(nil), provider.VisionModels...),
 		ReasoningEffort: provider.ReasoningEffort,
 		Status:          providerStatusOrUnknown(provider.Status),
 		Message:         provider.Message,
@@ -317,9 +321,10 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		LastCheckedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	var (
-		models []string
-		images []string
-		err    error
+		models  []string
+		images  []string
+		visions []string
+		err     error
 	)
 	switch id {
 	case ModelProviderIDOpenCSG:
@@ -335,7 +340,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		}
 		var directory modelprovider.ModelDiscoveryResult
 		directory, err = modelprovider.ListOpenAIModelDirectoryWithClient(ctx, client, baseURL, apiKey, input.Headers)
-		models, images = directory.Models, directory.ImageModels
+		models, images, visions = directory.Models, directory.ImageModels, directory.VisionModels
 	case ModelProviderIDCodex:
 		models, err = listCLIProxyModelChoices(ctx, ProviderCodex)
 	case ModelProviderIDClaude:
@@ -349,6 +354,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		)
 		models = discovery.Models
 		images = discovery.ImageModels
+		visions = discovery.VisionModels
 		result.ResolvedBaseURL = discovery.ResolvedBaseURL
 		err = discoveryErr
 	default:
@@ -356,7 +362,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		apiKey := strings.TrimSpace(input.APIKey)
 		var directory modelprovider.ModelDiscoveryResult
 		directory, err = modelprovider.ListOpenAIModelDirectoryWithClient(ctx, &http.Client{Timeout: 3 * time.Second}, baseURL, apiKey, input.Headers)
-		models, images = directory.Models, directory.ImageModels
+		models, images, visions = directory.Models, directory.ImageModels, directory.VisionModels
 	}
 	if err != nil {
 		result.Message = conciseProviderError(err)
@@ -365,6 +371,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 	result.Status = ModelProviderStatusConnected
 	result.Models = sortModelIDs(models)
 	result.ImageModels = imageModels(id, models, images)
+	result.VisionModels = sortModelIDs(visions)
 	result.Message = "connected"
 	return result
 }
@@ -440,11 +447,12 @@ func ClearModelProviderCachedState(llm config.LLMConfig, id string) (config.LLMC
 		return llm, false
 	}
 	_, profileExists := cfg.Profiles[id]
-	if len(existing.Models) == 0 && len(existing.ImageModels) == 0 && existing.Status == "" && existing.Message == "" && existing.LastCheckedAt == "" && !profileExists {
+	if len(existing.Models) == 0 && len(existing.ImageModels) == 0 && len(existing.VisionModels) == 0 && existing.Status == "" && existing.Message == "" && existing.LastCheckedAt == "" && !profileExists {
 		return llm, false
 	}
 	existing.Models = nil
 	existing.ImageModels = nil
+	existing.VisionModels = nil
 	existing.Status = ""
 	existing.Message = ""
 	existing.LastCheckedAt = ""
@@ -461,6 +469,7 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 	if result.Status == ModelProviderStatusConnected {
 		out.Models = append([]string(nil), result.Models...)
 		out.ImageModels = append([]string(nil), result.ImageModels...)
+		out.VisionModels = append([]string(nil), result.VisionModels...)
 	}
 	if result.Status == ModelProviderStatusConnected && NormalizeModelProviderID(id) == ModelProviderIDCSGHubLite {
 		if baseURL := strings.TrimRight(strings.TrimSpace(result.ResolvedBaseURL), "/"); baseURL != "" {
@@ -486,7 +495,8 @@ func providerConfigsEqual(left, right config.ProviderConfig) bool {
 		left.Message != right.Message ||
 		left.LastCheckedAt != right.LastCheckedAt ||
 		!stringMapsEqual(left.Headers, right.Headers) ||
-		len(left.Models) != len(right.Models) || !sameStringSlice(left.ImageModels, right.ImageModels) {
+		len(left.Models) != len(right.Models) || !sameStringSlice(left.ImageModels, right.ImageModels) ||
+		!sameStringSlice(left.VisionModels, right.VisionModels) {
 		return false
 	}
 	for i := range left.Models {

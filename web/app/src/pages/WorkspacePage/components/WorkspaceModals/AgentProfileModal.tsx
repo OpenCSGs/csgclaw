@@ -15,6 +15,8 @@ import {
 } from "@/components/business/ProfileControls";
 import { Button, Select } from "@/components/ui";
 import { AgentAvatarPicker } from "@/components/business/AgentAvatar";
+import { RuntimeInstallProgress } from "@/components/business/RuntimeInstallProgress";
+import type { AgentRuntimeInstallation } from "@/api/agentRuntimes";
 import {
   agentRuntimeKind,
   agentDraftMissingRequiredEnv,
@@ -68,6 +70,9 @@ export type AgentProfileModalProps = {
   modelProviders?: ModelProviderCatalog | null;
   agentModels?: string[];
   agentProgress?: AgentCreateProgressProps["progress"];
+  runtimeInstallBusy?: boolean;
+  runtimeInstallError?: string;
+  runtimeInstallation?: AgentRuntimeInstallation | null;
   authBusyProvider?: string;
   authStatuses?: unknown;
   bootstrapConfig?: RuntimeBootstrapConfig | null;
@@ -82,6 +87,7 @@ export type AgentProfileModalProps = {
   onClose: () => void;
   onProviderLogin?: (provider: string) => VoidOrPromise;
   onRequireOpenCSGAuth?: () => boolean;
+  onInstallRuntime?: (name: string) => VoidOrPromise;
   onSave: () => VoidOrPromise;
   locale: LocaleCode;
   t: TranslateFn;
@@ -109,9 +115,13 @@ export function AgentProfileModal({
   agentBillingURL = "",
   agentProgress = null,
   agentBusy = false,
+  runtimeInstallBusy = false,
+  runtimeInstallError = "",
+  runtimeInstallation = null,
   locale,
   onClose,
   onRequireOpenCSGAuth = () => true,
+  onInstallRuntime = () => {},
   onSave,
 }: AgentProfileModalProps) {
   const [mcpServersInvalid, setMCPServersInvalid] = useState(false);
@@ -197,19 +207,48 @@ export function AgentProfileModal({
     return choiceSandboxEnabled === sandboxEnabled && choiceRuntimeName === selectedRuntimeName;
   });
   const selectedRuntimeMissing = isWorkerCreate && selectedRuntimeChoice?.installed === false;
-  const selectedRuntimeUnavailable = selectedRuntimeMissing && selectedRuntimeName !== "dsh";
+  const selectedRuntimeUnavailable = selectedRuntimeMissing;
+  const selectedRuntimeInstallable = selectedRuntimeMissing && selectedRuntimeChoice?.installable === true;
   const runtimeMessageKey = String(selectedRuntimeChoice?.message_code || "").trim();
   const localizedRuntimeMessage = runtimeMessageKey ? t(`errors.${runtimeMessageKey}`) : "";
-  const selectedRuntimeUnavailableMessage = selectedRuntimeMissing
-    ? sandboxEnabled
-      ? t("runtimeSandboxUnavailable", {
-          reason:
-            (localizedRuntimeMessage !== `errors.${runtimeMessageKey}` ? localizedRuntimeMessage : "") ||
-            selectedRuntimeChoice?.message ||
-            t("runtimeSandboxUnavailableReason"),
-        })
-      : selectedRuntimeChoice?.message || t("runtimeCodexNotInstalled")
-    : "";
+  const selectedRuntimeUnavailableMessage =
+    selectedRuntimeMissing && !selectedRuntimeInstallable
+      ? sandboxEnabled
+        ? t("runtimeSandboxUnavailable", {
+            reason:
+              (localizedRuntimeMessage !== `errors.${runtimeMessageKey}` ? localizedRuntimeMessage : "") ||
+              selectedRuntimeChoice?.message ||
+              t("runtimeSandboxUnavailableReason"),
+          })
+        : selectedRuntimeChoice?.message || t("runtimeCodexNotInstalled")
+      : "";
+  const runtimeAvailabilityNotice = selectedRuntimeInstallable ? (
+    <div className="agent-runtime-install-notice" role="status" aria-live="polite">
+      <div className="agent-runtime-install-copy">
+        <strong>{t("runtimeInstallRequiredTitle")}</strong>
+        <span>{t("runtimeInstallRequiredDescription")}</span>
+        {runtimeInstallError ? <small className="field-warning">{runtimeInstallError}</small> : null}
+      </div>
+      <Button
+        variant="primary"
+        size="sm"
+        loading={runtimeInstallBusy}
+        loadingLabel={t("computerRuntimeInstalling")}
+        onClick={() => void onInstallRuntime(selectedRuntimeName)}
+      >
+        {t("computerRuntimeInstall")}
+      </Button>
+      {runtimeInstallBusy ? (
+        <div className="agent-runtime-install-progress">
+          <RuntimeInstallProgress installation={runtimeInstallation} t={t} />
+        </div>
+      ) : null}
+    </div>
+  ) : selectedRuntimeUnavailableMessage ? (
+    <div className="agent-runtime-install-notice is-error" role="alert">
+      <small className="field-warning">{selectedRuntimeUnavailableMessage}</small>
+    </div>
+  ) : null;
 
   function defaultCustomWorkerDraft(baseDraft: AgentDraft): AgentDraft {
     const codexAvailable = isCSGHubSandboxProvider || codexChoice?.installed !== false;
@@ -471,10 +510,8 @@ export function AgentProfileModal({
                         }))}
                     />
                     <small className="field-hint">{t("templateHelp")}</small>
-                    {selectedRuntimeUnavailableMessage ? (
-                      <small className="field-warning">{selectedRuntimeUnavailableMessage}</small>
-                    ) : null}
                   </label>
+                  {runtimeAvailabilityNotice}
                   {selectedWorkerTemplate?.image_env?.length ? (
                     <div className="field span-2">
                       <span>{t("profileEnv")}</span>
@@ -514,9 +551,6 @@ export function AgentProfileModal({
                           <strong>{sandboxEnabled ? t("statusEnabled") : t("statusDisabled")}</strong>
                         </span>
                       </label>
-                      {selectedRuntimeUnavailableMessage ? (
-                        <small className="field-warning">{selectedRuntimeUnavailableMessage}</small>
-                      ) : null}
                     </div>
                   ) : null}
                   {isWorkerCreate ? (
@@ -542,8 +576,7 @@ export function AgentProfileModal({
                             options={hostRuntimeChoices.map((option) => ({
                               value: normalizeRuntimeName(option.name) || "",
                               label: option.label || normalizeRuntimeName(option.name) || "",
-                              disabled: option.installed === false && normalizeRuntimeName(option.name) !== "dsh",
-                              description: option.message || undefined,
+                              disabled: option.installed === false && option.installable !== true,
                             }))}
                           />
                         ) : templateLocked ? (
@@ -594,11 +627,11 @@ export function AgentProfileModal({
                               value: normalizeRuntimeName(option.name) || "",
                               label: option.label || normalizeRuntimeName(option.name) || "",
                               disabled: option.installed === false,
-                              description: option.message || undefined,
                             }))}
                           />
                         )}
                       </label>
+                      {runtimeAvailabilityNotice}
                     </div>
                   ) : agentModalMode === "edit" ? (
                     <label className="field span-2">

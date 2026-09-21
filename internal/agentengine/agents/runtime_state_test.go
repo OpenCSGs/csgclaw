@@ -214,6 +214,29 @@ func TestRuntimeProfileForKindUsesBridgeForDSHRuntime(t *testing.T) {
 	if got, want := profile.ModelID, "qwen3.7-plus"; got != want {
 		t.Fatalf("runtimeProfileForKind().ModelID = %q, want %q", got, want)
 	}
+	if got := profile.InputModalities; len(got) != 2 || got[0] != "text" || got[1] != "image" {
+		t.Fatalf("runtimeProfileForKind().InputModalities = %v, want text and image", got)
+	}
+}
+
+func TestRuntimeProfileForKindUsesDiscoveredVisionCapability(t *testing.T) {
+	svc, err := NewController(config.ModelConfig{}, config.ServerConfig{ListenAddr: "127.0.0.1:18080"}, "manager-image:test", "")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.SetLLMConfig(config.LLMConfig{Providers: map[string]config.ProviderConfig{
+		"custom": {
+			BaseURL: "https://models.example/v1", APIKey: "key",
+			Models: []string{"custom-vision"}, VisionModels: []string{"custom-vision"},
+		},
+	}})
+
+	profile := svc.runtimeProfileForKind(RuntimeKindDSH, "u-dsh", "dsh", "", AgentProfile{
+		Name: "dsh", ModelProviderID: "custom", ModelID: "custom-vision",
+	})
+	if got := profile.InputModalities; len(got) != 2 || got[0] != "text" || got[1] != "image" {
+		t.Fatalf("runtimeProfileForKind().InputModalities = %v, want discovered text and image", got)
+	}
 }
 
 func TestRuntimeProfileForKindUsesHostReachableBridgeForCodexRuntime(t *testing.T) {

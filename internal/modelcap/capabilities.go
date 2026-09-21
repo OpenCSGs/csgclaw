@@ -32,8 +32,18 @@ func ForProviderModel(provider, model string) Capabilities {
 		}
 		return caps
 	default:
-		return conservativeCapabilities()
+		caps := conservativeCapabilities()
+		if isKnownVisionModel(model) {
+			caps.InputModalities = []string{"text", "image"}
+		}
+		return caps
 	}
+}
+
+func isKnownVisionModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	return model == "qwen3.7-plus" || strings.HasPrefix(model, "qwen3.7-plus-") ||
+		(strings.Contains(model, "qwen") && (strings.Contains(model, "-vl") || strings.Contains(model, "_vl")))
 }
 
 func conservativeCapabilities() Capabilities {

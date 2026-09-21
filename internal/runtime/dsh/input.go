@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,16 +20,18 @@ import (
 )
 
 type acpPromptBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	Data     string `json:"data,omitempty"`
+	MIMEType string `json:"mimeType,omitempty"`
 }
 
 var safeInputNamePattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
-func preparePromptInput(ctx context.Context, turnID contract.TurnID, workspace string, input []contract.InputPart) ([]acpPromptBlock, func(), *contract.TurnError) {
+func preparePromptInput(ctx context.Context, turnID contract.TurnID, workspace string, input []contract.InputPart, imagePrompts bool) ([]acpPromptBlock, func(), *contract.TurnError) {
 	needsFiles := false
 	for _, part := range input {
-		needsFiles = needsFiles || part.Kind == contract.InputPartFile
+		needsFiles = needsFiles || (part.Kind == contract.InputPartFile && !canInlineImage(part.File, imagePrompts))
 	}
 	cleanup := func() {}
 	var turnDir string
@@ -74,6 +77,17 @@ func preparePromptInput(ctx context.Context, turnID contract.TurnID, workspace s
 				cleanup()
 				return nil, func() {}, inputFileUnavailable("resolve_input", fmt.Errorf("input file is unresolved"))
 			}
+			if canInlineImage(part.File, imagePrompts) {
+				data, err := readVerifiedInput(ctx, *part.File)
+				if err != nil {
+					cleanup()
+					return nil, func() {}, inputFileUnavailable("read_image_input", err)
+				}
+				blocks = append(blocks, acpPromptBlock{
+					Type: "image", Data: base64.StdEncoding.EncodeToString(data), MIMEType: part.File.Resolved.MediaType,
+				})
+				continue
+			}
 			path, err := copyVerifiedInput(ctx, workspaceRoot, workspace, turnDir, index, *part.File)
 			if err != nil {
 				cleanup()
@@ -93,6 +107,39 @@ func preparePromptInput(ctx context.Context, turnID contract.TurnID, workspace s
 		return nil, func() {}, &contract.TurnError{Code: contract.ErrorInvalidRequest, Message: "DSH prompt input is required"}
 	}
 	return blocks, cleanup, nil
+}
+
+func canInlineImage(input *contract.InputFile, imagePrompts bool) bool {
+	if !imagePrompts || input == nil || input.Resolved == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(input.Resolved.MediaType)) {
+	case "image/png", "image/jpeg", "image/webp", "image/gif":
+		return true
+	default:
+		return false
+	}
+}
+
+func readVerifiedInput(ctx context.Context, input contract.InputFile) ([]byte, error) {
+	if input.Resolved == nil {
+		return nil, fmt.Errorf("input file %q is unresolved", input.ID)
+	}
+	source, err := input.Resolved.Open(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("open input file %q: %w", input.Resolved.Name, err)
+	}
+	defer source.Close()
+	hash := sha256.New()
+	data, err := io.ReadAll(io.TeeReader(source, hash))
+	if err != nil {
+		return nil, fmt.Errorf("read input file %q: %w", input.Resolved.Name, err)
+	}
+	actualHash := fmt.Sprintf("%x", hash.Sum(nil))
+	if !strings.EqualFold(actualHash, strings.TrimSpace(input.Resolved.SHA256)) {
+		return nil, fmt.Errorf("input file %q SHA-256 does not match", input.Resolved.Name)
+	}
+	return data, nil
 }
 
 func inputFileUnavailable(stage string, err error) *contract.TurnError {

@@ -1233,6 +1233,49 @@
   align-items: start;
 }
 
+.agent-runtime-install-notice {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 12px 14px;
+  border: 1px solid color-mix(in oklab, var(--brand-500) 26%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--brand-500) 8%, var(--field));
+  flex-wrap: wrap;
+}
+
+.agent-runtime-install-progress {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.agent-runtime-install-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.agent-runtime-install-copy strong {
+  color: var(--text);
+  font-size: var(--text-sm-size);
+  line-height: var(--text-sm-line-height);
+}
+
+.agent-runtime-install-copy > span {
+  color: var(--muted);
+  font-size: var(--text-xs-size);
+  line-height: var(--text-xs-line-height);
+}
+
+.agent-runtime-install-notice.is-error {
+  border-color: color-mix(in oklab, var(--error-500) 28%, var(--line));
+  background: color-mix(in oklab, var(--error-500) 9%, var(--field));
+}
+
 .profile-modal.agent-modal .field-hint {
   color: var(--muted);
   font-size: var(--text-xs-size);
@@ -2487,6 +2530,11 @@
   .agent-basics-grid > .span-2,
   .agent-basics-grid > .agent-runtime-image-row {
     grid-column: 1 / -1;
+  }
+
+  .agent-runtime-install-notice {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

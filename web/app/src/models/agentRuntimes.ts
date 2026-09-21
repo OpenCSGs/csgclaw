@@ -22,6 +22,7 @@ export type AgentRuntime = {
   arch?: string;
   docsURL?: string;
   message?: string;
+  messageCode?: string;
 };
 
 const runtimeOrder = new Map([
@@ -70,6 +71,7 @@ export function normalizeAgentRuntime(value: unknown): AgentRuntime | null {
     arch: stringValue(record.arch) || undefined,
     docsURL: stringValue(record.docs_url) || undefined,
     message: stringValue(record.message) || undefined,
+    messageCode: stringValue(record.message_code) || undefined,
   };
 }
 

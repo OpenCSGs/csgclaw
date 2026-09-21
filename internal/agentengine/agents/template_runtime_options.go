@@ -3,6 +3,8 @@ package agents
 import (
 	"fmt"
 	"strings"
+
+	runtimedsh "csgclaw/internal/runtime/dsh"
 )
 
 const (
@@ -15,7 +17,17 @@ const (
 )
 
 func templateSafeRuntimeOptions(item Agent) (map[string]any, error) {
-	if item.ID == ManagerUserID || item.Role == RoleManager || strings.TrimSpace(item.RuntimeKind) != RuntimeKindCodex {
+	if item.ID == ManagerUserID || item.Role == RoleManager {
+		return nil, nil
+	}
+	if strings.TrimSpace(item.RuntimeKind) == RuntimeKindDSH {
+		opts, err := runtimedsh.DecodeRuntimeOptions(item.RuntimeOptions)
+		if err != nil {
+			return nil, fmt.Errorf("agent %q runtime_options.permission_mode is invalid: %w", item.ID, err)
+		}
+		return map[string]any{runtimedsh.PermissionModeOptionKey: opts.PermissionMode}, nil
+	}
+	if strings.TrimSpace(item.RuntimeKind) != RuntimeKindCodex {
 		return nil, nil
 	}
 	mode := templateExecutionModeStandard

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "react-router-dom";
-import { apiErrorBillingURL, errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
+import { apiErrorBillingURL, apiErrorCode, errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
 import {
   batchAddAgentMCPServersRequest,
@@ -28,6 +28,7 @@ import {
   updateAgentRequest,
 } from "@/api/agents";
 import { fetchAgentMCPServerSourceStatus, syncAgentMCPServerSource } from "@/api/mcp";
+import { installAgentRuntime, type AgentRuntimeInstallation } from "@/api/agentRuntimes";
 import type {
   AgentUpdatePayload,
   FeishuRegistration,
@@ -131,6 +132,7 @@ import type { MessageAction, MessageActionFeedback, MessageLike } from "@/compon
 import type { IMConversation, IMUser } from "@/models/conversations";
 import type { UseAgentControllerArgs } from "./types";
 import { useProfileModelOptions } from "./useProfileModelOptions";
+import { useGlobalNotice } from "@/components/ui";
 
 const SANDBOX_RUNTIME_REFRESH_INTERVAL_MS = 3000;
 
@@ -549,6 +551,7 @@ export function useAgentController({
   setSelectedHubTemplateId,
   t,
 }: UseAgentControllerArgs) {
+  const { showNotice } = useGlobalNotice();
   const {
     authenticated: openCSGAuthenticated,
     handleAuthenticationError: handleOpenCSGAuthenticationError,
@@ -570,6 +573,9 @@ export function useAgentController({
   const [agentModalBootstrapConfig, setAgentModalBootstrapConfig] = useState<RuntimeBootstrapConfig | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
   const [agentError, setAgentError] = useState("");
+  const [runtimeInstallBusy, setRuntimeInstallBusy] = useState(false);
+  const [runtimeInstallError, setRuntimeInstallError] = useState("");
+  const [runtimeInstallation, setRuntimeInstallation] = useState<AgentRuntimeInstallation | null>(null);
   const [agentBillingURL, setAgentBillingURL] = useState("");
   const [agentProgress, setAgentProgress] = useState<AgentCreateProgressState | null>(null);
   const [agentActionBusyByAgent, setAgentActionBusyByAgent] = useState<AgentActionBusyState>({});
@@ -1491,6 +1497,8 @@ export function useAgentController({
     setAgentCreateMode("template");
     setEditingAgent(null);
     setAgentError("");
+    setRuntimeInstallError("");
+    setRuntimeInstallation(null);
     setAgentBillingURL("");
     setAgentProgress(null);
     resetAgentModels();
@@ -1548,6 +1556,35 @@ export function useAgentController({
       draft = draftWithModelProviderFallback(draft, agentModelOptions);
       setAgentDraft(draft);
       setShowAgentModal(true);
+    }
+  }
+
+  async function installRuntimeFromAgentModal(name: string): Promise<void> {
+    const runtimeName = String(name || "").trim();
+    if (!runtimeName || runtimeInstallBusy) {
+      return;
+    }
+    setRuntimeInstallBusy(true);
+    setRuntimeInstallError("");
+    setRuntimeInstallation(null);
+    try {
+      await installAgentRuntime(runtimeName, setRuntimeInstallation);
+      await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.agentRuntimes() });
+      const refreshedBootstrapConfig = await refreshWorkspaceBootstrapConfig();
+      if (refreshedBootstrapConfig) {
+        setAgentModalBootstrapConfig(refreshedBootstrapConfig);
+      }
+    } catch (error) {
+      const message = errorMessage(error, t("runtimeInstallFailed"));
+      setRuntimeInstallError(message);
+      const code = apiErrorCode(error);
+      if (code === "dsh_node_required" || code === "dsh_npm_required") {
+        showNotice({ title: t("dshNodeRequiredTitle"), message, closeLabel: t("close"), tone: "warning" });
+      } else if (code === "dsh_node_version_unsupported") {
+        showNotice({ title: t("dshNodeUnsupportedTitle"), message, closeLabel: t("close"), tone: "warning" });
+      }
+    } finally {
+      setRuntimeInstallBusy(false);
     }
   }
 
@@ -2968,7 +3005,11 @@ export function useAgentController({
             agentBillingURL,
             agentProgress,
             agentBusy,
+            runtimeInstallBusy,
+            runtimeInstallError,
+            runtimeInstallation,
             onClose: () => setShowAgentModal(false),
+            onInstallRuntime: installRuntimeFromAgentModal,
             onSave: saveAgent,
           }
         : null,

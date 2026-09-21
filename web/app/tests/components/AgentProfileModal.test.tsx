@@ -49,6 +49,10 @@ const labels: Record<string, string> = {
   runtimeCodexCLI: "Codex CLI",
   runtimeSandboxUnavailable: "Current sandbox is unavailable: {reason}",
   runtimeSandboxUnavailableReason: "Check the current sandbox configuration.",
+  runtimeInstallRequiredTitle: "DeepSeek Harness is required",
+  runtimeInstallRequiredDescription: "Install DSH 0.1.5-rc.2 to continue creating the agent.",
+  computerRuntimeInstall: "Install",
+  computerRuntimeInstalling: "Installing...",
   statusEnabled: "Enabled",
   statusDisabled: "Disabled",
   templateLabel: "Template",
@@ -1036,6 +1040,69 @@ describe("AgentProfileModal", () => {
     expect(runtime).toHaveTextContent("Codex CLI");
     await user.click(runtime);
     expect(screen.getByRole("option", { name: "DeepSeek Harness" })).toBeInTheDocument();
+  });
+
+  it("keeps the DSH option compact and shows installation below the runtime field", async () => {
+    const user = userEvent.setup();
+    const onInstallRuntime = vi.fn();
+    const { container } = render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="create"
+        editingAgent={null}
+        agentDraft={{
+          ...agentToDraft(worker),
+          sandbox_enabled: false,
+          runtime_name: "dsh",
+          runtime_kind: "dsh",
+        }}
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{
+          worker_runtime_choices: [
+            { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
+            {
+              name: "dsh",
+              sandbox_enabled: false,
+              installed: false,
+              installable: true,
+              label: "DeepSeek Harness",
+              message: "DSH CLI is unavailable; run a very long npm command",
+              message_code: "dsh_not_installed",
+            },
+          ],
+        }}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        locale="en"
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        agentCreateMode="custom"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onInstallRuntime={onInstallRuntime}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Runtime" }));
+    expect(screen.getByRole("option", { name: "DeepSeek Harness" })).toBeInTheDocument();
+    expect(screen.queryByText(/very long npm command/)).not.toBeInTheDocument();
+    const notice = container.querySelector(".agent-runtime-install-notice");
+    expect(notice).not.toBeNull();
+    expect(notice?.parentElement).toHaveClass("agent-runtime-image-row");
+    expect(screen.getByText("DeepSeek Harness is required")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Install" }));
+    expect(onInstallRuntime).toHaveBeenCalledWith("dsh");
   });
 
   it("uses the matching worker template image when switching blank drafts to OpenClaw", async () => {

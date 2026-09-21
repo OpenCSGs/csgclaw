@@ -8,6 +8,7 @@ import (
 
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/runtime"
+	runtimedsh "csgclaw/internal/runtime/dsh"
 )
 
 const currentAgentFileSchemaVersion = "agentfile/v1"
@@ -136,8 +137,20 @@ func normalizeTemplateRuntimeOptions(runtimeKind string, raw map[string]any) (ma
 		return nil, nil
 	}
 	runtimeKind = normalizeTemplateRuntimeKind(runtimeKind)
+	if runtimeKind == runtime.KindDSH {
+		for key := range raw {
+			if key != runtimedsh.PermissionModeOptionKey {
+				return nil, fmt.Errorf("DSH runtime_options supports only permission_mode")
+			}
+		}
+		opts, err := runtimedsh.DecodeRuntimeOptions(raw)
+		if err != nil {
+			return nil, fmt.Errorf("runtime_options.%s is invalid: %w", runtimedsh.PermissionModeOptionKey, err)
+		}
+		return map[string]any{runtimedsh.PermissionModeOptionKey: opts.PermissionMode}, nil
+	}
 	if runtimeKind != runtime.KindCodex {
-		return nil, fmt.Errorf("runtime_options are supported only for Codex worker templates")
+		return nil, fmt.Errorf("runtime_options are supported only for Codex and DSH worker templates")
 	}
 	for key := range raw {
 		if key != "execution_mode" && key != "memory_mode" {

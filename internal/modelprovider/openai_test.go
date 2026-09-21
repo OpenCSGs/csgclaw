@@ -456,4 +456,7 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
 	if !reflect.DeepEqual(directory.Models, []string{"chat-vision", "gpt-image-2"}) {
 		t.Fatalf("chat models: %v", directory.Models)
 	}
+	if !reflect.DeepEqual(directory.VisionModels, []string{"chat-vision"}) {
+		t.Fatalf("vision models: %v", directory.VisionModels)
+	}
 }

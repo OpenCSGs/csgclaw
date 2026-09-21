@@ -118,6 +118,9 @@ func (s *Service) Models(_ context.Context, botID string) ([]byte, int, string, 
 
 func bridgeModelMetadata(profile agent.AgentProfile) map[string]any {
 	caps := modelcap.ForProviderModel(profile.Provider, profile.ModelID)
+	if len(profile.InputModalities) > 0 {
+		caps.InputModalities = append([]string(nil), profile.InputModalities...)
+	}
 	if caps.UseCodexMetadata {
 		return codexmodel.Metadata(codexmodel.Profile{
 			Provider:        profile.Provider,
