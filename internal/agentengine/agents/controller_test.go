@@ -4076,7 +4076,7 @@ func TestRecreateProvisionsRuntimeBeforeDeleteAndNew(t *testing.T) {
 	}
 }
 
-func TestRecreateDSHDeletesBeforeProvisionAndNew(t *testing.T) {
+func TestRecreateDSHProvisionsBeforeDeleteAndNew(t *testing.T) {
 	var callOrder []string
 	svc, err := NewController(
 		config.ModelConfig{},
@@ -4138,7 +4138,7 @@ func TestRecreateDSHDeletesBeforeProvisionAndNew(t *testing.T) {
 	if _, err := svc.RecreateRecord(context.Background(), "agent-alice"); err != nil {
 		t.Fatalf("Recreate() error = %v", err)
 	}
-	if got, want := strings.Join(callOrder, ","), "delete,provision,new"; got != want {
+	if got, want := strings.Join(callOrder, ","), "provision,delete,new"; got != want {
 		t.Fatalf("call order = %q, want %q", got, want)
 	}
 }

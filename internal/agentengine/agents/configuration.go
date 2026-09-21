@@ -1104,10 +1104,6 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 			InitShell:            runtimeInitShell,
 		})
 	}
-	// DSH replaces its complete private runtime directory during Delete, so
-	// provisioning must run afterwards. Other runtimes provision first while
-	// the workspace skills transaction protects user-owned skill content.
-	provisionBeforeDelete := runtimeKind != RuntimeKindDSH
 	deleteHandle := runtimeHandleForAgent(got)
 	var (
 		skillsPreservation *workspaceSkillsPreservation
@@ -1173,10 +1169,8 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 	if err := s.refreshGatewayTemplateSkills(got.ID, runtimeKind, recreateTemplateRole(got)); err != nil {
 		return Agent{}, fmt.Errorf("refresh gateway template skills: %w", err)
 	}
-	if provisionBeforeDelete {
-		if err := provision(); err != nil {
-			return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
-		}
+	if err := provision(); err != nil {
+		return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
 	}
 	skillsPreservation, err = s.prepareWorkspaceSkillsPreservation(got.ID, runtimeKind, runtimeKind, recreateTemplateRole(got))
 	if err != nil {
@@ -1187,11 +1181,6 @@ func (s *Controller) recreate(ctx context.Context, id string, imageFor func(cont
 		return Agent{}, fmt.Errorf("remove existing agent box: %w", deleteErr)
 	}
 	oldRuntimeDeleted = true
-	if !provisionBeforeDelete {
-		if err := provision(); err != nil {
-			return Agent{}, fmt.Errorf("provision agent runtime: %w", err)
-		}
-	}
 	if err := s.prepareExtensions(ctx, id); err != nil {
 		return Agent{}, err
 	}

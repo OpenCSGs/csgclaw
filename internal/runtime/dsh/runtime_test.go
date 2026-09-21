@@ -138,6 +138,62 @@ func TestRuntimeRunsACPConversation(t *testing.T) {
 	}
 }
 
+func TestNewRecreatesRuntimeDirectoriesAfterDelete(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test helper uses a POSIX launcher")
+	}
+	root := t.TempDir()
+	launcher := filepath.Join(root, "dsh-test")
+	if err := os.WriteFile(launcher, []byte("#!/bin/sh\nexec \"$DSH_TEST_BINARY\" -test.run=TestDSHHelperProcess\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GO_WANT_DSH_HELPER_PROCESS", "1")
+	t.Setenv("DSH_TEST_BINARY", os.Args[0])
+	profile := agentruntime.Profile{BaseURL: "https://gateway.example/v1", APIKey: "secret-key", ModelID: "test-model"}
+	ref := AgentRef{ID: "agent-test", RuntimeID: "rt-agent-test", Profile: profile}
+	agentHome := filepath.Join(root, "agent")
+	rt := New(Dependencies{
+		ResolveBinary: func(context.Context, string) (dshcli.Info, error) {
+			return dshcli.Info{Path: launcher, Version: "0.1.5-rc.2"}, nil
+		},
+		ResolveAgent: func(agentruntime.Handle) (AgentRef, error) { return ref, nil },
+		AgentHome:    func(string) (string, error) { return agentHome, nil },
+	})
+	t.Cleanup(func() { _ = rt.Close() })
+	if err := rt.Provision(context.Background(), agentruntime.ProvisionRequest{
+		RuntimeID: "rt-agent-test", AgentID: "agent-test", AgentName: "test", Profile: profile,
+	}); err != nil {
+		t.Fatalf("Provision() error = %v", err)
+	}
+	runtimeRoot := filepath.Join(agentHome, hostStateDirName)
+	workspaceFile := filepath.Join(runtimeRoot, workspaceDirName, "project.txt")
+	if err := os.WriteFile(workspaceFile, []byte("keep me\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Delete(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-test"}); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if data, err := os.ReadFile(workspaceFile); err != nil || string(data) != "keep me\n" {
+		t.Fatalf("workspace after Delete() = %q, %v; want preserved", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeRoot, homeDirName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("DSH home after Delete() error = %v, want not exist", err)
+	}
+
+	if _, err := rt.New(context.Background(), agentruntime.Spec{RuntimeID: "rt-agent-test", AgentID: "agent-test", Profile: profile}); err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	for _, path := range []string{
+		filepath.Join(runtimeRoot, homeDirName, settingsFileName),
+		filepath.Join(runtimeRoot, patchFileName),
+		filepath.Join(runtimeRoot, runtimeFileName),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("regenerated runtime file %s stat error = %v", path, err)
+		}
+	}
+}
+
 func TestDSHLaunchArgsEnablePresentOverlay(t *testing.T) {
 	root := filepath.Join("tmp", "agent", hostStateDirName)
 	wantPatch := filepath.Join(root, patchFileName)

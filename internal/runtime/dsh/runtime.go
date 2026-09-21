@@ -161,6 +161,17 @@ func (r *Runtime) Layout(agentHome string) agentruntime.Layout {
 	}
 }
 
+func (r *Runtime) ensureRuntimeDirs(agentHome string) (agentruntime.Layout, error) {
+	layout := r.Layout(agentHome)
+	root := filepath.Dir(layout.WorkspaceRoot)
+	for _, path := range []string{root, layout.WorkspaceRoot, filepath.Join(root, homeDirName)} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			return agentruntime.Layout{}, fmt.Errorf("create DSH runtime dir %s: %w", path, err)
+		}
+	}
+	return layout, nil
+}
+
 func (r *Runtime) Conversation(runtimeID string) contract.RuntimeConversation {
 	return &conversation{runtime: r, runtimeID: strings.TrimSpace(runtimeID)}
 }
@@ -174,11 +185,11 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	if err != nil {
 		return err
 	}
-	layout := r.Layout(agentHome)
-	root := filepath.Dir(layout.WorkspaceRoot)
-	if err := os.MkdirAll(filepath.Join(root, homeDirName), 0o755); err != nil {
-		return fmt.Errorf("create DSH home: %w", err)
+	layout, err := r.ensureRuntimeDirs(agentHome)
+	if err != nil {
+		return err
 	}
+	root := filepath.Dir(layout.WorkspaceRoot)
 	if err := sandboxgateway.EnsureEmbeddedWorkspace(templateembed.DSHWorkerRoot, layout.WorkspaceRoot); err != nil {
 		return fmt.Errorf("seed DSH worker workspace: %w", err)
 	}
@@ -309,7 +320,10 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	layout := r.Layout(agentHome)
+	layout, err := r.ensureRuntimeDirs(agentHome)
+	if err != nil {
+		return agentruntime.StateUnknown, err
+	}
 	root := filepath.Dir(layout.WorkspaceRoot)
 	servers := ref.MCPServers
 	if r.deps.MaterializeMCPServers != nil {
