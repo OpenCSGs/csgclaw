@@ -289,6 +289,9 @@ func TestDSHHelperProcess(t *testing.T) {
 					},
 				},
 			})
+			if os.Getenv("DSH_TEST_HANG_PROMPT") == "1" {
+				continue
+			}
 			_ = encoder.Encode(map[string]any{
 				"jsonrpc": "2.0", "method": "session/update",
 				"params": map[string]any{

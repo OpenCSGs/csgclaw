@@ -13,10 +13,9 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
-const (
-	dshPromptCancellationTimeout = 5 * time.Second
-	dshHungProcessStopTimeout    = 5 * time.Second
-)
+const dshHungProcessStopTimeout = 5 * time.Second
+
+var dshPromptCancellationTimeout = 5 * time.Second
 
 type conversation struct {
 	runtime   *Runtime
@@ -65,6 +64,12 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 		c.runtime.cancelPendingPermissions(c.runtimeID, request.ConversationKey)
 		return notifyErr
 	})
+	var cancellationCleanupErr error
+	if errors.Is(err, errACPCancellationTimeout) {
+		stopCtx, cancel := context.WithTimeout(context.Background(), dshHungProcessStopTimeout)
+		_, cancellationCleanupErr = c.runtime.Stop(stopCtx, agentruntime.Handle{RuntimeID: c.runtimeID})
+		cancel()
+	}
 	proc.mu.Lock()
 	interactionErr := turn.interactionError
 	output := turn.output.String()
@@ -76,13 +81,8 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	if err != nil {
 		if ctx.Err() != nil {
 			message := ctx.Err().Error()
-			if errors.Is(err, errACPCancellationTimeout) {
-				stopCtx, cancel := context.WithTimeout(context.Background(), dshHungProcessStopTimeout)
-				_, stopErr := c.runtime.Stop(stopCtx, agentruntime.Handle{RuntimeID: c.runtimeID})
-				cancel()
-				if stopErr != nil {
-					message = fmt.Sprintf("%s; stop unresponsive DSH process: %v", message, stopErr)
-				}
+			if cancellationCleanupErr != nil {
+				message = fmt.Sprintf("%s; stop unresponsive DSH process: %v", message, cancellationCleanupErr)
 			}
 			return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: message}}
 		}
