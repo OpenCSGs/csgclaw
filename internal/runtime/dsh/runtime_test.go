@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -342,6 +343,56 @@ func TestBuildACPMCPServersRejectsRelativeCommand(t *testing.T) {
 	}
 }
 
+func TestBuildACPMCPServersPreservesRequiredArraysOnWire(t *testing.T) {
+	command := filepath.Join(t.TempDir(), "server")
+	servers, err := buildACPMCPServers(map[string]any{
+		"empty-http":  map[string]any{"url": "https://example.com/mcp"},
+		"empty-stdio": map[string]any{"command": command},
+		"full-http":   map[string]any{"url": "https://example.com/full", "headers": map[string]any{"Authorization": "Bearer token"}},
+		"full-stdio":  map[string]any{"command": command, "args": []any{"serve"}, "env": map[string]any{"MODE": "test"}},
+	})
+	if err != nil {
+		t.Fatalf("buildACPMCPServers() error = %v", err)
+	}
+	raw, err := json.Marshal(servers)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	var decoded []map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	byName := make(map[string]map[string]any, len(decoded))
+	for _, item := range decoded {
+		byName[item["name"].(string)] = item
+	}
+	for _, field := range []string{"args", "env"} {
+		value, ok := byName["empty-stdio"][field].([]any)
+		if !ok || len(value) != 0 {
+			t.Fatalf("empty stdio %s = %#v, want []", field, byName["empty-stdio"][field])
+		}
+	}
+	if _, ok := byName["empty-stdio"]["headers"]; ok {
+		t.Fatalf("stdio wire unexpectedly includes headers: %#v", byName["empty-stdio"])
+	}
+	headers, ok := byName["empty-http"]["headers"].([]any)
+	if !ok || len(headers) != 0 {
+		t.Fatalf("empty HTTP headers = %#v, want []", byName["empty-http"]["headers"])
+	}
+	if _, ok := byName["empty-http"]["args"]; ok {
+		t.Fatalf("HTTP wire unexpectedly includes args: %#v", byName["empty-http"])
+	}
+	if args := byName["full-stdio"]["args"].([]any); len(args) != 1 || args[0] != "serve" {
+		t.Fatalf("full stdio args = %#v", args)
+	}
+	if env := byName["full-stdio"]["env"].([]any); len(env) != 1 {
+		t.Fatalf("full stdio env = %#v", env)
+	}
+	if headers := byName["full-http"]["headers"].([]any); len(headers) != 1 {
+		t.Fatalf("full HTTP headers = %#v", headers)
+	}
+}
+
 func TestRequiresHTTPMCP(t *testing.T) {
 	if requiresHTTPMCP([]acpMCPServer{{Name: "local", Command: "/usr/bin/server"}}) {
 		t.Fatal("stdio MCP unexpectedly requires HTTP capability")
@@ -351,10 +402,169 @@ func TestRequiresHTTPMCP(t *testing.T) {
 	}
 }
 
-func TestRunRejectsFileInput(t *testing.T) {
-	result := (&conversation{}).Run(context.Background(), contract.TurnRequest{Input: []contract.InputPart{{Kind: contract.InputPartFile}}}, nil)
-	if result.Error == nil || result.Error.Code != contract.ErrorFileUnavailable {
-		t.Fatalf("Run() error = %+v", result.Error)
+func TestPreparePromptInputStagesAndCleansAuthorizedFile(t *testing.T) {
+	workspace := t.TempDir()
+	file, err := contract.NewOutputFile(context.Background(), contract.OutputFileMetadata{
+		Name: "notes.txt", MediaType: "text/plain", SizeBytes: int64(len("hello from file")),
+	}, strings.NewReader("hello from file"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Cleanup()
+
+	blocks, cleanup, turnErr := preparePromptInput(context.Background(), "turn/file", workspace, []contract.InputPart{
+		{Kind: contract.InputPartText, Text: "read the attachment"},
+		{Kind: contract.InputPartFile, File: &contract.InputFile{ID: file.ID, Resolved: file}},
+	})
+	if turnErr != nil {
+		t.Fatalf("preparePromptInput() error = %v", turnErr)
+	}
+	if len(blocks) != 2 || blocks[0].Text != "read the attachment" || !strings.Contains(blocks[1].Text, "notes.txt") {
+		t.Fatalf("prompt blocks = %#v", blocks)
+	}
+	matches, err := filepath.Glob(filepath.Join(workspace, ".csgclaw", "engine-inputs", "*", "*notes.txt"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("staged input matches = %q, error = %v", matches, err)
+	}
+	data, err := os.ReadFile(matches[0])
+	if err != nil || string(data) != "hello from file" {
+		t.Fatalf("staged input = %q, error = %v", data, err)
+	}
+	if !strings.Contains(blocks[1].Text, matches[0]) {
+		t.Fatalf("file prompt %q does not contain staged path %q", blocks[1].Text, matches[0])
+	}
+	cleanup()
+	if _, err := os.Stat(filepath.Dir(matches[0])); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("turn input directory survived cleanup: %v", err)
+	}
+}
+
+func TestPreparePromptInputRejectsUnresolvedFile(t *testing.T) {
+	_, cleanup, turnErr := preparePromptInput(context.Background(), "turn-1", t.TempDir(), []contract.InputPart{{
+		Kind: contract.InputPartFile, File: &contract.InputFile{ID: "missing"},
+	}})
+	cleanup()
+	if turnErr == nil || turnErr.Code != contract.ErrorFileUnavailable {
+		t.Fatalf("preparePromptInput() error = %+v", turnErr)
+	}
+}
+
+func TestProcessMetadataUpdatesAreSerialized(t *testing.T) {
+	root := t.TempDir()
+	proc := &process{
+		root:  root,
+		meta:  runtimeMetadata{RuntimeID: "rt-agent-test", Sessions: map[string]string{}},
+		ready: map[string]bool{},
+	}
+	const sessionCount = 40
+	created := make([]chan struct{}, sessionCount)
+	for index := range created {
+		created[index] = make(chan struct{})
+	}
+	errorsCh := make(chan error, sessionCount*2)
+	var wait sync.WaitGroup
+	for index := range sessionCount {
+		index := index
+		key := fmt.Sprintf("conversation-%02d", index)
+		sessionID := fmt.Sprintf("session-%02d", index)
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			errorsCh <- proc.updateMetadata(func(meta *runtimeMetadata) {
+				meta.Sessions[key] = sessionID
+				proc.ready[sessionID] = true
+			})
+			close(created[index])
+		}()
+		if index%2 == 0 {
+			wait.Add(1)
+			go func() {
+				defer wait.Done()
+				<-created[index]
+				errorsCh <- proc.updateMetadata(func(meta *runtimeMetadata) {
+					delete(meta.Sessions, key)
+					delete(proc.ready, sessionID)
+				})
+			}()
+		}
+	}
+	wait.Wait()
+	close(errorsCh)
+	for err := range errorsCh {
+		if err != nil {
+			t.Fatalf("updateMetadata() error = %v", err)
+		}
+	}
+	persisted, err := readMetadata(root)
+	if err != nil {
+		t.Fatalf("readMetadata() error = %v", err)
+	}
+	if len(persisted.Sessions) != sessionCount/2 {
+		t.Fatalf("persisted sessions = %d, want %d", len(persisted.Sessions), sessionCount/2)
+	}
+	for index := range sessionCount {
+		key := fmt.Sprintf("conversation-%02d", index)
+		_, found := persisted.Sessions[key]
+		if found != (index%2 == 1) {
+			t.Fatalf("persisted session %q found = %v", key, found)
+		}
+	}
+}
+
+func TestDeletePreservesDSHRecreateState(t *testing.T) {
+	agentHome := t.TempDir()
+	root := filepath.Join(agentHome, hostStateDirName)
+	preservedFiles := map[string]string{
+		filepath.Join(root, workspaceDirName, "project.txt"):      "workspace state\n",
+		filepath.Join(root, homeDirName, "agents", "session.log"): "session state\n",
+		filepath.Join(root, homeDirName, "skills", "custom.md"):   "skill state\n",
+	}
+	ephemeralFiles := map[string]string{
+		filepath.Join(root, homeDirName, settingsFileName): "generated settings\n",
+		filepath.Join(root, patchFileName):                 "generated patch\n",
+		filepath.Join(root, stderrFileName):                "runtime log\n",
+	}
+	writeFiles := func(files map[string]string) {
+		for path, content := range files {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	writeFiles(preservedFiles)
+	writeFiles(ephemeralFiles)
+	if err := writeMetadata(root, runtimeMetadata{
+		RuntimeID: "rt-agent-test", AgentID: "agent-test", Sessions: map[string]string{"room-1": "session-1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rt := New(Dependencies{})
+	rt.roots["rt-agent-test"] = root
+	if err := rt.Delete(context.Background(), agentruntime.Handle{RuntimeID: "rt-agent-test"}); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	for path, want := range preservedFiles {
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != want {
+			t.Fatalf("preserved file %s = %q, %v; want %q", path, data, err, want)
+		}
+	}
+	meta, err := readMetadata(root)
+	if err != nil || meta.Sessions["room-1"] != "session-1" {
+		t.Fatalf("preserved runtime metadata = %+v, %v", meta, err)
+	}
+	for path := range ephemeralFiles {
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("ephemeral runtime file %s survived Delete(): %v", path, err)
+		}
+	}
+	matches, err := filepath.Glob(filepath.Join(agentHome, ".csgclaw-dsh-state-*"))
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("temporary state preservation directories = %q, error = %v", matches, err)
 	}
 }
 

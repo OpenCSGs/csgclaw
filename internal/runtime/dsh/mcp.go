@@ -1,6 +1,7 @@
 package dsh
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -23,6 +24,35 @@ type acpMCPServer struct {
 	Env     []acpNameValue `json:"env,omitempty"`
 	URL     string         `json:"url,omitempty"`
 	Headers []acpNameValue `json:"headers,omitempty"`
+}
+
+func (s acpMCPServer) MarshalJSON() ([]byte, error) {
+	if strings.EqualFold(strings.TrimSpace(s.Type), "http") {
+		headers := s.Headers
+		if headers == nil {
+			headers = []acpNameValue{}
+		}
+		return json.Marshal(struct {
+			Type    string         `json:"type"`
+			Name    string         `json:"name"`
+			URL     string         `json:"url"`
+			Headers []acpNameValue `json:"headers"`
+		}{Type: "http", Name: s.Name, URL: s.URL, Headers: headers})
+	}
+	args := s.Args
+	if args == nil {
+		args = []string{}
+	}
+	env := s.Env
+	if env == nil {
+		env = []acpNameValue{}
+	}
+	return json.Marshal(struct {
+		Name    string         `json:"name"`
+		Command string         `json:"command"`
+		Args    []string       `json:"args"`
+		Env     []acpNameValue `json:"env"`
+	}{Name: s.Name, Command: s.Command, Args: args, Env: env})
 }
 
 func buildACPMCPServers(raw map[string]any) ([]acpMCPServer, error) {

@@ -5915,6 +5915,8 @@ func TestValidateAgentTemplatePublishTarget(t *testing.T) {
 	}{
 		{name: "Codex to community", runtimeKind: agent.RuntimeKindCodex, registry: "official"},
 		{name: "Codex to local", runtimeKind: agent.RuntimeKindCodex, registry: "local"},
+		{name: "DSH to community", runtimeKind: agent.RuntimeKindDSH, registry: "official"},
+		{name: "DSH to local", runtimeKind: agent.RuntimeKindDSH, registry: "local"},
 		{name: "OpenClaw to local", runtimeKind: agent.RuntimeKindOpenClawSandbox, registry: "local"},
 		{name: "OpenClaw to community", runtimeKind: agent.RuntimeKindOpenClawSandbox, registry: "official", wantErr: true},
 	}

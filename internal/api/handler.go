@@ -1985,9 +1985,10 @@ func writeHubTemplateError(w http.ResponseWriter, status int, code, message, pub
 }
 
 func validateAgentTemplatePublishTarget(spec hub.PublishSpec, registry string) error {
+	runtimeName := agentruntime.NormalizeRuntimeName(spec.RuntimeKind)
 	if strings.TrimSpace(registry) == config.DefaultOfficialHubRegistryName &&
-		agentruntime.NormalizeRuntimeName(spec.RuntimeKind) != agentruntime.NameCodex {
-		return fmt.Errorf("only Codex agents can be published to the community")
+		runtimeName != agentruntime.NameCodex && runtimeName != agentruntime.NameDSH {
+		return fmt.Errorf("only Codex and DSH agents can be published to the community")
 	}
 	return nil
 }

@@ -21,14 +21,15 @@ type sessionResult struct {
 }
 
 func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, sink contract.EventSink) contract.TurnResult {
-	prompt, inputErr := textPrompt(request.Input)
-	if inputErr != nil {
-		return contract.TurnResult{Status: contract.TurnFailed, Error: inputErr}
-	}
 	proc, err := c.runtime.process(c.runtimeID)
 	if err != nil {
 		return failed(err)
 	}
+	prompt, cleanupInput, inputErr := preparePromptInput(ctx, request.ID, proc.workspace, request.Input)
+	if inputErr != nil {
+		return contract.TurnResult{Status: contract.TurnFailed, Error: inputErr}
+	}
+	defer cleanupInput()
 	sessionID, turnErr := c.ensureSession(ctx, proc, request)
 	if turnErr != nil {
 		return contract.TurnResult{Status: contract.TurnFailed, Error: turnErr}
@@ -50,7 +51,7 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	}
 	err = proc.client.call(ctx, "session/prompt", map[string]any{
 		"sessionId": sessionID,
-		"prompt":    []map[string]any{{"type": "text", "text": prompt}},
+		"prompt":    prompt,
 	}, &response, func() { dispatched = true })
 	proc.mu.Lock()
 	interactionErr := turn.interactionError
@@ -85,26 +86,6 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 		result.Dispatched = dispatched
 		return result
 	}
-}
-
-func textPrompt(parts []contract.InputPart) (string, *contract.TurnError) {
-	var values []string
-	for _, part := range parts {
-		switch part.Kind {
-		case contract.InputPartText:
-			if part.Text != "" {
-				values = append(values, part.Text)
-			}
-		case contract.InputPartFile:
-			return "", &contract.TurnError{Code: contract.ErrorFileUnavailable, Message: "DSH ACP runtime currently accepts text input only"}
-		default:
-			return "", &contract.TurnError{Code: contract.ErrorInvalidRequest, Message: "unsupported DSH input part"}
-		}
-	}
-	if len(values) == 0 {
-		return "", &contract.TurnError{Code: contract.ErrorInvalidRequest, Message: "DSH prompt text is required"}
-	}
-	return strings.Join(values, "\n"), nil
 }
 
 func (c *conversation) ensureSession(ctx context.Context, proc *process, request contract.TurnRequest) (string, *contract.TurnError) {
@@ -142,12 +123,10 @@ func (c *conversation) ensureSession(ctx context.Context, proc *process, request
 	if err := configureSession(ctx, proc, created.SessionID, created.ConfigOptions); err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
-	proc.mu.Lock()
-	proc.meta.Sessions[key] = created.SessionID
-	proc.ready[created.SessionID] = true
-	meta := proc.meta
-	proc.mu.Unlock()
-	if err := writeMetadata(proc.root, meta); err != nil {
+	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
+		meta.Sessions[key] = created.SessionID
+		proc.ready[created.SessionID] = true
+	}); err != nil {
 		return "", &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
 	return created.SessionID, nil
@@ -231,20 +210,20 @@ func (c *conversation) Reset(ctx context.Context, key contract.ConversationKey) 
 	}
 	proc.mu.Lock()
 	sessionID, ok := proc.meta.Sessions[string(key)]
-	if ok {
-		delete(proc.meta.Sessions, string(key))
-		delete(proc.ready, sessionID)
-	}
-	meta := proc.meta
 	proc.mu.Unlock()
 	if !ok {
 		return nil
 	}
+	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
+		if meta.Sessions[string(key)] == sessionID {
+			delete(meta.Sessions, string(key))
+			delete(proc.ready, sessionID)
+		}
+	}); err != nil {
+		return &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
+	}
 	if err := proc.client.call(ctx, "session/close", map[string]any{"sessionId": sessionID}, nil, nil); err != nil {
 		return &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: fmt.Sprintf("close DSH session: %v", err)}
-	}
-	if err := writeMetadata(proc.root, meta); err != nil {
-		return &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
 	return nil
 }

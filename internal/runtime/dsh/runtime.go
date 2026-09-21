@@ -82,9 +82,10 @@ type process struct {
 	meta      runtimeMetadata
 	done      chan struct{}
 
-	mu     sync.Mutex
-	active map[string]*activeTurn
-	ready  map[string]bool
+	metadataMu sync.Mutex
+	mu         sync.Mutex
+	active     map[string]*activeTurn
+	ready      map[string]bool
 }
 
 type activeTurn struct {
@@ -411,9 +412,10 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 		stderr.Close()
 		return nil, fmt.Errorf("DSH ACP does not advertise HTTP MCP support required by this Agent")
 	}
-	proc.meta.PID = cmd.Process.Pid
-	proc.meta.State = agentruntime.StateRunning
-	if err := writeMetadata(root, proc.meta); err != nil {
+	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
+		meta.PID = cmd.Process.Pid
+		meta.State = agentruntime.StateRunning
+	}); err != nil {
 		_ = terminateProcessTree(cmd.Process.Pid, true)
 		_ = cmd.Wait()
 		stderr.Close()
@@ -475,12 +477,10 @@ func buildEnvironment(profile agentruntime.Profile, home string) []string {
 func (r *Runtime) waitProcess(proc *process) {
 	_ = proc.cmd.Wait()
 	_ = proc.stderr.Close()
-	proc.mu.Lock()
-	proc.meta.PID = 0
-	proc.meta.State = agentruntime.StateExited
-	meta := proc.meta
-	proc.mu.Unlock()
-	_ = writeMetadata(proc.root, meta)
+	_ = proc.updateMetadata(func(meta *runtimeMetadata) {
+		meta.PID = 0
+		meta.State = agentruntime.StateExited
+	})
 	r.mu.Lock()
 	if r.processes[proc.meta.RuntimeID] == proc {
 		delete(r.processes, proc.meta.RuntimeID)
@@ -524,12 +524,10 @@ func (r *Runtime) Stop(ctx context.Context, h agentruntime.Handle) (agentruntime
 	if !exited {
 		return agentruntime.StateUnknown, fmt.Errorf("DSH process tree did not exit")
 	}
-	proc.mu.Lock()
-	proc.meta.PID = 0
-	proc.meta.State = agentruntime.StateStopped
-	meta := proc.meta
-	proc.mu.Unlock()
-	if err := writeMetadata(proc.root, meta); err != nil {
+	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
+		meta.PID = 0
+		meta.State = agentruntime.StateStopped
+	}); err != nil {
 		return agentruntime.StateUnknown, err
 	}
 	r.mu.Lock()
@@ -548,8 +546,17 @@ func (r *Runtime) Delete(ctx context.Context, h agentruntime.Handle) error {
 	if err != nil {
 		return err
 	}
-	if err := os.RemoveAll(root); err != nil {
-		return fmt.Errorf("remove DSH runtime: %w", err)
+	preserved, err := preserveRecreateState(root)
+	if err != nil {
+		return err
+	}
+	if preserved != nil {
+		defer preserved.Cleanup()
+	}
+	removeErr := os.RemoveAll(root)
+	restoreErr := preserved.Restore()
+	if removeErr != nil || restoreErr != nil {
+		return errors.Join(removeErr, restoreErr)
 	}
 	r.mu.Lock()
 	delete(r.roots, strings.TrimSpace(h.RuntimeID))
@@ -624,10 +631,62 @@ func writeMetadata(root string, meta runtimeMetadata) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(root, runtimeFileName), append(data, '\n'), 0o600); err != nil {
-		return fmt.Errorf("write DSH runtime metadata: %w", err)
+	path := filepath.Join(root, runtimeFileName)
+	tmp, err := os.CreateTemp(root, ".runtime-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temporary DSH runtime metadata: %w", err)
 	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod temporary DSH runtime metadata: %w", err)
+	}
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temporary DSH runtime metadata: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync temporary DSH runtime metadata: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temporary DSH runtime metadata: %w", err)
+	}
+	if err := replaceMetadataFile(tmpPath, path); err != nil {
+		return fmt.Errorf("replace DSH runtime metadata: %w", err)
+	}
+	cleanup = false
 	return nil
+}
+
+func (p *process) updateMetadata(update func(*runtimeMetadata)) error {
+	if p == nil {
+		return fmt.Errorf("DSH process is unavailable")
+	}
+	p.metadataMu.Lock()
+	defer p.metadataMu.Unlock()
+	p.mu.Lock()
+	if update != nil {
+		update(&p.meta)
+	}
+	meta := cloneRuntimeMetadata(p.meta)
+	p.mu.Unlock()
+	return writeMetadata(p.root, meta)
+}
+
+func cloneRuntimeMetadata(meta runtimeMetadata) runtimeMetadata {
+	clone := meta
+	clone.Sessions = make(map[string]string, len(meta.Sessions))
+	for key, sessionID := range meta.Sessions {
+		clone.Sessions[key] = sessionID
+	}
+	return clone
 }
 
 func (r *Runtime) ValidateConfig(ctx context.Context, current agentruntime.RuntimeConfigSnapshot) error {

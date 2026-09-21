@@ -109,7 +109,8 @@ func (r *Resolver) All(ctx context.Context) ([]Resolved, error) {
 	for _, item := range agents {
 		// Runtime-native channels are outside the hosted Feishu binding
 		// manager. Do not read or validate their credentials here.
-		if !strings.EqualFold(strings.TrimSpace(item.Spec.Runtime.Adapter), agentruntime.NameCodex) || item.Spec.Runtime.Sandboxed {
+		runtimeName := agentruntime.NormalizeRuntimeName(item.Spec.Runtime.Adapter)
+		if item.Spec.Runtime.Sandboxed || runtimeName != agentruntime.NameCodex && runtimeName != agentruntime.NameDSH {
 			continue
 		}
 		selection, ok, err := r.selectCredential(item.ID)

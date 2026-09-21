@@ -25,7 +25,11 @@ func (a *testAgents) List(context.Context, agentengine.AgentListOptions) ([]agen
 }
 
 func hostedAgent(id string) agentengine.Agent {
-	return agentengine.Agent{ID: id, Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: "codex"}}}
+	return hostedRuntimeAgent(id, "codex")
+}
+
+func hostedRuntimeAgent(id, runtimeName string) agentengine.Agent {
+	return agentengine.Agent{ID: id, Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: runtimeName}}}
 }
 
 type testProvider struct {
@@ -223,6 +227,7 @@ func TestManagerStopsOnlyWhenBindingIsRemoved(t *testing.T) {
 func TestResolverLeavesRuntimeNativeFeishuBindingsAlone(t *testing.T) {
 	agents := &testAgents{items: []agentengine.Agent{
 		hostedAgent("codex"),
+		hostedRuntimeAgent("dsh", "dsh"),
 		{ID: "picoclaw", Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: "picoclaw", Sandboxed: true}}},
 		{ID: "openclaw", Spec: agentengine.AgentSpec{Runtime: agentengine.RuntimeSpec{Adapter: "openclaw", Sandboxed: true}}},
 	}}
@@ -231,6 +236,7 @@ func TestResolverLeavesRuntimeNativeFeishuBindingsAlone(t *testing.T) {
 		app         feishu.AppConfig
 	}{
 		"codex":    {participant: "bot-codex", app: feishu.AppConfig{AppID: "app-codex", AppSecret: "secret"}},
+		"dsh":      {participant: "bot-dsh", app: feishu.AppConfig{AppID: "app-dsh", AppSecret: "secret"}},
 		"picoclaw": {participant: "bot-pico", app: feishu.AppConfig{AppID: "app-pico", AppSecret: "secret"}},
 		"openclaw": {participant: "bot-open", app: feishu.AppConfig{AppID: "app-open", AppSecret: "secret"}},
 	}}
@@ -238,8 +244,8 @@ func TestResolverLeavesRuntimeNativeFeishuBindingsAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(resolved) != 1 || resolved[0].Binding.AgentID != "codex" {
-		t.Fatalf("resolved bindings = %+v, want only the CSGClaw-hosted Codex binding", resolved)
+	if len(resolved) != 2 || resolved[0].Binding.AgentID != "codex" || resolved[1].Binding.AgentID != "dsh" {
+		t.Fatalf("resolved bindings = %+v, want the CSGClaw-hosted Codex and DSH bindings", resolved)
 	}
 }
 
