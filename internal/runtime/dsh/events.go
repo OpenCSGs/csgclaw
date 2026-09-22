@@ -2,6 +2,7 @@ package dsh
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -29,7 +30,7 @@ type permissionOption struct {
 }
 
 func (r *Runtime) handleNotification(proc *process, note notification) {
-	if note.Method != "session/update" {
+	if note.Method != "session/update" && note.Method != "csgclaw/context" {
 		return
 	}
 	var params struct {
@@ -80,7 +81,58 @@ func (r *Runtime) handleNotification(proc *process, note notification) {
 		} else {
 			event.Kind = contract.TurnEventToolCallUpdate
 		}
-	case "usage_update", "config_option_update":
+	case "context_error":
+		turn.contextExceeded = true
+		proc.mu.Unlock()
+		return
+	case "context_compaction":
+		turn.compactionFailed, _ = params.Update["failed"].(bool)
+		metadata := proc.profile.ModelMetadata.Normalized()
+		usage, exists := proc.contextUsage[params.SessionID]
+		if !exists {
+			usage = modelcap.ContextUsage{SessionID: params.SessionID, ModelID: proc.profile.ModelID, ContextWindow: metadata.ContextWindow, ContextSource: metadata.ContextSource, AutoCompact: proc.profile.AutoCompact == nil || *proc.profile.AutoCompact, CompactThreshold: metadata.CompactThreshold(), Estimated: true}
+		}
+		usage.Compacting, _ = params.Update["compacting"].(bool)
+		if !usage.Compacting {
+			usage.UsedTokens = nil
+			if used, ok := params.Update["used"].(float64); ok && used >= 0 && used < 1e12 {
+				n := int64(used)
+				usage.UsedTokens = &n
+			}
+		}
+		usage.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		if proc.contextUsage == nil {
+			proc.contextUsage = make(map[string]modelcap.ContextUsage)
+		}
+		proc.contextUsage[params.SessionID] = usage
+		event.Kind = contract.TurnEventActivityUpdate
+		event.Activity = &contract.ActivityUpdate{ID: params.SessionID, Kind: modelcap.ContextUsageKind, Payload: usage}
+	case "usage_update":
+		metadata := proc.profile.ModelMetadata.Normalized()
+		raw, _ := json.Marshal(params.Update)
+		var values struct {
+			Used *int64 `json:"used"`
+			Size int64  `json:"size"`
+		}
+		if json.Unmarshal(raw, &values) != nil || values.Used == nil || *values.Used < 0 {
+			proc.mu.Unlock()
+			return
+		}
+		if values.Size <= 0 {
+			values.Size = metadata.ContextWindow
+		}
+		usage := modelcap.ContextUsage{SessionID: params.SessionID, ModelID: proc.profile.ModelID, UsedTokens: values.Used, ContextWindow: values.Size, ContextSource: metadata.ContextSource, AutoCompact: proc.profile.AutoCompact == nil || *proc.profile.AutoCompact, CompactThreshold: metadata.CompactThreshold(), Estimated: true, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+		if !usage.Valid() {
+			proc.mu.Unlock()
+			return
+		}
+		if proc.contextUsage == nil {
+			proc.contextUsage = make(map[string]modelcap.ContextUsage)
+		}
+		proc.contextUsage[params.SessionID] = usage
+		event.Kind = contract.TurnEventActivityUpdate
+		event.Activity = &contract.ActivityUpdate{ID: params.SessionID, Kind: modelcap.ContextUsageKind, Status: "updated", Payload: usage}
+	case "config_option_update":
 		event.Kind = contract.TurnEventActivityUpdate
 		event.Activity = &contract.ActivityUpdate{ID: kind, Kind: kind, Status: "updated", Payload: params.Update}
 	default:

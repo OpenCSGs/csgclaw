@@ -1,7 +1,9 @@
+import type { ModelOverride } from "@/models/modelMetadata";
 import { del, get, post, put } from "@/api/client";
 import { normalizeModelProviderCatalog, type ModelProvider, type ModelProviderCatalog } from "@/models/modelProviders";
 
 export type ModelProviderPayload = {
+  model_overrides?: Record<string, ModelOverride>;
   id?: string;
   display_name?: string;
   preset?: string;

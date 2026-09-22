@@ -205,12 +205,18 @@ func (s *Controller) runtimeProfileForAgent(a Agent) agentruntime.Profile {
 }
 
 func (s *Controller) runtimeProfileForAgentWithProfile(a Agent, profile AgentProfile) agentruntime.Profile {
-	return s.runtimeProfileForKind(strings.TrimSpace(a.RuntimeKind), a.ID, a.Name, a.Description, profile)
+	result := s.runtimeProfileForKind(strings.TrimSpace(a.RuntimeKind), a.ID, a.Name, a.Description, profile)
+	if value, ok := a.RuntimeOptions["auto_compact"].(string); ok && a.RuntimeKind == RuntimeKindDSH {
+		enabled := value != "disabled"
+		result.AutoCompact = &enabled
+	}
+	return result
 }
 
 func (s *Controller) runtimeProfileForKind(runtimeKind, agentID, fallbackName, fallbackDescription string, profile AgentProfile) agentruntime.Profile {
 	profile = normalizeProfile(profile, fallbackName, fallbackDescription)
 	profile = s.hydrateProfileFromCatalog(profile)
+	metadata := profile.ModelMetadata.Normalized()
 	baseURL := profileBaseURL(profile)
 	apiKey := profileAPIKey(profile)
 	env := normalizeStringMap(profile.Env)
@@ -240,6 +246,7 @@ func (s *Controller) runtimeProfileForKind(runtimeKind, agentID, fallbackName, f
 	}
 
 	return (agentruntime.Profile{
+		ModelMetadata:   metadata,
 		Provider:        profile.Provider,
 		BaseURL:         baseURL,
 		APIKey:          apiKey,
@@ -781,6 +788,8 @@ func bridgeLLMEnvVars(llmBaseURL, accessToken, modelID string) map[string]string
 func runtimeProfileFromAgent(profile AgentProfile) agentruntime.Profile {
 	profile = normalizeProfile(profile, profile.Name, profile.Description)
 	return (agentruntime.Profile{
+		ModelMetadata: profile.ModelMetadata,
+
 		Provider:        strings.TrimSpace(profile.Provider),
 		BaseURL:         strings.TrimSpace(profile.BaseURL),
 		APIKey:          strings.TrimSpace(profile.APIKey),

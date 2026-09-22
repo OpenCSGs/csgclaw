@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -116,4 +117,17 @@ func (s *Controller) restartRuntimeLocked(ctx context.Context, id string) (Agent
 		return Agent{}, err
 	}
 	return restarted, nil
+}
+
+// Use the existing lifecycle gate to drain turns before applying shared model settings.
+func (s *Controller) applyModelMetadataChanges(ids []string) {
+	for _, id := range ids {
+		go func(id string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			defer cancel()
+			if _, _, err := s.RestartRuntimeIfRunning(ctx, id); err != nil {
+				slog.Warn("model settings remain pending", "agent_id", id, "error", err)
+			}
+		}(id)
+	}
 }

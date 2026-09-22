@@ -8,6 +8,7 @@ import (
 )
 
 type Profile struct {
+	Metadata        modelcap.Resolved
 	Provider        string
 	ModelID         string
 	ReasoningEffort string
@@ -74,8 +75,8 @@ func Metadata(profile Profile) map[string]any {
 		},
 		"supports_parallel_tool_calls":     false,
 		"supports_image_detail_original":   false,
-		"context_window":                   272000,
-		"auto_compact_token_limit":         nil,
+		"context_window":                   profile.Metadata.Normalized().ContextWindow,
+		"auto_compact_token_limit":         profile.Metadata.CompactThreshold(),
 		"effective_context_window_percent": 95,
 		"experimental_supported_tools":     []any{},
 		"input_modalities":                 []string{"text", "image"},

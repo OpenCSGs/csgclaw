@@ -120,6 +120,7 @@ func bridgeModelMetadata(profile agent.AgentProfile) map[string]any {
 	caps := modelcap.ForProviderModel(profile.Provider, profile.ModelID)
 	if caps.UseCodexMetadata {
 		return codexmodel.Metadata(codexmodel.Profile{
+			Metadata:        profile.ModelMetadata,
 			Provider:        profile.Provider,
 			ModelID:         profile.ModelID,
 			ReasoningEffort: profile.ReasoningEffort,
@@ -332,7 +333,7 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 	if err != nil {
 		return nil, &HTTPError{Status: http.StatusBadRequest, Message: fmt.Sprintf("encode request: %v", err)}
 	}
-	if s.responsesAPIUnsupportedCached(profile, baseURL) {
+	if profile.Provider != agent.ProviderCodex && s.responsesAPIUnsupportedCached(profile, baseURL) {
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, allowAuthRefresh)
 	}
 	upstreamURL := strings.TrimRight(baseURL, "/") + "/responses"
@@ -363,7 +364,7 @@ func (s *Service) forwardRemoteResponsesWithAuthRefresh(ctx context.Context, pro
 type responsesRequestSender func([]byte) (*http.Response, error)
 
 func (s *Service) handleRemoteResponsesResult(ctx context.Context, profile agent.AgentProfile, payload map[string]any, baseURL, apiKey string, resp *http.Response, allowReasoningRetry bool, sendResponses responsesRequestSender) (*UpstreamResponse, error) {
-	if responsesAPIUnsupportedStatus(resp.StatusCode) {
+	if profile.Provider != agent.ProviderCodex && responsesAPIUnsupportedStatus(resp.StatusCode) {
 		_ = resp.Body.Close()
 		s.markResponsesAPIUnsupported(profile, baseURL)
 		return s.forwardResponsesViaChat(ctx, profile, payload, baseURL, apiKey, true)

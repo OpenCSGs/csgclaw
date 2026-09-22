@@ -771,9 +771,16 @@ func runtimeConfigChangeForAgent(previousProfile, currentProfile AgentProfile, p
 }
 
 func runtimeConfigSnapshotForAgent(profile AgentProfile, options map[string]any) agentruntime.RuntimeConfigSnapshot {
+	var autoCompact *bool
+	if value, ok := options["auto_compact"].(string); ok {
+		enabled := value != "disabled"
+		autoCompact = &enabled
+	}
 	profile = normalizeProfile(profile, profile.Name, profile.Description)
 	return agentruntime.RuntimeConfigSnapshot{
 		Profile: agentruntime.RuntimeProfileConfig{
+			ModelMetadata:   profile.ModelMetadata,
+			AutoCompact:     autoCompact,
 			Provider:        strings.TrimSpace(profile.Provider),
 			BaseURL:         profileBaseURL(profile),
 			APIKey:          profileAPIKey(profile),

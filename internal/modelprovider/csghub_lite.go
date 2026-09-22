@@ -2,6 +2,7 @@ package modelprovider
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"fmt"
 	"net/http"
 	"strings"
@@ -19,6 +20,7 @@ const (
 // that served them. Callers can persist ResolvedBaseURL so later inference uses
 // the same reachable endpoint as model discovery.
 type ModelDiscoveryResult struct {
+	ModelMetadata   map[string]modelcap.Metadata
 	ResolvedBaseURL string
 	Models          []string
 	ImageModels     []string

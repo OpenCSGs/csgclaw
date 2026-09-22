@@ -2,6 +2,8 @@ package execution
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -180,6 +182,26 @@ func (t *activeWorkTurn) observeEvent(ctx context.Context, event agentengine.Tur
 	now := time.Now()
 	request := apitypes.ParticipantWorkStatusPatchRequest{}
 	switch event.Kind {
+	case agentengine.TurnEventActivityUpdate:
+		if event.Activity == nil || event.Activity.Kind != modelcap.ContextUsageKind {
+			t.mu.Unlock()
+			return
+		}
+		raw, err := json.Marshal(event.Activity.Payload)
+		var usage modelcap.ContextUsage
+		if err != nil || json.Unmarshal(raw, &usage) != nil || !usage.Valid() {
+			t.mu.Unlock()
+			return
+		}
+		request.ContextUsage = &usage
+		request.Stage = t.statusStage
+		request.Phase = apitypes.ParticipantWorkPhaseWorking
+		if t.statusStage == apitypes.ParticipantWorkStageThinking || t.statusStage == apitypes.ParticipantWorkStagePreparingReply {
+			request.Phase = apitypes.ParticipantWorkPhaseThinking
+			if t.statusStage == apitypes.ParticipantWorkStageThinking {
+				request.Thinking = &apitypes.ParticipantThinkingStatus{Format: apitypes.ParticipantThinkingFormatPlainText, Text: t.thinking, Truncated: t.truncated}
+			}
+		}
 	case agentengine.TurnEventThoughtDelta:
 		if event.Thought == "" {
 			t.mu.Unlock()

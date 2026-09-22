@@ -10,13 +10,20 @@ import (
 const executablePathOption = "executable_path"
 
 type RuntimeOptions struct {
+	AutoCompact    bool
 	ExecutablePath string
 }
 
 func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
-	var out RuntimeOptions
+	out := RuntimeOptions{AutoCompact: true}
 	if raw == nil {
 		return out, nil
+	}
+	if value, ok := raw["auto_compact"]; ok && value != nil {
+		if value != "enabled" && value != "disabled" {
+			return out, fmt.Errorf("auto_compact must be enabled or disabled")
+		}
+		out.AutoCompact = value == "enabled"
 	}
 	value, ok := raw[executablePathOption]
 	if !ok || value == nil {
@@ -31,7 +38,7 @@ func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
 }
 
 func (r *Runtime) RuntimeOptionsSchema() []agentruntime.RuntimeOptionSchema {
-	return []agentruntime.RuntimeOptionSchema{{
+	return []agentruntime.RuntimeOptionSchema{{Key: "auto_compact", Path: "auto_compact", Label: "Automatic context compaction", LabelZh: "自动整理对话", LabelEn: "Automatic context compaction", Type: "select", Options: []string{"enabled", "disabled"}, DefaultValue: "enabled"}, {
 		Key:           executablePathOption,
 		Path:          executablePathOption,
 		Label:         "DSH Executable",

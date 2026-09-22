@@ -1,3 +1,9 @@
+import {
+  normalizeModelMetadataMap,
+  normalizeModelOverrides,
+  type ModelMetadata,
+  type ModelOverride,
+} from "@/models/modelMetadata";
 import type { ProviderName } from "@/models/agents";
 import {
   modelProviderPresetMeta,
@@ -34,6 +40,9 @@ const builtinRank = new Map<string, number>(BUILTIN_MODEL_PROVIDER_IDS.map((id, 
 export type ModelProviderStatus = "unknown" | "connected" | "failed" | string;
 
 export type ModelProvider = {
+  model_metadata?: Record<string, ModelMetadata>;
+  model_defaults?: Record<string, ModelMetadata>;
+  model_overrides?: Record<string, ModelOverride>;
   id: string;
   kind: string;
   display_name: string;
@@ -153,6 +162,9 @@ function normalizeModelProvider(raw: unknown): ModelProvider {
     id,
     kind,
     imageModels: normalizeModelIDs(record.image_models),
+    model_metadata: normalizeModelMetadataMap(record.model_metadata),
+    model_defaults: normalizeModelMetadataMap(record.model_defaults),
+    model_overrides: normalizeModelOverrides(record.model_overrides),
     display_name: displayName,
     preset: normalizeModelProviderPreset(record.preset ?? inferModelProviderPreset(id, record.base_url)),
     builtin: Boolean(record.builtin) || builtinRank.has(id),

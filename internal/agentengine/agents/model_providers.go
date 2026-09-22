@@ -2,8 +2,11 @@ package agents
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"fmt"
 	"net/http"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -47,32 +50,36 @@ type ModelProviderCatalog struct {
 }
 
 type ModelProviderSummary struct {
-	ImageModels     []string          `json:"image_models"`
-	ID              string            `json:"id"`
-	Kind            string            `json:"kind"`
-	DisplayName     string            `json:"display_name"`
-	Preset          string            `json:"preset,omitempty"`
-	Builtin         bool              `json:"builtin"`
-	BaseURL         string            `json:"base_url,omitempty"`
-	APIKey          string            `json:"api_key,omitempty"`
-	APIKeySet       bool              `json:"api_key_set"`
-	APIKeyPreview   string            `json:"api_key_preview,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	Models          []string          `json:"models"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
-	Status          string            `json:"status"`
-	Message         string            `json:"message,omitempty"`
-	LastCheckedAt   string            `json:"last_checked_at,omitempty"`
+	ModelDefaults   map[string]modelcap.Resolved `json:"model_defaults"`
+	ModelMetadata   map[string]modelcap.Resolved `json:"model_metadata"`
+	ModelOverrides  map[string]modelcap.Metadata `json:"model_overrides"`
+	ImageModels     []string                     `json:"image_models"`
+	ID              string                       `json:"id"`
+	Kind            string                       `json:"kind"`
+	DisplayName     string                       `json:"display_name"`
+	Preset          string                       `json:"preset,omitempty"`
+	Builtin         bool                         `json:"builtin"`
+	BaseURL         string                       `json:"base_url,omitempty"`
+	APIKey          string                       `json:"api_key,omitempty"`
+	APIKeySet       bool                         `json:"api_key_set"`
+	APIKeyPreview   string                       `json:"api_key_preview,omitempty"`
+	Headers         map[string]string            `json:"headers,omitempty"`
+	Models          []string                     `json:"models"`
+	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
+	Status          string                       `json:"status"`
+	Message         string                       `json:"message,omitempty"`
+	LastCheckedAt   string                       `json:"last_checked_at,omitempty"`
 }
 
 type ModelProviderCheckResult struct {
-	ImageModels     []string `json:"image_models"`
-	ID              string   `json:"id"`
-	ResolvedBaseURL string   `json:"base_url,omitempty"`
-	Status          string   `json:"status"`
-	Message         string   `json:"message,omitempty"`
-	Models          []string `json:"models"`
-	LastCheckedAt   string   `json:"last_checked_at"`
+	ModelMetadata   map[string]modelcap.Metadata `json:"model_metadata,omitempty"`
+	ImageModels     []string                     `json:"image_models"`
+	ID              string                       `json:"id"`
+	ResolvedBaseURL string                       `json:"base_url,omitempty"`
+	Status          string                       `json:"status"`
+	Message         string                       `json:"message,omitempty"`
+	Models          []string                     `json:"models"`
+	LastCheckedAt   string                       `json:"last_checked_at"`
 }
 
 type ModelProviderCheckInput struct {
@@ -259,6 +266,9 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 		summary.APIKeySet = true
 		summary.APIKeyPreview = apiKeyPreview(provider.APIKey)
 	}
+	summary.ModelMetadata = resolvedProviderMetadata(id, provider)
+	summary.ModelDefaults = automaticProviderMetadata(id, provider)
+	summary.ModelOverrides = modelcap.Clone(provider.ModelOverrides)
 	summary.Headers = cloneStringMap(provider.Headers)
 	summary.ReasoningEffort = provider.ReasoningEffort
 	applyProviderCheckMetadata(&summary, provider)
@@ -274,6 +284,9 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 	return ModelProviderSummary{
 		ID:              id,
 		Kind:            ModelProviderKindOpenAICompatible,
+		ModelMetadata:   resolvedProviderMetadata(id, provider),
+		ModelDefaults:   automaticProviderMetadata(id, provider),
+		ModelOverrides:  modelcap.Clone(provider.ModelOverrides),
 		DisplayName:     displayName,
 		Preset:          effectiveModelProviderPreset(id, provider),
 		Builtin:         false,
@@ -336,6 +349,8 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		var directory modelprovider.ModelDiscoveryResult
 		directory, err = modelprovider.ListOpenAIModelDirectoryWithClient(ctx, client, baseURL, apiKey, input.Headers)
 		models, images = directory.Models, directory.ImageModels
+		result.ModelMetadata = directory.ModelMetadata
+		result.ResolvedBaseURL = baseURL
 	case ModelProviderIDCodex:
 		models, err = listCLIProxyModelChoices(ctx, ProviderCodex)
 	case ModelProviderIDClaude:
@@ -349,6 +364,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		)
 		models = discovery.Models
 		images = discovery.ImageModels
+		result.ModelMetadata = discovery.ModelMetadata
 		result.ResolvedBaseURL = discovery.ResolvedBaseURL
 		err = discoveryErr
 	default:
@@ -357,6 +373,8 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		var directory modelprovider.ModelDiscoveryResult
 		directory, err = modelprovider.ListOpenAIModelDirectoryWithClient(ctx, &http.Client{Timeout: 3 * time.Second}, baseURL, apiKey, input.Headers)
 		models, images = directory.Models, directory.ImageModels
+		result.ModelMetadata = directory.ModelMetadata
+		result.ResolvedBaseURL = baseURL
 	}
 	if err != nil {
 		result.Message = conciseProviderError(err)
@@ -443,6 +461,7 @@ func ClearModelProviderCachedState(llm config.LLMConfig, id string) (config.LLMC
 	if len(existing.Models) == 0 && len(existing.ImageModels) == 0 && existing.Status == "" && existing.Message == "" && existing.LastCheckedAt == "" && !profileExists {
 		return llm, false
 	}
+	existing.ModelMetadata = nil
 	existing.Models = nil
 	existing.ImageModels = nil
 	existing.Status = ""
@@ -459,6 +478,9 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 	out.Message = strings.TrimSpace(result.Message)
 	out.LastCheckedAt = strings.TrimSpace(result.LastCheckedAt)
 	if result.Status == ModelProviderStatusConnected {
+		if result.ResolvedBaseURL == "" || out.BaseURL == "" || strings.TrimRight(result.ResolvedBaseURL, "/") == out.BaseURL || IsBuiltinModelProviderID(id) {
+			out.ModelMetadata = modelcap.Clone(result.ModelMetadata)
+		}
 		out.Models = append([]string(nil), result.Models...)
 		out.ImageModels = append([]string(nil), result.ImageModels...)
 	}
@@ -478,7 +500,7 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 func providerConfigsEqual(left, right config.ProviderConfig) bool {
 	left = left.Resolved()
 	right = right.Resolved()
-	if left.DisplayName != right.DisplayName ||
+	if !reflect.DeepEqual(left.ModelMetadata, right.ModelMetadata) || !reflect.DeepEqual(left.ModelOverrides, right.ModelOverrides) || left.DisplayName != right.DisplayName ||
 		left.BaseURL != right.BaseURL ||
 		left.APIKey != right.APIKey ||
 		left.ReasoningEffort != right.ReasoningEffort ||
@@ -791,9 +813,25 @@ func imageModels(providerID string, models, declared []string) []string {
 		return []string{}
 	}
 	for _, model := range models {
-		if modelprovider.IsGPTImageModel(model) {
+		if modelprovider.IsImageGenerationModel(model) {
 			result = append(result, model)
 		}
 	}
 	return sortModelIDs(result)
+}
+
+func resolvedProviderMetadata(id string, provider config.ProviderConfig) map[string]modelcap.Resolved {
+	out := make(map[string]modelcap.Resolved, len(provider.Models))
+	for _, model := range provider.Models {
+		if modelprovider.IsImageGenerationModel(model) || slices.Contains(provider.ImageModels, model) {
+			continue
+		}
+		out[model] = modelcap.Resolve(id, provider.BaseURL, model, provider.ModelMetadata[model], provider.ModelOverrides[model])
+	}
+	return out
+}
+
+func automaticProviderMetadata(id string, provider config.ProviderConfig) map[string]modelcap.Resolved {
+	provider.ModelOverrides = nil
+	return resolvedProviderMetadata(id, provider)
 }

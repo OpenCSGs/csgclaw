@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"csgclaw/internal/modelcap"
 	"io"
 	"os"
 	"os/exec"
@@ -12,6 +13,8 @@ import (
 )
 
 type liveSession struct {
+	compactingThreads     map[string]bool
+	contextUsage          map[string]modelcap.ContextUsage
 	mu                    sync.Mutex
 	conversationResumeMu  sync.Mutex
 	conversationPersistMu sync.Mutex

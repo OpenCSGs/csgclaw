@@ -39,6 +39,16 @@ func IsGPTImageModel(model string) bool {
 	}
 }
 
+// IsImageGenerationModel recognizes image generators whose context settings do
+// not govern the image generation endpoint. Provider-declared models also apply.
+func IsImageGenerationModel(model string) bool {
+	name := strings.ToLower(strings.TrimSpace(model))
+	if index := strings.LastIndex(name, "/"); index >= 0 {
+		name = name[index+1:]
+	}
+	return IsGPTImageModel(name) || name == "qwen-image" || strings.HasPrefix(name, "qwen-image-") || strings.HasPrefix(name, "doubao-seedream-") || name == "gemini-2.5-flash-image" || name == "gemini-3.1-flash-image" || name == "gemini-3-pro-image"
+}
+
 const MaxGeneratedImageBytes = 32 << 20
 
 type GeneratedImage struct {

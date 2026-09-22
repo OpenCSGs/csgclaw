@@ -127,9 +127,9 @@ func TestRuntimeRunsACPConversation(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(events) != 4 || events[0].Kind != contract.TurnEventThoughtDelta ||
-		events[1].Kind != contract.TurnEventToolCallStart || events[2].Kind != contract.TurnEventToolCallUpdate ||
-		events[3].Kind != contract.TurnEventTextDelta {
+	if len(events) != 5 || events[0].Kind != contract.TurnEventActivityUpdate || events[1].Kind != contract.TurnEventThoughtDelta ||
+		events[2].Kind != contract.TurnEventToolCallStart || events[3].Kind != contract.TurnEventToolCallUpdate ||
+		events[4].Kind != contract.TurnEventTextDelta {
 		t.Fatalf("events = %+v", events)
 	}
 	for index, event := range events {
@@ -202,11 +202,11 @@ func TestDSHLaunchArgsEnablePresentOverlay(t *testing.T) {
 	root := filepath.Join("tmp", "agent", hostStateDirName)
 	wantPatch := filepath.Join(root, patchFileName)
 	args := dshLaunchArgs(root, true)
-	if len(args) != 4 || args[0] != "--profile" || args[1] != "acp" || args[2] != "--patch" || args[3] != wantPatch {
+	if len(args) != 6 || args[0] != "--profile" || args[1] != "acp" || args[2] != "--patch" || args[3] != filepath.Join(root, contextPatchFileName) || args[5] != wantPatch {
 		t.Fatalf("dshLaunchArgs() = %q", args)
 	}
 	fallback := dshLaunchArgs(root, false)
-	if len(fallback) != 2 || fallback[0] != "--profile" || fallback[1] != "acp" {
+	if len(fallback) != 4 || fallback[0] != "--profile" || fallback[1] != "acp" || fallback[3] != filepath.Join(root, contextPatchFileName) {
 		t.Fatalf("fallback dshLaunchArgs() = %q", fallback)
 	}
 }

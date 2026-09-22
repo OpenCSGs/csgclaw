@@ -2,6 +2,7 @@ package dsh
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,7 +45,22 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	turn := &activeTurn{request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
 	proc.mu.Lock()
 	proc.active[sessionID] = turn
+	metadata := proc.profile.ModelMetadata.Normalized()
+	usage, ok := proc.contextUsage[sessionID]
+	if !ok || usage.ModelID != proc.profile.ModelID {
+		usage = modelcap.ContextUsage{SessionID: sessionID, ModelID: proc.profile.ModelID, ContextWindow: metadata.ContextWindow, ContextSource: metadata.ContextSource, AutoCompact: proc.profile.AutoCompact == nil || *proc.profile.AutoCompact, CompactThreshold: metadata.CompactThreshold(), Estimated: true}
+	}
+	turn.seq++
+	initial := contract.TurnEvent{TurnID: request.ID, Sequence: turn.seq, Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{ID: sessionID, Kind: modelcap.ContextUsageKind, Payload: usage}}
 	proc.mu.Unlock()
+	if sink != nil {
+		if err := sink.Emit(ctx, initial); err != nil {
+			proc.mu.Lock()
+			delete(proc.active, sessionID)
+			proc.mu.Unlock()
+			return failed(err)
+		}
+	}
 	defer func() {
 		proc.mu.Lock()
 		delete(proc.active, sessionID)
@@ -71,6 +87,7 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 		cancel()
 	}
 	proc.mu.Lock()
+	contextExceeded, compactionFailed := turn.contextExceeded, turn.compactionFailed
 	interactionErr := turn.interactionError
 	output := turn.output.String()
 	presentedFiles := append([]presentedFile(nil), turn.presentedFiles...)
@@ -87,6 +104,11 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 			return contract.TurnResult{Status: contract.TurnCanceled, Output: output, Dispatched: dispatched, Error: &contract.TurnError{Code: contract.ErrorCanceled, Message: message}}
 		}
 		result := failed(err)
+		if compactionFailed {
+			result.Error = &contract.TurnError{Code: contract.ErrorCode("context_compaction_failed"), Message: "Conversation compaction failed. Your history is preserved. Retry or choose a model with a larger context window."}
+		} else if contextExceeded {
+			result.Error = &contract.TurnError{Code: contract.ErrorCode("context_length_exceeded"), Message: "The input exceeds the model context window. Split the input or check the model capacity."}
+		}
 		result.Output = output
 		result.Dispatched = dispatched
 		return result

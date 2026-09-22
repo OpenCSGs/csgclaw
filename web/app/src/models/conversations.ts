@@ -1,3 +1,4 @@
+import type { ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 import {
   isOpenClawToolDeliveryMessage,
@@ -166,6 +167,7 @@ export type ParticipantWorkUpdate = {
   state: "working" | "idle";
   status?: {
     phase: "working" | "thinking";
+    context_usage?: ContextUsage;
     sequence: number;
     stage?: ParticipantWorkStage | null;
     thinking?: {

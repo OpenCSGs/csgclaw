@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 )
 
@@ -110,5 +111,47 @@ func TestNativeResponsesPreservesAppSearchDefinitionsHistoryAndSSE(t *testing.T)
 	}
 	if got["model"] != "fixture-model" {
 		t.Fatalf("model routing was lost: %v", got["model"])
+	}
+}
+
+func TestCodexResponsesNotFoundDoesNotDowngradeOrPoisonCache(t *testing.T) {
+	oldTarget, oldAuth := embeddedCLIProxyProviderBaseURL, embeddedCLIProxyAuthStatus
+	t.Cleanup(func() { embeddedCLIProxyProviderBaseURL = oldTarget; embeddedCLIProxyAuthStatus = oldAuth })
+	calls := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" {
+			t.Errorf("wrong protocol: %s", r.URL.Path)
+			http.Error(w, "wrong route", 500)
+			return
+		}
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			w.WriteHeader(404)
+			io.WriteString(w, `{"error":{"code":"model_not_found","message":"temporary upstream routing failure"}}`)
+			return
+		}
+		io.WriteString(w, `{"id":"response-ok","status":"completed","output":[]}`)
+	}))
+	defer upstream.Close()
+	embeddedCLIProxyProviderBaseURL = func(context.Context, string) (string, error) { return upstream.URL + "/v1", nil }
+	embeddedCLIProxyAuthStatus = func(context.Context, string) (cliproxy.AuthStatus, error) {
+		return cliproxy.AuthStatus{Authenticated: true}, nil
+	}
+	service := NewService(config.ModelConfig{}, nil)
+	profile := agent.AgentProfile{Provider: agent.ProviderCodex, ModelID: "gpt-5.6-luna"}
+	body := []byte(`{"input":[{"type":"function_call_output","call_id":"tool-1","output":"preserved history"}],"tools":[{"type":"function","name":"inspect","parameters":{"type":"object"}}]}`)
+	for _, status := range []int{404, 200} {
+		resp, err := service.forwardRemoteResponses(context.Background(), profile, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != status {
+			t.Fatalf("status=%d want=%d", resp.StatusCode, status)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("cached false capability: %d calls", calls)
 	}
 }

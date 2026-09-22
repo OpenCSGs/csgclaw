@@ -1291,6 +1291,7 @@ func managerTemplateSkillNames() ([]string, error) {
 func (r *Runtime) writeModelCatalog(runtimeCodexHome string, profile agentruntime.Profile) error {
 	catalogPath := filepath.Join(runtimeCodexHome, modelCatalogFileName)
 	body, err := json.MarshalIndent(codexmodel.Catalog(codexmodel.Profile{
+		Metadata:        profile.ModelMetadata,
 		Provider:        profile.Provider,
 		ModelID:         profile.ModelID,
 		ReasoningEffort: profile.ReasoningEffort,

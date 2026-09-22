@@ -2,6 +2,7 @@ package dsh
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,14 +27,15 @@ import (
 )
 
 const (
-	hostStateDirName = ".dsh"
-	homeDirName      = "home"
-	workspaceDirName = "workspace"
-	runtimeFileName  = "runtime.json"
-	stderrFileName   = "stderr.log"
-	settingsFileName = "settings.yaml"
-	patchFileName    = "csgclaw.patch.yml"
-	llmAPIKeyEnvName = "CSGCLAW_DSH_LLM_API_KEY"
+	hostStateDirName     = ".dsh"
+	homeDirName          = "home"
+	workspaceDirName     = "workspace"
+	runtimeFileName      = "runtime.json"
+	stderrFileName       = "stderr.log"
+	settingsFileName     = "settings.yaml"
+	patchFileName        = "csgclaw.patch.yml"
+	contextPatchFileName = "csgclaw-context.patch.yml"
+	llmAPIKeyEnvName     = "CSGCLAW_DSH_LLM_API_KEY"
 )
 
 const runtimePatch = `- insert:
@@ -71,6 +73,7 @@ type Runtime struct {
 }
 
 type process struct {
+	contextUsage         map[string]modelcap.ContextUsage
 	cmd                  *exec.Cmd
 	stdin                io.WriteCloser
 	client               *acpClient
@@ -92,6 +95,8 @@ type process struct {
 }
 
 type activeTurn struct {
+	contextExceeded  bool
+	compactionFailed bool
 	request          contract.TurnRequest
 	sink             contract.EventSink
 	seq              uint64
@@ -230,7 +235,7 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), req.Profile); err != nil {
 		return err
 	}
-	if err := writeRuntimePatch(filepath.Join(root, patchFileName)); err != nil {
+	if err := writeRuntimePatch(filepath.Join(root, patchFileName), req.Profile); err != nil {
 		return err
 	}
 	r.mu.Lock()
@@ -255,14 +260,7 @@ func stripManagedInstructions(current string) string {
 
 func writeSettings(path string, profile agentruntime.Profile) error {
 	profile = profile.Normalized()
-	settings := map[string]any{
-		"llm-deepseek": map[string]any{
-			"protocol":  "chat-completions",
-			"baseURL":   profile.BaseURL,
-			"apiKeyEnv": llmAPIKeyEnvName,
-			"models":    []map[string]any{{"id": profile.ModelID}},
-		},
-	}
+	settings := map[string]any{"llm-deepseek": dshProviderSettings(profile)}
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode DSH settings: %w", err)
@@ -274,7 +272,21 @@ func writeSettings(path string, profile agentruntime.Profile) error {
 	return nil
 }
 
-func writeRuntimePatch(path string) error {
+func writeRuntimePatch(path string, profile agentruntime.Profile) error {
+	enabled := profile.AutoCompact == nil || *profile.AutoCompact
+	bridgePath := filepath.Join(filepath.Dir(path), "context-bridge.mjs")
+	if err := os.WriteFile(bridgePath, []byte(contextBridgeModule), 0o600); err != nil {
+		return err
+	}
+	providerConfig, err := json.Marshal(dshProviderSettings(profile))
+	if err != nil {
+		return err
+	}
+	patch := fmt.Sprintf("- id: llm-deepseek\n  config: %s\n- id: acp\n  config:\n    provider: deepseek-official\n    model: %q\n- id: compaction-basic\n  config:\n    thresholdRatio: 0.75\n    maxOverflowRetries: 1\n    auto: %t\n- insert:\n    - id: csgclaw-context\n      name: %q\n", providerConfig, profile.ModelID, enabled, bridgePath)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), contextPatchFileName), []byte(patch), 0o600); err != nil {
+		return err
+	}
+
 	if err := os.WriteFile(path, []byte(runtimePatch), 0o600); err != nil {
 		return fmt.Errorf("write CSGClaw DSH patch: %w", err)
 	}
@@ -359,7 +371,7 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	if err := writeRuntimePatch(filepath.Join(root, patchFileName)); err != nil {
+	if err := writeRuntimePatch(filepath.Join(root, patchFileName), ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
 	}
 	projections, err := r.ExtensionProjections(ref.ID)
@@ -459,7 +471,7 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 }
 
 func dshLaunchArgs(root string, enablePresent bool) []string {
-	args := []string{"--profile", "acp"}
+	args := []string{"--profile", "acp", "--patch", filepath.Join(root, contextPatchFileName)}
 	if enablePresent {
 		args = append(args, "--patch", filepath.Join(root, patchFileName))
 	}
@@ -761,9 +773,11 @@ func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, ch
 		return err
 	}
 	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), agentruntime.Profile{
-		Provider: change.Current.Profile.Provider,
-		BaseURL:  change.Current.Profile.BaseURL,
-		ModelID:  change.Current.Profile.ModelID,
+		Provider:      change.Current.Profile.Provider,
+		BaseURL:       change.Current.Profile.BaseURL,
+		ModelID:       change.Current.Profile.ModelID,
+		ModelMetadata: change.Current.Profile.ModelMetadata,
+		AutoCompact:   change.Current.Profile.AutoCompact,
 	}); err != nil {
 		return err
 	}
@@ -836,4 +850,10 @@ func processRunning(proc *process) bool {
 	default:
 		return true
 	}
+}
+
+func dshProviderSettings(profile agentruntime.Profile) map[string]any {
+	profile = profile.Normalized()
+	return map[string]any{"protocol": "chat-completions", "baseURL": profile.BaseURL, "apiKeyEnv": llmAPIKeyEnvName, "models": []map[string]any{{"id": profile.ModelID, "contextWindow": profile.ModelMetadata.Normalized().ContextWindow, "maxTokens": max(int64(1), min(int64(8192), profile.ModelMetadata.Normalized().ContextWindow/4))}}}
+
 }

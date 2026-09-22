@@ -171,7 +171,15 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		if message == "" {
 			message = "agent turn ended without a final response"
 		}
-		result := failedResult(contract.ErrorRuntimeFailed, message)
+		code := contract.ErrorRuntimeFailed
+		eventErr, _ := event.Payload.(error)
+		if errors.Is(eventErr, errContextCompaction) {
+			code = contract.ErrorCode("context_compaction_failed")
+		}
+		if isContextWindowError(eventErr) || message == (&contextWindowError{}).Error() {
+			code = contract.ErrorCode("context_length_exceeded")
+		}
+		result := failedResult(code, message)
 		return &result
 	case activity.RuntimeEventActionRequest:
 		return a.handleInteraction(ctx, request.Interaction, permissionInteraction(event), sink)
@@ -222,7 +230,7 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallStart, Tool: toolActivity(event)})
 	case activity.RuntimeEventToolCallUpdate:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventToolCallUpdate, Tool: toolActivity(event)})
-	case activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved:
+	case activity.RuntimeEventContextUsage, activity.RuntimeEventPlanUpdate, activity.RuntimeEventActionDecision, activity.RuntimeEventUserInputResolved:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventActivityUpdate, Activity: &contract.ActivityUpdate{
 			ID: event.ActionID + event.UserInputID, Kind: string(event.Kind), Status: event.ActionStatus + event.UserInputStatus, Payload: event.Payload,
 		}})
@@ -594,6 +602,12 @@ func emitTurnEvent(ctx context.Context, sink contract.EventSink, event contract.
 }
 
 func resultFromContext(ctx context.Context, err error) contract.TurnResult {
+	if errors.Is(err, errContextCompaction) {
+		return failedResult(contract.ErrorCode("context_compaction_failed"), err.Error())
+	}
+	if isContextWindowError(err) {
+		return failedResult(contract.ErrorCode("context_length_exceeded"), err.Error())
+	}
 	if err == nil {
 		err = ctx.Err()
 	}

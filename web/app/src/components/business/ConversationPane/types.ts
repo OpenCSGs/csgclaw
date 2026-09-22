@@ -1,3 +1,4 @@
+import type { ContextUsage } from "@/models/modelMetadata";
 import type { Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction } from "react";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentDetailSidePanelProps } from "@/hooks/workspace/types";
@@ -42,6 +43,8 @@ export type ComposerSendStatus = "failed" | "idle" | "sending";
 export type ConversationWorkingAction = (typeof ConversationWorkingActions)[keyof typeof ConversationWorkingActions];
 
 export type ConversationWorkingParticipant = {
+  contextUsage?: ContextUsage;
+  showContextUsage?: boolean;
   activity?: {
     action: ConversationWorkingAction;
     entryID?: string;

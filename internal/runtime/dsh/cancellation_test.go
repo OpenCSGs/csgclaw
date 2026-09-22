@@ -140,7 +140,10 @@ func TestConversationCancellationTimeoutStopsProcessBeforeReturningDeliveryError
 		resultCh <- runtime.Conversation(ref.RuntimeID).Run(ctx, contract.TurnRequest{
 			ID: "turn-timeout", ConversationKey: "room-timeout", Interaction: contract.InteractionResolve,
 			Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}},
-		}, contract.EventSinkFunc(func(context.Context, contract.TurnEvent) error {
+		}, contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
+			if event.Kind == contract.TurnEventActivityUpdate {
+				return nil
+			}
 			select {
 			case <-deliveryFailed:
 			default:

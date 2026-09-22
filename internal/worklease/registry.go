@@ -2,6 +2,7 @@ package worklease
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"errors"
 	"fmt"
 	"slices"
@@ -288,11 +289,15 @@ func (r *Registry) UpdateStatus(
 	lease.statusWindowCount++
 	lease.capabilities = append([]string(nil), request.Capabilities...)
 	lease.statusSequence = request.Sequence
+	if request.ContextUsage == nil && lease.status != nil {
+		request.ContextUsage = lease.status.ContextUsage
+	}
 	lease.status = &apitypes.ParticipantWorkStatus{
-		Sequence: request.Sequence,
-		Phase:    request.Phase,
-		Stage:    request.Stage,
-		Thinking: cloneThinking(request.Thinking),
+		ContextUsage: modelcap.CloneUsage(request.ContextUsage),
+		Sequence:     request.Sequence,
+		Phase:        request.Phase,
+		Stage:        request.Stage,
+		Thinking:     cloneThinking(request.Thinking),
 	}
 	lease.revision++
 	r.activeByKey[key] = lease
@@ -674,10 +679,11 @@ func (r *Registry) updateFor(lease activeLease, state, reason string) apitypes.P
 	}
 	if lease.status != nil {
 		update.Status = &apitypes.ParticipantWorkStatus{
-			Sequence: lease.status.Sequence,
-			Phase:    lease.status.Phase,
-			Stage:    lease.status.Stage,
-			Thinking: cloneThinking(lease.status.Thinking),
+			ContextUsage: modelcap.CloneUsage(lease.status.ContextUsage),
+			Sequence:     lease.status.Sequence,
+			Phase:        lease.status.Phase,
+			Stage:        lease.status.Stage,
+			Thinking:     cloneThinking(lease.status.Thinking),
 		}
 	}
 	return update
@@ -722,6 +728,9 @@ func maxTime(left, right time.Time) time.Time {
 }
 func validateStatusPatch(request apitypes.ParticipantWorkStatusPatchRequest) error {
 	if request.Sequence == 0 {
+		return ErrInvalidStatus
+	}
+	if request.ContextUsage != nil && !request.ContextUsage.Valid() {
 		return ErrInvalidStatus
 	}
 	seen := make(map[string]struct{}, len(request.Capabilities))

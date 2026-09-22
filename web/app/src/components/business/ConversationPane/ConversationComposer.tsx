@@ -1,3 +1,4 @@
+import { ContextUsageRing } from "./ContextUsageRing";
 import { memo, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { ArrowUp, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
@@ -469,6 +470,9 @@ function ComposerWorkingTurn({
             {content}
           </div>
         )}
+        {participant.showContextUsage || participant.contextUsage ? (
+          <ContextUsageRing usage={participant.contextUsage} t={t} />
+        ) : null}
         {participant.canStop && onStop ? (
           <Tooltip content={stopLabel} contentProps={{ side: "top", sideOffset: 6 }}>
             <button
@@ -482,7 +486,11 @@ function ComposerWorkingTurn({
             </button>
           </Tooltip>
         ) : null}
-        {thinkingLatestLine ? <span className="composer-thinking-latest">{thinkingLatestLine}</span> : null}
+        {participant.contextUsage?.compacting || thinkingLatestLine ? (
+          <span className="composer-thinking-latest">
+            {participant.contextUsage?.compacting ? t("contextCompacting") : thinkingLatestLine}
+          </span>
+        ) : null}
       </div>
       {participant.stopError ? <div className="composer-working-error">{participant.stopError}</div> : null}
     </div>

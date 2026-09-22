@@ -1,8 +1,13 @@
 package runtime
 
-import "context"
+import (
+	"context"
+	"csgclaw/internal/modelcap"
+)
 
 type RuntimeProfileConfig struct {
+	ModelMetadata   modelcap.Resolved
+	AutoCompact     *bool
 	Provider        string
 	BaseURL         string
 	APIKey          string

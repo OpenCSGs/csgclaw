@@ -28,6 +28,9 @@ func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
 	if len(raw) == 0 {
 		return defaultRuntimeOptions(), nil
 	}
+	if value, ok := raw["auto_compact"]; ok && value != "enabled" && value != true {
+		return RuntimeOptions{}, fmt.Errorf("this Codex runtime does not support disabling automatic context compaction")
+	}
 	opts := defaultRuntimeOptions()
 	if value, ok := raw[localWorkspaceDirOptionKey]; ok && value != nil {
 		text, ok := value.(string)

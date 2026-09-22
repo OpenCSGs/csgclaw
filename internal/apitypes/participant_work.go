@@ -1,6 +1,9 @@
 package apitypes
 
-import "time"
+import (
+	"csgclaw/internal/modelcap"
+	"time"
+)
 
 const (
 	ParticipantWorkKindAgentTurn = "agent_turn"
@@ -59,13 +62,15 @@ type ParticipantThinkingStatus struct {
 }
 
 type ParticipantWorkStatus struct {
-	Sequence uint64                     `json:"sequence"`
-	Phase    string                     `json:"phase"`
-	Stage    string                     `json:"stage,omitempty"`
-	Thinking *ParticipantThinkingStatus `json:"thinking,omitempty"`
+	ContextUsage *modelcap.ContextUsage     `json:"context_usage,omitempty"`
+	Sequence     uint64                     `json:"sequence"`
+	Phase        string                     `json:"phase"`
+	Stage        string                     `json:"stage,omitempty"`
+	Thinking     *ParticipantThinkingStatus `json:"thinking,omitempty"`
 }
 
 type ParticipantWorkStatusPatchRequest struct {
+	ContextUsage *modelcap.ContextUsage     `json:"context_usage,omitempty"`
 	Capabilities []string                   `json:"capabilities"`
 	Sequence     uint64                     `json:"sequence"`
 	Phase        string                     `json:"phase"`

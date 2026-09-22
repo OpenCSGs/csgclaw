@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { classNames } from "@/shared/lib/classNames";
 
 export type ModelProviderModelListProps = {
+  renderDetails?: (model: string) => ReactNode;
   className?: string;
   emptyLabel: string;
   modelListLabel: string;
@@ -12,6 +14,7 @@ export type ModelProviderModelListProps = {
 
 export function ModelProviderModelList({
   className,
+  renderDetails,
   emptyLabel,
   modelListLabel,
   models,
@@ -42,7 +45,10 @@ export function ModelProviderModelList({
         <div className="model-provider-model-grid" role="list" aria-label={modelListLabel}>
           {visibleModels.map(({ index, model }) => (
             <div className="model-provider-model-card" role="listitem" key={`${model}-${index}`}>
-              <span className="model-provider-model-name">{model}</span>
+              <span className="model-provider-model-name" title={model}>
+                {model}
+              </span>
+              {renderDetails?.(model)}
             </div>
           ))}
         </div>

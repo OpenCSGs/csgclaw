@@ -106,6 +106,8 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 	live.trackAppServerTurn(threadID, appServerNotificationTurnID(params))
 
 	switch method {
+	case "thread/tokenUsage/updated":
+		m.publishContextUsage(runtimeID, live, threadID, params, "")
 	case "turn/started":
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
 			turnID:   appServerNotificationTurnID(params),
@@ -124,12 +126,23 @@ func (m *appServerManager) handleRawAppServerNotification(runtimeID string, live
 		m.handleRawErrorNotification(runtimeID, live, threadID, params)
 	default:
 		if strings.HasPrefix(method, "item/") {
+			if appServerNestedString(params, "item", "type") == "contextCompaction" {
+				m.publishContextUsage(runtimeID, live, threadID, params, method)
+				return
+			}
 			m.handleRawItemNotification(runtimeID, live, threadID, method, params)
 		}
 	}
 }
 
 func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSession, threadID string, params map[string]any) {
+	live.mu.Lock()
+	wasCompacting := live.contextUsage[threadID].Compacting
+	live.mu.Unlock()
+	if wasCompacting {
+		defer m.publishContextUsage(runtimeID, live, threadID, nil, "item/completed")
+	}
+
 	status := strings.ToLower(appServerNestedString(params, "turn", "status"))
 	if status == "" {
 		status = strings.ToLower(appServerString(params, "status"))
@@ -166,7 +179,15 @@ func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSe
 		if errMsg == "" {
 			errMsg = "codex turn failed"
 		}
-		err := fmt.Errorf("%s", errMsg)
+		var err error = fmt.Errorf("%s", errMsg)
+		if wasCompacting {
+			err = errContextCompaction
+		}
+		if turn, _ := params["turn"].(map[string]any); turn != nil {
+			if details, _ := turn["error"].(map[string]any); details != nil && !wasCompacting && contextErrorInfo(details) {
+				err = &contextWindowError{}
+			}
+		}
 		if !live.notifyAppServerTurn(threadID, appServerTurnResult{err: err, turnID: turnID, activity: "turn:" + status}) {
 			m.publishAppServerEvent(SessionEvent{
 				RuntimeID: runtimeID,
@@ -180,6 +201,16 @@ func (m *appServerManager) handleRawTurnCompleted(runtimeID string, live *liveSe
 }
 
 func (m *appServerManager) handleRawErrorNotification(runtimeID string, live *liveSession, threadID string, params map[string]any) {
+	live.mu.Lock()
+	compacting := live.contextUsage[threadID].Compacting
+	live.mu.Unlock()
+	if compacting {
+		return
+	} // Native turn/completed owns the compaction outcome.
+
+	if details, _ := params["error"].(map[string]any); details != nil && contextErrorInfo(details) {
+		return
+	} // Wait for turn/completed before any recovery.
 	willRetry, _ := params["willRetry"].(bool)
 	activity := "error:retry"
 	if !willRetry {
@@ -861,17 +892,30 @@ func structuredOutputToolStatusSuccessful(status string) bool {
 }
 
 func (m *appServerManager) publishAppServerEvent(event SessionEvent) {
-	if m.deps.EventSink == nil {
-		return
-	}
 	event.RuntimeKind = agentruntime.KindCodex
 	event.RuntimeID = strings.TrimSpace(event.RuntimeID)
 	event.SessionID = strings.TrimSpace(event.SessionID)
 	if live := m.liveSession(event.RuntimeID); live != nil && live.isMemoryMaintenanceThread(event.SessionID) {
 		return
 	}
+	if live := m.liveSession(event.RuntimeID); live != nil {
+		live.mu.Lock()
+		compacting := live.compactingThreads[event.SessionID]
+		waiter := live.turnWaiters[event.SessionID]
+		live.mu.Unlock()
+		if compacting && event.Kind != activitypkg.RuntimeEventContextUsage {
+			return
+		}
+		if waiter != nil && contextVisibleEvent(event.Kind) {
+			waiter.mu.Lock()
+			waiter.visibleActivity = true
+			waiter.mu.Unlock()
+		}
+	}
 	event.ReceivedAt = time.Now().UTC()
-	m.deps.EventSink.Publish(event)
+	if m.deps.EventSink != nil {
+		m.deps.EventSink.Publish(event)
+	}
 }
 
 func (s *liveSession) appServerTracksThread(threadID string) bool {

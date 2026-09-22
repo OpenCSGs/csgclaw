@@ -217,6 +217,7 @@ const (
 	RuntimeEventUserInputResolved RuntimeEventKind = "user_input_resolved"
 	RuntimeEventStructuredOutput  RuntimeEventKind = "structured_output"
 	RuntimeEventFileOutput        RuntimeEventKind = "file_output"
+	RuntimeEventContextUsage      RuntimeEventKind = "context_usage"
 	RuntimeEventPromptCompleted   RuntimeEventKind = "prompt_completed"
 	RuntimeEventPromptFailed      RuntimeEventKind = "prompt_failed"
 )
@@ -261,7 +262,7 @@ type RuntimeSessionEventSubscriber interface {
 
 func RuntimeEventRequiresReliableDelivery(event RuntimeEvent) bool {
 	switch event.Kind {
-	case RuntimeEventTextDelta,
+	case RuntimeEventTextDelta, RuntimeEventContextUsage,
 		RuntimeEventActionRequest, RuntimeEventActionDecision,
 		RuntimeEventUserInputRequest, RuntimeEventUserInputResolved,
 		RuntimeEventStructuredOutput, RuntimeEventFileOutput:

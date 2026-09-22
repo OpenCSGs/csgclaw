@@ -49,6 +49,7 @@ func (s *Controller) bindResources() {
 			s.runtimeRegistry = &registry.Registry{}
 		}
 		s.ModelConfiguration.Repository = &s.Repository
+		s.ModelConfiguration.onMetadataChange = s.applyModelMetadataChanges
 		s.WorkspaceService.Repository = &s.Repository
 		s.WorkspaceService.registry = s.runtimeRegistry
 	})

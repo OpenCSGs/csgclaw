@@ -6,8 +6,9 @@ import "csgclaw/internal/config"
 // It reads Repository snapshots but never starts or controls a Runtime.
 type ModelConfiguration struct {
 	*Repository
-	model config.ModelConfig
-	llm   config.LLMConfig
+	model            config.ModelConfig
+	llm              config.LLMConfig
+	onMetadataChange func([]string)
 }
 
 func (s *Controller) Models() *ModelConfiguration {

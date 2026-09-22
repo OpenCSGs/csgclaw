@@ -3,8 +3,11 @@ package agents
 import (
 	context "context"
 	config "csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
 	fmt "fmt"
+	"log/slog"
 	strings "strings"
+	"time"
 )
 
 func (s *ModelConfiguration) resolveModelProfile(profile string) (string, config.ModelConfig, error) {
@@ -81,6 +84,21 @@ func (s *ModelConfiguration) SetLLMConfig(llmCfg config.LLMConfig) {
 	llmCfg = llmCfg.Normalized()
 	defaultSelector, defaultModel, err := llmCfg.Resolve("")
 	s.mu.Lock()
+	var changed []string
+	for key, a := range s.agents {
+		if a.RuntimeKind != RuntimeKindCodex && a.RuntimeKind != RuntimeKindDSH {
+			continue
+		}
+		before, _ := ModelProviderConfigForProfile(s.llm, a.AgentProfile)
+		after, _ := ModelProviderConfigForProfile(llmCfg, a.AgentProfile)
+		id := a.AgentProfile.ModelID
+		if modelcap.Resolve(a.AgentProfile.ModelProviderID, before.BaseURL, id, before.ModelMetadata[id], before.ModelOverrides[id]) != modelcap.Resolve(a.AgentProfile.ModelProviderID, after.BaseURL, id, after.ModelMetadata[id], after.ModelOverrides[id]) {
+			a.AgentProfile.EnvRestartRequired = true
+			a.UpdatedAt = time.Now().UTC()
+			s.putAgentLocked(key, a)
+			changed = append(changed, a.ID)
+		}
+	}
 	s.llm = llmCfg
 	s.normalizeProfileReference = profileCatalogNormalizer(llmCfg)
 	if err == nil {
@@ -89,7 +107,16 @@ func (s *ModelConfiguration) SetLLMConfig(llmCfg config.LLMConfig) {
 			s.profileDefaults = profileFromConfigModel(defaultSelector, "", defaultModel)
 		}
 	}
+	if len(changed) > 0 {
+		if err := s.saveLocked(); err != nil {
+			slog.Warn("persist model settings pending state", "error", err)
+		}
+	}
+	callback := s.onMetadataChange
 	s.mu.Unlock()
+	if len(changed) > 0 && callback != nil {
+		callback(changed)
+	}
 }
 
 func (s *ModelConfiguration) AgentProfileView(id string) (AgentProfileView, error) {
@@ -101,7 +128,7 @@ func (s *ModelConfiguration) AgentProfileView(id string) (AgentProfileView, erro
 	if !ok {
 		return AgentProfileView{}, fmt.Errorf("agent %q not found", id)
 	}
-	return profileViewWithAgentRuntimeOptions(got.AgentProfile, got.RuntimeOptions, got.RuntimeKind, got.DetectionResults), nil
+	return profileViewWithAgentRuntimeOptions(s.hydrateProfileFromCatalog(got.AgentProfile), got.RuntimeOptions, got.RuntimeKind, got.DetectionResults), nil
 }
 
 func (s *ModelConfiguration) ProfileDefaultsView() AgentProfileView {
@@ -159,11 +186,13 @@ func (s *ModelConfiguration) hydrateProfileFromCatalogLocked(profile AgentProfil
 	out := cloneProfile(profile)
 	providerID := NormalizeModelProviderID(out.ModelProviderID)
 	if providerID == "" {
+		out.ModelMetadata = modelcap.Resolve(out.Provider, out.BaseURL, out.ModelID, modelcap.Metadata{}, modelcap.Metadata{})
 		return out
 	}
 	out.ModelProviderID = providerID
 	out.Provider = ProfileProviderForModelProviderID(providerID)
 	if provider, ok := ModelProviderConfigForProfile(s.llm, out); ok {
+		out.ModelMetadata = modelcap.Resolve(providerID, provider.BaseURL, out.ModelID, provider.ModelMetadata[out.ModelID], provider.ModelOverrides[out.ModelID])
 		out.BaseURL = provider.BaseURL
 		out.APIKey = provider.APIKey
 		out.Headers = cloneStringMap(provider.Headers)

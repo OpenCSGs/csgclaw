@@ -2955,3 +2955,41 @@ button.message-file-attachment {
   color: var(--danger);
   overflow-wrap: anywhere;
 }
+
+.context-usage-ring {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 4px;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 50%;
+  cursor: default;
+}
+.context-usage-ring:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.context-usage-track {
+  stroke: currentColor;
+  opacity: 0.25;
+}
+.context-usage-value {
+  stroke: currentColor;
+}
+.context-usage-ring.is-warning {
+  color: var(--warning);
+}
+.context-usage-ring.is-danger {
+  color: var(--danger);
+}
+.context-usage-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}

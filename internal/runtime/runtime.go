@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
 )
 
 // ErrReadinessNotSupported reports that a runtime does not expose a separate
@@ -96,6 +97,8 @@ const (
 )
 
 type Profile struct {
+	ModelMetadata   modelcap.Resolved
+	AutoCompact     *bool
 	Provider        string
 	BaseURL         string
 	APIKey          string

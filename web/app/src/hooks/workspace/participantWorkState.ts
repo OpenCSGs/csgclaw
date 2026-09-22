@@ -1,3 +1,4 @@
+import { normalizeContextUsage } from "@/models/modelMetadata";
 import { localIdentitiesMatch, participantIDForLocalIdentity } from "@/models/conversations";
 import type { ParticipantWorkStage, ParticipantWorkUpdate } from "@/models/conversations";
 
@@ -352,10 +353,10 @@ function normalizeParticipantWorkStatus(
   }
   const stage = normalizeParticipantWorkStage(status.stage, status.phase);
   if (status.phase === "working") {
-    return { phase: "working", sequence, stage };
+    return { phase: "working", sequence, stage, context_usage: normalizeContextUsage(status.context_usage) };
   }
   if (!status.thinking) {
-    return { phase: "thinking", sequence, stage };
+    return { phase: "thinking", sequence, stage, context_usage: normalizeContextUsage(status.context_usage) };
   }
   if (
     status.thinking.format !== "plain_text" ||
@@ -366,6 +367,7 @@ function normalizeParticipantWorkStatus(
   }
   return {
     phase: "thinking",
+    context_usage: normalizeContextUsage(status.context_usage),
     sequence,
     stage,
     thinking: {

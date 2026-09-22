@@ -198,6 +198,16 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 		message := "turn failed"
 		if result.Error != nil && strings.TrimSpace(result.Error.Message) != "" {
 			message = strings.TrimSpace(result.Error.Message)
+			switch string(result.Error.Code) {
+			case "context_length_exceeded":
+				if strings.HasPrefix(turn.Locale, "zh") {
+					message = "本次内容超过模型容量，请拆分输入、检查模型容量设置或选择容量更大的模型。已有对话已保留。"
+				}
+			case "context_compaction_failed":
+				if strings.HasPrefix(turn.Locale, "zh") {
+					message = "暂时无法整理对话，已有记录已保留。请重试或选择容量更大的模型。"
+				}
+			}
 		}
 		if store, ok := r.store.(failureStore); ok {
 			return store.DeliverFailure(ctx, turn, message)

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"csgclaw/internal/modelcap"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,9 +16,11 @@ import (
 
 type openAIModelsResponse struct {
 	Data []struct {
-		ID           string `json:"id"`
-		Task         any    `json:"task"`
-		Availability *struct {
+		ID            string `json:"id"`
+		ContextWindow int64  `json:"context_window"`
+		ContextLength int64  `json:"context_length"`
+		Task          any    `json:"task"`
+		Availability  *struct {
 			IsAvailable *bool `json:"is_available"`
 		} `json:"availability"`
 	} `json:"data"`
@@ -120,6 +123,7 @@ func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: err}
 	}
 
+	metadata := make(map[string]modelcap.Metadata)
 	models := make([]string, 0, len(payload.Data))
 	imageModels := []string{}
 	seen := make(map[string]struct{}, len(payload.Data))
@@ -135,6 +139,13 @@ func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 			continue
 		}
 		seen[id] = struct{}{}
+		m := modelcap.Metadata{ContextWindow: item.ContextWindow}
+		if m.ContextWindow == 0 {
+			m.ContextWindow = item.ContextLength
+		}
+		if m.Validate() == nil && m != (modelcap.Metadata{}) {
+			metadata[id] = m
+		}
 		if taskSupportsImageGeneration(item.Task) || (!taskPresent(item.Task) && IsGPTImageModel(id)) {
 			imageModels = append(imageModels, id)
 		}
@@ -145,7 +156,7 @@ func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 	if len(models) == 0 && len(imageModels) == 0 {
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
-	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels}, nil
+	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, ModelMetadata: metadata}, nil
 }
 
 func taskPresent(task any) bool {

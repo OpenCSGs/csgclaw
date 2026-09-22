@@ -50,7 +50,7 @@ var (
 	rootMemoriesTableHeaderRe  = regexp.MustCompile(`^\s*\[\s*memories\s*\]\s*(?:#.*)?$`)
 	mcpServersTableHeaderRe    = regexp.MustCompile(`^\s*\[\s*mcp_servers\s*(?:\.\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z0-9_-]+)\s*)*\]\s*(?:#.*)?$`)
 	proxyProviderTableHeaderRe = regexp.MustCompile(`^\s*\[\s*model_providers\s*\.\s*proxy\s*\]\s*(?:#.*)?$`)
-	rootProviderDirectiveRe    = regexp.MustCompile(`^\s*(?:model|model_provider|model_catalog_json)\s*=`)
+	rootProviderDirectiveRe    = regexp.MustCompile(`^\s*(?:model|model_provider|model_catalog_json|model_context_window|model_auto_compact_token_limit)\s*=`)
 
 	rootDottedMultiAgentRe    = regexp.MustCompile(`^\s*features\s*\.\s*multi_agent\s*=`)
 	featuresTableMultiAgentRe = regexp.MustCompile(`^\s*multi_agent\s*=`)
@@ -107,6 +107,7 @@ func buildProviderConfigBlock(profile agentruntime.Profile) string {
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "model = %s\n", strconv.Quote(profile.ModelID))
 	fmt.Fprintf(&b, "model_provider = %s\n", strconv.Quote(codexProxyProviderName))
+	fmt.Fprintf(&b, "model_context_window = %d\nmodel_auto_compact_token_limit = %d\n", profile.ModelMetadata.Normalized().ContextWindow, profile.ModelMetadata.CompactThreshold())
 	fmt.Fprintf(&b, "model_catalog_json = %s\n\n", strconv.Quote(modelCatalogFileName))
 	fmt.Fprintf(&b, "[model_providers.%s]\n", codexProxyProviderName)
 	fmt.Fprintf(&b, "name = %s\n", strconv.Quote("OpenAI using LLM proxy"))

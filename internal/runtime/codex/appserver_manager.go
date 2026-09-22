@@ -360,7 +360,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
-	defer live.removeAppServerTurnWaiter(sessionID, waiter)
+	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
 	live.setAppServerTurnContext(sessionID, waiter, turnCtx)
 	defer func() {
@@ -368,6 +368,7 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		live.clearAppServerTurnContext(sessionID, waiter)
 	}()
 
+	m.publishContextUsage(runtimeID, live, sessionID, nil, "snapshot")
 	params := appServerTurnStartParamsWithInput(live.spec, sessionID, promptInput, req.ClientUserMessageID)
 	turnStartAt := time.Now()
 	live.appClient.logDebug("codex app-server turn start request",
@@ -406,6 +407,9 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 
 	waitStartAt := time.Now()
 	resp, err := m.waitAppServerTurn(ctx, live, waiter)
+	if isContextWindowError(err) && ctx.Err() == nil {
+		resp, err = m.recoverContext(turnCtx, live, &waiter)
+	}
 	if err != nil {
 		live.appClient.logDebug("codex app-server turn wait failed",
 			"runtime_id", runtimeID,
@@ -791,7 +795,7 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerReasoningConfig(spec.Profile.ReasoningEffort); len(config) > 0 {
+	if config := appServerThreadConfig(spec.Profile); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -854,7 +858,7 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
 	}
-	if config := appServerReasoningConfig(spec.Profile.ReasoningEffort); len(config) > 0 {
+	if config := appServerThreadConfig(spec.Profile); len(config) > 0 {
 		params["config"] = config
 	}
 	if spec.ExecutionMode == ExecutionModeReadOnly {
@@ -987,6 +991,11 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 	}
 	params.ThreadID = strings.TrimSpace(params.ThreadID)
 	params.TurnID = strings.TrimSpace(params.TurnID)
+	if waiter := live.appServerTurnWaiter(params.ThreadID); waiter != nil && waiter.matchesTurn(params.TurnID) {
+		waiter.mu.Lock()
+		waiter.visibleActivity = true
+		waiter.mu.Unlock()
+	}
 	params.CallID = strings.TrimSpace(params.CallID)
 	params.Tool = strings.TrimSpace(params.Tool)
 	if params.ThreadID == "" || params.TurnID == "" || params.CallID == "" {
@@ -1391,6 +1400,7 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
+	visibleActivity          bool
 	mu                       sync.RWMutex
 	threadID                 string
 	turnID                   string
@@ -2107,4 +2117,15 @@ func appServerGenerateImageToolSpec() map[string]any {
 		"description": "Generate one image from the user's requested description using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
 		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
 	}
+}
+
+// Explicit per-thread values override settings retained by cold-resumed threads.
+func appServerThreadConfig(profile agentruntime.Profile) map[string]any {
+	values := appServerReasoningConfig(profile.ReasoningEffort)
+	if values == nil {
+		values = make(map[string]any)
+	}
+	values["model_context_window"] = profile.ModelMetadata.Normalized().ContextWindow
+	values["model_auto_compact_token_limit"] = profile.ModelMetadata.CompactThreshold()
+	return values
 }

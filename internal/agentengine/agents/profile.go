@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"fmt"
 	"net/http"
 	"sort"
@@ -56,6 +57,7 @@ var (
 )
 
 type AgentProfile struct {
+	ModelMetadata        modelcap.Resolved                    `json:"-"`
 	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
 	Name                 string                               `json:"name,omitempty"`
 	Description          string                               `json:"description,omitempty"`

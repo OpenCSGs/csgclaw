@@ -250,7 +250,7 @@ func TestAppServerManagerRestoresColdEngineConversationFileDelivery(t *testing.T
 	if result["success"] != true {
 		t.Fatalf("cold resumed file tool response = %#v", response)
 	}
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Kind != activity.RuntimeEventFileOutput || events[0].SessionID != threadID {
 		t.Fatalf("cold resumed file events = %#v", events)
 	}
@@ -449,7 +449,7 @@ func TestAppServerManagerPromptCompletesTurn(t *testing.T) {
 	}
 
 	waitForRuntime(t, func() bool { return len(sink.snapshot()) >= 2 })
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 ||
 		events[0].Kind != SessionEventTextDelta ||
 		events[1].Kind != SessionEventPromptCompleted ||
@@ -621,7 +621,7 @@ func TestAppServerManagerPublishFileDynamicToolEndToEnd(t *testing.T) {
 	}
 
 	waitForRuntime(t, func() bool { return len(sink.snapshot()) >= 3 })
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 3 || events[0].Kind != SessionEventFileOutput || events[1].Kind != SessionEventTextDelta || events[2].Kind != SessionEventPromptCompleted {
 		t.Fatalf("events = %#v, want file output, text, and prompt completion", events)
 	}
@@ -871,7 +871,7 @@ func TestAppServerManagerPromptReplaysLegacyRolloutResponseItems(t *testing.T) {
 	}
 
 	waitForRuntime(t, func() bool { return len(sink.snapshot()) >= 4 })
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	kinds := make([]SessionEventKind, 0, len(events))
 	for _, event := range events {
 		kinds = append(kinds, event.Kind)
@@ -918,7 +918,7 @@ func TestAppServerManagerPromptHandlesLargeCommandOutput(t *testing.T) {
 	}
 
 	waitForRuntime(t, func() bool { return len(sink.snapshot()) >= 4 })
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) < 4 {
 		t.Fatalf("events len = %d, want at least 4: %#v", len(events), events)
 	}
@@ -958,7 +958,7 @@ func TestAppServerManagerPromptPublishesStructuredDeltaBeforeCompletion(t *testi
 		t.Fatalf("StopReason = %q, want %q", resp.StopReason, StopReasonEndTurn)
 	}
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	want := []SessionEventKind{
 		SessionEventToolCallStart,
 		SessionEventStructuredOutput,
@@ -1073,7 +1073,7 @@ func TestAppServerManagerPromptFailedTurnPublishesFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "model failed") {
 		t.Fatalf("Prompt() error = %v, want model failed", err)
 	}
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Kind != SessionEventPromptFailed || !strings.Contains(events[0].Error, "model failed") {
 		t.Fatalf("events = %#v, want one prompt failed event", events)
 	}
@@ -1111,7 +1111,7 @@ func TestAppServerManagerPromptNoProgressTimeout(t *testing.T) {
 		strings.Contains(err.Error(), "runtime_id") {
 		t.Fatalf("Prompt() error = %v, want concise canceled-turn message", err)
 	}
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Kind != SessionEventPromptFailed {
 		t.Fatalf("events = %#v, want one prompt failed event", events)
 	}
@@ -1180,7 +1180,7 @@ func TestAppServerManagerMCPToolCallCountsAsProgress(t *testing.T) {
 		t.Fatalf("Prompt() error = %v, want canceled turn after inactivity", err)
 	}
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) < 2 {
 		t.Fatalf("events = %#v, want MCP tool event and prompt failure", events)
 	}
@@ -1288,7 +1288,7 @@ func TestAppServerManagerPromptAutoAcceptDoesNotBlockLifecycle(t *testing.T) {
 	}
 
 	waitForRuntime(t, func() bool { return len(sink.snapshot()) >= 2 })
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 ||
 		events[0].Kind != SessionEventTextDelta ||
 		events[1].Kind != SessionEventPromptCompleted {
@@ -1333,7 +1333,7 @@ func TestAppServerEventAdapterRawTextAndToolEvents(t *testing.T) {
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 3 {
 		t.Fatalf("events len = %d, want 3: %#v", len(events), events)
 	}
@@ -1390,7 +1390,7 @@ func TestAppServerEventAdapterStructuredOutputRawAndLegacyRoutes(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			manager, live, sink := testAppServerEventAdapter(t)
 			test.run(manager, live)
-			events := sink.snapshot()
+			events := withoutContextUsage(sink.snapshot())
 			if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput || events[1].Kind != SessionEventToolCallUpdate {
 				t.Fatalf("events = %#v, want structured output then cleaned tool update", events)
 			}
@@ -1442,7 +1442,7 @@ func TestAppServerEventAdapterStreamsAgentMessageDeltasWithoutCompletedDuplicate
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 {
 		t.Fatalf("events = %#v, want only two agent message deltas", events)
 	}
@@ -1489,7 +1489,7 @@ func TestAppServerEventAdapterIgnoresStaleCompletionForNewTurn(t *testing.T) {
 	if len(waiter.ch) != 0 {
 		t.Fatalf("stale completion reached new waiter: %#v", <-waiter.ch)
 	}
-	if events := sink.snapshot(); len(events) != 0 {
+	if events := withoutContextUsage(sink.snapshot()); len(events) != 0 {
 		t.Fatalf("stale completion leaked as runtime event: %#v", events)
 	}
 
@@ -1623,7 +1623,7 @@ func TestAppServerEventAdapterWaitsForTurnCompletionWhenProviderOmitsAgentMessag
 		t.Fatal("turn/completed did not finish the turn")
 	}
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 5 {
 		t.Fatalf("events = %#v, want three text deltas and two MCP events", events)
 	}
@@ -1656,7 +1656,7 @@ func TestAppServerEventAdapterDoesNotClassifyUnknownAgentDeltaAsFinal(t *testing
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Payload.(map[string]any)["phase"] != "unknown" {
 		t.Fatalf("events = %#v, want unknown phase preserved for downstream filtering", events)
 	}
@@ -1682,7 +1682,7 @@ func TestAppServerEventAdapterFallsBackToCompletedFinalAfterUnknownDelta(t *test
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 ||
 		events[0].Payload.(map[string]any)["phase"] != "unknown" ||
 		events[1].Payload.(map[string]any)["phase"] != "final_answer" {
@@ -1711,7 +1711,7 @@ func TestAppServerEventAdapterDecodesStructuredOutputAfterStreamedDeltas(t *test
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Kind != SessionEventStructuredOutput {
 		t.Fatalf("events = %#v, want decoded structured artifact without raw text delta", events)
 	}
@@ -1744,7 +1744,7 @@ func TestAppServerEventAdapterKeepsLegacyFinalAfterUnclassifiedTypedDeltas(t *te
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 3 ||
 		events[0].Payload.(map[string]any)["phase"] != "unknown" ||
 		events[1].Payload.(map[string]any)["phase"] != "unknown" ||
@@ -1784,7 +1784,7 @@ func TestAppServerEventAdapterSuppressesResponseItemFinalAfterTypedFinalDeltas(t
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 || events[0].Text != "hello" || events[1].Text != " world" {
 		t.Fatalf("events = %#v, want typed deltas without response_item duplicate", events)
 	}
@@ -1860,7 +1860,7 @@ func TestAppServerEventAdapterAccumulatesCanonicalCommandOutputDeltas(t *testing
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput || events[1].Kind != SessionEventToolCallUpdate {
 		t.Fatalf("events = %#v, want structured output before completed tool update", events)
 	}
@@ -1896,7 +1896,7 @@ func TestAppServerEventAdapterDeltaDecoderSurvivesLargeOrdinaryOutput(t *testing
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput {
 		t.Fatalf("events = %#v, want structured link after oversized ordinary stdout", events)
 	}
@@ -1925,7 +1925,7 @@ func TestAppServerEventAdapterFailedDeltaOutputDoesNotActivateStructuredRecords(
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != "failed" {
 		t.Fatalf("events = %#v, want failed tool update only", events)
 	}
@@ -1954,7 +1954,7 @@ func TestAppServerEventAdapterAggregatedOutputWinsOverDeltaFallback(t *testing.T
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput {
 		t.Fatalf("events = %#v, want one structured output and tool update", events)
 	}
@@ -2018,7 +2018,7 @@ func TestAppServerEventAdapterRoutesLegacyStructuredOutputToActiveConversationTu
 		"item": map[string]any{"id": "step-3-item", "type": "commandExecution", "status": "completed", "aggregatedOutput": ""},
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 3 {
 		t.Fatalf("events = %#v, want structured legacy output plus legacy and raw tool updates", events)
 	}
@@ -2048,7 +2048,7 @@ func TestAppServerEventAdapterRoutesAssistantStructuredOutput(t *testing.T) {
 		"item": map[string]any{"id": "assistant-question", "type": "agentMessage", "text": text},
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput || events[1].Kind != SessionEventTextDelta {
 		t.Fatalf("events = %#v, want structured request followed by cleaned assistant text", events)
 	}
@@ -2069,7 +2069,7 @@ func TestAppServerEventAdapterIgnoresStructuredOutputFromFailedLegacyCommand(t *
 	manager.handleLegacyResponseItemEvent("runtime-1", live, map[string]any{
 		"type": "function_call_output", "call_id": "failed-tool", "output": record + "\nProcess exited with code 1",
 	})
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != "failed" {
 		t.Fatalf("events = %#v, want failed tool update only", events)
 	}
@@ -2125,7 +2125,7 @@ func TestAppServerEventAdapterRawFileChangeAndFailures(t *testing.T) {
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 4 {
 		t.Fatalf("events len = %d, want 4: %#v", len(events), events)
 	}
@@ -2161,7 +2161,7 @@ func TestAppServerEventAdapterLegacyEvents(t *testing.T) {
 		})
 	}
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	kinds := make([]SessionEventKind, 0, len(events))
 	for _, event := range events {
 		kinds = append(kinds, event.Kind)
@@ -2214,7 +2214,7 @@ func TestAppServerEventAdapterLegacyTurnAbortedAcceptsStructuredOutputBoundary(t
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for legacy structured-output boundary")
 	}
-	if events := sink.snapshot(); len(events) != 0 {
+	if events := withoutContextUsage(sink.snapshot()); len(events) != 0 {
 		t.Fatalf("events = %#v, want no fallback prompt event while waiter is active", events)
 	}
 }
@@ -2240,7 +2240,7 @@ func TestAppServerEventAdapterLegacyResponseItemExecCommandFallback(t *testing.T
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 {
 		t.Fatalf("events len = %d, want 2: %#v", len(events), events)
 	}
@@ -2284,7 +2284,7 @@ func TestAppServerEventAdapterCanonicalExecCommandSuppressesResponseItemFallback
 		Params: mustJSONRaw(t, map[string]any{"type": "function_call_output", "call_id": "call-1", "output": "duplicate"}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 {
 		t.Fatalf("events len = %d, want only canonical begin/end: %#v", len(events), events)
 	}
@@ -2330,7 +2330,7 @@ func TestAppServerEventAdapterResponseItemFallbackDoesNotLockOutRawEvents(t *tes
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 3 {
 		t.Fatalf("events len = %d, want fallback tool, raw final, raw completed: %#v", len(events), events)
 	}
@@ -2384,7 +2384,7 @@ func TestAppServerEventAdapterResponseItemMessageFallbackDedupesEventMsg(t *test
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 {
 		t.Fatalf("events len = %d, want canonical final plus response_item-only final: %#v", len(events), events)
 	}
@@ -2426,7 +2426,7 @@ func TestAppServerEventAdapterProtocolDetectionAndSubagentFilter(t *testing.T) {
 		}),
 	})
 
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Text != "main" {
 		t.Fatalf("events = %#v, want only main-thread raw event", events)
 	}
@@ -2515,8 +2515,12 @@ func TestAppServerParamsOmitReasoningForModelDefault(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.Profile.ReasoningEffort = "auto"
 
-	if config, ok := appServerThreadStartParams(spec, false)["config"]; ok {
-		t.Fatalf("thread config = %v, want omitted", config)
+	values := appServerThreadStartParams(spec, false)["config"].(map[string]any)
+	if _, ok := values["model_reasoning_effort"]; ok {
+		t.Fatalf("reasoning config should be omitted: %v", values)
+	}
+	if values["model_context_window"] != int64(200000) || values["model_auto_compact_token_limit"] != int64(150000) {
+		t.Fatalf("context config missing: %v", values)
 	}
 	turn := appServerTurnStartParams(spec, "thread-1", "hello")
 	if effort, ok := turn["effort"]; ok {
@@ -2873,7 +2877,7 @@ func TestAppServerPublishFileDynamicToolEmitsTypedFileEvent(t *testing.T) {
 	if result["success"] != true || len(items) != 1 || items[0]["type"] != "inputText" {
 		t.Fatalf("dynamic tool response = %#v", response)
 	}
-	events := sink.snapshot()
+	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 1 || events[0].Kind != activity.RuntimeEventFileOutput || events[0].RuntimeID != "runtime-1" || events[0].SessionID != "thread-1" || events[0].TurnID != "turn-1" || events[0].ToolCallID != "call-1" {
 		t.Fatalf("file events = %#v", events)
 	}
@@ -2914,7 +2918,7 @@ func TestAppServerPublishFileDynamicToolRejectsUnsafeArguments(t *testing.T) {
 			if result["success"] != false {
 				t.Fatalf("response = %#v, want typed failure", response)
 			}
-			if events := sink.snapshot(); len(events) != 0 {
+			if events := withoutContextUsage(sink.snapshot()); len(events) != 0 {
 				t.Fatalf("unsafe file events = %#v", events)
 			}
 		})
@@ -3791,4 +3795,14 @@ func TestImagePromptPolicyAppliesToStartedAndResumedThreads(t *testing.T) {
 			}
 		}
 	}
+}
+
+func withoutContextUsage(events []SessionEvent) []SessionEvent {
+	out := make([]SessionEvent, 0, len(events))
+	for _, event := range events {
+		if string(event.Kind) != "context_usage" {
+			out = append(out, event)
+		}
+	}
+	return out
 }

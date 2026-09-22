@@ -228,6 +228,7 @@ describe("ModelProviderPage", () => {
         base_url: "http://127.0.0.1:4000/v1",
         display_name: "Team OpenAI",
         models: ["gpt-4.1"],
+        model_overrides: {},
       }),
     );
   });

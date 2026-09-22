@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { errorMessage } from "@/api/client";
 import { stopParticipantWorkRequest } from "@/api/im";
 import type { ConversationWorkingParticipant } from "@/components/business/ConversationPane";
-import type { AgentLike } from "@/models/agents";
+import { agentRuntimeKind, type AgentLike } from "@/models/agents";
 import {
   agentMatchesUser,
   buildUsersById,
@@ -156,6 +156,11 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
           const stopRequest = stopRequests[lease.lease_id];
           const thinking = lease.status?.phase === "thinking" ? (lease.status.thinking?.text ?? "") : undefined;
           result.push({
+            contextUsage: lease.status?.context_usage,
+            showContextUsage:
+              agentRuntimeKind(agent) === "codex" ||
+              agentRuntimeKind(agent) === "dsh" ||
+              Boolean(lease.status?.context_usage),
             canStop: lease.capabilities?.includes("turn_stop_v1") === true,
             id,
             leaseID: lease.lease_id,

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"csgclaw/internal/modelcap"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,17 +14,19 @@ const (
 )
 
 type ProviderConfig struct {
-	DisplayName     string            `json:"display_name,omitempty"`
-	Preset          string            `json:"preset,omitempty"`
-	BaseURL         string            `json:"base_url,omitempty"`
-	APIKey          string            `json:"api_key,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	Models          []string          `json:"models,omitempty"`
-	ImageModels     []string          `json:"image_models,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
-	Status          string            `json:"status,omitempty"`
-	Message         string            `json:"message,omitempty"`
-	LastCheckedAt   string            `json:"last_checked_at,omitempty"`
+	ModelMetadata   map[string]modelcap.Metadata `json:"model_metadata,omitempty"`
+	ModelOverrides  map[string]modelcap.Metadata `json:"model_overrides,omitempty"`
+	DisplayName     string                       `json:"display_name,omitempty"`
+	Preset          string                       `json:"preset,omitempty"`
+	BaseURL         string                       `json:"base_url,omitempty"`
+	APIKey          string                       `json:"api_key,omitempty"`
+	Headers         map[string]string            `json:"headers,omitempty"`
+	Models          []string                     `json:"models,omitempty"`
+	ImageModels     []string                     `json:"image_models,omitempty"`
+	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
+	Status          string                       `json:"status,omitempty"`
+	Message         string                       `json:"message,omitempty"`
+	LastCheckedAt   string                       `json:"last_checked_at,omitempty"`
 }
 
 type ModelValidationError struct {
@@ -117,6 +120,8 @@ func (c SandboxConfig) Validate() error {
 
 func (c ProviderConfig) Resolved() ProviderConfig {
 	out := c
+	out.ModelMetadata = modelcap.Clone(c.ModelMetadata)
+	out.ModelOverrides = modelcap.Clone(c.ModelOverrides)
 	out.DisplayName = strings.TrimSpace(out.DisplayName)
 	out.Preset = strings.ToLower(strings.TrimSpace(out.Preset))
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")

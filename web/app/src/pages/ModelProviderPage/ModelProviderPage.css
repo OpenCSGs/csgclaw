@@ -744,12 +744,11 @@
   color: var(--text);
 }
 
-/* ── Model cards grid layout (skill page style) ── */
+/* Model list with aligned capacity and action columns. */
 .model-provider-model-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 16px;
-  row-gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   min-height: 0;
   overflow-y: auto;
   padding: 2px 0 16px;
@@ -796,4 +795,162 @@
 
 :root[data-theme="dark"] .model-provider-model-card:hover {
   background: var(--gray-800);
+}
+
+.model-provider-model-card:has(.model-context-cell),
+.model-provider-model-card:has(.model-image-kind) {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.model-context-cell {
+  display: grid;
+  grid-template-columns: 160px 88px 28px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.model-context-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.model-context-edit svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.model-context-edit:hover,
+.model-context-edit:focus-visible {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  outline: none;
+}
+.model-context-cell.is-changed .model-context-edit {
+  border-color: var(--warning);
+}
+.model-context-source {
+  min-width: 0;
+  line-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.model-context-source.is-user {
+  color: var(--primary);
+  font-weight: 500;
+}
+.model-context-source.is-pending {
+  color: var(--warning);
+}
+.model-context-reset {
+  width: 28px;
+  height: 28px;
+}
+.model-context-popover {
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 16px;
+}
+.model-context-popover form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.model-context-editor-model {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.model-context-inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 8px;
+}
+.model-context-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.model-context-hint,
+.model-context-error {
+  font-size: 12px;
+  margin: 0;
+  color: var(--muted);
+  min-height: 18px;
+}
+.model-context-error {
+  color: var(--danger);
+}
+.model-provider-footer-feedback {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success-600);
+  font-size: 13px;
+  min-width: 0;
+}
+.model-provider-footer-feedback.is-pending {
+  color: var(--warning);
+}
+@media (max-width: 640px) {
+  .model-provider-model-card:has(.model-context-cell),
+  .model-provider-model-card:has(.model-image-kind) {
+    grid-template-columns: minmax(0, 1fr) 180px;
+    gap: 8px;
+    padding-inline: 4px;
+  }
+  .model-context-cell {
+    grid-template-columns: minmax(0, 1fr) 28px;
+    gap: 4px;
+  }
+  .model-context-source {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    white-space: normal;
+  }
+  .model-provider-footer-feedback {
+    font-size: 12px;
+  }
+}
+
+.model-provider-footer-feedback.has-error {
+  color: var(--danger);
+}
+.model-provider-footer-feedback > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-image-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.model-context-source.is-error {
+  color: var(--danger);
 }

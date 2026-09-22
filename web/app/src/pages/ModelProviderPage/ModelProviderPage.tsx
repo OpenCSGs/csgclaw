@@ -1,5 +1,7 @@
+import { ModelMetadataFields } from "./ModelMetadataFields";
+import { modelOverridesEqual, type ModelOverride } from "@/models/modelMetadata";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2, Image as ImageIcon } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
@@ -29,6 +31,7 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import "./ModelProviderPage.css";
 
 type ProviderDraft = {
+  modelOverrides: Record<string, ModelOverride>;
   apiKey: string;
   baseURL: string;
   displayName: string;
@@ -43,6 +46,7 @@ type ProviderCheckState = {
 
 function providerToDraft(provider: ModelProvider | null | undefined): ProviderDraft {
   return {
+    modelOverrides: provider?.model_overrides || {},
     apiKey: "",
     baseURL: provider?.base_url || "",
     displayName: provider?.display_name || provider?.id || "",
@@ -73,9 +77,11 @@ export function ModelProviderPage() {
   const providerMessage = provider?.message;
   const providerStatus = provider?.status || "unknown";
   const [draft, setDraft] = useState<ProviderDraft>(() => providerToDraft(provider));
+  const [savedDraft, setSavedDraft] = useState<ProviderDraft>(() => providerToDraft(provider));
   const [checkState, setCheckState] = useState<ProviderCheckState>(() => providerToCheckState(provider));
   const [busy, setBusy] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
+  const [checkFeedback, setCheckFeedback] = useState("");
   const [error, setError] = useState("");
   const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
@@ -114,6 +120,7 @@ export function ModelProviderPage() {
           }));
         }
         await refreshWorkspaceModelProviders();
+        return result;
       } catch (err) {
         if (options.showError) {
           setError(errorMessage(err, "Check failed"));
@@ -133,6 +140,8 @@ export function ModelProviderPage() {
     }
     draftSourceKeyRef.current = draftSourceKey;
     setDraft(providerToDraft(provider));
+    setSavedDraft(providerToDraft(provider));
+    setCheckFeedback("");
     setSaveStatus("");
     setError("");
   }, [draftSourceKey, provider]);
@@ -141,7 +150,11 @@ export function ModelProviderPage() {
     if (!isOpenCSG) {
       return;
     }
-    setDraft(providerToDraft(provider));
+    setDraft((current) => ({
+      ...current,
+      baseURL: provider?.base_url || "",
+      modelsText: (provider?.models || []).join("\n"),
+    }));
   }, [isOpenCSG, provider]);
 
   useEffect(() => {
@@ -218,7 +231,15 @@ export function ModelProviderPage() {
   const opencsgSignedIn = isOpenCSG ? isAuthenticated(authStatus) : true;
   const effectiveTone = isOpenCSG && !opencsgSignedIn ? "warning" : providerStatusTone(checkState.status, provider);
   const providerSubtitle = isBuiltinCLI ? provider.kind : provider.base_url || draft.baseURL || provider.kind;
-  const modelList = parseModelProviderModelsText(draft.modelsText);
+  const imageModels = new Set(provider.imageModels || []);
+  const modelList = Array.from(new Set([...parseModelProviderModelsText(draft.modelsText), ...imageModels])).sort(
+    (a, b) => Number(imageModels.has(a)) - Number(imageModels.has(b)),
+  );
+  const dirty =
+    draft.apiKey !== savedDraft.apiKey ||
+    draft.baseURL !== savedDraft.baseURL ||
+    draft.displayName !== savedDraft.displayName ||
+    !modelOverridesEqual(draft.modelOverrides, savedDraft.modelOverrides);
 
   const showOpenCSGSignIn = isOpenCSG && !opencsgSignedIn;
   const checkMessage =
@@ -234,7 +255,15 @@ export function ModelProviderPage() {
         : checkState.status;
 
   async function runCheck() {
-    await runCheckForDraft(draft.baseURL, draft.apiKey, { showError: true });
+    setCheckFeedback("");
+    const result = await runCheckForDraft(draft.baseURL, draft.apiKey, { showError: true });
+    if (result?.status === "connected") setCheckFeedback(t("modelContextChecked"));
+    else if (result) setError(result.message || t("modelContextCheckFailed"));
+  }
+
+  async function refreshModelMetadata() {
+    const result = await runCheckForDraft(draft.baseURL, draft.apiKey);
+    if (result?.status !== "connected") throw new Error(result?.message || t("modelContextCheckFailed"));
   }
 
   async function saveProvider() {
@@ -245,16 +274,25 @@ export function ModelProviderPage() {
     setError("");
     setSaveStatus("");
     try {
-      await updateModelProvider(provider.id, {
-        display_name: provider.builtin ? undefined : draft.displayName,
-        base_url: draft.baseURL,
-        api_key: draft.apiKey,
-        models: parseModelProviderModelsText(draft.modelsText),
-      });
+      const submitted = draft;
+      await updateModelProvider(
+        provider.id,
+        isOpenCSG
+          ? { model_overrides: draft.modelOverrides }
+          : {
+              display_name: provider.builtin ? undefined : draft.displayName,
+              base_url: draft.baseURL,
+              api_key: draft.apiKey,
+              models: parseModelProviderModelsText(draft.modelsText),
+              model_overrides: draft.modelOverrides,
+            },
+      );
       await refreshWorkspaceModelProviders();
+      setSavedDraft({ ...submitted, apiKey: "" });
+      setDraft((current) => ({ ...current, apiKey: current.apiKey === submitted.apiKey ? "" : current.apiKey }));
       setSaveStatus(t("profileSavedToast"));
     } catch (err) {
-      setError(errorMessage(err, "Save failed"));
+      setError(errorMessage(err, t("modelContextSaveFailed")));
     } finally {
       setBusy("");
     }
@@ -386,7 +424,7 @@ export function ModelProviderPage() {
                 <span>{error}</span>
               </DismissibleAlert>
             ) : null}
-            {saveStatus ? <div className="model-provider-save-status">{saveStatus}</div> : null}
+
             {showOpenCSGSignIn ? (
               <DismissibleAlert
                 className="model-provider-notice warning opencsg-signin-warning"
@@ -484,6 +522,38 @@ export function ModelProviderPage() {
                   </p>
                 </div>
                 <ModelProviderModelList
+                  renderDetails={(model) =>
+                    provider.imageModels?.includes(model) ? (
+                      <Tooltip content={t("modelContextImageHint")}>
+                        <span className="model-image-kind">
+                          <ImageIcon size={14} aria-hidden="true" />
+                          {t("modelContextImage")}
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <ModelMetadataFields
+                        model={model}
+                        onRefresh={refreshModelMetadata}
+                        metadata={provider.model_metadata?.[model]}
+                        automatic={provider.model_defaults?.[model]}
+                        changed={
+                          (draft.modelOverrides[model]?.context_window || 0) !==
+                          (savedDraft.modelOverrides[model]?.context_window || 0)
+                        }
+                        disabled={Boolean(busy)}
+                        value={draft.modelOverrides[model]}
+                        t={t}
+                        onChange={(value) =>
+                          setDraft((current) => {
+                            const modelOverrides = { ...current.modelOverrides };
+                            if (value) modelOverrides[model] = value;
+                            else delete modelOverrides[model];
+                            return { ...current, modelOverrides };
+                          })
+                        }
+                      />
+                    )
+                  }
                   emptyLabel={t("modelProviderNoModels")}
                   modelListLabel={t("modelProviderModels")}
                   models={modelList}
@@ -508,17 +578,56 @@ export function ModelProviderPage() {
                 </span>
               </Tooltip>
             ) : null}
-            <div style={{ flex: 1 }} />
-            <Button variant="secondaryGray" onClick={runCheck} disabled={Boolean(busy)}>
+            <div
+              className={`model-provider-footer-feedback${error ? " has-error" : dirty ? " is-pending" : ""}`}
+              role="status"
+              aria-live="polite"
+            >
+              {busy === "save" ? (
+                t("modelContextSaving")
+              ) : busy === "check" ? (
+                t("profileLoadingModels")
+              ) : error ? (
+                <span title={error}>{error}</span>
+              ) : dirty ? (
+                t("modelContextUnsaved")
+              ) : saveStatus ? (
+                <>
+                  <CheckCircle2 size={15} aria-hidden="true" />
+                  {saveStatus}
+                </>
+              ) : (
+                checkFeedback
+              )}
+            </div>
+            <Button
+              variant="secondaryGray"
+              onClick={runCheck}
+              disabled={Boolean(busy)}
+              loading={busy === "check"}
+              loadingLabel={t("profileLoadingModels")}
+            >
               <RefreshCw size={16} aria-hidden="true" />
               {busy === "check" ? t("profileLoadingModels") : t("modelProviderCheck")}
             </Button>
-            {!isOpenCSG ? (
-              <Button variant="primary" onClick={saveProvider} disabled={Boolean(busy)}>
+            <Button
+              variant="primary"
+              onClick={saveProvider}
+              disabled={Boolean(busy) || showOpenCSGSignIn}
+              loading={busy === "save"}
+              loadingLabel={t("modelContextSaving")}
+            >
+              {saveStatus && !dirty ? (
+                <CheckCircle2 size={16} aria-hidden="true" />
+              ) : (
                 <Save size={16} aria-hidden="true" />
-                {busy === "save" ? t("profileLoadingModels") : t("agentUpdateSave")}
-              </Button>
-            ) : null}
+              )}
+              {busy === "save"
+                ? t("modelContextSaving")
+                : saveStatus && !dirty
+                  ? t("profileSavedToast")
+                  : t("agentUpdateSave")}
+            </Button>
             {showOpenCSGSignIn ? (
               <Button variant="primary" onClick={() => void controller.sidebarProps?.onLogin?.()} disabled={authBusy}>
                 <LogIn size={16} aria-hidden="true" />

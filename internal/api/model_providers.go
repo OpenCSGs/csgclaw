@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/modelcap"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -17,14 +18,15 @@ import (
 var appCheckModelProvider = agent.CheckModelProvider
 
 type modelProviderRequest struct {
-	ID              string            `json:"id,omitempty"`
-	DisplayName     string            `json:"display_name,omitempty"`
-	Preset          string            `json:"preset,omitempty"`
-	BaseURL         string            `json:"base_url,omitempty"`
-	APIKey          string            `json:"api_key,omitempty"`
-	Headers         map[string]string `json:"headers,omitempty"`
-	Models          []string          `json:"models,omitempty"`
-	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
+	ModelOverrides  map[string]modelcap.Metadata `json:"model_overrides,omitempty"`
+	ID              string                       `json:"id,omitempty"`
+	DisplayName     string                       `json:"display_name,omitempty"`
+	Preset          string                       `json:"preset,omitempty"`
+	BaseURL         string                       `json:"base_url,omitempty"`
+	APIKey          string                       `json:"api_key,omitempty"`
+	Headers         map[string]string            `json:"headers,omitempty"`
+	Models          []string                     `json:"models,omitempty"`
+	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
 }
 
 func (h *Handler) handleModelProviders(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +64,10 @@ func (h *Handler) createModelProvider(w http.ResponseWriter, r *http.Request) {
 	var req modelProviderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := validateModelOverrides(req.ModelOverrides); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
 		return
 	}
 	cfg, path, err := h.loadBootstrapConfig()
@@ -104,6 +110,10 @@ func (h *Handler) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 	var req modelProviderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+	if err := validateModelOverrides(req.ModelOverrides); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]string{"code": "invalid_request_error", "message": err.Error()}})
 		return
 	}
 	cfg, path, err := h.loadBootstrapConfig()
@@ -269,6 +279,12 @@ func (h *Handler) refreshOpenCSGModelProvider(ctx context.Context) error {
 
 func providerConfigFromRequest(existing config.ProviderConfig, req modelProviderRequest, preserveSecret bool) config.ProviderConfig {
 	out := existing.Resolved()
+	if req.ModelOverrides != nil {
+		out.ModelOverrides = modelcap.Clone(req.ModelOverrides)
+	}
+	if req.BaseURL != "" && strings.TrimRight(strings.TrimSpace(req.BaseURL), "/") != out.BaseURL {
+		out.ModelMetadata = nil
+	}
 	if strings.TrimSpace(req.DisplayName) != "" {
 		out.DisplayName = strings.TrimSpace(req.DisplayName)
 	}
@@ -356,4 +372,16 @@ func (h *Handler) modelProviderInUse(llm config.LLMConfig, id string) bool {
 		}
 	}
 	return false
+}
+
+func validateModelOverrides(values map[string]modelcap.Metadata) error {
+	for id, m := range values {
+		if strings.TrimSpace(id) == "" {
+			return fmt.Errorf("model ID is required")
+		}
+		if err := m.Validate(); err != nil {
+			return fmt.Errorf("model %q: %w", id, err)
+		}
+	}
+	return nil
 }
