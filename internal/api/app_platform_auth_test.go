@@ -430,6 +430,73 @@ func TestAppNoAuthAllowsCrossSiteConnectorOAuthCallbacks(t *testing.T) {
 	}
 }
 
+func TestAppNoAuthAllowsCrossSiteOpenCSGCallbacks(t *testing.T) {
+	h, _, _, _, _ := newAppPlatformAuthFixture(t)
+	server := httptest.NewServer(h.Routes())
+	defer server.Close()
+	client := server.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	for _, origin := range []string{"https://opencsg.com", "https://opencsg-stg.com"} {
+		t.Run(origin, func(t *testing.T) {
+			send := func() *http.Response {
+				t.Helper()
+				req, err := http.NewRequest(http.MethodGet, server.URL+authCallbackPath+"?auth_state=invalid-repro", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Header.Set("Origin", origin)
+				req.Header.Set("Referer", origin+"/")
+				req.Header.Set("Sec-Fetch-Site", "cross-site")
+				req.Header.Set("Sec-Fetch-Mode", "navigate")
+				req.Header.Set("Sec-Fetch-Dest", "document")
+				resp, err := client.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = resp.Body.Close() })
+				return resp
+			}
+			// Invalid credentials must reach the real callback validator.
+			if resp := send(); resp.StatusCode != http.StatusBadRequest {
+				t.Fatalf("invalid callback status = %d, want 400", resp.StatusCode)
+			}
+			// Successful authentication must preserve the settings redirect.
+			restore := stubAuthCallback(func(*http.Request, string) (string, error) {
+				return server.URL + "/#/settings", nil
+			})
+			defer restore()
+			resp := send()
+			if resp.StatusCode != http.StatusFound || resp.Header.Get("Location") != server.URL+"/#/settings?auth_result=success" {
+				t.Fatalf("successful callback status = %d, location = %q", resp.StatusCode, resp.Header.Get("Location"))
+			}
+		})
+	}
+}
+
+func TestAppCrossSiteCallbackExemptionIsScoped(t *testing.T) {
+	h, _, _, _, _ := newAppPlatformAuthFixture(t)
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodPost, authCallbackPath},
+		{http.MethodHead, authCallbackPath},
+		{http.MethodGet, authCallbackPath + "/extra"},
+		{http.MethodGet, "/api/v1/auth/status"},
+		{http.MethodPost, "/api/v1/auth/login"},
+		{http.MethodPost, "/api/v1/auth/logout"},
+		{http.MethodPost, githubConnectorCallbackPath},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.Header.Set("Sec-Fetch-Site", "cross-site")
+			rec := httptest.NewRecorder()
+			h.Routes().ServeHTTP(rec, req)
+			if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "origin_denied") {
+				t.Fatalf("status = %d, body = %s; want origin_denied", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestAgentMCPRejectsForeignTokensAndSessions(t *testing.T) {
 	h, alice, bob, aliceToken, bobToken := newAppPlatformAuthFixture(t)
 	invoke := func(agentID, token, sessionID, body string) *httptest.ResponseRecorder {

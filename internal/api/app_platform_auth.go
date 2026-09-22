@@ -92,11 +92,11 @@ func appOriginPort(origin *url.URL) string {
 	return "80"
 }
 
-func isConnectorOAuthCallback(r *http.Request) bool {
+func isAppAuthenticationCallback(r *http.Request) bool {
 	if r.Method != http.MethodGet {
 		return false
 	}
-	return r.URL.Path == githubConnectorCallbackPath
+	return r.URL.Path == authCallbackPath || r.URL.Path == githubConnectorCallbackPath
 }
 
 func (h *Handler) authorizeAppPlatformRequests(next http.Handler) http.Handler {
@@ -126,10 +126,10 @@ func (h *Handler) authorizeAppPlatformRequests(next http.Handler) http.Handler {
 			writeCodedAPIError(w, http.StatusUnauthorized, "unauthorized", "Invalid Agent credential")
 			return
 		}
-		// OAuth providers return through a cross-site top-level navigation. The
-		// callback handlers validate the one-time state value before exchanging
-		// the authorization code, so these exact GET routes must reach them.
-		if isConnectorOAuthCallback(r) {
+		// Sign-in providers return through a cross-site top-level navigation.
+		// These exact GET routes must reach their callback handlers, which
+		// validate the provider credentials or OAuth state.
+		if isAppAuthenticationCallback(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
