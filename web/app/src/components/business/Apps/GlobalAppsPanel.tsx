@@ -68,10 +68,10 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
     };
   }, [reload]);
   const editing = items.find((item) => item.installation_id === resourceId) || null;
-  const definition = adding || definitions.find((d) => d.app_id === (editing?.app_id || search.get("add_app")));
+  const definition = adding || definitions.find((d) => d.app_id === (editing?.app_id || search.get("add_connector")));
   const close = () => {
     setAdding(null);
-    void navigate("/apps");
+    void navigate("/connectors");
   };
   async function mutate(operation: () => Promise<unknown>) {
     setBusy(true);
@@ -131,7 +131,7 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
                 {app.bindings.map((binding) => (
                   <li key={binding.installation_id}>
                     <a
-                      href={`#/agents/${encodeURIComponent(binding.agent_id)}?tab=apps&app=${encodeURIComponent(binding.installation_id)}`}
+                      href={`#/agents/${encodeURIComponent(binding.agent_id)}?tab=connectors&connector=${encodeURIComponent(binding.installation_id)}`}
                     >
                       {binding.agent_name || binding.agent_id}
                     </a>
@@ -141,7 +141,7 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
               </ul>
             ) : null}
             <div className={styles.actions}>
-              <Button size="sm" onClick={() => void navigate(`/apps/${app.installation_id}`)}>
+              <Button size="sm" onClick={() => void navigate(`/connectors/${app.installation_id}`)}>
                 {t("appSettings")}
               </Button>
               <Button
@@ -187,7 +187,6 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
           globalResource
           definition={definition}
           existing={adding ? null : editing}
-          hasFeishuChannel={false}
           t={t}
           onClose={close}
           onProbe={(payload) =>

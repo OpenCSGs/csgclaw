@@ -10,6 +10,7 @@ const GUIDE_STORAGE_KEY = "csgclaw:floating-chat:manager-guide:v1";
 
 const labels: Record<string, string> = {
   cancel: "Cancel",
+  addAttachment: "Add attachment",
   channelTools: "Channel tools",
   clearRoomMessages: "Clear messages",
   clearRoomMessagesAgentScopeHint: "Clear visible chat messages.",
@@ -17,20 +18,11 @@ const labels: Record<string, string> = {
   close: "Close",
   composerAdd: "Add",
   composerAddContent: "Add content",
-  composerConnectors: "Connectors",
   composerFiles: "Files",
   composerTip: "Enter to send · Shift + Enter for a new line",
   conversationWorkingPreparingReply: "Preparing a reply",
   conversationWorkingStop: "Stop",
   conversationWorkingStopAria: "Stop {name}'s current turn",
-  connectorConnect: "Connect",
-  connectorConnected: "Connected",
-  connectorDisconnect: "Disconnect",
-  connectorGitHub: "GitHub",
-  connectorGitLab: "GitLab",
-  appOpenApps: "Open Apps",
-  connectorManage: "Manage",
-  connectorNotConnected: "Not connected",
   deleteRoom: "Delete room",
   deleteRoomConfirm: "Confirm delete",
   deleteRoomConfirmBody: "Delete this room.",
@@ -253,8 +245,7 @@ describe("FloatingChat manager prompts", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("opens Manager Apps from the floating chat GitLab entry", async () => {
-    const onManageApps = vi.fn();
+  it("keeps the floating chat attachment menu free of legacy connectors", async () => {
     const user = userEvent.setup();
     const conversation: IMConversation = {
       id: "room-manager",
@@ -266,9 +257,7 @@ describe("FloatingChat manager prompts", () => {
     render(
       <FloatingChat
         avatarFallback="M"
-        chatProps={managerChatProps(conversation, {
-          onManageApps,
-        })}
+        chatProps={managerChatProps(conversation, {})}
         locale="en"
         open={true}
         t={t}
@@ -279,8 +268,9 @@ describe("FloatingChat manager prompts", () => {
 
     await user.click(screen.getByRole("button", { name: "Add content" }));
 
-    await user.click(screen.getByRole("button", { name: "Open Apps" }));
-    expect(onManageApps).toHaveBeenCalledOnce();
+    expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
+    expect(screen.queryByText("GitLab")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add attachment" })).toBeVisible();
     expect(screen.queryByLabelText("Personal Access Token")).not.toBeInTheDocument();
   });
 

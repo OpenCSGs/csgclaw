@@ -23,7 +23,6 @@ import { useUpgradeController } from "./useUpgradeController";
 import { useConfigController } from "./useConfigController";
 import { useAuthController } from "./useAuthController";
 import { useOpenCSGAuthGuard } from "./useOpenCSGAuthGuard";
-import { useConnectorController } from "./useConnectorController";
 import { useAgentController } from "./useAgentController";
 import { useConversationController } from "./useConversationController";
 import { useProfilePreviewController } from "./useProfilePreviewController";
@@ -284,7 +283,6 @@ export function useWorkspaceController() {
       }),
     [auth.environment.aiGatewayBaseURL, openCSGAuthGuard.authenticated, rawModelProviders, t],
   );
-  const connectors = useConnectorController(t);
   const navigateAfterSkillDelete = useCallback(
     (nextSkill: SkillSummary | null) => {
       if (!nextSkill?.name) {
@@ -419,19 +417,6 @@ export function useWorkspaceController() {
     agents,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
-    connectorStatus: connectors.github,
-    connectorBusyAction: connectors.busyAction,
-    connectorBusyProvider: connectors.busyProvider,
-    connectorError: connectors.error,
-    connectorPending: connectors.pending,
-    onSaveConnectorConfig: connectors.saveGitHubConfig,
-    onConnectConnector: connectors.connectGitHub,
-    onDisconnectConnector: connectors.disconnectGitHub,
-    onManageConnector: connectors.manageGitHub,
-    onManageApps: () => {
-      setFloatingChatOpen(false);
-      selectApps("gitlab");
-    },
     data: displayData,
     locale,
     managerProfile,
@@ -498,19 +483,6 @@ export function useWorkspaceController() {
     autoSelectFallbackConversation: false,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
-    connectorStatus: connectors.github,
-    connectorBusyAction: connectors.busyAction,
-    connectorBusyProvider: connectors.busyProvider,
-    connectorError: connectors.error,
-    connectorPending: connectors.pending,
-    onSaveConnectorConfig: connectors.saveGitHubConfig,
-    onConnectConnector: connectors.connectGitHub,
-    onDisconnectConnector: connectors.disconnectGitHub,
-    onManageConnector: connectors.manageGitHub,
-    onManageApps: () => {
-      setFloatingChatOpen(false);
-      selectApps("gitlab");
-    },
     data: displayData,
     locale,
     managerProfile,

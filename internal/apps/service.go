@@ -2,7 +2,6 @@ package apps
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,11 +27,10 @@ type record struct {
 }
 
 type entry struct {
-	record         record
-	generation     uint64
-	connection     *connection
-	credentialHash [32]byte
-	pendingCancel  context.CancelFunc
+	record        record
+	generation    uint64
+	connection    *connection
+	pendingCancel context.CancelFunc
 }
 
 type gateway struct {
@@ -118,6 +116,9 @@ func copyJSON[T any](v T) T {
 
 func view(e *entry) Installation {
 	result := copyJSON(e.record.Installation)
+	if result.AppID == "feishu" {
+		result.FeishuAppID = e.record.Credentials.AppID
+	}
 	result.Tools = []*mcp.Tool{}
 	if e.connection != nil {
 		result.Tools = copyJSON(e.connection.tools)
@@ -129,9 +130,7 @@ func view(e *entry) Installation {
 	for key := range e.record.Credentials.Env {
 		result.CredentialsSet["env."+key] = true
 	}
-	if e.record.Config.CredentialSource == "feishu_channel" {
-		result.CredentialsSet["channel_reference"] = true
-	}
+
 	if !result.Enabled {
 		result.Status = "disabled"
 	}
@@ -201,10 +200,7 @@ func protect(c *Config, credentials *Credentials) {
 		}
 		c.Env = nil
 	}
-	if c.CredentialSource == "feishu_channel" {
-		credentials.AppID = ""
-		credentials.AppSecret = ""
-	}
+
 }
 
 func mergeCredentials(old, next Credentials) Credentials {
@@ -436,7 +432,6 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 	}
 	conn.generation = generation
 	e.connection = conn
-	e.credentialHash = conn.credentialHash
 	e.record.Status = "connected"
 	e.record.LastError = ""
 	e.record.LastErrorCode = ""
@@ -539,7 +534,11 @@ func (s *Service) Probe(ctx context.Context, agentID string, in ProbeRequest) (P
 			return ProbeResult{}, err
 		}
 		in.AppID = e.record.AppID
-		in.Credentials = mergeCredentials(e.record.Credentials, in.Credentials)
+		stored := e.record.Credentials
+		if in.Config.AuthMode == "connector" || in.Config.AuthMode == "oauth2" {
+			stored.Token = ""
+		}
+		in.Credentials = mergeCredentials(stored, in.Credentials)
 		s.mu.Unlock()
 	}
 	if _, ok := s.packages[in.AppID]; !ok {
@@ -599,45 +598,6 @@ func (s *Service) RestoreAll(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (s *Service) channelHash(ctx context.Context, agentID string) ([32]byte, error) {
-	if s.options.ResolveFeishu == nil {
-		return [32]byte{}, fmt.Errorf("Feishu channel credentials are unavailable")
-	}
-	v, err := s.options.ResolveFeishu(ctx, agentID)
-	if err != nil || v.AppID == "" || v.AppSecret == "" {
-		return [32]byte{}, fmt.Errorf("Feishu channel credentials are unavailable")
-	}
-	return sha256.Sum256([]byte(v.AppID + "\x00" + v.AppSecret)), nil
-}
-
-func (s *Service) RefreshCredentials(ctx context.Context, agentID string) error {
-	s.mu.Lock()
-	ids := []string{}
-	for id, e := range s.entries {
-		if e.record.AgentID == agentID && e.record.Config.CredentialSource == "feishu_channel" && e.record.active() && !e.record.Disconnected && e.record.ConnectRequested {
-			ids = append(ids, id)
-		}
-	}
-	s.mu.Unlock()
-	if len(ids) == 0 {
-		return nil
-	}
-	fingerprint, hashErr := s.channelHash(ctx, agentID)
-	var errs []error
-	for _, id := range ids {
-		s.mu.Lock()
-		e, err := s.findLocked(agentID, id)
-		changed := err == nil && (hashErr != nil || e.connection == nil || e.credentialHash != fingerprint)
-		s.mu.Unlock()
-		if changed {
-			if _, err := s.connect(ctx, agentID, id, false); err != nil {
-				errs = append(errs, err)
-			}
-		}
-	}
-	return errors.Join(errs...)
-}
-
 // InvalidateConnector closes every live App session backed by connectorID.
 // Connector credentials are copied into HTTP transports, so those transports
 // must never survive a credential rotation or disconnect.
@@ -653,7 +613,7 @@ func (s *Service) InvalidateConnector(connectorID string) {
 	revisions := map[string]uint64{}
 	s.mu.Lock()
 	for id, e := range s.entries {
-		if e.record.Config.AuthMode != "connector" || !strings.EqualFold(strings.TrimSpace(e.record.Config.ConnectorID), connectorID) {
+		if e.record.AgentID == "" || e.record.Config.AuthMode != "connector" || !strings.EqualFold(strings.TrimSpace(e.record.Config.ConnectorID), connectorID) {
 			continue
 		}
 		conn := e.connection

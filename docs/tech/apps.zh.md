@@ -1,13 +1,17 @@
-# Agent Apps
+# 连接器
 
 [English](apps.md) | 中文
 
-在 **资源 > Apps** 中统一配置 GitLab、飞书和 llm-wiki 连接。
+界面统一使用“连接器（Connector）”；内部 Plugin 包结构、CLI 命令和现有 API 路径保持不变。
+
+在 **资源 > 连接器** 中统一配置 GitLab、飞书和 llm-wiki 连接。
 每个全局实例有独立名称、服务地址和受保护的凭据或凭据引用，同一种 App 可以配置多个账户或服务实例。
 
 ## 配置资源与添加到 Agent
 
-先创建并测试全局资源，再在 Agent 的 **Apps** 页选择 **从资源添加**。
+连接器表单底部展示默认折叠的工具列表。
+测试连接后显示当前表单对应的工具；修改表单后需要重新测试以更新列表。
+填写全局资源配置，点击 **测试连接** 验证当前表单，通过后按需点击 **保存配置**，再在 Agent 的 **连接器** 页选择 **从资源添加**。
 Agent 绑定仅保存资源引用和自己的启停、断开意图，不复制秘密凭据。
 每个绑定保留独立的 MCP 会话、本地进程目录和 Agent 工具名称。
 修改全局资源会撤下旧工具，并重连之前已连接且启用的绑定；已手动断开或停用的绑定不会被恢复。
@@ -15,10 +19,13 @@ Agent 绑定仅保存资源引用和自己的启停、断开意图，不复制�
 移除绑定或删除 Agent 不会删除全局资源或其他 Agent 的绑定。
 删除全局资源时展示受影响的 Agent，并移除该资源的所有绑定。
 
-飞书资源可以选择使用绑定 Agent 的飞书渠道。
-此时全局页显示“绑定 Agent 后验证身份”，允许先保存，再由各个 Agent 连接验证。
-渠道凭据在连接时按 Agent 解析，不复制到全局资源中。
-使用独立凭据的资源可以直接在全局页测试连接。
+飞书连接器独立保存 App ID/App Secret，不再引用任意 Agent 的渠道凭据。
+所有绑定的 Agent 使用该全局连接器的身份；修改渠道不影响连接器凭据。
+测试只使用当前表单和未修改的已存凭据，不写入资源配置或新凭据。
+GitLab 测试会先通过实例的 `/api/v4/user` 验证填写的 PAT，再检查 MCP 连接和工具发现。
+保存接口会先验证候选凭据、MCP 初始化和工具发现，通过后才写入新连接设置。
+验证失败时保留原配置与现有连接；上游不可用时仍可停用或移除连接器。
+验证期间配置被其他操作修改时，本次保存会被拒绝，需要重新验证。
 App 连接已有的 HTTP 或 stdio MCP 服务，CSGClaw 不负责部署该服务。
 浏览器 OAuth2 仍未实现。
 已有本地安装记录会一次性转换为全局资源与绑定，保留绑定 ID、连接意图和工具名称。
@@ -44,13 +51,13 @@ App CLI 无需额外登录，服务地址通过 `CSGCLAW_BASE_URL` 指定。
 前端分别显示平台 401/403、未登录、环境不匹配、飞书 Token 获取失败、MCP 地址错误或后端休眠/不可用，并保留 HTTP 状态信息。
 ## 飞书远端 Passthrough 服务
 
-HTTP 飞书 App 选择“飞书应用凭据”，填写 MCP URL，并选择当前 Agent 的飞书 Channel 或手动填写 App ID/App Secret。
+HTTP 飞书连接器填写 MCP URL 及其独立的 App ID/App Secret。
 Connector 复用飞书 Token 获取实现，按连接实例缓存 tenant access token，并在有效期结束前按需重新获取。
 调用 MCP 时自动注入 `lark-access-token` 和 `X-Lark-Token-Type: tenant_access_token`，平台 Token 单独放入 `Authorization: Bearer ...`。
 不需要填写 Header 名称或临时飞书 Token，App Secret 不会发给 passthrough MCP。
 只有上游明确返回 `lark_token_invalid` 时才刷新 Token 并重试一次；权限不足、网络错误或其他业务错误不自动重试。
 重复拒绝刷新后的 Token 会将连接标记为需要重新授权。
-Channel 凭据变化后，引用连接重新建立并使用新的 Token 缓存；断开、停用和移除遵守原有生命周期规则。
+连接器凭据变化后，连接重新建立并使用新的 Token 缓存；断开、停用和移除遵守原有生命周期规则。
 stdio 模式继续将应用凭据注入本地 MCP 进程的环境变量。
 用户身份的 UAT 和浏览器 OAuth 不属于该应用身份流程，当前仍不支持自动用户授权；已有 UAT 可通过 Bearer/自定义 Header 模式手动配置。
 
@@ -112,14 +119,14 @@ Agent 运行环境中的 CLI 只允许目录、列表和详情读取，并提供
 
 | 接口 | 用途 |
 |---|---|
-| `GET /api/v1/apps` | 内置 App 类型目录 |
-| `GET /api/v1/apps/{app_id}` | 定义和连接默认值 |
-| `GET/POST /api/v1/app-resources` | 列出或创建全局资源 |
-| `GET/PATCH/DELETE /api/v1/app-resources/{resource_id}` | 管理全局资源并查看受影响的 Agent |
-| `POST /api/v1/app-resources:probe` | 使用独立凭据测试全局资源 |
-| `GET/POST /api/v1/agents/{agent_id}/apps` | 列出或添加资源绑定 |
-| `GET/PATCH/DELETE /api/v1/agents/{agent_id}/apps/{installation_id}` | 读取、启停或移除一个绑定 |
-| `POST /api/v1/agents/{agent_id}/apps:probe` | 使用 Agent 身份测试连接 |
+| `GET /api/v1/connectors/catalog` | 内置 App 类型目录 |
+| `GET /api/v1/connectors/catalog/{app_id}` | 定义和连接默认值 |
+| `GET/POST /api/v1/connectors/resources` | 列出或创建全局资源 |
+| `GET/PATCH/DELETE /api/v1/connectors/resources/{resource_id}` | 管理全局资源并查看受影响的 Agent |
+| `POST /api/v1/connectors/resources:probe` | 使用独立凭据测试全局资源 |
+| `GET/POST /api/v1/agents/{agent_id}/connectors` | 列出或添加资源绑定 |
+| `GET/PATCH/DELETE /api/v1/agents/{agent_id}/connectors/{installation_id}` | 读取、启停或移除一个绑定 |
+| `POST /api/v1/agents/{agent_id}/connectors:probe` | 使用 Agent 身份测试连接 |
 | `POST .../{installation_id}/connect` 或 `/disconnect` | 连接或断开一个绑定 |
 
 Codex 通过该 Agent 的受管 `/api/v1/agents/{agent_id}/mcp` 入口使用 App 工具。
@@ -135,11 +142,14 @@ Codex 通过该 Agent 的受管 `/api/v1/agents/{agent_id}/mcp` 入口使用 App
 ## 安装默认值与设置表单
 
 新增 App 表单读取目录中 `config_schema.properties.*.default` 声明的非秘密连接默认值。
-GitLab 和飞书预填已配置的 staging MCP 地址，并自动选择对应环境的 OpenCSG 登录引用。
+GitLab 预填 `https://u-agentichub-gitlab-mcp-1qq.public.opencsg.com/mcp`；飞书预填 `https://u-agentichub-lark-mcp-passthrough-1qr.public.opencsg.com/mcp`。
+连接时使用与服务地址匹配的 OpenCSG 登录环境。
 llm-wiki 暂时预填本地测试服务 `http://127.0.0.1:19093/mcp`，可以手动替换地址或通过知识库选择器填写。
 本机地址指运行 CSGClaw 的机器。
 默认值不包含凭据，已安装实例继续使用已保存的配置。
 表单分为服务连接、MCP 服务鉴权、飞书应用身份；超时和附加 Header/环境变量放在高级设置中。
 
 Agent 添加接口使用 `{"resource_id":"RESOURCE_ID","connect":true}`，Agent 更新接口仅接受 `enabled`。
-全局资源通过 `/api/v1/app-resources` 管理，通过 `/api/v1/app-resources:probe` 测试。
+全局资源通过 `/api/v1/connectors/resources` 管理，通过 `/api/v1/connectors/resources:probe` 测试。
+
+对话输入区仅保留附件上传，旧 GitHub/GitLab 连接器入口及其前端 OAuth 轮询已移除。

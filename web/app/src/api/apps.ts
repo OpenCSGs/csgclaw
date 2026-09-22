@@ -23,7 +23,7 @@ export type AppConfig = {
   env?: Record<string, string>;
   headers?: Record<string, string>;
   auth_mode?: "none" | "bearer" | "header" | "env" | "feishu" | "oauth2" | "connector";
-  credential_source?: "manual" | "feishu_channel";
+  credential_source?: "manual";
   token_header?: string;
   token_prefix?: string;
   token_env?: string;
@@ -43,6 +43,7 @@ export type AppCredentials = {
 
 export type AppTool = { name: string; title?: string; description?: string; inputSchema?: Record<string, unknown> };
 export type AppInstallation = {
+  feishu_app_id?: string;
   resource_id?: string;
   resource_enabled?: boolean;
   bindings?: AppBindingSummary[];
@@ -54,7 +55,6 @@ export type AppInstallation = {
   disconnected: boolean;
   status:
     | "configured"
-    | "agent_identity_required"
     | "needs_configuration"
     | "connecting"
     | "connected"
@@ -88,7 +88,7 @@ export type AppCreateRequest = AppProbeRequest & { name: string; connect: boolea
 export type AppUpdateRequest = { name?: string; enabled?: boolean; config?: AppConfig; credentials?: AppCredentials };
 
 function agentAppsPath(agentID: string): string {
-  return `/api/v1/agents/${encodeURIComponent(agentID)}/apps`;
+  return `/api/v1/agents/${encodeURIComponent(agentID)}/connectors`;
 }
 
 function appPath(agentID: string, installationID: string): string {
@@ -96,15 +96,12 @@ function appPath(agentID: string, installationID: string): string {
 }
 
 export async function fetchAppDefinitions(signal?: AbortSignal): Promise<AppDefinition[]> {
-  const result = await get<{ items: AppDefinition[] }>("/api/v1/apps", { signal });
+  const result = await get<{ items: AppDefinition[] }>("/api/v1/connectors/catalog", { signal });
   return result.items ?? [];
 }
 
-export async function fetchAgentApps(
-  agentID: string,
-  signal?: AbortSignal,
-): Promise<{ items: AppInstallation[]; feishu_channel_available?: boolean }> {
-  const result = await get<{ items: AppInstallation[]; feishu_channel_available?: boolean }>(agentAppsPath(agentID), {
+export async function fetchAgentApps(agentID: string, signal?: AbortSignal): Promise<{ items: AppInstallation[] }> {
+  const result = await get<{ items: AppInstallation[] }>(agentAppsPath(agentID), {
     signal,
   });
   return { ...result, items: (result.items ?? []).map(normalizeInstallation) };
@@ -148,22 +145,22 @@ export type AppBindingSummary = {
   tool_count: number;
 };
 export async function fetchAppResources(signal?: AbortSignal): Promise<AppInstallation[]> {
-  const result = await get<{ items: AppInstallation[] }>("/api/v1/app-resources", { signal });
+  const result = await get<{ items: AppInstallation[] }>("/api/v1/connectors/resources", { signal });
   return (result.items ?? []).map(normalizeInstallation);
 }
 export async function createAppResource(payload: AppCreateRequest): Promise<AppInstallation> {
-  return normalizeInstallation(await post<AppInstallation>("/api/v1/app-resources", payload));
+  return normalizeInstallation(await post<AppInstallation>("/api/v1/connectors/resources", payload));
 }
 export async function updateAppResource(id: string, payload: AppUpdateRequest): Promise<AppInstallation> {
   return normalizeInstallation(
-    await patch<AppInstallation>(`/api/v1/app-resources/${encodeURIComponent(id)}`, payload),
+    await patch<AppInstallation>(`/api/v1/connectors/resources/${encodeURIComponent(id)}`, payload),
   );
 }
 export function deleteAppResource(id: string): Promise<void> {
-  return del(`/api/v1/app-resources/${encodeURIComponent(id)}`);
+  return del(`/api/v1/connectors/resources/${encodeURIComponent(id)}`);
 }
 export async function probeAppResource(payload: AppProbeRequest): Promise<AppProbeResult> {
-  const result = await post<AppProbeResult>("/api/v1/app-resources:probe", payload);
+  const result = await post<AppProbeResult>("/api/v1/connectors/resources:probe", payload);
   return { ...result, tools: result.tools ?? [] };
 }
 export async function bindAgentApp(agentID: string, resourceID: string): Promise<AppInstallation> {

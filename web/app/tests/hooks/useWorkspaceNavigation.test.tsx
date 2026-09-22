@@ -65,20 +65,20 @@ describe("useWorkspaceNavigation", () => {
       </BrowserRouter>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Open agent apps" }));
-    await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("?tab=apps"));
+    await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("?tab=connectors"));
     expect(screen.getByTestId("path")).toHaveTextContent("/agents/agent-1");
   });
 
   it("opens the global Apps page with the requested App configuration", async () => {
-    window.history.replaceState({}, "", "/agents/agent-1?tab=apps");
+    window.history.replaceState({}, "", "/agents/agent-1?tab=connectors");
     render(
       <BrowserRouter>
         <NavigationHarness />
       </BrowserRouter>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Configure GitLab app" }));
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/apps"));
-    expect(screen.getByTestId("search")).toHaveTextContent("?add_app=gitlab");
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/connectors"));
+    expect(screen.getByTestId("search")).toHaveTextContent("?add_connector=gitlab");
   });
 
   afterEach(() => {

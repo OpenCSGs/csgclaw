@@ -21,16 +21,16 @@ func TestAppCommandsUseSharedAuthenticatedAPI(t *testing.T) {
 		action, method, path string
 		withID, withFile     bool
 	}{
-		{"catalog", "GET", "/api/v1/apps", false, false},
-		{"catalog", "GET", "/api/v1/apps/install-1", true, false},
-		{"list", "GET", "/api/v1/agents/agent-dev/apps", false, false},
-		{"get", "GET", "/api/v1/agents/agent-dev/apps/install-1", true, false},
-		{"add", "POST", "/api/v1/agents/agent-dev/apps", false, true},
-		{"update", "PATCH", "/api/v1/agents/agent-dev/apps/install-1", true, true},
-		{"probe", "POST", "/api/v1/agents/agent-dev/apps:probe", true, true},
-		{"connect", "POST", "/api/v1/agents/agent-dev/apps/install-1/connect", true, false},
-		{"disconnect", "POST", "/api/v1/agents/agent-dev/apps/install-1/disconnect", true, false},
-		{"remove", "DELETE", "/api/v1/agents/agent-dev/apps/install-1", true, false},
+		{"catalog", "GET", "/api/v1/connectors/catalog", false, false},
+		{"catalog", "GET", "/api/v1/connectors/catalog/install-1", true, false},
+		{"list", "GET", "/api/v1/agents/agent-dev/connectors", false, false},
+		{"get", "GET", "/api/v1/agents/agent-dev/connectors/install-1", true, false},
+		{"add", "POST", "/api/v1/agents/agent-dev/connectors", false, true},
+		{"update", "PATCH", "/api/v1/agents/agent-dev/connectors/install-1", true, true},
+		{"probe", "POST", "/api/v1/agents/agent-dev/connectors:probe", true, true},
+		{"connect", "POST", "/api/v1/agents/agent-dev/connectors/install-1/connect", true, false},
+		{"disconnect", "POST", "/api/v1/agents/agent-dev/connectors/install-1/disconnect", true, false},
+		{"remove", "DELETE", "/api/v1/agents/agent-dev/connectors/install-1", true, false},
 	} {
 		t.Run(tc.action+tc.path, func(t *testing.T) {
 			var calls int
@@ -116,7 +116,7 @@ func TestAgentCLIOnlyReadsAndReturnsSettingsLink(t *testing.T) {
 	var calls int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		if r.Method != "GET" || r.URL.Path != "/api/v1/agents/agent-dev/apps" || r.Header.Get("X-CSGClaw-Caller-Agent") != "agent-dev" {
+		if r.Method != "GET" || r.URL.Path != "/api/v1/agents/agent-dev/connectors" || r.Header.Get("X-CSGClaw-Caller-Agent") != "agent-dev" {
 			t.Errorf("unexpected Agent request %s %s", r.Method, r.URL.Path)
 		}
 		_, _ = io.WriteString(w, `{"items":[{"installation_id":"install-1","app_id":"gitlab","name":"Work","status":"connected"}]}`)
@@ -128,7 +128,7 @@ func TestAgentCLIOnlyReadsAndReturnsSettingsLink(t *testing.T) {
 	if err := NewCmd().Run(context.Background(), run, []string{"get", "--id", "install-1"}, globals); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "settings_url") || !strings.Contains(stdout.String(), "tab=apps") {
+	if !strings.Contains(stdout.String(), "settings_url") || !strings.Contains(stdout.String(), "tab=connectors") {
 		t.Fatalf("missing settings link: %s", stdout.String())
 	}
 	err := NewCmd().Run(context.Background(), run, []string{"add", "--file", "-"}, globals)

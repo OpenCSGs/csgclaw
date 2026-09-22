@@ -15,7 +15,6 @@ import type { SkillSummary } from "@/models/skillhub";
 import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
 import type { ThemeMode } from "@/shared/theme/theme";
 import type { ConfigSettingsDraft } from "@/models/configSettings";
-import type { ConnectorConfigDraft, ConnectorStatus } from "@/models/connectors";
 import type { CLIProxyAuthStatusMap } from "./useCLIProxyAuthStatuses";
 import type { ConfigPhase } from "./useConfigController";
 import type { WorkspaceUiState } from "./workspaceUiStore";
@@ -210,11 +209,6 @@ export type UseConversationControllerArgs = {
   autoSelectFallbackConversation?: boolean;
   authBusyProvider: string;
   authStatuses: CLIProxyAuthStatusMap;
-  connectorBusyAction?: string;
-  connectorBusyProvider?: string;
-  connectorError?: string;
-  connectorPending?: boolean;
-  connectorStatus?: ConnectorStatus;
   data: IMData | null;
   locale: LocaleCode;
   managerProfile: AgentProfileLike | null;
@@ -232,13 +226,8 @@ export type UseConversationControllerArgs = {
     action: MessageAction | null | undefined,
     message: MessageLike | null | undefined,
   ) => void | Promise<void>;
-  onConnectConnector?: () => Promise<void>;
-  onDisconnectConnector?: () => Promise<void>;
-  onManageApps?: (agentID?: string) => void;
-  onManageConnector?: () => Promise<void>;
   onProviderLogin: (provider: string | null | undefined) => Promise<void>;
   openCSGAuthGuard: OpenCSGAuthGuard;
-  onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => Promise<void>;
   preferredFallbackConversationId?: string;
   rooms: IMConversation[];
   selectComputer: WorkspaceNavigationController["selectComputer"];

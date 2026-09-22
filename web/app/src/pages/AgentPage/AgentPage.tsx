@@ -32,15 +32,15 @@ export function AgentPage() {
     <AgentView
       {...agentViewProps}
       item={agentViewProps.item}
-      requestedProfileTab={search.get("tab") || undefined}
-      requestedAppID={search.get("app") || undefined}
-      requestedAddAppID={search.get("add_app") || undefined}
+      requestedProfileTab={search.get("tab") === "connectors" ? "apps" : search.get("tab") || undefined}
+      requestedAppID={search.get("connector") || undefined}
+      requestedAddAppID={search.get("add_connector") || undefined}
       onProfileTabChange={(tab, appID) => {
         const next = new URLSearchParams(location.search);
-        next.set("tab", tab);
-        next.delete("add_app");
-        if (appID) next.set("app", appID);
-        else next.delete("app");
+        next.set("tab", tab === "apps" ? "connectors" : tab);
+        next.delete("add_connector");
+        if (appID) next.set("connector", appID);
+        else next.delete("connector");
         void navigate({ pathname: location.pathname, search: next.toString() });
       }}
     />

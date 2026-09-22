@@ -187,25 +187,7 @@ func (s *Service) call(ctx context.Context, agentID, id string, generation uint6
 		}
 	}
 	config := e.record.Config
-	fingerprint := e.credentialHash
 	s.mu.Unlock()
-	if config.CredentialSource == "feishu_channel" {
-		current, err := s.channelHash(ctx, agentID)
-		if err != nil || current != fingerprint {
-			_ = s.RefreshCredentials(ctx, agentID)
-			return nil, fmt.Errorf("App credentials changed; retry after reconnecting")
-		}
-	}
-	// Recheck admission after resolving a channel reference without holding the
-	// service lock across the upstream call. Existing calls may finish; no new
-	// call can use a disconnected, removed or replaced session.
-	s.mu.Lock()
-	e, err = s.findLocked(agentID, id)
-	allowed := err == nil && e.generation == generation && e.record.active() && !e.record.Disconnected && e.connection == conn
-	s.mu.Unlock()
-	if !allowed {
-		return nil, fmt.Errorf("App is no longer connected or enabled")
-	}
 	callCtx, cancel := context.WithTimeout(ctx, time.Duration(config.ToolTimeoutSec)*time.Second)
 	defer cancel()
 	params := req.Params

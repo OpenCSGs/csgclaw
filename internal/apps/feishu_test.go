@@ -76,15 +76,13 @@ func TestFeishuAppObtainsAndRefreshesTenantToken(t *testing.T) {
 				handler.ServeHTTP(w, r)
 			}))
 			t.Cleanup(server.Close)
-			service := newTestService(t, Options{ResolveFeishu: func(context.Context, string) (FeishuCredentials, error) {
-				return FeishuCredentials{AppID: "cli-real-app", AppSecret: "app-secret"}, nil
-			}, FeishuTokenSource: func(id, secret string) feishutransport.TenantTokenSource {
+			service := newTestService(t, Options{FeishuTokenSource: func(id, secret string) feishutransport.TenantTokenSource {
 				if id != "cli-real-app" || secret != "app-secret" {
 					t.Error("channel credential reference not resolved")
 				}
 				return source
 			}})
-			item, err := service.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "feishu_channel"}, Credentials: Credentials{Token: "platform-test", Headers: map[string]string{"X-Lark-Token-Type": "user_access_token", "lark-access-token": "stale-user-token"}}, Connect: true})
+			item, err := service.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: Credentials{AppID: "cli-real-app", AppSecret: "app-secret", Token: "platform-test", Headers: map[string]string{"X-Lark-Token-Type": "user_access_token", "lark-access-token": "stale-user-token"}}, Connect: true})
 			if err != nil || item.Status != "connected" {
 				t.Fatalf("connection: %v", err)
 			}
@@ -124,9 +122,8 @@ func TestFeishuTokenRejectionRequiresStructuredError(t *testing.T) {
 	}
 }
 
-func TestFeishuChannelRotationReplacesPrivateTokenSource(t *testing.T) {
-	var channel atomic.Value
-	channel.Store(FeishuCredentials{AppID: "channel-one", AppSecret: "secret-one"})
+func TestFeishuGlobalCredentialsRotationReplacesPrivateTokenSource(t *testing.T) {
+	credentials := Credentials{AppID: "channel-one", AppSecret: "secret-one"}
 	upstream := mcp.NewServer(&mcp.Implementation{Name: "rotation", Version: "1"}, nil)
 	upstream.AddTool(&mcp.Tool{Name: "read", InputSchema: map[string]any{"type": "object"}}, func(_ context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: r.Extra.Header.Get("lark-access-token")}}}, nil
@@ -134,13 +131,11 @@ func TestFeishuChannelRotationReplacesPrivateTokenSource(t *testing.T) {
 	server := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return upstream }, nil))
 	t.Cleanup(server.Close)
 	var created atomic.Int32
-	service := newTestService(t, Options{ResolveFeishu: func(context.Context, string) (FeishuCredentials, error) {
-		return channel.Load().(FeishuCredentials), nil
-	}, FeishuTokenSource: func(id, secret string) feishutransport.TenantTokenSource {
+	service := newTestService(t, Options{FeishuTokenSource: func(id, secret string) feishutransport.TenantTokenSource {
 		created.Add(1)
 		return &fakeTenantSource{prefix: id, generation: 1}
 	}})
-	item, err := service.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Channel", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "feishu_channel"}, Connect: true})
+	item, err := service.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Channel", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: credentials, Connect: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,8 +153,8 @@ func TestFeishuChannelRotationReplacesPrivateTokenSource(t *testing.T) {
 	}
 	check(item.InstallationID, "channel-one-1")
 	check(other.InstallationID, "manual-1")
-	channel.Store(FeishuCredentials{AppID: "channel-two", AppSecret: "secret-two"})
-	if err := service.RefreshCredentials(context.Background(), "agent"); err != nil {
+	credentials = Credentials{AppID: "channel-two", AppSecret: "secret-two"}
+	if _, err := service.Update(context.Background(), "", item.ResourceID, UpdateRequest{Credentials: &credentials}); err != nil {
 		t.Fatal(err)
 	}
 	check(item.InstallationID, "channel-two-1")
@@ -170,8 +165,8 @@ func TestFeishuChannelRotationReplacesPrivateTokenSource(t *testing.T) {
 	if _, err := service.Disconnect(context.Background(), "agent", item.InstallationID); err != nil {
 		t.Fatal(err)
 	}
-	channel.Store(FeishuCredentials{AppID: "channel-three", AppSecret: "secret-three"})
-	if err := service.RefreshCredentials(context.Background(), "agent"); err != nil {
+	credentials = Credentials{AppID: "channel-three", AppSecret: "secret-three"}
+	if _, err := service.Update(context.Background(), "", item.ResourceID, UpdateRequest{Credentials: &credentials}); err != nil {
 		t.Fatal(err)
 	}
 	if created.Load() != 3 {

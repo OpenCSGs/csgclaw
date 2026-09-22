@@ -31,7 +31,6 @@ export function appStatus(app: AppInstallation, t: TranslateFn): string {
   if (app.disconnected) return t("appStatusDisconnected");
   const keys = {
     configured: "appStatusConfigured",
-    agent_identity_required: "appStatusAgentIdentity",
     needs_configuration: "appStatusNeedsConfiguration",
     connecting: "appStatusConnecting",
     connected: "appStatusConnected",
@@ -74,26 +73,25 @@ function appConfigDefaults(definition: AppDefinition): AppConfig {
   return defaults;
 }
 
-export function initialAppForm(
-  definition: AppDefinition,
-  existing: AppInstallation | null,
-  hasFeishuChannel: boolean,
-): AppForm {
+export function initialAppForm(definition: AppDefinition, existing: AppInstallation | null): AppForm {
   const feishu = definition.app_id === "feishu";
   const gitlab = definition.app_id === "gitlab";
   const defaults = appConfigDefaults(definition);
-  const config = existing?.config ?? {
-    transport: "http",
-    auth_mode: feishu ? "feishu" : "bearer",
-    token_header: "Authorization",
-    token_prefix: "Bearer ",
-    token_env: gitlab ? "GITLAB_PERSONAL_ACCESS_TOKEN" : "MCP_ACCESS_TOKEN",
-    app_id_env: "FEISHU_APP_ID",
-    app_secret_env: "FEISHU_APP_SECRET",
-    startup_timeout_sec: 30,
-    tool_timeout_sec: 60,
-    ...defaults,
-    credential_source: feishu && hasFeishuChannel ? defaults.credential_source || "feishu_channel" : "manual",
+  const config: AppConfig = {
+    ...(existing?.config ?? {
+      transport: "http",
+      auth_mode: feishu ? "feishu" : "bearer",
+      token_header: "Authorization",
+      token_prefix: "Bearer ",
+      token_env: gitlab ? "GITLAB_PERSONAL_ACCESS_TOKEN" : "MCP_ACCESS_TOKEN",
+      app_id_env: "FEISHU_APP_ID",
+      app_secret_env: "FEISHU_APP_SECRET",
+      startup_timeout_sec: 30,
+      tool_timeout_sec: 60,
+      ...defaults,
+      credential_source: "manual",
+    }),
+    credential_source: "manual",
   };
   const savedHeaderNames = Object.keys(existing?.credentials_set ?? {})
     .filter((key) => key.startsWith("headers."))
@@ -115,7 +113,7 @@ export function initialAppForm(
           platform_credential_source: config.platform_credential_source,
         }
       : config,
-    credentials: {},
+    credentials: feishu && existing?.feishu_app_id ? { app_id: existing.feishu_app_id } : {},
     args: config.args?.join("\n") ?? "",
     headers: [...headerNames].map((key) => ({ key, value: existing?.config.headers?.[key] ?? "" })),
     env: Object.entries(existing?.config.env ?? {}).map(([key, value]) => ({ key, value })),

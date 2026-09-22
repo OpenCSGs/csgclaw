@@ -104,8 +104,8 @@ func configSchema(appID string) map[string]any {
 	// Editable installation defaults. Local knowledge bases may instead be selected
 	// through the knowledge picker; no credentials are embedded in these defaults.
 	props["url"].(map[string]any)["default"] = map[string]string{
-		"feishu":   "https://u-ryandraco-lark-mcp-passthrough-15s.public.opencsg-stg.com/mcp",
-		"gitlab":   "https://u-wanghj-gitlab-mcp-161.public.opencsg-stg.com/mcp",
+		"feishu":   "https://u-agentichub-lark-mcp-passthrough-1qr.public.opencsg.com/mcp",
+		"gitlab":   "https://u-agentichub-gitlab-mcp-1qq.public.opencsg.com/mcp",
 		"llm-wiki": "http://127.0.0.1:19093/mcp",
 	}[appID]
 	for key, value := range map[string]string{
@@ -121,7 +121,7 @@ func configSchema(appID string) map[string]any {
 		props["token"] = field("Platform access token (optional)", true)
 		props["app_id"] = field("App ID", true)
 		props["app_secret"] = field("App Secret", true)
-		props["credential_source"] = map[string]any{"type": "string", "enum": []string{"feishu_channel", "manual"}, "default": "feishu_channel"}
+		props["credential_source"] = map[string]any{"type": "string", "enum": []string{"manual"}, "default": "manual"}
 	}
 	if appID == "gitlab" {
 		props["gitlab_base_url"] = field("GitLab instance URL", false)

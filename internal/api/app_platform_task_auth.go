@@ -10,7 +10,7 @@ import (
 // Runtime CLI task notifications remain valid with Agent credentials. Each
 // admitted route resolves task/team ownership and replaces identity arguments.
 func (h *Handler) authorizeAgentTaskRoute(r *http.Request, agentID string, parts []string) bool {
-	if r.Method != http.MethodGet && h.appReadOnlyAgent(agentID) {
+	if r.Method != http.MethodGet && h.connectorReadOnlyAgent(agentID) {
 		return false
 	}
 	actor := h.agentPlatformParticipant(agentID)

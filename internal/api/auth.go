@@ -99,7 +99,7 @@ func (h *Handler) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	h.syncAgentHubService(r)
 	h.resetEnvironmentSensitiveRuntimes()
-	h.refreshAppPlatformAuthentication()
+	h.refreshConnectorPlatformAuthentication()
 	setNoStoreHeaders(w)
 	if h.runtimeDistribution == "electron" {
 		writeOAuthCompletePage(w, "Login complete", "Authentication completed. You can close this tab and return to CSGClaw.")
@@ -230,7 +230,7 @@ func (h *Handler) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.resetEnvironmentSensitiveRuntimes()
-	h.refreshAppPlatformAuthentication()
+	h.refreshConnectorPlatformAuthentication()
 	if err := h.clearOpenCSGModelProviderCache(); err != nil {
 		slog.Warn("clear OpenCSG models after logout failed", "error", err)
 	}

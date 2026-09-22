@@ -234,16 +234,6 @@ function ConversationPaneContent({
   managerRuntimeUnavailable,
   authStatuses,
   authBusyProvider,
-  connectorStatus,
-  connectorBusyAction,
-  connectorBusyProvider,
-  connectorError,
-  connectorPending,
-  onSaveConnectorConfig,
-  onConnectConnector,
-  onDisconnectConnector,
-  onManageApps,
-  onManageConnector,
   onProviderLogin,
   draftSegments,
   draftText,
@@ -560,11 +550,6 @@ function ConversationPaneContent({
         <Conversation.Composer
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
-          connectorStatus={connectorStatus}
-          connectorBusyAction={connectorBusyAction}
-          connectorBusyProvider={connectorBusyProvider}
-          connectorError={connectorError}
-          connectorPending={connectorPending}
           composerDisabled={composerDisabled}
           composerDisabledReason={composerDisabledReason}
           composerError={composerError}
@@ -594,14 +579,9 @@ function ConversationPaneContent({
           onComposerCompositionEnd={onComposerCompositionEnd}
           onComposerCompositionStart={onComposerCompositionStart}
           onComposerKeyDown={onComposerKeyDown}
-          onConnectConnector={onConnectConnector}
-          onDisconnectConnector={onDisconnectConnector}
-          onManageApps={onManageApps}
-          onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
           onPreviewAttachment={handlePreviewAttachment}
           onRetrySend={onRetrySend}
-          onSaveConnectorConfig={onSaveConnectorConfig}
           onSendMessage={onSendMessage}
           onStopSend={onStopSend}
           onUndoRemoveAttachment={onUndoRemoveAttachment}

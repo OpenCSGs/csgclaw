@@ -8,8 +8,8 @@ import (
 func TestCatalogInstallationDefaults(t *testing.T) {
 	service := newTestService(t, Options{})
 	for _, tc := range []struct{ app, url, auth string }{
-		{"gitlab", "https://u-wanghj-gitlab-mcp-161.public.opencsg-stg.com/mcp", "bearer"},
-		{"feishu", "https://u-ryandraco-lark-mcp-passthrough-15s.public.opencsg-stg.com/mcp", "feishu"},
+		{"gitlab", "https://u-agentichub-gitlab-mcp-1qq.public.opencsg.com/mcp", "bearer"},
+		{"feishu", "https://u-agentichub-lark-mcp-passthrough-1qr.public.opencsg.com/mcp", "feishu"},
 		{"llm-wiki", "http://127.0.0.1:19093/mcp", "bearer"},
 	} {
 		definition, err := service.Definition(tc.app)

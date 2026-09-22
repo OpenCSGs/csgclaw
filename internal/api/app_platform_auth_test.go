@@ -45,10 +45,10 @@ func newAppPlatformAuthFixture(t *testing.T) (*Handler, agent.Agent, agent.Agent
 	alice, aliceToken := create("alice")
 	bob, bobToken := create("bob")
 	h := &Handler{svc: svc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc, serverAccessToken: "test-admin-secret", desktopSessionToken: "test-desktop-secret", serverNoAuth: true}
-	if err := h.EnableApps(filepath.Join(home, "apps.json")); err != nil {
+	if err := h.EnableConnectors(filepath.Join(home, "apps.json")); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = h.CloseApps() })
+	t.Cleanup(func() { _ = h.CloseConnectors() })
 	return h, alice, bob, aliceToken, bobToken
 }
 
@@ -96,7 +96,7 @@ func TestGitLabPATAppCallsConfiguredMCPByConnectorID(t *testing.T) {
 	}
 	h.SetConnectorService(connectors.NewService(store))
 	body := `{"app_id":"gitlab","config":{"transport":"http","url":"` + upstream.URL + `","gitlab_base_url":"` + upstream.URL + `","connector_id":"gitlab","auth_mode":"connector"},"credentials":{"headers":{"PRIVATE-TOKEN":"custom-gitlab-token","X-GitLab-Base-URL":"https://custom.gitlab.example.com","X-MCP-Deployment":"fixture-secret"}}}`
-	rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/apps:probe", body, "", nil)
+	rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/connectors:probe", body, "", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("probe status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -107,6 +107,7 @@ func TestGitLabPATAppCallsConfiguredMCPByConnectorID(t *testing.T) {
 }
 
 func TestGitLabResourceSaveRollsBackConnectorWhenPersistenceFails(t *testing.T) {
+	mcpService := appSaveMCPServer(t)
 	h, _, _, _, _ := newAppPlatformAuthFixture(t)
 	gitlab := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"id": 1, "username": "fixture"})
@@ -119,8 +120,8 @@ func TestGitLabResourceSaveRollsBackConnectorWhenPersistenceFails(t *testing.T) 
 	if _, err := h.apps.Create(context.Background(), "", apps.CreateRequest{AppID: "gitlab", Name: "duplicate"}); err != nil {
 		t.Fatal(err)
 	}
-	body := `{"app_id":"gitlab","name":"duplicate","config":{"transport":"http","url":"https://mcp.example.com/mcp","gitlab_base_url":"` + gitlab.URL + `","connector_id":"gitlab","auth_mode":"connector"},"credentials":{"token":"temporary-pat"}}`
-	rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/app-resources", body, "", nil)
+	body := `{"app_id":"gitlab","name":"duplicate","config":{"transport":"http","url":"` + mcpService.URL + `","gitlab_base_url":"` + gitlab.URL + `","connector_id":"gitlab","auth_mode":"connector"},"credentials":{"token":"temporary-pat"}}`
+	rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/connectors/resources", body, "", nil)
 	if rec.Code < 400 {
 		t.Fatalf("invalid resource save status=%d", rec.Code)
 	}
@@ -130,6 +131,7 @@ func TestGitLabResourceSaveRollsBackConnectorWhenPersistenceFails(t *testing.T) 
 }
 
 func TestConcurrentGitLabResourceRollbackDoesNotOverwriteSuccessfulUpdate(t *testing.T) {
+	mcpService := appSaveMCPServer(t)
 	h, _, _, _, _ := newAppPlatformAuthFixture(t)
 	firstValidation, releaseFirst, secondValidation := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	gitlab := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -151,16 +153,16 @@ func TestConcurrentGitLabResourceRollbackDoesNotOverwriteSuccessfulUpdate(t *tes
 		t.Fatal(err)
 	}
 	body := func(name, token string) string {
-		return `{"app_id":"gitlab","name":"` + name + `","config":{"transport":"http","url":"https://mcp.example.com/mcp","gitlab_base_url":"` + gitlab.URL + `","connector_id":"gitlab","auth_mode":"connector"},"credentials":{"token":"` + token + `"}}`
+		return `{"app_id":"gitlab","name":"` + name + `","config":{"transport":"http","url":"` + mcpService.URL + `","gitlab_base_url":"` + gitlab.URL + `","connector_id":"gitlab","auth_mode":"connector"},"credentials":{"token":"` + token + `"}}`
 	}
 	firstDone := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
-		firstDone <- appAuthRequest(t, h, http.MethodPost, "/api/v1/app-resources", body("duplicate", "token-a"), "", nil)
+		firstDone <- appAuthRequest(t, h, http.MethodPost, "/api/v1/connectors/resources", body("duplicate", "token-a"), "", nil)
 	}()
 	<-firstValidation
 	secondDone := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
-		secondDone <- appAuthRequest(t, h, http.MethodPost, "/api/v1/app-resources", body("work", "token-b"), "", nil)
+		secondDone <- appAuthRequest(t, h, http.MethodPost, "/api/v1/connectors/resources", body("work", "token-b"), "", nil)
 	}()
 	select {
 	case <-secondValidation:
@@ -182,17 +184,17 @@ func TestConcurrentGitLabResourceRollbackDoesNotOverwriteSuccessfulUpdate(t *tes
 
 func TestAppPlatformAuthHonorsNoAuthAndRejectsCrossAgentAccess(t *testing.T) {
 	h, alice, bob, aliceToken, _ := newAppPlatformAuthFixture(t)
-	for _, path := range []string{"/api/v1/apps", "/api/v1/agents", "/api/v1/agents/" + alice.ID + "/apps"} {
+	for _, path := range []string{"/api/v1/connectors/catalog", "/api/v1/agents", "/api/v1/agents/" + alice.ID + "/connectors"} {
 		if rec := appAuthRequest(t, h, http.MethodGet, path, "", "", nil); rec.Code != http.StatusOK {
 			t.Errorf("personal mode %s status=%d", path, rec.Code)
 		}
 	}
-	for _, path := range []string{"/api/v1/agents/" + bob.ID + "/apps", "/api/v1/agents/" + bob.ID + "/llm/models", "/api/v1/config", "/api/v1/agents"} {
+	for _, path := range []string{"/api/v1/agents/" + bob.ID + "/connectors", "/api/v1/agents/" + bob.ID + "/llm/models", "/api/v1/config", "/api/v1/agents"} {
 		if rec := appAuthRequest(t, h, http.MethodGet, path, "", aliceToken, nil); rec.Code != http.StatusForbidden {
 			t.Errorf("scoped %s status=%d", path, rec.Code)
 		}
 	}
-	if rec := appAuthRequest(t, h, http.MethodGet, "/api/v1/agents/"+alice.ID+"/apps", "", aliceToken, nil); rec.Code != http.StatusOK {
+	if rec := appAuthRequest(t, h, http.MethodGet, "/api/v1/agents/"+alice.ID+"/connectors", "", aliceToken, nil); rec.Code != http.StatusOK {
 		t.Fatalf("own apps status=%d body=%s", rec.Code, rec.Body)
 	}
 	resource, err := h.apps.Create(context.Background(), "", apps.CreateRequest{AppID: "gitlab", Name: "Work GitLab"})
@@ -200,10 +202,10 @@ func TestAppPlatformAuthHonorsNoAuthAndRejectsCrossAgentAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := `{"resource_id":"` + resource.InstallationID + `"}`
-	if rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/apps", body, aliceToken, nil); rec.Code != http.StatusForbidden {
+	if rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/connectors", body, aliceToken, nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("Agent configured credentials through REST: status=%d", rec.Code)
 	}
-	if rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/apps", body, h.serverAccessToken, nil); rec.Code != http.StatusCreated {
+	if rec := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/connectors", body, h.serverAccessToken, nil); rec.Code != http.StatusCreated {
 		t.Fatalf("admin app create status=%d body=%s", rec.Code, rec.Body)
 	}
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/agents/"+alice.ID+"/llm/models", nil)
@@ -224,7 +226,7 @@ func TestAppPlatformAuthHonorsNoAuthAndRejectsCrossAgentAccess(t *testing.T) {
 func TestAppManagementWithoutLogin(t *testing.T) {
 	h, alice, _, _, _ := newAppPlatformAuthFixture(t)
 	h.serverNoAuth = false
-	path := "/api/v1/agents/" + alice.ID + "/apps"
+	path := "/api/v1/agents/" + alice.ID + "/connectors"
 	resource, err := h.apps.Create(context.Background(), "", apps.CreateRequest{AppID: "gitlab", Name: "Personal GitLab"})
 	if err != nil {
 		t.Fatal(err)
@@ -248,7 +250,7 @@ func TestAppsDoNotAddLoginToPersonalUI(t *testing.T) {
 	// no_auth controls existing protected API operations, not Web UI login.
 	for _, noAuth := range []bool{false, true} {
 		h.serverNoAuth = noAuth
-		for _, path := range []string{"/api/v1/apps", "/api/v1/agents", "/api/v1/agents/" + alice.ID + "/apps"} {
+		for _, path := range []string{"/api/v1/connectors/catalog", "/api/v1/agents", "/api/v1/agents/" + alice.ID + "/connectors"} {
 			rec := appAuthRequest(t, h, http.MethodGet, path, "", "", nil)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("personal UI no_auth=%v %s: %d", noAuth, path, rec.Code)
@@ -262,11 +264,11 @@ func TestAppsDoNotAddLoginToPersonalUI(t *testing.T) {
 
 func TestAppNoAuthRejectsInvalidAgentAndCrossOriginRequests(t *testing.T) {
 	h, _, _, _, _ := newAppPlatformAuthFixture(t)
-	rec := appAuthRequest(t, h, http.MethodGet, "/api/v1/apps", "", "agent.invalid", nil)
+	rec := appAuthRequest(t, h, http.MethodGet, "/api/v1/connectors/catalog", "", "agent.invalid", nil)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("invalid Agent accepted: %d", rec.Code)
 	}
-	req := httptest.NewRequest(http.MethodGet, "http://localhost:18080/api/v1/apps", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:18080/api/v1/connectors/catalog", nil)
 	req.Header.Set("Origin", "https://other.example")
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
 	rec = httptest.NewRecorder()
@@ -287,19 +289,19 @@ func TestAppRequestSameOrigin(t *testing.T) {
 	}{
 		{
 			name:       "direct HTTP origin",
-			requestURL: "http://localhost:18080/api/v1/apps",
+			requestURL: "http://localhost:18080/api/v1/connectors/catalog",
 			origin:     "http://localhost:18080",
 			want:       true,
 		},
 		{
 			name:       "direct HTTPS origin",
-			requestURL: "https://csgclaw.example.test/api/v1/apps",
+			requestURL: "https://csgclaw.example.test/api/v1/connectors/catalog",
 			origin:     "https://csgclaw.example.test",
 			want:       true,
 		},
 		{
 			name:             "advertised origin through HTTP proxy",
-			requestURL:       "http://csghub-runner:8082/api/v1/apps",
+			requestURL:       "http://csghub-runner:8082/api/v1/connectors/catalog",
 			origin:           "https://aigateway.opencsg-stg.com",
 			secFetchSite:     "same-origin",
 			advertiseBaseURL: "https://aigateway.opencsg-stg.com/v1/sandboxes/user-123?jwt=test",
@@ -307,7 +309,7 @@ func TestAppRequestSameOrigin(t *testing.T) {
 		},
 		{
 			name:             "advertised HTTPS origin with explicit default port",
-			requestURL:       "http://csghub-runner:8082/api/v1/apps",
+			requestURL:       "http://csghub-runner:8082/api/v1/connectors/catalog",
 			origin:           "https://aigateway.example.test",
 			secFetchSite:     "same-origin",
 			advertiseBaseURL: "https://aigateway.example.test:443/v1/sandboxes/user-123",
@@ -315,7 +317,7 @@ func TestAppRequestSameOrigin(t *testing.T) {
 		},
 		{
 			name:             "advertised HTTP origin with explicit default port",
-			requestURL:       "http://csghub-runner:8082/api/v1/apps",
+			requestURL:       "http://csghub-runner:8082/api/v1/connectors/catalog",
 			origin:           "http://aigateway.example.test",
 			secFetchSite:     "same-origin",
 			advertiseBaseURL: "http://aigateway.example.test:80/v1/sandboxes/user-123",
@@ -323,41 +325,41 @@ func TestAppRequestSameOrigin(t *testing.T) {
 		},
 		{
 			name:       "direct HTTPS origin with explicit default port",
-			requestURL: "https://csgclaw.example.test:443/api/v1/apps",
+			requestURL: "https://csgclaw.example.test:443/api/v1/connectors/catalog",
 			origin:     "https://csgclaw.example.test",
 			want:       true,
 		},
 		{
 			name:             "advertised non-default port",
-			requestURL:       "http://csghub-runner:8082/api/v1/apps",
+			requestURL:       "http://csghub-runner:8082/api/v1/connectors/catalog",
 			origin:           "https://aigateway.example.test:8443",
 			advertiseBaseURL: "https://aigateway.example.test:8443/v1/sandboxes/user-123",
 			want:             true,
 		},
 		{
 			name:             "different advertised port",
-			requestURL:       "http://csghub-runner:8082/api/v1/apps",
+			requestURL:       "http://csghub-runner:8082/api/v1/connectors/catalog",
 			origin:           "https://aigateway.example.test",
 			advertiseBaseURL: "https://aigateway.example.test:8443/v1/sandboxes/user-123",
 			want:             false,
 		},
 		{
 			name:             "direct origin remains available with advertised URL",
-			requestURL:       "http://localhost:18080/api/v1/apps",
+			requestURL:       "http://localhost:18080/api/v1/connectors/catalog",
 			origin:           "http://localhost:18080",
 			advertiseBaseURL: "https://aigateway.example.test/v1/sandboxes/user-123",
 			want:             true,
 		},
 		{
 			name:             "different advertised origin",
-			requestURL:       "http://csghub-runner:8082/api/v1/apps",
+			requestURL:       "http://csghub-runner:8082/api/v1/connectors/catalog",
 			origin:           "https://other.example.test",
 			advertiseBaseURL: "https://aigateway.example.test/v1/sandboxes/user-123",
 			want:             false,
 		},
 		{
 			name:             "cross-site request",
-			requestURL:       "http://csghub-runner:8082/api/v1/apps",
+			requestURL:       "http://csghub-runner:8082/api/v1/connectors/catalog",
 			origin:           "https://aigateway.example.test",
 			secFetchSite:     "cross-site",
 			advertiseBaseURL: "https://aigateway.example.test/v1/sandboxes/user-123",
@@ -365,14 +367,14 @@ func TestAppRequestSameOrigin(t *testing.T) {
 		},
 		{
 			name:             "invalid advertised URL",
-			requestURL:       "http://csghub-runner:8082/api/v1/apps",
+			requestURL:       "http://csghub-runner:8082/api/v1/connectors/catalog",
 			origin:           "https://aigateway.example.test",
 			advertiseBaseURL: "://invalid",
 			want:             false,
 		},
 		{
 			name:       "missing origin",
-			requestURL: "http://csghub-runner:8082/api/v1/apps",
+			requestURL: "http://csghub-runner:8082/api/v1/connectors/catalog",
 			want:       true,
 		},
 	}

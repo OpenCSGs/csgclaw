@@ -123,11 +123,11 @@ func Run(opts Options) error {
 
 	handler := newHandler(opts)
 	if opts.AppsStatePath != "" {
-		if err := handler.EnableApps(opts.AppsStatePath); err != nil {
+		if err := handler.EnableConnectors(opts.AppsStatePath); err != nil {
 			_ = listener.Close()
 			return fmt.Errorf("initialize Apps: %w", err)
 		}
-		defer handler.CloseApps()
+		defer handler.CloseConnectors()
 	}
 	handler.SetEventStreamShutdown(streamCtx.Done())
 	if err := handler.RecoverRoomTasks(); err != nil {
@@ -240,7 +240,7 @@ func Run(opts Options) error {
 		go opts.OnReady(handler, router)
 	}
 	if opts.AppsStatePath != "" {
-		go handler.RestoreApps(runCtx)
+		go handler.RestoreConnectors(runCtx)
 	}
 
 	firstErr := <-errCh

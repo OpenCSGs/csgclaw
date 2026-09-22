@@ -1017,7 +1017,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 key={String(item.id)}
                 agentID={String(item.id || "")}
                 controller={appsController}
-                hasFeishuChannel={appsController.feishuChannelAvailable ?? hasConnectedAgentChannel(item, "feishu")}
                 t={t}
                 portalContainer={dialogPortalContainer}
                 selectedID={onProfileTabChange ? requestedAppID : requestedAppID || appSettingsID}

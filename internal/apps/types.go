@@ -17,6 +17,7 @@ var (
 	ErrNotFound         = errors.New("app not found")
 	ErrInvalid          = errors.New("invalid app configuration")
 	ErrConflict         = errors.New("app name already exists")
+	ErrChanged          = errors.New("connector settings changed during validation")
 	ErrUnsupportedOAuth = errors.New("OAuth2 authorization is not supported in this version")
 )
 
@@ -106,6 +107,8 @@ type Credentials struct {
 func (Credentials) String() string { return "[redacted]" }
 
 type Installation struct {
+	// FeishuAppID is displayable identity metadata; secrets remain write-only.
+	FeishuAppID         string           `json:"feishu_app_id,omitempty"`
 	ResourceID          string           `json:"resource_id,omitempty"`
 	ResourceEnabled     bool             `json:"resource_enabled"`
 	Bindings            []BindingSummary `json:"bindings,omitempty"`
@@ -155,10 +158,6 @@ type ProbeResult struct {
 	ProtocolVersion string              `json:"protocol_version,omitempty"`
 }
 
-type FeishuCredentials struct{ AppID, AppSecret string }
-
-func (FeishuCredentials) String() string { return "[redacted]" }
-
 type ConnectorHTTPConfig struct {
 	Endpoint    string
 	Token       string
@@ -171,7 +170,6 @@ type Options struct {
 	OpenCSGCredentials   func(context.Context) (OpenCSGCredentials, error)
 	FeishuTokenSource    func(string, string) feishutransport.TenantTokenSource
 	ReadOnly             func(string) bool
-	ResolveFeishu        func(context.Context, string) (FeishuCredentials, error)
 	ResolveConnectorHTTP func(context.Context, string, string, Config) (ConnectorHTTPConfig, error)
 	OnCatalogChanged     func(string, uint64)
 }

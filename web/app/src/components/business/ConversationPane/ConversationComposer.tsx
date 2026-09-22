@@ -1,11 +1,10 @@
 import { ContextUsageRing } from "./ContextUsageRing";
-import { memo, useId, useMemo, useRef, useState } from "react";
+import { memo, useId, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { ArrowUp, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, Tooltip } from "@/components/ui";
-import { ConnectorGitLabIcon, IconImage } from "@/components/ui/Icons";
 import type { CLIProxyAuthStatusMap } from "@/hooks/workspace/useCLIProxyAuthStatuses";
 import type { AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
@@ -17,11 +16,8 @@ import {
   type ComposerMentionUser,
   type ComposerSegment,
 } from "@/models/composer";
-import { emptyGitHubConnectorStatus } from "@/models/connectors";
-import type { ConnectorConfigDraft, ConnectorStatus } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 import { composerActionSuggestions, type SlashPickerCandidate } from "@/models/slashCommands";
-import { classNames } from "@/shared/lib/classNames";
 import { MentionPicker } from "./MentionPicker";
 import { SlashPicker } from "./SlashPicker";
 import { AttachmentDraftStrip } from "./ConversationAttachments";
@@ -38,11 +34,6 @@ import {
 export type ConversationComposerProps = {
   authBusyProvider: string;
   authStatuses: CLIProxyAuthStatusMap;
-  connectorBusyAction?: string;
-  connectorBusyProvider?: string;
-  connectorError?: string;
-  connectorPending?: boolean;
-  connectorStatus?: ConnectorStatus;
   composerDisabled: boolean;
   composerDisabledReason?: string;
   composerError: string;
@@ -66,14 +57,9 @@ export type ConversationComposerProps = {
   onComposerCompositionEnd: () => void;
   onComposerCompositionStart: () => void;
   onComposerKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
-  onConnectConnector?: () => VoidOrPromise;
-  onDisconnectConnector?: () => VoidOrPromise;
-  onManageConnector?: () => VoidOrPromise;
-  onManageApps?: () => void;
   onProviderLogin: (provider: string) => VoidOrPromise;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onRetrySend?: () => VoidOrPromise;
-  onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => VoidOrPromise;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;
@@ -92,11 +78,6 @@ export type ConversationComposerProps = {
 export const ConversationComposer = memo(function ConversationComposer({
   authBusyProvider,
   authStatuses,
-  connectorBusyAction = "",
-  connectorBusyProvider = "",
-  connectorError = "",
-  connectorPending = false,
-  connectorStatus,
   composerDisabled,
   composerDisabledReason = "",
   composerError,
@@ -126,10 +107,6 @@ export const ConversationComposer = memo(function ConversationComposer({
   onComposerCompositionEnd,
   onComposerCompositionStart,
   onComposerKeyDown,
-  onConnectConnector,
-  onDisconnectConnector,
-  onManageConnector,
-  onManageApps,
   onProviderLogin,
   onPreviewAttachment,
   onRetrySend,
@@ -141,8 +118,6 @@ export const ConversationComposer = memo(function ConversationComposer({
   onUndoRemoveAttachment,
   onWorkingAction,
 }: ConversationComposerProps) {
-  const defaultConnectorStatus = useMemo(() => emptyGitHubConnectorStatus(), []);
-  const githubStatus = connectorStatus ?? defaultConnectorStatus;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerHelpId = useId();
   const isSending = sendStatus === "sending";
@@ -279,20 +254,7 @@ export const ConversationComposer = memo(function ConversationComposer({
           </div>
         ) : null}
         <div className="composer-toolbar">
-          <ComposerAddMenu
-            busyAction={connectorBusyAction}
-            busyProvider={connectorBusyProvider}
-            disabled={composerDisabled || isSending}
-            error={connectorError}
-            pending={connectorPending}
-            status={githubStatus}
-            t={t}
-            onAddFiles={() => fileInputRef.current?.click()}
-            onConnect={onConnectConnector}
-            onDisconnect={onDisconnectConnector}
-            onManage={onManageConnector}
-            onManageApps={onManageApps}
-          />
+          <ComposerAddMenu disabled={interactionDisabled} t={t} onAddFiles={() => fileInputRef.current?.click()} />
           <input
             ref={fileInputRef}
             className="sr-only"
@@ -534,184 +496,48 @@ function workingActionLabel(action: ConversationWorkingAction, t: TranslateFn): 
 }
 
 type ComposerAddMenuProps = {
-  busyAction: string;
-  busyProvider: string;
   disabled: boolean;
-  error: string;
-  pending: boolean;
-  status: ConnectorStatus;
   t: TranslateFn;
   onAddFiles: () => void;
-  onConnect?: () => VoidOrPromise;
-  onDisconnect?: () => VoidOrPromise;
-  onManage?: () => VoidOrPromise;
-  onManageApps?: () => void;
 };
 
-function ComposerAddMenu({
-  busyAction,
-  busyProvider,
-  disabled,
-  error,
-  pending,
-  status,
-  t,
-  onAddFiles,
-  onConnect,
-  onDisconnect,
-  onManage,
-  onManageApps,
-}: ComposerAddMenuProps) {
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const accountLabel = status.account?.login || status.account?.name || "";
-  const connectorStateLabel =
-    status.connected && accountLabel
-      ? accountLabel
-      : status.connected
-        ? t("connectorConnected")
-        : t("connectorNotConnected");
-  const hasConnectedConnector = status.connected;
-  const githubBusy = pending || (busyProvider !== "gitlab" && busyAction === "connect");
-
-  function handleConnectGitHub() {
-    void onConnect?.();
-  }
-
-  function handleDisconnectGitHub() {
-    void onDisconnect?.();
-  }
-
-  function handleManageGitHub() {
-    void onManage?.();
-  }
-
+function ComposerAddMenu({ disabled, t, onAddFiles }: ComposerAddMenuProps) {
   return (
-    <>
-      <PopoverRoot open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <Tooltip content={t("composerAddContent")}>
-          <PopoverTrigger asChild>
-            <span>
-              <Button
-                aria-haspopup="dialog"
-                aria-label={t("composerAddContent")}
-                className="composer-add-button"
-                disabled={disabled}
-                iconOnly
-                size="lg"
-                variant="tertiaryGray"
-              >
-                <Plus aria-hidden="true" size={24} strokeWidth={1.8} />
-              </Button>
-            </span>
-          </PopoverTrigger>
-        </Tooltip>
-        <PopoverContent
-          aria-label={t("composerAddContent")}
-          className={classNames("composer-add-popover", hasConnectedConnector ? "is-wide" : "is-compact")}
-          role="dialog"
-          side="top"
-        >
-          <section className="composer-add-section" aria-label={t("composerAdd")}>
-            <div className="composer-add-section-label">{t("composerAdd")}</div>
-            <PopoverClose asChild>
-              <button
-                type="button"
-                className="composer-add-menu-item"
-                aria-label={t("addAttachment")}
-                title={t("addAttachment")}
-                onClick={onAddFiles}
-              >
-                <Paperclip aria-hidden="true" size={19} />
-                <span>{t("addAttachment")}</span>
-              </button>
-            </PopoverClose>
-          </section>
-          <div className="composer-add-separator" />
-          <section className="composer-add-section" aria-label={t("composerConnectors")}>
-            <div className="composer-add-section-label">{t("composerConnectors")}</div>
-            <div className="connector-provider-row">
-              <div className="connector-provider-main">
-                <span className="connector-provider-icon" aria-hidden="true">
-                  {IconImage("github")}
-                </span>
-                <div className="connector-provider-copy">
-                  <strong>{t("connectorGitHub")}</strong>
-                  <span>{connectorStateLabel}</span>
-                </div>
-              </div>
-              {status.connected ? (
-                <div className="connector-provider-actions">
-                  <span className="connector-connected-state">{t("connectorConnected")}</span>
-                  <div className="connector-provider-action-buttons">
-                    {status.app_manageable ? (
-                      <Button
-                        aria-busy={busyAction === "manage" ? true : undefined}
-                        className="connector-manage-button"
-                        loading={busyAction === "manage"}
-                        size="sm"
-                        variant="secondaryGray"
-                        onClick={handleManageGitHub}
-                      >
-                        {t("connectorManage")}
-                      </Button>
-                    ) : null}
-                    <Button
-                      aria-busy={busyAction === "disconnect" ? true : undefined}
-                      className="connector-disconnect-button connector-disconnect-button-danger"
-                      loading={busyAction === "disconnect"}
-                      size="sm"
-                      variant="outlineDanger"
-                      onClick={handleDisconnectGitHub}
-                    >
-                      {t("connectorDisconnect")}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <Button
-                  aria-busy={githubBusy ? true : undefined}
-                  className="connector-connect-button"
-                  loading={githubBusy}
-                  size="sm"
-                  variant="tertiaryGray"
-                  onClick={handleConnectGitHub}
-                >
-                  {t("connectorConnect")}
-                </Button>
-              )}
-            </div>
-            <div className="connector-provider-row">
-              <div className="connector-provider-main">
-                <span className="connector-provider-icon" aria-hidden="true">
-                  <ConnectorGitLabIcon size={16} />
-                </span>
-                <div className="connector-provider-copy">
-                  <strong>{t("connectorGitLab")}</strong>
-                  <span>{t("appManageGlobally")}</span>
-                </div>
-              </div>
-              <Button
-                className="connector-connect-button"
-                size="sm"
-                variant="tertiaryGray"
-                disabled={!onManageApps}
-                onClick={() => {
-                  setPopoverOpen(false);
-                  onManageApps?.();
-                }}
-              >
-                {t("appOpenApps")}
-              </Button>
-            </div>
-            {pending ? (
-              <div className="connector-pending" role="status">
-                {t("connectorOAuthPending")}
-              </div>
-            ) : null}
-            {error ? <div className="form-error connector-form-error">{error}</div> : null}
-          </section>
-        </PopoverContent>
-      </PopoverRoot>
-    </>
+    <PopoverRoot>
+      <Tooltip content={t("composerAddContent")}>
+        <PopoverTrigger asChild>
+          <span>
+            <Button
+              aria-haspopup="dialog"
+              aria-label={t("composerAddContent")}
+              className="composer-add-button"
+              disabled={disabled}
+              iconOnly
+              size="lg"
+              variant="tertiaryGray"
+            >
+              <Plus aria-hidden="true" size={24} strokeWidth={1.8} />
+            </Button>
+          </span>
+        </PopoverTrigger>
+      </Tooltip>
+      <PopoverContent aria-label={t("composerAddContent")} className="composer-add-popover" role="dialog" side="top">
+        <section className="composer-add-section" aria-label={t("composerAdd")}>
+          <div className="composer-add-section-label">{t("composerAdd")}</div>
+          <PopoverClose asChild>
+            <button
+              type="button"
+              className="composer-add-menu-item"
+              aria-label={t("addAttachment")}
+              title={t("addAttachment")}
+              onClick={onAddFiles}
+            >
+              <Paperclip aria-hidden="true" size={19} />
+              <span>{t("addAttachment")}</span>
+            </button>
+          </PopoverClose>
+        </section>
+      </PopoverContent>
+    </PopoverRoot>
   );
 }

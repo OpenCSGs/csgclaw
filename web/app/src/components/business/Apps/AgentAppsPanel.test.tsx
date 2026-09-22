@@ -43,14 +43,7 @@ function Harness({ agentID = "agent-1", mode = "apps" }: { agentID?: string; mod
   const [selectedID, setSelectedID] = useState<string | undefined>();
   if (mode === "mcp") return <AppManagedMCPRows controller={controller} t={t} onSelect={setSelectedID} />;
   return (
-    <AgentAppsPanel
-      agentID={agentID}
-      controller={controller}
-      hasFeishuChannel={false}
-      t={t}
-      selectedID={selectedID}
-      onSelect={setSelectedID}
-    />
+    <AgentAppsPanel agentID={agentID} controller={controller} t={t} selectedID={selectedID} onSelect={setSelectedID} />
   );
 }
 
@@ -58,10 +51,10 @@ function mockServer(initial: AppInstallation[] = []) {
   let items = initial;
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const path = String(url);
-    if (path === "api/v1/apps") return Response.json({ items: [definition] });
-    if (path === "api/v1/app-resources")
+    if (path === "api/v1/connectors/catalog") return Response.json({ items: [definition] });
+    if (path === "api/v1/connectors/resources")
       return Response.json({ items: [{ ...installation, installation_id: "resource-1", agent_id: "", bindings: [] }] });
-    if (init?.method === "POST" && path.endsWith("apps:probe"))
+    if (init?.method === "POST" && path.endsWith("connectors:probe"))
       return Response.json({ connected: true, tools: installation.tools });
     if (init?.method === "POST" && path.endsWith("/disconnect")) {
       items = items.map((app) => ({
@@ -73,14 +66,14 @@ function mockServer(initial: AppInstallation[] = []) {
       }));
       return Response.json(items[0]);
     }
-    if (init?.method === "POST" && path.endsWith("/apps")) {
+    if (init?.method === "POST" && path.endsWith("/connectors")) {
       const body = JSON.parse(String(init.body));
       const saved = { ...installation, resource_id: body.resource_id };
       items = [...items, saved];
       return Response.json(saved);
     }
-    if (path === "api/v1/agents/agent-1/apps") return Response.json({ items });
-    if (path === "api/v1/agents/agent-2/apps") return Response.json({ items: [] });
+    if (path === "api/v1/agents/agent-1/connectors") return Response.json({ items });
+    if (path === "api/v1/agents/agent-2/connectors") return Response.json({ items: [] });
     throw new Error(`Unexpected request ${init?.method || "GET"} ${path}`);
   });
   vi.stubGlobal("fetch", fetch);
@@ -98,7 +91,7 @@ describe("Agent Apps", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText("Work GitLab")).toBeVisible();
     const create = fetch.mock.calls.find(
-      ([url, init]) => url === "api/v1/agents/agent-1/apps" && init?.method === "POST",
+      ([url, init]) => url === "api/v1/agents/agent-1/connectors" && init?.method === "POST",
     );
     expect(JSON.parse(String(create?.[1]?.body))).toEqual({ resource_id: "resource-1", connect: true });
     expect(screen.queryByLabelText("Token / API key")).not.toBeInTheDocument();
@@ -129,7 +122,7 @@ describe("Agent Apps", () => {
   it("projects app-managed MCP rows with only an App settings action", async () => {
     mockServer([installation]);
     render(<Harness mode="mcp" />);
-    await screen.findByText("Managed by app · Connected");
+    await screen.findByText("Managed by connector · Connected");
     expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["Settings"]);
   });
 
@@ -147,7 +140,6 @@ describe("Agent Apps", () => {
       <AppSettingsDialog
         definition={wikiDefinition}
         existing={wikiInstallation}
-        hasFeishuChannel={false}
         t={t}
         onClose={vi.fn()}
         onProbe={probe}
@@ -156,7 +148,7 @@ describe("Agent Apps", () => {
     );
     const secret = screen.getByLabelText("Token / API key");
     expect(secret).toHaveValue("");
-    expect(secret).toHaveAttribute("placeholder", "Configured; leave blank to keep");
+    expect(secret).toHaveAttribute("placeholder", "••••••••");
     await user.click(screen.getByRole("button", { name: "Test connection" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save and connect" })).toBeEnabled());
     await user.type(screen.getByLabelText("MCP service URL"), "/other");
@@ -172,7 +164,6 @@ describe("Agent Apps", () => {
         globalResource
         definition={{ ...definition, auth_methods: ["connector"] }}
         existing={null}
-        hasFeishuChannel={false}
         t={t}
         onClose={vi.fn()}
         onProbe={vi.fn()}
@@ -187,56 +178,60 @@ describe("Agent Apps", () => {
     expect(screen.getByLabelText("GitLab Personal Access Token")).toBeVisible();
     expect(screen.getByRole("combobox", { name: "Platform credential source" })).toBeVisible();
     expect(screen.queryByText("OAuth2 authorization is not supported in this version.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save configuration" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
+    await user.type(screen.getByLabelText("MCP service URL"), "http://localhost/mcp");
+    expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    await user.type(screen.getByLabelText("GitLab Personal Access Token"), "draft-pat");
+    expect(screen.getByRole("button", { name: "Test connection" })).toBeEnabled();
   });
 
-  it("uses the Feishu channel reference and keeps local command arguments separate", async () => {
+  it("uses connector-owned Feishu credentials and keeps local command arguments separate", async () => {
     const user = userEvent.setup();
     const probe = vi.fn().mockResolvedValue({ connected: true, tools: [] });
     render(
       <AppSettingsDialog
         definition={{ ...definition, app_id: "feishu" }}
         existing={null}
-        hasFeishuChannel
         t={t}
         onClose={vi.fn()}
         onProbe={probe}
         onSave={vi.fn()}
       />,
     );
-    expect(screen.queryByLabelText("App Secret")).not.toBeInTheDocument();
-    expect(screen.getByText("Use this agent’s Feishu channel")).toBeVisible();
+    expect(screen.getByLabelText("App Secret")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("App ID"), "test-app");
+    await user.type(screen.getByLabelText("App Secret"), "test-secret");
+    expect(screen.queryByText("Use this agent’s Feishu channel")).not.toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: "Connection type" }));
     await user.click(screen.getByRole("option", { name: "Local process (stdio)" }));
     await user.type(screen.getByLabelText("Command"), "node");
     await user.type(screen.getByLabelText("Arguments"), "mcp.js\n--label=team bot");
     await user.click(screen.getByRole("button", { name: "Test connection" }));
-    await screen.findByText("Connection successful, 0 tools found");
+    await screen.findByText("Connected · 0 tools");
     expect(probe.mock.calls[0][0]).toMatchObject({
       config: {
         transport: "stdio",
         command: "node",
         args: ["mcp.js", "--label=team bot"],
         auth_mode: "feishu",
-        credential_source: "feishu_channel",
+        credential_source: "manual",
         app_id_env: "FEISHU_APP_ID",
         app_secret_env: "FEISHU_APP_SECRET",
       },
     });
-    expect(probe.mock.calls[0][0].credentials).not.toHaveProperty("app_secret");
+    expect(probe.mock.calls[0][0].credentials.app_secret).toBe("test-secret");
   });
 });
 
 describe("Feishu managed authentication", () => {
-  it("uses channel credentials and a platform token without requesting header names", async () => {
+  it("uses connector credentials and a platform token without requesting header names", async () => {
     const user = userEvent.setup();
     const onProbe = vi.fn().mockResolvedValue({ connected: true, tools: [] });
     render(
       <AppSettingsDialog
         definition={{ ...definition, app_id: "feishu", name: "Feishu" }}
         existing={null}
-        hasFeishuChannel={true}
         t={t}
         onClose={vi.fn()}
         onProbe={onProbe}
@@ -245,14 +240,16 @@ describe("Feishu managed authentication", () => {
     );
     expect(screen.queryByLabelText("App ID header name")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("App Secret header name")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("App Secret")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("App Secret")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("App ID"), "test-app");
+    await user.type(screen.getByLabelText("App Secret"), "test-secret");
     await user.type(screen.getByLabelText("MCP service URL"), "https://passthrough.example/mcp");
     await user.type(screen.getByLabelText("Platform access token (optional)"), "platform-secret-test");
     await user.click(screen.getByRole("button", { name: "Test connection" }));
     await waitFor(() =>
       expect(onProbe).toHaveBeenCalledWith(
         expect.objectContaining({
-          config: expect.objectContaining({ auth_mode: "feishu", credential_source: "feishu_channel" }),
+          config: expect.objectContaining({ auth_mode: "feishu", credential_source: "manual" }),
           credentials: expect.objectContaining({ token: "platform-secret-test" }),
         }),
       ),
@@ -268,13 +265,14 @@ describe("Platform login and connection errors", () => {
       <AppSettingsDialog
         definition={{ ...definition, app_id: "feishu", name: "Feishu" }}
         existing={null}
-        hasFeishuChannel={true}
         t={t}
         onClose={vi.fn()}
         onProbe={onProbe}
         onSave={vi.fn()}
       />,
     );
+    await user.type(screen.getByLabelText("App ID"), "test-app");
+    await user.type(screen.getByLabelText("App Secret"), "test-secret");
     await user.type(screen.getByLabelText("MCP service URL"), "https://demo.public.opencsg-stg.com/mcp");
     expect(screen.queryByLabelText("Platform access token (optional)")).not.toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: "Platform credential source" }));
@@ -311,7 +309,6 @@ describe("App connection form layout", () => {
       <AppSettingsDialog
         definition={{ ...definition, app_id: "feishu" }}
         existing={null}
-        hasFeishuChannel={false}
         t={t}
         onClose={vi.fn()}
         onProbe={vi.fn()}

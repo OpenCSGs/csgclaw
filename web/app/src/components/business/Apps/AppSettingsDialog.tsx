@@ -34,7 +34,6 @@ type Props = {
   definition: AppDefinition;
   globalResource?: boolean;
   existing: AppInstallation | null;
-  hasFeishuChannel: boolean;
   t: TranslateFn;
   portalContainer?: HTMLElement | null;
   onClose: () => void;
@@ -46,21 +45,22 @@ export function AppSettingsDialog({
   definition,
   globalResource = false,
   existing,
-  hasFeishuChannel,
   t,
   portalContainer,
   onClose,
   onProbe,
   onSave,
 }: Props) {
-  const [form, setForm] = useState<AppForm>(() =>
-    initialAppForm(definition, existing, hasFeishuChannel || globalResource),
-  );
+  const [form, setForm] = useState<AppForm>(() => initialAppForm(definition, existing));
   const [busy, setBusy] = useState<"probe" | "save" | "connect" | "">("");
   const [error, setError] = useState("");
   const [probe, setProbe] = useState<{ signature: string; result: AppProbeResult } | null>(null);
   const signature = JSON.stringify(form);
+  const [initialSignature] = useState(signature);
   const tested = probe?.signature === signature && probe.result.connected;
+  useEffect(() => {
+    setError("");
+  }, [signature]);
   const probeResultRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (tested) probeResultRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -71,14 +71,34 @@ export function AppSettingsDialog({
   const gitlab = definition.app_id === "gitlab";
   const platformSource = config.platform_credential_source || defaultPlatformCredentialSource(config);
   const appCredentials = config.auth_mode === "feishu";
-  const channelCredentials = appCredentials && config.credential_source === "feishu_channel";
-  const needsAgentIdentity = globalResource && channelCredentials;
   const oauthUnsupported = config.auth_mode === "oauth2" && !definition.oauth_supported;
-  const credentialPlaceholder = (key: string) => (existing?.credentials_set[key] ? t("appSecretUnchanged") : "");
+  const hasSavedCredential = (key: string) =>
+    Boolean(existing?.credentials_set[key]) &&
+    !(
+      gitlab &&
+      key === "token" &&
+      config.gitlab_base_url?.trim().replace(/\/+$/, "") !==
+        existing?.config.gitlab_base_url?.trim().replace(/\/+$/, "")
+    );
+  const hasCredential = (key: "token" | "app_id" | "app_secret") =>
+    key === "app_id" || form.credentials[key] ? Boolean(form.credentials[key]?.trim()) : hasSavedCredential(key);
+  const tokenRequired =
+    gitlab ||
+    (!appCredentials &&
+      config.auth_mode !== "none" &&
+      config.auth_mode !== "oauth2" &&
+      (config.auth_mode === "header" || platformSource !== "opencsg_login"));
+  const requiredFieldsFilled =
+    Boolean(form.name.trim() && (stdio ? config.command?.trim() : config.url?.trim())) &&
+    (!gitlab || Boolean(config.gitlab_base_url?.trim())) &&
+    (!tokenRequired || hasCredential("token")) &&
+    (!appCredentials || (hasCredential("app_id") && hasCredential("app_secret")));
+  const credentialPlaceholder = (key: string) => (hasSavedCredential(key) ? "••••••••" : "");
   const updateConfig = (patch: Partial<AppConfig>) =>
     setForm((previous) => ({ ...previous, config: { ...previous.config, ...patch } }));
 
   async function execute(action: "probe" | "save" | "connect") {
+    if (!requiredFieldsFilled || oauthUnsupported) return;
     setBusy(action);
     setError("");
     try {
@@ -92,7 +112,7 @@ export function AppSettingsDialog({
       }
     } catch (failure) {
       setError(localizeAPIError(failure, t) || errorMessage(failure, t("appActionFailed")));
-      if (action === "probe") setProbe(null);
+      setProbe(null);
     } finally {
       setBusy("");
     }
@@ -113,7 +133,9 @@ export function AppSettingsDialog({
                 ? t("appSettingsTitle", { name: existing.name })
                 : t("appAddTitle", { name: appName(definition.app_id, t, definition.name) })}
             </DialogTitle>
-            <DialogDescription>{t("appSettingsDescription")}</DialogDescription>
+            <DialogDescription>
+              {t(globalResource ? "appSaveValidationHint" : "appSettingsDescription")}
+            </DialogDescription>
           </div>
           <DialogCloseButton label={t("close")} disabled={Boolean(busy)} size="sm" variant="tertiaryGray" />
         </DialogHeader>
@@ -125,9 +147,10 @@ export function AppSettingsDialog({
                 <p>{t("appConnectionSectionHint")}</p>
               </header>
               <div className={styles.columns}>
-                <Field label={t("appInstanceName")}>
+                <Field required label={t("appInstanceName")}>
                   <TextInput
                     required
+                    aria-label={t("appInstanceName")}
                     autoComplete="off"
                     value={form.name}
                     onChange={(event) => setForm({ ...form, name: event.target.value })}
@@ -162,7 +185,7 @@ export function AppSettingsDialog({
               </div>
               {stdio ? (
                 <>
-                  <Field label={t("appCommand")} hint={t("appCommandHint")}>
+                  <Field required label={t("appCommand")} hint={t("appCommandHint")}>
                     <TextInput
                       aria-label={t("appCommand")}
                       required
@@ -187,7 +210,7 @@ export function AppSettingsDialog({
                   </Field>
                 </>
               ) : (
-                <Field label={t("appServiceURL")} hint={t("appServiceURLHint")}>
+                <Field required label={t("appServiceURL")} hint={t("appServiceURLHint")}>
                   <TextInput
                     aria-label={t("appServiceURL")}
                     required
@@ -199,7 +222,7 @@ export function AppSettingsDialog({
                 </Field>
               )}
               {gitlab ? (
-                <Field label={t("appGitLabInstanceURL")} hint={t("appGitLabInstanceURLHint")}>
+                <Field required label={t("appGitLabInstanceURL")} hint={t("appGitLabInstanceURLHint")}>
                   <TextInput
                     aria-label={t("appGitLabInstanceURL")}
                     required
@@ -242,7 +265,7 @@ export function AppSettingsDialog({
                           auth_mode: value as AppConfig["auth_mode"],
                           platform_credential_source:
                             value === "env" || value === "oauth2" ? "manual" : config.platform_credential_source,
-                          credential_source: value === "feishu" ? config.credential_source || "manual" : "manual",
+                          credential_source: "manual",
                         })
                       }
                     />
@@ -295,9 +318,11 @@ export function AppSettingsDialog({
                 </Field>
               ) : null}
               {gitlab ? (
-                <Field label={t("connectorGitLabToken")} hint={t("connectorGitLabTokenKeep")}>
+                <Field required label={t("connectorGitLabToken")} hint={t("connectorGitLabTokenKeep")}>
                   <TextInput
                     aria-label={t("connectorGitLabToken")}
+                    required={!hasSavedCredential("token")}
+                    placeholder={credentialPlaceholder("token")}
                     type="password"
                     autoComplete="new-password"
                     value={form.credentials.token || ""}
@@ -311,9 +336,10 @@ export function AppSettingsDialog({
                 config.auth_mode !== "oauth2" &&
                 config.auth_mode !== "connector" &&
                 (config.auth_mode === "header" || platformSource !== "opencsg_login") ? (
-                <Field label={t("appToken")} hint={t("appSecretHint")}>
+                <Field required label={t("appToken")} hint={t("appSecretHint")}>
                   <TextInput
                     aria-label={t("appToken")}
+                    required={!hasSavedCredential("token")}
                     type="password"
                     autoComplete="new-password"
                     value={form.credentials.token || ""}
@@ -363,64 +389,32 @@ export function AppSettingsDialog({
               <section className={styles.formSection} aria-label={t("appFeishuIdentitySection")}>
                 <header className={styles.sectionHeading}>
                   <h3>{t("appFeishuIdentitySection")}</h3>
-                  <p>{t(stdio ? "appFeishuLocalIdentityHint" : "appFeishuIdentitySectionHint")}</p>
+                  <p>{t("appGlobalCredentialHint")}</p>
                 </header>
-                {feishu ? (
-                  <Field
-                    label={t("appCredentialSource")}
-                    hint={
-                      config.credential_source === "feishu_channel"
-                        ? t(globalResource ? "appBoundAgentChannelHint" : "appChannelReferenceHint")
-                        : undefined
+                <Field required label="App ID">
+                  <TextInput
+                    aria-label="App ID"
+                    required
+                    autoComplete="off"
+                    value={form.credentials.app_id || ""}
+                    onChange={(event) =>
+                      setForm({ ...form, credentials: { ...form.credentials, app_id: event.target.value } })
                     }
-                  >
-                    <Select
-                      value={config.credential_source || "manual"}
-                      triggerProps={{ "aria-label": t("appCredentialSource") }}
-                      options={[
-                        {
-                          value: "feishu_channel",
-                          label: t(globalResource ? "appBoundAgentChannel" : "appUseFeishuChannel"),
-                        },
-                        { value: "manual", label: t("appManualCredentials") },
-                      ]}
-                      onValueChange={(value) =>
-                        updateConfig({
-                          credential_source: value === "feishu_channel" ? "feishu_channel" : "manual",
-                        })
-                      }
-                    />
-                  </Field>
-                ) : null}
-                {channelCredentials && !hasFeishuChannel && !globalResource ? (
-                  <p className="form-warning">{t("appChannelUnavailable")}</p>
-                ) : null}
-                {!channelCredentials ? (
-                  <>
-                    <Field label="App ID">
-                      <TextInput
-                        autoComplete="off"
-                        value={form.credentials.app_id || ""}
-                        placeholder={credentialPlaceholder("app_id")}
-                        onChange={(event) =>
-                          setForm({ ...form, credentials: { ...form.credentials, app_id: event.target.value } })
-                        }
-                      />
-                    </Field>
-                    <Field label="App Secret" hint={t("appSecretHint")}>
-                      <TextInput
-                        aria-label="App Secret"
-                        type="password"
-                        autoComplete="new-password"
-                        value={form.credentials.app_secret || ""}
-                        placeholder={credentialPlaceholder("app_secret")}
-                        onChange={(event) =>
-                          setForm({ ...form, credentials: { ...form.credentials, app_secret: event.target.value } })
-                        }
-                      />
-                    </Field>
-                  </>
-                ) : null}
+                  />
+                </Field>
+                <Field required label="App Secret" hint={t("appSecretHint")}>
+                  <TextInput
+                    aria-label="App Secret"
+                    required={!hasSavedCredential("app_secret")}
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.credentials.app_secret || ""}
+                    placeholder={credentialPlaceholder("app_secret")}
+                    onChange={(event) =>
+                      setForm({ ...form, credentials: { ...form.credentials, app_secret: event.target.value } })
+                    }
+                  />
+                </Field>
                 {stdio ? (
                   <div className={styles.columns}>
                     <Field label={t("appIDEnvironment")}>
@@ -484,12 +478,21 @@ export function AppSettingsDialog({
             </div>
           ) : null}
           {tested ? (
-            <div className={styles.probeResult} role="status" ref={probeResultRef}>
+            <div className={styles.probeResult} role="status">
               <strong>{t("appProbeSucceeded", { count: probe.result.tools.length })}</strong>
-              <AppToolList tools={probe.result.tools} t={t} />
+              <p className={styles.hint}>{t("appProbeNotSaved")}</p>
             </div>
           ) : null}
           {probe && !tested ? <p className={styles.hint}>{t("appProbeStale")}</p> : null}
+          <div ref={probeResultRef}>
+            <AppToolList
+              key={tested ? "tested" : "saved"}
+              tools={
+                tested ? probe.result.tools : signature === initialSignature && !error ? (existing?.tools ?? []) : []
+              }
+              t={t}
+            />
+          </div>
         </DialogBody>
         <DialogFooter className={styles.footer}>
           <Button variant="secondaryGray" disabled={Boolean(busy)} onClick={onClose}>
@@ -497,7 +500,7 @@ export function AppSettingsDialog({
           </Button>
           {!globalResource ? (
             <Button
-              disabled={Boolean(busy) || !form.name.trim() || oauthUnsupported}
+              disabled={Boolean(busy) || !requiredFieldsFilled || oauthUnsupported}
               loading={busy === "save"}
               onClick={() => void execute("save")}
             >
@@ -505,13 +508,8 @@ export function AppSettingsDialog({
             </Button>
           ) : null}
           <Button
-            disabled={
-              Boolean(busy) ||
-              needsAgentIdentity ||
-              oauthUnsupported ||
-              !(stdio ? config.command?.trim() : config.url?.trim()) ||
-              (gitlab && !config.gitlab_base_url?.trim())
-            }
+            variant="secondaryGray"
+            disabled={Boolean(busy) || !requiredFieldsFilled || oauthUnsupported}
             loading={busy === "probe"}
             onClick={() => void execute("probe")}
           >
@@ -519,14 +517,8 @@ export function AppSettingsDialog({
           </Button>
           <Button
             variant="primary"
-            disabled={
-              Boolean(busy) ||
-              !form.name.trim() ||
-              (!globalResource && !tested) ||
-              oauthUnsupported ||
-              (gitlab && !config.gitlab_base_url?.trim())
-            }
-            loading={busy === "connect"}
+            disabled={Boolean(busy) || !requiredFieldsFilled || !tested || oauthUnsupported}
+            loading={busy === (globalResource ? "save" : "connect")}
             onClick={() => void execute(globalResource ? "save" : "connect")}
           >
             {globalResource ? t("appSaveConfiguration") : existing ? t("appSaveAndConnect") : t("appAddAndConnect")}

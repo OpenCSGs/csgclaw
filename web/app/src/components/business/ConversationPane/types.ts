@@ -6,7 +6,6 @@ import type { DocumentPreviewRequest } from "@/components/business/DocumentPrevi
 import type { AgentLike, AgentProfileLike } from "@/models/agents";
 import type { AttachmentDraft } from "@/models/attachments";
 import type { ComposerMentionUser, ComposerSegment } from "@/models/composer";
-import type { ConnectorConfigDraft, ConnectorStatus } from "@/models/connectors";
 import type {
   IMConversation,
   IMMessage,
@@ -76,11 +75,6 @@ export type ConversationPaneProps = {
   authStatuses: CLIProxyAuthStatusMap;
   channelToolsRef: RefObject<HTMLDivElement | null>;
   composerError: string;
-  connectorBusyAction?: string;
-  connectorBusyProvider?: string;
-  connectorError?: string;
-  connectorPending?: boolean;
-  connectorStatus?: ConnectorStatus;
   conversation: IMConversation;
   conversationMembers: IMUser[];
   currentUserID?: string;
@@ -119,10 +113,6 @@ export type ConversationPaneProps = {
   onComposerCompositionEnd: () => void;
   onComposerCompositionStart: () => void;
   onComposerKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
-  onConnectConnector?: () => VoidOrPromise;
-  onDisconnectConnector?: () => VoidOrPromise;
-  onManageApps?: () => void;
-  onManageConnector?: () => VoidOrPromise;
   onDeleteRoom: (id: string) => VoidOrPromise;
   onDismissThreadSlashPicker?: () => void;
   onInviteAction: () => void;
@@ -137,7 +127,6 @@ export type ConversationPaneProps = {
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onProviderLogin: (provider: string) => VoidOrPromise;
   onRetrySend?: () => VoidOrPromise;
-  onSaveConnectorConfig?: (draft: ConnectorConfigDraft) => VoidOrPromise;
   onSendMessage: () => VoidOrPromise;
   onStopSend?: () => void;
   onUndoRemoveAttachment?: () => void;

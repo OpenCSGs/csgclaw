@@ -7,20 +7,15 @@ describe("i18n messages", () => {
     expect(createTranslator("zh")("humanDetailSubtitle")).toBe("你在聊天、提及和协作中的显示方式。");
   });
 
-  it("localizes connector controls instead of exposing translation keys", () => {
-    const connectorLabels = {
-      en: ["Manage connectors", "Connected", "Manage", "Disconnect"],
-      zh: ["管理连接器", "已连接", "管理", "断开"],
+  it("uses Connector terminology while retaining App API translation keys", () => {
+    const labels = {
+      en: ["Connectors", "Add connector", "Managed by connector", "Manage global Connectors"],
+      zh: ["连接器", "添加连接器", "由连接器管理", "管理全局连接器"],
     } as const;
-
     for (const locale of ["en", "zh"] as const) {
       const t = createTranslator(locale);
-      expect([
-        t("connectorManagerTitle"),
-        t("connectorConnected"),
-        t("connectorManage"),
-        t("connectorDisconnect"),
-      ]).toEqual(connectorLabels[locale]);
+      expect([t("agentAppsTab"), t("appAdd"), t("appManagedMCP"), t("appManageResources")]).toEqual(labels[locale]);
+      expect(t("appSecretEnvironment")).toContain("App Secret");
     }
   });
 

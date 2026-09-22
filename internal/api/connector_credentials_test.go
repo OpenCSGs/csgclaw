@@ -260,10 +260,10 @@ func TestAgentConnectorCredentialAPIDeniesScopedRuntimes(t *testing.T) {
 
 	handler := &Handler{svc: agentSvc, serverAccessToken: "server-token", agentEngine: agentengine.New(agentSvc), workspace: agentSvc.Workspace(), agentModels: agentSvc.Models(), agentRuntime: agentSvc}
 	handler.SetConnectorService(connectorSvc)
-	if err := handler.EnableApps(filepath.Join(t.TempDir(), "apps.json")); err != nil {
+	if err := handler.EnableConnectors(filepath.Join(t.TempDir(), "apps.json")); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = handler.CloseApps() })
+	t.Cleanup(func() { _ = handler.CloseConnectors() })
 	routes := handler.Routes()
 
 	rec := httptest.NewRecorder()

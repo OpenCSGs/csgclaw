@@ -157,7 +157,6 @@ function renderConversationController(
     managerRuntimeWarning?: string;
     messageListActive?: boolean;
     openCSGAuthGuard?: OpenCSGAuthGuard;
-    onManageApps?: (agentID?: string) => void;
     setBootstrapData?: (updater: unknown) => void;
     workingParticipantsForRoom?: (roomID: string | null | undefined) => ConversationWorkingParticipant[];
   } = {},
@@ -196,7 +195,6 @@ function renderConversationController(
         onMessageAction: vi.fn(),
         onProviderLogin: vi.fn(),
         openCSGAuthGuard: options.openCSGAuthGuard ?? openCSGAuthGuardStub(),
-        onManageApps: options.onManageApps,
         rooms: data.rooms,
         selectComputer: vi.fn(),
         selectConversation: vi.fn(),
@@ -219,16 +217,6 @@ function renderConversationController(
 }
 
 describe("useConversationController", () => {
-  it("opens the canonical App owner for a direct Codex conversation", () => {
-    const onManageApps = vi.fn();
-    const { result } = renderConversationController({
-      agents: [{ id: "agent-codex", user_id: "u-demo", name: "demo", runtime_kind: "codex" }],
-      onManageApps,
-    });
-    act(() => result.current.conversationViewProps.onManageApps?.());
-    expect(onManageApps).toHaveBeenCalledWith("agent-codex");
-  });
-
   beforeEach(() => {
     subscribeIMEventsMock.mockReset();
     subscribeIMEventsMock.mockReturnValue(() => {});

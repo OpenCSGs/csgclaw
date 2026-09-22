@@ -40,11 +40,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     authStatuses,
     channelToolsRef,
     composerError,
-    connectorBusyAction,
-    connectorBusyProvider,
-    connectorError,
-    connectorPending,
-    connectorStatus,
     conversation,
     conversationMembers,
     currentUserID = "",
@@ -80,14 +75,10 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onComposerCompositionEnd,
     onComposerCompositionStart,
     onComposerKeyDown,
-    onConnectConnector,
     onDeleteRoom,
-    onDisconnectConnector,
     onDismissThreadSlashPicker = () => {},
     onInviteAction,
     onMessageAction,
-    onManageApps,
-    onManageConnector,
     onOpenThread,
     onPreviewUser,
     onProviderLogin,
@@ -98,7 +89,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     onStopSend,
     onUndoRemoveAttachment,
     onSendThreadReply,
-    onSaveConnectorConfig,
     onSetThreadSlashIndex = (_index) => {},
     onSyncComposer,
     onStopWorkingTurn,
@@ -321,11 +311,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         <Conversation.Composer
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
-          connectorStatus={connectorStatus}
-          connectorBusyAction={connectorBusyAction}
-          connectorBusyProvider={connectorBusyProvider}
-          connectorError={connectorError}
-          connectorPending={connectorPending}
           composerDisabled={composerDisabled}
           composerDisabledReason={composerDisabledReason}
           composerError={composerError}
@@ -355,14 +340,9 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           onComposerCompositionEnd={onComposerCompositionEnd}
           onComposerCompositionStart={onComposerCompositionStart}
           onComposerKeyDown={onComposerKeyDown}
-          onConnectConnector={onConnectConnector}
-          onDisconnectConnector={onDisconnectConnector}
-          onManageApps={onManageApps}
-          onManageConnector={onManageConnector}
           onProviderLogin={onProviderLogin}
           onPreviewAttachment={handlePreviewAttachment}
           onRetrySend={onRetrySend}
-          onSaveConnectorConfig={onSaveConnectorConfig}
           onSendMessage={onSendMessage}
           onStopSend={onStopSend}
           onUndoRemoveAttachment={onUndoRemoveAttachment}

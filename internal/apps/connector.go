@@ -2,7 +2,6 @@ package apps
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,16 +27,15 @@ var quietLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 var errAuthentication = errors.New("App authorization is no longer valid")
 
 type connection struct {
-	httpAuth       *headerTransport
-	tokens         feishutransport.TenantTokenSource
-	ctx            context.Context
-	session        *mcp.ClientSession
-	cancel         context.CancelFunc
-	tools          []*mcp.Tool
-	toolNames      []string
-	generation     uint64
-	refreshMu      chan struct{}
-	credentialHash [32]byte
+	httpAuth   *headerTransport
+	tokens     feishutransport.TenantTokenSource
+	ctx        context.Context
+	session    *mcp.ClientSession
+	cancel     context.CancelFunc
+	tools      []*mcp.Tool
+	toolNames  []string
+	generation uint64
+	refreshMu  chan struct{}
 }
 
 func (c *connection) close() {
@@ -125,12 +123,10 @@ func validateConfig(c Config, appID string) error {
 	if c.StartupTimeoutSec > 120 || c.ToolTimeoutSec > 600 {
 		return fmt.Errorf("%w: timeout is too large", ErrInvalid)
 	}
-	if c.CredentialSource != "manual" && c.CredentialSource != "feishu_channel" {
-		return fmt.Errorf("%w: credential source is unsupported", ErrInvalid)
+	if c.CredentialSource != "manual" {
+		return errors.Join(ErrInvalid, connectionError("app_global_credentials_required", "Configure credentials on the global connector. Agent channel credentials cannot be referenced.", 0, true))
 	}
-	if c.CredentialSource == "feishu_channel" && appID != "feishu" {
-		return fmt.Errorf("%w: channel credentials are only available for Feishu", ErrInvalid)
-	}
+
 	switch c.AuthMode {
 	case "none", "bearer", "header", "env", "feishu", "oauth2", "connector":
 	default:
@@ -159,17 +155,7 @@ func validateConfig(c Config, appID string) error {
 }
 
 func (s *Service) resolve(ctx context.Context, agentID string, c Config, credentials Credentials) (Credentials, error) {
-	if c.CredentialSource == "feishu_channel" {
-		if s.options.ResolveFeishu == nil {
-			return Credentials{}, connectionError("app_feishu_channel_required", "Configure this Agent’s Feishu channel before connecting this App.", 0, true)
-		}
-		value, err := s.options.ResolveFeishu(ctx, agentID)
-		if err != nil || value.AppID == "" || value.AppSecret == "" {
-			return Credentials{}, connectionError("app_feishu_channel_required", "Configure this Agent’s Feishu channel before connecting this App.", 0, true)
-		}
-		credentials.AppID = value.AppID
-		credentials.AppSecret = value.AppSecret
-	}
+
 	if c.AuthMode != "none" && c.AuthMode != "feishu" && c.AuthMode != "oauth2" && c.AuthMode != "connector" &&
 		(c.PlatformCredentialSource != "opencsg_login" || c.AuthMode == "header") && credentials.Token == "" {
 		return Credentials{}, fmt.Errorf("%w: token is required", ErrInvalid)
@@ -389,7 +375,7 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			var err error
 			token, err = t.tokens.Token(req.Context())
 			if err != nil {
-				return nil, t.captureFailure(connectionError("app_feishu_token_failed", "Cannot obtain a Feishu application token. Check the selected Channel or App ID/App Secret, application status and Feishu connectivity.", 0, true))
+				return nil, t.captureFailure(connectionError("app_feishu_token_failed", "Cannot obtain a Feishu application token. Check the connector App ID/App Secret, application status and Feishu connectivity.", 0, true))
 			}
 		}
 		cloned.Header.Set("lark-access-token", token)
@@ -446,7 +432,7 @@ func (s *Service) open(ctx context.Context, agentID, appID string, c Config, cre
 		_, tokenErr := tokens.Token(tokenCtx)
 		tokenCancel()
 		if tokenErr != nil {
-			return nil, nil, connectionError("app_feishu_token_failed", "Cannot obtain a Feishu application token. Check the selected Channel or App ID/App Secret, application status and Feishu connectivity.", 0, true)
+			return nil, nil, connectionError("app_feishu_token_failed", "Cannot obtain a Feishu application token. Check the connector App ID/App Secret, application status and Feishu connectivity.", 0, true)
 		}
 	}
 	transport, err := s.buildTransport(ctx, agentID, appID, c, resolved, dirs, tokens)
@@ -486,9 +472,7 @@ func (s *Service) open(ctx context.Context, agentID, appID string, c Config, cre
 		conn.close()
 		return nil, nil, fmt.Errorf("MCP connection was cancelled or timed out")
 	}
-	if c.CredentialSource == "feishu_channel" {
-		conn.credentialHash = sha256.Sum256([]byte(resolved.AppID + "\x00" + resolved.AppSecret))
-	}
+
 	listCtx, listCancel := context.WithTimeout(ctx, time.Duration(c.ToolTimeoutSec)*time.Second)
 	defer listCancel()
 	tools, err := listTools(listCtx, session)

@@ -2,7 +2,6 @@ package apps
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -67,10 +66,7 @@ func (s *Service) Upload(ctx context.Context, agentID, installationID, uploadURI
 	if err != nil {
 		return nil, err
 	}
-	if config.CredentialSource == "feishu_channel" && sha256.Sum256([]byte(credentials.AppID+"\x00"+credentials.AppSecret)) != conn.credentialHash {
-		_ = s.RefreshCredentials(ctx, agentID)
-		return nil, fmt.Errorf("App credentials changed; retry after reconnecting")
-	}
+
 	client, err := connectorHTTPClient(config, credentials, conn.tokens)
 	if err != nil {
 		return nil, err

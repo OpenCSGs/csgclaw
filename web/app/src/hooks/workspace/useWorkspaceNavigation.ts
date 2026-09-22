@@ -93,7 +93,8 @@ export function useWorkspaceNavigation({
   );
 
   const selectApps = useCallback(
-    (addAppID?: string) => navigate(addAppID ? `/apps?add_app=${encodeURIComponent(addAppID)}` : "/apps"),
+    (addAppID?: string) =>
+      navigate(addAppID ? `/connectors?add_connector=${encodeURIComponent(addAppID)}` : "/connectors"),
     [navigate],
   );
 

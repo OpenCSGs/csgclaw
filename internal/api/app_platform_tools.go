@@ -33,7 +33,7 @@ func (h *Handler) addAppPlatformTool(agentID, name, description string, properti
 	resolved, schemaErr := shape.Resolve(nil)
 	tool := &mcp.Tool{Name: name, Description: description, InputSchema: schema, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: readOnly}}
 	h.apps.RegisterTool(agentID, tool, func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		if !readOnly && h.appReadOnlyAgent(agentID) {
+		if !readOnly && h.connectorReadOnlyAgent(agentID) {
 			return platformToolFailure(fmt.Errorf("read-only Agent cannot perform this operation")), nil
 		}
 		if _, ok := h.svc.Agent(agentID); !ok {
@@ -274,18 +274,18 @@ func (h *Handler) registerAppIdentityTools(agentID string) {
 		return map[string]any{"apps": summaries, "available_app_counts": counts}, nil
 	})
 	h.addAppPlatformTool(agentID, "app_setup", "Open your App configuration page to add or reconnect GitLab, Feishu, or a knowledge base. The user enters credentials in the UI.", platformTextFields("app_id", "installation_id"), nil, true, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
-		q := url.Values{"tab": {"apps"}}
+		q := url.Values{"tab": {"connectors"}}
 		if id := platformText(args, "installation_id"); id != "" {
 			if _, err := h.apps.Get(ctx, agentID, id); err != nil {
 				return nil, err
 			}
-			q.Set("app", id)
+			q.Set("connector", id)
 		}
 		if id := platformText(args, "app_id"); id != "" {
 			if _, err := h.apps.Definition(id); err != nil {
 				return nil, err
 			}
-			q.Set("add_app", id)
+			q.Set("add_connector", id)
 		}
 		return map[string]any{"url": strings.TrimRight(h.advertiseBaseURL, "/") + "/#/agents/" + url.PathEscape(agentID) + "?" + q.Encode(), "message": "Open App settings and enter credentials there."}, nil
 	})
@@ -423,7 +423,7 @@ func (h *Handler) registerAppFileTools(agentID string) {
 			if err != nil {
 				return nil, err
 			}
-			rt := h.appCodexRuntime()
+			rt := h.connectorCodexRuntime()
 			if rt == nil {
 				return nil, fmt.Errorf("Codex runtime unavailable")
 			}

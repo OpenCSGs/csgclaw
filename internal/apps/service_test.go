@@ -429,20 +429,15 @@ func TestAppStdioHelper(t *testing.T) {
 	os.Exit(0)
 }
 
-func TestFeishuStdioChannelRotationAndManualDisconnect(t *testing.T) {
+func TestFeishuStdioCredentialRotationAndManualDisconnect(t *testing.T) {
 	t.Setenv("UNRELATED_HOST_SECRET", "must-not-inherit")
-	var mu sync.Mutex
-	value := FeishuCredentials{AppID: "fixture-id", AppSecret: "fixture-one"}
-	s := newTestService(t, Options{ResolveFeishu: func(context.Context, string) (FeishuCredentials, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		return value, nil
-	}})
+	value := Credentials{AppID: "fixture-id", AppSecret: "fixture-one"}
+	s := newTestService(t, Options{})
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	item, err := s.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{Transport: "stdio", Command: executable, Args: []string{"-test.run=^TestAppStdioHelper$"}, AuthMode: "feishu", CredentialSource: "feishu_channel", Env: map[string]string{"CSGCLAW_APP_TEST_HELPER": "1"}}, Connect: true})
+	item, err := s.Create(context.Background(), "agent", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{Transport: "stdio", Command: executable, Args: []string{"-test.run=^TestAppStdioHelper$"}, AuthMode: "feishu", CredentialSource: "manual", Env: map[string]string{"CSGCLAW_APP_TEST_HELPER": "1"}}, Credentials: value, Connect: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -456,13 +451,11 @@ func TestFeishuStdioChannelRotationAndManualDisconnect(t *testing.T) {
 		t.Fatalf("credential/env isolation failed: %q", got)
 	}
 	data, _ := os.ReadFile(s.path)
-	if bytes.Contains(data, []byte("fixture-one")) {
-		t.Fatal("channel secret was copied into installation")
+	if bytes.Count(data, []byte("fixture-one")) != 1 {
+		t.Fatal("global credential was not stored exactly once")
 	}
-	mu.Lock()
 	value.AppSecret = "fixture-two"
-	mu.Unlock()
-	if err := s.RefreshCredentials(context.Background(), "agent"); err != nil {
+	if _, err := s.Update(context.Background(), "", item.ResourceID, UpdateRequest{Credentials: &value}); err != nil {
 		t.Fatal(err)
 	}
 	result, err = client.CallTool(context.Background(), &mcp.CallToolParams{Name: name})
@@ -475,10 +468,8 @@ func TestFeishuStdioChannelRotationAndManualDisconnect(t *testing.T) {
 	if _, err := s.Disconnect(context.Background(), "agent", item.InstallationID); err != nil {
 		t.Fatal(err)
 	}
-	mu.Lock()
 	value.AppSecret = "fixture-three"
-	mu.Unlock()
-	if err := s.RefreshCredentials(context.Background(), "agent"); err != nil {
+	if _, err := s.Update(context.Background(), "", item.ResourceID, UpdateRequest{Credentials: &value}); err != nil {
 		t.Fatal(err)
 	}
 	current, _ := s.Get(context.Background(), "agent", item.InstallationID)

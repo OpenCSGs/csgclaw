@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	feishutransport "csgclaw/internal/channel/feishu/transport"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -36,6 +38,10 @@ func TestGlobalResourceBindingsRefreshAndRevokeIndependently(t *testing.T) {
 	}
 	if _, err = s.Bind(ctx, "a", BindRequest{ResourceID: resource.InstallationID}); err != ErrConflict {
 		t.Fatal("duplicate binding accepted")
+	}
+	current, err := s.Get(ctx, "", resource.InstallationID)
+	if err != nil || len(current.Tools) != 1 || current.Tools[0].Name != "inspect" {
+		t.Fatal("global resource omitted discovered tools")
 	}
 	ac, bc := gatewayClient(t, s, "a"), gatewayClient(t, s, "b")
 	check := func(client *mcp.ClientSession, binding Installation, token string) {
@@ -172,7 +178,7 @@ func TestExistingInstallationBecomesResourceWithoutChangingToolIdentity(t *testi
 	}
 }
 
-func TestGlobalFeishuResourceResolvesEachAgentsChannel(t *testing.T) {
+func TestGlobalFeishuResourceUsesItsOwnIdentityForEveryAgent(t *testing.T) {
 	ctx := context.Background()
 	upstream := mcp.NewServer(&mcp.Implementation{Name: "feishu", Version: "1"}, nil)
 	upstream.AddTool(&mcp.Tool{Name: "identity", InputSchema: map[string]any{"type": "object"}}, func(_ context.Context, r *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -180,16 +186,14 @@ func TestGlobalFeishuResourceResolvesEachAgentsChannel(t *testing.T) {
 	})
 	server := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return upstream }, nil))
 	t.Cleanup(server.Close)
-	s := newTestService(t, Options{ResolveFeishu: func(_ context.Context, id string) (FeishuCredentials, error) {
-		return FeishuCredentials{AppID: id, AppSecret: "private-" + id}, nil
-	}, FeishuTokenSource: func(appID, secret string) feishutransport.TenantTokenSource {
+	s := newTestService(t, Options{FeishuTokenSource: func(appID, secret string) feishutransport.TenantTokenSource {
 		return &fakeTenantSource{prefix: appID, generation: 1}
 	}})
-	resource, err := s.Create(ctx, "", CreateRequest{AppID: "feishu", Name: "Team Feishu", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "feishu_channel"}})
+	resource, err := s.Create(ctx, "", CreateRequest{AppID: "feishu", Name: "Team Feishu", Config: Config{URL: server.URL, AuthMode: "feishu", CredentialSource: "manual"}, Credentials: Credentials{AppID: "shared-app", AppSecret: "global-feishu-secret"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resource.Status != "agent_identity_required" {
+	if resource.Status != "configured" {
 		t.Fatal("global resource claimed an Agent identity")
 	}
 	for _, agentID := range []string{"alpha", "beta"} {
@@ -199,7 +203,7 @@ func TestGlobalFeishuResourceResolvesEachAgentsChannel(t *testing.T) {
 		}
 		client := gatewayClient(t, s, agentID)
 		result, err := client.CallTool(ctx, &mcp.CallToolParams{Name: toolName(binding.InstallationID, "identity"), Arguments: map[string]any{}})
-		if err != nil || result.Content[0].(*mcp.TextContent).Text != agentID+"-1" {
+		if err != nil || result.Content[0].(*mcp.TextContent).Text != "shared-app-1" {
 			t.Fatal("Agent used another channel identity")
 		}
 	}
@@ -209,18 +213,11 @@ func TestGlobalFeishuResourceResolvesEachAgentsChannel(t *testing.T) {
 	}
 }
 
-func TestGlobalChannelResourceCanBeBoundBeforeChannelIsConfigured(t *testing.T) {
+func TestAgentChannelReferencesAreRejected(t *testing.T) {
 	s := newTestService(t, Options{})
-	resource, err := s.Create(t.Context(), "", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{URL: "http://localhost:9999/mcp", AuthMode: "feishu", CredentialSource: "feishu_channel"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	binding, err := s.Bind(t.Context(), "agent", BindRequest{ResourceID: resource.InstallationID, Connect: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if binding.Status != "authorization_required" || binding.LastErrorCode != "app_feishu_channel_required" {
-		t.Fatalf("missing Agent channel lost its cause: %s %s", binding.Status, binding.LastErrorCode)
+	_, err := s.Probe(t.Context(), "agent", ProbeRequest{AppID: "feishu", Config: Config{URL: "http://localhost:9999/mcp", AuthMode: "feishu", CredentialSource: "feishu_channel"}})
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatal("Agent channel reference accepted")
 	}
 }
 
@@ -278,5 +275,79 @@ func TestExistingResourceNamesRemainUniqueAfterConversion(t *testing.T) {
 	}
 	if len(items) != 3 {
 		t.Fatal("conversion merged independent resources")
+	}
+}
+
+func TestVerifiedDraftRejectsConcurrentCredentialChanges(t *testing.T) {
+	ctx := t.Context()
+	server := upstreamServer(t)
+	s := newTestService(t, Options{})
+	resource, err := s.Create(ctx, "", CreateRequest{AppID: "llm-wiki", Name: "Versioned", Config: Config{URL: server.URL}, Credentials: Credentials{Token: "old"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := resource.Config
+	if err = s.ProbeResourceUpdate(ctx, resource.ResourceID, resource.UpdatedAt, UpdateRequest{Config: &cfg}); err != nil {
+		t.Fatal(err)
+	}
+	creds := Credentials{Token: "changed"}
+	if _, err = s.Update(ctx, "", resource.ResourceID, UpdateRequest{Credentials: &creds}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.UpdateResourceAt(ctx, resource.ResourceID, UpdateRequest{Config: &cfg}, resource.UpdatedAt); !errors.Is(err, ErrChanged) {
+		t.Fatal("unchecked concurrent credentials accepted")
+	}
+}
+
+func TestDraftProbeUsesCurrentCredentialsWithoutSaving(t *testing.T) {
+	upstream := upstreamServer(t)
+	resolved := false
+	s := newTestService(t, Options{ResolveConnectorHTTP: func(_ context.Context, _, _ string, cfg Config) (ConnectorHTTPConfig, error) {
+		resolved = true
+		return ConnectorHTTPConfig{Endpoint: cfg.URL, Token: "managed", TokenHeader: "PRIVATE-TOKEN"}, nil
+	}})
+	resource, err := s.Create(t.Context(), "", CreateRequest{AppID: "gitlab", Name: "Original", Config: Config{URL: upstream.URL, AuthMode: "bearer"}, Credentials: Credentials{Token: "saved-bearer"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(s.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{URL: upstream.URL, AuthMode: "connector", GitLabBaseURL: "https://gitlab.example.com"}
+	for _, token := range []string{"", "draft-pat"} {
+		resolved = false
+		result, err := s.Probe(t.Context(), "", ProbeRequest{InstallationID: resource.ResourceID, Config: cfg, Credentials: Credentials{Token: token, Headers: map[string]string{"Authorization": "Bearer fixture"}}})
+		if err != nil || !result.Connected {
+			t.Fatalf("probe: %v", err)
+		}
+		if resolved != (token == "") {
+			t.Fatal("probe did not use the current credential source")
+		}
+		after, err := os.ReadFile(s.path)
+		if err != nil || string(before) != string(after) {
+			t.Fatal("probe changed persisted settings")
+		}
+	}
+}
+
+func TestFeishuViewShowsAppIDWithoutSecrets(t *testing.T) {
+	s := newTestService(t, Options{})
+	item, err := s.Create(t.Context(), "", CreateRequest{AppID: "feishu", Name: "Feishu", Config: Config{URL: "https://example.com/mcp", AuthMode: "feishu"}, Credentials: Credentials{AppID: "cli_visible_id", AppSecret: "private-app-secret", Token: "private-token"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := s.Get(t.Context(), "", item.ResourceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, resource := range []Installation{item, saved} {
+		if resource.FeishuAppID != "cli_visible_id" {
+			t.Fatal("saved App ID is not visible")
+		}
+		data, err := json.Marshal(resource)
+		if err != nil || bytes.Contains(data, []byte("private-app-secret")) || bytes.Contains(data, []byte("private-token")) {
+			t.Fatal("view exposed secrets")
+		}
 	}
 }

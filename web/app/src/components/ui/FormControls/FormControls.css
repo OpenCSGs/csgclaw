@@ -61,3 +61,7 @@
   margin-top: 14px;
   color: oklch(0.72 0.16 35);
 }
+
+.field-required {
+  color: var(--danger);
+}

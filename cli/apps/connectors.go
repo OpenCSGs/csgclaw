@@ -71,16 +71,16 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 		return fmt.Errorf("Connect an Agent binding; use update --global to enable or disable a resource")
 	}
 	client := run.APIClient(globals)
-	collection := "/api/v1/agents/" + url.PathEscape(*agentID) + "/apps"
+	collection := "/api/v1/agents/" + url.PathEscape(*agentID) + "/connectors"
 	if *global {
-		collection = "/api/v1/app-resources"
+		collection = "/api/v1/connectors/resources"
 	}
 	instance := collection + "/" + url.PathEscape(*installationID)
 	var result map[string]any
 	var err error
 	switch action {
 	case "catalog":
-		path := "/api/v1/apps"
+		path := "/api/v1/connectors/catalog"
 		if *installationID != "" && caller == "" {
 			path += "/" + url.PathEscape(*installationID)
 		}
@@ -172,9 +172,9 @@ func settingsURL(endpoint, agentID, id string) string {
 	if endpoint == "" {
 		endpoint = apiclient.DefaultAPIBaseURL()
 	}
-	values := url.Values{"tab": []string{"apps"}}
+	values := url.Values{"tab": []string{"connectors"}}
 	if id != "" {
-		values.Set("app", id)
+		values.Set("connector", id)
 	}
 	return strings.TrimRight(endpoint, "/") + "/#/agents/" + url.PathEscape(agentID) + "?" + values.Encode()
 }

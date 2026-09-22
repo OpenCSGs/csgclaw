@@ -17,12 +17,12 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// TestAppsBrowserE2EFixture serves the real HTTP handlers and built Web UI with
+// TestConnectorsBrowserE2EFixture serves the real HTTP handlers and built Web UI with
 // isolated Agents and an authenticated local MCP service for headless UI QA.
-func TestAppsBrowserE2EFixture(t *testing.T) {
-	readyPath := os.Getenv("CSGCLAW_APPS_BROWSER_E2E_READY")
+func TestConnectorsBrowserE2EFixture(t *testing.T) {
+	readyPath := os.Getenv("CSGCLAW_CONNECTORS_BROWSER_E2E_READY")
 	if readyPath == "" {
-		t.Skip("set CSGCLAW_APPS_BROWSER_E2E_READY for interactive headless verification")
+		t.Skip("set CSGCLAW_CONNECTORS_BROWSER_E2E_READY for interactive headless verification")
 	}
 	h, alice, bob, _, _ := newAppPlatformAuthFixture(t)
 	h.serverNoAuth = false

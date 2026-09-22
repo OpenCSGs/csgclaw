@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("Agent App deep links", () => {
-  it("opens the global resource picker and clears add_app when closed", async () => {
+  it("opens the global resource picker and clears add_connector when closed", async () => {
     const agent: AgentLike = { id: "agent-1", name: "Assistant", runtime_kind: "codex", role: "assistant" };
     mocked.controller = {
       ready: true,
@@ -46,7 +46,7 @@ describe("Agent App deep links", () => {
       vi.fn(async (url: string) =>
         Response.json({
           items:
-            String(url) === "api/v1/apps"
+            String(url) === "api/v1/connectors/catalog"
               ? [
                   {
                     app_id: "gitlab",
@@ -65,17 +65,20 @@ describe("Agent App deep links", () => {
     );
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/agents/agent-1?tab=apps&add_app=gitlab"]}>
+      <MemoryRouter initialEntries={["/agents/agent-1?tab=connectors&add_connector=gitlab"]}>
         <AgentPage />
         <Location />
       </MemoryRouter>,
     );
     expect(await screen.findByRole("dialog", { name: "Add from resources" })).toBeVisible();
     expect(screen.queryByLabelText("Instance name")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Manage global Apps" })).toHaveAttribute("href", "#/apps?add_app=gitlab");
+    expect(screen.getByRole("link", { name: "Manage global Connectors" })).toHaveAttribute(
+      "href",
+      "#/connectors?add_connector=gitlab",
+    );
     await user.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByTestId("location")).toHaveTextContent("/agents/agent-1?tab=apps");
-    expect(screen.getByTestId("location")).not.toHaveTextContent("add_app");
+    expect(screen.getByTestId("location")).toHaveTextContent("/agents/agent-1?tab=connectors");
+    expect(screen.getByTestId("location")).not.toHaveTextContent("add_connector");
   });
 });

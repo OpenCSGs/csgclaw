@@ -59,7 +59,7 @@ export const WorkspaceRouteSegments = {
   templates: "templates",
   skills: "skills",
   mcpServers: "mcp-servers",
-  apps: "apps",
+  apps: "connectors",
   knowledgeBases: "knowledge-bases",
   tasks: "tasks",
   channels: "channels",
@@ -180,7 +180,8 @@ export function pathForPane(
   pane: WorkspacePane | null | undefined,
   rooms: readonly Pick<IMConversation, "id" | "is_direct">[] = [],
 ): string {
-  if (pane?.type === WorkspacePaneTypes.apps) return pane.id ? `/apps/${encodeURIComponent(pane.id)}` : "/apps";
+  if (pane?.type === WorkspacePaneTypes.apps)
+    return pane.id ? `/connectors/${encodeURIComponent(pane.id)}` : "/connectors";
   if (!pane || pane.type === WorkspacePaneTypes.computer) {
     return `/${WorkspaceRouteSegments.computer}`;
   }
@@ -294,5 +295,5 @@ export function readCollapsedWorkspaceGroups(): CollapsedWorkspaceGroups {
 }
 
 export function pathForAgentApps(agentID: string): string {
-  return `${pathForPane({ type: WorkspacePaneTypes.agent, id: agentID })}?tab=apps`;
+  return `${pathForPane({ type: WorkspacePaneTypes.agent, id: agentID })}?tab=connectors`;
 }

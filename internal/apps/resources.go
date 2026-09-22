@@ -134,7 +134,7 @@ func (s *Service) viewLocked(e *entry) Installation {
 	item.ResourceEnabled = e.record.Enabled
 	item.Status = "configured"
 	if item.Config.CredentialSource == "feishu_channel" {
-		item.Status = "agent_identity_required"
+		item.Status = "needs_configuration"
 	}
 	if !item.Enabled {
 		item.Status = "disabled"
@@ -147,6 +147,10 @@ func (s *Service) viewLocked(e *entry) Installation {
 		b := view(bound)
 		if !bound.record.active() {
 			b.Status = "disabled"
+		}
+		// Reuse an active binding's discovered catalog for resource settings.
+		if len(item.Tools) == 0 && bound.record.active() && b.Status == "connected" {
+			item.Tools = b.Tools
 		}
 		item.Bindings = append(item.Bindings, BindingSummary{InstallationID: b.InstallationID, AgentID: b.AgentID, Enabled: b.Enabled, Status: b.Status, ToolCount: len(b.Tools)})
 	}
@@ -199,12 +203,16 @@ func (s *Service) Bind(ctx context.Context, agentID string, in BindRequest) (Ins
 	return out, nil
 }
 
-func (s *Service) updateResource(ctx context.Context, id string, in UpdateRequest) (Installation, error) {
+func (s *Service) updateResource(ctx context.Context, id string, in UpdateRequest, expected ...time.Time) (Installation, error) {
 	s.mu.Lock()
 	resource, err := s.findLocked("", id)
 	if err != nil {
 		s.mu.Unlock()
 		return Installation{}, err
+	}
+	if len(expected) > 0 && !resource.record.UpdatedAt.Equal(expected[0]) {
+		s.mu.Unlock()
+		return Installation{}, ErrChanged
 	}
 	next := copyJSON(resource.record)
 	if in.Name != nil {
@@ -325,4 +333,37 @@ func (s *Service) deleteResource(ctx context.Context, id string) error {
 	}
 	return errors.Join(failures...)
 
+}
+
+// ProbeResourceUpdate validates the exact merged draft without exposing saved secrets.
+// UpdateResourceAt rejects concurrent changes so untested credentials cannot be saved.
+func (s *Service) ProbeResourceUpdate(ctx context.Context, id string, expected time.Time, in UpdateRequest) error {
+	s.mu.Lock()
+	e, err := s.findLocked("", id)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if !e.record.UpdatedAt.Equal(expected) {
+		s.mu.Unlock()
+		return ErrChanged
+	}
+	r := copyJSON(e.record)
+	s.mu.Unlock()
+	if in.Config != nil {
+		r.Config = *in.Config
+	}
+	if r.Config.AuthMode == "connector" || r.Config.AuthMode == "oauth2" {
+		// A draft PAT must be supplied explicitly or resolved from the credential owner.
+		// Old resource-owned tokens are discarded by the save path as well.
+		r.Credentials.Token = ""
+	}
+	if in.Credentials != nil {
+		r.Credentials = mergeCredentials(r.Credentials, *in.Credentials)
+	}
+	_, err = s.Probe(ctx, "", ProbeRequest{AppID: r.AppID, Config: r.Config, Credentials: r.Credentials})
+	return err
+}
+func (s *Service) UpdateResourceAt(ctx context.Context, id string, in UpdateRequest, expected time.Time) (Installation, error) {
+	return s.updateResource(ctx, id, in, expected)
 }

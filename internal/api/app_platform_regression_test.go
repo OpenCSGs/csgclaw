@@ -97,7 +97,7 @@ func TestAppCreationCannotOutliveAgentDeletion(t *testing.T) {
 	}
 	result := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
-		r := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+target.ID+"/apps", strings.NewReader(`{"resource_id":"`+resource.InstallationID+`"}`))
+		r := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+target.ID+"/connectors", strings.NewReader(`{"resource_id":"`+resource.InstallationID+`"}`))
 		r.Header.Set("Authorization", "Bearer test-admin-secret")
 		w := httptest.NewRecorder()
 		h.Routes().ServeHTTP(w, r)
@@ -163,7 +163,7 @@ func TestManagerBundledSkillRoutesKeepWorking(t *testing.T) {
 		}
 	}
 	for _, route := range []struct{ method, path string }{
-		{"POST", "/api/v1/agents/" + worker.ID + "/apps"},
+		{"POST", "/api/v1/agents/" + worker.ID + "/connectors"},
 		{"POST", "/api/v1/agents/" + worker.ID + "/mcp"},
 		{"GET", "/api/v1/config"},
 	} {

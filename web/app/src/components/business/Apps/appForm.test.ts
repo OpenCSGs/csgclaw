@@ -29,8 +29,23 @@ const installation: AppInstallation = {
 };
 
 describe("App settings payload", () => {
+  it("prefills the public Feishu App ID without returning saved secrets", () => {
+    const form = initialAppForm(
+      { ...definition, app_id: "feishu" },
+      {
+        ...installation,
+        app_id: "feishu",
+        feishu_app_id: "cli_visible_id",
+        config: { transport: "http", auth_mode: "feishu", url: "https://example.com/mcp" },
+        credentials_set: { app_id: true, app_secret: true, token: true },
+      },
+    );
+    expect(form.credentials).toEqual({ app_id: "cli_visible_id" });
+    expect(appFormPayload(form).credentials).toMatchObject({ app_id: "cli_visible_id" });
+    expect(appFormPayload(form).credentials.app_secret).toBeUndefined();
+  });
   it("keeps the GitLab MCP endpoint separate from the transient Connector PAT", () => {
-    const form = initialAppForm(definition, installation, false);
+    const form = initialAppForm(definition, installation);
     form.config.gitlab_base_url = "https://gitlab.example.com";
     form.credentials = { token: "new-pat", headers: { Authorization: "legacy" } };
     form.headers = [{ key: "X-Custom-Auth", value: "mcp-secret" }];
@@ -46,7 +61,7 @@ describe("App settings payload", () => {
   });
 
   it("keeps secret values out of the displayable configuration and preserves argument boundaries", () => {
-    const form = initialAppForm({ ...definition, app_id: "llm-wiki" }, null, false);
+    const form = initialAppForm({ ...definition, app_id: "llm-wiki" }, null);
     form.config = { ...form.config, transport: "stdio", url: "https://previous.example/mcp", command: "npx" };
     form.args = "--endpoint\nhttps://service.example/a b\n--label=team one\n";
     form.env = [{ key: "API_KEY", value: "private-key" }];
@@ -59,17 +74,17 @@ describe("App settings payload", () => {
     expect(payload.credentials).not.toHaveProperty("token");
   });
 
-  it("references the existing Feishu channel without copying credentials", () => {
-    const form = initialAppForm({ ...definition, app_id: "feishu" }, null, true);
-    expect(form.config.credential_source).toBe("feishu_channel");
+  it("defaults to connector-owned Feishu credentials", () => {
+    const form = initialAppForm({ ...definition, app_id: "feishu" }, null);
+    expect(form.config.credential_source).toBe("manual");
     expect(form.config.auth_mode).toBe("feishu");
     expect(form.credentials).toEqual({});
-    expect(initialAppForm({ ...definition, app_id: "feishu" }, null, false).config.credential_source).toBe("manual");
+    expect(initialAppForm({ ...definition, app_id: "feishu" }, null).config.credential_source).toBe("manual");
   });
 
   it("does not restore persisted secret values into an editing form", () => {
     const existing = installation;
-    expect(initialAppForm(definition, existing, false).credentials).toEqual({});
+    expect(initialAppForm(definition, existing).credentials).toEqual({});
   });
 
   it("shows a persisted disconnect or disable intent ahead of old connection status", () => {
@@ -81,7 +96,7 @@ describe("App settings payload", () => {
 
 describe("Shared OpenCSG platform credentials", () => {
   it.each(["feishu", "llm-wiki"])("defaults %s to login for OpenCSG URLs", (appID) => {
-    const form = initialAppForm({ ...definition, app_id: appID }, null, false);
+    const form = initialAppForm({ ...definition, app_id: appID }, null);
     form.config.url = "https://demo.public.opencsg-stg.com/mcp";
     expect(appFormPayload(form).config.platform_credential_source).toBe("opencsg_login");
     form.config.platform_credential_source = "manual";
@@ -96,13 +111,13 @@ describe("Shared OpenCSG platform credentials", () => {
     "https://demo.public.opencsg-stg.com.evil.example/mcp",
     "https://demo.public.opencsg-stg.com:8443/mcp",
   ])("does not send login to %s", (url) => {
-    const form = initialAppForm(definition, null, false);
+    const form = initialAppForm(definition, null);
     form.config.url = url;
     expect(appFormPayload(form).config.platform_credential_source).toBe("manual");
   });
 
   it("preserves a business API key alongside platform login", () => {
-    const form = initialAppForm(definition, null, false);
+    const form = initialAppForm(definition, null);
     form.config = {
       transport: "http",
       auth_mode: "header",
@@ -134,7 +149,7 @@ describe("Catalog connection defaults", () => {
     },
   };
   it("fills non-secret connection defaults and submits edited values", () => {
-    const form = initialAppForm(configured, null, false);
+    const form = initialAppForm(configured, null);
     expect(form.config).toMatchObject({
       url: "https://mcp.example.test/gitlab",
       auth_mode: "header",
@@ -150,6 +165,6 @@ describe("Catalog connection defaults", () => {
     expect(appFormPayload(form).config.url).toBe("http://localhost:9999/mcp");
   });
   it("does not replace saved configuration with newer catalog defaults", () => {
-    expect(initialAppForm(configured, installation, false).config).toEqual(installation.config);
+    expect(initialAppForm(configured, installation).config).toMatchObject(installation.config);
   });
 });

@@ -95,6 +95,21 @@ func (s *Service) Status(_ context.Context, provider, callbackURL string) (Statu
 	return status, nil
 }
 
+// ValidateGitLabConfig verifies draft credentials without reading or changing saved state.
+func (s *Service) ValidateGitLabConfig(ctx context.Context, config Config) error {
+	config = NormalizeGitLabConfig(config)
+	if err := validateGitLabBaseURL(config.BaseURL); err != nil {
+		return err
+	}
+	if config.AccessToken == "" {
+		return fmt.Errorf("gitlab access_token is required")
+	}
+	_, err := s.fetchGitLabAccount(ctx, config)
+	return err
+}
+
+var ErrGitLabAuthentication = errors.New("GitLab rejected the personal access token")
+
 // SaveGitLabConfig validates and stores the workspace-wide GitLab PAT connector.
 func (s *Service) SaveGitLabConfig(ctx context.Context, config Config) (Status, error) {
 	s.gitLabMu.Lock()
@@ -225,6 +240,9 @@ func (s *Service) fetchGitLabAccount(ctx context.Context, config Config) (Accoun
 		return Account{}, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return Account{}, fmt.Errorf("%w (HTTP %d)", ErrGitLabAuthentication, resp.StatusCode)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return Account{}, fmt.Errorf("gitlab user api returned status %d", resp.StatusCode)
 	}

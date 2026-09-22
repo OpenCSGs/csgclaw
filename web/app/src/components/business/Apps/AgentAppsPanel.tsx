@@ -23,7 +23,6 @@ import styles from "./AgentAppsPanel.module.css";
 type Props = {
   agentID: string;
   controller: AgentAppsController;
-  hasFeishuChannel: boolean;
   t: TranslateFn;
   portalContainer?: HTMLElement | null;
   selectedID?: string;
@@ -100,7 +99,10 @@ export function AgentAppsPanel({ controller, t, portalContainer, selectedID, add
             {app.disconnected ? <p className={styles.hint}>{t("appDisconnectedHint")}</p> : null}
             <AppToolList tools={app.tools} t={t} />
             <div className={styles.actions}>
-              <a className="btn btn-secondary-gray btn-sm" href={`#/apps/${encodeURIComponent(app.resource_id || "")}`}>
+              <a
+                className="btn btn-secondary-gray btn-sm"
+                href={`#/connectors/${encodeURIComponent(app.resource_id || "")}`}
+              >
                 {t("appManageResource")}
               </a>
               <Button
@@ -168,7 +170,7 @@ export function AgentAppsPanel({ controller, t, portalContainer, selectedID, add
               </Button>
             ))}
             {!available.length ? <p className={styles.hint}>{t("appNoAvailableResources")}</p> : null}
-            <a href={addAppID ? `#/apps?add_app=${encodeURIComponent(addAppID)}` : "#/apps"}>
+            <a href={addAppID ? `#/connectors?add_connector=${encodeURIComponent(addAppID)}` : "#/connectors"}>
               {t("appManageResources")}
             </a>
           </DialogBody>

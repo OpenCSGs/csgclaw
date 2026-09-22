@@ -4,34 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { ConversationComposer } from "@/components/business/ConversationPane/ConversationComposer";
 import type { ConversationComposerProps } from "@/components/business/ConversationPane/ConversationComposer";
 import { createAttachmentDrafts } from "@/models/attachments";
-import { emptyGitHubConnectorStatus } from "@/models/connectors";
 import type { TranslateFn } from "@/models/conversations";
 
 const t: TranslateFn = (key, params) => {
   const labels: Record<string, string> = {
-    connectorCallbackURL: "Callback URL",
-    connectorClientID: "Client ID",
-    connectorClientSecret: "Client Secret",
-    connectorConnect: "Connect",
-    connectorConnected: "Connected",
-    connectorDisconnect: "Disconnect",
-    connectorGitHub: "GitHub",
-    connectorGitLab: "GitLab",
-    connectorGitLabBaseURL: "GitLab Base URL",
-    connectorGitLabToken: "Personal Access Token",
-    connectorGitLabTokenKeep: "Leave blank to keep the current token",
-    connectorManage: "Manage",
-    connectorManagerTitle: "Manage connectors",
-    connectorNotConnected: "Not connected",
-    connectorSave: "Save",
-    connectorScopes: "Scopes",
-    connectorSetUp: "Set up",
-    appOpenApps: "Open Apps",
-    appManageGlobally: "Configure in global Apps",
     composerAdd: "Add",
     composerAddContent: "Add content",
     composerFiles: "Files",
-    composerConnectors: "Connectors",
     inputPlaceholder: "Message",
     addAttachment: "Add attachment",
     attachments: "Attachments",
@@ -95,7 +74,7 @@ function renderComposer(props: Partial<ConversationComposerProps> = {}): ReturnT
   );
 }
 
-describe("ConversationComposer connectors", () => {
+describe("ConversationComposer attachments", () => {
   it("blocks message entry with the provided manager runtime warning", async () => {
     const user = userEvent.setup();
     const onSendMessage = vi.fn();
@@ -115,45 +94,16 @@ describe("ConversationComposer connectors", () => {
     expect(onSendMessage).not.toHaveBeenCalled();
   });
 
-  it("opens the add menu with files and connectors sections", async () => {
+  it("keeps file uploads available without legacy connector controls", async () => {
     const user = userEvent.setup();
-    renderComposer({
-      connectorStatus: {
-        ...emptyGitHubConnectorStatus(),
-        configured: true,
-        client_id: "client-id",
-        client_secret_set: true,
-      },
-    });
-
-    const button = screen.getByRole("button", { name: "Add content" });
-    expect(button).toHaveClass("composer-add-button");
-
-    await user.click(button);
-
-    const dialog = screen.getByRole("dialog", { name: "Add content" });
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText("Add attachment")).toBeInTheDocument();
-    expect(within(dialog).getByText("Connectors")).toBeInTheDocument();
-    expect(screen.getByText("GitHub")).toBeInTheDocument();
-    expect(screen.getByText("GitLab")).toBeInTheDocument();
-    expect(screen.getAllByText("Not connected")).toHaveLength(1);
-    expect(within(dialog).getAllByRole("button", { name: "Connect" })).toHaveLength(1);
-    expect(screen.queryByLabelText("Client ID")).not.toBeInTheDocument();
-    expect(screen.queryByText("Save")).not.toBeInTheDocument();
-    expect(screen.queryByText("Set up")).not.toBeInTheDocument();
-  });
-
-  it("routes GitLab configuration to the current agent's Apps", async () => {
-    const user = userEvent.setup();
-    const onManageApps = vi.fn();
-    renderComposer({ onManageApps });
+    renderComposer();
     await user.click(screen.getByRole("button", { name: "Add content" }));
-    const gitlabRow = screen.getByText("GitLab").closest(".connector-provider-row") as HTMLElement;
-    await user.click(within(gitlabRow).getByRole("button", { name: "Open Apps" }));
-    expect(onManageApps).toHaveBeenCalledOnce();
-    expect(screen.queryByLabelText("GitLab Base URL")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Personal Access Token")).not.toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Add content" });
+    expect(within(dialog).getByRole("button", { name: "Add attachment" })).toBeVisible();
+    expect(within(dialog).queryByText("Connectors")).not.toBeInTheDocument();
+    expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
+    expect(screen.queryByText("GitLab")).not.toBeInTheDocument();
+    expect(within(dialog).getAllByRole("button")).toHaveLength(1);
   });
 
   it("places the add and send controls in one composer toolbar without visible shortcut copy", () => {
@@ -354,80 +304,5 @@ describe("ConversationComposer connectors", () => {
     expect(screen.getByText("Suggestions only; nothing runs automatically")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "/创建智能体" }));
     expect(onApplySlashCandidate).toHaveBeenCalledWith("创建智能体");
-  });
-
-  it("starts GitHub authorization from the dropdown row connect action", async () => {
-    const user = userEvent.setup();
-    const onConnectConnector = vi.fn();
-    renderComposer({
-      connectorStatus: {
-        ...emptyGitHubConnectorStatus(),
-        configured: true,
-        connected: false,
-        client_id: "client-id",
-        client_secret_set: true,
-        scopes: ["repo"],
-      },
-      onConnectConnector,
-    });
-
-    await user.click(screen.getByRole("button", { name: "Add content" }));
-    const githubRow = screen.getByText("GitHub").closest(".connector-provider-row") as HTMLElement;
-    await user.click(within(githubRow).getByRole("button", { name: "Connect" }));
-
-    expect(onConnectConnector).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a green Connected state after GitHub is connected", async () => {
-    const user = userEvent.setup();
-    const onDisconnectConnector = vi.fn();
-    const onManageConnector = vi.fn();
-    renderComposer({
-      connectorStatus: {
-        ...emptyGitHubConnectorStatus(),
-        configured: true,
-        connected: true,
-        app_manageable: true,
-        client_id: "client-id",
-        client_secret_set: true,
-        scopes: ["repo"],
-        account: {
-          avatar_url: "https://github.com/images/error/octocat_happy.gif",
-          email: "",
-          html_url: "https://github.com/octocat",
-          id: 583231,
-          login: "octocat",
-          name: "",
-        },
-      },
-      onDisconnectConnector,
-      onManageConnector,
-    });
-
-    await user.click(screen.getByRole("button", { name: "Add content" }));
-
-    expect(screen.getByText("octocat")).toBeInTheDocument();
-    const connectedState = screen.getByText("Connected");
-    expect(connectedState).toBeInTheDocument();
-    expect(connectedState).toHaveClass("connector-connected-state");
-    const actions = connectedState.closest(".connector-provider-actions");
-    expect(actions?.children[0]).toHaveTextContent("Connected");
-    expect(actions?.children[1]).toHaveTextContent("Manage");
-    expect(actions?.children[1]).toHaveTextContent("Disconnect");
-    const manageButton = screen.getByRole("button", { name: "Manage" });
-    expect(manageButton).toHaveClass("connector-manage-button");
-    expect(manageButton).toHaveClass("btn-secondary-gray");
-    expect(manageButton).not.toHaveClass("btn-tertiary-gray");
-    const disconnectButton = screen.getByRole("button", { name: "Disconnect" });
-    expect(disconnectButton).toHaveClass("connector-disconnect-button-danger");
-    expect(disconnectButton).toHaveClass("btn-outline-danger");
-    await user.click(manageButton);
-    expect(onManageConnector).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole("button", { name: "Disconnect" }));
-    expect(onDisconnectConnector).toHaveBeenCalledTimes(1);
-    const githubRow = screen.getByText("GitHub").closest(".connector-provider-row") as HTMLElement;
-    expect(within(githubRow).queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
-    expect(screen.queryByText("secret")).not.toBeInTheDocument();
-    expect(screen.queryByText("access_token")).not.toBeInTheDocument();
   });
 });

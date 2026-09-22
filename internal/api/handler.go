@@ -3916,7 +3916,6 @@ func (h *Handler) publishUserEvent(eventType string, user im.User) {
 }
 
 func (h *Handler) publishParticipantEvent(eventType string, item apitypes.Participant) {
-	h.refreshAppChannelCredentials(item)
 	if h.imBus == nil {
 		return
 	}

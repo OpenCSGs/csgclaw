@@ -8,7 +8,6 @@ import { ConversationWorkingActions, type ConversationWorkingParticipant } from 
 function defaultTranslate(key: string, params?: Record<string, unknown>) {
   if (key === "composerAddContent") return "添加内容";
   if (key === "composerAdd") return "添加";
-  if (key === "composerConnectors") return "连接器";
   if (key === "addAttachment") return "添加附件";
   if (key === "connectorGitHub") return "GitHub";
   if (key === "connectorGitLab") return "GitLab";
@@ -210,24 +209,13 @@ describe("ConversationComposer working activity", () => {
   });
 });
 
-describe("ConversationComposer Apps entry", () => {
-  it("opens agent Apps instead of collecting a global GitLab token", async () => {
+describe("ConversationComposer attachment menu", () => {
+  it("does not expose the retired connector actions", async () => {
     const user = userEvent.setup();
-    const onManageApps = vi.fn();
-    renderConversationComposer({ onManageApps });
+    renderConversationComposer();
     await user.click(screen.getByRole("button", { name: "添加内容" }));
-    await user.click(screen.getByRole("button", { name: "appOpenApps" }));
-    expect(onManageApps).toHaveBeenCalledOnce();
-    expect(screen.queryByLabelText("Personal Access Token")).not.toBeInTheDocument();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("preserves the GitHub connection action", async () => {
-    const user = userEvent.setup();
-    const onConnectConnector = vi.fn();
-    renderConversationComposer({ onConnectConnector });
-    await user.click(screen.getByRole("button", { name: "添加内容" }));
-    await user.click(screen.getByRole("button", { name: "连接" }));
-    expect(onConnectConnector).toHaveBeenCalledOnce();
+    expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
+    expect(screen.queryByText("GitLab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "连接" })).not.toBeInTheDocument();
   });
 });

@@ -19,7 +19,6 @@ export function useAgentApps(agentID: string, active: boolean) {
     items: AppInstallation[];
     definitions: AppDefinition[];
     resources: AppInstallation[];
-    feishuChannelAvailable?: boolean;
   }>({
     agentID: "",
     items: [],
@@ -55,7 +54,6 @@ export function useAgentApps(agentID: string, active: boolean) {
             definitions,
             resources,
             items: apps.items,
-            feishuChannelAvailable: apps.feishu_channel_available,
           });
           setError(null);
         }
@@ -97,7 +95,6 @@ export function useAgentApps(agentID: string, active: boolean) {
     items: snapshot.agentID === agentID ? snapshot.items : [],
     definitions: snapshot.definitions,
     resources: snapshot.resources,
-    feishuChannelAvailable: snapshot.agentID === agentID ? snapshot.feishuChannelAvailable : undefined,
     loading,
     error,
     busyID,
