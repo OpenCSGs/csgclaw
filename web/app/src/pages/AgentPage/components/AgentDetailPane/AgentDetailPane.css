@@ -102,6 +102,10 @@
   line-height: 1.5;
 }
 
+.agent-profile-fixed-header > .form-warning > span {
+  white-space: pre-line;
+}
+
 .agent-notice-close {
   display: inline-flex;
   flex: 0 0 auto;

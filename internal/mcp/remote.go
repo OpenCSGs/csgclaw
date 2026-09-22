@@ -19,6 +19,9 @@ const (
 	remoteServerEnabled        = true
 	remoteServerStartupTimeout = 30
 	remoteServerToolTimeout    = 60
+	ManagedMetaKey             = "_meta"
+	ManagedMetaNamespace       = "com.opencsg/mcp"
+	RemoteHubMCPType           = "agentichub_mcp"
 )
 
 var remoteServersHTTPClient = &http.Client{Timeout: 20 * time.Second}
@@ -63,6 +66,13 @@ func (s RemoteServer) Config() map[string]any {
 		"startup_timeout_sec": remoteServerStartupTimeout,
 		"tool_timeout_sec":    remoteServerToolTimeout,
 		"url":                 s.URL,
+		ManagedMetaKey: map[string]any{
+			ManagedMetaNamespace: map[string]any{
+				"type":        RemoteHubMCPType,
+				"resource_id": strings.TrimSpace(s.ID),
+				"name":        strings.TrimSpace(s.Name),
+			},
+		},
 	}
 	if transport := remoteServerTransport(s.Protocol); transport != "" {
 		config["transport"] = transport
@@ -74,6 +84,37 @@ func (s RemoteServer) Config() map[string]any {
 		config["description"] = description
 	}
 	return config
+}
+
+// IsRemoteHubServer reports whether a persisted MCP entry came from the
+// authenticated AgenticHub remote-install flow. Manually authored URL and
+// stdio MCP entries deliberately remain outside availability filtering.
+func IsRemoteHubServer(config any) bool {
+	_, _, ok := RemoteHubServerMetadata(config)
+	return ok
+}
+
+// RemoteHubServerMetadata returns the stable resource identity and display
+// name stored by the authenticated AgenticHub installation flow.
+func RemoteHubServerMetadata(config any) (resourceID, name string, ok bool) {
+	entry, ok := config.(map[string]any)
+	if !ok {
+		return "", "", false
+	}
+	meta, ok := entry[ManagedMetaKey].(map[string]any)
+	if !ok {
+		return "", "", false
+	}
+	raw, ok := meta[ManagedMetaNamespace].(map[string]any)
+	if !ok {
+		return "", "", false
+	}
+	typeName, _ := raw["type"].(string)
+	resourceID, _ = raw["resource_id"].(string)
+	name, _ = raw["name"].(string)
+	resourceID = strings.TrimSpace(resourceID)
+	name = strings.TrimSpace(name)
+	return resourceID, name, strings.TrimSpace(typeName) == RemoteHubMCPType && resourceID != ""
 }
 
 // RemoteServerPage is one page of OpenCSG Hub MCP servers.

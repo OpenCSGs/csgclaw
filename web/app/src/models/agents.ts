@@ -144,6 +144,7 @@ export type AgentLarkCLIStatus = {
 };
 
 export type AgentLike = AgentProfileLike & {
+  skipped_resources?: Array<{ type?: "mcp" | "knowledge_base" | string; name?: string }> | null;
   agent_profile?: AgentProfileLike | null;
   model_config?: AgentProfileLike | null;
   profile?: AgentProfileLike | string | null;

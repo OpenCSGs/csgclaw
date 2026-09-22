@@ -191,6 +191,56 @@ func TestCheckResponsesAPIWithClientAcceptsFirstStreamingEventWithoutCompletion(
 	}
 }
 
+func TestCheckResponsesAPIWithClientIgnoresUnrelatedStreamingEvent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: ping\ndata: {}\n\nevent: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"object\":\"response\",\"status\":\"failed\",\"error\":{\"code\":\"model_unavailable\"}}}\n\n"))
+	}))
+	defer srv.Close()
+
+	err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil)
+	status, code, _, ok := UserFacingUpstreamError(err)
+	if !ok || status != http.StatusServiceUnavailable || code != "model_unavailable" {
+		t.Fatalf("mapped error = (%d, %q, %t), source=%v", status, code, ok, err)
+	}
+}
+
+func TestCheckResponsesAPIWithClientWrapsStreamingDecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: response.created\ndata: {not-json}\n\n"))
+	}))
+	defer srv.Close()
+
+	err := CheckResponsesAPIWithClient(context.Background(), srv.Client(), srv.URL, "sk-test", "gpt-test", nil)
+	status, code, _, ok := UserFacingUpstreamError(err)
+	if !ok || status != http.StatusBadGateway || code != "upstream_unavailable" {
+		t.Fatalf("mapped error = (%d, %q, %t), source=%v", status, code, ok, err)
+	}
+}
+
+func TestCheckResponsesAPIWithClientWrapsStreamingTimeout(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(timeoutReader{}),
+		}, nil
+	})}
+
+	err := CheckResponsesAPIWithClient(context.Background(), client, "https://private.example/v1", "sk-test", "gpt-test", nil)
+	status, code, _, ok := UserFacingUpstreamError(err)
+	if !ok || status != http.StatusGatewayTimeout || code != "upstream_timeout" {
+		t.Fatalf("mapped error = (%d, %q, %t), source=%v", status, code, ok, err)
+	}
+}
+
+type timeoutReader struct{}
+
+func (timeoutReader) Read([]byte) (int, error) {
+	return 0, context.DeadlineExceeded
+}
+
 func TestCheckResponsesAPIWithClientMapsFailedEvent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

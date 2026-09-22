@@ -1,0 +1,119 @@
+package mcp
+
+import (
+	"context"
+	"errors"
+	"testing"
+)
+
+type availabilityTestProber struct {
+	probe func(context.Context, string, map[string]any) (ProbeResult, error)
+}
+
+func (p availabilityTestProber) Probe(ctx context.Context, name string, config map[string]any) (ProbeResult, error) {
+	return p.probe(ctx, name, config)
+}
+
+func TestListAvailableServersFiltersUnavailableRemoteAndKeepsStoredConfig(t *testing.T) {
+	store := &memoryServerStore{servers: map[string]any{
+		"local": map[string]any{"url": "https://local.example.test/mcp"},
+		"allowed": RemoteServer{
+			ID: "remote-allowed", Name: "allowed", URL: "https://allowed.example.test/mcp",
+		}.Config(),
+		"denied": RemoteServer{
+			ID: "remote-denied", Name: "denied", URL: "https://denied.example.test/mcp",
+		}.Config(),
+	}}
+	svc := NewService(
+		WithServerStore(store),
+		WithServerProber(availabilityTestProber{probe: func(_ context.Context, name string, _ map[string]any) (ProbeResult, error) {
+			if name == "allowed" {
+				return ProbeResult{Connected: true}, nil
+			}
+			return ProbeResult{}, errors.New("access denied")
+		}}),
+	)
+
+	available, err := svc.ListAvailableServers(context.Background())
+	if err != nil {
+		t.Fatalf("ListAvailableServers() error = %v", err)
+	}
+	for _, name := range []string{"local", "allowed"} {
+		if _, ok := available[name]; !ok {
+			t.Fatalf("available servers = %#v, want %q", available, name)
+		}
+	}
+	if _, ok := available["denied"]; ok {
+		t.Fatalf("available servers retained denied remote: %#v", available)
+	}
+
+	stored, err := svc.ListServers(context.Background())
+	if err != nil {
+		t.Fatalf("ListServers() error = %v", err)
+	}
+	if _, ok := stored["denied"]; !ok {
+		t.Fatalf("stored servers removed denied remote: %#v", stored)
+	}
+}
+
+func TestRequireServerAvailableRejectsFailedRemoteProbe(t *testing.T) {
+	svc := NewService(WithServerProber(availabilityTestProber{probe: func(context.Context, string, map[string]any) (ProbeResult, error) {
+		return ProbeResult{}, errors.New("forbidden")
+	}}))
+	config := RemoteServer{ID: "remote-denied", Name: "denied", URL: "https://denied.example.test/mcp"}.Config()
+
+	err := svc.RequireServerAvailable(context.Background(), "denied", config)
+	if !errors.Is(err, ErrServerUnavailable) {
+		t.Fatalf("RequireServerAvailable() error = %v, want ErrServerUnavailable", err)
+	}
+}
+
+func TestRemoteServerConfigCarriesStableHubIdentity(t *testing.T) {
+	config := RemoteServer{ID: "builtin:calendar", Name: "calendar", URL: "https://mcp.example.test/calendar"}.Config()
+	if !IsRemoteHubServer(config) {
+		t.Fatalf("IsRemoteHubServer(%#v) = false, want true", config)
+	}
+	meta := config[ManagedMetaKey].(map[string]any)[ManagedMetaNamespace].(map[string]any)
+	if meta["resource_id"] != "builtin:calendar" || meta["name"] != "calendar" {
+		t.Fatalf("remote metadata = %#v", meta)
+	}
+}
+
+func TestFilterAvailableTemplateServersSkipsUnavailableManagedResourcesOnly(t *testing.T) {
+	svc := NewService(WithServerProber(availabilityTestProber{probe: func(_ context.Context, name string, _ map[string]any) (ProbeResult, error) {
+		if name == "allowed" {
+			return ProbeResult{Connected: true}, nil
+		}
+		return ProbeResult{}, errors.New("forbidden")
+	}}))
+	servers := map[string]any{
+		"manual":  map[string]any{"url": "https://third-party.example.test/mcp"},
+		"allowed": RemoteServer{ID: "remote-allowed", Name: "Allowed MCP", URL: "https://allowed.example.test/mcp"}.Config(),
+		"denied":  RemoteServer{ID: "remote-denied", Name: "Denied MCP", URL: "https://denied.example.test/mcp"}.Config(),
+		"wiki-content-42": map[string]any{
+			"url":         "https://wiki.example.test/mcp",
+			"description": "Product Handbook | Internal docs",
+			"_meta": map[string]any{"com.opencsg/mcp": map[string]any{
+				"type": "llm_wiki", "resource_id": "7", "content_id": "wiki-content-42", "auth_type": "csghub_access_token",
+			}},
+		},
+	}
+
+	filtered, skipped := svc.FilterAvailableTemplateServers(context.Background(), servers)
+	for _, name := range []string{"manual", "allowed"} {
+		if _, ok := filtered[name]; !ok {
+			t.Fatalf("filtered servers = %#v, want %q", filtered, name)
+		}
+	}
+	for _, name := range []string{"denied", "wiki-content-42"} {
+		if _, ok := filtered[name]; ok {
+			t.Fatalf("filtered servers retained unavailable %q: %#v", name, filtered)
+		}
+	}
+	if len(skipped) != 2 || skipped[0].Type != TemplateResourceKnowledgeBase || skipped[0].Name != "Product Handbook" || skipped[1].Type != TemplateResourceMCP || skipped[1].Name != "Denied MCP" {
+		t.Fatalf("skipped resources = %#v", skipped)
+	}
+	if _, ok := servers["denied"]; !ok {
+		t.Fatalf("input template servers were mutated: %#v", servers)
+	}
+}

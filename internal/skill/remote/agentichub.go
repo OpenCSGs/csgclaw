@@ -198,7 +198,7 @@ func downloadAgenticHubSkillArchive(
 	return body, true, nil
 }
 
-func ListAgenticHubSkills(ctx context.Context, baseURL string, options AgenticHubSkillListOptions) (AgenticHubSkillList, error) {
+func ListAgenticHubSkills(ctx context.Context, baseURL, accessToken string, options AgenticHubSkillListOptions) (AgenticHubSkillList, error) {
 	page := options.Page
 	if page <= 0 {
 		page = 1
@@ -212,7 +212,7 @@ func ListAgenticHubSkills(ctx context.Context, baseURL string, options AgenticHu
 		return AgenticHubSkillList{}, err
 	}
 	var payload agenticHubSkillsResponse
-	if err := getAgenticHubJSON(ctx, &http.Client{Timeout: agenticHubRequestTimeout}, endpoint, &payload); err != nil {
+	if err := getAgenticHubJSONWithAccessToken(ctx, &http.Client{Timeout: agenticHubRequestTimeout}, endpoint, accessToken, &payload); err != nil {
 		return AgenticHubSkillList{}, err
 	}
 	items := make([]AgenticHubSkillSummary, 0, len(payload.Data))
@@ -361,11 +361,18 @@ func (b *agenticHubArchiveBuilder) fetchBlob(ctx context.Context, filePath strin
 }
 
 func getAgenticHubJSON(ctx context.Context, client *http.Client, endpoint string, out any) error {
+	return getAgenticHubJSONWithAccessToken(ctx, client, endpoint, "", out)
+}
+
+func getAgenticHubJSONWithAccessToken(ctx context.Context, client *http.Client, endpoint, accessToken string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return fmt.Errorf("create AgenticHub request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	if token := strings.TrimSpace(accessToken); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("AgenticHub request %s: %w", endpoint, err)

@@ -2,15 +2,18 @@ package api
 
 import (
 	"context"
+	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"csgclaw/internal/llm"
+	"csgclaw/internal/mcp"
 	"csgclaw/internal/participant"
 	"csgclaw/internal/participant/feishubind"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 )
@@ -59,8 +62,10 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 		}
 		req.AgentHubService = hubSvc
 		var created apitypes.Participant
+		skippedResources := []mcp.SkippedTemplateResource{}
 		create := func(ctx context.Context) error {
 			var err error
+			ctx = agentengine.WithTemplateMCPAvailability(ctx, h.mcp, &skippedResources)
 			created, err = h.participant.Create(ctx, req)
 			return err
 		}
@@ -82,6 +87,13 @@ func (h *Handler) handleParticipants(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		presented := h.presentParticipant(created)
+		if len(skippedResources) > 0 {
+			presented.Metadata = maps.Clone(presented.Metadata)
+			if presented.Metadata == nil {
+				presented.Metadata = map[string]any{}
+			}
+			presented.Metadata["skipped_resources"] = skippedResources
+		}
 		h.publishParticipantEvent(im.EventTypeParticipantCreated, presented)
 		writeJSON(w, http.StatusCreated, presented)
 	default:

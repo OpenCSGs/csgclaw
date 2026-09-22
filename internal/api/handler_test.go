@@ -4595,6 +4595,41 @@ func TestHandleBatchAddAgentMCPServersReturnsNotFoundWhenCatalogServerMissing(t 
 	}
 }
 
+func TestHandleBatchAddAgentMCPServersRejectsUnavailableRemoteWithoutRemovingConfig(t *testing.T) {
+	srv, svc, created := newAgentMCPManagementTestServer(t)
+	srv.mcp = mcp.NewService(mcp.WithServerProber(failingMCPServerProber{}))
+	if _, err := srv.mcp.InstallRemoteServer(context.Background(), mcp.RemoteServer{
+		ID: "remote-denied", Name: "denied", URL: "https://mcp.example.test/denied",
+	}); err != nil {
+		t.Fatalf("InstallRemoteServer() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/mcp-servers:batchAdd", strings.NewReader(`{"names":["denied"]}`))
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "mcp_server_unavailable") {
+		t.Fatalf("body = %q, want stable unavailable error", rec.Body.String())
+	}
+	stored, err := srv.mcp.ListServers(context.Background())
+	if err != nil {
+		t.Fatalf("ListServers() error = %v", err)
+	}
+	if _, ok := stored["denied"]; !ok {
+		t.Fatalf("stored servers removed denied MCP: %#v", stored)
+	}
+	got, ok := svc.Agent(created.ID)
+	if !ok {
+		t.Fatalf("Agent(%q) not found", created.ID)
+	}
+	if _, ok := got.MCPServers["denied"]; ok {
+		t.Fatalf("agent MCP servers retained denied MCP: %#v", got.MCPServers)
+	}
+}
+
 func TestHandleBatchDeleteAgentMCPServersUsesBackendManagedState(t *testing.T) {
 	srv, svc, created := newAgentMCPManagementTestServer(t)
 	initial := map[string]any{
@@ -5237,6 +5272,9 @@ func TestHandleSkillUpload(t *testing.T) {
 }
 
 func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
+	previousAccessToken := remoteSkillsHubAccessToken
+	remoteSkillsHubAccessToken = func() (string, error) { return "skill-user-token", nil }
+	t.Cleanup(func() { remoteSkillsHubAccessToken = previousAccessToken })
 	currentStatus := auth.Status{}
 	restore := stubAuthStatus(func(*http.Request) (auth.Status, error) {
 		return currentStatus, nil
@@ -5244,6 +5282,9 @@ func TestHandleRemoteSkillsUsesEffectiveOfficialHub(t *testing.T) {
 	defer restore()
 
 	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.Header.Get("Authorization"), "Bearer skill-user-token"; got != want {
+			t.Fatalf("Authorization = %q, want %q", got, want)
+		}
 		if r.URL.Path != "/api/v1/skills" {
 			t.Fatalf("path = %q, want /api/v1/skills", r.URL.Path)
 		}

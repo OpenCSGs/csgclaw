@@ -1563,6 +1563,9 @@ export const messages = {
     agentCreateProgressDone: "完成",
     agentCreateProgressFailed: "创建失败",
     agentCreated: "Agent 已创建",
+    agentTemplateCreatedWithSkippedResources: "Agent 已创建，以下资源不可用，已自动跳过",
+    agentTemplateSkippedMCP: "MCP「{name}」",
+    agentTemplateSkippedKnowledgeBase: "知识库「{name}」",
     agentUpdated: "Agent 已更新",
     agentActionFailed: "Agent 操作失败",
     agentRecreateInProgress: "正在重建 {name}...",
@@ -1785,6 +1788,7 @@ export const messages = {
       app_gitlab_authentication_failed: "GitLab 拒绝了此 PAT，请检查令牌是否有效、过期或缺少权限。",
       app_gitlab_validation_failed: "无法验证 GitLab 账号，请检查实例地址和网络连接。",
       app_connection_failed: "连接器连接失败，请检查服务是否可达及凭据是否有效。",
+      mcp_server_unavailable: "MCP 服务当前不可用，无法添加到 Agent。请检查服务地址、鉴权和运行状态。",
       "AGENT-ERR-22": "模板已发布，当前仍在审核中。请稍后在模板列表中查看最新状态。",
       "AGENT-ERR-23": "模板已发布，但未通过敏感内容审核。请根据问题文件修改后重新发布。",
       "AGENT-ERR-25": "该智能体模板的敏感内容检查仍在进行中，无法创建智能体。",
@@ -3480,6 +3484,9 @@ export const messages = {
     agentCreateProgressDone: "Done",
     agentCreateProgressFailed: "Create failed",
     agentCreated: "Agent created",
+    agentTemplateCreatedWithSkippedResources: "Agent created. The following unavailable resources were skipped:",
+    agentTemplateSkippedMCP: 'MCP "{name}"',
+    agentTemplateSkippedKnowledgeBase: 'Knowledge base "{name}"',
     agentUpdated: "Agent updated",
     agentActionFailed: "Agent action failed",
     agentRecreateInProgress: "Recreating {name}...",
@@ -3727,6 +3734,8 @@ export const messages = {
         "Could not verify the GitLab account. Check the instance URL and network connection.",
       app_connection_failed:
         "The connector could not connect. Check that the service is reachable and the credentials are valid.",
+      mcp_server_unavailable:
+        "The MCP server is currently unavailable and cannot be added to the agent. Check its endpoint, credentials, and service status.",
       "AGENT-ERR-22": "The template was published and is still under review. Check the template list again later.",
       "AGENT-ERR-23":
         "The template was published but did not pass sensitive-content review. Update the affected files and publish again.",

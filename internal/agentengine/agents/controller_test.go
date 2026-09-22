@@ -21,6 +21,7 @@ import (
 	"csgclaw/internal/channel/feishu"
 	"csgclaw/internal/config"
 	"csgclaw/internal/dshcli"
+	"csgclaw/internal/mcp"
 	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
@@ -8331,6 +8332,45 @@ func TestCreateWorkerFromBuiltinDSHTemplateOverlaysDefaultWorkspace(t *testing.T
 	}
 	if _, err := os.Stat(filepath.Join(overlayTarget, "skills", "agent-teams", "SKILL.md")); err != nil {
 		t.Fatalf("template overlay agent-teams skill error = %v", err)
+	}
+}
+
+type templateAvailabilityTestProber struct{}
+
+func (templateAvailabilityTestProber) Probe(context.Context, string, map[string]any) (mcp.ProbeResult, error) {
+	return mcp.ProbeResult{}, errors.New("forbidden")
+}
+
+func TestResolveTemplateCreateSpecSkipsUnavailableManagedMCP(t *testing.T) {
+	hubSvc := mustNewLocalTemplateHubServiceWithMCP(t, "remote-worker", hub.Template{
+		ID: "remote-worker", Name: "remote-worker", Role: hub.TemplateRoleWorker, RuntimeKind: RuntimeNameCodex,
+	}, map[string]any{
+		"manual": map[string]any{"command": "manual-mcp"},
+		"remote": mcp.RemoteServer{ID: "remote-1", Name: "Remote Docs", URL: "https://remote.example.test/mcp"}.Config(),
+	})
+	svc, err := NewController(testModelConfig(), config.ServerConfig{}, "manager-image:1", "", WithHubService(hubSvc))
+	if err != nil {
+		t.Fatalf("NewController() error = %v", err)
+	}
+	checker := mcp.NewService(mcp.WithServerProber(templateAvailabilityTestProber{}))
+	skipped := []mcp.SkippedTemplateResource{}
+	ctx := WithTemplateMCPAvailability(context.Background(), checker, &skipped)
+
+	resolved, cleanup, err := svc.resolveTemplateCreateSpec(ctx, CreateAgentSpec{Name: "alice", FromTemplate: "local.remote-worker"})
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		t.Fatalf("resolveTemplateCreateSpec() error = %v", err)
+	}
+	if _, ok := resolved.MCPServers["remote"]; ok {
+		t.Fatalf("MCPServers retained unavailable remote: %#v", resolved.MCPServers)
+	}
+	if _, ok := resolved.MCPServers["manual"]; !ok {
+		t.Fatalf("MCPServers removed manual server: %#v", resolved.MCPServers)
+	}
+	if len(skipped) != 1 || skipped[0].Type != mcp.TemplateResourceMCP || skipped[0].Name != "Remote Docs" {
+		t.Fatalf("skipped resources = %#v", skipped)
 	}
 }
 

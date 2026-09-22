@@ -7,6 +7,7 @@ import (
 	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcp"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,50 @@ import (
 type stubMCPServerProber struct {
 	config map[string]any
 	name   string
+}
+
+type failingMCPServerProber struct{}
+
+func (failingMCPServerProber) Probe(context.Context, string, map[string]any) (mcp.ProbeResult, error) {
+	return mcp.ProbeResult{}, errors.New("access denied")
+}
+
+func TestHandleMCPServersHidesUnavailableRemoteAndRetainsManualServer(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	svc := mcp.NewService(mcp.WithServerProber(failingMCPServerProber{}))
+	if _, err := svc.CreateServer(context.Background(), "manual", map[string]any{"url": "https://manual.example.test/mcp"}); err != nil {
+		t.Fatalf("CreateServer() error = %v", err)
+	}
+	if _, err := svc.InstallRemoteServer(context.Background(), mcp.RemoteServer{
+		ID: "remote-denied", Name: "denied", URL: "https://remote.example.test/mcp",
+	}); err != nil {
+		t.Fatalf("InstallRemoteServer() error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	(&Handler{mcp: svc}).Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/mcp-servers", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	var response struct {
+		Servers map[string]any `json:"mcpServers"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if _, ok := response.Servers["manual"]; !ok {
+		t.Fatalf("available servers = %#v, want manual", response.Servers)
+	}
+	if _, ok := response.Servers["denied"]; ok {
+		t.Fatalf("available servers retained denied remote: %#v", response.Servers)
+	}
+	stored, err := svc.ListServers(context.Background())
+	if err != nil {
+		t.Fatalf("ListServers() error = %v", err)
+	}
+	if _, ok := stored["denied"]; !ok {
+		t.Fatalf("stored servers removed denied remote: %#v", stored)
+	}
 }
 
 func (p *stubMCPServerProber) Probe(_ context.Context, name string, config map[string]any) (mcp.ProbeResult, error) {

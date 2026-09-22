@@ -3,8 +3,10 @@ package api
 import (
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
+	"csgclaw/internal/mcp"
 	"csgclaw/internal/mcpschema"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -97,6 +99,10 @@ func (h *Handler) handleBatchAddAgentMCPServers(w http.ResponseWriter, r *http.R
 				err = fmt.Errorf("mcp server %q config must be an object", name)
 				break
 			}
+			if availabilityErr := h.mcp.RequireServerAvailable(r.Context(), name, config); availabilityErr != nil {
+				err = availabilityErr
+				break
+			}
 			server, normalizeErr := agentMCPServerConfig(name, config)
 			if normalizeErr != nil {
 				err = normalizeErr
@@ -182,6 +188,10 @@ func (h *Handler) handleBatchDeleteAgentMCPServers(w http.ResponseWriter, r *htt
 func writeAgentMCPServersMutationError(w http.ResponseWriter, err error) {
 	status := http.StatusBadRequest
 	message := strings.ToLower(err.Error())
+	if errors.Is(err, mcp.ErrServerUnavailable) {
+		writeCodedAPIError(w, http.StatusConflict, "mcp_server_unavailable", err.Error())
+		return
+	}
 	if strings.Contains(message, "not found") {
 		status = http.StatusNotFound
 	} else if strings.Contains(message, "mcp server") && strings.Contains(message, "config") {

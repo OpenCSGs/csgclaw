@@ -18,8 +18,13 @@ var (
 var serverDocumentMu sync.Mutex
 
 type Service struct {
-	prober ServerProber
-	store  ServerStore
+	prober               ServerProber
+	store                ServerStore
+	availabilityOnce     sync.Once
+	availabilityMu       sync.Mutex
+	availability         map[string]availabilityEntry
+	availabilityInflight map[string]*availabilityProbe
+	availabilitySem      chan struct{}
 }
 
 type ServiceOption func(*Service)
@@ -98,6 +103,11 @@ func (s *Service) InstallRemoteServer(ctx context.Context, server RemoteServer) 
 	})
 	if err != nil {
 		return "", err
+	}
+	s.initAvailability()
+	hash, hashErr := availabilityConfigHash(config)
+	if hashErr == nil {
+		s.startAvailabilityProbe(name, config, hash)
 	}
 	return name, nil
 }

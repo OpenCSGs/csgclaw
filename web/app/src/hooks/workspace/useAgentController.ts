@@ -55,7 +55,7 @@ import {
 } from "@/shared/constants/agents";
 import { ACTION_REBUILD_MANAGER } from "@/shared/constants/messages";
 import { selectUnusedAgentAvatar } from "@/shared/avatarOptions";
-import { FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
+import { AGENT_CREATION_WARNINGS_STORAGE_KEY, FEISHU_REGISTRATIONS_STORAGE_KEY } from "@/shared/storage/keys";
 import { localizeAPIError } from "@/shared/i18n";
 import { LAST_CREATED_AGENT_MODEL_STORAGE_KEY } from "@/shared/storage/keys";
 import {
@@ -174,6 +174,35 @@ type AgentPageNoticeState = {
   message: string;
   tone: AgentPageNoticeTone;
 };
+
+function loadPersistentAgentCreationWarnings(): Record<string, AgentPageNoticeState> {
+  if (typeof window === "undefined") return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(AGENT_CREATION_WARNINGS_STORAGE_KEY) || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([agentID, notice]) =>
+          Boolean(agentID) &&
+          Boolean(notice) &&
+          typeof notice === "object" &&
+          typeof (notice as AgentPageNoticeState).message === "string" &&
+          (notice as AgentPageNoticeState).tone === "warning",
+      ),
+    ) as Record<string, AgentPageNoticeState>;
+  } catch {
+    return {};
+  }
+}
+
+function savePersistentAgentCreationWarnings(notices: Record<string, AgentPageNoticeState>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(AGENT_CREATION_WARNINGS_STORAGE_KEY, JSON.stringify(notices));
+  } catch {
+    // Storage may be unavailable in a hardened browser; the in-memory notice still works.
+  }
+}
 type LarkCLIDialogState = {
   kind: "message" | "install";
   message: string;
@@ -605,7 +634,9 @@ export function useAgentController({
   const [agentMCPAddError, setAgentMCPAddError] = useState("");
   const [agentMCPDeleteBusy, setAgentMCPDeleteBusy] = useState(false);
   const [agentMCPDeleteError, setAgentMCPDeleteError] = useState("");
-  const [agentPageNotices, setAgentPageNotices] = useState<Record<string, AgentPageNoticeState>>({});
+  const [agentPageNotices, setAgentPageNotices] = useState<Record<string, AgentPageNoticeState>>(
+    loadPersistentAgentCreationWarnings,
+  );
   const agentPageNoticeTimersRef = useRef<Record<string, number>>({});
   const agentPageDraftLoadSeqRef = useRef(0);
   const agentPageDraftRequestRef = useRef(0);
@@ -1063,12 +1094,23 @@ export function useAgentController({
       }
       const next = { ...current };
       delete next[noticeKey];
+      const persisted = loadPersistentAgentCreationWarnings();
+      if (noticeKey in persisted) {
+        delete persisted[noticeKey];
+        savePersistentAgentCreationWarnings(persisted);
+      }
       return next;
     });
   }, []);
 
   const showAgentPageNotice = useCallback(
-    (message: string, tone: AgentPageNoticeTone = "warning", durationMs = 5000, ownerAgentID?: string | null) => {
+    (
+      message: string,
+      tone: AgentPageNoticeTone = "warning",
+      durationMs = 5000,
+      ownerAgentID?: string | null,
+      persist = false,
+    ) => {
       const noticeKey =
         ownerAgentID === null
           ? GLOBAL_AGENT_PAGE_NOTICE_KEY
@@ -1079,6 +1121,11 @@ export function useAgentController({
         delete agentPageNoticeTimersRef.current[noticeKey];
       }
       setAgentPageNotices((current) => ({ ...current, [noticeKey]: { message, tone } }));
+      if (persist) {
+        const persisted = loadPersistentAgentCreationWarnings();
+        persisted[noticeKey] = { message, tone };
+        savePersistentAgentCreationWarnings(persisted);
+      }
       if (durationMs <= 0) {
         return;
       }
@@ -2133,6 +2180,21 @@ export function useAgentController({
       }
       if (isCreate) {
         saveLastCreatedAgentModelPreference(agentDraft);
+        const skippedResources = Array.isArray(saved.skipped_resources) ? saved.skipped_resources : [];
+        if (saved.id && skippedResources.length > 0) {
+          const resourceLines = skippedResources.map((resource) =>
+            resource.type === "knowledge_base"
+              ? t("agentTemplateSkippedKnowledgeBase", { name: String(resource.name || "") })
+              : t("agentTemplateSkippedMCP", { name: String(resource.name || "") }),
+          );
+          showAgentPageNotice(
+            [t("agentTemplateCreatedWithSkippedResources"), ...resourceLines].join("\n"),
+            "warning",
+            0,
+            saved.id,
+            true,
+          );
+        }
       }
       await refreshAgents();
       await refreshWorkspaceBootstrap();

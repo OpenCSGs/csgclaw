@@ -361,7 +361,14 @@ export async function createBotRequest(payload: CreateBotPayload): Promise<Agent
       },
     },
   });
-  return participant.agent_id ? fetchAgent(participant.agent_id) : participantToAgentLike(participant);
+  const skippedResources = Array.isArray(participant.metadata?.skipped_resources)
+    ? participant.metadata.skipped_resources
+    : [];
+  if (!participant.agent_id) {
+    return { ...participantToAgentLike(participant), skipped_resources: skippedResources };
+  }
+  const created = await fetchAgent(participant.agent_id);
+  return { ...created, skipped_resources: skippedResources };
 }
 
 export async function createNotificationBotRequest(payload: CreateBotPayload): Promise<AgentLike> {

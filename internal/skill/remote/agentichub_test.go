@@ -186,6 +186,9 @@ func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
 		if r.URL.Path != "/hub/api/v1/skills" {
 			t.Fatalf("path = %q, want catalog endpoint", r.URL.Path)
 		}
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("Authorization = %q, want empty for anonymous listing", got)
+		}
 		if got := r.URL.Query().Get("page"); got != "2" {
 			t.Fatalf("page = %q, want 2", got)
 		}
@@ -211,7 +214,7 @@ func TestListAgenticHubSkillsNormalizesCatalogRecords(t *testing.T) {
 	}))
 	defer server.Close()
 
-	page, err := ListAgenticHubSkills(context.Background(), server.URL+"/hub", AgenticHubSkillListOptions{
+	page, err := ListAgenticHubSkills(context.Background(), server.URL+"/hub", "", AgenticHubSkillListOptions{
 		Page:   2,
 		Per:    16,
 		Search: " agent ",

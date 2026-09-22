@@ -23,7 +23,7 @@ func (h *Handler) handleMCPServers(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		servers, err := h.mcp.ListServers(r.Context())
+		servers, err := h.mcp.ListAvailableServers(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return

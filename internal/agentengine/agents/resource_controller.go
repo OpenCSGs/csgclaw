@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/mcp"
 	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
 	hub "csgclaw/internal/template"
@@ -17,6 +18,12 @@ import (
 )
 
 type localTemplateServiceContextKey struct{}
+type templateMCPAvailabilityContextKey struct{}
+
+type templateMCPAvailabilityContext struct {
+	service *mcp.Service
+	skipped *[]mcp.SkippedTemplateResource
+}
 
 // WithLocalTemplateService preserves the HTTP adapter's request-scoped Hub
 // selection without adding a concrete template client to public Engine request
@@ -27,6 +34,18 @@ func WithLocalTemplateService(ctx context.Context, service *hub.Service) context
 		ctx = context.Background()
 	}
 	return context.WithValue(ctx, localTemplateServiceContextKey{}, service)
+}
+
+// WithTemplateMCPAvailability installs the request-scoped checker used while
+// resolving a template and collects resources omitted from the created Agent.
+func WithTemplateMCPAvailability(ctx context.Context, service *mcp.Service, skipped *[]mcp.SkippedTemplateResource) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if service == nil || skipped == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, templateMCPAvailabilityContextKey{}, templateMCPAvailabilityContext{service: service, skipped: skipped})
 }
 
 func (f *Controller) Create(ctx context.Context, request contract.AgentCreateRequest) (contract.Agent, error) {

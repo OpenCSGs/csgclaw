@@ -19,6 +19,8 @@ const (
 
 var errOfficialHubURLNotConfigured = errors.New("official Hub URL is not configured")
 
+var remoteSkillsHubAccessToken = currentOpenCSGAccessToken
+
 type remoteSkillsListResponse struct {
 	Items    []remoteSkillSummary `json:"items"`
 	NextPage *int                 `json:"next_page,omitempty"`
@@ -58,7 +60,12 @@ func (h *Handler) handleRemoteSkills(w http.ResponseWriter, r *http.Request) {
 		writeRemoteSkillsHubError(w, err)
 		return
 	}
-	list, err := skillremote.ListAgenticHubSkills(r.Context(), baseURL, skillremote.AgenticHubSkillListOptions{
+	accessToken, err := remoteSkillsHubAccessToken()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	list, err := skillremote.ListAgenticHubSkills(r.Context(), baseURL, accessToken, skillremote.AgenticHubSkillListOptions{
 		Page:   page,
 		Per:    per,
 		Search: r.URL.Query().Get("search"),

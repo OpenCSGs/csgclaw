@@ -338,7 +338,10 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 	var probe openAIResponsesProbeResponse
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
 	if mediaType == "text/event-stream" {
-		return validateOpenAIResponsesProbeStream(resp.Body)
+		if err := validateOpenAIResponsesProbeStream(resp.Body); err != nil {
+			return &UpstreamRequestError{Operation: "read responses probe stream", BaseURL: baseURL, Err: err}
+		}
+		return nil
 	} else {
 		err = json.NewDecoder(resp.Body).Decode(&probe)
 	}
@@ -371,15 +374,17 @@ func validateOpenAIResponsesProbeStream(r io.Reader) error {
 			eventType = strings.TrimSpace(sseEventType)
 		}
 		switch eventType {
-		case "response.failed", "error":
+		case "response.failed", "response.incomplete", "error":
 			code := UpstreamErrorCode([]byte(data))
 			status := UpstreamStatusForErrorCode(code)
 			return false, &ResponsesAPIStatusError{Operation: "responses", Status: http.StatusText(status), StatusCode: status, Body: data}
+		case "response.created", "response.queued", "response.in_progress", "response.completed":
+			if strings.TrimSpace(event.Response.Object) != "response" {
+				return false, fmt.Errorf("%s event contains an invalid response", eventType)
+			}
+			return true, nil
 		}
-		if eventType == "" {
-			return false, nil
-		}
-		return true, nil
+		return false, nil
 	})
 	if err != nil {
 		return err

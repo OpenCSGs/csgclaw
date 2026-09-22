@@ -6,6 +6,7 @@ import (
 )
 
 var WithLocalTemplateService = agent.WithLocalTemplateService
+var WithTemplateMCPAvailability = agent.WithTemplateMCPAvailability
 
 type unavailableAgents struct{}
 

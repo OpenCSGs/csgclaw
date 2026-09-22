@@ -242,6 +242,7 @@ type agentResponse struct {
 	ParticipantNames     []string                           `json:"participant_names,omitempty"`
 	Participants         []apitypes.Participant             `json:"participants,omitempty"`
 	LarkCLI              *apitypes.AgentLarkCLIStatus       `json:"lark_cli,omitempty"`
+	SkippedResources     []mcp.SkippedTemplateResource      `json:"skipped_resources,omitempty"`
 }
 
 func (r *agentResponse) UnmarshalJSON(data []byte) error {
@@ -1724,7 +1725,9 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		http.Error(w, "agent service is not configured", http.StatusServiceUnavailable)
 		return
 	}
+	skippedResources := []mcp.SkippedTemplateResource{}
 	ctx := agentengine.WithLocalTemplateService(r.Context(), hubSvc)
+	ctx = agentengine.WithTemplateMCPAvailability(ctx, h.mcp, &skippedResources)
 	agents := h.agentEngine.Agents()
 	var created agentengine.Agent
 	if createReq.Replace {
@@ -1742,7 +1745,9 @@ func (h *Handler) handleCreateAgentWorker(w http.ResponseWriter, r *http.Request
 		writeAgentOperationErrorWithBillingURL(w, err, http.StatusBadRequest, llm.OpenCSGBillingURL(createReq.Spec.AgentProfile))
 		return
 	}
-	writeJSON(w, http.StatusCreated, h.presentEngineAgentForRequest(r, created))
+	response := h.presentEngineAgentForRequest(r, created)
+	response.SkippedResources = skippedResources
+	writeJSON(w, http.StatusCreated, response)
 }
 
 func writeAgentOperationError(w http.ResponseWriter, err error, defaultStatus int) {

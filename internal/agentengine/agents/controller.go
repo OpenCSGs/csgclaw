@@ -27,6 +27,7 @@ import (
 	"csgclaw/internal/config"
 	"csgclaw/internal/identity"
 	"csgclaw/internal/knowledgebase"
+	"csgclaw/internal/mcp"
 	agentruntime "csgclaw/internal/runtime"
 	runtimeinstructions "csgclaw/internal/runtime/instructions"
 	"csgclaw/internal/sandbox"
@@ -1105,6 +1106,13 @@ func (s *Controller) resolveTemplateCreateSpecWithService(
 			hydratedMCPServers, err := knowledgebase.HydrateTemplateServers(ctx, templateMCPServers)
 			if err != nil {
 				return CreateAgentSpec{}, cleanup, err
+			}
+			if availability, ok := ctx.Value(templateMCPAvailabilityContextKey{}).(templateMCPAvailabilityContext); ok {
+				var skipped []mcp.SkippedTemplateResource
+				hydratedMCPServers, skipped = availability.service.FilterAvailableTemplateServers(ctx, hydratedMCPServers)
+				if len(skipped) > 0 {
+					*availability.skipped = append(*availability.skipped, skipped...)
+				}
 			}
 			spec.MCPServers = hydratedMCPServers
 			spec.MCPServersSet = true
