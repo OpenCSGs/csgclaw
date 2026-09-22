@@ -1081,7 +1081,7 @@ func TestCreateWorkerUsesDSHRuntimeAndPersistsBeforeNew(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	dshValidator := runtimedsh.New(runtimedsh.Dependencies{
-		ResolveBinary: func(context.Context, string) (dshcli.Info, error) {
+		ResolveBinary: func(context.Context) (dshcli.Info, error) {
 			return dshcli.Info{Path: "/opt/dsh", Version: "0.1.5-rc.2"}, nil
 		},
 	})
@@ -1128,6 +1128,112 @@ func TestCreateWorkerUsesDSHRuntimeAndPersistsBeforeNew(t *testing.T) {
 	}
 	if got.RuntimeKind != RuntimeKindDSH || got.BoxID != "dsh-agent" {
 		t.Fatalf("CreateWorker() = %+v", got)
+	}
+}
+
+func TestCreateWorkerDSHSupportsAllModelProviderKinds(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		selector string
+		profile  AgentProfile
+		llm      config.LLMConfig
+	}{
+		{
+			name:     "OpenCSG",
+			selector: ModelProviderIDOpenCSG + ".qwen3.7-plus",
+			profile:  AgentProfile{ModelProviderID: ModelProviderIDOpenCSG, ModelID: "qwen3.7-plus"},
+		},
+		{
+			name:     "CSGHub Lite",
+			selector: ModelProviderIDCSGHubLite + ".Qwen3-0.6B-GGUF",
+			profile:  AgentProfile{ModelProviderID: ModelProviderIDCSGHubLite, ModelID: "Qwen3-0.6B-GGUF"},
+		},
+		{
+			name:     "Codex",
+			selector: ModelProviderIDCodex + ".gpt-5.5",
+			profile:  AgentProfile{ModelProviderID: ModelProviderIDCodex, ModelID: "gpt-5.5"},
+		},
+		{
+			name:     "Claude Code",
+			selector: ModelProviderIDClaude + ".claude-sonnet",
+			profile:  AgentProfile{ModelProviderID: ModelProviderIDClaude, ModelID: "claude-sonnet"},
+		},
+		{
+			name:     "custom OpenAI compatible",
+			selector: "custom.test-model",
+			profile:  AgentProfile{ModelProviderID: "custom", ModelID: "test-model"},
+			llm: config.LLMConfig{Providers: map[string]config.ProviderConfig{
+				"custom": {BaseURL: "https://api.example/v1", APIKey: "custom-key", Models: []string{"test-model"}},
+			}},
+		},
+		{
+			name: "legacy inline API",
+			profile: AgentProfile{
+				Provider: ProviderAPI,
+				BaseURL:  "https://api.example/v1",
+				APIKey:   "inline-key",
+				ModelID:  "test-model",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			validator := runtimedsh.New(runtimedsh.Dependencies{
+				ResolveBinary: func(context.Context) (dshcli.Info, error) {
+					return dshcli.Info{Path: "/test/dsh", Version: "0.1.5-rc.2"}, nil
+				},
+			})
+			var provisioned agentruntime.Profile
+			runtimeImpl := fakeAgentRuntime{
+				kind:     RuntimeKindDSH,
+				validate: validator.ValidateConfig,
+				provision: func(_ context.Context, req agentruntime.ProvisionRequest) error {
+					provisioned = req.Profile
+					if req.Profile.BaseURL != "http://127.0.0.1:18080/api/v1/agents/agent-dsh/llm" {
+						return fmt.Errorf("unexpected DSH bridge URL %q", req.Profile.BaseURL)
+					}
+					if !strings.HasPrefix(req.Profile.APIKey, "agent.") {
+						return fmt.Errorf("DSH Agent token is missing")
+					}
+					return nil
+				},
+				new: func(_ context.Context, spec agentruntime.Spec) (agentruntime.Handle, error) {
+					return agentruntime.Handle{RuntimeID: spec.RuntimeID, HandleID: "dsh-agent"}, nil
+				},
+				info: func(_ context.Context, h agentruntime.Handle) (agentruntime.Info, error) {
+					return agentruntime.Info{HandleID: h.HandleID, State: agentruntime.StateRunning}, nil
+				},
+			}
+			svc, err := NewController(
+				config.ModelConfig{},
+				config.ServerConfig{ListenAddr: "127.0.0.1:18080"},
+				"manager-image:test",
+				"",
+				WithRuntime(runtimeImpl),
+			)
+			if err != nil {
+				t.Fatalf("NewController() error = %v", err)
+			}
+			if !test.llm.IsZero() {
+				svc.SetLLMConfig(test.llm)
+			}
+
+			profile := test.profile
+			profile.Name = "dsh-worker"
+			created, err := svc.CreateWorker(context.Background(), CreateAgentSpec{
+				ID:           "agent-dsh",
+				Name:         "dsh-worker",
+				RuntimeKind:  RuntimeKindDSH,
+				Profile:      test.selector,
+				AgentProfile: profile,
+			})
+			if err != nil {
+				t.Fatalf("CreateWorker() error = %v", err)
+			}
+			if created.Status != string(agentruntime.StateRunning) || provisioned.ModelID != profile.ModelID {
+				t.Fatalf("CreateWorker() = %+v, provisioned profile = %+v", created, provisioned)
+			}
+		})
 	}
 }
 
@@ -9605,6 +9711,21 @@ func TestTemplateSafeRuntimeOptionsValidatesMemoryMode(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "runtime_options.memory_mode") {
 			t.Fatalf("templateSafeRuntimeOptions(%#v) error = %v, want memory_mode validation error", runtimeOptions, err)
 		}
+	}
+}
+
+func TestTemplateSafeRuntimeOptionsPreservesDSHPermissionMode(t *testing.T) {
+	got, err := templateSafeRuntimeOptions(Agent{
+		ID:             "u-dsh",
+		Role:           RoleWorker,
+		RuntimeKind:    RuntimeKindDSH,
+		RuntimeOptions: map[string]any{"permission_mode": "read-only", "executable_path": "/custom/dsh"},
+	})
+	if err != nil {
+		t.Fatalf("templateSafeRuntimeOptions() error = %v", err)
+	}
+	if len(got) != 1 || got["permission_mode"] != "read-only" {
+		t.Fatalf("templateSafeRuntimeOptions() = %#v, want only DSH permission mode", got)
 	}
 }
 

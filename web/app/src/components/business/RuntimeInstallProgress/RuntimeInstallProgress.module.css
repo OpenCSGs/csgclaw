@@ -1,0 +1,82 @@
+.root {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.track {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.segment {
+  position: relative;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--brand-500) 15%, var(--line));
+}
+
+.segment.complete {
+  background: var(--brand-500);
+}
+
+.segment.active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--brand-400), transparent);
+  animation: runtimeInstallProgress 1.1s ease-in-out infinite;
+}
+
+.meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.meta strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta span {
+  flex: 0 0 auto;
+}
+
+.root small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+@keyframes runtimeInstallProgress {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(225%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .segment.active::after {
+    width: 100%;
+    animation: none;
+    background: color-mix(in oklab, var(--brand-500) 65%, transparent);
+  }
+}

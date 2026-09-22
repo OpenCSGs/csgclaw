@@ -1,9 +1,12 @@
 import {
+  localizedRuntimeOptionChoiceDescription,
+  localizedRuntimeOptionChoiceLabel,
   localizedRuntimeOptionDescription,
   localizedRuntimeOptionLabel,
   runtimeOptionValueForPath,
   setRuntimeOptionValue,
   type AgentDraft,
+  type RuntimeOptionChoice,
   type RuntimeOptionSchema,
 } from "@/models/agents";
 import { Button } from "@/components/ui/Button/Button";
@@ -30,6 +33,7 @@ function clearFieldLabel(locale: LocaleCode): string {
 
 const EXECUTION_MODE_PATH = "execution_mode";
 const EXECUTION_MODE_READ_ONLY = "read_only";
+const CODEX_EXECUTION_MODE_PRESENTATION = "codex_execution_mode";
 
 function executionModeLabel(value: string, locale: LocaleCode): string {
   if (value === EXECUTION_MODE_READ_ONLY) {
@@ -47,6 +51,10 @@ function executionModeHint(value: string, locale: LocaleCode): string {
   return locale === "zh"
     ? "可读取和修改数据，并使用运行环境允许的工具。"
     : "Can read and modify data and use tools allowed by the runtime environment.";
+}
+
+function choiceForValue(choices: RuntimeOptionChoice[] | null | undefined, value: string) {
+  return choices?.find((choice) => String(choice.value ?? "").trim() === value);
 }
 
 function ExecutionModeHelp({ locale }: { locale: LocaleCode }) {
@@ -137,7 +145,9 @@ export function RuntimeOptionsFields({
     const inputValue = runtimeOptionValueForPath(draft.runtime_options, path, String(schema.default_value ?? ""));
     const isDirectory = schema.type === "directory";
     const isSelect = schema.type === "select";
-    const isExecutionMode = path === EXECUTION_MODE_PATH;
+    const isCodexExecutionMode =
+      schema.presentation === CODEX_EXECUTION_MODE_PRESENTATION ||
+      (!schema.presentation && path === EXECUTION_MODE_PATH);
     const placeholder = isDirectory ? "/path/to/workspace" : "";
     if (isSelect) {
       const resolvedValue = inputValue || String(schema.default_value ?? schema.options?.[0] ?? "");
@@ -145,7 +155,7 @@ export function RuntimeOptionsFields({
         <div key={String(schema.key ?? path)} className="field span-2">
           <div className="field-label-with-help">
             <span>{label}</span>
-            {isExecutionMode ? <ExecutionModeHelp locale={locale} /> : null}
+            {isCodexExecutionMode ? <ExecutionModeHelp locale={locale} /> : null}
           </div>
           <Select
             value={resolvedValue}
@@ -158,10 +168,15 @@ export function RuntimeOptionsFields({
             triggerProps={{ "aria-label": label }}
             options={(schema.options || []).map((value) => ({
               value,
-              label: isExecutionMode ? executionModeLabel(value, locale) : value,
+              label:
+                localizedRuntimeOptionChoiceLabel(choiceForValue(schema.choices, value), locale) ||
+                (isCodexExecutionMode ? executionModeLabel(value, locale) : value),
             }))}
           />
-          <span className="field-hint">{isExecutionMode ? executionModeHint(resolvedValue, locale) : description}</span>
+          <span className="field-hint">
+            {localizedRuntimeOptionChoiceDescription(choiceForValue(schema.choices, resolvedValue), locale) ||
+              (isCodexExecutionMode ? executionModeHint(resolvedValue, locale) : description)}
+          </span>
         </div>
       );
     }

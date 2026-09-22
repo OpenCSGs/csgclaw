@@ -5,6 +5,7 @@ export * from "./MessageContent";
 export * from "./OpenCSGConnectionDialog";
 export * from "./ProfilePreview";
 export * from "./RoomAvatar";
+export * from "./RuntimeInstallProgress";
 export * from "./ProfileControls";
 export * from "./TaskStatusPill";
 export * from "./TaskSubtaskIndicator";

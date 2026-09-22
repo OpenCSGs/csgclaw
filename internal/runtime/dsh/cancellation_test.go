@@ -117,7 +117,7 @@ func TestConversationCancellationTimeoutStopsProcessBeforeReturningDeliveryError
 	profile := agentruntime.Profile{BaseURL: "https://gateway.example/v1", APIKey: "secret-key", ModelID: "test-model", ReasoningEffort: "auto"}
 	ref := AgentRef{ID: "agent-timeout", RuntimeID: "rt-agent-timeout", Profile: profile}
 	runtime := New(Dependencies{
-		ResolveBinary: func(context.Context, string) (dshcli.Info, error) {
+		ResolveBinary: func(context.Context) (dshcli.Info, error) {
 			return dshcli.Info{Path: launcher, Version: "0.1.5-rc.2"}, nil
 		},
 		ResolveAgent: func(agentruntime.Handle) (AgentRef, error) { return ref, nil },

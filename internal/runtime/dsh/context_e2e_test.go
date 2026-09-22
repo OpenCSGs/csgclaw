@@ -55,7 +55,7 @@ func testContextNativeDSH(t *testing.T, mode string) {
 		disabled := false
 		profile.AutoCompact = &disabled
 	}
-	rt := New(Dependencies{ResolveBinary: func(context.Context, string) (dshcli.Info, error) {
+	rt := New(Dependencies{ResolveBinary: func(context.Context) (dshcli.Info, error) {
 		return dshcli.Info{Path: binary, Version: "0.1.5-rc.2"}, nil
 	}, ResolveAgent: func(agentruntime.Handle) (AgentRef, error) {
 		return AgentRef{ID: "alice", RuntimeID: "rt-alice", Profile: profile}, nil

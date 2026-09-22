@@ -7,15 +7,21 @@ import (
 	agentruntime "csgclaw/internal/runtime"
 )
 
-const executablePathOption = "executable_path"
+const (
+	PermissionModeOptionKey        = "permission_mode"
+	PermissionModeReadOnly         = "read-only"
+	PermissionModeWorkspaceWrite   = "workspace-write"
+	PermissionModeDangerFullAccess = "danger-full-access"
+	defaultPermissionMode          = PermissionModeWorkspaceWrite
+)
 
 type RuntimeOptions struct {
 	AutoCompact    bool
-	ExecutablePath string
+	PermissionMode string
 }
 
 func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
-	out := RuntimeOptions{AutoCompact: true}
+	out := RuntimeOptions{AutoCompact: true, PermissionMode: defaultPermissionMode}
 	if raw == nil {
 		return out, nil
 	}
@@ -25,28 +31,64 @@ func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
 		}
 		out.AutoCompact = value == "enabled"
 	}
-	value, ok := raw[executablePathOption]
-	if !ok || value == nil {
-		return out, nil
+	if value, ok := raw[PermissionModeOptionKey]; ok && value != nil {
+		text, ok := value.(string)
+		if !ok {
+			return RuntimeOptions{}, fmt.Errorf("%s must be a string", PermissionModeOptionKey)
+		}
+		mode := strings.ToLower(strings.TrimSpace(text))
+		if mode != "" {
+			switch mode {
+			case PermissionModeReadOnly, PermissionModeWorkspaceWrite, PermissionModeDangerFullAccess:
+				out.PermissionMode = mode
+			default:
+				return RuntimeOptions{}, fmt.Errorf("%s must be %q, %q, or %q", PermissionModeOptionKey, PermissionModeReadOnly, PermissionModeWorkspaceWrite, PermissionModeDangerFullAccess)
+			}
+		}
 	}
-	text, ok := value.(string)
-	if !ok {
-		return out, fmt.Errorf("%s must be a string", executablePathOption)
-	}
-	out.ExecutablePath = strings.TrimSpace(text)
 	return out, nil
 }
 
+func IsReadOnlyPermissionMode(raw map[string]any) bool {
+	opts, err := DecodeRuntimeOptions(raw)
+	return err == nil && opts.PermissionMode == PermissionModeReadOnly
+}
+
 func (r *Runtime) RuntimeOptionsSchema() []agentruntime.RuntimeOptionSchema {
-	return []agentruntime.RuntimeOptionSchema{{Key: "auto_compact", Path: "auto_compact", Label: "Automatic context compaction", LabelZh: "自动整理对话", LabelEn: "Automatic context compaction", Type: "select", Options: []string{"enabled", "disabled"}, DefaultValue: "enabled"}, {
-		Key:           executablePathOption,
-		Path:          executablePathOption,
-		Label:         "DSH Executable",
-		LabelZh:       "DSH 可执行文件",
-		LabelEn:       "DSH Executable",
-		Description:   "Leave empty to use CSGCLAW_DSH_PATH or dsh from PATH.",
-		DescriptionZh: "留空时依次使用 CSGCLAW_DSH_PATH 或 PATH 中的 dsh。",
-		DescriptionEn: "Leave empty to use CSGCLAW_DSH_PATH or dsh from PATH.",
-		Type:          "string",
-	}}
+	return []agentruntime.RuntimeOptionSchema{
+		{
+			Key:           PermissionModeOptionKey,
+			Path:          PermissionModeOptionKey,
+			Label:         "Permission Mode",
+			LabelZh:       "运行模式",
+			LabelEn:       "Permission Mode",
+			Description:   "Controls which local files DSH may modify.",
+			DescriptionZh: "控制 DSH 可以修改的本地文件范围。",
+			DescriptionEn: "Controls which local files DSH may modify.",
+			Type:          "select",
+			Options:       []string{PermissionModeWorkspaceWrite, PermissionModeReadOnly},
+			Choices: []agentruntime.RuntimeOptionChoice{
+				{
+					Value:         PermissionModeWorkspaceWrite,
+					Label:         "Workspace write",
+					LabelZh:       "工作区内修改",
+					LabelEn:       "Workspace write",
+					Description:   "Can modify this Agent's automatically managed workspace and temporary files; broader access requires approval.",
+					DescriptionZh: "可修改系统自动管理的当前 Agent 工作区和临时文件；更大范围的访问需要确认，无需额外设置工作区。",
+					DescriptionEn: "Can modify this Agent's automatically managed workspace and temporary files; broader access requires approval.",
+				},
+				{
+					Value:         PermissionModeReadOnly,
+					Label:         "View only",
+					LabelZh:       "仅可查看",
+					LabelEn:       "View only",
+					Description:   "Can read local files but cannot modify them; operations requiring broader access ask for approval.",
+					DescriptionZh: "可读取本地文件，但不能修改；需要更高权限的操作会请求确认。",
+					DescriptionEn: "Can read local files but cannot modify them; operations requiring broader access ask for approval.",
+				},
+			},
+			DefaultValue: defaultPermissionMode,
+			Presentation: "dsh_permission_mode",
+		},
+	}
 }

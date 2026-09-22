@@ -18,8 +18,8 @@ func WithDSHRuntime() agent.ControllerOption {
 		}
 		host := s.PicoClawRuntimeHost()
 		rt := runtimedsh.New(runtimedsh.Dependencies{
-			ResolveBinary: func(ctx context.Context, explicit string) (dshcli.Info, error) {
-				return (dshcli.Provider{ExplicitPath: explicit}).Resolve(ctx)
+			ResolveBinary: func(ctx context.Context) (dshcli.Info, error) {
+				return (dshcli.Provider{}).Resolve(ctx)
 			},
 			MaterializeMCPServers: func(ctx context.Context, servers map[string]any) (map[string]any, error) {
 				return s.MaterializeRuntimeMCPServers(ctx, agent.RuntimeKindDSH, servers)

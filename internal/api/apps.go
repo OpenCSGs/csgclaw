@@ -18,6 +18,7 @@ import (
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
 	runtimecodex "csgclaw/internal/runtime/codex"
+	runtimedsh "csgclaw/internal/runtime/dsh"
 )
 
 // EnableApps wires the same installation service into HTTP administration and
@@ -97,11 +98,23 @@ func (h *Handler) appReadOnlyAgent(agentID string) bool {
 		return false
 	}
 	a, ok := h.svc.Agent(agentID)
-	if !ok || a.RuntimeKind != agent.RuntimeKindCodex {
+	if !ok {
 		return false
 	}
-	options, err := runtimecodex.DecodeRuntimeOptions(a.RuntimeOptions)
-	return err != nil || options.ExecutionMode == runtimecodex.ExecutionModeReadOnly
+	return readOnlyRuntime(a.RuntimeKind, a.RuntimeOptions)
+}
+
+func readOnlyRuntime(runtimeKind string, options map[string]any) bool {
+	switch strings.TrimSpace(runtimeKind) {
+	case agent.RuntimeKindCodex:
+		decoded, err := runtimecodex.DecodeRuntimeOptions(options)
+		return err != nil || decoded.ExecutionMode == runtimecodex.ExecutionModeReadOnly
+	case agent.RuntimeKindDSH:
+		decoded, err := runtimedsh.DecodeRuntimeOptions(options)
+		return err != nil || decoded.PermissionMode == runtimedsh.PermissionModeReadOnly
+	default:
+		return false
+	}
 }
 
 func (h *Handler) appCodexRuntime() *runtimecodex.Runtime {

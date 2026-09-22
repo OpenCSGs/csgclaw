@@ -456,4 +456,32 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
 	if !reflect.DeepEqual(directory.Models, []string{"chat-vision", "gpt-image-2"}) {
 		t.Fatalf("chat models: %v", directory.Models)
 	}
+	if !reflect.DeepEqual(directory.VisionModels, []string{"chat-vision"}) {
+		t.Fatalf("vision models: %v", directory.VisionModels)
+	}
+}
+
+func TestOpenCSGModelDirectoryReadsPluralTasksWithoutChangingGenericProviders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[
+   {"id":"chat-vision-plural","task":"text-generation","tasks":["text-generation","image-text-to-text"]}
+  ]}`))
+	}))
+	defer server.Close()
+
+	generic, err := ListOpenAIModelDirectoryWithClient(context.Background(), server.Client(), server.URL, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(generic.VisionModels) != 0 {
+		t.Fatalf("generic OpenAI-compatible vision models = %v, want plural tasks ignored", generic.VisionModels)
+	}
+
+	opencsg, err := ListOpenCSGModelDirectoryWithClient(context.Background(), server.Client(), server.URL, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(opencsg.VisionModels, []string{"chat-vision-plural"}) {
+		t.Fatalf("OpenCSG vision models = %v, want plural tasks recognized", opencsg.VisionModels)
+	}
 }

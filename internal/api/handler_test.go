@@ -817,6 +817,21 @@ func TestHandlerBootstrapConfigIncludesRuntimeOptionSchemas(t *testing.T) {
 				},
 			},
 		}),
+		agent.WithRuntime(fakeCompatRuntime{
+			kind: agent.RuntimeKindDSH,
+			schemas: []agentruntime.RuntimeOptionSchema{
+				{
+					Key:          "permission_mode",
+					Path:         "permission_mode",
+					Label:        "Permission Mode",
+					LabelZh:      "运行模式",
+					LabelEn:      "Permission Mode",
+					Type:         "select",
+					Options:      []string{"workspace-write", "read-only"},
+					DefaultValue: "workspace-write",
+				},
+			},
+		}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -840,6 +855,12 @@ func TestHandlerBootstrapConfigIncludesRuntimeOptionSchemas(t *testing.T) {
 	}
 	if got.RuntimeOptionSchemas[agent.RuntimeKindCodex][0].Path != "local_workspace_dir" {
 		t.Fatalf("schema path = %q, want local_workspace_dir", got.RuntimeOptionSchemas[agent.RuntimeKindCodex][0].Path)
+	}
+	if len(got.RuntimeOptionSchemas[agent.RuntimeKindDSH]) != 1 {
+		t.Fatalf("dsh runtime option schemas = %#v, want one schema", got.RuntimeOptionSchemas)
+	}
+	if got.RuntimeOptionSchemas[agent.RuntimeKindDSH][0].Path != "permission_mode" {
+		t.Fatalf("DSH schema path = %q, want permission_mode", got.RuntimeOptionSchemas[agent.RuntimeKindDSH][0].Path)
 	}
 }
 

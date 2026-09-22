@@ -27,6 +27,7 @@ describe("agent runtimes", () => {
         status: "installed",
         path: "/tmp/dsh",
         version: "0.1.6-alpha.2",
+        message_code: "dsh_not_installed",
       },
       {
         name: "codex",
@@ -50,6 +51,7 @@ describe("agent runtimes", () => {
     expect(runtimes[1]).toMatchObject({
       path: "/tmp/dsh",
       version: "0.1.6-alpha.2",
+      messageCode: "dsh_not_installed",
     });
     expect(runtimes[2]).toMatchObject({
       docsURL: "https://example.com/claude",

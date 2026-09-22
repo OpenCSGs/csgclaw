@@ -2,7 +2,6 @@ package agents
 
 import (
 	"context"
-	"csgclaw/internal/modelcap"
 	"fmt"
 	"net/http"
 	"sort"
@@ -12,6 +11,7 @@ import (
 	"csgclaw/internal/auth"
 	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
+	"csgclaw/internal/modelcap"
 	"csgclaw/internal/modelprovider"
 	agentruntime "csgclaw/internal/runtime"
 )
@@ -67,6 +67,7 @@ type AgentProfile struct {
 	APIKey               string                               `json:"api_key,omitempty"`
 	Headers              map[string]string                    `json:"headers,omitempty"`
 	ModelID              string                               `json:"model_id,omitempty"`
+	InputModalities      []string                             `json:"-"`
 	ReasoningEffort      string                               `json:"reasoning_effort,omitempty"`
 	EnableFastMode       bool                                 `json:"enable_fast_mode,omitempty"`
 	RequestOptions       map[string]any                       `json:"request_options,omitempty"`
@@ -145,6 +146,7 @@ func normalizeProfile(profile AgentProfile, fallbackName, fallbackDescription st
 	out.BaseURL = strings.TrimRight(strings.TrimSpace(out.BaseURL), "/")
 	out.APIKey = strings.TrimSpace(out.APIKey)
 	out.ModelID = strings.TrimSpace(out.ModelID)
+	out.InputModalities = resolvedInputModalities(out.Provider, out.ModelID, modelSupportsVision(out.InputModalities))
 	out.ReasoningEffort = config.NormalizeReasoningEffort(out.ReasoningEffort)
 	if out.ReasoningEffort == "" {
 		out.ReasoningEffort = DefaultReasoningEffort
@@ -242,6 +244,7 @@ func normalizeRequestOptions(values map[string]any) map[string]any {
 
 func cloneProfile(profile AgentProfile) AgentProfile {
 	out := profile
+	out.InputModalities = append([]string(nil), profile.InputModalities...)
 	out.ImageGeneration = modelprovider.CloneImageGeneration(profile.ImageGeneration)
 	if len(profile.Headers) > 0 {
 		out.Headers = make(map[string]string, len(profile.Headers))
@@ -262,6 +265,22 @@ func cloneProfile(profile AgentProfile) AgentProfile {
 		}
 	}
 	return out
+}
+
+func resolvedInputModalities(provider, model string, supportsVision bool) []string {
+	if supportsVision {
+		return []string{"text", "image"}
+	}
+	return append([]string(nil), modelcap.ForProviderModel(provider, model).InputModalities...)
+}
+
+func modelSupportsVision(modalities []string) bool {
+	for _, modality := range modalities {
+		if strings.EqualFold(strings.TrimSpace(modality), "image") {
+			return true
+		}
+	}
+	return false
 }
 
 func profileViewWithAgentRuntimeOptions(profile AgentProfile, _ map[string]any, _ string, detection []ProfileDetectionResult) AgentProfileView {

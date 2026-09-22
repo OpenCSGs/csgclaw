@@ -17,7 +17,7 @@ const labels: Record<string, string> = {
   computerRuntimesTitle: "Agent runtimes",
   computerRuntimeClaudeDescription: "Anthropic runtime",
   computerRuntimeCodexDescription: "OpenAI runtime",
-  computerRuntimeDSHDescription: "DeepSeek Harness runtime",
+  computerRuntimeDSHDescription: "DeepSeek local coding agent runtime",
   computerRuntimeComingSoon: "Coming soon",
   computerRuntimeComingSoonHint: "Installation support will arrive later.",
   computerRuntimeExecutable: "Executable",
@@ -29,6 +29,13 @@ const labels: Record<string, string> = {
   computerRuntimeInstallingHint: "Downloading in the background.",
   computerRuntimeInstall: "Install",
   computerRuntimeInstallHint: "Install with one click.",
+  computerRuntimeManagedInstallDescription: "Installs DeepSeek Harness 0.1.5-rc.2 for you.",
+  computerRuntimeInstallProgressLabel: "DeepSeek Harness installation progress",
+  computerRuntimeInstallStageInstallingNode: "Installing managed Node.js 24 LTS",
+  computerRuntimeInstallStageInstalling: "Downloading and installing dependencies",
+  computerRuntimeInstallActivity: "Processed {count} npm requests",
+  computerRuntimeInstallElapsed: "{seconds}s elapsed",
+  computerRuntimeInstallFirstRunHint: "The first installation usually takes 20–60 seconds.",
   computerRuntimeExternalInstallHint: "Install a compatible version using the guide, then retry detection.",
   computerRuntimeBundleMissingHint: "Codex CLI is missing from this CSGClaw bundle. Reinstall CSGClaw.",
   computerRuntimeNotInstalled: "Not installed",
@@ -44,7 +51,8 @@ const labels: Record<string, string> = {
   online: "online",
 };
 
-const t: TranslateFn = (key) => labels[key] ?? key;
+const t: TranslateFn = (key, params = {}) =>
+  (labels[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => `${params[name] ?? ""}`);
 
 const bundledCodex: AgentRuntime = {
   name: "codex",
@@ -74,7 +82,7 @@ const dsh: AgentRuntime = {
   label: "DeepSeek Harness",
   supported: true,
   installed: true,
-  installable: false,
+  installable: true,
   status: "installed",
   path: "/usr/local/bin/dsh",
   version: "0.1.6-alpha.2",
@@ -121,14 +129,18 @@ describe("AgentRuntimeSection", () => {
     expect(screen.queryByRole("button", { name: "Install" })).not.toBeInTheDocument();
   });
 
-  it("shows the detected DSH version and links to installation guidance when missing", () => {
-    const { rerender } = render(<AgentRuntimeSection runtimes={[dsh]} t={t} />);
+  it("shows the detected DSH version and offers a productized install action when missing", async () => {
+    const user = userEvent.setup();
+    const onInstallRuntime = vi.fn();
+    const { container, rerender } = render(<AgentRuntimeSection runtimes={[dsh]} t={t} />);
 
     expect(screen.getByText("0.1.6-alpha.2")).toBeInTheDocument();
     expect(screen.getByText("/usr/local/bin/dsh")).toBeInTheDocument();
+    expect(container.querySelector('svg[viewBox="0 0 23.16 17.04"] path')).toHaveAttribute("fill", "currentColor");
 
     rerender(
       <AgentRuntimeSection
+        onInstallRuntime={onInstallRuntime}
         runtimes={[
           {
             ...dsh,
@@ -138,18 +150,80 @@ describe("AgentRuntimeSection", () => {
             version: undefined,
             docsURL: "https://github.com/deepseek-ai/deepseek-harness",
             message: "DSH CLI is unavailable",
+            messageCode: "dsh_not_installed",
           },
         ]}
         t={t}
       />,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent("DSH CLI is unavailable");
-    expect(screen.getByText("Install a compatible version using the guide, then retry detection.")).toBeInTheDocument();
+    expect(screen.queryByText("DSH CLI is unavailable")).not.toBeInTheDocument();
+    expect(screen.getByText("Installs DeepSeek Harness 0.1.5-rc.2 for you.")).toBeInTheDocument();
+    expect(screen.getByText("Install with one click.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Installation guide" })).toHaveAttribute(
       "href",
       "https://github.com/deepseek-ai/deepseek-harness",
     );
+    await user.click(screen.getByRole("button", { name: "Install" }));
+    expect(onInstallRuntime).toHaveBeenCalledWith("dsh");
+  });
+
+  it("shows truthful staged progress and live npm activity while DSH installs", () => {
+    render(
+      <AgentRuntimeSection
+        installingRuntime="dsh"
+        installProgress={{
+          name: "dsh",
+          status: "running",
+          stage: "installing_packages",
+          activityCount: 120,
+          startedAt: new Date(Date.now() - 8_000).toISOString(),
+          updatedAt: new Date().toISOString(),
+        }}
+        runtimes={[
+          {
+            ...dsh,
+            installed: false,
+            status: "not_installed",
+            path: undefined,
+            version: undefined,
+          },
+        ]}
+        t={t}
+      />,
+    );
+
+    expect(screen.getByRole("progressbar", { name: "DeepSeek Harness installation progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "2",
+    );
+    expect(screen.getByText("Downloading and installing dependencies")).toBeInTheDocument();
+    expect(screen.getByText(/Processed 120 npm requests/)).toHaveTextContent(/\d+s elapsed/);
+    expect(screen.getByText("The first installation usually takes 20–60 seconds.")).toBeInTheDocument();
+  });
+
+  it("shows the managed Node.js stage when DSH needs a compatible runtime", () => {
+    render(
+      <AgentRuntimeSection
+        installingRuntime="dsh"
+        installProgress={{
+          name: "dsh",
+          status: "running",
+          stage: "installing_node",
+          activityCount: 0,
+          startedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }}
+        runtimes={[{ ...dsh, installed: false, status: "not_installed" }]}
+        t={t}
+      />,
+    );
+
+    expect(screen.getByRole("progressbar", { name: "DeepSeek Harness installation progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "1",
+    );
+    expect(screen.getByText("Installing managed Node.js 24 LTS")).toBeInTheDocument();
   });
 
   it("explains when a required bundled Codex binary is missing", () => {

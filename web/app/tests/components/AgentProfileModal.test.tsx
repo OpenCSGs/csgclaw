@@ -49,6 +49,10 @@ const labels: Record<string, string> = {
   runtimeCodexCLI: "Codex CLI",
   runtimeSandboxUnavailable: "Current sandbox is unavailable: {reason}",
   runtimeSandboxUnavailableReason: "Check the current sandbox configuration.",
+  runtimeInstallRequiredTitle: "DeepSeek Harness is required",
+  runtimeInstallRequiredDescription: "Install DSH 0.1.5-rc.2 to continue creating the agent.",
+  computerRuntimeInstall: "Install",
+  computerRuntimeInstalling: "Installing...",
   statusEnabled: "Enabled",
   statusDisabled: "Disabled",
   templateLabel: "Template",
@@ -247,6 +251,74 @@ describe("AgentProfileModal", () => {
     expect(screen.getByDisplayValue("/tmp/project")).toBeInTheDocument();
     expect(screen.getByText("本地工作目录")).toBeInTheDocument();
     expect(screen.getByText("留空时使用默认 Agent 工作目录。")).toBeInTheDocument();
+  });
+
+  it("shows the two DSH permission modes during agent creation", async () => {
+    const user = userEvent.setup();
+    render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="create"
+        editingAgent={null}
+        agentDraft={{
+          ...agentToDraft(worker),
+          runtime_kind: "dsh",
+          runtime_name: "dsh",
+          sandbox_enabled: false,
+          runtime_options: {},
+        }}
+        locale="zh"
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{
+          worker_runtime_choices: [
+            { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
+            { name: "dsh", sandbox_enabled: false, installed: true, label: "DeepSeek Harness" },
+          ],
+          runtime_option_schemas: {
+            dsh: [
+              {
+                key: "permission_mode",
+                path: "permission_mode",
+                label: "Permission Mode",
+                label_zh: "运行模式",
+                type: "select",
+                options: ["workspace-write", "read-only"],
+                choices: [
+                  { value: "workspace-write", label_zh: "工作区内修改" },
+                  { value: "read-only", label_zh: "仅可查看" },
+                ],
+                default_value: "workspace-write",
+                presentation: "dsh_permission_mode",
+              },
+            ],
+          },
+        }}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        agentCreateMode="custom"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    const permissionMode = screen.getByRole("combobox", { name: "运行模式" });
+    expect(permissionMode).toHaveTextContent("工作区内修改");
+    await user.click(permissionMode);
+    expect(screen.getByRole("option", { name: "工作区内修改" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "仅可查看" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "完全访问" })).not.toBeInTheDocument();
   });
 
   it("shows sandbox help text in worker create mode", () => {
@@ -1036,6 +1108,69 @@ describe("AgentProfileModal", () => {
     expect(runtime).toHaveTextContent("Codex CLI");
     await user.click(runtime);
     expect(screen.getByRole("option", { name: "DeepSeek Harness" })).toBeInTheDocument();
+  });
+
+  it("keeps the DSH option compact and shows installation below the runtime field", async () => {
+    const user = userEvent.setup();
+    const onInstallRuntime = vi.fn();
+    const { container } = render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="create"
+        editingAgent={null}
+        agentDraft={{
+          ...agentToDraft(worker),
+          sandbox_enabled: false,
+          runtime_name: "dsh",
+          runtime_kind: "dsh",
+        }}
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{
+          worker_runtime_choices: [
+            { name: "codex", sandbox_enabled: false, installed: true, label: "Codex CLI" },
+            {
+              name: "dsh",
+              sandbox_enabled: false,
+              installed: false,
+              installable: true,
+              label: "DeepSeek Harness",
+              message: "DSH CLI is unavailable; run a very long npm command",
+              message_code: "dsh_not_installed",
+            },
+          ],
+        }}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        locale="en"
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        agentCreateMode="custom"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onInstallRuntime={onInstallRuntime}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Runtime" }));
+    expect(screen.getByRole("option", { name: "DeepSeek Harness" })).toBeInTheDocument();
+    expect(screen.queryByText(/very long npm command/)).not.toBeInTheDocument();
+    const notice = container.querySelector(".agent-runtime-install-notice");
+    expect(notice).not.toBeNull();
+    expect(notice?.parentElement).toHaveClass("agent-runtime-image-row");
+    expect(screen.getByText("DeepSeek Harness is required")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Install" }));
+    expect(onInstallRuntime).toHaveBeenCalledWith("dsh");
   });
 
   it("uses the matching worker template image when switching blank drafts to OpenClaw", async () => {

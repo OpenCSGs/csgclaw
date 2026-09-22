@@ -104,6 +104,15 @@ func TestNormalizeTemplateRuntimeOptions(t *testing.T) {
 	if got["memory_mode"] != "disabled" {
 		t.Fatalf("memory_mode = %v, want disabled", got["memory_mode"])
 	}
+	dshOptions, err := normalizeTemplateRuntimeOptions(runtime.KindDSH, map[string]any{
+		"permission_mode": " READ-ONLY ",
+	})
+	if err != nil {
+		t.Fatalf("normalizeTemplateRuntimeOptions(DSH) error = %v", err)
+	}
+	if dshOptions["permission_mode"] != "read-only" {
+		t.Fatalf("permission_mode = %v, want read-only", dshOptions["permission_mode"])
+	}
 
 	for name, test := range map[string]struct {
 		runtimeKind string
@@ -114,6 +123,8 @@ func TestNormalizeTemplateRuntimeOptions(t *testing.T) {
 		"invalid mode":   {runtimeKind: runtime.KindCodex, options: map[string]any{"execution_mode": "unsafe"}},
 		"invalid memory": {runtimeKind: runtime.KindCodex, options: map[string]any{"memory_mode": "sometimes"}},
 		"memory type":    {runtimeKind: runtime.KindCodex, options: map[string]any{"memory_mode": true}},
+		"DSH unknown":    {runtimeKind: runtime.KindDSH, options: map[string]any{"executable_path": "/tmp/dsh"}},
+		"DSH invalid":    {runtimeKind: runtime.KindDSH, options: map[string]any{"permission_mode": "auto"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := normalizeTemplateRuntimeOptions(test.runtimeKind, test.options); err == nil {

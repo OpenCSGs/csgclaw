@@ -7,30 +7,36 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
 const (
 	BinaryName       = "dsh"
-	PathEnv          = "CSGCLAW_DSH_PATH"
 	DocumentationURL = "https://github.com/deepseek-ai/deepseek-harness"
+	InstallCommand   = "npm install -g @deepseek-ai/dsh@latest --registry=https://registry.npmmirror.com"
 )
 
 var versionPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])v?(\d+)\.(\d+)\.(\d+)(?:-([0-9a-z.-]+))?`)
 
 type CommandRunner func(context.Context, string, ...string) ([]byte, error)
 
-// Provider resolves a user-installed DSH executable. ExplicitPath is used by
-// per-Agent runtime options; CSGCLAW_DSH_PATH and PATH provide host defaults.
+// Provider resolves a user-installed DSH executable from PATH and common
+// user/system installation locations.
 type Provider struct {
-	ExplicitPath string
-	LookPath     func(string) (string, error)
-	Run          CommandRunner
+	LookPath    func(string) (string, error)
+	Run         CommandRunner
+	UserHomeDir func() (string, error)
+	GOOS        string
 }
 
 type Info struct {
 	Path    string
 	Version string
+}
+
+func InstallGuidance() string {
+	return fmt.Sprintf("run %q, then retry", InstallCommand)
 }
 
 func (p Provider) Ensure(ctx context.Context) (string, error) {
@@ -59,21 +65,61 @@ func (p Provider) Resolve(ctx context.Context) (Info, error) {
 }
 
 func (p Provider) resolvePath() (string, error) {
-	if path := strings.TrimSpace(p.ExplicitPath); path != "" {
-		return validateExecutable(path)
-	}
-	if path := strings.TrimSpace(os.Getenv(PathEnv)); path != "" {
-		return validateExecutable(path)
-	}
 	lookPath := p.LookPath
 	if lookPath == nil {
 		lookPath = exec.LookPath
 	}
 	path, err := lookPath(BinaryName)
-	if err != nil {
-		return "", fmt.Errorf("DSH CLI not found; install the current @deepseek-ai/dsh release or set %s: %w", PathEnv, err)
+	if err == nil {
+		return filepath.Clean(path), nil
 	}
-	return filepath.Clean(path), nil
+	for _, candidate := range p.fallbackPaths() {
+		if resolved, validateErr := validateExecutable(candidate); validateErr == nil {
+			return resolved, nil
+		}
+	}
+	return "", fmt.Errorf("DSH CLI not found; %s: %w", InstallGuidance(), err)
+}
+
+func (p Provider) fallbackPaths() []string {
+	homeDir := p.UserHomeDir
+	if homeDir == nil {
+		homeDir = os.UserHomeDir
+	}
+	home, _ := homeDir()
+	goos := strings.TrimSpace(p.GOOS)
+	if goos == "" {
+		goos = runtime.GOOS
+	}
+	installRoot := strings.TrimSpace(os.Getenv(InstallRootEnv))
+	if installRoot == "" && home != "" {
+		installRoot = filepath.Join(home, ".local", "share", "deepseek-harness")
+	}
+	binaryName := BinaryName
+	if goos == "windows" {
+		binaryName = "dsh.cmd"
+	}
+	paths := make([]string, 0, 6)
+	if home != "" {
+		paths = append(paths,
+			filepath.Join(home, "bin", binaryName),
+			filepath.Join(home, ".local", "bin", binaryName),
+		)
+	}
+	if goos == "windows" {
+		if appData := strings.TrimSpace(os.Getenv("APPDATA")); appData != "" {
+			paths = append(paths, filepath.Join(appData, "npm", binaryName))
+		}
+		if installRoot != "" {
+			paths = append(paths, filepath.Join(installRoot, binaryName))
+		}
+		return paths
+	}
+	paths = append(paths, "/opt/homebrew/bin/dsh", "/usr/local/bin/dsh")
+	if installRoot != "" {
+		paths = append(paths, filepath.Join(installRoot, "bin", BinaryName))
+	}
+	return paths
 }
 
 func validateExecutable(path string) (string, error) {

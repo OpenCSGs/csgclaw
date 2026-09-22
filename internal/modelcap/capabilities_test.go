@@ -16,3 +16,15 @@ func TestSearchCapabilityRequiresKnownProviderAndModel(t *testing.T) {
 		}
 	}
 }
+
+func TestKnownVisionModelsDeclareImageInput(t *testing.T) {
+	for _, model := range []string{"qwen3.7-plus", "qwen3.7-plus-20260901", "qwen3-vl"} {
+		got := ForProviderModel("api", model).InputModalities
+		if len(got) != 2 || got[0] != "text" || got[1] != "image" {
+			t.Errorf("api/%s input modalities = %v, want text and image", model, got)
+		}
+	}
+	if got := ForProviderModel("api", "text-only").InputModalities; len(got) != 1 || got[0] != "text" {
+		t.Fatalf("text-only input modalities = %v, want text", got)
+	}
+}

@@ -5,6 +5,7 @@ export * from "./Checkbox";
 export * from "./Dialog";
 export * from "./DropdownMenu";
 export * from "./FormControls";
+export * from "./GlobalNotice";
 export * from "./Icons";
 export * from "./Popover";
 export * from "./Select";

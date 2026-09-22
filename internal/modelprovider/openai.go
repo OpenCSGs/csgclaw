@@ -20,6 +20,7 @@ type openAIModelsResponse struct {
 		ContextWindow int64  `json:"context_window"`
 		ContextLength int64  `json:"context_length"`
 		Task          any    `json:"task"`
+		Tasks         any    `json:"tasks"`
 		Availability  *struct {
 			IsAvailable *bool `json:"is_available"`
 		} `json:"availability"`
@@ -94,6 +95,16 @@ func ListOpenAIModelsWithClient(ctx context.Context, client *http.Client, baseUR
 // ListOpenAIModelDirectoryWithClient separates declared image generation tasks
 // from chat models without probing or generating images.
 func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client, baseURL, apiKey string, headers map[string]string) (ModelDiscoveryResult, error) {
+	return listOpenAIModelDirectoryWithClient(ctx, client, baseURL, apiKey, headers, false)
+}
+
+// ListOpenCSGModelDirectoryWithClient extends the OpenAI-compatible model
+// directory with OpenCSG's plural tasks field.
+func ListOpenCSGModelDirectoryWithClient(ctx context.Context, client *http.Client, baseURL, apiKey string, headers map[string]string) (ModelDiscoveryResult, error) {
+	return listOpenAIModelDirectoryWithClient(ctx, client, baseURL, apiKey, headers, true)
+}
+
+func listOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client, baseURL, apiKey string, headers map[string]string, includePluralTasks bool) (ModelDiscoveryResult, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
 		return ModelDiscoveryResult{}, fmt.Errorf("base URL is required")
@@ -126,6 +137,7 @@ func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 	metadata := make(map[string]modelcap.Metadata)
 	models := make([]string, 0, len(payload.Data))
 	imageModels := []string{}
+	visionModels := []string{}
 	seen := make(map[string]struct{}, len(payload.Data))
 	for _, item := range payload.Data {
 		id := strings.TrimSpace(item.ID)
@@ -146,17 +158,24 @@ func ListOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 		if m.Validate() == nil && m != (modelcap.Metadata{}) {
 			metadata[id] = m
 		}
-		if taskSupportsImageGeneration(item.Task) || (!taskPresent(item.Task) && IsGPTImageModel(id)) {
+		var declaredTasks any = item.Task
+		if includePluralTasks {
+			declaredTasks = append(taskValues(item.Task), taskValues(item.Tasks)...)
+		}
+		if taskSupportsImageGeneration(declaredTasks) || (!taskPresent(declaredTasks) && IsGPTImageModel(id)) {
 			imageModels = append(imageModels, id)
 		}
-		if !taskPresent(item.Task) || taskSupportsTextGeneration(item.Task) {
+		if taskSupportsVisionInput(declaredTasks) {
+			visionModels = append(visionModels, id)
+		}
+		if !taskPresent(declaredTasks) || taskSupportsTextGeneration(declaredTasks) {
 			models = append(models, id)
 		}
 	}
 	if len(models) == 0 && len(imageModels) == 0 {
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
-	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, ModelMetadata: metadata}, nil
+	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, VisionModels: visionModels, ModelMetadata: metadata}, nil
 }
 
 func taskPresent(task any) bool {
@@ -165,29 +184,54 @@ func taskPresent(task any) bool {
 		return strings.TrimSpace(value) != ""
 	case []any:
 		return len(value) > 0
+	case []string:
+		return len(value) > 0
 	default:
 		return task != nil
 	}
 }
 
 func taskSupportsTextGeneration(task any) bool {
-	values := make([]string, 0, 2)
-	switch value := task.(type) {
-	case string:
-		values = strings.Split(value, ",")
-	case []any:
-		for _, entry := range value {
-			if text, ok := entry.(string); ok {
-				values = append(values, text)
-			}
-		}
-	}
-	for _, value := range values {
+	for _, value := range taskValues(task) {
 		if strings.EqualFold(strings.TrimSpace(value), "text-generation") {
 			return true
 		}
 	}
 	return false
+}
+
+func taskSupportsVisionInput(task any) bool {
+	values := taskValues(task)
+	for _, value := range values {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "image-text-to-text", "image-to-text", "vision":
+			return true
+		}
+	}
+	return false
+}
+
+func taskValues(task any) []string {
+	var raw []string
+	switch value := task.(type) {
+	case string:
+		raw = strings.Split(value, ",")
+	case []any:
+		for _, entry := range value {
+			if text, ok := entry.(string); ok {
+				raw = append(raw, text)
+			}
+		}
+	case []string:
+		raw = append(raw, value...)
+	}
+	values := make([]string, 0, len(raw))
+	for _, value := range raw {
+		if value = strings.TrimSpace(value); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 func requestOpenAIModels(ctx context.Context, client *http.Client, modelsURL, apiKey string, headers map[string]string) (*http.Response, error) {
@@ -500,17 +544,7 @@ func scanOpenAIProbeSSE(r io.Reader, visit func(eventType, data string) (bool, e
 }
 
 func taskSupportsImageGeneration(task any) bool {
-	var values []string
-	switch v := task.(type) {
-	case string:
-		values = strings.Split(v, ",")
-	case []any:
-		for _, item := range v {
-			if text, ok := item.(string); ok {
-				values = append(values, text)
-			}
-		}
-	}
+	values := taskValues(task)
 	for _, value := range values {
 		switch strings.ToLower(strings.TrimSpace(value)) {
 		case "text-to-image", "text2image", "image-generation":

@@ -17,9 +17,10 @@ func TestRefreshModelProviderCatalogUpdatesBuiltinAndPreservesDefaults(t *testin
 			return ModelProviderCheckResult{ID: input.ID, Status: ModelProviderStatusFailed}
 		}
 		return ModelProviderCheckResult{
-			ID:     input.ID,
-			Status: ModelProviderStatusConnected,
-			Models: []string{"qwen3"},
+			ID:           input.ID,
+			Status:       ModelProviderStatusConnected,
+			Models:       []string{"qwen3"},
+			VisionModels: []string{"qwen3"},
 		}
 	})
 
@@ -38,6 +39,9 @@ func TestRefreshModelProviderCatalogUpdatesBuiltinAndPreservesDefaults(t *testin
 	}
 	if len(provider.Models) != 1 || provider.Models[0] != "qwen3" {
 		t.Fatalf("CSGHub Lite models = %+v, want [qwen3]", provider.Models)
+	}
+	if len(provider.VisionModels) != 1 || provider.VisionModels[0] != "qwen3" {
+		t.Fatalf("CSGHub Lite vision models = %+v, want [qwen3]", provider.VisionModels)
 	}
 }
 
@@ -70,7 +74,11 @@ func TestCheckModelProviderUsesOpenCSGAIGatewayCredentials(t *testing.T) {
 			t.Fatalf("path = %q, want /v1/models", r.URL.Path)
 		}
 		authHeader = r.Header.Get("Authorization")
-		_, _ = w.Write([]byte(`{"data":[{"id":"opencsg/deepseek-v4"},{"id":"opencsg/deepseek-v4"}]}`))
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":"opencsg/deepseek-v4","tasks":["text-generation"]},
+			{"id":"qwen3.7-plus","tasks":["text-generation","image-text-to-text"]},
+			{"id":"opencsg/deepseek-v4","tasks":["text-generation"]}
+		]}`))
 	}))
 	defer upstream.Close()
 
@@ -88,8 +96,11 @@ func TestCheckModelProviderUsesOpenCSGAIGatewayCredentials(t *testing.T) {
 	if authHeader != "Bearer gk_builtin-test" {
 		t.Fatalf("Authorization = %q, want OpenCSG AI Gateway token", authHeader)
 	}
-	if strings.Join(got.Models, ",") != "opencsg/deepseek-v4" {
+	if strings.Join(got.Models, ",") != "qwen3.7-plus,opencsg/deepseek-v4" {
 		t.Fatalf("Models = %+v, want deduplicated OpenCSG models", got.Models)
+	}
+	if strings.Join(got.VisionModels, ",") != "qwen3.7-plus" {
+		t.Fatalf("VisionModels = %+v, want OpenCSG tasks metadata to declare qwen3.7-plus as vision", got.VisionModels)
 	}
 }
 

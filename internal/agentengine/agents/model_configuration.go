@@ -199,9 +199,20 @@ func (s *ModelConfiguration) hydrateProfileFromCatalogLocked(profile AgentProfil
 		if strings.TrimSpace(out.ReasoningEffort) == "" && strings.TrimSpace(provider.ReasoningEffort) != "" {
 			out.ReasoningEffort = provider.ReasoningEffort
 		}
+		out.InputModalities = resolvedInputModalities(out.Provider, out.ModelID, containsModelID(provider.VisionModels, out.ModelID))
 	}
 	out.ProfileComplete = profileIsComplete(out)
 	return out
+}
+
+func containsModelID(models []string, modelID string) bool {
+	modelID = strings.TrimSpace(modelID)
+	for _, candidate := range models {
+		if strings.EqualFold(strings.TrimSpace(candidate), modelID) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *ModelConfiguration) inheritModelProviderReference(profile AgentProfile, current Agent) AgentProfile {

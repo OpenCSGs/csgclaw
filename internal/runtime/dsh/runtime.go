@@ -27,15 +27,17 @@ import (
 )
 
 const (
-	hostStateDirName     = ".dsh"
-	homeDirName          = "home"
-	workspaceDirName     = "workspace"
-	runtimeFileName      = "runtime.json"
-	stderrFileName       = "stderr.log"
-	settingsFileName     = "settings.yaml"
-	patchFileName        = "csgclaw.patch.yml"
-	contextPatchFileName = "csgclaw-context.patch.yml"
-	llmAPIKeyEnvName     = "CSGCLAW_DSH_LLM_API_KEY"
+	hostStateDirName      = ".dsh"
+	homeDirName           = "home"
+	workspaceDirName      = "workspace"
+	runtimeFileName       = "runtime.json"
+	stderrFileName        = "stderr.log"
+	settingsFileName      = "settings.yaml"
+	sessionsDirName       = "sessions"
+	patchFileName         = "csgclaw.patch.yml"
+	contextPatchFileName  = "csgclaw-context.patch.yml"
+	llmAPIKeyEnvName      = "CSGCLAW_DSH_LLM_API_KEY"
+	permissionModeEnvName = "DSH_PERMISSION_MODE"
 )
 
 const runtimePatch = `- insert:
@@ -53,7 +55,7 @@ type AgentRef struct {
 	Profile        agentruntime.Profile
 }
 
-type BinaryResolver func(context.Context, string) (dshcli.Info, error)
+type BinaryResolver func(context.Context) (dshcli.Info, error)
 
 type Dependencies struct {
 	ResolveBinary         BinaryResolver
@@ -81,6 +83,7 @@ type process struct {
 	root                 string
 	workspace            string
 	profile              agentruntime.Profile
+	imagePrompts         bool
 	mcp                  []acpMCPServer
 	meta                 runtimeMetadata
 	environment          []string
@@ -121,14 +124,15 @@ type pendingPermission struct {
 }
 
 type runtimeMetadata struct {
-	RuntimeID  string             `json:"runtime_id"`
-	AgentID    string             `json:"agent_id"`
-	Executable string             `json:"executable"`
-	Version    string             `json:"version"`
-	PID        int                `json:"pid,omitempty"`
-	State      agentruntime.State `json:"state"`
-	CreatedAt  time.Time          `json:"created_at"`
-	Sessions   map[string]string  `json:"sessions,omitempty"`
+	RuntimeID      string             `json:"runtime_id"`
+	AgentID        string             `json:"agent_id"`
+	Executable     string             `json:"executable"`
+	Version        string             `json:"version"`
+	PermissionMode string             `json:"permission_mode,omitempty"`
+	PID            int                `json:"pid,omitempty"`
+	State          agentruntime.State `json:"state"`
+	CreatedAt      time.Time          `json:"created_at"`
+	Sessions       map[string]string  `json:"sessions,omitempty"`
 }
 
 var (
@@ -145,8 +149,8 @@ var (
 
 func New(deps Dependencies) *Runtime {
 	if deps.ResolveBinary == nil {
-		deps.ResolveBinary = func(ctx context.Context, explicit string) (dshcli.Info, error) {
-			return (dshcli.Provider{ExplicitPath: explicit}).Resolve(ctx)
+		deps.ResolveBinary = func(ctx context.Context) (dshcli.Info, error) {
+			return (dshcli.Provider{}).Resolve(ctx)
 		}
 	}
 	return &Runtime{
@@ -189,7 +193,7 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	if agentID == "" || r.deps.AgentHome == nil {
 		return fmt.Errorf("DSH agent home resolver is required")
 	}
-	if err := validateRuntimeProfile(req.Profile); err != nil {
+	if err := validateExecutionProfile(req.Profile); err != nil {
 		return err
 	}
 	agentHome, err := r.deps.AgentHome(agentID)
@@ -323,18 +327,18 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	if spec != nil && ref.Profile.ModelID == "" {
+	if spec != nil && !executionProfileComplete(ref.Profile) {
 		ref.Profile = spec.Profile
 	}
 	ref.Profile = ref.Profile.Normalized()
-	if err := validateRuntimeProfile(ref.Profile); err != nil {
+	if err := validateExecutionProfile(ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
 	}
 	opts, err := DecodeRuntimeOptions(ref.RuntimeOptions)
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	binary, err := r.deps.ResolveBinary(ctx, opts.ExecutablePath)
+	binary, err := r.deps.ResolveBinary(ctx)
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
@@ -358,10 +362,14 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	meta := runtimeMetadata{RuntimeID: runtimeID, AgentID: ref.ID, Executable: binary.Path, Version: binary.Version, State: agentruntime.StateCreated, CreatedAt: time.Now().UTC(), Sessions: map[string]string{}}
+	meta := runtimeMetadata{RuntimeID: runtimeID, AgentID: ref.ID, Executable: binary.Path, Version: binary.Version, PermissionMode: opts.PermissionMode, State: agentruntime.StateCreated, CreatedAt: time.Now().UTC(), Sessions: map[string]string{}}
 	if persisted, readErr := readMetadata(root); readErr == nil {
 		meta.CreatedAt = persisted.CreatedAt
-		meta.Sessions = persisted.Sessions
+		var permissionChanged bool
+		meta.Sessions, permissionChanged = sessionsForPermissionMode(persisted, opts.PermissionMode)
+		if permissionChanged && len(persisted.Sessions) > 0 {
+			slog.Info("DSH permission mode changed; starting fresh sessions", "runtime_id", runtimeID, "previous_mode", persistedPermissionMode(persisted), "permission_mode", opts.PermissionMode, "session_count", len(persisted.Sessions))
+		}
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return agentruntime.StateUnknown, readErr
 	}
@@ -378,7 +386,7 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	environment, extensionDigests, err := buildEnvironmentWithExtensions(ref.Profile, filepath.Join(root, homeDirName), projections)
+	environment, extensionDigests, err := buildEnvironmentWithExtensions(ref.Profile, filepath.Join(root, homeDirName), opts.PermissionMode, projections)
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
@@ -432,6 +440,9 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 	var initialized struct {
 		ProtocolVersion   int `json:"protocolVersion"`
 		AgentCapabilities struct {
+			PromptCapabilities struct {
+				Image bool `json:"image"`
+			} `json:"promptCapabilities"`
 			MCPCapabilities struct {
 				HTTP bool `json:"http"`
 			} `json:"mcpCapabilities"`
@@ -457,6 +468,7 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 		stderr.Close()
 		return nil, fmt.Errorf("DSH ACP does not advertise HTTP MCP support required by this Agent")
 	}
+	proc.imagePrompts = initialized.AgentCapabilities.PromptCapabilities.Image
 	if err := proc.updateMetadata(func(meta *runtimeMetadata) {
 		meta.PID = cmd.Process.Pid
 		meta.State = agentruntime.StateRunning
@@ -487,9 +499,9 @@ func requiresHTTPMCP(servers []acpMCPServer) bool {
 	return false
 }
 
-func buildEnvironment(profile agentruntime.Profile, home string) []string {
+func buildEnvironment(profile agentruntime.Profile, home, permissionMode string) []string {
 	blocked := map[string]bool{
-		"DSH_HOME": true, "DSH_AGENTS_HOME": true, llmAPIKeyEnvName: true,
+		"DSH_HOME": true, "DSH_AGENTS_HOME": true, llmAPIKeyEnvName: true, permissionModeEnvName: true,
 		"LARKSUITE_CLI_CONFIG_DIR": true, "LARK_CHANNEL": true, "LARK_CHANNEL_HOME": true,
 		"LARK_CHANNEL_PROFILE": true, "LARK_CHANNEL_CONFIG": true,
 	}
@@ -512,6 +524,7 @@ func buildEnvironment(profile agentruntime.Profile, home string) []string {
 	values["DSH_HOME"] = home
 	values["DSH_AGENTS_HOME"] = filepath.Join(home, "agents")
 	values[llmAPIKeyEnvName] = profile.APIKey
+	values[permissionModeEnvName] = permissionMode
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
@@ -524,8 +537,8 @@ func buildEnvironment(profile agentruntime.Profile, home string) []string {
 	return env
 }
 
-func buildEnvironmentWithExtensions(profile agentruntime.Profile, home string, projections []agentruntime.ExtensionProjection) ([]string, map[string]string, error) {
-	return agentruntime.MergeExtensionEnvironment(buildEnvironment(profile, home), profile.Env, projections)
+func buildEnvironmentWithExtensions(profile agentruntime.Profile, home, permissionMode string, projections []agentruntime.ExtensionProjection) ([]string, map[string]string, error) {
+	return agentruntime.MergeExtensionEnvironment(buildEnvironment(profile, home, permissionMode), profile.Env, projections)
 }
 
 func (r *Runtime) waitProcess(proc *process) {
@@ -743,21 +756,49 @@ func cloneRuntimeMetadata(meta runtimeMetadata) runtimeMetadata {
 	return clone
 }
 
-func (r *Runtime) ValidateConfig(ctx context.Context, current agentruntime.RuntimeConfigSnapshot) error {
-	opts, err := DecodeRuntimeOptions(current.Options)
-	if err != nil {
-		return err
+func persistedPermissionMode(meta runtimeMetadata) string {
+	if mode := strings.TrimSpace(meta.PermissionMode); mode != "" {
+		return mode
 	}
-	_, err = r.deps.ResolveBinary(ctx, opts.ExecutablePath)
-	return err
+	return defaultPermissionMode
 }
 
-func validateRuntimeProfile(profile agentruntime.Profile) error {
-	profile = profile.Normalized()
-	if profile.APIKey == "" || profile.BaseURL == "" || profile.ModelID == "" {
-		return fmt.Errorf("DSH runtime profile requires API key, base URL, and model ID")
+func sessionsForPermissionMode(meta runtimeMetadata, permissionMode string) (map[string]string, bool) {
+	changed := persistedPermissionMode(meta) != strings.TrimSpace(permissionMode)
+	sessions := make(map[string]string, len(meta.Sessions))
+	if changed {
+		return sessions, true
 	}
-	return nil
+	for key, sessionID := range meta.Sessions {
+		sessions[key] = sessionID
+	}
+	return sessions, false
+}
+
+func (r *Runtime) ValidateConfig(ctx context.Context, current agentruntime.RuntimeConfigSnapshot) error {
+	profile := current.Profile
+	// Host runtimes receive an Agent-scoped LLM Bridge URL and token only after
+	// the catalog profile has passed this validation. Built-in providers keep
+	// their upstream credentials out of the persisted Agent profile, so requiring
+	// BaseURL/APIKey here would reject valid OpenCSG, Codex, and Claude references
+	// before the bridge profile can be materialized.
+	if strings.TrimSpace(profile.ModelID) == "" {
+		return fmt.Errorf("DSH requires a model ID")
+	}
+	provider := strings.ToLower(strings.TrimSpace(profile.Provider))
+	switch provider {
+	case "csghub", "opencsg", "codex", "claude_code", "claude-code":
+		// These providers resolve credentials dynamically in the local LLM Bridge.
+	default:
+		if strings.TrimSpace(profile.BaseURL) == "" || strings.TrimSpace(profile.APIKey) == "" {
+			return fmt.Errorf("DSH provider %q requires API key and base URL", provider)
+		}
+	}
+	if _, err := DecodeRuntimeOptions(current.Options); err != nil {
+		return err
+	}
+	_, err := r.deps.ResolveBinary(ctx)
+	return err
 }
 
 func (r *Runtime) RestartRequired(change agentruntime.RuntimeConfigChange) (bool, error) {
@@ -772,21 +813,31 @@ func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, ch
 	if err != nil {
 		return err
 	}
-	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), agentruntime.Profile{
-		Provider:      change.Current.Profile.Provider,
-		BaseURL:       change.Current.Profile.BaseURL,
-		ModelID:       change.Current.Profile.ModelID,
-		ModelMetadata: change.Current.Profile.ModelMetadata,
-		AutoCompact:   change.Current.Profile.AutoCompact,
-	}); err != nil {
+	profile := agentruntime.Profile{
+		Provider:        change.Current.Profile.Provider,
+		BaseURL:         change.Current.Profile.BaseURL,
+		APIKey:          change.Current.Profile.APIKey,
+		ModelID:         change.Current.Profile.ModelID,
+		ModelMetadata:   change.Current.Profile.ModelMetadata,
+		AutoCompact:     change.Current.Profile.AutoCompact,
+		ReasoningEffort: change.Current.Profile.ReasoningEffort,
+	}
+	var ref AgentRef
+	if r.deps.ResolveAgent != nil {
+		ref, err = r.deps.ResolveAgent(h)
+		if err != nil {
+			return err
+		}
+		profile = ref.Profile
+	}
+	if err := validateExecutionProfile(profile); err != nil {
+		return err
+	}
+	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), profile); err != nil {
 		return err
 	}
 	if r.deps.ResolveAgent == nil {
 		return nil
-	}
-	ref, err := r.deps.ResolveAgent(h)
-	if err != nil {
-		return err
 	}
 	projections, err := r.ExtensionProjections(ref.ID)
 	if err != nil {
@@ -794,6 +845,18 @@ func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, ch
 	}
 	path := filepath.Join(root, workspaceDirName, "AGENTS.md")
 	return r.renderExtensionInstructions(ctx, path, ref.ID, &ref.Instructions, projections)
+}
+
+func validateExecutionProfile(profile agentruntime.Profile) error {
+	if !executionProfileComplete(profile) {
+		return fmt.Errorf("DSH runtime profile requires API key, base URL, and model ID")
+	}
+	return nil
+}
+
+func executionProfileComplete(profile agentruntime.Profile) bool {
+	profile = profile.Normalized()
+	return profile.APIKey != "" && profile.BaseURL != "" && profile.ModelID != ""
 }
 
 func (r *Runtime) ValidateMCPServers(_ context.Context, current agentruntime.MCPServersSnapshot) error {
@@ -854,6 +917,10 @@ func processRunning(proc *process) bool {
 
 func dshProviderSettings(profile agentruntime.Profile) map[string]any {
 	profile = profile.Normalized()
-	return map[string]any{"protocol": "chat-completions", "baseURL": profile.BaseURL, "apiKeyEnv": llmAPIKeyEnvName, "models": []map[string]any{{"id": profile.ModelID, "contextWindow": profile.ModelMetadata.Normalized().ContextWindow, "maxTokens": max(int64(1), min(int64(8192), profile.ModelMetadata.Normalized().ContextWindow/4))}}}
-
+	inputModalities := append([]string(nil), profile.InputModalities...)
+	if len(inputModalities) == 0 {
+		inputModalities = []string{"text"}
+	}
+	metadata := profile.ModelMetadata.Normalized()
+	return map[string]any{"protocol": "chat-completions", "baseURL": profile.BaseURL, "apiKeyEnv": llmAPIKeyEnvName, "models": []map[string]any{{"id": profile.ModelID, "inputModalities": inputModalities, "contextWindow": metadata.ContextWindow, "maxTokens": max(int64(1), min(int64(8192), metadata.ContextWindow/4))}}}
 }

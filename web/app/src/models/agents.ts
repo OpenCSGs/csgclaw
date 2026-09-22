@@ -37,6 +37,16 @@ export type MCPServersParseResult =
   | { ok: true; value: JSONRecord | null }
   | { ok: false; error: "invalid_json" | "object_required" };
 
+export type RuntimeOptionChoice = {
+  value?: string | null;
+  label?: string | null;
+  label_zh?: string | null;
+  label_en?: string | null;
+  description?: string | null;
+  description_zh?: string | null;
+  description_en?: string | null;
+};
+
 export type RuntimeOptionSchema = {
   key?: string | null;
   path?: string | null;
@@ -50,7 +60,9 @@ export type RuntimeOptionSchema = {
   required?: boolean | null;
   picker?: string | null;
   options?: string[] | null;
+  choices?: RuntimeOptionChoice[] | null;
   default_value?: string | null;
+  presentation?: string | null;
 };
 
 export type EnvKeyValueRow = {
@@ -522,6 +534,7 @@ export type RuntimeChoiceLike = {
   label?: string | null;
   sandbox_enabled?: boolean | null;
   installed?: boolean | null;
+  installable?: boolean | null;
   message?: string | null;
   message_code?: string | null;
 };
@@ -566,6 +579,29 @@ function normalizeRuntimeOptionSchema(item: unknown): RuntimeOptionSchema | null
   if (!path) {
     return null;
   }
+  const choices = Array.isArray(record.choices)
+    ? record.choices
+        .map((choice): RuntimeOptionChoice | null => {
+          if (!choice || typeof choice !== "object" || Array.isArray(choice)) {
+            return null;
+          }
+          const choiceRecord = choice as JSONRecord;
+          const value = String(choiceRecord.value ?? "").trim();
+          if (!value) {
+            return null;
+          }
+          return {
+            value,
+            label: String(choiceRecord.label ?? "").trim(),
+            label_zh: String(choiceRecord.label_zh ?? "").trim(),
+            label_en: String(choiceRecord.label_en ?? "").trim(),
+            description: String(choiceRecord.description ?? "").trim(),
+            description_zh: String(choiceRecord.description_zh ?? "").trim(),
+            description_en: String(choiceRecord.description_en ?? "").trim(),
+          };
+        })
+        .filter((choice): choice is RuntimeOptionChoice => choice != null)
+    : [];
   return {
     key: String(record.key ?? path).trim() || path,
     path,
@@ -581,7 +617,9 @@ function normalizeRuntimeOptionSchema(item: unknown): RuntimeOptionSchema | null
     options: Array.isArray(record.options)
       ? record.options.map((option) => String(option ?? "").trim()).filter(Boolean)
       : [],
+    choices,
     default_value: String(record.default_value ?? "").trim(),
+    presentation: String(record.presentation ?? "").trim(),
   };
 }
 
@@ -606,6 +644,23 @@ export function localizedRuntimeOptionDescription(
     return localized;
   }
   return String(schema?.description ?? "").trim();
+}
+
+export function localizedRuntimeOptionChoiceLabel(
+  choice: RuntimeOptionChoice | null | undefined,
+  locale: LocaleCode,
+): string {
+  const localized = locale === "zh" ? String(choice?.label_zh ?? "").trim() : String(choice?.label_en ?? "").trim();
+  return localized || String(choice?.label ?? choice?.value ?? "").trim();
+}
+
+export function localizedRuntimeOptionChoiceDescription(
+  choice: RuntimeOptionChoice | null | undefined,
+  locale: LocaleCode,
+): string {
+  const localized =
+    locale === "zh" ? String(choice?.description_zh ?? "").trim() : String(choice?.description_en ?? "").trim();
+  return localized || String(choice?.description ?? "").trim();
 }
 
 export function normalizeRuntimeOptionSchemas(value: unknown): RuntimeOptionSchema[] {

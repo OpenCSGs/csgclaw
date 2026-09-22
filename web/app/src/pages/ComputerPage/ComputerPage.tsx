@@ -15,7 +15,11 @@ export function ComputerPage() {
       {...controller.computerViewProps}
       runtimeSectionProps={{
         error: agentRuntimes.error,
+        installError: agentRuntimes.installError,
+        installProgress: agentRuntimes.installProgress,
+        installingRuntime: agentRuntimes.installingRuntime,
         loading: agentRuntimes.loading,
+        onInstallRuntime: agentRuntimes.install,
         onRetryLoad: agentRuntimes.refresh,
         refreshing: agentRuntimes.refreshing,
         runtimes: agentRuntimes.runtimes,

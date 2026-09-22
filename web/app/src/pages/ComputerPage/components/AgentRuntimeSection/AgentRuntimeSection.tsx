@@ -1,17 +1,24 @@
 import type { ReactNode } from "react";
 import { AlertCircle, CheckCircle2, CircleDashed, Clock3, LoaderCircle, RefreshCw, SquareTerminal } from "lucide-react";
 import { Button, Tooltip } from "@/components/ui";
+import { RuntimeInstallProgress } from "@/components/business";
+import type { AgentRuntimeInstallation } from "@/api/agentRuntimes";
 import { AgentRuntimeStatuses } from "@/models/agentRuntimes";
 import type { AgentRuntime, AgentRuntimeStatus } from "@/models/agentRuntimes";
 import type { TranslateFn } from "@/models/conversations";
 import { classNames } from "@/shared/lib/classNames";
+import { DeepSeekHarnessLogo } from "./DeepSeekHarnessLogo";
 import styles from "./AgentRuntimeSection.module.css";
 
 type VoidOrPromise = void | Promise<void>;
 
 export type AgentRuntimeSectionProps = {
   error?: string;
+  installError?: string;
+  installProgress?: AgentRuntimeInstallation | null;
+  installingRuntime?: string;
   loading?: boolean;
+  onInstallRuntime?: (name: string) => VoidOrPromise;
   onRetryLoad?: () => VoidOrPromise;
   refreshing?: boolean;
   runtimes?: AgentRuntime[];
@@ -25,7 +32,11 @@ const runtimeLogos: Record<string, string> = {
 
 export function AgentRuntimeSection({
   error = "",
+  installError = "",
+  installProgress = null,
+  installingRuntime = "",
   loading = false,
+  onInstallRuntime = () => {},
   onRetryLoad = () => {},
   refreshing = false,
   runtimes = [],
@@ -75,7 +86,15 @@ export function AgentRuntimeSection({
           {runtimes.length ? (
             <ul className={styles.grid}>
               {runtimes.map((runtime) => (
-                <RuntimeCard key={runtime.name} runtime={runtime} t={t} />
+                <RuntimeCard
+                  key={runtime.name}
+                  runtime={runtime}
+                  installError={runtime.name === "dsh" ? installError : ""}
+                  installation={runtime.name === installingRuntime ? installProgress : null}
+                  installing={installingRuntime === runtime.name}
+                  onInstallRuntime={onInstallRuntime}
+                  t={t}
+                />
               ))}
             </ul>
           ) : error ? null : (
@@ -87,10 +106,26 @@ export function AgentRuntimeSection({
   );
 }
 
-function RuntimeCard({ runtime, t }: { runtime: AgentRuntime; t: TranslateFn }) {
-  const status = runtimeStatus(runtime);
+function RuntimeCard({
+  runtime,
+  installError,
+  installation,
+  installing,
+  onInstallRuntime,
+  t,
+}: {
+  runtime: AgentRuntime;
+  installError: string;
+  installation: AgentRuntimeInstallation | null;
+  installing: boolean;
+  onInstallRuntime: (name: string) => VoidOrPromise;
+  t: TranslateFn;
+}) {
+  const status = installing ? AgentRuntimeStatuses.installing : runtimeStatus(runtime);
   const statusMeta = runtimeStatusMeta(status, t);
-  const visibleError = runtime.installed ? "" : runtime.message || "";
+  const visibleError = runtime.installed
+    ? ""
+    : installError || (!runtime.installable ? localizedRuntimeMessage(runtime, t) : "");
   const logo = runtimeLogos[runtime.name];
 
   return (
@@ -103,7 +138,13 @@ function RuntimeCard({ runtime, t }: { runtime: AgentRuntime; t: TranslateFn }) 
     >
       <div className={styles.cardHeader}>
         <span className={styles.logo} aria-hidden="true">
-          {logo ? <img src={logo} alt="" /> : <SquareTerminal size={24} />}
+          {runtime.name === "dsh" ? (
+            <DeepSeekHarnessLogo className={styles.dshLogo} />
+          ) : logo ? (
+            <img src={logo} alt="" />
+          ) : (
+            <SquareTerminal size={24} />
+          )}
         </span>
         <div className={styles.identity}>
           <h3>{runtime.label}</h3>
@@ -131,6 +172,13 @@ function RuntimeCard({ runtime, t }: { runtime: AgentRuntime; t: TranslateFn }) 
             <code>{runtime.version}</code>
           </div>
         ) : null}
+        {installing ? <RuntimeInstallProgress installation={installation} t={t} /> : null}
+        {!installing && !runtime.installed && runtime.installable && !visibleError ? (
+          <div className={styles.installNotice} role="status">
+            <SquareTerminal size={16} aria-hidden="true" />
+            <span>{t("computerRuntimeManagedInstallDescription")}</span>
+          </div>
+        ) : null}
         {visibleError ? (
           <div className={styles.runtimeError} role="alert">
             <AlertCircle size={16} aria-hidden="true" />
@@ -141,14 +189,36 @@ function RuntimeCard({ runtime, t }: { runtime: AgentRuntime; t: TranslateFn }) 
 
       <footer className={styles.cardFooter}>
         <span>{runtimeHint(runtime, status, t)}</span>
-        {!runtime.installed && runtime.docsURL ? (
-          <a href={runtime.docsURL} target="_blank" rel="noreferrer">
-            {t("computerRuntimeDocs")}
-          </a>
-        ) : null}
+        <span className={styles.footerActions}>
+          {!runtime.installed && runtime.docsURL ? (
+            <a href={runtime.docsURL} target="_blank" rel="noreferrer">
+              {t("computerRuntimeDocs")}
+            </a>
+          ) : null}
+          {!runtime.installed && runtime.installable ? (
+            <Button
+              variant="primary"
+              size="sm"
+              loading={installing}
+              loadingLabel={t("computerRuntimeInstalling")}
+              onClick={() => void onInstallRuntime(runtime.name)}
+            >
+              {t("computerRuntimeInstall")}
+            </Button>
+          ) : null}
+        </span>
       </footer>
     </li>
   );
+}
+
+function localizedRuntimeMessage(runtime: AgentRuntime, t: TranslateFn): string {
+  if (!runtime.messageCode) {
+    return runtime.message || "";
+  }
+  const key = `errors.${runtime.messageCode}`;
+  const localized = t(key);
+  return localized === key ? runtime.message || "" : localized;
 }
 
 function runtimeStatus(runtime: AgentRuntime): AgentRuntimeStatus {

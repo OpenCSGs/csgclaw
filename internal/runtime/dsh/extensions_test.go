@@ -36,7 +36,7 @@ func TestLarkCLIExtensionProjectsIntoDSHRuntime(t *testing.T) {
 	rt := New(Dependencies{
 		AgentHome:    func(string) (string, error) { return agentHome, nil },
 		ResolveAgent: func(agentruntime.Handle) (AgentRef, error) { return ref, nil },
-		ResolveBinary: func(context.Context, string) (dshcli.Info, error) {
+		ResolveBinary: func(context.Context) (dshcli.Info, error) {
 			return dshcli.Info{Path: launcher, Version: "0.1.5-rc.2"}, nil
 		},
 	})
@@ -109,7 +109,7 @@ func TestLarkCLIExtensionProjectsIntoDSHRuntime(t *testing.T) {
 	}
 
 	home := filepath.Join(agentHome, hostStateDirName, homeDirName)
-	environment, digests, err := buildEnvironmentWithExtensions(agentruntime.Profile{}, home, projections)
+	environment, digests, err := buildEnvironmentWithExtensions(agentruntime.Profile{}, home, defaultPermissionMode, projections)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1446,6 +1446,16 @@ func TestModelsReturnsCodexMetadataForCodexProvider(t *testing.T) {
 	}
 }
 
+func TestBridgeModelMetadataUsesResolvedVisionCapability(t *testing.T) {
+	model := bridgeModelMetadata(agent.AgentProfile{
+		Provider: "api", ModelID: "custom-vision", InputModalities: []string{"text", "image"},
+	})
+	modalities, ok := model["input_modalities"].([]string)
+	if !ok || len(modalities) != 2 || modalities[0] != "text" || modalities[1] != "image" {
+		t.Fatalf("input_modalities = %#v, want text and image", model["input_modalities"])
+	}
+}
+
 func inputContainsReasoning(input []any) bool {
 	for _, item := range input {
 		if responseInputItemIsReasoning(item) {
