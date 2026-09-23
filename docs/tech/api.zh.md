@@ -707,6 +707,8 @@ Codex Worker 目前保存 `execution_mode` 和 `memory_mode`，不会保存 `loc
 缺少 `execution_mode` 时默认为 `standard`。
 缺少 `memory_mode` 时默认为 `enabled`。
 
+DSH Worker 的 `permission_mode` 可选 `workspace-write`、`read-only`、`danger-full-access`，默认 `workspace-write`。`local_workspace_dir` 可指定本机绝对路径；留空时使用 Agent 自动管理的工作目录。切换目录会开启新 DSH 会话，避免恢复到旧目录。CSGClaw 将 Agent 指令保存在独立的 `DSH_HOME/AGENTS.md`，DSH 同时读取所选项目自己的 `AGENTS.md`，不会修改项目文件。发布模板只保留 `permission_mode`，不会发布本机工作目录。
+
 ### `GET /api/v1/hub/templates`
 
 列出可读 registry 中的全部模板。

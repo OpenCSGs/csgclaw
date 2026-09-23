@@ -103,8 +103,7 @@ func (r *Runtime) RenderExtensions(ctx context.Context, agentID string, projecti
 	if err != nil {
 		return err
 	}
-	root := filepath.Dir(home)
-	instructionsPath := filepath.Join(root, workspaceDirName, "AGENTS.md")
+	instructionsPath := filepath.Join(home, "AGENTS.md")
 	var instructions *string
 	if r.deps.ResolveAgent != nil {
 		ref, resolveErr := r.deps.ResolveAgent(agentruntime.Handle{RuntimeID: "rt-" + identity.CanonicalAgentID(agentID)})

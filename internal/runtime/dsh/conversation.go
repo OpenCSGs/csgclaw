@@ -29,10 +29,11 @@ type sessionResult struct {
 }
 
 func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, sink contract.EventSink) contract.TurnResult {
-	proc, err := c.runtime.process(c.runtimeID)
+	proc, release, err := c.runtime.processForTurn(ctx, c.runtimeID)
 	if err != nil {
 		return failed(err)
 	}
+	defer release()
 	prompt, cleanupInput, inputErr := preparePromptInput(ctx, request.ID, proc.workspace, request.Input, proc.imagePrompts)
 	if inputErr != nil {
 		return contract.TurnResult{Status: contract.TurnFailed, Error: inputErr}

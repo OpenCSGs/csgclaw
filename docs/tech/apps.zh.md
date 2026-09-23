@@ -35,6 +35,7 @@ App 连接已有的 HTTP 或 stdio MCP 服务，CSGClaw 不负责部署该服务
 App 管理与 CSGClaw 个人助理页面一样，可直接打开使用，无需填写 CSGClaw 服务 Token。
 GitLab、飞书和知识库需要的凭据仍在各自 App 中配置。
 Agent MCP 继续使用系统自动配置的专属 Token，按 Agent 校验工具访问权限。
+Codex 与 DSH 都通过 Agent MCP 使用连接器。DSH 在连接器目录变化后会在空闲时重启 ACP 进程；若正在执行回合，则在下一回合前刷新，并恢复原目录中的会话。按 Codex 原生回合 ID 校验的文件发布与上传工具仅向 Codex 提供；DSH 的文件交付沿用自身的文件工具。
 App CLI 无需额外登录，服务地址通过 `CSGCLAW_BASE_URL` 指定。
 原有受保护 API 的服务 Token 校验保持独立，`server.no_auth` 不作为页面登录开关。
 

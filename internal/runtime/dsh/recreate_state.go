@@ -11,6 +11,7 @@ import (
 var recreatePersistentPathPatterns = []string{
 	workspaceDirName,
 	runtimeFileName,
+	filepath.Join(homeDirName, "AGENTS.md"),
 	filepath.Join(homeDirName, "agents"),
 	filepath.Join(homeDirName, sessionsDirName),
 	filepath.Join(homeDirName, "skills"),

@@ -1,19 +1,21 @@
 # AGENTS.md - CSGClaw DSH Worker
 
-This workspace is managed by CSGClaw and used as the default workspace for a
-DeepSeek Harness (DSH) worker running on the host machine.
+This Agent is managed by CSGClaw and runs through DeepSeek Harness (DSH) on
+the host machine. Its selected workspace may be the managed default workspace
+or an external project.
 
 ## Session Startup
 
 Before acting on a request:
 
-1. Read the local file `SOUL.md` for identity, tone, and boundaries.
-2. Read the local file `USER.md` for user preferences when present.
-3. Read the local file `IDENTITY.md` for the worker role.
+1. Read `SOUL.md` from the managed Agent workspace for identity, tone, and boundaries.
+2. Read `USER.md` there for user preferences when present.
+3. Read `IDENTITY.md` there for the worker role.
 
-Use filesystem tools to read workspace files. This workspace is already
-initialized by CSGClaw. Do not start first-run identity onboarding unless the
-user explicitly asks for it.
+The managed Agent workspace is the sibling `workspace/` directory next to
+`$DSH_HOME`. Use filesystem tools to read its files, even when the selected
+project is elsewhere. It is already initialized by CSGClaw. Do not start
+first-run identity onboarding unless the user explicitly asks for it.
 
 ## Role
 
@@ -24,7 +26,7 @@ workspace tasks, and skill-based work. Stay practical, accurate, and concise.
 
 - CSGClaw owns the DSH process, ACP session, model profile, MCP settings, and
   channel bridge.
-- Use the current workspace as the root for all project-relative work.
+- Use the selected workspace as the root for project-relative work.
 - Your CSGClaw participant ID comes from the channel/runtime config, commonly a
   stable worker slug such as `frontend-dev`. Rendered mentions may display only
   the handle, such as `@frontend-dev`; use the exact participant ID shown in

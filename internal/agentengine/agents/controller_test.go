@@ -370,7 +370,7 @@ func (f fakeAgentRuntime) Layout(agentHome string) agentruntime.Layout {
 	case RuntimeKindDSH:
 		return agentruntime.Layout{
 			WorkspaceRoot:    filepath.Join(agentHome, ".dsh", "workspace"),
-			InstructionsPath: filepath.Join(agentHome, ".dsh", "workspace", "AGENTS.md"),
+			InstructionsPath: filepath.Join(agentHome, ".dsh", "home", "AGENTS.md"),
 			SkillsRoot:       filepath.Join(agentHome, ".dsh", "home", "skills"),
 			HostLogPaths:     []string{filepath.Join(agentHome, ".dsh", "stderr.log")},
 		}

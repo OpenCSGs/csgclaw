@@ -160,7 +160,9 @@ func (h *Handler) registerAppPlatformTools(agentID string) {
 	h.registerAppIdentityTools(agentID)
 	h.registerAppRoomTools(agentID)
 	h.registerAppPlatformTaskTools(agentID)
-	h.registerAppFileTools(agentID)
+	if a.RuntimeKind == agent.RuntimeKindCodex {
+		h.registerAppFileTools(agentID)
+	}
 	if h.agentPlatformManager(agentID) {
 		h.registerAppWorkerTools(agentID)
 	}

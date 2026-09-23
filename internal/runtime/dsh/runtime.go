@@ -67,11 +67,15 @@ type Dependencies struct {
 type Runtime struct {
 	deps Dependencies
 
-	mu        sync.Mutex
-	processes map[string]*process
-	roots     map[string]string
-	pending   map[string]*pendingPermission
-	nextPerm  uint64
+	mu                       sync.Mutex
+	mcpRefreshMu             sync.Mutex
+	mcpCatalogMu             sync.RWMutex
+	mcpCatalogRevisions      map[string]uint64
+	mcpCatalogRevisionSource func(string) uint64
+	processes                map[string]*process
+	roots                    map[string]string
+	pending                  map[string]*pendingPermission
+	nextPerm                 uint64
 }
 
 type process struct {
@@ -85,16 +89,18 @@ type process struct {
 	profile              agentruntime.Profile
 	imagePrompts         bool
 	mcp                  []acpMCPServer
+	mcpCatalogRevision   uint64
 	meta                 runtimeMetadata
 	environment          []string
 	extensionDigests     map[string]string
 	extensionExecutables map[string]string
 	done                 chan struct{}
 
-	metadataMu sync.Mutex
-	mu         sync.Mutex
-	active     map[string]*activeTurn
-	ready      map[string]bool
+	metadataMu    sync.Mutex
+	mu            sync.Mutex
+	active        map[string]*activeTurn
+	inFlightTurns int
+	ready         map[string]bool
 }
 
 type activeTurn struct {
@@ -129,6 +135,7 @@ type runtimeMetadata struct {
 	Executable     string             `json:"executable"`
 	Version        string             `json:"version"`
 	PermissionMode string             `json:"permission_mode,omitempty"`
+	WorkspaceDir   string             `json:"workspace_dir,omitempty"`
 	PID            int                `json:"pid,omitempty"`
 	State          agentruntime.State `json:"state"`
 	CreatedAt      time.Time          `json:"created_at"`
@@ -168,7 +175,7 @@ func (r *Runtime) Layout(agentHome string) agentruntime.Layout {
 	return agentruntime.Layout{
 		WorkspaceRoot:    filepath.Join(root, workspaceDirName),
 		SkillsRoot:       filepath.Join(root, homeDirName, "skills"),
-		InstructionsPath: filepath.Join(root, workspaceDirName, "AGENTS.md"),
+		InstructionsPath: filepath.Join(root, homeDirName, "AGENTS.md"),
 		HostLogPaths:     []string{filepath.Join(root, stderrFileName)},
 	}
 }
@@ -221,11 +228,20 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
 		return fmt.Errorf("inspect DSH template skills: %w", statErr)
 	}
+	seededBase, removeSeed, err := embeddedWorkspaceInstructions(root)
+	if err != nil {
+		return err
+	}
 	base := stripManagedInstructions(req.TemplateInstructions)
 	if base == "" {
 		if data, readErr := os.ReadFile(layout.InstructionsPath); readErr == nil {
 			base = stripManagedInstructions(string(data))
+		} else if !errors.Is(readErr, os.ErrNotExist) {
+			return fmt.Errorf("read DSH home instructions: %w", readErr)
 		}
+	}
+	if base == "" {
+		base = seededBase
 	}
 	fragments, err := managedExtensionInstructions(filepath.Join(root, homeDirName))
 	if err != nil {
@@ -235,6 +251,11 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	document := mergeDSHInstructionsDocument(base, block)
 	if err := os.WriteFile(layout.InstructionsPath, []byte(document), 0o644); err != nil {
 		return fmt.Errorf("write DSH AGENTS.md: %w", err)
+	}
+	if removeSeed {
+		if err := os.Remove(filepath.Join(layout.WorkspaceRoot, "AGENTS.md")); err != nil {
+			return fmt.Errorf("remove duplicate DSH workspace instructions: %w", err)
+		}
 	}
 	if err := writeSettings(filepath.Join(root, homeDirName, settingsFileName), req.Profile); err != nil {
 		return err
@@ -350,25 +371,31 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
+	workspace, err := ResolveWorkspaceDir(agentHome, ref.RuntimeOptions)
+	if err != nil {
+		return agentruntime.StateUnknown, err
+	}
+	if info, statErr := os.Stat(workspace); statErr != nil {
+		return agentruntime.StateUnknown, fmt.Errorf("open DSH workspace %s: %w", workspace, statErr)
+	} else if !info.IsDir() {
+		return agentruntime.StateUnknown, fmt.Errorf("DSH workspace %s is not a directory", workspace)
+	}
 	root := filepath.Dir(layout.WorkspaceRoot)
-	servers := ref.MCPServers
-	if r.deps.MaterializeMCPServers != nil {
-		servers, err = r.deps.MaterializeMCPServers(ctx, servers)
-		if err != nil {
-			return agentruntime.StateUnknown, err
-		}
+	servers, mcpRevision, err := r.runtimeMCPServers(ctx, ref.ID, ref.Profile, ref.MCPServers)
+	if err != nil {
+		return agentruntime.StateUnknown, err
 	}
 	mcpServers, err := buildACPMCPServers(servers)
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
-	meta := runtimeMetadata{RuntimeID: runtimeID, AgentID: ref.ID, Executable: binary.Path, Version: binary.Version, PermissionMode: opts.PermissionMode, State: agentruntime.StateCreated, CreatedAt: time.Now().UTC(), Sessions: map[string]string{}}
+	meta := runtimeMetadata{RuntimeID: runtimeID, AgentID: ref.ID, Executable: binary.Path, Version: binary.Version, PermissionMode: opts.PermissionMode, WorkspaceDir: workspace, State: agentruntime.StateCreated, CreatedAt: time.Now().UTC(), Sessions: map[string]string{}}
 	if persisted, readErr := readMetadata(root); readErr == nil {
 		meta.CreatedAt = persisted.CreatedAt
-		var permissionChanged bool
-		meta.Sessions, permissionChanged = sessionsForPermissionMode(persisted, opts.PermissionMode)
-		if permissionChanged && len(persisted.Sessions) > 0 {
-			slog.Info("DSH permission mode changed; starting fresh sessions", "runtime_id", runtimeID, "previous_mode", persistedPermissionMode(persisted), "permission_mode", opts.PermissionMode, "session_count", len(persisted.Sessions))
+		var configChanged bool
+		meta.Sessions, configChanged = sessionsForRuntimeConfig(persisted, opts.PermissionMode, workspace, layout.WorkspaceRoot)
+		if configChanged && len(persisted.Sessions) > 0 {
+			slog.Info("DSH workspace or permission mode changed; starting fresh sessions", "runtime_id", runtimeID, "previous_mode", persistedPermissionMode(persisted), "permission_mode", opts.PermissionMode, "previous_workspace", persistedWorkspaceDir(persisted, layout.WorkspaceRoot), "workspace", workspace, "session_count", len(persisted.Sessions))
 		}
 	} else if !errors.Is(readErr, os.ErrNotExist) {
 		return agentruntime.StateUnknown, readErr
@@ -386,20 +413,24 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
+	if err := r.renderExtensionInstructions(ctx, layout.InstructionsPath, ref.ID, &ref.Instructions, projections); err != nil {
+		return agentruntime.StateUnknown, err
+	}
 	environment, extensionDigests, err := buildEnvironmentWithExtensions(ref.Profile, filepath.Join(root, homeDirName), opts.PermissionMode, projections)
 	if err != nil {
 		return agentruntime.StateUnknown, err
 	}
 	extensionExecutables := managedExtensionExecutables(projections)
-	proc, err := r.launch(ctx, root, layout.WorkspaceRoot, binary.Path, ref.Profile, mcpServers, meta, environment, extensionDigests, extensionExecutables, true)
+	proc, err := r.launch(ctx, root, workspace, binary.Path, ref.Profile, mcpServers, meta, environment, extensionDigests, extensionExecutables, true)
 	if err != nil {
 		patchErr := err
 		slog.Warn("DSH present tool overlay unavailable; retrying base ACP profile", "runtime_id", runtimeID, "version", binary.Version, "error", patchErr)
-		proc, err = r.launch(ctx, root, layout.WorkspaceRoot, binary.Path, ref.Profile, mcpServers, meta, environment, extensionDigests, extensionExecutables, false)
+		proc, err = r.launch(ctx, root, workspace, binary.Path, ref.Profile, mcpServers, meta, environment, extensionDigests, extensionExecutables, false)
 		if err != nil {
 			return agentruntime.StateUnknown, errors.Join(patchErr, err)
 		}
 	}
+	proc.mcpCatalogRevision = mcpRevision
 	r.mu.Lock()
 	r.processes[runtimeID] = proc
 	r.roots[runtimeID] = root
@@ -763,8 +794,15 @@ func persistedPermissionMode(meta runtimeMetadata) string {
 	return defaultPermissionMode
 }
 
-func sessionsForPermissionMode(meta runtimeMetadata, permissionMode string) (map[string]string, bool) {
-	changed := persistedPermissionMode(meta) != strings.TrimSpace(permissionMode)
+func persistedWorkspaceDir(meta runtimeMetadata, defaultWorkspace string) string {
+	if workspace := strings.TrimSpace(meta.WorkspaceDir); workspace != "" {
+		return filepath.Clean(workspace)
+	}
+	return defaultWorkspace
+}
+
+func sessionsForRuntimeConfig(meta runtimeMetadata, permissionMode, workspace, defaultWorkspace string) (map[string]string, bool) {
+	changed := persistedPermissionMode(meta) != strings.TrimSpace(permissionMode) || persistedWorkspaceDir(meta, defaultWorkspace) != workspace
 	sessions := make(map[string]string, len(meta.Sessions))
 	if changed {
 		return sessions, true
@@ -843,8 +881,11 @@ func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, ch
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(root, workspaceDirName, "AGENTS.md")
-	return r.renderExtensionInstructions(ctx, path, ref.ID, &ref.Instructions, projections)
+	path := filepath.Join(root, homeDirName, "AGENTS.md")
+	if err := r.renderExtensionInstructions(ctx, path, ref.ID, &ref.Instructions, projections); err != nil {
+		return err
+	}
+	return nil
 }
 
 func validateExecutionProfile(profile agentruntime.Profile) error {
@@ -860,20 +901,22 @@ func executionProfileComplete(profile agentruntime.Profile) bool {
 }
 
 func (r *Runtime) ValidateMCPServers(_ context.Context, current agentruntime.MCPServersSnapshot) error {
+	if _, reserved := current.Servers[agentMCPServerName]; reserved {
+		return fmt.Errorf("mcpServers.%s is reserved for Agent Apps", agentMCPServerName)
+	}
 	_, err := buildACPMCPServers(current.Servers)
 	return err
 }
 
 func (r *Runtime) MCPServersRestartRequired(change agentruntime.MCPServersChange) (bool, error) {
-	if _, err := buildACPMCPServers(change.Current.Servers); err != nil {
+	if err := r.ValidateMCPServers(context.Background(), change.Current); err != nil {
 		return false, err
 	}
 	return agentruntime.MCPServersNeedsRestart(change.Previous.Servers, change.Current.Servers)
 }
 
 func (r *Runtime) ReconcileMCPServers(_ context.Context, _ agentruntime.Handle, change agentruntime.MCPServersChange) error {
-	_, err := buildACPMCPServers(change.Current.Servers)
-	return err
+	return r.ValidateMCPServers(context.Background(), change.Current)
 }
 
 func (r *Runtime) Close() error {

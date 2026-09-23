@@ -80,7 +80,7 @@ func TestLarkCLIExtensionProjectsIntoDSHRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	instructionsPath := filepath.Join(agentHome, hostStateDirName, workspaceDirName, "AGENTS.md")
+	instructionsPath := filepath.Join(agentHome, hostStateDirName, homeDirName, "AGENTS.md")
 	instructions, err := os.ReadFile(instructionsPath)
 	if err != nil {
 		t.Fatal(err)

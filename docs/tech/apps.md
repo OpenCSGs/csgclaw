@@ -35,6 +35,7 @@ Existing local installations are converted once to global resources and bindings
 ## Access
 
 App management opens directly like the existing CSGClaw personal-assistant UI, without a service-token login.
+Codex and DSH both access connectors through Agent MCP. After the connector catalog changes, DSH restarts its ACP process when idle, or refreshes before the next turn, and resumes sessions in the same directory. File publish and upload tools that require native Codex turn IDs remain available only to Codex; DSH keeps its own file-delivery tools.
 GitLab, Feishu, and knowledge-base credentials are still configured separately in each App.
 Agent MCP endpoints continue to validate automatically provisioned Agent-scoped tokens.
 The App CLI requires no additional login; set `CSGCLAW_BASE_URL` to select the service address.

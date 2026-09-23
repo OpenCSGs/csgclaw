@@ -44,15 +44,15 @@ func (h *Handler) EnableConnectors(statePath string) error {
 			}, nil
 		},
 		OnCatalogChanged: func(agentID string, revision uint64) {
-			// Never make an app-server RPC while answering its MCP request.
+			// Never refresh a runtime while answering its MCP request.
 			// Every prompt also checks the revision source before admission.
 			go func() {
-				if rt := h.connectorCodexRuntime(); rt != nil {
+				for _, rt := range h.connectorAgentMCPRuntimes() {
 					ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-					defer cancel()
 					if err := rt.RefreshAgentMCP(ctx, agentID, revision); err != nil {
 						slog.Warn("refresh Agent App tools", "agent_id", agentID, "error", err)
 					}
+					cancel()
 				}
 			}()
 		},
@@ -62,7 +62,7 @@ func (h *Handler) EnableConnectors(statePath string) error {
 	}
 	h.apps = service
 	h.appPlatformAgents = make(map[string]string)
-	if rt := h.connectorCodexRuntime(); rt != nil {
+	for _, rt := range h.connectorAgentMCPRuntimes() {
 		rt.SetAgentMCPRevisionSource(service.Revision)
 	}
 	if owner, ok := h.svc.(interface {
@@ -120,6 +120,30 @@ func (h *Handler) connectorCodexRuntime() *runtimecodex.Runtime {
 	return result
 }
 
+type connectorAgentMCPRuntime interface {
+	SetAgentMCPRevisionSource(func(string) uint64)
+	RefreshAgentMCP(context.Context, string, uint64) error
+}
+
+func (h *Handler) connectorAgentMCPRuntimes() []connectorAgentMCPRuntime {
+	owner, ok := h.svc.(interface {
+		Runtime(string) (agentruntime.Runtime, error)
+	})
+	if !ok {
+		return nil
+	}
+	var runtimes []connectorAgentMCPRuntime
+	for _, kind := range []string{agent.RuntimeKindCodex, agent.RuntimeKindDSH} {
+		rt, err := owner.Runtime(kind)
+		if err == nil {
+			if adapter, ok := rt.(connectorAgentMCPRuntime); ok {
+				runtimes = append(runtimes, adapter)
+			}
+		}
+	}
+	return runtimes
+}
+
 func (h *Handler) RestoreConnectors(ctx context.Context) {
 	if h.apps == nil {
 		return
@@ -133,7 +157,7 @@ func (h *Handler) CloseConnectors() error {
 	if h.apps == nil {
 		return nil
 	}
-	if rt := h.connectorCodexRuntime(); rt != nil {
+	for _, rt := range h.connectorAgentMCPRuntimes() {
 		rt.SetAgentMCPRevisionSource(nil)
 	}
 	return h.apps.Close()

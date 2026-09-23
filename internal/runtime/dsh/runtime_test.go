@@ -588,30 +588,59 @@ func TestDecodeRuntimeOptionsPermissionMode(t *testing.T) {
 	}
 }
 
-func TestPermissionModeChangeDropsPersistedSessionMappings(t *testing.T) {
+func TestResolveWorkspaceDir(t *testing.T) {
+	home := t.TempDir()
+	external := filepath.Join(t.TempDir(), "project")
+	for _, test := range []struct {
+		name    string
+		raw     map[string]any
+		want    string
+		wantErr bool
+	}{
+		{name: "default", want: filepath.Join(home, hostStateDirName, workspaceDirName)},
+		{name: "selected", raw: map[string]any{localWorkspaceDirOptionKey: "  " + external + "  "}, want: external},
+		{name: "relative path", raw: map[string]any{localWorkspaceDirOptionKey: "project"}, wantErr: true},
+		{name: "non string", raw: map[string]any{localWorkspaceDirOptionKey: 42}, wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := ResolveWorkspaceDir(home, test.raw)
+			if (err != nil) != test.wantErr || (!test.wantErr && got != test.want) {
+				t.Fatalf("ResolveWorkspaceDir() = %q, %v; want %q, error %v", got, err, test.want, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestRuntimeConfigChangeDropsPersistedSessionMappings(t *testing.T) {
+	defaultWorkspace := filepath.Join(t.TempDir(), "workspace")
+	otherWorkspace := filepath.Join(t.TempDir(), "other")
 	persisted := runtimeMetadata{
 		PermissionMode: PermissionModeWorkspaceWrite,
 		Sessions:       map[string]string{"room-1": "session-1"},
 	}
 
-	unchanged, changed := sessionsForPermissionMode(persisted, PermissionModeWorkspaceWrite)
+	unchanged, changed := sessionsForRuntimeConfig(persisted, PermissionModeWorkspaceWrite, defaultWorkspace, defaultWorkspace)
 	if changed || unchanged["room-1"] != "session-1" {
 		t.Fatalf("unchanged permission sessions = %v, changed = %v", unchanged, changed)
 	}
 	unchanged["room-1"] = "replacement"
 	if persisted.Sessions["room-1"] != "session-1" {
-		t.Fatal("sessionsForPermissionMode() aliased persisted session metadata")
+		t.Fatal("sessionsForRuntimeConfig() aliased persisted session metadata")
 	}
 
-	reset, changed := sessionsForPermissionMode(persisted, PermissionModeReadOnly)
+	reset, changed := sessionsForRuntimeConfig(persisted, PermissionModeReadOnly, defaultWorkspace, defaultWorkspace)
 	if !changed || len(reset) != 0 {
 		t.Fatalf("changed permission sessions = %v, changed = %v; want empty reset", reset, changed)
 	}
 
 	legacy := runtimeMetadata{Sessions: map[string]string{"room-legacy": "session-legacy"}}
-	legacySessions, changed := sessionsForPermissionMode(legacy, PermissionModeWorkspaceWrite)
+	legacySessions, changed := sessionsForRuntimeConfig(legacy, PermissionModeWorkspaceWrite, defaultWorkspace, defaultWorkspace)
 	if changed || legacySessions["room-legacy"] != "session-legacy" {
 		t.Fatalf("legacy default permission sessions = %v, changed = %v", legacySessions, changed)
+	}
+	reset, changed = sessionsForRuntimeConfig(persisted, PermissionModeWorkspaceWrite, otherWorkspace, defaultWorkspace)
+	if !changed || len(reset) != 0 {
+		t.Fatalf("changed workspace sessions = %v, changed = %v; want empty reset", reset, changed)
 	}
 }
 
@@ -628,14 +657,17 @@ func TestRuntimeOptionsSchemaExposesPermissionModes(t *testing.T) {
 			break
 		}
 	}
-	if schema == nil || schema.DefaultValue != PermissionModeWorkspaceWrite || len(schema.Choices) != 2 {
+	if schema == nil || schema.DefaultValue != PermissionModeWorkspaceWrite || len(schema.Choices) != 3 {
 		t.Fatalf("permission mode schema = %#v", schema)
 	}
-	if schema.Choices[0].Value != PermissionModeWorkspaceWrite || schema.Choices[1].Value != PermissionModeReadOnly {
+	if schema.Choices[0].Value != PermissionModeWorkspaceWrite || schema.Choices[1].Value != PermissionModeReadOnly || schema.Choices[2].Value != PermissionModeDangerFullAccess {
 		t.Fatalf("permission mode choices = %#v", schema.Choices)
 	}
-	if len(schema.Options) != 2 || schema.Options[0] != PermissionModeWorkspaceWrite || schema.Options[1] != PermissionModeReadOnly {
+	if len(schema.Options) != 3 || schema.Options[0] != PermissionModeWorkspaceWrite || schema.Options[1] != PermissionModeReadOnly || schema.Options[2] != PermissionModeDangerFullAccess {
 		t.Fatalf("permission mode options = %#v", schema.Options)
+	}
+	if len(schemas) != 2 || schemas[1].Path != localWorkspaceDirOptionKey || schemas[1].Type != "directory" || schemas[1].Picker != "optional" {
+		t.Fatalf("workspace directory schema = %#v", schemas)
 	}
 }
 
@@ -687,8 +719,22 @@ func TestDSHHelperProcess(t *testing.T) {
 				"mcpCapabilities":    map[string]any{"http": true},
 			}})
 		case "session/new":
+			if recordPath := os.Getenv("DSH_TEST_SESSION_RECORD"); recordPath != "" {
+				cwd, _ := os.Getwd()
+				record, _ := json.Marshal(map[string]any{"method": frame.Method, "cwd": cwd, "params": frame.Params})
+				if err := os.WriteFile(recordPath, record, 0o600); err != nil {
+					os.Exit(8)
+				}
+			}
 			respond(map[string]any{"sessionId": "session-1", "configOptions": helperConfigOptions()})
 		case "session/resume":
+			if recordPath := os.Getenv("DSH_TEST_SESSION_RECORD"); recordPath != "" {
+				cwd, _ := os.Getwd()
+				record, _ := json.Marshal(map[string]any{"method": frame.Method, "cwd": cwd, "params": frame.Params})
+				if err := os.WriteFile(recordPath, record, 0o600); err != nil {
+					os.Exit(8)
+				}
+			}
 			if required := os.Getenv("DSH_TEST_REQUIRE_RESUME_FILE"); required != "" {
 				if _, err := os.Stat(required); err != nil {
 					_ = encoder.Encode(map[string]any{"jsonrpc": "2.0", "id": frame.ID, "error": map[string]any{"code": -32602, "message": "persisted session file is unavailable"}})
@@ -968,6 +1014,7 @@ func TestDeletePreservesDSHRecreateState(t *testing.T) {
 	root := filepath.Join(agentHome, hostStateDirName)
 	preservedFiles := map[string]string{
 		filepath.Join(root, workspaceDirName, "project.txt"):                                        "workspace state\n",
+		filepath.Join(root, homeDirName, "AGENTS.md"):                                               "Agent instructions\n",
 		filepath.Join(root, homeDirName, "agents", "subagent.json"):                                 "agent state\n",
 		filepath.Join(root, homeDirName, sessionsDirName, "--workspace--", "session-1", "v3.jsonl"): "session state\n",
 		filepath.Join(root, homeDirName, "skills", "custom.md"):                                     "skill state\n",

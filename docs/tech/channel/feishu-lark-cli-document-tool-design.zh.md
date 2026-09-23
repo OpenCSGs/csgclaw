@@ -58,8 +58,8 @@ Source 实现在 `internal/channel/feishu/larkcli/source.go`。
 ## 托管布局与事务
 
 ```text
-AGENTS.md       # Codex 使用 CODEX_HOME/AGENTS.md，DSH 使用 workspace/AGENTS.md
 RUNTIME_HOME/   # Codex 使用 CODEX_HOME，DSH 使用 DSH_HOME
+  AGENTS.md     # Agent 指令，两个 Runtime 均从各自的 home 读取
   runtime-extensions/
     feishu-lark-cli/
       active.json

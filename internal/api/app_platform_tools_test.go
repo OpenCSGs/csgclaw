@@ -1,11 +1,34 @@
 package api
 
 import (
+	"context"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/im"
 	"testing"
 )
+
+func TestDSHAppMCPListsConnectorToolsWithoutCodexFileTools(t *testing.T) {
+	h := newAppTaskTestHandler(t)
+	records := h.svc.(appTaskTestRecords)
+	worker := records.records["agent-dev"]
+	worker.RuntimeKind = agent.RuntimeKindDSH
+	records.records[worker.ID] = worker
+	h.appPlatformAgents = make(map[string]string)
+	h.registerAppPlatformTools(worker.ID)
+	client := taskMCPClient(t, h, worker.ID)
+	listed, err := client.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tools := map[string]bool{}
+	for _, tool := range listed.Tools {
+		tools[tool.Name] = true
+	}
+	if !tools["apps_list"] || tools["csgclaw_publish_file"] || tools["csgclaw_upload_file"] {
+		t.Fatalf("DSH App MCP tools = %#v", tools)
+	}
+}
 
 func TestAppMCPRoomCreationPreservesHumanAndMembership(t *testing.T) {
 	h := newAppTaskTestHandler(t)
