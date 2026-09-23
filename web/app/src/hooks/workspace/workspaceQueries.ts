@@ -48,6 +48,7 @@ export const WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS = 1_500;
 // Keep refreshing the complete roster at a lower rate during the startup window.
 export const WORKSPACE_AGENTS_SETTLE_POLL_INTERVAL_MS = 5_000;
 export const WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS = 120_000;
+export const WORKSPACE_MCP_PROBE_REFETCH_INTERVAL_MS = 500;
 const WORKSPACE_AGENTS_AVAILABILITY_MIN_REFETCH_MS = 1_000;
 const WORKSPACE_AGENTS_UNKNOWN_REFETCH_MS = 1_000;
 
@@ -291,7 +292,12 @@ export function useWorkspaceMCPServersQuery(options: { enabled?: boolean } = {})
     queryKey: workspaceQueryKeys.mcpServers(),
     queryFn: fetchMCPServers,
     enabled: options.enabled !== false,
+    refetchInterval: (query) => workspaceMCPServersRefetchInterval(query.state.data),
   });
+}
+
+export function workspaceMCPServersRefetchInterval(payload: JSONRecord | undefined): number | false {
+  return payload?.probes_pending === true ? WORKSPACE_MCP_PROBE_REFETCH_INTERVAL_MS : false;
 }
 
 export function useWorkspaceKnowledgeBasesQuery(search = "", options: { enabled?: boolean } = {}) {

@@ -57,6 +57,46 @@ func TestListAvailableServersFiltersUnavailableRemoteAndKeepsStoredConfig(t *tes
 	}
 }
 
+func TestListAvailableServersWithStatusReportsPendingProbeUntilCompletion(t *testing.T) {
+	release := make(chan struct{})
+	svc := NewService(
+		WithServerStore(&memoryServerStore{servers: map[string]any{
+			"slow": RemoteServer{ID: "remote-slow", Name: "slow", URL: "https://slow.example.test/mcp"}.Config(),
+		}}),
+		WithServerProber(availabilityTestProber{probe: func(ctx context.Context, _ string, _ map[string]any) (ProbeResult, error) {
+			select {
+			case <-release:
+				return ProbeResult{Connected: true}, nil
+			case <-ctx.Done():
+				return ProbeResult{}, ctx.Err()
+			}
+		}}),
+	)
+
+	servers, pending, err := svc.ListAvailableServersWithStatus(context.Background())
+	if err != nil {
+		t.Fatalf("ListAvailableServersWithStatus() error = %v", err)
+	}
+	if !pending {
+		t.Fatal("ListAvailableServersWithStatus() pending = false, want true")
+	}
+	if _, ok := servers["slow"]; ok {
+		t.Fatalf("pending server was exposed before its probe completed: %#v", servers)
+	}
+
+	close(release)
+	servers, pending, err = svc.ListAvailableServersWithStatus(context.Background())
+	if err != nil {
+		t.Fatalf("ListAvailableServersWithStatus() after completion error = %v", err)
+	}
+	if pending {
+		t.Fatal("ListAvailableServersWithStatus() pending = true after completion")
+	}
+	if _, ok := servers["slow"]; !ok {
+		t.Fatalf("completed healthy server missing from catalog: %#v", servers)
+	}
+}
+
 func TestRequireServerAvailableRejectsFailedRemoteProbe(t *testing.T) {
 	svc := NewService(WithServerProber(availabilityTestProber{probe: func(context.Context, string, map[string]any) (ProbeResult, error) {
 		return ProbeResult{}, errors.New("forbidden")

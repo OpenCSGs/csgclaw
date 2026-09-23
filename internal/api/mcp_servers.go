@@ -23,12 +23,12 @@ func (h *Handler) handleMCPServers(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		servers, err := h.mcp.ListAvailableServers(r.Context())
+		servers, probesPending, err := h.mcp.ListAvailableServersWithStatus(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{mcp.ServersKey: servers})
+		writeJSON(w, http.StatusOK, map[string]any{mcp.ServersKey: servers, "probes_pending": probesPending})
 	case http.MethodPost:
 		req, err := decodeMCPServerRequest(r)
 		if err != nil {

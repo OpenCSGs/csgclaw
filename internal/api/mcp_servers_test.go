@@ -44,7 +44,8 @@ func TestHandleMCPServersHidesUnavailableRemoteAndRetainsManualServer(t *testing
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
 	var response struct {
-		Servers map[string]any `json:"mcpServers"`
+		Servers       map[string]any `json:"mcpServers"`
+		ProbesPending bool           `json:"probes_pending"`
 	}
 	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
@@ -54,6 +55,9 @@ func TestHandleMCPServersHidesUnavailableRemoteAndRetainsManualServer(t *testing
 	}
 	if _, ok := response.Servers["denied"]; ok {
 		t.Fatalf("available servers retained denied remote: %#v", response.Servers)
+	}
+	if response.ProbesPending {
+		t.Fatal("completed failed probe was reported as pending")
 	}
 	stored, err := svc.ListServers(context.Background())
 	if err != nil {

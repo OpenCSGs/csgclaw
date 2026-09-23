@@ -2,9 +2,11 @@ import {
   WORKSPACE_AGENTS_SETTLE_POLL_INTERVAL_MS,
   WORKSPACE_AGENTS_STARTUP_POLL_INTERVAL_MS,
   WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS,
+  WORKSPACE_MCP_PROBE_REFETCH_INTERVAL_MS,
   workspaceAgentsAvailabilityRefetchInterval,
   workspaceAgentsRefetchInterval,
   workspaceAgentsStartupRefetchInterval,
+  workspaceMCPServersRefetchInterval,
 } from "@/hooks/workspace/workspaceQueries";
 import type { AgentLike } from "@/models/agents";
 
@@ -51,6 +53,14 @@ describe("workspaceAgentsStartupRefetchInterval", () => {
     expect(workspaceAgentsStartupRefetchInterval([manager("stopped")], WORKSPACE_AGENTS_STARTUP_POLL_WINDOW_MS)).toBe(
       false,
     );
+  });
+});
+
+describe("workspaceMCPServersRefetchInterval", () => {
+  it("polls only while availability probes are pending", () => {
+    expect(workspaceMCPServersRefetchInterval({ probes_pending: true })).toBe(WORKSPACE_MCP_PROBE_REFETCH_INTERVAL_MS);
+    expect(workspaceMCPServersRefetchInterval({ probes_pending: false })).toBe(false);
+    expect(workspaceMCPServersRefetchInterval(undefined)).toBe(false);
   });
 });
 

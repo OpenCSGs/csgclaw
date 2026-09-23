@@ -59,9 +59,16 @@ func (s *Service) initAvailability() {
 // Missing or stale probes are started concurrently and this call waits for at
 // most a sub-second UI budget before failing closed for unfinished entries.
 func (s *Service) ListAvailableServers(ctx context.Context) (map[string]any, error) {
+	servers, _, err := s.ListAvailableServersWithStatus(ctx)
+	return servers, err
+}
+
+// ListAvailableServersWithStatus also reports whether managed remote servers
+// still have probes in flight so clients can refresh after the UI wait budget.
+func (s *Service) ListAvailableServersWithStatus(ctx context.Context) (map[string]any, bool, error) {
 	servers, err := s.ListServers(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	s.initAvailability()
 
@@ -85,10 +92,21 @@ func (s *Service) ListAvailableServers(ctx context.Context) (map[string]any, err
 		select {
 		case <-probe.done:
 		case <-waitCtx.Done():
-			return s.filterAvailableServers(servers), nil
+			return s.filterAvailableServers(servers), availabilityProbesPending(probes), nil
 		}
 	}
-	return s.filterAvailableServers(servers), nil
+	return s.filterAvailableServers(servers), false, nil
+}
+
+func availabilityProbesPending(probes []*availabilityProbe) bool {
+	for _, probe := range probes {
+		select {
+		case <-probe.done:
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // RequireServerAvailable performs a bounded fresh check for a remotely
