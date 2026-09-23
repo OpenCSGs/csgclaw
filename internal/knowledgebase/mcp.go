@@ -223,12 +223,7 @@ func HydrateTemplateServers(ctx context.Context, servers map[string]any) (map[st
 		if !ok {
 			continue
 		}
-		metadata, managed := ManagedMetadataFromServer(entry)
-		if !managed {
-			continue
-		}
-		if name != metadata.ContentID {
-			slog.Warn("keeping template knowledge-base MCP snapshot with mismatched identity", "server", name, "content_id", metadata.ContentID)
+		if _, managed := ManagedMetadataFromServer(entry); !managed {
 			continue
 		}
 		prepared, err := HydrateManagedServer(ctx, entry, connection)
@@ -274,11 +269,12 @@ func FindConfiguredServer(servers map[string]any, contentID string) string {
 	if contentID == "" {
 		return ""
 	}
-	metadata, ok := ManagedMetadataFromServer(servers[contentID])
-	if !ok || metadata.ContentID != contentID {
-		return ""
+	for id, raw := range servers {
+		if metadata, ok := ManagedMetadataFromServer(raw); ok && metadata.ContentID == contentID {
+			return id
+		}
 	}
-	return contentID
+	return ""
 }
 
 // RuntimeServers removes CSGClaw-only management metadata while retaining the

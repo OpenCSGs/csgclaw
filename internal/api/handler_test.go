@@ -4867,7 +4867,7 @@ func TestHandleMCPServersUsesMCPService(t *testing.T) {
 		t.Fatalf("PUT status = %d, want %d; body=%s", putRec.Code, http.StatusOK, putRec.Body.String())
 	}
 
-	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/v1/mcp-servers/remote", nil)
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/v1/mcp-servers/context7", nil)
 	deleteRec := httptest.NewRecorder()
 	srv.Routes().ServeHTTP(deleteRec, deleteReq)
 	if deleteRec.Code != http.StatusOK {

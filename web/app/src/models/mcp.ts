@@ -92,7 +92,7 @@ export function mcpServersFromMap(servers: unknown): MCPServer[] {
       });
       return items;
     }, [])
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort((left, right) => mcpServerDisplayName(left).localeCompare(mcpServerDisplayName(right)));
 }
 
 export function mcpServersFromTemplateDocument(document: unknown): MCPServer[] {
@@ -106,6 +106,20 @@ export function mcpServersFromTemplateDocument(document: unknown): MCPServer[] {
 
 export function mcpServersMap(servers: unknown): Record<string, JSONRecord> {
   return cloneMCPServersRecord(isJSONRecord(servers) ? servers : null);
+}
+
+// `name` is the persisted MCP identity; display_name is editable presentation.
+export function mcpServerDisplayName(server: MCPServer): string {
+  const label = server.config.display_name;
+  return typeof label === "string" && label.trim() ? label.trim() : server.name;
+}
+
+export function isRemoteMCPInstalled(servers: readonly MCPServer[], remote: RemoteMCPServer): boolean {
+  return servers.some((server) => {
+    const meta = isJSONRecord(server.config._meta) ? server.config._meta : null;
+    const source = meta && isJSONRecord(meta["com.opencsg/marketplace"]) ? meta["com.opencsg/marketplace"] : null;
+    return source ? source.server_id === remote.id : mcpServerDisplayName(server) === remote.name;
+  });
 }
 
 export function hasMCPServerName(servers: readonly MCPServer[], name: string | null | undefined): boolean {
@@ -158,7 +172,7 @@ export function mcpServerPayloadFromDocument(document: unknown): MCPServerPayloa
   }
   const [name, serverConfig] = entries[0];
   return {
-    name,
+    name: typeof serverConfig.display_name === "string" ? serverConfig.display_name.trim() : name,
     config: serverConfig,
   };
 }

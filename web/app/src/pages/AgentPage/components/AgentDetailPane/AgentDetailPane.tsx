@@ -83,7 +83,7 @@ import {
 } from "@/models/modelProviders";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
-import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
+import { mcpManagedKnowledgeBaseSource, mcpServerDisplayName } from "@/models/mcp";
 import type { MCPServer } from "@/models/mcp";
 import { skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
@@ -1297,7 +1297,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                         }}
                       />
                       <span className="agent-skill-candidate-copy">
-                        <span className="agent-skill-name">{server.name}</span>
+                        <span className="agent-skill-name">{mcpServerDisplayName(server)}</span>
                         <span className="agent-skill-description">{server.description || "-"}</span>
                       </span>
                     </label>
@@ -1346,7 +1346,9 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             <div className="agent-skills-dialog-copy">
               <DialogTitle>{t("agentDeleteMCP")}</DialogTitle>
               <DialogDescription>
-                {t("agentDeleteMCPConfirmMessage", { name: mcpPendingDelete?.name || "" })}
+                {t("agentDeleteMCPConfirmMessage", {
+                  name: mcpPendingDelete ? mcpServerDisplayName(mcpPendingDelete) : "",
+                })}
               </DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />
@@ -1675,7 +1677,7 @@ function AgentMCPPanel({
                 </span>
                 <div className="agent-skills-summary-copy">
                   <div className="agent-mcp-name-row">
-                    <div className="agent-skills-summary-name">{server.name}</div>
+                    <div className="agent-skills-summary-name">{mcpServerDisplayName(server)}</div>
                     {managedSource ? (
                       <span className="agent-mcp-knowledge-badge">{t("agentKnowledgeMCPBadge")}</span>
                     ) : null}

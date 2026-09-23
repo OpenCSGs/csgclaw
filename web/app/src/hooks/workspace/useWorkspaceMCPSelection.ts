@@ -258,7 +258,7 @@ export function useWorkspaceMCPSelection({
         queryClient.setQueryData(workspaceQueryKeys.mcpServers(), state);
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
         setSelectedHubResourceType("mcp");
-        setSelectedMCPServerName(payload.name);
+        setSelectedMCPServerName(currentName);
         return true;
       } catch (error) {
         setMCPMutationError(errorMessage(error, t("resourcesMCPSaveFailed")));

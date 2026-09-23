@@ -11,6 +11,7 @@ import (
 
 	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcp"
+	"csgclaw/internal/mcpschema"
 )
 
 var errMCPServerSourceUnsupported = errors.New("mcp server has no refreshable source")
@@ -60,7 +61,7 @@ func (h *Handler) handleMCPServerSourceByName(w http.ResponseWriter, r *http.Req
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, resolved.Status)
 	case http.MethodPost:
-		state, err := h.mcp.UpdateServer(r.Context(), name, name, resolved.Refreshed)
+		state, err := h.mcp.UpdateServer(r.Context(), name, mcpschema.ServerDisplayName(name, resolved.Refreshed), resolved.Refreshed)
 		if err != nil {
 			writeMCPServerError(w, err)
 			return

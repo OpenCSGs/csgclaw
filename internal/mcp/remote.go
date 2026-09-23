@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"csgclaw/internal/mcpschema"
 )
 
 const (
@@ -49,6 +51,7 @@ type RemoteServerListOptions struct {
 
 // RemoteServer is an installable MCP server from the configured OpenCSG Hub.
 type RemoteServer struct {
+	HubURL      string
 	Description string
 	Headers     map[string]string
 	ID          string
@@ -82,6 +85,9 @@ func (s RemoteServer) Config() map[string]any {
 	}
 	if description := strings.TrimSpace(s.Description); description != "" {
 		config["description"] = description
+	}
+	if s.ID != "" {
+		config[ManagedMetaKey].(map[string]any)[mcpschema.MarketplaceMetaKey] = map[string]any{"server_id": s.ID, "hub_url": s.HubURL}
 	}
 	return config
 }
@@ -185,6 +191,7 @@ func GetRemoteServer(ctx context.Context, baseURL, accessToken, id string) (Remo
 	if server.ID == "" {
 		server.ID = strings.TrimSpace(id)
 	}
+	server.HubURL = strings.TrimRight(baseURL, "/")
 	return server, nil
 }
 

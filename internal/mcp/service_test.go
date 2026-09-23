@@ -6,10 +6,69 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/localstore"
+	"csgclaw/internal/mcpschema"
 )
+
+func TestInstallRemoteServerProbesStableIDAndPreservesSourceMetadata(t *testing.T) {
+	probed := make(chan string, 2)
+	svc := NewService(WithServerStore(&memoryServerStore{}), WithServerProber(availabilityTestProber{
+		probe: func(_ context.Context, id string, _ map[string]any) (ProbeResult, error) {
+			probed <- id
+			return ProbeResult{Connected: true}, nil
+		},
+	}))
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	id, err := svc.InstallRemoteServer(ctx, RemoteServer{ID: "42", HubURL: "https://hub.example", Name: "必应 搜索", URL: "https://mcp.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-probed:
+		if got != id {
+			t.Fatalf("probe key = %q, want persisted ID %q", got, id)
+		}
+	case <-ctx.Done():
+		t.Fatal("installation did not start an availability probe")
+	}
+	servers, err := svc.ListAvailableServers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := servers[id].(map[string]any)
+	if !ok {
+		t.Fatal("healthy installation was omitted from the catalog")
+	}
+	resourceID, sourceName, managed := RemoteHubServerMetadata(entry)
+	if !managed || resourceID != "42" || sourceName != "必应 搜索" {
+		t.Fatal("availability source metadata lost")
+	}
+	if source := marketplaceSource(entry); source["server_id"] != "42" || source["hub_url"] != "https://hub.example" {
+		t.Fatal("reinstall source identity lost")
+	}
+	if _, err = svc.UpdateServer(ctx, id, "改名后的搜索", entry); err != nil {
+		t.Fatal(err)
+	}
+	servers, err = svc.ListAvailableServers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mcpschema.ServerDisplayName(id, servers[id]) != "改名后的搜索" {
+		t.Fatal("renamed installation lost identity or availability")
+	}
+	select {
+	case got := <-probed:
+		if got != id {
+			t.Fatalf("renamed probe key = %q, want %q", got, id)
+		}
+	case <-ctx.Done():
+		t.Fatal("renamed installation was not checked")
+	}
+}
 
 func TestServiceUsesInjectedServerStore(t *testing.T) {
 	store := &memoryServerStore{
@@ -35,6 +94,69 @@ func TestServiceUsesInjectedServerStore(t *testing.T) {
 	}
 	if _, ok := store.servers["github"]; !ok {
 		t.Fatalf("store missing created server: %#v", store.servers)
+	}
+}
+
+func TestRenameAndReinstallPreserveIdentity(t *testing.T) {
+	store := &memoryServerStore{}
+	svc := NewService(WithServerStore(store))
+	ctx := context.Background()
+	remote := RemoteServer{ID: "42", HubURL: "https://hub.example", Name: "必应 搜索", URL: "https://mcp.example/one"}
+	id, err := svc.InstallRemoteServer(ctx, remote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mcpschema.ValidServerID(id) {
+		t.Fatal("invalid runtime ID")
+	}
+	config := cloneMap(store.servers[id].(map[string]any))
+	if _, err = svc.UpdateServer(ctx, id, "自定义中文 名称", config); err != nil {
+		t.Fatal(err)
+	}
+	remote.Name = "市场也改名了"
+	remote.URL = "https://mcp.example/two"
+	again, err := svc.InstallRemoteServer(ctx, remote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != id || len(store.servers) != 1 {
+		t.Fatal("reinstall created another identity")
+	}
+	if got := mcpschema.ServerDisplayName(id, store.servers[id]); got != "自定义中文 名称" {
+		t.Fatalf("rename lost: %s", got)
+	}
+	if store.servers[id].(map[string]any)["url"] != remote.URL {
+		t.Fatal("reinstall did not refresh config")
+	}
+	remote.ID = "43"
+	other, err := svc.InstallRemoteServer(ctx, remote)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other == id || len(store.servers) != 2 {
+		t.Fatal("distinct marketplace source replaced an installation")
+	}
+}
+
+func TestRenameDoesNotAllowReusingOccupiedID(t *testing.T) {
+	store := &memoryServerStore{}
+	svc := NewService(WithServerStore(store))
+	ctx := context.Background()
+	config := map[string]any{"url": "https://mcp.example"}
+	if _, err := svc.CreateServer(ctx, "alpha", config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.UpdateServer(ctx, "alpha", "beta", config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CreateServer(ctx, "alpha", config); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.servers) != 2 || mcpschema.ServerDisplayName("alpha", store.servers["alpha"]) != "beta" {
+		t.Fatal("new display name overwrote occupied ID")
+	}
+	if _, err := svc.UpdateServer(ctx, "alpha", "alpha", config); !errors.Is(err, ErrServerExists) {
+		t.Fatalf("duplicate display name accepted: %v", err)
 	}
 }
 
@@ -123,21 +245,21 @@ func TestServiceCRUDAndErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListServers() error = %v", err)
 	}
-	if _, exists := listed["alpha"]; exists {
-		t.Fatalf("ListServers() retained renamed server: %#v", listed)
+	if entry, exists := listed["alpha"].(map[string]any); !exists || entry["display_name"] != "beta" {
+		t.Fatalf("rename lost fixed ID: %#v", listed)
 	}
-	if _, exists := listed["beta"]; !exists {
-		t.Fatalf("ListServers() missing renamed server: %#v", listed)
+	if _, exists := listed["beta"]; exists {
+		t.Fatal("rename created a new identity")
 	}
-	if _, err := svc.DeleteServer(ctx, "beta"); err != nil {
+	if _, err := svc.DeleteServer(ctx, "alpha"); err != nil {
 		t.Fatalf("DeleteServer(beta) error = %v", err)
 	}
-	if _, err := svc.DeleteServer(ctx, "beta"); !errors.Is(err, ErrServerNotFound) {
+	if _, err := svc.DeleteServer(ctx, "alpha"); !errors.Is(err, ErrServerNotFound) {
 		t.Fatalf("DeleteServer(beta) error = %v, want ErrServerNotFound", err)
 	}
 }
 
-func TestCreateServerRequiresManagedKnowledgeBaseContentIDName(t *testing.T) {
+func TestCreateServerUsesManagedKnowledgeBaseMetadataIdentity(t *testing.T) {
 	store := &memoryServerStore{}
 	svc := NewService(WithServerStore(store))
 	config := map[string]any{
@@ -152,11 +274,11 @@ func TestCreateServerRequiresManagedKnowledgeBaseContentIDName(t *testing.T) {
 			},
 		},
 	}
-	if _, err := svc.CreateServer(context.Background(), "knowledge-one", config); err == nil {
-		t.Fatal("CreateServer(alias) error = nil")
+	if _, err := svc.CreateServer(context.Background(), "knowledge-one", config); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := svc.CreateServer(context.Background(), "content-42", config); err != nil {
-		t.Fatalf("CreateServer(content ID) error = %v", err)
+	if _, err := svc.CreateServer(context.Background(), "content-42", config); !errors.Is(err, ErrServerExists) {
+		t.Fatalf("duplicate source: %v", err)
 	}
 	if _, err := svc.CreateServer(context.Background(), "content-42", config); !errors.Is(err, ErrServerExists) {
 		t.Fatalf("CreateServer(duplicate) error = %v, want ErrServerExists", err)
@@ -252,4 +374,22 @@ func (s *memoryServerStore) ReadServers(context.Context) (map[string]any, error)
 func (s *memoryServerStore) WriteServers(_ context.Context, servers map[string]any) error {
 	s.servers = cloneMap(servers)
 	return nil
+}
+
+func TestUpdateServerWithoutNamePreservesDisplayLabel(t *testing.T) {
+	store := &memoryServerStore{servers: map[string]any{"fixed": map[string]any{"display_name": "自定义 名称", "url": "https://old.example"}}}
+	svc := NewService(WithServerStore(store))
+	ctx := context.Background()
+	if _, err := svc.UpdateServer(ctx, "fixed", "", map[string]any{"url": "https://new.example"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := mcpschema.ServerDisplayName("fixed", store.servers["fixed"]); got != "自定义 名称" {
+		t.Fatalf("lost label: %q", got)
+	}
+	if _, err := svc.UpdateServer(ctx, "fixed", "", map[string]any{"url": "https://new.example", "display_name": "又改名了"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := mcpschema.ServerDisplayName("fixed", store.servers["fixed"]); got != "又改名了" {
+		t.Fatalf("config label ignored: %q", got)
+	}
 }

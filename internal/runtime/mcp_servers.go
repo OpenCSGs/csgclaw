@@ -48,5 +48,7 @@ func MCPServersNeedsRestart(previous, current map[string]any) (bool, error) {
 	if previousErr != nil {
 		return true, nil
 	}
+	mcpschema.StripPresentation(previousNormalized)
+	mcpschema.StripPresentation(currentNormalized)
 	return !reflect.DeepEqual(previousNormalized, currentNormalized), nil
 }

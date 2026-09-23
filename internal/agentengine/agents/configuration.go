@@ -449,7 +449,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 			if req.MCPServers == nil {
 				current.MCPServers = nil
 			} else {
-				normalizedMCPServers, err := mcpschema.NormalizeMCPServers(*req.MCPServers)
+				normalizedMCPServers, err := mcpschema.WithServerIdentities(*req.MCPServers)
 				if err != nil {
 					s.mu.Unlock()
 					return Agent{}, err
@@ -970,7 +970,7 @@ func normalizeMCPServers(config map[string]any) (map[string]any, error) {
 	if config == nil {
 		return nil, nil
 	}
-	return mcpschema.NormalizeMCPServers(config)
+	return mcpschema.WithServerIdentities(config)
 }
 
 func (s *Controller) RecreateRecord(ctx context.Context, id string) (Agent, error) {

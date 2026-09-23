@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"csgclaw/internal/knowledgebase"
+	"csgclaw/internal/mcpschema"
 	"csgclaw/internal/opencsgmcp"
 )
 
@@ -20,7 +21,12 @@ func (s *Controller) materializeRuntimeMCPServers(ctx context.Context, runtimeKi
 	if err != nil {
 		return nil, err
 	}
-	return knowledgebase.RuntimeServers(prepared)
+	prepared, err = knowledgebase.RuntimeServers(prepared)
+	if err != nil {
+		return nil, err
+	}
+	mcpschema.StripPresentation(prepared)
+	return prepared, nil
 }
 
 func (s *Controller) mcpProxyBaseURL(runtimeKind string) string {

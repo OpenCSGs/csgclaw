@@ -1410,6 +1410,9 @@ func migrateLocalStore() error {
 	if err := localstore.ReconcileTypedAgentDirs(root); err != nil {
 		return fmt.Errorf("reconcile local store agent dirs: %w", err)
 	}
+	if err := localstore.MigrateMCPIdentities(filepath.Join(root, localstore.RootStateFileName)); err != nil {
+		return fmt.Errorf("migrate MCP identities: %w", err)
+	}
 	return nil
 }
 

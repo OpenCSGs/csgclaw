@@ -64,9 +64,6 @@ func (h *Handler) handleMCPServerByName(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		nextName := strings.TrimSpace(req.Name)
-		if nextName == "" {
-			nextName = name
-		}
 		state, err := h.mcp.UpdateServer(r.Context(), name, nextName, req.Config)
 		if err != nil {
 			writeMCPServerError(w, err)

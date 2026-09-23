@@ -32,6 +32,7 @@ Each server must provide a non-empty `command` or `url`.
 | `startup_timeout_sec` | integer | MCP initialization timeout in seconds. |
 | `tool_timeout_sec` | integer | Per-tool invocation timeout in seconds. |
 | `description` | string | User-facing server description. |
+| `display_name` | string | Editable display label, independent of the fixed MCP map key. |
 | `enabled` | boolean | Whether the server is enabled. |
 | `_meta` | object | CSGClaw-managed source and runtime declarations. |
 
@@ -139,3 +140,37 @@ CSGClaw uses `resource_id` and `content_id` to verify the knowledge-base identit
 - For `opencsg_mcp_gateway`, OpenCSG user tokens are injected only by the runtime proxy and do not enter templates, persisted Agent configuration, or model context.
 - Regular MCP URLs never receive an OpenCSG token. Only recognized managed types enter their corresponding trusted resolution path.
 - The current Gateway trust boundary is the authenticated tool catalog visible to the current user. Do not register unreviewed MCP services in that catalog. Strong isolation between resources behind one Gateway will require the Gateway protocol to expose a verifiable resource/server identity.
+
+## Stable identity and display names
+
+Managed MCP maps use immutable runtime IDs as keys and store the editable label in `display_name`.
+Chinese characters, spaces, and punctuation are supported in display names.
+Legal existing keys are retained; a new name that cannot be a runtime ID, or whose key is already occupied, receives a generated `mcp_` ID.
+Rename `display_name` rather than the map key to preserve runtime identity.
+Catalog PUT and DELETE paths, Agent batch `names`, and file-bridge paths identify servers by their fixed map keys.
+The catalog PUT request's `name` field is the desired display name.
+
+```json
+{
+  "mcpServers": {
+    "mcp_8f53d812e79c4b76ab537915a83250bc": {
+      "display_name": "必应搜索中文",
+      "url": "https://mcp.example.com/mcp",
+      "transport": "streamable-http"
+    }
+  }
+}
+```
+
+Display names and marketplace source metadata are removed before runtime materialization.
+Changing only a display name does not require a runtime restart.
+Agent configurations remain independent snapshots of the catalog; applying the same catalog ID again updates its snapshot without adding a second server.
+Marketplace installations retain their source ID so reinstalling after a local or upstream rename preserves the local ID and display name.
+
+Startup migrates the root catalog and all Agent MCP snapshots together, before loading services.
+The migration preserves legal keys, assigns shared replacement IDs for the same invalid old key, and copies old names into `display_name`.
+It preserves per-Agent connection settings, credentials, unknown fields, and the distinction between absent, null, and empty MCP maps.
+Agents whose runtime keys change are marked as requiring a runtime refresh.
+The migration writes and syncs a temporary file with owner-only permissions, then atomically replaces `state.json` without keeping backup files.
+The temporary file is cleaned up when the operation returns.
+Repeating startup preserves IDs and leaves unchanged data untouched.

@@ -497,6 +497,7 @@ export const messages = {
     resourcesMCPRemoteInstallFailed: "远端 MCP server 安装失败，请稍后重试。",
     resourcesMCPRemoteServersRefresh: "刷新",
     resourcesMCPRemoteServersSearchPlaceholder: "搜索远端 MCP",
+    resourcesMCPIdentityHint: "通过 display_name 修改显示名称，保留 MCP 标识不变。",
     resourcesMCPNameLabel: "名称",
     resourcesMCPNamePlaceholder: "例如 filesystem",
     resourcesMCPServerDocumentJSONLabel: "MCP server JSON",
@@ -1208,7 +1209,7 @@ export const messages = {
     profileModelErrorDetails: "详情",
     profileRuntimeOptions: "运行时选项",
     profileMCPServers: "MCP Servers",
-    profileMCPServersHint: '请输入 MCP server map，例如：{"context7":{...}}。',
+    profileMCPServersHint: "MCP map 的 key 是固定 ID；使用 display_name 设置或修改显示名称。",
     profileMCPServersHubHint:
       "从 Hub 中安装 MCP server；这里展示 runtime 当前 MCP 状态，配置持久化在 Agent mcpServers。",
     profileMCPServersPlaceholder: '{\n  "context7": {}\n}',
@@ -2376,6 +2377,7 @@ export const messages = {
     resourcesMCPRemoteInstallFailed: "Failed to install the remote MCP server. Please try again later.",
     resourcesMCPRemoteServersRefresh: "Refresh",
     resourcesMCPRemoteServersSearchPlaceholder: "Search remote MCP servers",
+    resourcesMCPIdentityHint: "Rename display_name while keeping the MCP identifier unchanged.",
     resourcesMCPNameLabel: "Name",
     resourcesMCPNamePlaceholder: "For example filesystem",
     resourcesMCPServerDocumentJSONLabel: "MCP server JSON",
@@ -3112,7 +3114,7 @@ export const messages = {
     profileModelErrorDetails: "Details",
     profileRuntimeOptions: "Runtime Options",
     profileMCPServers: "MCP Servers",
-    profileMCPServersHint: 'Enter an MCP server map, for example: {"context7": {...}}.',
+    profileMCPServersHint: "MCP map keys are fixed IDs. Set or rename the display label with display_name.",
     profileMCPServersHubHint:
       "Install MCP servers from Hub. This view shows the runtime MCP state, persisted through agent mcpServers.",
     profileMCPServersPlaceholder: '{\n  "context7": {}\n}',

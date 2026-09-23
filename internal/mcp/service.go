@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"csgclaw/internal/knowledgebase"
+	"csgclaw/internal/mcpschema"
 )
 
 var (
@@ -72,7 +73,7 @@ func (s *Service) CreateServer(ctx context.Context, name string, config map[stri
 		return nil, err
 	}
 	return s.updateServers(ctx, func(servers map[string]any) error {
-		if _, exists := servers[name]; exists {
+		if findDisplayName(servers, name) != "" {
 			return fmt.Errorf("%w: %s", ErrServerExists, name)
 		}
 		if metadata, ok := knowledgebase.ManagedMetadataFromServer(config); ok {
@@ -80,25 +81,47 @@ func (s *Service) CreateServer(ctx context.Context, name string, config map[stri
 				return fmt.Errorf("%w: %s", ErrServerExists, existing)
 			}
 		}
-		servers[name] = config
+		id := mcpschema.NewServerID(name, func(id string) bool { _, exists := servers[id]; return exists })
+		config[mcpschema.DisplayNameKey] = name
+		servers[id] = config
 		return nil
 	})
 }
 
-// InstallRemoteServer writes a Hub-resolved server into the local catalog.
-// Remote discovery and authentication stay outside this service, while the
-// server configuration follows the same schema validation and persistence
-// path as locally authored catalog entries.
-//
-// Reinstalling replaces a same-named catalog entry. This is intentional: the
-// Hub UI explicitly presents that operation as a replacement.
+// InstallRemoteServer retains the local identity and display name on reinstall.
+// Marketplace identity, when available, survives upstream and local renames.
 func (s *Service) InstallRemoteServer(ctx context.Context, server RemoteServer) (string, error) {
 	name, config, err := normalizeServerInput(server.Name, server.Config())
 	if err != nil {
 		return "", err
 	}
+	var id string
 	_, err = s.updateServers(ctx, func(servers map[string]any) error {
-		servers[name] = config
+		if server.ID != "" {
+			for key, raw := range servers {
+				if entry, ok := raw.(map[string]any); ok && sameMarketplaceSource(entry, config) {
+					id = key
+					break
+				}
+			}
+		}
+		if id == "" {
+			candidate := findDisplayName(servers, name)
+			if entry, ok := servers[candidate].(map[string]any); ok {
+				// Old installations have no source ID; only those may be adopted by name.
+				if marketplaceSource(entry) == nil {
+					id = candidate
+				}
+			}
+		}
+		label := name
+		if id != "" {
+			label = mcpschema.ServerDisplayName(id, servers[id])
+		} else {
+			id = mcpschema.NewServerID(name, func(id string) bool { _, exists := servers[id]; return exists })
+		}
+		config[mcpschema.DisplayNameKey] = label
+		servers[id] = config
 		return nil
 	})
 	if err != nil {
@@ -107,14 +130,15 @@ func (s *Service) InstallRemoteServer(ctx context.Context, server RemoteServer) 
 	s.initAvailability()
 	hash, hashErr := availabilityConfigHash(config)
 	if hashErr == nil {
-		s.startAvailabilityProbe(name, config, hash)
+		s.startAvailabilityProbe(id, config, hash)
 	}
-	return name, nil
+	return id, nil
 }
 
 func (s *Service) UpdateServer(ctx context.Context, currentName, nextName string, config map[string]any) (map[string]any, error) {
 	currentName = strings.TrimSpace(currentName)
-	nextName, config, err := normalizeServerInput(nextName, config)
+	nextName = strings.TrimSpace(nextName)
+	_, config, err := normalizeServerInput(currentName, config)
 	if err != nil {
 		return nil, err
 	}
@@ -125,18 +149,19 @@ func (s *Service) UpdateServer(ctx context.Context, currentName, nextName string
 		if _, exists := servers[currentName]; !exists {
 			return fmt.Errorf("%w: %s", ErrServerNotFound, currentName)
 		}
+		if nextName == "" {
+			nextName = mcpschema.ServerDisplayName(mcpschema.ServerDisplayName(currentName, servers[currentName]), config)
+		}
 		if metadata, ok := knowledgebase.ManagedMetadataFromServer(config); ok {
 			if existing := knowledgebase.FindConfiguredServer(servers, metadata.ContentID); existing != "" && existing != currentName {
 				return fmt.Errorf("%w: %s", ErrServerExists, existing)
 			}
 		}
-		if nextName != currentName {
-			if _, exists := servers[nextName]; exists {
-				return fmt.Errorf("%w: %s", ErrServerExists, nextName)
-			}
-			delete(servers, currentName)
+		if existing := findDisplayName(servers, nextName); existing != "" && existing != currentName {
+			return fmt.Errorf("%w: %s", ErrServerExists, nextName)
 		}
-		servers[nextName] = config
+		config[mcpschema.DisplayNameKey] = nextName
+		servers[currentName] = config
 		return nil
 	})
 }
@@ -181,4 +206,24 @@ func (s *Service) serverStore() ServerStore {
 		return defaultServerStore()
 	}
 	return s.store
+}
+
+func findDisplayName(servers map[string]any, name string) string {
+	for id, raw := range servers {
+		if mcpschema.ServerDisplayName(id, raw) == name {
+			return id
+		}
+	}
+	return ""
+}
+
+func marketplaceSource(config map[string]any) map[string]any {
+	meta, _ := config["_meta"].(map[string]any)
+	source, _ := meta[mcpschema.MarketplaceMetaKey].(map[string]any)
+	return source
+}
+
+func sameMarketplaceSource(a, b map[string]any) bool {
+	left, right := marketplaceSource(a), marketplaceSource(b)
+	return left != nil && right != nil && left["server_id"] == right["server_id"] && left["hub_url"] == right["hub_url"]
 }

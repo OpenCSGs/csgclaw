@@ -34,6 +34,7 @@ import {
 } from "@/models/hubWorkspace";
 import {
   formatMCPServerDocument,
+  mcpServerDisplayName,
   mcpManagedKnowledgeBaseSource,
   mcpServerDescription,
   mcpServerPayloadFromDocument,
@@ -327,11 +328,16 @@ function mcpMatchesQuery(server: MCPServer, query: string): boolean {
   if (!normalizedQuery) {
     return true;
   }
-  return [server.name, server.description, mcpServerDescription(server.config), JSON.stringify(server.config)].some(
-    (value) =>
-      String(value || "")
-        .toLocaleLowerCase()
-        .includes(normalizedQuery),
+  return [
+    mcpServerDisplayName(server),
+    server.name,
+    server.description,
+    mcpServerDescription(server.config),
+    JSON.stringify(server.config),
+  ].some((value) =>
+    String(value || "")
+      .toLocaleLowerCase()
+      .includes(normalizedQuery),
   );
 }
 
@@ -2258,7 +2264,9 @@ export function HubDetailPane({
                             <Server size={18} strokeWidth={1.8} />
                           </span>
                           <div className={moduleClassNames("hub-template-mcp-copy")}>
-                            <div className={moduleClassNames("hub-template-mcp-name")}>{server.name}</div>
+                            <div className={moduleClassNames("hub-template-mcp-name")}>
+                              {mcpServerDisplayName(server)}
+                            </div>
                             <p>{server.description || mcpServerDescription(server.config) || "-"}</p>
                           </div>
                         </article>
@@ -2506,9 +2514,13 @@ export function HubDetailPane({
                             <SidebarMcpIcon size={16} aria-hidden="true" />
                           </ResourceFeaturedIcon>
                           <span className={moduleClassNames("hub-skill-card-copy")}>
-                            <span className={moduleClassNames("hub-skill-card-title")}>{server.name}</span>
+                            <span className={moduleClassNames("hub-skill-card-title")}>
+                              {mcpServerDisplayName(server)}
+                            </span>
                             <span className={moduleClassNames("hub-skill-card-description")}>
-                              {server.description || mcpServerDescription(server.config) || server.name}
+                              {server.description ||
+                                mcpServerDescription(server.config) ||
+                                mcpServerDisplayName(server)}
                             </span>
                           </span>
                           <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
@@ -2548,7 +2560,7 @@ export function HubDetailPane({
                         <span className={moduleClassNames("hub-inspector-title-icon")} aria-hidden="true">
                           <Server size={18} strokeWidth={2} />
                         </span>
-                        <h2>{selectedMCPServer.name}</h2>
+                        <h2>{mcpServerDisplayName(selectedMCPServer)}</h2>
                         {selectedManagedMCPSource ? (
                           <span className={moduleClassNames("mini-badge mcp-knowledge-badge")}>
                             {t("resourcesKnowledgeMCPBadge")}
@@ -2558,7 +2570,7 @@ export function HubDetailPane({
                       <p>
                         {selectedMCPServer.description ||
                           mcpServerDescription(selectedMCPServer.config) ||
-                          selectedMCPServer.name}
+                          mcpServerDisplayName(selectedMCPServer)}
                       </p>
                     </div>
                   </div>
@@ -3035,7 +3047,9 @@ export function HubDetailPane({
                               <Server size={18} strokeWidth={1.8} />
                             </span>
                             <div className={moduleClassNames("hub-template-mcp-copy")}>
-                              <div className={moduleClassNames("hub-template-mcp-name")}>{server.name}</div>
+                              <div className={moduleClassNames("hub-template-mcp-name")}>
+                                {mcpServerDisplayName(server)}
+                              </div>
                               <p>{server.description || mcpServerDescription(server.config) || "-"}</p>
                             </div>
                           </article>
@@ -3211,11 +3225,11 @@ export function HubDetailPane({
             <>
               <DialogHeader>
                 <div>
-                  <DialogTitle>{selectedMCPServer.name}</DialogTitle>
+                  <DialogTitle>{mcpServerDisplayName(selectedMCPServer)}</DialogTitle>
                   <DialogDescription>
                     {selectedMCPServer.description ||
                       mcpServerDescription(selectedMCPServer.config) ||
-                      selectedMCPServer.name}
+                      mcpServerDisplayName(selectedMCPServer)}
                   </DialogDescription>
                 </div>
                 <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
@@ -3289,6 +3303,7 @@ export function HubDetailPane({
                   </div>
                 ) : null}
                 <div className={moduleClassNames("hub-workspace-block mcp-server-document-block")}>
+                  <p className="field-hint">{t("resourcesMCPIdentityHint")}</p>
                   <JSONConfigEditor
                     label={t("resourcesMCPServerDocumentLabel")}
                     value={mcpDetailDocument}
@@ -3679,7 +3694,9 @@ export function HubDetailPane({
             <div className={moduleClassNames("hub-skill-delete-dialog-copy")}>
               <DialogTitle>{t("resourcesMCPDelete")}</DialogTitle>
               <DialogDescription>
-                {t("resourcesMCPDeleteConfirmMessage", { name: selectedMCPServer?.name || "" })}
+                {t("resourcesMCPDeleteConfirmMessage", {
+                  name: selectedMCPServer ? mcpServerDisplayName(selectedMCPServer) : "",
+                })}
               </DialogDescription>
             </div>
             <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" />

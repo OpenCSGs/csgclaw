@@ -2529,8 +2529,9 @@ func TestUpdateMCPServersDoesNotLiveReconcileUnchangedOpenClawConfig(t *testing.
 	}
 	currentMCPServers := map[string]any{
 		"context7": map[string]any{
-			"command": "uvx",
-			"args":    []any{"context7-mcp"},
+			"command":      "uvx",
+			"display_name": "context7",
+			"args":         []any{"context7-mcp"},
 		},
 	}
 	svc.agents["u-alice"] = Agent{

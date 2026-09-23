@@ -52,6 +52,9 @@ func normalizeMCPServerEntry(name string, entry map[string]any) (map[string]any,
 	if !ok {
 		return nil, fmt.Errorf("%s.%s must be an object", MCPServersKey, name)
 	}
+	if err := validateDisplayName(normalized); err != nil {
+		return nil, fmt.Errorf("%s.%s: %w", MCPServersKey, name, err)
+	}
 	command, hasCommand, err := mcpStringField(normalized, "command")
 	if err != nil {
 		return nil, fmt.Errorf("%s.%s.command %s", MCPServersKey, name, err)

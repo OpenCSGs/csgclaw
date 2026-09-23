@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   formatMCPServerDocument,
   hasMCPServerName,
+  mcpServerDisplayName,
+  isRemoteMCPInstalled,
   managedMCPServerSnapshotDiffers,
   mcpManagedKnowledgeBaseSource,
   mcpProbeResultFromResponse,
@@ -190,5 +192,28 @@ describe("MCP catalog helpers", () => {
         url: "https://current.example.test/mcp",
       }),
     ).toBe(false);
+  });
+});
+
+describe("MCP identities", () => {
+  it("keeps keys for actions and uses Unicode display names in the UI and rename payload", () => {
+    const [server] = mcpServersFromMap({ mcp_fixed: { display_name: "必应 搜索", url: "https://example.test" } });
+    expect(server.name).toBe("mcp_fixed");
+    expect(mcpServerDisplayName(server)).toBe("必应 搜索");
+    const document = JSON.parse(formatMCPServerDocument(server.name, server.config));
+    document.mcpServers.mcp_fixed.display_name = "改名之后";
+    expect(mcpServerPayloadFromDocument(document)?.name).toBe("改名之后");
+    expect(Object.keys(document.mcpServers)).toEqual(["mcp_fixed"]);
+  });
+  it("recognizes a renamed marketplace installation by its source ID", () => {
+    const servers = mcpServersFromMap({
+      mcp_fixed: {
+        display_name: "自定义名称",
+        url: "https://example.test",
+        _meta: { "com.opencsg/marketplace": { server_id: "42", hub_url: "https://hub.test" } },
+      },
+    });
+    expect(isRemoteMCPInstalled(servers, { id: "42", name: "市场新名字" })).toBe(true);
+    expect(isRemoteMCPInstalled(servers, { id: "43", name: "自定义名称" })).toBe(false);
   });
 });

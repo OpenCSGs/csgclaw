@@ -2,7 +2,7 @@ import { useCallback, useEffect } from "react";
 import type { UIEvent } from "react";
 import { CloudDownload, RefreshCw, Server } from "lucide-react";
 import { Button, TextInput } from "@/components/ui";
-import { hasMCPServerName } from "@/models/mcp";
+import { isRemoteMCPInstalled } from "@/models/mcp";
 import type { MCPServer, RemoteMCPServer } from "@/models/mcp";
 import type { TranslateFn } from "@/models/conversations";
 import { classNames } from "@/shared/lib/classNames";
@@ -84,7 +84,7 @@ export function RemoteMCPList({
         <div className={styles.list} onScroll={handleScroll}>
           {items.map((item) => {
             const installKey = item.id || item.name;
-            const installed = hasMCPServerName(installedServers, item.name);
+            const installed = isRemoteMCPInstalled(installedServers, item);
             const description = item.description || item.url || item.name;
             const metadata = [item.protocol, item.url].filter(Boolean).join(" · ");
             return (
