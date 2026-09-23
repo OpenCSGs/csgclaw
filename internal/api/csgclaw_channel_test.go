@@ -179,15 +179,18 @@ func TestHandleCsgclawMessageMultipartAttachmentAndDownload(t *testing.T) {
 		t.Fatalf("unsafe filename status = %d, body=%q, want 400 unsafe filename", rec.Code, rec.Body.String())
 	}
 
-	oversized := bytes.Repeat([]byte("x"), im.MaxAttachmentFileBytes+1)
-	body, contentType = multipartMessageBodyForTest(t, map[string]any{
-		"room_id":   room.ID,
-		"sender_id": "user-admin",
-		"content":   "",
-	}, "files", "large.bin", "application/octet-stream", oversized)
+	oversized, err := os.CreateTemp(t.TempDir(), "oversized-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer oversized.Close()
+	if err := oversized.Truncate(im.MaxAttachmentFileBytes + 1); err != nil {
+		t.Fatal(err)
+	}
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/channels/csgclaw/messages", body)
-	req.Header.Set("Content-Type", contentType)
+	req = streamedAttachmentRequest(t, "/api/v1/channels/csgclaw/messages", map[string]any{
+		"room_id": room.ID, "sender_id": "user-admin", "content": "",
+	}, oversized, im.MaxAttachmentFileBytes+1)
 	srv.Routes().ServeHTTP(rec, req)
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("oversized attachment status = %d, body=%q, want %d", rec.Code, rec.Body.String(), http.StatusRequestEntityTooLarge)

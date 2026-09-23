@@ -48,7 +48,6 @@ func decodeMessagePayload(w http.ResponseWriter, r *http.Request, dst any) ([]im
 	if err := r.ParseMultipartForm(multipartAttachmentMemory); err != nil {
 		return nil, fmt.Errorf("decode multipart request: %w", err)
 	}
-	defer r.MultipartForm.RemoveAll()
 	payload := strings.TrimSpace(r.FormValue("payload"))
 	if payload == "" {
 		return nil, fmt.Errorf("payload is required")
@@ -89,18 +88,18 @@ func readMultipartAttachmentUploads(form *multipart.Form) ([]im.MessageAttachmen
 		if err != nil {
 			return nil, err
 		}
-		data, err := readMultipartAttachment(header)
-		if err != nil {
-			return nil, err
+		if header.Size > im.MaxAttachmentFileBytes {
+			return nil, fmt.Errorf("%w: attachment %q exceeds %d bytes", errAttachmentPayloadTooLarge, header.Filename, im.MaxAttachmentFileBytes)
 		}
-		total += int64(len(data))
+		total += header.Size
 		if total > im.MaxAttachmentMessageBytes {
 			return nil, fmt.Errorf("%w: attachments exceed %d bytes per message", errAttachmentPayloadTooLarge, im.MaxAttachmentMessageBytes)
 		}
 		uploads = append(uploads, im.MessageAttachmentUpload{
 			Name:      name,
 			MediaType: header.Header.Get("Content-Type"),
-			Data:      data,
+			SizeBytes: header.Size,
+			Open:      func() (io.ReadCloser, error) { return header.Open() },
 		})
 	}
 	return uploads, nil
@@ -120,23 +119,11 @@ func multipartOriginalFilename(header *multipart.FileHeader) (string, error) {
 	return header.Filename, nil
 }
 
-func readMultipartAttachment(header *multipart.FileHeader) ([]byte, error) {
-	if header == nil {
-		return nil, fmt.Errorf("attachment is missing")
+// Multipart files must remain available until message persistence has consumed them.
+func cleanupMessagePayload(r *http.Request) {
+	if r.MultipartForm != nil {
+		_ = r.MultipartForm.RemoveAll()
 	}
-	file, err := header.Open()
-	if err != nil {
-		return nil, fmt.Errorf("open attachment %q: %w", header.Filename, err)
-	}
-	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, im.MaxAttachmentFileBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read attachment %q: %w", header.Filename, err)
-	}
-	if len(data) > im.MaxAttachmentFileBytes {
-		return nil, fmt.Errorf("%w: attachment %q exceeds %d bytes", errAttachmentPayloadTooLarge, header.Filename, im.MaxAttachmentFileBytes)
-	}
-	return data, nil
 }
 
 func writeMessagePayloadError(w http.ResponseWriter, err error) {

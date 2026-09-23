@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
-import { DocumentPreviewPanel, MAX_TEXT_PREVIEW_BYTES } from "@/components/business/DocumentPreviewPanel";
+import { DocumentPreviewPanel } from "@/components/business/DocumentPreviewPanel";
 import type { AttachmentPreviewItem } from "@/models/attachments";
 
 const pdfMock = vi.hoisted(() => ({ pageCount: 1 }));
@@ -446,8 +446,37 @@ describe("DocumentPreviewPanel", () => {
     expect(screen.queryByText("Only the first 32 MiB is shown")).not.toBeInTheDocument();
   });
 
-  it("bounds large text previews and keeps the complete file downloadable", async () => {
-    const fullText = `${"x".repeat(MAX_TEXT_PREVIEW_BYTES + 32)}TAIL`;
+  it.each([
+    ["video/mp4", "movie.mp4", "video"],
+    ["audio/mpeg", "sound.mp3", "audio"],
+  ])("streams %s previews directly without buffering the download", async (mediaType, name, tag) => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { container } = render(
+      <DocumentPreviewPanel
+        index={0}
+        items={[
+          {
+            id: "large-media",
+            name,
+            mediaType,
+            sizeBytes: 291 * 1024 * 1024,
+            previewURL: "/api/media?inline=1",
+            downloadURL: "/api/media",
+          },
+        ]}
+        t={t}
+        onClose={vi.fn()}
+        onIndexChange={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector(tag)).toHaveAttribute("src", "/api/media?inline=1"));
+    expect(container.querySelector(tag)).toHaveAttribute("controls");
+    expect(container.querySelector(tag)).toHaveAttribute("preload", "metadata");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("shows large text previews in full and keeps the complete file downloadable", async () => {
+    const fullText = `${"x".repeat(32 * 1024 * 1024 + 32)}TAIL`;
     const { container } = render(
       <DocumentPreviewPanel
         index={0}
@@ -466,10 +495,12 @@ describe("DocumentPreviewPanel", () => {
       />,
     );
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Only the first 32 MiB is shown");
+    await waitFor(() =>
+      expect(container.querySelector(".document-preview-text")?.textContent).toHaveLength(fullText.length),
+    );
     const preview = container.querySelector(".document-preview-text");
-    expect(preview?.textContent).toHaveLength(MAX_TEXT_PREVIEW_BYTES);
-    expect(preview).not.toHaveTextContent("TAIL");
+    expect(preview?.textContent).toHaveLength(fullText.length);
+    expect(preview?.textContent?.endsWith("TAIL")).toBe(true);
     expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("download", "large.txt");
   });
 

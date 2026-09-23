@@ -7,6 +7,10 @@ import {
 
 describe("document preview helpers", () => {
   it.each([
+    ["video/mp4", "file.bin", "video"],
+    ["application/octet-stream", "movie.mp4", "video"],
+    ["audio/mpeg", "file.bin", "audio"],
+    ["application/octet-stream", "sound.mp3", "audio"],
     ["application/pdf", "file.bin", "pdf"],
     ["text/html", "file.bin", "html"],
     ["application/xhtml+xml", "file.bin", "html"],

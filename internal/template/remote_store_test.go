@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"csgclaw/internal/config"
-	"csgclaw/internal/utils/filebrowse"
 )
 
 const remoteTestManifest = `name = "gitlab-assistant"
@@ -616,7 +615,7 @@ func TestRemoteStoreLargeFilePreview(t *testing.T) {
 		case "/api/v1/codes/Agentic/large-preview/blob/instructions/AGENTS.md":
 			writeRemoteBlob(t, w, "instructions/AGENTS.md", content)
 		case "/api/v1/codes/Agentic/large-preview/blob/instructions/LARGE.md":
-			writeRemoteBlob(t, w, "instructions/LARGE.md", bytes.Repeat([]byte("x"), filebrowse.FilePreviewMaxBytes+1))
+			writeRemoteBlob(t, w, "instructions/LARGE.md", bytes.Repeat([]byte("x"), (32*1024*1024)+1))
 		default:
 			http.NotFound(w, r)
 		}
@@ -634,25 +633,28 @@ func TestRemoteStoreLargeFilePreview(t *testing.T) {
 		}
 	})
 
-	t.Run("truncated preview retains original size", func(t *testing.T) {
+	t.Run("large preview returns complete content", func(t *testing.T) {
 		store := NewRemoteStore(srv.URL, "")
 		file, err := store.ReadWorkspaceFile(context.Background(), "large-preview", "instructions/LARGE.md")
 		if err != nil {
 			t.Fatal(err)
 		}
-		if file.Size != int64(filebrowse.FilePreviewMaxBytes+1) || !file.Truncated || file.Binary || len(file.Content) != filebrowse.FilePreviewMaxBytes || strings.Trim(file.Content, "x") != "" {
-			t.Fatalf("size=%d, truncated=%t, binary=%t, preview bytes=%d, want full size and 32 MiB text preview", file.Size, file.Truncated, file.Binary, len(file.Content))
+		if file.Size != int64((32*1024*1024)+1) || file.Truncated || file.Binary || len(file.Content) != (32*1024*1024)+1 || strings.Trim(file.Content, "x") != "" {
+			t.Fatalf("size=%d, truncated=%t, binary=%t, preview bytes=%d, want complete preview", file.Size, file.Truncated, file.Binary, len(file.Content))
 		}
 	})
 
-	t.Run("decoded size limit remains enforced", func(t *testing.T) {
+	t.Run("preview ignores installation size limit", func(t *testing.T) {
 		store := NewRemoteStore(srv.URL, "")
 		store.maxWorkspace = int64(len(content) - 1)
-		_, err := store.ReadWorkspaceFile(context.Background(), "large-preview", "instructions/AGENTS.md")
-		want := fmt.Sprintf("remote hub blob %q exceeds %d bytes", "instructions/AGENTS.md", store.maxWorkspace)
-		if err == nil || err.Error() != want {
-			t.Fatalf("ReadWorkspaceFile() error=%v, want %q", err, want)
+		file, err := store.ReadWorkspaceFile(context.Background(), "large-preview", "instructions/AGENTS.md")
+		if err != nil || file.Content != string(content) {
+			t.Fatalf("preview size=%d, error=%v", len(file.Content), err)
 		}
+		if _, err := store.fetchBlob(context.Background(), "Agentic/large-preview", "instructions/AGENTS.md", "main"); err == nil {
+			t.Fatal("installation must still enforce its size limit")
+		}
+
 	})
 }
 

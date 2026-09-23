@@ -22,7 +22,6 @@ import (
 	"unicode/utf8"
 
 	"csgclaw/internal/apitypes"
-	"csgclaw/internal/utils/filebrowse"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -614,39 +613,21 @@ func (s *RemoteStore) ReadWorkspaceFile(
 	if err != nil {
 		return apitypes.WorkspaceFile{}, err
 	}
-	data, err := s.fetchBlob(ctx, id, cleanPath, branch)
+	data, err := s.fetchBlobWithLimit(ctx, id, cleanPath, branch, 0)
 	if errors.Is(err, ErrTemplateNotFound) {
 		if legacyPath := legacyRemoteWorkspacePath(cleanPath); legacyPath != "" {
-			data, err = s.fetchBlob(ctx, id, legacyPath, branch)
+			data, err = s.fetchBlobWithLimit(ctx, id, legacyPath, branch, 0)
 		}
 	}
 	if err != nil {
 		return apitypes.WorkspaceFile{}, err
 	}
 	file := apitypes.WorkspaceFile{Path: cleanPath, Size: int64(len(data))}
-	preview := data
-	if len(preview) > filebrowse.FilePreviewMaxBytes {
-		preview = preview[:filebrowse.FilePreviewMaxBytes]
-		file.Truncated = true
-		validPreview := false
-		for trim := 0; trim < utf8.UTFMax && trim < len(preview); trim++ {
-			candidate := preview[:len(preview)-trim]
-			if utf8.Valid(candidate) {
-				preview = candidate
-				validPreview = true
-				break
-			}
-		}
-		if !validPreview {
-			file.Binary = true
-			return file, nil
-		}
-	}
-	if !utf8.Valid(preview) {
+	if !utf8.Valid(data) {
 		file.Binary = true
 		return file, nil
 	}
-	file.Content = string(preview)
+	file.Content = string(data)
 	return file, nil
 }
 
@@ -741,9 +722,16 @@ func (s *RemoteStore) fetchWorkspaceTree(
 }
 
 func (s *RemoteStore) fetchBlob(ctx context.Context, id, filePath, branch string) ([]byte, error) {
+	return s.fetchBlobWithLimit(ctx, id, filePath, branch, s.maxWorkspace)
+}
+
+func (s *RemoteStore) fetchBlobWithLimit(ctx context.Context, id, filePath, branch string, maxBytes int64) ([]byte, error) {
 	var payload remoteBlobResponse
 	// Blob responses include base64 file content in addition to ordinary JSON metadata.
-	maxBlobJSON := int64(base64.StdEncoding.EncodedLen(int(s.maxWorkspace))) + s.maxJSON
+	var maxBlobJSON int64
+	if maxBytes > 0 {
+		maxBlobJSON = int64(base64.StdEncoding.EncodedLen(int(maxBytes))) + s.maxJSON
+	}
 	if err := s.getJSONWithLimit(ctx, s.blobURL(id, filePath, branch), &payload, maxBlobJSON); err != nil {
 		return nil, err
 	}
@@ -751,8 +739,8 @@ func (s *RemoteStore) fetchBlob(ctx context.Context, id, filePath, branch string
 	if err != nil {
 		return nil, fmt.Errorf("decode remote hub blob %q: %w", filePath, err)
 	}
-	if int64(len(data)) > s.maxWorkspace {
-		return nil, fmt.Errorf("remote hub blob %q exceeds %d bytes", filePath, s.maxWorkspace)
+	if maxBytes > 0 && int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("remote hub blob %q exceeds %d bytes", filePath, maxBytes)
 	}
 	return data, nil
 }
@@ -875,11 +863,15 @@ func (s *RemoteStore) getJSON(ctx context.Context, endpoint string, out any) err
 }
 
 func (s *RemoteStore) getJSONWithLimit(ctx context.Context, endpoint string, out any, maxBytes int64) error {
-	body, status, err := s.request(ctx, http.MethodGet, endpoint, maxBytes+1)
+	var readLimit int64
+	if maxBytes > 0 {
+		readLimit = maxBytes + 1
+	}
+	body, status, err := s.request(ctx, http.MethodGet, endpoint, readLimit)
 	if err != nil {
 		return err
 	}
-	if int64(len(body)) > maxBytes {
+	if maxBytes > 0 && int64(len(body)) > maxBytes {
 		return fmt.Errorf("remote hub response exceeds %d bytes", maxBytes)
 	}
 	if status == http.StatusNotFound {

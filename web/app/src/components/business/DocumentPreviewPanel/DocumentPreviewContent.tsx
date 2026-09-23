@@ -45,6 +45,12 @@ export function DocumentPreviewContent({
   );
   const loading = <div className="document-preview-status">{t("attachmentPreviewLoading")}</div>;
 
+  if (kind === "video") {
+    return <video className="w-full max-h-full" src={objectURL} controls preload="metadata" aria-label={item.name} />;
+  }
+  if (kind === "audio") {
+    return <audio className="w-full" src={objectURL} controls preload="metadata" aria-label={item.name} />;
+  }
   if (kind === "image") {
     return (
       <div className="document-preview-image-stage">

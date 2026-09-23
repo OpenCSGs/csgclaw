@@ -2,6 +2,7 @@ package apitypes
 
 import (
 	"encoding/json"
+	"io"
 	"time"
 )
 
@@ -96,6 +97,11 @@ type MessageAttachmentUpload struct {
 	Name      string `json:"name,omitempty"`
 	MediaType string `json:"media_type,omitempty"`
 	Data      []byte `json:"-"`
+
+	// Open supplies a request-scoped upload without buffering it in Data.
+	// The consumer closes the returned reader; the caller owns the source lifetime.
+	Open      func() (io.ReadCloser, error) `json:"-"`
+	SizeBytes int64                         `json:"-"`
 }
 
 type CreateMessageRequest struct {

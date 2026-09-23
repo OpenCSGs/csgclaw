@@ -11,7 +11,7 @@ import (
 )
 
 func TestReadFileAcceptsTextAboveFormerPreviewLimit(t *testing.T) {
-	content := strings.Repeat("preview content\n", (4*1024*1024)/16)
+	content := strings.Repeat("preview content\n", (33*1024*1024)/16)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "large.txt"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)

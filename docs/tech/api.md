@@ -1096,7 +1096,7 @@ Notes:
 - A thread reply also publishes `thread.updated`
 - To send attachments, use `multipart/form-data` with a `payload` JSON part containing the same fields and one or more `files` parts.
 - Attachment-only messages are valid when at least one file is present.
-- A message accepts up to 10 attachments, with a maximum of `100 MiB` per file and `256 MiB` in total.
+- A message accepts up to 10 attachments, with a maximum of `1 GiB` per file and `2 GiB` in total.
 - Each returned message can include `attachments` with `id`, `name`, `kind`, `media_type`, `size_bytes`, `sha256`, `created_at`, `download_url`, optional `preview_url`, optional image dimensions, and optional `workspace_path` for agent-facing deliveries.
 
 Multipart example:

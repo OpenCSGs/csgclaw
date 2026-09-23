@@ -809,6 +809,7 @@ func (h *Handler) handleParticipantSendMessage(w http.ResponseWriter, r *http.Re
 		http.Error(w, "im service is not configured", http.StatusServiceUnavailable)
 		return
 	}
+	defer cleanupMessagePayload(r)
 	req, err := parseParticipantSendMessageHTTP(w, r)
 	if err != nil {
 		writeMessagePayloadError(w, err)

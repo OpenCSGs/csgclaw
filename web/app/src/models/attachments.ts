@@ -1,8 +1,8 @@
 export type AttachmentKind = "image" | "file";
 
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
-export const MAX_ATTACHMENT_FILE_BYTES = 100 * 1024 * 1024;
-export const MAX_ATTACHMENT_MESSAGE_BYTES = 256 * 1024 * 1024;
+export const MAX_ATTACHMENT_FILE_BYTES = 1024 * 1024 * 1024;
+export const MAX_ATTACHMENT_MESSAGE_BYTES = 2 * 1024 * 1024 * 1024;
 
 let attachmentDraftSequence = 0;
 
@@ -158,7 +158,10 @@ export function formatAttachmentSize(sizeBytes: number | null | undefined): stri
   if (size < 1024 * 1024) {
     return `${(size / 1024).toFixed(1)} KiB`;
   }
-  return `${(size / (1024 * 1024)).toFixed(1)} MiB`;
+  if (size < 1024 * 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MiB`;
+  }
+  return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
 }
 
 function sanitizeDraftIDPart(value: string): string {

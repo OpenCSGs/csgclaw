@@ -25,7 +25,7 @@ import { formatAttachmentSize } from "@/models/attachments";
 import { DOCUMENT_PREVIEW_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import { DocumentPreviewContent } from "./DocumentPreviewContent";
 import { clampDocumentPreviewPanelWidth } from "./panelWidth";
-import { documentPreviewKind, MAX_TEXT_PREVIEW_BYTES } from "./previewTypes";
+import { documentPreviewKind } from "./previewTypes";
 import type { DocumentPreviewPanelProps } from "./types";
 
 const DEFAULT_PANEL_WIDTH = 640;
@@ -60,7 +60,6 @@ export function DocumentPreviewPanel({
   const [contentType, setContentType] = useState("");
   const [data, setData] = useState<ArrayBuffer | null>(null);
   const [objectURL, setObjectURL] = useState("");
-  const [previewTruncated, setPreviewTruncated] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [loadState, setLoadState] = useState<"error" | "loading" | "ready">("loading");
 
@@ -97,8 +96,18 @@ export function DocumentPreviewPanel({
     let nextObjectURL = "";
     setData(null);
     setObjectURL("");
-    setPreviewTruncated(false);
     setLoadState("loading");
+    const initialKind = documentPreviewKind(item);
+    if (initialKind === "video" || initialKind === "audio") {
+      nextObjectURL = item.file ? URL.createObjectURL(item.file) : "";
+      setObjectURL(nextObjectURL || item.previewURL || item.downloadURL || "");
+      setData(new ArrayBuffer(0));
+      setContentType(item.mediaType);
+      setLoadState("ready");
+      return () => {
+        if (nextObjectURL) URL.revokeObjectURL(nextObjectURL);
+      };
+    }
     const load = item.file
       ? Promise.resolve(item.file)
       : fetch(item.previewURL || item.downloadURL || "", {
@@ -112,18 +121,10 @@ export function DocumentPreviewPanel({
         });
     void load
       .then(async (blob) => {
-        const initialKind = documentPreviewKind(item);
-        const limitTextBytes =
-          initialKind === "html" ||
-          initialKind === "markdown" ||
-          initialKind === "text" ||
-          initialKind === "unsupported";
-        const truncated = limitTextBytes && blob.size > MAX_TEXT_PREVIEW_BYTES;
-        const previewBlob = limitTextBytes ? blob.slice(0, MAX_TEXT_PREVIEW_BYTES) : blob;
-        const buffer = initialKind === "image" ? new ArrayBuffer(0) : await previewBlob.arrayBuffer();
-        return { blob, buffer, truncated };
+        const buffer = initialKind === "image" ? new ArrayBuffer(0) : await blob.arrayBuffer();
+        return { blob, buffer };
       })
-      .then(({ blob, buffer, truncated }) => {
+      .then(({ blob, buffer }) => {
         if (cancelled) {
           return;
         }
@@ -131,7 +132,6 @@ export function DocumentPreviewPanel({
         setObjectURL(nextObjectURL);
         setData(buffer);
         setContentType(blob.type);
-        setPreviewTruncated(truncated);
         setLoadState("ready");
       })
       .catch((error: unknown) => {
@@ -387,14 +387,8 @@ export function DocumentPreviewPanel({
         ) : null}
         {loadState === "ready" && data ? (
           <>
-            {previewTruncated ? (
-              <div className="document-preview-status is-truncated" role="status">
-                {t("attachmentPreviewTruncated")}
-              </div>
-            ) : null}
             <DocumentPreviewContent
               contentType={contentType}
-              truncated={previewTruncated}
               data={data}
               item={item}
               objectURL={objectURL}

@@ -13,8 +13,6 @@ import (
 	"csgclaw/internal/apitypes"
 )
 
-const FilePreviewMaxBytes = 32 * 1024 * 1024
-
 func List(root, relativePath string) (apitypes.WorkspaceListing, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
@@ -172,7 +170,7 @@ func ReadFile(root, relativePath string) (apitypes.WorkspaceFile, error) {
 		return apitypes.WorkspaceFile{}, fmt.Errorf("read workspace file %q: %w", cleanPath, err)
 	}
 	defer handle.Close()
-	data, err := io.ReadAll(io.LimitReader(handle, int64(FilePreviewMaxBytes)))
+	data, err := io.ReadAll(handle)
 	if err != nil {
 		return apitypes.WorkspaceFile{}, fmt.Errorf("read workspace file %q: %w", cleanPath, err)
 	}
@@ -180,15 +178,7 @@ func ReadFile(root, relativePath string) (apitypes.WorkspaceFile, error) {
 		Path: filepath.ToSlash(cleanPath),
 		Size: info.Size(),
 	}
-	if info.Size() > int64(FilePreviewMaxBytes) {
-		file.Truncated = true
-		var ok bool
-		data, ok = trimUTF8Preview(data)
-		if !ok {
-			file.Binary = true
-			return file, nil
-		}
-	} else if !utf8.Valid(data) {
+	if !utf8.Valid(data) {
 		file.Binary = true
 		return file, nil
 	}
@@ -285,7 +275,7 @@ func ReadFileFS(sourceFS fs.FS, root, relativePath string) (apitypes.WorkspaceFi
 		return apitypes.WorkspaceFile{}, fmt.Errorf("read workspace file %q: %w", cleanPath, err)
 	}
 	defer handle.Close()
-	data, err := io.ReadAll(io.LimitReader(handle, int64(FilePreviewMaxBytes)))
+	data, err := io.ReadAll(handle)
 	if err != nil {
 		return apitypes.WorkspaceFile{}, fmt.Errorf("read workspace file %q: %w", cleanPath, err)
 	}
@@ -293,33 +283,12 @@ func ReadFileFS(sourceFS fs.FS, root, relativePath string) (apitypes.WorkspaceFi
 		Path: cleanPath,
 		Size: info.Size(),
 	}
-	if info.Size() > int64(FilePreviewMaxBytes) {
-		file.Truncated = true
-		var ok bool
-		data, ok = trimUTF8Preview(data)
-		if !ok {
-			file.Binary = true
-			return file, nil
-		}
-	} else if !utf8.Valid(data) {
+	if !utf8.Valid(data) {
 		file.Binary = true
 		return file, nil
 	}
 	file.Content = string(data)
 	return file, nil
-}
-
-func trimUTF8Preview(data []byte) ([]byte, bool) {
-	if utf8.Valid(data) {
-		return data, true
-	}
-	for trim := 1; trim < utf8.UTFMax && trim < len(data); trim++ {
-		preview := data[:len(data)-trim]
-		if utf8.Valid(preview) {
-			return preview, true
-		}
-	}
-	return nil, false
 }
 
 func cleanRelativePath(value string) (string, error) {

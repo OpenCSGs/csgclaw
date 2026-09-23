@@ -14,6 +14,8 @@ export type DocumentPreviewPanelProps = DocumentPreviewRequest & {
 };
 
 export type PreviewKind =
+  | "video"
+  | "audio"
   | "docx"
   | "html"
   | "image"

@@ -18,6 +18,15 @@ const mediaKinds = new Map<string, PreviewKind>([
 
 const extensionKinds = new Map<string, PreviewKind>([
   ["csv", "text"],
+  ["mp4", "video"],
+  ["webm", "video"],
+  ["mov", "video"],
+  ["m4v", "video"],
+  ["ogv", "video"],
+  ["mp3", "audio"],
+  ["m4a", "audio"],
+  ["wav", "audio"],
+  ["ogg", "audio"],
   ["docx", "docx"],
   ["htm", "html"],
   ["html", "html"],
@@ -41,8 +50,6 @@ type TextEncoding = "utf-16be" | "utf-16le" | "utf-8";
 
 const textSniffBytes = 64 * 1024;
 
-export const MAX_TEXT_PREVIEW_BYTES = 32 * 1024 * 1024;
-
 export function documentPreviewKind(
   item: Pick<AttachmentPreviewItem, "mediaType" | "name">,
   data?: ArrayBuffer,
@@ -51,6 +58,8 @@ export function documentPreviewKind(
   if (mediaType.startsWith("image/")) {
     return "image";
   }
+  if (mediaType.startsWith("video/")) return "video";
+  if (mediaType.startsWith("audio/")) return "audio";
   const byMediaType = mediaKinds.get(mediaType);
   if (byMediaType) {
     return byMediaType;

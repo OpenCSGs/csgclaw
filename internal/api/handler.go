@@ -2970,6 +2970,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	defer cleanupMessagePayload(r)
 	req, err := parseCreateMessageHTTP(w, r)
 	if err != nil {
 		writeMessagePayloadError(w, err)

@@ -2,8 +2,6 @@ package delivery
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -73,7 +71,8 @@ func (s *IMTranscriptStore) DeliverFinalMessage(
 	text string,
 	files []agentengine.OutputFile,
 ) error {
-	uploads, rejected := s.outputFileUploads(ctx, turn.AgentID, files)
+	uploads, rejected := s.outputFileSources(ctx, turn.AgentID, files)
+	defer closeOutputFileSources(uploads)
 	text = outputFileDeliveryText(text, rejected, turn.Locale)
 	if strings.TrimSpace(text) == "" && len(uploads) == 0 {
 		return nil
@@ -82,32 +81,30 @@ func (s *IMTranscriptStore) DeliverFinalMessage(
 		return err
 	}
 	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{
-		RoomID:       strings.TrimSpace(turn.RoomID),
-		SenderID:     s.senderID(turn.ParticipantID),
-		Content:      text,
-		MessageID:    finalMessageID(turn),
-		ThreadRootID: strings.TrimSpace(turn.ThreadRootID),
-		Metadata:     transcriptMetadata("final", turn, nil),
-		Attachments:  uploads,
+		RoomID:            strings.TrimSpace(turn.RoomID),
+		SenderID:          s.senderID(turn.ParticipantID),
+		Content:           text,
+		MessageID:         finalMessageID(turn),
+		ThreadRootID:      strings.TrimSpace(turn.ThreadRootID),
+		Metadata:          transcriptMetadata("final", turn, nil),
+		AttachmentSources: uploads,
 	})
 	return err
 }
 
-func (s *IMTranscriptStore) outputFileUploads(
+func (s *IMTranscriptStore) outputFileSources(
 	ctx context.Context,
 	agentID string,
 	files []agentengine.OutputFile,
-) ([]im.MessageAttachmentUpload, []string) {
-	uploads := make([]im.MessageAttachmentUpload, 0, min(len(files), im.MaxAttachmentsPerMessage))
+) ([]im.AttachmentSource, []string) {
+	uploads := make([]im.AttachmentSource, 0, len(files))
 	rejected := make([]string, 0)
-	var totalBytes int64
 	for _, file := range files {
 		name := strings.TrimSpace(file.Name)
 		if name == "" {
 			name = "attachment"
 		}
-		if len(uploads) >= im.MaxAttachmentsPerMessage || file.SizeBytes <= 0 ||
-			file.SizeBytes > im.MaxAttachmentFileBytes || file.SizeBytes > im.MaxAttachmentMessageBytes-totalBytes {
+		if file.SizeBytes <= 0 {
 			rejected = append(rejected, name)
 			continue
 		}
@@ -125,35 +122,37 @@ func (s *IMTranscriptStore) outputFileUploads(
 			rejected = append(rejected, name)
 			continue
 		}
-		data, valid := readOutputFile(ctx, content, file)
-		if !valid {
+		if content.Content == nil || content.Metadata != file.OutputFileMetadata {
+			if content.Content != nil {
+				_ = content.Content.Close()
+			}
 			rejected = append(rejected, name)
 			continue
 		}
-		uploads = append(uploads, im.MessageAttachmentUpload{
-			Name:      content.Metadata.Name,
-			MediaType: content.Metadata.MediaType,
-			Data:      data,
+		uploads = append(uploads, im.AttachmentSource{
+			Name: content.Metadata.Name, MediaType: content.Metadata.MediaType,
+			SizeBytes: file.SizeBytes, SHA256: file.SHA256, Reader: outputFileReader{ReadCloser: content.Content, ctx: ctx},
 		})
-		totalBytes += int64(len(data))
 	}
 	return uploads, rejected
 }
 
-func readOutputFile(ctx context.Context, content agentengine.FileContent, expected agentengine.OutputFile) ([]byte, bool) {
-	if content.Content == nil || content.Metadata != expected.OutputFileMetadata {
-		if content.Content != nil {
-			_ = content.Content.Close()
-		}
-		return nil, false
+func closeOutputFileSources(sources []im.AttachmentSource) {
+	for _, source := range sources {
+		_ = source.Reader.Close()
 	}
-	data, err := io.ReadAll(io.LimitReader(content.Content, expected.SizeBytes+1))
-	closeErr := content.Content.Close()
-	if err != nil || closeErr != nil || int64(len(data)) != expected.SizeBytes || contextError(ctx) != nil {
-		return nil, false
+}
+
+type outputFileReader struct {
+	io.ReadCloser
+	ctx context.Context
+}
+
+func (r outputFileReader) Read(data []byte) (int, error) {
+	if err := contextError(r.ctx); err != nil {
+		return 0, err
 	}
-	sum := sha256.Sum256(data)
-	return data, hex.EncodeToString(sum[:]) == expected.SHA256
+	return r.ReadCloser.Read(data)
 }
 
 func outputFileDeliveryText(text string, rejected []string, locale string) string {

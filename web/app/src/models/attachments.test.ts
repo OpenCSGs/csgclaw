@@ -28,14 +28,12 @@ describe("attachment drafts", () => {
     expect(formatAttachmentSize(999)).toBe("999 B");
     expect(formatAttachmentSize(1536)).toBe("1.5 KiB");
     expect(formatAttachmentSize(2 * 1024 * 1024)).toBe("2.0 MiB");
+    expect(formatAttachmentSize(1024 * 1024 * 1024)).toBe("1.0 GiB");
+    expect(formatAttachmentSize(2 * 1024 * 1024 * 1024)).toBe("2.0 GiB");
   });
 
-  it("accepts 100 MiB files up to a combined 256 MiB", () => {
-    const files = [
-      fileWithSize("first.bin", 100 * 1024 * 1024),
-      fileWithSize("second.bin", 100 * 1024 * 1024),
-      fileWithSize("third.bin", 56 * 1024 * 1024),
-    ];
+  it("accepts 1 GiB files up to a combined 2 GiB", () => {
+    const files = [fileWithSize("first.bin", 1024 * 1024 * 1024), fileWithSize("second.bin", 1024 * 1024 * 1024)];
     expect(selectAttachmentFiles(files)).toMatchObject({ files, fileTooLarge: false, totalTooLarge: false });
     expect(selectAttachmentFiles([...files, fileWithSize("extra.bin", 1)])).toMatchObject({
       files,

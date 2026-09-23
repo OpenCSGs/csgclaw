@@ -26,16 +26,26 @@ import (
 )
 
 const (
-	assetsDirName              = "assets"
-	assetObjectsDirName        = "objects"
-	assetBlobsDirName          = "blobs"
-	attachmentKindFile         = "file"
-	attachmentKindImage        = "image"
-	MaxAttachmentsPerMessage   = 10
-	MaxAttachmentFileBytes     = 100 * 1024 * 1024
-	MaxAttachmentMessageBytes  = 256 * 1024 * 1024
-	maxSafeAttachmentNameBytes = 160
+	assetsDirName                    = "assets"
+	assetObjectsDirName              = "objects"
+	assetBlobsDirName                = "blobs"
+	attachmentKindFile               = "file"
+	attachmentKindImage              = "image"
+	MaxAttachmentsPerMessage         = 10
+	MaxAttachmentFileBytes           = 1024 * 1024 * 1024
+	MaxAttachmentMessageBytes  int64 = 2 * 1024 * 1024 * 1024
+	maxSafeAttachmentNameBytes       = 160
 )
+
+// AttachmentSource is an internal, streamed generated file. The caller owns Reader.
+// User uploads continue to use MessageAttachmentUpload and its upload quotas.
+type AttachmentSource struct {
+	Name      string
+	MediaType string
+	SizeBytes int64
+	SHA256    string
+	Reader    io.ReadCloser
+}
 
 type attachmentObject struct {
 	ID            string    `json:"id"`
@@ -63,8 +73,22 @@ type AttachmentFile struct {
 	DownloadToken string
 }
 
-func (s *Service) storeMessageAttachmentsLocked(roomID, messageID, senderID string, uploads []MessageAttachmentUpload) ([]MessageAttachment, error) {
-	if len(uploads) == 0 {
+// Prepared files live outside the object/blob directories so a concurrent
+// message save or room cleanup cannot collect them before they are committed.
+type preparedAttachment struct {
+	path        string
+	object      attachmentObject
+	corruptBlob os.FileInfo
+}
+
+func discardPreparedAttachments(files []preparedAttachment) {
+	for _, file := range files {
+		_ = os.Remove(file.path)
+	}
+}
+
+func (s *Service) prepareMessageAttachments(uploads []MessageAttachmentUpload, sources ...AttachmentSource) ([]preparedAttachment, error) {
+	if len(uploads) == 0 && len(sources) == 0 {
 		return nil, nil
 	}
 	if s == nil || strings.TrimSpace(s.statePath) == "" {
@@ -75,14 +99,17 @@ func (s *Service) storeMessageAttachmentsLocked(roomID, messageID, senderID stri
 	}
 	total := int64(0)
 	for _, upload := range uploads {
-		data := upload.Data
-		if len(data) == 0 {
+		size := int64(len(upload.Data))
+		if upload.Open != nil {
+			size = upload.SizeBytes
+		}
+		if size <= 0 {
 			return nil, fmt.Errorf("attachment %q is empty", strings.TrimSpace(upload.Name))
 		}
-		if len(data) > MaxAttachmentFileBytes {
+		if size > MaxAttachmentFileBytes {
 			return nil, fmt.Errorf("attachment %q exceeds %d bytes", strings.TrimSpace(upload.Name), MaxAttachmentFileBytes)
 		}
-		total += int64(len(data))
+		total += size
 		if total > MaxAttachmentMessageBytes {
 			return nil, fmt.Errorf("attachments exceed %d bytes per message", MaxAttachmentMessageBytes)
 		}
@@ -91,15 +118,27 @@ func (s *Service) storeMessageAttachmentsLocked(roomID, messageID, senderID stri
 		}
 	}
 
-	attachments := make([]MessageAttachment, 0, len(uploads))
 	for _, upload := range uploads {
-		data := upload.Data
-		att, err := s.storeAttachmentLocked(roomID, messageID, senderID, upload, data)
-		if err != nil {
-			state := s.bootstrapLocked()
-			if cleanupErr := cleanupAssetFilesForState(s.statePath, state.Rooms); cleanupErr != nil {
-				return nil, errors.Join(err, cleanupErr)
+		source := AttachmentSource{Name: upload.Name, MediaType: upload.MediaType, SizeBytes: int64(len(upload.Data)), Reader: io.NopCloser(bytes.NewReader(upload.Data))}
+		if upload.Open != nil {
+			reader, err := upload.Open()
+			if err != nil {
+				return nil, fmt.Errorf("open attachment %q: %w", upload.Name, err)
 			}
+			if reader == nil {
+				return nil, fmt.Errorf("attachment %q reader is missing", upload.Name)
+			}
+			defer reader.Close()
+			source.Reader = reader
+			source.SizeBytes = upload.SizeBytes
+		}
+		sources = append(sources, source)
+	}
+	attachments := make([]preparedAttachment, 0, len(sources))
+	for _, source := range sources {
+		att, err := s.prepareAttachment(source)
+		if err != nil {
+			discardPreparedAttachments(attachments)
 			return nil, err
 		}
 		attachments = append(attachments, att)
@@ -107,47 +146,158 @@ func (s *Service) storeMessageAttachmentsLocked(roomID, messageID, senderID stri
 	return attachments, nil
 }
 
-func (s *Service) storeAttachmentLocked(roomID, messageID, senderID string, upload MessageAttachmentUpload, data []byte) (MessageAttachment, error) {
-	sum := sha256.Sum256(data)
-	sha := hex.EncodeToString(sum[:])
-	mediaType := normalizedAttachmentMediaType(upload.MediaType, data)
+// Commit metadata and blob names while holding the IM lock. All copying,
+// hashing and syncing of file contents has already completed outside the lock.
+func (s *Service) storeMessageAttachmentsLocked(roomID, messageID, senderID string, files []preparedAttachment) ([]MessageAttachment, error) {
+	if len(files) == 0 {
+		return nil, nil
+	}
+	attachments := make([]MessageAttachment, 0, len(files))
+	for _, file := range files {
+		attachment, err := s.storePreparedAttachmentLocked(roomID, messageID, senderID, file)
+		if err != nil {
+			state := s.bootstrapLocked()
+			if cleanupErr := cleanupAssetFilesForState(s.statePath, state.Rooms); cleanupErr != nil {
+				return nil, errors.Join(err, cleanupErr)
+			}
+			return nil, err
+		}
+		attachments = append(attachments, attachment)
+	}
+	return attachments, nil
+}
+
+func (s *Service) prepareAttachment(source AttachmentSource) (preparedAttachment, error) {
+	originalName, err := validatedAttachmentOriginalName(source.Name)
+	if err != nil {
+		return preparedAttachment{}, err
+	}
+	if source.Reader == nil || source.SizeBytes <= 0 {
+		return preparedAttachment{}, fmt.Errorf("attachment %q is empty", source.Name)
+	}
+	dir := filepath.Join(filepath.Dir(s.statePath), assetsDirName)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return preparedAttachment{}, err
+	}
+	staged, err := os.CreateTemp(dir, ".attachment-*")
+	if err != nil {
+		return preparedAttachment{}, err
+	}
+	keep := false
+	defer func() {
+		_ = staged.Close()
+		if !keep {
+			_ = os.Remove(staged.Name())
+		}
+	}()
+	hash := sha256.New()
+	written, err := io.CopyN(io.MultiWriter(staged, hash), source.Reader, source.SizeBytes)
+	if err != nil {
+		return preparedAttachment{}, fmt.Errorf("read attachment: %w", err)
+	}
+	var extra [1]byte
+	n, err := io.ReadFull(source.Reader, extra[:])
+	if n != 0 || err != io.EOF || written != source.SizeBytes {
+		return preparedAttachment{}, fmt.Errorf("attachment size changed")
+	}
+	sha := hex.EncodeToString(hash.Sum(nil))
+	if source.SHA256 != "" && source.SHA256 != sha {
+		return preparedAttachment{}, fmt.Errorf("attachment checksum changed")
+	}
+	if _, err := staged.Seek(0, io.SeekStart); err != nil {
+		return preparedAttachment{}, err
+	}
+	header := make([]byte, 512)
+	n, err = staged.Read(header)
+	if err != nil && err != io.EOF {
+		return preparedAttachment{}, err
+	}
+	mediaType := normalizedAttachmentMediaType(source.MediaType, header[:n])
 	kind := attachmentKindForMediaType(mediaType)
-	width, height := imageDimensions(data)
-	id, err := newAttachmentID(sha)
+	var width, height int
+	if strings.HasPrefix(mediaType, "image/") {
+		if _, err := staged.Seek(0, io.SeekStart); err != nil {
+			return preparedAttachment{}, err
+		}
+		if config, _, err := image.DecodeConfig(staged); err == nil {
+			width, height = config.Width, config.Height
+		}
+	}
+	if err := staged.Sync(); err != nil {
+		return preparedAttachment{}, err
+	}
+	if err := staged.Close(); err != nil {
+		return preparedAttachment{}, err
+	}
+	corruptBlob, err := inspectExistingAttachmentBlob(attachmentBlobPath(s.statePath, sha), sha, written)
+	if err != nil {
+		return preparedAttachment{}, err
+	}
+	keep = true
+	return preparedAttachment{path: staged.Name(), corruptBlob: corruptBlob, object: attachmentObject{
+		BlobSHA256: sha, OriginalName: originalName, SafeName: safeAttachmentName(originalName), MediaType: mediaType, Kind: kind, SizeBytes: written, SHA256: sha, Width: width, Height: height,
+	}}, nil
+}
+
+// Blob contents are immutable once installed. Detect pre-existing damage outside
+// the IM lock, while allowing another pending upload to install the same hash.
+func inspectExistingAttachmentBlob(path, sha string, size int64) (os.FileInfo, error) {
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() != size {
+		return info, nil
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return nil, err
+	}
+	if hex.EncodeToString(hash.Sum(nil)) != sha {
+		return info, nil
+	}
+	return nil, nil
+}
+
+func (s *Service) storePreparedAttachmentLocked(roomID, messageID, senderID string, prepared preparedAttachment) (MessageAttachment, error) {
+	object := prepared.object
+	blobPath := attachmentBlobPath(s.statePath, object.SHA256)
+	if err := os.MkdirAll(filepath.Dir(blobPath), 0o700); err != nil {
+		return MessageAttachment{}, err
+	}
+	info, err := os.Stat(blobPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return MessageAttachment{}, err
+	}
+	corrupt := err == nil && prepared.corruptBlob != nil && os.SameFile(info, prepared.corruptBlob) && info.ModTime().Equal(prepared.corruptBlob.ModTime()) && info.Size() == prepared.corruptBlob.Size()
+	// Reuse a valid blob, including one committed by another concurrent upload.
+	// This also avoids replacing a blob that is open for download on Windows.
+	if err != nil || info.Size() != object.SizeBytes || corrupt {
+		if err := os.Rename(prepared.path, blobPath); err != nil {
+			return MessageAttachment{}, fmt.Errorf("store attachment blob: %w", err)
+		}
+	}
+	object.ID, err = newAttachmentID(object.SHA256)
 	if err != nil {
 		return MessageAttachment{}, err
 	}
-	downloadToken, err := newAttachmentDownloadToken()
+	object.DownloadToken, err = newAttachmentDownloadToken()
 	if err != nil {
 		return MessageAttachment{}, err
 	}
-	originalName, err := validatedAttachmentOriginalName(upload.Name)
-	if err != nil {
-		return MessageAttachment{}, err
-	}
-	safeName := safeAttachmentName(originalName)
-	createdAt := time.Now().UTC()
-	object := attachmentObject{
-		ID:            id,
-		BlobSHA256:    sha,
-		OriginalName:  originalName,
-		SafeName:      safeName,
-		MediaType:     mediaType,
-		Kind:          kind,
-		SizeBytes:     int64(len(data)),
-		SHA256:        sha,
-		CreatedAt:     createdAt,
-		CreatedBy:     strings.TrimSpace(senderID),
-		RoomID:        strings.TrimSpace(roomID),
-		MessageID:     strings.TrimSpace(messageID),
-		Width:         width,
-		Height:        height,
-		DownloadToken: downloadToken,
-	}
-	if err := writeAttachmentBlob(attachmentBlobPath(s.statePath, sha), sha, data); err != nil {
-		return MessageAttachment{}, err
-	}
-	if err := writeAttachmentObject(attachmentObjectPath(s.statePath, id), object); err != nil {
+	object.CreatedAt = time.Now().UTC()
+	object.CreatedBy = strings.TrimSpace(senderID)
+	object.RoomID = strings.TrimSpace(roomID)
+	object.MessageID = strings.TrimSpace(messageID)
+	if err := writeAttachmentObject(attachmentObjectPath(s.statePath, object.ID), object); err != nil {
 		return MessageAttachment{}, err
 	}
 	return attachmentFromObject(object), nil
@@ -208,11 +358,12 @@ func (s *Service) MaterializeAttachment(id, workspaceRoot, relativeDir string) (
 	if err != nil {
 		return MessageAttachment{}, err
 	}
-	data, err := os.ReadFile(file.Path)
+	source, err := os.Open(file.Path)
 	if err != nil {
 		return MessageAttachment{}, fmt.Errorf("read attachment blob: %w", err)
 	}
-	if err := atomicWriteFile(targetPath, data, 0o600); err != nil {
+	defer source.Close()
+	if err := atomicWriteReader(targetPath, source, 0o600); err != nil {
 		return MessageAttachment{}, fmt.Errorf("write attachment workspace file: %w", err)
 	}
 	att := file.Attachment
@@ -287,17 +438,6 @@ func attachmentKindForMediaType(mediaType string) string {
 		return attachmentKindImage
 	}
 	return attachmentKindFile
-}
-
-func imageDimensions(data []byte) (int, int) {
-	if len(data) == 0 {
-		return 0, 0
-	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil {
-		return 0, 0
-	}
-	return cfg.Width, cfg.Height
 }
 
 func safeAttachmentName(name string) string {
@@ -424,41 +564,6 @@ func attachmentBlobPath(statePath, sha string) string {
 	return filepath.Join(filepath.Dir(statePath), assetsDirName, assetBlobsDirName, "sha256", prefix, sha)
 }
 
-func writeAttachmentBlob(path, expectedSHA string, data []byte) error {
-	if _, err := os.Stat(path); err == nil {
-		matches, verifyErr := attachmentBlobMatches(path, expectedSHA, int64(len(data)))
-		if verifyErr != nil {
-			return verifyErr
-		}
-		if matches {
-			return nil
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("stat attachment blob: %w", err)
-	}
-	return atomicWriteFile(path, data, 0o600)
-}
-
-func attachmentBlobMatches(path, expectedSHA string, expectedSize int64) (bool, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return false, fmt.Errorf("open attachment blob: %w", err)
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return false, fmt.Errorf("stat attachment blob: %w", err)
-	}
-	if info.Size() != expectedSize {
-		return false, nil
-	}
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return false, fmt.Errorf("hash attachment blob: %w", err)
-	}
-	return hex.EncodeToString(hash.Sum(nil)) == expectedSHA, nil
-}
-
 func writeAttachmentObject(path string, object attachmentObject) error {
 	data, err := json.MarshalIndent(object, "", "  ")
 	if err != nil {
@@ -487,6 +592,10 @@ func readAttachmentObject(path string) (attachmentObject, error) {
 }
 
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	return atomicWriteReader(path, bytes.NewReader(data), perm)
+}
+
+func atomicWriteReader(path string, source io.Reader, perm os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create parent dir: %w", err)
 	}
@@ -501,7 +610,7 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 			_ = os.Remove(tmpName)
 		}
 	}()
-	if _, err := tmp.Write(data); err != nil {
+	if _, err := io.Copy(tmp, source); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("write temp file: %w", err)
 	}
