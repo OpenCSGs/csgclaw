@@ -146,18 +146,19 @@ type imBootstrapResponse struct {
 }
 
 type imEventResponse struct {
-	Type        string                          `json:"type"`
-	RoomID      string                          `json:"room_id,omitempty"`
-	TeamID      string                          `json:"team_id,omitempty"`
-	Room        *im.Room                        `json:"room,omitempty"`
-	User        *im.User                        `json:"user,omitempty"`
-	Message     *im.Message                     `json:"message,omitempty"`
-	Participant *apitypes.Participant           `json:"participant,omitempty"`
-	Team        *apitypes.Team                  `json:"team,omitempty"`
-	Thread      *im.ThreadView                  `json:"thread,omitempty"`
-	Sender      *im.User                        `json:"sender,omitempty"`
-	Upgrade     *apitypes.UpgradeStatus         `json:"upgrade,omitempty"`
-	Work        *apitypes.ParticipantWorkUpdate `json:"work,omitempty"`
+	AttachmentID string                          `json:"attachment_id,omitempty"`
+	Type         string                          `json:"type"`
+	RoomID       string                          `json:"room_id,omitempty"`
+	TeamID       string                          `json:"team_id,omitempty"`
+	Room         *im.Room                        `json:"room,omitempty"`
+	User         *im.User                        `json:"user,omitempty"`
+	Message      *im.Message                     `json:"message,omitempty"`
+	Participant  *apitypes.Participant           `json:"participant,omitempty"`
+	Team         *apitypes.Team                  `json:"team,omitempty"`
+	Thread       *im.ThreadView                  `json:"thread,omitempty"`
+	Sender       *im.User                        `json:"sender,omitempty"`
+	Upgrade      *apitypes.UpgradeStatus         `json:"upgrade,omitempty"`
+	Work         *apitypes.ParticipantWorkUpdate `json:"work,omitempty"`
 }
 
 type bootstrapConfigResponse struct {
@@ -3767,17 +3768,18 @@ func profileDetectionResultsFromAgent(items []agent.ProfileDetectionResult) []ap
 
 func presentEvent(evt im.Event) imEventResponse {
 	return imEventResponse{
-		Type:        evt.Type,
-		RoomID:      evt.RoomID,
-		TeamID:      evt.TeamID,
-		Room:        evt.Room,
-		User:        evt.User,
-		Message:     evt.Message,
-		Participant: evt.Participant,
-		Team:        evt.Team,
-		Thread:      evt.Thread,
-		Sender:      evt.Sender,
-		Upgrade:     evt.Upgrade,
+		AttachmentID: evt.AttachmentID,
+		Type:         evt.Type,
+		RoomID:       evt.RoomID,
+		TeamID:       evt.TeamID,
+		Room:         evt.Room,
+		User:         evt.User,
+		Message:      evt.Message,
+		Participant:  evt.Participant,
+		Team:         evt.Team,
+		Thread:       evt.Thread,
+		Sender:       evt.Sender,
+		Upgrade:      evt.Upgrade,
 	}
 }
 

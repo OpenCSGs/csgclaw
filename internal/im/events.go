@@ -12,6 +12,7 @@ const (
 	EventTypeThreadUpdated            = "thread.updated"
 	EventTypeRoomCreated              = "room.created"
 	EventTypeRoomUpdated              = "room.updated"
+	EventTypeRoomAttachmentDeleted    = "room.attachment_deleted"
 	EventTypeRoomDeleted              = "room.deleted"
 	EventTypeRoomMembersAdded         = "room.members_added"
 	EventTypeRoomMembersRemoved       = "room.members_removed"
@@ -31,17 +32,18 @@ const (
 )
 
 type Event struct {
-	Type        string                  `json:"type"`
-	RoomID      string                  `json:"room_id,omitempty"`
-	TeamID      string                  `json:"team_id,omitempty"`
-	Room        *Room                   `json:"room,omitempty"`
-	User        *User                   `json:"user,omitempty"`
-	Message     *Message                `json:"message,omitempty"`
-	Participant *apitypes.Participant   `json:"participant,omitempty"`
-	Team        *apitypes.Team          `json:"team,omitempty"`
-	Thread      *ThreadView             `json:"thread,omitempty"`
-	Sender      *User                   `json:"sender,omitempty"`
-	Upgrade     *apitypes.UpgradeStatus `json:"upgrade,omitempty"`
+	Type         string                  `json:"type"`
+	AttachmentID string                  `json:"attachment_id,omitempty"`
+	RoomID       string                  `json:"room_id,omitempty"`
+	TeamID       string                  `json:"team_id,omitempty"`
+	Room         *Room                   `json:"room,omitempty"`
+	User         *User                   `json:"user,omitempty"`
+	Message      *Message                `json:"message,omitempty"`
+	Participant  *apitypes.Participant   `json:"participant,omitempty"`
+	Team         *apitypes.Team          `json:"team,omitempty"`
+	Thread       *ThreadView             `json:"thread,omitempty"`
+	Sender       *User                   `json:"sender,omitempty"`
+	Upgrade      *apitypes.UpgradeStatus `json:"upgrade,omitempty"`
 }
 
 type Bus struct {

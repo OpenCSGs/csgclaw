@@ -1,6 +1,7 @@
 import {
   agentMatchesUser,
   applyIMEvent,
+  removeAttachmentFromThreadView,
   appendMessageToData,
   buildUsersById,
   conversationThreadViews,
@@ -414,6 +415,49 @@ describe("conversation model helpers", () => {
     expect(next.rooms.find((item) => item.id === "general")?.messages).toEqual([]);
     expect(next.rooms.find((item) => item.id === "general")?.threads).toEqual([]);
     expect(next.rooms.find((item) => item.id === "other")?.messages.map((item) => item.id)).toEqual(["other-message"]);
+  });
+
+  it("removes a deleted attachment from messages and retained thread context without removing messages", () => {
+    const attachment = {
+      id: "file-1",
+      name: "movie.mkv",
+      kind: "file",
+      media_type: "video/matroska",
+      size_bytes: 12,
+      sha256: "hash",
+      created_at: "now",
+      download_url: "/file",
+    };
+    const source = { ...message("source", "2026-05-15T00:00:00Z"), attachments: [attachment] };
+    const current = {
+      rooms: [
+        room("general", "2026-05-15T00:00:00Z", {
+          messages: [source],
+          threads: [{ root_message_id: "source", context: [source] }],
+        }),
+        room("other", "2026-05-15T00:00:00Z", { messages: [source] }),
+      ],
+      users: [],
+    };
+    const next = applyIMEvent(current, {
+      type: "room.attachment_deleted",
+      room_id: "general",
+      attachment_id: "file-1",
+    });
+    expect(next.rooms[0].messages[0].attachments).toEqual([]);
+    expect(next.rooms[0].threads?.[0].context?.[0].attachments).toEqual([]);
+    expect(next.rooms[0].messages[0].content).toBe(source.content);
+    expect(next.rooms[1].messages[0].attachments).toEqual([attachment]);
+    expect(current.rooms[0].messages[0].attachments).toEqual([attachment]);
+    const thread = removeAttachmentFromThreadView(
+      { root: source, context: [source], replies: [source], summary: { latest_reply: source } },
+      "file-1",
+    );
+    expect(
+      [thread?.root, ...(thread?.context ?? []), ...(thread?.replies ?? []), thread?.summary?.latest_reply].every(
+        (item) => item?.attachments?.length === 0,
+      ),
+    ).toBe(true);
   });
 
   it("preserves newer messages when applying an older room notification event", () => {

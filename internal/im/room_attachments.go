@@ -1,6 +1,7 @@
 package im
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -55,7 +56,7 @@ func (s *Service) RoomAttachmentFile(roomID, attachmentID string) (AttachmentFil
 			return s.AttachmentFile(item.ID)
 		}
 	}
-	return AttachmentFile{}, fmt.Errorf("attachment not found in room")
+	return AttachmentFile{}, ErrRoomAttachmentNotFound
 }
 
 func roomAttachmentReferences(room *Room) []apitypes.RoomAttachment {
@@ -77,4 +78,63 @@ func roomAttachmentReferences(room *Room) []apitypes.RoomAttachment {
 		collect(thread.Context)
 	}
 	return items
+}
+
+var ErrRoomAttachmentNotFound = errors.New("attachment not found in room")
+
+// DeleteRoomAttachment removes only this room's references. The existing asset
+// collector retains blobs used by other attachment IDs or rooms.
+func (s *Service) DeleteRoomAttachment(roomID, attachmentID string) error {
+	roomID, attachmentID = strings.TrimSpace(roomID), strings.TrimSpace(attachmentID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	room, ok := s.rooms[roomID]
+	if !ok {
+		return ErrRoomNotFound
+	}
+	found := false
+	remove := func(messages []Message) []Message {
+		result := append([]Message(nil), messages...)
+		for i, message := range result {
+			attachments := make([]MessageAttachment, 0, len(message.Attachments))
+			for _, attachment := range message.Attachments {
+				if attachment.ID == attachmentID {
+					found = true
+					continue
+				}
+				attachments = append(attachments, attachment)
+			}
+			result[i].Attachments = attachments
+		}
+		return result
+	}
+	next := *room
+	next.Messages = remove(room.Messages)
+	next.Threads = append([]ThreadState(nil), room.Threads...)
+	for i := range next.Threads {
+		next.Threads[i].Context = remove(next.Threads[i].Context)
+	}
+	if !found {
+		return ErrRoomAttachmentNotFound
+	}
+	// Persist references before collecting bytes. The room index and message IDs
+	// are unchanged, so only the message and retained-context files need updating.
+	persist := func(value Room) error {
+		if s.statePath == "" {
+			return nil
+		}
+		if err := saveRoomMessagesForState(s.statePath, value); err != nil {
+			return err
+		}
+		return saveRoomThreadsForState(s.statePath, value)
+	}
+	if err := persist(next); err != nil {
+		return errors.Join(err, persist(*room))
+	}
+	*room = next
+	cleanupErr := cleanupAssetFilesForState(s.statePath, s.bootstrapLocked().Rooms)
+	if s.bus != nil {
+		s.bus.Publish(Event{Type: EventTypeRoomAttachmentDeleted, RoomID: roomID, AttachmentID: attachmentID})
+	}
+	return cleanupErr
 }

@@ -15,6 +15,7 @@ import {
   agentMatchesUser,
   appendMessageToData,
   appendReplyToThreadView,
+  removeAttachmentFromThreadView,
   buildUsersById,
   applyThreadToData,
   conversationThreadViews,
@@ -807,6 +808,10 @@ export function useConversationController({
     const selection = activeThreadSelectionRef.current;
     if (!selection) {
       return;
+    }
+    if (payload.type === "room.attachment_deleted" && payload.room_id === selection.roomID && payload.attachment_id) {
+      const attachmentID = payload.attachment_id;
+      setActiveThreadView((current) => removeAttachmentFromThreadView(current, attachmentID));
     }
     const selectedKey = threadKey(selection.roomID, selection.rootID);
     if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {

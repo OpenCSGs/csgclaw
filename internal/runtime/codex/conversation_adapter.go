@@ -508,7 +508,7 @@ func (a *ConversationAdapter) prepareInput(ctx context.Context, turnID contract.
 		if strings.HasPrefix(mediaType, "image/") {
 			blocks = append(blocks, LocalImageBlock(path))
 		} else {
-			blocks = append(blocks, TextBlock(fmt.Sprintf("Attached file %q is available in the Runtime workspace at %s", part.File.Resolved.Name, path)))
+			blocks = append(blocks, TextBlock(fmt.Sprintf("Attached file %q is temporarily available for this turn at %s. This managed input is deleted when the turn ends. If the user asks to save or keep it for later, copy it to a regular workspace path outside .csgclaw/engine-inputs and .csgclaw/attachments, verify the saved file, and report that persistent path. Do not claim it was saved without doing the copy. In later turns, recover missing inputs using the current room attachment list/download commands instead of reusing this temporary path.", part.File.Resolved.Name, path)))
 		}
 	}
 	return blocks, cleanup, nil

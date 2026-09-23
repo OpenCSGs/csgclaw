@@ -1,6 +1,7 @@
 package conv
 
 import (
+	"strings"
 	"testing"
 
 	"csgclaw/internal/channel"
@@ -87,5 +88,18 @@ func TestRoomManagerKeepsOneConversationAndRelatedTaskContext(t *testing.T) {
 	direct, _ := ConversationKey(binding, channel.Event{RoomID: "direct-admin-manager", RoomManager: true})
 	if direct == base {
 		t.Fatal("direct conversation shared the on-demand room context")
+	}
+}
+
+func TestAttachmentContextExplainsPersistenceRecoveryAndDeletion(t *testing.T) {
+	text := hiddenContext(channel.Binding{}, channel.Event{RoomID: "room-test"})
+	for _, want := range []string{"temporary turn inputs", "copy or download", "verify it exists", "list/download/delete", "--attachment-id", "never delete service asset-store paths"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing lifecycle guidance %q", want)
+		}
+	}
+	summary := formatAttachmentSummary([]channel.MessageAttachment{{ID: "attachment-1", Name: "video.mkv"}})
+	if !strings.Contains(summary, "attachment_id: attachment-1") {
+		t.Fatalf("missing stable attachment ID: %s", summary)
 	}
 }

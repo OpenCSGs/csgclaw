@@ -98,3 +98,7 @@ func (c *Client) DownloadRoomAttachment(ctx context.Context, roomID, attachmentI
 	}
 	return target, nil
 }
+
+func (c *Client) DeleteRoomAttachment(ctx context.Context, roomID, attachmentID string) error {
+	return c.DoNoContent(ctx, http.MethodDelete, roomAttachmentsPath(roomID)+"/"+url.PathEscape(attachmentID))
+}

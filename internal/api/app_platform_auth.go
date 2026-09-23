@@ -119,7 +119,7 @@ func (h *Handler) authorizeAgentPlatformRoute(r *http.Request, agentID string) b
 	if p == "connectors/catalog" && r.Method == http.MethodGet {
 		return true
 	}
-	if (len(parts) == 3 || len(parts) == 4) && parts[0] == "rooms" && parts[2] == "attachments" && r.Method == http.MethodGet {
+	if (len(parts) == 3 || len(parts) == 4) && parts[0] == "rooms" && parts[2] == "attachments" && (r.Method == http.MethodGet || (len(parts) == 4 && r.Method == http.MethodDelete)) {
 		return h.agentPlatformRoom(agentID, parts[1])
 	}
 	if len(parts) >= 3 && parts[0] == "rooms" && parts[2] == "tasks" {

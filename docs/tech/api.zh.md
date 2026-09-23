@@ -1103,6 +1103,7 @@ files=@diagram.png;type=image/png
 csgclaw room attachments list --room-id <房间> --query <文件名关键词>
 csgclaw room attachments list --room-id <房间> --message-id <来源消息>
 csgclaw room attachments download --room-id <房间> --attachment-id <附件ID> --output <新建本地路径>
+csgclaw room attachments delete --room-id <房间> --attachment-id <附件ID>
 ```
 
 智能体运行环境中的 `csgclaw-cli` 提供相同命令。
@@ -1117,6 +1118,15 @@ Worker 的服务端任务上下文包含 `request_source_message_id`，由父任
 当前消息附件和引用的线程上下文附件统一进入文件输入链路，按附件 ID 去重，并为每次执行独立准备临时文件。
 清空消息和删除房间沿用现有附件引用清理规则，显式下载的工作区副本仍是普通本地文件。
 该接口不开放智能体未发布的工作区文件，也不提供文档正文搜索。
+
+`DELETE /api/v1/rooms/{id}/attachments/{attachment_id}` 按附件 ID 移除该房间消息和保留线程上下文中的引用，成功返回 `204 No Content`。
+删除保留消息文本以及独立保存到工作目录的副本，仅在没有其他附件引用时回收共享文件数据。
+附件不存在时返回 404，非房间成员的 Agent 凭据返回 403。
+删除后发送包含 `room_id` 和 `attachment_id` 的 `room.attachment_deleted` 事件，及时更新聊天界面。
+
+`.csgclaw/engine-inputs` 和 `.csgclaw/attachments` 下的运行时输入是临时文件。
+用户要求长期保存时，Agent 必须复制或下载到普通工作目录路径，验证结果后再确认保存成功。
+后续聊天应通过房间附件命令找回历史上传，不能只依赖已失效的临时路径。
 
 ### `GET /api/v1/attachments/{id}`
 

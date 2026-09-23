@@ -184,6 +184,7 @@ export type ParticipantWorkUpdate = {
 };
 
 export type IMServerEvent = {
+  attachment_id?: string;
   message?: IMMessage | null;
   participant?: IMParticipantLike | null;
   room?: Partial<IMConversation> | null;
@@ -888,6 +889,39 @@ export function latestAt(conversation: { messages?: readonly IMMessage[] | null 
   return new Date(messages[messages.length - 1].created_at || "").getTime();
 }
 
+function removeAttachmentFromMessage(message: IMMessage, attachmentID: string): IMMessage {
+  return {
+    ...message,
+    attachments: message.attachments?.filter((attachment) => attachment.id !== attachmentID),
+    thread: message.thread
+      ? {
+          ...message.thread,
+          latest_reply: message.thread.latest_reply
+            ? removeAttachmentFromMessage(message.thread.latest_reply, attachmentID)
+            : message.thread.latest_reply,
+        }
+      : message.thread,
+  };
+}
+
+export function removeAttachmentFromThreadView(view: ThreadView | null, attachmentID: string): ThreadView | null {
+  if (!view) return view;
+  return {
+    ...view,
+    root: view.root ? removeAttachmentFromMessage(view.root, attachmentID) : view.root,
+    context: view.context?.map((message) => removeAttachmentFromMessage(message, attachmentID)),
+    replies: view.replies?.map((message) => removeAttachmentFromMessage(message, attachmentID)),
+    summary: view.summary
+      ? {
+          ...view.summary,
+          latest_reply: view.summary.latest_reply
+            ? removeAttachmentFromMessage(view.summary.latest_reply, attachmentID)
+            : view.summary.latest_reply,
+        }
+      : view.summary,
+  };
+}
+
 export function applyIMEvent<T extends IMData | null | undefined>(
   current: T,
   event: IMServerEvent | null | undefined,
@@ -896,6 +930,24 @@ export function applyIMEvent<T extends IMData | null | undefined>(
     return current;
   }
 
+  if (event.type === "room.attachment_deleted" && event.room_id && event.attachment_id) {
+    const attachmentID = event.attachment_id;
+    return {
+      ...current,
+      rooms: current.rooms.map((room) =>
+        room.id !== event.room_id
+          ? room
+          : {
+              ...room,
+              messages: room.messages.map((message) => removeAttachmentFromMessage(message, attachmentID)),
+              threads: room.threads?.map((thread) => ({
+                ...thread,
+                context: thread.context?.map((message) => removeAttachmentFromMessage(message, attachmentID)),
+              })),
+            },
+      ),
+    };
+  }
   if ((event.type === "user.created" || event.type === "user.updated") && event.user) {
     return upsertUserInData(current, event.user);
   }

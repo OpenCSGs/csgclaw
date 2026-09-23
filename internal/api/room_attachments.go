@@ -1,6 +1,8 @@
 package api
 
 import (
+	"csgclaw/internal/im"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -72,4 +74,20 @@ func (h *Handler) handleRoomAttachmentDownload(w http.ResponseWriter, r *http.Re
 	w.Header().Set("X-CSGClaw-File-Size", strconv.FormatInt(file.Attachment.SizeBytes, 10))
 	// Membership and live room references are checked on every download.
 	serveAttachment(w, r, file, false)
+}
+
+func (h *Handler) handleRoomAttachmentDelete(w http.ResponseWriter, r *http.Request) {
+	if !h.authorizeRoomAttachments(w, r) {
+		return
+	}
+	err := h.im.DeleteRoomAttachment(pathValue(r, "id"), pathValue(r, "attachment_id"))
+	if errors.Is(err, im.ErrRoomAttachmentNotFound) || errors.Is(err, im.ErrRoomNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -1,7 +1,10 @@
 package codex
 
 import (
+	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -34,5 +37,54 @@ func TestStructuredQuestionPreservesReadableOutput(t *testing.T) {
 	}
 	if events[1].Output.Kind != contract.OutputItemResourceLink || events[1].Text != "" {
 		t.Fatalf("link event = %+v, want link without duplicate text", events[1])
+	}
+}
+
+type inputLifecycleBackend struct {
+	ConversationBackend
+	workspace string
+}
+
+func (b inputLifecycleBackend) WorkspaceDir(string) (string, error) { return b.workspace, nil }
+
+func TestInputFileExplainsTemporaryPathAndPreservesExplicitSavedCopy(t *testing.T) {
+	workspace := t.TempDir()
+	adapter := &ConversationAdapter{runtime: inputLifecycleBackend{workspace: workspace}}
+	payload := []byte("uploaded video")
+	file, err := contract.NewOutputFile(context.Background(), contract.OutputFileMetadata{Name: "video.mkv", MediaType: "video/matroska", SizeBytes: int64(len(payload))}, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Cleanup()
+	blocks, cleanup, inputErr := adapter.prepareInput(context.Background(), "upload-turn", []contract.InputPart{{Kind: contract.InputPartFile, File: &contract.InputFile{ID: file.ID, Resolved: file}}})
+	if inputErr != nil {
+		t.Fatal(inputErr)
+	}
+	defer cleanup()
+	text := blocks[0].Text.Text
+	for _, want := range []string{"temporarily available", "deleted when the turn ends", "copy it", "verify", "list/download"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q", want)
+		}
+	}
+	inputs, err := filepath.Glob(filepath.Join(workspace, ".csgclaw", "engine-inputs", "*", "*"))
+	if err != nil || len(inputs) != 1 {
+		t.Fatalf("inputs=%v %v", inputs, err)
+	}
+	saved := filepath.Join(workspace, "saved-video.mkv")
+	content, err := os.ReadFile(inputs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(saved, content, 0600); err != nil {
+		t.Fatal(err)
+	}
+	cleanup()
+	if _, err := os.Stat(inputs[0]); !os.IsNotExist(err) {
+		t.Fatal("temporary input survived the turn")
+	}
+	content, err = os.ReadFile(saved)
+	if err != nil || !bytes.Equal(content, payload) {
+		t.Fatal("explicit saved copy lost")
 	}
 }

@@ -193,6 +193,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Delete("/", h.deleteRoom)
 				r.Get("/attachments", h.handleRoomAttachments)
 				r.Get("/attachments/{attachment_id}", h.handleRoomAttachmentDownload)
+				r.Delete("/attachments/{attachment_id}", h.handleRoomAttachmentDelete)
 				r.Get("/tasks", h.handleListRoomTasks)
 				r.Get("/tasks/{task_id}", h.handleGetRoomTask)
 				r.Get("/task-context", h.handleRoomTaskContext)

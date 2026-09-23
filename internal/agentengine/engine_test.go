@@ -809,13 +809,20 @@ func TestConversationRunCopiesCodexFileInput(t *testing.T) {
 	runtimeImpl := &fakeConversationRuntime{workspace: t.TempDir()}
 	var runtimePath string
 	runtimeImpl.prompt = func(_ context.Context, runtimeID, sessionID, prompt string) error {
-		runtimePath = strings.TrimSpace(strings.TrimPrefix(prompt, "Attached file \"report.txt\" is available in the Runtime workspace at "))
+		matches, err := filepath.Glob(filepath.Join(runtimeImpl.workspace, ".csgclaw", "engine-inputs", "*", "*report.txt"))
+		if err != nil || len(matches) != 1 {
+			return fmt.Errorf("Runtime-local input files = %v: %v", matches, err)
+		}
+		runtimePath = matches[0]
+		if !strings.Contains(prompt, runtimePath) || !strings.Contains(prompt, "deleted when the turn ends") {
+			return fmt.Errorf("prompt is missing input path or lifetime")
+		}
 		info, err := os.Stat(runtimePath)
 		if err != nil {
-			t.Fatalf("stat Runtime-local file: %v", err)
+			return fmt.Errorf("stat Runtime-local file: %w", err)
 		}
 		if info.Mode().Perm() != 0o600 {
-			t.Fatalf("Runtime-local file mode = %o, want 600", info.Mode().Perm())
+			return fmt.Errorf("Runtime-local file mode = %o, want 600", info.Mode().Perm())
 		}
 		runtimeImpl.publish(activity.RuntimeEvent{RuntimeID: runtimeID, SessionID: sessionID, Kind: activity.RuntimeEventPromptCompleted})
 		return nil

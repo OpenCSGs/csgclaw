@@ -450,8 +450,9 @@ func roomSpec() CommandSpec {
 		Name:    "room",
 		Summary: "Manage IM rooms.",
 		Children: []CommandSpec{
-			{Name: "attachments", Summary: "Find and download published room files", Children: []CommandSpec{
+			{Name: "attachments", Summary: "Manage published room files", Children: []CommandSpec{
 				{Name: "list", Summary: "List room attachments", Flags: []FlagSpec{{Name: "room-id", TakesValue: true}, {Name: "query", TakesValue: true}, {Name: "message-id", TakesValue: true}, {Name: "from", TakesValue: true}, {Name: "limit", TakesValue: true}}},
+				{Name: "delete", Summary: "Delete a room attachment", Flags: []FlagSpec{{Name: "room-id", TakesValue: true}, {Name: "attachment-id", TakesValue: true}}},
 				{Name: "download", Summary: "Download a room attachment", Flags: []FlagSpec{{Name: "room-id", TakesValue: true}, {Name: "attachment-id", TakesValue: true}, {Name: "output", TakesValue: true}}},
 			}},
 			{Name: "list", Summary: "List rooms", Flags: channelFlags()},

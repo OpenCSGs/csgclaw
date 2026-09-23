@@ -12,14 +12,14 @@ import (
 
 func (c cmd) runAttachments(ctx context.Context, run *command.Context, args []string, globals command.GlobalOptions) error {
 	if len(args) == 0 || command.IsHelpArg(args[0]) {
-		fmt.Fprintln(run.Stderr, "Usage: "+run.Program+" room attachments <list|download> [flags]")
+		fmt.Fprintln(run.Stderr, "Usage: "+run.Program+" room attachments <list|download|delete> [flags]")
 		return flag.ErrHelp
 	}
 	action := args[0]
-	if action != "list" && action != "download" {
+	if action != "list" && action != "download" && action != "delete" {
 		return fmt.Errorf("unknown attachments subcommand %q", action)
 	}
-	fs := run.NewFlagSet("room attachments "+action, run.Program+" room attachments "+action+" [flags]", "Find and download files published to a CSGClaw room.")
+	fs := run.NewFlagSet("room attachments "+action, run.Program+" room attachments "+action+" [flags]", "Find, download, or delete files published to a CSGClaw room.")
 	roomID := fs.String("room-id", "", "room id")
 	var query, messageID, attachmentID, output string
 	var from, limit int
@@ -30,7 +30,9 @@ func (c cmd) runAttachments(ctx context.Context, run *command.Context, args []st
 		fs.IntVar(&limit, "limit", 50, "page size (1-200)")
 	} else {
 		fs.StringVar(&attachmentID, "attachment-id", "", "attachment id from the room listing")
-		fs.StringVar(&output, "output", "", "new local file path; existing files are never replaced")
+		if action == "download" {
+			fs.StringVar(&output, "output", "", "new local file path; existing files are never replaced")
+		}
 	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -48,6 +50,15 @@ func (c cmd) runAttachments(ctx context.Context, run *command.Context, args []st
 			return err
 		}
 		return command.WriteJSON(run.Stdout, result)
+	}
+	if action == "delete" {
+		if strings.TrimSpace(attachmentID) == "" {
+			return fmt.Errorf("attachment-id is required")
+		}
+		if err := client.DeleteRoomAttachment(ctx, *roomID, attachmentID); err != nil {
+			return err
+		}
+		return command.WriteJSON(run.Stdout, map[string]any{"attachment_id": attachmentID, "room_id": *roomID, "deleted": true})
 	}
 	if strings.TrimSpace(attachmentID) == "" || strings.TrimSpace(output) == "" {
 		return fmt.Errorf("attachment-id and output are required")

@@ -52,7 +52,7 @@ func (c cmd) Run(ctx context.Context, run *command.Context, args []string, globa
 func (c cmd) usage(run *command.Context) {
 	run.UsageCommandGroup(c, run.Program+" room <subcommand> [flags]", []string{
 		"list               List rooms",
-		"attachments        List or download room attachments",
+		"attachments        List, download, or delete room attachments",
 		"create             Create a room",
 		"delete <id>        Delete a room",
 	})

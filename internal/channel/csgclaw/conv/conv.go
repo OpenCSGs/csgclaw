@@ -126,7 +126,7 @@ func hiddenContext(binding channel.Binding, event channel.Event) string {
 		channelContext.WriteString(participantID)
 	}
 	channelContext.WriteString("\nUse these values when a skill asks for <current_channel>, <target_room_id>, or message create/list channel flags.")
-	channelContext.WriteString("\nRoom attachments are available through the CLI room attachments list/download commands. When task inputs are missing, first list by request_source_message_id (when supplied), then search this room by filename before asking for another upload. Download to your own workspace and read the file with local tools.\n")
+	channelContext.WriteString("\nRoom attachments persist across turns and are available through the CLI room attachments list/download/delete commands. Files under .csgclaw/engine-inputs or .csgclaw/attachments are temporary turn inputs, not saved workspace files. When asked to save a file for later, copy or download it to a regular workspace path, verify it exists, and report the persistent path. When a prior path is missing, first list by request_source_message_id (when supplied), then search this room by filename; do not conclude the upload is gone or ask for another upload before checking. Use the returned attachment ID to download it. When explicitly asked to delete an uploaded chat attachment, use room attachments delete --room-id <current_room_id> --attachment-id <id>; check ambiguous same-name matches before deleting. This removes the room attachment, not separately saved workspace copies. Delete a requested saved workspace copy with local file tools and verify the result. Report which copy was deleted; never delete service asset-store paths directly.\n")
 	parts = append(parts, channelContext.String())
 
 	if thread := formatThreadContext(event.ThreadContext); thread != "" {
@@ -190,7 +190,7 @@ func formatAttachmentSummary(attachments []channel.MessageAttachment) string {
 		if name == "" {
 			name = "attachment"
 		}
-		items = append(items, "[attachment: "+name+"]")
+		items = append(items, fmt.Sprintf("[attachment: %s; attachment_id: %s]", name, attachment.ID))
 	}
 	return strings.Join(items, " ")
 }
