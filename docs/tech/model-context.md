@@ -40,7 +40,9 @@ The small managed ACP bridge forwards DSH's existing compaction lifecycle events
 The existing participant work status carries `context_usage` separately from tools and thoughts.
 Snapshots are isolated by native session and business turn and use the same revision-controlled status delivery and reconnect snapshots.
 Codex contributes the latest request's token usage rather than its cumulative total; DSH contributes ACP `used` and `size`.
-The runtime's actual usable capacity takes precedence over the configured capacity for the indicator.
+For Codex, the indicator uses the full capacity from the currently applied model profile, matching provider settings and the 75 percent compaction threshold.
+Codex's internal 95 percent usable budget remains unchanged and is not used as the display denominator.
+For DSH, the native ACP window is used when supplied, otherwise the applied profile capacity is used.
 Before runtime reporting, usage is unknown rather than zero.
 A completed compaction invalidates the old occupancy until a fresh reading is available.
 
@@ -66,6 +68,8 @@ CSGCLAW_TEST_CODEX_BINARY="$PWD/bin/codex" go test ./internal/runtime/codex -run
 CSGCLAW_TEST_DSH_BINARY=/absolute/path/to/dsh go test ./internal/runtime/dsh -run TestContextUsageNativeDSHE2E -count=1
 ```
 
+The `TestNativeCodexContextReportingE2E` fixture also starts Codex directly and compares raw token notifications with CSGClaw snapshots.
+It verifies the full-window display, provider-reported usage above capacity, and high cumulative consumption with low current occupancy.
 No real model credentials are needed for these fixtures.
 A single oversized input, non-reducible history, or failed summary can still exceed the model capacity; no chat history is silently deleted to hide that failure.
 

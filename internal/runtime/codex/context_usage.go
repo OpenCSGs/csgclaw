@@ -22,6 +22,13 @@ func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSessi
 	if !ok || usage.ModelID != live.spec.Profile.ModelID {
 		usage = modelcap.ContextUsage{SessionID: threadID, ModelID: live.spec.Profile.ModelID, ContextWindow: metadata.ContextWindow, ContextSource: metadata.ContextSource, AutoCompact: true, CompactThreshold: metadata.CompactThreshold(), Estimated: true}
 	}
+	// The model profile is the configured full window. Codex reports its
+	// internal usable budget (normally 95%) as modelContextWindow; using that
+	// as the denominator makes a 75% compaction threshold appear as 79%.
+	// Keep the display, remaining tokens and threshold on the same full window.
+	usage.ContextWindow = metadata.ContextWindow
+	usage.ContextSource = metadata.ContextSource
+	usage.CompactThreshold = metadata.CompactThreshold()
 	switch method {
 	case "item/started":
 		usage.Compacting = true
@@ -34,12 +41,6 @@ func (m *appServerManager) publishContextUsage(runtimeID string, live *liveSessi
 				if value, valid := contextTokenNumber(last["totalTokens"]); valid {
 					usage.UsedTokens = &value
 					usage.Estimated = false
-				}
-			}
-			if size, valid := contextTokenNumber(raw["modelContextWindow"]); valid && size > 0 {
-				usage.ContextWindow = size
-				if size != metadata.ContextWindow {
-					usage.ContextSource = "runtime"
 				}
 			}
 		}
