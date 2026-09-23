@@ -10,6 +10,7 @@ import {
   useConversationDraftEditorSync,
 } from "@/components/business/ConversationPane";
 import { DocumentPreviewPanel, type DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
+import { CitationSources, type CitationSelection } from "@/components/business/MessageContent";
 import { AgentView, type AgentDetailPaneHandle } from "@/pages/AgentPage/components";
 import { Button, DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
@@ -292,6 +293,7 @@ function ConversationPaneContent({
   const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
   const [deleteRoomError, setDeleteRoomError] = useState("");
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
+  const [citationSelection, setCitationSelection] = useState<CitationSelection | null>(null);
   const logAgentID = logAgent?.id || "";
   const logAgentName = logAgent?.name || conversation.title || "";
   const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
@@ -330,6 +332,7 @@ function ConversationPaneContent({
     setDeleteRoomBusy(false);
     setDeleteRoomError("");
     setDocumentPreview(null);
+    setCitationSelection(null);
   }, [conversation.id, logAgentID]);
 
   const refreshAgentLogs = useCallback(async () => {
@@ -357,6 +360,7 @@ function ConversationPaneContent({
       onCloseThread();
       onToggleChannelTools(false);
       setDocumentPreview(null);
+      setCitationSelection(null);
     }
     setActivityPanelOpen((open) => !open);
   }, [activityPanelOpen, onCloseThread, onToggleChannelTools]);
@@ -367,6 +371,7 @@ function ConversationPaneContent({
       onCloseThread();
       onToggleChannelTools(false);
       setDocumentPreview(null);
+      setCitationSelection(null);
       setActivityPanelOpen(true);
     },
     [onCloseThread, onToggleChannelTools],
@@ -381,6 +386,7 @@ function ConversationPaneContent({
       onCloseThread();
       setActivityPanelOpen(false);
       setDocumentPreview(request);
+      setCitationSelection(null);
     },
     [agentDetailPanelProps, onCloseThread, onPreserveMessageAnchor],
   );
@@ -389,8 +395,35 @@ function ConversationPaneContent({
     if (activeThreadRootID) {
       setActivityPanelOpen(false);
       setDocumentPreview(null);
+      setCitationSelection(null);
     }
   }, [activeThreadRootID]);
+
+  const handleOpenCitation = useCallback(
+    (selection: CitationSelection) => {
+      if (agentDetailPanelProps?.onClose(false) === false) return;
+      onPreserveMessageAnchor(selection.anchor);
+      onCloseThread();
+      onToggleChannelTools(false);
+      setActivityPanelOpen(false);
+      setDocumentPreview(null);
+      setCitationSelection(selection);
+    },
+    [agentDetailPanelProps, onCloseThread, onPreserveMessageAnchor, onToggleChannelTools],
+  );
+
+  const handleCitationChange = useCallback(
+    (id: string | null) => {
+      if (!id) {
+        const anchor = citationSelection?.anchor;
+        setCitationSelection(null);
+        requestAnimationFrame(() => anchor?.isConnected && anchor.focus({ preventScroll: true }));
+        return;
+      }
+      setCitationSelection((current) => (current ? { ...current, activeID: id } : null));
+    },
+    [citationSelection],
+  );
 
   const handleOpenClearMessagesDialog = useCallback(() => {
     onToggleChannelTools(false);
@@ -447,6 +480,7 @@ function ConversationPaneContent({
       onPreviewUser={onPreviewUser}
       onPreviewAttachment={handlePreviewAttachment}
       onQuestionSelect={threadQuestionMode.select}
+      onCitationSelect={handleOpenCitation}
       questionMode={threadQuestionMode}
       onSend={onSendThreadReply}
     />
@@ -462,6 +496,7 @@ function ConversationPaneContent({
       t={t}
       usersById={usersById}
       onClose={() => setActivityPanelOpen(false)}
+      onCitationSelect={handleOpenCitation}
     />
   ) : null;
   const documentPreviewPanel = documentPreview ? (
@@ -472,7 +507,16 @@ function ConversationPaneContent({
       onIndexChange={(index) => setDocumentPreview((current) => (current ? { ...current, index } : current))}
     />
   ) : null;
-  const sidePanel = agentDetailPanel ?? documentPreviewPanel ?? activityPanel ?? threadPanel;
+  const citationPanel = citationSelection ? (
+    <CitationSources
+      activeID={citationSelection.activeID}
+      cited={citationSelection.cited}
+      onActiveChange={handleCitationChange}
+      t={t}
+      variant="panel"
+    />
+  ) : null;
+  const sidePanel = agentDetailPanel ?? documentPreviewPanel ?? activityPanel ?? citationPanel ?? threadPanel;
 
   return (
     <>
@@ -542,6 +586,7 @@ function ConversationPaneContent({
         onPreviewUser={onPreviewUser}
         onPreviewAttachment={handlePreviewAttachment}
         onQuestionSelect={questionMode.select}
+        onCitationSelect={handleOpenCitation}
       />
 
       {questionMode.pending.length > 0 ? (

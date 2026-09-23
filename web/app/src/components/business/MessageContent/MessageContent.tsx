@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionCard } from "./ActionCard";
 import { AgentActivityCard } from "./AgentActivityCard";
 import { LongMessageCollapse } from "./LongMessageCollapse";
-import { renderMarkdown } from "./markdown";
+import { CitationSources } from "./CitationSources";
+import { renderMarkdownWithCitations } from "./markdown";
 import { SlashCommandCard } from "./SlashCommandCard";
 import { parseSlashCommand } from "./slashCommands";
 import { StructuredMessageCard } from "./StructuredMessageCard";
@@ -22,11 +23,13 @@ export function MessageContent({
   enableLongMessageCollapse = false,
   longMessageExpanded,
   onAction,
+  onCitationSelect,
   onLongMessageExpandedChange,
   onQuestionSelect,
   t,
 }: MessageContentProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [activeCitationID, setActiveCitationID] = useState<string | null>(null);
   const blankTurnPlaceholder = isBlankTurnPlaceholder(content);
   const activity = useMemo(
     () => (blankTurnPlaceholder ? null : parseAgentActivity(message ?? content)),
@@ -43,10 +46,19 @@ export function MessageContent({
     [activity, content, slashCommandText],
   );
   const displayContent = String(content ?? "");
-  const markup = useMemo(
-    () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : renderMarkdown(displayContent)),
-    [activity, displayContent, resolvedQuestion, slashCommandText, structured],
+  const rendered = useMemo(
+    () =>
+      renderMarkdownWithCitations(displayContent, (title) => {
+        const translated = t?.("citationLinkLabel", { title });
+        return translated && translated !== "citationLinkLabel" ? translated : `查看引用：${title}`;
+      }),
+    [displayContent, t],
   );
+  const markup = useMemo(
+    () => ((activity && !resolvedQuestion) || slashCommandText || structured ? "" : rendered.html),
+    [activity, rendered.html, resolvedQuestion, slashCommandText, structured],
+  );
+  const markdownHTML = useMemo(() => ({ __html: markup }), [markup]);
 
   useEffect(() => {
     if (enableLongMessageCollapse) {
@@ -108,16 +120,55 @@ export function MessageContent({
     return <StructuredMessageCard data={structured} />;
   }
 
-  return enableLongMessageCollapse && t ? (
-    <LongMessageCollapse
-      expanded={longMessageExpanded}
-      html={markup}
-      onExpandedChange={onLongMessageExpandedChange}
-      t={t}
-    />
-  ) : (
-    <div ref={containerRef} className="message-content" dangerouslySetInnerHTML={{ __html: markup }} />
+  const markdownContent =
+    enableLongMessageCollapse && t ? (
+      <LongMessageCollapse
+        expanded={longMessageExpanded}
+        html={markup}
+        onExpandedChange={onLongMessageExpandedChange}
+        t={t}
+      />
+    ) : (
+      <div
+        ref={rendered.cited.length ? undefined : containerRef}
+        className="message-content"
+        dangerouslySetInnerHTML={markdownHTML}
+      />
+    );
+
+  if (!rendered.cited.length) return markdownContent;
+
+  return (
+    <div
+      ref={containerRef}
+      className="message-citation-shell"
+      onClick={(event) => {
+        const button = citationButton(event.target);
+        if (!button) return;
+        const activeID = button.dataset.citationId || "";
+        if (!rendered.byID.has(activeID)) return;
+        if (onCitationSelect) {
+          onCitationSelect({ activeID, anchor: button, cited: rendered.cited });
+        } else {
+          setActiveCitationID(activeID);
+        }
+      }}
+    >
+      {markdownContent}
+      {!onCitationSelect ? (
+        <CitationSources
+          activeID={activeCitationID}
+          cited={rendered.cited}
+          onActiveChange={setActiveCitationID}
+          t={t}
+        />
+      ) : null}
+    </div>
   );
+}
+
+function citationButton(target: EventTarget | null): HTMLButtonElement | null {
+  return target instanceof Element ? target.closest<HTMLButtonElement>("button[data-citation-id]") : null;
 }
 
 function isBlankTurnPlaceholder(content: string | null | undefined): boolean {

@@ -1,4 +1,13 @@
 import type { TranslateFn } from "@/models/conversations";
+import type { RenderedCitation } from "./markdown";
+
+export type CitationSelection = {
+  activeID: string;
+  anchor: HTMLButtonElement;
+  cited: RenderedCitation[];
+};
+
+export type CitationSelectHandler = (selection: CitationSelection) => void;
 
 export type MessageLike = {
   id?: string;
@@ -48,6 +57,7 @@ export type MessageContentProps = {
   message?: MessageLike | null;
   onLongMessageExpandedChange?: (expanded: boolean) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
+  onCitationSelect?: CitationSelectHandler;
   onAction?: (action: MessageAction, message?: MessageLike | null) => void;
   t?: TranslateFn;
 };

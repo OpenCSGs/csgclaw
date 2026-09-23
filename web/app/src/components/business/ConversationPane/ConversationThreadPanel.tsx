@@ -4,6 +4,7 @@ import { Paperclip, X } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
+import type { CitationSelectHandler } from "@/components/business/MessageContent/types";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, Tooltip } from "@/components/ui";
 import { IconImage } from "@/components/ui/Icons";
@@ -82,6 +83,7 @@ export type ConversationThreadPanelProps = {
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
+  onCitationSelect?: CitationSelectHandler;
   questionMode?: QuestionAnswerMode;
   onRemoveAttachment?: (id: string) => void;
   onSend: () => VoidOrPromise;
@@ -125,6 +127,7 @@ export function ConversationThreadPanel({
   onPreviewUser,
   onPreviewAttachment,
   onQuestionSelect,
+  onCitationSelect,
   questionMode,
   onRemoveAttachment = () => {},
   mentionableUsers = [],
@@ -316,6 +319,7 @@ export function ConversationThreadPanel({
               onPreviewUser={onPreviewUser}
               onPreviewAttachment={onPreviewAttachment}
               onQuestionSelect={onQuestionSelect}
+              onCitationSelect={onCitationSelect}
             />
           </div>
         ) : null}
@@ -335,6 +339,7 @@ export function ConversationThreadPanel({
                 onPreviewUser={onPreviewUser}
                 onPreviewAttachment={onPreviewAttachment}
                 onQuestionSelect={onQuestionSelect}
+                onCitationSelect={onCitationSelect}
               />
             ))
           ) : (
@@ -545,6 +550,7 @@ type ThreadMessageProps = {
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
+  onCitationSelect?: CitationSelectHandler;
   t: TranslateFn;
   theme: ThemeMode;
   usersById: UsersById;
@@ -561,6 +567,7 @@ function ThreadMessage({
   onPreviewUser,
   onPreviewAttachment,
   onQuestionSelect,
+  onCitationSelect,
   compact = false,
 }: ThreadMessageProps) {
   const user = resolveUserByLocalIdentity(message.sender_id, usersById);
@@ -608,6 +615,7 @@ function ThreadMessage({
               content={message.content}
               message={message}
               onQuestionSelect={onQuestionSelect}
+              onCitationSelect={onCitationSelect}
               t={t}
             />
           </div>

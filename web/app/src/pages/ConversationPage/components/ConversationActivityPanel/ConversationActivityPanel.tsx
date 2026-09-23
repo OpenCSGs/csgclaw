@@ -22,6 +22,7 @@ import {
 import { fetchMessagesRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
 import { MessageContent } from "@/components/business/MessageContent";
+import type { CitationSelectHandler } from "@/components/business/MessageContent/types";
 import {
   Button,
   DropdownMenuCheckboxItem,
@@ -66,6 +67,7 @@ type ConversationActivityPanelProps = {
   initialEntryID?: string | null;
   locale: LocaleCode;
   onClose: () => void;
+  onCitationSelect?: CitationSelectHandler;
   t: TranslateFn;
   usersById: UsersById;
 };
@@ -119,6 +121,7 @@ export function ConversationActivityPanel({
   initialEntryID = null,
   locale,
   onClose,
+  onCitationSelect,
   t,
   usersById,
 }: ConversationActivityPanelProps) {
@@ -540,6 +543,7 @@ export function ConversationActivityPanel({
                 selected={selectedEntryID === entry.id}
                 t={t}
                 usersById={usersById}
+                onCitationSelect={onCitationSelect}
                 rowRef={(node) => {
                   if (node) {
                     rowRefs.current.set(entry.id, node);
@@ -661,6 +665,7 @@ function ActivityRow({
   selected,
   t,
   usersById,
+  onCitationSelect,
 }: {
   direct: boolean;
   entry: ConversationActivityEntry;
@@ -669,6 +674,7 @@ function ActivityRow({
   selected: boolean;
   t: TranslateFn;
   usersById: UsersById;
+  onCitationSelect?: CitationSelectHandler;
 }) {
   const [expanded, setExpanded] = useState(false);
   const details = conversationActivityEntryDetails(entry);
@@ -710,6 +716,7 @@ function ActivityRow({
               actionBusy=""
               actionFeedback={{ key: "", message: "" }}
               onAction={() => undefined}
+              onCitationSelect={onCitationSelect}
               t={t}
             />
           ) : (

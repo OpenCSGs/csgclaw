@@ -5,7 +5,12 @@ import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
-import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
+import type {
+  CitationSelectHandler,
+  MessageAction,
+  MessageActionFeedback,
+  MessageLike,
+} from "@/components/business/MessageContent/types";
 import { IconImage } from "@/components/ui/Icons";
 import { isAgentAvailable, resolveAgentAvatarFallback, type AgentLike } from "@/models/agents";
 import {
@@ -49,6 +54,7 @@ export type ConversationMessageListProps = {
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onPreviewAttachment?: (request: DocumentPreviewRequest) => void;
   onQuestionSelect?: (activityID: string, questionID?: string, optionIndex?: number) => void;
+  onCitationSelect?: CitationSelectHandler;
   t: TranslateFn;
   theme: ThemeMode;
   usersById: UsersById;
@@ -76,6 +82,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   onPreviewUser,
   onPreviewAttachment,
   onQuestionSelect,
+  onCitationSelect,
 }: ConversationMessageListProps) {
   const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
 
@@ -179,6 +186,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                           : undefined
                       }
                       onQuestionSelect={onQuestionSelect}
+                      onCitationSelect={onCitationSelect}
                       t={t}
                     />
                   </div>
