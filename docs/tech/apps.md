@@ -133,6 +133,8 @@ Inside an Agent runtime, the CLI permits catalog/list/get and supplies an App se
 | `POST .../{installation_id}/connect` or `/disconnect` | Connect or disconnect one binding |
 
 Codex accesses App tools through the Agent's managed `/api/v1/agents/{agent_id}/mcp` endpoint.
+The managed CSGClaw MCP endpoint is required: Codex waits for its tool catalog during startup and refresh before admitting a turn.
+A slow refresh must not make connected connectors appear unavailable through an incomplete optional-server catalog.
 Existing manually configured MCP servers continue to work independently; App-owned rows link to App settings.
 Disabling, disconnecting, or removing an App immediately blocks subsequent calls, including names retained by an old session.
 Read-only Agents receive and can call only tools annotated as read-only.

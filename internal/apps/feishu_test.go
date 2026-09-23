@@ -39,7 +39,7 @@ func (s *fakeTenantSource) Invalidate(token string) {
 }
 
 func TestFeishuAppObtainsAndRefreshesTenantToken(t *testing.T) {
-	for _, reject := range []string{"lark_token_invalid", "lark_token_invalid_rpc", "lark_token_invalid_always", "lark_scope_missing", "upstream_retryable"} {
+	for _, reject := range []string{"lark_token_invalid", "lark_token_invalid_rpc", "lark_token_invalid_always", "lark_scope_missing", "lark_openapi_error", "upstream_retryable"} {
 		t.Run(reject, func(t *testing.T) {
 			var calls atomic.Int32
 			source := &fakeTenantSource{prefix: "tenant-test", generation: 1}
@@ -60,6 +60,9 @@ func TestFeishuAppObtainsAndRefreshesTenantToken(t *testing.T) {
 					return nil, &jsonrpc.Error{Code: -32000, Message: "rejected", Data: json.RawMessage(`{"code":"lark_token_invalid"}`)}
 				}
 				if n == 1 || reject == "lark_token_invalid_always" {
+					if reject == "lark_openapi_error" {
+						return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: `{"code":"lark_openapi_error","message":"Lack of necessary permissions, ext=need scope: im:message.group_msg","status":400,"larkCode":230027,"tool":"im.v1.message.list","tokenType":"tenant_access_token"}`}}}, nil
+					}
 					code := reject
 					if reject == "lark_token_invalid_always" {
 						code = "lark_token_invalid"
@@ -102,6 +105,24 @@ func TestFeishuAppObtainsAndRefreshesTenantToken(t *testing.T) {
 				}
 			} else if calls.Load() != 1 || !result.IsError {
 				t.Fatal("non-authentication failure retried")
+			}
+			if reject == "lark_openapi_error" {
+				rawError, _ := json.Marshal(result)
+				if !strings.Contains(string(rawError), "230027") || !strings.Contains(string(rawError), "im:message.group_msg") {
+					t.Fatal("upstream permission details lost")
+				}
+				state, err := service.Get(context.Background(), "agent", item.InstallationID)
+				if err != nil || state.Status != "connected" {
+					t.Fatal("permission denial disconnected the connector")
+				}
+				tools, err := client.ListTools(context.Background(), nil)
+				if err != nil || len(tools.Tools) != 1 {
+					t.Fatal("permission denial removed other capabilities")
+				}
+				next, err := client.CallTool(context.Background(), &mcp.CallToolParams{Name: toolName(item.InstallationID, "read"), Arguments: map[string]any{}})
+				if err != nil || next.IsError {
+					t.Fatal("connector unusable after permission denial")
+				}
 			}
 			raw, _ := json.Marshal(item)
 			for _, secret := range []string{"platform-test", "tenant-test-1", "app-secret", "stale-user-token"} {

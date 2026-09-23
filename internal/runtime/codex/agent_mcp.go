@@ -54,10 +54,13 @@ func (r *Runtime) projectAgentMCP(profile agentruntime.Profile, manual map[strin
 	if servers == nil {
 		servers = make(map[string]any)
 	}
+	// The platform catalog is essential to every Agent turn. Optional MCP startup
+	// can omit a slow or refreshing catalog and make connected tools look absent.
 	servers[AgentMCPServerName] = map[string]any{
 		"url":                  baseURL + "/api/v1/agents/" + url.PathEscape(agentID) + "/mcp?catalog_revision=" + strconv.FormatUint(r.agentMCPRevision(agentID), 10),
 		"bearer_token_env_var": agentAccessTokenEnv,
 		"enabled":              true,
+		"required":             true,
 	}
 	return servers, nil
 }

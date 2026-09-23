@@ -151,7 +151,7 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
               >
                 {app.enabled ? t("appDisable") : t("appEnable")}
               </Button>
-              <Button size="sm" variant="tertiaryDanger" disabled={busy} onClick={() => setRemoving(app)}>
+              <Button size="sm" variant="outlineDanger" disabled={busy} onClick={() => setRemoving(app)}>
                 {t("appRemove")}
               </Button>
             </div>

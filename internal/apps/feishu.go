@@ -19,7 +19,7 @@ func callAppTool(ctx context.Context, conn *connection, params *mcp.CallToolPara
 			var err error
 			token, err = conn.tokens.Token(ctx)
 			if err != nil {
-				return nil, connectionError("app_feishu_token_failed", "Cannot obtain a Feishu application token. Check the selected Channel or App ID/App Secret, application status and Feishu connectivity.", 0, true)
+				return nil, connectionError("app_feishu_token_failed", "Cannot obtain a Feishu application token. Check the connector App ID/App Secret, application status and Feishu connectivity.", 0, true)
 			}
 			requestContext = context.WithValue(ctx, feishuCallTokenKey{}, token)
 		}

@@ -127,12 +127,7 @@ export function AgentAppsPanel({ controller, t, portalContainer, selectedID, add
               >
                 {t("appDisconnect")}
               </Button>
-              <Button
-                size="sm"
-                variant="tertiaryDanger"
-                disabled={!!controller.busyID}
-                onClick={() => setRemoving(app)}
-              >
+              <Button size="sm" variant="outlineDanger" disabled={!!controller.busyID} onClick={() => setRemoving(app)}>
                 {t("appRemove")}
               </Button>
             </div>

@@ -29,6 +29,9 @@ func TestAgentMCPProjectionPreservesManualServersAndScopedCredential(t *testing.
 		t.Fatal(err)
 	}
 	builtin := servers[AgentMCPServerName].(map[string]any)
+	if builtin["required"] != true {
+		t.Fatal("platform catalog must be ready before an Agent turn")
+	}
 	if builtin["url"] != "http://127.0.0.1:18080/api/v1/agents/agent-alice/mcp?catalog_revision=7" || builtin["bearer_token_env_var"] != agentAccessTokenEnv {
 		t.Fatalf("builtin = %#v", builtin)
 	}

@@ -1,9 +1,11 @@
 package codex
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,15 +23,16 @@ import (
 // An opt-in integration test exercises the actual bundled app-server against
 // local MCP and Responses fixtures, without external model calls or secrets.
 func TestAgentMCPBundledCodexE2E(t *testing.T) {
-	t.Run("full_tools", func(t *testing.T) { testAgentMCPBundledCodex(t, "") })
+	t.Run("delayed_refresh", func(t *testing.T) { testAgentMCPBundledCodex(t, "gpt-6-luna", 2*time.Second) })
+	t.Run("full_tools", func(t *testing.T) { testAgentMCPBundledCodex(t, "", 0) })
 	t.Run("native_tool_search", func(t *testing.T) {
 		for _, model := range []string{"gpt-5.5", "gpt-6-sol", "gpt-6-luna"} {
-			t.Run(model, func(t *testing.T) { testAgentMCPBundledCodex(t, model) })
+			t.Run(model, func(t *testing.T) { testAgentMCPBundledCodex(t, model, 0) })
 		}
 	})
 }
 
-func testAgentMCPBundledCodex(t *testing.T, model string) {
+func testAgentMCPBundledCodex(t *testing.T, model string, refreshDiscoveryDelay time.Duration) {
 	search := model != ""
 	binary := os.Getenv("CSGCLAW_TEST_CODEX_BINARY")
 	if binary == "" {
@@ -70,6 +73,26 @@ func testAgentMCPBundledCodex(t *testing.T, model string) {
 		if r.Header.Get("Authorization") != "Bearer agent-token" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
+		}
+		if refreshDiscoveryDelay > 0 && revision.Load() > 0 && r.Method == http.MethodPost {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			var request struct {
+				Method string `json:"method"`
+			}
+			if json.Unmarshal(body, &request) == nil && request.Method == "tools/list" {
+				timer := time.NewTimer(refreshDiscoveryDelay)
+				defer timer.Stop()
+				select {
+				case <-timer.C:
+				case <-r.Context().Done():
+					return
+				}
+			}
 		}
 		handler.ServeHTTP(w, r)
 	})

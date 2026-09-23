@@ -130,6 +130,8 @@ Agent 运行环境中的 CLI 只允许目录、列表和详情读取，并提供
 | `POST .../{installation_id}/connect` 或 `/disconnect` | 连接或断开一个绑定 |
 
 Codex 通过该 Agent 的受管 `/api/v1/agents/{agent_id}/mcp` 入口使用 App 工具。
+CSGClaw 内置 MCP 入口被标记为必需服务，Codex 在启动及工具刷新后等待工具清单就绪再生成回答。
+工具加载较慢时，不应使用不完整的可选服务清单将已连接的连接器误判为不可用。
 已有手动 MCP 继续独立工作，由 App 管理的记录跳转到 App 设置。
 停用、断开或移除后立即禁止后续调用，旧会话保留的工具名也不能绕过。
 只读 Agent 只能发现和调用标记为只读的工具。
