@@ -62,11 +62,8 @@ func TestInstallRemoteServerProbesStableIDAndPreservesSourceMetadata(t *testing.
 	}
 	select {
 	case got := <-probed:
-		if got != id {
-			t.Fatalf("renamed probe key = %q, want %q", got, id)
-		}
-	case <-ctx.Done():
-		t.Fatal("renamed installation was not checked")
+		t.Fatalf("display-only rename started another probe for %q", got)
+	default:
 	}
 }
 

@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"time"
 
 	"csgclaw/internal/knowledgebase"
+	"csgclaw/internal/mcpschema"
 )
 
 const (
@@ -307,7 +309,22 @@ func (s *Service) filterAvailableServers(servers map[string]any) map[string]any 
 }
 
 func availabilityConfigHash(config map[string]any) (string, error) {
-	encoded, err := json.Marshal(config)
+	// Display and source edits do not change the MCP connection. Keep their
+	// cached result while still invalidating it for endpoint, auth or timeout edits.
+	probeConfig := maps.Clone(config)
+	delete(probeConfig, mcpschema.DisplayNameKey)
+	delete(probeConfig, "description")
+	if metadata, ok := probeConfig[ManagedMetaKey].(map[string]any); ok {
+		metadata = maps.Clone(metadata)
+		delete(metadata, ManagedMetaNamespace)
+		delete(metadata, mcpschema.MarketplaceMetaKey)
+		if len(metadata) == 0 {
+			delete(probeConfig, ManagedMetaKey)
+		} else {
+			probeConfig[ManagedMetaKey] = metadata
+		}
+	}
+	encoded, err := json.Marshal(probeConfig)
 	if err != nil {
 		return "", err
 	}

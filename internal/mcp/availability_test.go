@@ -2,10 +2,61 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
+
+	"csgclaw/internal/mcpschema"
 )
+
+func TestAvailabilityConfigHashSeparatesPresentationFromConnection(t *testing.T) {
+	config := RemoteServer{ID: "42", Name: "必应搜索", HubURL: "https://hub.example", URL: "https://mcp.example"}.Config()
+	config[mcpschema.DisplayNameKey] = "必应搜索"
+	config["description"] = "Original description"
+	original, _ := json.Marshal(config)
+	want, err := availabilityConfigHash(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := json.Marshal(config); string(after) != string(original) {
+		t.Fatal("hashing mutated stored metadata")
+	}
+	for _, key := range []string{mcpschema.DisplayNameKey, "description", ManagedMetaKey} {
+		t.Run(key, func(t *testing.T) {
+			changed := cloneMap(config)
+			if key == ManagedMetaKey {
+				changed[key] = map[string]any{ManagedMetaNamespace: map[string]any{"name": "new source name"}, mcpschema.MarketplaceMetaKey: map[string]any{"hub_url": "https://another-hub.example"}}
+			} else {
+				changed[key] = "Renamed 搜索"
+			}
+			got, err := availabilityConfigHash(changed)
+			if err != nil || got != want {
+				t.Fatalf("presentation edit invalidated availability: %v", err)
+			}
+			delete(changed, key)
+			got, err = availabilityConfigHash(changed)
+			if err != nil || got != want {
+				t.Fatalf("removing presentation invalidated availability: %v", err)
+			}
+		})
+	}
+	for key, value := range map[string]any{
+		"url": "https://other.example", "headers": map[string]any{"Authorization": "new-test-token"},
+		"command": "new-command", "args": []any{"--new"}, "env": map[string]any{"MODE": "changed"},
+		"transport": "sse", "startup_timeout_sec": 15, "tool_timeout_sec": 45, "enabled": false,
+		ManagedMetaKey: map[string]any{"vendor.example/config": map[string]any{"setting": "changed"}},
+	} {
+		t.Run(key+" connection", func(t *testing.T) {
+			changed := cloneMap(config)
+			changed[key] = value
+			got, err := availabilityConfigHash(changed)
+			if err != nil || got == want {
+				t.Fatalf("connection edit reused stale availability: %v", err)
+			}
+		})
+	}
+}
 
 type availabilityTestProber struct {
 	probe func(context.Context, string, map[string]any) (ProbeResult, error)
