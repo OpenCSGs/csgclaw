@@ -68,7 +68,12 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
     };
   }, [reload]);
   const editing = items.find((item) => item.installation_id === resourceId) || null;
-  const definition = adding || definitions.find((d) => d.app_id === (editing?.app_id || search.get("add_connector")));
+  const availableDefinitions = definitions.filter((definition) => definition.app_id !== "llm-wiki");
+  const definition =
+    adding ||
+    (editing
+      ? definitions.find((d) => d.app_id === editing.app_id)
+      : availableDefinitions.find((d) => d.app_id === search.get("add_connector")));
   const close = () => {
     setAdding(null);
     void navigate("/connectors");
@@ -166,7 +171,7 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
             <DialogCloseButton label={t("close")} />
           </DialogHeader>
           <DialogBody className={styles.catalog}>
-            {definitions.map((definition) => (
+            {availableDefinitions.map((definition) => (
               <Button
                 key={definition.app_id}
                 onClick={() => {
