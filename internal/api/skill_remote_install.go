@@ -126,7 +126,12 @@ func (h *Handler) handleSkillInstall(w http.ResponseWriter, r *http.Request) {
 		writeRemoteSkillsHubError(w, err)
 		return
 	}
-	archive, err := skillremote.FetchAgenticHubSkillArchive(r.Context(), baseURL, remotePath, ref)
+	accessToken, err := remoteSkillsHubAccessToken()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	archive, err := skillremote.FetchAgenticHubSkillArchive(r.Context(), baseURL, accessToken, remotePath, ref)
 	if err != nil {
 		if skillremote.IsInvalidAgenticHubRequest(err) {
 			http.Error(w, err.Error(), http.StatusBadRequest)

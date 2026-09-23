@@ -5435,9 +5435,15 @@ enabled = true
 func TestHandleSkillInstallFromOfficialHub(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	previousAccessToken := remoteSkillsHubAccessToken
+	remoteSkillsHubAccessToken = func() (string, error) { return "skill-user-token", nil }
+	t.Cleanup(func() { remoteSkillsHubAccessToken = previousAccessToken })
 
 	archiveRequests := 0
 	officialHub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.Header.Get("Authorization"), "Bearer skill-user-token"; got != want {
+			t.Errorf("Authorization = %q, want %q", got, want)
+		}
 		switch r.URL.Path {
 		case "/api/v1/skills/AIWizards/agent-builder/download_archive/refs/dev":
 			archiveRequests++

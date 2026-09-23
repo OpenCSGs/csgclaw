@@ -95,18 +95,19 @@ type agenticHubSkillRecord struct {
 }
 
 type agenticHubArchiveBuilder struct {
-	baseURL    string
-	client     *http.Client
-	files      int
-	ref        string
-	remotePath string
-	skillName  string
-	totalBytes int64
-	treePages  int
-	visited    map[string]struct{}
+	accessToken string
+	baseURL     string
+	client      *http.Client
+	files       int
+	ref         string
+	remotePath  string
+	skillName   string
+	totalBytes  int64
+	treePages   int
+	visited     map[string]struct{}
 }
 
-func FetchAgenticHubSkillArchive(ctx context.Context, baseURL, remotePath, ref string) ([]byte, error) {
+func FetchAgenticHubSkillArchive(ctx context.Context, baseURL, accessToken, remotePath, ref string) ([]byte, error) {
 	remotePath, ref, err := NormalizeAgenticHubSkillRequest(remotePath, ref)
 	if err != nil {
 		return nil, err
@@ -116,7 +117,7 @@ func FetchAgenticHubSkillArchive(ctx context.Context, baseURL, remotePath, ref s
 		return nil, fmt.Errorf("%w: %v", ErrInvalidAgenticHubRequest, err)
 	}
 	archiveClient := &http.Client{Timeout: agenticHubArchiveTimeout}
-	archive, available, err := downloadAgenticHubSkillArchive(ctx, archiveClient, baseURL, remotePath, ref)
+	archive, available, err := downloadAgenticHubSkillArchive(ctx, archiveClient, baseURL, accessToken, remotePath, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -124,21 +125,22 @@ func FetchAgenticHubSkillArchive(ctx context.Context, baseURL, remotePath, ref s
 		return archive, nil
 	}
 	requestClient := &http.Client{Timeout: agenticHubRequestTimeout}
-	return buildAgenticHubSkillArchive(ctx, requestClient, baseURL, remotePath, ref, skillName)
+	return buildAgenticHubSkillArchive(ctx, requestClient, baseURL, accessToken, remotePath, ref, skillName)
 }
 
 func buildAgenticHubSkillArchive(
 	ctx context.Context,
 	client *http.Client,
-	baseURL, remotePath, ref, skillName string,
+	baseURL, accessToken, remotePath, ref, skillName string,
 ) ([]byte, error) {
 	builder := &agenticHubArchiveBuilder{
-		baseURL:    baseURL,
-		client:     client,
-		ref:        ref,
-		remotePath: remotePath,
-		skillName:  skillName,
-		visited:    map[string]struct{}{},
+		accessToken: accessToken,
+		baseURL:     baseURL,
+		client:      client,
+		ref:         ref,
+		remotePath:  remotePath,
+		skillName:   skillName,
+		visited:     map[string]struct{}{},
 	}
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -159,7 +161,7 @@ func buildAgenticHubSkillArchive(
 func downloadAgenticHubSkillArchive(
 	ctx context.Context,
 	client *http.Client,
-	baseURL, remotePath, ref string,
+	baseURL, accessToken, remotePath, ref string,
 ) ([]byte, bool, error) {
 	endpoint, err := agenticHubSkillArchiveURL(baseURL, remotePath, ref)
 	if err != nil {
@@ -170,6 +172,9 @@ func downloadAgenticHubSkillArchive(
 		return nil, false, fmt.Errorf("create AgenticHub archive request: %w", err)
 	}
 	req.Header.Set("Accept", "application/zip")
+	if token := strings.TrimSpace(accessToken); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, false, fmt.Errorf("AgenticHub archive request %s: %w", endpoint, err)
@@ -325,7 +330,7 @@ func (b *agenticHubArchiveBuilder) walkTree(
 			return err
 		}
 		var payload agenticHubTreeResponse
-		if err := getAgenticHubJSON(ctx, b.client, endpoint, &payload); err != nil {
+		if err := getAgenticHubJSONWithAccessToken(ctx, b.client, endpoint, b.accessToken, &payload); err != nil {
 			return err
 		}
 		for _, entry := range payload.Data.Files {
@@ -350,7 +355,7 @@ func (b *agenticHubArchiveBuilder) fetchBlob(ctx context.Context, filePath strin
 		return nil, err
 	}
 	var payload agenticHubBlobResponse
-	if err := getAgenticHubJSON(ctx, b.client, endpoint, &payload); err != nil {
+	if err := getAgenticHubJSONWithAccessToken(ctx, b.client, endpoint, b.accessToken, &payload); err != nil {
 		return nil, err
 	}
 	content, err := decodeAgenticHubBase64(payload.Data.Content)
@@ -358,10 +363,6 @@ func (b *agenticHubArchiveBuilder) fetchBlob(ctx context.Context, filePath strin
 		return nil, fmt.Errorf("decode remote skill blob %q: %w", filePath, err)
 	}
 	return content, nil
-}
-
-func getAgenticHubJSON(ctx context.Context, client *http.Client, endpoint string, out any) error {
-	return getAgenticHubJSONWithAccessToken(ctx, client, endpoint, "", out)
 }
 
 func getAgenticHubJSONWithAccessToken(ctx context.Context, client *http.Client, endpoint, accessToken string, out any) error {

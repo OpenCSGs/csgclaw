@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 type availabilityTestProber struct {
@@ -65,6 +66,45 @@ func TestRequireServerAvailableRejectsFailedRemoteProbe(t *testing.T) {
 	err := svc.RequireServerAvailable(context.Background(), "denied", config)
 	if !errors.Is(err, ErrServerUnavailable) {
 		t.Fatalf("RequireServerAvailable() error = %v, want ErrServerUnavailable", err)
+	}
+}
+
+func TestAvailabilityChecksHonorConfiguredProbeTimeouts(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		check func(*Service, map[string]any) bool
+	}{
+		{
+			name: "agent binding",
+			check: func(svc *Service, config map[string]any) bool {
+				return svc.RequireServerAvailable(context.Background(), "slow", config) == nil
+			},
+		},
+		{
+			name: "template creation",
+			check: func(svc *Service, config map[string]any) bool {
+				filtered, skipped := svc.FilterAvailableTemplateServers(context.Background(), map[string]any{"slow": config})
+				_, retained := filtered["slow"]
+				return retained && len(skipped) == 0
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			svc := NewService(WithServerProber(availabilityTestProber{probe: func(ctx context.Context, _ string, _ map[string]any) (ProbeResult, error) {
+				select {
+				case <-time.After(1100 * time.Millisecond):
+					return ProbeResult{Connected: true}, nil
+				case <-ctx.Done():
+					return ProbeResult{}, ctx.Err()
+				}
+			}}))
+			config := RemoteServer{ID: "remote-slow", Name: "slow", URL: "https://slow.example.test/mcp"}.Config()
+			config["startup_timeout_sec"] = 2
+			config["tool_timeout_sec"] = 2
+			if !test.check(svc, config) {
+				t.Fatal("availability check rejected a server that completed within its configured timeouts")
+			}
+		})
 	}
 }
 

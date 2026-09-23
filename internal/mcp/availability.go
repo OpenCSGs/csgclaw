@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"csgclaw/internal/knowledgebase"
@@ -19,7 +18,6 @@ const (
 	availabilitySuccessTTL = 30 * time.Second
 	availabilityFailureTTL = 10 * time.Second
 	availabilityListWait   = 750 * time.Millisecond
-	availabilityAddWait    = 1 * time.Second
 	availabilityWorkers    = 10
 )
 
@@ -44,7 +42,8 @@ type availabilityEntry struct {
 // availabilityProbe represents one shared in-flight probe so concurrent page
 // loads do not open duplicate MCP sessions for the same configuration.
 type availabilityProbe struct {
-	done chan struct{}
+	done      chan struct{}
+	available bool
 }
 
 func (s *Service) initAvailability() {
@@ -104,14 +103,12 @@ func (s *Service) RequireServerAvailable(ctx context.Context, name string, confi
 		return fmt.Errorf("%w: %s", ErrServerUnavailable, name)
 	}
 	probe := s.startAvailabilityProbe(name, config, hash)
-	waitCtx, cancel := context.WithTimeout(ctx, availabilityAddWait)
-	defer cancel()
 	select {
 	case <-probe.done:
-		if s.availabilityAvailable(name, hash) {
+		if probe.available {
 			return nil
 		}
-	case <-waitCtx.Done():
+	case <-ctx.Done():
 	}
 	return fmt.Errorf("%w: %s", ErrServerUnavailable, name)
 }
@@ -131,6 +128,8 @@ func (s *Service) FilterAvailableTemplateServers(ctx context.Context, servers ma
 		resourceType string
 		config       map[string]any
 		hash         string
+		probe        *availabilityProbe
+		available    bool
 	}
 	candidates := make([]candidate, 0)
 	for name, raw := range filtered {
@@ -154,36 +153,26 @@ func (s *Service) FilterAvailableTemplateServers(ctx context.Context, servers ma
 		return filtered, nil
 	}
 
-	checkCtx, cancel := context.WithTimeout(ctx, availabilityAddWait)
-	defer cancel()
-	var wg sync.WaitGroup
-	for _, item := range candidates {
-		if item.hash == "" {
+	for i := range candidates {
+		if candidates[i].hash == "" {
 			continue
 		}
-		wg.Add(1)
-		go func(item candidate) {
-			defer wg.Done()
-			probe := s.startAvailabilityProbe(item.name, item.config, item.hash)
-			select {
-			case <-probe.done:
-			case <-checkCtx.Done():
-			}
-		}(item)
+		candidates[i].probe = s.startAvailabilityProbe(candidates[i].name, candidates[i].config, candidates[i].hash)
 	}
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-checkCtx.Done():
+	for i := range candidates {
+		if candidates[i].probe == nil {
+			continue
+		}
+		select {
+		case <-candidates[i].probe.done:
+			candidates[i].available = candidates[i].probe.available
+		case <-ctx.Done():
+		}
 	}
 
 	skipped := make([]SkippedTemplateResource, 0)
 	for _, item := range candidates {
-		if item.hash != "" && s.availabilityAvailable(item.name, item.hash) {
+		if item.available {
 			continue
 		}
 		delete(filtered, item.name)
@@ -257,19 +246,30 @@ func (s *Service) startAvailabilityProbe(name string, config map[string]any, has
 
 	cloned := cloneMap(config)
 	go func() {
-		s.availabilitySem <- struct{}{}
-		probeCtx, cancel := context.WithTimeout(context.Background(), availabilityAddWait)
-		_, err := s.ProbeServer(probeCtx, name, cloned)
-		cancel()
-		<-s.availabilitySem
+		probeCtx, cancel := context.WithTimeout(context.Background(), availabilityProbeTimeout(cloned))
+		defer cancel()
+		var probeErr error
+		select {
+		case s.availabilitySem <- struct{}{}:
+			_, probeErr = s.ProbeServer(probeCtx, name, cloned)
+			<-s.availabilitySem
+		case <-probeCtx.Done():
+			probeErr = probeCtx.Err()
+		}
 
 		s.availabilityMu.Lock()
-		s.availability[name] = availabilityEntry{available: err == nil, checkedAt: time.Now(), hash: hash}
+		probe.available = probeErr == nil
+		s.availability[name] = availabilityEntry{available: probeErr == nil, checkedAt: time.Now(), hash: hash}
 		delete(s.availabilityInflight, key)
 		close(probe.done)
 		s.availabilityMu.Unlock()
 	}()
 	return probe
+}
+
+func availabilityProbeTimeout(config map[string]any) time.Duration {
+	return probeTimeout(config, "startup_timeout_sec", defaultProbeStartupTimeout) +
+		probeTimeout(config, "tool_timeout_sec", defaultProbeToolTimeout)
 }
 
 func (s *Service) filterAvailableServers(servers map[string]any) map[string]any {
