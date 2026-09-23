@@ -2,6 +2,7 @@ package cliproxy
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -104,6 +105,11 @@ func TestRegisteredModelsUsesCLIProxyProviderRegistry(t *testing.T) {
 }
 
 func TestFallbackModelsCoverEmbeddedCLIProviders(t *testing.T) {
+	for _, model := range []string{"gpt-6-sol", "gpt-6-luna"} {
+		if !containsString(fallbackModels(ProviderCodex), model) {
+			t.Errorf("Codex fallback models missing %s", model)
+		}
+	}
 	for provider, wantFirst := range map[string]string{
 		"codex":  "gpt-6-astra",
 		"claude": "claude-opus-4-7",
@@ -156,8 +162,10 @@ func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListModels() error = %v", err)
 	}
-	if !containsString(models, "gpt-5.5") {
-		t.Fatalf("models = %v, want gpt-5.5 registered for imported codex auth", models)
+	for _, model := range []string{"gpt-5.5", "gpt-6-sol", "gpt-6-luna"} {
+		if !containsString(models, model) {
+			t.Fatalf("models = %v, want %s registered for imported codex auth", models, model)
+		}
 	}
 	providerBaseURL, err := svc.ProviderBaseURL(ctx, ProviderCodex)
 	if err != nil {
@@ -178,6 +186,23 @@ func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET unified models route status = %d, want 200", resp.StatusCode)
+	}
+	var catalog struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&catalog); err != nil {
+		t.Fatal(err)
+	}
+	var modelIDs []string
+	for _, model := range catalog.Data {
+		modelIDs = append(modelIDs, model.ID)
+	}
+	for _, model := range []string{"gpt-6-sol", "gpt-6-luna"} {
+		if !containsString(modelIDs, model) {
+			t.Errorf("GET unified models route missing %s: %v", model, modelIDs)
+		}
 	}
 }
 

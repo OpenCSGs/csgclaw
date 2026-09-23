@@ -27,7 +27,7 @@ func ForProviderModel(provider, model string) Capabilities {
 		// Explicitly verified Codex models. Unknown models and third-party
 		// providers retain full MCP tool definitions instead of deferred search.
 		switch strings.ToLower(strings.TrimSpace(model)) {
-		case "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.3-codex-spark":
+		case "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.3-codex-spark":
 			caps.SupportsSearchTool = true
 		}
 		return caps

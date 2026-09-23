@@ -8,6 +8,8 @@ func TestSearchCapabilityRequiresKnownProviderAndModel(t *testing.T) {
 		want            bool
 	}{
 		{"codex", "gpt-5.5", true}, {"codex", "gpt-5.6-sol", true},
+		{"codex", "gpt-6-sol", true}, {"codex", "gpt-6-luna", true},
+		{"api", "gpt-6-sol", false}, {"api", "gpt-6-luna", false},
 		{"api", "gpt-5.5", false}, {"csghub", "gpt-5.5", false},
 		{"codex", "unknown", false}, {"codex", "gpt-4.1", false},
 	} {

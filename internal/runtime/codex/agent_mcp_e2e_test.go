@@ -21,11 +21,16 @@ import (
 // An opt-in integration test exercises the actual bundled app-server against
 // local MCP and Responses fixtures, without external model calls or secrets.
 func TestAgentMCPBundledCodexE2E(t *testing.T) {
-	t.Run("full_tools", func(t *testing.T) { testAgentMCPBundledCodex(t, false) })
-	t.Run("native_tool_search", func(t *testing.T) { testAgentMCPBundledCodex(t, true) })
+	t.Run("full_tools", func(t *testing.T) { testAgentMCPBundledCodex(t, "") })
+	t.Run("native_tool_search", func(t *testing.T) {
+		for _, model := range []string{"gpt-5.5", "gpt-6-sol", "gpt-6-luna"} {
+			t.Run(model, func(t *testing.T) { testAgentMCPBundledCodex(t, model) })
+		}
+	})
 }
 
-func testAgentMCPBundledCodex(t *testing.T, search bool) {
+func testAgentMCPBundledCodex(t *testing.T, model string) {
+	search := model != ""
 	binary := os.Getenv("CSGCLAW_TEST_CODEX_BINARY")
 	if binary == "" {
 		t.Skip("set CSGCLAW_TEST_CODEX_BINARY to the bundled Codex binary")
@@ -115,7 +120,7 @@ func testAgentMCPBundledCodex(t *testing.T, search bool) {
 	profile.ModelID = "fixture-model"
 	if search {
 		profile.Provider = "codex"
-		profile.ModelID = "gpt-5.5"
+		profile.ModelID = model
 	}
 	profile.BaseURL = server.URL + "/v1"
 	profile.Env["CSGCLAW_BASE_URL"] = server.URL

@@ -15,7 +15,7 @@ var contextCatalog = []struct {
 	aliases []string
 	tokens  int64
 }{
-	{[]string{"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4"}, 1050000},
+	{[]string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4"}, 1050000},
 	{[]string{"gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex", "gpt-5.2", "gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-5"}, 400000},
 	{[]string{"gpt-5.3-codex-spark"}, 128000},
 	{[]string{"gpt-4.1-mini", "gpt-4.1-nano", "gpt-4.1"}, 1047576},
