@@ -1,0 +1,52 @@
+[
+  {
+    "encoding": "gb18030",
+    "text": "# 坦克大战 - 需求文档\n\n## 游戏概述\n经典 Battle City 复刻，Web 平台像素风，支持单人双人。玩家移动、发射子弹，保护基地，击败所有敌人。",
+    "base64": "IyDMub/LtPPVvSAtINDox/POxLW1CgojIyDTzs+3uMXK9gq+rbXkIEJhdHRsZSBDaXR5ILi0v8yjrFdlYiDGvcyoz/HL2Lfno6zWp7PWtaXIy8uryMuho83mvNLSxravoaK3osnk19O1r6OssaO7pLv5tdijrLv3sNzL+dPQtdDIy6Gj"
+  },
+  {
+    "encoding": "gb18030",
+    "text": "# 中文文档\n你好世界",
+    "base64": "IyDW0M7EzsS1tQrE47rDysC95w=="
+  },
+  {
+    "encoding": "big5",
+    "text": "# 坦克大戰 - 需求文件\n\n## 遊戲概述\n經典 Battle City 復刻，Web 平台像素風，支援單人雙人。玩家移動、發射子彈，保護基地，擊敗所有敵人。",
+    "base64": "IyCpWqdKpGq+1CAtILvdqESk5aXzCgojIyC5Q8C4t6etegq4Z6jlIEJhdHRsZSBDaXR5ILRfqOihQVdlYiClraV4ubOvwK23oUGk5LSps+akSML5pEihQ6qxrmGyvrDKoUK1b65npGy8daFBq0/FQLDypmGhQcC7sdGp0qazvMSkSKFD"
+  },
+  {
+    "encoding": "shift_jis",
+    "text": "# ゲームの仕様書\nプレイヤーは戦車を操作して敵を倒します。方向キーで移動し、ボタンを押すと弾を発射します。",
+    "base64": "IyCDUYFbg4CCzI5kl2yPkQqDdoOMg0ODhIFbgs2Q7Y7UgvCRgI3sgrWCxJNHgvCTfIK1gtyCt4FClfuM/INMgVuCxYjak66CtYFBg3uDXoOTgvCJn4K3gsaSZYLwlK2Oy4K1gtyCt4FC"
+  },
+  {
+    "encoding": "euc_jp",
+    "text": "# ゲームの仕様書\nプレイヤーは戦車を操作して敵を倒します。方向キーで移動し、ボタンを押すと弾を発射します。",
+    "base64": "IyClsqG8peCkzrvFzc298Qql16XspaSl5KG8pM/A77zWpPLB4LrupLekxsWopPLF3aS3pN6kuaGjyv24/qWtobykx7DcxrCkt6Gipdylv6XzpPKyoaS5pMjDxqTyyK+8zaS3pN6kuaGj"
+  },
+  {
+    "encoding": "euc_kr",
+    "text": "# 게임 요구 사항\n플레이어는 탱크를 조작하여 적을 물리칩니다. 방향키로 이동하고 버튼을 누르면 총알을 발사합니다.",
+    "base64": "IyCw1MDTIL/ksbggu+fH1wrHw7e5wMy+7rTCIMXKxam4piDBtsDbx8+/qSDA+8C7ILmwuK7EqLTPtNkuILnmx+LFsLfOIMDMtb/Hz7DtILn2xrDAuyC0qbijuOkgw9G+y8C7ILnfu+fH1bTPtNku"
+  },
+  {
+    "encoding": "cp1252",
+    "text": "# Rapport de création\nLes élèves étudient à l’école. Le café coûte 10 € : voilà déjà l’été !",
+    "base64": "IyBSYXBwb3J0IGRlIGNy6WF0aW9uCkxlcyDpbOh2ZXMg6XR1ZGllbnQg4CBskuljb2xlLiBMZSBjYWbpIGNv+3RlIDEwIIAgOiB2b2ls4CBk6WrgIGyS6XTpICE="
+  },
+  {
+    "encoding": "gb18030-4byte",
+    "text": "# 坦克大战 - 需求文档\n\n## 游戏概述\n经典 Battle City 复刻，Web 平台像素风，支持单人双人。玩家移动、发射子弹，保护基地，击败所有敌人。\n扩展字符：𠮷、😀。",
+    "base64": "IyDMub/LtPPVvSAtINDox/POxLW1CgojIyDTzs+3uMXK9gq+rbXkIEJhdHRsZSBDaXR5ILi0v8yjrFdlYiDGvcyoz/HL2Lfno6zWp7PWtaXIy8uryMuho83mvNLSxravoaK3osnk19O1r6OssaO7pLv5tdijrLv3sNzL+dPQtdDIy6GjCsCp1bnX1rf7o7qVNLI1oaKUOfw2oaM="
+  },
+  {
+    "encoding": "utf-16",
+    "text": "# 坦克大战 - 需求文档\n\n## 游戏概述\n经典 Battle City 复刻，Web 平台像素风，支持单人双人。玩家移动、发射子弹，保护基地，击败所有敌人。",
+    "base64": "//4jACAAZldLUSdZGGIgAC0AIAAAl0Jsh2VjaAoACgAjACMAIAA4bg9igmnwjwoAz354USAAQgBhAHQAdABsAGUAIABDAGkAdAB5ACAADVk7Ugz/VwBlAGIAIABzXvBTz1Agfc6YDP8vZQFjVVO6TsxTuk4CMKlztlv7eahSATDRUwRcUFs5Xwz/3U+kYvpXMFcM//tRJY1AYglnTGW6TgIw"
+  },
+  {
+    "encoding": "utf-16-be",
+    "text": "# 坦克大战 - 需求文档\n\n## 游戏概述\n经典 Battle City 复刻，Web 平台像素风，支持单人双人。玩家移动、发射子弹，保护基地，击败所有敌人。",
+    "base64": "/v8AIwAgV2ZRS1knYhgAIAAtACCXAGxCZYdoYwAKAAoAIwAjACBuOGIPaYKP8AAKfs9ReAAgAEIAYQB0AHQAbABlACAAQwBpAHQAeQAgWQ1SO/8MAFcAZQBiACBec1PwUM99IJjO/wxlL2MBU1VOulPMTrowAnOpW7Z5+1KoMAFT0VwEW1BfOf8MT91ipFf6VzD/DFH7jSViQGcJZUxOujAC"
+  }
+]

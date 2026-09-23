@@ -1,5 +1,6 @@
 import type { AttachmentPreviewItem } from "@/models/attachments";
 import type { PreviewKind } from "./types";
+import { decodePreviewText } from "./textEncoding";
 
 const mediaKinds = new Map<string, PreviewKind>([
   ["application/xhtml+xml", "html"],
@@ -65,10 +66,14 @@ export function documentPreviewKind(
   return data && detectTextEncoding(data) ? "text" : "unsupported";
 }
 
-export function formatPreviewText(data: ArrayBuffer, mediaType: string): string {
+export function formatPreviewText(
+  data: ArrayBuffer,
+  mediaType: string,
+  options: { contentType?: string; truncated?: boolean } = {},
+): string {
   let text: string;
   try {
-    text = new TextDecoder(detectTextEncoding(data) ?? "utf-8").decode(data);
+    text = decodePreviewText(data, `${options.contentType ?? ""};${mediaType}`, options.truncated);
   } catch {
     return "";
   }

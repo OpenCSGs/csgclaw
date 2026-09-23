@@ -57,6 +57,7 @@ export function DocumentPreviewPanel({
   const [containerWidth, setContainerWidth] = useState(() => window.innerWidth);
   const [resizing, setResizing] = useState(false);
   const [scale, setScale] = useState(1);
+  const [contentType, setContentType] = useState("");
   const [data, setData] = useState<ArrayBuffer | null>(null);
   const [objectURL, setObjectURL] = useState("");
   const [previewTruncated, setPreviewTruncated] = useState(false);
@@ -129,6 +130,7 @@ export function DocumentPreviewPanel({
         nextObjectURL = URL.createObjectURL(blob);
         setObjectURL(nextObjectURL);
         setData(buffer);
+        setContentType(blob.type);
         setPreviewTruncated(truncated);
         setLoadState("ready");
       })
@@ -390,7 +392,15 @@ export function DocumentPreviewPanel({
                 {t("attachmentPreviewTruncated")}
               </div>
             ) : null}
-            <DocumentPreviewContent data={data} item={item} objectURL={objectURL} scale={scale} t={t} />
+            <DocumentPreviewContent
+              contentType={contentType}
+              truncated={previewTruncated}
+              data={data}
+              item={item}
+              objectURL={objectURL}
+              scale={scale}
+              t={t}
+            />
           </>
         ) : null}
       </div>

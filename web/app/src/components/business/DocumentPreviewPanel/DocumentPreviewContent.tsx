@@ -16,12 +16,16 @@ const SyntaxHighlightedText = lazy(() =>
 
 export function DocumentPreviewContent({
   data,
+  contentType,
+  truncated,
   item,
   objectURL,
   scale,
   t,
 }: {
   data: ArrayBuffer;
+  contentType?: string;
+  truncated?: boolean;
   item: AttachmentPreviewItem;
   objectURL: string;
   scale: number;
@@ -29,8 +33,11 @@ export function DocumentPreviewContent({
 }) {
   const kind = documentPreviewKind(item, data);
   const text = useMemo(
-    () => (kind === "html" || kind === "markdown" || kind === "text" ? formatPreviewText(data, item.mediaType) : ""),
-    [data, item.mediaType, kind],
+    () =>
+      kind === "html" || kind === "markdown" || kind === "text"
+        ? formatPreviewText(data, item.mediaType, { contentType, truncated })
+        : "",
+    [data, item.mediaType, kind, contentType, truncated],
   );
   const syntaxLanguage = useMemo(
     () => (kind === "text" ? syntaxLanguageForFile(item.name, item.mediaType) : null),

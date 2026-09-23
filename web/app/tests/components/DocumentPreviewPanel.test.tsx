@@ -122,6 +122,24 @@ describe("DocumentPreviewPanel", () => {
     },
   ];
 
+  it("uses the response charset in both Markdown preview and source", async () => {
+    const data = new Uint8Array([0x23, 0x20, 0xa4, 0xa4, 0xa4, 0xe5]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(data, {
+            headers: { "Content-Type": "text/markdown; charset=big5" },
+          }),
+      ),
+    );
+    render(<DocumentPreviewPanel index={0} items={items} t={t} onClose={vi.fn()} onIndexChange={vi.fn()} />);
+    expect(await screen.findByRole("heading", { name: "中文" })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("tab", { name: "Code" }));
+    expect(screen.getByText("# 中文")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute("href", items[0]!.downloadURL);
+  });
+
   it("loads, renders, navigates, zooms, downloads, and restores focus", async () => {
     const user = userEvent.setup();
     const anchor = document.createElement("button");
