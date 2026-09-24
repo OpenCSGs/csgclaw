@@ -3,12 +3,8 @@ name: Republish desktop OSS
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Existing release tag, for example v0.8.0-beta.1"
-        required: true
-        type: string
       source_run_id:
-        description: "Release workflow run containing the original build artifacts"
+        description: "Tag-triggered Release run containing the original build artifacts"
         required: true
         type: string
 
@@ -26,12 +22,13 @@ jobs:
       actions: read
       contents: read
     outputs:
+      version: ${{ steps.validate.outputs.version }}
       channel: ${{ steps.validate.outputs.channel }}
     steps:
-      - name: Checkout release tag
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ inputs.version }}
+          ref: main
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -44,21 +41,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
-          VERSION: ${{ inputs.version }}
         run: |
           if [[ ! "${SOURCE_RUN_ID}" =~ ^[0-9]+$ ]]; then
             echo "::error::source_run_id must be a numeric workflow run ID."
             exit 1
           fi
-          read -r run_sha run_event < <(
+          read -r run_sha run_event run_tag run_path < <(
             gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" \
-              --jq '[.head_sha, .event] | @tsv'
+              --jq '[.head_sha, .event, .head_branch, .path] | @tsv'
           )
-          if [[ "${run_event}" != push || "${run_sha}" != "$(git rev-parse HEAD)" ]]; then
-            echo "::error::The source run must be a tag push for ${VERSION}."
+          if [[ "${run_event}" != push || "${run_path}" != .github/workflows/release.yml ]]; then
+            echo "::error::The source run must be a tag-triggered Release workflow run."
             exit 1
           fi
-          echo "channel=$(node scripts/desktop-release-artifacts.mjs channel "${VERSION}")" >> "${GITHUB_OUTPUT}"
+          channel="$(node scripts/desktop-release-artifacts.mjs channel "${run_tag}")"
+          git fetch --no-tags --depth=1 origin "refs/tags/${run_tag}:refs/tags/${run_tag}"
+          if [[ "${run_sha}" != "$(git rev-parse "refs/tags/${run_tag}^{commit}")" ]]; then
+            echo "::error::The source run does not match release tag ${run_tag}."
+            exit 1
+          fi
+          echo "version=${run_tag}" >> "${GITHUB_OUTPUT}"
+          echo "channel=${channel}" >> "${GITHUB_OUTPUT}"
 
   publish:
     needs: prepare
@@ -134,7 +137,7 @@ jobs:
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
           CHANNEL: ${{ needs.prepare.outputs.channel }}
         run: |
           make desktop-oss-publish \
