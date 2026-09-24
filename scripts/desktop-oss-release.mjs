@@ -548,6 +548,8 @@ async function uploadDesktopRelease(context, options) {
     ...desktopUploadPaths(context.version, context.releaseDirectory),
     ...releasePackagePaths(context.version, context.releaseDirectory),
   ];
+  // Release objects are immutable. A rerun must keep completed uploads instead
+  // of comparing timestamps from freshly downloaded GitHub artifacts.
   for (const filePath of releaseFiles) {
     const objectPath = `oss://${bucket}/${prefix}/releases/${context.version}/${path.basename(filePath)}`;
     runCommand(
@@ -556,7 +558,7 @@ async function uploadDesktopRelease(context, options) {
         "cp",
         filePath,
         objectPath,
-        "-u",
+        "--ignore-existing",
         "--cache-control",
         "public,max-age=31536000,immutable",
       ],
@@ -579,7 +581,7 @@ async function uploadDesktopRelease(context, options) {
         "cp",
         filePath,
         objectPath,
-        "-u",
+        "--ignore-existing",
         "--cache-control",
         "public,max-age=31536000,immutable",
       ],
@@ -713,7 +715,7 @@ function uploadDesktopPackages(context, options) {
         "cp",
         filePath,
         objectPath,
-        "-u",
+        "--ignore-existing",
         "--cache-control",
         "public,max-age=31536000,immutable",
       ],
