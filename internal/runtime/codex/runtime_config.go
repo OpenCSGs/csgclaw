@@ -446,6 +446,13 @@ func configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(
 	executionMode := options.ExecutionMode
 	memoryEnabled := options.MemoryMode != MemoryModeDisabled
 	providerBlock := buildProviderConfigBlock(profile)
+	managedSkills := ""
+	if start := strings.Index(existing, skillConfigBegin); start >= 0 {
+		if end := strings.Index(existing[start:], skillConfigEnd); end >= 0 {
+			managedSkills = existing[start:start+end+len(skillConfigEnd)] + "\n"
+			existing = stripManagedBlock(existing, skillConfigBegin, skillConfigEnd)
+		}
+	}
 	content := sanitizeCopiedCodexConfigContent(existing)
 	content = strings.TrimLeft(content, "\n")
 
@@ -528,6 +535,7 @@ func configureCodexHomeConfigWithWorkspaceForPlatformAndRuntimeOptions(
 	if block, err := buildMCPServersBlockForExecutionMode(mcpServers, workspaceDir, executionMode); err == nil && block != "" {
 		content = appendManagedBlock(content, block)
 	}
+	content = appendManagedBlock(content, managedSkills)
 	content = strings.TrimLeft(content, "\n")
 	if strings.TrimSpace(content) == "" {
 		return ""

@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"csgclaw/internal/modelprovider"
+	skill "csgclaw/internal/skill/state"
 	"time"
 )
 
@@ -79,6 +80,7 @@ type AgentSpec struct {
 	Role         AgentRole                  `json:"role"`
 	Runtime      RuntimeSpec                `json:"runtime"`
 	Model        ModelSpec                  `json:"model"`
+	SkillStates  map[string]skill.State     `json:"skill_states,omitempty"`
 	Skills       []string                   `json:"skills,omitempty"`
 	MCPServers   map[string]MCPServerConfig `json:"mcp_servers,omitempty"`
 	Memory       *MemorySpec                `json:"memory,omitempty"`
@@ -186,6 +188,7 @@ type AgentStatus struct {
 // SkillSummary is a read-only projection, independent of desired Skill names.
 // Error is a stable per-file code and never contains paths or file contents.
 type SkillSummary struct {
+	Enabled     bool   `json:"enabled"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Error       string `json:"error,omitempty"`

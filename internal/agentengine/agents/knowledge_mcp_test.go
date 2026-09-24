@@ -256,3 +256,18 @@ func TestDeleteManagedKnowledgeBaseMCPUsesPersistedSnapshotWithoutSourceAccess(t
 		t.Fatalf("reconciled current servers = %#v, want empty", reconciled.Current.Servers)
 	}
 }
+
+func TestDisabledManagedMCPDoesNotResolveSourceOrMutateSpec(t *testing.T) {
+	svc := &Controller{}
+	entry := map[string]any{
+		"url": "https://example.com/mcp", "enabled": false, "description": "说明",
+		opencsgmcp.ManagedMetaKey: map[string]any{opencsgmcp.ManagedMetaNamespace: map[string]any{"type": opencsgmcp.GatewayMCPType, "auth_type": opencsgmcp.CSGHubAuthType}},
+	}
+	got, err := svc.materializeRuntimeMCPServers(context.Background(), RuntimeKindCodex, map[string]any{"search": entry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["search"].(map[string]any)["enabled"] != false || entry["description"] != "说明" {
+		t.Fatalf("禁用配置或原始配置被改变：%v", got)
+	}
+}

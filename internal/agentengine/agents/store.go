@@ -1,8 +1,10 @@
 package agents
 
 import (
+	skill "csgclaw/internal/skill/state"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,6 +68,7 @@ type legacyWorker struct {
 }
 
 type persistedAgent struct {
+	SkillStates        map[string]skill.State     `json:"skill_states,omitempty"`
 	ID                 string                     `json:"id"`
 	Name               string                     `json:"name"`
 	Description        string                     `json:"description,omitempty"`
@@ -136,6 +139,9 @@ func (a persistedAgent) MarshalJSON() ([]byte, error) {
 	}
 	if !profileEmpty(profile) {
 		out["model_config"] = profile
+	}
+	if len(a.SkillStates) > 0 {
+		out["skill_states"] = a.SkillStates
 	}
 	if a.MCPServers != nil {
 		out["mcpServers"] = a.MCPServers
@@ -240,6 +246,7 @@ func newPersistedAgent(a Agent) persistedAgent {
 		Image:              a.Image,
 		Runtime:            compactPersistedRuntime(runtimeRecordForAgent(a), topRX),
 		RuntimeOptions:     topRX,
+		SkillStates:        maps.Clone(a.SkillStates),
 		MCPServers:         cloneMCPServers(a.MCPServers),
 		RuntimeCredentials: cloneStringMap(map[string]string(a.runtimeCredentials)),
 		RuntimeInitShell:   a.runtimeInitShell,
@@ -317,6 +324,7 @@ func (a persistedAgent) toAgent() Agent {
 		Avatar:            a.Avatar,
 		BoxID:             boxID,
 		RuntimeOptions:    rx,
+		SkillStates:       maps.Clone(a.SkillStates),
 		MCPServers:        cloneMCPServers(mcpServers),
 		Role:              a.Role,
 		Status:            status,

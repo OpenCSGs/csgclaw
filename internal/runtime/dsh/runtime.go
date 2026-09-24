@@ -3,6 +3,7 @@ package dsh
 import (
 	"context"
 	"csgclaw/internal/modelcap"
+	skill "csgclaw/internal/skill/state"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,6 +47,7 @@ const runtimePatch = `- insert:
 `
 
 type AgentRef struct {
+	SkillStates    map[string]skill.State
 	ID             string
 	Name           string
 	RuntimeID      string
@@ -407,6 +409,9 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 		return agentruntime.StateUnknown, err
 	}
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), ref.Profile); err != nil {
+		return agentruntime.StateUnknown, err
+	}
+	if err := projectSkills(root, layout.SkillsRoot, ref.SkillStates); err != nil {
 		return agentruntime.StateUnknown, err
 	}
 	projections, err := r.ExtensionProjections(ref.ID)

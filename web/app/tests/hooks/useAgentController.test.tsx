@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
   batchAddAgentMCPServersRequest,
@@ -1694,6 +1694,35 @@ describe("useAgentController", () => {
     await waitFor(() => expect(result.current.agentViewProps.skills).toEqual(skills));
     expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1);
     expect(fetchAgentSkillsFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps the skill list available during a background refresh", async () => {
+    const skills = [{ name: "alpha", description: "Alpha skill", enabled: true }];
+    vi.mocked(fetchAgentSkillSummaries).mockResolvedValue(skills);
+    const { result } = renderHook(
+      () => ({ controller: useAgentControllerHarness().controller, queryClient: useQueryClient() }),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.controller.agentViewProps.skills).toEqual(skills));
+    let resolve!: (value: typeof skills) => void;
+    vi.mocked(fetchAgentSkillSummaries).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    let refresh!: Promise<void>;
+    act(() => {
+      refresh = result.current.queryClient.invalidateQueries();
+    });
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(2));
+    expect(result.current.controller.agentViewProps.skillsLoading).toBe(false);
+    expect(result.current.controller.agentViewProps.skills).toEqual(skills);
+    await act(async () => {
+      resolve([{ ...skills[0], enabled: false }]);
+      await refresh;
+    });
+    await waitFor(() => expect(result.current.controller.agentViewProps.skills?.[0].enabled).toBe(false));
   });
 
   it("loads global skill candidates and filters already-installed agent skills", async () => {

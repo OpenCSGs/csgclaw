@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAgentResourceEnablement } from "./useAgentResourceEnablement";
 import { useBlocker } from "react-router-dom";
 import { apiErrorBillingURL, apiErrorCode, errorMessage as apiErrorMessage, type ApiError } from "@/api/client";
 import { loginCLIProxyProviderRequest } from "@/api/cliproxy";
@@ -829,6 +830,17 @@ export function useAgentController({
     return normalizeFeishuPendingRegistration(feishuPendingRegistrations[agentID], agentID);
   }, [feishuPendingRegistrations, selectedAgentForPage?.id]);
   const agentDetailAgentID = selectedAgentForPage?.id || "";
+  const resourceEnablement = useAgentResourceEnablement(agentDetailAgentID, t, async (id) => {
+    if (!(await refreshAgentStateRef.current(id))) throw new Error(t("agentResourceRefreshFailed"));
+    const view = await fetchAgentMCPServers(id);
+    if (selectedAgentForPageRef.current?.id !== id) return;
+    setAgentPageDraft((current) =>
+      current ? { ...current, mcpServers: cloneMCPServersForDraft(view.servers) } : current,
+    );
+    setAgentPageSavedDraft((current) =>
+      current ? { ...current, mcpServers: cloneMCPServersForDraft(view.servers) } : current,
+    );
+  });
   const globalSkillsQuery = useQuery({
     queryKey: workspaceQueryKeys.skills(),
     queryFn: async () => {
@@ -2991,8 +3003,12 @@ export function useAgentController({
       mcpAddError: agentMCPAddError,
       mcpDeleteBusy: agentMCPDeleteBusy,
       mcpDeleteError: agentMCPDeleteError,
+      resourceBusy: resourceEnablement.busy,
+      resourceError: resourceEnablement.error,
+      onRetryResource: resourceEnablement.retry,
+      onSetResourceEnabled: resourceEnablement.setEnabled,
       skills: agentSkillsQuery.data ?? [],
-      skillsLoading: agentSkillsQuery.isFetching,
+      skillsLoading: agentSkillsQuery.isLoading,
       skillsError: agentSkillsError,
       workspaceSupported: Boolean(selectedAgentForPage),
       directoryPickerAvailable: bootstrapConfig?.directory_picker_available !== false,

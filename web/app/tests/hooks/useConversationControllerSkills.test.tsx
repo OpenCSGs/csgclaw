@@ -1,7 +1,9 @@
+import { createQueryWrapper } from "../helpers/queryClient";
+import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { useState } from "react";
 import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { fetchAgentSkills, fetchAgentSkillsFile } from "@/api/agents";
+import { fetchAgentSkillSummaries } from "@/api/agents";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMData, IMUser, TranslateFn } from "@/models/conversations";
@@ -13,8 +15,7 @@ vi.mock("@/api/agents", async () => {
   const actual = await vi.importActual<typeof import("@/api/agents")>("@/api/agents");
   return {
     ...actual,
-    fetchAgentSkills: vi.fn(),
-    fetchAgentSkillsFile: vi.fn(),
+    fetchAgentSkillSummaries: vi.fn(),
   };
 });
 
@@ -129,25 +130,15 @@ function useConversationControllerHarness(fixture: SkillHarnessFixture = default
 
 describe("useConversationController skill loading", () => {
   beforeEach(() => {
-    vi.mocked(fetchAgentSkills).mockReset();
-    vi.mocked(fetchAgentSkillsFile).mockReset();
+    vi.mocked(fetchAgentSkillSummaries).mockReset();
   });
 
   it("loads slash skills from the dedicated skills API", async () => {
-    vi.mocked(fetchAgentSkills).mockResolvedValue({
-      entries: [
-        { path: "reviewer", name: "reviewer", type: "dir" },
-        { path: "reviewer/SKILL.md", name: "SKILL.md", type: "file" },
-      ],
-      kind: "dir",
-      path: "",
-    });
-    vi.mocked(fetchAgentSkillsFile).mockResolvedValue({
-      path: "reviewer/SKILL.md",
-      content: '---\ndescription: "Review pull requests"\n---\n# reviewer',
-    });
-
-    const { result } = renderHook(() => useConversationControllerHarness());
+    vi.mocked(fetchAgentSkillSummaries).mockResolvedValue([
+      { name: "reviewer", description: "Review pull requests", enabled: true },
+      { name: "disabled", description: "Hidden skill", enabled: false },
+    ]);
+    const { result } = renderHook(() => useConversationControllerHarness(), { wrapper: createQueryWrapper().wrapper });
     const editor = document.createElement("div");
     editor.textContent = "/";
     document.body.append(editor);
@@ -158,9 +149,7 @@ describe("useConversationController skill loading", () => {
     selection?.removeAllRanges();
     selection?.addRange(range);
 
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledWith("u-skill-worker"));
-    await waitFor(() => expect(fetchAgentSkillsFile).toHaveBeenCalledWith("u-skill-worker", "reviewer/SKILL.md"));
-
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalled());
     await act(async () => {
       (result.current.conversationViewProps.editorRef as { current: HTMLDivElement | null }).current = editor;
       result.current.conversationViewProps.onSyncComposer();
@@ -174,6 +163,7 @@ describe("useConversationController skill loading", () => {
       }),
     );
 
+    expect(result.current.conversationViewProps.slashCandidates.some((item) => item.name === "disabled")).toBe(false);
     act(() => {
       result.current.conversationViewProps.onApplySlashCandidate("reviewer");
     });
@@ -188,23 +178,13 @@ describe("useConversationController skill loading", () => {
 
   it("refreshes added skills in floating chat and navigates them with Ctrl+N and Ctrl+P", async () => {
     const user = userEvent.setup();
-    vi.mocked(fetchAgentSkills)
-      .mockResolvedValueOnce({ entries: [], kind: "dir", path: "" })
-      .mockResolvedValue({
-        entries: [
-          { path: "alpha", name: "alpha", type: "dir" },
-          { path: "alpha/SKILL.md", name: "SKILL.md", type: "file" },
-          { path: "beta", name: "beta", type: "dir" },
-          { path: "beta/SKILL.md", name: "SKILL.md", type: "file" },
-        ],
-        kind: "dir",
-        path: "",
-      });
-    vi.mocked(fetchAgentSkillsFile).mockImplementation(async (_agentID, path) => ({
-      path,
-      content: `---\ndescription: "${path.startsWith("alpha/") ? "Alpha skill" : "Beta skill"}"\n---`,
-    }));
-
+    vi.mocked(fetchAgentSkillSummaries)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        { name: "alpha", description: "Alpha skill", enabled: true },
+        { name: "beta", description: "Beta skill", enabled: true },
+      ]);
+    const query = createQueryWrapper();
     function Harness() {
       const controller = useConversationControllerHarness(floatingFixture);
       return (
@@ -224,14 +204,17 @@ describe("useConversationController skill loading", () => {
       );
     }
 
-    render(<Harness />);
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(1));
+    render(<Harness />, { wrapper: query.wrapper });
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await query.client.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(floatingFixture.agent.id!) });
+    });
 
     const editor = screen.getByLabelText("floatingChatInputPlaceholder");
     await user.click(editor);
     await user.type(editor, "/");
 
-    await waitFor(() => expect(fetchAgentSkills).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchAgentSkillSummaries).toHaveBeenCalledTimes(2));
     const picker = screen.getByRole("listbox");
     const alpha = within(picker).getByRole("option", { name: /alpha/i });
     const beta = within(picker).getByRole("option", { name: /beta/i });
@@ -250,7 +233,7 @@ describe("useConversationController skill loading", () => {
 
   it("opens the slash picker at the caret before existing draft text", async () => {
     const user = userEvent.setup();
-    vi.mocked(fetchAgentSkills).mockResolvedValue({ entries: [], kind: "dir", path: "" });
+    vi.mocked(fetchAgentSkillSummaries).mockResolvedValue([]);
 
     function Harness() {
       const controller = useConversationControllerHarness(floatingFixture);
@@ -271,7 +254,7 @@ describe("useConversationController skill loading", () => {
       );
     }
 
-    render(<Harness />);
+    render(<Harness />, { wrapper: createQueryWrapper().wrapper });
     const editor = screen.getByLabelText("floatingChatInputPlaceholder");
     await user.type(editor, "existing prompt");
 

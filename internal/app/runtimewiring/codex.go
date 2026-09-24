@@ -42,6 +42,7 @@ func WithCodexRuntime() agent.ControllerOption {
 					Instructions:   got.Instructions,
 					RuntimeOptions: got.RuntimeOptions,
 					MCPServers:     got.MCPServers,
+					SkillStates:    got.SkillStates,
 					Profile:        profile,
 				}, nil
 			},

@@ -119,11 +119,25 @@ describe("Agent Apps", () => {
     await screen.findByText("Connect the services your agent needs");
   });
 
-  it("projects app-managed MCP rows with only an App settings action", async () => {
+  it("展示 App MCP 开关与详情弹框", async () => {
     mockServer([installation]);
     render(<Harness mode="mcp" />);
     await screen.findByText("Managed by connector · Connected");
-    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["Settings"]);
+    expect(screen.getByRole("switch", { name: "Work GitLab" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: /Managed by connector/ }));
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeVisible();
+  });
+
+  it("在 App MCP 详情中显示启用失败", async () => {
+    const fetch = mockServer([installation]);
+    render(<Harness mode="mcp" />);
+    await screen.findByText("Managed by connector · Connected");
+    await userEvent.click(screen.getByRole("button", { name: /Managed by connector/ }));
+    const dialog = screen.getByRole("dialog");
+    fetch.mockResolvedValueOnce(Response.json({ error: "update failed" }, { status: 500 }));
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Work GitLab" }));
+    expect(await within(dialog).findByRole("alert")).toBeVisible();
   });
 
   it("requires a fresh connection test after changing settings and never prefills saved secrets", async () => {

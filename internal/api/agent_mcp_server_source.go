@@ -58,6 +58,9 @@ func (h *Handler) handleAgentMCPServerSource(w http.ResponseWriter, r *http.Requ
 	if resolved.Agent.Spec.MCPServers == nil {
 		resolved.Agent.Spec.MCPServers = map[string]agentengine.MCPServerConfig{}
 	}
+	if enabled, ok := resolved.Agent.Spec.MCPServers[resolved.AgentName]["enabled"]; ok {
+		server["enabled"] = enabled
+	}
 	resolved.Agent.Spec.MCPServers[resolved.AgentName] = server
 	updated, err := h.agentEngine.Agents().Update(r.Context(), resolved.Agent.ID, agentengine.AgentUpdateRequest{
 		Spec:            resolved.Agent.Spec,

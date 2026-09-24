@@ -337,3 +337,29 @@ function numberFromUnknown(value: unknown): number | null {
   const number = typeof value === "string" ? Number(value) : value;
   return typeof number === "number" && Number.isFinite(number) ? number : null;
 }
+
+export function mcpServerDetailConfig(config: JSONRecord): JSONRecord {
+  const output: JSONRecord = {};
+  for (const key of ["command", "transport", "startup_timeout_sec", "tool_timeout_sec", "enabled"]) {
+    if (config[key] !== undefined) output[key] = config[key];
+  }
+  if (typeof config.url === "string") {
+    try {
+      const url = new URL(config.url);
+      url.username = "";
+      url.password = "";
+      url.search = "";
+      url.hash = "";
+      output.url = url.toString();
+    } catch {
+      output.url = "[redacted]";
+    }
+  }
+  for (const key of ["env", "headers", "http_headers"]) {
+    const value = config[key];
+    if (isJSONRecord(value)) output[key] = Object.fromEntries(Object.keys(value).map((name) => [name, "••••••"]));
+  }
+  // 参数可以携带认证信息，详情只展示参数数量。
+  if (Array.isArray(config.args)) output.argument_count = config.args.length;
+  return output;
+}

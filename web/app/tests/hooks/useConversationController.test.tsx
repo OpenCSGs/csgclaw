@@ -1,3 +1,4 @@
+import { createQueryWrapper } from "../helpers/queryClient";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { useConversationController } from "@/hooks/workspace/useConversationController";
@@ -207,6 +208,7 @@ function renderConversationController(
         workingParticipantsForRoom: options.workingParticipantsForRoom ?? (() => []),
       }),
     {
+      wrapper: createQueryWrapper().wrapper,
       initialProps: {
         activeConversationId: options.activeConversationId,
         data: options.data,

@@ -19,6 +19,7 @@ import "./WorkspaceFilePreview.css";
 type WorkspaceFileDialogMode = "code" | "preview";
 
 type WorkspaceFilePreviewProps = {
+  portalContainer?: HTMLElement | null;
   binaryText: string;
   className?: string;
   closeText: string;
@@ -37,6 +38,7 @@ type WorkspaceFilePreviewProps = {
 };
 
 export function WorkspaceFilePreview({
+  portalContainer,
   binaryText,
   className = "",
   closeText,
@@ -110,7 +112,7 @@ export function WorkspaceFilePreview({
           </div>
           {!file.binary ? (
             <DialogRoot open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogContent className="workspace-preview-dialog">
+              <DialogContent className="workspace-preview-dialog" portalContainer={portalContainer}>
                 <DialogHeader className="workspace-preview-dialog-header">
                   <div className="workspace-preview-dialog-heading">
                     <DialogTitle>{file.path}</DialogTitle>

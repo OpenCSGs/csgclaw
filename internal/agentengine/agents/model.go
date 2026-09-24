@@ -1,8 +1,10 @@
 package agents
 
 import (
+	skill "csgclaw/internal/skill/state"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -33,6 +35,7 @@ type Agent struct {
 	Avatar           string                   `json:"avatar,omitempty"`
 	BoxID            string                   `json:"box_id,omitempty"`
 	RuntimeOptions   map[string]any           `json:"runtime_options,omitempty"`
+	SkillStates      map[string]skill.State   `json:"skill_states,omitempty"`
 	MCPServers       map[string]any           `json:"mcpServers,omitempty"`
 	Role             string                   `json:"role"`
 	Status           string                   `json:"status"`
@@ -133,6 +136,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		Avatar           string                   `json:"avatar,omitempty"`
 		BoxID            string                   `json:"box_id,omitempty"`
 		RuntimeOptions   map[string]any           `json:"runtime_options,omitempty"`
+		SkillStates      map[string]skill.State   `json:"skill_states,omitempty"`
 		MCPServers       map[string]any           `json:"mcpServers,omitempty"`
 		Role             string                   `json:"role"`
 		Status           string                   `json:"status"`
@@ -161,6 +165,7 @@ func (a *Agent) UnmarshalJSON(data []byte) error {
 		Avatar:           decoded.Avatar,
 		BoxID:            decoded.BoxID,
 		RuntimeOptions:   utils.CloneAnyMap(decoded.RuntimeOptions),
+		SkillStates:      maps.Clone(decoded.SkillStates),
 		MCPServers:       cloneMCPServers(decoded.MCPServers),
 		Role:             decoded.Role,
 		Status:           decoded.Status,
@@ -444,23 +449,24 @@ func (s *CreateAgentSpec) UnmarshalJSON(data []byte) error {
 }
 
 type UpdateRequest struct {
-	Name                      *string            `json:"name,omitempty"`
-	Description               *string            `json:"description,omitempty"`
-	Instructions              *string            `json:"instructions,omitempty"`
-	Image                     *string            `json:"image,omitempty"`
-	Avatar                    *string            `json:"-"`
-	Profile                   *string            `json:"profile,omitempty"`
-	RuntimeKind               string             `json:"-"`
-	RuntimeName               string             `json:"-"`
-	SandboxEnabled            *bool              `json:"-"`
-	RuntimeSelectionRequested bool               `json:"-"`
-	RuntimeOptions            *map[string]any    `json:"runtime_options,omitempty"`
-	MCPServers                *map[string]any    `json:"mcpServers,omitempty"`
-	MCPServersSet             bool               `json:"-"`
-	RuntimeCredentials        *map[string]string `json:"-"`
-	RuntimeInitShell          *string            `json:"-"`
-	AgentProfile              *AgentProfile      `json:"agent_profile,omitempty"`
-	FieldMask                 []string           `json:"field_mask,omitempty"`
+	SkillStates               *map[string]skill.State `json:"-"`
+	Name                      *string                 `json:"name,omitempty"`
+	Description               *string                 `json:"description,omitempty"`
+	Instructions              *string                 `json:"instructions,omitempty"`
+	Image                     *string                 `json:"image,omitempty"`
+	Avatar                    *string                 `json:"-"`
+	Profile                   *string                 `json:"profile,omitempty"`
+	RuntimeKind               string                  `json:"-"`
+	RuntimeName               string                  `json:"-"`
+	SandboxEnabled            *bool                   `json:"-"`
+	RuntimeSelectionRequested bool                    `json:"-"`
+	RuntimeOptions            *map[string]any         `json:"runtime_options,omitempty"`
+	MCPServers                *map[string]any         `json:"mcpServers,omitempty"`
+	MCPServersSet             bool                    `json:"-"`
+	RuntimeCredentials        *map[string]string      `json:"-"`
+	RuntimeInitShell          *string                 `json:"-"`
+	AgentProfile              *AgentProfile           `json:"agent_profile,omitempty"`
+	FieldMask                 []string                `json:"field_mask,omitempty"`
 }
 
 func (r *UpdateRequest) UnmarshalJSON(data []byte) error {
@@ -683,6 +689,7 @@ func cloneAgent(src *Agent) *Agent {
 	dst.DetectionResults = append([]ProfileDetectionResult(nil), src.DetectionResults...)
 	dst.RuntimeOptions = utils.CloneAnyMap(src.RuntimeOptions)
 	dst.MCPServers = cloneMCPServers(src.MCPServers)
+	dst.SkillStates = maps.Clone(src.SkillStates)
 	dst.RuntimeExtensions = cloneRawMessages(src.RuntimeExtensions)
 	dst.runtimeCredentials = runtimeCredentials(cloneStringMap(map[string]string(src.runtimeCredentials)))
 	dst.Availability = cloneRuntimeAvailability(src.Availability)

@@ -77,3 +77,7 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 ## Dialog
 
 `Dialog` is built on the `Dialog` namespace from `radix-ui`. Use the shared dialog exports for modal workflows so pages inherit consistent backdrop, portal, focus trap, close button, title, description, and layout behavior. Expose `portalContainer` when a dialog or nested floating child needs to stay inside a specific layer.
+
+## Switch
+
+`Switch` wraps the `Switch` namespace from `radix-ui` for boolean settings. Use `checked`, `onCheckedChange`, and `disabled` for controlled updates, and provide an accessible name through `aria-label` or `aria-labelledby`. The shared styles support keyboard focus, disabled states, and reduced motion.

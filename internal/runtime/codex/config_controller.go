@@ -137,6 +137,9 @@ func validateCodexMCPServers(servers map[string]any) error {
 		if !ok {
 			return fmt.Errorf("%s.%s must be an object", mcpschema.MCPServersKey, name)
 		}
+		if !mcpschema.ServerEnabled(entry) {
+			continue
+		}
 		if mcpTrimmedString(entry["url"]) == "" {
 			continue
 		}

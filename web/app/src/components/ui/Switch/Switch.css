@@ -1,0 +1,47 @@
+.csg-switch {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  padding: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.csg-switch[data-state="checked"] {
+  background: var(--primary);
+}
+
+.csg-switch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.csg-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.csg-switch-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+  transition: transform 150ms ease;
+}
+
+.csg-switch-thumb[data-state="checked"] {
+  transform: translateX(20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .csg-switch,
+  .csg-switch-thumb {
+    transition: none;
+  }
+}

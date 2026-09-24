@@ -7,6 +7,7 @@ import (
 	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcpschema"
 	"csgclaw/internal/opencsgmcp"
+	"csgclaw/internal/utils"
 )
 
 func (s *Controller) materializeRuntimeMCPServers(ctx context.Context, runtimeKind string, servers map[string]any) (map[string]any, error) {
@@ -14,7 +15,7 @@ func (s *Controller) materializeRuntimeMCPServers(ctx context.Context, runtimeKi
 		return cloneMCPServers(servers), nil
 	}
 	prepared, err := opencsgmcp.RuntimeServers(
-		servers,
+		mcpschema.EnabledServers(servers),
 		s.mcpProxyBaseURL(runtimeKind),
 		strings.TrimSpace(s.server.AccessToken),
 	)
@@ -24,6 +25,18 @@ func (s *Controller) materializeRuntimeMCPServers(ctx context.Context, runtimeKi
 	prepared, err = knowledgebase.RuntimeServers(prepared)
 	if err != nil {
 		return nil, err
+	}
+	for name, raw := range servers {
+		if entry, ok := raw.(map[string]any); ok && !mcpschema.ServerEnabled(entry) {
+			entry = utils.CloneAnyMap(entry)
+			if meta, ok := entry[opencsgmcp.ManagedMetaKey].(map[string]any); ok {
+				delete(meta, opencsgmcp.ManagedMetaNamespace)
+				if len(meta) == 0 {
+					delete(entry, opencsgmcp.ManagedMetaKey)
+				}
+			}
+			prepared[name] = entry
+		}
 	}
 	mcpschema.StripPresentation(prepared)
 	return prepared, nil

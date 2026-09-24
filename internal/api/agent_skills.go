@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -30,6 +31,7 @@ func (h *Handler) handleAgentSkillSummaries(w http.ResponseWriter, r *http.Reque
 	if items == nil {
 		items = []agentengine.SkillSummary{}
 	}
+	w.Header().Set("ETag", strconv.Quote(item.ResourceVersion))
 	writeJSON(w, http.StatusOK, items)
 }
 

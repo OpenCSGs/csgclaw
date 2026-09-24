@@ -33,7 +33,8 @@ func TestSkillSummariesBrowserFixture(t *testing.T) {
 	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
 	item := completeWorkerAgent("agent-skills", "Skills Verification")
 	item.RuntimeKind = agent.RuntimeKindCodex
-	controller := mustNewSeededServiceWithOptions(t, []agent.Agent{item}, agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}))
+	item.MCPServers = map[string]any{"search": map[string]any{"url": "https://example.com/mcp"}}
+	controller := mustNewSeededServiceWithOptions(t, []agent.Agent{item}, agent.WithRuntime(&resourceEnablementRuntime{snapshotMCPServersRuntime: snapshotMCPServersRuntime{fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex}}}))
 	layout, err := controller.AgentLayout(item.ID)
 	if err != nil {
 		t.Fatal(err)

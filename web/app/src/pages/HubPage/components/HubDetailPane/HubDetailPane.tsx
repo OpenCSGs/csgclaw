@@ -1,3 +1,4 @@
+import { ResourceListCard } from "@/components/business/ResourceListCard";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -2389,30 +2390,21 @@ export function HubDetailPane({
                     {filteredSkills.map((skill) => {
                       const active = selectedSkill?.name === skill.name;
                       return (
-                        <button
+                        <ResourceListCard
                           key={skill.name}
-                          type="button"
-                          className={moduleClassNames(
-                            "hub-skill-list-card",
-                            "hub-skill-list-card--no-check",
-                            active && "active",
-                          )}
-                          onClick={() => openSkillDetail(skill)}
-                        >
-                          <SkillFeaturedIcon />
-                          <span className={moduleClassNames("hub-skill-card-copy")}>
-                            <span className={moduleClassNames("hub-skill-card-title")}>{skill.name}</span>
-                            <span className={moduleClassNames("hub-skill-card-description")}>
-                              {skill.description || skill.name}
+                          title={skill.name}
+                          description={skill.description}
+                          icon={<SkillFeaturedIcon />}
+                          active={active}
+                          onOpen={() => openSkillDetail(skill)}
+                          actions={
+                            <span className={moduleClassNames("hub-template-source-badge")}>
+                              {skillSourceBadgeName(skill) === "local"
+                                ? t("resourcesSkillInstalledTitle")
+                                : t("resourcesSkillSystemBadge")}
                             </span>
-                          </span>
-                          <span className={moduleClassNames("hub-template-source-badge")} aria-hidden="true">
-                            <span className={moduleClassNames("hub-template-source-badge-dot")}></span>
-                            {skillSourceBadgeName(skill) === "local"
-                              ? t("resourcesSkillInstalledTitle")
-                              : t("resourcesSkillSystemBadge")}
-                          </span>
-                        </button>
+                          }
+                        />
                       );
                     })}
                   </div>

@@ -1,9 +1,9 @@
+import { createQueryWrapper } from "../helpers/queryClient";
 import { useState } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import {
   buildSlashPickerState,
   normalizeSlashShorthandForPayload,
-  skillDescriptionFromMarkdown,
   slashSkillCommandText,
   slashCommandInputText,
   slashPickerQueryForDraft,
@@ -109,36 +109,38 @@ describe("useConversationController slash skill helpers", () => {
     const navigatePane = vi.fn();
     const setActiveConversationId = vi.fn();
 
-    renderHook(() =>
-      useConversationController({
-        activeConversationId: "",
-        activePane: { type: WorkspacePaneTypes.conversation, id: "" },
-        agents: [],
-        authBusyProvider: "",
-        authStatuses: {},
-        data: managerData,
-        locale: "en" as LocaleCode,
-        managerProfile: null,
-        managerProfileIncomplete: false,
-        hasObservedWorkLease: () => false,
-        messageActionBusy: "",
-        messageActionFeedback: {},
-        navigatePane,
-        onMessageAction: () => {},
-        onProviderLogin: async () => {},
-        openCSGAuthGuard: openCSGAuthGuardStub(),
-        preferredFallbackConversationId: "dm-manager",
-        rooms: managerData.rooms,
-        selectComputer: () => {},
-        selectConversation: () => {},
-        setActiveConversationId,
-        setBootstrapData: () => {},
-        setShowToolCalls: () => {},
-        showToolCalls: false,
-        t,
-        theme: "light",
-        workingParticipantsForRoom: () => [],
-      }),
+    renderHook(
+      () =>
+        useConversationController({
+          activeConversationId: "",
+          activePane: { type: WorkspacePaneTypes.conversation, id: "" },
+          agents: [],
+          authBusyProvider: "",
+          authStatuses: {},
+          data: managerData,
+          locale: "en" as LocaleCode,
+          managerProfile: null,
+          managerProfileIncomplete: false,
+          hasObservedWorkLease: () => false,
+          messageActionBusy: "",
+          messageActionFeedback: {},
+          navigatePane,
+          onMessageAction: () => {},
+          onProviderLogin: async () => {},
+          openCSGAuthGuard: openCSGAuthGuardStub(),
+          preferredFallbackConversationId: "dm-manager",
+          rooms: managerData.rooms,
+          selectComputer: () => {},
+          selectConversation: () => {},
+          setActiveConversationId,
+          setBootstrapData: () => {},
+          setShowToolCalls: () => {},
+          showToolCalls: false,
+          t,
+          theme: "light",
+          workingParticipantsForRoom: () => [],
+        }),
+      { wrapper: createQueryWrapper().wrapper },
     );
 
     await waitFor(() => {
@@ -192,13 +194,6 @@ describe("useConversationController slash skill helpers", () => {
       { description: "建议创建智能体，不会自动执行", name: "创建智能体", type: "command" },
       { description: "建议创建房间，不会自动执行", name: "创建房间", type: "command" },
     ]);
-  });
-
-  it("extracts optional skill descriptions from SKILL.md frontmatter", () => {
-    expect(
-      skillDescriptionFromMarkdown('---\nname: browser\ndescription: "Control the in-app browser"\n---\n# Browser'),
-    ).toBe("Control the in-app browser");
-    expect(skillDescriptionFromMarkdown("---\nname: empty\n---\n# Empty")).toBe("");
   });
 
   it("renders selected skills as canonical slash-command XML", () => {
@@ -265,7 +260,9 @@ describe("useConversationController send errors", () => {
       },
     );
 
-    const { result } = renderHook(() => useConversationControllerTestHarness());
+    const { result } = renderHook(() => useConversationControllerTestHarness(), {
+      wrapper: createQueryWrapper().wrapper,
+    });
     const editor = document.createElement("div");
     editor.textContent = "hello";
 

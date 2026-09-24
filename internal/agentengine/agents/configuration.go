@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"reflect"
 	"strings"
@@ -531,6 +532,10 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 			return Agent{}, fmt.Errorf("agent %q not found", id)
 		}
 	}
+	if req.SkillStates != nil {
+		current.SkillStates = maps.Clone(*req.SkillStates)
+		current.AgentProfile.EnvRestartRequired = true
+	}
 	current.UpdatedAt = time.Now().UTC()
 	s.putAgentLocked(key, current)
 	s.syncRuntimeRecordLocked(current)
@@ -543,6 +548,10 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 		if err := s.reconcileRuntimeConfig(ctx, previous, current); err != nil {
 			return Agent{}, err
 		}
+	}
+	deferred, _ := ctx.Value(deferResourceRestartKey{}).(bool)
+	if deferred {
+		return current, nil
 	}
 	if mcpServersUpdated {
 		// OpenClaw consumes MCP settings during provisioning/recreation. Writing
@@ -958,7 +967,15 @@ func (s *Controller) reconcileMCPServers(ctx context.Context, previous, current 
 	if !ok {
 		return fmt.Errorf("mcpServers live reconciliation is not supported for runtime_kind %q", runtimeKind)
 	}
-	previousServers, err := s.materializeRuntimeMCPServers(ctx, runtimeKind, previous.MCPServers)
+	// 已禁用或删除的 MCP 无需访问来源服务来生成旧配置。
+	previousConfig := cloneMCPServers(previous.MCPServers)
+	for name, raw := range previousConfig {
+		currentEntry, exists := current.MCPServers[name].(map[string]any)
+		if entry, ok := raw.(map[string]any); ok && (!exists || !mcpschema.ServerEnabled(currentEntry)) {
+			entry["enabled"] = false
+		}
+	}
+	previousServers, err := s.materializeRuntimeMCPServers(ctx, runtimeKind, previousConfig)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -39,6 +40,7 @@ func (h *Handler) handleAgentMCPServersByID(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), status)
 		return
 	}
+	w.Header().Set("ETag", strconv.Quote(current.ResourceVersion))
 	writeJSON(w, http.StatusOK, agent.MCPServersView{AgentID: current.ID, RuntimeKind: current.Status.RuntimeKind, Servers: serviceMCPServers(current.Spec.MCPServers)})
 }
 

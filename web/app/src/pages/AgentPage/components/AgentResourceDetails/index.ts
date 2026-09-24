@@ -1,0 +1,1 @@
+export { AgentResourceDetails } from "./AgentResourceDetails";

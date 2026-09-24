@@ -1,4 +1,4 @@
-import { del, get, patch, post, put, requestText, type ApiError } from "@/api/client";
+import { del, get, requestWithResponse, patch, post, put, requestText, type ApiError } from "@/api/client";
 import { BOT_TYPE_NOTIFICATION, MANAGER_AGENT_ID } from "@/shared/constants/agents";
 import {
   isNotificationBotAgent,
@@ -221,7 +221,7 @@ export function fetchAgentSkills(agentID: string, skillsPath = ""): Promise<Work
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/skills${query ? `?${query}` : ""}`);
 }
 
-export type AgentSkillSummary = { name: string; description?: string; error?: string };
+export type AgentSkillSummary = { enabled?: boolean; name: string; description?: string; error?: string };
 
 export function fetchAgentSkillSummaries(agentID: string, signal?: AbortSignal): Promise<AgentSkillSummary[]> {
   return get(`api/v1/agents/${encodeURIComponent(agentID)}/skill-summaries`, { signal });
@@ -480,4 +480,37 @@ function participantToAgentLike(participant: ParticipantLike): AgentLike {
     user_id: participant.user_id,
     user_name: participant.user_name,
   };
+}
+
+export type AgentResourceKind = "skill" | "mcp";
+export type AgentResourceEnabledResult = {
+  agent_id: string;
+  resource_version: string;
+  name: string;
+  enabled: boolean;
+  runtime_kind: string;
+  runtime_state: string;
+  restart_required: boolean;
+};
+
+export async function setAgentResourceEnabled(
+  agentID: string,
+  kind: AgentResourceKind,
+  name: string,
+  enabled: boolean,
+): Promise<AgentResourceEnabledResult> {
+  const base = `api/v1/agents/${encodeURIComponent(agentID)}`;
+  const list = kind === "skill" ? "skill-summaries" : "mcp-servers";
+  const { headers } = await requestWithResponse<unknown>(`${base}/${list}`);
+  const etag = headers.get("ETag");
+  if (!etag)
+    throw {
+      status: 409,
+      code: "resource_version_conflict",
+      message: "Agent resource version is unavailable",
+    } satisfies ApiError;
+  const resourceVersion: unknown = JSON.parse(etag);
+  if (typeof resourceVersion !== "string") throw new Error("Invalid resource version");
+  const resource = kind === "skill" ? "skills" : "mcp-servers";
+  return put(`${base}/${resource}/${encodeURIComponent(name)}/enabled`, { enabled, resource_version: resourceVersion });
 }

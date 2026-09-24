@@ -14,6 +14,13 @@ export type ApiRequestOptions = Omit<RequestInit, "body"> & {
 const absoluteURLPattern: RegExp = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
 
 export async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  return (await requestWithResponse<T>(path, options)).data;
+}
+
+export async function requestWithResponse<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<{ data: T; headers: Headers }> {
   const { json, ...requestOptions } = options;
   const headers = new Headers(requestOptions.headers);
   let body = requestOptions.body;
@@ -40,14 +47,14 @@ export async function request<T>(path: string, options: ApiRequestOptions = {}):
   }
 
   if (response.status === 204) {
-    return undefined as T;
+    return { data: undefined as T, headers: response.headers };
   }
 
   const text = await response.text();
   if (!text.trim()) {
-    return undefined as T;
+    return { data: undefined as T, headers: response.headers };
   }
-  return JSON.parse(text) as T;
+  return { data: JSON.parse(text) as T, headers: response.headers };
 }
 
 export async function requestText(path: string, options: ApiRequestOptions = {}): Promise<string> {

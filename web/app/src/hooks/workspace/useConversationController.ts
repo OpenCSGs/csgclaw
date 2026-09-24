@@ -10,7 +10,9 @@ import {
   removeRoomUserRequest,
   sendMessageRequest,
 } from "@/api/im";
-import { fetchAgentSkills, fetchAgentSkillsFile } from "@/api/agents";
+import { fetchAgentSkillSummaries } from "@/api/agents";
+import { useQuery } from "@tanstack/react-query";
+import { workspaceQueryKeys } from "./workspaceQueries";
 import {
   agentMatchesUser,
   appendMessageToData,
@@ -76,12 +78,7 @@ import {
   selectAttachmentFiles,
   type AttachmentDraft,
 } from "@/models/attachments";
-import {
-  parseSlashCommand,
-  skillDescriptionFromMarkdown,
-  skillOptionsFromWorkspace,
-  type SlashSkillOption,
-} from "@/models/slashCommands";
+import { parseSlashCommand, type SlashSkillOption } from "@/models/slashCommands";
 import { localizeAPIError } from "@/shared/i18n";
 import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
@@ -92,11 +89,6 @@ import { messageListScrollKey, useMessageListAutoScroll } from "./useMessageList
 import { handleSlashPickerNavigation } from "@/components/business/ConversationPane";
 import { modelProviderConfigUsesOpenCSG } from "@/models/modelProviders";
 import { isOpenCSGRuntimeAuthenticationError } from "./useOpenCSGAuthGuard";
-
-const slashSkillOptionsCache = new Map<string, SlashSkillOption[]>();
-const slashSkillOptionsRequests = new Map<string, Promise<SlashSkillOption[]>>();
-
-export { skillDescriptionFromMarkdown } from "@/models/slashCommands";
 
 type ComposerMentionState = {
   endOffset: number;
@@ -457,9 +449,7 @@ export function useConversationController({
   const [composerMentionState, setComposerMentionState] = useState<ComposerMentionState | null>(null);
   const [composerSlashQuery, setComposerSlashQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
-  const [skillOptions, setSkillOptions] = useState<SlashSkillOption[]>([]);
   const [slashIndex, setSlashIndex] = useState(0);
-  const [slashPickerLoading, setSlashPickerLoading] = useState(false);
   const [slashPickerDismissed, setSlashPickerDismissed] = useState(false);
   const [threadSlashPickerDismissed, setThreadSlashPickerDismissed] = useState(false);
   const [threadSlashIndex, setThreadSlashIndex] = useState(0);
@@ -677,6 +667,16 @@ export function useConversationController({
     }
     return "";
   }, [activeConversationAgentMembers, logAgent?.id]);
+  const skillQuery = useQuery({
+    queryKey: workspaceQueryKeys.agentSkills(activeConversationAgentId),
+    queryFn: ({ signal }) => fetchAgentSkillSummaries(activeConversationAgentId, signal),
+    enabled: Boolean(activeConversationAgentId),
+  });
+  const skillOptions = useMemo(
+    () => (skillQuery.data ?? []).filter((skill) => skill.enabled !== false),
+    [skillQuery.data],
+  );
+  const slashPickerLoading = skillQuery.isFetching;
   const activeConversationMembers = activeConversation
     ? activeConversation.members
         .map((id) => resolveUserByLocalIdentity(id, usersById))
@@ -778,7 +778,6 @@ export function useConversationController({
   const threadSlashPickerQuery = threadSlashPickerState.query;
   const threadSlashPickerActive = threadSlashPickerState.active;
   const threadSlashCandidates = threadSlashPickerState.candidates;
-  const isAnySlashPickerNeeded = slashPickerActive || threadSlashPickerActive;
 
   useEffect(() => {
     if (!activeConversationId || !removedAttachment) {
@@ -835,7 +834,6 @@ export function useConversationController({
   }, [draftText]);
 
   useEffect(() => {
-    setSkillOptions([]);
     setSlashIndex(0);
     setSlashPickerDismissed(false);
     setComposerSlashQuery(null);
@@ -854,93 +852,6 @@ export function useConversationController({
   useEffect(() => {
     setThreadSlashIndex(0);
   }, [threadSlashPickerQuery, skillOptions]);
-
-  useEffect(() => {
-    if (!activeConversationAgentId) {
-      setSkillOptions([]);
-      setSlashPickerLoading(false);
-      return;
-    }
-
-    const cached = slashSkillOptionsCache.get(activeConversationAgentId);
-    if (cached) {
-      setSkillOptions(cached);
-      setSlashPickerLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setSkillOptions([]);
-    setSlashPickerLoading(false);
-    loadSlashSkillOptions(activeConversationAgentId, (skills) => {
-      if (cancelled) {
-        return;
-      }
-      setSkillOptions(skills);
-      setSlashPickerLoading(false);
-    })
-      .then((skills) => {
-        if (cancelled) {
-          return;
-        }
-        setSkillOptions(skills);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSkillOptions([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setSlashPickerLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeConversationAgentId]);
-
-  useEffect(() => {
-    if (!isAnySlashPickerNeeded || !activeConversationAgentId || skillOptions.length > 0) {
-      setSlashPickerLoading(false);
-      return;
-    }
-    setSlashPickerLoading(slashSkillOptionsRequests.has(activeConversationAgentId));
-  }, [activeConversationAgentId, isAnySlashPickerNeeded, skillOptions.length]);
-
-  useEffect(() => {
-    if (!isAnySlashPickerNeeded || !activeConversationAgentId) {
-      return;
-    }
-
-    let cancelled = false;
-    setSlashPickerLoading(true);
-    loadSlashSkillOptions(
-      activeConversationAgentId,
-      (skills) => {
-        if (!cancelled) {
-          setSkillOptions(skills);
-        }
-      },
-      { refresh: true },
-    )
-      .then((skills) => {
-        if (!cancelled) {
-          setSkillOptions(skills);
-        }
-      })
-      .catch(() => {
-        // Keep cached candidates usable when background revalidation fails.
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setSlashPickerLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeConversationAgentId, isAnySlashPickerNeeded]);
 
   useEffect(() => {
     const wasIncomplete = managerProfileIncompleteRef.current;
@@ -2012,50 +1923,6 @@ export function useConversationController({
           }
         : null,
   };
-}
-
-function loadSlashSkillOptions(
-  agentID: string,
-  onInitial: (skills: SlashSkillOption[]) => void,
-  options: { refresh?: boolean } = {},
-): Promise<SlashSkillOption[]> {
-  const cached = slashSkillOptionsCache.get(agentID);
-  if (cached && !options.refresh) {
-    return Promise.resolve(cached);
-  }
-  const pending = slashSkillOptionsRequests.get(agentID);
-  if (pending) {
-    return pending;
-  }
-
-  const request = fetchAgentSkills(agentID)
-    .then(async (skillsListing) => {
-      const skills = skillOptionsFromWorkspace(skillsListing.entries || []);
-      slashSkillOptionsCache.set(agentID, skills);
-      onInitial(skills);
-
-      const enriched = await Promise.all(
-        skills.map(async (skill) => {
-          try {
-            const file = await fetchAgentSkillsFile(agentID, `${skill.name}/SKILL.md`);
-            return {
-              ...skill,
-              description: skillDescriptionFromMarkdown(file.content || "") || skill.description,
-            };
-          } catch {
-            return skill;
-          }
-        }),
-      );
-      slashSkillOptionsCache.set(agentID, enriched);
-      return enriched;
-    })
-    .finally(() => {
-      slashSkillOptionsRequests.delete(agentID);
-    });
-
-  slashSkillOptionsRequests.set(agentID, request);
-  return request;
 }
 
 const builtinSlashCommandNames = ["new"];

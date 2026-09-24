@@ -5,6 +5,7 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/registry"
 	skilllocal "csgclaw/internal/skill/local"
+	skill "csgclaw/internal/skill/state"
 	"errors"
 )
 
@@ -20,9 +21,13 @@ func (s *WorkspaceService) SkillSummaries(ctx context.Context, agentID string) (
 		}
 		return nil, errors.New("Agent skill metadata is unavailable")
 	}
+	agent, ok := s.agentSnapshot(agentID)
+	if !ok {
+		return nil, errors.New("agent not found")
+	}
 	out := make([]contract.SkillSummary, 0, len(items))
 	for _, item := range items {
-		out = append(out, contract.SkillSummary{Name: item.Name, Description: item.Description, Error: item.Error})
+		out = append(out, contract.SkillSummary{Enabled: skill.Enabled(agent.SkillStates, item.Name), Name: item.Name, Description: item.Description, Error: item.Error})
 	}
 	return out, nil
 }

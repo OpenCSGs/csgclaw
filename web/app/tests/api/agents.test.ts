@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import {
+  setAgentResourceEnabled,
   batchAddAgentMCPServersRequest,
   batchDeleteAgentMCPServersRequest,
   batchAddAgentSkillsRequest,
@@ -159,5 +160,28 @@ describe("agents API", () => {
         method: "POST",
       }),
     );
+  });
+});
+
+describe("资源启用请求", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each(["skill", "mcp"] as const)("%s 使用当前版本提交目标状态", async (kind) => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response("[]", { headers: { "content-type": "application/json", ETag: '"version-2"' } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ enabled: false }), { headers: { "content-type": "application/json" } }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    await setAgentResourceEnabled("agent-1", kind, "reviewer", false);
+    expect(fetchMock.mock.calls[1]).toEqual([
+      `api/v1/agents/agent-1/${kind === "skill" ? "skills" : "mcp-servers"}/reviewer/enabled`,
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ enabled: false, resource_version: "version-2" }),
+      }),
+    ]);
   });
 });

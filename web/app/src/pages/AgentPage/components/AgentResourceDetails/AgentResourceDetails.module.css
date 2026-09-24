@@ -1,0 +1,26 @@
+.dialog {
+  width: min(1000px, calc(100vw - 32px));
+  max-width: none;
+}
+.files {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.3fr) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 320px;
+}
+.files > * {
+  min-width: 0;
+  max-height: 60vh;
+  overflow: auto;
+}
+.config {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 60vh;
+  overflow: auto;
+}
+@media (max-width: 720px) {
+  .files {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

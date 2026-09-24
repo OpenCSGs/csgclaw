@@ -1,7 +1,9 @@
+import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { useState } from "react";
 import { BookOpen, Boxes, GitBranch, MessageCircle, Plus, RefreshCw } from "lucide-react";
 import {
   Button,
+  Switch,
   DialogRoot,
   DialogContent,
   DialogHeader,
@@ -206,26 +208,99 @@ export function AgentAppsPanel({ controller, t, portalContainer, selectedID, add
   );
 }
 
-export function AppManagedMCPRows({ controller, t, onSelect }: Pick<Props, "controller" | "t" | "onSelect">) {
+export function AppManagedMCPRows({
+  controller,
+  t,
+  onSelect,
+  disabled = false,
+  portalContainer,
+}: Pick<Props, "controller" | "t" | "onSelect" | "portalContainer"> & { disabled?: boolean }) {
+  const [detailID, setDetailID] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const selected = controller.items.find((app) => app.installation_id === detailID);
+  async function toggle(app: AppInstallation) {
+    setError(null);
+    try {
+      await controller.update(app.installation_id, { enabled: !app.enabled });
+    } catch (failure) {
+      setError(failure);
+    }
+  }
+  const busy = disabled || Boolean(controller.busyID);
+  const feedback = error ? (
+    <p role="alert" className="form-error">
+      {localizeAPIError(error, t, t("agentResourceApplyFailed"))}
+    </p>
+  ) : null;
   return controller.items.length ? (
-    <div className={styles.managedList}>
-      {controller.items.map((app) => (
-        <article className={styles.managedRow} key={app.installation_id}>
-          <span className={styles.icon}>
-            <AppIcon appID={app.app_id} />
-          </span>
-          <div className={styles.cardTitle}>
-            <strong>{app.name}</strong>
-            <span>
-              {t("appManagedMCP")} · {appStatus(app, t)}
-            </span>
-          </div>
-          <Button size="sm" onClick={() => onSelect(app.installation_id)}>
-            {t("appSettings")}
-          </Button>
-        </article>
-      ))}
-    </div>
+    <>
+      {selected ? null : feedback}
+      <ResourceList>
+        {controller.items.map((app) => (
+          <ResourceListCard
+            key={app.installation_id}
+            title={app.name}
+            description={`${t("appManagedMCP")} · ${appStatus(app, t)}`}
+            icon={<AppIcon appID={app.app_id} />}
+            onOpen={() => setDetailID(app.installation_id)}
+            actions={
+              <Switch
+                aria-label={app.name}
+                checked={app.enabled}
+                disabled={busy || (!app.enabled && app.resource_enabled === false)}
+                onCheckedChange={() => void toggle(app)}
+              />
+            }
+          />
+        ))}
+      </ResourceList>
+      <DialogRoot
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) setDetailID("");
+        }}
+      >
+        <DialogContent portalContainer={portalContainer}>
+          <DialogHeader>
+            <div>
+              <DialogTitle>{selected?.name}</DialogTitle>
+              <DialogDescription>{t("appManagedMCP")}</DialogDescription>
+            </div>
+            <div className="flex shrink-0 items-center gap-4">
+              {selected ? (
+                <Switch
+                  aria-label={selected.name}
+                  checked={selected.enabled}
+                  disabled={busy || (!selected.enabled && selected.resource_enabled === false)}
+                  onCheckedChange={() => void toggle(selected)}
+                />
+              ) : null}
+              <DialogCloseButton label={t("close")} />
+            </div>
+          </DialogHeader>
+          <DialogBody>
+            {feedback}
+            {selected ? (
+              <>
+                <p>{appStatus(selected, t)}</p>
+                <AppToolList tools={selected.tools} t={t} />
+                {selected.resource_enabled === false ? <p>{t("appGlobalDisabledHint")}</p> : null}
+              </>
+            ) : null}
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                onSelect(detailID);
+                setDetailID("");
+              }}
+            >
+              {t("appSettings")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </DialogRoot>
+    </>
   ) : null;
 }
 

@@ -64,3 +64,14 @@ func errString(err error) string {
 	}
 	return err.Error()
 }
+
+func TestMCPServerEnabledRequiresBoolean(t *testing.T) {
+	for _, value := range []any{"false", 0, nil} {
+		if _, err := NormalizeMCPServers(map[string]any{"search": map[string]any{"url": "https://example.com/mcp", "enabled": value}}); err == nil {
+			t.Fatalf("接受了无效状态：%v", value)
+		}
+	}
+	if !ServerEnabled(map[string]any{}) || ServerEnabled(map[string]any{"enabled": false}) {
+		t.Fatal("默认启用状态错误")
+	}
+}

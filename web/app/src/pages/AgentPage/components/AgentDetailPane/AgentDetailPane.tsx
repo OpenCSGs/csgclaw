@@ -1,3 +1,4 @@
+import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
 import {
   AlertCircle,
   Check,
@@ -23,6 +24,9 @@ import {
   X,
 } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
+import { AgentResourceDetails } from "../AgentResourceDetails";
+import type { AgentResourceKind } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import {
   fetchAgentInstructionsDocument,
@@ -83,7 +87,7 @@ import {
 } from "@/models/modelProviders";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
 import type { LocaleCode } from "@/models/conversations";
-import { mcpManagedKnowledgeBaseSource, mcpServerDisplayName } from "@/models/mcp";
+import { mcpServerDisplayName } from "@/models/mcp";
 import type { MCPServer } from "@/models/mcp";
 import { skillSourceBadgeName } from "@/models/skillhub";
 import type { SkillSummary } from "@/models/skillhub";
@@ -96,6 +100,7 @@ import { localizeTemplateSourceTag } from "@/shared/i18n";
 import type { AgentTemplatePublishTarget } from "@/api/hub";
 import {
   Button,
+  Switch,
   Checkbox,
   DialogBody,
   DialogCloseButton,
@@ -204,6 +209,10 @@ export type AgentDetailPaneProps = {
   saveBillingURL?: string;
   savedDraft?: AgentDraft | null;
   saving?: boolean;
+  resourceBusy?: string;
+  resourceError?: string;
+  onRetryResource?: () => Promise<void>;
+  onSetResourceEnabled?: (kind: AgentResourceKind, name: string, enabled: boolean) => Promise<void>;
   skillAddBusy?: boolean;
   skillAddError?: string;
   skillCandidates?: SkillSummary[];
@@ -276,6 +285,10 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     saveBillingURL = "",
     locale = "en",
     notifierWebhookPublicOrigin = "",
+    resourceBusy = "",
+    resourceError = "",
+    onRetryResource,
+    onSetResourceEnabled,
     skills = [],
     skillsLoading = false,
     skillsError = "",
@@ -332,6 +345,25 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const [isEditingName, setIsEditingName] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<AgentProfileTabID>(() => readAgentProfileActiveTab());
   const [appSettingsID, setAppSettingsID] = useState<string | undefined>();
+  const [resourceDetail, setResourceDetail] = useState<{
+    agentID: string;
+    kind: AgentResourceKind;
+    name: string;
+  } | null>(null);
+  const canToggleResources = ["codex", "dsh"].includes(String(agentRuntimeKind(item)));
+  const detailSkill =
+    resourceDetail && resourceDetail.agentID === item?.id && resourceDetail.kind === "skill"
+      ? skills.find((skill) => skill.name === resourceDetail.name)
+      : undefined;
+  const detailMCP =
+    resourceDetail && resourceDetail.agentID === item?.id && resourceDetail.kind === "mcp"
+      ? mcpServers.find((server) => server.name === resourceDetail.name)
+      : undefined;
+  const openResourceDetail = (kind: AgentResourceKind, name: string) =>
+    setResourceDetail({ agentID: String(item?.id || ""), kind, name });
+  const resourceMutationBusy = Boolean(
+    resourceBusy || skillAddBusy || skillDeleteBusy || mcpAddBusy || mcpDeleteBusy || mcpSourceSyncBusyName || saving,
+  );
   const [addSkillsDialogOpen, setAddSkillsDialogOpen] = useState(false);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [deleteSkillDialogOpen, setDeleteSkillDialogOpen] = useState(false);
@@ -994,12 +1026,28 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <AgentMemoryPanel agentID={String(item.id || "")} onMemoryChange={onMemoryChange} t={t} />
             ) : null}
 
+            {["skills", "mcp"].includes(visibleActiveProfileTab) && resourceError ? (
+              <div className="form-error" role="alert">
+                {resourceError}
+                {onRetryResource ? (
+                  <Button size="sm" disabled={resourceMutationBusy} onClick={() => void onRetryResource()}>
+                    {t("retry")}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             {visibleActiveProfileTab === "skills" && workspaceSupported ? (
               <AgentSkillsPanel
+                onOpenDetail={(skill) => openResourceDetail("skill", skill.name)}
+                onToggle={
+                  canToggleResources && onSetResourceEnabled
+                    ? (skill) => onSetResourceEnabled("skill", skill.name, skill.enabled === false)
+                    : undefined
+                }
+                mutationBusy={resourceMutationBusy || Boolean(appsController.busyID)}
                 skillAddBusy={skillAddBusy}
                 skillAddError={skillAddError}
                 skillCandidatesLoading={skillCandidatesLoading}
-                skillDeleteBusy={skillDeleteBusy}
                 skillDeleteError={skillDeleteError}
                 skills={skills}
                 skillsError={skillsError}
@@ -1027,11 +1075,26 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
             ) : null}
             {showMCPServers && visibleActiveProfileTab === "mcp" ? (
               <>
-                {showApps ? <AppManagedMCPRows controller={appsController} t={t} onSelect={selectAppSettings} /> : null}
+                {showApps ? (
+                  <AppManagedMCPRows
+                    key={item?.id}
+                    controller={appsController}
+                    t={t}
+                    onSelect={selectAppSettings}
+                    disabled={resourceMutationBusy}
+                    portalContainer={dialogPortalContainer}
+                  />
+                ) : null}
                 <AgentMCPPanel
+                  onOpenDetail={(server) => openResourceDetail("mcp", server.name)}
+                  onToggle={
+                    canToggleResources && onSetResourceEnabled
+                      ? (server) => onSetResourceEnabled("mcp", server.name, server.config.enabled === false)
+                      : undefined
+                  }
+                  mutationBusy={resourceMutationBusy || Boolean(appsController.busyID)}
                   addBusy={mcpAddBusy}
                   addError={mcpAddError}
-                  deleteBusy={mcpDeleteBusy}
                   deleteError={mcpDeleteError}
                   servers={mcpServers}
                   hasManagedApps={appsController.items.length > 0}
@@ -1052,6 +1115,38 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
           </div>
         ) : null}
       </div>
+      {detailSkill || detailMCP ? (
+        <AgentResourceDetails
+          key={`${item?.id}:${resourceDetail?.kind}:${resourceDetail?.name}`}
+          agentID={String(item?.id || "")}
+          skill={detailSkill}
+          server={detailMCP}
+          t={t}
+          portalContainer={dialogPortalContainer}
+          busy={resourceMutationBusy || Boolean(appsController.busyID)}
+          error={resourceError}
+          onRetry={onRetryResource}
+          canToggle={canToggleResources && Boolean(onSetResourceEnabled)}
+          onClose={() => setResourceDetail(null)}
+          onToggle={() => {
+            if (resourceDetail)
+              void onSetResourceEnabled?.(
+                resourceDetail.kind,
+                resourceDetail.name,
+                detailSkill ? detailSkill.enabled === false : detailMCP?.config.enabled === false,
+              );
+          }}
+          onDelete={() => {
+            if (detailSkill) {
+              setSkillPendingDelete(detailSkill);
+              setDeleteSkillDialogOpen(true);
+            } else if (detailMCP) {
+              setMCPPendingDelete(detailMCP);
+              setDeleteMCPDialogOpen(true);
+            }
+          }}
+        />
+      ) : null}
       <DialogRoot
         open={Boolean(larkCLIDialog?.message)}
         onOpenChange={(open) => {
@@ -1583,10 +1678,12 @@ function AgentRuntimePanel({
 }
 
 type AgentMCPPanelProps = {
+  onOpenDetail: (item: MCPServer) => void;
+  onToggle?: (item: MCPServer) => Promise<void>;
+  mutationBusy: boolean;
   hasManagedApps?: boolean;
   addBusy: boolean;
   addError: string;
-  deleteBusy: boolean;
   deleteError: string;
   onOpenAddMCP: () => void;
   onRequestDeleteMCP: (server: MCPServer) => void;
@@ -1600,13 +1697,15 @@ type AgentMCPPanelProps = {
 };
 
 function AgentMCPPanel({
+  onRequestDeleteMCP,
+  onOpenDetail,
+  onToggle,
+  mutationBusy,
   hasManagedApps = false,
   addBusy,
   addError,
-  deleteBusy,
   deleteError,
   onOpenAddMCP,
-  onRequestDeleteMCP,
   onUpdateMCP,
   servers,
   sourceBusyNames,
@@ -1636,7 +1735,7 @@ function AgentMCPPanel({
                 variant="secondaryGray"
                 size="sm"
                 aria-label={t("agentMCPAdd")}
-                disabled={addBusy}
+                disabled={mutationBusy || addBusy}
                 onClick={onOpenAddMCP}
               >
                 <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
@@ -1656,78 +1755,69 @@ function AgentMCPPanel({
             <strong>{t(hasManagedApps ? "appManualMCPEmpty" : "agentMCPEmpty")}</strong>
             <p>{t("agentMCPEmptyHint")}</p>
           </div>
-          <Button variant="secondaryGray" size="sm" disabled={addBusy} onClick={onOpenAddMCP}>
+          <Button variant="secondaryGray" size="sm" disabled={mutationBusy || addBusy} onClick={onOpenAddMCP}>
             <Plus aria-hidden="true" size={15} strokeWidth={2.2} />
             {t("agentMCPAdd")}
           </Button>
         </div>
       ) : null}
       {servers.length ? (
-        <div className="agent-skills-summary-list">
+        <ResourceList>
           {servers.map((server) => {
-            const managedSource = Boolean(mcpManagedKnowledgeBaseSource(server.config));
-            const sourceBusy = sourceBusyNames.has(server.name);
             const sourceUnavailable = sourceUnavailableNames.has(server.name);
             const updateAvailable = updateAvailableNames.has(server.name);
             const syncBusy = sourceSyncBusyName === server.name;
             return (
-              <article key={server.name} className="agent-skills-summary-row agent-mcp-summary-row">
-                <span className="agent-skills-summary-icon" aria-hidden="true">
-                  <Server size={18} strokeWidth={1.8} />
-                </span>
-                <div className="agent-skills-summary-copy">
-                  <div className="agent-mcp-name-row">
-                    <div className="agent-skills-summary-name">{mcpServerDisplayName(server)}</div>
-                    {managedSource ? (
-                      <span className="agent-mcp-knowledge-badge">{t("agentKnowledgeMCPBadge")}</span>
+              <ResourceListCard
+                key={server.name}
+                title={mcpServerDisplayName(server)}
+                description={server.description}
+                icon={<Server size={20} />}
+                onOpen={() => onOpenDetail(server)}
+                badge={
+                  <>
+                    {mcpManagedKnowledgeBaseSource(server.config) ? <span>{t("agentKnowledgeMCPBadge")}</span> : null}
+                    {sourceUnavailable ? (
+                      <span>{t("agentKnowledgeMCPSourceDeleted")}</span>
+                    ) : updateAvailable ? (
+                      <span>{t("agentKnowledgeMCPUpdateAvailable")}</span>
                     ) : null}
-                  </div>
-                  <p>{server.description || "-"}</p>
-                  {managedSource && (sourceUnavailable || updateAvailable) ? (
-                    <p
-                      className={`agent-mcp-source-hint ${
-                        sourceUnavailable ? "source-error" : updateAvailable ? "update-available" : ""
-                      }`.trim()}
-                    >
-                      {sourceUnavailable ? t("agentKnowledgeMCPSourceDeleted") : t("agentKnowledgeMCPUpdateAvailable")}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="agent-mcp-summary-actions">
-                  {updateAvailable && !sourceUnavailable && onUpdateMCP ? (
-                    <Button
-                      variant="secondaryGray"
-                      size="sm"
-                      loading={syncBusy}
-                      loadingLabel={t("agentMCPUpdateConfig")}
-                      disabled={sourceBusy || deleteBusy || Boolean(sourceSyncBusyName && !syncBusy)}
-                      onClick={() => {
-                        void onUpdateMCP(server);
-                      }}
-                    >
-                      <RefreshCw aria-hidden="true" size={14} strokeWidth={2} />
-                      {t("agentMCPUpdateConfig")}
-                    </Button>
-                  ) : null}
-                  <Tooltip content={t("agentDeleteMCP")}>
-                    <span className="agent-skills-summary-delete">
+                  </>
+                }
+                actions={
+                  <>
+                    {updateAvailable && !sourceUnavailable && onUpdateMCP ? (
                       <Button
-                        className="agent-skill-icon-button"
-                        variant="outlineDanger"
                         size="sm"
-                        aria-label={t("agentDeleteMCP")}
-                        disabled={addBusy || deleteBusy || Boolean(sourceSyncBusyName)}
-                        onClick={() => onRequestDeleteMCP(server)}
+                        loading={syncBusy}
+                        disabled={mutationBusy || sourceBusyNames.has(server.name)}
+                        onClick={() => void onUpdateMCP(server)}
+                        aria-label={t("agentMCPUpdateConfig")}
                       >
-                        <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                        <RefreshCw size={14} />
                       </Button>
-                    </span>
-                  </Tooltip>
-                </div>
-              </article>
+                    ) : null}
+                    <Switch
+                      aria-label={mcpServerDisplayName(server)}
+                      checked={server.config.enabled !== false}
+                      disabled={mutationBusy || !onToggle}
+                      onCheckedChange={() => void onToggle?.(server)}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondaryGray"
+                      disabled={mutationBusy}
+                      aria-label={t("agentDeleteMCP")}
+                      onClick={() => onRequestDeleteMCP(server)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </>
+                }
+              />
             );
           })}
-        </div>
+        </ResourceList>
       ) : null}
     </section>
   );
@@ -2250,12 +2340,14 @@ function AgentInstructionsPanel({ draft, t, updateDraft }: AgentInstructionsPane
 }
 
 type AgentSkillsPanelProps = {
+  onOpenDetail: (item: SlashSkillOption) => void;
+  onToggle?: (item: SlashSkillOption) => Promise<void>;
+  mutationBusy: boolean;
   onOpenAddSkills: () => void;
   onRequestDeleteSkill: (skill: SlashSkillOption) => void;
   skillAddBusy: boolean;
   skillAddError: string;
   skillCandidatesLoading: boolean;
-  skillDeleteBusy: boolean;
   skillDeleteError: string;
   skills: readonly SlashSkillOption[];
   skillsError: string;
@@ -2264,12 +2356,14 @@ type AgentSkillsPanelProps = {
 };
 
 function AgentSkillsPanel({
-  onOpenAddSkills,
   onRequestDeleteSkill,
+  onOpenDetail,
+  onToggle,
+  mutationBusy,
+  onOpenAddSkills,
   skillAddBusy,
   skillAddError,
   skillCandidatesLoading,
-  skillDeleteBusy,
   skillDeleteError,
   skills,
   skillsError,
@@ -2292,7 +2386,7 @@ function AgentSkillsPanel({
                 variant="secondaryGray"
                 size="sm"
                 aria-label={t("agentSkillAdd")}
-                disabled={skillCandidatesLoading || skillAddBusy}
+                disabled={mutationBusy || skillCandidatesLoading || skillAddBusy}
                 onClick={onOpenAddSkills}
               >
                 <Plus aria-hidden="true" size={16} strokeWidth={2.2} />
@@ -2326,7 +2420,7 @@ function AgentSkillsPanel({
           <Button
             variant="secondaryGray"
             size="sm"
-            disabled={skillCandidatesLoading || skillAddBusy}
+            disabled={mutationBusy || skillCandidatesLoading || skillAddBusy}
             onClick={onOpenAddSkills}
           >
             <Plus aria-hidden="true" size={15} strokeWidth={2.2} />
@@ -2335,33 +2429,36 @@ function AgentSkillsPanel({
         </div>
       ) : null}
       {!skillsLoading && skills.length ? (
-        <div className="agent-skills-summary-list">
+        <ResourceList>
           {skills.map((skill) => (
-            <article key={skill.name} className="agent-skills-summary-row">
-              <span className="agent-skills-summary-icon" aria-hidden="true">
-                <FileCode2 size={18} strokeWidth={1.8} />
-              </span>
-              <div className="agent-skills-summary-copy">
-                <div className="agent-skills-summary-name">{skill.name}</div>
-                <p>{skill.description || "-"}</p>
-              </div>
-              <Tooltip content={t("agentDeleteSkill")}>
-                <span className="agent-skills-summary-delete">
+            <ResourceListCard
+              key={skill.name}
+              title={skill.name}
+              description={skill.description}
+              icon={<FileCode2 size={20} />}
+              onOpen={() => onOpenDetail(skill)}
+              actions={
+                <>
+                  <Switch
+                    aria-label={skill.name}
+                    checked={skill.enabled !== false}
+                    disabled={mutationBusy || !onToggle}
+                    onCheckedChange={() => void onToggle?.(skill)}
+                  />
                   <Button
-                    className="agent-skill-icon-button"
-                    variant="outlineDanger"
                     size="sm"
+                    variant="secondaryGray"
+                    disabled={mutationBusy}
                     aria-label={t("agentDeleteSkill")}
-                    disabled={skillDeleteBusy}
                     onClick={() => onRequestDeleteSkill(skill)}
                   >
-                    <Trash2 aria-hidden="true" size={16} strokeWidth={1.9} />
+                    <Trash2 size={14} />
                   </Button>
-                </span>
-              </Tooltip>
-            </article>
+                </>
+              }
+            />
           ))}
-        </div>
+        </ResourceList>
       ) : null}
     </section>
   );

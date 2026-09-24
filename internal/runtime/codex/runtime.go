@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"crypto/sha256"
+	skill "csgclaw/internal/skill/state"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,6 +59,7 @@ var (
 const runtimeDirRemovalEntryLimit = 32
 
 type AgentRef struct {
+	SkillStates    map[string]skill.State
 	ID             string
 	Name           string
 	RuntimeID      string
@@ -821,6 +823,9 @@ func (r *Runtime) ensureSession(ctx context.Context, spec SessionSpec, copyHostS
 	if err := r.refreshCodexHomeAgentsFile(agentruntime.Handle{RuntimeID: runtimeID}, spec.CodexHomeDir); err != nil {
 		return nil, err
 	}
+	if err := r.writeSkillStates(spec.CodexHomeDir, agentRef.SkillStates); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(spec.BinaryPath) == "" {
 		binaryPath, err := r.ensureBinary(ctx)
 		if err != nil {
@@ -936,6 +941,9 @@ func (r *Runtime) hydratePersistedSession(ctx context.Context, manager *appServe
 		return nil, err
 	}
 	if err := r.refreshCodexHomeAgentsFile(agentruntime.Handle{RuntimeID: runtimeID}, spec.CodexHomeDir); err != nil {
+		return nil, err
+	}
+	if err := r.writeSkillStates(spec.CodexHomeDir, agentRef.SkillStates); err != nil {
 		return nil, err
 	}
 	if ctx == nil {

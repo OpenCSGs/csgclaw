@@ -68,6 +68,9 @@ func buildACPMCPServers(raw map[string]any) ([]acpMCPServer, error) {
 	out := make([]acpMCPServer, 0, len(names))
 	for _, name := range names {
 		entry := servers[name].(map[string]any)
+		if !mcpschema.ServerEnabled(entry) {
+			continue
+		}
 		command, _ := entry["command"].(string)
 		urlText, _ := entry["url"].(string)
 		if command != "" {

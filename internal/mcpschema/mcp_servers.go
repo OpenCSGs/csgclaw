@@ -55,6 +55,11 @@ func normalizeMCPServerEntry(name string, entry map[string]any) (map[string]any,
 	if err := validateDisplayName(normalized); err != nil {
 		return nil, fmt.Errorf("%s.%s: %w", MCPServersKey, name, err)
 	}
+	if value, exists := normalized["enabled"]; exists {
+		if _, ok := value.(bool); !ok {
+			return nil, fmt.Errorf("%s.%s.enabled must be a boolean", MCPServersKey, name)
+		}
+	}
 	command, hasCommand, err := mcpStringField(normalized, "command")
 	if err != nil {
 		return nil, fmt.Errorf("%s.%s.command %s", MCPServersKey, name, err)
@@ -275,4 +280,25 @@ func cloneMCPJSONObject(value any) any {
 	default:
 		return value
 	}
+}
+
+// ServerEnabled 为旧配置提供默认启用语义。
+func ServerEnabled(entry map[string]any) bool {
+	enabled, ok := entry["enabled"].(bool)
+	return !ok || enabled
+}
+
+// EnabledServers 保留 nil 与明确空集合的区别。
+func EnabledServers(servers map[string]any) map[string]any {
+	if servers == nil {
+		return nil
+	}
+	result := make(map[string]any, len(servers))
+	for name, raw := range servers {
+		entry, ok := raw.(map[string]any)
+		if !ok || ServerEnabled(entry) {
+			result[name] = raw
+		}
+	}
+	return result
 }

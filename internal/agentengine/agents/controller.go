@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -759,7 +760,9 @@ func (s *Controller) newCodexManagerAgent(name, description, instructions, avata
 		status = string(agentruntime.StateRunning)
 	}
 	prof := cloneProfile(profile)
+	existing, _ := s.agentSnapshot(ManagerUserID)
 	return Agent{
+		SkillStates:      maps.Clone(existing.SkillStates),
 		ID:               ManagerUserID,
 		Name:             strings.TrimSpace(name),
 		Description:      strings.TrimSpace(description),
@@ -2380,6 +2383,9 @@ func (s *Controller) persistStartingWorker(ctx context.Context, id, name, descri
 		State:     agentruntime.StateCreated,
 		CreatedAt: time.Now().UTC(),
 	})
+	if exists {
+		worker.SkillStates = maps.Clone(previous.SkillStates)
+	}
 	if exists && previousKey != worker.ID {
 		worker.RuntimeExtensions = cloneRawMessages(previous.RuntimeExtensions)
 		delete(s.agents, previousKey)
@@ -2429,6 +2435,9 @@ func (s *Controller) persistCreatedWorker(ctx context.Context, id, name, descrip
 	}
 
 	worker := newWorkerAgent(id, name, description, instructions, image, avatar, runtimeKind, runtimeName, sandboxEnabled, profile, createRuntimeExt, mcpServers, runtimeCredentials, runtimeInitShell, info)
+	if exists {
+		worker.SkillStates = maps.Clone(previous.SkillStates)
+	}
 	s.clearRuntimeAvailabilityLocked(worker.ID)
 	s.putAgentLocked(worker.ID, worker)
 	s.syncRuntimeRecordLocked(worker)
