@@ -74,10 +74,10 @@ jobs:
     environment:
       name: oss-publish
     steps:
-      - name: Checkout release tag
+      - name: Checkout current publishing script
         uses: actions/checkout@v4
         with:
-          ref: refs/tags/${{ inputs.version }}
+          ref: main
 
       - name: Set up Node
         uses: actions/setup-node@v4
