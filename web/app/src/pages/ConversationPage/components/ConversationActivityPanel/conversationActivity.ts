@@ -282,6 +282,7 @@ export function conversationWorkingParticipantsWithActivity(
           ...participant,
           activity: {
             action: conversationWorkingActionForEntry(entry),
+            detail: conversationWorkingDetailForEntry(entry),
             entryID: entry.id,
             summary: compactWorkingSummary(conversationActivityEntrySummary(entry)),
             toolName: entry.tone === "tool" ? entry.eventType : undefined,
@@ -297,6 +298,13 @@ export function conversationWorkingParticipantsWithActivity(
       return timeDelta || left.originalIndex - right.originalIndex;
     })
     .map(({ participant }) => participant);
+}
+
+function conversationWorkingDetailForEntry(entry: ConversationActivityEntry): string {
+  return conversationActivityEntryDetails(entry)
+    .map((detail) => detail.value.trim())
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function conversationWorkingActionForStage(

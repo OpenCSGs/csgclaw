@@ -199,10 +199,12 @@ describe("conversation activity model", () => {
     expect(working.map((participant) => participant.name)).toEqual(["qa", "dev"]);
     expect(working[0]?.activity).toMatchObject({
       action: "editing",
+      detail: "playwright.config.ts",
       summary: "playwright.config.ts",
     });
     expect(working[1]?.activity).toMatchObject({
       action: "searching",
+      detail: "release checklist",
       summary: "release checklist",
     });
   });

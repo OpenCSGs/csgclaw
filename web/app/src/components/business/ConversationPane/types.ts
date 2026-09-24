@@ -46,6 +46,7 @@ export type ConversationWorkingParticipant = {
   showContextUsage?: boolean;
   activity?: {
     action: ConversationWorkingAction;
+    detail?: string;
     entryID?: string;
     summary?: string;
     toolName?: string;
