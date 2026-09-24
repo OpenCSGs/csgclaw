@@ -72,8 +72,45 @@ func (r *Runtime) RestartRequired(change agentruntime.RuntimeConfigChange) (bool
 }
 
 func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, change agentruntime.RuntimeConfigChange) error {
-	_ = change
-	return r.RefreshCodexHomeAgentsFile(ctx, h)
+	if err := r.RefreshCodexHomeAgentsFile(ctx, h); err != nil {
+		return err
+	}
+	if !codexConversationProfileChanged(change.Previous.Profile, change.Current.Profile) {
+		return nil
+	}
+	return r.resetPersistedConversationMappings(h.RuntimeID)
+}
+
+func codexConversationProfileChanged(previous, current agentruntime.RuntimeProfileConfig) bool {
+	return strings.TrimSpace(previous.Provider) != strings.TrimSpace(current.Provider) ||
+		strings.TrimRight(strings.TrimSpace(previous.BaseURL), "/") != strings.TrimRight(strings.TrimSpace(current.BaseURL), "/") ||
+		strings.TrimSpace(previous.ModelID) != strings.TrimSpace(current.ModelID)
+}
+
+// resetPersistedConversationMappings rotates model-facing Codex threads without
+// deleting their rollout files or the channel transcript. The next prompt for
+// each conversation key will create and persist a fresh thread.
+func (r *Runtime) resetPersistedConversationMappings(runtimeID string) error {
+	meta, err := r.readSessionMetadata(strings.TrimSpace(runtimeID))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read codex conversations before model change: %w", err)
+	}
+	if len(meta.ConversationSessions) == 0 && len(meta.FilePublishingConversations) == 0 {
+		return nil
+	}
+	meta.ConversationSessions = nil
+	meta.FilePublishingConversations = nil
+	path, err := r.sessionMetadataPath(runtimeID)
+	if err != nil {
+		return fmt.Errorf("resolve codex session metadata after model change: %w", err)
+	}
+	if err := writeJSONFile(r.writeFile, path, meta); err != nil {
+		return fmt.Errorf("reset codex conversations after model change: %w", err)
+	}
+	return nil
 }
 
 func (r *Runtime) ValidateMCPServers(_ context.Context, current agentruntime.MCPServersSnapshot) error {

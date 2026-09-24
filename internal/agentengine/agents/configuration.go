@@ -163,6 +163,9 @@ func (s *Controller) UpdateAgentProfile(id string, profile AgentProfile) (AgentP
 		return AgentProfileView{}, err
 	}
 	s.mu.Unlock()
+	if err := s.reconcileRuntimeConfig(context.Background(), previous, current); err != nil {
+		return AgentProfileView{}, err
+	}
 	if restartRequired && runtimeRunning && isHostRuntimeKind(runtimeKind) {
 		if _, err := s.restartRuntime(context.Background(), id); err != nil {
 			return AgentProfileView{}, err
@@ -536,7 +539,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 		return Agent{}, err
 	}
 	s.mu.Unlock()
-	if instructionsUpdated || runtimeOptionsUpdated {
+	if instructionsUpdated || agentProfileUpdated || runtimeOptionsUpdated {
 		if err := s.reconcileRuntimeConfig(ctx, previous, current); err != nil {
 			return Agent{}, err
 		}

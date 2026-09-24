@@ -3866,11 +3866,12 @@ func TestRuntimeNewRestoresPersistedConversationMappings(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := writeJSONFile(os.WriteFile, filepath.Join(runtimeDir, sessionFileName), sessionMetadata{
-		RuntimeID:                   "rt-u-alice",
-		SessionID:                   "main-thread",
-		ConversationSessions:        map[string]string{"room-1": "room-thread"},
-		DynamicToolsVersion:         engineDynamicToolsVersion,
-		FilePublishingConversations: map[string]bool{"room-1": true},
+		RuntimeID:                      "rt-u-alice",
+		SessionID:                      "main-thread",
+		ConversationSessions:           map[string]string{"room-1": "room-thread"},
+		DynamicToolsVersion:            engineDynamicToolsVersion,
+		FilePublishingConversations:    map[string]bool{"room-1": true},
+		ConversationProfileFingerprint: conversationProfileFingerprint("", "", ""),
 	}); err != nil {
 		t.Fatalf("write session metadata: %v", err)
 	}
@@ -3918,6 +3919,37 @@ func TestRuntimeNewRestoresPersistedConversationMappings(t *testing.T) {
 	}
 }
 
+func TestPersistedConversationsWithoutProfileFingerprintRotateOnStartup(t *testing.T) {
+	meta := sessionMetadata{
+		ConversationSessions:        map[string]string{"room-1": "gpt-thread"},
+		FilePublishingConversations: map[string]bool{"room-1": true},
+	}
+	conversations, publishing := persistedConversationsForProfile(meta, agentruntime.Profile{
+		Provider: "csghub",
+		BaseURL:  "https://ai.example/v1",
+		ModelID:  "glm-5.1",
+	})
+	if len(conversations) != 0 || len(publishing) != 0 {
+		t.Fatalf("legacy persisted conversations = %#v, publishing = %#v; want a fresh thread", conversations, publishing)
+	}
+}
+
+func TestPersistedConversationsWithDifferentProfileFingerprintRotateOnStartup(t *testing.T) {
+	meta := sessionMetadata{
+		ConversationSessions:           map[string]string{"room-1": "gpt-thread"},
+		FilePublishingConversations:    map[string]bool{"room-1": true},
+		ConversationProfileFingerprint: conversationProfileFingerprint("codex", "https://old.example/v1", "gpt-5"),
+	}
+	conversations, publishing := persistedConversationsForProfile(meta, agentruntime.Profile{
+		Provider: "csghub",
+		BaseURL:  "https://new.example/v1",
+		ModelID:  "glm-5.1",
+	})
+	if len(conversations) != 0 || len(publishing) != 0 {
+		t.Fatalf("mismatched persisted conversations = %#v, publishing = %#v; want a fresh thread", conversations, publishing)
+	}
+}
+
 func TestRuntimeStartRestoresPersistedConversationMappings(t *testing.T) {
 	root := t.TempDir()
 	var startedSpec SessionSpec
@@ -3959,11 +3991,12 @@ func TestRuntimeStartRestoresPersistedConversationMappings(t *testing.T) {
 	}
 	runtimeDir := filepath.Join(root, "agent-alice", ".codex")
 	if err := writeJSONFile(os.WriteFile, filepath.Join(runtimeDir, sessionFileName), sessionMetadata{
-		RuntimeID:                   "rt-u-alice",
-		SessionID:                   "main-thread",
-		ConversationSessions:        map[string]string{"room-1": "room-thread"},
-		DynamicToolsVersion:         engineDynamicToolsVersion,
-		FilePublishingConversations: map[string]bool{"room-1": true},
+		RuntimeID:                      "rt-u-alice",
+		SessionID:                      "main-thread",
+		ConversationSessions:           map[string]string{"room-1": "room-thread"},
+		DynamicToolsVersion:            engineDynamicToolsVersion,
+		FilePublishingConversations:    map[string]bool{"room-1": true},
+		ConversationProfileFingerprint: conversationProfileFingerprint("", "", ""),
 	}); err != nil {
 		t.Fatalf("write session metadata: %v", err)
 	}
