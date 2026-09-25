@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"csgclaw/internal/agentengine"
 	channeltypes "csgclaw/internal/channel"
+	"csgclaw/internal/channel/feishu/presentation"
 	feishustate "csgclaw/internal/channel/feishu/state"
 	"csgclaw/internal/channel/feishu/transport"
 )
@@ -18,8 +20,8 @@ import (
 type recordingAdapter struct {
 	transport.Adapter
 	mu           sync.Mutex
-	texts        []transport.SendTextRequest
-	updates      []transport.UpdateTextRequest
+	texts        []transport.SendCardRequest
+	updates      []transport.UpdateCardRequest
 	imageUploads []transport.UploadImageRequest
 	fileUploads  []transport.UploadFileRequest
 	images       []transport.SendImageRequest
@@ -33,18 +35,20 @@ type recordingAdapter struct {
 	messageID    string
 }
 
-func (a *recordingAdapter) SendText(_ context.Context, req transport.SendTextRequest) (transport.SendResult, error) {
+func (a *recordingAdapter) SendCard(_ context.Context, card transport.SendCardRequest) (transport.SendResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	req := card
 	a.texts = append(a.texts, req)
 	if a.textErr != nil {
 		return transport.SendResult{}, a.textErr
 	}
 	return transport.SendResult{MessageID: a.messageID}, nil
 }
-func (a *recordingAdapter) UpdateText(_ context.Context, req transport.UpdateTextRequest) error {
+func (a *recordingAdapter) UpdateCard(_ context.Context, card transport.UpdateCardRequest) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	req := card
 	a.updates = append(a.updates, req)
 	return a.updateErr
 }
@@ -91,7 +95,7 @@ func TestDispatcherDeliversFromMemory(t *testing.T) {
 	store := feishustate.NewStore()
 	intent := channeltypes.DeliveryIntent{
 		ID: "text", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryText, ChatID: "chat-1", Text: "answer",
+		Kind: channeltypes.DeliveryCard, ChatID: "chat-1", Card: presentation.Card("answer"),
 	}
 	if err := store.Enqueue(intent); err != nil {
 		t.Fatal(err)
@@ -279,11 +283,11 @@ func TestDispatcherResolvesInMemoryUpdateDependency(t *testing.T) {
 	store := feishustate.NewStore()
 	create := channeltypes.DeliveryIntent{
 		ID: "create", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryMarkdown, ChatID: "chat-1", Text: "working",
+		Kind: channeltypes.DeliveryCard, ChatID: "chat-1", Card: presentation.Card("working"),
 	}
 	update := channeltypes.DeliveryIntent{
 		ID: "update", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryMarkdownUpdate, RelatedID: create.ID, Text: "done",
+		Kind: channeltypes.DeliveryCardUpdate, RelatedID: create.ID, Card: presentation.Card("done"),
 	}
 	if err := store.Enqueue(create); err != nil {
 		t.Fatal(err)
@@ -305,7 +309,7 @@ func TestDispatcherUsesBoundedInProcessRetry(t *testing.T) {
 	store := feishustate.NewStore()
 	intent := channeltypes.DeliveryIntent{
 		ID: "retry", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryText, ChatID: "chat-1", Text: "answer",
+		Kind: channeltypes.DeliveryCard, ChatID: "chat-1", Card: presentation.Card("answer"),
 	}
 	if err := store.Enqueue(intent); err != nil {
 		t.Fatal(err)
@@ -326,7 +330,7 @@ func TestDispatcherDoesNotRetryPermanentFailure(t *testing.T) {
 	store := feishustate.NewStore()
 	intent := channeltypes.DeliveryIntent{
 		ID: "permanent", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryText, ChatID: "chat-1", Text: "answer",
+		Kind: channeltypes.DeliveryCard, ChatID: "chat-1", Card: presentation.Card("answer"),
 	}
 	if err := store.Enqueue(intent); err != nil {
 		t.Fatal(err)
@@ -354,55 +358,16 @@ func TestRetryPolicyDoesNotRepeatAmbiguousUnsafeOperation(t *testing.T) {
 			t.Fatalf("kind %q was unexpectedly retryable", kind)
 		}
 	}
-	if !retryableDelivery(channeltypes.DeliveryIntent{Kind: channeltypes.DeliveryText}, retryable) {
+	if !retryableDelivery(channeltypes.DeliveryIntent{Kind: channeltypes.DeliveryCard}, retryable) {
 		t.Fatal("stable-UUID message send was not retryable")
-	}
-}
-
-func TestDispatcherUsesOnlyKnownEditLimitFallback(t *testing.T) {
-	store := feishustate.NewStore()
-	create := channeltypes.DeliveryIntent{
-		ID: "turn-1:markdown:create", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryMarkdown, ChatID: "chat-1", Text: "working",
-	}
-	if err := store.Enqueue(create); err != nil {
-		t.Fatal(err)
-	}
-	create.MessageID = "message-1"
-	if err := store.MarkDelivered(create); err != nil {
-		t.Fatal(err)
-	}
-	terminal := channeltypes.DeliveryIntent{
-		ID: "turn-1:markdown:final", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryMarkdownUpdate, RelatedID: create.ID, Text: "done",
-	}
-	if err := store.Enqueue(terminal); err != nil {
-		t.Fatal(err)
-	}
-	adapter := &recordingAdapter{
-		messageID: "completion-1",
-		updateErr: &transport.APIError{Operation: "update", Code: 230072},
-	}
-	dispatcher, _ := NewDispatcher(DispatcherOptions{State: store, Adapter: adapter})
-	dispatcher.drain(context.Background())
-	dispatcher.drain(context.Background())
-	fallback, ok := store.Delivery(terminal.ID + ":completion")
-	if !ok || fallback.Status != channeltypes.DeliveryDelivered || fallback.Text != "_（内容已结束）_" {
-		t.Fatalf("fallback = %#v, found=%t", fallback, ok)
-	}
-	if got := len(adapter.updates); got != 1 {
-		t.Fatalf("update attempts = %d, want 1", got)
-	}
-	if got := len(adapter.texts); got != 1 {
-		t.Fatalf("completion sends = %d, want 1", got)
 	}
 }
 
 func TestDispatcherPreventsOldStreamUpdateAfterTerminal(t *testing.T) {
 	store := feishustate.NewStore()
 	create := channeltypes.DeliveryIntent{
-		ID: "turn-1:markdown:create", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryMarkdown, ChatID: "chat-1", Text: "working",
+		ID: "turn-1:reply:create", BindingID: "binding-1", TurnID: "turn-1",
+		Kind: channeltypes.DeliveryCard, ChatID: "chat-1", Card: presentation.Card("working"),
 	}
 	if err := store.Enqueue(create); err != nil {
 		t.Fatal(err)
@@ -412,12 +377,12 @@ func TestDispatcherPreventsOldStreamUpdateAfterTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := channeltypes.DeliveryIntent{
-		ID: "turn-1:markdown:update:1", BindingID: "binding-1", TurnID: "turn-1", Sequence: 1,
-		Kind: channeltypes.DeliveryMarkdownUpdate, RelatedID: create.ID, Text: "old",
+		ID: "turn-1:reply:update:1", BindingID: "binding-1", TurnID: "turn-1", Sequence: 1,
+		Kind: channeltypes.DeliveryCardUpdate, RelatedID: create.ID, Card: presentation.Card("old"),
 	}
 	terminal := channeltypes.DeliveryIntent{
-		ID: "turn-1:markdown:final", BindingID: "binding-1", TurnID: "turn-1", Sequence: 2,
-		Kind: channeltypes.DeliveryMarkdownUpdate, RelatedID: create.ID, Text: "done",
+		ID: "turn-1:reply:final", BindingID: "binding-1", TurnID: "turn-1", Sequence: 2,
+		Kind: channeltypes.DeliveryCardUpdate, RelatedID: create.ID, Card: presentation.Card("done"),
 	}
 	if err := store.Enqueue(old); err != nil {
 		t.Fatal(err)
@@ -432,7 +397,7 @@ func TestDispatcherPreventsOldStreamUpdateAfterTerminal(t *testing.T) {
 	if stale.Status != channeltypes.DeliveryFailed {
 		t.Fatalf("old update = %#v", stale)
 	}
-	if len(adapter.updates) != 1 || adapter.updates[0].Text != "done" {
+	if len(adapter.updates) != 1 || !strings.Contains(testCardText(adapter.updates[0].Card), "done") {
 		t.Fatalf("updates = %#v, want terminal only", adapter.updates)
 	}
 }
@@ -442,9 +407,38 @@ func TestDependencyErrorsRemainRecognizable(t *testing.T) {
 	dispatcher, _ := NewDispatcher(DispatcherOptions{State: store, Adapter: &recordingAdapter{}})
 	update := channeltypes.DeliveryIntent{
 		ID: "update", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryMarkdownUpdate, RelatedID: "missing", Text: "done",
+		Kind: channeltypes.DeliveryCardUpdate, RelatedID: "missing", Card: presentation.Card("done"),
 	}
-	if _, err := dispatcher.deliverMarkdownUpdate(context.Background(), update); !errors.Is(err, ErrDependencyTerminal) {
+	if _, err := dispatcher.deliverCardUpdate(context.Background(), update); !errors.Is(err, ErrDependencyTerminal) {
 		t.Fatalf("dependency error = %v", err)
+	}
+}
+
+func testCardText(card map[string]any) string { raw, _ := json.Marshal(card); return string(raw) }
+
+func TestReplyPageWaitsForPreviousCard(t *testing.T) {
+	store := feishustate.NewStore()
+	previous := channeltypes.DeliveryIntent{ID: "page-1", BindingID: "binding", TurnID: "turn", Kind: channeltypes.DeliveryCard}
+	if err := store.Enqueue(previous); err != nil {
+		t.Fatal(err)
+	}
+	next := channeltypes.DeliveryIntent{ID: "page-2", BindingID: "binding", TurnID: "turn", Kind: channeltypes.DeliveryCard, RelatedID: previous.ID}
+	adapter := &recordingAdapter{messageID: "second-message"}
+	dispatcher, _ := NewDispatcher(DispatcherOptions{State: store, Adapter: adapter})
+	if _, err := dispatcher.deliver(context.Background(), next); !errors.Is(err, ErrDependencyPending) {
+		t.Fatalf("pending previous page: %v", err)
+	}
+	if len(adapter.texts) != 0 {
+		t.Fatal("sent next page before previous page")
+	}
+	previous.MessageID = "first-message"
+	if err := store.MarkDelivered(previous); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dispatcher.deliver(context.Background(), next); err != nil {
+		t.Fatal(err)
+	}
+	if len(adapter.texts) != 1 {
+		t.Fatalf("sent %d pages", len(adapter.texts))
 	}
 }

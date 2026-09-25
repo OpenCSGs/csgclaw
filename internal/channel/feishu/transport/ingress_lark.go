@@ -472,6 +472,12 @@ func parseMillis(value string) time.Time {
 	if _, err := fmt.Sscan(value, &millis); err != nil {
 		return time.Time{}
 	}
+	if millis >= 1_000_000_000_000_000_000 {
+		return time.Unix(0, millis).UTC()
+	}
+	if millis >= 1_000_000_000_000_000 {
+		return time.UnixMicro(millis).UTC()
+	}
 	if millis < 1_000_000_000_000 {
 		return time.Unix(millis, 0).UTC()
 	}

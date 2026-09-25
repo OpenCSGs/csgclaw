@@ -19,13 +19,10 @@ import (
 	"csgclaw/internal/channel/feishu/files"
 	"csgclaw/internal/channel/feishu/ingress"
 	"csgclaw/internal/channel/feishu/interaction"
-	"csgclaw/internal/channel/feishu/presentation"
 	feishustate "csgclaw/internal/channel/feishu/state"
 	"csgclaw/internal/channel/feishu/transport"
 	"csgclaw/internal/im"
 )
-
-const hostedPresentationMode = presentation.ModeMarkdown
 
 type PipelineFactoryOptions struct {
 	Engine    agentengine.Interface
@@ -80,6 +77,7 @@ type pipelineWorker struct {
 	intake      *ingress.Intake
 	runner      *execution.Runner
 	dispatcher  *delivery.Dispatcher
+	monitorDone chan struct{}
 }
 
 func (w *pipelineWorker) Start(ctx context.Context) error {
@@ -138,11 +136,10 @@ func (w *pipelineWorker) Start(ctx context.Context) error {
 		Root:       stagingRoot,
 	}
 	runner, err = execution.NewRunner(execution.RunnerOptions{
-		Engine:       w.factory.engine,
-		State:        store,
-		Files:        preparer,
-		Notifier:     dispatcher,
-		Presentation: hostedPresentationMode,
+		Engine:   w.factory.engine,
+		State:    store,
+		Files:    preparer,
+		Notifier: dispatcher,
 	})
 	if err != nil {
 		return fail(err)
@@ -216,6 +213,8 @@ func (w *pipelineWorker) Start(ctx context.Context) error {
 	w.intake = intake
 	w.runner = runner
 	w.dispatcher = dispatcher
+	w.monitorDone = make(chan struct{})
+	go func() { defer close(w.monitorDone); runner.Monitor(workerCtx) }()
 	w.mu.Unlock()
 	slog.Debug("Feishu binding worker ready", resolvedLogAttrs(w.resolved)...)
 	return nil
@@ -256,6 +255,7 @@ func (w *pipelineWorker) Close(ctx context.Context) error {
 	intake := w.intake
 	runner := w.runner
 	dispatcher := w.dispatcher
+	monitorDone := w.monitorDone
 	w.ctx = nil
 	w.cancel = nil
 	w.adapter = nil
@@ -285,6 +285,9 @@ func (w *pipelineWorker) Close(ctx context.Context) error {
 		if err := runner.Wait(waitCtx); err != nil {
 			closeErr = errors.Join(closeErr, fmt.Errorf("wait for Feishu executions: %w", err))
 		}
+	}
+	if monitorDone != nil {
+		<-monitorDone
 	}
 	if dispatcher != nil {
 		dispatcher.Close()

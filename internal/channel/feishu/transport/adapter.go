@@ -21,8 +21,6 @@ type larkIdentityPreparer interface {
 }
 
 type larkOperations interface {
-	SendText(context.Context, SendTextRequest) (SendResult, error)
-	UpdateText(context.Context, UpdateTextRequest) error
 	SendCard(context.Context, SendCardRequest) (SendResult, error)
 	UpdateCard(context.Context, UpdateCardRequest) error
 	UploadImage(context.Context, UploadImageRequest) (UploadResult, error)
@@ -190,18 +188,6 @@ func (a *adapter) FetchMessage(ctx context.Context, messageID string) (Message, 
 	return a.messages.FetchMessage(ctx, messageID)
 }
 
-func (a *adapter) SendText(ctx context.Context, req SendTextRequest) (SendResult, error) {
-	if err := a.ready(ctx); err != nil {
-		return SendResult{}, err
-	}
-	result, err := a.oapi.SendText(ctx, req)
-	if err != nil {
-		return SendResult{}, fmt.Errorf("send feishu text: %w", err)
-	}
-	result.MessageID = strings.TrimSpace(result.MessageID)
-	return result, nil
-}
-
 func (a *adapter) SendCard(ctx context.Context, req SendCardRequest) (SendResult, error) {
 	if err := a.ready(ctx); err != nil {
 		return SendResult{}, err
@@ -212,16 +198,6 @@ func (a *adapter) SendCard(ctx context.Context, req SendCardRequest) (SendResult
 	}
 	result.MessageID = strings.TrimSpace(result.MessageID)
 	return result, nil
-}
-
-func (a *adapter) UpdateText(ctx context.Context, req UpdateTextRequest) error {
-	if err := a.ready(ctx); err != nil {
-		return err
-	}
-	if err := a.oapi.UpdateText(ctx, req); err != nil {
-		return fmt.Errorf("update feishu text: %w", err)
-	}
-	return nil
 }
 
 func (a *adapter) UpdateCard(ctx context.Context, req UpdateCardRequest) error {

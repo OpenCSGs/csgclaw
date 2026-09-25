@@ -33,6 +33,10 @@ type Notifier interface {
 }
 
 type runnerState interface {
+	Delivery(string) (channeltypes.DeliveryIntent, bool)
+	ResolveControlTarget(feishustate.ControlQuery) (feishustate.ControlTarget, bool)
+	MarkCanceling(string)
+	RetryCOTCompletion(string) error
 	Put(channeltypes.TurnRecord) error
 	Get(string) (channeltypes.TurnRecord, bool)
 	Enqueue(channeltypes.DeliveryIntent) error
@@ -42,11 +46,10 @@ type runnerState interface {
 }
 
 type RunnerOptions struct {
-	Engine       agentengine.Interface
-	State        *feishustate.Store
-	Files        FilePreparer
-	Notifier     Notifier
-	Presentation presentation.Mode
+	Engine   agentengine.Interface
+	State    *feishustate.Store
+	Files    FilePreparer
+	Notifier Notifier
 }
 
 // Runner is the only Feishu component allowed to invoke Agent Engine Run. It
@@ -57,18 +60,22 @@ type Runner struct {
 	state    runnerState
 	files    FilePreparer
 	notifier Notifier
-	mode     presentation.Mode
 
-	mu     sync.Mutex
-	active map[string]*activeRun
-	runs   map[*activeRun]struct{}
+	controlMu      sync.Mutex
+	controls       map[string]*conversationControl
+	interactionMu  sync.Mutex
+	interactions   map[string]*pendingInteraction
+	latest         map[string]string
+	workerContexts map[string]context.Context
+	mu             sync.Mutex
+	active         map[string]*activeRun
+	runs           map[*activeRun]struct{}
 }
 
 type activeRun struct {
 	agentID       string
 	key           string
 	turnID        string
-	mode          presentation.Mode
 	engineEntered bool // guarded by Runner.mu
 	cancel        context.CancelFunc
 	done          chan struct{}
@@ -82,19 +89,30 @@ func NewRunner(options RunnerOptions) (*Runner, error) {
 		return nil, fmt.Errorf("feishu runner: memory state is required")
 	}
 	return &Runner{
-		engine:   options.Engine,
-		state:    options.State,
-		files:    options.Files,
-		notifier: options.Notifier,
-		mode:     presentation.NormalizeMode(string(options.Presentation)),
-		active:   make(map[string]*activeRun),
-		runs:     make(map[*activeRun]struct{}),
+		engine:         options.Engine,
+		state:          options.State,
+		files:          options.Files,
+		notifier:       options.Notifier,
+		active:         make(map[string]*activeRun),
+		controls:       make(map[string]*conversationControl),
+		interactions:   make(map[string]*pendingInteraction),
+		latest:         make(map[string]string),
+		workerContexts: make(map[string]context.Context),
+		runs:           make(map[*activeRun]struct{}),
 	}, nil
 }
 
 // Submit starts an Engine Run from the binding worker context. It does not
 // queue conversations; Agent Engine AdmissionSupersede owns replacement.
 func (r *Runner) Submit(ctx context.Context, message channeltypes.InboundMessage) error {
+	release, err := r.acquireControl(ctx, message.ConversationKey)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return r.submit(ctx, message)
+}
+func (r *Runner) submit(ctx context.Context, message channeltypes.InboundMessage) error {
 	if err := validateMessage(message); err != nil {
 		return err
 	}
@@ -105,13 +123,16 @@ func (r *Runner) Submit(ctx context.Context, message channeltypes.InboundMessage
 		return err
 	}
 
+	r.interactionMu.Lock()
+	r.latest[message.ConversationKey] = message.TurnID
+	r.workerContexts[message.ConversationKey] = ctx
+	r.interactionMu.Unlock()
 	record := turnRecord(message, channeltypes.TurnAccepted)
 	if err := r.state.Put(record); err != nil {
 		return fmt.Errorf("record accepted Feishu turn: %w", err)
 	}
-	mode := r.presentationModeForTurn(message.TurnID)
 	if isChatReply(message) {
-		if err := r.enqueueInitialPresentation(message, mode); err != nil {
+		if err := r.enqueueProcessStart(message); err != nil {
 			return err
 		}
 		if err := r.enqueueProcessingReaction(message); err != nil {
@@ -123,7 +144,6 @@ func (r *Runner) Submit(ctx context.Context, message channeltypes.InboundMessage
 		agentID: message.AgentID,
 		key:     message.ConversationKey,
 		turnID:  message.TurnID,
-		mode:    mode,
 		cancel:  cancel,
 		done:    make(chan struct{}),
 	}
@@ -141,7 +161,6 @@ func (r *Runner) Submit(ctx context.Context, message channeltypes.InboundMessage
 	r.mu.Unlock()
 	slog.Debug("accepted Feishu turn",
 		messageLogAttrs(message,
-			"presentation_mode", mode,
 			"canceled_previous_preflight", canceledPreviousPreflight,
 		)...)
 	go r.run(runCtx, active, message)
@@ -149,6 +168,7 @@ func (r *Runner) Submit(ctx context.Context, message channeltypes.InboundMessage
 }
 
 func (r *Runner) run(ctx context.Context, active *activeRun, message channeltypes.InboundMessage) {
+	process := presentation.NewProcess(message.TurnID, message.ConversationKey)
 	defer func() {
 		active.cancel()
 		close(active.done)
@@ -159,6 +179,9 @@ func (r *Runner) run(ctx context.Context, active *activeRun, message channeltype
 		delete(r.runs, active)
 		r.mu.Unlock()
 	}()
+	if isChatReply(message) {
+		defer r.finishProcess(message, process)
+	}
 	input := make([]agentengine.InputPart, 0, len(message.Files)+1)
 	if prompt := feishuctx.MessagePrompt(message); prompt != "" {
 		input = append(input, agentengine.InputPart{Kind: agentengine.InputPartText, Text: prompt})
@@ -226,26 +249,30 @@ func (r *Runner) run(ctx context.Context, active *activeRun, message channeltype
 	slog.Debug("start Feishu Agent Engine run",
 		messageLogAttrs(message,
 			"input_part_count", len(input),
-			"presentation_mode", active.mode,
 		)...)
-	progress := presentation.NewProgress(active.mode, message.TurnID, message.ConversationKey,
-		strings.TrimSpace(message.Source.ThreadID))
+	progress := presentation.NewProgress()
 	result := r.engine.Conversations(message.AgentID).Run(ctx, agentengine.TurnRequest{
 		ID:              agentengine.TurnID(message.TurnID),
 		ConversationKey: agentengine.ConversationKey(message.ConversationKey),
 		Input:           input,
 		Admission:       agentengine.AdmissionSupersede,
 		Continuation:    agentengine.ContinuationCreateOrResume,
-		Interaction:     agentengine.InteractionSkipUserInput,
+		Interaction:     interactionPolicy(message),
 	}, agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
 		if !isChatReply(message) {
 			return nil
+		}
+		if err := r.observeInteraction(ctx, message, event); err != nil {
+			return err
+		}
+		if err := r.enqueueProcess(message, event.Sequence, process.Observe(event)); err != nil {
+			return err
 		}
 		rendered, flush := progress.Observe(event)
 		if !flush {
 			return nil
 		}
-		intents := r.presentationUpdateIntents(message, event.Sequence, false, rendered)
+		intents := r.replyIntents(message, event.Sequence, false, rendered)
 		if err := r.state.AppendTurnDeliveries(message.TurnID, event.Sequence, intents...); err != nil {
 			return err
 		}
@@ -253,6 +280,11 @@ func (r *Runner) run(ctx context.Context, active *activeRun, message channeltype
 		return nil
 	}))
 	result = normalizeTerminalResult(result)
+	for _, item := range result.Interactions {
+		if err := r.registerInteraction(ctx, message, item); err != nil {
+			r.logFinalizeError(message, err)
+		}
+	}
 	r.logTerminalResult(message, result)
 	if err := r.finalize(message, result, true, progress.Finalize(presentationResult(result))); err != nil {
 		r.logFinalizeError(message, err)
@@ -261,12 +293,20 @@ func (r *Runner) run(ctx context.Context, active *activeRun, message channeltype
 
 // Reset handles /new through Engine's atomic active-Turn Reset operation.
 func (r *Runner) Reset(ctx context.Context, message channeltypes.InboundMessage) error {
+	release, err := r.acquireControl(ctx, message.ConversationKey)
+	if err != nil {
+		return err
+	}
+	defer release()
 	if err := validateMessage(message); err != nil {
 		return err
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	r.interactionMu.Lock()
+	r.latest[message.ConversationKey] = message.TurnID
+	r.interactionMu.Unlock()
 	if err := r.state.Put(turnRecord(message, channeltypes.TurnAccepted)); err != nil {
 		return fmt.Errorf("record accepted Feishu reset: %w", err)
 	}
@@ -283,15 +323,15 @@ func (r *Runner) Reset(ctx context.Context, message channeltypes.InboundMessage)
 	if err := r.state.BeginTurn(turnRecord(message, channeltypes.TurnRunning)); err != nil {
 		return fmt.Errorf("record running Feishu reset: %w", err)
 	}
-	err := r.engine.Conversations(message.AgentID).Reset(ctx, agentengine.ConversationKey(message.ConversationKey))
+	err = r.engine.Conversations(message.AgentID).Reset(ctx, agentengine.ConversationKey(message.ConversationKey))
 	if err != nil {
 		result := resultFromError(err)
 		slog.Warn("Feishu Agent Engine reset failed",
 			messageLogAttrs(message, resultLogAttrs(result)...,
 			)...)
-		return r.finalize(message, result, false, presentation.Rendered{})
+		return r.finalize(message, result, true, presentation.Rendered{})
 	}
-	intent := r.textIntent(message, message.TurnID+":reset", 1, "Cleared my internal history for this conversation. The IM room messages were not cleared.")
+	intent := r.messageCardIntent(message, message.TurnID+":reset", 1, "Cleared my internal history for this conversation. The IM room messages were not cleared.")
 	if err := r.state.FinishTurn(message.TurnID, channeltypes.TurnSucceeded, intent); err != nil {
 		return fmt.Errorf("record terminal Feishu reset: %w", err)
 	}
@@ -314,7 +354,7 @@ func (r *Runner) Cancel(ctx context.Context, agentID, conversationKey, turnID st
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	slog.Debug("cancel Feishu Agent Engine turn requested",
+	slog.Info("cancel Feishu Agent Engine turn requested",
 		"agent_id", agentID,
 		"conversation_key", conversationKey,
 		"turn_id", turnID,
@@ -339,10 +379,6 @@ func (r *Runner) Cancel(ctx context.Context, agentID, conversationKey, turnID st
 
 func (r *Runner) finalize(message channeltypes.InboundMessage, result agentengine.TurnResult, includePresentation bool, terminal presentation.Rendered) error {
 	result = normalizeTerminalResult(result)
-	mode := r.presentationModeForTurn(message.TurnID)
-	if terminal.Mode != "" {
-		mode = presentation.NormalizeMode(string(terminal.Mode))
-	}
 	status := channeltypes.TurnFailed
 	switch result.Status {
 	case agentengine.TurnSucceeded:
@@ -363,10 +399,6 @@ func (r *Runner) finalize(message channeltypes.InboundMessage, result agentengin
 	}
 
 	intents := make([]channeltypes.DeliveryIntent, 0, 3)
-	// Chat replies finish by updating the one presentation message created for
-	// the Turn. Emitting result.Output separately here would duplicate the same
-	// answer already rendered in the terminal Markdown/Card snapshot. Document
-	// comments have no presentation message, so they still need one reply.
 	if status != channeltypes.TurnCanceled && isCommentReply(message) {
 		text := strings.TrimSpace(result.Output)
 		if status == channeltypes.TurnFailed {
@@ -377,10 +409,10 @@ func (r *Runner) finalize(message channeltypes.InboundMessage, result agentengin
 		intents = append(intents, r.commentIntent(message, message.TurnID+":final", finalSequence, text))
 	}
 	if includePresentation && isChatReply(message) {
-		if terminal.Mode == "" {
-			terminal = presentation.Terminal(mode, presentationResult(result))
+		if len(terminal.Cards) == 0 {
+			terminal = presentation.Terminal(presentationResult(result))
 		}
-		intents = append(intents, r.presentationUpdateIntents(message, finalSequence, true, terminal)...)
+		intents = append(intents, r.replyIntents(message, finalSequence, true, terminal)...)
 		if status == channeltypes.TurnSucceeded {
 			intents = append(intents, r.fileDeliveryIntents(message, result.Files, finalSequence+1)...)
 		}
@@ -396,24 +428,6 @@ func (r *Runner) finalize(message channeltypes.InboundMessage, result agentengin
 	}
 	r.notify()
 	return nil
-}
-
-// presentationModeForTurn preserves the mode recorded by the in-memory create
-// intent while the binding is running.
-func (r *Runner) presentationModeForTurn(turnID string) presentation.Mode {
-	lookup, ok := r.state.(interface {
-		Delivery(string) (channeltypes.DeliveryIntent, bool)
-	})
-	if !ok {
-		return r.mode
-	}
-	if intent, found := lookup.Delivery(cardCreateID(turnID)); found && intent.Kind == channeltypes.DeliveryCard {
-		return presentation.ModeCard
-	}
-	if intent, found := lookup.Delivery(presentationCreateID(presentation.ModeMarkdown, turnID)); found && intent.Kind == channeltypes.DeliveryMarkdown {
-		return presentation.ModeMarkdown
-	}
-	return r.mode
 }
 
 func normalizeTerminalResult(result agentengine.TurnResult) agentengine.TurnResult {
@@ -462,11 +476,11 @@ func truncateRunes(value string, limit int) string {
 	return string(runes[:limit-1]) + "…"
 }
 
-func (r *Runner) textIntent(message channeltypes.InboundMessage, id string, sequence uint64, text string) channeltypes.DeliveryIntent {
+func (r *Runner) messageCardIntent(message channeltypes.InboundMessage, id string, sequence uint64, text string) channeltypes.DeliveryIntent {
 	text = strings.TrimSpace(text)
 	intent := baseIntent(message, id, sequence)
-	intent.Kind = channeltypes.DeliveryText
-	intent.Text = text
+	intent.Kind = channeltypes.DeliveryCard
+	intent.Card = presentation.Card(text)
 	return intent
 }
 
@@ -499,11 +513,13 @@ func (r *Runner) fileDeliveryIntents(message channeltypes.InboundMessage, files 
 	}
 	if rejected > 0 {
 		warning := baseIntent(message, strings.TrimSpace(message.TurnID)+":files:warning", startSequence+uint64(len(intents)))
-		warning.Kind = channeltypes.DeliveryText
+		warning.Kind = channeltypes.DeliveryCard
 		warning.Text = fmt.Sprintf(
 			"Feishu could not send %d generated file(s) because their metadata or delivery limits were invalid (maximum %d files, %d MiB per file, %d MiB total).",
 			rejected, maxFeishuOutputFileCount, transport.FileUploadLimitBytes>>20, maxFeishuOutputFileTotal>>20,
 		)
+		warning.Card = presentation.Card(warning.Text)
+		warning.Text = ""
 		intents = append(intents, warning)
 	}
 	return intents
@@ -532,90 +548,8 @@ func fileDeliveryID(turnID string, index int) string {
 	return strings.TrimSpace(turnID) + fmt.Sprintf(":file:%d", index+1)
 }
 
-func (r *Runner) enqueueInitialPresentation(message channeltypes.InboundMessage, mode presentation.Mode) error {
-	rendered := presentation.Initial(mode, message.TurnID, message.ConversationKey,
-		strings.TrimSpace(message.Source.ThreadID))
-	intent := baseIntent(message, presentationCreateID(rendered.Mode, message.TurnID), 0)
-	switch rendered.Mode {
-	case presentation.ModeMarkdown:
-		intent.Kind = channeltypes.DeliveryMarkdown
-		intent.Text = rendered.Markdown
-	case presentation.ModeCard:
-		intent.Kind = channeltypes.DeliveryCard
-		intent.Card = rendered.Card
-	default:
-		return fmt.Errorf("unsupported Feishu presentation mode %q", rendered.Mode)
-	}
-	if err := r.state.Enqueue(intent); err != nil {
-		return fmt.Errorf("queue initial Feishu presentation: %w", err)
-	}
-	r.notify()
-	return nil
-}
-
-func (r *Runner) presentationUpdateIntent(message channeltypes.InboundMessage, sequence uint64, final bool, rendered presentation.Rendered) channeltypes.DeliveryIntent {
-	id := presentationUpdateID(rendered.Mode, message.TurnID, sequence, final)
-	intent := baseIntent(message, id, sequence)
-	intent.RelatedID = presentationCreateID(rendered.Mode, message.TurnID)
-	switch rendered.Mode {
-	case presentation.ModeMarkdown:
-		intent.Kind = channeltypes.DeliveryMarkdownUpdate
-		intent.Text = rendered.Markdown
-	case presentation.ModeCard:
-		intent.Kind = channeltypes.DeliveryCardUpdate
-		intent.Card = rendered.Card
-	}
-	return intent
-}
-
-// presentationUpdateIntents turns one rendered Markdown snapshot into ordered
-// message parts when it exceeds Feishu's rich-message limit. The first part
-// continues to update the original presentation message; later parts get their
-// own reply messages and are updated independently on later snapshots.
-func (r *Runner) presentationUpdateIntents(message channeltypes.InboundMessage, sequence uint64, final bool, rendered presentation.Rendered) []channeltypes.DeliveryIntent {
-	if rendered.Mode != presentation.ModeMarkdown || len(rendered.MarkdownParts) <= 1 {
-		return []channeltypes.DeliveryIntent{r.presentationUpdateIntent(message, sequence, final, rendered)}
-	}
-	intents := make([]channeltypes.DeliveryIntent, 0, len(rendered.MarkdownParts))
-	for index, text := range rendered.MarkdownParts {
-		part := index + 1
-		if part == 1 {
-			first := rendered
-			first.Markdown = text
-			first.MarkdownParts = nil
-			intents = append(intents, r.presentationUpdateIntent(message, sequence, final, first))
-			continue
-		}
-		createID := markdownContinuationCreateID(message.TurnID, part)
-		if r.deliveryExists(createID) {
-			intent := baseIntent(message, markdownContinuationUpdateID(message.TurnID, part, sequence, final), sequence)
-			intent.Kind = channeltypes.DeliveryMarkdownUpdate
-			intent.RelatedID = createID
-			intent.Text = text
-			intents = append(intents, intent)
-			continue
-		}
-		previousCreateID := presentationCreateID(presentation.ModeMarkdown, message.TurnID)
-		if part > 2 {
-			previousCreateID = markdownContinuationCreateID(message.TurnID, part-1)
-		}
-		intent := baseIntent(message, createID, sequence)
-		intent.Kind = channeltypes.DeliveryMarkdown
-		intent.RelatedID = previousCreateID
-		intent.Text = text
-		intents = append(intents, intent)
-	}
-	return intents
-}
-
 func (r *Runner) deliveryExists(id string) bool {
-	lookup, ok := r.state.(interface {
-		Delivery(string) (channeltypes.DeliveryIntent, bool)
-	})
-	if !ok {
-		return false
-	}
-	_, found := lookup.Delivery(id)
+	_, found := r.state.Delivery(id)
 	return found
 }
 
@@ -635,7 +569,7 @@ func (r *Runner) enqueueProcessingReaction(message channeltypes.InboundMessage) 
 }
 
 func (r *Runner) reactionCleanupIntent(message channeltypes.InboundMessage) (channeltypes.DeliveryIntent, bool) {
-	if strings.TrimSpace(message.Source.MessageID) == "" {
+	if strings.TrimSpace(message.Source.MessageID) == "" || !r.deliveryExists(processingReactionID(message.TurnID)) {
 		return channeltypes.DeliveryIntent{}, false
 	}
 	intent := baseIntent(message, message.TurnID+":reaction:delete", math.MaxUint64)
@@ -656,14 +590,15 @@ func baseIntent(message channeltypes.InboundMessage, id string, sequence uint64)
 		replyTo = strings.TrimSpace(message.Source.MessageID)
 	}
 	intent := channeltypes.DeliveryIntent{
-		ID:        id,
-		BindingID: message.Source.BindingID,
-		TurnID:    message.TurnID,
-		Sequence:  sequence,
-		Status:    channeltypes.DeliveryPending,
-		ChatID:    message.Source.ChatID,
-		ReplyTo:   replyTo,
-		ThreadID:  threadID,
+		RequesterID: message.Source.SenderID,
+		ID:          id,
+		BindingID:   message.Source.BindingID,
+		TurnID:      message.TurnID,
+		Sequence:    sequence,
+		Status:      channeltypes.DeliveryPending,
+		ChatID:      message.Source.ChatID,
+		ReplyTo:     replyTo,
+		ThreadID:    threadID,
 	}
 	if target := message.ReplyTarget; target != nil {
 		intent.ResourceID = strings.TrimSpace(target.ResourceID)
@@ -774,9 +709,9 @@ func (r *Runner) logTerminalResult(message channeltypes.InboundMessage, result a
 	attrs := messageLogAttrs(message, resultLogAttrs(result)...)
 	switch result.Status {
 	case agentengine.TurnSucceeded:
-		slog.Debug("Feishu Agent Engine run completed", attrs...)
+		slog.Info("Feishu Agent Engine run completed", attrs...)
 	case agentengine.TurnCanceled:
-		slog.Debug("Feishu Agent Engine run canceled", attrs...)
+		slog.Info("Feishu Agent Engine run canceled", attrs...)
 	default:
 		slog.Warn("Feishu Agent Engine run failed", attrs...)
 	}

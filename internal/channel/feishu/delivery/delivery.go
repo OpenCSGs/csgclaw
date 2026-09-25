@@ -17,14 +17,10 @@ import (
 const (
 	defaultRetryInterval = 2 * time.Second
 	maxDeliveryAttempts  = 3
-	// Feishu accepts at most twenty edits for a post message. Streaming must
-	// leave one slot for the terminal snapshot, which removes the active footer.
-	feishuMarkdownEditLimit = 20
 )
 
 var (
-	ErrDeliverySuperseded             = errors.New("feishu delivery superseded by the terminal presentation")
-	ErrPresentationEditBudgetReserved = errors.New("feishu presentation edit budget reserved for terminal update")
+	ErrDeliverySuperseded = errors.New("feishu delivery superseded by the terminal presentation")
 )
 
 type DispatcherOptions struct {
@@ -42,10 +38,12 @@ type Dispatcher struct {
 	files    FileResolver
 	interval time.Duration
 	wake     chan struct{}
+	cotWake  chan struct{}
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	done   chan struct{}
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	done    chan struct{}
+	cotDone chan struct{}
 
 	uploadMu sync.Mutex
 	uploads  map[string]mediaUpload
@@ -68,7 +66,9 @@ func NewDispatcher(options DispatcherOptions) (*Dispatcher, error) {
 		files:    options.Files,
 		interval: interval,
 		wake:     make(chan struct{}, 1),
+		cotWake:  make(chan struct{}, 1),
 		done:     make(chan struct{}),
+		cotDone:  make(chan struct{}),
 	}, nil
 }
 
@@ -88,6 +88,7 @@ func (d *Dispatcher) Start(ctx context.Context) error {
 	d.cancel = cancel
 	d.mu.Unlock()
 	go d.run(runCtx)
+	go d.runCOT(runCtx)
 	d.Notify()
 	return nil
 }
@@ -98,6 +99,10 @@ func (d *Dispatcher) Notify() {
 	}
 	select {
 	case d.wake <- struct{}{}:
+	default:
+	}
+	select {
+	case d.cotWake <- struct{}{}:
 	default:
 	}
 }
@@ -115,6 +120,7 @@ func (d *Dispatcher) Close() {
 	d.mu.Unlock()
 	if cancel != nil {
 		<-d.done
+		<-d.cotDone
 	}
 }
 
@@ -139,6 +145,9 @@ func (d *Dispatcher) drain(ctx context.Context) {
 	superseded := d.supersededDeliveries(pending)
 	blockedScopes := make(map[string]struct{})
 	for _, intent := range pending {
+		if isCOT(intent.Kind) {
+			continue
+		}
 		if ctx.Err() != nil {
 			return
 		}
@@ -158,14 +167,6 @@ func (d *Dispatcher) drain(ctx context.Context) {
 			blockedScopes[lane] = struct{}{}
 			continue
 		}
-		if d.reserveTerminalMarkdownEdit(intent) {
-			if err := d.state.MarkFailed(intent.ID, ErrPresentationEditBudgetReserved); err != nil {
-				slog.Error("reserve Feishu terminal presentation edit failed",
-					intentLogAttrs(intent, "error", err)...)
-				blockedScopes[lane] = struct{}{}
-			}
-			continue
-		}
 		if err := d.state.Begin(intent.ID); err != nil {
 			slog.Error("begin Feishu delivery failed", intentLogAttrs(intent, "error", err)...)
 			blockedScopes[lane] = struct{}{}
@@ -178,22 +179,7 @@ func (d *Dispatcher) drain(ctx context.Context) {
 			var markErr error
 			retry := false
 			var nextAttemptAt time.Time
-			if terminalMarkdownEditLimit(intent, err) {
-				markErr = d.state.MarkFailed(intent.ID, err)
-				if markErr == nil {
-					if fallbackErr := d.enqueueTerminalCompletionFallback(intent); fallbackErr != nil {
-						slog.Warn("enqueue Feishu terminal completion fallback failed",
-							intentLogAttrs(intent,
-								"delivery_error", err,
-								"error", fallbackErr,
-							)...)
-					} else {
-						slog.Warn("Feishu terminal presentation reached edit limit; queued completion fallback",
-							deliveryErrorLogAttrs(intent, err)...)
-						d.Notify()
-					}
-				}
-			} else if errors.Is(err, ErrDependencyTerminal) {
+			if errors.Is(err, ErrDependencyTerminal) {
 				markErr = d.state.MarkFailed(intent.ID, err)
 			} else if errors.Is(err, ErrDependencyPending) || retryableDelivery(intent, err) {
 				retry = true
@@ -239,55 +225,6 @@ func (d *Dispatcher) logDeliveryFailure(intent channeltypes.DeliveryIntent, err 
 		return
 	}
 	slog.Error("Feishu delivery failed permanently", attrs...)
-}
-
-func (d *Dispatcher) reserveTerminalMarkdownEdit(intent channeltypes.DeliveryIntent) bool {
-	if d == nil || d.state == nil || intent.Kind != channeltypes.DeliveryMarkdownUpdate || terminalPresentationUpdate(intent) {
-		return false
-	}
-	relatedID := strings.TrimSpace(intent.RelatedID)
-	if relatedID == "" {
-		return false
-	}
-	return d.state.DeliveredCount(channeltypes.DeliveryMarkdownUpdate, relatedID) >= feishuMarkdownEditLimit-1
-}
-
-func terminalPresentationUpdate(intent channeltypes.DeliveryIntent) bool {
-	return presentationUpdate(intent.Kind) && strings.HasSuffix(strings.TrimSpace(intent.ID), ":final")
-}
-
-func terminalMarkdownEditLimit(intent channeltypes.DeliveryIntent, err error) bool {
-	if intent.Kind != channeltypes.DeliveryMarkdownUpdate || !terminalPresentationUpdate(intent) || err == nil {
-		return false
-	}
-	var apiErr *transport.APIError
-	if errors.As(err, &apiErr) && apiErr.Code == 230072 {
-		return true
-	}
-	return strings.Contains(err.Error(), "code=230072")
-}
-
-func terminalCompletionFallback(intent channeltypes.DeliveryIntent) channeltypes.DeliveryIntent {
-	fallback := intent
-	fallback.ID = strings.TrimSpace(intent.ID) + ":completion"
-	fallback.Kind = channeltypes.DeliveryMarkdown
-	fallback.RelatedID = ""
-	fallback.MessageID = ""
-	fallback.Card = nil
-	fallback.Text = "_（内容已结束）_"
-	fallback.Status = ""
-	fallback.Attempts = 0
-	fallback.LastError = ""
-	fallback.NextAttemptAt = nil
-	fallback.CreatedAt = time.Time{}
-	return fallback
-}
-
-func (d *Dispatcher) enqueueTerminalCompletionFallback(intent channeltypes.DeliveryIntent) error {
-	if d == nil || d.state == nil {
-		return fmt.Errorf("Feishu delivery state is required")
-	}
-	return d.state.Enqueue(terminalCompletionFallback(intent))
 }
 
 func (d *Dispatcher) supersededDeliveries(pending []channeltypes.DeliveryIntent) map[string]struct{} {
@@ -359,7 +296,7 @@ func supersededPresentationUpdates(pending []channeltypes.DeliveryIntent) map[st
 }
 
 func presentationUpdate(kind channeltypes.DeliveryKind) bool {
-	return kind == channeltypes.DeliveryCardUpdate || kind == channeltypes.DeliveryMarkdownUpdate
+	return kind == channeltypes.DeliveryCardUpdate
 }
 
 func presentationUpdateAfter(candidate, current channeltypes.DeliveryIntent) bool {
@@ -389,10 +326,6 @@ func deliveryLane(intent channeltypes.DeliveryIntent) string {
 		return scope + "\x00card\x00" + intent.TurnID + "\x00" + intent.ID
 	case channeltypes.DeliveryCardUpdate:
 		return scope + "\x00card\x00" + intent.TurnID + "\x00" + presentationMessageID(intent)
-	case channeltypes.DeliveryMarkdown:
-		return scope + "\x00markdown\x00" + intent.TurnID + "\x00" + intent.ID
-	case channeltypes.DeliveryMarkdownUpdate:
-		return scope + "\x00markdown\x00" + intent.TurnID + "\x00" + presentationMessageID(intent)
 	case channeltypes.DeliveryReactionAdd, channeltypes.DeliveryReactionDelete:
 		return scope + "\x00reaction\x00" + intent.TurnID
 	default:
@@ -431,9 +364,9 @@ func retryableDelivery(intent channeltypes.DeliveryIntent, err error) bool {
 	// remote IDs. Reaction creation and comment reply have no equivalent
 	// deduplication key, so an ambiguous outcome must not be repeated.
 	switch intent.Kind {
-	case channeltypes.DeliveryText, channeltypes.DeliveryMarkdown, channeltypes.DeliveryCard,
+	case channeltypes.DeliveryCard,
 		channeltypes.DeliveryFile,
-		channeltypes.DeliveryMarkdownUpdate, channeltypes.DeliveryCardUpdate, channeltypes.DeliveryReactionDelete:
+		channeltypes.DeliveryCardUpdate, channeltypes.DeliveryReactionDelete:
 		return true
 	default:
 		return false
@@ -442,16 +375,14 @@ func retryableDelivery(intent channeltypes.DeliveryIntent, err error) bool {
 
 func (d *Dispatcher) deliver(ctx context.Context, intent channeltypes.DeliveryIntent) (channeltypes.DeliveryIntent, error) {
 	switch intent.Kind {
-	case channeltypes.DeliveryText, channeltypes.DeliveryMarkdown:
-		if err := d.messageDependency(intent); err != nil {
-			return intent, err
-		}
-		return deliverText(ctx, d.adapter, intent)
 	case channeltypes.DeliveryFile:
 		return d.deliverMedia(ctx, intent)
-	case channeltypes.DeliveryMarkdownUpdate:
-		return d.deliverMarkdownUpdate(ctx, intent)
 	case channeltypes.DeliveryCard:
+		if intent.RelatedID != "" {
+			if _, err := d.cardUpdateMessageID(intent); err != nil {
+				return intent, err
+			}
+		}
 		return deliverCard(ctx, d.adapter, intent)
 	case channeltypes.DeliveryCardUpdate:
 		return d.deliverCardUpdate(ctx, intent)
@@ -469,26 +400,3 @@ func (d *Dispatcher) deliver(ctx context.Context, intent channeltypes.DeliveryIn
 		return intent, fmt.Errorf("unsupported Feishu delivery kind %q", intent.Kind)
 	}
 }
-
-func (d *Dispatcher) messageDependency(intent channeltypes.DeliveryIntent) error {
-	relatedID := strings.TrimSpace(intent.RelatedID)
-	if relatedID == "" {
-		return nil
-	}
-	related, ok := d.state.Intent(relatedID)
-	if !ok || related.Kind != intent.Kind || related.TurnID != intent.TurnID || related.BindingID != intent.BindingID {
-		return fmt.Errorf("%w: previous message chunk %q is invalid", ErrDependencyTerminal, relatedID)
-	}
-	switch related.Status {
-	case channeltypes.DeliveryDelivered:
-		return nil
-	case channeltypes.DeliveryPending, channeltypes.DeliveryDispatching:
-		return fmt.Errorf("%w: previous message chunk %q is %s", ErrDependencyPending, relatedID, related.Status)
-	case channeltypes.DeliveryFailed:
-		return fmt.Errorf("%w: previous message chunk %q failed", ErrDependencyTerminal, relatedID)
-	default:
-		return fmt.Errorf("%w: previous message chunk %q has unsupported status %q", ErrDependencyTerminal, relatedID, related.Status)
-	}
-}
-
-var _ interface{ Notify() } = (*Dispatcher)(nil)

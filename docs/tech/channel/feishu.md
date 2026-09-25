@@ -9,6 +9,13 @@ manager, worker, and admin identities into `~/.csgclaw/im/participants.json`.
 CSGClaw does not read Feishu credentials from `config.toml`. The old
 `channels/feishu.toml` path is not migrated automatically by this flow.
 
+Control callbacks resolve the original task and requester from local delivery records.
+Task cancellation and COT completion have independent states; completion failures
+can be retried from a separate card. Final COT events and completion requests are
+separate deliveries. Native COT client controls remain platform-managed.
+
+The native COT stop button sends `/stop`. The channel handles this message as a control request for the task active when the message arrives, validates the requester, and uses the existing Engine cancellation path. It does not submit a new prompt or send an extra command acknowledgement.
+
 ## Commands
 
 Bind the default human Feishu administrator:
@@ -33,9 +40,20 @@ printf '%s' "$APP_SECRET" | csgclaw-cli participant bind \
   --restart
 ```
 
-Hosted Codex Feishu replies use the Markdown presentation fixed by the channel
-implementation. Presentation mode is not part of participant binding or stored
-participant configuration.
+Feishu shows tool activity and available thought events in a native COT message.
+Reply text streams into independent message cards. Permission requests and user
+questions use separate interactive cards; only the originating user may answer.
+Use `/new` to reset the conversation. Long replies use consecutive cards.
+
+The channel consumes existing Agent Engine events. Codex supports permission and
+user-input requests; DSH currently supplies permission requests. Detached Codex
+questions start one follow-up turn in the same conversation after submission.
+COT delivery failure leaves reply delivery available and produces a notice card.
+COT append requests have no replay key and are attempted once. Completion requests
+retry transient failures up to three attempts without replaying events. Recognized
+stop callbacks from locally recorded COT messages target their original turn and
+can retry a failed completion. Delivery and
+interaction routing state is process-local. Presentation has no format setting.
 
 Bind the manager app:
 

@@ -22,11 +22,11 @@ func TestDirectOutboundReplyErrorHasOneCallAndNoFallbackOrChunk(t *testing.T) {
 	replyErr := errors.New("reply target was withdrawn")
 	api := &fakeLarkOpenAPI{replyErr: replyErr}
 	outbound := newDirectOutboundWithAPI(api)
-	text := strings.Repeat("long answer ", 5_000)
+	text := strings.Repeat("long answer ", 100)
 	key := "delivery/with/a/very/long/raw/id/that/must/not/be/sent/to/feishu"
 
-	_, err := outbound.SendText(context.Background(), SendTextRequest{
-		ChatID: "chat-1", Text: text, IdempotencyKey: key,
+	_, err := outbound.SendCard(context.Background(), SendCardRequest{
+		ChatID: "chat-1", Card: map[string]any{"text": text}, IdempotencyKey: key,
 		ReplyTo: "message-1", ReplyInThread: true, ThreadID: "thread-1",
 	})
 	if !errors.Is(err, replyErr) {
@@ -249,92 +249,8 @@ func TestDirectOutboundPatchAndReactionsEachCallOnce(t *testing.T) {
 	}
 }
 
-func TestDirectOutboundMarkdownUpdateUsesOnePostEdit(t *testing.T) {
-	t.Parallel()
-	api := &fakeLarkOpenAPI{}
-	outbound := newDirectOutboundWithAPI(api)
-	markdown := "> ✅ **command_execution** — git status\n\ndone"
-	if err := outbound.UpdateText(context.Background(), UpdateTextRequest{
-		MessageID: " message-1 ", Text: markdown, Markdown: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if api.updateCalls != 1 || api.patchCalls != 0 || api.updateReq == nil || api.updateReq.MessageID != "message-1" ||
-		api.updateReq.Body == nil || api.updateReq.Body.MsgType == nil || *api.updateReq.Body.MsgType != "post" ||
-		api.updateReq.Body.Content == nil {
-		t.Fatalf("update calls=%d patch calls=%d request=%#v", api.updateCalls, api.patchCalls, api.updateReq)
-	}
-	var post struct {
-		ZhCN struct {
-			Content [][]struct {
-				Tag  string `json:"tag"`
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"zh_cn"`
-	}
-	if err := json.Unmarshal([]byte(*api.updateReq.Body.Content), &post); err != nil ||
-		len(post.ZhCN.Content) != 1 || len(post.ZhCN.Content[0]) != 1 ||
-		post.ZhCN.Content[0][0].Tag != "md" || post.ZhCN.Content[0][0].Text != markdown {
-		t.Fatalf("markdown update = %#v, error=%v", post, err)
-	}
-}
-
-func TestDirectOutboundMarkdownIsOnePostWithoutTextFallback(t *testing.T) {
-	t.Parallel()
-	api := &fakeLarkOpenAPI{}
-	outbound := newDirectOutboundWithAPI(api)
-	markdown := "# heading\n\n```go\nfmt.Println(\"hello\")\n```"
-	if _, err := outbound.SendText(context.Background(), SendTextRequest{ChatID: "chat-1", Text: markdown, Markdown: true, IdempotencyKey: "markdown-delivery"}); err != nil {
-		t.Fatal(err)
-	}
-	if api.createCalls != 1 || api.createReq.Body.MsgType == nil || *api.createReq.Body.MsgType != "post" {
-		t.Fatalf("create calls=%d body=%#v", api.createCalls, api.createReq.Body)
-	}
-	var post struct {
-		ZhCN struct {
-			Content [][]struct {
-				Tag  string `json:"tag"`
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"zh_cn"`
-	}
-	if api.createReq.Body.Content == nil || json.Unmarshal([]byte(*api.createReq.Body.Content), &post) != nil || len(post.ZhCN.Content) != 1 || len(post.ZhCN.Content[0]) != 1 || post.ZhCN.Content[0][0].Tag != "md" || post.ZhCN.Content[0][0].Text != markdown {
-		t.Fatalf("markdown post content = %v", api.createReq.Body.Content)
-	}
-}
-
-func TestDirectOutboundFormatErrorDoesNotDowngradeToText(t *testing.T) {
-	t.Parallel()
-	api := &fakeLarkOpenAPI{createResp: &larkim.CreateMessageResp{
-		ApiResp:   &larkcore.ApiResp{StatusCode: 400},
-		CodeError: larkcore.CodeError{Code: 230001, Msg: "invalid post format"},
-	}}
-	outbound := newDirectOutboundWithAPI(api)
-	_, err := outbound.SendText(context.Background(), SendTextRequest{
-		ChatID: "chat-1", Text: "**invalid remotely**", Markdown: true, IdempotencyKey: "format-error-delivery",
-	})
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) || apiErr.Code != 230001 || !apiErr.Permanent() {
-		t.Fatalf("SendText() error = %#v, %v", apiErr, err)
-	}
-	if api.createCalls != 1 || api.replyCalls != 0 || api.createReq == nil || api.createReq.Body == nil || api.createReq.Body.MsgType == nil || *api.createReq.Body.MsgType != "post" {
-		t.Fatalf("format failure retried or downgraded: create=%d reply=%d request=%#v", api.createCalls, api.replyCalls, api.createReq)
-	}
-}
-
 func TestDirectOutboundRejectsOversizeWireBodiesWithoutCallingAPI(t *testing.T) {
 	t.Parallel()
-	t.Run("post", func(t *testing.T) {
-		api := &fakeLarkOpenAPI{}
-		outbound := newDirectOutboundWithAPI(api)
-		_, err := outbound.SendText(context.Background(), SendTextRequest{
-			ChatID: "chat-1", Text: strings.Repeat("\n", 20<<10), Markdown: true, IdempotencyKey: "oversize-post",
-		})
-		if !errors.Is(err, ErrPayloadTooLarge) || IsRetryable(err) || api.createCalls != 0 || api.replyCalls != 0 {
-			t.Fatalf("SendText() error=%v create=%d reply=%d", err, api.createCalls, api.replyCalls)
-		}
-	})
-
 	t.Run("card create", func(t *testing.T) {
 		api := &fakeLarkOpenAPI{}
 		outbound := newDirectOutboundWithAPI(api)
@@ -357,16 +273,6 @@ func TestDirectOutboundRejectsOversizeWireBodiesWithoutCallingAPI(t *testing.T) 
 		}
 	})
 
-	t.Run("markdown update", func(t *testing.T) {
-		api := &fakeLarkOpenAPI{}
-		outbound := newDirectOutboundWithAPI(api)
-		err := outbound.UpdateText(context.Background(), UpdateTextRequest{
-			MessageID: "message-1", Text: strings.Repeat("\n", 20<<10), Markdown: true,
-		})
-		if !errors.Is(err, ErrPayloadTooLarge) || IsRetryable(err) || api.updateCalls != 0 || api.patchCalls != 0 {
-			t.Fatalf("UpdateText() error=%v update=%d patch=%d", err, api.updateCalls, api.patchCalls)
-		}
-	})
 }
 
 func TestAPIErrorClassificationAndRedaction(t *testing.T) {
@@ -419,60 +325,11 @@ func TestSDKOutboundDoesNotRetryDialFailure(t *testing.T) {
 		return "tenant-token", nil
 	}))
 
-	_, err := outbound.SendText(context.Background(), SendTextRequest{
-		ChatID: "chat-1", Text: "hello", IdempotencyKey: "delivery-1",
+	_, err := outbound.SendCard(context.Background(), SendCardRequest{
+		ChatID: "chat-1", Card: map[string]any{"text": "hello"}, IdempotencyKey: "delivery-1",
 	})
 	if err == nil || !IsRetryable(err) {
 		t.Fatalf("SendText() error = %v, want retryable transport error", err)
-	}
-	if calls != 1 {
-		t.Fatalf("network calls = %d, want exactly one", calls)
-	}
-}
-
-func TestSDKOutboundMarkdownUpdateUsesFeishuPutMessageAPI(t *testing.T) {
-	t.Parallel()
-	calls := 0
-	httpClient := &singleAttemptHTTPClient{client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		calls++
-		if req.Method != http.MethodPut || req.URL.Path != "/open-apis/im/v1/messages/message-1" {
-			t.Fatalf("request = %s %s, want PUT message edit", req.Method, req.URL.Path)
-		}
-		if got := req.Header.Get("Authorization"); got != "Bearer tenant-token" {
-			t.Fatalf("Authorization = %q", got)
-		}
-		var body struct {
-			MsgType string `json:"msg_type"`
-			Content string `json:"content"`
-		}
-		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
-			t.Fatalf("decode update body: %v", err)
-		}
-		if body.MsgType != "post" || !strings.Contains(body.Content, "final answer") {
-			t.Fatalf("update body = %#v", body)
-		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"code":0,"msg":"ok"}`)),
-			Request:    req,
-		}, nil
-	})}}
-	client := lark.NewClient(
-		"app-id",
-		"app-secret",
-		lark.WithOpenBaseUrl("https://open.feishu.test"),
-		lark.WithEnableTokenCache(false),
-		lark.WithHttpClient(httpClient),
-	)
-	outbound := newDirectOutbound(client, tenantTokenSourceFunc(func(context.Context) (string, error) {
-		return "tenant-token", nil
-	}))
-
-	if err := outbound.UpdateText(context.Background(), UpdateTextRequest{
-		MessageID: "message-1", Text: "final answer", Markdown: true,
-	}); err != nil {
-		t.Fatalf("UpdateText() error = %v", err)
 	}
 	if calls != 1 {
 		t.Fatalf("network calls = %d, want exactly one", calls)
@@ -504,8 +361,8 @@ func TestSDKOutboundInvalidatesRejectedTokenWithoutSameAttemptRetry(t *testing.T
 	)
 	outbound := newDirectOutbound(client, tokens)
 
-	_, err := outbound.SendText(context.Background(), SendTextRequest{
-		ChatID: "chat-1", Text: "hello", IdempotencyKey: "delivery-1",
+	_, err := outbound.SendCard(context.Background(), SendCardRequest{
+		ChatID: "chat-1", Card: map[string]any{"text": "hello"}, IdempotencyKey: "delivery-1",
 	})
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr.Code != tenantAccessTokenInvalidCode || !IsRetryable(err) {
@@ -549,7 +406,6 @@ type fakeLarkOpenAPI struct {
 	createFileReq     *createFileAPIRequest
 	createReq         *createMessageAPIRequest
 	replyReq          *replyMessageAPIRequest
-	updateReq         *updateMessageAPIRequest
 	patchReq          *patchMessageAPIRequest
 	createReactionReq *createReactionAPIRequest
 	deleteReactionReq *deleteReactionAPIRequest
@@ -610,15 +466,6 @@ func (f *fakeLarkOpenAPI) ReplyMessage(_ context.Context, req replyMessageAPIReq
 		return nil, f.replyErr
 	}
 	return &larkim.ReplyMessageResp{Data: &larkim.ReplyMessageRespData{MessageId: testStringPointer("reply-message")}}, nil
-}
-
-func (f *fakeLarkOpenAPI) UpdateMessage(_ context.Context, req updateMessageAPIRequest) (*larkim.UpdateMessageResp, error) {
-	f.updateCalls++
-	f.updateReq = &req
-	if f.updateErr != nil {
-		return nil, f.updateErr
-	}
-	return &larkim.UpdateMessageResp{}, nil
 }
 
 func (f *fakeLarkOpenAPI) PatchMessage(_ context.Context, req patchMessageAPIRequest) (*larkim.PatchMessageResp, error) {

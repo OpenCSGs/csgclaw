@@ -84,6 +84,7 @@ type Outcome struct {
 // Source identifies the external event that produced one normalized inbound
 // item.
 type Source struct {
+	SenderID      string `json:"sender_id,omitempty"`
 	Channel       string `json:"channel"`
 	BindingID     string `json:"binding_id"`
 	ParticipantID string `json:"participant_id,omitempty"`
@@ -155,6 +156,7 @@ const (
 	TurnSucceeded TurnStatus = "succeeded"
 	TurnFailed    TurnStatus = "failed"
 	TurnCanceled  TurnStatus = "canceled"
+	TurnCanceling TurnStatus = "canceling"
 )
 
 // TurnRecord correlates an Engine Turn with process-local delivery intents. It
@@ -172,9 +174,9 @@ type TurnRecord struct {
 type DeliveryKind string
 
 const (
-	DeliveryText           DeliveryKind = "text"
-	DeliveryMarkdown       DeliveryKind = "markdown"
-	DeliveryMarkdownUpdate DeliveryKind = "markdown_update"
+	DeliveryCOTCreate      DeliveryKind = "cot_create"
+	DeliveryCOTUpdate      DeliveryKind = "cot_update"
+	DeliveryCOTComplete    DeliveryKind = "cot_complete"
 	DeliveryCard           DeliveryKind = "card"
 	DeliveryCardUpdate     DeliveryKind = "card_update"
 	DeliveryFile           DeliveryKind = "file"
@@ -195,29 +197,41 @@ const (
 
 // DeliveryIntent describes one process-local channel API call. ID is stable so
 // streaming updates and dependencies can be correlated while a binding runs.
+type COTEvent struct {
+	EventType string `json:"event_type"`
+	Content   string `json:"content"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 type DeliveryIntent struct {
-	ID            string         `json:"id"`
-	BindingID     string         `json:"binding_id"`
-	TurnID        string         `json:"turn_id"`
-	Sequence      uint64         `json:"sequence,omitempty"`
-	Kind          DeliveryKind   `json:"kind"`
-	Status        DeliveryStatus `json:"status"`
-	ChatID        string         `json:"chat_id,omitempty"`
-	MessageID     string         `json:"message_id,omitempty"`
-	RelatedID     string         `json:"related_id,omitempty"`
-	ReplyTo       string         `json:"reply_to,omitempty"`
-	ThreadID      string         `json:"thread_id,omitempty"`
-	ResourceID    string         `json:"resource_id,omitempty"`
-	ResourceType  string         `json:"resource_type,omitempty"`
-	ParentID      string         `json:"parent_id,omitempty"`
-	TopLevel      bool           `json:"top_level,omitempty"`
-	Text          string         `json:"text,omitempty"`
-	Card          map[string]any `json:"card,omitempty"`
-	FileID        string         `json:"file_id,omitempty"`
-	EmojiType     string         `json:"emoji_type,omitempty"`
-	ReactionID    string         `json:"reaction_id,omitempty"`
-	Attempts      int            `json:"attempts,omitempty"`
-	LastError     string         `json:"last_error,omitempty"`
-	NextAttemptAt *time.Time     `json:"next_attempt_at,omitempty"`
-	CreatedAt     time.Time      `json:"created_at"`
+	RequesterID     string         `json:"requester_id,omitempty"`
+	COTID           string         `json:"cot_id,omitempty"`
+	OriginMessageID string         `json:"origin_message_id,omitempty"`
+	Events          []COTEvent     `json:"events,omitempty"`
+	Reason          string         `json:"reason,omitempty"`
+	InteractionID   string         `json:"interaction_id,omitempty"`
+	ID              string         `json:"id"`
+	BindingID       string         `json:"binding_id"`
+	TurnID          string         `json:"turn_id"`
+	Sequence        uint64         `json:"sequence,omitempty"`
+	Kind            DeliveryKind   `json:"kind"`
+	Status          DeliveryStatus `json:"status"`
+	ChatID          string         `json:"chat_id,omitempty"`
+	MessageID       string         `json:"message_id,omitempty"`
+	RelatedID       string         `json:"related_id,omitempty"`
+	ReplyTo         string         `json:"reply_to,omitempty"`
+	ThreadID        string         `json:"thread_id,omitempty"`
+	ResourceID      string         `json:"resource_id,omitempty"`
+	ResourceType    string         `json:"resource_type,omitempty"`
+	ParentID        string         `json:"parent_id,omitempty"`
+	TopLevel        bool           `json:"top_level,omitempty"`
+	Text            string         `json:"text,omitempty"`
+	Card            map[string]any `json:"card,omitempty"`
+	FileID          string         `json:"file_id,omitempty"`
+	EmojiType       string         `json:"emoji_type,omitempty"`
+	ReactionID      string         `json:"reaction_id,omitempty"`
+	Attempts        int            `json:"attempts,omitempty"`
+	LastError       string         `json:"last_error,omitempty"`
+	NextAttemptAt   *time.Time     `json:"next_attempt_at,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
 }

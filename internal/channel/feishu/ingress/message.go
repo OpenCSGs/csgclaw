@@ -58,6 +58,7 @@ func normalizeMessage(binding channeltypes.Binding, event transport.Event, bot t
 	turnID := feishuctx.TurnID(binding.ID, message.ID, message.ID)
 	return channeltypes.InboundMessage{
 		Source: channeltypes.Source{
+			SenderID:      strings.TrimSpace(message.Sender.OpenID),
 			Channel:       binding.Channel,
 			BindingID:     binding.ID,
 			ParticipantID: binding.ParticipantID,

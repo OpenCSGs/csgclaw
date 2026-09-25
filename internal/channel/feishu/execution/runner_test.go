@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	"csgclaw/internal/agentengine"
 	channeltypes "csgclaw/internal/channel"
-	"csgclaw/internal/channel/feishu/presentation"
 	feishustate "csgclaw/internal/channel/feishu/state"
 	"csgclaw/internal/channel/feishu/transport"
 )
@@ -302,7 +302,7 @@ func TestRunnerRendersEngineEventsIntoMemoryDelivery(t *testing.T) {
 	}}
 	store := feishustate.NewStore()
 	runner, err := NewRunner(RunnerOptions{
-		Engine: fakeEngine{conversation}, State: store, Presentation: presentation.ModeMarkdown,
+		Engine: fakeEngine{conversation}, State: store,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -315,9 +315,9 @@ func TestRunnerRendersEngineEventsIntoMemoryDelivery(t *testing.T) {
 	if err := runner.Wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	finalID := presentationUpdateID(presentation.ModeMarkdown, message.TurnID, 2, true)
+	finalID := message.TurnID + ":reply:000000:final"
 	final, ok := store.Delivery(finalID)
-	if !ok || final.Kind != channeltypes.DeliveryMarkdownUpdate || !strings.Contains(final.Text, "answer") {
+	if !ok || final.Kind != channeltypes.DeliveryCardUpdate || !strings.Contains(cardText(final.Card), "answer") {
 		t.Fatalf("final delivery = %#v, found=%t", final, ok)
 	}
 }
@@ -344,7 +344,7 @@ func TestRunnerQueuesOutputFilesForChatDelivery(t *testing.T) {
 	}}
 	store := feishustate.NewStore()
 	runner, err := NewRunner(RunnerOptions{
-		Engine: fakeEngine{conversation}, State: store, Presentation: presentation.ModeMarkdown,
+		Engine: fakeEngine{conversation}, State: store,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -398,8 +398,8 @@ func TestFileDeliveryIntentsEnforceOutboundPolicyAndWarnUser(t *testing.T) {
 		}
 	}
 	warning := intents[len(intents)-1]
-	if warning.Kind != channeltypes.DeliveryText || warning.ID != message.TurnID+":files:warning" ||
-		warning.Sequence != 10+maxFeishuOutputFileCount || !strings.Contains(warning.Text, "could not send 2 generated file(s)") {
+	if warning.Kind != channeltypes.DeliveryCard || warning.ID != message.TurnID+":files:warning" ||
+		warning.Sequence != 10+maxFeishuOutputFileCount || !strings.Contains(cardText(warning.Card), "could not send 2 generated file(s)") {
 		t.Fatalf("warning intent = %#v", warning)
 	}
 }
@@ -417,7 +417,7 @@ func TestFileDeliveryIntentsEnforceAggregateSizeLimit(t *testing.T) {
 
 	intents := (&Runner{}).fileDeliveryIntents(message, files, 1)
 	if len(intents) != 2 || intents[0].Kind != channeltypes.DeliveryFile || intents[0].FileID != "file-30" ||
-		intents[1].Kind != channeltypes.DeliveryText || !strings.Contains(intents[1].Text, "could not send 1 generated file(s)") {
+		intents[1].Kind != channeltypes.DeliveryCard || !strings.Contains(cardText(intents[1].Card), "could not send 1 generated file(s)") {
 		t.Fatalf("intents = %#v", intents)
 	}
 }
@@ -429,9 +429,9 @@ func TestFileDeliveryIntentsRejectEmptyFileAndWarnUser(t *testing.T) {
 	}}}
 
 	intents := (&Runner{}).fileDeliveryIntents(message, files, 4)
-	if len(intents) != 1 || intents[0].Kind != channeltypes.DeliveryText ||
+	if len(intents) != 1 || intents[0].Kind != channeltypes.DeliveryCard ||
 		intents[0].ID != message.TurnID+":files:warning" || intents[0].Sequence != 4 ||
-		!strings.Contains(intents[0].Text, "could not send 1 generated file(s)") {
+		!strings.Contains(cardText(intents[0].Card), "could not send 1 generated file(s)") {
 		t.Fatalf("intents = %#v", intents)
 	}
 }
@@ -505,3 +505,5 @@ func runnerMessage(eventID, turnID, conversationKey, text string) channeltypes.I
 func (*fakeConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
 	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
 }
+
+func cardText(card map[string]any) string { raw, _ := json.Marshal(card); return string(raw) }

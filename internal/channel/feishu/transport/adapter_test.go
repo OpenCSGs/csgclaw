@@ -17,7 +17,7 @@ func TestAdapterUsesBindingLifetimeContextAndDelegatesProtocolOperations(t *test
 	adapter := newAdapter(lifecycle, oapi)
 	ctx := context.WithValue(context.Background(), contextKey("binding"), "binding-1")
 
-	if _, err := adapter.SendText(ctx, SendTextRequest{ChatID: "oc_chat", Text: "early"}); !errors.Is(err, ErrNotStarted) {
+	if _, err := adapter.SendCard(ctx, SendCardRequest{ChatID: "oc_chat", Card: map[string]any{}}); !errors.Is(err, ErrNotStarted) {
 		t.Fatalf("SendText() before Start error = %v, want ErrNotStarted", err)
 	}
 	if err := adapter.Start(ctx); err != nil {
@@ -32,23 +32,6 @@ func TestAdapterUsesBindingLifetimeContextAndDelegatesProtocolOperations(t *test
 	if err := adapter.Start(ctx); !errors.Is(err, ErrAlreadyStarted) {
 		t.Fatalf("second Start() error = %v, want ErrAlreadyStarted", err)
 	}
-	textResult, err := adapter.SendText(ctx, SendTextRequest{
-		ChatID: " oc_chat ", Text: "**hello**", Markdown: true, IdempotencyKey: " delivery-text ",
-		ReplyTo: " om_root ", ReplyInThread: true, ThreadID: " omt_thread ",
-	})
-	if err != nil || textResult.MessageID != "om_text" {
-		t.Fatalf("SendText() = %#v, %v", textResult, err)
-	}
-	if got := oapi.sendText; got.ChatID != " oc_chat " || got.Text != "**hello**" || !got.Markdown || got.IdempotencyKey != " delivery-text " || got.ReplyTo != " om_root " || !got.ReplyInThread || got.ThreadID != " omt_thread " {
-		t.Fatalf("SendText request = %#v", got)
-	}
-	if err := adapter.UpdateText(ctx, UpdateTextRequest{MessageID: " om_text ", Text: "updated", Markdown: true}); err != nil {
-		t.Fatalf("UpdateText() error = %v", err)
-	}
-	if oapi.updateText.MessageID != " om_text " || oapi.updateText.Text != "updated" || !oapi.updateText.Markdown {
-		t.Fatalf("UpdateText request = %#v", oapi.updateText)
-	}
-
 	cardResult, err := adapter.SendCard(ctx, SendCardRequest{
 		ChatID: " oc_chat ", Card: map[string]any{"schema": "2.0"}, IdempotencyKey: " delivery-card ", ReplyTo: " om_root ", ReplyInThread: true, ThreadID: " omt_thread ",
 	})
@@ -140,7 +123,7 @@ func TestAdapterUsesBindingLifetimeContextAndDelegatesProtocolOperations(t *test
 	if lifecycle.disconnectCalls != 1 {
 		t.Fatalf("Disconnect calls after idempotent Close = %d, want 1", lifecycle.disconnectCalls)
 	}
-	if _, err := adapter.SendText(ctx, SendTextRequest{ChatID: "oc_chat", Text: "late"}); !errors.Is(err, ErrClosed) {
+	if _, err := adapter.SendCard(ctx, SendCardRequest{ChatID: "oc_chat", Card: map[string]any{}}); !errors.Is(err, ErrClosed) {
 		t.Fatalf("SendText() after Close error = %v, want ErrClosed", err)
 	}
 }
@@ -216,8 +199,6 @@ func (f *fakeLifecycle) PrepareIdentity(context.Context) (Identity, error) {
 }
 
 type fakeOperations struct {
-	sendText       SendTextRequest
-	updateText     UpdateTextRequest
 	sendCard       SendCardRequest
 	updateCard     UpdateCardRequest
 	uploadImage    UploadImageRequest
@@ -229,19 +210,9 @@ type fakeOperations struct {
 	download       DownloadResourceRequest
 }
 
-func (f *fakeOperations) SendText(_ context.Context, req SendTextRequest) (SendResult, error) {
-	f.sendText = req
-	return SendResult{MessageID: " om_text "}, nil
-}
-
 func (f *fakeOperations) SendCard(_ context.Context, req SendCardRequest) (SendResult, error) {
 	f.sendCard = req
 	return SendResult{MessageID: " om_card "}, nil
-}
-
-func (f *fakeOperations) UpdateText(_ context.Context, req UpdateTextRequest) error {
-	f.updateText = req
-	return nil
 }
 
 func (f *fakeOperations) UpdateCard(_ context.Context, req UpdateCardRequest) error {
@@ -289,10 +260,7 @@ type fakePublicAdapter struct{}
 func (*fakePublicAdapter) Start(context.Context) error { return nil }
 func (*fakePublicAdapter) Close(context.Context) error { return nil }
 func (*fakePublicAdapter) Identity() Identity          { return Identity{} }
-func (*fakePublicAdapter) SendText(context.Context, SendTextRequest) (SendResult, error) {
-	return SendResult{}, nil
-}
-func (*fakePublicAdapter) UpdateText(context.Context, UpdateTextRequest) error { return nil }
+
 func (*fakePublicAdapter) SendCard(context.Context, SendCardRequest) (SendResult, error) {
 	return SendResult{}, nil
 }

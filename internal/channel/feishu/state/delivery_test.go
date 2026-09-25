@@ -28,7 +28,7 @@ func TestStoreBoundsTerminalDeliveryRecords(t *testing.T) {
 	for index := 0; index <= maxDeliveryRecords; index++ {
 		id := fmt.Sprintf("delivery-%04d", index)
 		if err := store.Enqueue(channeltypes.DeliveryIntent{
-			ID: id, BindingID: "binding-1", TurnID: "missing-turn", Kind: channeltypes.DeliveryText,
+			ID: id, BindingID: "binding-1", TurnID: "missing-turn", Kind: channeltypes.DeliveryCard,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -49,7 +49,7 @@ func TestStoreRetainsPendingDeliveryDependencyAtLimit(t *testing.T) {
 	for index := 0; index < maxDeliveryRecords-1; index++ {
 		id := fmt.Sprintf("old-%04d", index)
 		if err := store.Enqueue(channeltypes.DeliveryIntent{
-			ID: id, BindingID: "binding-1", TurnID: "old-turn", Kind: channeltypes.DeliveryText,
+			ID: id, BindingID: "binding-1", TurnID: "old-turn", Kind: channeltypes.DeliveryCard,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func TestStoreRetainsPendingDeliveryDependencyAtLimit(t *testing.T) {
 		}
 	}
 	create := channeltypes.DeliveryIntent{
-		ID: "create", BindingID: "binding-1", TurnID: "turn-1", Kind: channeltypes.DeliveryMarkdown,
+		ID: "create", BindingID: "binding-1", TurnID: "turn-1", Kind: channeltypes.DeliveryCard,
 	}
 	if err := store.Enqueue(create); err != nil {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestStoreRetainsPendingDeliveryDependencyAtLimit(t *testing.T) {
 	}
 	update := channeltypes.DeliveryIntent{
 		ID: "update", BindingID: "binding-1", TurnID: "turn-1",
-		Kind: channeltypes.DeliveryMarkdownUpdate, RelatedID: create.ID,
+		Kind: channeltypes.DeliveryCardUpdate, RelatedID: create.ID,
 	}
 	if err := store.Enqueue(update); err != nil {
 		t.Fatal(err)

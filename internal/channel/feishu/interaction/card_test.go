@@ -23,10 +23,8 @@ func (e *recordingEngine) Conversations(agentID string) agentengine.Conversation
 }
 
 type recordingConversation struct {
-	cancelKey    agentengine.ConversationKey
-	cancelTurnID agentengine.TurnID
-	resetKey     agentengine.ConversationKey
-	err          error
+	resetKey agentengine.ConversationKey
+	err      error
 }
 
 func (*recordingConversation) Files() agentengine.FileInterface {
@@ -37,10 +35,8 @@ func (*recordingConversation) Run(context.Context, agentengine.TurnRequest, agen
 	panic("unexpected Run call")
 }
 
-func (c *recordingConversation) Cancel(_ context.Context, key agentengine.ConversationKey, turnID agentengine.TurnID) error {
-	c.cancelKey = key
-	c.cancelTurnID = turnID
-	return c.err
+func (*recordingConversation) Cancel(context.Context, agentengine.ConversationKey, agentengine.TurnID) error {
+	panic("unexpected Cancel call")
 }
 
 func (c *recordingConversation) Reset(_ context.Context, key agentengine.ConversationKey) error {
@@ -61,24 +57,6 @@ func newRecordingHandler(t *testing.T) (*Handler, *recordingEngine, *recordingCo
 		t.Fatalf("NewHandler() error = %v", err)
 	}
 	return handler, engine, conversation
-}
-
-func TestHandlerDispatchesCancelUsingTrustedInputIdentity(t *testing.T) {
-	t.Parallel()
-	handler, engine, conversation := newRecordingHandler(t)
-
-	err := handler.Handle(context.Background(), Input{
-		AgentID:         "agent-trusted",
-		ConversationKey: "conversation-trusted",
-		TurnID:          "turn-trusted",
-		Action:          CardAction{Operation: OperationCancel},
-	})
-	if err != nil {
-		t.Fatalf("Handle() error = %v", err)
-	}
-	if engine.agentID != "agent-trusted" || conversation.cancelKey != "conversation-trusted" || conversation.cancelTurnID != "turn-trusted" {
-		t.Fatalf("cancel target = agent %q conversation %q turn %q", engine.agentID, conversation.cancelKey, conversation.cancelTurnID)
-	}
 }
 
 func TestHandlerDispatchesResetUsingTrustedInputIdentity(t *testing.T) {
@@ -107,7 +85,7 @@ func TestHandlerRejectsUnknownAndIncompleteActions(t *testing.T) {
 	}{
 		{name: "agent", input: Input{ConversationKey: "conversation", Action: CardAction{Operation: OperationReset}}, want: "agent_id is required"},
 		{name: "conversation", input: Input{AgentID: "agent", Action: CardAction{Operation: OperationReset}}, want: "conversation_key is required"},
-		{name: "cancel turn", input: Input{AgentID: "agent", ConversationKey: "conversation", Action: CardAction{Operation: OperationCancel}}, want: "turn_id is required for cancel"},
+		{name: "cancel requires runner", input: Input{AgentID: "agent", ConversationKey: "conversation", Action: CardAction{Operation: OperationCancel}}, want: "unsupported operation"},
 		{name: "unknown", input: Input{AgentID: "agent", ConversationKey: "conversation", Action: CardAction{Operation: "approve_everything"}}, want: "unsupported operation"},
 	}
 
@@ -134,7 +112,7 @@ func TestHandlerPropagatesEngineErrorWithoutFallback(t *testing.T) {
 		AgentID:         "agent",
 		ConversationKey: "conversation",
 		TurnID:          "turn",
-		Action:          CardAction{Operation: OperationCancel},
+		Action:          CardAction{Operation: OperationReset},
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Handle() error = %v, want %v", err, wantErr)
