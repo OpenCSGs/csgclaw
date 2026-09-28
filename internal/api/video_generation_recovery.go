@@ -30,7 +30,6 @@ func (h *Handler) RecoverVideoGenerations(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	renderer := delivery.NewTranscriptRenderer(store)
 	seen := map[string]struct{}{}
 	for _, room := range h.im.ListRoomsWithOptions(im.ListMessagesOptions{IncludeThreadReplies: true}) {
 		for _, message := range room.Messages {
@@ -64,6 +63,7 @@ func (h *Handler) RecoverVideoGenerations(ctx context.Context) error {
 			go func(turn channel.TurnContext, recoveryTurnID agentengine.TurnID, task contract.VideoGenerationTask) {
 				recoveryCtx, cancel := context.WithTimeout(ctx, 16*time.Minute)
 				defer cancel()
+				renderer := delivery.NewTranscriptRenderer(store)
 				conversation := h.agentEngine.Conversations(turn.AgentID)
 				recovery, ok := conversation.(interface {
 					RecoverVideoGeneration(context.Context, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult

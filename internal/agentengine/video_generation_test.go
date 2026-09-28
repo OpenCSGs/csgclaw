@@ -53,10 +53,17 @@ func TestRecoverVideoGenerationDoesNotOccupyConversationAdmission(t *testing.T) 
 	}}
 	conversation := engine.Conversations("agent-video").(*conversations)
 	done := make(chan TurnResult, 1)
+	var recoveredFileID string
 	go func() {
 		done <- conversation.RecoverVideoGeneration(context.Background(), TurnRequest{
 			ID: "recovery-turn", ConversationKey: "room-video", VideoGeneration: &contract.VideoGenerationTask{ID: "video-call", Prompt: "kitten"},
-		}, contract.VideoGenerationSink{EventSink: EventSinkFunc(func(context.Context, TurnEvent) error { return nil })})
+		}, contract.VideoGenerationSink{EventSink: EventSinkFunc(func(_ context.Context, event TurnEvent) error {
+			task := event.Output.Payload.(contract.VideoGenerationTask)
+			if task.File != nil {
+				recoveredFileID = task.File.ID
+			}
+			return nil
+		})})
 	}()
 	<-started
 	engine.mu.Lock()
@@ -69,5 +76,11 @@ func TestRecoverVideoGenerationDoesNotOccupyConversationAdmission(t *testing.T) 
 	}
 	if result.Status != TurnSucceeded {
 		t.Fatalf("recovery result = %+v", result)
+	}
+	if recoveredFileID == "" {
+		t.Fatal("recovery did not deliver a file")
+	}
+	if _, err := conversation.Files().Get(context.Background(), recoveredFileID); ErrorCodeOf(err) != ErrorFileNotFound {
+		t.Fatalf("recovery file remains registered: %v", err)
 	}
 }

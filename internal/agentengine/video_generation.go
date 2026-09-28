@@ -35,6 +35,7 @@ func (c *conversations) RecoverVideoGeneration(ctx context.Context, request Turn
 	turnCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	turn := &activeTurn{ctx: turnCtx, cancel: cancel, agentID: c.agentID, request: request}
+	defer c.engine.files.DeleteTurn(c.agentID, request.ConversationKey, request.ID)
 	if err := c.generateVideo(turnCtx, turn, sink, *request.VideoGeneration); err != nil {
 		return failedResult(ErrorRuntimeFailed, err.Error())
 	}
