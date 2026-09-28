@@ -97,6 +97,8 @@ func (i Installer) InstallWithProgress(ctx context.Context, report ProgressRepor
 
 	reportProgress(report, InstallStageInstalling, 0)
 	npmPath, npmPrefix := nodeRuntime.npmCommand()
+	// Revalidate registry metadata so a stale cached version list cannot hide
+	// the pinned release, even if the user's npm config prefers offline data.
 	npmArgs := append(npmPrefix,
 		"install",
 		"-g",
@@ -106,7 +108,8 @@ func (i Installer) InstallWithProgress(ctx context.Context, report ProgressRepor
 		"--no-progress",
 		"--no-audit",
 		"--no-fund",
-		"--prefer-offline",
+		"--prefer-offline=false",
+		"--prefer-online",
 		packageName,
 	)
 	out, err := i.runNPM(

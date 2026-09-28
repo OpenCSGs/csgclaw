@@ -137,7 +137,9 @@ foreach ($dshPath in $dshPaths) {
 
 以上路径为默认受管安装位置。智能体配置和会话保存在 `.csgclaw` 中，清理命令不会删除这些数据。
 
-使用已经包含版本升级改动的 CSGClaw 可执行文件重新启动，在“电脑 → Agent Runtime”中安装 DSH。源码用户需要先重新编译 CSGClaw；仅拉取代码而继续运行旧的可执行文件，仍会安装旧版本。安装后确认版本：
+使用已经包含版本升级改动的 CSGClaw 可执行文件重新启动，在“电脑 → Agent Runtime”中安装 DSH。源码用户需要先重新编译 CSGClaw；仅拉取代码而继续运行旧的可执行文件，仍会安装旧版本。
+
+安装器会向 registry 重新校验包元数据，避免旧的 npm 版本列表缓存导致 `ETARGET`（找不到目标版本），无需提前清空全局 npm 缓存。安装后确认版本：
 
 ```powershell
 & "$env:USERPROFILE\.local\bin\dsh.cmd" --version

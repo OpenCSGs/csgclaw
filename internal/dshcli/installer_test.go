@@ -60,7 +60,8 @@ func TestInstallerUsesUserPrefixDomesticRegistryAndVerifies(t *testing.T) {
 		"--no-progress",
 		"--no-audit",
 		"--no-fund",
-		"--prefer-offline",
+		"--prefer-offline=false",
+		"--prefer-online",
 		DefaultPackage,
 	}
 	if !slices.Equal(npmArgs, wantArgs) {
