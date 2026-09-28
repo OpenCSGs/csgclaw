@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { errorMessage } from "@/api/client";
 import { fetchRemoteKnowledgeBaseMCPConfig } from "@/api/knowledgeBases";
 import { resolveHubListSelection } from "@/models/hubSelection";
 import { configuredKnowledgeBases, mergeRemoteKnowledgeBasePages } from "@/models/knowledgeBases";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import { formatMCPServerDocument } from "@/models/mcp";
+import { localizeAPIError } from "@/shared/i18n";
 import { useWorkspaceKnowledgeBasesQuery } from "./workspaceQueries";
 import { isOpenCSGAuthenticationError, type OpenCSGAuthGuard } from "./useOpenCSGAuthGuard";
 
@@ -112,7 +112,7 @@ export function useWorkspaceKnowledgeBaseSelection({
         if (handleOpenCSGAuthenticationError(error)) {
           return false;
         }
-        setCopyError(errorMessage(error, t("resourcesKnowledgeBaseConfigFailed")));
+        setCopyError(localizeAPIError(error, t, t("resourcesKnowledgeBaseConfigFailed")));
         await Promise.all([catalogQuery.refetch(), discoveryQuery.refetch()]);
         return false;
       } finally {
@@ -205,7 +205,7 @@ export function useWorkspaceKnowledgeBaseSelection({
     discoveryLoadError:
       loginError ||
       (discoveryQuery.error && !isOpenCSGAuthenticationError(discoveryQuery.error)
-        ? errorMessage(discoveryQuery.error, t("resourcesKnowledgeBasesLoadFailed"))
+        ? localizeAPIError(discoveryQuery.error, t, t("resourcesKnowledgeBasesLoadFailed"))
         : ""),
     discoveryLoading: enabled && authenticated && discoveryQuery.isFetching && !discoveryIsFetchingNextPage,
     discoveryLoadingMore: discoveryIsFetchingNextPage,
@@ -217,7 +217,7 @@ export function useWorkspaceKnowledgeBaseSelection({
     loadError:
       loginError ||
       (catalogQuery.error && !isOpenCSGAuthenticationError(catalogQuery.error)
-        ? errorMessage(catalogQuery.error, t("resourcesKnowledgeBasesLoadFailed"))
+        ? localizeAPIError(catalogQuery.error, t, t("resourcesKnowledgeBasesLoadFailed"))
         : ""),
     pendingMCPKnowledgeBase,
     refetch: refetchCatalog,

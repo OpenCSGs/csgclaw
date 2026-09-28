@@ -44,6 +44,39 @@ function toolMessage(id: string, createdAt: string, tool: Record<string, unknown
 }
 
 describe("conversation activity model", () => {
+  it("shows runtime diagnostics in activity while preserving the chat fallback", () => {
+    const roomAgents = conversationActivityAgents(room, agents);
+    const entries = conversationActivityEntries(
+      [
+        {
+          id: "runtime-error",
+          created_at: "2026-07-16T10:00:00Z",
+          sender_id: "u-dev",
+          content: "处理消息时发生错误，请稍后重试。",
+          metadata: {
+            csgclaw: {
+              runtime_error: true,
+              error_code: "internal_error",
+              error_detail: "model deployment is unavailable in the selected region",
+            },
+          },
+        },
+      ],
+      roomAgents,
+      room.members,
+    );
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ eventType: "error", tone: "error" });
+    expect(conversationActivityEntrySummary(entries[0]!)).toBe(
+      "model deployment is unavailable in the selected region",
+    );
+    expect(conversationActivityEntryDetails(entries[0]!)).toEqual([
+      { kind: "result", value: "model deployment is unavailable in the selected region" },
+    ]);
+    expect(entries[0]?.message.content).toBe("处理消息时发生错误，请稍后重试。");
+  });
+
   it("scopes the timeline to room agents and merges tool lifecycle events", () => {
     const roomAgents = conversationActivityAgents(room, agents);
     const entries = conversationActivityEntries(

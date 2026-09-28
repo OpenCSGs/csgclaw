@@ -190,9 +190,10 @@ func (s *IMTranscriptStore) DeliverFailure(ctx context.Context, turn channel.Tur
 	}
 	metadata := transcriptMetadata("final", turn, nil)
 	metadata = mergeCSGClawMetadata(metadata, map[string]any{
-		channelrender.RuntimeErrorMetaKey: true,
-		"error_code":                      publicError.Code,
-		"presentation_version":            2,
+		channelrender.RuntimeErrorMetaKey:   true,
+		channelrender.RuntimeErrorDetailKey: strings.TrimSpace(internalError),
+		"error_code":                        publicError.Code,
+		"presentation_version":              2,
 	})
 	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{
 		RoomID:       strings.TrimSpace(turn.RoomID),

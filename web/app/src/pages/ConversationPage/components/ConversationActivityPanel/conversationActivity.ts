@@ -193,6 +193,10 @@ export function conversationActivityDensitySegments(
 }
 
 export function conversationActivityEntrySummary(entry: ConversationActivityEntry): string {
+  const runtimeErrorDetail = messageRuntimeErrorDetail(entry.message);
+  if (runtimeErrorDetail) {
+    return runtimeErrorDetail;
+  }
   if (entry.command) {
     return firstNonEmpty(entry.command.command, entry.command.title, entry.command.output);
   }
@@ -316,6 +320,10 @@ function conversationWorkingActionForStage(
 }
 
 export function conversationActivityEntryDetails(entry: ConversationActivityEntry): ConversationActivityDetail[] {
+  const runtimeErrorDetail = messageRuntimeErrorDetail(entry.message);
+  if (runtimeErrorDetail) {
+    return [{ kind: "result", value: runtimeErrorDetail }];
+  }
   if (entry.command) {
     return compactDetails([
       { kind: "command", value: entry.command.command },
@@ -518,6 +526,9 @@ function mergeActivityCommand(base: AgentActivityCommand | null, next: AgentActi
 }
 
 function activityEventType(entry: MutableConversationActivityEntry): string {
+  if (messageRuntimeErrorDetail(entry.message)) {
+    return "error";
+  }
   if (entry.source === "user") {
     return AgentActivityKinds.message;
   }
@@ -537,6 +548,15 @@ function activityEventType(entry: MutableConversationActivityEntry): string {
     return normalizeEventType(activity.content.action?.kind || "") || "action";
   }
   return activity ? "activity" : AgentActivityKinds.message;
+}
+
+function messageRuntimeErrorDetail(message: IMMessage): string {
+  const metadata = recordValue(message.metadata);
+  const csgclaw = recordValue(metadata?.csgclaw);
+  if (csgclaw?.runtime_error !== true) {
+    return "";
+  }
+  return firstNonEmpty(csgclaw.error_detail);
 }
 
 function activityTone(entry: MutableConversationActivityEntry, eventType: string): ConversationActivityTone {

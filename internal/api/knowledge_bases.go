@@ -221,24 +221,24 @@ func (h *Handler) handleKnowledgeBaseMCPProxy(w http.ResponseWriter, r *http.Req
 
 func writeKnowledgeBaseError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errKnowledgeBaseSignInRequired) {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		writeCodedAPIError(w, http.StatusUnauthorized, "knowledge_base_sign_in_required", err.Error())
 		return
 	}
 	if errors.Is(err, errKnowledgeBaseUnavailable) {
-		http.Error(w, err.Error(), http.StatusConflict)
+		writeCodedAPIError(w, http.StatusConflict, "knowledge_base_unavailable", err.Error())
 		return
 	}
 	var remoteErr *knowledgebase.HTTPError
 	if errors.As(err, &remoteErr) {
 		switch remoteErr.StatusCode {
 		case http.StatusUnauthorized:
-			http.Error(w, errKnowledgeBaseSignInRequired.Error(), http.StatusUnauthorized)
+			writeCodedAPIError(w, http.StatusUnauthorized, "knowledge_base_sign_in_required", errKnowledgeBaseSignInRequired.Error())
 		case http.StatusForbidden:
-			http.Error(w, "knowledge base access is not permitted", http.StatusForbidden)
+			writeCodedAPIError(w, http.StatusForbidden, "knowledge_base_access_forbidden", "knowledge base access is not permitted")
 		case http.StatusNotFound:
-			http.Error(w, "knowledge base not found", http.StatusNotFound)
+			writeCodedAPIError(w, http.StatusNotFound, "knowledge_base_not_found", "knowledge base not found")
 		default:
-			http.Error(w, "AgenticHub knowledge base service is temporarily unavailable", http.StatusBadGateway)
+			writeCodedAPIError(w, http.StatusBadGateway, "knowledge_base_service_unavailable", "AgenticHub knowledge base service is temporarily unavailable")
 		}
 		return
 	}

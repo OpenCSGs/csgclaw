@@ -45,6 +45,13 @@ func TestHandleRemoteKnowledgeBasesRequiresSignInBeforeAgenticHubRequest(t *test
 	if got, want := recorder.Code, http.StatusUnauthorized; got != want {
 		t.Fatalf("status = %d, want %d; body=%s", got, want, recorder.Body.String())
 	}
+	assertAPIErrorCode(t, recorder, http.StatusUnauthorized, "knowledge_base_sign_in_required")
+}
+
+func TestWriteKnowledgeBaseErrorReturnsStableForbiddenCode(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeKnowledgeBaseError(recorder, &knowledgebase.HTTPError{StatusCode: http.StatusForbidden})
+	assertAPIErrorCode(t, recorder, http.StatusForbidden, "knowledge_base_access_forbidden")
 }
 
 func TestLoadKnowledgeBaseConnectionUsesManagedCommunityRunnerIdentity(t *testing.T) {

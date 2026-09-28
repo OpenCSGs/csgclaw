@@ -15,14 +15,15 @@ import (
 )
 
 const (
-	AgentActivityVersion = 1
-	AgentActivityType    = "com.opencsg.csgclaw.agent.activity"
-	AgentToolMsgType     = "com.opencsg.csgclaw.agent.tool"
-	AgentActionMsgType   = "com.opencsg.csgclaw.agent.action"
-	AgentQuestionMsgType = "com.opencsg.csgclaw.agent.question"
-	CSGClawMetadataKey   = "csgclaw"
-	AgentActivityMetaKey = "agent_activity"
-	RuntimeErrorMetaKey  = "runtime_error"
+	AgentActivityVersion  = 1
+	AgentActivityType     = "com.opencsg.csgclaw.agent.activity"
+	AgentToolMsgType      = "com.opencsg.csgclaw.agent.tool"
+	AgentActionMsgType    = "com.opencsg.csgclaw.agent.action"
+	AgentQuestionMsgType  = "com.opencsg.csgclaw.agent.question"
+	CSGClawMetadataKey    = "csgclaw"
+	AgentActivityMetaKey  = "agent_activity"
+	RuntimeErrorMetaKey   = "runtime_error"
+	RuntimeErrorDetailKey = "error_detail"
 )
 
 type TurnRenderer struct {

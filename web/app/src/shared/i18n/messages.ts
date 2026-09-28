@@ -1768,6 +1768,11 @@ export const messages = {
       worker: "worker（对话代理）",
     },
     errors: {
+      knowledge_base_sign_in_required: "请先登录 OpenCSG，再访问远端知识库。",
+      knowledge_base_unavailable: "该知识库当前不可用。",
+      knowledge_base_access_forbidden: "当前账号无权访问该知识库。",
+      knowledge_base_not_found: "未找到该知识库，它可能已被删除。",
+      knowledge_base_service_unavailable: "AgenticHub 知识库服务暂时不可用，请稍后重试。",
       dsh_not_installed: "尚未安装 DeepSeek Harness。",
       dsh_npm_required: "安装 DeepSeek Harness 需要 Node.js 和 npm，请先完成安装。",
       dsh_node_required: "安装 DSH 前，请先安装 Node.js 24 LTS（内含 npm），安装完成后重试。",
@@ -3723,6 +3728,12 @@ export const messages = {
       worker: "worker",
     },
     errors: {
+      knowledge_base_sign_in_required: "Sign in to OpenCSG to access remote knowledge bases.",
+      knowledge_base_unavailable: "This knowledge base is currently unavailable.",
+      knowledge_base_access_forbidden: "Your account does not have permission to access this knowledge base.",
+      knowledge_base_not_found: "This knowledge base was not found. It may have been deleted.",
+      knowledge_base_service_unavailable:
+        "The AgenticHub knowledge base service is temporarily unavailable. Try again later.",
       dsh_not_installed: "DeepSeek Harness is not installed.",
       dsh_npm_required: "Node.js and npm are required to install DeepSeek Harness. Install them first.",
       dsh_node_required: "Install Node.js 24 LTS, which includes npm, before installing DSH, then try again.",

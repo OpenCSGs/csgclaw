@@ -265,7 +265,8 @@ func TestIMTranscriptStorePreservesActivityAndRuntimeErrorMetadata(t *testing.T)
 
 	failureTurn := turn
 	failureTurn.TurnID = "turn-2"
-	if err := store.DeliverFailure(context.Background(), failureTurn, "unexpected status 429"); err != nil {
+	const failureDetail = "unexpected status 429: provider quota exceeded"
+	if err := store.DeliverFailure(context.Background(), failureTurn, failureDetail); err != nil {
 		t.Fatalf("DeliverFailure() error = %v", err)
 	}
 
@@ -282,6 +283,12 @@ func TestIMTranscriptStorePreservesActivityAndRuntimeErrorMetadata(t *testing.T)
 	failureMetadata, _ := room.Messages[1].Metadata[channelrender.CSGClawMetadataKey].(map[string]any)
 	if failureMetadata[channelrender.RuntimeErrorMetaKey] != true || failureMetadata["error_code"] != "rate_limit_exceeded" {
 		t.Fatalf("failure metadata = %#v, want runtime error fields", failureMetadata)
+	}
+	if failureMetadata[channelrender.RuntimeErrorDetailKey] != failureDetail {
+		t.Fatalf("failure metadata = %#v, want runtime error detail", failureMetadata)
+	}
+	if strings.Contains(room.Messages[1].Content, failureDetail) {
+		t.Fatalf("failure content = %q, must keep diagnostic out of chat content", room.Messages[1].Content)
 	}
 }
 

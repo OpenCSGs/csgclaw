@@ -32,6 +32,12 @@ describe("i18n messages", () => {
   it("localizes structured API errors by stable code", () => {
     expect(
       localizeAPIError(
+        { status: 403, code: "knowledge_base_access_forbidden", message: "knowledge base access is not permitted" },
+        createTranslator("zh"),
+      ),
+    ).toBe("当前账号无权访问该知识库。");
+    expect(
+      localizeAPIError(
         { status: 503, code: "model_unavailable", message: "The selected model is unavailable." },
         createTranslator("zh"),
       ),
