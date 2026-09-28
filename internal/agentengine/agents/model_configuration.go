@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/modelcap"
 	fmt "fmt"
 	"log/slog"
+	"reflect"
 	strings "strings"
 	"time"
 )
@@ -84,6 +85,7 @@ func (s *ModelConfiguration) SetLLMConfig(llmCfg config.LLMConfig) {
 	llmCfg = llmCfg.Normalized()
 	defaultSelector, defaultModel, err := llmCfg.Resolve("")
 	s.mu.Lock()
+	previousDefaults := s.profileDefaults
 	var changed []string
 	for key, a := range s.agents {
 		if a.RuntimeKind != RuntimeKindCodex && a.RuntimeKind != RuntimeKindDSH {
@@ -107,7 +109,21 @@ func (s *ModelConfiguration) SetLLMConfig(llmCfg config.LLMConfig) {
 			s.profileDefaults = profileFromConfigModel(defaultSelector, "", defaultModel)
 		}
 	}
-	if len(changed) > 0 {
+	// OpenCSG credentials and its catalog follow the signed-in environment.
+	// A remembered creation default must follow that catalog as well.
+	if NormalizeModelProviderID(s.profileDefaults.ModelProviderID) == ModelProviderIDOpenCSG ||
+		normalizeProfileProvider(s.profileDefaults.Provider) == ProviderCSGHub {
+		provider := llmCfg.Providers[ModelProviderIDOpenCSG]
+		if !containsModelID(provider.Models, s.profileDefaults.ModelID) {
+			s.profileDefaults = stripCatalogProviderCredentials(s.profileDefaults, ModelProviderIDOpenCSG)
+			s.profileDefaults.ModelID = ""
+			if len(provider.Models) > 0 {
+				s.profileDefaults.ModelID = provider.Models[0]
+			}
+			s.profileDefaults.ProfileComplete = profileIsComplete(s.profileDefaults)
+		}
+	}
+	if len(changed) > 0 || !reflect.DeepEqual(previousDefaults, s.profileDefaults) {
 		if err := s.saveLocked(); err != nil {
 			slog.Warn("persist model settings pending state", "error", err)
 		}

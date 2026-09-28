@@ -507,7 +507,7 @@ function draftWithModelProviderFallback(draft: AgentDraft, options: readonly Mod
     option = options.find((item) => item.providerID && item.modelID);
   }
   if (!option) {
-    return draft;
+    return { ...draft, model_id: "" };
   }
   return {
     ...draft,
@@ -1561,9 +1561,16 @@ export function useAgentController({
     setRuntimeInstallation(null);
     setAgentBillingURL("");
     setAgentProgress(null);
-    resetAgentModels();
-    const refreshedBootstrapConfig = await refreshWorkspaceBootstrapConfig();
+    const [refreshedBootstrapConfig, refreshedModelProviders] = await Promise.all([
+      refreshWorkspaceBootstrapConfig(),
+      refreshWorkspaceModelProviders(),
+    ]);
     const effectiveBootstrapConfig = refreshedBootstrapConfig || bootstrapConfig;
+    const createModelOptions = modelProviderOptionsFromCatalog(
+      modelProviderCatalogForAgentAvailability(refreshedModelProviders, {
+        codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false,
+      }),
+    );
     setAgentModalBootstrapConfig(effectiveBootstrapConfig);
     const createWorkerTemplates = createAgentSelectableTemplates(hubTemplates);
     const preferredRuntimeKind = "codex";
@@ -1591,7 +1598,7 @@ export function useAgentController({
         agent_profile: defaults,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = draftWithModelProviderFallback(draft, agentModelOptions);
+      draft = draftWithModelProviderFallback(draft, createModelOptions);
       setAgentDraft(draft);
       setShowAgentModal(true);
     } catch (_) {
@@ -1613,7 +1620,7 @@ export function useAgentController({
         agent_profile: managerProfile,
       });
       draft = applyTemplateToDraft(draft, selectedTemplate, effectiveBootstrapConfig, managerAgent?.image || "");
-      draft = draftWithModelProviderFallback(draft, agentModelOptions);
+      draft = draftWithModelProviderFallback(draft, createModelOptions);
       setAgentDraft(draft);
       setShowAgentModal(true);
     }

@@ -228,6 +228,7 @@ function useAgentControllerHarness(
     bootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshedBootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshMCPServers?: () => Promise<unknown>;
+    refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
     setHubPublishError?: (message: string) => void;
     t?: TranslateFn;
   } = {},
@@ -239,6 +240,9 @@ function useAgentControllerHarness(
   const refreshWorkspaceBootstrapRef = useRef(vi.fn(async () => null));
   const refreshWorkspaceBootstrapConfigRef = useRef(vi.fn(async () => options.refreshedBootstrapConfig ?? null));
   const refreshWorkspaceManagerProfileRef = useRef(vi.fn(async () => null));
+  const refreshWorkspaceModelProvidersRef = useRef(
+    options.refreshWorkspaceModelProviders ?? (async () => options.modelProviders ?? null),
+  );
   const refreshWorkspaceAgents = refreshWorkspaceAgentsRef.current;
   const refreshWorkspaceBootstrap = refreshWorkspaceBootstrapRef.current;
   const refreshWorkspaceBootstrapConfig = refreshWorkspaceBootstrapConfigRef.current;
@@ -299,6 +303,7 @@ function useAgentControllerHarness(
     refreshWorkspaceBootstrap,
     refreshWorkspaceBootstrapConfig,
     refreshWorkspaceManagerProfile,
+    refreshWorkspaceModelProviders: refreshWorkspaceModelProvidersRef.current,
     rooms: data?.rooms ?? [],
     navigatePane: navigatePaneRef.current,
     selectAgent,
@@ -372,6 +377,7 @@ describe("useAgentController", () => {
       state: "unblocked",
     };
     window.localStorage.removeItem(feishuRegistrationStorageKey);
+    window.localStorage.removeItem("csgclaw.im.lastCreatedAgentModel");
     vi.mocked(fetchAgent).mockResolvedValueOnce(oldAgent).mockResolvedValueOnce(latestAgent);
     vi.mocked(fetchAgentProfile).mockResolvedValue(profile);
     vi.mocked(fetchAgentProfileDefaults).mockResolvedValue(profile);
@@ -490,6 +496,7 @@ describe("useAgentController", () => {
 
   afterEach(() => {
     window.localStorage.removeItem(feishuRegistrationStorageKey);
+    window.localStorage.removeItem("csgclaw.im.lastCreatedAgentModel");
   });
 
   it("prefills the selected agent page draft before full agent/profile requests finish", async () => {
@@ -2781,6 +2788,81 @@ describe("useAgentController", () => {
       vi.useRealTimers();
     }
   });
+
+  it("uses the refreshed environment catalog when opening template creation", async () => {
+    const catalog = (model: string) =>
+      normalizeModelProviderCatalog({ providers: [{ id: "opencsg", models: [model] }] });
+    vi.mocked(fetchAgentProfileDefaults).mockResolvedValueOnce({
+      provider: "csghub",
+      model_provider_id: "opencsg",
+      model_id: "production-model",
+    });
+    window.localStorage.setItem(
+      "csgclaw.im.lastCreatedAgentModel",
+      JSON.stringify({ providerID: "opencsg", modelID: "production-model" }),
+    );
+    const productionCatalog = catalog("production-model");
+    const stagingCatalog = catalog("staging-model");
+    const refreshCatalog = async () => stagingCatalog;
+    const { result } = renderHook(
+      () =>
+        useAgentControllerHarness({
+          openCSGAuthenticated: true,
+          modelProviders: productionCatalog,
+          modelProvidersLoaded: true,
+          refreshWorkspaceModelProviders: refreshCatalog,
+        }).controller,
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.computerViewProps.onCreateAgent({
+        id: "local.resume-scorer",
+        name: "resume-scorer",
+        runtime_kind: "codex",
+      });
+    });
+    expect(result.current.agentProfileModalProps?.agentDraft.model_id).toBe("staging-model");
+    await act(async () => {
+      await result.current.agentProfileModalProps?.onSave();
+    });
+    expect(createBotRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from_template: "local.resume-scorer",
+        profile: "opencsg.staging-model",
+        agent_profile: expect.objectContaining({ model_provider_id: "opencsg", model_id: "staging-model" }),
+      }),
+    );
+  });
+
+  it.each([null, normalizeModelProviderCatalog({ providers: [] })])(
+    "clears stale create models when refreshing returns %j",
+    async (catalog) => {
+      vi.mocked(fetchAgentProfileDefaults).mockResolvedValueOnce({
+        model_provider_id: "opencsg",
+        model_id: "production-model",
+      });
+      const productionCatalog = normalizeModelProviderCatalog({
+        providers: [{ id: "opencsg", models: ["production-model"] }],
+      });
+      const refreshCatalog = async () => catalog;
+      const { result } = renderHook(
+        () =>
+          useAgentControllerHarness({
+            modelProviders: productionCatalog,
+            modelProvidersLoaded: true,
+            refreshWorkspaceModelProviders: refreshCatalog,
+          }).controller,
+        { wrapper: createWrapper() },
+      );
+      await act(async () => {
+        await result.current.computerViewProps.onCreateAgent();
+      });
+      expect(result.current.agentProfileModalProps?.agentDraft).toMatchObject({
+        model_provider_id: "opencsg",
+        model_id: "",
+      });
+    },
+  );
 
   it("initializes create agent drafts with an unused user-owned avatar", async () => {
     const availableAvatar = AGENT_AVATAR_OPTIONS.at(-1)?.value || "";
