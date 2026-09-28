@@ -72,7 +72,13 @@ export function RemoteMCPList({
         <div className={styles.state}>
           <span>{error}</span>
           {onRefresh ? (
-            <Button size="sm" variant="secondaryGray" onClick={() => void onRefresh()}>
+            <Button
+              size="sm"
+              variant="secondaryGray"
+              loading={loading}
+              disabled={loading}
+              onClick={() => void onRefresh()}
+            >
               <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
               {t("resourcesMCPRemoteServersRefresh")}
             </Button>

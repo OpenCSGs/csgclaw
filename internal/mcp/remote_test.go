@@ -116,7 +116,7 @@ func TestGetRemoteServerResolvesCompleteConfiguration(t *testing.T) {
 	if got, want := config["enabled"], true; got != want {
 		t.Fatalf("config.enabled = %#v, want %#v", got, want)
 	}
-	if got, want := config["startup_timeout_sec"], remoteServerStartupTimeout; got != want {
+	if got, want := config["startup_timeout_sec"], 5; got != want {
 		t.Fatalf("config.startup_timeout_sec = %#v, want %#v", got, want)
 	}
 	if got, want := config["tool_timeout_sec"], remoteServerToolTimeout; got != want {

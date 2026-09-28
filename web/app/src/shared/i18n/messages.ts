@@ -1799,6 +1799,7 @@ export const messages = {
       app_gitlab_validation_failed: "无法验证 GitLab 账号，请检查实例地址和网络连接。",
       app_connection_failed: "连接器连接失败，请检查服务是否可达及凭据是否有效。",
       mcp_server_unavailable: "MCP 服务当前不可用，无法添加到 Agent。请检查服务地址、鉴权和运行状态。",
+      remote_mcp_install_failed: "MCP构建失败或权限不足",
       "AGENT-ERR-22": "模板已发布，当前仍在审核中。请稍后在模板列表中查看最新状态。",
       "AGENT-ERR-23": "模板已发布，但未通过敏感内容审核。请根据问题文件修改后重新发布。",
       "AGENT-ERR-25": "该智能体模板的敏感内容检查仍在进行中，无法创建智能体。",
@@ -3756,6 +3757,7 @@ export const messages = {
         "The connector could not connect. Check that the service is reachable and the credentials are valid.",
       mcp_server_unavailable:
         "The MCP server is currently unavailable and cannot be added to the agent. Check its endpoint, credentials, and service status.",
+      remote_mcp_install_failed: "MCP build failed or permission is insufficient.",
       "AGENT-ERR-22": "The template was published and is still under review. Check the template list again later.",
       "AGENT-ERR-23":
         "The template was published but did not pass sensitive-content review. Update the affected files and publish again.",

@@ -119,6 +119,10 @@ func decodeMCPServerRequest(r *http.Request) (mcpServerRequest, error) {
 }
 
 func writeMCPServerError(w http.ResponseWriter, err error) {
+	if errors.Is(err, mcp.ErrRemoteServerInstallFailed) {
+		writeCodedAPIError(w, http.StatusBadGateway, "remote_mcp_install_failed", err.Error())
+		return
+	}
 	status := http.StatusBadRequest
 	if errors.Is(err, mcp.ErrServerExists) {
 		status = http.StatusConflict

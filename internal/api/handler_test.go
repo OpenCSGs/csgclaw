@@ -4597,12 +4597,13 @@ func TestHandleBatchAddAgentMCPServersReturnsNotFoundWhenCatalogServerMissing(t 
 
 func TestHandleBatchAddAgentMCPServersRejectsUnavailableRemoteWithoutRemovingConfig(t *testing.T) {
 	srv, svc, created := newAgentMCPManagementTestServer(t)
-	srv.mcp = mcp.NewService(mcp.WithServerProber(failingMCPServerProber{}))
-	if _, err := srv.mcp.InstallRemoteServer(context.Background(), mcp.RemoteServer{
+	installer := mcp.NewService(mcp.WithServerProber(&stubMCPServerProber{}))
+	if _, err := installer.InstallRemoteServer(context.Background(), mcp.RemoteServer{
 		ID: "remote-denied", Name: "denied", URL: "https://mcp.example.test/denied",
 	}); err != nil {
 		t.Fatalf("InstallRemoteServer() error = %v", err)
 	}
+	srv.mcp = mcp.NewService(mcp.WithServerProber(failingMCPServerProber{}))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/"+created.ID+"/mcp-servers:batchAdd", strings.NewReader(`{"names":["denied"]}`))
 	rec := httptest.NewRecorder()

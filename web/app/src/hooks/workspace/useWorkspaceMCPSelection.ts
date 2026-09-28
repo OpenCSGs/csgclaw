@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { errorMessage } from "@/api/client";
+import { localizeAPIError } from "@/shared/i18n";
 import {
   createMCPServerRequest,
   deleteMCPServerRequest,
@@ -296,7 +297,7 @@ export function useWorkspaceMCPSelection({
         return true;
       } catch (error) {
         if (!handleOpenCSGAuthenticationError(error)) {
-          setMCPMutationError(errorMessage(error, t("resourcesMCPRemoteInstallFailed")));
+          setMCPMutationError(localizeAPIError(error, t, t("resourcesMCPRemoteInstallFailed")));
         }
         return false;
       } finally {
@@ -453,6 +454,7 @@ export function useWorkspaceMCPSelection({
     if (!requireOpenCSGAuthentication()) {
       return;
     }
+    setMCPMutationError("");
     const result = await remoteMCPServersQuery.refetch();
     if (result.error) {
       handleOpenCSGAuthenticationError(result.error);

@@ -19,7 +19,7 @@ const (
 	remoteServersPath          = "/api/v1/agent/mcp-servers"
 	remoteServersRequestLimit  = 4 * 1024 * 1024
 	remoteServerEnabled        = true
-	remoteServerStartupTimeout = 30
+	remoteServerStartupTimeout = 5
 	remoteServerToolTimeout    = 60
 	ManagedMetaKey             = "_meta"
 	ManagedMetaNamespace       = "com.opencsg/mcp"

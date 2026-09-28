@@ -15,6 +15,17 @@ import (
 	"csgclaw/internal/mcp"
 )
 
+type remoteMCPTestProber struct {
+	err error
+}
+
+func (p remoteMCPTestProber) Probe(context.Context, string, map[string]any) (mcp.ProbeResult, error) {
+	if p.err != nil {
+		return mcp.ProbeResult{}, p.err
+	}
+	return mcp.ProbeResult{Connected: true}, nil
+}
+
 func TestHandleRemoteMCPServersUsesConfiguredOfficialHub(t *testing.T) {
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got, want := r.URL.Path, "/api/v1/agent/mcp-servers"; got != want {
@@ -191,7 +202,7 @@ enabled = true
 	if err := os.WriteFile(configPath, []byte(configText), 0o600); err != nil {
 		t.Fatalf("WriteFile(config) error = %v", err)
 	}
-	handler := &Handler{mcp: mcp.NewService()}
+	handler := &Handler{mcp: mcp.NewService(mcp.WithServerProber(remoteMCPTestProber{}))}
 	handler.SetConfigPath(configPath)
 
 	recorder := httptest.NewRecorder()

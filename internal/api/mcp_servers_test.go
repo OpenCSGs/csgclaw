@@ -8,6 +8,7 @@ import (
 	"csgclaw/internal/mcp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -26,17 +27,24 @@ func (failingMCPServerProber) Probe(context.Context, string, map[string]any) (mc
 	return mcp.ProbeResult{}, errors.New("access denied")
 }
 
+func TestWriteMCPServerErrorMapsRemoteInstallFailure(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeMCPServerError(recorder, fmt.Errorf("%w: permission denied", mcp.ErrRemoteServerInstallFailed))
+
+	if recorder.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadGateway)
+	}
+	if !strings.Contains(recorder.Body.String(), `"code":"remote_mcp_install_failed"`) {
+		t.Fatalf("body = %s, want remote_mcp_install_failed", recorder.Body.String())
+	}
+}
+
 func TestHandleMCPServersHidesUnavailableRemoteAndRetainsManualServer(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	svc := mcp.NewService(mcp.WithServerProber(failingMCPServerProber{}))
-	if _, err := svc.CreateServer(context.Background(), "manual", map[string]any{"url": "https://manual.example.test/mcp"}); err != nil {
-		t.Fatalf("CreateServer() error = %v", err)
-	}
-	if _, err := svc.InstallRemoteServer(context.Background(), mcp.RemoteServer{
-		ID: "remote-denied", Name: "denied", URL: "https://remote.example.test/mcp",
-	}); err != nil {
-		t.Fatalf("InstallRemoteServer() error = %v", err)
-	}
+	store := &memoryMCPServerStoreForAPI{servers: map[string]any{
+		"manual": map[string]any{"url": "https://manual.example.test/mcp"},
+		"denied": mcp.RemoteServer{ID: "remote-denied", Name: "denied", URL: "https://remote.example.test/mcp"}.Config(),
+	}}
+	svc := mcp.NewService(mcp.WithServerStore(store), mcp.WithServerProber(failingMCPServerProber{}))
 
 	recorder := httptest.NewRecorder()
 	(&Handler{mcp: svc}).Routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/mcp-servers", nil))
@@ -442,14 +450,19 @@ func assertManagedKnowledgeBaseMCPRuntimeSnapshot(t *testing.T, raw any, endpoin
 }
 
 type memoryMCPServerStoreForAPI struct {
-	writes int
+	servers map[string]any
+	writes  int
 }
 
-func (*memoryMCPServerStoreForAPI) ReadServers(context.Context) (map[string]any, error) {
-	return map[string]any{}, nil
+func (s *memoryMCPServerStoreForAPI) ReadServers(context.Context) (map[string]any, error) {
+	if s.servers == nil {
+		return map[string]any{}, nil
+	}
+	return s.servers, nil
 }
 
-func (s *memoryMCPServerStoreForAPI) WriteServers(context.Context, map[string]any) error {
+func (s *memoryMCPServerStoreForAPI) WriteServers(_ context.Context, servers map[string]any) error {
 	s.writes++
+	s.servers = servers
 	return nil
 }

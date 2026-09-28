@@ -13,6 +13,12 @@ import (
 	"csgclaw/internal/mcpschema"
 )
 
+func successfulInstallTestProber() ServerProber {
+	return availabilityTestProber{probe: func(context.Context, string, map[string]any) (ProbeResult, error) {
+		return ProbeResult{Connected: true}, nil
+	}}
+}
+
 func TestInstallRemoteServerProbesStableIDAndPreservesSourceMetadata(t *testing.T) {
 	probed := make(chan string, 2)
 	svc := NewService(WithServerStore(&memoryServerStore{}), WithServerProber(availabilityTestProber{
@@ -96,7 +102,7 @@ func TestServiceUsesInjectedServerStore(t *testing.T) {
 
 func TestRenameAndReinstallPreserveIdentity(t *testing.T) {
 	store := &memoryServerStore{}
-	svc := NewService(WithServerStore(store))
+	svc := NewService(WithServerStore(store), WithServerProber(successfulInstallTestProber()))
 	ctx := context.Background()
 	remote := RemoteServer{ID: "42", HubURL: "https://hub.example", Name: "必应 搜索", URL: "https://mcp.example/one"}
 	id, err := svc.InstallRemoteServer(ctx, remote)
@@ -202,7 +208,7 @@ func TestCreateServerRejectsWrappedMCPServersConfig(t *testing.T) {
 
 func TestInstallRemoteServerCreatesAndReplacesServer(t *testing.T) {
 	store := &memoryServerStore{}
-	svc := NewService(WithServerStore(store))
+	svc := NewService(WithServerStore(store), WithServerProber(successfulInstallTestProber()))
 	ctx := context.Background()
 
 	if _, err := svc.InstallRemoteServer(ctx, RemoteServer{Name: "calendar", URL: "https://mcp.example.test/v1"}); err != nil {
@@ -222,6 +228,25 @@ func TestInstallRemoteServerCreatesAndReplacesServer(t *testing.T) {
 	calendar := servers["calendar"].(map[string]any)
 	if got, want := calendar["url"], "https://mcp.example.test/v2"; got != want {
 		t.Fatalf("calendar.url = %#v, want %q", got, want)
+	}
+}
+
+func TestInstallRemoteServerRejectsUnavailableServerWithoutPersisting(t *testing.T) {
+	store := &memoryServerStore{}
+	svc := NewService(WithServerStore(store), WithServerProber(availabilityTestProber{
+		probe: func(context.Context, string, map[string]any) (ProbeResult, error) {
+			return ProbeResult{}, errors.New("permission denied")
+		},
+	}))
+
+	_, err := svc.InstallRemoteServer(context.Background(), RemoteServer{
+		ID: "denied", Name: "Denied MCP", URL: "https://mcp.example.test/denied",
+	})
+	if !errors.Is(err, ErrRemoteServerInstallFailed) {
+		t.Fatalf("InstallRemoteServer() error = %v, want ErrRemoteServerInstallFailed", err)
+	}
+	if len(store.servers) != 0 {
+		t.Fatalf("failed installation persisted servers: %#v", store.servers)
 	}
 }
 

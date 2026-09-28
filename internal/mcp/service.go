@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcpschema"
 )
 
 var (
-	ErrServerExists   = errors.New("mcp server already exists")
-	ErrServerNotFound = errors.New("mcp server not found")
+	ErrServerExists              = errors.New("mcp server already exists")
+	ErrServerNotFound            = errors.New("mcp server not found")
+	ErrRemoteServerInstallFailed = errors.New("remote mcp server build failed or permission denied")
 )
 
 var serverDocumentMu sync.Mutex
@@ -95,30 +97,29 @@ func (s *Service) InstallRemoteServer(ctx context.Context, server RemoteServer) 
 	if err != nil {
 		return "", err
 	}
+	servers, err := s.ListServers(ctx)
+	if err != nil {
+		return "", err
+	}
+	probeID := remoteServerInstallID(servers, server.ID, name, config)
+	probeCtx, cancelProbe := context.WithTimeout(ctx, availabilityProbeTimeout(config))
+	result, err := s.ProbeServer(probeCtx, probeID, config)
+	cancelProbe()
+	if err != nil || !result.Connected {
+		if err == nil {
+			err = ErrServerUnavailable
+		}
+		return "", fmt.Errorf("%w: %v", ErrRemoteServerInstallFailed, err)
+	}
 	var id string
 	_, err = s.updateServers(ctx, func(servers map[string]any) error {
-		if server.ID != "" {
-			for key, raw := range servers {
-				if entry, ok := raw.(map[string]any); ok && sameMarketplaceSource(entry, config) {
-					id = key
-					break
-				}
-			}
-		}
+		id = existingRemoteServerInstallID(servers, server.ID, name, config)
 		if id == "" {
-			candidate := findDisplayName(servers, name)
-			if entry, ok := servers[candidate].(map[string]any); ok {
-				// Old installations have no source ID; only those may be adopted by name.
-				if marketplaceSource(entry) == nil {
-					id = candidate
-				}
-			}
+			id = probeID
 		}
 		label := name
-		if id != "" {
+		if _, exists := servers[id]; exists {
 			label = mcpschema.ServerDisplayName(id, servers[id])
-		} else {
-			id = mcpschema.NewServerID(name, func(id string) bool { _, exists := servers[id]; return exists })
 		}
 		config[mcpschema.DisplayNameKey] = label
 		servers[id] = config
@@ -130,9 +131,34 @@ func (s *Service) InstallRemoteServer(ctx context.Context, server RemoteServer) 
 	s.initAvailability()
 	hash, hashErr := availabilityConfigHash(config)
 	if hashErr == nil {
-		s.startAvailabilityProbe(id, config, hash)
+		s.availabilityMu.Lock()
+		s.availability[id] = availabilityEntry{available: true, checkedAt: time.Now(), hash: hash}
+		s.availabilityMu.Unlock()
 	}
 	return id, nil
+}
+
+func remoteServerInstallID(servers map[string]any, sourceID, name string, config map[string]any) string {
+	if existing := existingRemoteServerInstallID(servers, sourceID, name, config); existing != "" {
+		return existing
+	}
+	return mcpschema.NewServerID(name, func(id string) bool { _, exists := servers[id]; return exists })
+}
+
+func existingRemoteServerInstallID(servers map[string]any, sourceID, name string, config map[string]any) string {
+	if sourceID != "" {
+		for key, raw := range servers {
+			if entry, ok := raw.(map[string]any); ok && sameMarketplaceSource(entry, config) {
+				return key
+			}
+		}
+	}
+	if candidate := findDisplayName(servers, name); candidate != "" {
+		if entry, ok := servers[candidate].(map[string]any); ok && marketplaceSource(entry) == nil {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func (s *Service) UpdateServer(ctx context.Context, currentName, nextName string, config map[string]any) (map[string]any, error) {
