@@ -310,6 +310,20 @@ func CheckResponsesAPIWithClient(ctx context.Context, client *http.Client, baseU
 		"store":             false,
 		"stream":            true,
 		"max_output_tokens": 128,
+		// Mirror an agent's function-enabled request: some gateways forward
+		// parallel_tool_calls to Chat Completions even when tools are absent.
+		// The declared tool is never executed during this connectivity probe.
+		"tools": []any{map[string]any{
+			"type":        "function",
+			"name":        "csgclaw_probe",
+			"description": "Unused connectivity probe tool.",
+			"parameters": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		}},
+		"tool_choice":         "none",
+		"parallel_tool_calls": false,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
