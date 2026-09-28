@@ -50,7 +50,7 @@ const labels: Record<string, string> = {
   runtimeSandboxUnavailable: "Current sandbox is unavailable: {reason}",
   runtimeSandboxUnavailableReason: "Check the current sandbox configuration.",
   runtimeInstallRequiredTitle: "DeepSeek Harness is required",
-  runtimeInstallRequiredDescription: "Install DSH 0.1.5-rc.2 to continue creating the agent.",
+  runtimeInstallRequiredDescription: "Install DSH 0.1.5-rc.3 to continue creating the agent.",
   computerRuntimeInstall: "Install",
   computerRuntimeInstalling: "Installing...",
   statusEnabled: "Enabled",

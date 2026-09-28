@@ -119,6 +119,34 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 也可以通过 CMD 入口传参，例如 `.\scripts\collect-desktop-diagnostics.cmd -AgentLogLines 2000 -DesktopLogLines 20000`。
 
+### 重新安装 Windows 受管 DSH
+
+CSGClaw 默认安装 `@deepseek-ai/dsh@0.1.5-rc.3`。更新 CSGClaw 不会自动升级已有 DSH；若要清理旧安装后重新安装，先退出 CSGClaw 及其 `serve` 服务，再在 PowerShell 中执行：
+
+```powershell
+$dshPaths = @(
+  "$env:USERPROFILE\.local\bin\dsh.cmd",
+  "$env:USERPROFILE\.local\share\deepseek-harness"
+)
+foreach ($dshPath in $dshPaths) {
+  if (Test-Path -LiteralPath $dshPath) {
+    Remove-Item -LiteralPath $dshPath -Recurse -Force -ErrorAction Stop
+  }
+}
+```
+
+以上路径为默认受管安装位置。智能体配置和会话保存在 `.csgclaw` 中，清理命令不会删除这些数据。
+
+使用已经包含版本升级改动的 CSGClaw 可执行文件重新启动，在“电脑 → Agent Runtime”中安装 DSH。源码用户需要先重新编译 CSGClaw；仅拉取代码而继续运行旧的可执行文件，仍会安装旧版本。安装后确认版本：
+
+```powershell
+& "$env:USERPROFILE\.local\bin\dsh.cmd" --version
+```
+
+应显示 `0.1.5-rc.3`。随后启动 DSH 智能体并确认能完成一次对话。
+
+### 手工查看日志
+
 以下命令用于不生成诊断包时手工查看日志。
 
 查找并查看最新 `main.log` 的最后 300 行：

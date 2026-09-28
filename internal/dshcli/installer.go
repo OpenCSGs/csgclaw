@@ -14,7 +14,7 @@ import (
 
 const (
 	DefaultRegistry   = "https://registry.npmmirror.com"
-	DefaultVersion    = "0.1.5-rc.2"
+	DefaultVersion    = "0.1.5-rc.3"
 	DefaultPackage    = "@deepseek-ai/dsh@" + DefaultVersion
 	InstallRootEnv    = "CSGCLAW_DSH_INSTALL_ROOT"
 	InstallPackageEnv = "CSGCLAW_DSH_PACKAGE"

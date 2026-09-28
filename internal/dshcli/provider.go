@@ -14,7 +14,7 @@ import (
 const (
 	BinaryName       = "dsh"
 	DocumentationURL = "https://github.com/deepseek-ai/deepseek-harness"
-	InstallCommand   = "npm install -g @deepseek-ai/dsh@latest --registry=https://registry.npmmirror.com"
+	InstallCommand   = "npm install -g " + DefaultPackage + " --registry=" + DefaultRegistry
 )
 
 var versionPattern = regexp.MustCompile(`(?i)(?:^|[^0-9])v?(\d+)\.(\d+)\.(\d+)(?:-([0-9a-z.-]+))?`)

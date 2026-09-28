@@ -12,7 +12,7 @@ import (
 )
 
 func TestInstallerUsesUserPrefixDomesticRegistryAndVerifies(t *testing.T) {
-	if DefaultPackage != "@deepseek-ai/dsh@0.1.5-rc.2" {
+	if DefaultPackage != "@deepseek-ai/dsh@0.1.5-rc.3" {
 		t.Fatalf("DefaultPackage = %q, want pinned DSH release candidate", DefaultPackage)
 	}
 	home := t.TempDir()
@@ -43,7 +43,7 @@ func TestInstallerUsesUserPrefixDomesticRegistryAndVerifies(t *testing.T) {
 				}
 				return []byte("installed"), nil
 			}
-			return []byte("dsh 0.1.5-rc.2"), nil
+			return []byte("dsh 0.1.5-rc.3"), nil
 		},
 	}).InstallWithProgress(context.Background(), func(progress InstallProgress) {
 		stages = append(stages, progress.Stage)
@@ -67,7 +67,7 @@ func TestInstallerUsesUserPrefixDomesticRegistryAndVerifies(t *testing.T) {
 		t.Fatalf("npm args = %q, want %q", npmArgs, wantArgs)
 	}
 	launcher := filepath.Join(home, ".local", "bin", "dsh")
-	if info.Path != launcher || info.Version != "0.1.5-rc.2" {
+	if info.Path != launcher || info.Version != "0.1.5-rc.3" {
 		t.Fatalf("Install() info = %+v", info)
 	}
 	target, err := os.Readlink(launcher)
@@ -181,7 +181,7 @@ func TestInstallerFallsBackToManagedNode(t *testing.T) {
 						}
 						return []byte("installed"), nil
 					}
-					return []byte("dsh 0.1.5-rc.2"), nil
+					return []byte("dsh 0.1.5-rc.3"), nil
 				},
 			}).InstallWithProgress(context.Background(), func(progress InstallProgress) {
 				stages = append(stages, progress.Stage)
@@ -225,7 +225,7 @@ func TestManagedNodeIsAvailableToNPMInstallScripts(t *testing.T) {
 	if err := os.WriteFile(nodePath, []byte(nodeScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	npmScript := "#!/bin/sh\n[ \"$(command -v node)\" = " + shellQuote(nodePath) + " ] || exit 42\nmkdir -p " + shellQuote(filepath.Dir(actualDSH)) + "\nprintf '#!/bin/sh\\necho dsh 0.1.5-rc.2\\n' > " + shellQuote(actualDSH) + "\nchmod +x " + shellQuote(actualDSH) + "\n"
+	npmScript := "#!/bin/sh\n[ \"$(command -v node)\" = " + shellQuote(nodePath) + " ] || exit 42\nmkdir -p " + shellQuote(filepath.Dir(actualDSH)) + "\nprintf '#!/bin/sh\\necho dsh 0.1.5-rc.3\\n' > " + shellQuote(actualDSH) + "\nchmod +x " + shellQuote(actualDSH) + "\n"
 	if err := os.WriteFile(npmCLI, []byte(npmScript), 0o755); err != nil {
 		t.Fatal(err)
 	}

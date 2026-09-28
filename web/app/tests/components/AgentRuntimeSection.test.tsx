@@ -29,7 +29,7 @@ const labels: Record<string, string> = {
   computerRuntimeInstallingHint: "Downloading in the background.",
   computerRuntimeInstall: "Install",
   computerRuntimeInstallHint: "Install with one click.",
-  computerRuntimeManagedInstallDescription: "Installs DeepSeek Harness 0.1.5-rc.2 for you.",
+  computerRuntimeManagedInstallDescription: "Installs DeepSeek Harness 0.1.5-rc.3 for you.",
   computerRuntimeInstallProgressLabel: "DeepSeek Harness installation progress",
   computerRuntimeInstallStageInstallingNode: "Installing managed Node.js 24 LTS",
   computerRuntimeInstallStageInstalling: "Downloading and installing dependencies",
@@ -158,7 +158,7 @@ describe("AgentRuntimeSection", () => {
     );
 
     expect(screen.queryByText("DSH CLI is unavailable")).not.toBeInTheDocument();
-    expect(screen.getByText("Installs DeepSeek Harness 0.1.5-rc.2 for you.")).toBeInTheDocument();
+    expect(screen.getByText("Installs DeepSeek Harness 0.1.5-rc.3 for you.")).toBeInTheDocument();
     expect(screen.getByText("Install with one click.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Installation guide" })).toHaveAttribute(
       "href",
