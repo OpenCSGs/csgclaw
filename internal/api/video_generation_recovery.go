@@ -50,7 +50,7 @@ func (h *Handler) RecoverVideoGenerations(ctx context.Context) error {
 			}
 			seen[key] = struct{}{}
 			digest := sha256.Sum256([]byte(key))
-			turn.TurnID = agentengine.TurnID("video-recovery-" + hex.EncodeToString(digest[:16]))
+			recoveryTurnID := agentengine.TurnID("video-recovery-" + hex.EncodeToString(digest[:16]))
 			if strings.TrimSpace(task.UpstreamID) == "" {
 				task.State = "failed"
 				task.Error = "video_generation_interrupted"
@@ -61,20 +61,28 @@ func (h *Handler) RecoverVideoGenerations(ctx context.Context) error {
 				continue
 			}
 			task.File = nil
-			go func(turn channel.TurnContext, task contract.VideoGenerationTask) {
+			go func(turn channel.TurnContext, recoveryTurnID agentengine.TurnID, task contract.VideoGenerationTask) {
 				recoveryCtx, cancel := context.WithTimeout(ctx, 16*time.Minute)
 				defer cancel()
-				result := h.agentEngine.Conversations(turn.AgentID).Run(recoveryCtx, agentengine.TurnRequest{
-					ID: turn.TurnID, ConversationKey: turn.ConversationKey,
-					Input:     []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: task.Prompt}},
-					Admission: agentengine.AdmissionWait, VideoGeneration: &task,
+				conversation := h.agentEngine.Conversations(turn.AgentID)
+				recovery, ok := conversation.(interface {
+					RecoverVideoGeneration(context.Context, agentengine.TurnRequest, agentengine.EventSink) agentengine.TurnResult
+				})
+				if !ok {
+					slog.Error("recover video generation", "video_task_id", task.ID, "upstream_id", task.UpstreamID, "error", "video recovery is unavailable")
+					return
+				}
+				result := recovery.RecoverVideoGeneration(recoveryCtx, agentengine.TurnRequest{
+					ID: recoveryTurnID, ConversationKey: turn.ConversationKey,
+					Input:           []agentengine.InputPart{{Kind: agentengine.InputPartText, Text: task.Prompt}},
+					VideoGeneration: &task,
 				}, contract.VideoGenerationSink{EventSink: agentengine.EventSinkFunc(func(eventCtx context.Context, event agentengine.TurnEvent) error {
 					return renderer.Emit(eventCtx, turn, event)
 				})})
 				if result.Status != agentengine.TurnSucceeded {
 					slog.Error("recover video generation", "video_task_id", task.ID, "upstream_id", task.UpstreamID, "error", fmt.Sprint(result.Error))
 				}
-			}(turn, task)
+			}(turn, recoveryTurnID, task)
 		}
 	}
 	return nil

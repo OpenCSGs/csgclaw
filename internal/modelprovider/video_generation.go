@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -185,8 +186,12 @@ func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string
 	}
 	sizeBytes, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
 	if err != nil || sizeBytes <= 0 {
-		resp.Body.Close()
-		return result, &VideoGenerationError{Code: "upstream_response_invalid", Message: "The video service did not return a valid content length."}
+		content, detectedSize, spoolErr := spoolVideoContent(resp.Body)
+		if spoolErr != nil {
+			return result, spoolErr
+		}
+		resp.Body = content
+		sizeBytes = detectedSize
 	}
 	if sizeBytes > MaxGeneratedVideoBytes {
 		resp.Body.Close()
@@ -203,6 +208,47 @@ func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string
 		return GeneratedVideo{}, &VideoGenerationError{Code: "upstream_response_invalid", Message: "The video service returned non-video content."}
 	}
 	return result, nil
+}
+
+type temporaryVideoContent struct {
+	*os.File
+	path string
+}
+
+func (content *temporaryVideoContent) Close() error {
+	closeErr := content.File.Close()
+	removeErr := os.Remove(content.path)
+	return errors.Join(closeErr, removeErr)
+}
+
+func spoolVideoContent(source io.ReadCloser) (io.ReadCloser, int64, error) {
+	defer source.Close()
+	temporary, err := os.CreateTemp("", "csgclaw-video-download-")
+	if err != nil {
+		return nil, 0, err
+	}
+	content := &temporaryVideoContent{File: temporary, path: temporary.Name()}
+	cleanup := func() {
+		_ = content.Close()
+	}
+	size, err := io.Copy(temporary, io.LimitReader(source, MaxGeneratedVideoBytes+1))
+	if err != nil {
+		cleanup()
+		return nil, 0, err
+	}
+	if size == 0 {
+		cleanup()
+		return nil, 0, &VideoGenerationError{Code: "upstream_response_invalid", Message: "The video service returned empty content."}
+	}
+	if size > MaxGeneratedVideoBytes {
+		cleanup()
+		return nil, 0, &VideoGenerationError{Code: "video_too_large", Message: "The generated video exceeds the supported size limit."}
+	}
+	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
+		cleanup()
+		return nil, 0, err
+	}
+	return content, size, nil
 }
 
 func reportVideoProgress(callback func(VideoGenerationProgress), id, status string) {

@@ -42,3 +42,32 @@ func TestVideoDeliveryFailureReplacesDownloadingStatus(t *testing.T) {
 		t.Fatalf("failed task = %#v", failed)
 	}
 }
+
+func TestRecoverVideoGenerationDoesNotOccupyConversationAdmission(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	engine := &Engine{files: NewFileStore(), generateVideo: func(context.Context, *modelprovider.VideoGenerationConfig, string, modelprovider.VideoGenerationOptions) (modelprovider.GeneratedVideo, error) {
+		close(started)
+		<-release
+		return modelprovider.GeneratedVideo{Content: io.NopCloser(bytes.NewReader([]byte("video"))), SizeBytes: 5, MediaType: "video/mp4"}, nil
+	}}
+	conversation := engine.Conversations("agent-video").(*conversations)
+	done := make(chan TurnResult, 1)
+	go func() {
+		done <- conversation.RecoverVideoGeneration(context.Background(), TurnRequest{
+			ID: "recovery-turn", ConversationKey: "room-video", VideoGeneration: &contract.VideoGenerationTask{ID: "video-call", Prompt: "kitten"},
+		}, contract.VideoGenerationSink{EventSink: EventSinkFunc(func(context.Context, TurnEvent) error { return nil })})
+	}()
+	<-started
+	engine.mu.Lock()
+	activeTurns := len(engine.active)
+	engine.mu.Unlock()
+	close(release)
+	result := <-done
+	if activeTurns != 0 {
+		t.Fatalf("recovery occupied %d active conversation turns", activeTurns)
+	}
+	if result.Status != TurnSucceeded {
+		t.Fatalf("recovery result = %+v", result)
+	}
+}

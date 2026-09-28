@@ -73,6 +73,37 @@ func TestGenerateVideoUsesAIGatewayAsyncAPI(t *testing.T) {
 	}
 }
 
+func TestGenerateVideoAcceptsChunkedContentWithoutContentLength(t *testing.T) {
+	previous := videoPollInterval
+	videoPollInterval = time.Millisecond
+	t.Cleanup(func() { videoPollInterval = previous })
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "video_1", "status": "completed"})
+		case r.URL.Path == "/videos/video_1/content":
+			w.Header().Set("Content-Type", "video/mp4")
+			flusher := w.(http.Flusher)
+			_, _ = w.Write([]byte("video-"))
+			flusher.Flush()
+			_, _ = w.Write([]byte("bytes"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	result, err := GenerateVideo(context.Background(), server.Client(), server.URL, "", nil, "model", "prompt", VideoGenerationOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer result.Content.Close()
+	data := new(bytes.Buffer)
+	_, _ = data.ReadFrom(result.Content)
+	if data.String() != "video-bytes" || result.SizeBytes != int64(len("video-bytes")) {
+		t.Fatalf("content = %q, size = %d", data.String(), result.SizeBytes)
+	}
+}
+
 func TestGenerateVideoRetriesPollingWithoutCreatingAnotherJob(t *testing.T) {
 	previousPoll, previousRetry := videoPollInterval, videoRetryBaseDelay
 	videoPollInterval, videoRetryBaseDelay = time.Millisecond, time.Millisecond

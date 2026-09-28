@@ -168,3 +168,11 @@ func TestImageModelProviderReferenceCountsAsInUse(t *testing.T) {
 		t.Fatal("image provider could be deleted while an Agent references it")
 	}
 }
+
+func TestVideoModelProviderReferenceCountsAsInUse(t *testing.T) {
+	svc := mustNewSeededService(t, []agent.Agent{{ID: "agent-alice", Name: "Alice", Role: agent.RoleWorker, AgentProfile: agent.AgentProfile{Provider: agent.ProviderCodex, ModelID: "chat-model", VideoGeneration: &modelprovider.VideoGenerationConfig{ProviderID: "video-provider", ModelID: "vendor-video"}}}})
+	h := &Handler{agentEngine: agentengine.New(svc)}
+	if !h.modelProviderInUse(config.LLMConfig{}, "video-provider") {
+		t.Fatal("video provider could be deleted while an Agent references it")
+	}
+}

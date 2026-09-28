@@ -16,6 +16,31 @@ type videoGenerator func(context.Context, *modelprovider.VideoGenerationConfig, 
 
 var videoDeliveryRetryInterval = time.Second
 
+// RecoverVideoGeneration resumes a persisted asynchronous video job without
+// entering normal conversation admission. The caller owns the delivery
+// context, so recovered progress can keep pointing at the original chat turn.
+func (c *conversations) RecoverVideoGeneration(ctx context.Context, request TurnRequest, sink EventSink) TurnResult {
+	if c == nil || c.engine == nil || c.agentID == "" || request.ID == "" || request.ConversationKey == "" || request.VideoGeneration == nil {
+		return failedResult(ErrorInvalidRequest, "agent ID, turn ID, conversation key, and video generation task are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return resultFromContext(ctx, err)
+	}
+	request = cloneTurnRequest(request)
+	if request.VideoGeneration.Model == nil && c.engine.agents != nil {
+		if selected, err := c.engine.agents.Get(ctx, c.agentID, AgentGetOptions{}); err == nil {
+			request.VideoGeneration.Model = selected.Spec.Model.VideoGeneration
+		}
+	}
+	turnCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	turn := &activeTurn{ctx: turnCtx, cancel: cancel, agentID: c.agentID, request: request}
+	if err := c.generateVideo(turnCtx, turn, sink, *request.VideoGeneration); err != nil {
+		return failedResult(ErrorRuntimeFailed, err.Error())
+	}
+	return TurnResult{Status: TurnSucceeded, Dispatched: true}
+}
+
 func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *modelprovider.VideoGenerationConfig) contract.VideoGenerationHandler {
 	var mu sync.Mutex
 	tasks := map[string]struct{}{}

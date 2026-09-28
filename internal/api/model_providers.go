@@ -364,6 +364,9 @@ func (h *Handler) modelProviderInUse(llm config.LLMConfig, id string) bool {
 		if ref := item.Spec.Model.ImageGeneration; ref != nil && agent.NormalizeModelProviderID(ref.ProviderID) == id {
 			return true
 		}
+		if ref := item.Spec.Model.VideoGeneration; ref != nil && agent.NormalizeModelProviderID(ref.ProviderID) == id {
+			return true
+		}
 		if agent.NormalizeModelProviderID(item.Spec.Model.ProviderID) == id {
 			return true
 		}
