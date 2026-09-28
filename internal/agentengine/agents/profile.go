@@ -51,6 +51,9 @@ var (
 	listCLIProxyModels = func(ctx context.Context, provider string) ([]string, error) {
 		return cliproxy.Default().ListModels(ctx, provider)
 	}
+	cliProxyAuthStatus = func(ctx context.Context, provider string) (cliproxy.AuthStatus, error) {
+		return cliproxy.Default().AuthStatus(ctx, provider)
+	}
 	listCLIProxyModelChoices = func(ctx context.Context, provider string) ([]string, error) {
 		return cliproxy.Default().ListModelChoices(ctx, provider)
 	}

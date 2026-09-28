@@ -2,6 +2,8 @@ package agents
 
 import (
 	"context"
+	"csgclaw/internal/cliproxy"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -318,5 +320,83 @@ func TestImageModelDiscoveryCachesAndClearsNonGPTModels(t *testing.T) {
 				t.Fatal("API catalog lost image models")
 			}
 		}
+	}
+}
+
+func TestCheckCLIProviderRequiresAuthAndRegisteredModels(t *testing.T) {
+	for _, provider := range []string{ModelProviderIDCodex, ModelProviderIDClaude} {
+		t.Run(provider, func(t *testing.T) {
+			for _, tc := range []struct {
+				name          string
+				authenticated bool
+				authError     error
+				listError     error
+				wantStatus    string
+				wantMessage   string
+			}{
+				{name: "missing auth", wantStatus: ModelProviderStatusFailed, wantMessage: "Sign in first"},
+				{name: "auth lookup fails", authError: errors.New("cannot read auth"), wantStatus: ModelProviderStatusFailed, wantMessage: "cannot read auth"},
+				{name: "model discovery fails", authenticated: true, listError: errors.New("models unavailable"), wantStatus: ModelProviderStatusFailed, wantMessage: "models unavailable"},
+				{name: "authenticated models", authenticated: true, wantStatus: ModelProviderStatusConnected, wantMessage: "connected"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					oldAuth, oldModels, oldChoices := cliProxyAuthStatus, listCLIProxyModels, listCLIProxyModelChoices
+					t.Cleanup(func() {
+						cliProxyAuthStatus, listCLIProxyModels, listCLIProxyModelChoices = oldAuth, oldModels, oldChoices
+					})
+					cliProxyAuthStatus = func(_ context.Context, gotProvider string) (cliproxy.AuthStatus, error) {
+						if gotProvider != provider {
+							t.Fatalf("auth provider = %q, want %q", gotProvider, provider)
+						}
+						return cliproxy.AuthStatus{Authenticated: tc.authenticated, Message: "Sign in first"}, tc.authError
+					}
+					listed := false
+					listCLIProxyModels = func(_ context.Context, gotProvider string) ([]string, error) {
+						listed = true
+						if gotProvider != provider {
+							t.Fatalf("models provider = %q, want %q", gotProvider, provider)
+						}
+						return []string{"registered-model"}, tc.listError
+					}
+					listCLIProxyModelChoices = func(context.Context, string) ([]string, error) {
+						t.Fatal("connection check must not use fallback model choices")
+						return nil, nil
+					}
+					got := CheckModelProvider(context.Background(), ModelProviderCheckInput{ID: provider})
+					if got.Status != tc.wantStatus || got.Message != tc.wantMessage {
+						t.Fatalf("check = %+v, want %s: %s", got, tc.wantStatus, tc.wantMessage)
+					}
+					if listed != (tc.authenticated && tc.authError == nil) {
+						t.Fatalf("models listed = %v", listed)
+					}
+					if tc.wantStatus == ModelProviderStatusConnected {
+						if strings.Join(got.Models, ",") != "registered-model" {
+							t.Fatalf("models = %v", got.Models)
+						}
+					} else if len(got.Models) != 0 {
+						t.Fatalf("failed check returned models: %v", got.Models)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestFailedCLIProviderCheckClearsCachedCatalog(t *testing.T) {
+	for _, provider := range []string{ModelProviderIDCodex, ModelProviderIDClaude} {
+		t.Run(provider, func(t *testing.T) {
+			llm := config.LLMConfig{Providers: map[string]config.ProviderConfig{provider: {
+				Status: ModelProviderStatusConnected, Models: []string{"stale-model"}, ImageModels: []string{"stale-image"}, VisionModels: []string{"stale-model"},
+			}}}
+			got, changed := ApplyModelProviderCheckResult(llm, provider, ModelProviderCheckResult{Status: ModelProviderStatusFailed, Message: "Sign in first"})
+			cached := got.Providers[provider]
+			if !changed || cached.Status != ModelProviderStatusFailed || len(cached.Models)+len(cached.ImageModels)+len(cached.VisionModels) != 0 {
+				t.Fatalf("cached provider after failure = %+v, changed = %v", cached, changed)
+			}
+			got, changed = ApplyModelProviderCheckResult(got, provider, ModelProviderCheckResult{Status: ModelProviderStatusConnected, Models: []string{"registered-model"}})
+			if !changed || strings.Join(got.Providers[provider].Models, ",") != "registered-model" {
+				t.Fatalf("catalog did not recover: %+v", got)
+			}
+		})
 	}
 }

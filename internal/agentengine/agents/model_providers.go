@@ -356,10 +356,21 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		models, images, visions = directory.Models, directory.ImageModels, directory.VisionModels
 		result.ModelMetadata = directory.ModelMetadata
 		result.ResolvedBaseURL = baseURL
-	case ModelProviderIDCodex:
-		models, err = listCLIProxyModelChoices(ctx, ProviderCodex)
-	case ModelProviderIDClaude:
-		models, err = listCLIProxyModelChoices(ctx, ProviderClaudeCode)
+	case ModelProviderIDCodex, ModelProviderIDClaude:
+		status, authErr := cliProxyAuthStatus(ctx, id)
+		if authErr != nil {
+			result.Message = conciseProviderError(authErr)
+			return result
+		}
+		if !status.Authenticated {
+			result.Message = strings.TrimSpace(status.Message)
+			if result.Message == "" {
+				result.Message = fmt.Sprintf("%s auth is required. Connect this provider in the CSGClaw UI.", id)
+			}
+			return result
+		}
+		// A fallback catalog is useful for configuration, but cannot prove connectivity.
+		models, err = listCLIProxyModels(ctx, id)
 	case ModelProviderIDCSGHubLite:
 		discovery, discoveryErr := modelprovider.ListCSGHubLiteModels(
 			ctx,
@@ -492,6 +503,11 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 		out.Models = append([]string(nil), result.Models...)
 		out.ImageModels = append([]string(nil), result.ImageModels...)
 		out.VisionModels = append([]string(nil), result.VisionModels...)
+	} else if id == ModelProviderIDCodex || id == ModelProviderIDClaude {
+		out.ModelMetadata = nil
+		out.Models = nil
+		out.ImageModels = nil
+		out.VisionModels = nil
 	}
 	if result.Status == ModelProviderStatusConnected && NormalizeModelProviderID(id) == ModelProviderIDCSGHubLite {
 		if baseURL := strings.TrimRight(strings.TrimSpace(result.ResolvedBaseURL), "/"); baseURL != "" {

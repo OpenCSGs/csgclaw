@@ -147,7 +147,7 @@ export function ModelProviderPage() {
   }, [draftSourceKey, provider]);
 
   useEffect(() => {
-    if (!isOpenCSG) {
+    if (!isOpenCSG && !isBuiltinCLI) {
       return;
     }
     setDraft((current) => ({
@@ -155,7 +155,7 @@ export function ModelProviderPage() {
       baseURL: provider?.base_url || "",
       modelsText: (provider?.models || []).join("\n"),
     }));
-  }, [isOpenCSG, provider]);
+  }, [isBuiltinCLI, isOpenCSG, provider]);
 
   useEffect(() => {
     setCheckState({
@@ -258,7 +258,6 @@ export function ModelProviderPage() {
     setCheckFeedback("");
     const result = await runCheckForDraft(draft.baseURL, draft.apiKey, { showError: true });
     if (result?.status === "connected") setCheckFeedback(t("modelContextChecked"));
-    else if (result) setError(result.message || t("modelContextCheckFailed"));
   }
 
   async function refreshModelMetadata() {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { WorkspaceControllerProvider } from "@/hooks/workspace";
@@ -131,6 +131,21 @@ describe("ModelProviderPage", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each(["codex", "claude_code"])("clears stale %s models after a failed auth check", async (id) => {
+    vi.mocked(checkModelProvider).mockResolvedValue({ id, models: [], status: "failed", message: "Sign in first" });
+    const catalog = createCatalog({ id, kind: id, builtin: true, models: ["stale-model"] });
+    const { rerenderWithCatalog, refreshWorkspaceModelProviders } = renderModelProviderPage(catalog, id);
+    await waitFor(() => expect(refreshWorkspaceModelProviders).toHaveBeenCalled());
+    rerenderWithCatalog(
+      createCatalog({ id, kind: id, builtin: true, models: [], status: "failed", message: "Sign in first" }),
+    );
+    await waitFor(() => expect(screen.queryByText("stale-model")).not.toBeInTheDocument());
+    expect(screen.getAllByText("Sign in first").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Check" }));
+    expect(within(screen.getByRole("dialog")).getAllByText("Sign in first")).toHaveLength(1);
   });
 
   it("checks the provider when opening the page", async () => {
