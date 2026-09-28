@@ -118,6 +118,7 @@ import {
   Select,
   Tooltip,
 } from "@/components/ui";
+import { SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
 import { AgentAppsPanel, AppManagedMCPRows, useAgentApps } from "@/components/business/Apps";
 
 type VoidOrPromise = void | Promise<void>;
@@ -1054,10 +1055,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 skillsLoading={skillsLoading}
                 t={t}
                 onOpenAddSkills={() => setAddSkillsDialogOpen(true)}
-                onRequestDeleteSkill={(skill) => {
-                  setSkillPendingDelete(skill);
-                  setDeleteSkillDialogOpen(true);
-                }}
               />
             ) : null}
 
@@ -2344,7 +2341,6 @@ type AgentSkillsPanelProps = {
   onToggle?: (item: SlashSkillOption) => Promise<void>;
   mutationBusy: boolean;
   onOpenAddSkills: () => void;
-  onRequestDeleteSkill: (skill: SlashSkillOption) => void;
   skillAddBusy: boolean;
   skillAddError: string;
   skillCandidatesLoading: boolean;
@@ -2356,7 +2352,6 @@ type AgentSkillsPanelProps = {
 };
 
 function AgentSkillsPanel({
-  onRequestDeleteSkill,
   onOpenDetail,
   onToggle,
   mutationBusy,
@@ -2429,38 +2424,44 @@ function AgentSkillsPanel({
         </div>
       ) : null}
       {!skillsLoading && skills.length ? (
-        <ResourceList>
+        <div className="hub-skill-card-grid agent-profile-skill-card-grid">
           {skills.map((skill) => (
             <ResourceListCard
               key={skill.name}
               title={skill.name}
               description={skill.description}
-              icon={<FileCode2 size={20} />}
+              icon={<AgentSkillFeaturedIcon />}
               onOpen={() => onOpenDetail(skill)}
               actions={
                 <>
+                  <span className="hub-template-source-badge agent-skill-status-badge">
+                    {skill.enabled === false ? t("appStatusDisabled") : t("resourcesSkillEnabled")}
+                  </span>
                   <Switch
+                    className="agent-skill-card-switch-sm"
                     aria-label={skill.name}
                     checked={skill.enabled !== false}
                     disabled={mutationBusy || !onToggle}
                     onCheckedChange={() => void onToggle?.(skill)}
                   />
-                  <Button
-                    size="sm"
-                    variant="secondaryGray"
-                    disabled={mutationBusy}
-                    aria-label={t("agentDeleteSkill")}
-                    onClick={() => onRequestDeleteSkill(skill)}
-                  >
-                    <Trash2 size={14} />
-                  </Button>
                 </>
               }
             />
           ))}
-        </ResourceList>
+        </div>
       ) : null}
     </section>
+  );
+}
+
+function AgentSkillFeaturedIcon() {
+  return (
+    <span className="hub-skill-featured-icon" aria-hidden="true">
+      <span className="hub-skill-featured-icon-shadow"></span>
+      <span className="hub-skill-featured-icon-glass">
+        <SidebarPuzzlePiece02Icon size={16} aria-hidden="true" />
+      </span>
+    </span>
   );
 }
 

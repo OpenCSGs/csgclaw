@@ -21,6 +21,14 @@
   background: var(--gray-50);
   border-color: var(--brand-600);
 }
+:global(:root[data-theme="dark"]) .card:hover {
+  background: var(--gray-800);
+}
+:global(:root[data-theme="dark"]) .active {
+  background: var(--gray-900);
+  border-color: color-mix(in srgb, var(--brand-400) 50%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand-400) 18%, transparent);
+}
 .content {
   display: flex;
   align-items: center;
@@ -61,12 +69,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+:global(:root[data-theme="dark"]) .title {
+  color: var(--gray-100);
+}
 .description {
   font-size: 12px;
   color: var(--gray-500);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+:global(:root[data-theme="dark"]) .description {
+  color: var(--gray-400);
 }
 .actions {
   display: flex;
