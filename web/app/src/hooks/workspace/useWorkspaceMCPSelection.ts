@@ -424,7 +424,7 @@ export function useWorkspaceMCPSelection({
   const rawMCPServersError = mcpServersQuery.error
     ? errorMessage(mcpServersQuery.error, t("resourcesMCPLoadFailed"))
     : "";
-  const mcpStateError = selectedHubResourceType === "mcp" ? rawMCPServersError : "";
+  const mcpStateError = enabled ? rawMCPServersError : "";
   const remoteMCPServersError =
     remoteMCPServersEnabled && remoteMCPServersQuery.error && !isOpenCSGAuthenticationError(remoteMCPServersQuery.error)
       ? errorMessage(remoteMCPServersQuery.error, t("resourcesMCPRemoteServersLoadFailed"))
