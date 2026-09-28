@@ -252,7 +252,7 @@ func (r *TurnRenderer) publicPromptError() PublicPromptError {
 		"not_found":            {"请求的模型服务不存在，请联系管理员检查配置。", "The requested model service was not found. Contact an administrator."},
 		"rate_limit_exceeded":  {"请求过于频繁，请稍后重试。", "Too many requests. Try again later."},
 		"upstream_unavailable": {"模型服务暂时不可用，请稍后重试。", "The model service is temporarily unavailable. Try again later."},
-		"internal_error":       {"处理消息时发生错误，请稍后重试。", "An error occurred while processing the message. Try again later."},
+		"internal_error":       {"消息处理失败，请稍后重试或前往「活动记录」查看具体原因。", "An error occurred while processing the message. Try again later."},
 	}
 	pair := messages[code]
 	message := pair[1]

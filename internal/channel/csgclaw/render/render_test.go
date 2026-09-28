@@ -149,11 +149,11 @@ func TestTurnRendererIdentifiesOnlyItsPromptErrorMessage(t *testing.T) {
 	t.Parallel()
 
 	renderer := NewTurnRenderer()
-	if renderer.IsPromptErrorMessage("处理消息时发生错误，请稍后重试。") {
+	if renderer.IsPromptErrorMessage("消息处理失败，请稍后重试或前往「活动记录」查看具体原因。") {
 		t.Fatal("ordinary model text was identified as a prompt error")
 	}
 	renderer.SetPromptError("boom")
-	if !renderer.IsPromptErrorMessage("处理消息时发生错误，请稍后重试。") {
+	if !renderer.IsPromptErrorMessage("消息处理失败，请稍后重试或前往「活动记录」查看具体原因。") {
 		t.Fatal("generated prompt error was not identified")
 	}
 	if renderer.IsPromptErrorMessage("another failure") {
