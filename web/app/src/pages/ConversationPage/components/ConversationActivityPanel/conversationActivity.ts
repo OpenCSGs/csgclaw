@@ -301,10 +301,13 @@ export function conversationWorkingParticipantsWithActivity(
 }
 
 function conversationWorkingDetailForEntry(entry: ConversationActivityEntry): string {
-  return conversationActivityEntryDetails(entry)
-    .map((detail) => detail.value.trim())
-    .filter(Boolean)
-    .join("\n\n");
+  if (entry.command || entry.activity?.content.msgtype === AgentActivityMsgTypes.tool) {
+    return "";
+  }
+  if (entry.activity) {
+    return entry.activity.content.body.trim();
+  }
+  return cleanMessageBody(entry.message.content).trim();
 }
 
 function conversationWorkingActionForStage(

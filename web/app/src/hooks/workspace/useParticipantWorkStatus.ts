@@ -119,6 +119,7 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
         room_id: roomID,
       });
       setStopRequests((current) => ({ ...current, [leaseID]: { state: "accepted" } }));
+      dispatch({ leaseID, participantID, roomID, type: "closeLeaseLocally" });
     } catch (error) {
       setStopRequests((current) => ({
         ...current,

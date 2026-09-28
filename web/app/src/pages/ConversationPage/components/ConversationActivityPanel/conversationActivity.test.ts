@@ -199,14 +199,14 @@ describe("conversation activity model", () => {
     expect(working.map((participant) => participant.name)).toEqual(["qa", "dev"]);
     expect(working[0]?.activity).toMatchObject({
       action: "editing",
-      detail: "playwright.config.ts",
       summary: "playwright.config.ts",
     });
+    expect(working[0]?.activity?.detail).toBe("");
     expect(working[1]?.activity).toMatchObject({
       action: "searching",
-      detail: "release checklist",
       summary: "release checklist",
     });
+    expect(working[1]?.activity?.detail).toBe("");
   });
 
   it("does not reuse an older turn's content before the current request emits activity", () => {
@@ -270,6 +270,7 @@ describe("conversation activity model", () => {
       summary: "csgclaw-cli participant list --channel csgclaw",
       toolName: "exec_command",
     });
+    expect(working?.activity?.detail).toBe("");
   });
 
   it("uses explicit work stages for model waits and final generation", () => {

@@ -24,9 +24,9 @@ function defaultTranslate(key: string, params?: Record<string, unknown>) {
   if (key === "conversationWorkingProcessSubtitle") return `${params?.count} 个智能体正在处理`;
   if (key === "conversationWorkingProcessCount") return `${params?.count} 个运行中`;
   if (key === "conversationWorkingActivityDrawer") return "活动记录";
-  if (key === "conversationWorkingExpandProcess") return "展开过程";
-  if (key === "conversationWorkingCollapseProcess") return "收起过程";
-  if (key === "conversationWorkingResizeProcess") return "调整运行过程高度";
+  if (key === "conversationWorkingExpandProcess") return "展开";
+  if (key === "conversationWorkingCollapseProcess") return "收起";
+  if (key === "conversationWorkingResizeProcess") return "拖拽调整高度";
   if (key === "cancel") return "取消";
   if (key === "close") return "关闭";
   if (key === "connectorConnected") return "已连接";
@@ -117,9 +117,9 @@ describe("ConversationComposer working activity", () => {
           if (key === "conversationWorkingProcessSubtitle") return `${params?.count} 个智能体正在处理`;
           if (key === "conversationWorkingProcessCount") return `${params?.count} 个运行中`;
           if (key === "conversationWorkingActivityDrawer") return "活动记录";
-          if (key === "conversationWorkingExpandProcess") return "展开过程";
-          if (key === "conversationWorkingCollapseProcess") return "收起过程";
-          if (key === "conversationWorkingResizeProcess") return "调整运行过程高度";
+          if (key === "conversationWorkingExpandProcess") return "展开";
+          if (key === "conversationWorkingCollapseProcess") return "收起";
+          if (key === "conversationWorkingResizeProcess") return "拖拽调整高度";
           return key;
         }}
         workingParticipants={[participant, toolParticipant]}
@@ -135,7 +135,7 @@ describe("ConversationComposer working activity", () => {
       />,
     );
 
-    const processToggle = screen.getByRole("button", { name: "收起过程" });
+    const processToggle = screen.getByRole("button", { name: "收起" });
     expect(processToggle).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByText("正在检查可用的 agent").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("manager")).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe("ConversationComposer working activity", () => {
     expect(screen.queryByText("运行过程")).not.toBeInTheDocument();
     expect(screen.getByText("manager")).toBeInTheDocument();
     expect(screen.queryByText("exec_command")).toBeInTheDocument();
-    const compactExpand = screen.getByRole("button", { name: "展开过程" });
+    const compactExpand = screen.getByRole("button", { name: "展开" });
     expect(compactExpand).toHaveAttribute("aria-expanded", "false");
   });
 
@@ -217,9 +217,9 @@ describe("ConversationComposer working activity", () => {
           if (key === "conversationWorkingProcessSubtitle") return `${params?.count} 个智能体正在处理`;
           if (key === "conversationWorkingProcessCount") return `${params?.count} 个运行中`;
           if (key === "conversationWorkingActivityDrawer") return "活动记录";
-          if (key === "conversationWorkingExpandProcess") return "展开过程";
-          if (key === "conversationWorkingCollapseProcess") return "收起过程";
-          if (key === "conversationWorkingResizeProcess") return "调整运行过程高度";
+          if (key === "conversationWorkingExpandProcess") return "展开";
+          if (key === "conversationWorkingCollapseProcess") return "收起";
+          if (key === "conversationWorkingResizeProcess") return "拖拽调整高度";
           return key;
         }}
         workingParticipants={[participant, emptyReasoning]}
@@ -235,7 +235,7 @@ describe("ConversationComposer working activity", () => {
       />,
     );
 
-    const processToggle = screen.getByRole("button", { name: "收起过程" });
+    const processToggle = screen.getByRole("button", { name: "收起" });
     expect(processToggle).toHaveAttribute("aria-expanded", "true");
     const thinkingLatest = container.querySelector(".composer-thinking-latest");
     const thinkingTranscript = container.querySelector(".composer-thinking-transcript");
@@ -259,10 +259,10 @@ describe("ConversationComposer working activity", () => {
     expect(container.querySelector(".composer-thinking-latest")).toHaveTextContent("next");
     expect(container.querySelector(".composer-thinking-transcript")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "停止 worker 的当前请求" })).toBeInTheDocument();
-    const compactExpand = screen.getByRole("button", { name: "展开过程" });
+    const compactExpand = screen.getByRole("button", { name: "展开" });
     expect(compactExpand).toHaveAttribute("aria-expanded", "false");
     await user.click(compactExpand);
-    expect(screen.getByText("运行过程")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "收起" })).toHaveAttribute("aria-expanded", "true");
     expect(container.querySelector(".composer-thinking-transcript")).toHaveTextContent("next");
   });
 
@@ -279,7 +279,7 @@ describe("ConversationComposer working activity", () => {
     });
 
     const workingPanel = container.querySelector<HTMLElement>(".composer-working");
-    const resizeHandle = screen.getByRole("separator", { name: "调整运行过程高度" });
+    const resizeHandle = screen.getByRole("separator", { name: "拖拽调整高度" });
 
     expect(workingPanel).toHaveStyle({ "--composer-thinking-transcript-max-height": "104px" });
     fireEvent.pointerDown(resizeHandle, { clientY: 200 });
@@ -312,7 +312,7 @@ describe("ConversationComposer working activity", () => {
       workingParticipants: [firstParticipant],
     });
 
-    await user.click(screen.getByRole("button", { name: "收起过程" }));
+    await user.click(screen.getByRole("button", { name: "收起" }));
     expect(container.querySelector(".composer-thinking-transcript")).not.toBeInTheDocument();
 
     rerender(
@@ -346,7 +346,7 @@ describe("ConversationComposer working activity", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "收起过程" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "收起" })).toHaveAttribute("aria-expanded", "true");
     expect(container.querySelector(".composer-thinking-transcript")).toHaveTextContent("second turn");
   });
 
@@ -414,6 +414,58 @@ describe("ConversationComposer working activity", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("dismisses the lingered working process when a final message appears", () => {
+    const participant: ConversationWorkingParticipant = {
+      activity: {
+        action: ConversationWorkingActions.replying,
+        summary: "正在整理答案",
+      },
+      id: "u-manager",
+      name: "manager",
+    };
+
+    const { rerender } = renderConversationComposer({
+      workingParticipants: [participant],
+      workingStatusDismissKey: "message-1|10:00|prompt",
+    });
+
+    expect(screen.getAllByText("正在整理答案").length).toBeGreaterThanOrEqual(2);
+
+    rerender(
+      <ConversationComposer
+        authBusyProvider=""
+        authStatuses={{}}
+        composerDisabled={false}
+        composerError=""
+        draftSegments={[]}
+        draftText=""
+        editorRef={createRef<HTMLDivElement>()}
+        managerProvider=""
+        mentionCandidates={[]}
+        mentionIndex={0}
+        mentionableUsersByName={new Map()}
+        slashCandidates={[]}
+        slashIndex={0}
+        slashPickerLoading={false}
+        slashPickerOpen={false}
+        t={defaultTranslate}
+        workingParticipants={[]}
+        workingStatusDismissKey="message-2|10:01|answer"
+        onAddAttachments={vi.fn()}
+        onApplyMention={vi.fn()}
+        onApplySlashCandidate={vi.fn()}
+        onComposerCompositionEnd={vi.fn()}
+        onComposerCompositionStart={vi.fn()}
+        onComposerKeyDown={vi.fn()}
+        onProviderLogin={vi.fn()}
+        onSendMessage={vi.fn()}
+        onSyncComposer={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("正在整理答案")).not.toBeInTheDocument();
   });
 });
 

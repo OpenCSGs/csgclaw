@@ -1,7 +1,7 @@
 import { ContextUsageRing } from "./ContextUsageRing";
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode, PointerEvent as ReactPointerEvent, RefObject } from "react";
-import { ArrowUp, ChevronDown, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, Tooltip } from "@/components/ui";
@@ -77,6 +77,7 @@ export type ConversationComposerProps = {
   slashPickerLoading: boolean;
   slashPickerOpen: boolean;
   t: TranslateFn;
+  workingStatusDismissKey?: string;
   workingParticipants?: ConversationWorkingParticipant[];
 };
 
@@ -105,6 +106,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   slashPickerLoading,
   slashPickerOpen,
   t,
+  workingStatusDismissKey = "",
   workingParticipants = [],
   onApplyMention,
   onApplySlashCandidate,
@@ -129,7 +131,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   const interactionDisabled = composerDisabled || isSending;
   const sendDisabled = interactionDisabled || (!draftText.trim() && attachmentDrafts.length === 0);
   const actionSuggestions = useMemo(() => composerActionSuggestions(draftText), [draftText]);
-  const lingeredWorkingParticipants = useLingeringWorkingParticipants(workingParticipants);
+  const lingeredWorkingParticipants = useLingeringWorkingParticipants(workingParticipants, workingStatusDismissKey);
   const visibleWorkingParticipants =
     workingParticipants.length > 0 ? workingParticipants : disableCompletedWorkingActions(lingeredWorkingParticipants);
 
@@ -345,20 +347,28 @@ export const ConversationComposer = memo(function ConversationComposer({
 
 function useLingeringWorkingParticipants(
   participants: readonly ConversationWorkingParticipant[],
+  dismissKey: string,
 ): ConversationWorkingParticipant[] {
   const [visibleParticipants, setVisibleParticipants] = useState<ConversationWorkingParticipant[]>([]);
+  const lastActiveDismissKeyRef = useRef(dismissKey);
 
   useEffect(() => {
     if (participants.length > 0) {
+      lastActiveDismissKeyRef.current = dismissKey;
       setVisibleParticipants([...participants]);
       return undefined;
     }
     if (visibleParticipants.length === 0) {
       return undefined;
     }
+    if (dismissKey && dismissKey !== lastActiveDismissKeyRef.current) {
+      lastActiveDismissKeyRef.current = dismissKey;
+      setVisibleParticipants([]);
+      return undefined;
+    }
     const timer = window.setTimeout(() => setVisibleParticipants([]), WORKING_STATUS_LINGER_MS);
     return () => window.clearTimeout(timer);
-  }, [participants, visibleParticipants.length]);
+  }, [dismissKey, participants, visibleParticipants.length]);
 
   return visibleParticipants;
 }
@@ -389,9 +399,6 @@ function ComposerWorkingIndicator({
   const [processHeight, setProcessHeight] = useState(WORKING_PROCESS_DEFAULT_HEIGHT);
   const activeCount = participants.length;
   const turnKey = participants.map((participant) => participant.leaseID || participant.requestID || participant.id).join("|");
-  const latestSummary = participants
-    .map((participant) => participant.activity?.summary?.trim() || latestThinkingLine(participant.thinkingText || ""))
-    .find(Boolean);
 
   useEffect(() => {
     setExpanded(true);
@@ -429,49 +436,6 @@ function ComposerWorkingIndicator({
       className={`composer-working${expanded ? "" : " is-collapsed"}`}
       style={{ "--composer-thinking-transcript-max-height": `${processHeight}px` } as CSSProperties}
     >
-      {expanded ? (
-        <>
-          <div
-            className="composer-working-resize-handle"
-            role="separator"
-            aria-label={t("conversationWorkingResizeProcess")}
-            aria-orientation="horizontal"
-            aria-valuemin={WORKING_PROCESS_MIN_HEIGHT}
-            aria-valuemax={WORKING_PROCESS_MAX_HEIGHT}
-            aria-valuenow={processHeight}
-            tabIndex={0}
-            onKeyDown={handleResizeKeyDown}
-            onPointerDown={handleResizePointerDown}
-          />
-          <div className="composer-working-header">
-            <div className="composer-working-heading">
-              <span className="composer-working-toggle-title">{t("conversationWorkingProcessTitle")}</span>
-              <span className="composer-working-toggle-subtitle">
-                {latestSummary || t("conversationWorkingProcessSubtitle", { count: activeCount })}
-              </span>
-            </div>
-            <div className="composer-working-actions">
-              <span className="composer-working-toggle-count">
-                {t("conversationWorkingProcessCount", { count: activeCount })}
-              </span>
-              {onAction ? (
-                <button type="button" className="composer-working-activity-button" onClick={() => onAction()}>
-                  {t("conversationWorkingActivityDrawer")}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="composer-working-toggle-button"
-                aria-expanded="true"
-                onClick={() => setExpanded(false)}
-              >
-                {t("conversationWorkingCollapseProcess")}
-                <ChevronDown aria-hidden="true" className="composer-working-toggle-icon" size={16} />
-              </button>
-            </div>
-          </div>
-        </>
-      ) : null}
       <div className="composer-working-status" role="status" aria-live="polite">
         {participants.map((participant, index) => (
           <ComposerWorkingTurn
@@ -479,15 +443,63 @@ function ComposerWorkingIndicator({
             participant={participant}
             expandControl={
               !expanded && index === 0 ? (
-                <button
-                  type="button"
+                <Button
                   className="composer-working-toggle-button"
+                  size="sm"
+                  variant="secondaryGray"
                   aria-expanded="false"
                   onClick={() => setExpanded(true)}
                 >
                   {t("conversationWorkingExpandProcess")}
                   <ChevronDown aria-hidden="true" className="composer-working-toggle-icon" size={16} />
-                </button>
+                </Button>
+              ) : null
+            }
+            resizeControl={
+              expanded && index === 0 ? (
+                <Tooltip content={t("conversationWorkingResizeProcess")} contentProps={{ side: "top", sideOffset: 6 }}>
+                  <div
+                    className="composer-working-resize-handle"
+                    role="separator"
+                    aria-label={t("conversationWorkingResizeProcess")}
+                    aria-orientation="horizontal"
+                    aria-valuemin={WORKING_PROCESS_MIN_HEIGHT}
+                    aria-valuemax={WORKING_PROCESS_MAX_HEIGHT}
+                    aria-valuenow={processHeight}
+                    tabIndex={0}
+                    onKeyDown={handleResizeKeyDown}
+                    onPointerDown={handleResizePointerDown}
+                  />
+                </Tooltip>
+              ) : null
+            }
+            rowActions={
+              expanded && index === 0 ? (
+                <div className="composer-working-actions">
+                  <span className="composer-working-toggle-count">
+                    {t("conversationWorkingProcessCount", { count: activeCount })}
+                  </span>
+                  {onAction ? (
+                    <Button
+                      className="composer-working-activity-button"
+                      size="sm"
+                      variant="secondaryGray"
+                      onClick={() => onAction()}
+                    >
+                      {t("conversationWorkingActivityDrawer")}
+                    </Button>
+                  ) : null}
+                  <Button
+                    className="composer-working-toggle-button"
+                    size="sm"
+                    variant="secondaryGray"
+                    aria-expanded="true"
+                    onClick={() => setExpanded(false)}
+                  >
+                    {t("conversationWorkingCollapseProcess")}
+                    <ChevronUp aria-hidden="true" className="composer-working-toggle-icon" size={16} />
+                  </Button>
+                </div>
               ) : null
             }
             showDetails={expanded}
@@ -504,6 +516,8 @@ function ComposerWorkingIndicator({
 function ComposerWorkingTurn({
   participant,
   expandControl,
+  resizeControl,
+  rowActions,
   showDetails,
   t,
   onAction,
@@ -511,6 +525,8 @@ function ComposerWorkingTurn({
 }: {
   participant: ConversationWorkingParticipant;
   expandControl?: ReactNode;
+  resizeControl?: ReactNode;
+  rowActions?: ReactNode;
   showDetails?: boolean;
   t: TranslateFn;
   onAction?: (participant?: ConversationWorkingParticipant) => void;
@@ -598,6 +614,8 @@ function ComposerWorkingTurn({
           </span>
         ) : null}
         {expandControl}
+        {resizeControl}
+        {rowActions}
       </div>
       {showDetails && processDetails.length > 0 ? (
         <div className="composer-thinking-transcript">

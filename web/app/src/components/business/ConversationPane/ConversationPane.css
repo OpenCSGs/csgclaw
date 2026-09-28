@@ -675,12 +675,13 @@
 
 .composer-working {
   --composer-thinking-transcript-max-height: 104px;
+  position: relative;
   min-width: 0;
   margin: 0 0 8px;
   border: 1px solid color-mix(in oklab, var(--brand-400) 18%, var(--line));
   border-radius: 8px;
   padding: 6px;
-  background: color-mix(in oklab, var(--brand-25) 26%, var(--surface));
+  background: var(--surface);
   box-shadow: inset 0 1px 0 color-mix(in oklab, var(--surface) 84%, transparent);
   font: var(--text-xs-normal);
 }
@@ -692,47 +693,12 @@
   box-shadow: none;
 }
 
-.composer-working-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  width: 100%;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
 .composer-working-actions {
   display: flex;
+  margin-left: auto;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.composer-working-heading {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 3px 5px 3px 7px;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-.composer-working-toggle-title {
-  flex: none;
-  color: var(--text);
-  font-weight: var(--font-weight-semibold);
-}
-
-.composer-working-toggle-subtitle {
-  overflow: hidden;
-  min-width: 0;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .composer-working-toggle-count {
@@ -745,47 +711,13 @@
   white-space: nowrap;
 }
 
-.composer-working-activity-button,
 .composer-working-toggle-button {
-  min-height: 28px;
-  border: 1px solid color-mix(in oklab, var(--line) 76%, transparent);
-  border-radius: 7px;
-  padding: 3px 9px;
-  background: color-mix(in oklab, var(--panel-strong) 72%, var(--surface));
-  color: var(--text);
-  font: inherit;
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.composer-working-toggle-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 84px;
-}
-
-.composer-working-activity-button:hover,
-.composer-working-toggle-button:hover {
-  border-color: color-mix(in oklab, var(--brand-400) 28%, var(--line));
-  background: color-mix(in oklab, var(--brand-25) 36%, var(--surface));
-}
-
-.composer-working-activity-button:focus-visible,
-.composer-working-toggle-button:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  min-width: 64px;
 }
 
 .composer-working-toggle-icon {
   color: var(--muted);
   transition: transform 140ms ease;
-}
-
-.composer-working-toggle-button[aria-expanded="false"] .composer-working-toggle-icon {
-  transform: rotate(-90deg);
 }
 
 .composer-working-status {
@@ -795,7 +727,7 @@
   align-items: flex-start;
   gap: 5px;
   min-width: 0;
-  margin-top: 6px;
+  margin-top: 0;
 }
 
 .composer-working:not(.is-collapsed) .composer-working-status {
@@ -812,6 +744,7 @@
 }
 
 .composer-working-row {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 0;
@@ -927,11 +860,15 @@
 }
 
 .composer-working-resize-handle {
-  position: relative;
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
   width: 46px;
   height: 14px;
-  margin: -2px auto 3px;
+  margin: 0;
   cursor: ns-resize;
+  transform: translate(-50%, -50%);
   touch-action: none;
 }
 

@@ -319,6 +319,10 @@ function ConversationPaneContent({
     () => conversationWorkingParticipantsWithActivity(workingParticipants, activityAgents, activityEntries),
     [activityAgents, activityEntries, workingParticipants],
   );
+  const workingStatusDismissKey = useMemo(() => {
+    const message = visibleMessages[visibleMessages.length - 1];
+    return message ? [message.id || "", message.created_at || "", message.content || ""].join("|") : "";
+  }, [visibleMessages]);
 
   useConversationDraftEditorSync(editorRef, draftSegments);
 
@@ -617,6 +621,7 @@ function ConversationPaneContent({
           slashPickerLoading={slashPickerLoading}
           slashPickerOpen={slashPickerOpen}
           t={t}
+          workingStatusDismissKey={workingStatusDismissKey}
           workingParticipants={workingParticipantsWithActivity}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}

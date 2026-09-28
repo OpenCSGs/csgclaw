@@ -24,6 +24,7 @@ export type ParticipantWorkState = {
 
 export type ParticipantWorkAction =
   | { now: number; type: "clock" }
+  | { leaseID: string; participantID: string; roomID: string; type: "closeLeaseLocally" }
   | { participantIDs: string[]; type: "participantLifecycle" }
   | { memberParticipantIDs?: string[]; roomID: string; type: "roomLifecycle" }
   | { type: "reset" }
@@ -46,6 +47,8 @@ export function participantWorkReducer(
       return createParticipantWorkState();
     case "clock":
       return applyClock(state, action.now);
+    case "closeLeaseLocally":
+      return closeLeaseLocally(state, action.roomID, action.participantID, action.leaseID);
     case "participantLifecycle":
       return removeParticipants(state, action.participantIDs);
     case "roomLifecycle":
@@ -102,6 +105,21 @@ export function nextParticipantWorkDeadline(state: ParticipantWorkState): number
     next = next === null ? closed.forgetAt : Math.min(next, closed.forgetAt);
   });
   return next;
+}
+
+function closeLeaseLocally(
+  state: ParticipantWorkState,
+  roomIDValue: string,
+  participantIDValue: string,
+  leaseIDValue: string,
+): ParticipantWorkState {
+  const roomID = String(roomIDValue || "").trim();
+  const participantID = String(participantIDValue || "").trim();
+  const leaseID = String(leaseIDValue || "").trim();
+  if (!roomID || !participantID || !leaseID || !state.activeByRoom[roomID]?.[participantID]?.[leaseID]) {
+    return state;
+  }
+  return closeLease(state, roomID, participantID, leaseID, Number.MAX_SAFE_INTEGER, Date.now());
 }
 
 function applyWorkEvent(current: ParticipantWorkState, work: ParticipantWorkUpdate, now: number): ParticipantWorkState {
