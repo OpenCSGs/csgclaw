@@ -56,6 +56,18 @@ Common local defaults:
 - task state: `~/.csgclaw/tasks`
 - built-in IM state: `~/.csgclaw/im/state.json`
 
+### Corrupt or missing IM state
+
+If startup reports `decode im bootstrap`, the error identifies the IM state file that could not be decoded.
+Do not delete the file or reinitialize; stop the service and preserve the entire `.csgclaw` directory before investigating a copy or contacting support.
+On Windows, the default directory is `%USERPROFILE%\.csgclaw`.
+If a known-good backup is available, restore its IM state together with the corresponding sessions, threads, and attachments instead of mixing files from different points in time.
+
+IM state saves write and sync a temporary file in the same directory before replacing the original, avoiding in-place truncation of the active state file.
+If the state file is missing but session, thread, or attachment files remain, startup stops and preserves the data instead of treating the installation as new and cleaning up its history.
+This protection does not reconstruct damaged or deleted data and does not replace a complete backup.
+Rooms or Workers disappearing from the UI does not establish that all Agent data was deleted; inspect the IM index and root Agent state separately.
+
 ## `csgclaw`
 
 ### Global flags

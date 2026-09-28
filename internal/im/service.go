@@ -337,6 +337,9 @@ func LoadBootstrap(path string) (Bootstrap, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if err := checkMissingBootstrap(path); err != nil {
+				return Bootstrap{}, err
+			}
 			return DefaultBootstrap(), nil
 		}
 		return Bootstrap{}, fmt.Errorf("read im bootstrap: %w", err)
@@ -344,7 +347,7 @@ func LoadBootstrap(path string) (Bootstrap, error) {
 
 	var persisted persistedBootstrap
 	if err := json.Unmarshal(data, &persisted); err != nil {
-		return Bootstrap{}, fmt.Errorf("decode im bootstrap: %w", err)
+		return Bootstrap{}, fmt.Errorf("decode im bootstrap %q: %w; %s", path, err, bootstrapRecoveryGuidance)
 	}
 	state, err := loadPersistedBootstrap(path, persisted)
 	if err != nil {
@@ -420,7 +423,7 @@ func writePersistedBootstrap(path string, persisted persistedBootstrap) error {
 	}
 	data = append(data, '\n')
 
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := atomicWriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write im bootstrap: %w", err)
 	}
 	return nil
