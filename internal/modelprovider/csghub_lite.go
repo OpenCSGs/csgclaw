@@ -21,9 +21,11 @@ const (
 // the same reachable endpoint as model discovery.
 type ModelDiscoveryResult struct {
 	ModelMetadata   map[string]modelcap.Metadata
+	VideoMetadata   map[string]modelcap.VideoGeneration
 	ResolvedBaseURL string
 	Models          []string
 	ImageModels     []string
+	VideoModels     []string
 	VisionModels    []string
 }
 
@@ -72,6 +74,8 @@ func ListCSGHubLiteModelsWithClient(
 				ResolvedBaseURL: candidate,
 				Models:          directory.Models,
 				ImageModels:     directory.ImageModels,
+				VideoModels:     directory.VideoModels,
+				VideoMetadata:   directory.VideoMetadata,
 				VisionModels:    directory.VisionModels,
 			}, nil
 		}

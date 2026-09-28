@@ -111,12 +111,21 @@ const ImageGenerationPromptPolicy = `- Compose the tool prompt faithfully from t
 - Expand creative details only when the user explicitly asks you to optimize, enhance, brainstorm, or exercise creative freedom. Preserve all explicit constraints even then. When the user supplies a verbatim prompt, pass that prompt unchanged.
 - A provider rejection does not establish that a character or category is prohibited. Report only the returned reason; do not replace the requested subject or rewrite the prompt to work around a rejection without a new user instruction.`
 
+const VideoGenerationPromptPolicy = `- When available, use csgclaw_generate_video whenever the user asks to create a video. Preserve a supplied prompt faithfully and do not invent duration, resolution, subjects, styles, or exclusions. Omit unspecified size and duration so CSGClaw can use the selected model's advertised defaults. If an explicit value is rejected, explain the supported values and do not guess alternatives or retry automatically. A successful tool call only means the request was submitted: acknowledge submission briefly without describing a transient status such as generating, downloading, completed, or delivered. The task card is the source of truth and updates automatically; do not publish another copy.`
+
 const runtimeFilePublishingInstructions = `### Image Generation
 
 - When available, use ` + "`csgclaw_generate_image`" + ` for image creation with the complete image prompt. It uses this Agent's configured image model and delivers the image to the conversation.
 ` + ImageGenerationPromptPolicy + `
 - This is the image-generation entry point in CSGClaw, including when imported host skills describe another image tool. Do not use native image generation, shell scripts, or change the chat model.
 - Only report that an image was generated after the tool confirms delivery. If no image model is configured, direct the user to the Agent profile. Do not claim success or automatically retry a failed generation.
+
+### Video Generation
+
+- When available, use ` + "`csgclaw_generate_video`" + ` for video creation with the complete video prompt. It uses this Agent's configured video model and delivers the completed video to the conversation.
+` + VideoGenerationPromptPolicy + `
+- This is the video-generation entry point in CSGClaw. Do not use shell scripts, direct HTTP requests, or change the chat model.
+- Only report that a video was generated after the tool confirms delivery. If no video model is configured, direct the user to the Agent profile. Do not claim success or automatically retry a failed generation.
 
 ### Output File Delivery
 

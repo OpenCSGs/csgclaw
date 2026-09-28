@@ -50,38 +50,42 @@ type ModelProviderCatalog struct {
 }
 
 type ModelProviderSummary struct {
-	ModelDefaults   map[string]modelcap.Resolved `json:"model_defaults"`
-	ModelMetadata   map[string]modelcap.Resolved `json:"model_metadata"`
-	ModelOverrides  map[string]modelcap.Metadata `json:"model_overrides"`
-	ImageModels     []string                     `json:"image_models"`
-	VisionModels    []string                     `json:"vision_models"`
-	ID              string                       `json:"id"`
-	Kind            string                       `json:"kind"`
-	DisplayName     string                       `json:"display_name"`
-	Preset          string                       `json:"preset,omitempty"`
-	Builtin         bool                         `json:"builtin"`
-	BaseURL         string                       `json:"base_url,omitempty"`
-	APIKey          string                       `json:"api_key,omitempty"`
-	APIKeySet       bool                         `json:"api_key_set"`
-	APIKeyPreview   string                       `json:"api_key_preview,omitempty"`
-	Headers         map[string]string            `json:"headers,omitempty"`
-	Models          []string                     `json:"models"`
-	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
-	Status          string                       `json:"status"`
-	Message         string                       `json:"message,omitempty"`
-	LastCheckedAt   string                       `json:"last_checked_at,omitempty"`
+	ModelDefaults   map[string]modelcap.Resolved        `json:"model_defaults"`
+	ModelMetadata   map[string]modelcap.Resolved        `json:"model_metadata"`
+	ModelOverrides  map[string]modelcap.Metadata        `json:"model_overrides"`
+	ImageModels     []string                            `json:"image_models"`
+	VideoModels     []string                            `json:"video_models"`
+	VideoMetadata   map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
+	VisionModels    []string                            `json:"vision_models"`
+	ID              string                              `json:"id"`
+	Kind            string                              `json:"kind"`
+	DisplayName     string                              `json:"display_name"`
+	Preset          string                              `json:"preset,omitempty"`
+	Builtin         bool                                `json:"builtin"`
+	BaseURL         string                              `json:"base_url,omitempty"`
+	APIKey          string                              `json:"api_key,omitempty"`
+	APIKeySet       bool                                `json:"api_key_set"`
+	APIKeyPreview   string                              `json:"api_key_preview,omitempty"`
+	Headers         map[string]string                   `json:"headers,omitempty"`
+	Models          []string                            `json:"models"`
+	ReasoningEffort string                              `json:"reasoning_effort,omitempty"`
+	Status          string                              `json:"status"`
+	Message         string                              `json:"message,omitempty"`
+	LastCheckedAt   string                              `json:"last_checked_at,omitempty"`
 }
 
 type ModelProviderCheckResult struct {
-	ModelMetadata   map[string]modelcap.Metadata `json:"model_metadata,omitempty"`
-	ImageModels     []string                     `json:"image_models"`
-	VisionModels    []string                     `json:"vision_models"`
-	ID              string                       `json:"id"`
-	ResolvedBaseURL string                       `json:"base_url,omitempty"`
-	Status          string                       `json:"status"`
-	Message         string                       `json:"message,omitempty"`
-	Models          []string                     `json:"models"`
-	LastCheckedAt   string                       `json:"last_checked_at"`
+	ModelMetadata   map[string]modelcap.Metadata        `json:"model_metadata,omitempty"`
+	VideoMetadata   map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
+	ImageModels     []string                            `json:"image_models"`
+	VideoModels     []string                            `json:"video_models"`
+	VisionModels    []string                            `json:"vision_models"`
+	ID              string                              `json:"id"`
+	ResolvedBaseURL string                              `json:"base_url,omitempty"`
+	Status          string                              `json:"status"`
+	Message         string                              `json:"message,omitempty"`
+	Models          []string                            `json:"models"`
+	LastCheckedAt   string                              `json:"last_checked_at"`
 }
 
 type ModelProviderCheckInput struct {
@@ -227,6 +231,8 @@ func builtinModelProviderSummary(id string, provider config.ProviderConfig) Mode
 		Builtin:       true,
 		Models:        append([]string(nil), provider.Models...),
 		ImageModels:   imageModels(id, provider.Models, provider.ImageModels),
+		VideoModels:   videoModels(id, provider.Models, provider.VideoModels),
+		VideoMetadata: modelcap.CloneVideoGeneration(provider.VideoMetadata),
 		VisionModels:  append([]string(nil), provider.VisionModels...),
 		Status:        ModelProviderStatusUnknown,
 		APIKeySet:     true,
@@ -299,6 +305,8 @@ func customProviderSummary(id string, provider config.ProviderConfig) ModelProvi
 		Headers:         cloneStringMap(provider.Headers),
 		Models:          append([]string(nil), provider.Models...),
 		ImageModels:     imageModels(id, provider.Models, provider.ImageModels),
+		VideoModels:     videoModels(id, provider.Models, provider.VideoModels),
+		VideoMetadata:   modelcap.CloneVideoGeneration(provider.VideoMetadata),
 		VisionModels:    append([]string(nil), provider.VisionModels...),
 		ReasoningEffort: provider.ReasoningEffort,
 		Status:          providerStatusOrUnknown(provider.Status),
@@ -336,6 +344,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 	var (
 		models  []string
 		images  []string
+		videos  []string
 		visions []string
 		err     error
 	)
@@ -353,8 +362,9 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		}
 		var directory modelprovider.ModelDiscoveryResult
 		directory, err = modelprovider.ListOpenCSGModelDirectoryWithClient(ctx, client, baseURL, apiKey, input.Headers)
-		models, images, visions = directory.Models, directory.ImageModels, directory.VisionModels
+		models, images, videos, visions = directory.Models, directory.ImageModels, directory.VideoModels, directory.VisionModels
 		result.ModelMetadata = directory.ModelMetadata
+		result.VideoMetadata = directory.VideoMetadata
 		result.ResolvedBaseURL = baseURL
 	case ModelProviderIDCodex, ModelProviderIDClaude:
 		status, authErr := cliProxyAuthStatus(ctx, id)
@@ -380,8 +390,10 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		)
 		models = discovery.Models
 		images = discovery.ImageModels
+		videos = discovery.VideoModels
 		visions = discovery.VisionModels
 		result.ModelMetadata = discovery.ModelMetadata
+		result.VideoMetadata = discovery.VideoMetadata
 		result.ResolvedBaseURL = discovery.ResolvedBaseURL
 		err = discoveryErr
 	default:
@@ -389,8 +401,9 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 		apiKey := strings.TrimSpace(input.APIKey)
 		var directory modelprovider.ModelDiscoveryResult
 		directory, err = modelprovider.ListOpenAIModelDirectoryWithClient(ctx, &http.Client{Timeout: 3 * time.Second}, baseURL, apiKey, input.Headers)
-		models, images, visions = directory.Models, directory.ImageModels, directory.VisionModels
+		models, images, videos, visions = directory.Models, directory.ImageModels, directory.VideoModels, directory.VisionModels
 		result.ModelMetadata = directory.ModelMetadata
+		result.VideoMetadata = directory.VideoMetadata
 		result.ResolvedBaseURL = baseURL
 	}
 	if err != nil {
@@ -400,6 +413,7 @@ func CheckModelProvider(ctx context.Context, input ModelProviderCheckInput) Mode
 	result.Status = ModelProviderStatusConnected
 	result.Models = sortModelIDs(models)
 	result.ImageModels = imageModels(id, models, images)
+	result.VideoModels = videoModels(id, models, videos)
 	result.VisionModels = sortModelIDs(visions)
 	result.Message = "connected"
 	return result
@@ -476,12 +490,14 @@ func ClearModelProviderCachedState(llm config.LLMConfig, id string) (config.LLMC
 		return llm, false
 	}
 	_, profileExists := cfg.Profiles[id]
-	if len(existing.Models) == 0 && len(existing.ImageModels) == 0 && len(existing.VisionModels) == 0 && existing.Status == "" && existing.Message == "" && existing.LastCheckedAt == "" && !profileExists {
+	if len(existing.Models) == 0 && len(existing.ImageModels) == 0 && len(existing.VideoModels) == 0 && len(existing.VisionModels) == 0 && existing.Status == "" && existing.Message == "" && existing.LastCheckedAt == "" && !profileExists {
 		return llm, false
 	}
 	existing.ModelMetadata = nil
 	existing.Models = nil
 	existing.ImageModels = nil
+	existing.VideoModels = nil
+	existing.VideoMetadata = nil
 	existing.VisionModels = nil
 	existing.Status = ""
 	existing.Message = ""
@@ -502,6 +518,8 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 		}
 		out.Models = append([]string(nil), result.Models...)
 		out.ImageModels = append([]string(nil), result.ImageModels...)
+		out.VideoModels = append([]string(nil), result.VideoModels...)
+		out.VideoMetadata = modelcap.CloneVideoGeneration(result.VideoMetadata)
 		out.VisionModels = append([]string(nil), result.VisionModels...)
 	} else if id == ModelProviderIDCodex || id == ModelProviderIDClaude {
 		out.ModelMetadata = nil
@@ -525,7 +543,7 @@ func providerConfigWithCheckResult(id string, existing config.ProviderConfig, re
 func providerConfigsEqual(left, right config.ProviderConfig) bool {
 	left = left.Resolved()
 	right = right.Resolved()
-	if !reflect.DeepEqual(left.ModelMetadata, right.ModelMetadata) || !reflect.DeepEqual(left.ModelOverrides, right.ModelOverrides) || left.DisplayName != right.DisplayName ||
+	if !reflect.DeepEqual(left.ModelMetadata, right.ModelMetadata) || !reflect.DeepEqual(left.VideoMetadata, right.VideoMetadata) || !reflect.DeepEqual(left.ModelOverrides, right.ModelOverrides) || left.DisplayName != right.DisplayName ||
 		left.BaseURL != right.BaseURL ||
 		left.APIKey != right.APIKey ||
 		left.ReasoningEffort != right.ReasoningEffort ||
@@ -533,7 +551,7 @@ func providerConfigsEqual(left, right config.ProviderConfig) bool {
 		left.Message != right.Message ||
 		left.LastCheckedAt != right.LastCheckedAt ||
 		!stringMapsEqual(left.Headers, right.Headers) ||
-		len(left.Models) != len(right.Models) || !sameStringSlice(left.ImageModels, right.ImageModels) ||
+		len(left.Models) != len(right.Models) || !sameStringSlice(left.ImageModels, right.ImageModels) || !sameStringSlice(left.VideoModels, right.VideoModels) ||
 		!sameStringSlice(left.VisionModels, right.VisionModels) {
 		return false
 	}
@@ -846,10 +864,17 @@ func imageModels(providerID string, models, declared []string) []string {
 	return sortModelIDs(result)
 }
 
+func videoModels(providerID string, models, declared []string) []string {
+	if providerID == ModelProviderIDClaude || providerID == ModelProviderIDCodex {
+		return nil
+	}
+	return sortModelIDs(declared)
+}
+
 func resolvedProviderMetadata(id string, provider config.ProviderConfig) map[string]modelcap.Resolved {
 	out := make(map[string]modelcap.Resolved, len(provider.Models))
 	for _, model := range provider.Models {
-		if modelprovider.IsImageGenerationModel(model) || slices.Contains(provider.ImageModels, model) {
+		if modelprovider.IsImageGenerationModel(model) || slices.Contains(provider.ImageModels, model) || slices.Contains(provider.VideoModels, model) {
 			continue
 		}
 		out[model] = modelcap.Resolve(id, provider.BaseURL, model, provider.ModelMetadata[model], provider.ModelOverrides[model])

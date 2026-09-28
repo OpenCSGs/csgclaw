@@ -667,6 +667,11 @@ func validateAgentSpec(spec contract.AgentSpec) error {
 			return fmt.Errorf("image_model_unavailable")
 		}
 	}
+	if ref := spec.Model.VideoGeneration; ref != nil {
+		if strings.TrimSpace(ref.ProviderID) == "" || strings.TrimSpace(ref.ModelID) == "" || ref.ProviderID == ModelProviderIDClaude || ref.ProviderID == ModelProviderIDCodex {
+			return fmt.Errorf("video_model_unavailable")
+		}
+	}
 	if strings.TrimSpace(spec.Name) == "" || strings.TrimSpace(spec.Runtime.Adapter) == "" {
 		return &contract.TurnError{Code: contract.ErrorInvalidRequest, Message: "agent name and Runtime adapter are required"}
 	}
@@ -868,6 +873,7 @@ func modelToService(spec contract.ModelSpec) AgentProfile {
 	return AgentProfile{
 		Name:            strings.TrimSpace(spec.Name),
 		ImageGeneration: spec.ImageGeneration,
+		VideoGeneration: spec.VideoGeneration,
 		Description:     strings.TrimSpace(spec.Description),
 		Provider:        strings.TrimSpace(spec.Provider),
 		ModelProviderID: strings.TrimSpace(spec.ProviderID),
@@ -887,6 +893,7 @@ func modelFromService(profile AgentProfile) contract.ModelSpec {
 	return contract.ModelSpec{
 		Name:            profile.Name,
 		ImageGeneration: profile.ImageGeneration,
+		VideoGeneration: profile.VideoGeneration,
 		Description:     profile.Description,
 		Provider:        profile.Provider,
 		ProviderID:      profile.ModelProviderID,
@@ -915,6 +922,7 @@ func modelViewFromService(view AgentProfileView) contract.ModelView {
 		ModelSpec: contract.ModelSpec{
 			Name:            view.Name,
 			ImageGeneration: view.ImageGeneration,
+			VideoGeneration: view.VideoGeneration,
 			Description:     view.Description,
 			Provider:        view.Provider,
 			ProviderID:      view.ModelProviderID,
@@ -969,6 +977,10 @@ func cloneAgentSpec(input contract.AgentSpec) contract.AgentSpec {
 		ref := *input.Model.ImageGeneration
 		input.Model.ImageGeneration = &ref
 	}
+	if input.Model.VideoGeneration != nil {
+		ref := *input.Model.VideoGeneration
+		input.Model.VideoGeneration = &ref
+	}
 	input.Model.Headers = maps.Clone(input.Model.Headers)
 	input.Model.Env = maps.Clone(input.Model.Env)
 	input.Model.Options = utils.CloneAnyMap(input.Model.Options)
@@ -1014,6 +1026,7 @@ func (f *Controller) specFromService(selected Agent, skills []string, includeSec
 			Selector:        selected.Profile,
 			Name:            selected.AgentProfile.Name,
 			ImageGeneration: modelprovider.CloneImageGeneration(selected.AgentProfile.ImageGeneration),
+			VideoGeneration: modelprovider.CloneVideoGeneration(selected.AgentProfile.VideoGeneration),
 			Description:     selected.AgentProfile.Description,
 			Provider:        selected.AgentProfile.Provider,
 			ProviderID:      selected.AgentProfile.ModelProviderID,

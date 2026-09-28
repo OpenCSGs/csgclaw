@@ -1915,6 +1915,13 @@ function AgentModelPanel({
       model={selectedImageProvider?.displayName || imageProviderID}
     />
   ) : undefined;
+  const videoProviderID = draft.video_generation?.provider_id || "";
+  const videoModelID = draft.video_generation?.model_id || "";
+  const videoProviders = providerOptions.filter(
+    (provider) => (provider.videoModels?.length ?? 0) > 0 || provider.id === videoProviderID,
+  );
+  const selectedVideoProvider = videoProviders.find((provider) => provider.id === videoProviderID);
+  const videoModels = selectedVideoProvider?.videoModels ?? [];
 
   return (
     <section id="agent-profile-model" className="profile-section agent-profile-scroll-target">
@@ -2089,6 +2096,46 @@ function AgentModelPanel({
               <small>{t("profileImageModelHelp")}</small>
               {!imageProviders.some((provider) => provider.imageModels?.length) ? (
                 <small>{t("profileImageModelEmpty")}</small>
+              ) : null}
+            </div>
+            <label className="field agent-image-provider-field">
+              <span>{t("profileVideoModelProvider")}</span>
+              <Select
+                value={videoProviderID}
+                onValueChange={(value) => {
+                  const provider = videoProviders.find((option) => option.id === value);
+                  updateDraft({
+                    video_generation: provider?.videoModels?.length
+                      ? { provider_id: provider.id, model_id: provider.videoModels[0] }
+                      : null,
+                  });
+                }}
+                triggerProps={{ "aria-label": t("profileVideoModelProvider") }}
+                options={[
+                  { value: "", label: t("profileVideoModelNone") },
+                  ...videoProviders.map((provider) => ({ value: provider.id, label: provider.displayName })),
+                ]}
+              />
+            </label>
+            <label className="field">
+              <span>{t("profileVideoModel")}</span>
+              <Select
+                value={videoModelID}
+                disabled={!videoProviderID || !videoModels.length}
+                onValueChange={(value) =>
+                  updateDraft({ video_generation: value ? { provider_id: videoProviderID, model_id: value } : null })
+                }
+                searchable
+                searchPlaceholder={t("modelProviderModelSearch")}
+                emptyLabel={t("modelProviderNoModels")}
+                triggerProps={{ "aria-label": t("profileVideoModel") }}
+                options={videoModels.map((model) => ({ value: model, label: model }))}
+              />
+            </label>
+            <div className="agent-image-model-help">
+              <small>{t("profileVideoModelHelp")}</small>
+              {!videoProviders.some((provider) => provider.videoModels?.length) ? (
+                <small>{t("profileVideoModelEmpty")}</small>
               ) : null}
             </div>
             {modelError ? (

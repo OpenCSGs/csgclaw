@@ -14,20 +14,22 @@ const (
 )
 
 type ProviderConfig struct {
-	ModelMetadata   map[string]modelcap.Metadata `json:"model_metadata,omitempty"`
-	ModelOverrides  map[string]modelcap.Metadata `json:"model_overrides,omitempty"`
-	DisplayName     string                       `json:"display_name,omitempty"`
-	Preset          string                       `json:"preset,omitempty"`
-	BaseURL         string                       `json:"base_url,omitempty"`
-	APIKey          string                       `json:"api_key,omitempty"`
-	Headers         map[string]string            `json:"headers,omitempty"`
-	Models          []string                     `json:"models,omitempty"`
-	ImageModels     []string                     `json:"image_models,omitempty"`
-	VisionModels    []string                     `json:"vision_models,omitempty"`
-	ReasoningEffort string                       `json:"reasoning_effort,omitempty"`
-	Status          string                       `json:"status,omitempty"`
-	Message         string                       `json:"message,omitempty"`
-	LastCheckedAt   string                       `json:"last_checked_at,omitempty"`
+	ModelMetadata   map[string]modelcap.Metadata        `json:"model_metadata,omitempty"`
+	ModelOverrides  map[string]modelcap.Metadata        `json:"model_overrides,omitempty"`
+	DisplayName     string                              `json:"display_name,omitempty"`
+	Preset          string                              `json:"preset,omitempty"`
+	BaseURL         string                              `json:"base_url,omitempty"`
+	APIKey          string                              `json:"api_key,omitempty"`
+	Headers         map[string]string                   `json:"headers,omitempty"`
+	Models          []string                            `json:"models,omitempty"`
+	ImageModels     []string                            `json:"image_models,omitempty"`
+	VideoModels     []string                            `json:"video_models,omitempty"`
+	VideoMetadata   map[string]modelcap.VideoGeneration `json:"video_metadata,omitempty"`
+	VisionModels    []string                            `json:"vision_models,omitempty"`
+	ReasoningEffort string                              `json:"reasoning_effort,omitempty"`
+	Status          string                              `json:"status,omitempty"`
+	Message         string                              `json:"message,omitempty"`
+	LastCheckedAt   string                              `json:"last_checked_at,omitempty"`
 }
 
 type ModelValidationError struct {
@@ -131,6 +133,8 @@ func (c ProviderConfig) Resolved() ProviderConfig {
 	out.ReasoningEffort = NormalizeReasoningEffort(out.ReasoningEffort)
 	out.Models = normalizeModelIDs(out.Models)
 	out.ImageModels = normalizeModelIDs(out.ImageModels)
+	out.VideoModels = normalizeModelIDs(out.VideoModels)
+	out.VideoMetadata = modelcap.CloneVideoGeneration(c.VideoMetadata)
 	out.VisionModels = normalizeModelIDs(out.VisionModels)
 	out.Status = strings.ToLower(strings.TrimSpace(out.Status))
 	out.Message = strings.TrimSpace(out.Message)
@@ -147,7 +151,7 @@ func (c ProviderConfig) MissingFields() []string {
 	if cfg.APIKey == "" {
 		missing = append(missing, "api_key")
 	}
-	if len(cfg.Models) == 0 && len(cfg.ImageModels) == 0 {
+	if len(cfg.Models) == 0 && len(cfg.ImageModels) == 0 && len(cfg.VideoModels) == 0 {
 		missing = append(missing, "model_id")
 	}
 	return missing

@@ -97,6 +97,11 @@ Provider-declared `text-to-image` models are cached separately in `image_models`
 This cache is refreshed by connection checks and does not mean the current account or upstream adapter has passed a real generation request.
 The image adapter uses the OpenAI Images API and requests base64 output; providers exposing only a native, different request schema require a compatible gateway adapter.
 
+### Video generation models
+
+An Agent can select a video generation provider and model separately from its chat model. Provider-declared `text-to-video` and `image-to-video` models are cached in `video_models`.
+The video adapter uses AIGateway's OpenAI-compatible asynchronous API: `POST /v1/videos` creates a task, `GET /v1/videos/{id}` reads its status, and `GET /v1/videos/{id}/content` downloads the result. The Codex Runtime exposes this through `csgclaw_generate_video`; completed videos are stored and delivered as conversation attachments.
+
 ### Dynamic Codex or Claude Code profiles
 
 ```toml

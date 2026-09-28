@@ -2564,8 +2564,8 @@ func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	params := appServerThreadStartParams(spec, true)
 	tools, ok := params["dynamicTools"].([]map[string]any)
-	if !ok || len(tools) != 3 {
-		t.Fatalf("dynamicTools = %#v, want publish, image, and upload tools", params["dynamicTools"])
+	if !ok || len(tools) != 4 {
+		t.Fatalf("dynamicTools = %#v, want publish, image, video, and upload tools", params["dynamicTools"])
 	}
 	tool := tools[0]
 	description := strings.TrimSpace(fmt.Sprint(tool["description"]))
@@ -3217,7 +3217,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 					}
 					return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
 				}
-				if len(tools) != 3 {
+				if len(tools) != 4 {
 					t.Fatalf("thread/start dynamicTools = %#v", params["dynamicTools"])
 				}
 				tool, _ := tools[0].(map[string]any)

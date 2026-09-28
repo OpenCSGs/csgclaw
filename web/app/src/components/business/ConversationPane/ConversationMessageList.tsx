@@ -1,6 +1,6 @@
 import { isImageAttachment } from "@/models/attachments";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
-import { Fragment, memo, useState } from "react";
+import { Fragment, memo, useMemo, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
@@ -17,6 +17,7 @@ import {
   formatEventMessage,
   formatMessageTimestampParts,
   formatThreadReplyCount,
+  groupVideoGenerationMessages,
   isEventMessage,
   localIdentitiesMatch,
   resolveAgentForUser,
@@ -36,6 +37,7 @@ import { MessageAttachments } from "./ConversationAttachments";
 import { ConversationMessageActions } from "./ConversationMessageActions";
 import { shouldShowMessageDateDivider } from "./messageTimeUtils";
 import type { VoidOrPromise } from "./types";
+import { VideoGenerationCard } from "./VideoGenerationCard";
 
 export type ConversationMessageListProps = {
   agents?: AgentLike[];
@@ -85,6 +87,11 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   onCitationSelect,
 }: ConversationMessageListProps) {
   const [expandedLongMessages, setExpandedLongMessages] = useState<Record<string, boolean>>({});
+  const videoGroups = useMemo(() => groupVideoGenerationMessages(visibleMessages), [visibleMessages]);
+  const displayMessages = useMemo(
+    () => visibleMessages.filter((message) => !message.id || !videoGroups.childMessageIDs.has(message.id)),
+    [visibleMessages, videoGroups],
+  );
 
   return (
     <section ref={messageListRef} className="messages">
@@ -98,7 +105,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
             <strong>{t("noMessages")}</strong>
           </div>
         ))
-      ) : visibleMessages.length === 0 ? (
+      ) : displayMessages.length === 0 ? (
         <div className="messages-empty rich-empty">
           <span aria-hidden="true" className="rich-empty-mark">
             #
@@ -106,9 +113,9 @@ export const ConversationMessageList = memo(function ConversationMessageList({
           <strong>{t("noVisibleMessages")}</strong>
         </div>
       ) : null}
-      {visibleMessages.map((message, index) => {
+      {displayMessages.map((message, index) => {
         const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
-        const previousMessage = visibleMessages[index - 1];
+        const previousMessage = displayMessages[index - 1];
         const showDivider = shouldShowMessageDateDivider(previousMessage, message);
 
         if (isEventMessage(message)) {
@@ -136,11 +143,13 @@ export const ConversationMessageList = memo(function ConversationMessageList({
         const threadSummary = threadHasReplies(message.thread) ? message.thread : null;
         const latestThreadReply = threadSummary?.latest_reply;
         const messageStateKey = longMessageStateKey(conversation, message, index);
+        const embeddedVideos = message.id ? videoGroups.childrenByParentID.get(message.id) || [] : [];
+        const isVideoGeneration = Boolean(message.metadata?.video_generation);
         return (
           <Fragment key={message.id || `message-${index}`}>
             {showDivider ? <MessageTimeDivider parts={timestampParts} /> : null}
             <div
-              className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""} ${message.metadata?.image_generation ? "image-generation-message" : ""}`.trim()}
+              className={`message-row ${own ? "own" : ""} ${isAdmin ? "admin" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
               data-message-id={message.id || undefined}
             >
               <button
@@ -192,7 +201,19 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                   </div>
                 ) : null}
                 <ImageGenerationStatus message={message} roomID={conversation.id} t={t} />
-                <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
+                {isVideoGeneration ? (
+                  <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
+                ) : (
+                  <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
+                )}
+                {embeddedVideos.map((video) => (
+                  <VideoGenerationCard
+                    key={video.id || String(video.created_at || video.content)}
+                    message={video}
+                    t={t}
+                    onPreviewAttachment={onPreviewAttachment}
+                  />
+                ))}
                 {threadSummary ? (
                   <div className="message-thread-actions has-thread-summary">
                     <button type="button" className="thread-action-button" onClick={() => onOpenThread(message)}>

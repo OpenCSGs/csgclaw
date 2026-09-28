@@ -33,6 +33,7 @@ import {
 import {
   formatMessageTimestampParts,
   formatThreadReplyCount,
+  groupVideoGenerationMessages,
   isToolCallMessage,
   resolveAgentForUser,
   resolveUserByLocalIdentity,
@@ -54,6 +55,7 @@ import { SlashPicker } from "./SlashPicker";
 import { handleSlashPickerNavigation } from "./slashPickerNavigation";
 import type { MentionPickerUser, VoidOrPromise } from "./types";
 import { AgentQuestionComposer } from "./AgentQuestionComposer";
+import { VideoGenerationCard } from "./VideoGenerationCard";
 import type { QuestionAnswerMode } from "./useQuestionAnswerMode";
 
 type ThreadMentionState = {
@@ -143,9 +145,14 @@ export function ConversationThreadPanel({
   const [mentionIndex, setMentionIndex] = useState(0);
   const root = thread?.root ?? null;
   const replies = thread?.replies ?? [];
-  const visibleRoot = showToolCalls || !isToolCallMessage(root) ? root : null;
+  const videoGroups = useMemo(() => groupVideoGenerationMessages(root ? [root, ...replies] : replies), [root, replies]);
+  const visibleRoot =
+    (showToolCalls || !isToolCallMessage(root)) && (!root?.id || !videoGroups.childMessageIDs.has(root.id)) ? root : null;
   const visibleReplies = showToolCalls ? replies : replies.filter((message) => !isToolCallMessage(message));
-  const latestReplyID = visibleReplies[visibleReplies.length - 1]?.id || "";
+  const displayReplies = visibleReplies.filter(
+    (message) => !message.id || !videoGroups.childMessageIDs.has(message.id),
+  );
+  const latestReplyID = displayReplies[displayReplies.length - 1]?.id || "";
   const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, (typeof mentionableUsers)[number]>();
     const duplicateNames = new Set<string>();
@@ -323,13 +330,14 @@ export function ConversationThreadPanel({
               onPreviewAttachment={onPreviewAttachment}
               onQuestionSelect={onQuestionSelect}
               onCitationSelect={onCitationSelect}
+              embeddedVideos={visibleRoot.id ? videoGroups.childrenByParentID.get(visibleRoot.id) : undefined}
             />
           </div>
         ) : null}
         <div className="thread-replies">
-          <div className="thread-section-title">{formatThreadReplyCount(visibleReplies.length, t)}</div>
-          {visibleReplies.length > 0 ? (
-            visibleReplies.map((message) => (
+          <div className="thread-section-title">{formatThreadReplyCount(displayReplies.length, t)}</div>
+          {displayReplies.length > 0 ? (
+            displayReplies.map((message) => (
               <ThreadMessage
                 key={message.id}
                 message={message}
@@ -343,6 +351,7 @@ export function ConversationThreadPanel({
                 onPreviewAttachment={onPreviewAttachment}
                 onQuestionSelect={onQuestionSelect}
                 onCitationSelect={onCitationSelect}
+                embeddedVideos={message.id ? videoGroups.childrenByParentID.get(message.id) : undefined}
               />
             ))
           ) : (
@@ -549,6 +558,7 @@ export function ConversationThreadPanel({
 type ThreadMessageProps = {
   agents?: AgentLike[];
   compact?: boolean;
+  embeddedVideos?: IMMessage[];
   locale: LocaleCode;
   message: IMMessage;
   onOpenAgentDetail?: (agent: AgentLike, anchor: HTMLElement) => VoidOrPromise;
@@ -574,6 +584,7 @@ function ThreadMessage({
   onQuestionSelect,
   onCitationSelect,
   compact = false,
+  embeddedVideos = [],
 }: ThreadMessageProps) {
   const user = resolveUserByLocalIdentity(message.sender_id, usersById);
   const messageAgent = user ? resolveThreadMessageAgent(agents, user, message.sender_id) : null;
@@ -583,10 +594,11 @@ function ThreadMessage({
   const fallback = messageAgent ? resolveAgentAvatarFallback(messageAgent, usersById) : avatar;
   const name = user?.name || fallbackName;
   const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
+  const isVideoGeneration = Boolean(message.metadata?.video_generation);
 
   return (
     <div
-      className={`thread-message ${compact ? "compact" : ""} ${message.metadata?.image_generation ? "image-generation-message" : ""}`.trim()}
+      className={`thread-message ${compact ? "compact" : ""} ${message.metadata?.image_generation || isVideoGeneration ? "image-generation-message" : ""}`.trim()}
     >
       {user ? (
         <button
@@ -626,7 +638,19 @@ function ThreadMessage({
           </div>
         ) : null}
         <ImageGenerationStatus message={message} t={t} />
-        <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
+        {isVideoGeneration ? (
+          <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
+        ) : (
+          <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
+        )}
+        {embeddedVideos.map((video) => (
+          <VideoGenerationCard
+            key={video.id || String(video.created_at || video.content)}
+            message={video}
+            t={t}
+            onPreviewAttachment={onPreviewAttachment}
+          />
+        ))}
         <ConversationMessageActions
           className="thread-message-actions"
           content={message.metadata?.image_generation ? null : message.content}

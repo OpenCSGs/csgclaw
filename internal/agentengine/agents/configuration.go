@@ -96,6 +96,7 @@ func (s *Controller) EffectiveAgentProfileForUpdate(id string, req UpdateRequest
 			selected.RequestOptions = current.AgentProfile.RequestOptions
 			selected.Env = current.AgentProfile.Env
 			selected.ImageGeneration = current.AgentProfile.ImageGeneration
+			selected.VideoGeneration = current.AgentProfile.VideoGeneration
 			return selected, nil
 		}
 	}
@@ -412,6 +413,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 			selected.RequestOptions = current.AgentProfile.RequestOptions
 			selected.Env = current.AgentProfile.Env
 			selected.ImageGeneration = current.AgentProfile.ImageGeneration
+			selected.VideoGeneration = current.AgentProfile.VideoGeneration
 			req.AgentProfile = &selected
 			agentProfileUpdated = true
 		}

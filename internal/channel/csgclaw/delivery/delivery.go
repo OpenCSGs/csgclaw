@@ -114,6 +114,9 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 	}
 	state, ok := r.acceptEvent(turn, event)
 	if !ok {
+		if event.Output != nil && event.Output.Kind == contract.OutputItemVideoGeneration {
+			return r.deliverLateVideoGeneration(ctx, turn, event)
+		}
 		if event.Kind == agentengine.TurnEventActivityUpdate {
 			return r.deliverLateInteraction(ctx, turn, event)
 		}
@@ -144,6 +147,16 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 				return fmt.Errorf("image delivery is unavailable")
 			}
 			return store.DeliverImageGeneration(ctx, turn, task)
+		}
+		if event.Output != nil && event.Output.Kind == contract.OutputItemVideoGeneration {
+			task, ok := event.Output.Payload.(contract.VideoGenerationTask)
+			store, supported := r.store.(interface {
+				DeliverVideoGeneration(context.Context, channel.TurnContext, contract.VideoGenerationTask) error
+			})
+			if !ok || !supported {
+				return fmt.Errorf("video delivery is unavailable")
+			}
+			return store.DeliverVideoGeneration(ctx, turn, task)
 		}
 		return r.captureOutputItem(state, event)
 	case agentengine.TurnEventInteractionRequest:
@@ -180,6 +193,29 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 		r.interactions.Observe(turn, event)
 	}
 	return nil
+}
+
+func (r *TranscriptRenderer) deliverLateVideoGeneration(ctx context.Context, turn channel.TurnContext, event agentengine.TurnEvent) error {
+	task, ok := event.Output.Payload.(contract.VideoGenerationTask)
+	if !ok {
+		return nil
+	}
+	r.mu.Lock()
+	key := bufferKey(turn)
+	sequence, completed := r.completed[key]
+	if !completed || event.Sequence == 0 || event.Sequence <= sequence {
+		r.mu.Unlock()
+		return nil
+	}
+	r.completed[key] = event.Sequence
+	r.mu.Unlock()
+	store, supported := r.store.(interface {
+		DeliverVideoGeneration(context.Context, channel.TurnContext, contract.VideoGenerationTask) error
+	})
+	if !supported {
+		return fmt.Errorf("video delivery is unavailable")
+	}
+	return store.DeliverVideoGeneration(ctx, turn, task)
 }
 
 func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnContext, result agentengine.TurnResult) error {

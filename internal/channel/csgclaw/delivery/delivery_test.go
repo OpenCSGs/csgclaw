@@ -6,12 +6,41 @@ import (
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/channel"
 )
 
 type recordingStore struct {
 	messages   []deliveredMessage
 	activities int
+}
+
+type videoRecordingStore struct {
+	recordingStore
+	tasks []contract.VideoGenerationTask
+}
+
+func (s *videoRecordingStore) DeliverVideoGeneration(_ context.Context, _ channel.TurnContext, task contract.VideoGenerationTask) error {
+	s.tasks = append(s.tasks, task)
+	return nil
+}
+
+func TestTranscriptRendererDeliversVideoEventsAfterTurnCompletes(t *testing.T) {
+	store := &videoRecordingStore{}
+	renderer := NewTranscriptRenderer(store)
+	turn := channel.TurnContext{RoomID: "room-video", SourceMessageID: "message-video", TurnID: "turn-video"}
+	if err := renderer.Complete(context.Background(), turn, agentengine.TurnResult{Status: agentengine.TurnSucceeded}); err != nil {
+		t.Fatal(err)
+	}
+	for sequence, state := range []string{"generating", "completed"} {
+		event := agentengine.TurnEvent{Kind: agentengine.TurnEventOutputItem, Sequence: uint64(sequence + 1), Output: &agentengine.OutputItem{Kind: contract.OutputItemVideoGeneration, Payload: contract.VideoGenerationTask{ID: "video-1", State: state}}}
+		if err := renderer.Emit(context.Background(), turn, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(store.tasks) != 2 || store.tasks[0].State != "generating" || store.tasks[1].State != "completed" {
+		t.Fatalf("late video tasks = %#v", store.tasks)
+	}
 }
 
 func TestTranscriptRendererPreservesStructuredQuestionText(t *testing.T) {

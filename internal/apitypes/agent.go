@@ -62,6 +62,7 @@ type RuntimeAvailability struct {
 
 type AgentProfile struct {
 	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation"`
+	VideoGeneration      *modelprovider.VideoGenerationConfig `json:"video_generation,omitempty"`
 	ModelProviderID      string                               `json:"model_provider_id,omitempty"`
 	BaseURL              string                               `json:"base_url,omitempty"`
 	APIKey               string                               `json:"api_key,omitempty"`
@@ -406,6 +407,7 @@ func (r *CreateAgentRequest) UnmarshalJSON(data []byte) error {
 
 type CreateAgentProfile struct {
 	ImageGeneration *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
+	VideoGeneration *modelprovider.VideoGenerationConfig `json:"video_generation,omitempty"`
 	ModelProviderID string                               `json:"model_provider_id,omitempty"`
 	BaseURL         string                               `json:"base_url,omitempty"`
 	APIKey          string                               `json:"api_key,omitempty"`

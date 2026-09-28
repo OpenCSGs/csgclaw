@@ -46,6 +46,7 @@ func New(controller *agent.Controller) *Engine {
 	controller.RuntimeRegistry().Seal()
 	engine.agents = controller
 	engine.generateImage = controller.Models().GenerateImage
+	engine.generateVideo = controller.Models().GenerateVideo
 	return engine
 }
 

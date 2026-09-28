@@ -321,7 +321,8 @@ func NewServiceFromBootstrapWithBus(state Bootstrap, bus *Bus) *Service {
 	svc := &Service{
 		bus: bus,
 	}
-	svc.replaceState(normalizeBootstrap(state))
+	state = normalizeBootstrap(state)
+	svc.replaceState(state)
 	return svc
 }
 

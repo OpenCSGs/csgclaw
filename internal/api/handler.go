@@ -2155,6 +2155,7 @@ func agentProfileFromAPI(req *apitypes.CreateAgentProfile) agent.AgentProfile {
 	}
 	return agent.AgentProfile{
 		ImageGeneration: modelprovider.CloneImageGeneration(req.ImageGeneration),
+		VideoGeneration: modelprovider.CloneVideoGeneration(req.VideoGeneration),
 		ModelProviderID: req.ModelProviderID,
 		BaseURL:         req.BaseURL,
 		APIKey:          req.APIKey,
@@ -3734,6 +3735,7 @@ func sanitizeMCPSecretValues(raw any) (map[string]any, bool) {
 func profileResponseFromAgentView(view agent.AgentProfileView) apitypes.AgentProfile {
 	return apitypes.AgentProfile{
 		ImageGeneration:      modelprovider.CloneImageGeneration(view.ImageGeneration),
+		VideoGeneration:      modelprovider.CloneVideoGeneration(view.VideoGeneration),
 		ModelProviderID:      view.ModelProviderID,
 		BaseURL:              view.BaseURL,
 		APIKeySet:            view.APIKeySet,

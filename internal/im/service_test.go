@@ -18,6 +18,23 @@ import (
 	"csgclaw/internal/assets"
 )
 
+func TestNewServicePreservesRunningVideoGenerationForRecovery(t *testing.T) {
+	state := DefaultBootstrap()
+	state.Rooms = []Room{{ID: "room-video", Messages: []Message{{
+		ID:       "video-status",
+		Metadata: map[string]any{"video_generation": map[string]any{"id": "call-1", "state": "generating", "upstream_id": "video-1"}},
+	}}}}
+	service := NewServiceFromBootstrap(state)
+	rooms := service.ListRooms()
+	if len(rooms) != 1 {
+		t.Fatalf("rooms = %#v", rooms)
+	}
+	task, _ := rooms[0].Messages[0].Metadata["video_generation"].(map[string]any)
+	if task["state"] != "generating" || task["error"] != nil || task["upstream_id"] != "video-1" {
+		t.Fatalf("video generation metadata = %#v", task)
+	}
+}
+
 func TestEnsureWorkerUserCreatesUserAndBootstrapRoom(t *testing.T) {
 	svc := NewService()
 

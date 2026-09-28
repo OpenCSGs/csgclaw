@@ -1,0 +1,34 @@
+package delivery
+
+import (
+	"context"
+	"crypto/sha256"
+	"csgclaw/internal/agentengine"
+	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/channel"
+	"csgclaw/internal/im"
+	"encoding/hex"
+	"fmt"
+)
+
+func (s *IMTranscriptStore) DeliverVideoGeneration(ctx context.Context, turn channel.TurnContext, task contract.VideoGenerationTask) error {
+	if err := contextError(ctx); err != nil {
+		return err
+	}
+	metadata := transcriptMetadata("video_generation", turn, nil)
+	metadata["video_generation"] = task
+	metadata["video_generation_context"] = turn
+	digest := sha256.Sum256([]byte(turn.AgentID + "\x00" + string(turn.ConversationKey) + "\x00" + task.ID))
+	messageID := "video-" + hex.EncodeToString(digest[:16])
+	var uploads []im.AttachmentSource
+	if task.State == "completed" && task.File != nil {
+		var rejected []string
+		uploads, rejected = s.outputFileSources(ctx, turn.AgentID, []agentengine.OutputFile{*task.File})
+		defer closeOutputFileSources(uploads)
+		if len(rejected) > 0 || len(uploads) != 1 {
+			return fmt.Errorf("generated video could not be attached")
+		}
+	}
+	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{RoomID: turn.RoomID, SenderID: s.senderID(turn.ParticipantID), MessageID: messageID, ThreadRootID: turn.ThreadRootID, Content: task.Prompt, Metadata: metadata, AttachmentSources: uploads})
+	return err
+}

@@ -242,7 +242,10 @@ export function MessageAttachments({
   const items = attachments.map(messagePreviewItem);
   const indexed = attachments.map((attachment, index) => ({ attachment, index }));
   const images = indexed.filter(({ attachment }) => isImageAttachment(attachment));
-  const files = indexed.filter(({ attachment }) => !isImageAttachment(attachment));
+  const videos = indexed.filter(({ attachment }) => String(attachment.media_type || "").startsWith("video/"));
+  const files = indexed.filter(
+    ({ attachment }) => !isImageAttachment(attachment) && !String(attachment.media_type || "").startsWith("video/"),
+  );
   return (
     <div className="message-attachments">
       {images.length > 0 ? (
@@ -267,6 +270,12 @@ export function MessageAttachments({
           ))}
         </div>
       ) : null}
+      {videos.map(({ attachment }) => (
+        <video key={attachment.id} className="message-video-attachment" controls preload="metadata">
+          <source src={resolveRequestPath(attachment.download_url)} type={attachment.media_type} />
+          {attachment.name}
+        </video>
+      ))}
       {files.length > 0 ? (
         <div className="message-file-list">
           {files.map(({ attachment, index }) => {

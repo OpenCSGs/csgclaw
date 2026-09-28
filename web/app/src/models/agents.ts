@@ -79,9 +79,11 @@ export type ImageEnvContract = {
 };
 
 export type ImageGenerationConfig = { provider_id: string; model_id: string };
+export type VideoGenerationConfig = { provider_id: string; model_id: string };
 
 export type AgentProfileLike = {
   image_generation?: ImageGenerationConfig | null;
+  video_generation?: VideoGenerationConfig | null;
   api_key_preview?: string | null;
   api_key_set?: boolean | null;
   base_url?: string | null;
@@ -451,6 +453,7 @@ export type AgentDraft = {
   image?: string;
   model_id: string;
   image_generation?: ImageGenerationConfig | null;
+  video_generation?: VideoGenerationConfig | null;
   model_provider_id?: string;
   name?: string;
   notifier_delivery_complete?: boolean;
@@ -1432,6 +1435,7 @@ export function profileToDraft(profile: AgentProfileLike | null | undefined, age
     api_key_preview: profile?.api_key_preview || "",
     model_id: profile?.model_id || "",
     image_generation: profile?.image_generation ? { ...profile.image_generation } : null,
+    video_generation: profile?.video_generation ? { ...profile.video_generation } : null,
     reasoning_effort: normalizeReasoningEffort(profile?.reasoning_effort),
     enable_fast_mode: Boolean(profile?.enable_fast_mode),
     headersText: stringifyJSON(profile?.headers || {}),
@@ -1665,6 +1669,7 @@ export function draftToProfile(draft: AgentDraft, options: DraftProfileOptions =
     api_key: "",
     model_id: draft.model_id,
     image_generation: draft.image_generation ?? null,
+    video_generation: draft.video_generation ?? null,
     reasoning_effort: normalizeReasoningEffort(draft.reasoning_effort),
     enable_fast_mode: Boolean(draft.enable_fast_mode),
     headers: {},
@@ -1683,6 +1688,7 @@ export function draftToProfileComparePayload(draft: AgentDraft, options: DraftPr
     api_key: "",
     model_id: draft.model_id,
     image_generation: draft.image_generation ?? null,
+    video_generation: draft.video_generation ?? null,
     reasoning_effort: normalizeReasoningEffort(draft.reasoning_effort),
     enable_fast_mode: Boolean(draft.enable_fast_mode),
     headers: {},
@@ -2046,6 +2052,7 @@ export function llmProfilePayloadForCompare(draft: AgentDraft | null | undefined
     api_key: profile.api_key,
     model_id: profile.model_id,
     image_generation: profile.image_generation ?? null,
+    video_generation: profile.video_generation ?? null,
     reasoning_effort: profile.reasoning_effort,
     enable_fast_mode: profile.enable_fast_mode,
     headers: profile.headers,

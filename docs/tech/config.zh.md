@@ -97,6 +97,11 @@ Agent 可以在档案中单独选择可选的图片生成服务商和模型，�
 连接检查会刷新该缓存，但目录声明不代表当前账号或上游适配器已通过真实生图请求。
 图片适配器使用 OpenAI Images API 并请求 base64 输出；仅暴露其他原生请求格式的服务商需要由兼容网关完成适配。
 
+### 视频生成模型
+
+Agent 可以在档案中单独选择视频生成服务商和模型。服务商声明的 `text-to-video` 或 `image-to-video` 模型缓存在 `video_models` 中。
+视频适配器使用 AIGateway 的 OpenAI-compatible 异步接口：`POST /v1/videos` 创建任务，`GET /v1/videos/{id}` 查询状态，完成后通过 `GET /v1/videos/{id}/content` 获取视频。Codex Runtime 通过 `csgclaw_generate_video` 工具调用该能力；生成结果作为会话视频附件保存和投递。
+
 ### 动态 Codex 或 Claude Code Profile
 
 ```toml

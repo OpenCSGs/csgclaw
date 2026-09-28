@@ -115,6 +115,41 @@ export type IMMessage = {
   thread?: ThreadSummary | null;
 };
 
+export type VideoGenerationMessageGroup = {
+  childMessageIDs: Set<string>;
+  childrenByParentID: Map<string, IMMessage[]>;
+};
+
+// Video generation remains a separate persisted message so an asynchronous
+// task can survive restarts. When its originating final message is present in
+// the same view, project it as a child card of that message instead.
+export function groupVideoGenerationMessages(messages: readonly IMMessage[]): VideoGenerationMessageGroup {
+  const parentIDs = new Set(messages.map((message) => String(message.id || "").trim()).filter(Boolean));
+  const childMessageIDs = new Set<string>();
+  const childrenByParentID = new Map<string, IMMessage[]>();
+  messages.forEach((message) => {
+    if (!message.metadata?.video_generation) return;
+    const parentID = videoGenerationParentMessageID(message);
+    const messageID = String(message.id || "").trim();
+    if (!parentID || !messageID || parentID === messageID || !parentIDs.has(parentID)) return;
+    childMessageIDs.add(messageID);
+    const children = childrenByParentID.get(parentID) || [];
+    children.push(message);
+    childrenByParentID.set(parentID, children);
+  });
+  return { childMessageIDs, childrenByParentID };
+}
+
+function videoGenerationParentMessageID(message: IMMessage): string {
+  for (const key of ["codex", "openclaw"]) {
+    const metadata = message.metadata?.[key];
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) continue;
+    const parentID = String((metadata as Record<string, unknown>).turn_message_id || "").trim();
+    if (parentID) return parentID;
+  }
+  return "";
+}
+
 export type IMConversation = {
   type?: RoomType | null;
   manager_id?: string;

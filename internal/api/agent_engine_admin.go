@@ -196,6 +196,7 @@ func engineModelFromProfile(profile agent.AgentProfile) agentengine.ModelSpec {
 	return agentengine.ModelSpec{
 		Name:            profile.Name,
 		ImageGeneration: profile.ImageGeneration,
+		VideoGeneration: profile.VideoGeneration,
 		Description:     profile.Description,
 		Provider:        profile.Provider,
 		ProviderID:      profile.ModelProviderID,
@@ -214,6 +215,7 @@ func serviceProfileFromEngine(view agentengine.ModelView) agent.AgentProfile {
 	profile := agent.AgentProfile{
 		Name:                 view.Name,
 		ImageGeneration:      view.ImageGeneration,
+		VideoGeneration:      view.VideoGeneration,
 		Description:          view.Description,
 		Provider:             view.Provider,
 		ModelProviderID:      view.ProviderID,

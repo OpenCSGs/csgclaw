@@ -28,6 +28,7 @@ type conversationRuntimeAdapter interface {
 // result idempotency.
 type Engine struct {
 	generateImage imageGenerator
+	generateVideo videoGenerator
 	agents        AgentInterface
 	runtimes      conversationRuntimeResolver
 	files         *FileStore
@@ -191,10 +192,28 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 		c.engine.complete(identity, turn, result)
 		return result
 	}
+	if request.VideoGeneration != nil {
+		if request.VideoGeneration.Model == nil && c.engine.agents != nil {
+			if selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{}); err == nil {
+				task := *request.VideoGeneration
+				task.Model = selected.Spec.Model.VideoGeneration
+				request.VideoGeneration = &task
+			}
+		}
+		err := c.generateVideo(turn.ctx, turn, sink, *request.VideoGeneration)
+		result := TurnResult{Status: TurnSucceeded, Dispatched: true}
+		if err != nil {
+			result = failedResult(ErrorRuntimeFailed, err.Error())
+		}
+		turn.cancel()
+		c.engine.complete(identity, turn, result)
+		return result
+	}
 	if c.engine.agents != nil {
 		selected, err := c.engine.agents.Get(turn.ctx, c.agentID, AgentGetOptions{})
 		if err == nil {
 			turn.ctx = contract.WithImageGenerationHandler(turn.ctx, c.imageHandler(turn, sink, selected.Spec.Model.ImageGeneration))
+			turn.ctx = contract.WithVideoGenerationHandler(turn.ctx, c.videoHandler(turn, sink, selected.Spec.Model.VideoGeneration))
 		}
 	}
 	c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
@@ -637,6 +656,10 @@ func cloneTurnRequest(input TurnRequest) TurnRequest {
 		task := contract.CloneImageGenerationTask(*input.ImageGeneration)
 		input.ImageGeneration = &task
 	}
+	if input.VideoGeneration != nil {
+		task := contract.CloneVideoGenerationTask(*input.VideoGeneration)
+		input.VideoGeneration = &task
+	}
 	input.Input = append([]InputPart(nil), input.Input...)
 	for index := range input.Input {
 		if input.Input[index].File != nil {
@@ -672,6 +695,9 @@ func cloneTurnEvent(input TurnEvent) TurnEvent {
 		copy := *input.Output
 		if task, ok := copy.Payload.(contract.ImageGenerationTask); ok {
 			copy.Payload = contract.CloneImageGenerationTask(task)
+		}
+		if task, ok := copy.Payload.(contract.VideoGenerationTask); ok {
+			copy.Payload = contract.CloneVideoGenerationTask(task)
 		}
 		input.Output = &copy
 	}

@@ -62,6 +62,7 @@ var (
 type AgentProfile struct {
 	ModelMetadata        modelcap.Resolved                    `json:"-"`
 	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
+	VideoGeneration      *modelprovider.VideoGenerationConfig `json:"video_generation,omitempty"`
 	Name                 string                               `json:"name,omitempty"`
 	Description          string                               `json:"description,omitempty"`
 	Provider             string                               `json:"provider,omitempty"`
@@ -82,6 +83,7 @@ type AgentProfile struct {
 
 type AgentProfileView struct {
 	ImageGeneration      *modelprovider.ImageGenerationConfig `json:"image_generation,omitempty"`
+	VideoGeneration      *modelprovider.VideoGenerationConfig `json:"video_generation,omitempty"`
 	Name                 string                               `json:"name,omitempty"`
 	Description          string                               `json:"description,omitempty"`
 	Provider             string                               `json:"provider,omitempty"`
@@ -249,6 +251,7 @@ func cloneProfile(profile AgentProfile) AgentProfile {
 	out := profile
 	out.InputModalities = append([]string(nil), profile.InputModalities...)
 	out.ImageGeneration = modelprovider.CloneImageGeneration(profile.ImageGeneration)
+	out.VideoGeneration = modelprovider.CloneVideoGeneration(profile.VideoGeneration)
 	if len(profile.Headers) > 0 {
 		out.Headers = make(map[string]string, len(profile.Headers))
 		for key, value := range profile.Headers {
@@ -291,6 +294,7 @@ func profileViewWithAgentRuntimeOptions(profile AgentProfile, _ map[string]any, 
 	v := AgentProfileView{
 		Name:                 profile.Name,
 		ImageGeneration:      modelprovider.CloneImageGeneration(profile.ImageGeneration),
+		VideoGeneration:      modelprovider.CloneVideoGeneration(profile.VideoGeneration),
 		Description:          profile.Description,
 		Provider:             profile.Provider,
 		ModelProviderID:      profile.ModelProviderID,

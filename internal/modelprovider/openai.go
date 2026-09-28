@@ -24,6 +24,11 @@ type openAIModelsResponse struct {
 		Availability  *struct {
 			IsAvailable *bool `json:"is_available"`
 		} `json:"availability"`
+		Metadata struct {
+			Capabilities struct {
+				Video modelcap.VideoGeneration `json:"video"`
+			} `json:"capabilities"`
+		} `json:"metadata"`
 	} `json:"data"`
 }
 
@@ -137,6 +142,8 @@ func listOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 	metadata := make(map[string]modelcap.Metadata)
 	models := make([]string, 0, len(payload.Data))
 	imageModels := []string{}
+	videoModels := []string{}
+	videoMetadata := make(map[string]modelcap.VideoGeneration)
 	visionModels := []string{}
 	seen := make(map[string]struct{}, len(payload.Data))
 	for _, item := range payload.Data {
@@ -165,6 +172,12 @@ func listOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 		if taskSupportsImageGeneration(declaredTasks) || (!taskPresent(declaredTasks) && IsGPTImageModel(id)) {
 			imageModels = append(imageModels, id)
 		}
+		if taskSupportsVideoGeneration(declaredTasks) {
+			videoModels = append(videoModels, id)
+			if capabilities := item.Metadata.Capabilities.Video.Normalized(); len(capabilities.Sizes) > 0 || len(capabilities.Seconds) > 0 {
+				videoMetadata[id] = capabilities
+			}
+		}
 		if taskSupportsVisionInput(declaredTasks) {
 			visionModels = append(visionModels, id)
 		}
@@ -172,10 +185,10 @@ func listOpenAIModelDirectoryWithClient(ctx context.Context, client *http.Client
 			models = append(models, id)
 		}
 	}
-	if len(models) == 0 && len(imageModels) == 0 {
+	if len(models) == 0 && len(imageModels) == 0 && len(videoModels) == 0 {
 		return ModelDiscoveryResult{}, &UpstreamRequestError{Operation: "decode models response", BaseURL: baseURL, Err: errors.New("no models returned")}
 	}
-	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, VisionModels: visionModels, ModelMetadata: metadata}, nil
+	return ModelDiscoveryResult{ResolvedBaseURL: baseURL, Models: models, ImageModels: imageModels, VideoModels: videoModels, VisionModels: visionModels, ModelMetadata: metadata, VideoMetadata: videoMetadata}, nil
 }
 
 func taskPresent(task any) bool {
@@ -553,6 +566,16 @@ func taskSupportsImageGeneration(task any) bool {
 	for _, value := range values {
 		switch strings.ToLower(strings.TrimSpace(value)) {
 		case "text-to-image", "text2image", "image-generation":
+			return true
+		}
+	}
+	return false
+}
+
+func taskSupportsVideoGeneration(task any) bool {
+	for _, value := range taskValues(task) {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "text-to-video", "text2video", "image-to-video", "video-generation":
 			return true
 		}
 	}

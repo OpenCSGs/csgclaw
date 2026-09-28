@@ -245,7 +245,7 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		Admission:       builtInIMAdmissionPolicy,
 		Continuation:    agentengine.ContinuationCreateOrResume,
 		Interaction:     agentengine.InteractionResolve,
-	}, contract.ImageGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn, observeWork: observeWork}})
+	}, contract.MediaGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn, observeWork: observeWork}})
 	if result.Status != agentengine.TurnSucceeded && a.projector != nil {
 		// A failed/canceled Runtime call may not have retained its input. Prefer
 		// one safe full fact refresh on retry.

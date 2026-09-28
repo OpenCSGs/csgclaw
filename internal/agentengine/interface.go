@@ -109,6 +109,7 @@ const (
 	OutputItemRequestUserInput       = contract.OutputItemRequestUserInput
 	OutputItemResourceLink           = contract.OutputItemResourceLink
 	OutputItemImageGeneration        = contract.OutputItemImageGeneration
+	OutputItemVideoGeneration        = contract.OutputItemVideoGeneration
 	TurnSucceeded                    = contract.TurnSucceeded
 	TurnFailed                       = contract.TurnFailed
 	TurnCanceled                     = contract.TurnCanceled

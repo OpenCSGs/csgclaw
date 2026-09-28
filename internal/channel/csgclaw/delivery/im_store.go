@@ -351,6 +351,8 @@ func transcriptMetadata(kind string, turn channel.TurnContext, tool *agentengine
 		"delivery_kind":     strings.TrimSpace(kind),
 		"request_id":        strings.TrimSpace(turn.SourceMessageID),
 		"source_message_id": strings.TrimSpace(turn.SourceMessageID),
+		"turn_id":           strings.TrimSpace(string(turn.TurnID)),
+		"turn_message_id":   finalMessageID(turn),
 	}
 	if tool != nil {
 		entry["tool_call_id"] = strings.TrimSpace(tool.ID)

@@ -86,6 +86,7 @@ type InputFile struct {
 // TurnRequest contains conversation identity and caller-normalized input.
 type TurnRequest struct {
 	ImageGeneration *ImageGenerationTask `json:"image_generation,omitempty"`
+	VideoGeneration *VideoGenerationTask `json:"video_generation,omitempty"`
 	ID              TurnID               `json:"id"`
 	ConversationKey ConversationKey      `json:"conversation_key"`
 	Input           []InputPart          `json:"input"`

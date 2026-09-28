@@ -54,6 +54,7 @@ export type ModelProvider = {
   headers?: Record<string, unknown>;
   models: string[];
   imageModels?: string[];
+  videoModels?: string[];
   reasoning_effort?: string;
   status: ModelProviderStatus;
   message?: string;
@@ -83,6 +84,7 @@ export type ModelProviderSelectOption = {
   id: string;
   models: string[];
   imageModels?: string[];
+  videoModels?: string[];
   value: string;
 };
 
@@ -162,6 +164,7 @@ function normalizeModelProvider(raw: unknown): ModelProvider {
     id,
     kind,
     imageModels: normalizeModelIDs(record.image_models),
+    videoModels: normalizeModelIDs(record.video_models),
     model_metadata: normalizeModelMetadataMap(record.model_metadata),
     model_defaults: normalizeModelMetadataMap(record.model_defaults),
     model_overrides: normalizeModelOverrides(record.model_overrides),
@@ -393,6 +396,7 @@ export function modelProviderSelectOptionsFromCatalog(
         id: provider.id,
         models: [...provider.models],
         imageModels: provider.imageModels ?? [],
+        videoModels: provider.videoModels ?? [],
         value: provider.id,
       });
     }

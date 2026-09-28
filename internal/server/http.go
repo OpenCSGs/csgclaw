@@ -133,6 +133,9 @@ func Run(opts Options) error {
 	if err := handler.RecoverRoomTasks(); err != nil {
 		return fmt.Errorf("recover room tasks: %w", err)
 	}
+	if err := handler.RecoverVideoGenerations(runCtx); err != nil {
+		return fmt.Errorf("recover video generations: %w", err)
+	}
 	router := handler.Routes()
 	router.Handle("/*", uiFallbackHandler())
 

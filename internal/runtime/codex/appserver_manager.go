@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/modelprovider"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -784,12 +785,12 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		"cwd":                    spec.WorkspaceDir,
 		"persistExtendedHistory": true,
 		"experimentalRawEvents":  false,
-		"developerInstructions":  runtimeinstructions.ImageGenerationPromptPolicy,
+		"developerInstructions":  runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy,
 	}
 	if publishFiles {
 		tools := []map[string]any{appServerPublishFileToolSpec()}
 		if spec.ExecutionMode != ExecutionModeReadOnly {
-			tools = append(tools, appServerGenerateImageToolSpec(), appServerUploadFileToolSpec())
+			tools = append(tools, appServerGenerateImageToolSpec(), appServerGenerateVideoToolSpec(), appServerUploadFileToolSpec())
 		}
 		params["dynamicTools"] = tools
 	}
@@ -854,7 +855,7 @@ func appServerThreadResumeParams(spec SessionSpec, threadID string) map[string]a
 	params := map[string]any{
 		"threadId":              strings.TrimSpace(threadID),
 		"cwd":                   spec.WorkspaceDir,
-		"developerInstructions": runtimeinstructions.ImageGenerationPromptPolicy,
+		"developerInstructions": runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy,
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID
@@ -1002,7 +1003,7 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 	if params.ThreadID == "" || params.TurnID == "" || params.CallID == "" {
 		return nil, fmt.Errorf("dynamic tool thread ID, turn ID, and call ID are required")
 	}
-	if params.Tool != appServerPublishFileToolName && params.Tool != appServerUploadFileToolName && params.Tool != "csgclaw_generate_image" {
+	if params.Tool != appServerPublishFileToolName && params.Tool != appServerUploadFileToolName && params.Tool != "csgclaw_generate_image" && params.Tool != "csgclaw_generate_video" {
 		return nil, fmt.Errorf("unsupported dynamic tool %q", params.Tool)
 	}
 	if live == nil || !live.appServerPublishesFilesForThread(params.ThreadID) {
@@ -1026,6 +1027,27 @@ func (m *appServerManager) handleAppServerDynamicToolCall(runtimeID string, live
 			return appServerDynamicToolResponse(false, err.Error()), nil
 		}
 		return appServerDynamicToolResponse(true, "Image generated and delivered to the current conversation. Do not generate again or publish another copy. Continue responding using the original chat model."), nil
+	}
+	if params.Tool == "csgclaw_generate_video" {
+		if live.spec.ExecutionMode == ExecutionModeReadOnly {
+			return appServerDynamicToolResponse(false, "video generation is unavailable in read-only mode"), nil
+		}
+		var args struct {
+			Prompt  string `json:"prompt"`
+			Size    string `json:"size"`
+			Seconds int    `json:"seconds"`
+		}
+		if json.Unmarshal(params.Arguments, &args) != nil {
+			return appServerDynamicToolResponse(false, "invalid video generation arguments"), nil
+		}
+		ctx, ok := live.appServerTurnContext(params.ThreadID, params.TurnID)
+		if !ok {
+			return appServerDynamicToolResponse(false, "video generation requires an active turn"), nil
+		}
+		if err := contract.GenerateVideo(ctx, params.CallID, args.Prompt, modelprovider.VideoGenerationOptions{Size: args.Size, Seconds: args.Seconds}); err != nil {
+			return appServerDynamicToolResponse(false, err.Error()), nil
+		}
+		return appServerDynamicToolResponse(true, "Video generation was submitted. Briefly acknowledge submission without describing a transient status such as still generating, downloading, completed, or delivered. The attached task card is the source of truth and updates automatically. Do not publish another copy."), nil
 	}
 	if params.Tool == appServerUploadFileToolName {
 		if live.spec.ExecutionMode == ExecutionModeReadOnly {
@@ -2118,6 +2140,10 @@ func appServerGenerateImageToolSpec() map[string]any {
 		"description": "Generate one image from the user's requested description using this Agent's configured image generation model and deliver it to the current conversation. Use this tool whenever the user asks to create an image. Never switch the chat model or call providers with shell commands. If image_model_not_configured is returned, ask the user to configure the Image generation model in the Agent profile; do not retry automatically.",
 		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string", "description": "Faithfully express the user's image request. Resolve references using established conversation context, but do not invent subjects, styles, text exclusions, or other constraints. Expand creatively only when explicitly requested. Preserve a supplied verbatim prompt unchanged."}}, "required": []string{"prompt"}, "additionalProperties": false},
 	}
+}
+
+func appServerGenerateVideoToolSpec() map[string]any {
+	return map[string]any{"name": "csgclaw_generate_video", "description": "Generate one video using this Agent's configured video model and deliver it to the conversation. Omit size or seconds unless the user explicitly supplied them; CSGClaw applies the selected model's advertised defaults and validates explicit values.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"prompt": map[string]any{"type": "string"}, "size": map[string]any{"type": "string", "description": "Optional provider-advertised size value. Do not convert it to width x height or guess a value."}, "seconds": map[string]any{"type": "integer", "minimum": 1, "description": "Optional requested duration. Omit when the user did not specify one."}}, "required": []string{"prompt"}, "additionalProperties": false}}
 }
 
 // Explicit per-thread values override settings retained by cold-resumed threads.

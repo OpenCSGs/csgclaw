@@ -492,6 +492,7 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
    {"id":"image-two","task":["text-to-image","image-to-image"]},
    {"id":"editor-only","task":"image-to-image"},
    {"id":"image-offline","task":"text-to-image","availability":{"is_available":false}},
+   {"id":"MiniMax-Hailuo-2.3","task":"text-to-video","metadata":{"capabilities":{"video":{"size":["768P","1080P"],"seconds":[6,10]}}}},
    {"id":"gpt-image-2"}, {"id":"image-one","task":"text-to-image"}
   ]}`))
 	}))
@@ -502,6 +503,12 @@ func TestModelDirectorySeparatesImageGenerationFromVisionAndUnavailableModels(t 
 	}
 	if !reflect.DeepEqual(directory.ImageModels, []string{"image-one", "image-two", "gpt-image-2"}) {
 		t.Fatalf("image models: %v", directory.ImageModels)
+	}
+	if !reflect.DeepEqual(directory.VideoModels, []string{"MiniMax-Hailuo-2.3"}) {
+		t.Fatalf("video models: %v", directory.VideoModels)
+	}
+	if got := directory.VideoMetadata["MiniMax-Hailuo-2.3"]; !reflect.DeepEqual(got.Sizes, []string{"768P", "1080P"}) || !reflect.DeepEqual(got.Seconds, []int{6, 10}) {
+		t.Fatalf("video metadata: %#v", got)
 	}
 	if !reflect.DeepEqual(directory.Models, []string{"chat-vision", "gpt-image-2"}) {
 		t.Fatalf("chat models: %v", directory.Models)

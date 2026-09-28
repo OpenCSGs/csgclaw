@@ -3934,6 +3934,37 @@ func TestPersistedConversationsWithoutProfileFingerprintRotateOnStartup(t *testi
 	}
 }
 
+func TestReadSessionMetadataInvalidatesPublishingCapabilityForOlderDynamicTools(t *testing.T) {
+	root := t.TempDir()
+	rt := newTestCodexRuntime(root, func(h agentruntime.Handle) (AgentRef, error) {
+		return AgentRef{ID: "agent-manager", Name: "manager", RuntimeID: h.RuntimeID}, nil
+	})
+	runtimeID := "rt-agent-manager"
+	if err := rt.mkdirAll(filepath.Join(root, "agent-manager", hostStateDirName), 0o755); err != nil {
+		t.Fatalf("mkdir runtime dir: %v", err)
+	}
+	if err := rt.writeSessionMetadata(sessionMetadata{
+		DynamicToolsVersion:            engineDynamicToolsVersion - 1,
+		RuntimeID:                      runtimeID,
+		ConversationSessions:           map[string]string{"manager-dm": "old-thread"},
+		FilePublishingConversations:    map[string]bool{"manager-dm": true},
+		ConversationProfileFingerprint: conversationProfileFingerprint("codex", "", "gpt-5"),
+	}); err != nil {
+		t.Fatalf("writeSessionMetadata() error = %v", err)
+	}
+
+	meta, err := rt.readSessionMetadata(runtimeID)
+	if err != nil {
+		t.Fatalf("readSessionMetadata() error = %v", err)
+	}
+	if got := meta.ConversationSessions["manager-dm"]; got != "old-thread" {
+		t.Fatalf("conversation mapping = %q, want retained until the next engine turn", got)
+	}
+	if len(meta.FilePublishingConversations) != 0 {
+		t.Fatalf("file publishing capabilities = %#v, want invalidated for old dynamic tools", meta.FilePublishingConversations)
+	}
+}
+
 func TestPersistedConversationsWithDifferentProfileFingerprintRotateOnStartup(t *testing.T) {
 	meta := sessionMetadata{
 		ConversationSessions:           map[string]string{"room-1": "gpt-thread"},
