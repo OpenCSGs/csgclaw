@@ -6,9 +6,33 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+type blockingProbeSessionCloser struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (closer blockingProbeSessionCloser) Close() error {
+	close(closer.started)
+	<-closer.release
+	return nil
+}
+
+func TestCloseProbeSessionDoesNotBlockProbeResult(t *testing.T) {
+	closer := blockingProbeSessionCloser{started: make(chan struct{}), release: make(chan struct{})}
+	closeProbeSession(closer)
+
+	select {
+	case <-closer.started:
+		close(closer.release)
+	case <-time.After(time.Second):
+		t.Fatal("session cleanup did not start asynchronously")
+	}
+}
 
 func TestProbeServerConnectsAndListsTools(t *testing.T) {
 	server := mcpsdk.NewServer(&mcpsdk.Implementation{

@@ -20,6 +20,8 @@ var (
 
 var serverDocumentMu sync.Mutex
 
+const remoteInstallProbeTimeout = 5 * time.Second
+
 type Service struct {
 	prober               ServerProber
 	store                ServerStore
@@ -102,13 +104,16 @@ func (s *Service) InstallRemoteServer(ctx context.Context, server RemoteServer) 
 		return "", err
 	}
 	probeID := remoteServerInstallID(servers, server.ID, name, config)
-	probeCtx, cancelProbe := context.WithTimeout(ctx, availabilityProbeTimeout(config))
+	probeCtx, cancelProbe := context.WithTimeout(ctx, remoteInstallProbeTimeout)
 	result, err := s.ProbeServer(probeCtx, probeID, config)
 	cancelProbe()
 	if err != nil || !result.Connected {
 		if err == nil {
 			err = ErrServerUnavailable
 		}
+		return "", fmt.Errorf("%w: %v", ErrRemoteServerInstallFailed, err)
+	}
+	if err := ctx.Err(); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrRemoteServerInstallFailed, err)
 	}
 	var id string

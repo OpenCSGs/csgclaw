@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"csgclaw/internal/mcp"
 )
@@ -18,6 +20,7 @@ var (
 	errRemoteMCPHubNotConfigured  = errors.New("remote MCP Hub URL is not configured")
 	errRemoteMCPHubSignInRequired = errors.New("OpenCSG sign-in is required to browse remote MCP servers")
 	remoteMCPHubAccessToken       = currentOpenCSGAccessToken
+	remoteMCPInstallTimeout       = 5 * time.Second
 )
 
 type remoteMCPServersListResponse struct {
@@ -41,6 +44,12 @@ type remoteMCPServerSummary struct {
 // is not echoed by the installation endpoint.
 type remoteMCPServerInstallResponse struct {
 	Name string `json:"name"`
+}
+
+type remoteMCPServerInstallResult struct {
+	err      error
+	errStage string
+	name     string
 }
 
 func (h *Handler) handleRemoteMCPServers(w http.ResponseWriter, r *http.Request) {
@@ -103,24 +112,42 @@ func (h *Handler) handleInstallRemoteMCPServer(w http.ResponseWriter, r *http.Re
 		http.NotFound(w, r)
 		return
 	}
-	baseURL, token, err := h.remoteMCPHubConnection(r)
-	if err != nil {
-		writeRemoteMCPHubError(w, err)
+	installCtx, cancelInstall := context.WithTimeout(r.Context(), remoteMCPInstallTimeout)
+	defer cancelInstall()
+	result := make(chan remoteMCPServerInstallResult, 1)
+	go func() {
+		baseURL, token, err := h.remoteMCPHubConnection(r)
+		if err != nil {
+			result <- remoteMCPServerInstallResult{err: err, errStage: "connection"}
+			return
+		}
+		server, err := mcp.GetRemoteServer(installCtx, baseURL, token, id)
+		if err != nil {
+			result <- remoteMCPServerInstallResult{err: err, errStage: "detail"}
+			return
+		}
+		name, err := h.mcp.InstallRemoteServer(installCtx, server)
+		result <- remoteMCPServerInstallResult{name: name, err: err, errStage: "install"}
+	}()
+
+	select {
+	case <-installCtx.Done():
+		writeCodedAPIError(w, http.StatusGatewayTimeout, "remote_mcp_install_failed", "remote MCP installation timed out")
 		return
+	case installed := <-result:
+		if installed.err != nil {
+			switch installed.errStage {
+			case "connection":
+				writeRemoteMCPHubError(w, installed.err)
+			case "detail":
+				writeRemoteMCPHubUpstreamError(w, installed.err)
+			default:
+				writeMCPServerError(w, installed.err)
+			}
+			return
+		}
+		writeJSON(w, http.StatusOK, remoteMCPServerInstallResponse{Name: installed.name})
 	}
-	server, err := mcp.GetRemoteServer(r.Context(), baseURL, token, id)
-	if err != nil {
-		writeRemoteMCPHubUpstreamError(w, err)
-		return
-	}
-	name, err := h.mcp.InstallRemoteServer(r.Context(), server)
-	if err != nil {
-		writeMCPServerError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, remoteMCPServerInstallResponse{
-		Name: name,
-	})
 }
 
 func writeRemoteMCPHubUpstreamError(w http.ResponseWriter, err error) {

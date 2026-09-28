@@ -69,7 +69,7 @@ export function RemoteMCPList({
         onChange={(event) => onSearchChange?.(event.currentTarget.value)}
       />
       {error ? (
-        <div className={styles.state}>
+        <div className={classNames(styles.state, styles.errorState)} role="alert">
           <span>{error}</span>
           {onRefresh ? (
             <Button

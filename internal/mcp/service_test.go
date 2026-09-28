@@ -250,6 +250,29 @@ func TestInstallRemoteServerRejectsUnavailableServerWithoutPersisting(t *testing
 	}
 }
 
+func TestInstallRemoteServerLimitsEntireProbeToFiveSeconds(t *testing.T) {
+	store := &memoryServerStore{}
+	svc := NewService(WithServerStore(store), WithServerProber(availabilityTestProber{
+		probe: func(ctx context.Context, _ string, _ map[string]any) (ProbeResult, error) {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("installation probe has no deadline")
+			}
+			remaining := time.Until(deadline)
+			if remaining <= 0 || remaining > remoteInstallProbeTimeout {
+				t.Fatalf("installation probe deadline remaining = %v, want at most %v", remaining, remoteInstallProbeTimeout)
+			}
+			return ProbeResult{Connected: true}, nil
+		},
+	}))
+
+	if _, err := svc.InstallRemoteServer(context.Background(), RemoteServer{
+		ID: "bounded", Name: "Bounded MCP", URL: "https://mcp.example.test/bounded",
+	}); err != nil {
+		t.Fatalf("InstallRemoteServer() error = %v", err)
+	}
+}
+
 func TestServiceCRUDAndErrors(t *testing.T) {
 	svc := NewService(WithServerStore(&memoryServerStore{}))
 	ctx := context.Background()

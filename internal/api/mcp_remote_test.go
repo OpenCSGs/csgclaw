@@ -10,16 +10,21 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"csgclaw/internal/auth"
 	"csgclaw/internal/mcp"
 )
 
 type remoteMCPTestProber struct {
-	err error
+	delay time.Duration
+	err   error
 }
 
 func (p remoteMCPTestProber) Probe(context.Context, string, map[string]any) (mcp.ProbeResult, error) {
+	if p.delay > 0 {
+		time.Sleep(p.delay)
+	}
 	if p.err != nil {
 		return mcp.ProbeResult{}, p.err
 	}
@@ -233,5 +238,74 @@ enabled = true
 	headers, ok := stored["headers"].(map[string]any)
 	if !ok || headers["Authorization"] != "test-secret" {
 		t.Fatalf("stored.headers = %#v, want server-side header", stored["headers"])
+	}
+}
+
+func TestHandleInstallRemoteMCPServerTimesOutEntireInstallation(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	t.Cleanup(remote.Close)
+	t.Setenv("CSGHUB_API_BASE_URL", remote.URL)
+	previousToken := remoteMCPHubAccessToken
+	remoteMCPHubAccessToken = func() (string, error) { return "hub-token", nil }
+	t.Cleanup(func() { remoteMCPHubAccessToken = previousToken })
+	previousTimeout := remoteMCPInstallTimeout
+	remoteMCPInstallTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { remoteMCPInstallTimeout = previousTimeout })
+	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
+
+	handler := &Handler{mcp: mcp.NewService(mcp.WithServerProber(remoteMCPTestProber{}))}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/mcp-servers/remote/slow/install", nil)
+	started := time.Now()
+	handler.Routes().ServeHTTP(recorder, request)
+
+	if elapsed := time.Since(started); elapsed >= time.Second {
+		t.Fatalf("installation elapsed = %v, want bounded by request timeout", elapsed)
+	}
+	if recorder.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusGatewayTimeout, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"code":"remote_mcp_install_failed"`) {
+		t.Fatalf("body = %s, want remote_mcp_install_failed", recorder.Body.String())
+	}
+}
+
+func TestHandleInstallRemoteMCPServerHardDeadlineRejectsLateProbe(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"data":{"id":"slow","name":"slow-mcp","protocol":"streamable-http","url":"https://mcp.example.test/slow"}}`)
+	}))
+	t.Cleanup(remote.Close)
+	t.Setenv("CSGHUB_API_BASE_URL", remote.URL)
+	previousToken := remoteMCPHubAccessToken
+	remoteMCPHubAccessToken = func() (string, error) { return "hub-token", nil }
+	t.Cleanup(func() { remoteMCPHubAccessToken = previousToken })
+	previousTimeout := remoteMCPInstallTimeout
+	remoteMCPInstallTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { remoteMCPInstallTimeout = previousTimeout })
+	t.Cleanup(stubAuthStatus(func(*http.Request) (auth.Status, error) { return auth.Status{}, nil }))
+
+	service := mcp.NewService(mcp.WithServerProber(remoteMCPTestProber{delay: 250 * time.Millisecond}))
+	handler := &Handler{mcp: service}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/mcp-servers/remote/slow/install", nil)
+	started := time.Now()
+	handler.Routes().ServeHTTP(recorder, request)
+
+	if elapsed := time.Since(started); elapsed >= 200*time.Millisecond {
+		t.Fatalf("installation elapsed = %v, want hard response deadline", elapsed)
+	}
+	if recorder.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusGatewayTimeout, recorder.Body.String())
+	}
+	time.Sleep(300 * time.Millisecond)
+	servers, err := service.ListServers(context.Background())
+	if err != nil {
+		t.Fatalf("ListServers() error = %v", err)
+	}
+	if len(servers) != 0 {
+		t.Fatalf("late probe persisted MCP servers after timeout: %#v", servers)
 	}
 }

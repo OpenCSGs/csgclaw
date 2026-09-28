@@ -548,7 +548,8 @@ Hub 凭据。查询参数与远端 Skill 列表保持一致：`page`（默认 `1
 安装或刷新一个远端 MCP 条目。CSGClaw 会在服务端请求 Hub 详情接口，将详情中的
 `protocol`、`url` 和 `headers` 转换为 catalog 配置，并使用详情响应的 `name` 作为
 catalog key。新远端条目默认写入 `enabled: true`、`startup_timeout_sec: 5` 和
-`tool_timeout_sec: 60`。响应只返回已安装的名称：
+`tool_timeout_sec: 60`。获取 Hub 详情、执行 MCP 握手与工具发现共用 5 秒安装总超时。
+响应只返回已安装的名称：
 
 ```json
 { "name": "calendar" }

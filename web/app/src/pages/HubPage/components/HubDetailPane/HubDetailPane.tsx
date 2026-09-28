@@ -2475,15 +2475,15 @@ export function HubDetailPane({
                   })}
                 </div>
 
-                {error || mcpMutationError || mcpProbeError ? (
+                {error || (!mcpCreateDialogOpen && mcpMutationError) || mcpProbeError ? (
                   <DismissibleAlert
                     className={moduleClassNames("mcp-error-notice")}
                     aria-live="polite"
-                    messageKey={error || mcpMutationError || mcpProbeError}
+                    messageKey={error || (!mcpCreateDialogOpen && mcpMutationError) || mcpProbeError}
                     closeLabel={t("close")}
                   >
                     <AlertCircle size={16} aria-hidden="true" />
-                    <span>{error || mcpMutationError || mcpProbeError}</span>
+                    <span>{error || (!mcpCreateDialogOpen && mcpMutationError) || mcpProbeError}</span>
                   </DismissibleAlert>
                 ) : null}
 

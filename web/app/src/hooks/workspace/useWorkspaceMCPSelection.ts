@@ -214,6 +214,7 @@ export function useWorkspaceMCPSelection({
 
   const changeMCPCreateDialogOpen = useCallback((open: boolean) => {
     setMCPCreateError("");
+    setMCPMutationError("");
     if (open) {
       setMCPCreateSource("mcp");
       setMCPAdded(false);

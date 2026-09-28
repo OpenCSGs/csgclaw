@@ -107,7 +107,7 @@ func (defaultServerProber) Probe(ctx context.Context, name string, config map[st
 		return ProbeResult{}, fmt.Errorf("connect to MCP server %q: %w", name, cause)
 	}
 	defer cancelConnect(context.Canceled)
-	defer session.Close()
+	defer closeProbeSession(session)
 
 	result := ProbeResult{
 		Connected:  true,
@@ -141,6 +141,17 @@ func (defaultServerProber) Probe(ctx context.Context, name string, config map[st
 	result.Truncated = truncated
 	result.DurationMS = time.Since(startedAt).Milliseconds()
 	return result, nil
+}
+
+type probeSessionCloser interface {
+	Close() error
+}
+
+// closeProbeSession keeps best-effort MCP session cleanup from extending the
+// caller's probe deadline. Streamable HTTP cleanup can issue a DELETE request
+// on a transport context deliberately detached by the SDK.
+func closeProbeSession(session probeSessionCloser) {
+	go func() { _ = session.Close() }()
 }
 
 func listProbeTools(ctx context.Context, session *mcpsdk.ClientSession) ([]ProbeTool, bool, error) {

@@ -567,7 +567,9 @@ Installs or refreshes one remote MCP entry. CSGClaw fetches the Hub item's
 detail endpoint server-side, converts `protocol`, `url`, and `headers` into the
 catalog configuration, and uses the detail response's `name` as the catalog
 key. New remote entries default to `enabled: true`, `startup_timeout_sec: 5`,
-and `tool_timeout_sec: 60`. The response returns only the installed name:
+and `tool_timeout_sec: 60`. Resolving the Hub detail, performing the MCP
+handshake, and discovering tools share a five-second total installation deadline.
+The response returns only the installed name:
 
 ```json
 { "name": "calendar" }

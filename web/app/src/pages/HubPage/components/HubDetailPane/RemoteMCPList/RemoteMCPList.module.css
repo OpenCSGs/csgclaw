@@ -75,6 +75,10 @@
   text-align: center;
 }
 
+.errorState {
+  color: var(--danger);
+}
+
 :global(:root[data-theme="dark"]) .icon,
 :global(:root[data-theme="dark"]) .state,
 :global(:root[data-theme="dark"]) .listState {
