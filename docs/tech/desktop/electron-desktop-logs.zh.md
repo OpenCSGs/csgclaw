@@ -80,11 +80,33 @@ Windows Website/Squirrel 安装包的日志位于 Electron `userData` 目录下�
 .\scripts\collect-desktop-diagnostics.cmd
 ```
 
-脚本会把最新的 `main.log`、`main.previous.log`、`backend.log`、Windows 渠道安装协调器日志和 ready 标记、安装目录下的 `Squirrel-*.log`、Crashpad dump、当前进程状态以及最近 30 分钟的 Windows Application 事件打包到桌面：
+也可以把 `collect-desktop-diagnostics.cmd` 和 `collect-desktop-diagnostics.ps1` 放在同一个目录发给出现问题的用户，在该目录的终端运行 `collect-desktop-diagnostics.cmd`，无需克隆源码仓库。
+
+脚本将所有信息放进桌面上的**一个 ZIP**，不会为智能体或崩溃文件另外生成压缩包：
 
 ```text
-csgclaw-diagnostics-YYYYMMDD-HHMMSS.zip
+csgclaw-diagnostics.zip
 ```
+
+每次成功运行更新同名 ZIP，先完成压缩再替换旧文件。旧版脚本留下的带时间戳 ZIP 不会自动删除；本次只需发送 `csgclaw-diagnostics.zip`。
+
+主要收集内容：
+
+| 包内文件 | 内容 |
+| --- | --- |
+| 桌面与安装日志 | 最新 `main.log`、`main.previous.log`、`backend.log`、渠道安装日志与 ready 标记、Squirrel 日志；每个文本文件默认保留最后 10000 行并进行常见凭据脱敏 |
+| `agent-data/agents.json` | 本地 API 的智能体快照，包括运行状态、配置完成状态和启动状态；API 不可用时记录原因 |
+| `agent-data/persisted-agents.json` | 本地 `state.json` 中的智能体部分，经脱敏后保留配置与期望状态；不复制整个状态文件 |
+| `agent-data/<id>/` | Codex 和 DSH 的运行元数据、目录清单及 stderr 尾部，默认各 500 行；应用未运行时也从本地文件收集 |
+| `process-status.txt`、`agent-data/process-details.txt` | 相关进程的资源占用、文件版本、PID、父 PID、启动时间和脱敏命令行；包含 DSH 的 CMD/Node 子进程 |
+| `agent-data/network-connections.txt` | 相关进程的 TCP 连接 |
+| `windows-system-info.txt`、`diagnostics-info.txt` | Windows 版本、构建号、内存、系统启动时间、PowerShell 版本、位数、时区与采集时间 |
+| `windows-events.txt` | 最近 180 分钟内与 CSGClaw、DSH、Node、Codex 相关的 Windows Application 事件 |
+| `windows-power-events.txt`、`windows-defender-events.txt` | 同一时间范围内的系统休眠唤醒事件和与运行时相关的 Defender 事件；无权限时记录原因 |
+| `crash-*` | Crashpad dump 和元数据，仍放在同一个 ZIP 中；二进制 dump 无法脱敏 |
+| `collection-errors.txt`、`collected-paths.txt`、`README.txt` | 不可用的数据项、来源路径和包内说明 |
+
+某个文件读不到、桌面日志目录不存在或应用已经退出时，脚本仍尽量生成包含其余信息的 ZIP。排查“智能体自动离线”时，建议出现问题后立即运行，先保留现场再重启应用。
 
 需要修改 Windows 事件回溯时间或 userData 位置时，可以直接调用 PowerShell 脚本：
 
@@ -94,6 +116,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -EventLookbackMinutes 60 `
   -UserDataDirectory "$env:APPDATA\CSGClaw"
 ```
+
+也可以通过 CMD 入口传参，例如 `.\scripts\collect-desktop-diagnostics.cmd -AgentLogLines 2000 -DesktopLogLines 20000`。
 
 以下命令用于不生成诊断包时手工查看日志。
 
