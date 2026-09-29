@@ -18,13 +18,18 @@ export function VideoGenerationStatus({ message, t }: { message: IMMessage; t: T
     in_progress: t("videoGenerating"),
     downloading: t("videoDownloading"),
   };
-  const errorDetails = task.error_details && typeof task.error_details === "object" && !Array.isArray(task.error_details)
-    ? task.error_details as Record<string, unknown>
-    : null;
+  const errorDetails =
+    task.error_details && typeof task.error_details === "object" && !Array.isArray(task.error_details)
+      ? (task.error_details as Record<string, unknown>)
+      : null;
   const errorMessage = String(errorDetails?.message ?? "").trim();
   return (
     <div className="image-generation-status" role="status" aria-live="polite">
-      <span>{state === "generating" && progressLabels[upstreamStatus] ? progressLabels[upstreamStatus] : labels[state] || t("videoGenerating")}</span>
+      <span>
+        {state === "generating" && progressLabels[upstreamStatus]
+          ? progressLabels[upstreamStatus]
+          : labels[state] || t("videoGenerating")}
+      </span>
       {state === "failed" && errorMessage ? <p>{errorMessage}</p> : null}
       <details className="image-generation-prompt">
         <summary>{t("videoViewPrompt")}</summary>

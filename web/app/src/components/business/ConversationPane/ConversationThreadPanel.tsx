@@ -144,10 +144,12 @@ export function ConversationThreadPanel({
   const [mentionState, setMentionState] = useState<ThreadMentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const root = thread?.root ?? null;
-  const replies = thread?.replies ?? [];
+  const replies = useMemo(() => thread?.replies ?? [], [thread?.replies]);
   const videoGroups = useMemo(() => groupVideoGenerationMessages(root ? [root, ...replies] : replies), [root, replies]);
   const visibleRoot =
-    (showToolCalls || !isToolCallMessage(root)) && (!root?.id || !videoGroups.childMessageIDs.has(root.id)) ? root : null;
+    (showToolCalls || !isToolCallMessage(root)) && (!root?.id || !videoGroups.childMessageIDs.has(root.id))
+      ? root
+      : null;
   const visibleReplies = showToolCalls ? replies : replies.filter((message) => !isToolCallMessage(message));
   const displayReplies = visibleReplies.filter(
     (message) => !message.id || !videoGroups.childMessageIDs.has(message.id),

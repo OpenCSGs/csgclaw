@@ -204,7 +204,11 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                 {isVideoGeneration ? (
                   <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
                 ) : (
-                  <MessageAttachments attachments={message.attachments} t={t} onPreviewAttachment={onPreviewAttachment} />
+                  <MessageAttachments
+                    attachments={message.attachments}
+                    t={t}
+                    onPreviewAttachment={onPreviewAttachment}
+                  />
                 )}
                 {embeddedVideos.map((video) => (
                   <VideoGenerationCard
