@@ -714,6 +714,7 @@ export function AgentProfileModal({
                             },
                             ...providerOptions.map((option) => ({
                               value: option.value,
+                              disabled: option.disabled,
                               label: (
                                 <ModelOptionLabel
                                   avatar={option.avatar}

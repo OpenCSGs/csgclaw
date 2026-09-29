@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { AgentProfileModal } from "@/pages/WorkspacePage/components";
+import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import { agentToDraft, type AgentDraft } from "@/models/agents";
 import * as directoryPicker from "@/components/business/ProfileControls/runtimeOptionDirectoryPicker";
 
@@ -77,6 +78,50 @@ const worker = {
 };
 
 describe("AgentProfileModal", () => {
+  it("disables failed CLI providers and keeps an existing selection read-only", async () => {
+    const user = userEvent.setup();
+    const draft = { ...agentToDraft(worker), provider: "codex", model_provider_id: "codex", model_id: "saved-model" };
+    render(
+      <AgentProfileModal
+        t={t}
+        agentModalMode="create"
+        editingAgent={null}
+        agentDraft={draft}
+        modelProviders={normalizeModelProviderCatalog({
+          providers: [
+            { id: "codex", display_name: "Codex", status: "failed", models: ["stale-model"] },
+            { id: "claude_code", display_name: "Claude Code", status: "failed", models: ["stale-model"] },
+          ],
+        })}
+        onAgentDraftChange={vi.fn()}
+        onAgentModelsReset={vi.fn()}
+        hubTemplates={[]}
+        bootstrapConfig={{}}
+        managerAgent={null}
+        agentModels={[]}
+        agentModelBusy={false}
+        locale="en"
+        authStatuses={{}}
+        authBusyProvider=""
+        agentCreateBotKind="worker"
+        agentCreateMode="custom"
+        onAgentCreateBotKindChange={vi.fn()}
+        notifierWebhookPublicOrigin="http://127.0.0.1:18080"
+        onProviderLogin={vi.fn()}
+        agentError=""
+        agentProgress={null}
+        agentBusy={false}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("combobox", { name: /^Model$/ })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: /^Model$/ })).toHaveTextContent("saved-model");
+    await user.click(screen.getByRole("combobox", { name: "profileModelProvider" }));
+    expect(screen.getByRole("option", { name: /Codex/ })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("option", { name: /Claude Code/ })).toHaveAttribute("aria-disabled", "true");
+  });
+
   it("does not preselect an avatar in create mode", () => {
     const draft = { ...agentToDraft(worker), avatar: "" };
 

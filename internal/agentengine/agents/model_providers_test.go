@@ -362,6 +362,14 @@ func TestCheckCLIProviderRequiresAuthAndRegisteredModels(t *testing.T) {
 						t.Fatal("connection check must not use fallback model choices")
 						return nil, nil
 					}
+					models, err := (&ModelConfiguration{}).ListModelsForRequest(context.Background(), ProfileModelRequest{Provider: provider})
+					if tc.wantStatus == ModelProviderStatusConnected {
+						if err != nil || strings.Join(models, ",") != "registered-model" {
+							t.Fatalf("agent picker models = %v, err = %v", models, err)
+						}
+					} else if err == nil || err.Error() != tc.wantMessage || len(models) != 0 {
+						t.Fatalf("agent picker models = %v, err = %v; want no models and %q", models, err, tc.wantMessage)
+					}
 					got := CheckModelProvider(context.Background(), ModelProviderCheckInput{ID: provider})
 					if got.Status != tc.wantStatus || got.Message != tc.wantMessage {
 						t.Fatalf("check = %+v, want %s: %s", got, tc.wantStatus, tc.wantMessage)

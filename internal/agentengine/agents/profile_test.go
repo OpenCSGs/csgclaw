@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/cliproxy"
 	"csgclaw/internal/config"
 	"csgclaw/internal/modelprovider"
 )
@@ -393,13 +394,14 @@ func TestRedactedProfileViewOmitsAPIKeyPreviewForShortKeys(t *testing.T) {
 	}
 }
 
-func TestListModelsForRequestUsesCLIProxyChoicesForDropdown(t *testing.T) {
-	oldChoices := listCLIProxyModelChoices
-	defer func() {
-		listCLIProxyModelChoices = oldChoices
-	}()
+func TestListModelsForRequestUsesAuthenticatedCLIProxyModels(t *testing.T) {
+	oldAuth, oldModels := cliProxyAuthStatus, listCLIProxyModels
+	t.Cleanup(func() { cliProxyAuthStatus, listCLIProxyModels = oldAuth, oldModels })
+	cliProxyAuthStatus = func(context.Context, string) (cliproxy.AuthStatus, error) {
+		return cliproxy.AuthStatus{Authenticated: true}, nil
+	}
 	var gotProvider string
-	listCLIProxyModelChoices = func(ctx context.Context, provider string) ([]string, error) {
+	listCLIProxyModels = func(ctx context.Context, provider string) ([]string, error) {
 		gotProvider = provider
 		return []string{"gpt-5.4", "gpt-5.5", "gpt-4.1", "gpt-5.4-mini"}, nil
 	}

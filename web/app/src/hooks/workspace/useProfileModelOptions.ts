@@ -47,7 +47,10 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
   const query = useWorkspaceAgentProfileModelsQuery(requestDraft, {
     enabled: Boolean(requestDraft),
   });
-  const models = useMemo(() => query.data?.models ?? [], [query.data]);
+  const models = useMemo(
+    () => (!shouldLoad || draftRequestKey !== requestKey || query.isError ? [] : (query.data?.models ?? [])),
+    [draftRequestKey, query.data, query.isError, requestKey, shouldLoad],
+  );
 
   useEffect(() => {
     if (!models.length || !draft || draft.model_id || !onDraftChange) {

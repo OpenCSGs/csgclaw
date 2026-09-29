@@ -13,6 +13,32 @@ import {
 } from "@/models/modelProviders";
 
 describe("model provider catalog helpers", () => {
+  it.each(["codex", "claude_code"])("keeps failed %s unavailable despite cached or discovered models", (id) => {
+    const catalog = normalizeModelProviderCatalog({
+      providers: [{ id, builtin: true, status: "failed", models: ["cached-model"], image_models: ["cached-image"] }],
+    });
+    const staleOptions = [
+      {
+        value: `${id}.discovered-model`,
+        label: "discovered-model",
+        providerID: id,
+        providerDisplayName: id,
+        providerAvatar: "",
+        modelID: "discovered-model",
+      },
+    ];
+    const refreshed = modelProviderCatalogWithModels(catalog, id, ["discovered-model"]);
+    expect(modelProviderOptionsFromCatalog(refreshed)).toEqual([]);
+    expect(modelProviderSelectOptionsFromCatalog(refreshed, staleOptions)).toMatchObject([
+      { id, disabled: true, models: [], imageModels: [] },
+    ]);
+    const recovered = normalizeModelProviderCatalog({
+      providers: [{ id, builtin: true, status: "connected", models: ["available-model"] }],
+    });
+    expect(modelProviderSelectOptionsFromCatalog(recovered)).toMatchObject([{ id, models: ["available-model"] }]);
+    expect(modelProviderSelectOptionsFromCatalog(recovered)[0].disabled).not.toBe(true);
+  });
+
   it("uses only the canonical OpenCSG model provider id for authentication guards", () => {
     expect(MODEL_PROVIDER_IDS.OpenCSG).toBe("opencsg");
     expect(modelProviderConfigUsesOpenCSG({ model_provider_id: "opencsg" })).toBe(true);

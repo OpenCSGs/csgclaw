@@ -80,6 +80,7 @@ export type ModelProviderOption = {
 export type ModelProviderSelectOption = {
   avatar: string;
   builtin?: boolean;
+  disabled?: boolean;
   displayName: string;
   id: string;
   models: string[];
@@ -281,6 +282,7 @@ export function modelProviderOptionsFromCatalog(
   const options: ModelProviderOption[] = [];
   const seen = new Set<string>();
   for (const provider of catalog?.providers ?? []) {
+    if (cliProviderCheckFailed(provider)) continue;
     const providerAvatar = modelProviderAvatarPath(provider);
     for (const modelID of provider.models) {
       const value = selectorForProviderModel(provider.id, modelID);
@@ -317,7 +319,7 @@ export function modelProviderCatalogWithModels(
   }
   let matched = false;
   const providers = catalog.providers.map((provider) => {
-    if (provider.id !== normalizedProviderID) {
+    if (provider.id !== normalizedProviderID || cliProviderCheckFailed(provider)) {
       return provider;
     }
     matched = true;
@@ -371,6 +373,7 @@ export function modelProviderSelectOptionsFromCatalog(
     }
     const existing = providers.get(providerID);
     if (existing) {
+      if (existing.disabled) return;
       if (option.modelID && !existing.models.includes(option.modelID)) {
         existing.models.push(option.modelID);
       }
@@ -389,14 +392,16 @@ export function modelProviderSelectOptionsFromCatalog(
   if (catalog?.providers?.length) {
     const providers = new Map<string, ModelProviderSelectOption>();
     for (const provider of catalog.providers) {
+      const disabled = cliProviderCheckFailed(provider);
       providers.set(provider.id, {
         avatar: modelProviderAvatarPath(provider),
         builtin: provider.builtin || undefined,
         displayName: provider.display_name || provider.id,
         id: provider.id,
-        models: [...provider.models],
-        imageModels: provider.imageModels ?? [],
-        videoModels: provider.videoModels ?? [],
+        disabled: disabled || undefined,
+        models: disabled ? [] : [...provider.models],
+        imageModels: disabled ? [] : (provider.imageModels ?? []),
+        videoModels: disabled ? [] : (provider.videoModels ?? []),
         value: provider.id,
       });
     }
@@ -411,6 +416,13 @@ export function modelProviderSelectOptionsFromCatalog(
     mergeModelOption(providers, option);
   }
   return [...providers.values()];
+}
+
+function cliProviderCheckFailed(provider: ModelProvider): boolean {
+  return (
+    (provider.id === MODEL_PROVIDER_IDS.Codex || provider.id === MODEL_PROVIDER_IDS.ClaudeCode) &&
+    provider.status === "failed"
+  );
 }
 
 export function modelProviderDisplayNameExists(

@@ -8,6 +8,7 @@ import type { Ref } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentDraft, AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
+import { normalizeModelProviderCatalog } from "@/models/modelProviders";
 import { AgentDetailPane } from "./AgentDetailPane";
 import type { AgentDetailPaneHandle, AgentDetailPaneProps } from "./AgentDetailPane";
 
@@ -555,4 +556,24 @@ it.each(["skill", "mcp"])("%s 更新期间保留其他资源状态并标记当�
   }
   expect(screen.getByText("resourceUpdating")).toBeVisible();
   expect(onSetResourceEnabled).not.toHaveBeenCalled();
+});
+
+it("disables failed CLI providers even when stale models remain", async () => {
+  const user = userEvent.setup();
+  render(
+    <Harness
+      modelProviders={normalizeModelProviderCatalog({
+        providers: [
+          { id: "codex", display_name: "Codex", status: "failed", models: ["stale-codex"] },
+          { id: "claude_code", display_name: "Claude Code", status: "failed", models: ["stale-claude"] },
+          { id: "custom", display_name: "Available API", status: "connected", models: ["available-model"] },
+        ],
+      })}
+    />,
+    { wrapper: createQueryWrapper().wrapper },
+  );
+  await user.click(screen.getByRole("combobox", { name: "profileModelProvider" }));
+  expect(screen.getByRole("option", { name: /Codex/ })).toHaveAttribute("aria-disabled", "true");
+  expect(screen.getByRole("option", { name: /Claude Code/ })).toHaveAttribute("aria-disabled", "true");
+  expect(screen.getByRole("option", { name: /Available API/ })).not.toHaveAttribute("aria-disabled", "true");
 });

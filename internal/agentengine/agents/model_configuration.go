@@ -172,11 +172,11 @@ func (s *ModelConfiguration) ListModelsForRequest(ctx context.Context, req Profi
 		profile = s.withDefaultAPIKeyForMatchingProfile(profile)
 	}
 	if profile.Provider == ProviderCodex || profile.Provider == ProviderClaudeCode {
-		models, err := listCLIProxyModelChoices(ctx, profile.Provider)
-		if err != nil {
-			return nil, err
+		result := CheckModelProvider(ctx, ModelProviderCheckInput{ID: profile.Provider})
+		if result.Status != ModelProviderStatusConnected {
+			return nil, fmt.Errorf("%s", result.Message)
 		}
-		return sortModelIDs(models), nil
+		return result.Models, nil
 	}
 	models, err := ListModelsForProfile(ctx, profile)
 	if err != nil {

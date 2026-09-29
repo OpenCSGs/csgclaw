@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fetchAgentProfileModels } from "@/api/agents";
 import { useProfileModelOptions } from "@/hooks/workspace/useProfileModelOptions";
@@ -45,6 +45,20 @@ function apiDraft(overrides: Partial<AgentDraft> = {}): AgentDraft {
 }
 
 describe("useProfileModelOptions", () => {
+  it("drops retained query data when refreshing models fails", async () => {
+    vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: ["previously-available"] });
+    const draft = apiDraft({ provider: "codex", model_id: "saved-model" });
+    const { result } = renderHook(() => useProfileModelOptions({ draft }), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.models).toEqual(["previously-available"]));
+    vi.mocked(fetchAgentProfileModels).mockRejectedValue(new Error("Codex auth was not found"));
+    await act(async () => {
+      await result.current.retryModels();
+    });
+    await waitFor(() => expect(result.current.modelError).toBeTruthy());
+    expect(result.current.models).toEqual([]);
+    expect(draft.model_id).toBe("saved-model");
+  });
+
   beforeEach(() => {
     vi.mocked(fetchAgentProfileModels).mockReset();
     vi.mocked(fetchAgentProfileModels).mockResolvedValue({ models: [] });

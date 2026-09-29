@@ -1966,6 +1966,7 @@ function AgentModelPanel({
                   { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileProviderSelect") },
                   ...providerOptions.map((option) => ({
                     value: option.value,
+                    disabled: option.disabled,
                     label: (
                       <ModelOptionLabel
                         avatar={option.avatar}
