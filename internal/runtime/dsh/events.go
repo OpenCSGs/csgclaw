@@ -392,7 +392,7 @@ func (r *Runtime) handleServerRequest(proc *process, request serverRequest) {
 	interaction := contract.InteractionRequest{
 		ID: interactionID, Kind: contract.InteractionPermission, Title: title, Payload: snapshot,
 	}
-	r.pending[interactionID] = &pendingPermission{runtimeID: proc.meta.RuntimeID, conversation: turn.request.ConversationKey, request: interaction, requestID: request.ID, client: proc.client, allowedOptions: allowed}
+	r.pending[interactionID] = &pendingPermission{diagnostic: turn.diagnostic, diagnosticSpan: turn.diagnostic.Start("user.wait", "user", interactionID), runtimeID: proc.meta.RuntimeID, conversation: turn.request.ConversationKey, request: interaction, requestID: request.ID, client: proc.client, allowedOptions: allowed}
 	r.mu.Unlock()
 
 	proc.mu.Lock()
@@ -404,6 +404,7 @@ func (r *Runtime) handleServerRequest(proc *process, request serverRequest) {
 		if err := sink.Emit(context.Background(), event); err != nil {
 			r.mu.Lock()
 			delete(r.pending, interactionID)
+			turn.diagnostic.End(interactionID, "failed")
 			r.mu.Unlock()
 			proc.mu.Lock()
 			if turn.interactionError == nil {

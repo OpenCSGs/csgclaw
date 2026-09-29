@@ -2,6 +2,7 @@ package ingress
 
 import (
 	"context"
+	"csgclaw/internal/diagnostics"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -41,6 +42,7 @@ type Worker struct {
 }
 
 type queuedEvent struct {
+	diagnostic      *diagnostics.Record
 	event           channel.Event
 	dedupeKey       string
 	conversationKey agentengine.ConversationKey
@@ -162,6 +164,7 @@ func (w *Worker) run(ctx context.Context) {
 				continue
 			}
 			pending = append(pending[:index], pending[index+1:]...)
+			item.diagnostic.Finish("canceled")
 			w.discardQueued(item.dedupeKey)
 		}
 		for len(activeScopes) < defaultConcurrentScopes {
@@ -187,7 +190,17 @@ func (w *Worker) run(ctx context.Context) {
 		dispatch()
 		select {
 		case <-ctx.Done():
-			return
+			for _, item := range pending {
+				item.diagnostic.Finish("interrupted")
+			}
+			for {
+				select {
+				case item := <-w.queue:
+					item.diagnostic.Finish("interrupted")
+				default:
+					return
+				}
+			}
 		case item := <-w.queue:
 			pending = append(pending, item)
 		case scope := <-completed:
@@ -198,10 +211,12 @@ func (w *Worker) run(ctx context.Context) {
 
 func (w *Worker) handle(ctx context.Context, item queuedEvent) {
 	if ctx.Err() != nil {
+		item.diagnostic.Finish("interrupted")
 		return
 	}
-	turnCtx, cancel := context.WithCancel(ctx)
+	turnCtx, cancel := context.WithCancel(diagnostics.WithRecord(ctx, item.diagnostic))
 	if !w.setActive(item, cancel) {
+		item.diagnostic.Finish("canceled")
 		cancel()
 		return
 	}
@@ -253,6 +268,7 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 		generation++
 	}
 	item := queuedEvent{
+		diagnostic:      w.adapter.BeginDiagnostics(w.binding, event),
 		event:           event,
 		dedupeKey:       key,
 		conversationKey: conversationKey,
@@ -265,6 +281,8 @@ func (w *Worker) acceptAndEnqueue(event channel.Event) (queuedEvent, bool, error
 		w.latest[string(conversationKey)] = key
 		return item, true, nil
 	default:
+		item.diagnostic.Failure("queue_full", "queue", "The channel queue is full")
+		item.diagnostic.Finish("failed")
 		return queuedEvent{}, false, fmt.Errorf("binding worker queue is full")
 	}
 }

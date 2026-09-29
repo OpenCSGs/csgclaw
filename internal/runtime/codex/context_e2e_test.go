@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"csgclaw/internal/diagnostics"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,7 +22,7 @@ import (
 
 // Exercises the bundled process, real Responses transport and event subscription.
 func TestContextUsageBundledCodexE2E(t *testing.T) {
-	for _, mode := range []string{"usage", "auto_compact", "overflow", "cold_resume", "luna_history", "auto_compact_failure"} {
+	for _, mode := range []string{"diagnostics", "usage", "auto_compact", "overflow", "cold_resume", "luna_history", "auto_compact_failure"} {
 		t.Run(mode, func(t *testing.T) { testContextBundledCodex(t, mode) })
 	}
 }
@@ -33,6 +35,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CODEX_HOME", filepath.Join(home, "host"))
+	diagnosticStore := diagnostics.New("")
 	var requests atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/responses" {
@@ -40,6 +43,20 @@ func testContextBundledCodex(t *testing.T, mode string) {
 			return
 		}
 		n := requests.Add(1)
+		if mode == "diagnostics" {
+			var meta struct {
+				Session string `json:"thread_id"`
+				Turn    string `json:"turn_id"`
+			}
+			if json.Unmarshal([]byte(r.Header.Get("X-Codex-Turn-Metadata")), &meta) != nil || meta.Session == "" || meta.Turn == "" {
+				t.Error("native model request lacks exact turn correlation")
+			}
+			update, finish := diagnostics.ObserveRequest(diagnostics.WithNativeLookup(r.Context(), diagnosticStore, "alice", meta.Session, meta.Turn), "responses")
+			defer finish("completed")
+			update(200, nil)
+			time.Sleep(15 * time.Millisecond)
+		}
+
 		if mode == "auto_compact_failure" && n >= 2 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(400)
@@ -70,7 +87,11 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		emit := func(v any) { b, _ := json.Marshal(v); fmt.Fprintf(w, "data: %s\n\n", b) }
 		emit(map[string]any{"type": "response.created", "response": map[string]any{"id": "r1"}})
-		emit(map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "message", "role": "assistant", "id": "m1", "content": []any{map[string]any{"type": "output_text", "text": "done"}}}})
+		if mode == "diagnostics" && n == 1 {
+			emit(map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "function_call", "id": "tool1", "call_id": "tool1", "name": "exec_command", "arguments": `{"cmd":"printf native-diagnostic-fixture","yield_time_ms":1000}`}})
+		} else {
+			emit(map[string]any{"type": "response.output_item.done", "item": map[string]any{"type": "message", "role": "assistant", "id": "m1", "content": []any{map[string]any{"type": "output_text", "text": "done"}}}})
+		}
 		emit(map[string]any{"type": "response.completed", "response": map[string]any{"id": "r1", "usage": map[string]any{"input_tokens": tokens, "output_tokens": 20, "total_tokens": tokens + 20}}})
 	}))
 	defer server.Close()
@@ -102,8 +123,79 @@ func testContextBundledCodex(t *testing.T, mode string) {
 
 	events, unsubscribe := rt.SubscribeSession(h.RuntimeID, thread)
 	defer unsubscribe()
+	var diagnostic *diagnostics.Record
+	if mode == "diagnostics" {
+		store := diagnosticStore
+		store.Source("room", "source", time.Now())
+		diagnostic = store.Begin("room", "source", "", "alice", "turn")
+		diagnostic.Running()
+		ctx = diagnostics.WithRecord(ctx, diagnostic)
+	}
 	if err := rt.Prompt(ctx, h.RuntimeID, thread, "CSG_CONTEXT_SENTINEL Reply done."); err != nil {
 		t.Fatal(err)
+	}
+	if diagnostic != nil {
+		time.Sleep(20 * time.Millisecond)
+		diagnostic.Finish("succeeded")
+		v := diagnostic.Snapshot()
+		calls := 0
+		for _, span := range v.Spans {
+			if span.Owner == "llm" {
+				calls++
+			}
+		}
+		if calls != 2 {
+			t.Fatalf("native request did not correlate: %+v", v)
+		}
+		if v.RuntimeStartMS == nil || v.RuntimeEndMS == nil || v.TotalMS-*v.RuntimeEndMS < 20 || v.Runtime != "codex" {
+			t.Fatalf("native Codex diagnostic boundary: %+v", v)
+		}
+	}
+	if mode == "diagnostics" {
+		deadline := time.Now().Add(8 * time.Second)
+		found := map[string]bool{}
+		for time.Now().Before(deadline) {
+			for _, span := range diagnostic.Snapshot().Spans {
+				if span.Details != nil && span.Details.Source == "codex_otel" {
+					found[span.Details.Label] = true
+				}
+			}
+			if found["session_task.turn"] && found["model_client.stream_responses_api"] && found["drain_in_flight"] {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		if !found["session_task.turn"] || !found["model_client.stream_responses_api"] || !found["drain_in_flight"] {
+			t.Fatalf("missing native turn/model/tool phases: %v", found)
+		}
+		var bridgeCalls, nativeRequests, nativeStreams []diagnostics.Span
+		for _, span := range diagnostic.Snapshot().Spans {
+			if span.Owner == "llm" {
+				bridgeCalls = append(bridgeCalls, span)
+			}
+			if span.Details != nil && span.Details.Source == "codex_otel" {
+				if span.Details.Label == "model_client.stream_responses_api" {
+					nativeRequests = append(nativeRequests, span)
+				}
+				if span.Details.Label == "receiving_stream" {
+					nativeStreams = append(nativeStreams, span)
+				}
+			}
+		}
+		for _, spans := range [][]diagnostics.Span{bridgeCalls, nativeRequests, nativeStreams} {
+			sort.Slice(spans, func(i, j int) bool { return spans[i].StartMS < spans[j].StartMS })
+		}
+		if len(nativeRequests) != 2 || len(nativeStreams) != 2 {
+			t.Fatalf("native/bridge request count mismatch: requests=%d streams=%d", len(nativeRequests), len(nativeStreams))
+		}
+		for i, call := range bridgeCalls {
+			// Allow millisecond wall-clock precision, but verify the separately clocked
+			// bridge interval lies inside native request establishment + stream receipt.
+			if nativeRequests[i].StartMS > call.StartMS+5 || *nativeStreams[i].EndMS < *call.EndMS-5 {
+				t.Fatalf("native/bridge timing mismatch: bridge=%+v native=%+v stream=%+v", call, nativeRequests[i], nativeStreams[i])
+			}
+		}
+
 	}
 	if mode == "cold_resume" {
 		manager := rt.SessionManager().(*appServerManager)
@@ -140,6 +232,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		}
 	}
 	completed := 0
+	successfulCommand := false
 	target := 1
 	if mode == "auto_compact" || mode == "cold_resume" || mode == "luna_history" {
 		target = 2
@@ -152,6 +245,9 @@ func testContextBundledCodex(t *testing.T, mode string) {
 			if !ok {
 				t.Fatal("event stream closed")
 			}
+			if e.Kind == SessionEventToolCallUpdate && e.ToolKind == "exec_command" && e.ToolStatus == "completed" {
+				successfulCommand = true
+			}
 			if string(e.Kind) == "context_usage" {
 				latest = e.Payload.(modelcap.ContextUsage)
 				sawCompaction = sawCompaction || latest.Compacting
@@ -162,6 +258,9 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		}
+	}
+	if mode == "diagnostics" && !successfulCommand {
+		t.Fatal("native shell command did not complete")
 	}
 	expectedUsage := int64(1020)
 	if mode == "luna_history" {

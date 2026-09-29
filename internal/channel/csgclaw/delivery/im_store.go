@@ -360,8 +360,9 @@ func transcriptMetadata(kind string, turn channel.TurnContext, tool *agentengine
 		entry["tool_status"] = strings.TrimSpace(tool.Status)
 	}
 	metadata := taskmeta.Set(map[string]any{
-		"codex":    cloneMetadata(entry),
-		"openclaw": cloneMetadata(entry),
+		"diagnostics": map[string]any{"room_id": turn.RoomID, "source_id": turn.SourceMessageID, "turn_id": string(turn.TurnID), "agent_id": turn.AgentID},
+		"codex":       cloneMetadata(entry),
+		"openclaw":    cloneMetadata(entry),
 	}, turn.TaskID, turn.TaskAttempt)
 	return withChannelMetadata(metadata)
 }

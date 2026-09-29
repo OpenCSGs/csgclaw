@@ -1,6 +1,8 @@
 package api
 
 import (
+	"csgclaw/internal/diagnostics"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -70,6 +72,7 @@ func (h *Handler) handleBotLLMModels(w http.ResponseWriter, r *http.Request, bot
 }
 
 func (h *Handler) handleBotLLMChatCompletions(w http.ResponseWriter, r *http.Request, botID string) {
+	r = h.withLLMDiagnostic(r, botID)
 	if h.llm == nil {
 		http.Error(w, "llm bridge is not configured", http.StatusServiceUnavailable)
 		return
@@ -89,6 +92,7 @@ func (h *Handler) handleBotLLMChatCompletions(w http.ResponseWriter, r *http.Req
 }
 
 func (h *Handler) handleBotLLMResponses(w http.ResponseWriter, r *http.Request, botID string) {
+	r = h.withLLMDiagnostic(r, botID)
 	if h.llm == nil {
 		http.Error(w, "llm bridge is not configured", http.StatusServiceUnavailable)
 		return
@@ -181,4 +185,32 @@ func writeLLMError(w http.ResponseWriter, err error) {
 		return
 	}
 	http.Error(w, err.Error(), http.StatusInternalServerError)
+}
+
+// Codex includes stable session and turn IDs on each HTTP model request.
+// Requests without that contract (including current DSH and WebSockets) remain
+// explicitly unmeasured rather than being assigned by Agent identity alone.
+func (h *Handler) withLLMDiagnostic(r *http.Request, agentID string) *http.Request {
+	if h.im == nil {
+		return r
+	}
+	raw := r.Header.Get("X-Codex-Turn-Metadata")
+	if len(raw) > 8192 || raw == "" {
+		return r
+	}
+	var meta struct {
+		Thread  string `json:"thread_id"`
+		Session string `json:"session_id"`
+		Turn    string `json:"turn_id"`
+	}
+	if json.Unmarshal([]byte(raw), &meta) != nil {
+		return r
+	}
+	if meta.Thread == "" {
+		meta.Thread = meta.Session
+	}
+	if meta.Thread == "" || meta.Turn == "" || len(meta.Thread) > 256 || len(meta.Turn) > 256 {
+		return r
+	}
+	return r.WithContext(diagnostics.WithNativeLookup(r.Context(), h.im.Diagnostics(), agentID, meta.Thread, meta.Turn))
 }

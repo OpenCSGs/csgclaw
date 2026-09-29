@@ -32,16 +32,17 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
         headerControls={props.progressControls?.header}
         controls={props.progressControls?.footer}
         t={props.t}
-        answer={hasAnswer ? <MessageBody {...props} /> : null}
+        answer={hasAnswer ? <MessageBody {...props} diagnosticText /> : null}
         renderText={renderProgressText}
       />
     );
   }
-  return <MessageBody {...props} />;
+  return <MessageBody {...props} diagnosticText />;
 });
 
 function MessageBody({
   content,
+  diagnosticText = false,
   message,
   actionBusy,
   actionFeedback,
@@ -52,7 +53,7 @@ function MessageBody({
   onLongMessageExpandedChange,
   onQuestionSelect,
   t,
-}: MessageContentProps) {
+}: MessageContentProps & { diagnosticText?: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeCitationID, setActiveCitationID] = useState<string | null>(null);
   const blankTurnPlaceholder = isBlankTurnPlaceholder(content);
@@ -156,6 +157,7 @@ function MessageBody({
     ) : (
       <div
         ref={rendered.cited.length ? undefined : containerRef}
+        data-diagnostic-response-text={diagnosticText || undefined}
         className="message-content"
         dangerouslySetInnerHTML={markdownHTML}
       />

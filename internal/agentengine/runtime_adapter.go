@@ -6,6 +6,7 @@ import (
 	"csgclaw/internal/agentengine/contract"
 	"csgclaw/internal/agentengine/lifecycle"
 	"csgclaw/internal/agentengine/registry"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/runtime"
 	"encoding/json"
 	"errors"
@@ -302,15 +303,20 @@ func (a runtimeBackend) conversationRuntime(ctx context.Context, agentID string)
 	if a.agents == nil {
 		return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: "agent service is required"}
 	}
+	finishLease := diagnostics.Measure(ctx, "runtime.lease", "csgclaw")
 	release, err := a.lifecycle.Execution(ctx, agent.CanonicalID(agentID))
+	finishLease()
 	if err != nil {
 		return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: err.Error()}
 	}
+	finishProbe := diagnostics.Measure(ctx, "runtime.inspect", "runtime")
 	selected, getErr := a.agents.Get(ctx, agentID, AgentGetOptions{ProbeRuntime: true})
+	finishProbe()
 	if getErr != nil {
 		release()
 		return nil, nil, &TurnError{Code: ErrorAgentUnavailable, Message: getErr.Error()}
 	}
+	diagnostics.From(ctx).AgentName(selected.Spec.Name)
 	if a.ready != nil {
 		if err := a.ready(selected.ID); err != nil {
 			release()

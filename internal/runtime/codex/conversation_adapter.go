@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/diagnostics"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -56,7 +57,9 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	finishSession := diagnostics.Measure(runCtx, "session.prepare", "runtime")
 	sessionID, sessionErr := a.session(runCtx, request)
+	finishSession()
 	if sessionErr != nil {
 		return contract.TurnResult{Status: contract.TurnFailed, Error: sessionErr}
 	}

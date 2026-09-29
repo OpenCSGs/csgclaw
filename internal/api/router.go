@@ -194,6 +194,9 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			r.Route("/{id}", func(r chi.Router) {
 				r.Patch("/", h.updateRoom)
 				r.Delete("/", h.deleteRoom)
+				r.Get("/diagnostics", h.listDiagnostics)
+				r.Get("/diagnostics/{diagnostic_id}", h.getDiagnostic)
+				r.Post("/diagnostics/timings", h.reportDiagnosticTiming)
 				r.Get("/attachments", h.handleRoomAttachments)
 				r.Get("/attachments/{attachment_id}", h.handleRoomAttachmentDownload)
 				r.Delete("/attachments/{attachment_id}", h.handleRoomAttachmentDelete)

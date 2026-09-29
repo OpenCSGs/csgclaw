@@ -3,6 +3,7 @@ package dsh
 import (
 	"context"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/dshcli"
 	"csgclaw/internal/modelcap"
 	agentruntime "csgclaw/internal/runtime"
@@ -20,7 +21,7 @@ import (
 )
 
 func TestContextUsageNativeDSHE2E(t *testing.T) {
-	for _, mode := range []string{"usage", "auto_compact", "overflow", "disabled", "overflow_failure", "cold_resume"} {
+	for _, mode := range []string{"diagnostics", "usage", "auto_compact", "overflow", "disabled", "overflow_failure", "cold_resume"} {
 		t.Run(mode, func(t *testing.T) { testContextNativeDSH(t, mode) })
 	}
 }
@@ -99,6 +100,14 @@ func testContextNativeDSH(t *testing.T, mode string) {
 			text += strings.Repeat("context fixture token ", 1500)
 		}
 		input := []contract.InputPart{{Kind: contract.InputPartText, Text: text}}
+		var diagnostic *diagnostics.Record
+		if mode == "diagnostics" {
+			store := diagnostics.New("")
+			store.Source("room", "source", time.Now())
+			diagnostic = store.Begin("room", "source", "", "alice", "turn")
+			diagnostic.Running()
+			ctx = diagnostics.WithRecord(ctx, diagnostic)
+		}
 		result := rt.Conversation(h.RuntimeID).Run(ctx, contract.TurnRequest{ID: contract.TurnID(fmt.Sprintf("turn-%d", i)), ConversationKey: "room:test", Input: input}, contract.EventSinkFunc(func(_ context.Context, e contract.TurnEvent) error {
 			if e.Activity != nil && e.Activity.Kind == modelcap.ContextUsageKind {
 				u := e.Activity.Payload.(modelcap.ContextUsage)
@@ -109,6 +118,14 @@ func testContextNativeDSH(t *testing.T, mode string) {
 			}
 			return nil
 		}))
+		if diagnostic != nil {
+			time.Sleep(20 * time.Millisecond)
+			diagnostic.Finish("succeeded")
+			v := diagnostic.Snapshot()
+			if v.RuntimeStartMS == nil || v.RuntimeEndMS == nil || v.TotalMS-*v.RuntimeEndMS < 20 || v.Runtime != "dsh" {
+				t.Fatalf("native DSH diagnostic boundary: %+v", v)
+			}
+		}
 		if mode == "overflow_failure" && i == 1 {
 			if result.Status != contract.TurnFailed || result.Error == nil || result.Error.Code != contract.ErrorCode("context_compaction_failed") {
 				t.Fatalf("expected friendly compaction failure: %+v", result)

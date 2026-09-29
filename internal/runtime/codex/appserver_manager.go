@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelprovider"
 	"encoding/json"
 	"errors"
@@ -113,7 +114,17 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("open stderr log %s: %w", spec.StderrPath, err)
 	}
 
-	cmd, err := appServerCommandContext(ctx, spec.BinaryPath, appServerOverrides(spec))
+	telemetry, telemetryErr := newNativeTelemetry()
+	if telemetryErr != nil {
+		slog.Warn("native diagnostics unavailable", "error", telemetryErr)
+	}
+	ownedTelemetry := false
+	defer func() {
+		if !ownedTelemetry {
+			telemetry.close()
+		}
+	}()
+	cmd, err := appServerCommandContext(ctx, spec.BinaryPath, append(appServerOverrides(spec), telemetry.overrides()...))
 	if err != nil {
 		_ = stderrFile.Close()
 		return nil, fmt.Errorf("prepare codex app-server command: %w", err)
@@ -125,6 +136,10 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		return nil, fmt.Errorf("prepare Runtime extension environment: %w", err)
 	}
 	cmd.Env = environment
+	if telemetry != nil {
+		// Keep completed-turn exports timely; this does not block the turn itself.
+		cmd.Env = append(cmd.Env, "OTEL_BSP_SCHEDULE_DELAY=1000")
+	}
 	cmd.Stderr = stderrFile
 	if sysProcAttr := newSessionSysProcAttr(); sysProcAttr != nil {
 		cmd.SysProcAttr = sysProcAttr
@@ -158,6 +173,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 		}
 	}
 	live := &liveSession{
+		telemetry:             telemetry,
 		mcpCatalogRevision:    spec.MCPCatalogRevision,
 		cmd:                   cmd,
 		stdin:                 stdin,
@@ -192,6 +208,7 @@ func (m *appServerManager) Start(ctx context.Context, spec SessionSpec) (*Sessio
 	m.sessions[spec.RuntimeID] = live
 	m.mu.Unlock()
 
+	ownedTelemetry = true
 	go m.readAppServerStdout(spec.RuntimeID, live, stdout)
 	go m.waitAppServerSession(spec.RuntimeID, live)
 
@@ -357,11 +374,15 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 
+	diagnostics.From(ctx).RuntimeInfo("codex", live.spec.Profile.ModelID)
 	waiter, err := live.registerAppServerTurnWaiter(sessionID)
 	if err != nil {
 		m.publishAppServerEvent(promptFailedEvent(runtimeID, sessionID, err))
 		return PromptResponse{}, err
 	}
+	waiter.mu.Lock()
+	waiter.diagnostic = diagnostics.From(ctx)
+	waiter.mu.Unlock()
 	defer func() { live.removeAppServerTurnWaiter(sessionID, waiter) }()
 	turnCtx, cancelTurn := context.WithCancel(ctx)
 	live.setAppServerTurnContext(sessionID, waiter, turnCtx)
@@ -396,6 +417,10 @@ func (m *appServerManager) Prompt(ctx context.Context, handle SessionHandle, req
 		return PromptResponse{}, err
 	}
 	waiter.setTurnID(appServerTurnIDFromResult(raw))
+	live.telemetry.bind(waiter.currentTurnID(), diagnostics.From(ctx))
+	defer live.telemetry.finish(diagnostics.From(ctx))
+	acceptedAt := time.Now()
+	diagnostics.From(ctx).Interval("runtime.accepted", "runtime", acceptedAt, acceptedAt)
 	if req.OnAccepted != nil {
 		req.OnAccepted()
 	}
@@ -930,6 +955,20 @@ func appServerOverrides(spec SessionSpec) []string {
 }
 
 func (m *appServerManager) handleAppServerServerRequest(runtimeID string, live *liveSession, req appServerServerRequest) (any, error) {
+	var diagnosticParams struct {
+		ThreadID string `json:"threadId"`
+		TurnID   string `json:"turnId"`
+	}
+	if json.Unmarshal(req.Params, &diagnosticParams) == nil && live != nil {
+		if ctx, ok := live.appServerTurnContext(diagnosticParams.ThreadID, diagnosticParams.TurnID); ok {
+			name, owner := "callback.handle", "csgclaw"
+			if strings.Contains(req.Method, "requestUserInput") {
+				name, owner = "user.wait", "user"
+			}
+			finish := diagnostics.Measure(ctx, name, owner)
+			defer finish()
+		}
+	}
 	readOnly := live != nil && live.spec.ExecutionMode == ExecutionModeReadOnly
 	switch strings.TrimSpace(req.Method) {
 	case "item/commandExecution/requestApproval", "execCommandApproval":
@@ -1423,6 +1462,8 @@ func (m *appServerManager) persistedThreadID(spec SessionSpec) string {
 }
 
 type appServerTurnWaiter struct {
+	diagnostic               *diagnostics.Record
+	diagnosticEnds           map[string]time.Time
 	visibleActivity          bool
 	mu                       sync.RWMutex
 	threadID                 string
@@ -1594,6 +1635,23 @@ func (s *liveSession) appServerTurnWaiter(threadID string) *appServerTurnWaiter 
 	return s.turnWaiters[strings.TrimSpace(threadID)]
 }
 
+func (w *appServerTurnWaiter) recordDiagnosticCompletion(turnID string, at time.Time) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if turnID == "" || (w.turnID != "" && w.turnID != turnID) {
+		return
+	}
+	if w.diagnosticEnds == nil {
+		w.diagnosticEnds = map[string]time.Time{}
+	}
+	if _, ok := w.diagnosticEnds[turnID]; !ok && (len(w.diagnosticEnds) < 8 || w.turnID == turnID) {
+		w.diagnosticEnds[turnID] = at
+	}
+	if w.turnID == turnID {
+		w.diagnostic.RuntimeEndAt(w.diagnosticEnds[turnID])
+	}
+}
+
 func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	turnID = strings.TrimSpace(turnID)
 	if turnID == "" {
@@ -1602,6 +1660,10 @@ func (w *appServerTurnWaiter) setTurnID(turnID string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.turnID = turnID
+	w.diagnostic.RuntimeRef(w.threadID, turnID, "")
+	if at, ok := w.diagnosticEnds[turnID]; ok {
+		w.diagnostic.RuntimeEndAt(at)
+	}
 	for id := range w.terminalResults {
 		if id != "" && id != turnID {
 			delete(w.terminalResults, id)
@@ -1623,6 +1685,10 @@ func (w *appServerTurnWaiter) apply(result *appServerTurnResult) bool {
 	// A previous turn can finish while the next start response is still pending.
 	if result.started && result.turnID != "" {
 		w.turnID = result.turnID
+		w.diagnostic.RuntimeRef(w.threadID, result.turnID, "")
+		if at, ok := w.diagnosticEnds[w.turnID]; ok {
+			w.diagnostic.RuntimeEndAt(at)
+		}
 	}
 	if result.success || result.err != nil {
 		// Progress is coalescible, but a terminal outcome must survive a full
@@ -2041,6 +2107,7 @@ func (m *appServerManager) readAppServerStdout(runtimeID string, live *liveSessi
 
 func (m *appServerManager) waitAppServerSession(runtimeID string, live *liveSession) {
 	err := live.cmd.Wait()
+	live.telemetry.close()
 	exitCode := 0
 	if err != nil {
 		exitCode = 1

@@ -29,6 +29,16 @@ func (m *appServerManager) handleAppServerNotification(runtimeID string, live *l
 	if params == nil {
 		params = map[string]any{}
 	}
+	if note.Method == "turn/completed" {
+		at := note.ReceivedAt
+		if at.IsZero() {
+			at = time.Now()
+		}
+		threadID := appServerString(params, "threadId")
+		if waiter := live.appServerTurnWaiter(threadID); waiter != nil {
+			waiter.recordDiagnosticCompletion(appServerNotificationTurnID(params), at)
+		}
+	}
 	if note.Method == "serverRequest/resolved" {
 		if m.deps.UserInput != nil {
 			m.deps.UserInput.CancelServerRequest(

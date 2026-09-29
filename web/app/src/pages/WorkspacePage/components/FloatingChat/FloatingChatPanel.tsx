@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
@@ -54,7 +53,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     editorRef,
     inviteActionLabel,
     locale,
-    logAgent,
     managerProfile,
     managerProfileIncomplete,
     managerRuntimeUnavailable,
@@ -123,17 +121,11 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   } = chatProps;
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
-  const [logModalOpen, setLogModalOpen] = useState(false);
-  const [logContent, setLogContent] = useState("");
-  const [logError, setLogError] = useState("");
-  const [logLoading, setLogLoading] = useState(false);
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
   const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
   const [deleteRoomError, setDeleteRoomError] = useState("");
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
-  const logAgentID = logAgent?.id || "";
-  const logAgentName = logAgent?.name || conversation.title || "";
   const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
   const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
   const questionMode = useQuestionAnswerMode({
@@ -162,16 +154,12 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   useConversationDraftEditorSync(editorRef, draftSegments);
 
   useEffect(() => {
-    setLogModalOpen(false);
-    setLogContent("");
-    setLogError("");
-    setLogLoading(false);
     setClearMessagesDialogOpen(false);
     setDeleteRoomDialogOpen(false);
     setDeleteRoomBusy(false);
     setDeleteRoomError("");
     setDocumentPreview(null);
-  }, [conversation.id, logAgentID]);
+  }, [conversation.id]);
 
   const handlePreviewAttachment = useCallback(
     (request: DocumentPreviewRequest) => {
@@ -180,26 +168,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     },
     [onCloseThread],
   );
-
-  const refreshAgentLogs = useCallback(async () => {
-    if (!logAgentID) {
-      return;
-    }
-    setLogLoading(true);
-    setLogError("");
-    try {
-      setLogContent(await fetchAgentLogsRequest(logAgentID, { lines: 400 }));
-    } catch (err) {
-      setLogError(errorMessage(err, t("agentLogsLoadFailed")));
-    } finally {
-      setLogLoading(false);
-    }
-  }, [logAgentID, t]);
-
-  const handleOpenAgentLogs = useCallback(() => {
-    setLogModalOpen(true);
-    void refreshAgentLogs();
-  }, [refreshAgentLogs]);
 
   const handleOpenClearMessagesDialog = useCallback(() => {
     onToggleChannelTools(false);
@@ -269,8 +237,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         description={description}
         headerAccessory={headerAccessory}
         inviteActionLabel={inviteActionLabel}
-        logAgent={logAgent}
-        logModalOpen={logModalOpen}
+        agents={agents}
         memberMenuRef={memberMenuRef}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={floatingVisibleMessages.length}
@@ -282,7 +249,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
         onInviteAction={onInviteAction}
-        onOpenAgentLogs={handleOpenAgentLogs}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}
         onToggleMemberList={onToggleMemberList}
@@ -418,17 +384,6 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
               setDeleteRoomError("");
             }
           }}
-        />
-      ) : null}
-      {logModalOpen && logAgent ? (
-        <Conversation.AgentLogsDialog
-          agentName={logAgentName}
-          content={logContent}
-          error={logError}
-          loading={logLoading}
-          t={t}
-          onClose={() => setLogModalOpen(false)}
-          onRefresh={refreshAgentLogs}
         />
       ) : null}
     </div>

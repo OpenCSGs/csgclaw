@@ -1,4 +1,5 @@
 import { emptyCompletedProgress } from "@/models/turnProgress";
+import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { Fragment, memo, useMemo, useState } from "react";
@@ -206,6 +207,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                     />
                   </div>
                 ) : null}
+                <DiagnosticMessageAction metadata={message.metadata} t={t} />
                 <ImageGenerationStatus message={message} roomID={conversation.id} t={t} />
                 {isVideoGeneration ? (
                   <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
@@ -250,6 +252,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                   </div>
                 ) : null}
                 <ConversationMessageActions
+                  metadata={message.metadata}
                   className="message-hover-actions"
                   leading={renderMessageFooter?.(message)}
                   content={message.metadata?.image_generation ? null : message.content}

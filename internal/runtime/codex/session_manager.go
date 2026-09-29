@@ -13,6 +13,7 @@ import (
 )
 
 type liveSession struct {
+	telemetry             *nativeTelemetry
 	compactingThreads     map[string]bool
 	contextUsage          map[string]modelcap.ContextUsage
 	mu                    sync.Mutex
