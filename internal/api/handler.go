@@ -2968,6 +2968,7 @@ func roomHasMember(members []string, id string) bool {
 }
 
 func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
+	receivedAt := time.Now()
 	channel, ok := h.requireLocalChannel(w)
 	if !ok {
 		return
@@ -2984,6 +2985,7 @@ func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err, http.StatusBadRequest)
 		return
 	}
+	serviceReq.DiagnosticStart = receivedAt
 	serviceReq = h.resolveCSGClawParticipantMessageRequest(serviceReq)
 	if caller := strings.TrimSpace(r.Header.Get("X-CSGClaw-Caller-Agent")); caller != "" {
 		if !h.participantBridgeTargetForRoomMember(serviceReq.SenderID).matches(caller) {

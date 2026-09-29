@@ -1,11 +1,12 @@
+import { DiagnosticHeaderAction } from "@/components/business/TurnDiagnostics";
 import { memo } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { Button, Tooltip } from "@/components/ui";
-import { AddUserIcon, IconImage, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
+import { AddUserIcon, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
-import { isDirectConversation } from "@/models/conversations";
+import { isDirectConversation, resolveAgentForUser } from "@/models/conversations";
 import { avatarFallbackText } from "@/shared/avatar";
 import { localizeRole } from "@/shared/i18n";
 import type { BooleanStateSetter } from "./types";
@@ -17,13 +18,11 @@ export type ConversationHeaderProps = {
   description?: string;
   headerAccessory?: ReactNode;
   inviteActionLabel: string;
-  logAgent?: AgentLike | null;
-  logModalOpen: boolean;
+  agents?: AgentLike[];
   memberMenuRef?: RefObject<HTMLDivElement | null>;
   onClearMessages: () => void;
   onDeleteRoom: () => void;
   onInviteAction: () => void;
-  onOpenAgentLogs: () => void;
   onPreviewUser: (user: IMUser, anchor: HTMLElement) => void;
   onToggleChannelTools: BooleanStateSetter;
   onToggleMemberList?: BooleanStateSetter;
@@ -45,8 +44,7 @@ export const ConversationHeader = memo(function ConversationHeader({
   description,
   headerAccessory,
   inviteActionLabel,
-  logAgent,
-  logModalOpen,
+  agents = [],
   memberMenuRef,
   selectedMessageCount,
   selectedVisibleMessageCount,
@@ -59,7 +57,6 @@ export const ConversationHeader = memo(function ConversationHeader({
   onClearMessages,
   onDeleteRoom,
   onInviteAction,
-  onOpenAgentLogs,
   onPreviewUser,
   onToggleChannelTools,
   onToggleMemberList,
@@ -142,23 +139,13 @@ export const ConversationHeader = memo(function ConversationHeader({
           </div>
           <div className="chat-title-actions">
             {headerAccessory}
-            {logAgent ? (
-              <Button
-                className="icon-button log-button"
-                active={logModalOpen}
-                iconOnly
-                size="lg"
-                variant="secondaryGray"
-                aria-label={t("agentLogs")}
-                data-tooltip={t("agentLogs")}
-                data-tooltip-side="bottom"
-                onClick={onOpenAgentLogs}
-              >
-                <span className="icon-button-mark" aria-hidden="true">
-                  {IconImage("log")}
-                </span>
-              </Button>
-            ) : null}
+            <DiagnosticHeaderAction
+              room={conversation.id}
+              agents={conversationMembers
+                .map((user) => resolveAgentForUser(agents, user))
+                .filter((agent): agent is AgentLike => Boolean(agent))}
+              t={t}
+            />
             <div ref={channelToolsRef} className="header-menu tools-menu">
               <Button
                 className="icon-button"

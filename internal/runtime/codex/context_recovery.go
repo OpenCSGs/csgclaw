@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"csgclaw/internal/diagnostics"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -62,6 +63,9 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 		if err != nil {
 			return err
 		}
+		next.mu.Lock()
+		next.diagnostic = diagnostics.From(ctx)
+		next.mu.Unlock()
 		*waiter = next
 		live.setAppServerTurnContext(threadID, next, ctx)
 		return nil
@@ -108,6 +112,7 @@ func (m *appServerManager) recoverContext(ctx context.Context, live *liveSession
 		return PromptResponse{}, err
 	}
 	(*waiter).setTurnID(appServerTurnIDFromResult(raw))
+	live.telemetry.bind((*waiter).currentTurnID(), (*waiter).diagnostic)
 	return m.waitAppServerTurn(ctx, live, *waiter)
 }
 

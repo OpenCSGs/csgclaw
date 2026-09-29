@@ -1,3 +1,5 @@
+import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
+import { diagnosticReference } from "@/models/diagnostics";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Copy, MessageSquareReply } from "lucide-react";
 import { resolveRequestPath } from "@/api/client";
@@ -8,6 +10,7 @@ import { renderSlashCommandPreviewText } from "@/models/slashCommands";
 import type { VoidOrPromise } from "./types";
 
 export type ConversationMessageActionsProps = {
+  metadata?: Record<string, unknown> | null;
   className?: string;
   leading?: ReactNode;
   content?: string | null;
@@ -17,6 +20,7 @@ export type ConversationMessageActionsProps = {
 };
 
 export function ConversationMessageActions({
+  metadata,
   className = "",
   content,
   image,
@@ -75,13 +79,14 @@ export function ConversationMessageActions({
     }, 2000);
   }
 
-  if (!canCopy && !onOpenThread && !leading) {
+  if (!canCopy && !onOpenThread && !leading && !diagnosticReference(metadata)) {
     return null;
   }
 
   return (
     <div className={`message-action-controls ${className} ${leading ? "has-leading" : ""}`.trim()}>
       {leading ? <span className="message-action-leading">{leading}</span> : null}
+      <DiagnosticMessageAction metadata={metadata} t={t} iconOnly />
       {canCopy ? (
         <button
           type="button"

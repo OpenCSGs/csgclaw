@@ -1,6 +1,7 @@
 package im
 
 import (
+	"csgclaw/internal/diagnostics"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -175,6 +176,8 @@ var (
 )
 
 type Service struct {
+	diagnosticsOnce  sync.Once
+	diagnostics      *diagnostics.Store
 	mu               sync.RWMutex
 	bus              *Bus
 	statePath        string
@@ -290,6 +293,17 @@ func (r *persistedRoom) UnmarshalJSON(data []byte) error {
 		r.Members = append([]string(nil), decoded.Participants...)
 	}
 	return nil
+}
+
+func (s *Service) Diagnostics() *diagnostics.Store {
+	s.diagnosticsOnce.Do(func() {
+		dir := ""
+		if s.statePath != "" {
+			dir = filepath.Join(filepath.Dir(s.statePath), "diagnostics")
+		}
+		s.diagnostics = diagnostics.New(dir)
+	})
+	return s.diagnostics
 }
 
 func NewService() *Service {
@@ -1523,6 +1537,7 @@ func (s *Service) DeleteRoom(roomID string) error {
 		return ErrRoomNotFound
 	}
 	delete(s.rooms, roomID)
+	s.Diagnostics().DeleteRoom(roomID)
 	s.rebuildSessionRoomIndexLocked()
 	return s.saveLocked()
 }
@@ -1709,6 +1724,7 @@ func (s *Service) ClearRoomMessages(roomID string) (Room, error) {
 	bus := s.bus
 	s.mu.Unlock()
 
+	s.Diagnostics().DeleteRoom(roomID)
 	publishRoomEvent(bus, EventTypeRoomMessagesCleared, presented)
 	return presented, nil
 }
@@ -2059,6 +2075,12 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 	message := s.newMessage("", senderID, MessageKindMessage, content)
 	message.ClientMessageID = clientMessageID
 	message.Metadata = utils.CloneAnyMap(req.Metadata)
+	if !req.DiagnosticStart.IsZero() {
+		if message.Metadata == nil {
+			message.Metadata = map[string]any{}
+		}
+		message.Metadata["diagnostics"] = map[string]any{"source_id": message.ID, "room_id": roomID}
+	}
 	message.RelatesTo = relatesTo
 	attachments, err := s.storeMessageAttachmentsLocked(roomID, message.ID, senderID, prepared)
 	if err != nil {
@@ -2073,6 +2095,9 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 			return Message{}, false, errors.Join(err, fmt.Errorf("restore IM state after failed message save: %w", rollbackErr))
 		}
 		return Message{}, false, err
+	}
+	if !req.DiagnosticStart.IsZero() {
+		s.Diagnostics().Source(roomID, message.ID, req.DiagnosticStart)
 	}
 	return s.presentMessageLocked(*room, message, ""), true, nil
 }

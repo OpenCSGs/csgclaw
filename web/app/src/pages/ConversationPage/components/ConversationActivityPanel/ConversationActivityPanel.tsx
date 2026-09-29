@@ -1,3 +1,4 @@
+import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import {
   useCallback,
   useEffect,
@@ -709,6 +710,7 @@ function ActivityRow({
       </div>
       {hasDetail && expanded ? (
         <div className={styles.detail}>
+          <DiagnosticMessageAction metadata={entry.message.metadata} t={t} iconOnly />
           {entry.source === "user" || entry.eventType === "message" ? (
             <MessageContent
               content={entry.message.content}

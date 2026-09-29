@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"crypto/sha256"
+	"csgclaw/internal/diagnostics"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -36,6 +37,7 @@ type idGenerator func() (agentengine.TurnID, error)
 
 // Adapter converts built-in IM events into runtime-neutral Agent Engine turns.
 type Adapter struct {
+	diagnostics *diagnostics.Store
 	engine      Engine
 	attachments files.Resolver
 	renderer    delivery.Renderer
@@ -51,6 +53,16 @@ type Adapter struct {
 const builtInIMAdmissionPolicy = agentengine.AdmissionWait
 
 type Option func(*Adapter)
+
+func WithDiagnostics(store *diagnostics.Store) Option {
+	return func(a *Adapter) { a.diagnostics = store }
+}
+func (a *Adapter) BeginDiagnostics(binding channel.Binding, event channel.Event) *diagnostics.Record {
+	if a.diagnostics == nil || classifyInbound(event) != inboundRun {
+		return nil
+	}
+	return a.diagnostics.Begin(event.RoomID, event.MessageID, event.ThreadRootID, binding.AgentID, string(sourceTurnID(binding, event)))
+}
 
 // WithRoomContextProvider supplies fresh private collaboration facts after the
 // ingress queue admits this room's next turn. It never creates an IM message.
@@ -210,6 +222,26 @@ func (a *Adapter) reset(ctx context.Context, binding channel.Binding, event chan
 
 // Run executes one already-routed and already-deduplicated built-in IM event.
 func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channel.Event) (outcome channel.Outcome, err error) {
+	record := diagnostics.From(ctx)
+	if record == nil {
+		record = a.BeginDiagnostics(binding, event)
+		ctx = diagnostics.WithRecord(ctx, record)
+	}
+	record.Running()
+	defer func() {
+		status := string(outcome.Result.Status)
+		if outcome.Result.Error != nil {
+			record.Failure(string(outcome.Result.Error.Code), "execution", outcome.Result.Error.Message)
+		}
+		if err != nil {
+			status = "failed"
+			record.Failure("delivery_failed", "delivery", err.Error())
+		}
+		if status == "" {
+			status = "failed"
+		}
+		record.Finish(status)
+	}()
 	turn, err := a.turnContext(binding, event)
 	if err != nil {
 		return channel.Outcome{}, err
@@ -227,11 +259,14 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		}
 	}
 
+	finishInput := diagnostics.Measure(ctx, "input.prepare", "csgclaw")
 	input, release, inputErr := a.input(ctx, binding, event, turn)
+	finishInput()
 	if release != nil {
 		defer release()
 	}
 	if inputErr != nil {
+		record.Failure(string(agentengine.ErrorFileUnavailable), "input.prepare", inputErr.Error())
 		result := failed(agentengine.ErrorFileUnavailable, inputErr.Error())
 		return a.complete(ctx, turn, result)
 	}
@@ -351,10 +386,15 @@ func (a *Adapter) input(ctx context.Context, binding channel.Binding, event chan
 }
 
 func (a *Adapter) complete(ctx context.Context, turn channel.TurnContext, result agentengine.TurnResult) (channel.Outcome, error) {
+	if result.Error != nil {
+		diagnostics.From(ctx).Failure(string(result.Error.Code), "execution", result.Error.Message)
+	}
 	outcome := channel.Outcome{Turn: turn, Result: result}
 	if a.renderer == nil {
 		return outcome, nil
 	}
+	finishDelivery := diagnostics.Measure(ctx, "message.deliver", "csgclaw")
+	defer finishDelivery()
 	if err := a.renderer.Complete(ctx, turn, result); err != nil {
 		return outcome, fmt.Errorf("render turn result: %w", err)
 	}
@@ -381,6 +421,26 @@ type rendererSink struct {
 }
 
 func (s rendererSink) Emit(ctx context.Context, event agentengine.TurnEvent) error {
+	record := diagnostics.From(ctx)
+	if event.Text != "" {
+		record.FirstOutput()
+	}
+	if event.Tool != nil {
+		id := "tool:" + event.Tool.ID
+		record.Start("tool."+event.Tool.Kind, "tool", id)
+		record.Annotate(id, diagnostics.ToolDetails(event.Tool.Title, event.Tool.InputSummary, event.Tool.Payload))
+		switch event.Tool.Status {
+		case "completed", "failed", "canceled", "succeeded":
+			record.End(id, event.Tool.Status)
+		}
+	}
+	eventID := record.Start("event.deliver", "csgclaw", "")
+	kind := string(event.Kind)
+	if event.Activity != nil {
+		kind += "/" + event.Activity.Kind
+	}
+	record.Annotate(eventID, diagnostics.SpanDetails{EventType: kind})
+	defer record.End(eventID, "completed")
 	if s.observeWork != nil {
 		s.observeWork(ctx, event)
 	}

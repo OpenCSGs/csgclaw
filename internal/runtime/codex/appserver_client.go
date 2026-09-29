@@ -2,12 +2,14 @@ package codex
 
 import (
 	"context"
+	"csgclaw/internal/diagnostics"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 )
 
 type appServerClient struct {
@@ -77,7 +79,11 @@ func (c *appServerClient) request(ctx context.Context, method string, params any
 	if params != nil {
 		msg["params"] = params
 	}
-	if err := c.writeJSONLine(msg); err != nil {
+	if err := c.writeJSONLine(msg, func() {
+		if method == "turn/start" {
+			diagnostics.From(ctx).RuntimeStart()
+		}
+	}); err != nil {
 		c.removePending(id)
 		return nil, fmt.Errorf("write %s: %w", method, err)
 	}
@@ -228,8 +234,9 @@ func (c *appServerClient) handleNotification(msg appServerWireMessage) {
 		return
 	}
 	handler(appServerNotification{
-		Method: strings.TrimSpace(msg.Method),
-		Params: cloneRawMessage(msg.Params),
+		ReceivedAt: time.Now(),
+		Method:     strings.TrimSpace(msg.Method),
+		Params:     cloneRawMessage(msg.Params),
 	})
 }
 
@@ -268,7 +275,7 @@ func (c *appServerClient) respondError(id json.RawMessage, code int, message str
 	return c.writeJSONLine(msg)
 }
 
-func (c *appServerClient) writeJSONLine(msg any) error {
+func (c *appServerClient) writeJSONLine(msg any, beforeWrite ...func()) error {
 	if c == nil || c.stdin == nil {
 		return fmt.Errorf("codex app-server client is not configured")
 	}
@@ -284,6 +291,9 @@ func (c *appServerClient) writeJSONLine(msg any) error {
 	c.mu.Unlock()
 	if closed != nil {
 		return closed
+	}
+	for _, fn := range beforeWrite {
+		fn()
 	}
 	_, err = c.stdin.Write(data)
 	return err

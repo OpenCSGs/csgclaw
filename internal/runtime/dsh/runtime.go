@@ -2,6 +2,7 @@ package dsh
 
 import (
 	"context"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
 	skill "csgclaw/internal/skill/state"
 	"encoding/json"
@@ -106,6 +107,7 @@ type process struct {
 }
 
 type activeTurn struct {
+	diagnostic       *diagnostics.Record
 	contextExceeded  bool
 	compactionFailed bool
 	request          contract.TurnRequest
@@ -123,6 +125,8 @@ type presentedFile struct {
 }
 
 type pendingPermission struct {
+	diagnostic     *diagnostics.Record
+	diagnosticSpan string
 	runtimeID      string
 	conversation   contract.ConversationKey
 	request        contract.InteractionRequest

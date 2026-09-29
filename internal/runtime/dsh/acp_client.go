@@ -3,10 +3,12 @@ package dsh
 import (
 	"bufio"
 	"context"
+	"csgclaw/internal/diagnostics"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -44,12 +46,13 @@ type acpClient struct {
 	reader io.Reader
 	writer io.Writer
 
-	writeMu sync.Mutex
-	mu      sync.Mutex
-	nextID  int64
-	pending map[int64]chan rpcReply
-	closed  chan struct{}
-	err     error
+	writeMu     sync.Mutex
+	mu          sync.Mutex
+	nextID      int64
+	pending     map[int64]chan rpcReply
+	diagnostics map[int64]*diagnostics.Record
+	closed      chan struct{}
+	err         error
 
 	handlerMu      sync.RWMutex
 	onRequest      func(serverRequest)
@@ -75,7 +78,7 @@ func newACPClient(reader io.Reader, writer io.Writer) *acpClient {
 }
 
 func (c *acpClient) call(ctx context.Context, method string, params any, result any, accepted func()) error {
-	id, replies, err := c.sendRequest(method, params)
+	id, replies, err := c.sendRequest(method, params, diagnostics.From(ctx))
 	if err != nil {
 		return err
 	}
@@ -108,7 +111,7 @@ func (c *acpClient) callRetainingOnCancel(
 	cancelWait time.Duration,
 	onCancel func() error,
 ) error {
-	id, replies, err := c.sendRequest(method, params)
+	id, replies, err := c.sendRequest(method, params, diagnostics.From(ctx))
 	if err != nil {
 		return err
 	}
@@ -169,7 +172,11 @@ func (c *acpClient) respond(id json.RawMessage, result any, responseErr *rpcErro
 	return c.writeFrame(frame)
 }
 
-func (c *acpClient) sendRequest(method string, params any) (int64, <-chan rpcReply, error) {
+func (c *acpClient) sendRequest(method string, params any, records ...*diagnostics.Record) (int64, <-chan rpcReply, error) {
+	var record *diagnostics.Record
+	if method == "session/prompt" && len(records) > 0 {
+		record = records[0]
+	}
 	c.mu.Lock()
 	select {
 	case <-c.closed:
@@ -185,15 +192,22 @@ func (c *acpClient) sendRequest(method string, params any) (int64, <-chan rpcRep
 	id := c.nextID
 	replies := make(chan rpcReply, 1)
 	c.pending[id] = replies
+	if record != nil {
+		record.RuntimeRef("", "", strconv.FormatInt(id, 10))
+		if c.diagnostics == nil {
+			c.diagnostics = map[int64]*diagnostics.Record{}
+		}
+		c.diagnostics[id] = record
+	}
 	c.mu.Unlock()
-	if err := c.writeFrame(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}); err != nil {
+	if err := c.writeFrame(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}, record.RuntimeStart); err != nil {
 		c.removePending(id)
 		return 0, nil, err
 	}
 	return id, replies, nil
 }
 
-func (c *acpClient) writeFrame(frame any) error {
+func (c *acpClient) writeFrame(frame any, beforeWrite ...func()) error {
 	data, err := json.Marshal(frame)
 	if err != nil {
 		return err
@@ -201,6 +215,9 @@ func (c *acpClient) writeFrame(frame any) error {
 	data = append(data, '\n')
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	for _, fn := range beforeWrite {
+		fn()
+	}
 	_, err = c.writer.Write(data)
 	return err
 }
@@ -209,6 +226,7 @@ func (c *acpClient) readLoop() {
 	scanner := bufio.NewScanner(c.reader)
 	scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
 	for scanner.Scan() {
+		receivedAt := time.Now()
 		line := scanner.Bytes()
 		var envelope struct {
 			ID     json.RawMessage `json:"id"`
@@ -245,7 +263,11 @@ func (c *acpClient) readLoop() {
 		}
 		c.mu.Lock()
 		replies := c.pending[id]
+		record := c.diagnostics[id]
+		delete(c.diagnostics, id)
+		record.RuntimeEndAt(receivedAt)
 		delete(c.pending, id)
+		delete(c.diagnostics, id)
 		c.mu.Unlock()
 		if replies != nil {
 			if envelope.Error != nil {
@@ -275,6 +297,7 @@ func (c *acpClient) fail(err error) {
 	for id, replies := range c.pending {
 		replies <- rpcReply{err: err}
 		delete(c.pending, id)
+		delete(c.diagnostics, id)
 	}
 	c.mu.Unlock()
 }
@@ -282,6 +305,7 @@ func (c *acpClient) fail(err error) {
 func (c *acpClient) removePending(id int64) {
 	c.mu.Lock()
 	delete(c.pending, id)
+	delete(c.diagnostics, id)
 	c.mu.Unlock()
 }
 

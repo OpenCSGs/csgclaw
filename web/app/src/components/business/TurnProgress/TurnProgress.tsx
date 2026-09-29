@@ -121,7 +121,11 @@ function Elapsed({ progress }: { progress: Progress }) {
 const Group = memo(
   function Group({ group, renderText, t }: { group: ProgressGroup; renderText: Props["renderText"]; t: TranslateFn }) {
     if (group.kind === "commentary")
-      return <div className={styles.commentary}>{renderText(group.items[0].text || "")}</div>;
+      return (
+        <div className={styles.commentary} data-diagnostic-response-text>
+          {renderText(group.items[0].text || "")}
+        </div>
+      );
     return (
       <div className={styles.group}>
         <div className={styles.summary}>

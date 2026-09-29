@@ -1,3 +1,4 @@
+import { trackDiagnosticSubmission } from "@/shared/diagnostics/renderTiming";
 import { del, get, post, resolveRequestPath, type ApiError } from "@/api/client";
 import type {
   IMConversation,
@@ -85,10 +86,7 @@ export type CreateUserPayload = Partial<IMUser> & {
   name: string;
 };
 
-export function sendMessageRequest(
-  payload: SendMessagePayload,
-  options: SendMessageRequestOptions = {},
-): Promise<IMMessage> {
+function sendMessage(payload: SendMessagePayload, options: SendMessageRequestOptions = {}): Promise<IMMessage> {
   if (payload.attachments?.length) {
     const formData = new FormData();
     const { attachments, ...messagePayload } = payload;
@@ -213,4 +211,14 @@ export function retryImageGenerationRequest(
   roomID: string,
 ): Promise<{ status: string; error?: { code?: string; message?: string } }> {
   return post(`api/v1/messages/${encodeURIComponent(messageID)}/image-generation/retry`, { room_id: roomID });
+}
+
+export async function sendMessageRequest(
+  payload: SendMessagePayload,
+  options: SendMessageRequestOptions = {},
+): Promise<IMMessage> {
+  const started = performance.now();
+  const message = await sendMessage(payload, options);
+  if (message.id) trackDiagnosticSubmission(payload.room_id, message.id, started);
+  return message;
 }

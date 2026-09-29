@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 const appServerJSONRPCVersion = "2.0"
 
 type appServerNotification struct {
-	Method string
-	Params json.RawMessage
+	ReceivedAt time.Time
+	Method     string
+	Params     json.RawMessage
 }
 
 type appServerServerRequest struct {

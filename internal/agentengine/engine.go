@@ -4,6 +4,7 @@ import (
 	"context"
 	"csgclaw/internal/activity"
 	"csgclaw/internal/agentengine/contract"
+	"csgclaw/internal/diagnostics"
 	"fmt"
 	"reflect"
 	"strings"
@@ -155,13 +156,17 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	} else if preflightResult != nil {
 		return *preflightResult
 	}
+	finishInput := diagnostics.Measure(ctx, "input.resolve", "csgclaw")
 	runtimeRequest, releaseInputs, inputErr := c.engine.resolveInputFiles(c.agentID, request)
+	finishInput()
 	if inputErr != nil {
 		return TurnResult{Status: TurnFailed, Error: inputErr}
 	}
 	defer releaseInputs()
 
+	finishAdmission := diagnostics.Measure(ctx, "engine.queue", "csgclaw")
 	turn, replay, existing, admissionResult := c.engine.admit(ctx, identity, request)
+	finishAdmission()
 	if replay != nil {
 		return replayCompleted(ctx, sink, *replay)
 	}
@@ -171,6 +176,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	if admissionResult != nil {
 		return *admissionResult
 	}
+	turn.ctx = diagnostics.WithRecord(turn.ctx, diagnostics.From(ctx))
 	turn.agentID = c.agentID
 	if request.ImageGeneration != nil {
 		if request.ImageGeneration.Model == nil && c.engine.agents != nil {
@@ -219,6 +225,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	c.engine.interactions.Interrupt(c.agentID, request.ConversationKey, "", true)
 	runtimeAdapter, releaseRuntime, resolveErr := c.engine.runtimes.conversationRuntime(turn.ctx, c.agentID)
 	if resolveErr != nil {
+		diagnostics.From(turn.ctx).Failure(string(resolveErr.Code), "runtime.prepare", resolveErr.Message)
 		result := TurnResult{Status: TurnFailed, Error: resolveErr}
 		turn.cancel()
 		c.engine.complete(identity, turn, result)
@@ -230,9 +237,14 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	c.engine.setRuntime(identity, turn, runtimeAdapter)
 
 	orderedSink := EventSinkFunc(func(eventCtx context.Context, event TurnEvent) error {
-		return c.engine.recordAndEmit(eventCtx, turn, sink, event)
+		return c.engine.recordAndEmit(diagnostics.WithRecord(eventCtx, diagnostics.From(turn.ctx)), turn, sink, event)
 	})
 	result := runtimeAdapter.Run(turn.ctx, runtimeRequest, orderedSink)
+	if result.Error != nil {
+		diagnostics.From(turn.ctx).Failure(string(result.Error.Code), "runtime", result.Error.Message)
+	}
+	finishResult := diagnostics.Measure(turn.ctx, "result.process", "csgclaw")
+	defer finishResult()
 	if result.Status != TurnSucceeded {
 		cleanupOutputFiles(result.RuntimeFiles)
 		result.Files = nil
@@ -240,6 +252,7 @@ func (c *conversations) Run(ctx context.Context, request TurnRequest, sink Event
 	} else if len(result.RuntimeFiles) > 0 {
 		files, fileErr := c.engine.files.RegisterTurnFiles(c.agentID, request.ConversationKey, request.ID, result.RuntimeFiles)
 		if fileErr != nil {
+			diagnostics.From(turn.ctx).Failure(string(fileErr.Code), "result.process", fileErr.Message)
 			result.Status = TurnFailed
 			result.Output = ""
 			result.Files = nil

@@ -1,6 +1,7 @@
 import type { SkillContinuation } from "@/models/slashCommands";
 import { emptyCompletedProgress } from "@/models/turnProgress";
 import { messageListScrollKey, useMessageListAutoScroll } from "@/hooks/workspace/useMessageListAutoScroll";
+import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
@@ -649,6 +650,7 @@ function ThreadMessage({
             />
           </div>
         ) : null}
+        <DiagnosticMessageAction metadata={message.metadata} t={t} />
         <ImageGenerationStatus message={message} t={t} />
         {isVideoGeneration ? (
           <VideoGenerationCard message={message} t={t} onPreviewAttachment={onPreviewAttachment} />
@@ -664,6 +666,7 @@ function ThreadMessage({
           />
         ))}
         <ConversationMessageActions
+          metadata={message.metadata}
           className="thread-message-actions"
           content={message.metadata?.image_generation ? null : message.content}
           image={message.metadata?.image_generation ? message.attachments?.find(isImageAttachment) : undefined}

@@ -105,6 +105,7 @@ type MessageAttachmentUpload struct {
 }
 
 type CreateMessageRequest struct {
+	DiagnosticStart time.Time                 `json:"-"`
 	RoomID          string                    `json:"room_id"`
 	ClientMessageID string                    `json:"client_message_id,omitempty"`
 	SenderID        string                    `json:"sender_id"`

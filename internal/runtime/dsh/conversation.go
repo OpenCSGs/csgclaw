@@ -2,6 +2,7 @@ package dsh
 
 import (
 	"context"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/modelcap"
 	"encoding/json"
 	"errors"
@@ -29,6 +30,8 @@ type sessionResult struct {
 }
 
 func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, sink contract.EventSink) contract.TurnResult {
+	finishPrepare := diagnostics.Measure(ctx, "session.prepare", "runtime")
+	defer finishPrepare()
 	proc, release, err := c.runtime.processForTurn(ctx, c.runtimeID)
 	if err != nil {
 		return failed(err)
@@ -43,7 +46,10 @@ func (c *conversation) Run(ctx context.Context, request contract.TurnRequest, si
 	if turnErr != nil {
 		return contract.TurnResult{Status: contract.TurnFailed, Error: turnErr}
 	}
-	turn := &activeTurn{request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
+	diagnostics.From(ctx).RuntimeInfo("dsh", proc.profile.ModelID)
+	diagnostics.From(ctx).RuntimeRef(sessionID, "", "")
+	finishPrepare()
+	turn := &activeTurn{diagnostic: diagnostics.From(ctx), request: request, sink: sink, tools: make(map[string]contract.ToolActivity)}
 	proc.mu.Lock()
 	proc.active[sessionID] = turn
 	metadata := proc.profile.ModelMetadata.Normalized()
@@ -289,6 +295,7 @@ func (c *conversation) Resolve(ctx context.Context, request contract.Interaction
 	if pending == nil || pending.runtimeID != c.runtimeID || !conversationMatches || !pending.allowedOptions[optionID] {
 		return &contract.TurnError{Code: contract.ErrorInteractionNotFound, Message: "DSH permission request is no longer pending"}
 	}
+	defer pending.diagnostic.End(pending.diagnosticSpan, "completed")
 	if err := pending.client.respond(pending.requestID, map[string]any{"outcome": map[string]any{"outcome": "selected", "optionId": optionID}}, nil); err != nil {
 		return &contract.TurnError{Code: contract.ErrorRuntimeFailed, Message: err.Error()}
 	}
@@ -306,6 +313,7 @@ func (r *Runtime) cancelPendingPermissions(runtimeID string, key contract.Conver
 	}
 	r.mu.Unlock()
 	for _, item := range pending {
+		item.diagnostic.End(item.diagnosticSpan, "canceled")
 		_ = item.client.respond(item.requestID, map[string]any{"outcome": map[string]any{"outcome": "cancelled"}}, nil)
 	}
 }

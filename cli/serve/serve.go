@@ -580,6 +580,13 @@ func startServer(ctx context.Context, run *command.Context, cfg config.Config, s
 }
 
 func startServerWithConfigPath(ctx context.Context, run *command.Context, cfg config.Config, svc *agent.Controller, imSvc *im.Service, imBus *im.Bus, feishuSvc *feishu.Service, configPath, output string, opts ...serveOptions) error {
+	if imSvc != nil {
+		defer func() {
+			flushCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = imSvc.Diagnostics().Flush(flushCtx)
+		}()
+	}
 	serveOpts := serveOptions{}
 	if len(opts) > 0 {
 		serveOpts = opts[0]
@@ -1367,6 +1374,7 @@ func newCSGClawAdapterSource(
 	}
 	rendererOptions := []delivery.RendererOption{delivery.WithInteractionProjector(interactionCoordinator)}
 	adapterOptions := []execution.Option{
+		execution.WithDiagnostics(imSvc.Diagnostics()),
 		execution.WithRoomContextProvider(participantBridge.RoomContext),
 		execution.WithAttachmentResolver(attachmentResolver),
 		execution.WithParticipantWorkReporter(workReporter),

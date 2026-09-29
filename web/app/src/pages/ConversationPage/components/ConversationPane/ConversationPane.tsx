@@ -1,7 +1,6 @@
 import { WorkingTurnControls } from "@/components/business/ConversationPane/WorkingTurnControls";
 import { workingParticipantForProgress } from "@/models/turnWorkingParticipant";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
@@ -204,7 +203,6 @@ function ConversationPaneContent({
   theme,
   workingParticipants = [],
   selectedMessageCount,
-  logAgent,
   conversationMembers,
   showChannelTools,
   onToggleChannelTools,
@@ -287,10 +285,6 @@ function ConversationPaneContent({
 }: ConversationPaneProps & RoomTaskSlots) {
   const description = getConversationDescription(conversation, currentUserID, usersById, locale, t);
   const managerProvider = normalizeAuthProviderName(managerProfile?.provider);
-  const [logModalOpen, setLogModalOpen] = useState(false);
-  const [logContent, setLogContent] = useState("");
-  const [logError, setLogError] = useState("");
-  const [logLoading, setLogLoading] = useState(false);
   const [activityPanelOpen, setActivityPanelOpen] = useState(false);
   const [focusedActivityEntryID, setFocusedActivityEntryID] = useState<string | null>(null);
   const [clearMessagesDialogOpen, setClearMessagesDialogOpen] = useState(false);
@@ -299,8 +293,6 @@ function ConversationPaneContent({
   const [deleteRoomError, setDeleteRoomError] = useState("");
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
   const [citationSelection, setCitationSelection] = useState<CitationSelection | null>(null);
-  const logAgentID = logAgent?.id || "";
-  const logAgentName = logAgent?.name || conversation.title || "";
   const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
   const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
   const questionMode = useQuestionAnswerMode({
@@ -381,37 +373,13 @@ function ConversationPaneContent({
   useConversationDraftEditorSync(editorRef, draftSegments);
 
   useEffect(() => {
-    setLogModalOpen(false);
-    setLogContent("");
-    setLogError("");
-    setLogLoading(false);
     setClearMessagesDialogOpen(false);
     setDeleteRoomDialogOpen(false);
     setDeleteRoomBusy(false);
     setDeleteRoomError("");
     setDocumentPreview(null);
     setCitationSelection(null);
-  }, [conversation.id, logAgentID]);
-
-  const refreshAgentLogs = useCallback(async () => {
-    if (!logAgentID) {
-      return;
-    }
-    setLogLoading(true);
-    setLogError("");
-    try {
-      setLogContent(await fetchAgentLogsRequest(logAgentID, { lines: 400 }));
-    } catch (err) {
-      setLogError(errorMessage(err, t("agentLogsLoadFailed")));
-    } finally {
-      setLogLoading(false);
-    }
-  }, [logAgentID, t]);
-
-  const handleOpenAgentLogs = useCallback(() => {
-    setLogModalOpen(true);
-    void refreshAgentLogs();
-  }, [refreshAgentLogs]);
+  }, [conversation.id]);
 
   const handleToggleActivityPanel = useCallback(() => {
     if (!activityPanelOpen) {
@@ -608,8 +576,7 @@ function ConversationPaneContent({
           </>
         }
         inviteActionLabel={inviteActionLabel}
-        logAgent={logAgent}
-        logModalOpen={logModalOpen}
+        agents={agents}
         selectedMessageCount={selectedMessageCount}
         selectedVisibleMessageCount={visibleMessages.length}
         showChannelTools={showChannelTools}
@@ -620,7 +587,6 @@ function ConversationPaneContent({
         onClearMessages={handleOpenClearMessagesDialog}
         onDeleteRoom={handleOpenDeleteRoomDialog}
         onInviteAction={onInviteAction}
-        onOpenAgentLogs={handleOpenAgentLogs}
         onPreviewUser={onPreviewUser}
         onToggleChannelTools={onToggleChannelTools}
         onToggleToolCalls={onToggleToolCalls}
@@ -729,17 +695,6 @@ function ConversationPaneContent({
               setDeleteRoomError("");
             }
           }}
-        />
-      ) : null}
-      {logModalOpen && logAgent ? (
-        <Conversation.AgentLogsDialog
-          agentName={logAgentName}
-          content={logContent}
-          error={logError}
-          loading={logLoading}
-          t={t}
-          onClose={() => setLogModalOpen(false)}
-          onRefresh={refreshAgentLogs}
         />
       ) : null}
     </>
