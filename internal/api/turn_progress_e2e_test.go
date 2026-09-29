@@ -112,7 +112,14 @@ func (r *progressBrowserRuntime) Run(ctx context.Context, req agentengine.TurnRe
 	case <-gate:
 	}
 	if strings.HasPrefix(id, "failed") {
-		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Message: "The test runtime failed."}}
+		failure := &agentengine.TurnError{Message: "The test runtime failed."}
+		switch id {
+		case "failed-context-length":
+			failure.Code = "context_length_exceeded"
+		case "failed-context-compaction":
+			failure.Code = "context_compaction_failed"
+		}
+		return agentengine.TurnResult{Status: agentengine.TurnFailed, Error: failure}
 	}
 	return agentengine.TurnResult{Status: agentengine.TurnSucceeded, Output: "**验证结果**：文件已读取，命令执行成功。"}
 }

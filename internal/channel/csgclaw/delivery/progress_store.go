@@ -24,7 +24,7 @@ func (s *IMTranscriptStore) DeliverTurnProgress(ctx context.Context, turn channe
 	if progress.Error != "" {
 		renderer := channelrender.NewTurnRenderer()
 		renderer.SetLocale(turn.Locale)
-		renderer.SetPromptError(progress.Error)
+		renderer.SetPromptErrorWithCode(progress.ErrorCode, progress.Error)
 		publicError = renderer.PromptError()
 		progress.Error = strings.Join(renderer.FinalMessages(), "\n\n")
 	}

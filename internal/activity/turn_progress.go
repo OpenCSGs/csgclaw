@@ -11,6 +11,8 @@ type TurnProgress struct {
 	EndedAt   string         `json:"ended_at,omitempty"`
 	Items     []ProgressItem `json:"items"`
 	Error     string         `json:"error,omitempty"`
+	// ErrorCode is passed to the presentation store; its public form lives in message metadata.
+	ErrorCode string `json:"-"`
 }
 
 type ProgressItem struct {

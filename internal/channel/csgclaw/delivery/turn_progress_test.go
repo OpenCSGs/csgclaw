@@ -209,3 +209,41 @@ func TestProgressFailureRetainsDiagnosticMetadata(t *testing.T) {
 		t.Fatalf("missing diagnostics: %+v", metadata)
 	}
 }
+
+func TestProgressPreservesStructuredContextFailures(t *testing.T) {
+	for _, tc := range []struct {
+		code   agentengine.ErrorCode
+		zh, en string
+	}{
+		{"context_length_exceeded", "本次内容超过模型容量，请拆分输入、检查模型容量设置或选择容量更大的模型。已有对话已保留。", "This request exceeds the model context capacity."},
+		{"context_compaction_failed", "暂时无法整理对话，已有记录已保留。请重试或选择容量更大的模型。", "The conversation could not be compacted."},
+	} {
+		for _, locale := range []string{"zh-CN", "en"} {
+			for _, raw := range []string{"unexpected status 400: provider diagnostic", ""} {
+				t.Run(string(tc.code)+"/"+locale+"/"+raw, func(t *testing.T) {
+					renderer, service, turn := progressFixture(t)
+					turn.Locale = locale
+					ctx := context.Background()
+					if err := renderer.Emit(ctx, turn, agentengine.TurnEvent{Kind: agentengine.TurnEventTextDelta, Phase: "commentary", Text: "Checking context."}); err != nil {
+						t.Fatal(err)
+					}
+					if err := renderer.Complete(ctx, turn, agentengine.TurnResult{Status: agentengine.TurnFailed, Error: &agentengine.TurnError{Code: tc.code, Message: raw}}); err != nil {
+						t.Fatal(err)
+					}
+					msg, progress := progressMessage(t, service)
+					want := tc.en
+					if locale == "zh-CN" {
+						want = tc.zh
+					}
+					meta := msg.Metadata["csgclaw"].(map[string]any)
+					if progress.Status != "failed" || !strings.HasPrefix(progress.Error, want) || meta["error_code"] != string(tc.code) {
+						t.Fatalf("lost structured failure: progress=%+v metadata=%+v", progress, meta)
+					}
+					if raw != "" && (meta["error_detail"] != raw || strings.Contains(progress.Error, raw) || strings.Contains(msg.Content, raw)) {
+						t.Fatal("raw diagnostics must remain in activity metadata only")
+					}
+				})
+			}
+		}
+	}
+}

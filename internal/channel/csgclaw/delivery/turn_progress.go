@@ -219,6 +219,10 @@ func (p *progressState) finish(ctx context.Context, result agentengine.TurnResul
 	p.snapshot.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	if result.Error != nil {
 		p.snapshot.Error = result.Error.Message
+		p.snapshot.ErrorCode = string(result.Error.Code)
+	}
+	if result.Status == agentengine.TurnFailed && strings.TrimSpace(p.snapshot.Error) == "" {
+		p.snapshot.Error = "turn failed"
 	}
 	if result.Status == agentengine.TurnSucceeded {
 		if structured || (p.answer == "" && len(p.snapshot.Items) == 0) {
