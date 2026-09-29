@@ -74,6 +74,8 @@ export const messages = {
     modelContextRefreshFailed: "刷新失败，请重试",
     modelContextImage: "图片生成",
     modelContextImageHint: "图片生成不使用此对话窗口设置；分辨率和文件大小由图片服务决定。",
+    modelContextVideo: "视频生成",
+    modelContextVideoHint: "视频生成使用智能体档案中单独配置的视频模型。",
 
     modelContextChecked: "模型信息已更新",
     modelContextCheckFailed: "检查失败，请重试。",
@@ -2030,6 +2032,8 @@ export const messages = {
     modelContextImage: "Image generation",
     modelContextImageHint:
       "Image generation does not use conversation context settings; resolution and file size are controlled by the image service.",
+    modelContextVideo: "Video generation",
+    modelContextVideoHint: "Video generation uses the video model configured separately in the Agent profile.",
 
     modelContextChecked: "Model information updated",
     modelContextCheckFailed: "Check failed. Please try again.",

@@ -103,6 +103,17 @@ export type OpenCSGModelProviderViewState = {
   authenticated: boolean;
 };
 
+export function mergeModelProviderModelIDs(
+  models: readonly string[],
+  imageModels: readonly string[] = [],
+  videoModels: readonly string[] = [],
+): string[] {
+  const generativeModels = new Set([...imageModels, ...videoModels]);
+  return Array.from(new Set([...models, ...imageModels, ...videoModels])).sort(
+    (a, b) => Number(generativeModels.has(a)) - Number(generativeModels.has(b)),
+  );
+}
+
 export function modelProviderConfigUsesOpenCSG(config: ModelProviderConfigLike | null | undefined): boolean {
   return String(config?.model_provider_id ?? "").trim() === MODEL_PROVIDER_IDS.OpenCSG;
 }

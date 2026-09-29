@@ -170,6 +170,8 @@ func TestRenderRuntimeAgentsInstructionsBlockAddsSharedFilePublishingRules(t *te
 		rendered := RenderRuntimeAgentsInstructionsBlock(agentID, "Stay concise.")
 		for _, want := range []string{
 			"Compose the tool prompt faithfully",
+			"including its original language and wording",
+			"do not translate, rewrite, expand, or otherwise optimize it",
 			"Do not invent restrictions",
 			"Expand creative details only when the user explicitly asks",
 			"pass that prompt unchanged",

@@ -1,7 +1,7 @@
 import { ModelMetadataFields } from "./ModelMetadataFields";
 import { modelOverridesEqual, type ModelOverride } from "@/models/modelMetadata";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2, Image as ImageIcon } from "lucide-react";
+import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2, Image as ImageIcon, Video } from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
@@ -22,6 +22,7 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { isAuthenticated } from "@/models/auth";
 import {
   MODEL_PROVIDER_IDS,
+  mergeModelProviderModelIDs,
   modelProviderAvatarPath,
   parseModelProviderModelsText,
   providerStatusTone,
@@ -232,8 +233,11 @@ export function ModelProviderPage() {
   const effectiveTone = isOpenCSG && !opencsgSignedIn ? "warning" : providerStatusTone(checkState.status, provider);
   const providerSubtitle = isBuiltinCLI ? provider.kind : provider.base_url || draft.baseURL || provider.kind;
   const imageModels = new Set(provider.imageModels || []);
-  const modelList = Array.from(new Set([...parseModelProviderModelsText(draft.modelsText), ...imageModels])).sort(
-    (a, b) => Number(imageModels.has(a)) - Number(imageModels.has(b)),
+  const videoModels = new Set(provider.videoModels || []);
+  const modelList = mergeModelProviderModelIDs(
+    parseModelProviderModelsText(draft.modelsText),
+    provider.imageModels,
+    provider.videoModels,
   );
   const dirty =
     draft.apiKey !== savedDraft.apiKey ||
@@ -521,15 +525,32 @@ export function ModelProviderPage() {
                   </p>
                 </div>
                 <ModelProviderModelList
-                  renderDetails={(model) =>
-                    provider.imageModels?.includes(model) ? (
-                      <Tooltip content={t("modelContextImageHint")}>
-                        <span className="model-image-kind">
-                          <ImageIcon size={14} aria-hidden="true" />
-                          {t("modelContextImage")}
+                  renderDetails={(model) => {
+                    const imageModel = imageModels.has(model);
+                    const videoModel = videoModels.has(model);
+                    if (imageModel || videoModel) {
+                      return (
+                        <span className="model-provider-model-kinds">
+                          {imageModel ? (
+                            <Tooltip content={t("modelContextImageHint")}>
+                              <span className="model-image-kind">
+                                <ImageIcon size={14} aria-hidden="true" />
+                                {t("modelContextImage")}
+                              </span>
+                            </Tooltip>
+                          ) : null}
+                          {videoModel ? (
+                            <Tooltip content={t("modelContextVideoHint")}>
+                              <span className="model-image-kind">
+                                <Video size={14} aria-hidden="true" />
+                                {t("modelContextVideo")}
+                              </span>
+                            </Tooltip>
+                          ) : null}
                         </span>
-                      </Tooltip>
-                    ) : (
+                      );
+                    }
+                    return (
                       <ModelMetadataFields
                         model={model}
                         onRefresh={refreshModelMetadata}
@@ -551,8 +572,8 @@ export function ModelProviderPage() {
                           })
                         }
                       />
-                    )
-                  }
+                    );
+                  }}
                   emptyLabel={t("modelProviderNoModels")}
                   modelListLabel={t("modelProviderModels")}
                   models={modelList}

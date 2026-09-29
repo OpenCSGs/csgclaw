@@ -951,6 +951,13 @@
   color: var(--muted);
   font-size: 13px;
 }
+
+.model-provider-model-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
 .model-context-source.is-error {
   color: var(--danger);
 }

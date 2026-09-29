@@ -1922,6 +1922,12 @@ function AgentModelPanel({
   );
   const selectedVideoProvider = videoProviders.find((provider) => provider.id === videoProviderID);
   const videoModels = selectedVideoProvider?.videoModels ?? [];
+  const videoProviderLabel = videoProviderID ? (
+    <ModelOptionLabel
+      avatar={selectedVideoProvider?.avatar || modelProviderAvatarPath(videoProviderID)}
+      model={selectedVideoProvider?.displayName || videoProviderID}
+    />
+  ) : undefined;
 
   return (
     <section id="agent-profile-model" className="profile-section agent-profile-scroll-target">
@@ -2103,6 +2109,7 @@ function AgentModelPanel({
               <span>{t("profileVideoModelProvider")}</span>
               <Select
                 value={videoProviderID}
+                selectedLabel={videoProviderLabel}
                 onValueChange={(value) => {
                   const provider = videoProviders.find((option) => option.id === value);
                   updateDraft({
@@ -2114,7 +2121,14 @@ function AgentModelPanel({
                 triggerProps={{ "aria-label": t("profileVideoModelProvider") }}
                 options={[
                   { value: "", label: t("profileVideoModelNone") },
-                  ...videoProviders.map((provider) => ({ value: provider.id, label: provider.displayName })),
+                  ...videoProviders.map((provider) => ({
+                    value: provider.id,
+                    label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
+                    textValue: provider.displayName,
+                  })),
+                  ...(videoProviderID && !selectedVideoProvider
+                    ? [{ value: videoProviderID, label: videoProviderLabel, textValue: videoProviderID }]
+                    : []),
                 ]}
               />
             </label>
