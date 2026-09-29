@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcp"
 )
 
@@ -91,6 +92,19 @@ func (h *Handler) probeMCPServer(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 		return
+	}
+	if _, managed := knowledgebase.ManagedMetadataFromServer(req.Config); managed {
+		connection, connectionErr := loadKnowledgeBaseConnection(r.Context())
+		if connectionErr != nil {
+			writeKnowledgeBaseError(w, connectionErr)
+			return
+		}
+		prepared, prepareErr := knowledgebase.PrepareManagedServerProbe(r.Context(), req.Config, connection)
+		if prepareErr != nil {
+			writeKnowledgeBaseError(w, prepareErr)
+			return
+		}
+		req.Config = prepared
 	}
 	result, err := h.mcp.ProbeServer(r.Context(), req.Name, req.Config)
 	if err != nil {
