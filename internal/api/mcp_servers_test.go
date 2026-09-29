@@ -122,13 +122,33 @@ func TestProbeMCPServerUsesDraftConfigWithoutPersisting(t *testing.T) {
 	}
 }
 
-func TestProbeManagedKnowledgeBaseMCPSanitizesDraftCredentialsWithoutRefreshing(t *testing.T) {
+func TestProbeManagedKnowledgeBaseMCPUsesCurrentUserCredentialWithoutPersisting(t *testing.T) {
 	originalLoader := loadKnowledgeBaseConnection
-	defer func() { loadKnowledgeBaseConnection = originalLoader }()
+	originalTransport := http.DefaultTransport
+	defer func() {
+		loadKnowledgeBaseConnection = originalLoader
+		http.DefaultTransport = originalTransport
+	}()
 	loadKnowledgeBaseConnection = func(context.Context) (knowledgeBaseConnection, error) {
-		t.Fatal("managed MCP probe unexpectedly refreshed the knowledge base connection")
-		return knowledgeBaseConnection{}, nil
+		return knowledgeBaseConnection{
+			CSGHubBaseURL:     "https://hub.example.test",
+			CSGHubAccessToken: "current-user-token",
+		}, nil
 	}
+	http.DefaultTransport = knowledgeBaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if got, want := req.URL.Path, "/api/v1/agent/knowledge-bases/42"; got != want {
+			t.Fatalf("path = %q, want %q", got, want)
+		}
+		if got, want := req.Header.Get("Authorization"), "Bearer current-user-token"; got != want {
+			t.Fatalf("Authorization = %q, want %q", got, want)
+		}
+		body := `{"data":{"id":42,"name":"Handbook","content_id":"content-42","type":"llmwiki","metadata":{"mcp_endpoint_url":"https://gateway.example.test/current/mcp","resource_state":{"readiness":"ready","mcp_status":"ready"}}}}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	})
 
 	prober := &stubMCPServerProber{}
 	store := &memoryMCPServerStoreForAPI{}
@@ -140,7 +160,7 @@ func TestProbeManagedKnowledgeBaseMCPSanitizesDraftCredentialsWithoutRefreshing(
 			"type":"remote",
 			"url":"https://gateway.example.test/v1/gateway/mcp",
 			"transport":"streamable-http",
-			"headers":{"Authorization":"Bearer draft-csghub-token"},
+			"headers":{"Authorization":"Bearer stale-user-token","X-Local":"probe"},
 			"_meta":{
 				"com.opencsg/mcp":{
 					"type":"llm_wiki",
@@ -157,11 +177,18 @@ func TestProbeManagedKnowledgeBaseMCPSanitizesDraftCredentialsWithoutRefreshing(
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("POST managed probe status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
 	}
-	if got, want := prober.config["url"], "https://gateway.example.test/v1/gateway/mcp"; got != want {
+	if got, want := prober.config["url"], "https://gateway.example.test/current/mcp"; got != want {
 		t.Fatalf("probe url = %#v, want %q", got, want)
 	}
-	if _, exists := prober.config["headers"]; exists {
-		t.Fatalf("probe retained draft user credentials: %#v", prober.config)
+	headers, ok := prober.config["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("probe headers = %#v, want map", prober.config["headers"])
+	}
+	if got, want := headers["Authorization"], "Bearer current-user-token"; got != want {
+		t.Fatalf("probe Authorization = %#v, want %q", got, want)
+	}
+	if got, want := headers["X-Local"], "probe"; got != want {
+		t.Fatalf("probe X-Local = %#v, want %q", got, want)
 	}
 	if _, ok := knowledgebase.ManagedMetadataFromServer(prober.config); !ok {
 		t.Fatalf("probe lost managed metadata: %#v", prober.config)
@@ -169,8 +196,49 @@ func TestProbeManagedKnowledgeBaseMCPSanitizesDraftCredentialsWithoutRefreshing(
 	if store.writes != 0 {
 		t.Fatalf("probe persisted MCP state %d times", store.writes)
 	}
-	if strings.Contains(recorder.Body.String(), "draft-csghub-token") {
+	if strings.Contains(recorder.Body.String(), "current-user-token") || strings.Contains(recorder.Body.String(), "stale-user-token") {
 		t.Fatalf("probe response leaked CSGHub access token: %s", recorder.Body.String())
+	}
+}
+
+func TestProbeManagedKnowledgeBaseMCPRejectsCurrentUserWithoutAccess(t *testing.T) {
+	originalLoader := loadKnowledgeBaseConnection
+	originalTransport := http.DefaultTransport
+	defer func() {
+		loadKnowledgeBaseConnection = originalLoader
+		http.DefaultTransport = originalTransport
+	}()
+	loadKnowledgeBaseConnection = func(context.Context) (knowledgeBaseConnection, error) {
+		return knowledgeBaseConnection{
+			CSGHubBaseURL:     "https://hub.example.test",
+			CSGHubAccessToken: "current-user-token",
+		}, nil
+	}
+	http.DefaultTransport = knowledgeBaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusForbidden,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"message":"forbidden"}`)),
+		}, nil
+	})
+
+	prober := &stubMCPServerProber{}
+	handler := &Handler{mcp: mcp.NewService(mcp.WithServerProber(prober), mcp.WithServerStore(&memoryMCPServerStoreForAPI{}))}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/mcp-servers:probe", strings.NewReader(`{
+		"name":"content-42",
+		"config":{
+			"type":"remote",
+			"url":"https://gateway.example.test/snapshot/mcp",
+			"_meta":{"com.opencsg/mcp":{"type":"llm_wiki","resource_id":"42","content_id":"content-42","auth_type":"csghub_access_token"}}
+		}
+	}`))
+
+	handler.Routes().ServeHTTP(recorder, request)
+
+	assertAPIErrorCode(t, recorder, http.StatusForbidden, "knowledge_base_access_forbidden")
+	if prober.config != nil {
+		t.Fatalf("MCP probe ran after permission denial: %#v", prober.config)
 	}
 }
 

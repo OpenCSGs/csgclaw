@@ -145,6 +145,32 @@ func RefreshManagedServerSnapshot(ctx context.Context, config map[string]any, co
 	return item, prepared, nil
 }
 
+// PrepareManagedServerProbe refreshes a managed knowledge-base snapshot with
+// the current user's accessible resource and injects that user's credential
+// into the returned in-memory probe configuration. Callers must never persist
+// the result.
+func PrepareManagedServerProbe(ctx context.Context, config map[string]any, connection Connection) (map[string]any, error) {
+	_, prepared, err := RefreshManagedServerSnapshot(ctx, config, connection)
+	if err != nil {
+		return nil, err
+	}
+	token := strings.TrimSpace(connection.CSGHubAccessToken)
+	if token == "" {
+		return nil, fmt.Errorf("prepare knowledge base MCP probe: CSGHub access token is required")
+	}
+	headers := map[string]any{}
+	if existing, ok := prepared["headers"].(map[string]any); ok {
+		for name, value := range existing {
+			if !strings.EqualFold(strings.TrimSpace(name), "Authorization") {
+				headers[name] = value
+			}
+		}
+	}
+	headers["Authorization"] = "Bearer " + token
+	prepared["headers"] = headers
+	return prepared, nil
+}
+
 // RefreshManagedServerConfig overlays the current AgenticHub-owned endpoint
 // onto one persisted server snapshot. User credentials are deliberately
 // removed: managed knowledge bases receive the current identity through the

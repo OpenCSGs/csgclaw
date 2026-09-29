@@ -226,6 +226,10 @@ func (s *Service) updateServers(ctx context.Context, update func(map[string]any)
 	if err := update(servers); err != nil {
 		return nil, err
 	}
+	servers, err = knowledgebase.SanitizePersistedServers(servers)
+	if err != nil {
+		return nil, fmt.Errorf("sanitize persisted MCP servers: %w", err)
+	}
 	if err := store.WriteServers(ctx, servers); err != nil {
 		return nil, err
 	}

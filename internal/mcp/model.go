@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcpschema"
 	"csgclaw/internal/opencsgmcp"
 )
@@ -37,11 +36,6 @@ func normalizeServerInput(name string, config map[string]any) (string, map[strin
 			return "", nil, fmt.Errorf("managed OpenCSG MCP server %q: %w", name, err)
 		}
 	}
-	sanitized, err := knowledgebase.SanitizePersistedServers(map[string]any{name: normalizedServer})
-	if err != nil {
-		return "", nil, err
-	}
-	normalizedServer = sanitized[name].(map[string]any)
 	return name, cloneMap(normalizedServer), nil
 }
 
