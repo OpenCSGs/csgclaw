@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { TranslateFn } from "@/models/conversations";
 import type { RenderedCitation } from "./markdown";
 
@@ -48,7 +49,10 @@ export type ActionCardPayload = StructuredMessagePayload & {
 
 export type ParsedStructuredMessage = StructuredMessagePayload | ActionCardPayload;
 
+export type ProgressControlSlots = { header?: ReactNode; footer?: ReactNode };
+
 export type MessageContentProps = {
+  progressControls?: ProgressControlSlots | null;
   actionBusy?: string;
   actionFeedback?: MessageActionFeedback | null;
   content?: string | null;

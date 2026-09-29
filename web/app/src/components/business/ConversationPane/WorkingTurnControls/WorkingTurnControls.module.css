@@ -1,0 +1,17 @@
+.message {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.status {
+  color: var(--muted);
+  font-size: 12px;
+}
+.error {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+  color: var(--danger);
+  font-size: 12px;
+}

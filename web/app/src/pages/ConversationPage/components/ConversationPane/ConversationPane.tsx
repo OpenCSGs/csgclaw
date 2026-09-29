@@ -1,8 +1,11 @@
+import { WorkingTurnControls } from "@/components/business/ConversationPane/WorkingTurnControls";
+import { workingParticipantForProgress } from "@/models/turnWorkingParticipant";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchAgentLogsRequest } from "@/api/agents";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
+  ContextUsageRing,
   AgentQuestionComposer,
   type ConversationWorkingParticipant,
   type ConversationPaneProps,
@@ -322,6 +325,59 @@ function ConversationPaneContent({
     [activityAgents, activityEntries, workingParticipants],
   );
 
+  const messageControls = useMemo(() => {
+    const byMessage = new Map<string, ConversationWorkingParticipant>();
+    const moved = new Set<ConversationWorkingParticipant>();
+    const threadVisible =
+      activeThreadRootID && !agentDetailPanelProps && !documentPreview && !activityPanelOpen && !citationSelection;
+    const threadMessages =
+      threadVisible && activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [];
+    for (const message of [...visibleMessages, ...threadMessages]) {
+      const participant = workingParticipantForProgress(message, conversation.id, workingParticipantsWithActivity);
+      if (
+        !message.id ||
+        !participant ||
+        !(participant.showContextUsage || participant.contextUsage || (participant.canStop && onStopWorkingTurn))
+      )
+        continue;
+      byMessage.set(message.id, participant);
+      moved.add(participant);
+    }
+    return {
+      byMessage,
+      composerParticipants: workingParticipantsWithActivity.filter((participant) => !moved.has(participant)),
+    };
+  }, [
+    activeThreadRootID,
+    activeThreadView,
+    activityPanelOpen,
+    agentDetailPanelProps,
+    citationSelection,
+    conversation.id,
+    documentPreview,
+    onStopWorkingTurn,
+    visibleMessages,
+    workingParticipantsWithActivity,
+  ]);
+  const renderTurnControls = useCallback(
+    (message: IMMessage) => {
+      const participant = messageControls.byMessage.get(message.id || "");
+      return participant
+        ? {
+            header: (
+              <>
+                {participant.showContextUsage || participant.contextUsage ? (
+                  <ContextUsageRing usage={participant.contextUsage} t={t} />
+                ) : null}
+                <WorkingTurnControls participant={participant} t={t} onStop={onStopWorkingTurn} placement="message" />
+              </>
+            ),
+          }
+        : null;
+    },
+    [messageControls.byMessage, onStopWorkingTurn, t],
+  );
+
   useConversationDraftEditorSync(editorRef, draftSegments);
 
   useEffect(() => {
@@ -453,6 +509,7 @@ function ConversationPaneContent({
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
+      renderTurnControls={renderTurnControls}
       agents={agents}
       thread={activeThreadView}
       loading={threadLoading}
@@ -570,6 +627,7 @@ function ConversationPaneContent({
       />
 
       <Conversation.MessageList
+        renderTurnControls={renderTurnControls}
         renderMessageFooter={taskFooter}
         agents={agents}
         conversation={conversation}
@@ -621,7 +679,7 @@ function ConversationPaneContent({
           slashPickerLoading={slashPickerLoading}
           slashPickerOpen={slashPickerOpen}
           t={t}
-          workingParticipants={workingParticipantsWithActivity}
+          workingParticipants={messageControls.composerParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}
           onAddAttachments={onAddAttachments}

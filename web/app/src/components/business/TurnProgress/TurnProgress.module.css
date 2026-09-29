@@ -1,0 +1,274 @@
+.shell {
+  min-width: 0;
+  width: 100%;
+}
+
+/* Keep process messages on the transcript plane, including thread replies. */
+:global(:root[data-theme]) :global(.message-row:not(.own)) :global(.message-bubble):has(> .shell),
+:global(:root[data-theme]) :global(.thread-message) :global(.thread-message-bubble):has(> .shell) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.shell button.heading,
+.shell button.toolToggle {
+  --btn-height: auto;
+  --btn-min-width: 0;
+  --btn-padding-x: 0;
+  --btn-font-size: 14px;
+  --btn-line-height: 22px;
+  height: auto;
+  min-height: 0;
+  padding: 4px 0;
+  font-weight: 400;
+  text-align: left;
+  max-width: 100%;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 0 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.shell button.heading {
+  display: flex;
+  justify-content: flex-start;
+  width: auto;
+  padding: 0;
+  border: 0;
+}
+
+.headerControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.heading > span {
+  justify-content: flex-start;
+  gap: 6px;
+  white-space: normal;
+}
+
+.shell svg {
+  flex-shrink: 0;
+}
+
+.elapsed {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Reserve timer width only while its neighboring usage control is present. */
+.header:has(.headerControls) .elapsed {
+  min-width: 8ch;
+}
+
+.body {
+  margin-bottom: 20px;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.commentary {
+  margin: 0 0 18px;
+}
+
+.commentary :global(.message-content) {
+  font-size: inherit;
+  line-height: 1.65;
+}
+
+.group {
+  margin: 4px 0 16px;
+}
+
+.details {
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.toolList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 41px;
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.tool:first-child {
+  border-top: 1px solid var(--line);
+}
+
+.shell button.toolToggle {
+  display: flex;
+  width: 100%;
+  padding: 9px 4px;
+  border: 0;
+  border-radius: 4px;
+}
+
+.toolToggle > :global(.btn-content) {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.shell button.toolToggle:hover {
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.ordinal {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.commandPreview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font:
+    13px/22px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--text);
+}
+
+.toolStatus {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tool[data-failed] .toolStatus {
+  color: var(--danger);
+}
+
+.toolDetails {
+  margin: 0 0 10px;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--panel-strong);
+}
+
+.detailSection + .detailSection {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.detailLabel {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.toolDetails pre {
+  overflow: visible;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font:
+    12px/1.65 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Consolas,
+    monospace;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.toolDetails small,
+.emptyOutput {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.toolMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.directory {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.directory > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waiting {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.answer {
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell * {
+    scroll-behavior: auto;
+    transition: none;
+    animation: none;
+  }
+}

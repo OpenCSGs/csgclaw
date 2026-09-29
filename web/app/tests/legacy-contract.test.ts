@@ -136,9 +136,6 @@ describe("legacy UI contract", () => {
     expect(styles).toContain("[data-tooltip]:hover::after");
     expect(source).toContain("message-thread-actions has-thread-summary");
     expect(source).toContain("const threadBodyRef = useRef<HTMLDivElement | null>(null);");
-    expect(source).toContain("threadBody.scrollTop = threadBody.scrollHeight;");
-    expect(source).toContain("const visibleReplies = showToolCalls ? replies : replies.filter");
-    expect(source).toContain("[root, visibleReplies.length, latestReplyID, loading]");
     expect(source).toContain("mentionableUsers={conversationMembers}");
     expect(source).toContain("thread-mention-picker");
   });

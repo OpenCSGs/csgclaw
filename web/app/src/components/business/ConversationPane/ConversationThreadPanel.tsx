@@ -1,11 +1,13 @@
 import type { SkillContinuation } from "@/models/slashCommands";
+import { emptyCompletedProgress } from "@/models/turnProgress";
+import { messageListScrollKey, useMessageListAutoScroll } from "@/hooks/workspace/useMessageListAutoScroll";
 import { isImageAttachment } from "@/models/attachments";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
-import type { CitationSelectHandler } from "@/components/business/MessageContent/types";
+import type { CitationSelectHandler, ProgressControlSlots } from "@/components/business/MessageContent/types";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, Tooltip } from "@/components/ui";
 import { IconImage } from "@/components/ui/Icons";
@@ -68,6 +70,7 @@ type ThreadMentionState = {
 };
 
 export type ConversationThreadPanelProps = {
+  renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   agents?: AgentLike[];
   disabled: boolean;
   draftSegments: ComposerSegment[];
@@ -104,6 +107,7 @@ export type ConversationThreadPanelProps = {
 };
 
 export function ConversationThreadPanel({
+  renderTurnControls,
   thread,
   agents = [],
   loading,
@@ -147,14 +151,17 @@ export function ConversationThreadPanel({
   const replies = useMemo(() => thread?.replies ?? [], [thread?.replies]);
   const videoGroups = useMemo(() => groupVideoGenerationMessages(root ? [root, ...replies] : replies), [root, replies]);
   const visibleRoot =
-    (showToolCalls || !isToolCallMessage(root)) && (!root?.id || !videoGroups.childMessageIDs.has(root.id))
+    !emptyCompletedProgress(root) &&
+    (showToolCalls || !isToolCallMessage(root)) &&
+    (!root?.id || !videoGroups.childMessageIDs.has(root.id))
       ? root
       : null;
-  const visibleReplies = showToolCalls ? replies : replies.filter((message) => !isToolCallMessage(message));
+  const visibleReplies = replies.filter(
+    (message) => !emptyCompletedProgress(message) && (showToolCalls || !isToolCallMessage(message)),
+  );
   const displayReplies = visibleReplies.filter(
     (message) => !message.id || !videoGroups.childMessageIDs.has(message.id),
   );
-  const latestReplyID = displayReplies[displayReplies.length - 1]?.id || "";
   const mentionableUsersByName = useMemo(() => {
     const result = new Map<string, (typeof mentionableUsers)[number]>();
     const duplicateNames = new Set<string>();
@@ -182,18 +189,16 @@ export function ConversationThreadPanel({
     return getMentionCandidates(mentionableUsers, mentionState.query) as MentionPickerUser[];
   }, [mentionState, mentionableUsers]);
 
-  useLayoutEffect(() => {
-    const threadBody = threadBodyRef.current;
-    if (!threadBody || !root) {
-      return;
-    }
-    const scrollToBottom = () => {
-      threadBody.scrollTop = threadBody.scrollHeight;
-    };
-    scrollToBottom();
-    const frame = window.requestAnimationFrame(scrollToBottom);
-    return () => window.cancelAnimationFrame(frame);
-  }, [root, visibleReplies.length, latestReplyID, loading]);
+  const threadScrollKey = useMemo(
+    () => messageListScrollKey([...(visibleRoot ? [visibleRoot] : []), ...displayReplies]),
+    [visibleRoot, displayReplies],
+  );
+  useMessageListAutoScroll({
+    active: Boolean(root) && !loading,
+    conversationId: root?.id || "",
+    messageListRef: threadBodyRef,
+    visibleMessagesKey: threadScrollKey,
+  });
 
   useLayoutEffect(() => {
     const editor = threadEditorRef.current;
@@ -322,6 +327,7 @@ export function ConversationThreadPanel({
           <div className="thread-root">
             <ThreadMessage
               message={visibleRoot}
+              progressControls={renderTurnControls?.(visibleRoot)}
               agents={agents}
               usersById={usersById}
               locale={locale}
@@ -343,6 +349,7 @@ export function ConversationThreadPanel({
               <ThreadMessage
                 key={message.id}
                 message={message}
+                progressControls={renderTurnControls?.(message)}
                 agents={agents}
                 usersById={usersById}
                 locale={locale}
@@ -558,6 +565,7 @@ export function ConversationThreadPanel({
 }
 
 type ThreadMessageProps = {
+  progressControls?: ProgressControlSlots | null;
   agents?: AgentLike[];
   compact?: boolean;
   embeddedVideos?: IMMessage[];
@@ -574,6 +582,7 @@ type ThreadMessageProps = {
 };
 
 function ThreadMessage({
+  progressControls,
   message,
   agents = [],
   usersById,
@@ -633,6 +642,7 @@ function ThreadMessage({
               key={`${message.id}:${theme}`}
               content={message.content}
               message={message}
+              progressControls={progressControls}
               onQuestionSelect={onQuestionSelect}
               onCitationSelect={onCitationSelect}
               t={t}

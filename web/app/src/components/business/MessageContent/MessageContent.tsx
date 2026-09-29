@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { TurnProgress } from "@/components/business/TurnProgress";
+import { parseTurnProgress } from "@/models/turnProgress";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActionCard } from "./ActionCard";
 import { AgentActivityCard } from "./AgentActivityCard";
 import { LongMessageCollapse } from "./LongMessageCollapse";
@@ -15,7 +17,30 @@ import { AgentActivityMsgTypes } from "@/shared/constants/messages";
 import { prepareMermaidBlocks, renderMermaidBlocks } from "./mermaid";
 import "./MessageContent.css";
 
-export function MessageContent({
+export const MessageContent = memo(function MessageContent(props: MessageContentProps) {
+  const { t, onCitationSelect } = props;
+  const renderProgressText = useCallback(
+    (content: string) => <MessageBody content={content} t={t} onCitationSelect={onCitationSelect} />,
+    [t, onCitationSelect],
+  );
+  const progress = parseTurnProgress(props.message);
+  if (progress && props.t) {
+    const hasAnswer = Boolean(props.content?.replace(/\u200b/g, "").trim());
+    return (
+      <TurnProgress
+        progress={progress}
+        headerControls={props.progressControls?.header}
+        controls={props.progressControls?.footer}
+        t={props.t}
+        answer={hasAnswer ? <MessageBody {...props} /> : null}
+        renderText={renderProgressText}
+      />
+    );
+  }
+  return <MessageBody {...props} />;
+});
+
+function MessageBody({
   content,
   message,
   actionBusy,

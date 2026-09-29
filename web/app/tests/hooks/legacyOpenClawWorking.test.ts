@@ -258,4 +258,28 @@ describe("withLegacyOpenClawWorkingFallback", () => {
 
     expect(result).toEqual([]);
   });
+  it("preserves separate authoritative requests for the same agent", () => {
+    const leases = [
+      { id: "user-worker", name: "Worker", leaseID: "lease-a", requestID: "request-a", roomID: "room-1" },
+      {
+        id: "user-worker",
+        name: "Worker",
+        leaseID: "lease-b",
+        requestID: "request-b",
+        roomID: "room-1",
+        threadRootID: "thread",
+      },
+    ];
+    const result = withLegacyOpenClawWorkingFallback({
+      agents: [agent("codex")],
+      authoritative: leases,
+      conversation: conversation([]),
+      currentUserID: "user-admin",
+      hasObservedWorkLease: () => true,
+      now,
+      usersById,
+    });
+    expect(result.map((item) => item.leaseID)).toEqual(["lease-a", "lease-b"]);
+    expect(result.map((item) => item.requestID)).toEqual(["request-a", "request-b"]);
+  });
 });

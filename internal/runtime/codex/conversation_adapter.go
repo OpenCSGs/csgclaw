@@ -78,7 +78,7 @@ func (a *ConversationAdapter) Run(ctx context.Context, request contract.TurnRequ
 	promptReturned := false
 	runtimeDone := false
 	eventStreamClosed := false
-	var output strings.Builder
+	var output conversationText
 	var files []*contract.OutputFile
 	filesOwned := true
 	defer func() {
@@ -157,7 +157,7 @@ func (a *ConversationAdapter) session(ctx context.Context, request contract.Turn
 	return sessionID, nil
 }
 
-func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.TurnRequest, sink contract.EventSink, event activity.RuntimeEvent, output *strings.Builder, files *[]*contract.OutputFile) *contract.TurnResult {
+func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.TurnRequest, sink contract.EventSink, event activity.RuntimeEvent, output *conversationText, files *[]*contract.OutputFile) *contract.TurnResult {
 	emit := func(turnEvent contract.TurnEvent) *contract.TurnResult {
 		if err := emitTurnEvent(ctx, sink, turnEvent); err != nil {
 			result := resultFromContext(ctx, err)
@@ -217,13 +217,13 @@ func (a *ConversationAdapter) handleEvent(ctx context.Context, request contract.
 		return nil
 	case activity.RuntimeEventTextDelta:
 		phase := runtimeEventPhase(event)
-		if phase != "" && phase != "final_answer" {
-			return nil
-		}
-		if result := emit(contract.TurnEvent{Kind: contract.TurnEventTextDelta, Text: event.Text}); result != nil {
+
+		payload, _ := event.Payload.(map[string]any)
+		snapshot, _ := payload["text_snapshot"].(bool)
+		if result := emit(contract.TurnEvent{Kind: contract.TurnEventTextDelta, Text: event.Text, ItemID: event.MessageID, Phase: phase, TextSnapshot: snapshot}); result != nil {
 			return result
 		}
-		_, _ = output.WriteString(event.Text)
+		output.apply(event.MessageID, phase, event.Text, snapshot)
 	case activity.RuntimeEventThoughtDelta:
 		return emit(contract.TurnEvent{Kind: contract.TurnEventThoughtDelta, Thought: event.Text})
 	case activity.RuntimeEventToolCallStart:
@@ -437,7 +437,7 @@ func userInputInteraction(event activity.RuntimeEvent) contract.InteractionReque
 func toolActivity(event activity.RuntimeEvent) *contract.ToolActivity {
 	return &contract.ToolActivity{
 		ID: event.ToolCallID, Kind: event.ToolKind, Title: event.ToolTitle, Status: event.ToolStatus,
-		InputSummary: event.ToolInputSummary, OutputSummary: event.ToolOutputSummary, Payload: event.Payload,
+		InputSummary: event.ToolInputSummary, OutputSummary: event.ToolOutputSummary, Payload: redactToolValue(event.Payload),
 	}
 }
 

@@ -399,7 +399,10 @@ function mergeWorkingParticipants(
       if (!id || !name) {
         return;
       }
-      const existing = merged.findIndex((candidate) => localIdentitiesMatch(candidate.id, id));
+      const existing = merged.findIndex(
+        (candidate) =>
+          localIdentitiesMatch(candidate.id, id) && (candidate.leaseID || "") === (participant.leaseID || ""),
+      );
       if (existing >= 0) {
         merged[existing] = {
           ...merged[existing],

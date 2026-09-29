@@ -23,6 +23,11 @@ afterEach(() => vi.unstubAllGlobals());
 describe("Global Apps", () => {
   it("tests the current draft without saving and invalidates the result after edits", async () => {
     const user = userEvent.setup();
+    // These assertions exercise draft changes, not individual keystrokes.
+    const enter = async (label: string, value: string) => {
+      await user.click(screen.getByLabelText(label));
+      await user.paste(value);
+    };
     const close = vi.fn();
     const probe = vi.fn().mockResolvedValue({
       connected: true,
@@ -49,18 +54,18 @@ describe("Global Apps", () => {
     expect(screen.queryByRole("combobox", { name: "Credential source" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Test connection" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
-    await user.type(screen.getByLabelText("MCP service URL"), "https://service.example/mcp");
-    await user.type(screen.getByLabelText("App ID"), "test-app");
+    await enter("MCP service URL", "https://service.example/mcp");
+    await enter("App ID", "test-app");
     expect(screen.getByLabelText("App Secret")).toBeRequired();
     expect(screen.getByLabelText("App Secret").closest("label")?.querySelector(".field-required")).toHaveTextContent(
       "*",
     );
     expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
-    await user.type(screen.getByLabelText("App Secret"), "   ");
+    await enter("App Secret", "   ");
     expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
     await user.clear(screen.getByLabelText("App Secret"));
-    await user.type(screen.getByLabelText("App Secret"), "test-secret");
+    await enter("App Secret", "test-secret");
     await user.click(screen.getByRole("button", { name: "Test connection" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Connected · 1 tools");
     expect(screen.getByRole("status")).toHaveTextContent("Not saved yet");
@@ -74,7 +79,7 @@ describe("Global Apps", () => {
     await user.clear(screen.getByLabelText("App Secret"));
     expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Test connection" })).toBeDisabled();
-    await user.type(screen.getByLabelText("App Secret"), "test-secret-changed");
+    await enter("App Secret", "test-secret-changed");
     expect(screen.getByRole("button", { name: "Save configuration" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Test connection" }));
     expect(probe.mock.calls[1][0].credentials.app_secret).toBe("test-secret-changed");

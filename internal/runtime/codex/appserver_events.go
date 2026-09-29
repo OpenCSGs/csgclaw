@@ -252,8 +252,9 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 				phase = "unknown"
 			}
 			payload["phase"] = phase
+			live.setAgentMessagePhase(itemID, phase)
+			live.markStreamedAgentMessage(itemID)
 			if phase == "final_answer" {
-				live.markStreamedAgentMessage(itemID)
 				live.markStreamedAgentThread(threadID)
 			}
 			if cleanedDelta := live.filterAgentMessageDelta(itemID, delta); cleanedDelta != "" {
@@ -277,7 +278,10 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 	}
 	if method == "item/commandExecution/outputDelta" {
 		itemID := appServerString(params, "itemId")
-		live.appendAppServerCommandOutput(threadID, appServerNotificationTurnID(params), itemID, appServerString(params, "delta"))
+		preview := live.appendAppServerCommandOutput(threadID, appServerNotificationTurnID(params), itemID, appServerString(params, "delta"))
+		if preview != "" {
+			m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, TurnID: appServerNotificationTurnID(params), Kind: SessionEventToolCallUpdate, ToolCallID: itemID, ToolKind: "exec_command", ToolStatus: "running", Payload: map[string]any{"output": preview, "preview_truncated": len(preview) >= appServerCommandOutputPreviewBytes}})
+		}
 		live.notifyAppServerTurn(threadID, appServerTurnResult{
 			activity: "commandExecution:outputDelta:" + itemID,
 			progress: true,
@@ -304,7 +308,7 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 			// Some OpenAI-compatible providers, including qwen3.6-plus,
 			// omit the Codex-specific phase field. A typed agentMessage item
 			// is still streamable assistant output.
-			phase = "final_answer"
+			phase = "unknown"
 		}
 		live.setAgentMessagePhase(itemID, phase)
 	case method == "item/started" && itemType == "commandExecution":
@@ -336,6 +340,8 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 		} else {
 			output = m.decodeAndPublishStructuredCommandOutput(runtimeID, threadID, itemID, status, output, item, live)
 		}
+		item = cloneAppServerParams(item)
+		item["aggregatedOutput"] = output
 		m.publishAppServerEvent(SessionEvent{
 			RuntimeID:         runtimeID,
 			SessionID:         threadID,
@@ -448,11 +454,19 @@ func (m *appServerManager) handleRawItemNotification(runtimeID string, live *liv
 		})
 	case method == "item/completed" && itemType == "agentMessage":
 		defer live.clearAgentMessageState(itemID)
+		previousPhase := live.agentMessagePhase(itemID)
 		live.setAgentMessagePhase(itemID, appServerString(item, "phase"))
 		text := appServerString(item, "text")
 		cleanedText := m.decodeAndPublishStructuredAssistantOutput(runtimeID, threadID, itemID, text, live)
 		if live.hasStreamedAgentMessage(itemID) {
-			if remainder := live.finishAgentMessageStream(itemID, cleanedText); remainder != "" {
+			if live.agentMessageNeedsReplacement(itemID, cleanedText) {
+				payload := cloneAppServerParams(item)
+				payload["text_snapshot"] = true
+				m.publishAppServerEvent(SessionEvent{RuntimeID: runtimeID, SessionID: threadID, MessageID: itemID, Kind: SessionEventTextDelta, Text: cleanedText, Payload: payload})
+				return
+			}
+
+			if remainder := live.finishAgentMessageStream(itemID, cleanedText); remainder != "" || (cleanedText != "" && appServerString(item, "phase") != "" && previousPhase != appServerString(item, "phase")) {
 				m.publishAppServerEvent(SessionEvent{
 					RuntimeID: runtimeID,
 					SessionID: threadID,
@@ -1160,4 +1174,11 @@ func appServerNestedString(values map[string]any, path ...string) string {
 	}
 	value, _ := current.(string)
 	return strings.TrimSpace(value)
+}
+
+func (s *liveSession) agentMessageNeedsReplacement(itemID, completed string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stream := s.agentMessageStreams[itemID]
+	return stream != nil && !strings.HasPrefix(completed, stream.emitted.String())
 }

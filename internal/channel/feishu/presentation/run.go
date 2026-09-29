@@ -90,6 +90,9 @@ func (p *Progress) Observe(event agentengine.TurnEvent) (Rendered, bool) {
 	immediate := false
 	switch event.Kind {
 	case agentengine.TurnEventTextDelta:
+		if event.Phase == "commentary" || event.TextSnapshot {
+			return Rendered{}, false
+		}
 		if event.Text == "" {
 			return Rendered{}, false
 		}

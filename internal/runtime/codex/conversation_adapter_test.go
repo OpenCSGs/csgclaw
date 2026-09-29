@@ -15,7 +15,7 @@ import (
 func TestStructuredQuestionPreservesReadableOutput(t *testing.T) {
 	adapter := &ConversationAdapter{}
 	var events []contract.TurnEvent
-	var output strings.Builder
+	var output conversationText
 	var files []*contract.OutputFile
 	text := "## 交互式输出演示 - 第 1/3 步\n\n请选择工作流分支。"
 	result := adapter.handleEvent(context.Background(), contract.TurnRequest{}, contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error {
@@ -86,5 +86,44 @@ func TestInputFileExplainsTemporaryPathAndPreservesExplicitSavedCopy(t *testing.
 	content, err = os.ReadFile(saved)
 	if err != nil || !bytes.Equal(content, payload) {
 		t.Fatal("explicit saved copy lost")
+	}
+}
+
+func TestConversationAdapterPreservesCommentaryOutsideFinalOutput(t *testing.T) {
+	adapter := &ConversationAdapter{}
+	var output conversationText
+	var files []*contract.OutputFile
+	var events []contract.TurnEvent
+	sink := contract.EventSinkFunc(func(_ context.Context, event contract.TurnEvent) error { events = append(events, event); return nil })
+	for _, event := range []activity.RuntimeEvent{
+		{Kind: activity.RuntimeEventTextDelta, MessageID: "intro", Text: "Checking.", Payload: map[string]any{"phase": "commentary"}},
+		{Kind: activity.RuntimeEventTextDelta, MessageID: "answer", Text: "Answer.", Payload: map[string]any{"phase": "final_answer"}},
+	} {
+		if result := adapter.handleEvent(context.Background(), contract.TurnRequest{}, sink, event, &output, &files); result != nil {
+			t.Fatal(result)
+		}
+	}
+	if len(events) != 2 || events[0].Phase != "commentary" || events[0].ItemID != "intro" || output.String() != "Answer." {
+		t.Fatalf("events=%+v output=%s", events, output.String())
+	}
+}
+
+func TestCompletedMessageSnapshotReplacesOnlyItsOwnOutput(t *testing.T) {
+	var text conversationText
+	text.apply("intro", "commentary", "Checking", false)
+	text.apply("a", "final_answer", "First. ", false)
+	text.apply("b", "final_answer", "Draft", false)
+	text.apply("b", "final_answer", "Corrected.", true)
+	if text.String() != "First. Corrected." {
+		t.Fatal(text.String())
+	}
+}
+
+func TestUnidentifiedCommentaryNeverEntersFinalOutput(t *testing.T) {
+	var text conversationText
+	text.apply("", "commentary", "Checking.", false)
+	text.apply("", "final_answer", "Answer.", false)
+	if text.String() != "Answer." {
+		t.Fatal(text.String())
 	}
 }

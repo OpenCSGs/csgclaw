@@ -703,3 +703,5 @@ func firstActivityText(values ...string) string {
 	}
 	return ""
 }
+
+func (r *TurnRenderer) ReplaceText(text string) { r.text.Reset(); r.text.WriteString(text) }

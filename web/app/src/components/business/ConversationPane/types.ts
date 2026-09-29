@@ -59,6 +59,7 @@ export type ConversationWorkingParticipant = {
   name: string;
   participantID?: string;
   requestID?: string;
+  threadRootID?: string;
   roomID?: string;
   stopError?: string;
   stopSending?: boolean;

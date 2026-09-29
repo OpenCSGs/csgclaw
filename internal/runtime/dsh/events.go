@@ -213,7 +213,7 @@ func mergeDSHToolActivity(previous contract.ToolActivity, update map[string]any)
 			tool.OutputSummary = summarizeDSHToolValue(content)
 		}
 	}
-	tool.Payload = mergeDSHToolPayload(previous.Payload, update)
+	tool.Payload = redactDSHToolValue(mergeDSHToolPayload(previous.Payload, update))
 	return tool
 }
 

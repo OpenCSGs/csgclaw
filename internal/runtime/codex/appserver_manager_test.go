@@ -959,6 +959,13 @@ func TestAppServerManagerPromptPublishesStructuredDeltaBeforeCompletion(t *testi
 	}
 
 	events := withoutContextUsage(sink.snapshot())
+	if len(events) <= 1 || events[1].Kind != SessionEventToolCallUpdate || events[1].ToolStatus != "running" {
+		t.Fatalf("missing live output preview")
+	}
+	if output, _ := events[1].Payload.(map[string]any)["output"].(string); output == "" || strings.Contains(output, structuredOutputPrefix) {
+		t.Fatalf("invalid live output preview: %q", output)
+	}
+	events = append(events[:1], events[2:]...)
 	want := []SessionEventKind{
 		SessionEventToolCallStart,
 		SessionEventStructuredOutput,
@@ -1631,7 +1638,7 @@ func TestAppServerEventAdapterWaitsForTurnCompletionWhenProviderOmitsAgentMessag
 		event := events[index]
 		if event.Kind != SessionEventTextDelta ||
 			event.Text != want ||
-			event.Payload.(map[string]any)["phase"] != "final_answer" {
+			event.Payload.(map[string]any)["phase"] != "unknown" {
 			t.Fatalf("event[%d] = %#v, want final-answer delta %q", index, event, want)
 		}
 	}
@@ -1861,6 +1868,13 @@ func TestAppServerEventAdapterAccumulatesCanonicalCommandOutputDeltas(t *testing
 	})
 
 	events := withoutContextUsage(sink.snapshot())
+	if len(events) <= 0 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != "running" {
+		t.Fatalf("missing live output preview")
+	}
+	if output, _ := events[0].Payload.(map[string]any)["output"].(string); output == "" || strings.Contains(output, structuredOutputPrefix) {
+		t.Fatalf("invalid live output preview: %q", output)
+	}
+	events = append(events[:0], events[1:]...)
 	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput || events[1].Kind != SessionEventToolCallUpdate {
 		t.Fatalf("events = %#v, want structured output before completed tool update", events)
 	}
@@ -1897,6 +1911,13 @@ func TestAppServerEventAdapterDeltaDecoderSurvivesLargeOrdinaryOutput(t *testing
 	})
 
 	events := withoutContextUsage(sink.snapshot())
+	if len(events) <= 0 || events[0].Kind != SessionEventToolCallUpdate || events[0].ToolStatus != "running" {
+		t.Fatalf("missing live output preview")
+	}
+	if output, _ := events[0].Payload.(map[string]any)["output"].(string); output == "" || strings.Contains(output, structuredOutputPrefix) {
+		t.Fatalf("invalid live output preview: %q", output)
+	}
+	events = append(events[:0], events[1:]...)
 	if len(events) != 2 || events[0].Kind != SessionEventStructuredOutput {
 		t.Fatalf("events = %#v, want structured link after oversized ordinary stdout", events)
 	}
@@ -3805,4 +3826,14 @@ func withoutContextUsage(events []SessionEvent) []SessionEvent {
 		}
 	}
 	return out
+}
+
+func TestAppServerCompletedMessageCorrectsStreamedDraft(t *testing.T) {
+	manager, live, sink := testAppServerEventAdapter(t)
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{Method: "item/agentMessage/delta", Params: mustJSONRaw(t, map[string]any{"threadId": "main-thread", "itemId": "answer", "phase": "final_answer", "delta": "Draft"})})
+	manager.handleAppServerNotification("runtime-1", live, appServerNotification{Method: "item/completed", Params: mustJSONRaw(t, map[string]any{"threadId": "main-thread", "item": map[string]any{"id": "answer", "type": "agentMessage", "phase": "final_answer", "text": "Corrected"}})})
+	events := withoutContextUsage(sink.snapshot())
+	if len(events) != 2 || events[1].Text != "Corrected" || events[1].Payload.(map[string]any)["text_snapshot"] != true {
+		t.Fatalf("events=%+v", events)
+	}
 }

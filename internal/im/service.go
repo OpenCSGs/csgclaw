@@ -83,6 +83,7 @@ type ThreadListOptions struct {
 }
 
 type DeliverMessageRequest struct {
+	Transient         bool                      `json:"-"`
 	RoomID            string                    `json:"room_id"`
 	SenderID          string                    `json:"sender_id,omitempty"`
 	MentionID         string                    `json:"mention_id,omitempty"`
@@ -308,6 +309,9 @@ func NewServiceFromPathWithBus(path string, bus *Bus) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	for i := range state.Rooms {
+		interruptSavedTurnProgress(state.Rooms[i].Messages)
+	}
 	svc := NewServiceFromBootstrapWithBus(state, bus)
 	svc.statePath = path
 	return svc, nil
@@ -362,13 +366,15 @@ func (s *Service) Reload() error {
 		return nil
 	}
 
+	// Serialize disk reads with delivery so a reload cannot replace a newer
+	// in-memory projection with a snapshot read before that delivery.
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	state, err := LoadBootstrap(s.statePath)
 	if err != nil {
 		return err
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.preserveTurnProgressLocked(&state)
 	s.replaceStateLocked(state)
 	return nil
 }
@@ -2121,6 +2127,9 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 
 	message := s.newMessage(req.MessageID, senderID, MessageKindMessage, content)
 	message.Metadata = utils.CloneAnyMap(req.Metadata)
+	if req.Transient && (!IsAgentActivityMessage(message) || len(req.Attachments) > 0 || len(req.AttachmentSources) > 0) {
+		return Message{}, fmt.Errorf("transient delivery requires activity without attachments")
+	}
 	message.RelatesTo = relatesTo
 	replaceIndex := -1
 	if strings.TrimSpace(req.MessageID) != "" {
@@ -2144,7 +2153,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 		message.CreatedAt = room.Messages[replaceIndex].CreatedAt
 		room.Messages[replaceIndex] = message
 		s.rebuildThreadStatesLocked(room)
-		if err := s.saveLocked(); err != nil {
+		if err := s.saveMessageProjectionLocked(req.Transient); err != nil {
 			return Message{}, err
 		}
 		presented := s.presentMessageLocked(*room, message, "")
@@ -2152,7 +2161,7 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 		return presented, nil
 	}
 	room.Messages = append(room.Messages, message)
-	if err := s.saveLocked(); err != nil {
+	if err := s.saveMessageProjectionLocked(req.Transient); err != nil {
 		return Message{}, err
 	}
 	presented := s.presentMessageLocked(*room, message, "")
@@ -3531,4 +3540,11 @@ func latestMessageAt(conv Conversation) time.Time {
 func seedTime(hour, minute int) time.Time {
 	now := time.Now().UTC()
 	return time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, time.UTC)
+}
+
+func (s *Service) saveMessageProjectionLocked(transient bool) error {
+	if transient {
+		return nil
+	}
+	return s.saveLocked()
 }

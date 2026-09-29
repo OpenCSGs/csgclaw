@@ -167,6 +167,7 @@ export function useParticipantWorkStatus({ agents, users }: UseParticipantWorkSt
             name,
             participantID: lease.participant_id,
             requestID: lease.request_id,
+            threadRootID: lease.thread_root_id ?? undefined,
             roomID: lease.room_id,
             stopError: stopRequest?.error || lease.stop_error || undefined,
             stopSending: stopRequest?.state === "sending" && !stopRequest.error,

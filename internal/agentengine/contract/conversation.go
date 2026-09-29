@@ -111,15 +111,18 @@ const (
 // TurnEvent is the replay-safe envelope for one normalized Runtime event.
 // Sequence starts at one and increases monotonically for each TurnID.
 type TurnEvent struct {
-	TurnID      TurnID              `json:"turn_id"`
-	Sequence    uint64              `json:"sequence"`
-	Kind        TurnEventKind       `json:"kind"`
-	Text        string              `json:"text,omitempty"`
-	Thought     string              `json:"thought,omitempty"`
-	Tool        *ToolActivity       `json:"tool,omitempty"`
-	Activity    *ActivityUpdate     `json:"activity,omitempty"`
-	Interaction *InteractionRequest `json:"interaction,omitempty"`
-	Output      *OutputItem         `json:"output,omitempty"`
+	TurnID       TurnID              `json:"turn_id"`
+	Sequence     uint64              `json:"sequence"`
+	Kind         TurnEventKind       `json:"kind"`
+	Text         string              `json:"text,omitempty"`
+	TextSnapshot bool                `json:"text_snapshot,omitempty"`
+	ItemID       string              `json:"item_id,omitempty"`
+	Phase        string              `json:"phase,omitempty"`
+	Thought      string              `json:"thought,omitempty"`
+	Tool         *ToolActivity       `json:"tool,omitempty"`
+	Activity     *ActivityUpdate     `json:"activity,omitempty"`
+	Interaction  *InteractionRequest `json:"interaction,omitempty"`
+	Output       *OutputItem         `json:"output,omitempty"`
 }
 
 // ToolActivity contains normalized tool progress. Payload must be JSON-compatible.

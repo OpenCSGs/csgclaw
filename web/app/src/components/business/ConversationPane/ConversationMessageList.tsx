@@ -1,3 +1,4 @@
+import { emptyCompletedProgress } from "@/models/turnProgress";
 import { isImageAttachment } from "@/models/attachments";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { Fragment, memo, useMemo, useState } from "react";
@@ -6,6 +7,7 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import type {
+  ProgressControlSlots,
   CitationSelectHandler,
   MessageAction,
   MessageActionFeedback,
@@ -45,6 +47,7 @@ export type ConversationMessageListProps = {
   currentUserID?: string;
   emptyStateSlot?: ReactNode;
   headerSlot?: ReactNode;
+  renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   renderMessageFooter?: (message: IMMessage) => ReactNode;
   locale: LocaleCode;
   messageActionBusy: string;
@@ -70,6 +73,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
   emptyStateSlot,
   headerSlot,
   renderMessageFooter,
+  renderTurnControls,
   locale,
   messageActionBusy,
   messageActionFeedback,
@@ -114,6 +118,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
         </div>
       ) : null}
       {displayMessages.map((message, index) => {
+        if (emptyCompletedProgress(message)) return null;
         const timestampParts = formatMessageTimestampParts(message.created_at, locale, t);
         const previousMessage = displayMessages[index - 1];
         const showDivider = shouldShowMessageDateDivider(previousMessage, message);
@@ -180,6 +185,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                       key={`${message.id}:${theme}`}
                       content={message.content}
                       message={message}
+                      progressControls={renderTurnControls?.(message)}
                       actionBusy={messageActionBusy}
                       actionFeedback={messageActionFeedback}
                       enableLongMessageCollapse={own}

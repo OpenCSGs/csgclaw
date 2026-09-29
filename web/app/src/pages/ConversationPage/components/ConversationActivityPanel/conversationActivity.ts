@@ -1,3 +1,4 @@
+import { expandProgressMessage } from "@/models/turnProgress";
 import {
   agentActivityMessageToolMergeKey,
   agentActivityToolMergeKeys,
@@ -96,42 +97,44 @@ export function conversationActivityEntries(
   const entries: MutableConversationActivityEntry[] = [];
   const mergedEntries = new Map<string, MutableConversationActivityEntry>();
 
-  sortMessages(messages).forEach((message) => {
-    const activity = parseAgentActivity(message);
-    const agent = resolveMessageAgent(message, activity, agents);
-    const userPrompt = isConversationUserPrompt(message, activity, agent, conversationMemberIDs, usersById);
-    if (!agent && !userPrompt) {
-      return;
-    }
-    const command = agent && !activity ? parseMessageActivityCommand(message) : null;
-    const body = cleanMessageBody(message.content);
-    if (!activity && !command && !body) {
-      return;
-    }
+  sortMessages(messages)
+    .flatMap(expandProgressMessage)
+    .forEach((message) => {
+      const activity = parseAgentActivity(message);
+      const agent = resolveMessageAgent(message, activity, agents);
+      const userPrompt = isConversationUserPrompt(message, activity, agent, conversationMemberIDs, usersById);
+      if (!agent && !userPrompt) {
+        return;
+      }
+      const command = agent && !activity ? parseMessageActivityCommand(message) : null;
+      const body = cleanMessageBody(message.content);
+      if (!activity && !command && !body) {
+        return;
+      }
 
-    const agentID = agent?.id || "";
-    const mergeKeys = agent ? activityMergeKeys(agentID, message, activity, command) : [];
-    const existing = mergeKeys.map((key) => mergedEntries.get(key)).find(Boolean);
-    if (existing) {
-      mergeActivityEntry(existing, message, activity, command);
-      mergeKeys.forEach((key) => mergedEntries.set(key, existing));
-      return;
-    }
+      const agentID = agent?.id || "";
+      const mergeKeys = agent ? activityMergeKeys(agentID, message, activity, command) : [];
+      const existing = mergeKeys.map((key) => mergedEntries.get(key)).find(Boolean);
+      if (existing) {
+        mergeActivityEntry(existing, message, activity, command);
+        mergeKeys.forEach((key) => mergedEntries.set(key, existing));
+        return;
+      }
 
-    const entry: MutableConversationActivityEntry = {
-      activity,
-      agentID,
-      agentName: agent?.name || "",
-      command,
-      createdAt: message.created_at || "",
-      id: activityEntryID(agentID || "user", message, entries.length),
-      message,
-      source: userPrompt ? "user" : "agent",
-      updatedAt: message.created_at || "",
-    };
-    entries.push(entry);
-    mergeKeys.forEach((key) => mergedEntries.set(key, entry));
-  });
+      const entry: MutableConversationActivityEntry = {
+        activity,
+        agentID,
+        agentName: agent?.name || "",
+        command,
+        createdAt: message.created_at || "",
+        id: activityEntryID(agentID || "user", message, entries.length),
+        message,
+        source: userPrompt ? "user" : "agent",
+        updatedAt: message.created_at || "",
+      };
+      entries.push(entry);
+      mergeKeys.forEach((key) => mergedEntries.set(key, entry));
+    });
 
   return entries
     .sort((left, right) => activityTime(left.createdAt) - activityTime(right.createdAt))

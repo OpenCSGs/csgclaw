@@ -79,6 +79,7 @@ type TranscriptRenderer struct {
 }
 
 type turnRenderState struct {
+	progress            *progressState
 	renderer            *channelrender.TurnRenderer
 	lastSequence        uint64
 	hasText             bool
@@ -109,6 +110,11 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 	if r == nil {
 		return nil
 	}
+	if event.Output == nil || (event.Output.Kind != contract.OutputItemImageGeneration && event.Output.Kind != contract.OutputItemVideoGeneration) {
+		if err := r.Start(ctx, turn); err != nil {
+			return err
+		}
+	}
 	if r.interactions != nil {
 		event = r.interactions.Project(event)
 	}
@@ -123,9 +129,17 @@ func (r *TranscriptRenderer) Emit(ctx context.Context, turn channel.TurnContext,
 		return nil
 	}
 
+	if state.progress != nil {
+		if err := state.progress.observe(ctx, event); err != nil {
+			return err
+		}
+		if event.Kind == agentengine.TurnEventToolCallStart || event.Kind == agentengine.TurnEventToolCallUpdate {
+			return nil
+		}
+	}
 	switch event.Kind {
 	case agentengine.TurnEventTextDelta:
-		if event.Text == "" {
+		if event.Text == "" || event.Phase == "commentary" {
 			return nil
 		}
 		r.mu.Lock()
@@ -223,6 +237,9 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 		return nil
 	}
 	state := r.finishState(turn)
+	if state != nil && state.progress != nil && result.Status != agentengine.TurnSucceeded {
+		return state.progress.finish(ctx, result, "", false)
+	}
 	if r.store == nil || result.Status == agentengine.TurnCanceled {
 		return nil
 	}
@@ -254,8 +271,15 @@ func (r *TranscriptRenderer) Complete(ctx context.Context, turn channel.TurnCont
 	if !state.hasText && strings.TrimSpace(result.Output) != "" {
 		state.renderer.ApplyText(activity.RuntimeEvent{Kind: activity.RuntimeEventTextDelta, Text: result.Output})
 	}
+	if state.progress != nil {
+		state.renderer.ReplaceText(state.progress.finalText(result.Output))
+	}
 	text := strings.TrimSpace(strings.Join(state.renderer.FinalMessages(), "\n\n"))
-	if store, ok := r.store.(finalMessageStore); ok && len(result.Files) > 0 {
+	if state.progress != nil {
+		if err := state.progress.finish(ctx, result, text, true); err != nil {
+			return err
+		}
+	} else if store, ok := r.store.(finalMessageStore); ok && len(result.Files) > 0 {
 		if err := store.DeliverFinalMessage(ctx, turn, text, result.Files); err != nil {
 			return err
 		}
@@ -512,26 +536,7 @@ func activityDelivery(turn channel.TurnContext, event agentengine.TurnEvent, ren
 		Metadata:  rendered.Metadata,
 		Event:     event,
 	}
-	switch event.Kind {
-	case agentengine.TurnEventToolCallStart, agentengine.TurnEventToolCallUpdate:
-		// Legacy tool activities are top-level timeline entries.
-	case agentengine.TurnEventInteractionRequest:
-		if event.Interaction != nil && event.Interaction.Kind == agentengine.InteractionUserInput {
-			delivery.ThreadRootID = turn.ThreadRootID
-		} else if turn.ThreadRootID != "" {
-			delivery.ThreadRootID = turn.ThreadRootID
-		} else {
-			delivery.EnsureTurnRoot = true
-		}
-	case agentengine.TurnEventActivityUpdate:
-		if event.Activity != nil && strings.TrimSpace(event.Activity.Kind) == string(activity.RuntimeEventUserInputResolved) {
-			delivery.ThreadRootID = turn.ThreadRootID
-		} else if turn.ThreadRootID != "" {
-			delivery.ThreadRootID = turn.ThreadRootID
-		} else {
-			delivery.EnsureTurnRoot = true
-		}
-	}
+	delivery.ThreadRootID = turn.ThreadRootID
 	return delivery
 }
 

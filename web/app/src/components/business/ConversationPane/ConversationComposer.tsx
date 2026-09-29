@@ -1,5 +1,5 @@
 import type { SkillContinuation } from "@/models/slashCommands";
-import { ContextUsageRing } from "./ContextUsageRing";
+import { WorkingTurnControls } from "./WorkingTurnControls";
 import { memo, useId, useMemo, useRef } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { ArrowUp, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
@@ -390,11 +390,6 @@ function ComposerWorkingTurn({
     : participant.stopSending
       ? t("conversationWorkingStopSending")
       : toolName || workingActionLabel(action, t);
-  const stopLabel = participant.stopping
-    ? t("conversationWorkingStopping")
-    : participant.stopSending
-      ? t("conversationWorkingStopSending")
-      : t("conversationWorkingStop");
   const summary = participant.activity?.summary?.trim() || "";
   const thinkingText = participant.thinkingText;
   const thinkingLatestLine = thinkingText === undefined ? "" : latestThinkingLine(thinkingText);
@@ -436,22 +431,7 @@ function ComposerWorkingTurn({
             {content}
           </div>
         )}
-        {participant.showContextUsage || participant.contextUsage ? (
-          <ContextUsageRing usage={participant.contextUsage} t={t} />
-        ) : null}
-        {participant.canStop && onStop ? (
-          <Tooltip content={stopLabel} contentProps={{ side: "top", sideOffset: 6 }}>
-            <button
-              type="button"
-              className="composer-working-stop"
-              aria-label={t("conversationWorkingStopAria", { name: participant.name })}
-              disabled={participant.stopSending || participant.stopping}
-              onClick={() => void onStop(participant)}
-            >
-              <span className="composer-working-stop-icon" aria-hidden="true" />
-            </button>
-          </Tooltip>
-        ) : null}
+        <WorkingTurnControls participant={participant} t={t} onStop={onStop} />
         {participant.contextUsage?.compacting || thinkingLatestLine ? (
           <span className="composer-thinking-latest">
             {participant.contextUsage?.compacting ? t("contextCompacting") : thinkingLatestLine}

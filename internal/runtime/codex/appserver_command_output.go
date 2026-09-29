@@ -159,10 +159,10 @@ func appServerCommandOutputKey(threadID, itemID string) string {
 	return threadID + "\x00" + itemID
 }
 
-func (s *liveSession) appendAppServerCommandOutput(threadID, turnID, itemID, delta string) {
+func (s *liveSession) appendAppServerCommandOutput(threadID, turnID, itemID, delta string) string {
 	key := appServerCommandOutputKey(threadID, itemID)
 	if s == nil || key == "" || delta == "" {
-		return
+		return ""
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -181,7 +181,12 @@ func (s *liveSession) appendAppServerCommandOutput(threadID, turnID, itemID, del
 	if state.turnID == "" {
 		state.turnID = strings.TrimSpace(turnID)
 	}
+	before := state.output.cleanedPreview.Len()
 	state.output.append(delta)
+	if before == state.output.cleanedPreview.Len() {
+		return ""
+	}
+	return state.output.cleanedPreview.String()
 }
 
 func (s *liveSession) takeAppServerCommandOutput(threadID, itemID string) *appServerCommandOutputAccumulator {

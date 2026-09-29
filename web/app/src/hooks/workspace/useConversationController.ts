@@ -827,6 +827,21 @@ export function useConversationController({
       const attachmentID = payload.attachment_id;
       setActiveThreadView((current) => removeAttachmentFromThreadView(current, attachmentID));
     }
+    if (payload.type === "connection.open") {
+      void fetchThreadRequest(selection.roomID, selection.rootID)
+        .then((view) => {
+          if (
+            activeThreadSelectionRef.current?.rootID === selection.rootID &&
+            activeThreadSelectionRef.current?.roomID === selection.roomID
+          )
+            setActiveThreadView((current) => {
+              let merged = view;
+              for (const message of current?.replies || []) merged = appendReplyToThreadView(merged, message) || merged;
+              return merged;
+            });
+        })
+        .catch(() => undefined);
+    }
     const selectedKey = threadKey(selection.roomID, selection.rootID);
     if ((payload?.type === "thread.created" || payload?.type === "thread.updated") && payload.thread) {
       if (threadViewKey(payload.thread) === selectedKey) {

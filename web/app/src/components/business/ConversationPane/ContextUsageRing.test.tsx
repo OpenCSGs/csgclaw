@@ -48,4 +48,11 @@ describe("ContextUsageRing", () => {
     expect(tooltip).toHaveTextContent("剩余：0 K tokens");
     expect(tooltip).toHaveTextContent("正在整理对话");
   });
+  it("keeps the open statistics visible when usage updates", async () => {
+    const view = render(<ContextUsageRing usage={usage} t={t} />);
+    await userEvent.hover(screen.getByRole("button", { name: "上下文已使用 62%" }));
+    await screen.findByRole("tooltip");
+    view.rerender(<ContextUsageRing usage={{ ...usage, used_tokens: 32768 }} t={t} />);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("上下文已使用 100%");
+  });
 });

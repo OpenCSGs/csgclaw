@@ -1,6 +1,22 @@
 import { ApiEndpoints, IM_EVENTS_SHARED_WORKER_PATH } from "@/shared/constants/api";
 import type { IMServerEvent } from "@/models/conversations";
 
+let connected = true;
+const connectionListeners = new Set<() => void>();
+export const imEventsConnected = () => connected;
+export function subscribeIMConnection(listener: () => void) {
+  connectionListeners.add(listener);
+  return () => {
+    connectionListeners.delete(listener);
+  };
+}
+function updateConnection(value: boolean) {
+  if (value !== connected) {
+    connected = value;
+    connectionListeners.forEach((listener) => listener());
+  }
+}
+
 const sharedWorkerURL = import.meta.env.DEV ? "/src/shared/realtime/sseSharedWorker.ts" : IM_EVENTS_SHARED_WORKER_PATH;
 
 function createSharedWorker() {
@@ -36,6 +52,15 @@ export function subscribeIMEvents(onEvent: (payload: IMServerEvent) => void): ()
       const worker = createSharedWorker();
       const port = worker.port;
       const handleMessage = ({ data }: MessageEvent<SharedWorkerEnvelope>) => {
+        if (data?.type === "open") {
+          updateConnection(true);
+          onEvent({ type: "connection.open" });
+          return;
+        }
+        if (data?.type === "error") {
+          updateConnection(false);
+          return;
+        }
         if (!data || data.type !== "message") {
           return;
         }
@@ -60,6 +85,11 @@ export function subscribeIMEvents(onEvent: (payload: IMServerEvent) => void): ()
   }
 
   const source = new EventSource(endpoint);
+  source.onopen = () => {
+    updateConnection(true);
+    onEvent({ type: "connection.open" });
+  };
+  source.onerror = () => updateConnection(false);
   source.onmessage = (event) => {
     const payload = safeParseEventData(event.data);
     if (payload) {

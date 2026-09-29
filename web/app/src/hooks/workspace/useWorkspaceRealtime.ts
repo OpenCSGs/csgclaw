@@ -136,6 +136,9 @@ export function useWorkspaceRealtime({
 
     function handleEvent(payload: IMServerEvent) {
       const current = refs.current;
+      if (payload.type === "connection.open") {
+        scheduleRefresh({ bootstrap: true });
+      }
       current.setBootstrapData((data) => applyIMEvent(data, payload));
       current.onConversationEvent?.(payload);
       current.onFloatingConversationEvent?.(payload);

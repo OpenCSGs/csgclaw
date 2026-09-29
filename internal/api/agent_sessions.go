@@ -166,6 +166,9 @@ func (h *Handler) createAgentSessionResponse(w http.ResponseWriter, r *http.Requ
 		sink = agentengine.EventSinkFunc(func(_ context.Context, event agentengine.TurnEvent) error {
 			switch event.Kind {
 			case agentengine.TurnEventTextDelta:
+				if event.Phase == "commentary" || event.TextSnapshot {
+					return nil
+				}
 				return eventStream.writeDelta(event.Text)
 			case agentengine.TurnEventToolCallStart:
 				return eventStream.writeToolUse(event.Tool)

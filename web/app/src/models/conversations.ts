@@ -1,3 +1,4 @@
+import { newerProgressMessage } from "@/models/turnProgress";
 import type { ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
 import {
@@ -1101,7 +1102,9 @@ export function appendMessageToData<T extends IMData | null | undefined>(
     if (existingIndex >= 0) {
       return {
         ...room,
-        messages: room.messages.map((item, index) => (index === existingIndex ? message : item)),
+        messages: room.messages.map((item, index) =>
+          index === existingIndex ? newerProgressMessage(item, message) : item,
+        ),
       };
     }
     return { ...room, messages: [...room.messages, message] };
@@ -1157,7 +1160,9 @@ export function appendReplyToThreadView(
     return current;
   }
   if (current.replies?.some((item) => item.id === message.id)) {
-    const replies = current.replies.map((item) => (item.id === message.id ? message : item));
+    const replies = current.replies.map((item) =>
+      item.id === message.id ? newerProgressMessage(item, message) : item,
+    );
     const summary = {
       ...(current.summary ?? {}),
       reply_count: replies.length,

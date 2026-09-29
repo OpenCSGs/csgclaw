@@ -219,6 +219,13 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 	}
 	ctx, finishWork, observeWork := a.startWork(ctx, turn)
 	defer func() { finishWork(outcome.Result) }()
+	if starter, ok := a.renderer.(interface {
+		Start(context.Context, channel.TurnContext) error
+	}); ok {
+		if err := starter.Start(ctx, turn); err != nil {
+			return channel.Outcome{}, err
+		}
+	}
 
 	input, release, inputErr := a.input(ctx, binding, event, turn)
 	if release != nil {

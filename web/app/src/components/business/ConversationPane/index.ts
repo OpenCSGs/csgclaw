@@ -16,3 +16,5 @@ export * from "./MessageTime";
 export * from "./messageTimeUtils";
 export * from "./types";
 export * from "./useConversationDraftEditorSync";
+
+export { ContextUsageRing } from "./ContextUsageRing";

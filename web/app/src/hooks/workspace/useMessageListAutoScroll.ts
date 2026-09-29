@@ -1,3 +1,4 @@
+import { parseTurnProgress } from "@/models/turnProgress";
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import type { IMMessage } from "@/models/conversations";
 import { MESSAGE_LIST_BOTTOM_THRESHOLD } from "@/shared/constants/workspace";
@@ -47,6 +48,7 @@ function messageScrollKey(message: IMMessage, index: number): string {
     message.sender_id || "",
     message.kind || "",
     message.content || "",
+    parseTurnProgress(message)?.revision ?? "",
     message.thread?.reply_count ?? "",
     message.thread?.latest_reply?.id || "",
     message.thread?.latest_reply?.created_at || "",
@@ -76,6 +78,10 @@ export function useMessageListAutoScroll({
   const preservingAnchorRef = useRef(false);
   const observedMessageListRef = useRef<HTMLElement | null>(null);
 
+  const pauseOnUpwardWheel = useCallback((event: WheelEvent) => {
+    if (event.deltaY < 0) shouldAutoScrollRef.current = false;
+  }, []);
+
   const updateAutoScrollState = useCallback(() => {
     const el = observedMessageListRef.current;
     if (!el) {
@@ -102,7 +108,7 @@ export function useMessageListAutoScroll({
       }
       const scroll = () => {
         const el = messageListRef.current;
-        if (!el) {
+        if (!el || !shouldAutoScrollRef.current || el.querySelector('[data-preserve-scroll="true"]')) {
           return;
         }
         scrollMessageListToBottom(el, behavior);
@@ -173,6 +179,7 @@ export function useMessageListAutoScroll({
     const observed = observedMessageListRef.current;
     if (observed) {
       observed.removeEventListener("scroll", scheduleAutoScrollStateUpdate);
+      observed.removeEventListener("wheel", pauseOnUpwardWheel);
     }
     messageListResizeObserverRef.current?.disconnect();
     messageListMutationObserverRef.current?.disconnect();
@@ -187,7 +194,7 @@ export function useMessageListAutoScroll({
     autoScrollStateFrameRef.current = null;
     messageListScrollFrameRef.current = null;
     messageListAnchorFrameRef.current = null;
-  }, [scheduleAutoScrollStateUpdate]);
+  }, [scheduleAutoScrollStateUpdate, pauseOnUpwardWheel]);
 
   useLayoutEffect(() => {
     const nextElement = active ? messageListRef.current : null;
@@ -208,6 +215,7 @@ export function useMessageListAutoScroll({
       updateAutoScrollState();
     }
     nextElement.addEventListener("scroll", scheduleAutoScrollStateUpdate, { passive: true });
+    nextElement.addEventListener("wheel", pauseOnUpwardWheel, { passive: true });
 
     if (typeof ResizeObserver === "function") {
       const resizeObserver = new ResizeObserver(() => {
@@ -224,8 +232,22 @@ export function useMessageListAutoScroll({
       messageListResizeObserverRef.current = resizeObserver;
 
       if (typeof MutationObserver === "function") {
-        const mutationObserver = new MutationObserver(observeMessageListContent);
-        mutationObserver.observe(nextElement, { childList: true });
+        const mutationObserver = new MutationObserver((records) => {
+          if (records.some((record) => record.type === "childList" && record.target === nextElement))
+            observeMessageListContent();
+          if (
+            records.some((record) => record.type === "attributes") &&
+            shouldAutoScrollRef.current &&
+            !preservingAnchorRef.current
+          )
+            scrollToBottomAfterLayout();
+        });
+        mutationObserver.observe(nextElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ["data-preserve-scroll"],
+        });
         messageListMutationObserverRef.current = mutationObserver;
       }
     }
@@ -265,7 +287,7 @@ export function useMessageListAutoScroll({
     if (!messageListRef.current || !shouldAutoScrollRef.current) {
       return;
     }
-    scrollToBottomAfterLayout("smooth");
+    scrollToBottomAfterLayout("auto");
   }, [active, conversationId, messageListRef, scrollToBottomAfterLayout, visibleMessagesKey]);
 
   return { follow, preserveAnchor };

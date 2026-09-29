@@ -1,3 +1,4 @@
+import { newerProgressMessage } from "@/models/turnProgress";
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchAgents, fetchManagerProfile } from "@/api/agents";
@@ -108,7 +109,22 @@ export function useWorkspaceData() {
   const refreshWorkspaceBootstrap = useCallback(async () => {
     try {
       const normalized = await fetchWorkspaceBootstrapData();
-      setBootstrapData(normalized);
+      setBootstrapData((current) => {
+        if (!current || !normalized) return normalized;
+        return {
+          ...normalized,
+          rooms: normalized.rooms.map((room) => {
+            const prior = current.rooms.find((item) => item.id === room.id);
+            return {
+              ...room,
+              messages: room.messages.map((message) => {
+                const old = prior?.messages.find((item) => item.id === message.id);
+                return old ? newerProgressMessage(old, message) : message;
+              }),
+            };
+          }),
+        };
+      });
       return normalized;
     } catch (_) {
       return null;

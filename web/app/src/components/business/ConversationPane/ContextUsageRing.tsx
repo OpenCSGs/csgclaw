@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Tooltip } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 import { contextUsageRatio, formatContextSize, type ContextUsage } from "@/models/modelMetadata";
 
 export function ContextUsageRing({ usage, t }: { usage?: ContextUsage; t: TranslateFn }) {
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const ratio = contextUsageRatio(usage);
   const percent = ratio === null ? null : Math.round(ratio * 100);
   const label = percent === null ? t("contextUsageUnknown") : t("contextUsagePercent", { percent });
@@ -42,8 +45,15 @@ export function ContextUsageRing({ usage, t }: { usage?: ContextUsage; t: Transl
     </div>
   );
   return (
-    <Tooltip content={detail} contentProps={{ side: "top", sideOffset: 6 }}>
-      <button type="button" className={`context-usage-ring is-${tone}`} aria-label={label}>
+    <Tooltip open={open} onOpenChange={setOpen} content={detail} contentProps={{ side: "top", sideOffset: 6 }}>
+      <button
+        type="button"
+        className={`context-usage-ring is-${tone}`}
+        aria-label={label}
+        data-preserve-scroll={hovered || open ? "true" : undefined}
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+      >
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
           <circle
             className="context-usage-track"
