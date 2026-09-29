@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"csgclaw/internal/identity"
+	"csgclaw/internal/knowledgebase"
 	"csgclaw/internal/mcpschema"
 	agentruntime "csgclaw/internal/runtime"
 	"csgclaw/internal/sandbox"
@@ -455,7 +456,7 @@ func (s *Controller) updateWithManagedRuntimeOptions(ctx context.Context, id str
 			if req.MCPServers == nil {
 				current.MCPServers = nil
 			} else {
-				normalizedMCPServers, err := mcpschema.WithServerIdentities(*req.MCPServers)
+				normalizedMCPServers, err := normalizeMCPServers(*req.MCPServers)
 				if err != nil {
 					s.mu.Unlock()
 					return Agent{}, err
@@ -995,7 +996,11 @@ func normalizeMCPServers(config map[string]any) (map[string]any, error) {
 	if config == nil {
 		return nil, nil
 	}
-	return mcpschema.WithServerIdentities(config)
+	normalized, err := mcpschema.WithServerIdentities(config)
+	if err != nil {
+		return nil, err
+	}
+	return knowledgebase.SanitizePersistedServers(normalized)
 }
 
 func (s *Controller) RecreateRecord(ctx context.Context, id string) (Agent, error) {

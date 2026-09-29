@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -79,9 +80,6 @@ func ServerConfig(item KnowledgeBase, csgHubAccessToken string) (string, map[str
 		"url":         mcpEndpointFor(item),
 		"transport":   "streamable-http",
 		"description": serverDescription(item),
-		"headers": map[string]any{
-			"Authorization": "Bearer " + strings.TrimSpace(csgHubAccessToken),
-		},
 		ManagedMetaKey: map[string]any{
 			ManagedMetaNamespace: map[string]any{
 				"type":        ManagedMCPType,
@@ -148,8 +146,9 @@ func RefreshManagedServerSnapshot(ctx context.Context, config map[string]any, co
 }
 
 // RefreshManagedServerConfig overlays the current AgenticHub-owned endpoint
-// and credential fields onto one persisted server snapshot. Runtime tuning and
-// other locally authored fields remain owned by that snapshot.
+// onto one persisted server snapshot. User credentials are deliberately
+// removed: managed knowledge bases receive the current identity through the
+// trusted CSGClaw proxy at runtime.
 func RefreshManagedServerConfig(config map[string]any, item KnowledgeBase, csgHubAccessToken string) (map[string]any, error) {
 	metadata, ok := ManagedMetadataFromServer(config)
 	if !ok {
@@ -165,10 +164,10 @@ func RefreshManagedServerConfig(config map[string]any, item KnowledgeBase, csgHu
 	if token == "" {
 		return nil, fmt.Errorf("refresh knowledge base MCP: CSGHub access token is required")
 	}
-	return hydrateServerConfig(config, mcpEndpointFor(item), token)
+	return hydrateServerConfig(config, mcpEndpointFor(item))
 }
 
-func hydrateServerConfig(config map[string]any, endpoint, token string) (map[string]any, error) {
+func hydrateServerConfig(config map[string]any, endpoint string) (map[string]any, error) {
 	encoded, err := json.Marshal(config)
 	if err != nil {
 		return nil, fmt.Errorf("clone knowledge base MCP config: %w", err)
@@ -188,16 +187,19 @@ func hydrateServerConfig(config map[string]any, endpoint, token string) (map[str
 			headers[name] = value
 		}
 	}
-	headers["Authorization"] = "Bearer " + strings.TrimSpace(token)
-	prepared["headers"] = headers
+	if len(headers) > 0 {
+		prepared["headers"] = headers
+	} else {
+		delete(prepared, "headers")
+	}
 	return prepared, nil
 }
 
-// HydrateTemplateServers best-effort injects the current template runner's
-// CSGHub access token into managed knowledge-base MCP servers. Successful
-// refreshes use the runner's current CSGHub record instead of trusting a
-// community template URL. Failed refreshes retain the sanitized template
-// snapshot so an external dependency cannot block agent creation.
+// HydrateTemplateServers best-effort refreshes managed knowledge-base MCP
+// endpoints using the current template runner's identity. Credentials are
+// never copied into the resulting Agent snapshot. Failed refreshes retain the
+// sanitized template snapshot so an external dependency cannot block Agent
+// creation.
 func HydrateTemplateServers(ctx context.Context, servers map[string]any) (map[string]any, error) {
 	hydrated, err := cloneServers(servers)
 	if err != nil || hydrated == nil {
@@ -277,23 +279,76 @@ func FindConfiguredServer(servers map[string]any, contentID string) string {
 	return ""
 }
 
-// RuntimeServers removes CSGClaw-only management metadata while retaining the
-// direct URL and Authorization header required by the MCP runtime.
-func RuntimeServers(servers map[string]any) (map[string]any, error) {
+// RuntimeServers rewrites managed knowledge-base entries to the trusted local
+// proxy. The Runtime authenticates to CSGClaw with the internal server token;
+// the proxy resolves the currently authenticated OpenCSG identity per request.
+func RuntimeServers(servers map[string]any, proxyURL, serverAccessToken string) (map[string]any, error) {
 	runtimeServers, err := cloneServers(servers)
 	if err != nil || runtimeServers == nil {
 		return runtimeServers, err
 	}
-	for _, raw := range runtimeServers {
+	for name, raw := range runtimeServers {
 		entry, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
-		if _, managed := ManagedMetadataFromServer(entry); managed {
-			removeManagedMetadata(entry)
+		metadata, managed := ManagedMetadataFromServer(entry)
+		if !managed {
+			continue
 		}
+		if strings.TrimSpace(proxyURL) == "" {
+			return nil, fmt.Errorf("materialize knowledge-base MCP %q: CSGClaw proxy URL is unavailable", name)
+		}
+		if strings.TrimSpace(serverAccessToken) == "" {
+			return nil, fmt.Errorf("materialize knowledge-base MCP %q: CSGClaw access token is unavailable", name)
+		}
+		entry["url"] = strings.TrimRight(strings.TrimSpace(proxyURL), "/") + "/api/v1/knowledge-bases/" + url.PathEscape(metadata.ContentID) + "/mcp"
+		entry["transport"] = "streamable-http"
+		headers := map[string]any{}
+		if existing, ok := entry["headers"].(map[string]any); ok {
+			for headerName, value := range existing {
+				if !strings.EqualFold(strings.TrimSpace(headerName), "Authorization") {
+					headers[headerName] = value
+				}
+			}
+		}
+		headers["Authorization"] = "Bearer " + strings.TrimSpace(serverAccessToken)
+		entry["headers"] = headers
+		removeManagedMetadata(entry)
 	}
 	return runtimeServers, nil
+}
+
+// SanitizePersistedServers enforces that managed knowledge-base snapshots
+// never retain an OpenCSG user credential. Non-managed MCP servers and
+// non-Authorization headers are preserved.
+func SanitizePersistedServers(servers map[string]any) (map[string]any, error) {
+	sanitized, err := cloneServers(servers)
+	if err != nil || sanitized == nil {
+		return sanitized, err
+	}
+	for _, raw := range sanitized {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, managed := ManagedMetadataFromServer(entry); !managed {
+			continue
+		}
+		headers, ok := entry["headers"].(map[string]any)
+		if !ok {
+			continue
+		}
+		for name := range headers {
+			if strings.EqualFold(strings.TrimSpace(name), "Authorization") {
+				delete(headers, name)
+			}
+		}
+		if len(headers) == 0 {
+			delete(entry, "headers")
+		}
+	}
+	return sanitized, nil
 }
 
 func cloneServers(servers map[string]any) (map[string]any, error) {

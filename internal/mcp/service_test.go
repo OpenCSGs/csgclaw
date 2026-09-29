@@ -330,11 +330,11 @@ func TestCreateServerUsesManagedKnowledgeBaseMetadataIdentity(t *testing.T) {
 	}
 }
 
-func TestManagedKnowledgeBaseAuthenticationIsPersistedAndListed(t *testing.T) {
+func TestManagedKnowledgeBaseAuthenticationIsRemovedBeforePersistence(t *testing.T) {
 	managedConfig := map[string]any{
 		"type":    "remote",
 		"url":     "https://gateway.example.test/v1/llmwikis/content-42/mcp",
-		"headers": map[string]any{"Authorization": "Bearer current-csghub-token"},
+		"headers": map[string]any{"Authorization": "Bearer current-csghub-token", "X-Trace": "keep"},
 		knowledgebase.ManagedMetaKey: map[string]any{
 			knowledgebase.ManagedMetaNamespace: map[string]any{
 				"type":        knowledgebase.ManagedMCPType,
@@ -356,13 +356,13 @@ func TestManagedKnowledgeBaseAuthenticationIsPersistedAndListed(t *testing.T) {
 	}
 	listedConfig := listed["content-42"].(map[string]any)
 	listedHeaders := listedConfig["headers"].(map[string]any)
-	if got, want := listedHeaders["Authorization"], "Bearer current-csghub-token"; got != want {
-		t.Fatalf("listed Authorization = %#v, want %q", got, want)
+	if _, exists := listedHeaders["Authorization"]; exists || listedHeaders["X-Trace"] != "keep" {
+		t.Fatalf("listed headers = %#v", listedHeaders)
 	}
 	persisted := store.servers["content-42"].(map[string]any)
 	persistedHeaders := persisted["headers"].(map[string]any)
-	if got, want := persistedHeaders["Authorization"], "Bearer current-csghub-token"; got != want {
-		t.Fatalf("persisted Authorization = %#v, want %q", got, want)
+	if _, exists := persistedHeaders["Authorization"]; exists || persistedHeaders["X-Trace"] != "keep" {
+		t.Fatalf("persisted headers = %#v", persistedHeaders)
 	}
 }
 

@@ -4581,6 +4581,9 @@ func TestHandleBatchAddAgentMCPServersTrustsManagedKnowledgeBaseSnapshot(t *test
 	if _, managed := knowledgebase.ManagedMetadataFromServer(server); !managed {
 		t.Fatalf("saved knowledge-base MCP lost managed metadata: %#v", server)
 	}
+	if _, exists := server["headers"]; exists {
+		t.Fatalf("saved knowledge-base MCP retained user credentials: %#v", server)
+	}
 }
 
 func TestHandleBatchAddAgentMCPServersReturnsNotFoundWhenCatalogServerMissing(t *testing.T) {
@@ -4807,7 +4810,7 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Controller,
 		BaseURL:  "http://127.0.0.1:4000",
 		APIKey:   "sk-test",
 		ModelID:  "model-1",
-	}, config.ServerConfig{}, "manager-image:test", "",
+	}, config.ServerConfig{ListenAddr: "127.0.0.1:18080", AccessToken: "test-server-token"}, "manager-image:test", "",
 		agent.WithHubService(hubSvc),
 		agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{
 			DefaultWorkerTemplate: "local/picoclaw-worker",
@@ -4831,7 +4834,7 @@ func newAgentMCPManagementTestServer(t *testing.T) (*Handler, *agent.Controller,
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	return &Handler{svc: svc, mcp: mcpSvc, agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}, svc, created
+	return &Handler{svc: svc, mcp: mcpSvc, serverAccessToken: "test-server-token", agentEngine: agentengine.New(svc), workspace: svc.Workspace(), agentModels: svc.Models(), agentRuntime: svc}, svc, created
 }
 
 func TestHandleMCPServersUsesMCPService(t *testing.T) {

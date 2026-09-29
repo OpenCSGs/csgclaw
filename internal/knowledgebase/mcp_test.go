@@ -70,7 +70,7 @@ func installKnowledgeBaseErrorResponse(t *testing.T, status int, wantToken strin
 	return "https://hub.example.test"
 }
 
-func TestServerConfigPersistsCSGHubAccessTokenAndManagedMeta(t *testing.T) {
+func TestServerConfigOmitsCSGHubAccessTokenAndKeepsManagedMeta(t *testing.T) {
 	name, config, err := ServerConfig(availableKnowledgeBase(), "current-csghub-token")
 	if err != nil {
 		t.Fatalf("ServerConfig() error = %v", err)
@@ -81,9 +81,8 @@ func TestServerConfigPersistsCSGHubAccessTokenAndManagedMeta(t *testing.T) {
 	if got, want := config["description"], "Engineering Handbook | Engineering runbooks"; got != want {
 		t.Fatalf("description = %#v, want %q", got, want)
 	}
-	headers := config["headers"].(map[string]any)
-	if got, want := headers["Authorization"], "Bearer current-csghub-token"; got != want {
-		t.Fatalf("Authorization = %#v, want %q", got, want)
+	if _, exists := config["headers"]; exists {
+		t.Fatalf("persisted config contains credentials: %#v", config)
 	}
 	meta := config[ManagedMetaKey].(map[string]any)[ManagedMetaNamespace].(map[string]any)
 	if got, want := meta["type"], ManagedMCPType; got != want {
@@ -117,16 +116,17 @@ func TestServerConfigAcceptsLegacyResourceStateEndpoint(t *testing.T) {
 	}
 }
 
-func TestHydrateManagedServerRefreshesEndpointAndCSGHubAccessToken(t *testing.T) {
+func TestHydrateManagedServerRefreshesEndpointAndRemovesCSGHubAccessToken(t *testing.T) {
 	_, config, err := ServerConfig(availableKnowledgeBase(), "stored-csghub-token")
 	if err != nil {
 		t.Fatalf("ServerConfig() error = %v", err)
 	}
 	config["startup_timeout_sec"] = 90
-	originalHeaders := config["headers"].(map[string]any)
-	delete(originalHeaders, "Authorization")
-	originalHeaders["authorization"] = "Bearer stored-csghub-token"
-	originalHeaders["X-Tenant-ID"] = "tenant-a"
+	originalHeaders := map[string]any{
+		"authorization": "Bearer stored-csghub-token",
+		"X-Tenant-ID":   "tenant-a",
+	}
+	config["headers"] = originalHeaders
 	current := availableKnowledgeBase()
 	current.Metadata.MCPEndpoint = "https://current-gateway.example.test/v1/llmwikis/wiki-content-42/mcp"
 	hubURL := installKnowledgeBaseResponse(t, current, "current-csghub-token")
@@ -142,9 +142,6 @@ func TestHydrateManagedServerRefreshesEndpointAndCSGHubAccessToken(t *testing.T)
 		t.Fatalf("url = %#v, want %q", got, want)
 	}
 	headers := prepared["headers"].(map[string]any)
-	if got, want := headers["Authorization"], "Bearer current-csghub-token"; got != want {
-		t.Fatalf("Authorization = %#v, want %q", got, want)
-	}
 	if _, exists := headers["authorization"]; exists {
 		t.Fatalf("headers retained stale case-variant Authorization: %#v", headers)
 	}
@@ -159,7 +156,7 @@ func TestHydrateManagedServerRefreshesEndpointAndCSGHubAccessToken(t *testing.T)
 	}
 }
 
-func TestHydrateTemplateServersInjectsRunnerTokenIntoTrustedDirectMCP(t *testing.T) {
+func TestHydrateTemplateServersRefreshesEndpointWithoutPersistingRunnerToken(t *testing.T) {
 	originalLoader := loadInteractiveConnection
 	defer func() { loadInteractiveConnection = originalLoader }()
 	loadInteractiveConnection = func(context.Context) (Connection, bool, error) {
@@ -187,9 +184,8 @@ func TestHydrateTemplateServersInjectsRunnerTokenIntoTrustedDirectMCP(t *testing
 	if got, want := entry["url"], "https://runner-gateway.example.test/v1/llmwikis/wiki-content-42/mcp"; got != want {
 		t.Fatalf("url = %#v, want %q", got, want)
 	}
-	headers := entry["headers"].(map[string]any)
-	if got, want := headers["Authorization"], "Bearer template-runner-token"; got != want {
-		t.Fatalf("Authorization = %#v, want %q", got, want)
+	if _, exists := entry["headers"]; exists {
+		t.Fatalf("hydrated config persisted runner credentials: %#v", entry)
 	}
 	if _, managed := ManagedMetadataFromServer(entry); !managed {
 		t.Fatalf("hydrated config lost managed _meta: %#v", entry)
@@ -256,22 +252,22 @@ func TestHydrateTemplateServersKeepsSanitizedSnapshotWhenHydrationFails(t *testi
 	}
 }
 
-func TestRuntimeServersKeepsDirectAuthenticationAndRemovesOnlyManagedMeta(t *testing.T) {
+func TestRuntimeServersUsesLocalProxyAuthenticationAndRemovesOnlyManagedMeta(t *testing.T) {
 	name, config, err := ServerConfig(availableKnowledgeBase(), "runner-token")
 	if err != nil {
 		t.Fatalf("ServerConfig() error = %v", err)
 	}
 	config[ManagedMetaKey].(map[string]any)["third-party"] = map[string]any{"trace": "keep"}
-	runtimeServers, err := RuntimeServers(map[string]any{name: config})
+	runtimeServers, err := RuntimeServers(map[string]any{name: config}, "http://127.0.0.1:18080", "internal-token")
 	if err != nil {
 		t.Fatalf("RuntimeServers() error = %v", err)
 	}
 	entry := runtimeServers[name].(map[string]any)
-	if got, want := entry["url"], "https://gateway.example.test/v1/llmwikis/wiki-content-42/mcp"; got != want {
+	if got, want := entry["url"], "http://127.0.0.1:18080/api/v1/knowledge-bases/wiki-content-42/mcp"; got != want {
 		t.Fatalf("url = %#v, want %q", got, want)
 	}
 	headers := entry["headers"].(map[string]any)
-	if got, want := headers["Authorization"], "Bearer runner-token"; got != want {
+	if got, want := headers["Authorization"], "Bearer internal-token"; got != want {
 		t.Fatalf("Authorization = %#v, want %q", got, want)
 	}
 	if _, managed := ManagedMetadataFromServer(entry); managed {

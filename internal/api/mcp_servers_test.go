@@ -122,7 +122,7 @@ func TestProbeMCPServerUsesDraftConfigWithoutPersisting(t *testing.T) {
 	}
 }
 
-func TestProbeManagedKnowledgeBaseMCPUsesDraftConfigWithoutRefreshing(t *testing.T) {
+func TestProbeManagedKnowledgeBaseMCPSanitizesDraftCredentialsWithoutRefreshing(t *testing.T) {
 	originalLoader := loadKnowledgeBaseConnection
 	defer func() { loadKnowledgeBaseConnection = originalLoader }()
 	loadKnowledgeBaseConnection = func(context.Context) (knowledgeBaseConnection, error) {
@@ -160,12 +160,8 @@ func TestProbeManagedKnowledgeBaseMCPUsesDraftConfigWithoutRefreshing(t *testing
 	if got, want := prober.config["url"], "https://gateway.example.test/v1/gateway/mcp"; got != want {
 		t.Fatalf("probe url = %#v, want %q", got, want)
 	}
-	headers, ok := prober.config["headers"].(map[string]any)
-	if !ok {
-		t.Fatalf("probe headers = %#v", prober.config["headers"])
-	}
-	if got, want := headers["Authorization"], "Bearer draft-csghub-token"; got != want {
-		t.Fatalf("probe authorization = %#v, want %q", got, want)
+	if _, exists := prober.config["headers"]; exists {
+		t.Fatalf("probe retained draft user credentials: %#v", prober.config)
 	}
 	if _, ok := knowledgebase.ManagedMetadataFromServer(prober.config); !ok {
 		t.Fatalf("probe lost managed metadata: %#v", prober.config)
@@ -256,8 +252,8 @@ func TestManagedKnowledgeBaseMCPSourceStatusAndManualSync(t *testing.T) {
 		t.Fatalf("synced url = %#v, want %q", got, want)
 	}
 	headers := config["headers"].(map[string]any)
-	if got, want := headers["Authorization"], "Bearer current-token"; got != want {
-		t.Fatalf("synced Authorization = %#v, want %q", got, want)
+	if _, exists := headers["Authorization"]; exists {
+		t.Fatalf("synced config persisted current user credentials: %#v", headers)
 	}
 	if got, want := headers["X-Local"], "global"; got != want {
 		t.Fatalf("synced X-Local = %#v, want %q", got, want)
@@ -336,7 +332,7 @@ func TestAgentManagedKnowledgeBaseMCPSourceSyncUsesAgentSnapshotWithoutGlobalMCP
 	if !ok {
 		t.Fatalf("Agent(%q) not found", created.ID)
 	}
-	assertManagedKnowledgeBaseMCPRuntimeSnapshot(t, saved.MCPServers["content-42"], "https://gateway.example.test/current/mcp", "current-token")
+	assertManagedKnowledgeBaseMCPRuntimeSnapshot(t, saved.MCPServers["content-42"], "https://gateway.example.test/current/mcp")
 	refreshedAgent := saved.MCPServers["content-42"].(map[string]any)
 	if got, want := refreshedAgent["startup_timeout_sec"], float64(90); got != want {
 		t.Fatalf("Agent startup_timeout_sec = %#v, want %#v", got, want)
@@ -431,7 +427,7 @@ func managedKnowledgeBaseMCPConfigForTest(endpoint, token string) map[string]any
 	}
 }
 
-func assertManagedKnowledgeBaseMCPRuntimeSnapshot(t *testing.T, raw any, endpoint, token string) {
+func assertManagedKnowledgeBaseMCPRuntimeSnapshot(t *testing.T, raw any, endpoint string) {
 	t.Helper()
 	config, ok := raw.(map[string]any)
 	if !ok {
@@ -440,9 +436,10 @@ func assertManagedKnowledgeBaseMCPRuntimeSnapshot(t *testing.T, raw any, endpoin
 	if got := config["url"]; got != endpoint {
 		t.Fatalf("MCP URL = %#v, want %q", got, endpoint)
 	}
-	headers, ok := config["headers"].(map[string]any)
-	if !ok || headers["Authorization"] != "Bearer "+token {
-		t.Fatalf("MCP headers = %#v, want current token", config["headers"])
+	if headers, ok := config["headers"].(map[string]any); ok {
+		if _, exists := headers["Authorization"]; exists {
+			t.Fatalf("MCP headers persisted current user token: %#v", headers)
+		}
 	}
 	if _, managed := knowledgebase.ManagedMetadataFromServer(config); !managed {
 		t.Fatalf("MCP config lost managed metadata: %#v", config)

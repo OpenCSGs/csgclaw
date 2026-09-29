@@ -22,13 +22,32 @@ func (s *Controller) materializeRuntimeMCPServers(ctx context.Context, runtimeKi
 	if err != nil {
 		return nil, err
 	}
-	prepared, err = knowledgebase.RuntimeServers(prepared)
+	prepared, err = knowledgebase.RuntimeServers(
+		prepared,
+		s.mcpProxyBaseURL(runtimeKind),
+		strings.TrimSpace(s.server.AccessToken),
+	)
 	if err != nil {
 		return nil, err
 	}
 	for name, raw := range servers {
 		if entry, ok := raw.(map[string]any); ok && !mcpschema.ServerEnabled(entry) {
 			entry = utils.CloneAnyMap(entry)
+			if _, managed := knowledgebase.ManagedMetadataFromServer(entry); managed {
+				if existing, ok := entry["headers"].(map[string]any); ok {
+					headers := utils.CloneAnyMap(existing)
+					for headerName := range headers {
+						if strings.EqualFold(strings.TrimSpace(headerName), "Authorization") {
+							delete(headers, headerName)
+						}
+					}
+					if len(headers) == 0 {
+						delete(entry, "headers")
+					} else {
+						entry["headers"] = headers
+					}
+				}
+			}
 			if meta, ok := entry[opencsgmcp.ManagedMetaKey].(map[string]any); ok {
 				delete(meta, opencsgmcp.ManagedMetaNamespace)
 				if len(meta) == 0 {

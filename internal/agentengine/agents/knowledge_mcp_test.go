@@ -116,20 +116,21 @@ func TestManagedKnowledgeBaseMCPPublishAndRuntimeMaterialization(t *testing.T) {
 		t.Fatalf("published MCP document leaked publisher token: %s", encoded)
 	}
 
-	svc := &Controller{Repository: Repository{agents: map[string]Agent{}}}
+	server := config.ServerConfig{ListenAddr: "127.0.0.1:18080", AccessToken: "internal-token"}
+	svc := &Controller{Repository: Repository{agents: map[string]Agent{}}, server: server}
 	runtimeServers, err := svc.materializeRuntimeMCPServers(context.Background(), RuntimeKindCodex, map[string]any{"handbook": localConfig})
 	if err != nil {
 		t.Fatalf("materializeRuntimeMCPServers() error = %v", err)
 	}
 	runtimeConfig := runtimeServers["handbook"].(map[string]any)
-	if got, want := runtimeConfig["url"], "https://publisher-gateway.example.test/v1/llmwikis/content-42/mcp"; got != want {
+	if got, want := runtimeConfig["url"], "http://127.0.0.1:18080/api/v1/knowledge-bases/content-42/mcp"; got != want {
 		t.Fatalf("runtime url = %#v, want %q", got, want)
 	}
 	headers, ok := runtimeConfig["headers"].(map[string]any)
 	if !ok {
 		t.Fatalf("runtime headers = %#v, want object; config=%#v", runtimeConfig["headers"], runtimeConfig)
 	}
-	if got, want := headers["Authorization"], "Bearer publisher-csghub-token"; got != want {
+	if got, want := headers["Authorization"], "Bearer internal-token"; got != want {
 		t.Fatalf("runtime Authorization = %#v, want %q", got, want)
 	}
 	if _, managed := knowledgebase.ManagedMetadataFromServer(runtimeConfig); managed {
@@ -137,7 +138,7 @@ func TestManagedKnowledgeBaseMCPPublishAndRuntimeMaterialization(t *testing.T) {
 	}
 }
 
-func TestTemplateCreateSpecInjectsCurrentRunnerTokenIntoManagedKnowledgeBaseMCP(t *testing.T) {
+func TestTemplateCreateSpecRefreshesManagedKnowledgeBaseWithoutPersistingRunnerToken(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	hubURL := installAgentKnowledgeBaseResponse(t, "https://runner-gateway.example.test/v1/llmwikis/content-42/mcp", "runner-csghub-token")
 	t.Setenv("CSGHUB_API_BASE_URL", hubURL)
@@ -182,9 +183,8 @@ func TestTemplateCreateSpecInjectsCurrentRunnerTokenIntoManagedKnowledgeBaseMCP(
 	if got, want := entry["url"], "https://runner-gateway.example.test/v1/llmwikis/content-42/mcp"; got != want {
 		t.Fatalf("url = %#v, want %q", got, want)
 	}
-	headers := entry["headers"].(map[string]any)
-	if got, want := headers["Authorization"], "Bearer runner-csghub-token"; got != want {
-		t.Fatalf("Authorization = %#v, want %q", got, want)
+	if _, exists := entry["headers"]; exists {
+		t.Fatalf("resolved config persisted runner credentials: %#v", entry)
 	}
 	if _, managed := knowledgebase.ManagedMetadataFromServer(entry); !managed {
 		t.Fatalf("resolved config lost managed _meta: %#v", entry)
@@ -196,7 +196,7 @@ func TestDeleteManagedKnowledgeBaseMCPUsesPersistedSnapshotWithoutSourceAccess(t
 	var reconciled agentruntime.MCPServersChange
 	svc, err := NewController(
 		testModelConfig(),
-		config.ServerConfig{},
+		config.ServerConfig{ListenAddr: "127.0.0.1:18080", AccessToken: "internal-token"},
 		"manager-image:test",
 		"",
 		WithRuntime(fakeAgentRuntime{
@@ -248,6 +248,9 @@ func TestDeleteManagedKnowledgeBaseMCPUsesPersistedSnapshotWithoutSourceAccess(t
 	previous := reconciled.Previous.Servers["content-42"].(map[string]any)
 	if got, want := previous["url"], "https://gateway.example.test/snapshot/mcp"; got != want {
 		t.Fatalf("reconciled previous URL = %#v, want %q", got, want)
+	}
+	if _, exists := previous["headers"]; exists {
+		t.Fatalf("reconciled disabled snapshot retained credentials: %#v", previous)
 	}
 	if _, managed := knowledgebase.ManagedMetadataFromServer(previous); managed {
 		t.Fatalf("reconciled previous snapshot retained managed metadata: %#v", previous)

@@ -8,13 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"csgclaw/internal/mcpschema"
 )
 
 // MigrateMCPIdentities upgrades both catalog and Agent snapshots in one atomic
 // write before services load state. It retains legal runtime keys, shares the
-// replacement of an old key across snapshots, and never changes credentials.
+// replacement of an old key across snapshots. It also removes legacy
+// OpenCSG user credentials from managed knowledge-base entries now that those
+// requests are authenticated dynamically by the local proxy.
 // A synced temporary file replaces state.json without keeping history files.
 func MigrateMCPIdentities(path string) error {
 	rootStateMu.Lock()
@@ -90,7 +93,7 @@ func MigrateMCPIdentities(path string) error {
 	}
 	changed := false
 	convert := func(servers serverMap) (bool, error) {
-		rekeyed := false
+		runtimeChanged := false
 		for old, entry := range servers {
 			// Iterate original names only; newly inserted IDs are already complete.
 			id, original := ids[old]
@@ -110,23 +113,31 @@ func MigrateMCPIdentities(path string) error {
 				delete(servers, old)
 				servers[id] = entry
 				changed = true
-				rekeyed = true
+				runtimeChanged = true
+			}
+			credentialRemoved, stripErr := stripManagedKnowledgeBaseAuthorization(entry)
+			if stripErr != nil {
+				return false, fmt.Errorf("sanitize MCP server %q: %w", old, stripErr)
+			}
+			if credentialRemoved {
+				changed = true
+				runtimeChanged = true
 			}
 		}
-		return rekeyed, nil
+		return runtimeChanged, nil
 	}
 	if _, err = convert(catalog); err != nil {
 		return err
 	}
 	for i, servers := range snapshots {
-		rekeyed, convertErr := convert(servers)
+		runtimeChanged, convertErr := convert(servers)
 		if convertErr != nil {
 			return convertErr
 		}
 		if servers != nil {
 			agents.Items[i]["mcpServers"], _ = json.Marshal(servers)
 		}
-		if rekeyed {
+		if runtimeChanged {
 			var profile map[string]json.RawMessage
 			if raw := agents.Items[i]["model_config"]; len(raw) > 0 {
 				if err = json.Unmarshal(raw, &profile); err != nil {
@@ -174,4 +185,49 @@ func MigrateMCPIdentities(path string) error {
 		return err
 	}
 	return os.Rename(temp.Name(), path)
+}
+
+func stripManagedKnowledgeBaseAuthorization(entry map[string]json.RawMessage) (bool, error) {
+	var meta map[string]json.RawMessage
+	if raw := entry["_meta"]; len(raw) == 0 || string(raw) == "null" {
+		return false, nil
+	} else if err := json.Unmarshal(raw, &meta); err != nil {
+		return false, err
+	}
+	var managed map[string]json.RawMessage
+	if raw := meta["com.opencsg/mcp"]; len(raw) == 0 || string(raw) == "null" {
+		return false, nil
+	} else if err := json.Unmarshal(raw, &managed); err != nil {
+		return false, err
+	}
+	var typeName, authType string
+	_ = json.Unmarshal(managed["type"], &typeName)
+	_ = json.Unmarshal(managed["auth_type"], &authType)
+	if typeName != "llm_wiki" || authType != "csghub_access_token" {
+		return false, nil
+	}
+	rawHeaders := entry["headers"]
+	if len(rawHeaders) == 0 || string(rawHeaders) == "null" {
+		return false, nil
+	}
+	var headers map[string]json.RawMessage
+	if err := json.Unmarshal(rawHeaders, &headers); err != nil {
+		return false, err
+	}
+	removed := false
+	for name := range headers {
+		if strings.EqualFold(strings.TrimSpace(name), "Authorization") {
+			delete(headers, name)
+			removed = true
+		}
+	}
+	if !removed {
+		return false, nil
+	}
+	if len(headers) == 0 {
+		delete(entry, "headers")
+	} else {
+		entry["headers"], _ = json.Marshal(headers)
+	}
+	return true, nil
 }

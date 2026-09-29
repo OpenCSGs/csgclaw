@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"csgclaw/internal/mcpschema"
@@ -100,6 +101,44 @@ func TestMigrateMCPIdentitiesRejectsMalformedStateWithoutWriting(t *testing.T) {
 			t.Fatal("failed migration changed state")
 		}
 		assertMCPMigrationLeavesOnlyState(t, path)
+	}
+}
+
+func TestMigrateMCPIdentitiesRemovesManagedKnowledgeBaseCredentials(t *testing.T) {
+	path := filepath.Join(t.TempDir(), RootStateFileName)
+	body := `{
+  "mcpServers":{"knowledge":{"url":"https://gateway.example/mcp","headers":{"Authorization":"Bearer catalog-token","X-Trace":"keep"},"_meta":{"com.opencsg/mcp":{"type":"llm_wiki","resource_id":"42","content_id":"content-42","auth_type":"csghub_access_token"}}}},
+  "agents":{"items":[{"id":"agent-one","mcpServers":{"knowledge":{"url":"https://gateway.example/mcp","headers":{"authorization":"Bearer agent-token"},"_meta":{"com.opencsg/mcp":{"type":"llm_wiki","resource_id":"42","content_id":"content-42","auth_type":"csghub_access_token"}}}}}]}
+}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateMCPIdentities(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state map[string]any
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	catalog := state["mcpServers"].(map[string]any)["knowledge"].(map[string]any)
+	headers := catalog["headers"].(map[string]any)
+	if _, exists := headers["Authorization"]; exists || headers["X-Trace"] != "keep" {
+		t.Fatalf("catalog headers = %#v", headers)
+	}
+	agent := state["agents"].(map[string]any)["items"].([]any)[0].(map[string]any)
+	snapshot := agent["mcpServers"].(map[string]any)["knowledge"].(map[string]any)
+	if _, exists := snapshot["headers"]; exists {
+		t.Fatalf("Agent snapshot retained credentials: %#v", snapshot)
+	}
+	if restart, _ := agent["model_config"].(map[string]any)["env_restart_required"].(bool); !restart {
+		t.Fatalf("Agent snapshot migration did not request runtime restart: %#v", agent)
+	}
+	if strings.Contains(string(data), "catalog-token") || strings.Contains(string(data), "agent-token") {
+		t.Fatalf("migrated state retained knowledge-base token: %s", data)
 	}
 }
 
