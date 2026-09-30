@@ -3082,3 +3082,77 @@
   padding-top: 0;
   border-top: 0;
 }
+
+.connectorMenuHint {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.hub-detail-pane .connectorSectionTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.connector-page {
+  gap: 22px;
+}
+.connector-page .hub-skill-card-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+  overflow: visible;
+}
+.connector-page .hub-skill-filter-tabs {
+  border-bottom: 0;
+  gap: 4px;
+}
+.connector-page .hub-skill-filter-tab {
+  height: 32px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border-bottom: 0;
+}
+.connector-page .hub-skill-filter-tab.active {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--panel));
+}
+.connector-page .hub-template-source-badge {
+  align-self: start;
+  margin-top: 2px;
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 16px;
+  min-height: 0;
+}
+.connector-page .hub-template-source-badge-dot {
+  display: none;
+}
+.connector-page .hub-skill-list-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.connectorSearch {
+  --input-padding-md: 10px 14px 10px 38px;
+  position: relative;
+}
+.connectorSearch > svg {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+@media (max-width: 1100px) {
+  .connector-page .hub-skill-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .connector-page .hub-skill-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

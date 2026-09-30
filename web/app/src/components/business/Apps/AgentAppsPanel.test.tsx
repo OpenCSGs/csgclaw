@@ -86,7 +86,8 @@ describe("Agent Apps", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await screen.findByText("Connect the services your agent needs");
-    await user.click(screen.getByRole("button", { name: "Add from resources" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.click(screen.getByRole("menuitem", { name: "Add from resources" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Work GitLab" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText("Work GitLab")).toBeVisible();
@@ -102,10 +103,12 @@ describe("Agent Apps", () => {
     const user = userEvent.setup();
     const view = render(<Harness />);
     await screen.findByText("Work GitLab");
+    await user.click(screen.getByRole("button", { name: /Work GitLab/ }));
     await user.click(screen.getByRole("button", { name: "Disconnect" }));
-    await screen.findByText("Disconnected");
+    await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Disconnected"));
     view.unmount();
     render(<Harness />);
+    await user.click(await screen.findByRole("button", { name: /Work GitLab/ }));
     await screen.findByText("Manually disconnected. Reconnect explicitly to restore access.");
     expect(fetch.mock.calls.some(([url]) => url.endsWith("/connect"))).toBe(false);
   });
@@ -312,6 +315,7 @@ describe("Platform login and connection errors", () => {
       },
     ]);
     render(<Harness />);
+    await userEvent.click(await screen.findByRole("button", { name: /Work GitLab/ }));
     expect(await screen.findByText(/The platform token has expired/)).toHaveTextContent("HTTP 401");
     expect(screen.queryByText("App authorization is no longer valid")).not.toBeInTheDocument();
   });
@@ -330,12 +334,18 @@ describe("App connection form layout", () => {
       />,
     );
     const connection = screen.getByRole("region", { name: "Service connection" });
-    const access = screen.getByRole("region", { name: "MCP service authentication" });
-    const identity = screen.getByRole("region", { name: "Feishu application identity" });
+    const access = screen.getByRole("region", { name: "Platform authentication" });
+    const identity = screen.getByRole("region", { name: "MCP identity" });
     expect(within(connection).getByLabelText("MCP service URL")).toBeInTheDocument();
     expect(within(access).getByLabelText("Platform access token (optional)")).toBeInTheDocument();
     expect(within(identity).getByLabelText("App Secret")).toBeInTheDocument();
     expect(within(access).queryByLabelText("App Secret")).not.toBeInTheDocument();
     expect(within(identity).queryByLabelText("Platform access token (optional)")).not.toBeInTheDocument();
+    expect(within(identity).getByRole("combobox", { name: "Authentication" })).toBeVisible();
+    expect(within(access).getByRole("combobox", { name: "Platform credential source" })).toBeVisible();
+    expect(access.compareDocumentPosition(identity) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("dialog").querySelectorAll(".field-hint")).toHaveLength(0);
+    expect(screen.queryByText(t("appConnectionSectionHint"))).not.toBeInTheDocument();
+    expect(screen.queryByText(t("appSettingsDescription"))).not.toBeInTheDocument();
   });
 });

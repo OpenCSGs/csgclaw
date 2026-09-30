@@ -262,8 +262,9 @@ func (s *Service) watch(agentID, id string, conn *connection) {
 	e.generation++
 	e.record.Status = "error"
 	e.record.LastError = "MCP connection closed; reconnect the App"
-	e.record.LastErrorCode = ""
+	e.record.LastErrorCode = "app_mcp_connection_closed"
 	e.record.LastErrorHTTPStatus = 0
+	e.record.UpdatedAt = time.Now().UTC()
 	var detail *ConnectionError
 	if !errors.As(waitErr, &detail) {
 		detail = conn.httpAuth.latestFailure()
@@ -271,6 +272,7 @@ func (s *Service) watch(agentID, id string, conn *connection) {
 	if detail != nil {
 		setConnectionError(&e.record.Installation, detail)
 	}
+	logMCPConnectionFailure("session_closed", agentID, e.record.AppID, e.record.Config, e.record.Credentials, waitErr, detail)
 	_ = s.persistLocked(id, &e.record)
 	s.mu.Unlock()
 	conn.cancel()

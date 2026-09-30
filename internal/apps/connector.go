@@ -256,13 +256,15 @@ func (s *Service) buildTransport(ctx context.Context, agentID, appID string, c C
 		if err != nil {
 			return nil, err
 		}
-		return &mcp.StreamableClientTransport{Endpoint: resolved.Endpoint, HTTPClient: client, MaxRetries: -1}, nil
+		// Keep the SDK's bounded SSE recovery: an idle stream closing does not
+		// mean the MCP session or its POST tool endpoint has failed.
+		return &mcp.StreamableClientTransport{Endpoint: resolved.Endpoint, HTTPClient: client}, nil
 	}
 	client, err := connectorHTTPClient(c, credentials, tokenSources...)
 	if err != nil {
 		return nil, err
 	}
-	return &mcp.StreamableClientTransport{Endpoint: c.URL, HTTPClient: client, MaxRetries: -1}, nil
+	return &mcp.StreamableClientTransport{Endpoint: c.URL, HTTPClient: client}, nil
 }
 
 func setHeaderValue(headers map[string]string, name, value string) {

@@ -653,3 +653,76 @@ func TestGatewayAppIdentityAndRenameRefresh(t *testing.T) {
 		t.Fatal("renaming broke stable tool identity")
 	}
 }
+
+func TestGlobalResourceNameUniquenessUnderConcurrentWrites(t *testing.T) {
+	s := newTestService(t, Options{})
+	ctx := t.Context()
+	const attempts = 12
+	start := make(chan struct{})
+	results := make(chan error, attempts)
+	for i := 0; i < attempts; i++ {
+		go func(i int) {
+			<-start
+			appID := "gitlab"
+			if i%2 != 0 {
+				appID = "feishu"
+			}
+			_, err := s.Create(ctx, "", CreateRequest{AppID: appID, Name: " Shared workspace "})
+			results <- err
+		}(i)
+	}
+	close(start)
+	succeeded := 0
+	for i := 0; i < attempts; i++ {
+		err := <-results
+		if err == nil {
+			succeeded++
+		} else if !errors.Is(err, ErrConflict) {
+			t.Fatal(err)
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("successful duplicate creates = %d, want 1", succeeded)
+	}
+	items, err := s.List(ctx, "")
+	if err != nil || len(items) != 1 || items[0].Name != "Shared workspace" {
+		t.Fatalf("resources = %+v, err = %v", items, err)
+	}
+	other, err := s.Create(ctx, "", CreateRequest{AppID: "feishu", Name: "Other workspace"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start = make(chan struct{})
+	for _, id := range []string{items[0].InstallationID, other.InstallationID} {
+		go func(id string) {
+			<-start
+			name := "Renamed workspace"
+			_, err := s.Update(ctx, "", id, UpdateRequest{Name: &name})
+			results <- err
+		}(id)
+	}
+	close(start)
+	succeeded = 0
+	for i := 0; i < 2; i++ {
+		err := <-results
+		if err == nil {
+			succeeded++
+		} else if !errors.Is(err, ErrConflict) {
+			t.Fatal(err)
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("successful duplicate renames = %d, want 1", succeeded)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewService(s.path, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if _, err := reopened.Create(ctx, "", CreateRequest{AppID: "gitlab", Name: "Renamed workspace"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate name after restart: %v", err)
+	}
+}

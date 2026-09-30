@@ -193,7 +193,7 @@ func TestGlobalFeishuResourceUsesItsOwnIdentityForEveryAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resource.Status != "configured" {
+	if resource.Status != "not_connected" {
 		t.Fatal("global resource claimed an Agent identity")
 	}
 	for _, agentID := range []string{"alpha", "beta"} {
@@ -350,4 +350,70 @@ func TestFeishuViewShowsAppIDWithoutSecrets(t *testing.T) {
 			t.Fatal("view exposed secrets")
 		}
 	}
+}
+
+func TestGlobalResourceReflectsLiveBindingFailures(t *testing.T) {
+	ctx := t.Context()
+	s := newTestService(t, Options{})
+	upstream := upstreamServer(t)
+	resource, err := s.Create(ctx, "", CreateRequest{AppID: "gitlab", Name: "Shared GitLab", Config: Config{URL: upstream.URL, AuthMode: "bearer"}, Credentials: Credentials{Token: "fixture"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(status, code string) Installation {
+		t.Helper()
+		current, err := s.Get(ctx, "", resource.InstallationID)
+		if err != nil || current.Status != status || current.LastErrorCode != code {
+			t.Fatalf("global state: status=%s code=%s error=%v", current.Status, current.LastErrorCode, err)
+		}
+		if !current.UpdatedAt.Equal(resource.UpdatedAt) {
+			t.Fatal("runtime status changed the resource configuration version")
+		}
+		return current
+	}
+	check("not_connected", "")
+	a, err := s.Bind(ctx, "alpha", BindRequest{ResourceID: resource.InstallationID, Connect: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Bind(ctx, "beta", BindRequest{ResourceID: resource.InstallationID, Connect: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("connected", "")
+	s.mu.Lock()
+	conn := s.entries[a.InstallationID].connection
+	s.mu.Unlock()
+	s.failConnectionDetail("alpha", a.InstallationID, conn, connectionError("app_mcp_network_error", "Cannot reach the MCP service", 0, false))
+	failed := check("error", "app_mcp_network_error")
+	if failed.LastError != "Cannot reach the MCP service" || len(failed.Bindings) != 2 {
+		t.Fatal("global resource hid a binding failure")
+	}
+	if _, err = s.Disconnect(ctx, "alpha", a.InstallationID); err != nil {
+		t.Fatal(err)
+	}
+	check("connected", "")
+	s.mu.Lock()
+	conn = s.entries[b.InstallationID].connection
+	s.mu.Unlock()
+	s.failConnectionDetail("beta", b.InstallationID, conn, connectionError("app_platform_token_expired", "The platform token has expired", 401, true))
+	check("authorization_required", "app_platform_token_expired")
+	if _, err = s.Disconnect(ctx, "beta", b.InstallationID); err != nil {
+		t.Fatal(err)
+	}
+	check("not_connected", "")
+	if _, err = s.Connect(ctx, "beta", b.InstallationID); err != nil {
+		t.Fatal(err)
+	}
+	check("connected", "")
+	disabled := false
+	if _, err = s.Update(ctx, "beta", b.InstallationID, UpdateRequest{Enabled: &disabled}); err != nil {
+		t.Fatal(err)
+	}
+	check("not_connected", "")
+	resource, err = s.Update(ctx, "", resource.InstallationID, UpdateRequest{Enabled: &disabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("disabled", "")
 }

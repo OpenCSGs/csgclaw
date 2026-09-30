@@ -63,8 +63,8 @@ Chinese companion: `architecture.zh.md`.
   |     +-- WorkspacePage
   |     |     Main shell: sidebar, layout, modals, overlays, nested outlet
   |     |
-  |     +-- AppsPage (/apps, /apps/:resourceId)
-  |     |     Global App resources; Agent pages bind selected resources
+  |     +-- AppsPage (/connectors, /connectors/:resourceId)
+  |     |     Applications and MCP in one view; existing APIs and forms remain separate
   |     |
   |     +-- ConversationPage
   |     |     Conversation route content and conversation-private components
@@ -76,7 +76,7 @@ Chinese companion: `architecture.zh.md`.
   |     |     Agent route content and agent-private components
   |     |
   |     +-- HubPage
-  |           Hub route content and hub-private components
+  |           Hub resources and MCP details (/mcp-servers/:name); shared connector view
   |
   +-- hooks/
   |     Shared React controllers and reusable hooks

@@ -1,3 +1,4 @@
+import { SidebarMcpIcon } from "@/components/ui/Icons";
 import { ResourceLoadMore } from "../ResourceLoadMore";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
 import { mcpManagedKnowledgeBaseSource } from "@/models/mcp";
@@ -121,7 +122,7 @@ import {
   Tooltip,
 } from "@/components/ui";
 import { SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
-import { AgentAppsPanel, AppManagedMCPRows, useAgentApps } from "@/components/business/Apps";
+import { AgentAppsPanel, useAgentApps } from "@/components/business/Apps";
 
 type VoidOrPromise = void | Promise<void>;
 type AgentActionHandler = (item: AgentLike) => VoidOrPromise;
@@ -560,7 +561,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 ]
               : []),
             ...(showApps ? [{ id: "apps" as const, label: t("agentAppsTab") }] : []),
-            ...(showMCPServers ? [{ id: "mcp" as const, label: t("agentProfileMCPTab") }] : []),
+            ...(!showApps && showMCPServers ? [{ id: "mcp" as const, label: t("agentAppsTab") }] : []),
             ...(!isNotificationBotAgent(item) ? [{ id: "channels" as const, label: t("agentChannelsTitle") }] : []),
           ]
         : [],
@@ -576,7 +577,13 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       workspaceSupported,
     ],
   );
-  const selectedProfileTab = requestedProfileTab || activeProfileTab;
+  const requestedTab = requestedProfileTab || activeProfileTab;
+  const selectedProfileTab =
+    showApps && requestedTab === "mcp"
+      ? "apps"
+      : !showApps && showMCPServers && requestedTab === "apps"
+        ? "mcp"
+        : requestedTab;
   const visibleActiveProfileTab = profileTabs.some((tab) => tab.id === selectedProfileTab)
     ? selectedProfileTab
     : profileTabs[0]?.id;
@@ -708,6 +715,38 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     setAppSettingsID(undefined);
     onProfileTabChange?.(tabID);
   }
+
+  const toolConnectors = (
+    <AgentMCPPanel
+      embedded={showApps}
+      continuation={mcpContinuation}
+      toggleBusyName={resourceBusy.startsWith("mcp:") ? resourceBusy.slice(4) : ""}
+      listError={mcpListError}
+      onOpenDetail={(server) => openResourceDetail("mcp", server.name)}
+      onToggle={
+        canToggleResources && onSetResourceEnabled
+          ? (server) => onSetResourceEnabled("mcp", server.name, server.config.enabled === false)
+          : undefined
+      }
+      mutationBusy={resourceMutationBusy || Boolean(appsController.busyID)}
+      addBusy={mcpAddBusy}
+      addError={mcpAddError}
+      deleteError={mcpDeleteError}
+      servers={mcpServers}
+      hasManagedApps={appsController.items.length > 0}
+      sourceBusyNames={mcpSourceBusyNames}
+      sourceUnavailableNames={mcpSourceUnavailableNames}
+      sourceSyncBusyName={mcpSourceSyncBusyName}
+      updateAvailableNames={mcpUpdateAvailableNames}
+      t={t}
+      onOpenAddMCP={() => setAddMCPDialogOpen(true)}
+      onRequestDeleteMCP={(server) => {
+        setMCPPendingDelete(server);
+        setDeleteMCPDialogOpen(true);
+      }}
+      onUpdateMCP={onUpdateMCPServer}
+    />
+  );
 
   return (
     <section className="entity-pane agent-detail-pane">
@@ -1053,7 +1092,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
               <AgentMemoryPanel agentID={String(item.id || "")} onMemoryChange={onMemoryChange} t={t} />
             ) : null}
 
-            {["skills", "mcp"].includes(visibleActiveProfileTab) && resourceError ? (
+            {["skills", "mcp", "apps"].includes(visibleActiveProfileTab) && resourceError ? (
               <div className="form-error" role="alert">
                 {resourceError}
                 {onRetryResource ? (
@@ -1098,49 +1137,12 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
                 selectedID={onProfileTabChange ? requestedAppID : requestedAppID || appSettingsID}
                 addAppID={requestedAddAppID}
                 onSelect={selectAppSettings}
-              />
-            ) : null}
-            {showMCPServers && visibleActiveProfileTab === "mcp" ? (
-              <>
-                {showApps ? (
-                  <AppManagedMCPRows
-                    key={item?.id}
-                    controller={appsController}
-                    t={t}
-                    onSelect={selectAppSettings}
-                    disabled={resourceMutationBusy}
-                    portalContainer={dialogPortalContainer}
-                  />
-                ) : null}
-                <AgentMCPPanel
-                  continuation={mcpContinuation}
-                  toggleBusyName={resourceBusy.startsWith("mcp:") ? resourceBusy.slice(4) : ""}
-                  listError={mcpListError}
-                  onOpenDetail={(server) => openResourceDetail("mcp", server.name)}
-                  onToggle={
-                    canToggleResources && onSetResourceEnabled
-                      ? (server) => onSetResourceEnabled("mcp", server.name, server.config.enabled === false)
-                      : undefined
-                  }
-                  mutationBusy={resourceMutationBusy || Boolean(appsController.busyID)}
-                  addBusy={mcpAddBusy}
-                  addError={mcpAddError}
-                  deleteError={mcpDeleteError}
-                  servers={mcpServers}
-                  hasManagedApps={appsController.items.length > 0}
-                  sourceBusyNames={mcpSourceBusyNames}
-                  sourceUnavailableNames={mcpSourceUnavailableNames}
-                  sourceSyncBusyName={mcpSourceSyncBusyName}
-                  updateAvailableNames={mcpUpdateAvailableNames}
-                  t={t}
-                  onOpenAddMCP={() => setAddMCPDialogOpen(true)}
-                  onRequestDeleteMCP={(server) => {
-                    setMCPPendingDelete(server);
-                    setDeleteMCPDialogOpen(true);
-                  }}
-                  onUpdateMCP={onUpdateMCPServer}
-                />
-              </>
+                onAddTools={showMCPServers ? () => setAddMCPDialogOpen(true) : undefined}
+              >
+                {showMCPServers ? toolConnectors : null}
+              </AgentAppsPanel>
+            ) : showMCPServers && visibleActiveProfileTab === "mcp" ? (
+              toolConnectors
             ) : null}
           </div>
         ) : null}
@@ -1708,6 +1710,7 @@ function AgentRuntimePanel({
 }
 
 type AgentMCPPanelProps = {
+  embedded?: boolean;
   toggleBusyName: string;
   continuation?: ResourceContinuation;
   listError?: string;
@@ -1730,6 +1733,7 @@ type AgentMCPPanelProps = {
 };
 
 function AgentMCPPanel({
+  embedded = false,
   toggleBusyName,
   continuation,
   listError,
@@ -1753,14 +1757,16 @@ function AgentMCPPanel({
   return (
     <section
       id="agent-profile-mcp"
-      className="profile-section agent-skills-section agent-mcp-section agent-profile-scroll-target"
+      className={
+        embedded
+          ? "agent-skills-section agent-mcp-section"
+          : "profile-section agent-skills-section agent-mcp-section agent-profile-scroll-target"
+      }
     >
       <div className="agent-skills-summary-heading">
         <div className="profile-section-heading">
-          <div className="profile-section-title">{t(hasManagedApps ? "appManualMCPTitle" : "profileMCPServers")}</div>
-          <p className="profile-section-description">
-            {t(hasManagedApps ? "appManualMCPDescription" : "profileMCPServersHubHint")}
-          </p>
+          <div className="profile-section-title">{t(embedded ? "connectorsTools" : "agentAppsTab")}</div>
+          {!embedded ? <p className="profile-section-description">{t("profileMCPServersHubHint")}</p> : null}
         </div>
         <div className="agent-skills-summary-actions">
           <span className="agent-skills-summary-count">
@@ -1820,7 +1826,11 @@ function AgentMCPPanel({
                 key={server.name}
                 title={mcpServerDisplayName(server)}
                 description={server.description}
-                icon={<Server size={20} />}
+                icon={
+                  <span className="agent-connector-tool-icon">
+                    <SidebarMcpIcon size={16} />
+                  </span>
+                }
                 onOpen={() => onOpenDetail(server)}
                 badge={
                   <>
@@ -1834,6 +1844,16 @@ function AgentMCPPanel({
                 }
                 actions={
                   <>
+                    <span className="agent-connector-source-badge">
+                      {t(
+                        server.config.url ||
+                          String(server.config.type || server.config.transport || "")
+                            .toLowerCase()
+                            .includes("remote")
+                          ? "resourcesSkillRemoteFilter"
+                          : "resourcesSkillLocalFilter",
+                      )}
+                    </span>
                     {updateAvailable && !sourceUnavailable && onUpdateMCP ? (
                       <Button
                         size="sm"

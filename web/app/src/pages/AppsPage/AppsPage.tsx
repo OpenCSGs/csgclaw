@@ -1,8 +1,5 @@
-import { useWorkspaceControllerContext } from "@/hooks/workspace";
-import { GlobalAppsPanel } from "@/components/business/Apps";
+import { HubPage } from "@/pages/HubPage";
 
 export function AppsPage() {
-  const controller = useWorkspaceControllerContext();
-  if (!controller.ready) return null;
-  return <GlobalAppsPanel t={controller.t} />;
+  return <HubPage />;
 }

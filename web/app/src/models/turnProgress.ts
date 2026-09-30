@@ -160,9 +160,7 @@ export function expandProgressMessage(message: IMMessage): IMMessage[] {
       content: item.text || tool?.name || "",
       attachments: [],
       metadata: {
-        csgclaw: activity
-          ? { agent_activity: activity, delivery_kind: "tool" }
-          : { delivery_kind: "activity" },
+        csgclaw: activity ? { agent_activity: activity, delivery_kind: "tool" } : { delivery_kind: "activity" },
       },
     };
   });

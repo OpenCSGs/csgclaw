@@ -2966,3 +2966,24 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 112px;
 }
+
+.agent-connector-tool-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--brand-600) 28%, var(--panel));
+  color: var(--brand-600);
+}
+.agent-connector-source-badge {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--muted);
+  white-space: nowrap;
+}

@@ -1,8 +1,20 @@
-import { render, screen } from "@testing-library/react";
+import { render as rtlRender, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { MemoryRouter } from "react-router-dom";
+import { useState, type ReactNode } from "react";
 import { HubDetailPane } from "@/pages/HubPage/components";
 import type { HubTemplate } from "@/models/hubWorkspace";
+
+function render(ui: ReactNode) {
+  return rtlRender(<MemoryRouter>{ui}</MemoryRouter>);
+}
+beforeEach(() =>
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ items: [] })),
+  ),
+);
+afterEach(() => vi.unstubAllGlobals());
 
 function t(key: string, params: Record<string, string | number> = {}) {
   const messages: Record<string, string> = {
@@ -501,7 +513,7 @@ function renderMCPDetailPane({
   return { ...result, onCheckMCPSource, onProbeMCP, onSyncMCPSource, onUpdateMCP };
 }
 
-function renderMCPCreateDialog() {
+function renderMCPCreateDialog(initialOpen = true) {
   const onInstallRemoteMCP = vi.fn().mockResolvedValue(true);
   const onRemoteMCPVisibleChange = vi.fn();
   const remoteMCP = {
@@ -511,54 +523,58 @@ function renderMCPCreateDialog() {
     protocol: "streamable-http",
     url: "https://mcp.example.test/calendar",
   };
-  const result = render(
-    <HubDetailPane
-      locale="en"
-      t={t}
-      onCreateFromTemplate={vi.fn()}
-      hub={{
-        detailPaneProps: {
-          detailLoading: false,
-          error: "",
-          loaded: true,
-          mcpCreateDialogOpen: true,
-          mcpServers: [],
-          onInstallRemoteMCP,
-          onMCPCreateDialogOpenChange: vi.fn(),
-          onRemoteMCPVisibleChange,
-          onRetry: vi.fn(),
-          onSelectSkillFile: vi.fn(),
-          onSelectWorkspaceFile: vi.fn(),
-          remoteMCPInstallBusy: "",
-          remoteMCPServers: [remoteMCP],
-          remoteMCPServersError: "",
-          remoteMCPServersHasMore: false,
-          remoteMCPServersLoading: false,
-          remoteMCPServersLoadingMore: false,
-          remoteMCPServersSearch: "",
-          selectedMCPServer: null,
-          selectedMCPServerName: "",
-          selectedResourceType: "mcp",
-          selectedSkill: null,
-          selectedSkillPath: "",
-          selectedTemplate: null,
-          selectedTemplateId: "",
-          selectedWorkspacePath: "",
-          skillFile: null,
-          skillFileError: "",
-          skillFileLoading: false,
-          skills: [],
-          skillTree: null,
-          skillTreeError: "",
-          skillTreeLoading: false,
-          templates: [],
-          workspaceFile: null,
-          workspaceFileError: "",
-          workspaceFileLoading: false,
-        },
-      }}
-    />,
-  );
+  function Harness() {
+    const [open, setOpen] = useState(initialOpen);
+    return (
+      <HubDetailPane
+        locale="en"
+        t={t}
+        onCreateFromTemplate={vi.fn()}
+        hub={{
+          detailPaneProps: {
+            detailLoading: false,
+            error: "",
+            loaded: true,
+            mcpCreateDialogOpen: open,
+            mcpServers: [],
+            onInstallRemoteMCP,
+            onMCPCreateDialogOpenChange: setOpen,
+            onRemoteMCPVisibleChange,
+            onRetry: vi.fn(),
+            onSelectSkillFile: vi.fn(),
+            onSelectWorkspaceFile: vi.fn(),
+            remoteMCPInstallBusy: "",
+            remoteMCPServers: [remoteMCP],
+            remoteMCPServersError: "",
+            remoteMCPServersHasMore: false,
+            remoteMCPServersLoading: false,
+            remoteMCPServersLoadingMore: false,
+            remoteMCPServersSearch: "",
+            selectedMCPServer: null,
+            selectedMCPServerName: "",
+            selectedResourceType: "mcp",
+            selectedSkill: null,
+            selectedSkillPath: "",
+            selectedTemplate: null,
+            selectedTemplateId: "",
+            selectedWorkspacePath: "",
+            skillFile: null,
+            skillFileError: "",
+            skillFileLoading: false,
+            skills: [],
+            skillTree: null,
+            skillTreeError: "",
+            skillTreeLoading: false,
+            templates: [],
+            workspaceFile: null,
+            workspaceFileError: "",
+            workspaceFileLoading: false,
+          },
+        }}
+      />
+    );
+  }
+  const result = render(<Harness />);
   return { ...result, onInstallRemoteMCP, onRemoteMCPVisibleChange };
 }
 
@@ -1300,5 +1316,62 @@ describe("HubDetailPane", () => {
       protocol: "streamable-http",
       url: "https://mcp.example.test/calendar",
     });
+  });
+});
+
+describe("Unified connectors", () => {
+  it("keeps all three creation entries available with an empty catalog and opens remote install directly", async () => {
+    const user = userEvent.setup();
+    const { onRemoteMCPVisibleChange } = renderMCPCreateDialog(false);
+    expect(screen.getByRole("heading", { name: "connectorsApplications" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "connectorsTools" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "connectorsAdd" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getAllByRole("menuitem")).toHaveLength(3);
+    await user.click(within(menu).getByRole("menuitem", { name: /Remote install/ }));
+    expect(screen.getByRole("tab", { name: "Remote install" })).toHaveAttribute("aria-selected", "true");
+    expect(onRemoteMCPVisibleChange).toHaveBeenCalledWith(true);
+    expect(screen.getByText("Calendar tools")).toBeVisible();
+  });
+
+  it("searches applications and MCP tools together while transport filters affect only tools", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        Response.json({
+          items: String(url).endsWith("catalog")
+            ? [{ app_id: "gitlab", name: "GitLab", interface: {}, config_schema: {}, description: "Projects" }]
+            : [
+                {
+                  installation_id: "work",
+                  app_id: "gitlab",
+                  name: "Work projects",
+                  enabled: true,
+                  status: "configured",
+                  config: {},
+                  credentials_set: {},
+                  tools: [],
+                },
+              ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderMCPDetailPane();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    const app = await screen.findByRole("button", { name: /^Work projects/ });
+    expect(app).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "Remote" }));
+    expect(app).toBeVisible();
+    expect(screen.queryByRole("button", { name: /grafana.*Grafana/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "All" }));
+    const search = screen.getByRole("searchbox", { name: "connectorsSearch" });
+    await user.type(search, "Work projects");
+    expect(app).toBeVisible();
+    expect(screen.queryByRole("button", { name: /grafana.*Grafana/ })).not.toBeInTheDocument();
+    await user.clear(search);
+    await user.type(search, "grafana");
+    expect(screen.queryByRole("button", { name: /^Work projects/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /grafana/i })).toBeVisible();
   });
 });

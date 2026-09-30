@@ -4,9 +4,28 @@ import { HubView } from "./components";
 export function HubPage() {
   const controller = useWorkspaceControllerContext();
 
-  if (!controller.ready) {
+  if (!controller.ready || !controller.hubViewProps) {
     return null;
   }
 
-  return <HubView {...controller.hubViewProps} />;
+  const props = controller.hubViewProps;
+  const connectorRoute = controller.activePane?.type === "apps";
+  return (
+    <HubView
+      {...props}
+      hub={
+        connectorRoute && props.hub
+          ? {
+              ...props.hub,
+              detailPaneProps: {
+                ...props.hub.detailPaneProps,
+                selectedResourceType: "mcp",
+                selectedMCPServer: null,
+                error: props.hub.detailPaneProps.mcpStateError || "",
+              },
+            }
+          : props.hub
+      }
+    />
+  );
 }

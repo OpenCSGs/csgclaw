@@ -207,3 +207,89 @@ func TestResourceViewReportsManagedGitLabTokenPresence(t *testing.T) {
 		t.Fatal("removed credential still marked as saved")
 	}
 }
+
+func TestGlobalConnectorNamesAreUniqueAcrossApplicationTypes(t *testing.T) {
+	upstream := appSaveMCPServer(t)
+	h, _, _, _, _ := newAppPlatformAuthFixture(t)
+	create := func(appID, name string) *httptest.ResponseRecorder {
+		t.Helper()
+		body, err := json.Marshal(apps.CreateRequest{AppID: appID, Name: name, Config: apps.Config{URL: upstream.URL, AuthMode: "none"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return appAuthRequest(t, h, http.MethodPost, "/api/v1/connectors/resources", string(body), "", nil)
+	}
+	first := create("gitlab", "Company workspace")
+	if first.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", first.Code, first.Body)
+	}
+	for _, appID := range []string{"gitlab", "feishu"} {
+		for _, name := range []string{"Company workspace", "  Company workspace  "} {
+			result := create(appID, name)
+			if result.Code != http.StatusConflict || !strings.Contains(result.Body.String(), `"code":"app_name_conflict"`) {
+				t.Fatalf("duplicate %s %q: %d %s", appID, name, result.Code, result.Body)
+			}
+		}
+	}
+	second := create("feishu", "Personal workspace")
+	if second.Code != http.StatusCreated {
+		t.Fatalf("create second: %d %s", second.Code, second.Body)
+	}
+	var resource apps.Installation
+	if err := json.Unmarshal(second.Body.Bytes(), &resource); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/connectors/resources/" + resource.InstallationID
+	result := appAuthRequest(t, h, http.MethodPatch, path, `{"name":" Company workspace "}`, "", nil)
+	if result.Code != http.StatusConflict || !strings.Contains(result.Body.String(), `"code":"app_name_conflict"`) {
+		t.Fatalf("duplicate rename: %d %s", result.Code, result.Body)
+	}
+	current, err := h.apps.Get(t.Context(), "", resource.InstallationID)
+	if err != nil || current.Name != "Personal workspace" {
+		t.Fatalf("failed rename changed resource: %+v %v", current, err)
+	}
+	result = appAuthRequest(t, h, http.MethodPatch, path, `{"name":" Personal workspace "}`, "", nil)
+	if result.Code != http.StatusOK {
+		t.Fatalf("unchanged name: %d %s", result.Code, result.Body)
+	}
+}
+
+func TestGlobalResourceAPIReportsActualConnectionState(t *testing.T) {
+	upstream := appSaveMCPServer(t)
+	h, alice, _, _, _ := newAppPlatformAuthFixture(t)
+	created := appAuthRequest(t, h, http.MethodPost, "/api/v1/connectors/resources", `{"app_id":"gitlab","name":"Shared","config":{"url":"`+upstream.URL+`","auth_mode":"none"}}`, "", nil)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", created.Code, created.Body)
+	}
+	var resource apps.Installation
+	if err := json.Unmarshal(created.Body.Bytes(), &resource); err != nil {
+		t.Fatal(err)
+	}
+	if resource.Status != "not_connected" {
+		t.Fatalf("configuration alone claimed a connection: %s", resource.Status)
+	}
+	bound := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/connectors", `{"resource_id":"`+resource.InstallationID+`","connect":true}`, "", nil)
+	if bound.Code != http.StatusCreated {
+		t.Fatalf("bind: %d %s", bound.Code, bound.Body)
+	}
+	var binding apps.Installation
+	if err := json.Unmarshal(bound.Body.Bytes(), &binding); err != nil {
+		t.Fatal(err)
+	}
+	check := func(status string) {
+		t.Helper()
+		response := appAuthRequest(t, h, http.MethodGet, "/api/v1/connectors/resources", "", "", nil)
+		var inventory struct {
+			Items []apps.Installation `json:"items"`
+		}
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &inventory) != nil || len(inventory.Items) != 1 || inventory.Items[0].Status != status {
+			t.Fatalf("global status want %s: %d %s", status, response.Code, response.Body)
+		}
+	}
+	check("connected")
+	response := appAuthRequest(t, h, http.MethodPost, "/api/v1/agents/"+alice.ID+"/connectors/"+binding.InstallationID+"/disconnect", "", "", nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("disconnect: %d %s", response.Code, response.Body)
+	}
+	check("not_connected")
+}

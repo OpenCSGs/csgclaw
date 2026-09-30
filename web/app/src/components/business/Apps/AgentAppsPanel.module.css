@@ -112,17 +112,37 @@
 .catalogDialog {
   width: min(560px, calc(100vw - 32px));
 }
-.catalogItem {
+.catalog .catalogItem {
+  width: 100%;
+  height: auto;
+  min-height: 84px;
+  padding: 16px;
+  border-radius: 10px;
+  text-align: left;
+  white-space: normal;
+}
+.catalogItem :global(.btn-content) {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+}
+.catalogIcon {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+.catalogCopy {
+  min-width: 0;
+}
+.catalogCopy strong {
+  display: block;
+  font-size: 14px;
+  line-height: 20px;
 }
 .catalogItem:hover {
   background: var(--panel-soft);
@@ -131,20 +151,8 @@
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
-.catalogItem > div {
-  flex: 1;
-}
-.catalogItem strong {
-  font-size: 14px;
-}
-.catalogItem p {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
 .settingsDialog {
-  width: min(720px, calc(100vw - 32px));
+  width: min(640px, calc(100vw - 32px));
 }
 .settingsBody {
   overflow-y: auto;
@@ -205,18 +213,6 @@ fieldset.fields {
 .footer {
   flex-wrap: wrap;
 }
-.probeResult {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  background: var(--panel-soft);
-  border-radius: 10px;
-}
-.probeResult > strong {
-  color: var(--success-700);
-  font-size: 13px;
-}
 .tools ul {
   list-style: none;
   padding: 0;
@@ -274,9 +270,8 @@ fieldset.fields {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  padding: 0;
+  border: 0;
   min-width: 0;
 }
 .sectionHeading h3 {
@@ -291,8 +286,8 @@ fieldset.fields {
   line-height: 1.6;
   margin: 5px 0 0;
 }
-.footer > button:first-child {
-  margin-right: auto;
+.footer > button {
+  flex: 1;
 }
 @media (max-width: 600px) {
   .formSection {
@@ -324,4 +319,207 @@ fieldset.fields {
   gap: 16px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.applicationSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sectionTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.applicationGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 24px;
+}
+.agentGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 16px;
+}
+.connectorCard {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+}
+.connectorCard:hover,
+.connectorCard:focus-within {
+  background: var(--panel-soft);
+}
+.connectorOpen {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  cursor: pointer;
+}
+.connectorCard > .connectorOpen {
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+.connectorOpen:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+.connectorIcon {
+  width: 30px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  color: var(--primary);
+}
+.gitlabIcon {
+  color: var(--warning-500);
+}
+.connectorCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.connectorTitle {
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.connectorDescription {
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.connectorCard .status {
+  align-self: flex-start;
+  margin-top: 2px;
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 16px;
+  background: var(--panel);
+}
+.status[data-status="connected"]::before {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--success-500);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.catalogDescription {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  margin-top: 5px;
+  white-space: normal;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.resourceDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.secretInput {
+  --input-padding-md: 10px 42px 10px 14px;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.secretInput input {
+  width: 100%;
+}
+.secretInput > button {
+  position: absolute;
+  right: 4px;
+}
+.probeResult {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--success-300);
+  background: color-mix(in srgb, var(--success-500) 10%, var(--panel));
+  padding: 12px;
+  gap: 6px;
+  border-radius: 8px;
+}
+.probeResult > strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.probeResult > p {
+  margin-left: 24px;
+}
+.probeError {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--warning-300);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning-500) 10%, var(--panel));
+  color: var(--warning-700);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.probeError svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+@media (max-width: 1100px) {
+  .applicationGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .applicationGrid,
+  .agentGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+:global(:root[data-theme="dark"]) .probeResult > strong {
+  color: var(--success-300);
+}
+:global(:root[data-theme="dark"]) .probeError {
+  color: var(--warning-300);
+}
+
+.authSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }

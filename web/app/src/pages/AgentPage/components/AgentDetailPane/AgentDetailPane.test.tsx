@@ -387,8 +387,8 @@ describe("AgentDetailPane MCP snapshots", () => {
     );
     const user = userEvent.setup();
     render(<Harness workspaceSupported />);
-    await user.click(screen.getByRole("button", { name: "agentProfileMCPTab" }));
-    expect(await screen.findByText("appManualMCPTitle")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
+    expect(await screen.findByText("connectorsTools")).toBeVisible();
     expect(screen.getByText("appManualMCPEmpty")).toBeVisible();
     expect(screen.queryByText("agentMCPEmpty")).not.toBeInTheDocument();
   });
@@ -419,7 +419,7 @@ describe("AgentDetailPane MCP snapshots", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "agentProfileMCPTab" }));
+    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
     expect(screen.getByText("agentKnowledgeMCPBadge")).toBeInTheDocument();
     expect(screen.getByText("agentKnowledgeMCPUpdateAvailable")).toBeInTheDocument();
 
@@ -456,7 +456,7 @@ describe("AgentDetailPane MCP snapshots", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "agentProfileMCPTab" }));
+    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
     expect(screen.getByText("agentKnowledgeMCPSourceDeleted")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "agentMCPUpdateConfig" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
@@ -481,7 +481,7 @@ describe("AgentDetailPane MCP snapshots", () => {
     };
     render(<Harness workspaceSupported mcpServers={[mcpServer]} />);
 
-    await user.click(screen.getByRole("button", { name: "agentProfileMCPTab" }));
+    await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
     expect(screen.queryByText("agentKnowledgeMCPSourceDeleted")).not.toBeInTheDocument();
     expect(screen.queryByText("agentKnowledgeMCPUpdateAvailable")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
@@ -546,7 +546,7 @@ it.each(["skill", "mcp"])("%s 更新期间保留其他资源状态并标记当�
     { wrapper: createQueryWrapper().wrapper },
   );
   await userEvent.click(
-    screen.getByRole("button", { name: kind === "skill" ? /agentProfileSkillsTab/ : /agentProfileMCPTab/ }),
+    screen.getByRole("button", { name: kind === "skill" ? /agentProfileSkillsTab/ : /agentAppsTab/ }),
   );
   for (const name of ["alpha", "beta", "gamma"]) {
     const control = screen.getByRole("switch", { name });

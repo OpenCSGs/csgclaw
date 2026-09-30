@@ -198,8 +198,8 @@ describe("WorkspaceSidebar", () => {
     expect(onCreateRoom).toHaveBeenCalledTimes(1);
   });
 
-  it("selects the MCP resource type when the MCP list is empty", () => {
-    const onSelectMCPServer = vi.fn();
+  it("opens unified connectors when the MCP list is empty", () => {
+    const onSelectApps = vi.fn();
 
     renderSidebar({
       hub: {
@@ -215,12 +215,12 @@ describe("WorkspaceSidebar", () => {
         uploadBusy: false,
         uploadError: "",
       } as unknown as WorkspaceSidebarProps["hub"],
-      onSelectMCPServer,
+      onSelectApps,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "MCP" }));
+    fireEvent.click(screen.getByRole("button", { name: "agentAppsTab" }));
 
-    expect(onSelectMCPServer).toHaveBeenCalledWith(null);
+    expect(onSelectApps).toHaveBeenCalledTimes(1);
   });
 
   it("uses resource navigation without duplicating the main resource list", () => {

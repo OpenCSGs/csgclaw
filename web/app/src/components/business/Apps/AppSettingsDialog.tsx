@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode, type ComponentProps } from "react";
+import { Eye, EyeOff, CircleCheck, CircleAlert } from "lucide-react";
 import type { AppConfig, AppDefinition, AppInstallation, AppProbeResult } from "@/api/apps";
 import { errorMessage } from "@/api/client";
 import {
@@ -6,7 +7,6 @@ import {
   DialogBody,
   DialogCloseButton,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogRoot,
@@ -32,6 +32,7 @@ import styles from "./AgentAppsPanel.module.css";
 
 type Props = {
   definition: AppDefinition;
+  resourceDetails?: ReactNode;
   globalResource?: boolean;
   existing: AppInstallation | null;
   t: TranslateFn;
@@ -43,6 +44,7 @@ type Props = {
 
 export function AppSettingsDialog({
   definition,
+  resourceDetails,
   globalResource = false,
   existing,
   t,
@@ -118,6 +120,294 @@ export function AppSettingsDialog({
     }
   }
 
+  const connectionOptions = (
+    <>
+      <section className={styles.formSection} aria-label={t("appConnectionSection")}>
+        <header className={styles.sectionHeading}>
+          <h3>{t("appConnectionSection")}</h3>
+        </header>
+        <div className={gitlab ? styles.fields : styles.columns}>
+          <Field required label={t("appInstanceName")}>
+            <TextInput
+              required
+              aria-label={t("appInstanceName")}
+              autoComplete="off"
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+            />
+          </Field>
+          {!gitlab ? (
+            <Field label={t("appTransport")}>
+              <Select
+                value={config.transport || "http"}
+                triggerProps={{ "aria-label": t("appTransport") }}
+                options={[
+                  { value: "http", label: t("appTransportHTTP") },
+                  { value: "stdio", label: t("appTransportStdio") },
+                ]}
+                onValueChange={(value) =>
+                  updateConfig({
+                    transport: value === "stdio" ? "stdio" : "http",
+                    platform_credential_source: value === "stdio" ? "manual" : undefined,
+                    auth_mode:
+                      config.auth_mode === "feishu" || config.auth_mode === "none" || config.auth_mode === "oauth2"
+                        ? config.auth_mode
+                        : value === "stdio"
+                          ? "env"
+                          : "bearer",
+                  })
+                }
+              />
+            </Field>
+          ) : null}
+        </div>
+        {stdio ? (
+          <>
+            <Field required label={t("appCommand")}>
+              <TextInput
+                aria-label={t("appCommand")}
+                required
+                value={config.command || ""}
+                onChange={(event) => updateConfig({ command: event.target.value })}
+                placeholder="npx"
+              />
+            </Field>
+            <Field label={t("appArguments")}>
+              <TextArea
+                aria-label={t("appArguments")}
+                rows={3}
+                value={form.args}
+                onChange={(event) => setForm({ ...form, args: event.target.value })}
+              />
+            </Field>
+            <Field label={t("appWorkingDirectory")}>
+              <TextInput value={config.cwd || ""} onChange={(event) => updateConfig({ cwd: event.target.value })} />
+            </Field>
+          </>
+        ) : (
+          <Field required label={t("appServiceURL")}>
+            <TextInput
+              aria-label={t("appServiceURL")}
+              required
+              type="url"
+              value={config.url || ""}
+              onChange={(event) => updateConfig({ url: event.target.value })}
+              placeholder={gitlab ? "https://service.public.opencsg.com/mcp" : "https://example.com/mcp"}
+            />
+          </Field>
+        )}
+        {!stdio && definition.app_id === "llm-wiki" ? (
+          <AppKnowledgePicker t={t} onSelect={(url) => updateConfig({ url, transport: "http" })} />
+        ) : null}
+      </section>
+      {!stdio && config.auth_mode !== "oauth2" ? (
+        <section className={styles.authSection} aria-label={t("appPlatformAuthenticationSection")}>
+          <header className={styles.sectionHeading}>
+            <h3>{t("appPlatformAuthenticationSection")}</h3>
+          </header>
+          <Field label={t("appPlatformCredentialSource")}>
+            <Select
+              value={platformSource}
+              triggerProps={{ "aria-label": t("appPlatformCredentialSource") }}
+              options={[
+                { value: "manual", label: t("appManualPlatformToken") },
+                { value: "opencsg_login", label: t("appUseOpenCSGLogin") },
+              ]}
+              onValueChange={(value) =>
+                updateConfig({ platform_credential_source: value as AppConfig["platform_credential_source"] })
+              }
+            />
+          </Field>
+          {appCredentials && !stdio && platformSource !== "opencsg_login" ? (
+            <Field label={t("appPlatformToken")}>
+              <SecretInput
+                t={t}
+                aria-label={t("appPlatformToken")}
+                autoComplete="new-password"
+                value={form.credentials.token || ""}
+                placeholder={credentialPlaceholder("token")}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      platform_credential_source:
+                        config.auth_mode === "header" ? form.config.platform_credential_source : "manual",
+                    },
+                    credentials: { ...form.credentials, token: event.target.value },
+                  })
+                }
+              />
+            </Field>
+          ) : null}
+        </section>
+      ) : null}
+      <section className={styles.authSection} aria-label={t("appMCPIdentitySection")}>
+        <header className={styles.sectionHeading}>
+          <h3>{t("appMCPIdentitySection")}</h3>
+        </header>
+        {!gitlab ? (
+          <Field label={t("appAuthentication")}>
+            <Select
+              value={config.auth_mode || "none"}
+              triggerProps={{ "aria-label": t("appAuthentication") }}
+              options={[
+                ...(!stdio
+                  ? [
+                      { value: "bearer", label: t("appAuthBearer") },
+                      { value: "header", label: t("appAuthHeader") },
+                    ]
+                  : []),
+                ...(feishu ? [{ value: "feishu", label: t("appAuthFeishu") }] : []),
+                ...(stdio ? [{ value: "env", label: t("appAuthEnvironment") }] : []),
+                { value: "none", label: t("appAuthNone") },
+                ...(!stdio ? [{ value: "oauth2", label: t("appAuthOAuth") }] : []),
+              ]}
+              onValueChange={(value) =>
+                updateConfig({
+                  auth_mode: value as AppConfig["auth_mode"],
+                  platform_credential_source:
+                    value === "env" || value === "oauth2" ? "manual" : config.platform_credential_source,
+                  credential_source: "manual",
+                })
+              }
+            />
+          </Field>
+        ) : null}
+        {!gitlab && oauthUnsupported ? (
+          <p className="form-warning" role="status">
+            {t("appOAuthUnsupported")}
+          </p>
+        ) : null}
+        {!gitlab &&
+        !appCredentials &&
+        config.auth_mode !== "none" &&
+        config.auth_mode !== "oauth2" &&
+        config.auth_mode !== "connector" &&
+        (config.auth_mode === "header" || platformSource !== "opencsg_login") ? (
+          <Field required label={t("appToken")}>
+            <SecretInput
+              t={t}
+              aria-label={t("appToken")}
+              required={!hasSavedCredential("token")}
+              autoComplete="new-password"
+              value={form.credentials.token || ""}
+              placeholder={credentialPlaceholder("token")}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  config: {
+                    ...form.config,
+                    platform_credential_source:
+                      config.auth_mode === "header" ? form.config.platform_credential_source : "manual",
+                  },
+                  credentials: { ...form.credentials, token: event.target.value },
+                })
+              }
+            />
+          </Field>
+        ) : null}
+        {config.auth_mode === "header" ? (
+          <div className={styles.columns}>
+            <Field label={t("appTokenHeader")}>
+              <TextInput
+                value={config.token_header || ""}
+                onChange={(event) => updateConfig({ token_header: event.target.value })}
+                placeholder="X-API-Key"
+              />
+            </Field>
+            <Field label={t("appTokenPrefix")}>
+              <TextInput
+                value={config.token_prefix || ""}
+                onChange={(event) => updateConfig({ token_prefix: event.target.value })}
+                placeholder="Bearer "
+              />
+            </Field>
+          </div>
+        ) : null}
+        {config.auth_mode === "env" ? (
+          <Field label={t("appTokenEnvironment")}>
+            <TextInput
+              value={config.token_env || ""}
+              onChange={(event) => updateConfig({ token_env: event.target.value })}
+            />
+          </Field>
+        ) : null}
+        {gitlab ? (
+          <Field required label={t("appGitLabInstanceURL")}>
+            <TextInput
+              aria-label={t("appGitLabInstanceURL")}
+              required
+              type="url"
+              value={config.gitlab_base_url || ""}
+              onChange={(event) => updateConfig({ gitlab_base_url: event.target.value })}
+              placeholder="https://gitlab.example.com"
+            />
+          </Field>
+        ) : null}
+        {gitlab ? (
+          <Field required label={t("connectorGitLabToken")}>
+            <SecretInput
+              t={t}
+              aria-label={t("connectorGitLabToken")}
+              required={!hasSavedCredential("token")}
+              placeholder={credentialPlaceholder("token")}
+              autoComplete="new-password"
+              value={form.credentials.token || ""}
+              onChange={(event) =>
+                setForm({ ...form, credentials: { ...form.credentials, token: event.target.value } })
+              }
+            />
+          </Field>
+        ) : null}
+        {appCredentials ? (
+          <div className={styles.fields}>
+            <Field required label="App ID">
+              <TextInput
+                aria-label="App ID"
+                required
+                autoComplete="off"
+                value={form.credentials.app_id || ""}
+                onChange={(event) =>
+                  setForm({ ...form, credentials: { ...form.credentials, app_id: event.target.value } })
+                }
+              />
+            </Field>
+            <Field required label="App Secret">
+              <SecretInput
+                t={t}
+                aria-label="App Secret"
+                required={!hasSavedCredential("app_secret")}
+                autoComplete="new-password"
+                value={form.credentials.app_secret || ""}
+                placeholder={credentialPlaceholder("app_secret")}
+                onChange={(event) =>
+                  setForm({ ...form, credentials: { ...form.credentials, app_secret: event.target.value } })
+                }
+              />
+            </Field>
+            {stdio ? (
+              <div className={styles.columns}>
+                <Field label={t("appIDEnvironment")}>
+                  <TextInput
+                    value={config.app_id_env || ""}
+                    onChange={(event) => updateConfig({ app_id_env: event.target.value })}
+                  />
+                </Field>
+                <Field label={t("appSecretEnvironment")}>
+                  <TextInput
+                    value={config.app_secret_env || ""}
+                    onChange={(event) => updateConfig({ app_secret_env: event.target.value })}
+                  />
+                </Field>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    </>
+  );
+
   return (
     <DialogRoot
       open
@@ -125,7 +415,7 @@ export function AppSettingsDialog({
         if (!open && !busy) onClose();
       }}
     >
-      <DialogContent className={styles.settingsDialog} portalContainer={portalContainer}>
+      <DialogContent className={styles.settingsDialog} portalContainer={portalContainer} aria-describedby={undefined}>
         <DialogHeader>
           <div>
             <DialogTitle>
@@ -133,306 +423,12 @@ export function AppSettingsDialog({
                 ? t("appSettingsTitle", { name: existing.name })
                 : t("appAddTitle", { name: appName(definition.app_id, t, definition.name) })}
             </DialogTitle>
-            <DialogDescription>
-              {t(globalResource ? "appSaveValidationHint" : "appSettingsDescription")}
-            </DialogDescription>
           </div>
-          <DialogCloseButton label={t("close")} disabled={Boolean(busy)} size="sm" variant="tertiaryGray" />
+          <DialogCloseButton label={t("close")} disabled={Boolean(busy)} size="sm" variant="tertiaryGray" iconOnly />
         </DialogHeader>
         <DialogBody className={styles.settingsBody}>
           <fieldset className={styles.fields} disabled={Boolean(busy)}>
-            <section className={styles.formSection} aria-label={t("appConnectionSection")}>
-              <header className={styles.sectionHeading}>
-                <h3>{t("appConnectionSection")}</h3>
-                <p>{t("appConnectionSectionHint")}</p>
-              </header>
-              <div className={styles.columns}>
-                <Field required label={t("appInstanceName")}>
-                  <TextInput
-                    required
-                    aria-label={t("appInstanceName")}
-                    autoComplete="off"
-                    value={form.name}
-                    onChange={(event) => setForm({ ...form, name: event.target.value })}
-                  />
-                </Field>
-                {!gitlab ? (
-                  <Field label={t("appTransport")}>
-                    <Select
-                      value={config.transport || "http"}
-                      triggerProps={{ "aria-label": t("appTransport") }}
-                      options={[
-                        { value: "http", label: t("appTransportHTTP") },
-                        { value: "stdio", label: t("appTransportStdio") },
-                      ]}
-                      onValueChange={(value) =>
-                        updateConfig({
-                          transport: value === "stdio" ? "stdio" : "http",
-                          platform_credential_source: value === "stdio" ? "manual" : undefined,
-                          auth_mode:
-                            config.auth_mode === "feishu" ||
-                            config.auth_mode === "none" ||
-                            config.auth_mode === "oauth2"
-                              ? config.auth_mode
-                              : value === "stdio"
-                                ? "env"
-                                : "bearer",
-                        })
-                      }
-                    />
-                  </Field>
-                ) : null}
-              </div>
-              {stdio ? (
-                <>
-                  <Field required label={t("appCommand")} hint={t("appCommandHint")}>
-                    <TextInput
-                      aria-label={t("appCommand")}
-                      required
-                      value={config.command || ""}
-                      onChange={(event) => updateConfig({ command: event.target.value })}
-                      placeholder="npx"
-                    />
-                  </Field>
-                  <Field label={t("appArguments")} hint={t("appArgumentsHint")}>
-                    <TextArea
-                      aria-label={t("appArguments")}
-                      rows={3}
-                      value={form.args}
-                      onChange={(event) => setForm({ ...form, args: event.target.value })}
-                    />
-                  </Field>
-                  <Field label={t("appWorkingDirectory")}>
-                    <TextInput
-                      value={config.cwd || ""}
-                      onChange={(event) => updateConfig({ cwd: event.target.value })}
-                    />
-                  </Field>
-                </>
-              ) : (
-                <Field required label={t("appServiceURL")} hint={t("appServiceURLHint")}>
-                  <TextInput
-                    aria-label={t("appServiceURL")}
-                    required
-                    type="url"
-                    value={config.url || ""}
-                    onChange={(event) => updateConfig({ url: event.target.value })}
-                    placeholder={gitlab ? "https://service.public.opencsg.com/mcp" : "https://example.com/mcp"}
-                  />
-                </Field>
-              )}
-              {gitlab ? (
-                <Field required label={t("appGitLabInstanceURL")} hint={t("appGitLabInstanceURLHint")}>
-                  <TextInput
-                    aria-label={t("appGitLabInstanceURL")}
-                    required
-                    type="url"
-                    value={config.gitlab_base_url || ""}
-                    onChange={(event) => updateConfig({ gitlab_base_url: event.target.value })}
-                    placeholder="https://gitlab.example.com"
-                  />
-                </Field>
-              ) : null}
-              {!stdio && definition.app_id === "llm-wiki" ? (
-                <AppKnowledgePicker t={t} onSelect={(url) => updateConfig({ url, transport: "http" })} />
-              ) : null}
-            </section>
-            <section className={styles.formSection} aria-label={t("appAccessSection")}>
-              <header className={styles.sectionHeading}>
-                <h3>{t("appAccessSection")}</h3>
-                <p>{t("appAccessSectionHint")}</p>
-              </header>
-              <div className={styles.columns}>
-                {!gitlab ? (
-                  <Field label={t("appAuthentication")}>
-                    <Select
-                      value={config.auth_mode || "none"}
-                      triggerProps={{ "aria-label": t("appAuthentication") }}
-                      options={[
-                        ...(!stdio
-                          ? [
-                              { value: "bearer", label: t("appAuthBearer") },
-                              { value: "header", label: t("appAuthHeader") },
-                            ]
-                          : []),
-                        ...(feishu ? [{ value: "feishu", label: t("appAuthFeishu") }] : []),
-                        ...(stdio ? [{ value: "env", label: t("appAuthEnvironment") }] : []),
-                        { value: "none", label: t("appAuthNone") },
-                        ...(!stdio ? [{ value: "oauth2", label: t("appAuthOAuth") }] : []),
-                      ]}
-                      onValueChange={(value) =>
-                        updateConfig({
-                          auth_mode: value as AppConfig["auth_mode"],
-                          platform_credential_source:
-                            value === "env" || value === "oauth2" ? "manual" : config.platform_credential_source,
-                          credential_source: "manual",
-                        })
-                      }
-                    />
-                  </Field>
-                ) : null}
-                {!stdio && config.auth_mode !== "oauth2" ? (
-                  <Field
-                    label={t("appPlatformCredentialSource")}
-                    hint={platformSource === "opencsg_login" ? t("appOpenCSGLoginHint") : undefined}
-                  >
-                    <Select
-                      value={platformSource}
-                      triggerProps={{ "aria-label": t("appPlatformCredentialSource") }}
-                      options={[
-                        { value: "manual", label: t("appManualPlatformToken") },
-                        { value: "opencsg_login", label: t("appUseOpenCSGLogin") },
-                      ]}
-                      onValueChange={(value) =>
-                        updateConfig({ platform_credential_source: value as AppConfig["platform_credential_source"] })
-                      }
-                    />
-                  </Field>
-                ) : null}
-              </div>
-              {!gitlab && oauthUnsupported ? (
-                <p className="form-warning" role="status">
-                  {t("appOAuthUnsupported")}
-                </p>
-              ) : null}
-              {appCredentials && !stdio && platformSource !== "opencsg_login" ? (
-                <Field label={t("appPlatformToken")} hint={t("appFeishuTokenHint")}>
-                  <TextInput
-                    aria-label={t("appPlatformToken")}
-                    type="password"
-                    autoComplete="new-password"
-                    value={form.credentials.token || ""}
-                    placeholder={credentialPlaceholder("token")}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        config: {
-                          ...form.config,
-                          platform_credential_source:
-                            config.auth_mode === "header" ? form.config.platform_credential_source : "manual",
-                        },
-                        credentials: { ...form.credentials, token: event.target.value },
-                      })
-                    }
-                  />
-                </Field>
-              ) : null}
-              {gitlab ? (
-                <Field required label={t("connectorGitLabToken")} hint={t("connectorGitLabTokenKeep")}>
-                  <TextInput
-                    aria-label={t("connectorGitLabToken")}
-                    required={!hasSavedCredential("token")}
-                    placeholder={credentialPlaceholder("token")}
-                    type="password"
-                    autoComplete="new-password"
-                    value={form.credentials.token || ""}
-                    onChange={(event) =>
-                      setForm({ ...form, credentials: { ...form.credentials, token: event.target.value } })
-                    }
-                  />
-                </Field>
-              ) : !appCredentials &&
-                config.auth_mode !== "none" &&
-                config.auth_mode !== "oauth2" &&
-                config.auth_mode !== "connector" &&
-                (config.auth_mode === "header" || platformSource !== "opencsg_login") ? (
-                <Field required label={t("appToken")} hint={t("appSecretHint")}>
-                  <TextInput
-                    aria-label={t("appToken")}
-                    required={!hasSavedCredential("token")}
-                    type="password"
-                    autoComplete="new-password"
-                    value={form.credentials.token || ""}
-                    placeholder={credentialPlaceholder("token")}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        config: {
-                          ...form.config,
-                          platform_credential_source:
-                            config.auth_mode === "header" ? form.config.platform_credential_source : "manual",
-                        },
-                        credentials: { ...form.credentials, token: event.target.value },
-                      })
-                    }
-                  />
-                </Field>
-              ) : null}
-              {config.auth_mode === "header" ? (
-                <div className={styles.columns}>
-                  <Field label={t("appTokenHeader")}>
-                    <TextInput
-                      value={config.token_header || ""}
-                      onChange={(event) => updateConfig({ token_header: event.target.value })}
-                      placeholder="X-API-Key"
-                    />
-                  </Field>
-                  <Field label={t("appTokenPrefix")}>
-                    <TextInput
-                      value={config.token_prefix || ""}
-                      onChange={(event) => updateConfig({ token_prefix: event.target.value })}
-                      placeholder="Bearer "
-                    />
-                  </Field>
-                </div>
-              ) : null}
-              {config.auth_mode === "env" ? (
-                <Field label={t("appTokenEnvironment")}>
-                  <TextInput
-                    value={config.token_env || ""}
-                    onChange={(event) => updateConfig({ token_env: event.target.value })}
-                  />
-                </Field>
-              ) : null}
-            </section>
-            {appCredentials ? (
-              <section className={styles.formSection} aria-label={t("appFeishuIdentitySection")}>
-                <header className={styles.sectionHeading}>
-                  <h3>{t("appFeishuIdentitySection")}</h3>
-                  <p>{t("appGlobalCredentialHint")}</p>
-                </header>
-                <Field required label="App ID">
-                  <TextInput
-                    aria-label="App ID"
-                    required
-                    autoComplete="off"
-                    value={form.credentials.app_id || ""}
-                    onChange={(event) =>
-                      setForm({ ...form, credentials: { ...form.credentials, app_id: event.target.value } })
-                    }
-                  />
-                </Field>
-                <Field required label="App Secret" hint={t("appSecretHint")}>
-                  <TextInput
-                    aria-label="App Secret"
-                    required={!hasSavedCredential("app_secret")}
-                    type="password"
-                    autoComplete="new-password"
-                    value={form.credentials.app_secret || ""}
-                    placeholder={credentialPlaceholder("app_secret")}
-                    onChange={(event) =>
-                      setForm({ ...form, credentials: { ...form.credentials, app_secret: event.target.value } })
-                    }
-                  />
-                </Field>
-                {stdio ? (
-                  <div className={styles.columns}>
-                    <Field label={t("appIDEnvironment")}>
-                      <TextInput
-                        value={config.app_id_env || ""}
-                        onChange={(event) => updateConfig({ app_id_env: event.target.value })}
-                      />
-                    </Field>
-                    <Field label={t("appSecretEnvironment")}>
-                      <TextInput
-                        value={config.app_secret_env || ""}
-                        onChange={(event) => updateConfig({ app_secret_env: event.target.value })}
-                      />
-                    </Field>
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
+            {connectionOptions}
             <details className={styles.advanced}>
               <summary>{t("appAdvancedSettings")}</summary>
               <div className={styles.fields}>
@@ -462,28 +458,25 @@ export function AppSettingsDialog({
                   t={t}
                   onChange={(rows) => setForm({ ...form, [stdio ? "env" : "headers"]: rows })}
                 />
-                {gitlab ? <small className={styles.hint}>{t("appGitLabHeadersHint")}</small> : null}
-                {existing &&
-                Object.keys(existing.credentials_set).some(
-                  (key) => key.startsWith("env") || key.startsWith("header"),
-                ) ? (
-                  <small className={styles.hint}>{t("appCustomSecretsSaved")}</small>
-                ) : null}
               </div>
             </details>
           </fieldset>
           {error ? (
-            <div className="form-error" role="alert">
+            <div className={styles.probeError} role="alert">
+              <CircleAlert size={16} aria-hidden="true" />
               {error}
             </div>
           ) : null}
           {tested ? (
             <div className={styles.probeResult} role="status">
-              <strong>{t("appProbeSucceeded", { count: probe.result.tools.length })}</strong>
-              <p className={styles.hint}>{t("appProbeNotSaved")}</p>
+              <strong>
+                <CircleCheck size={16} aria-hidden="true" />
+                {t("appProbeSucceeded", { count: probe.result.tools.length })}
+              </strong>
             </div>
           ) : null}
           {probe && !tested ? <p className={styles.hint}>{t("appProbeStale")}</p> : null}
+          {resourceDetails}
           <div ref={probeResultRef}>
             <AppToolList
               key={tested ? "tested" : "saved"}
@@ -553,8 +546,8 @@ function AppValueFields({
             }
             placeholder={t("appVariableKey")}
           />
-          <TextInput
-            type="password"
+          <SecretInput
+            t={t}
             autoComplete="new-password"
             aria-label={t("appVariableValue", { index: index + 1 })}
             value={row.value}
@@ -574,6 +567,24 @@ function AppValueFields({
       ))}
       <Button className={styles.addValue} size="sm" onClick={() => onChange([...rows, { key: "", value: "" }])}>
         {t("appAddVariable")}
+      </Button>
+    </div>
+  );
+}
+
+function SecretInput({ t, ...props }: ComponentProps<typeof TextInput> & { t: TranslateFn }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className={styles.secretInput}>
+      <TextInput {...props} type={visible ? "text" : "password"} />
+      <Button
+        variant="tertiaryGray"
+        size="sm"
+        aria-label={t(visible ? "connectorsHideSecret" : "connectorsShowSecret")}
+        aria-pressed={visible}
+        onClick={() => setVisible(!visible)}
+      >
+        {visible ? <EyeOff size={15} /> : <Eye size={15} />}
       </Button>
     </div>
   );

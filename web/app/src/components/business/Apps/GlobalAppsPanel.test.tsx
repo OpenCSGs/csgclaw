@@ -68,7 +68,7 @@ describe("Global Apps", () => {
     await enter("App Secret", "test-secret");
     await user.click(screen.getByRole("button", { name: "Test connection" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Connected · 1 tools");
-    expect(screen.getByRole("status")).toHaveTextContent("Not saved yet");
+    expect(screen.queryByText("Current settings tested successfully. Not saved yet.")).not.toBeInTheDocument();
     expect(screen.getByText("Long tool details should not appear")).not.toBeVisible();
     const tools = screen.getByText("Available tools (1)").closest("details");
     expect(tools).not.toHaveAttribute("open");
@@ -134,11 +134,136 @@ describe("Global Apps", () => {
       </MemoryRouter>,
     );
     await screen.findByText("Team Feishu");
-    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Team Feishu" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Manager")).toBeVisible();
     expect(removed).toBe(false);
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(removed).toBe(true));
   });
+});
+
+describe("Connector creation and existing forms", () => {
+  it("offers application types and keeps connection options and advanced fields available", async () => {
+    const gitlab = {
+      ...definition,
+      app_id: "gitlab",
+      name: "GitLab",
+      config_schema: { properties: { url: { default: "https://service.example/mcp" } } },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        Response.json({
+          items: String(url).endsWith("catalog")
+            ? [gitlab, definition, { ...definition, app_id: "llm-wiki", name: "LLM Wiki" }]
+            : [],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <GlobalAppsPanel t={t} />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Connect the services your agent needs");
+    expect(screen.queryByRole("button", { name: /GitLab/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add connector" }));
+    const picker = screen.getByRole("dialog");
+    expect(within(picker).getByRole("heading", { name: "Add application connector" })).toBeVisible();
+    expect(within(picker).queryByText("LLM Wiki")).not.toBeInTheDocument();
+    await user.click(within(picker).getByRole("button", { name: /GitLab/ }));
+    expect(screen.getByLabelText("GitLab instance URL")).toBeVisible();
+    expect(screen.getByLabelText("GitLab Personal Access Token")).toBeVisible();
+    expect(screen.getByLabelText("Instance name")).toBeVisible();
+    expect(screen.getByLabelText("MCP service URL")).toHaveValue("https://service.example/mcp");
+    expect(screen.getByRole("combobox", { name: "Platform credential source" })).toBeVisible();
+    const name = screen.getByLabelText("Instance name");
+    const service = screen.getByLabelText("MCP service URL");
+    const credentials = screen.getByRole("combobox", { name: "Platform credential source" });
+    const instance = screen.getByLabelText("GitLab instance URL");
+    expect(name.closest("details")).toBeNull();
+    expect(service.compareDocumentPosition(instance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(credentials.compareDocumentPosition(instance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(screen.getByText("Advanced connection settings"));
+    expect(screen.getByLabelText("Connection timeout (seconds)")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add field" })).toBeVisible();
+    const token = screen.getByLabelText("GitLab Personal Access Token");
+    await user.type(token, "fixture-token");
+    await user.click(within(token.closest("label")!).getByRole("button", { name: "Show credential" }));
+    expect(token).toHaveAttribute("type", "text");
+    await user.click(within(token.closest("label")!).getByRole("button", { name: "Hide credential" }));
+    expect(token).toHaveAttribute("type", "password");
+  });
+});
+
+it("shows configured instance names and leaves application types in the add picker", async () => {
+  const resources = ["Company workspace", "Personal workspace"].map((name, index) => ({
+    installation_id: `resource-${index}`,
+    app_id: "feishu",
+    name,
+    enabled: true,
+    status: "configured",
+    config: {},
+    tools: [],
+    credentials_set: {},
+    bindings: [],
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      Response.json({
+        items: String(url).endsWith("catalog")
+          ? [definition, { ...definition, app_id: "gitlab", name: "GitLab" }]
+          : resources,
+      }),
+    ),
+  );
+  render(
+    <MemoryRouter>
+      <GlobalAppsPanel t={t} />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByRole("button", { name: /^Company workspace/ })).toBeVisible();
+  expect(screen.getByRole("button", { name: /^Personal workspace/ })).toBeVisible();
+  expect(screen.getByText("Company workspace")).toHaveAttribute("title", "Company workspace");
+  expect(screen.queryByRole("button", { name: /^GitLab / })).not.toBeInTheDocument();
+});
+
+it("shows live connection states and the actual failure in global connector cards", async () => {
+  const resources = [
+    { name: "Healthy", status: "connected" },
+    {
+      name: "Failed",
+      status: "error",
+      last_error: "MCP connection closed; reconnect the App",
+      last_error_code: "app_mcp_connection_closed",
+    },
+    { name: "Unused", status: "not_connected" },
+  ].map((item, index) => ({
+    ...item,
+    installation_id: `live-${index}`,
+    app_id: "feishu",
+    enabled: true,
+    config: {},
+    tools: [],
+    credentials_set: {},
+    bindings: [],
+  }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => Response.json({ items: String(url).endsWith("catalog") ? [definition] : resources })),
+  );
+  render(
+    <MemoryRouter>
+      <GlobalAppsPanel t={t} />
+    </MemoryRouter>,
+  );
+  expect(await screen.findByText("Connected")).toBeVisible();
+  expect(screen.getByText(t("appStatusError"))).toBeVisible();
+  expect(screen.getByText("Not connected")).toBeVisible();
+  expect(screen.getByText(t("errors.app_mcp_connection_closed"))).toBeVisible();
+  expect(screen.queryByText("Configured")).not.toBeInTheDocument();
 });
