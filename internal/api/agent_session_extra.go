@@ -43,15 +43,17 @@ func sanitizeAgentSessionWebPageDOM(raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	body := findAgentSessionDOMElement(document, "body")
-	if body == nil {
-		body = document
-	}
-
 	container := &html.Node{Type: html.ElementNode, Data: "div"}
-	for child := body.FirstChild; child != nil; child = child.NextSibling {
-		for _, sanitized := range sanitizeAgentSessionDOMNode(child) {
+	root := findAgentSessionDOMElement(document, "html")
+	if root != nil {
+		for _, sanitized := range sanitizeAgentSessionDOMNode(root) {
 			container.AppendChild(sanitized)
+		}
+	} else {
+		for child := document.FirstChild; child != nil; child = child.NextSibling {
+			for _, sanitized := range sanitizeAgentSessionDOMNode(child) {
+				container.AppendChild(sanitized)
+			}
 		}
 	}
 
@@ -202,10 +204,14 @@ func agentSessionDOMNodeHidden(node *html.Node) bool {
 		case "hidden":
 			return true
 		case "aria-hidden":
-			return value == "true"
+			if value == "true" {
+				return true
+			}
 		case "style":
 			compact := strings.NewReplacer(" ", "", "\t", "", "\r", "", "\n", "").Replace(value)
-			return strings.Contains(compact, "display:none") || strings.Contains(compact, "visibility:hidden")
+			if strings.Contains(compact, "display:none") || strings.Contains(compact, "visibility:hidden") {
+				return true
+			}
 		}
 	}
 	return false

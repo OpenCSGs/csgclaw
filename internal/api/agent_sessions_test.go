@@ -216,6 +216,9 @@ func TestSanitizeAgentSessionWebPageDOM(t *testing.T) {
   <div hidden>hidden secret</div>
   <div aria-hidden="true">aria secret</div>
   <div style="display: none">style secret</div>
+  <div style="color: red" hidden>combined hidden secret</div>
+  <div aria-hidden="false" style="display: none">combined style secret</div>
+  <div style="color: red" aria-hidden="true">reordered aria secret</div>
   <input type="password" value="password-secret" placeholder="Password">
   <input type="text" value="user-secret" placeholder="Project name" aria-required="true">
   <textarea placeholder="Description">private draft</textarea>
@@ -251,6 +254,28 @@ func TestSanitizeAgentSessionWebPageDOM(t *testing.T) {
 		if strings.Contains(strings.ToLower(got), unwanted) {
 			t.Fatalf("sanitized DOM contains %q:\n%s", unwanted, got)
 		}
+	}
+}
+
+func TestSanitizeAgentSessionWebPageDOMRedactsHiddenOrEditableDocumentRoots(t *testing.T) {
+	tests := map[string]string{
+		"hidden body":        `<html><body hidden><p>private body value</p></body></html>`,
+		"editable body":      `<html><body contenteditable="true"><p>private body draft</p></body></html>`,
+		"hidden html":        `<html hidden><body><p>private html value</p></body></html>`,
+		"editable html":      `<html contenteditable="true"><body><p>private html draft</p></body></html>`,
+		"styled hidden html": `<html aria-hidden="false" style="visibility: hidden"><body><p>private styled value</p></body></html>`,
+	}
+
+	for name, raw := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := sanitizeAgentSessionWebPageDOM(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != "" {
+				t.Fatalf("sanitized DOM = %q, want empty", got)
+			}
+		})
 	}
 }
 
