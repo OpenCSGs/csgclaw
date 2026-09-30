@@ -100,3 +100,17 @@ func TestNormalizeMessageUsesStructuredPostContent(t *testing.T) {
 		t.Fatalf("files = %#v", got.Files)
 	}
 }
+
+func TestNormalizeMessageAcceptsStopCommand(t *testing.T) {
+	binding := channeltypes.Binding{ID: "binding", Channel: "feishu", AgentID: "agent"}
+	for _, text := range []string{"/stop", " /STOP ", "@_user_1 /stop"} {
+		event := transport.Event{EventID: "event", Message: &transport.Message{ID: "message", ChatID: "chat", ChatType: transport.ChatP2P, Text: text, Mentions: []transport.Mention{{Key: "@_user_1", OpenID: "bot"}}}}
+		if _, accepted, err := normalizeMessage(binding, event, transport.Identity{OpenID: "bot"}); err != nil || !accepted {
+			t.Fatalf("text=%q accepted=%v err=%v", text, accepted, err)
+		}
+	}
+	event := transport.Event{EventID: "event", Message: &transport.Message{ID: "message", ChatID: "chat", ChatType: transport.ChatP2P, Text: "Explain /stop"}}
+	if _, accepted, err := normalizeMessage(binding, event, transport.Identity{OpenID: "bot"}); err != nil || !accepted {
+		t.Fatalf("ordinary message accepted=%v err=%v", accepted, err)
+	}
+}

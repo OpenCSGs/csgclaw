@@ -2,6 +2,7 @@ package binding
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -62,8 +63,6 @@ type pipelineTestAdapter struct {
 	mu          sync.Mutex
 	started     bool
 	closed      bool
-	texts       []transport.SendTextRequest
-	textUpdates []transport.UpdateTextRequest
 	cards       []transport.SendCardRequest
 	cardUpdates []transport.UpdateCardRequest
 }
@@ -86,18 +85,7 @@ func (*pipelineTestAdapter) Identity() transport.Identity {
 func (*pipelineTestAdapter) PrepareIdentity(context.Context) (transport.Identity, error) {
 	return transport.Identity{OpenID: "bot-open-id"}, nil
 }
-func (a *pipelineTestAdapter) SendText(_ context.Context, req transport.SendTextRequest) (transport.SendResult, error) {
-	a.mu.Lock()
-	a.texts = append(a.texts, req)
-	a.mu.Unlock()
-	return transport.SendResult{MessageID: "message-out"}, nil
-}
-func (a *pipelineTestAdapter) UpdateText(_ context.Context, req transport.UpdateTextRequest) error {
-	a.mu.Lock()
-	a.textUpdates = append(a.textUpdates, req)
-	a.mu.Unlock()
-	return nil
-}
+
 func (a *pipelineTestAdapter) SendCard(_ context.Context, req transport.SendCardRequest) (transport.SendResult, error) {
 	a.mu.Lock()
 	a.cards = append(a.cards, req)
@@ -163,15 +151,17 @@ func TestPipelineRoutesFeishuMessageThroughAgentEngine(t *testing.T) {
 	for time.Now().Before(deadline) {
 		adapter.mu.Lock()
 		found := false
-		for _, update := range adapter.textUpdates {
-			found = found || update.Markdown && strings.Contains(update.Text, "answer")
+		for _, card := range adapter.cards {
+			raw, _ := json.Marshal(card.Card)
+			found = found || strings.Contains(string(raw), "answer")
 		}
-		created := len(adapter.texts) > 0 && adapter.texts[0].Markdown
-		usedCard := len(adapter.cards) > 0 || len(adapter.cardUpdates) > 0
+		for _, card := range adapter.cardUpdates {
+			raw, _ := json.Marshal(card.Card)
+			found = found || strings.Contains(string(raw), "answer")
+		}
+		created := len(adapter.cards) > 0
+
 		adapter.mu.Unlock()
-		if usedCard {
-			t.Fatal("hosted Feishu pipeline unexpectedly used Card delivery")
-		}
 		if created && found {
 			return
 		}
@@ -306,4 +296,49 @@ func channelBinding(agentID, participantID string) channeltypes.Binding {
 
 func (pipelineTestConversation) GetInteraction(context.Context, agentengine.ConversationKey, string) (agentengine.InteractionRequest, error) {
 	return agentengine.InteractionRequest{}, &agentengine.TurnError{Code: agentengine.ErrorInteractionNotFound, Message: "no interaction in this test fixture"}
+}
+
+func TestPipelineWorkerCloseMonitorWait(t *testing.T) {
+	for _, mode := range []string{"completed", "canceled", "deadline"} {
+		t.Run(mode, func(t *testing.T) {
+			monitorDone := make(chan struct{})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			var expected error
+			switch mode {
+			case "completed":
+				close(monitorDone)
+			case "canceled":
+				cancel()
+				expected = context.Canceled
+			case "deadline":
+				ctx, cancel = context.WithTimeout(ctx, 20*time.Millisecond)
+				defer cancel()
+				expected = context.DeadlineExceeded
+			}
+			adapter := &pipelineTestAdapter{}
+			stopped := false
+			worker := &pipelineWorker{cancel: func() { stopped = true }, adapter: adapter, monitorDone: monitorDone}
+			result := make(chan error, 1)
+			go func() { result <- worker.Close(ctx) }()
+			select {
+			case err := <-result:
+				if !errors.Is(err, expected) {
+					t.Fatalf("Close error = %v, want %v", err, expected)
+				}
+				if !stopped || !adapter.closed {
+					t.Fatal("Close did not cancel the worker and close the adapter")
+				}
+			case <-time.After(time.Second):
+				if mode != "completed" {
+					close(monitorDone)
+				}
+				<-result
+				t.Fatal("Close waited beyond the caller context")
+			}
+			if mode != "completed" {
+				close(monitorDone)
+			}
+		})
+	}
 }

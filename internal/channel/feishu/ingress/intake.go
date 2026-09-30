@@ -10,6 +10,7 @@ import (
 
 	channeltypes "csgclaw/internal/channel"
 	"csgclaw/internal/channel/feishu/interaction"
+	"csgclaw/internal/channel/feishu/presentation"
 	feishustate "csgclaw/internal/channel/feishu/state"
 	"csgclaw/internal/channel/feishu/transport"
 )
@@ -38,6 +39,7 @@ type IntakeOptions struct {
 }
 
 type intakeItem struct {
+	stop    *channeltypes.InboundMessage
 	message *channeltypes.InboundMessage
 	card    *normalizedCardAction
 	comment *normalizedComment
@@ -172,6 +174,7 @@ func (i *Intake) HandleEvent(_ context.Context, event transport.Event) error {
 	if i == nil {
 		return fmt.Errorf("feishu intake is required")
 	}
+	slog.Info("receive Feishu ingress event", eventLogAttrs(i.binding, event, "occurred_at", eventTime(event))...)
 	switch event.Kind {
 	case transport.EventMessage:
 		i.identityMu.RLock()
@@ -183,7 +186,7 @@ func (i *Intake) HandleEvent(_ context.Context, event transport.Event) error {
 			return err
 		}
 		if !accepted {
-			slog.Debug("ignore Feishu message event", eventLogAttrs(i.binding, event, "reason", "not accepted")...)
+			slog.Info("ignore Feishu message event", eventLogAttrs(i.binding, event, "reason", "not accepted")...)
 			return nil
 		}
 		if !i.acceptFresh(event, message.ConversationKey) {
@@ -193,7 +196,13 @@ func (i *Intake) HandleEvent(_ context.Context, event transport.Event) error {
 			slog.Debug("drop duplicate Feishu message event", inboundMessageLogAttrs(message)...)
 			return nil
 		}
-		slog.Debug("admit Feishu message event", inboundMessageLogAttrs(message)...)
+		if strings.EqualFold(strings.TrimSpace(message.Text), "/stop") && len(message.Files) == 0 {
+			message.TurnID = i.runner.ActiveTurn(message.ConversationKey)
+			slog.Info("admit Feishu stop command", inboundMessageLogAttrs(message)...)
+			i.admit(intakeItem{stop: &message})
+			return nil
+		}
+		slog.Info("admit Feishu message event", inboundMessageLogAttrs(message)...)
 		i.admit(intakeItem{message: &message})
 		return nil
 
@@ -203,14 +212,15 @@ func (i *Intake) HandleEvent(_ context.Context, event transport.Event) error {
 			slog.Warn("normalize Feishu card action failed", eventLogAttrs(i.binding, event, "error", err)...)
 			return err
 		}
+		slog.Info("resolve Feishu card control", cardLogAttrs(card)...)
 		if !i.acceptFresh(event, firstNonEmpty(card.conversationKey, card.source.ChatID)) {
 			return nil
 		}
 		if !i.dedup.Claim(card.source) {
-			slog.Debug("drop duplicate Feishu card action", cardLogAttrs(card)...)
+			slog.Info("drop duplicate Feishu card action", cardLogAttrs(card)...)
 			return nil
 		}
-		slog.Debug("admit Feishu card action", cardLogAttrs(card)...)
+		slog.Info("admit Feishu card action", cardLogAttrs(card)...)
 		i.admit(intakeItem{card: &card})
 		return nil
 
@@ -355,6 +365,14 @@ func (i *Intake) run(ctx context.Context) {
 func (i *Intake) process(ctx context.Context, item intakeItem) {
 	var err error
 	switch {
+	case item.stop != nil:
+		if stopper, ok := i.runner.(interface {
+			Stop(context.Context, channeltypes.InboundMessage) error
+		}); ok {
+			err = stopper.Stop(ctx, *item.stop)
+		} else {
+			err = fmt.Errorf("Feishu task cancellation is unavailable")
+		}
 	case item.message != nil:
 		message := *item.message
 		if hydrated, hydrateErr := hydrateQuotedMessage(ctx, i.messages, message); hydrateErr != nil {
@@ -406,7 +424,37 @@ func cardResetMessage(card normalizedCardAction) channeltypes.InboundMessage {
 }
 
 func (i *Intake) handleCard(ctx context.Context, card normalizedCardAction) error {
-	err := handleCardAction(ctx, i.interactions, i.runner, card)
+	if card.input.Action.Operation == interaction.OperationCancel {
+		canceler, ok := i.runner.(interface {
+			CancelRequest(context.Context, interaction.CancelRequest) error
+		})
+		if !ok {
+			return i.completeCardResult(card, "任务取消暂时不可用。")
+		}
+		err := canceler.CancelRequest(ctx, interaction.CancelRequest{BindingID: i.binding.ID, AgentID: card.input.AgentID, ConversationKey: card.input.ConversationKey, TurnID: card.input.TurnID, MessageID: card.source.MessageID, ChatID: card.source.ChatID, ThreadID: card.source.ThreadID, RequesterID: card.input.ResponderID})
+		if err != nil {
+			return i.completeCardResult(card, cardActionErrorText(err))
+		}
+		return nil
+	}
+	if card.input.Action.Operation == interaction.OperationResolve {
+		if runner, ok := i.runner.(interface {
+			ResolveInteraction(context.Context, interaction.Input) error
+		}); ok {
+			err := runner.ResolveInteraction(ctx, card.input)
+			if err != nil {
+				return i.completeCardResult(card, err.Error())
+			}
+			return nil
+		}
+		return i.completeCardResult(card, "此确认暂时无法提交。")
+	}
+	var err error
+	if i.interactions == nil {
+		err = fmt.Errorf("Feishu card action handler is unavailable")
+	} else {
+		err = i.interactions.Handle(ctx, card.input)
+	}
 	text := card.successText
 	if err != nil {
 		text = cardActionErrorText(err)
@@ -419,11 +467,11 @@ func (i *Intake) completeCardResult(card normalizedCardAction, text string) erro
 		ID:        card.turnID + ":card-action-result",
 		BindingID: i.binding.ID,
 		TurnID:    card.turnID,
-		Kind:      channeltypes.DeliveryText,
+		Kind:      channeltypes.DeliveryCard,
 		ChatID:    card.source.ChatID,
 		ReplyTo:   card.source.MessageID,
 		ThreadID:  card.source.ThreadID,
-		Text:      text,
+		Card:      presentation.Card(text),
 	}
 	if err := i.state.Enqueue(intent); err != nil {
 		return err

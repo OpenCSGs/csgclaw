@@ -27,6 +27,8 @@ func eventLogAttrs(binding channeltypes.Binding, event transport.Event, extra ..
 			"parent_id", message.ParentID,
 			"content_type", message.ContentType,
 			"resource_count", len(message.Resources),
+			"sender_id", message.Sender.OpenID,
+			"mentioned_bot", message.MentionedBot,
 		)
 	case event.CardAction != nil:
 		action := event.CardAction
@@ -36,6 +38,10 @@ func eventLogAttrs(binding channeltypes.Binding, event transport.Event, extra ..
 			"chat_type", action.ChatType,
 			"thread_id", action.ThreadID,
 			"delivery_type", action.DeliveryType,
+			"operator_id", action.Operator.OpenID,
+			"action_field_count", len(action.ActionValue),
+			"operation_hint", controlLogOperation(firstMapString(action.ActionValue, "operation", "action", "csgclaw_action")),
+			"command_hint", controlLogOperation(firstMapString(action.ActionValue, "cmd")),
 		)
 	case event.Comment != nil:
 		comment := event.Comment
@@ -102,6 +108,8 @@ func commentLogAttrs(comment normalizedComment, extra ...any) []any {
 
 func intakeItemLogAttrs(binding channeltypes.Binding, item intakeItem, extra ...any) []any {
 	switch {
+	case item.stop != nil:
+		return inboundMessageLogAttrs(*item.stop, extra...)
 	case item.message != nil:
 		return inboundMessageLogAttrs(*item.message, extra...)
 	case item.card != nil:
@@ -114,5 +122,17 @@ func intakeItemLogAttrs(binding channeltypes.Binding, item intakeItem, extra ...
 			"agent_id", binding.AgentID,
 			"participant_id", binding.ParticipantID,
 		}, extra...)
+	}
+}
+
+// Log only recognized control names; arbitrary action values can contain user data.
+func controlLogOperation(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "stop", "cancel", "reset", "resolve":
+		return strings.ToLower(strings.TrimSpace(value))
+	case "":
+		return "absent"
+	default:
+		return "unrecognized"
 	}
 }

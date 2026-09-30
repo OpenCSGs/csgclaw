@@ -9,6 +9,13 @@ manager, worker, and admin identities into `~/.csgclaw/im/participants.json`.
 CSGClaw does not read Feishu credentials from `config.toml`. The old
 `channels/feishu.toml` path is not migrated automatically by this flow.
 
+Control callbacks resolve the original task and requester from local delivery records.
+Task cancellation and COT completion have independent states. COT creation and
+completion failures are logged with delivery identifiers and error details.
+Final COT events and completion requests are separate deliveries. Native COT client controls remain platform-managed.
+
+The native COT stop button sends `/stop`. The channel handles this message as a control request for the task active when the message arrives, validates the requester, and uses the existing Engine cancellation path. It does not submit a new prompt or send an extra command acknowledgement.
+
 ## Commands
 
 Bind the default human Feishu administrator:
@@ -33,9 +40,38 @@ printf '%s' "$APP_SECRET" | csgclaw-cli participant bind \
   --restart
 ```
 
-Hosted Codex Feishu replies use the Markdown presentation fixed by the channel
-implementation. Presentation mode is not part of participant binding or stored
-participant configuration.
+Feishu shows tool activity and available thought events in a native COT message.
+Reply text streams into independent message cards. Permission requests and user
+questions use separate interactive cards; only the originating user may answer.
+Use `/new` to reset the conversation. Long replies use consecutive cards.
+
+The channel consumes existing Agent Engine events. Codex supports permission and
+user-input requests; DSH currently supplies permission requests. Detached Codex
+questions start one follow-up turn in the same conversation after submission.
+COT updates use conservative local wire budgets: 1,024 bytes per encoded event,
+16 events per request, and 16,000 bytes per complete JSON request body, including
+escaping and identifiers. Thought and tool-argument deltas are split without
+truncation; display titles and result summaries may be shortened with an ellipsis.
+Oversized metadata fails locally. Partial append failures stop later fragments
+without replaying successful fragments. These budgets are not verified Feishu
+limits, and live API validation is still required.
+COT creation or append failure leaves reply delivery available and produces a notice card.
+If a final reply card cannot be created or updated after its bounded retries,
+the dispatcher sends that final page as one independent replacement card. It
+retains the original chat/thread routing and complete page content, with a stable
+idempotency key and at most three attempts for transient failures. Failed
+replacements do not spawn further replacements. Replacement pages share a
+per-turn delivery lane: retries block later pages; permanent failure allows the
+remaining pages to proceed. Idle conversation indexes are reclaimed after runs
+and pending interactions finish, while detached questions retain their routing.
+Streaming and interaction cards
+are excluded. This does not recover pending deliveries after a process restart
+or guarantee delivery while Feishu permissions or connectivity remain broken.
+COT append requests have no replay key and are attempted once. Completion requests
+retry transient failures up to three attempts without replaying events. Recognized
+stop callbacks from locally recorded COT messages target their original turn and
+can retry a failed completion. Delivery and
+interaction routing state is process-local. Presentation has no format setting.
 
 Bind the manager app:
 

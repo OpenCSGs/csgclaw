@@ -1,7 +1,6 @@
 package ingress
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -9,6 +8,7 @@ import (
 	channeltypes "csgclaw/internal/channel"
 	feishuctx "csgclaw/internal/channel/feishu/context"
 	"csgclaw/internal/channel/feishu/interaction"
+	feishustate "csgclaw/internal/channel/feishu/state"
 	"csgclaw/internal/channel/feishu/transport"
 )
 
@@ -28,8 +28,7 @@ type activeTurnLookup interface {
 }
 
 type cardRouteState interface {
-	DeliveryByRemoteMessage(string, channeltypes.DeliveryKind, string) (channeltypes.DeliveryIntent, bool, error)
-	Get(string) (channeltypes.TurnRecord, bool)
+	ResolveControlTarget(feishustate.ControlQuery) (feishustate.ControlTarget, bool)
 }
 
 func normalizeCardAction(binding channeltypes.Binding, event transport.Event, runner activeTurnLookup, state cardRouteState) (normalizedCardAction, error) {
@@ -85,15 +84,24 @@ func normalizeCardAction(binding channeltypes.Binding, event transport.Event, ru
 	threadID = route.intent.ThreadID
 	card.source.ThreadID = threadID
 	conversationKey := route.record.ConversationKey
-	turnID := ""
+	turnID := route.record.TurnID
 	if operation == interaction.OperationCancel {
 		turnID = route.record.TurnID
 		if runner == nil || runner.ActiveTurn(route.record.ConversationKey) != route.record.TurnID {
 			successText = "The requested turn is no longer active."
 		}
 	}
+	if route.intent.Kind == channeltypes.DeliveryCOTCreate {
+		if operation != interaction.OperationCancel {
+			return card, nil
+		}
+	}
 	card.conversationKey = conversationKey
 	card.input = interaction.Input{
+		InteractionID:   route.intent.InteractionID,
+		ResponderID:     strings.TrimSpace(action.Operator.OpenID),
+		OptionID:        firstMapString(action.ActionValue, "option_id"),
+		FormValue:       action.FormValue,
 		AgentID:         route.record.AgentID,
 		ConversationKey: conversationKey,
 		TurnID:          turnID,
@@ -113,25 +121,8 @@ func trustedCardRoute(binding channeltypes.Binding, action *transport.CardAction
 	if state == nil || action == nil || strings.TrimSpace(action.MessageID) == "" {
 		return trustedCardRouteResult{}, false, nil
 	}
-	intent, found, err := state.DeliveryByRemoteMessage(binding.ID, channeltypes.DeliveryCard, action.MessageID)
-	if err != nil {
-		return trustedCardRouteResult{}, false, fmt.Errorf("resolve trusted Feishu card route: %w", err)
-	}
-	if !found || intent.BindingID != binding.ID || intent.ChatID != strings.TrimSpace(action.ChatID) {
-		return trustedCardRouteResult{}, false, nil
-	}
-	// Older transports provided a carrier thread ID. If it is present, it is an
-	// additional consistency check; generic Ingress intentionally leaves it
-	// empty and relies on the trusted delivery record above.
-	if threadID := strings.TrimSpace(action.ThreadID); threadID != "" && strings.TrimSpace(intent.ThreadID) != threadID {
-		return trustedCardRouteResult{}, false, nil
-	}
-	record, found := state.Get(intent.TurnID)
-	if !found || record.TurnID != intent.TurnID || record.BindingID != binding.ID ||
-		record.AgentID != binding.AgentID || strings.TrimSpace(record.ConversationKey) == "" {
-		return trustedCardRouteResult{}, false, nil
-	}
-	return trustedCardRouteResult{intent: intent, record: record}, true, nil
+	target, found := state.ResolveControlTarget(feishustate.ControlQuery{BindingID: binding.ID, AgentID: binding.AgentID, MessageID: strings.TrimSpace(action.MessageID), ChatID: strings.TrimSpace(action.ChatID), ThreadID: strings.TrimSpace(action.ThreadID), RequesterID: strings.TrimSpace(action.Operator.OpenID)})
+	return trustedCardRouteResult{intent: target.Intent, record: target.Turn}, found, nil
 }
 
 func firstMapString(values map[string]any, keys ...string) string {
@@ -156,18 +147,4 @@ func cardActionErrorText(err error) string {
 	default:
 		return "The card action could not be applied."
 	}
-}
-
-type activeTurnCanceler interface {
-	Cancel(context.Context, string, string, string) error
-}
-
-func handleCardAction(ctx context.Context, handler *interaction.Handler, canceler activeTurnCanceler, item normalizedCardAction) error {
-	if item.input.Action.Operation == interaction.OperationCancel && canceler != nil {
-		return canceler.Cancel(ctx, item.input.AgentID, item.input.ConversationKey, item.input.TurnID)
-	}
-	if handler == nil {
-		return fmt.Errorf("Feishu card action handler is unavailable")
-	}
-	return handler.Handle(ctx, item.input)
 }

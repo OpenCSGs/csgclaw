@@ -16,8 +16,9 @@ import (
 type Operation string
 
 const (
-	OperationCancel Operation = "cancel"
-	OperationReset  Operation = "reset"
+	OperationResolve Operation = "resolve"
+	OperationCancel  Operation = "cancel"
+	OperationReset   Operation = "reset"
 )
 
 // CardAction is a Feishu card action after transport normalization.
@@ -29,6 +30,10 @@ type CardAction struct {
 // the binding and ingress layers. Callers must not populate these fields from
 // the card action value.
 type Input struct {
+	InteractionID   string
+	ResponderID     string
+	OptionID        string
+	FormValue       map[string]any
 	AgentID         string
 	ConversationKey string
 	TurnID          string
@@ -70,15 +75,15 @@ func (h *Handler) Handle(ctx context.Context, input Input) error {
 	}
 
 	switch Operation(strings.TrimSpace(string(input.Action.Operation))) {
-	case OperationCancel:
-		turnID := strings.TrimSpace(input.TurnID)
-		if turnID == "" {
-			return fmt.Errorf("%w: turn_id is required for cancel", ErrInvalidInput)
-		}
-		return conversation.Cancel(ctx, agentengine.ConversationKey(conversationKey), agentengine.TurnID(turnID))
 	case OperationReset:
 		return conversation.Reset(ctx, agentengine.ConversationKey(conversationKey))
 	default:
 		return fmt.Errorf("%w: unsupported operation %q", ErrInvalidInput, input.Action.Operation)
 	}
+}
+
+// CancelRequest identifies the delivered control and the task resolved from it.
+type CancelRequest struct {
+	BindingID, AgentID, ConversationKey, TurnID string
+	MessageID, ChatID, ThreadID, RequesterID    string
 }

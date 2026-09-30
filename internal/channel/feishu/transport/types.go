@@ -181,18 +181,6 @@ func (f SinkFunc) HandleEvent(ctx context.Context, event Event) error {
 	return f(ctx, event)
 }
 
-type SendTextRequest struct {
-	ChatID   string
-	Text     string
-	Markdown bool
-	// IdempotencyKey is a process-local delivery ID. It is hashed into the UUID
-	// sent to Feishu and is never sent verbatim.
-	IdempotencyKey string
-	ReplyTo        string
-	ReplyInThread  bool
-	ThreadID       string
-}
-
 type SendCardRequest struct {
 	ChatID string
 	Card   map[string]any
@@ -247,12 +235,6 @@ type UpdateCardRequest struct {
 	Card      map[string]any
 }
 
-type UpdateTextRequest struct {
-	MessageID string
-	Text      string
-	Markdown  bool
-}
-
 type SendResult struct {
 	MessageID string
 }
@@ -298,8 +280,6 @@ type Adapter interface {
 	Close(context.Context) error
 	Identity() Identity
 
-	SendText(context.Context, SendTextRequest) (SendResult, error)
-	UpdateText(context.Context, UpdateTextRequest) error
 	SendCard(context.Context, SendCardRequest) (SendResult, error)
 	UpdateCard(context.Context, UpdateCardRequest) error
 	UploadImage(context.Context, UploadImageRequest) (UploadResult, error)

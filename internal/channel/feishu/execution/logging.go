@@ -5,7 +5,6 @@ import (
 
 	"csgclaw/internal/agentengine"
 	channeltypes "csgclaw/internal/channel"
-	"csgclaw/internal/channel/feishu/presentation"
 )
 
 func messageLogAttrs(message channeltypes.InboundMessage, extra ...any) []any {
@@ -51,10 +50,5 @@ func resultLogAttrs(result agentengine.TurnResult, extra ...any) []any {
 			"error", result.Error,
 		)
 	}
-	return append(attrs, extra...)
-}
-
-func presentationLogAttrs(mode presentation.Mode, extra ...any) []any {
-	attrs := []any{"presentation_mode", mode}
 	return append(attrs, extra...)
 }

@@ -17,6 +17,8 @@ func intentLogAttrs(intent channeltypes.DeliveryIntent, extra ...any) []any {
 		"status", intent.Status,
 		"chat_id", intent.ChatID,
 		"message_id", intent.MessageID,
+		"cot_id", intent.COTID,
+		"reason", intent.Reason,
 		"related_id", intent.RelatedID,
 		"reply_to", intent.ReplyTo,
 		"thread_id", intent.ThreadID,
