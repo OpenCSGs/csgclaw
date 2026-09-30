@@ -1436,6 +1436,35 @@ Anonymous Session: <session_id> | Agent: <agent_name> (<agent_id>)
 }
 ```
 
+请求可以通过可选的 `extra` 和 `extra_type` 为当前用户消息附加额外的纯文本上下文：
+
+```json
+{
+  "input": "这个页面怎么继续？",
+  "extra_type": "web_page_dom",
+  "extra": "<main><button>继续</button></main>"
+}
+```
+
+`extra_type` 支持 `plain_text` 和 `web_page_dom`。有 `extra` 但省略或传空
+`extra_type` 时，服务端按 `plain_text` 处理；`extra` 为空或省略时不注入额外上下文，
+即使提供了 `extra_type` 也会忽略。未知的非空 `extra_type` 返回 `400
+invalid_request`。`plain_text` 的 `extra` 最大为 64 KiB，`web_page_dom` 最大为
+512 KiB，且整个请求仍受 1 MiB 上限约束。
+
+服务端会把额外内容包装为带固定安全约束的 `<extra_context>`，并与本轮用户输入
+一起提交给 Agent。`web_page_dom` 被标记为不可信的页面快照；产品文档 Skill 是产品
+使用方式的主要依据，DOM 仅用于识别当前页面和 UI 状态。该规则也会写入 CSGClaw
+管理的 Runtime 指令，以获得高于页面内容的指令优先级。服务端会再次解析 DOM，删除
+脚本、样式、嵌入内容、隐藏节点、密码或隐藏输入、表单值、可编辑内容和非白名单属性，
+并对链接移除用户信息、query 和 fragment。调用方仍应在提交前移除凭据和个人敏感
+信息，因为服务端无法根据静态 HTML 准确判断所有 CSS 可见性和业务敏感字段。
+清洗后的 DOM 最多保留 128 KiB；超过上限时服务端会在 UTF-8 字符边界截断、重新
+闭合 HTML，并附加 `[page DOM truncated by CSGClaw]` 标记。
+额外上下文会进入 Codex conversation
+历史，后续 turn 可能继续引用。响应不会单独返回原始 `extra` 字段，但 Agent 可能在
+回答中引用与问题有关的内容。
+
 也可以使用仅包含文本的 user message items：
 
 ```json
@@ -1507,8 +1536,8 @@ runtime 会降级为一个文本 delta。Agent 完成前，连接已建立并先
 }
 ```
 
-V1 只接受文本并返回最终文本。
-流式输出、tools、instructions、非 user role、attachments 和未知请求字段都会被拒绝。
+V1 接受文本输入、可选的纯文本额外上下文以及可选的文本输出流。
+tools、instructions、非 user role、attachments 和未知请求字段都会被拒绝。
 内置 live demo 和可替换的前端 mock 边界见 [Session API Demo 前端指南](web/session-api-demo.zh.md)。
 
 ### `GET /api/v1/agents/{id}/llm/models`
