@@ -297,17 +297,11 @@ export function WorkspaceSidebar({
             onSelect: () => onSelectKnowledgeBase?.(null),
           },
           {
-            active: isPrimaryNavigationActive(activeContextSectionId === WorkspaceContextSectionIds.mcpServers),
-            groupId: WorkspaceContextSectionIds.mcpServers,
-            icon: navigationIcon(SidebarMcpIcon),
-            id: "mcp-servers",
-            label: t("resourcesMCPLabel"),
-            onSelect: () => onSelectMCPServer?.(null),
-          },
-          {
-            active: activePane.type === WorkspacePaneTypes.apps,
+            active:
+              activePane.type === WorkspacePaneTypes.apps ||
+              activeContextSectionId === WorkspaceContextSectionIds.mcpServers,
             groupId: WorkspaceContextSectionIds.apps,
-            icon: navigationIcon(SidebarBoxIcon),
+            icon: navigationIcon(SidebarMcpIcon),
             id: "apps",
             label: t("agentAppsTab"),
             onSelect: () => onSelectApps?.(),
@@ -341,7 +335,6 @@ export function WorkspaceSidebar({
       onSelectAgent,
       onSelectComputer,
       onSelectHub,
-      onSelectMCPServer,
       onSelectKnowledgeBase,
       onSelectHubSkill,
       onSelectHubTemplate,

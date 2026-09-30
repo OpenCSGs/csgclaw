@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Plus, MoreHorizontal } from "lucide-react";
 import {
   createAppResource,
   deleteAppResource,
@@ -13,6 +13,10 @@ import {
 } from "@/api/apps";
 import {
   Button,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DialogRoot,
   DialogContent,
   DialogHeader,
@@ -27,14 +31,28 @@ import { errorMessage } from "@/api/client";
 import type { TranslateFn } from "@/models/conversations";
 import { AppSettingsDialog } from "./AppSettingsDialog";
 import { AppIcon } from "./AgentAppsPanel";
-import { appName, appStatus } from "./appForm";
+import { appName, appStatus, appDescription, appConnectionError } from "./appForm";
 import styles from "./AgentAppsPanel.module.css";
 
-export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
+export function GlobalAppsPanel({
+  t,
+  embedded = false,
+  search = "",
+  catalogOpen,
+  onCatalogOpenChange,
+}: {
+  t: TranslateFn;
+  embedded?: boolean;
+  search?: string;
+  catalogOpen?: boolean;
+  onCatalogOpenChange?: (open: boolean) => void;
+}) {
   const [items, setItems] = useState<AppInstallation[]>([]);
   const [definitions, setDefinitions] = useState<AppDefinition[]>([]);
   const [adding, setAdding] = useState<AppDefinition | null>(null);
-  const [catalog, setCatalog] = useState(false);
+  const [localCatalog, setLocalCatalog] = useState(false);
+  const catalog = catalogOpen ?? localCatalog;
+  const setCatalog = onCatalogOpenChange ?? setLocalCatalog;
   const [removing, setRemoving] = useState<AppInstallation | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -42,7 +60,7 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
   const seq = useRef(0);
   const navigate = useNavigate();
   const { resourceId } = useParams();
-  const [search] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const reload = useCallback(async (signal?: AbortSignal) => {
     const request = ++seq.current;
     try {
@@ -73,7 +91,7 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
     adding ||
     (editing
       ? definitions.find((d) => d.app_id === editing.app_id)
-      : availableDefinitions.find((d) => d.app_id === search.get("add_connector")));
+      : availableDefinitions.find((d) => d.app_id === searchParams.get("add_connector")));
   const close = () => {
     setAdding(null);
     void navigate("/connectors");
@@ -92,74 +110,94 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
       setBusy(false);
     }
   }
+  const query = search.trim().toLocaleLowerCase();
+  const matches = (name: string, description: string) =>
+    !query || `${name} ${description}`.toLocaleLowerCase().includes(query);
+  const describe = (item: AppInstallation) => {
+    const entry = definitions.find((candidate) => candidate.app_id === item.app_id);
+    return entry ? appDescription(entry, t) : item.config.url || item.config.command || appName(item.app_id, t);
+  };
+  const filteredItems = items.filter((item) =>
+    matches(item.name, `${appName(item.app_id, t)} ${describe(item)} ${item.config.url || item.config.command || ""}`),
+  );
   return (
-    <section className={`entity-pane ${styles.resourcePage}`}>
-      <div className={styles.heading}>
-        <div>
-          <h1>{t("agentAppsTab")}</h1>
-          <p className={styles.hint}>{t("appResourcesDescription")}</p>
+    <section className={embedded ? styles.applicationSection : `entity-pane ${styles.resourcePage}`}>
+      {embedded ? (
+        <h2 className={styles.sectionTitle}>{t("connectorsApplications")}</h2>
+      ) : (
+        <div className={styles.heading}>
+          <div>
+            <h1>{t("agentAppsTab")}</h1>
+            <p className={styles.hint}>{t("appResourcesDescription")}</p>
+          </div>
+          <Button variant="primary" onClick={() => setCatalog(true)}>
+            <Plus size={16} />
+            {t("appAdd")}
+          </Button>
         </div>
-        <Button variant="primary" onClick={() => setCatalog(true)}>
-          <Plus size={16} />
-          {t("appAdd")}
-        </Button>
-      </div>
+      )}
       {error ? (
         <div className="form-error" role="alert">
           {localizeAPIError(error, t) || errorMessage(error)}
         </div>
       ) : null}
-      {loaded && !items.length ? (
-        <div className={styles.empty}>
-          <strong>{t("appEmptyTitle")}</strong>
-          <p>{t("appResourcesDescription")}</p>
-        </div>
+      {!loaded ? (
+        <p role="status" className={styles.hint}>
+          {t("loading")}
+        </p>
       ) : null}
-      <div className={styles.list}>
-        {items.map((app) => (
-          <article key={app.installation_id} className={styles.card}>
-            <div className={styles.cardHeader}>
-              <span className={styles.icon}>
+      {loaded && !filteredItems.length ? (
+        <p className={styles.hint}>{t(query ? "workspaceSearchNoResults" : "appEmptyTitle")}</p>
+      ) : null}
+      <div className={styles.applicationGrid}>
+        {filteredItems.map((app) => (
+          <article key={app.installation_id} className={styles.connectorCard}>
+            <button
+              type="button"
+              className={styles.connectorOpen}
+              onClick={() => void navigate(`/connectors/${encodeURIComponent(app.installation_id)}`)}
+            >
+              <span className={styles.connectorIcon}>
                 <AppIcon appID={app.app_id} />
               </span>
-              <div className={styles.cardTitle}>
-                <strong>{app.name}</strong>
-                <span>
-                  {appName(app.app_id, t)} · {app.config.url || app.config.command}
+              <span className={styles.connectorCopy}>
+                <span className={styles.connectorTitle} title={app.name}>
+                  {app.name}
                 </span>
-              </div>
-              <span className={styles.status}>{appStatus(app, t)}</span>
-            </div>
-            <p className={styles.hint}>{t("appResourceUsers", { count: app.bindings?.length || 0 })}</p>
-            {app.bindings?.length ? (
-              <ul className={styles.bindingList}>
-                {app.bindings.map((binding) => (
-                  <li key={binding.installation_id}>
-                    <a
-                      href={`#/agents/${encodeURIComponent(binding.agent_id)}?tab=connectors&connector=${encodeURIComponent(binding.installation_id)}`}
-                    >
-                      {binding.agent_name || binding.agent_id}
-                    </a>
-                    <span>{appStatus({ ...app, enabled: binding.enabled, status: binding.status }, t)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            <div className={styles.actions}>
-              <Button size="sm" onClick={() => void navigate(`/connectors/${app.installation_id}`)}>
-                {t("appSettings")}
-              </Button>
-              <Button
-                size="sm"
-                disabled={busy}
-                onClick={() => void mutate(() => updateAppResource(app.installation_id, { enabled: !app.enabled }))}
-              >
-                {app.enabled ? t("appDisable") : t("appEnable")}
-              </Button>
-              <Button size="sm" variant="outlineDanger" disabled={busy} onClick={() => setRemoving(app)}>
-                {t("appRemove")}
-              </Button>
-            </div>
+                <span
+                  className={styles.connectorDescription}
+                  title={app.last_error ? appConnectionError(app, t) : describe(app)}
+                >
+                  {app.last_error ? appConnectionError(app, t) : describe(app)}
+                </span>
+              </span>
+              <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
+                {appStatus(app, t)}
+              </span>
+            </button>
+            <DropdownMenuRoot>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="tertiaryGray" aria-label={t("connectorsActions", { name: app.name })}>
+                  <MoreHorizontal size={16} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  onSelect={() => void navigate(`/connectors/${encodeURIComponent(app.installation_id)}`)}
+                >
+                  {t("appSettings")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={busy}
+                  onSelect={() => void mutate(() => updateAppResource(app.installation_id, { enabled: !app.enabled }))}
+                >
+                  {t(app.enabled ? "appDisable" : "appEnable")}
+                </DropdownMenuItem>
+                <DropdownMenuItem danger disabled={busy} onSelect={() => setRemoving(app)}>
+                  {t("appRemove")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenuRoot>
           </article>
         ))}
       </div>
@@ -167,20 +205,29 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
       <DialogRoot open={catalog} onOpenChange={setCatalog}>
         <DialogContent className={styles.catalogDialog}>
           <DialogHeader>
-            <DialogTitle>{t("appAdd")}</DialogTitle>
-            <DialogCloseButton label={t("close")} />
+            <div>
+              <DialogTitle>{t("connectorsAddApplication")}</DialogTitle>
+              <DialogDescription>{t("connectorsChooseType")}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} variant="tertiaryGray" size="sm" iconOnly />
           </DialogHeader>
           <DialogBody className={styles.catalog}>
             {availableDefinitions.map((definition) => (
               <Button
                 key={definition.app_id}
+                className={styles.catalogItem}
                 onClick={() => {
                   setAdding(definition);
                   setCatalog(false);
                 }}
               >
-                <AppIcon appID={definition.app_id} />
-                {appName(definition.app_id, t)}
+                <span className={styles.catalogIcon}>
+                  <AppIcon appID={definition.app_id} />
+                </span>
+                <span className={styles.catalogCopy}>
+                  <strong>{appName(definition.app_id, t)}</strong>
+                  <span className={styles.catalogDescription}>{appDescription(definition, t)}</span>
+                </span>
               </Button>
             ))}
           </DialogBody>
@@ -192,6 +239,31 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
           globalResource
           definition={definition}
           existing={adding ? null : editing}
+          resourceDetails={
+            editing && !adding ? (
+              <div className={styles.resourceDetails}>
+                <p className={styles.hint}>{appStatus(editing, t)}</p>
+                {editing.last_error ? (
+                  <p role="alert" className={styles.cardError}>
+                    {appConnectionError(editing, t)}
+                  </p>
+                ) : null}
+                <p className={styles.hint}>{t("appResourceUsers", { count: editing.bindings?.length || 0 })}</p>
+                <ul className={styles.bindingList}>
+                  {editing.bindings?.map((binding) => (
+                    <li key={binding.installation_id}>
+                      <a
+                        href={`#/agents/${encodeURIComponent(binding.agent_id)}?tab=connectors&connector=${encodeURIComponent(binding.installation_id)}`}
+                      >
+                        {binding.agent_name || binding.agent_id}
+                      </a>
+                      <span>{appStatus({ ...editing, enabled: binding.enabled, status: binding.status }, t)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : undefined
+          }
           t={t}
           onClose={close}
           onProbe={(payload) =>
@@ -221,7 +293,7 @@ export function GlobalAppsPanel({ t }: { t: TranslateFn }) {
               <DialogTitle>{t("appRemoveConfirmTitle", { name: removing?.name || "" })}</DialogTitle>
               <DialogDescription>{t("appDeleteResourceDescription")}</DialogDescription>
             </div>
-            <DialogCloseButton label={t("close")} />
+            <DialogCloseButton label={t("close")} variant="tertiaryGray" size="sm" iconOnly />
           </DialogHeader>
           <DialogBody>
             <p>{t("appResourceUsers", { count: removing?.bindings?.length || 0 })}</p>

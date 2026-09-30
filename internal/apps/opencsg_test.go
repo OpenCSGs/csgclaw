@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -310,5 +311,92 @@ func TestOpenCSGLoginPreservesConnectorBusinessToken(t *testing.T) {
 	}
 	if credentials.Headers["X-Custom"] != "custom-value" {
 		t.Fatal("business header was removed")
+	}
+}
+
+func TestHTTPAppSurvivesStandaloneSSEInterruption(t *testing.T) {
+	for _, mode := range []string{"bearer", "connector"} {
+		t.Run(mode, func(t *testing.T) {
+			var gets, calls atomic.Int32
+			cut := make(chan struct{})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					attempt := gets.Add(1)
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					_, _ = fmt.Fprint(w, ": keepalive\n\n")
+					w.(http.Flusher).Flush()
+					if attempt == 1 {
+						select {
+						case <-cut:
+						case <-r.Context().Done():
+						}
+					} else {
+						<-r.Context().Done()
+					}
+				case http.MethodDelete:
+					w.WriteHeader(http.StatusNoContent)
+				case http.MethodPost:
+					var request struct {
+						ID     json.RawMessage `json:"id"`
+						Method string          `json:"method"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+						http.Error(w, "invalid request", 400)
+						return
+					}
+					if len(request.ID) == 0 {
+						w.WriteHeader(http.StatusAccepted)
+						return
+					}
+					var result any
+					switch request.Method {
+					case "initialize":
+						result = map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{"listChanged": true}}, "serverInfo": map[string]any{"name": "sse-recovery", "version": "1"}}
+						w.Header().Set("Mcp-Session-Id", "stable-session")
+					case "tools/list":
+						result = map[string]any{"tools": []map[string]any{{"name": "read", "inputSchema": map[string]any{"type": "object"}}}}
+					case "tools/call":
+						calls.Add(1)
+						result = map[string]any{"content": []map[string]any{{"type": "text", "text": "ok"}}}
+					}
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": result})
+				}
+			}))
+			t.Cleanup(server.Close)
+			s := newTestService(t, Options{ResolveConnectorHTTP: func(context.Context, string, string, Config) (ConnectorHTTPConfig, error) {
+				return ConnectorHTTPConfig{Endpoint: server.URL, Token: "fixture", TokenHeader: "PRIVATE-TOKEN"}, nil
+			}})
+			item, err := s.Create(t.Context(), "agent", CreateRequest{AppID: "gitlab", Name: "GitLab", Connect: true, Config: Config{URL: server.URL, AuthMode: mode, GitLabBaseURL: "https://gitlab.example.com"}, Credentials: Credentials{Token: "fixture"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			close(cut)
+			deadline := time.Now().Add(5 * time.Second)
+			for gets.Load() < 2 {
+				current, _ := s.Get(t.Context(), "agent", item.InstallationID)
+				if current.Status != "connected" {
+					t.Fatalf("SSE interruption invalidated healthy POST session: %s (%s)", current.Status, current.LastError)
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("standalone SSE did not reconnect")
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			client := gatewayClient(t, s, "agent")
+			result, err := client.CallTool(t.Context(), &mcp.CallToolParams{Name: toolName(item.InstallationID, "read"), Arguments: map[string]any{}})
+			if err != nil || result.IsError || calls.Load() != 1 {
+				t.Fatalf("tool call after recovery: %v, calls=%d", err, calls.Load())
+			}
+			if _, err := s.Disconnect(t.Context(), "agent", item.InstallationID); err != nil {
+				t.Fatal(err)
+			}
+			current, _ := s.Get(t.Context(), "agent", item.InstallationID)
+			if current.Status != "disconnected" {
+				t.Fatalf("manual disconnect was lost: %s", current.Status)
+			}
+		})
 	}
 }

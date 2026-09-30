@@ -132,7 +132,8 @@ func (s *Service) viewLocked(e *entry) Installation {
 	}
 	item.ResourceID = e.record.InstallationID
 	item.ResourceEnabled = e.record.Enabled
-	item.Status = "configured"
+	item.Status = "not_connected"
+	item.LastError, item.LastErrorCode, item.LastErrorHTTPStatus = "", "", 0
 	if item.Config.CredentialSource == "feishu_channel" {
 		item.Status = "needs_configuration"
 	}
@@ -140,6 +141,7 @@ func (s *Service) viewLocked(e *entry) Installation {
 		item.Status = "disabled"
 	}
 	item.Bindings = []BindingSummary{}
+	var statusUpdatedAt time.Time
 	for _, bound := range s.entries {
 		if bound.record.ResourceID != e.record.InstallationID {
 			continue
@@ -147,6 +149,15 @@ func (s *Service) viewLocked(e *entry) Installation {
 		b := view(bound)
 		if !bound.record.active() {
 			b.Status = "disabled"
+		}
+		// A failing binding must remain visible even if another Agent is healthy.
+		priority := resourceConnectionStatusPriority(b.Status)
+		currentPriority := resourceConnectionStatusPriority(item.Status)
+		if item.Enabled && bound.record.active() && priority > 0 &&
+			(priority > currentPriority || (priority == currentPriority && b.UpdatedAt.After(statusUpdatedAt))) {
+			item.Status = b.Status
+			item.LastError, item.LastErrorCode, item.LastErrorHTTPStatus = b.LastError, b.LastErrorCode, b.LastErrorHTTPStatus
+			statusUpdatedAt = b.UpdatedAt
 		}
 		// Reuse an active binding's discovered catalog for resource settings.
 		if len(item.Tools) == 0 && bound.record.active() && b.Status == "connected" {
@@ -156,6 +167,21 @@ func (s *Service) viewLocked(e *entry) Installation {
 	}
 	sort.Slice(item.Bindings, func(i, j int) bool { return item.Bindings[i].AgentID < item.Bindings[j].AgentID })
 	return item
+}
+
+func resourceConnectionStatusPriority(status string) int {
+	switch status {
+	case "authorization_required":
+		return 4
+	case "error":
+		return 3
+	case "connecting":
+		return 2
+	case "connected":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func (s *Service) Bind(ctx context.Context, agentID string, in BindRequest) (Installation, error) {

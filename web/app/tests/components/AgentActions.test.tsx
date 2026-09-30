@@ -41,6 +41,7 @@ const labels: Record<string, string> = {
   agentProfileTab: "Profile",
   agentProfileSkillsTab: "Skills",
   agentProfileMCPTab: "MCP",
+  agentAppsTab: "Connectors",
   agentSaved: "Saved",
   agentSaveChanges: "Save changes",
   agentUpdateSave: "Save",
@@ -1379,9 +1380,9 @@ describe("agent action visibility", () => {
       within(navigation)
         .getAllByRole("button")
         .map((button) => button.textContent),
-    ).toEqual(["Profile", "Instructions", "Skills0", "MCP", "Channels"]);
+    ).toEqual(["Profile", "Instructions", "Skills0", "Connectors", "Channels"]);
 
-    await user.click(within(navigation).getByRole("button", { name: "MCP" }));
+    await user.click(within(navigation).getByRole("button", { name: "Connectors" }));
 
     expect(screen.getByText("existing")).toBeInTheDocument();
     expect(screen.getByText("node")).toBeInTheDocument();
@@ -1446,7 +1447,7 @@ describe("agent action visibility", () => {
     );
 
     const navigation = screen.getByRole("navigation", { name: "Profile sections" });
-    await user.click(within(navigation).getByRole("button", { name: "MCP" }));
+    await user.click(within(navigation).getByRole("button", { name: "Connectors" }));
 
     expect(screen.queryByLabelText("MCP Servers")).not.toBeInTheDocument();
     expect(screen.getByText("No MCP servers installed yet.")).toBeInTheDocument();
@@ -1455,7 +1456,7 @@ describe("agent action visibility", () => {
     await user.click(within(navigation).getByRole("button", { name: "Profile" }));
     expect(screen.getByText("Saved")).toBeInTheDocument();
 
-    await user.click(within(navigation).getByRole("button", { name: "MCP" }));
+    await user.click(within(navigation).getByRole("button", { name: "Connectors" }));
     expect(screen.queryByLabelText("MCP Servers")).not.toBeInTheDocument();
   });
 
@@ -1808,7 +1809,13 @@ describe("agent action visibility", () => {
 
     const navigation = screen.getByRole("navigation", { name: "Profile sections" });
     const tabs = within(navigation).getAllByRole("button");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Profile", "Instructions", "Skills0", "MCP", "Channels"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Profile",
+      "Instructions",
+      "Skills0",
+      "Connectors",
+      "Channels",
+    ]);
     expect(tabs[0]).toHaveAttribute("aria-current", "location");
     expect(screen.getByText("Request options")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Channels" })).not.toBeInTheDocument();

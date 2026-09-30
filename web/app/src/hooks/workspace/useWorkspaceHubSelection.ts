@@ -493,7 +493,10 @@ export function useWorkspaceHubSelection({
     t,
     templateCount: resourcesTemplates.length,
     templatesLoaded: templatesQuery?.isFetched ?? false,
-    enabled: selectedHubResourceType === "mcp" || activePane.type === WorkspacePaneTypes.agent,
+    enabled:
+      selectedHubResourceType === "mcp" ||
+      activePane.type === WorkspacePaneTypes.agent ||
+      activePane.type === WorkspacePaneTypes.apps,
     openCSGAuthGuard,
   });
 

@@ -1,8 +1,12 @@
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
-import { useState } from "react";
-import { BookOpen, Boxes, GitBranch, MessageCircle, Plus, RefreshCw } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { BookOpen, Boxes, Plus, RefreshCw, ChevronDown, Server } from "lucide-react";
 import {
   Button,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
   Switch,
   DialogRoot,
   DialogContent,
@@ -17,6 +21,7 @@ import { errorMessage } from "@/api/client";
 import { localizeAPIError } from "@/shared/i18n";
 import type { AppInstallation } from "@/api/apps";
 import type { TranslateFn } from "@/models/conversations";
+import { ConnectorGitLabIcon } from "@/components/ui/Icons";
 import { appName, appStatus, appConnectionError } from "./appForm";
 import { AppToolList } from "./AppToolList";
 import type { AgentAppsController } from "./useAgentApps";
@@ -24,6 +29,8 @@ import styles from "./AgentAppsPanel.module.css";
 
 type Props = {
   agentID: string;
+  children?: ReactNode;
+  onAddTools?: () => void;
   controller: AgentAppsController;
   t: TranslateFn;
   portalContainer?: HTMLElement | null;
@@ -32,10 +39,20 @@ type Props = {
   onSelect: (id: string | undefined) => void;
 };
 
-export function AgentAppsPanel({ controller, t, portalContainer, selectedID, addAppID, onSelect }: Props) {
+export function AgentAppsPanel({
+  controller,
+  t,
+  portalContainer,
+  selectedID,
+  addAppID,
+  onSelect,
+  children,
+  onAddTools,
+}: Props) {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<AppInstallation | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const selected = controller.items.find((app) => app.installation_id === selectedID);
   const available = controller.resources.filter(
     (resource) =>
       !controller.items.some((item) => item.resource_id === resource.installation_id) &&
@@ -62,80 +79,138 @@ export function AgentAppsPanel({ controller, t, portalContainer, selectedID, add
           <div className="profile-section-title">{t("agentAppsTab")}</div>
           <p className={styles.hint}>{t("appBindingDescription")}</p>
         </div>
-        <Button onClick={() => setAdding(true)}>
-          <Plus size={16} />
-          {t("appAddFromResources")}
-        </Button>
+        <DropdownMenuRoot>
+          <DropdownMenuTrigger asChild>
+            <Button variant="primary" size="sm">
+              <Plus size={16} />
+              {t("connectorsAdd")}
+              <ChevronDown size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent portalContainer={portalContainer}>
+            <DropdownMenuItem onSelect={() => setAdding(true)}>
+              <Boxes size={16} />
+              {t("appAddFromResources")}
+            </DropdownMenuItem>
+            {onAddTools ? (
+              <DropdownMenuItem onSelect={onAddTools}>
+                <Server size={16} />
+                {t("agentMCPAdd")}
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenuRoot>
       </div>
       {error || controller.error ? (
         <div role="alert" className="form-error">
           {localizeAPIError(error || controller.error, t) || errorMessage(error || controller.error)}
         </div>
       ) : null}
-      {!controller.items.length && !controller.loading ? (
-        <div className={styles.empty}>
-          <Boxes size={30} />
-          <strong>{t("appEmptyTitle")}</strong>
-          <p>{t("appBindingDescription")}</p>
-        </div>
+      {controller.loading ? (
+        <p role="status" className={styles.hint}>
+          {t("loading")}
+        </p>
       ) : null}
-      <div className={styles.list}>
+      <div className={styles.agentGrid}>
         {controller.items.map((app) => (
-          <article key={app.installation_id} className={styles.card} data-selected={app.installation_id === selectedID}>
-            <div className={styles.cardHeader}>
-              <span className={styles.icon}>
-                <AppIcon appID={app.app_id} />
+          <button
+            key={app.installation_id}
+            type="button"
+            className={`${styles.connectorCard} ${styles.connectorOpen}`}
+            onClick={() => onSelect(app.installation_id)}
+          >
+            <span className={styles.connectorIcon}>
+              <AppIcon appID={app.app_id} />
+            </span>
+            <span className={styles.connectorCopy}>
+              <span className={styles.connectorTitle} title={app.name}>
+                {app.name}
               </span>
-              <div className={styles.cardTitle}>
-                <strong>{app.name}</strong>
-                <span>
-                  {appName(app.app_id, t)} · {app.config.url || app.config.command}
-                </span>
-              </div>
-              <span className={styles.status} data-status={app.status}>
-                {appStatus(app, t)}
+              <span className={styles.connectorDescription}>
+                {appName(app.app_id, t)} · {app.config.url || app.config.command}
               </span>
-            </div>
-            {app.resource_enabled === false ? <p className={styles.hint}>{t("appGlobalDisabledHint")}</p> : null}
-            {app.last_error ? <p className={styles.cardError}>{appConnectionError(app, t)}</p> : null}
-            {app.disconnected ? <p className={styles.hint}>{t("appDisconnectedHint")}</p> : null}
-            <AppToolList tools={app.tools} t={t} />
-            <div className={styles.actions}>
-              <a
-                className="btn btn-secondary-gray btn-sm"
-                href={`#/connectors/${encodeURIComponent(app.resource_id || "")}`}
-              >
-                {t("appManageResource")}
-              </a>
-              <Button
-                size="sm"
-                disabled={!!controller.busyID || !app.enabled || app.resource_enabled === false}
-                onClick={() => void run(() => controller.connect(app.installation_id))}
-              >
-                <RefreshCw size={14} />
-                {app.status === "connected" ? t("appReconnect") : t("appConnect")}
-              </Button>
-              <Button
-                size="sm"
-                disabled={!!controller.busyID}
-                onClick={() => void run(() => controller.update(app.installation_id, { enabled: !app.enabled }))}
-              >
-                {app.enabled ? t("appDisable") : t("appEnable")}
-              </Button>
-              <Button
-                size="sm"
-                disabled={!!controller.busyID || app.disconnected}
-                onClick={() => void run(() => controller.disconnect(app.installation_id))}
-              >
-                {t("appDisconnect")}
-              </Button>
-              <Button size="sm" variant="outlineDanger" disabled={!!controller.busyID} onClick={() => setRemoving(app)}>
-                {t("appRemove")}
-              </Button>
-            </div>
-          </article>
+            </span>
+            <span className={styles.status} data-status={app.enabled ? app.status : "disabled"}>
+              {appStatus(app, t)}
+            </span>
+          </button>
         ))}
       </div>
+      {!controller.items.length && !controller.loading ? <p className={styles.hint}>{t("appEmptyTitle")}</p> : null}
+      {children}
+      <DialogRoot
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) onSelect(undefined);
+        }}
+      >
+        <DialogContent portalContainer={portalContainer} className={styles.settingsDialog}>
+          <DialogHeader>
+            <div>
+              <DialogTitle>{selected?.name}</DialogTitle>
+              <DialogDescription>{selected ? appStatus(selected, t) : ""}</DialogDescription>
+            </div>
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
+          </DialogHeader>
+          <DialogBody className={styles.settingsBody}>
+            {error ? (
+              <p role="alert" className="form-error">
+                {localizeAPIError(error, t) || errorMessage(error)}
+              </p>
+            ) : null}
+            {selected ? (
+              <>
+                {selected.resource_enabled === false ? (
+                  <p className={styles.hint}>{t("appGlobalDisabledHint")}</p>
+                ) : null}
+                {selected.last_error ? <p className={styles.cardError}>{appConnectionError(selected, t)}</p> : null}
+                {selected.disconnected ? <p className={styles.hint}>{t("appDisconnectedHint")}</p> : null}
+                <AppToolList tools={selected.tools} t={t} />
+                <div className={styles.actions}>
+                  <a
+                    className="btn btn-secondary-gray btn-sm"
+                    href={`#/connectors/${encodeURIComponent(selected.resource_id || "")}`}
+                  >
+                    {t("appManageResource")}
+                  </a>
+                  <Button
+                    size="sm"
+                    disabled={!!controller.busyID || !selected.enabled || selected.resource_enabled === false}
+                    onClick={() => void run(() => controller.connect(selected.installation_id))}
+                  >
+                    <RefreshCw size={14} />
+                    {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!!controller.busyID}
+                    onClick={() =>
+                      void run(() => controller.update(selected.installation_id, { enabled: !selected.enabled }))
+                    }
+                  >
+                    {selected.enabled ? t("appDisable") : t("appEnable")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!!controller.busyID || selected.disconnected}
+                    onClick={() => void run(() => controller.disconnect(selected.installation_id))}
+                  >
+                    {t("appDisconnect")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outlineDanger"
+                    disabled={!!controller.busyID}
+                    onClick={() => setRemoving(selected)}
+                  >
+                    {t("appRemove")}
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </DialogBody>
+        </DialogContent>
+      </DialogRoot>
       <DialogRoot
         open={adding || !!addAppID}
         onOpenChange={(open) => {
@@ -149,7 +224,7 @@ export function AgentAppsPanel({ controller, t, portalContainer, selectedID, add
               <DialogTitle>{t("appAddFromResources")}</DialogTitle>
               <DialogDescription>{t("appBindingDescription")}</DialogDescription>
             </div>
-            <DialogCloseButton label={t("close")} />
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
           </DialogHeader>
           <DialogBody className={styles.catalog}>
             {available.map((resource) => (
@@ -182,7 +257,7 @@ export function AgentAppsPanel({ controller, t, portalContainer, selectedID, add
         <DialogContent portalContainer={portalContainer} className={styles.catalogDialog}>
           <DialogHeader>
             <DialogTitle>{t("appRemoveConfirmTitle", { name: removing?.name || "" })}</DialogTitle>
-            <DialogCloseButton label={t("close")} />
+            <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
           </DialogHeader>
           <DialogBody>
             <p>{t("appUnbindDescription")}</p>
@@ -275,7 +350,7 @@ export function AppManagedMCPRows({
                   onCheckedChange={() => void toggle(selected)}
                 />
               ) : null}
-              <DialogCloseButton label={t("close")} />
+              <DialogCloseButton label={t("close")} size="sm" variant="tertiaryGray" iconOnly />
             </div>
           </DialogHeader>
           <DialogBody>
@@ -305,8 +380,9 @@ export function AppManagedMCPRows({
 }
 
 export function AppIcon({ appID }: { appID: string }) {
-  if (appID === "gitlab") return <GitBranch size={22} aria-hidden="true" />;
-  if (appID === "feishu") return <MessageCircle size={22} aria-hidden="true" />;
+  if (appID === "gitlab") return <ConnectorGitLabIcon size={30} className={styles.gitlabIcon} aria-hidden="true" />;
+  if (appID === "feishu") return <img src="icons/feishu.png" width={28} height={28} alt="" />;
+  if (appID === "github") return <img src="icons/github.svg" width={28} height={28} alt="" />;
   if (appID === "llm-wiki") return <BookOpen size={22} aria-hidden="true" />;
   return <Boxes size={22} aria-hidden="true" />;
 }

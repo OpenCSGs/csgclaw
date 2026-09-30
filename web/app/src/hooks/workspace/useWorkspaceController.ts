@@ -753,14 +753,14 @@ export function useWorkspaceController() {
       if (!item?.name) {
         setSelectedHubResourceType("mcp");
         setSelectedMCPServerName("");
-        selectHub();
+        navigatePane({ type: WorkspacePaneTypes.apps }, rooms);
         return;
       }
       setSelectedHubResourceType("mcp");
       setSelectedMCPServerName(item.name);
       navigatePane({ type: WorkspacePaneTypes.hub, id: item.name, resourceType: "mcp" }, rooms);
     },
-    [navigatePane, rooms, selectHub, setSelectedMCPServerName, setSelectedHubResourceType],
+    [navigatePane, rooms, setSelectedMCPServerName, setSelectedHubResourceType],
   );
   const selectKnowledgeBase = useCallback(
     (item: RemoteKnowledgeBase | null | undefined) => {

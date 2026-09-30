@@ -30,6 +30,7 @@ export function appStatus(app: AppInstallation, t: TranslateFn): string {
   if (!app.enabled || app.resource_enabled === false) return t("appStatusDisabled");
   if (app.disconnected) return t("appStatusDisconnected");
   const keys = {
+    not_connected: "appStatusNotConnected",
     configured: "appStatusConfigured",
     needs_configuration: "appStatusNeedsConfiguration",
     connecting: "appStatusConnecting",

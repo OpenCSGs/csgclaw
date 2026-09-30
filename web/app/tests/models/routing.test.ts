@@ -125,3 +125,11 @@ describe("global App resource routing", () => {
     expect(pathForPane({ type: WorkspacePaneTypes.apps })).toBe("/connectors");
   });
 });
+
+it("returns to unified connectors after MCP creation and preserves MCP detail links", () => {
+  expect(pathForPane({ type: WorkspacePaneTypes.hub, resourceType: "mcp", id: "" })).toBe("/connectors");
+  expect(paneFromLocation("/connectors")).toEqual({ type: WorkspacePaneTypes.apps, id: "" });
+  const detail = { type: WorkspacePaneTypes.hub, resourceType: "mcp" as const, id: "project tools" };
+  expect(pathForPane(detail)).toBe("/mcp-servers/project%20tools");
+  expect(paneFromLocation(pathForPane(detail))).toEqual(detail);
+});

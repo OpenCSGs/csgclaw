@@ -1,3 +1,4 @@
+import { GlobalAppsPanel } from "@/components/business/Apps";
 import { ResourceListCard } from "@/components/business/ResourceListCard";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
@@ -10,6 +11,10 @@ import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import {
+  Search,
+  ChevronDown,
+  Plus,
+  Boxes,
   AlertCircle,
   AlertTriangle,
   BookOpen,
@@ -48,6 +53,10 @@ import { localizeTemplateSourceTag } from "@/shared/i18n";
 import { WorkspaceTemplatesIcon } from "@/components/ui/Icons";
 import {
   Button,
+  DropdownMenuRoot,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
   Checkbox,
   DismissibleAlert,
   DialogBody,
@@ -1148,6 +1157,8 @@ export function HubDetailPane({
   const [mcpDetailInitialDocument, setMCPDetailInitialDocument] = useState("");
   const [mcpDetailError, setMCPDetailError] = useState("");
   const [mcpFormError, setMCPFormError] = useState("");
+  const [appCatalogOpen, setAppCatalogOpen] = useState(false);
+  const mcpRequestedMode = useRef<MCPCreateMode>("manual");
   const [mcpCreateMode, setMCPCreateMode] = useState<MCPCreateMode>("manual");
   const [skillDetailDialogOpen, setSkillDetailDialogOpen] = useState(false);
   const [skillFilter, setSkillFilter] = useState<SkillFilterTabID>("all");
@@ -1352,9 +1363,11 @@ export function HubDetailPane({
     if (mcpCreateDialogOpen) {
       setMCPDraftDocument(mcpCreateInitialDocument || DEFAULT_MCP_SERVER_DOCUMENT);
       setMCPFormError("");
-      setMCPCreateMode("manual");
+      setMCPCreateMode(mcpRequestedMode.current);
+      if (mcpRequestedMode.current === "remote") onRemoteMCPVisibleChange?.(true);
+      mcpRequestedMode.current = "manual";
     }
-  }, [mcpCreateDialogOpen, mcpCreateInitialDocument]);
+  }, [onRemoteMCPVisibleChange, mcpCreateDialogOpen, mcpCreateInitialDocument]);
   useEffect(() => {
     if (!selectedMCPServer) {
       setMCPDetailDocument("");
@@ -1520,20 +1533,19 @@ export function HubDetailPane({
 
   return (
     <section className={moduleClassNames("entity-pane hub-detail-pane")}>
-      {!loaded && !error ? (
+      {!loaded && !error && activeResourceType !== "mcp" ? (
         <div className={moduleClassNames("hub-loading-state")} role="status" aria-live="polite">
           <LoaderCircle className={moduleClassNames("hub-loading-spinner")} size={24} aria-hidden="true" />
           <span>
             {activeResourceType === "skill"
               ? t("resourcesSkillsLoading")
-              : activeResourceType === "mcp"
-                ? t("resourcesMCPLoading")
-                : activeResourceType === "knowledge"
-                  ? t("resourcesKnowledgeBasesLoading")
-                  : t("resourcesLoading")}
+              : activeResourceType === "knowledge"
+                ? t("resourcesKnowledgeBasesLoading")
+                : t("resourcesLoading")}
           </span>
         </div>
       ) : activeResourceType !== "knowledge" &&
+        activeResourceType !== "mcp" &&
         templates.length === 0 &&
         skills.length === 0 &&
         mcpServers.length === 0 ? (
@@ -2420,23 +2432,54 @@ export function HubDetailPane({
               </section>
             </div>
           ) : activeResourceType === "mcp" ? (
-            <div className={moduleClassNames("hub-skill-list-page")}>
+            <div className={moduleClassNames("hub-skill-list-page connector-page")}>
               <header className={moduleClassNames("hub-skill-list-header")}>
                 <div className={moduleClassNames("hub-skill-list-heading")}>
-                  <ResourceListTitle count={mcpServers.length}>{t("resourcesMCPLabel")}</ResourceListTitle>
-                  <p>{t("resourcesMCPListSubtitle")}</p>
+                  <h1>{t("agentAppsTab")}</h1>
+                  <p>{t("connectorsDescription")}</p>
                 </div>
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={() => {
-                    onSelectMCP?.(null);
-                    onMCPCreateDialogOpenChange?.(true);
-                  }}
-                >
-                  <span aria-hidden="true">+</span>
-                  {t("resourcesMCPAdd")}
-                </Button>
+                <DropdownMenuRoot>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="primary">
+                      <Plus size={16} />
+                      {t("connectorsAdd")}
+                      <ChevronDown size={14} />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onSelect={() => setAppCatalogOpen(true)}>
+                      <Boxes size={16} />
+                      <span>
+                        {t("connectorsAddApplication")}
+                        <small className={styles.connectorMenuHint}>{t("connectorsChooseType")}</small>
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        mcpRequestedMode.current = "manual";
+                        onMCPCreateDialogOpenChange?.(true);
+                      }}
+                    >
+                      <FileCode2 size={16} />
+                      <span>
+                        {t("resourcesMCPManualTab")}
+                        <small className={styles.connectorMenuHint}>{t("connectorsManualHint")}</small>
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        mcpRequestedMode.current = "remote";
+                        onMCPCreateDialogOpenChange?.(true);
+                      }}
+                    >
+                      <CloudDownload size={16} />
+                      <span>
+                        {t("resourcesMCPRemoteInstallTab")}
+                        <small className={styles.connectorMenuHint}>{t("connectorsRemoteHint")}</small>
+                      </span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenuRoot>
               </header>
 
               {showMCPAddedAlert ? (
@@ -2446,13 +2489,20 @@ export function HubDetailPane({
                 </div>
               ) : null}
 
-              <ResourceSearchField
-                value={mcpSearch}
-                placeholder={t("resourcesMCPSearchPlaceholder")}
-                onChange={setMCPSearch}
-              />
+              <div className={styles.connectorSearch}>
+                <Search size={18} aria-hidden="true" />
+                <ResourceSearchField value={mcpSearch} placeholder={t("connectorsSearch")} onChange={setMCPSearch} />
+              </div>
 
+              <GlobalAppsPanel
+                t={t}
+                embedded
+                search={mcpSearch}
+                catalogOpen={appCatalogOpen}
+                onCatalogOpenChange={setAppCatalogOpen}
+              />
               <section className={moduleClassNames("hub-skill-list-section")}>
+                <h2 className={styles.connectorSectionTitle}>{t("connectorsTools")}</h2>
                 <div
                   className={moduleClassNames("hub-skill-filter-tabs")}
                   role="tablist"

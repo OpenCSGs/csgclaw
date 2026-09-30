@@ -37,7 +37,7 @@ export function AgentPage() {
       requestedAddAppID={search.get("add_connector") || undefined}
       onProfileTabChange={(tab, appID) => {
         const next = new URLSearchParams(location.search);
-        next.set("tab", tab === "apps" ? "connectors" : tab);
+        next.set("tab", tab === "apps" || tab === "mcp" ? "connectors" : tab);
         next.delete("add_connector");
         if (appID) next.set("connector", appID);
         else next.delete("connector");

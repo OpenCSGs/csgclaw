@@ -54,6 +54,7 @@ export type AppInstallation = {
   enabled: boolean;
   disconnected: boolean;
   status:
+    | "not_connected"
     | "configured"
     | "needs_configuration"
     | "connecting"

@@ -209,8 +209,8 @@ export function pathForPane(
     if (pane.resourceType === "skill" && pane.id) {
       return `/${WorkspaceRouteSegments.skills}/${encodeURIComponent(pane.id)}`;
     }
-    if (pane.resourceType === "mcp" && pane.id) {
-      return `/${WorkspaceRouteSegments.mcpServers}/${encodeURIComponent(pane.id)}`;
+    if (pane.resourceType === "mcp") {
+      return pane.id ? `/${WorkspaceRouteSegments.mcpServers}/${encodeURIComponent(pane.id)}` : "/connectors";
     }
     if (pane.resourceType === "knowledge") {
       return pane.id
