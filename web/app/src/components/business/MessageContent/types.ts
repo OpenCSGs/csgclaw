@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TranslateFn } from "@/models/conversations";
+import type { IMMessage, TranslateFn } from "@/models/conversations";
 import type { RenderedCitation } from "./markdown";
 
 export type CitationSelection = {
@@ -52,6 +52,7 @@ export type ParsedStructuredMessage = StructuredMessagePayload | ActionCardPaylo
 export type ProgressControlSlots = { header?: ReactNode; footer?: ReactNode };
 
 export type MessageContentProps = {
+  videoMessages?: IMMessage[];
   progressControls?: ProgressControlSlots | null;
   showTurnProgress?: boolean;
   actionBusy?: string;

@@ -52,6 +52,7 @@ func (h *Handler) RecoverVideoGenerations(ctx context.Context) error {
 			recoveryTurnID := agentengine.TurnID("video-recovery-" + hex.EncodeToString(digest[:16]))
 			if strings.TrimSpace(task.UpstreamID) == "" {
 				task.State = "failed"
+				task.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
 				task.Error = "video_generation_interrupted"
 				task.ErrorDetails = &modelprovider.VideoGenerationError{Code: task.Error, Message: "Video submission was interrupted before an upstream task ID was saved. Retry manually to avoid creating a duplicate charged job."}
 				if err := store.DeliverVideoGeneration(ctx, turn, task); err != nil {

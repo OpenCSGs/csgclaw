@@ -3,8 +3,10 @@ package delivery
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"csgclaw/internal/agentengine"
 	"csgclaw/internal/agentengine/contract"
@@ -41,6 +43,8 @@ func TestCompletedVideoReplacesStatusWithPlayableAttachment(t *testing.T) {
 	if err := store.DeliverVideoGeneration(ctx, turn, task); err != nil {
 		t.Fatal(err)
 	}
+	beforeDelivery := time.Now()
+	task.EndedAt = beforeDelivery.Add(-time.Minute).Format(time.RFC3339Nano)
 	task.State = "completed"
 	task.File = &file
 	if err := store.DeliverVideoGeneration(ctx, turn, task); err != nil {
@@ -59,4 +63,14 @@ func TestCompletedVideoReplacesStatusWithPlayableAttachment(t *testing.T) {
 	if len(delivered) != 1 || len(delivered[0].Attachments) != 1 || delivered[0].Attachments[0].MediaType != "video/mp4" {
 		t.Fatalf("messages = %#v", messages)
 	}
+	raw, _ := json.Marshal(delivered[0].Metadata["video_generation"])
+	var completed contract.VideoGenerationTask
+	if err := json.Unmarshal(raw, &completed); err != nil {
+		t.Fatal(err)
+	}
+	end, err := time.Parse(time.RFC3339Nano, completed.EndedAt)
+	if err != nil || end.Before(beforeDelivery) || completed.State != "completed" {
+		t.Fatalf("completion timestamp precedes attachment delivery: %+v", completed)
+	}
+
 }

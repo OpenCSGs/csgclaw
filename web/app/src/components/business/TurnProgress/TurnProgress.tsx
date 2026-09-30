@@ -16,10 +16,12 @@ import {
 import { Button } from "@/components/ui";
 import { progressActive, progressDuration, progressGroups, toolGroupLabel, terminalTool } from "@/models/turnProgress";
 import type { ProgressGroup, ProgressTool, TurnProgress as Progress } from "@/models/turnProgress";
-import type { TranslateFn } from "@/models/conversations";
+import { videoProgressTiming } from "@/models/videoGeneration";
+import type { IMMessage, TranslateFn } from "@/models/conversations";
 import styles from "./TurnProgress.module.css";
 
 type Props = {
+  videoMessages?: IMMessage[];
   controls?: ReactNode;
   headerControls?: ReactNode;
   progress: Progress;
@@ -35,9 +37,12 @@ export const TurnProgress = memo(function TurnProgress({
   t,
   controls,
   headerControls,
+  videoMessages = [],
 }: Props) {
   const connected = useSyncExternalStore(subscribeIMConnection, imEventsConnected);
   const active = progressActive(progress);
+  const videoTiming = videoProgressTiming(progress, videoMessages);
+  const clockProgress = videoTiming?.progress ?? progress;
   const [disclosure, setDisclosure] = useState({ id: progress.id, active, open: active });
   if (disclosure.id !== progress.id || disclosure.active !== active) {
     setDisclosure({ id: progress.id, active, open: active });
@@ -46,8 +51,18 @@ export const TurnProgress = memo(function TurnProgress({
   const shell = useRef<HTMLElement>(null);
   const id = useId();
   const groups = useMemo(() => progressGroups(progress.items), [progress.items]);
-  const hasProcess = groups.length > 0 || active || progress.status !== "succeeded";
+  const hasProcess = groups.length > 0 || active || videoTiming !== null || progress.status !== "succeeded";
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  const statusLabel =
+    !active && videoTiming
+      ? videoTiming.pending
+        ? "videoGenerating"
+        : videoTiming.failed
+          ? "videoGenerationFailed"
+          : progress.status === "succeeded"
+            ? "progressTotalTime"
+            : `progressStatus_${progress.status}`
+      : `progressStatus_${active && (!online || !connected) ? "reconnecting" : progress.status}`;
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
@@ -81,9 +96,9 @@ export const TurnProgress = memo(function TurnProgress({
               onClick={toggle}
             >
               <Clock3 size={15} aria-hidden="true" />
-              <span>{t(`progressStatus_${active && (!online || !connected) ? "reconnecting" : progress.status}`)}</span>
-              <span aria-hidden="true">·</span>
-              <Elapsed progress={progress} />
+              <span>{t(statusLabel)}</span>
+              {clockProgress.status !== "succeeded" ? <span aria-hidden="true">·</span> : null}
+              <Elapsed progress={clockProgress} />
               {open ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
             </Button>
             {active && headerControls ? <div className={styles.headerControls}>{headerControls}</div> : null}

@@ -2194,6 +2194,35 @@ func (s *Service) DeliverMessage(req DeliverMessageRequest) (Message, error) {
 	return presented, nil
 }
 
+// UpdateDeliveredMessageMetadata records post-delivery results without copying
+// attachment bytes again or replacing the delivered content.
+func (s *Service) UpdateDeliveredMessageMetadata(roomID, messageID, senderID string, metadata map[string]any) (Message, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	room, ok := s.rooms[roomID]
+	if !ok {
+		return Message{}, ErrRoomNotFound
+	}
+	senderID = s.resolveUserIDLocked(senderID)
+	for i := range room.Messages {
+		if room.Messages[i].ID != messageID {
+			continue
+		}
+		if room.Messages[i].SenderID != senderID {
+			return Message{}, fmt.Errorf("message belongs to another sender")
+		}
+		room.Messages[i].Metadata = utils.CloneAnyMap(metadata)
+		s.rebuildThreadStatesLocked(room)
+		if err := s.saveMessageProjectionLocked(false); err != nil {
+			return Message{}, err
+		}
+		presented := s.presentMessageLocked(*room, room.Messages[i], "")
+		s.publishMessageCreatedLocked(roomID, senderID, presented)
+		return presented, nil
+	}
+	return Message{}, fmt.Errorf("message not found")
+}
+
 func (s *Service) DeliverEvent(req DeliverEventRequest) (Message, error) {
 	roomID := strings.TrimSpace(req.RoomID)
 	senderID := strings.TrimSpace(req.SenderID)

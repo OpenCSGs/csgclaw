@@ -99,3 +99,30 @@ it("matches per-type numbers between duration-ranked calls and filtered timeline
   expect(view.container.querySelector('button[data-call-id="llm-first"]')).toHaveTextContent("diagLLMRequest #1");
   view.unmount();
 });
+
+it("uses the video model name for asynchronous model calls", () => {
+  render(
+    <DiagnosticCalls
+      record={{
+        ...record,
+        model: "text-model",
+        spans: [
+          {
+            id: "video",
+            name: "llm.video",
+            owner: "llm",
+            status: "completed",
+            start_ms: 0,
+            end_ms: 40000,
+            details: { label: "video-model" },
+          },
+        ],
+      }}
+      t={t}
+    />,
+  );
+  expect(screen.getByText("video-model")).toBeTruthy();
+  expect(screen.queryByText("text-model")).toBeNull();
+  expect(screen.getByText("diagVideoModelHint")).toBeTruthy();
+  expect(screen.queryByText("diagFirstResponseHint")).toBeNull();
+});
