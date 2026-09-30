@@ -26,6 +26,8 @@ describe("TurnProgress", () => {
   it("shows intermediate text while running and collapses it on completion", () => {
     const { rerender } = render(<TurnProgress progress={progress} t={t} renderText={renderText} />);
     expect(screen.getByText("正在检查文件")).toBeTruthy();
+    expect(document.querySelector('[data-preserve-scroll="true"]')).toBeNull();
+    expect(document.querySelector('[data-scroll-anchor-toggle]')).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("cat README.md")).toBeTruthy();
     expect(screen.queryByText("contents")).toBeNull();
     expect(screen.getByText("Detailed reasoning")).toBeTruthy();

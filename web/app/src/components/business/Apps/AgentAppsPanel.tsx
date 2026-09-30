@@ -1,6 +1,6 @@
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { useState, type ReactNode } from "react";
-import { BookOpen, Boxes, Plus, RefreshCw, ChevronDown, Server } from "lucide-react";
+import { ArrowRight, ArrowUpRight, BookOpen, Plus, RefreshCw, ChevronDown, Server } from "lucide-react";
 import {
   Button,
   DropdownMenuRoot,
@@ -21,7 +21,7 @@ import { errorMessage } from "@/api/client";
 import { localizeAPIError } from "@/shared/i18n";
 import type { AppInstallation } from "@/api/apps";
 import type { TranslateFn } from "@/models/conversations";
-import { ConnectorGitLabIcon } from "@/components/ui/Icons";
+import { ConnectorBoxesIcon, ConnectorGitLabIcon } from "@/components/ui/Icons";
 import { appName, appStatus, appConnectionError } from "./appForm";
 import { AppToolList } from "./AppToolList";
 import type { AgentAppsController } from "./useAgentApps";
@@ -58,6 +58,7 @@ export function AgentAppsPanel({
       !controller.items.some((item) => item.resource_id === resource.installation_id) &&
       (!addAppID || resource.app_id === addAppID),
   );
+  const manageResourcesHref = addAppID ? `#/connectors?add_connector=${encodeURIComponent(addAppID)}` : "#/connectors";
   async function run(operation: () => Promise<unknown>) {
     setError(null);
     try {
@@ -89,7 +90,7 @@ export function AgentAppsPanel({
           </DropdownMenuTrigger>
           <DropdownMenuContent portalContainer={portalContainer}>
             <DropdownMenuItem onSelect={() => setAdding(true)}>
-              <Boxes size={16} />
+              <ConnectorBoxesIcon size={16} />
               {t("appAddFromResources")}
             </DropdownMenuItem>
             {onAddTools ? (
@@ -166,37 +167,40 @@ export function AgentAppsPanel({
                 {selected.last_error ? <p className={styles.cardError}>{appConnectionError(selected, t)}</p> : null}
                 {selected.disconnected ? <p className={styles.hint}>{t("appDisconnectedHint")}</p> : null}
                 <AppToolList tools={selected.tools} t={t} />
-                <div className={styles.actions}>
-                  <a
-                    className="btn btn-secondary-gray btn-sm"
-                    href={`#/connectors/${encodeURIComponent(selected.resource_id || "")}`}
-                  >
-                    {t("appManageResource")}
-                  </a>
-                  <Button
-                    size="sm"
-                    disabled={!!controller.busyID || !selected.enabled || selected.resource_enabled === false}
-                    onClick={() => void run(() => controller.connect(selected.installation_id))}
-                  >
-                    <RefreshCw size={14} />
-                    {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={!!controller.busyID}
-                    onClick={() =>
-                      void run(() => controller.update(selected.installation_id, { enabled: !selected.enabled }))
-                    }
-                  >
-                    {selected.enabled ? t("appDisable") : t("appEnable")}
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={!!controller.busyID || selected.disconnected}
-                    onClick={() => void run(() => controller.disconnect(selected.installation_id))}
-                  >
-                    {t("appDisconnect")}
-                  </Button>
+                <div className={styles.settingsActions}>
+                  <div className={styles.settingsActionGroup}>
+                    <a
+                      className={`btn btn-secondary-gray btn-sm ${styles.manageResourceLink}`}
+                      href={`#/connectors/${encodeURIComponent(selected.resource_id || "")}`}
+                    >
+                      {t("appManageResource")}
+                      <ArrowUpRight size={14} />
+                    </a>
+                    <Button
+                      size="sm"
+                      disabled={!!controller.busyID || !selected.enabled || selected.resource_enabled === false}
+                      onClick={() => void run(() => controller.connect(selected.installation_id))}
+                    >
+                      <RefreshCw size={14} />
+                      {selected.status === "connected" ? t("appReconnect") : t("appConnect")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!!controller.busyID}
+                      onClick={() =>
+                        void run(() => controller.update(selected.installation_id, { enabled: !selected.enabled }))
+                      }
+                    >
+                      {selected.enabled ? t("appDisable") : t("appEnable")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!!controller.busyID || selected.disconnected}
+                      onClick={() => void run(() => controller.disconnect(selected.installation_id))}
+                    >
+                      {t("appDisconnect")}
+                    </Button>
+                  </div>
                   <Button
                     size="sm"
                     variant="outlineDanger"
@@ -230,6 +234,7 @@ export function AgentAppsPanel({
             {available.map((resource) => (
               <Button
                 key={resource.installation_id}
+                className={styles.catalogItem}
                 disabled={!resource.enabled || !!controller.busyID}
                 onClick={() =>
                   void run(() => controller.bind(resource.installation_id)).then((ok) => {
@@ -237,14 +242,43 @@ export function AgentAppsPanel({
                   })
                 }
               >
-                <AppIcon appID={resource.app_id} />
-                {resource.name}
+                <span className={styles.catalogIcon}>
+                  <AppIcon appID={resource.app_id} />
+                </span>
+                <span className={styles.catalogCopy}>
+                  <strong>{resource.name}</strong>
+                  <span className={styles.catalogDescription}>
+                    {appName(resource.app_id, t)} · {resource.config.url || resource.config.command}
+                  </span>
+                </span>
               </Button>
             ))}
-            {!available.length ? <p className={styles.hint}>{t("appNoAvailableResources")}</p> : null}
-            <a href={addAppID ? `#/connectors?add_connector=${encodeURIComponent(addAppID)}` : "#/connectors"}>
-              {t("appManageResources")}
-            </a>
+            {!available.length ? (
+              <div className={styles.catalogEmpty}>
+                <span className={styles.catalogEmptyIcon} aria-hidden="true">
+                  <ConnectorBoxesIcon size={18} />
+                </span>
+                <div className={styles.catalogEmptyCopy}>
+                  <strong>{t("appNoAvailableResourcesTitle")}</strong>
+                  <p>{t("appNoAvailableResources")}</p>
+                </div>
+                <a className={`btn btn-secondary-gray btn-sm ${styles.catalogManageAction}`} href={manageResourcesHref}>
+                  <span className="btn-content">
+                    <ConnectorBoxesIcon size={16} />
+                    {t("appManageResources")}
+                    <ArrowRight size={14} />
+                  </span>
+                </a>
+              </div>
+            ) : (
+              <a className={`btn btn-secondary-gray btn-sm ${styles.catalogManageAction}`} href={manageResourcesHref}>
+                <span className="btn-content">
+                  <ConnectorBoxesIcon size={16} />
+                  {t("appManageResources")}
+                  <ArrowRight size={14} />
+                </span>
+              </a>
+            )}
           </DialogBody>
         </DialogContent>
       </DialogRoot>
@@ -384,5 +418,5 @@ export function AppIcon({ appID }: { appID: string }) {
   if (appID === "feishu") return <img src="icons/feishu.png" width={28} height={28} alt="" />;
   if (appID === "github") return <img src="icons/github.svg" width={28} height={28} alt="" />;
   if (appID === "llm-wiki") return <BookOpen size={22} aria-hidden="true" />;
-  return <Boxes size={22} aria-hidden="true" />;
+  return <ConnectorBoxesIcon size={22} aria-hidden="true" />;
 }

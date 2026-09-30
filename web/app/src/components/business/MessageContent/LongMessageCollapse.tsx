@@ -157,7 +157,9 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
   const ToggleIcon = isExpanded ? LongMessageCollapseIcon : LongMessageExpandIcon;
 
   return (
-    <div className={classNames("long-message-collapse", collapsed && "is-collapsed", isExpanded && "is-expanded")}>
+    <div
+      className={classNames("long-message-collapse", collapsed && "is-collapsed", isExpanded && "is-expanded")}
+    >
       <div
         ref={contentRef}
         id={contentId}
@@ -172,6 +174,7 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
           size="sm"
           aria-controls={contentId}
           aria-expanded={isExpanded}
+          data-scroll-anchor-toggle
           className="long-message-toggle"
           onClick={toggleExpanded}
         >

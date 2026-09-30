@@ -14,7 +14,6 @@ import {
   Search,
   ChevronDown,
   Plus,
-  Boxes,
   AlertCircle,
   AlertTriangle,
   BookOpen,
@@ -27,7 +26,7 @@ import {
   Server,
   Trash2,
 } from "lucide-react";
-import { SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
+import { ConnectorBoxesIcon, SidebarMcpIcon, SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
 import { KnowledgeBaseDiscoveryDialog } from "@/pages/WorkspacePage/components/WorkspaceSidebar/KnowledgeBaseDiscoveryDialog";
 import { formatRuntimeKindLabel, isBuiltinOpenClawWorkerTemplate } from "@/models/agents";
 import {
@@ -2448,7 +2447,7 @@ export function HubDetailPane({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
                     <DropdownMenuItem onSelect={() => setAppCatalogOpen(true)}>
-                      <Boxes size={16} />
+                      <ConnectorBoxesIcon size={16} />
                       <span>
                         {t("connectorsAddApplication")}
                         <small className={styles.connectorMenuHint}>{t("connectorsChooseType")}</small>

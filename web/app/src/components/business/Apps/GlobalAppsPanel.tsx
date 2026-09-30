@@ -151,10 +151,10 @@ export function GlobalAppsPanel({
       ) : null}
       <div className={styles.applicationGrid}>
         {filteredItems.map((app) => (
-          <article key={app.installation_id} className={styles.connectorCard}>
+          <article key={app.installation_id} className={`${styles.connectorCard} ${styles.resourceConnectorCard}`}>
             <button
               type="button"
-              className={styles.connectorOpen}
+              className={styles.resourceConnectorOpen}
               onClick={() => void navigate(`/connectors/${encodeURIComponent(app.installation_id)}`)}
             >
               <span className={styles.connectorIcon}>

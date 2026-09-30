@@ -2447,8 +2447,7 @@ button[disabled]:not(.csg-switch),
 }
 
 .sidebar-header,
-.chat-header,
-.composer {
+.chat-header {
   background: var(--surface);
 }
 
@@ -2823,7 +2822,6 @@ select,
 
 :root[data-theme="dark"] .chat-panel,
 :root[data-theme="dark"] .chat-header,
-:root[data-theme="dark"] .composer,
 :root[data-theme="dark"] .modal-card,
 :root[data-theme="dark"] .modal-actions,
 :root[data-theme="dark"] .header-popover,

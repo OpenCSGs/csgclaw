@@ -109,6 +109,15 @@
   gap: 12px;
 }
 
+.message-row:not(.own) .message-hover-actions {
+  right: auto;
+  justify-content: flex-start;
+}
+
+.message-row:not(.own) .message-action-controls {
+  justify-content: flex-start;
+}
+
 .message-action-button {
   width: 22px;
   height: 22px;

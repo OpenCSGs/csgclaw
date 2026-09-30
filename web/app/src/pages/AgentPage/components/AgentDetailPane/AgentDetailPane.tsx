@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { ResourceList, ResourceListCard } from "@/components/business/ResourceListCard";
 import { AgentResourceDetails } from "../AgentResourceDetails";
 import type { AgentResourceKind } from "@/api/agents";
@@ -740,10 +741,6 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
       updateAvailableNames={mcpUpdateAvailableNames}
       t={t}
       onOpenAddMCP={() => setAddMCPDialogOpen(true)}
-      onRequestDeleteMCP={(server) => {
-        setMCPPendingDelete(server);
-        setDeleteMCPDialogOpen(true);
-      }}
       onUpdateMCP={onUpdateMCPServer}
     />
   );
@@ -1722,7 +1719,6 @@ type AgentMCPPanelProps = {
   addError: string;
   deleteError: string;
   onOpenAddMCP: () => void;
-  onRequestDeleteMCP: (server: MCPServer) => void;
   onUpdateMCP?: (server: MCPServer) => Promise<boolean> | boolean;
   servers: readonly MCPServer[];
   sourceBusyNames: ReadonlySet<string>;
@@ -1737,7 +1733,6 @@ function AgentMCPPanel({
   toggleBusyName,
   continuation,
   listError,
-  onRequestDeleteMCP,
   onOpenDetail,
   onToggle,
   mutationBusy,
@@ -1827,9 +1822,9 @@ function AgentMCPPanel({
                 title={mcpServerDisplayName(server)}
                 description={server.description}
                 icon={
-                  <span className="agent-connector-tool-icon">
+                  <AgentProfileFeaturedIcon>
                     <SidebarMcpIcon size={16} />
-                  </span>
+                  </AgentProfileFeaturedIcon>
                 }
                 onOpen={() => onOpenDetail(server)}
                 badge={
@@ -1868,20 +1863,12 @@ function AgentMCPPanel({
                     {toggleBusyName === server.name ? <span role="status">{t("resourceUpdating")}</span> : null}
                     <Switch
                       aria-busy={toggleBusyName === server.name}
+                      className="agent-skill-card-switch-sm"
                       aria-label={mcpServerDisplayName(server)}
                       checked={server.config.enabled !== false}
                       disabled={mutationBusy || !onToggle}
                       onCheckedChange={() => void onToggle?.(server)}
                     />
-                    <Button
-                      size="sm"
-                      variant="secondaryGray"
-                      disabled={mutationBusy}
-                      aria-label={t("agentDeleteMCP")}
-                      onClick={() => onRequestDeleteMCP(server)}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
                   </>
                 }
               />
@@ -2059,119 +2046,123 @@ function AgentModelPanel({
                 <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
               </label>
             </div>
-            <label className="field agent-image-provider-field">
-              <span>{t("profileImageModelProvider")}</span>
-              <Select
-                value={imageProviderID}
-                selectedLabel={imageProviderLabel}
-                onValueChange={(value) => {
-                  const provider = imageProviders.find((option) => option.id === value);
-                  updateDraft({
-                    image_generation: provider?.imageModels?.length
-                      ? { provider_id: provider.id, model_id: provider.imageModels[0] }
-                      : null,
-                  });
-                }}
-                triggerProps={{ "aria-label": t("profileImageModelProvider") }}
-                contentProps={{ side: "bottom", align: "start", avoidCollisions: false }}
-                options={[
-                  { value: "", label: t("profileImageModelNone") },
-                  ...imageProviders.map((provider) => ({
-                    value: provider.id,
-                    label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
-                    textValue: provider.displayName,
-                  })),
-                  ...(imageProviderID && !selectedImageProvider
-                    ? [{ value: imageProviderID, label: imageProviderLabel, textValue: imageProviderID }]
-                    : []),
-                ]}
-              />
-            </label>
-            <label className="field">
-              <span>{t("profileImageModel")}</span>
-              <Select
-                value={imageModelID}
-                disabled={!imageProviderID || !imageModels.length}
-                onValueChange={(value) => {
-                  updateDraft({ image_generation: value ? { provider_id: imageProviderID, model_id: value } : null });
-                }}
-                searchable
-                searchPlaceholder={t("modelProviderModelSearch")}
-                emptyLabel={t("modelProviderNoModels")}
-                triggerProps={{ "aria-label": t("profileImageModel") }}
-                options={[
-                  ...(!imageModelID
-                    ? [
-                        {
-                          value: "",
-                          label: imageProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
-                        },
-                      ]
-                    : []),
-                  ...imageModels.map((model) => ({
-                    value: model,
-                    label: <ModelOptionLabel model={model} showAvatar={false} />,
-                    textValue: model,
-                  })),
-                  ...(imageModelID && !imageModels.includes(imageModelID)
-                    ? [{ value: imageModelID, label: `${imageModelID} (${t("profileImageModelUnavailable")})` }]
-                    : []),
-                ]}
-              />
-            </label>
-            <div className="agent-image-model-help">
-              <small>{t("profileImageModelHelp")}</small>
-              {!imageProviders.some((provider) => provider.imageModels?.length) ? (
-                <small>{t("profileImageModelEmpty")}</small>
-              ) : null}
+            <div className="agent-media-model-group agent-image-model-group">
+              <label className="field">
+                <span>{t("profileImageModelProvider")}</span>
+                <Select
+                  value={imageProviderID}
+                  selectedLabel={imageProviderLabel}
+                  onValueChange={(value) => {
+                    const provider = imageProviders.find((option) => option.id === value);
+                    updateDraft({
+                      image_generation: provider?.imageModels?.length
+                        ? { provider_id: provider.id, model_id: provider.imageModels[0] }
+                        : null,
+                    });
+                  }}
+                  triggerProps={{ "aria-label": t("profileImageModelProvider") }}
+                  contentProps={{ side: "bottom", align: "start", avoidCollisions: false }}
+                  options={[
+                    { value: "", label: t("profileImageModelNone") },
+                    ...imageProviders.map((provider) => ({
+                      value: provider.id,
+                      label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
+                      textValue: provider.displayName,
+                    })),
+                    ...(imageProviderID && !selectedImageProvider
+                      ? [{ value: imageProviderID, label: imageProviderLabel, textValue: imageProviderID }]
+                      : []),
+                  ]}
+                />
+              </label>
+              <label className="field">
+                <span>{t("profileImageModel")}</span>
+                <Select
+                  value={imageModelID}
+                  disabled={!imageProviderID || !imageModels.length}
+                  onValueChange={(value) => {
+                    updateDraft({ image_generation: value ? { provider_id: imageProviderID, model_id: value } : null });
+                  }}
+                  searchable
+                  searchPlaceholder={t("modelProviderModelSearch")}
+                  emptyLabel={t("modelProviderNoModels")}
+                  triggerProps={{ "aria-label": t("profileImageModel") }}
+                  options={[
+                    ...(!imageModelID
+                      ? [
+                          {
+                            value: "",
+                            label: imageProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
+                          },
+                        ]
+                      : []),
+                    ...imageModels.map((model) => ({
+                      value: model,
+                      label: <ModelOptionLabel model={model} showAvatar={false} />,
+                      textValue: model,
+                    })),
+                    ...(imageModelID && !imageModels.includes(imageModelID)
+                      ? [{ value: imageModelID, label: `${imageModelID} (${t("profileImageModelUnavailable")})` }]
+                      : []),
+                  ]}
+                />
+              </label>
+              <div className="agent-media-model-help">
+                <small>{t("profileImageModelHelp")}</small>
+                {!imageProviders.some((provider) => provider.imageModels?.length) ? (
+                  <small>{t("profileImageModelEmpty")}</small>
+                ) : null}
+              </div>
             </div>
-            <label className="field agent-image-provider-field">
-              <span>{t("profileVideoModelProvider")}</span>
-              <Select
-                value={videoProviderID}
-                selectedLabel={videoProviderLabel}
-                onValueChange={(value) => {
-                  const provider = videoProviders.find((option) => option.id === value);
-                  updateDraft({
-                    video_generation: provider?.videoModels?.length
-                      ? { provider_id: provider.id, model_id: provider.videoModels[0] }
-                      : null,
-                  });
-                }}
-                triggerProps={{ "aria-label": t("profileVideoModelProvider") }}
-                options={[
-                  { value: "", label: t("profileVideoModelNone") },
-                  ...videoProviders.map((provider) => ({
-                    value: provider.id,
-                    label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
-                    textValue: provider.displayName,
-                  })),
-                  ...(videoProviderID && !selectedVideoProvider
-                    ? [{ value: videoProviderID, label: videoProviderLabel, textValue: videoProviderID }]
-                    : []),
-                ]}
-              />
-            </label>
-            <label className="field">
-              <span>{t("profileVideoModel")}</span>
-              <Select
-                value={videoModelID}
-                disabled={!videoProviderID || !videoModels.length}
-                onValueChange={(value) =>
-                  updateDraft({ video_generation: value ? { provider_id: videoProviderID, model_id: value } : null })
-                }
-                searchable
-                searchPlaceholder={t("modelProviderModelSearch")}
-                emptyLabel={t("modelProviderNoModels")}
-                triggerProps={{ "aria-label": t("profileVideoModel") }}
-                options={videoModels.map((model) => ({ value: model, label: model }))}
-              />
-            </label>
-            <div className="agent-image-model-help">
-              <small>{t("profileVideoModelHelp")}</small>
-              {!videoProviders.some((provider) => provider.videoModels?.length) ? (
-                <small>{t("profileVideoModelEmpty")}</small>
-              ) : null}
+            <div className="agent-media-model-group agent-video-model-group">
+              <label className="field">
+                <span>{t("profileVideoModelProvider")}</span>
+                <Select
+                  value={videoProviderID}
+                  selectedLabel={videoProviderLabel}
+                  onValueChange={(value) => {
+                    const provider = videoProviders.find((option) => option.id === value);
+                    updateDraft({
+                      video_generation: provider?.videoModels?.length
+                        ? { provider_id: provider.id, model_id: provider.videoModels[0] }
+                        : null,
+                    });
+                  }}
+                  triggerProps={{ "aria-label": t("profileVideoModelProvider") }}
+                  options={[
+                    { value: "", label: t("profileVideoModelNone") },
+                    ...videoProviders.map((provider) => ({
+                      value: provider.id,
+                      label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
+                      textValue: provider.displayName,
+                    })),
+                    ...(videoProviderID && !selectedVideoProvider
+                      ? [{ value: videoProviderID, label: videoProviderLabel, textValue: videoProviderID }]
+                      : []),
+                  ]}
+                />
+              </label>
+              <label className="field">
+                <span>{t("profileVideoModel")}</span>
+                <Select
+                  value={videoModelID}
+                  disabled={!videoProviderID || !videoModels.length}
+                  onValueChange={(value) =>
+                    updateDraft({ video_generation: value ? { provider_id: videoProviderID, model_id: value } : null })
+                  }
+                  searchable
+                  searchPlaceholder={t("modelProviderModelSearch")}
+                  emptyLabel={t("modelProviderNoModels")}
+                  triggerProps={{ "aria-label": t("profileVideoModel") }}
+                  options={videoModels.map((model) => ({ value: model, label: model }))}
+                />
+              </label>
+              <div className="agent-media-model-help">
+                <small>{t("profileVideoModelHelp")}</small>
+                {!videoProviders.some((provider) => provider.videoModels?.length) ? (
+                  <small>{t("profileVideoModelEmpty")}</small>
+                ) : null}
+              </div>
             </div>
             {modelError ? (
               <div className="agent-model-load-error" role="alert">
@@ -2578,10 +2569,12 @@ function AgentSkillsPanel({
               onOpen={() => onOpenDetail(skill)}
               actions={
                 <>
-                  <span className="hub-template-source-badge agent-skill-status-badge">
+                  <span
+                    className="hub-template-source-badge agent-skill-status-badge"
+                    data-enabled={skill.enabled !== false}
+                  >
                     {skill.enabled === false ? t("appStatusDisabled") : t("resourcesSkillEnabled")}
                   </span>
-                  {toggleBusyName === skill.name ? <span role="status">{t("resourceUpdating")}</span> : null}
                   <Switch
                     aria-busy={toggleBusyName === skill.name}
                     className="agent-skill-card-switch-sm"
@@ -2603,11 +2596,17 @@ function AgentSkillsPanel({
 
 function AgentSkillFeaturedIcon() {
   return (
+    <AgentProfileFeaturedIcon>
+      <SidebarPuzzlePiece02Icon size={16} aria-hidden="true" />
+    </AgentProfileFeaturedIcon>
+  );
+}
+
+function AgentProfileFeaturedIcon({ children }: { children: ReactNode }) {
+  return (
     <span className="hub-skill-featured-icon" aria-hidden="true">
       <span className="hub-skill-featured-icon-shadow"></span>
-      <span className="hub-skill-featured-icon-glass">
-        <SidebarPuzzlePiece02Icon size={16} aria-hidden="true" />
-      </span>
+      <span className="hub-skill-featured-icon-glass">{children}</span>
     </span>
   );
 }

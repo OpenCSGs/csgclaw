@@ -1,0 +1,37 @@
+.root {
+  --resource-load-more-divider: var(--line);
+  --resource-load-more-text: var(--muted);
+
+  display: flex;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.allLoaded {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.divider {
+  flex: 1 0 0;
+  min-width: 1px;
+  height: 1px;
+  background: var(--resource-load-more-divider);
+}
+
+.allLoadedText {
+  color: var(--resource-load-more-text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  text-align: center;
+  white-space: nowrap;
+  word-break: break-word;
+}
+
+:global(:root[data-theme="dark"]) .root {
+  --resource-load-more-divider: color-mix(in srgb, var(--line) 78%, transparent);
+  --resource-load-more-text: var(--gray-400);
+}

@@ -104,6 +104,8 @@ describe("LongMessageCollapse", () => {
     await user.click(screen.getByRole("button", { name: "Expand" }));
 
     expect(screen.getByRole("button", { name: "Collapse" })).toBeTruthy();
+    expect(document.querySelector('[data-preserve-scroll="true"]')).toBeNull();
+    expect(screen.getByRole("button", { name: "Collapse" })).toHaveAttribute("data-scroll-anchor-toggle");
     expect(content?.style.maxHeight).toBe(`${naturalNineLineHeight}px`);
   });
 
