@@ -26,7 +26,7 @@ func TestAgentMCPBundledCodexE2E(t *testing.T) {
 	t.Run("delayed_refresh", func(t *testing.T) { testAgentMCPBundledCodex(t, "gpt-6-luna", 2*time.Second) })
 	t.Run("full_tools", func(t *testing.T) { testAgentMCPBundledCodex(t, "", 0) })
 	t.Run("native_tool_search", func(t *testing.T) {
-		for _, model := range []string{"gpt-5.5", "gpt-6-sol", "gpt-6-luna"} {
+		for _, model := range []string{"gpt-5.5", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 			t.Run(model, func(t *testing.T) { testAgentMCPBundledCodex(t, model, 0) })
 		}
 	})

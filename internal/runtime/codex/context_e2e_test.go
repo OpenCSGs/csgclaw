@@ -22,7 +22,7 @@ import (
 
 // Exercises the bundled process, real Responses transport and event subscription.
 func TestContextUsageBundledCodexE2E(t *testing.T) {
-	for _, mode := range []string{"diagnostics", "usage", "auto_compact", "overflow", "cold_resume", "luna_history", "auto_compact_failure"} {
+	for _, mode := range []string{"diagnostics", "usage", "auto_compact", "overflow", "cold_resume", "luna_history", "sol61_history", "sol61_auto_compact", "auto_compact_failure"} {
 		t.Run(mode, func(t *testing.T) { testContextBundledCodex(t, mode) })
 	}
 }
@@ -84,6 +84,12 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		if mode == "luna_history" {
 			tokens = 82594
 		}
+		if mode == "sol61_history" {
+			tokens = 383000
+		}
+		if mode == "sol61_auto_compact" && n == 1 {
+			tokens = 800000
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		emit := func(v any) { b, _ := json.Marshal(v); fmt.Fprintf(w, "data: %s\n\n", b) }
 		emit(map[string]any{"type": "response.created", "response": map[string]any{"id": "r1"}})
@@ -99,9 +105,12 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	profile.Provider = "api"
 	profile.ModelMetadata = modelcap.Resolved{ContextWindow: 32768, ContextSource: "user"}
 	profile.ModelID = "fixture-model"
-	if mode == "luna_history" {
+	if mode == "luna_history" || mode == "sol61_auto_compact" || mode == "sol61_history" {
 		profile.Provider = "codex"
 		profile.ModelID = "gpt-5.6-luna"
+		if mode == "sol61_auto_compact" || mode == "sol61_history" {
+			profile.ModelID = "gpt-6.1-sol"
+		}
 		profile.ModelMetadata = modelcap.Resolve("codex", "", profile.ModelID, modelcap.Metadata{}, modelcap.Metadata{})
 	}
 	profile.BaseURL = server.URL + "/v1"
@@ -119,6 +128,18 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	thread, err := rt.EnsureEngineSession(ctx, h.RuntimeID, "room:test")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if mode == "sol61_auto_compact" || mode == "sol61_history" {
+		live := rt.SessionManager().(*appServerManager).liveSession(h.RuntimeID)
+		config, err := os.ReadFile(filepath.Join(live.spec.CodexHomeDir, "config.toml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"model_context_window = 1050000", "model_auto_compact_token_limit = 787500"} {
+			if !strings.Contains(string(config), want) {
+				t.Fatalf("generated Codex config missing %q", want)
+			}
+		}
 	}
 
 	events, unsubscribe := rt.SubscribeSession(h.RuntimeID, thread)
@@ -226,7 +247,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		}
 		return
 	}
-	if mode == "auto_compact" || mode == "luna_history" {
+	if mode == "auto_compact" || mode == "luna_history" || mode == "sol61_auto_compact" || mode == "sol61_history" {
 		if err := rt.Prompt(ctx, h.RuntimeID, thread, "Continue after compaction."); err != nil {
 			t.Fatal(err)
 		}
@@ -234,7 +255,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	completed := 0
 	successfulCommand := false
 	target := 1
-	if mode == "auto_compact" || mode == "cold_resume" || mode == "luna_history" {
+	if mode == "auto_compact" || mode == "cold_resume" || mode == "luna_history" || mode == "sol61_auto_compact" || mode == "sol61_history" {
 		target = 2
 	}
 	var latest modelcap.ContextUsage
@@ -266,10 +287,13 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	if mode == "luna_history" {
 		expectedUsage = 82614
 	}
+	if mode == "sol61_history" {
+		expectedUsage = 383020
+	}
 	if latest.UsedTokens == nil || *latest.UsedTokens != expectedUsage || latest.Compacting {
 		t.Fatalf("final usage=%+v", latest)
 	}
-	if (mode == "auto_compact" || mode == "overflow") && (!sawCompaction || requests.Load() < 3) {
+	if (mode == "auto_compact" || mode == "sol61_auto_compact" || mode == "overflow") && (!sawCompaction || requests.Load() < 3) {
 		t.Fatalf("compaction=%v requests=%d", sawCompaction, requests.Load())
 	}
 	if mode == "cold_resume" && latest.ContextWindow < 40000 {
@@ -277,6 +301,12 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	}
 	if mode == "luna_history" && (sawCompaction || requests.Load() != 2 || latest.ContextWindow < 900000 || latest.CompactThreshold < 700000) {
 		t.Fatalf("premature compaction at low usage: %+v, calls=%d", latest, requests.Load())
+	}
+	if (mode == "sol61_auto_compact" || mode == "sol61_history") && (latest.ContextWindow != 1050000 || latest.CompactThreshold != 787500 || latest.ContextSource != "catalog") {
+		t.Fatalf("GPT-6.1 Sol context settings differ from full model capacity: %+v", latest)
+	}
+	if mode == "sol61_history" && (sawCompaction || requests.Load() != 2) {
+		t.Fatalf("premature GPT-6.1 Sol compaction at 383k usage: %+v, calls=%d", latest, requests.Load())
 	}
 	t.Logf("requests=%d compaction=%v used=%d capacity=%d", requests.Load(), sawCompaction, *latest.UsedTokens, latest.ContextWindow)
 }

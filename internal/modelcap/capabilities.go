@@ -24,10 +24,14 @@ func ForProviderModel(provider, model string) Capabilities {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "codex":
 		caps := codexCapabilities()
+		if strings.EqualFold(strings.TrimSpace(model), "gpt-6.1-sol") {
+			caps.SupportedReasoningEfforts = []string{"low", "medium", "high", "xhigh", "max"}
+			caps.ReasoningEffortMap = map[string]string{"low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh", "max": "max"}
+		}
 		// Explicitly verified Codex models. Unknown models and third-party
 		// providers retain full MCP tool definitions instead of deferred search.
 		switch strings.ToLower(strings.TrimSpace(model)) {
-		case "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.3-codex-spark":
+		case "gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.3-codex-spark":
 			caps.SupportsSearchTool = true
 		}
 		return caps

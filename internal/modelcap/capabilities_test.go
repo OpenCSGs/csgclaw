@@ -1,6 +1,23 @@
 package modelcap
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+func TestGPT61SolReasoningEfforts(t *testing.T) {
+	caps := ForProviderModel("codex", "gpt-6.1-sol")
+	want := []string{"low", "medium", "high", "xhigh", "max"}
+	if !slices.Equal(caps.SupportedReasoningEfforts, want) {
+		t.Fatalf("reasoning efforts = %v, want %v", caps.SupportedReasoningEfforts, want)
+	}
+	if _, ok := caps.ReasoningEffortMap["minimal"]; ok {
+		t.Fatal("GPT-6.1 Sol must not advertise unsupported minimal reasoning")
+	}
+	if caps.ReasoningEffortMap["max"] != "max" {
+		t.Fatal("GPT-6.1 Sol must preserve max reasoning")
+	}
+}
 
 func TestSearchCapabilityRequiresKnownProviderAndModel(t *testing.T) {
 	for _, test := range []struct {
@@ -8,8 +25,8 @@ func TestSearchCapabilityRequiresKnownProviderAndModel(t *testing.T) {
 		want            bool
 	}{
 		{"codex", "gpt-5.5", true}, {"codex", "gpt-5.6-sol", true},
-		{"codex", "gpt-6-sol", true}, {"codex", "gpt-6-luna", true},
-		{"api", "gpt-6-sol", false}, {"api", "gpt-6-luna", false},
+		{"codex", "gpt-6.1-sol", true}, {"codex", "gpt-6-sol", true}, {"codex", "gpt-6-luna", true},
+		{"api", "gpt-6.1-sol", false}, {"api", "gpt-6-sol", false}, {"api", "gpt-6-luna", false},
 		{"api", "gpt-5.5", false}, {"csghub", "gpt-5.5", false},
 		{"codex", "unknown", false}, {"codex", "gpt-4.1", false},
 	} {

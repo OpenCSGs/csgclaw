@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	sdkhandlers "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
-	sdkopenai "github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers/openai"
-	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
-	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
-	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
-	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
+	sdkhandlers "github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
+	sdkopenai "github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers/openai"
+	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
+	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
 )
 
 type transientThenSuccessStreamExecutor struct {
@@ -105,14 +105,14 @@ func TestRegisteredModelsUsesCLIProxyProviderRegistry(t *testing.T) {
 }
 
 func TestFallbackModelsCoverEmbeddedCLIProviders(t *testing.T) {
-	for _, model := range []string{"gpt-6-sol", "gpt-6-luna"} {
+	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		if !containsString(fallbackModels(ProviderCodex), model) {
 			t.Errorf("Codex fallback models missing %s", model)
 		}
 	}
 	for provider, wantFirst := range map[string]string{
 		"codex":  "gpt-6-astra",
-		"claude": "claude-opus-4-7",
+		"claude": "claude-opus-5-5",
 	} {
 		models := fallbackModels(provider)
 		if len(models) == 0 {
@@ -139,7 +139,7 @@ func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
 		"tokens": {
 			"access_token": "`+testJWT(t, `{"exp":1893456000}`)+`",
 			"refresh_token": "refresh",
-			"id_token": "`+testJWT(t, `{"exp":1893456000}`)+`",
+			"id_token": "`+testJWT(t, `{"exp":1893456000,"https://api.openai.com/auth":{"chatgpt_plan_type":"pro"}}`)+`",
 			"account_id": "acct_123"
 		}
 	}`), 0o600); err != nil {
@@ -162,7 +162,11 @@ func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListModels() error = %v", err)
 	}
-	for _, model := range []string{"gpt-5.5", "gpt-6-sol", "gpt-6-luna"} {
+	for _, auth := range svc.catalog.manager.List() {
+		clientID := auth.ID
+		t.Cleanup(func() { cliproxysdk.GlobalModelRegistry().UnregisterClient(clientID) })
+	}
+	for _, model := range []string{"gpt-5.5", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		if !containsString(models, model) {
 			t.Fatalf("models = %v, want %s registered for imported codex auth", models, model)
 		}
@@ -199,7 +203,7 @@ func TestEmbeddedCLIProxyRegistersImportedCodexAuthModels(t *testing.T) {
 	for _, model := range catalog.Data {
 		modelIDs = append(modelIDs, model.ID)
 	}
-	for _, model := range []string{"gpt-6-sol", "gpt-6-luna"} {
+	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		if !containsString(modelIDs, model) {
 			t.Errorf("GET unified models route missing %s: %v", model, modelIDs)
 		}

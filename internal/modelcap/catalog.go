@@ -15,12 +15,12 @@ var contextCatalog = []struct {
 	aliases []string
 	tokens  int64
 }{
-	{[]string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4"}, 1050000},
+	{[]string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4"}, 1050000},
 	{[]string{"gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex", "gpt-5.2", "gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-5"}, 400000},
 	{[]string{"gpt-5.3-codex-spark"}, 128000},
 	{[]string{"gpt-4.1-mini", "gpt-4.1-nano", "gpt-4.1"}, 1047576},
 	{[]string{"gpt-4o-mini", "gpt-4o", "gpt4o"}, 128000},
-	{[]string{"claude-fable-5.1", "claude-opus-5", "claude-sonnet-5", "claude-opus-4.8", "claude-opus-4.7", "claude-opus-4.6", "claude-sonnet-4.6"}, 1000000},
+	{[]string{"claude-opus-5.5", "claude-sonnet-5.5", "claude-fable-5.1", "claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-opus-4.8", "claude-opus-4.7", "claude-opus-4.6", "claude-sonnet-4.6"}, 1000000},
 	{[]string{"claude-opus-4.5", "claude-opus-4.1", "claude-opus-4", "claude-sonnet-4.5", "claude-sonnet-4", "claude-haiku-4.5", "claude-3.7-sonnet", "claude-3.5-sonnet", "claude-3.5-haiku", "claude-3-opus", "claude-3-sonnet", "claude-3-haiku"}, 200000},
 	{[]string{"deepseek-v4.1", "deepseek-v4", "deepseek-flash"}, 1000000},
 	{[]string{"deepseek-v3.2", "deepseek-v3.1", "deepseek-v3", "deepseek-r1", "deepseek-chat", "deepseek-reasoner"}, 128000},
