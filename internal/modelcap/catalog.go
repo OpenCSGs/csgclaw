@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+// CodexGPT61SolMaxContextWindow is the larger window in the Codex client
+// catalog, distinct from its 272000-token default and the API's 1050000 limit.
+const CodexGPT61SolMaxContextWindow int64 = 872000
+
 // Reference capacities, not deployment guarantees. Provider metadata and user
 // overrides always win. Specific aliases precede their shorter family names.
 // Sources: developers.openai.com/api/docs/models; platform.claude.com/docs/en/models;
@@ -15,9 +19,7 @@ var contextCatalog = []struct {
 	aliases []string
 	tokens  int64
 }{
-	// Match the Codex proxy's advertised budget when discovery supplies only IDs.
-	{[]string{"gpt-6.1-sol"}, 272000},
-	{[]string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4"}, 1050000},
+	{[]string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4"}, 1050000},
 	{[]string{"gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex", "gpt-5.2", "gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-5"}, 400000},
 	{[]string{"gpt-5.3-codex-spark"}, 128000},
 	{[]string{"gpt-4.1-mini", "gpt-4.1-nano", "gpt-4.1"}, 1047576},
@@ -55,8 +57,11 @@ func normalizeModelName(s string) string {
 	return strings.Trim(modelSeparators.ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 
-func catalog(_, _, model string) Metadata {
+func catalog(provider, _ string, model string) Metadata {
 	name := normalizeModelName(model)
+	if strings.EqualFold(strings.TrimSpace(provider), "codex") && matchesModelAlias(name, normalizeModelName("gpt-6.1-sol")) {
+		return Metadata{ContextWindow: CodexGPT61SolMaxContextWindow}
+	}
 	var best Metadata
 	longest := 0
 	for _, entry := range contextCatalog {

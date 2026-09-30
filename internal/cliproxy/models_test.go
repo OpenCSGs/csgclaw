@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"csgclaw/internal/modelcap"
+
 	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 )
@@ -93,6 +95,14 @@ func TestEmbeddedCLIProxyLatestModels(t *testing.T) {
 			models, err := svc.ListModels(ctx, test.provider)
 			if err != nil || !containsString(models, test.model) {
 				t.Fatalf("model discovery missing %s: models=%v err=%v", test.model, models, err)
+			}
+			if test.provider == ProviderCodex {
+				window := modelcap.Resolve(test.provider, "", test.model, modelcap.Metadata{}, modelcap.Metadata{}).ContextWindow
+				for _, info := range cliproxysdk.GlobalModelRegistry().GetAvailableModelsByProvider(test.provider) {
+					if info.ID == test.model && (int64(info.ContextLength) != window || int64(info.MaxContextLength) != window) {
+						t.Fatalf("proxy context metadata differs from Codex profile: default=%d maximum=%d profile=%d", info.ContextLength, info.MaxContextLength, window)
+					}
+				}
 			}
 			transport := &modelTransportFixture{provider: test.provider}
 			svc.catalog.manager.SetRoundTripperProvider(transport)

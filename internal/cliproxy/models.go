@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"csgclaw/internal/modelcap"
+
 	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 )
@@ -110,7 +112,10 @@ func (c *modelCatalog) reconcileClient(ctx context.Context, provider, clientID s
 		}
 		if provider == ProviderCodex {
 			model.Description = "Latest workhorse model for coding and everyday work."
-			model.ContextLength = 272000
+			// Advertise the supported larger window, rather than the upstream
+			// catalog's default. Codex reserves 5% of this window internally.
+			model.ContextLength = int(modelcap.CodexGPT61SolMaxContextWindow)
+			model.MaxContextLength = int(modelcap.CodexGPT61SolMaxContextWindow)
 			model.SupportConfigurationUpdate = true
 		} else if model.NativeCapabilities == nil {
 			// Sonnet 5.5 adds native web search, as does the embedded Opus 5.5.
