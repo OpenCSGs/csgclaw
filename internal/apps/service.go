@@ -31,6 +31,9 @@ type entry struct {
 	generation    uint64
 	connection    *connection
 	pendingCancel context.CancelFunc
+	recovery      *connectionRecovery
+	recoveryDelay time.Duration
+	connectedAt   time.Time
 }
 
 type gateway struct {
@@ -356,6 +359,10 @@ func (s *Service) Connect(ctx context.Context, agentID, id string) (Installation
 }
 
 func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool) (Installation, error) {
+	return s.connectWithRecovery(ctx, agentID, id, explicit, nil)
+}
+
+func (s *Service) connectWithRecovery(ctx context.Context, agentID, id string, explicit bool, recovery *connectionRecovery) (Installation, error) {
 	if agentID == "" {
 		return Installation{}, ErrInvalid
 	}
@@ -364,6 +371,10 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 	if err != nil {
 		s.mu.Unlock()
 		return Installation{}, err
+	}
+	if recovery != nil && (e.recovery != recovery || recovery.ctx.Err() != nil) {
+		s.mu.Unlock()
+		return Installation{}, context.Canceled
 	}
 	if !e.record.ResourceEnabled {
 		out := s.viewLocked(e)
@@ -399,7 +410,14 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 		return Installation{}, err
 	}
 	old := e.connection
-	revision := s.detachLocked(e)
+	var revision uint64
+	if recovery == nil {
+		e.recoveryDelay = 0
+		e.connectedAt = time.Time{}
+		revision = s.detachLocked(e)
+	} else {
+		revision = s.detachConnectionLocked(e)
+	}
 	e.generation++
 	generation := e.generation
 	e.record = r
@@ -423,6 +441,9 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 		e.record.UpdatedAt = time.Now().UTC()
 		persistErr := s.persistLocked(id, &e.record)
 		out := s.viewLocked(e)
+		if persistErr == nil && recovery == nil {
+			s.startRecoveryLocked(e)
+		}
 		s.mu.Unlock()
 		conn.close()
 		if persistErr != nil {
@@ -432,6 +453,7 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 	}
 	conn.generation = generation
 	e.connection = conn
+	e.connectedAt = time.Now()
 	e.record.Status = "connected"
 	e.record.LastError = ""
 	e.record.LastErrorCode = ""
@@ -447,6 +469,9 @@ func (s *Service) connect(ctx context.Context, agentID, id string, explicit bool
 		revision = s.attachLocked(e)
 	}
 	out := s.viewLocked(e)
+	if e.recovery == recovery {
+		e.recovery = nil
+	}
 	s.mu.Unlock()
 	s.notify(agentID, revision)
 	go s.watch(agentID, id, conn)
@@ -670,6 +695,7 @@ func (s *Service) Close() error {
 	connections := []*connection{}
 	servers := []*mcp.Server{}
 	for _, e := range s.entries {
+		s.stopRecoveryLocked(e)
 		if e.pendingCancel != nil {
 			e.pendingCancel()
 			e.pendingCancel = nil
