@@ -53,6 +53,7 @@ export type ProgressControlSlots = { header?: ReactNode; footer?: ReactNode };
 
 export type MessageContentProps = {
   progressControls?: ProgressControlSlots | null;
+  showTurnProgress?: boolean;
   actionBusy?: string;
   actionFeedback?: MessageActionFeedback | null;
   content?: string | null;
