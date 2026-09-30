@@ -1466,6 +1466,42 @@ The shortest request uses string input:
 }
 ```
 
+The request may attach supplemental text to the current user message with the
+optional `extra` and `extra_type` fields:
+
+```json
+{
+  "input": "How do I continue on this page?",
+  "extra_type": "web_page_dom",
+  "extra": "<main><button>Continue</button></main>"
+}
+```
+
+`extra_type` supports `plain_text` and `web_page_dom`. When `extra` is present
+but `extra_type` is omitted or empty, the server uses `plain_text`. An omitted
+or empty `extra` injects no context and ignores `extra_type`. An unknown non-empty
+`extra_type` returns `400 invalid_request`. A `plain_text` extra is limited to
+64 KiB and a `web_page_dom` extra to 512 KiB; the complete request remains subject
+to the 1 MiB request limit.
+
+The server wraps the content in an `<extra_context>` with fixed safety guidance
+and submits it with the user input. A `web_page_dom` value is labeled as an
+untrusted page snapshot: configured product-documentation skills remain the
+primary authority, while the DOM helps identify the current page and UI state.
+This rule is also installed in CSGClaw-managed Runtime instructions so it has
+higher priority than page content. The server parses the DOM again and removes
+scripts, styles, embeds, hidden nodes, password and hidden inputs, form values,
+editable content, and attributes outside a small allowlist. Link user information,
+queries, and fragments are also removed. Clients should still remove credentials
+and personal data before submission because static HTML cannot reveal every CSS
+visibility rule or application-specific sensitive field. Sanitized DOM is limited
+to 128 KiB; larger output is truncated on a UTF-8 boundary, parsed again to close
+partial HTML, and marked with `[page DOM truncated by CSGClaw]`.
+Supplemental context becomes part of the Codex
+conversation history and may be referenced by later turns. The response does not
+return the raw `extra` as a separate field, although the agent may quote relevant
+parts in its answer.
+
 Text-only user message items are also accepted:
 
 ```json
@@ -1541,8 +1577,9 @@ Errors use this JSON shape:
 }
 ```
 
-The v1 endpoint accepts text input and optional text-output streaming.
-It rejects tools, instructions, non-user roles, attachments, and unknown request fields.
+The v1 endpoint accepts text input, optional supplemental text context, and
+optional text-output streaming. It rejects tools, instructions, non-user roles,
+attachments, and unknown request fields.
 See [Session API Demo Frontend Guide](web/session-api-demo.md) for the bundled live demo and mockable frontend boundary.
 
 ### `GET /api/v1/agents/{id}/llm/models`

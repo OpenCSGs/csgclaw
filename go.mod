@@ -9,6 +9,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pelletier/go-toml/v2 v2.2.2
+	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 )
@@ -85,7 +86,6 @@ require (
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0
