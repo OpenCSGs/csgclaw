@@ -17,10 +17,11 @@ import (
 	"csgclaw/internal/config"
 
 	"github.com/gin-gonic/gin"
-	cliproxyapi "github.com/router-for-me/CLIProxyAPI/v7/sdk/api"
-	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy"
-	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
-	_ "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator/builtin"
+	cliproxyapi "github.com/router-for-me/CLIProxyAPI/v8/sdk/api"
+	sdkhandlers "github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
+	cliproxysdk "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
+	sdkconfig "github.com/router-for-me/CLIProxyAPI/v8/sdk/config"
+	_ "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator/builtin"
 )
 
 const (
@@ -60,6 +61,7 @@ type Service struct {
 	cancel  context.CancelFunc
 	errCh   chan error
 	client  *http.Client
+	catalog *modelCatalog
 }
 
 var defaultService = &Service{
@@ -97,10 +99,19 @@ func (s *Service) EnsureStarted(ctx context.Context) error {
 	}
 	importExistingAuth(ctx, cfg.AuthDir)
 
+	catalog := &modelCatalog{}
 	svc, err := cliproxysdk.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(cfgPath).
-		WithServerOptions(cliproxyapi.WithMiddleware(skipEmbeddedHealthzAccessLog())).
+		WithServerOptions(
+			cliproxyapi.WithMiddleware(skipEmbeddedHealthzAccessLog()),
+			cliproxyapi.WithRouterConfigurator(func(_ *gin.Engine, handler *sdkhandlers.BaseAPIHandler, _ *sdkconfig.Config) {
+				catalog.mu.Lock()
+				catalog.manager = handler.AuthManager
+				catalog.mu.Unlock()
+				cliproxysdk.SetGlobalModelRegistryHook(catalog)
+			}),
+		).
 		Build()
 	if err != nil {
 		s.mu.Unlock()
@@ -121,6 +132,7 @@ func (s *Service) EnsureStarted(ctx context.Context) error {
 	s.baseURL = baseURL
 	s.cancel = cancel
 	s.errCh = errCh
+	s.catalog = catalog
 	s.mu.Unlock()
 
 	if err = s.waitHealthy(ctx, baseURL, errCh); err != nil {
@@ -144,7 +156,7 @@ func (s *Service) ProviderBaseURL(ctx context.Context, provider string) (string,
 	if err != nil {
 		return "", err
 	}
-	if err := waitForProviderModels(ctx, provider); err != nil {
+	if _, err := s.ListModels(ctx, provider); err != nil {
 		return "", err
 	}
 	return strings.TrimRight(baseURL, "/") + "/v1", nil
@@ -161,11 +173,39 @@ func (s *Service) ListModels(ctx context.Context, provider string) ([]string, er
 	if err := waitForProviderModels(ctx, provider); err != nil {
 		return nil, err
 	}
-	models := registeredModels(registryProvider)
-	if len(models) > 0 {
-		return models, nil
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return nil, fmt.Errorf("no %s models registered in embedded cliproxy", registryProvider)
+	deadline := time.NewTimer(3 * time.Second)
+	defer deadline.Stop()
+	for {
+		s.reconcileModelCatalog(ctx)
+		models := registeredModels(registryProvider)
+		if len(models) == 0 {
+			return nil, fmt.Errorf("no %s models registered in embedded cliproxy", registryProvider)
+		}
+		if catalogComplete(registryProvider, models) {
+			return models, nil
+		}
+		// SDK startup and credential reload can rebind the embedded catalog
+		// while its asynchronous registration hook is supplementing it.
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-deadline.C:
+			return nil, fmt.Errorf("waiting for latest %s model catalog", registryProvider)
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+}
+
+func (s *Service) reconcileModelCatalog(ctx context.Context) {
+	s.mu.Lock()
+	catalog := s.catalog
+	s.mu.Unlock()
+	if catalog != nil {
+		catalog.reconcile(ctx)
+	}
 }
 
 func (s *Service) ListModelChoices(ctx context.Context, provider string) ([]string, error) {
@@ -246,8 +286,12 @@ func fallbackModels(provider string) []string {
 	case ProviderCodex:
 		return []string{
 			"gpt-6-astra",
+			"gpt-6.1-sol",
 			"gpt-6-sol",
 			"gpt-6-luna",
+			"gpt-5.6-sol",
+			"gpt-5.6-terra",
+			"gpt-5.6-luna",
 			"gpt-5.5",
 			"gpt-5.4",
 			"gpt-5.4-mini",
@@ -261,6 +305,13 @@ func fallbackModels(provider string) []string {
 		}
 	case "claude":
 		return []string{
+			"claude-opus-5-5",
+			"claude-sonnet-5-5",
+			"claude-fable-5-1",
+			"claude-fable-5",
+			"claude-opus-5",
+			"claude-sonnet-5",
+			"claude-opus-4-8",
 			"claude-opus-4-7",
 			"claude-opus-4-6",
 			"claude-sonnet-4-6",
@@ -289,14 +340,20 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
 	cancel := s.cancel
 	errCh := s.errCh
+	catalog := s.catalog
 	s.started = false
 	s.baseURL = ""
 	s.cancel = nil
 	s.errCh = nil
+	s.catalog = nil
 	s.mu.Unlock()
 
 	if cancel == nil {
 		return nil
+	}
+	if catalog != nil {
+		catalog.stop()
+		cliproxysdk.SetGlobalModelRegistryHook(nil)
 	}
 	cancel()
 	select {

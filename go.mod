@@ -7,6 +7,7 @@ require github.com/larksuite/oapi-sdk-go/v3 v3.9.7
 require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/google/jsonschema-go v0.4.3
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pelletier/go-toml/v2 v2.2.2
 	golang.org/x/net v0.57.0
@@ -17,7 +18,6 @@ require (
 require (
 	github.com/dlclark/regexp2/v2 v2.5.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/libp2p/zeroconf/v2 v2.2.0 // indirect
 	github.com/miekg/dns v1.1.43 // indirect
 	github.com/pion/datachannel v1.6.2 // indirect
@@ -46,7 +46,7 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/redis/go-redis/v9 v9.19.0 // indirect
-	github.com/router-for-me/CLIProxyAPI/v7 v7.3.15
+	github.com/router-for-me/CLIProxyAPI/v8 v8.0.4
 	go.uber.org/atomic v1.11.0 // indirect
 )
 
