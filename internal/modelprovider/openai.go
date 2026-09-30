@@ -206,7 +206,10 @@ func taskPresent(task any) bool {
 
 func taskSupportsTextGeneration(task any) bool {
 	for _, value := range taskValues(task) {
-		if strings.EqualFold(strings.TrimSpace(value), "text-generation") {
+		// Multimodal conversational tasks also generate text, even when the
+		// gateway does not additionally advertise text-generation.
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "text-generation", "image-text-to-text", "vision", "audio-text-to-text", "video-text-to-text", "any-to-any":
 			return true
 		}
 	}
@@ -240,8 +243,10 @@ func taskValues(task any) []string {
 	}
 	values := make([]string, 0, len(raw))
 	for _, value := range raw {
-		if value = strings.TrimSpace(value); value != "" {
-			values = append(values, value)
+		for _, part := range strings.Split(value, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				values = append(values, part)
+			}
 		}
 	}
 	return values

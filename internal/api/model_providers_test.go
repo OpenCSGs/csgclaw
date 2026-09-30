@@ -582,3 +582,44 @@ func (f modelProviderFakeRuntime) State(context.Context, agentruntime.Handle) (a
 func (f modelProviderFakeRuntime) Info(context.Context, agentruntime.Handle) (agentruntime.Info, error) {
 	return agentruntime.Info{State: agentruntime.StateStopped, CreatedAt: time.Now().UTC()}, nil
 }
+
+func TestMultimodalModelProviderCheckPersistsChatCatalog(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"Qwen3.8-27B:xx","task":"image-text-to-text","availability":{"is_available":true}}]}`))
+	}))
+	defer upstream.Close()
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	writeMinimalAPIConfig(t, configPath)
+	srv := newModelProviderTestHandler(t, configPath, nil)
+	rec := httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers", strings.NewReader(`{"id":"multimodal","base_url":"`+upstream.URL+`/v1","api_key":"sk-test"}`)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/model-providers/multimodal/check", strings.NewReader(`{}`)))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"connected"`) {
+		t.Fatalf("check: %d %s", rec.Code, rec.Body.String())
+	}
+	// Reload the persisted configuration, as a server restart would.
+	srv = newModelProviderTestHandler(t, configPath, nil)
+	rec = httptest.NewRecorder()
+	srv.Routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/model-providers", nil))
+	var catalog agent.ModelProviderCatalog
+	if err := json.Unmarshal(rec.Body.Bytes(), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	for _, provider := range catalog.Providers {
+		if provider.ID != "multimodal" {
+			continue
+		}
+		if len(provider.Models) != 1 || provider.Models[0] != "Qwen3.8-27B:xx" || len(provider.VisionModels) != 1 || provider.VisionModels[0] != "Qwen3.8-27B:xx" {
+			t.Fatalf("unexpected persisted catalog: %+v", provider)
+		}
+		return
+	}
+	t.Fatal("provider missing from catalog")
+}
