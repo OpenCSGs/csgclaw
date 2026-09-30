@@ -112,10 +112,11 @@ func (c *modelCatalog) reconcileClient(ctx context.Context, provider, clientID s
 		}
 		if provider == ProviderCodex {
 			model.Description = "Latest workhorse model for coding and everyday work."
-			// Advertise the supported larger window, rather than the upstream
-			// catalog's default. Codex reserves 5% of this window internally.
-			model.ContextLength = int(modelcap.CodexGPT61SolMaxContextWindow)
-			model.MaxContextLength = int(modelcap.CodexGPT61SolMaxContextWindow)
+			// Advertise the model's full reference capacity consistently with
+			// the CSGClaw profile, rather than the client catalog's default.
+			window := modelcap.Resolve(provider, "", entry.id, modelcap.Metadata{}, modelcap.Metadata{}).ContextWindow
+			model.ContextLength = int(window)
+			model.MaxContextLength = int(window)
 			model.SupportConfigurationUpdate = true
 		} else if model.NativeCapabilities == nil {
 			// Sonnet 5.5 adds native web search, as does the embedded Opus 5.5.

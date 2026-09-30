@@ -12,7 +12,7 @@ func TestMetadataResolution(t *testing.T) {
 		{"unknown", "custom", "http://local/v1", "x", Metadata{}, Metadata{}, 200000, "default"},
 		{"official", "api", "https://api.openai.com/v1", "gpt-4o", Metadata{}, Metadata{}, 128000, "catalog"},
 		{"Sol 6.1 API", "api", "https://api.openai.com/v1", "gpt-6.1-sol", Metadata{}, Metadata{}, 1050000, "catalog"},
-		{"Sol 6.1 Codex maximum", "codex", "http://localhost/v1", "gpt-6.1-sol", Metadata{}, Metadata{}, 872000, "catalog"},
+		{"Sol 6.1 Codex capacity", "codex", "http://localhost/v1", "gpt-6.1-sol", Metadata{}, Metadata{}, 1050000, "catalog"},
 		{"private deployment", "custom", "http://local/v1", "gpt-4o", Metadata{}, Metadata{}, 128000, "catalog"},
 		{"provider wins", "api", "https://api.openai.com/v1", "gpt-4o", Metadata{64000}, Metadata{}, 64000, "provider"},
 		{"override wins", "api", "https://api.openai.com/v1", "gpt-4o", Metadata{64000}, Metadata{8192}, 8192, "user"},

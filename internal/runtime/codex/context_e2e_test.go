@@ -88,7 +88,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 			tokens = 383000
 		}
 		if mode == "sol61_auto_compact" && n == 1 {
-			tokens = 700000
+			tokens = 800000
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		emit := func(v any) { b, _ := json.Marshal(v); fmt.Fprintf(w, "data: %s\n\n", b) }
@@ -135,7 +135,7 @@ func testContextBundledCodex(t *testing.T, mode string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"model_context_window = 872000", "model_auto_compact_token_limit = 654000"} {
+		for _, want := range []string{"model_context_window = 1050000", "model_auto_compact_token_limit = 787500"} {
 			if !strings.Contains(string(config), want) {
 				t.Fatalf("generated Codex config missing %q", want)
 			}
@@ -302,8 +302,8 @@ func testContextBundledCodex(t *testing.T, mode string) {
 	if mode == "luna_history" && (sawCompaction || requests.Load() != 2 || latest.ContextWindow < 900000 || latest.CompactThreshold < 700000) {
 		t.Fatalf("premature compaction at low usage: %+v, calls=%d", latest, requests.Load())
 	}
-	if (mode == "sol61_auto_compact" || mode == "sol61_history") && (latest.ContextWindow != 872000 || latest.CompactThreshold != 654000 || latest.ContextSource != "catalog") {
-		t.Fatalf("GPT-6.1 Sol context settings exceed proxy budget: %+v", latest)
+	if (mode == "sol61_auto_compact" || mode == "sol61_history") && (latest.ContextWindow != 1050000 || latest.CompactThreshold != 787500 || latest.ContextSource != "catalog") {
+		t.Fatalf("GPT-6.1 Sol context settings differ from full model capacity: %+v", latest)
 	}
 	if mode == "sol61_history" && (sawCompaction || requests.Load() != 2) {
 		t.Fatalf("premature GPT-6.1 Sol compaction at 383k usage: %+v, calls=%d", latest, requests.Load())

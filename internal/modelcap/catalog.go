@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// CodexGPT61SolMaxContextWindow is the larger window in the Codex client
-// catalog, distinct from its 272000-token default and the API's 1050000 limit.
-const CodexGPT61SolMaxContextWindow int64 = 872000
-
 // Reference capacities, not deployment guarantees. Provider metadata and user
 // overrides always win. Specific aliases precede their shorter family names.
 // Sources: developers.openai.com/api/docs/models; platform.claude.com/docs/en/models;
@@ -57,11 +53,8 @@ func normalizeModelName(s string) string {
 	return strings.Trim(modelSeparators.ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 
-func catalog(provider, _ string, model string) Metadata {
+func catalog(_, _, model string) Metadata {
 	name := normalizeModelName(model)
-	if strings.EqualFold(strings.TrimSpace(provider), "codex") && matchesModelAlias(name, normalizeModelName("gpt-6.1-sol")) {
-		return Metadata{ContextWindow: CodexGPT61SolMaxContextWindow}
-	}
 	var best Metadata
 	longest := 0
 	for _, entry := range contextCatalog {
