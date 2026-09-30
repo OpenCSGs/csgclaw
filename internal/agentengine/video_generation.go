@@ -62,7 +62,7 @@ func (c *conversations) videoHandler(turn *activeTurn, sink EventSink, ref *mode
 		tasks[id] = struct{}{}
 		mu.Unlock()
 
-		task := contract.VideoGenerationTask{ID: id, Prompt: prompt, Model: modelprovider.CloneVideoGeneration(ref), Options: options}
+		task := contract.VideoGenerationTask{StartedAt: time.Now().UTC().Format(time.RFC3339Nano), ID: id, Prompt: prompt, Model: modelprovider.CloneVideoGeneration(ref), Options: options}
 		// Video providers commonly take longer than Codex's dynamic-tool request
 		// window. Detach the generation from the turn so the tool can acknowledge
 		// submission immediately and the terminal event can arrive later.
@@ -84,7 +84,15 @@ func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sin
 	if task.ID == "" || strings.TrimSpace(task.Prompt) == "" || len(task.Prompt) > 32000 {
 		return fmt.Errorf("invalid video prompt")
 	}
+	if task.StartedAt == "" {
+		task.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	task.EndedAt = ""
 	emit := func() error {
+		switch task.State {
+		case "completed", "failed", "delivery_failed":
+			task.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		}
 		copy := task
 		return c.engine.recordAndEmit(ctx, turn, sink, TurnEvent{Kind: TurnEventOutputItem, Output: &OutputItem{Kind: contract.OutputItemVideoGeneration, Payload: copy}})
 	}
@@ -127,6 +135,12 @@ func (c *conversations) generateVideo(ctx context.Context, turn *activeTurn, sin
 		options.RequestID = task.ID
 		options.ResumeID = task.UpstreamID
 		options.Progress = func(progress modelprovider.VideoGenerationProgress) {
+			if progress.Status == "submitting" && task.ModelStartedAt == "" {
+				task.ModelStartedAt = progress.UpdatedAt.UTC().Format(time.RFC3339Nano)
+			}
+			if progress.Status == "completed" && task.ModelCompletedAt == "" {
+				task.ModelCompletedAt = progress.UpdatedAt.UTC().Format(time.RFC3339Nano)
+			}
 			previousStatus := task.UpstreamStatus
 			previousPoll, _ := time.Parse(time.RFC3339, task.LastPolledAt)
 			if previousStatus == progress.Status && !previousPoll.IsZero() && progress.UpdatedAt.Sub(previousPoll) < 30*time.Second {

@@ -64,21 +64,22 @@ export function diagnosticBreakdown(record: TurnDiagnostic): DiagnosticBucket[] 
   const total = Math.max(0, record.total_ms);
   const start = Math.max(0, Math.min(total, record.runtime_start_ms ?? total));
   const end = Math.max(start, Math.min(total, record.runtime_end_ms ?? total));
-  const sums: Record<string, number> = { before: start, after: total - end };
+  const sums: Record<string, number> = {};
   const edges: { time: number; owner: string; delta: number }[] = [];
   for (const span of record.spans ?? []) {
     const native = span.details?.source === "codex_otel" && span.details.category !== "turn";
     if (!native && !["llm", "tool", "csgclaw", "user"].includes(span.owner)) continue;
     const owner = native ? `native_${span.details?.category}` : span.owner;
-    const left = Math.max(start, span.start_ms);
-    const right = Math.min(end, span.end_ms ?? total);
+    const asynchronous = span.name === "llm.video" || span.name.startsWith("video.");
+    const left = Math.max(asynchronous ? 0 : start, span.start_ms);
+    const right = Math.min(asynchronous ? total : end, span.end_ms ?? total);
     if (right <= left) continue;
     edges.push({ time: left, owner, delta: 1 }, { time: right, owner, delta: -1 });
   }
-  edges.push({ time: end, owner: "", delta: 0 });
+  edges.push(...[start, end, total].map((time) => ({ time, owner: "", delta: 0 })));
   edges.sort((a, b) => a.time - b.time);
   const active = new Map<string, number>();
-  let position = start;
+  let position = 0;
   for (const edge of edges) {
     const owners = [...active].filter(([, count]) => count > 0).map(([owner]) => owner);
     const measured = owners.filter((owner) => !owner.startsWith("native_"));
@@ -92,7 +93,10 @@ export function diagnosticBreakdown(record: TurnDiagnostic): DiagnosticBucket[] 
       "native_prepare",
       "native_dispatch",
     ].find((owner) => owners.includes(owner));
-    const key = measured.length > 1 ? "overlap" : measured[0] || native || "unattributed";
+    const key =
+      measured.length > 1
+        ? "overlap"
+        : measured[0] || native || (position < start ? "before" : position >= end ? "after" : "unattributed");
     sums[key] = (sums[key] || 0) + Math.max(0, edge.time - position);
     if (edge.owner) active.set(edge.owner, (active.get(edge.owner) || 0) + edge.delta);
     position = edge.time;
@@ -131,7 +135,7 @@ export function diagnosticTimelineRows(record: TurnDiagnostic) {
 }
 export function diagnosticSpanLabel(span: DiagnosticSpan, t: TranslateFn, callOrdinal?: number) {
   if (callOrdinal !== undefined && span.owner === "llm")
-    return `${t("diagLLMRequest")} #${callOrdinal} · ${span.details?.label || "LLM"}`;
+    return `${t(span.name === "llm.video" ? "diagVideoModelRequest" : "diagLLMRequest")} #${callOrdinal} · ${span.details?.label || "LLM"}`;
   if (callOrdinal !== undefined && span.owner === "tool")
     return `${t("diagTool")} #${callOrdinal} · ${span.details?.label || span.name.slice(5)}`;
   if (span.details?.source === "codex_otel")

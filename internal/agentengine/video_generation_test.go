@@ -84,3 +84,27 @@ func TestRecoverVideoGenerationDoesNotOccupyConversationAdmission(t *testing.T) 
 		t.Fatalf("recovery file remains registered: %v", err)
 	}
 }
+
+func TestVideoTimingPreservesStartOnRecoveryAndEndsOnFailure(t *testing.T) {
+	start := time.Now().Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
+	engine := &Engine{files: NewFileStore(), generateVideo: func(context.Context, *modelprovider.VideoGenerationConfig, string, modelprovider.VideoGenerationOptions) (modelprovider.GeneratedVideo, error) {
+		return modelprovider.GeneratedVideo{}, errors.New("provider failed")
+	}}
+	conversation := &conversations{engine: engine, agentID: "video-agent"}
+	var tasks []contract.VideoGenerationTask
+	sink := contract.VideoGenerationSink{EventSink: EventSinkFunc(func(_ context.Context, event TurnEvent) error {
+		tasks = append(tasks, event.Output.Payload.(contract.VideoGenerationTask))
+		return nil
+	})}
+	result := conversation.RecoverVideoGeneration(context.Background(), TurnRequest{ID: "recovery", ConversationKey: "room", VideoGeneration: &contract.VideoGenerationTask{ID: "job", Prompt: "test", StartedAt: start}}, sink)
+	if result.Status != TurnFailed || len(tasks) != 2 {
+		t.Fatalf("result=%+v tasks=%+v", result, tasks)
+	}
+	if tasks[0].StartedAt != start || tasks[0].EndedAt != "" || tasks[1].StartedAt != start {
+		t.Fatalf("timing was reset: %+v", tasks)
+	}
+	end, err := time.Parse(time.RFC3339Nano, tasks[1].EndedAt)
+	if err != nil || time.Since(end) > time.Second {
+		t.Fatalf("missing terminal timestamp: %+v", tasks[1])
+	}
+}

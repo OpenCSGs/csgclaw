@@ -9,17 +9,21 @@ import (
 const OutputItemVideoGeneration OutputItemKind = "video_generation"
 
 type VideoGenerationTask struct {
-	ErrorDetails   *modelprovider.VideoGenerationError  `json:"error_details,omitempty"`
-	ID             string                               `json:"id"`
-	Prompt         string                               `json:"prompt"`
-	Model          *modelprovider.VideoGenerationConfig `json:"model,omitempty"`
-	Options        modelprovider.VideoGenerationOptions `json:"options,omitempty"`
-	State          string                               `json:"state"`
-	Error          string                               `json:"error,omitempty"`
-	UpstreamID     string                               `json:"upstream_id,omitempty"`
-	UpstreamStatus string                               `json:"upstream_status,omitempty"`
-	LastPolledAt   string                               `json:"last_polled_at,omitempty"`
-	File           *OutputFile                          `json:"file,omitempty"`
+	ModelStartedAt   string                               `json:"model_started_at,omitempty"`
+	ModelCompletedAt string                               `json:"model_completed_at,omitempty"`
+	StartedAt        string                               `json:"started_at,omitempty"`
+	EndedAt          string                               `json:"ended_at,omitempty"`
+	ErrorDetails     *modelprovider.VideoGenerationError  `json:"error_details,omitempty"`
+	ID               string                               `json:"id"`
+	Prompt           string                               `json:"prompt"`
+	Model            *modelprovider.VideoGenerationConfig `json:"model,omitempty"`
+	Options          modelprovider.VideoGenerationOptions `json:"options,omitempty"`
+	State            string                               `json:"state"`
+	Error            string                               `json:"error,omitempty"`
+	UpstreamID       string                               `json:"upstream_id,omitempty"`
+	UpstreamStatus   string                               `json:"upstream_status,omitempty"`
+	LastPolledAt     string                               `json:"last_polled_at,omitempty"`
+	File             *OutputFile                          `json:"file,omitempty"`
 }
 
 type videoGenerationKey struct{}

@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TurnProgress } from "./TurnProgress";
 import type { TurnProgress as Progress } from "@/models/turnProgress";
 import { createTranslator } from "@/shared/i18n";
@@ -40,7 +40,7 @@ describe("TurnProgress", () => {
     expect(screen.queryByText("正在检查文件")).toBeNull();
     expect(screen.queryByText("Detailed reasoning")).toBeNull();
     expect(screen.getByText("最终答案")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^已完成|已完成.*·/ }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: /^回复用时/ }).getAttribute("aria-expanded")).toBe("false");
   });
   it("collapses the whole process even if a command was expanded while running", async () => {
     const user = userEvent.setup();
@@ -51,8 +51,8 @@ describe("TurnProgress", () => {
       <TurnProgress progress={{ ...progress, revision: 2, status: "succeeded" }} t={t} renderText={renderText} />,
     );
     expect(screen.queryByText("contents")).toBeNull();
-    expect(screen.getByRole("button", { name: /已完成/ })).toHaveAttribute("aria-expanded", "false");
-    await user.click(screen.getByRole("button", { name: /已完成/ }));
+    expect(screen.getByRole("button", { name: /回复用时/ })).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: /回复用时/ }));
     expect(screen.getByRole("button", { name: /第 1 条/ })).toBeTruthy();
   });
   it("keeps a failure visible outside the collapsed process", () => {
@@ -134,7 +134,7 @@ describe("TurnProgress", () => {
       />,
     );
     expect(screen.queryByText("正在检查文件")).toBeNull();
-    await user.click(screen.getByRole("button", { name: /已完成/ }));
+    await user.click(screen.getByRole("button", { name: /回复用时/ }));
     expect(screen.getByText("正在检查文件")).toBeTruthy();
     expect(screen.getByText("Detailed reasoning")).toBeTruthy();
     expect(screen.getByRole("button", { name: /第 1 条/ })).toBeTruthy();
@@ -213,8 +213,65 @@ describe("TurnProgress", () => {
     const completed = { ...progress, status: "succeeded" };
     const { rerender } = render(<TurnProgress progress={completed} t={t} renderText={renderText} />);
     expect(screen.queryByText("正在检查文件")).toBeNull();
-    await user.click(screen.getByRole("button", { name: /已完成/ }));
+    await user.click(screen.getByRole("button", { name: /回复用时/ }));
     rerender(<TurnProgress progress={{ ...completed, revision: 2 }} t={t} renderText={renderText} />);
     expect(screen.getByText("正在检查文件")).toBeVisible();
   });
+});
+
+it("keeps the video clock running without restoring completed runtime stop controls", () => {
+  vi.useFakeTimers();
+  const origin = new Date("2026-09-30T02:44:00Z");
+  vi.setSystemTime(new Date(origin.getTime() + 10000));
+  const completed = {
+    ...progress,
+    status: "succeeded",
+    started_at: origin.toISOString(),
+    ended_at: new Date(origin.getTime() + 9000).toISOString(),
+  };
+  const video = {
+    content: "",
+    metadata: {
+      video_generation: { state: "generating", started_at: new Date(origin.getTime() + 6000).toISOString() },
+    },
+  };
+  try {
+    const view = render(
+      <TurnProgress
+        progress={completed}
+        videoMessages={[video]}
+        t={t}
+        renderText={renderText}
+        controls={<button>停止</button>}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /正在生成视频.*10s/ })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(60000));
+    expect(screen.getByRole("button", { name: /正在生成视频.*1m 10s/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "停止" })).toBeNull();
+    view.rerender(
+      <TurnProgress
+        progress={completed}
+        videoMessages={[
+          {
+            ...video,
+            metadata: {
+              video_generation: {
+                ...video.metadata.video_generation,
+                state: "completed",
+                ended_at: new Date(origin.getTime() + 70000).toISOString(),
+              },
+            },
+          },
+        ]}
+        t={t}
+        renderText={renderText}
+      />,
+    );
+    act(() => vi.advanceTimersByTime(60000));
+    expect(screen.getByRole("button", { name: /总用时.*1m 10s/ })).toBeTruthy();
+    view.unmount();
+  } finally {
+    vi.useRealTimers();
+  }
 });

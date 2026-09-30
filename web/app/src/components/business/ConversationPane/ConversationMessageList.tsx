@@ -187,6 +187,7 @@ export const ConversationMessageList = memo(function ConversationMessageList({
                       content={message.content}
                       message={message}
                       progressControls={renderTurnControls?.(message)}
+                      videoMessages={embeddedVideos}
                       actionBusy={messageActionBusy}
                       actionFeedback={messageActionFeedback}
                       enableLongMessageCollapse={own}

@@ -37,7 +37,16 @@ func (h *Handler) listDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	items := h.im.Diagnostics().List(room, q.Get("source_id"), q.Get("agent_id"), q.Get("status"), q.Get("thread_id"))
+	items := h.im.Diagnostics().List(room, q.Get("source_id"), q.Get("agent_id"), "", q.Get("thread_id"))
+	videos := h.diagnosticVideos(room)
+	filtered := items[:0]
+	for _, item := range items {
+		enrichVideoDiagnostic(&item, videos[item.TurnID], false)
+		if q.Get("status") == "" || item.Status == q.Get("status") {
+			filtered = append(filtered, item)
+		}
+	}
+	items = filtered
 	limit := 50
 	if n, e := strconv.Atoi(q.Get("limit")); e == nil && n > 0 {
 		limit = min(n, 100)
@@ -70,6 +79,7 @@ func (h *Handler) getDiagnostic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.enrichDiagnosticTools(&record)
+	enrichVideoDiagnostic(&record, h.diagnosticVideos(room)[record.TurnID], true)
 	writeJSON(w, http.StatusOK, record)
 }
 func (h *Handler) reportDiagnosticTiming(w http.ResponseWriter, r *http.Request) {

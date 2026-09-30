@@ -107,6 +107,7 @@ func GenerateVideo(ctx context.Context, client *http.Client, baseURL, key string
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	var created struct{ ID, Status string }
 	created.ID = strings.TrimSpace(options.ResumeID)
+	reportVideoProgress(options.Progress, created.ID, "submitting")
 	if created.ID == "" {
 		requestBody := map[string]any{"model": model, "prompt": prompt}
 		if options.Size != "" {

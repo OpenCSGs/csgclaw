@@ -85,7 +85,7 @@ export function DiagnosticSpanFields({ span, t }: { span: DiagnosticSpan; t: Tra
         </div>
       ) : null}
       {span.owner === "tool" && !details?.command && !details?.arguments ? <p>{t("diagArgumentsMissing")}</p> : null}
-      {span.owner === "llm" ? (
+      {span.owner === "llm" && span.name !== "llm.video" ? (
         <dl>
           <dt>{t("diagOperation")}</dt>
           <dd>{details?.label || "LLM"}</dd>
@@ -95,7 +95,9 @@ export function DiagnosticSpanFields({ span, t }: { span: DiagnosticSpan; t: Tra
           <dd>{diagnosticDuration(details?.first_response_ms)}</dd>
         </dl>
       ) : null}
-      {span.owner === "llm" ? <p>{t("diagFirstResponseHint")}</p> : null}
+      {span.owner === "llm" ? (
+        <p>{t(span.name === "llm.video" ? "diagVideoModelHint" : "diagFirstResponseHint")}</p>
+      ) : null}
     </div>
   );
 }
@@ -125,7 +127,9 @@ export function DiagnosticCalls({ record, t }: { record: TurnDiagnostic; t: Tran
             </span>
             <span className={styles.callName}>
               {span.owner === "llm"
-                ? record.model || span.details?.label || "LLM"
+                ? span.name === "llm.video"
+                  ? span.details?.label || t("diagVideoModelRequest")
+                  : record.model || span.details?.label || "LLM"
                 : span.details?.label || span.name.slice(5)}
               {span.details?.command ? <code>{span.details.command.split("\n")[0].slice(0, 160)}</code> : null}
             </span>

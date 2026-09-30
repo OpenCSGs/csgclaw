@@ -9,6 +9,7 @@ import (
 	"csgclaw/internal/im"
 	"encoding/hex"
 	"fmt"
+	"time"
 )
 
 func (s *IMTranscriptStore) DeliverVideoGeneration(ctx context.Context, turn channel.TurnContext, task contract.VideoGenerationTask) error {
@@ -16,7 +17,13 @@ func (s *IMTranscriptStore) DeliverVideoGeneration(ctx context.Context, turn cha
 		return err
 	}
 	metadata := transcriptMetadata("video_generation", turn, nil)
-	metadata["video_generation"] = task
+	completed := task.State == "completed"
+	pending := task
+	if completed {
+		pending.State = "delivering"
+		pending.EndedAt = ""
+	}
+	metadata["video_generation"] = pending
 	metadata["video_generation_context"] = turn
 	digest := sha256.Sum256([]byte(turn.AgentID + "\x00" + string(turn.ConversationKey) + "\x00" + task.ID))
 	messageID := "video-" + hex.EncodeToString(digest[:16])
@@ -30,5 +37,13 @@ func (s *IMTranscriptStore) DeliverVideoGeneration(ctx context.Context, turn cha
 		}
 	}
 	_, err := s.im.DeliverMessage(im.DeliverMessageRequest{RoomID: turn.RoomID, SenderID: s.senderID(turn.ParticipantID), MessageID: messageID, ThreadRootID: turn.ThreadRootID, Content: task.Prompt, Metadata: metadata, AttachmentSources: uploads})
+	if err != nil || !completed {
+		return err
+	}
+	// Measure through successful attachment storage and publication. The final
+	// metadata-only update retains the existing attachment and freezes the clock.
+	task.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	metadata["video_generation"] = task
+	_, err = s.im.UpdateDeliveredMessageMetadata(turn.RoomID, messageID, s.senderID(turn.ParticipantID), metadata)
 	return err
 }

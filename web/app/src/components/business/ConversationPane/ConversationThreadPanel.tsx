@@ -644,6 +644,7 @@ function ThreadMessage({
               content={message.content}
               message={message}
               progressControls={progressControls}
+              videoMessages={embeddedVideos}
               onQuestionSelect={onQuestionSelect}
               onCitationSelect={onCitationSelect}
               t={t}

@@ -29,6 +29,7 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
     return (
       <TurnProgress
         progress={progress}
+        videoMessages={props.videoMessages}
         headerControls={props.progressControls?.header}
         controls={props.progressControls?.footer}
         t={props.t}

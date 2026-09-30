@@ -270,3 +270,27 @@ it("keeps transport wrappers optional and warns about hidden work without flaggi
     categories: ["hooks"],
   });
 });
+
+it("attributes async video time after runtime without double counting parallel jobs", () => {
+  const record = {
+    id: "video",
+    room_id: "room",
+    source_id: "source",
+    agent_id: "agent",
+    turn_id: "turn",
+    started_at: "2026-09-30T00:00:00Z",
+    status: "succeeded",
+    total_ms: 130000,
+    runtime_start_ms: 0,
+    runtime_end_ms: 9000,
+    spans: [
+      { id: "v1", name: "llm.video", owner: "llm", status: "completed", start_ms: 6000, end_ms: 125000 },
+      { id: "d1", name: "video.deliver", owner: "csgclaw", status: "completed", start_ms: 125000, end_ms: 130000 },
+      { id: "v2", name: "llm.video", owner: "llm", status: "completed", start_ms: 7000, end_ms: 120000 },
+    ],
+  };
+  const buckets = diagnosticBreakdown(record);
+  expect(buckets.find((bucket) => bucket.key === "llm")?.duration).toBe(119000);
+  expect(buckets.find((bucket) => bucket.key === "csgclaw")?.duration).toBe(5000);
+  expect(buckets.reduce((sum, bucket) => sum + bucket.duration, 0)).toBe(130000);
+});

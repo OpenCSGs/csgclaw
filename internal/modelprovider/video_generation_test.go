@@ -68,7 +68,7 @@ func TestGenerateVideoUsesAIGatewayAsyncAPI(t *testing.T) {
 	if data.String() != "video-bytes" || got.SizeBytes != int64(len("video-bytes")) || got.MediaType != "video/mp4" {
 		t.Fatalf("result = %#v", got)
 	}
-	if len(progress) != 3 || progress[0].ID != "video_1" || progress[0].Status != "queued" || progress[1].Status != "completed" || progress[2].Status != "downloading" {
+	if len(progress) != 4 || progress[0].Status != "submitting" || progress[1].ID != "video_1" || progress[1].Status != "queued" || progress[2].Status != "completed" || progress[3].Status != "downloading" {
 		t.Fatalf("progress = %#v", progress)
 	}
 }
