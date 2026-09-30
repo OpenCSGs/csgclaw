@@ -24,7 +24,7 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
     [t, onCitationSelect],
   );
   const progress = parseTurnProgress(props.message);
-  if (progress && props.t) {
+  if (progress && props.t && props.showTurnProgress !== false) {
     const hasAnswer = Boolean(props.content?.replace(/\u200b/g, "").trim());
     return (
       <TurnProgress

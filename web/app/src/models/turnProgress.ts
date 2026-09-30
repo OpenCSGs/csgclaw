@@ -123,7 +123,8 @@ export function terminalTool(status?: string): boolean {
 export function expandProgressMessage(message: IMMessage): IMMessage[] {
   const progress = parseTurnProgress(message);
   if (!progress) return [message];
-  const entries: IMMessage[] = progress.items.map((item, index) => {
+  const entries: IMMessage[] = progress.items.flatMap((item, index) => {
+    if (item.kind === "reasoning") return [];
     const id = `${message.id}:${index}:${item.id}`;
     const tool = item.tool;
     const activity = tool
@@ -161,7 +162,7 @@ export function expandProgressMessage(message: IMMessage): IMMessage[] {
       metadata: {
         csgclaw: activity
           ? { agent_activity: activity, delivery_kind: "tool" }
-          : { delivery_kind: item.kind === "reasoning" ? "thought" : "activity" },
+          : { delivery_kind: "activity" },
       },
     };
   });
