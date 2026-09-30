@@ -175,11 +175,23 @@ export function useMessageListAutoScroll({
     [messageListRef, updateAutoScrollState],
   );
 
+  const preserveDisclosureAnchor = useCallback(
+    (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const toggle = target.closest<HTMLElement>("[data-scroll-anchor-toggle]");
+      if (!toggle) return;
+      preserveAnchor(toggle.closest<HTMLElement>("[data-turn-id], .long-message-collapse") ?? toggle);
+    },
+    [preserveAnchor],
+  );
+
   const disconnectMessageListElement = useCallback(() => {
     const observed = observedMessageListRef.current;
     if (observed) {
       observed.removeEventListener("scroll", scheduleAutoScrollStateUpdate);
       observed.removeEventListener("wheel", pauseOnUpwardWheel);
+      observed.removeEventListener("click", preserveDisclosureAnchor, true);
     }
     messageListResizeObserverRef.current?.disconnect();
     messageListMutationObserverRef.current?.disconnect();
@@ -194,7 +206,7 @@ export function useMessageListAutoScroll({
     autoScrollStateFrameRef.current = null;
     messageListScrollFrameRef.current = null;
     messageListAnchorFrameRef.current = null;
-  }, [scheduleAutoScrollStateUpdate, pauseOnUpwardWheel]);
+  }, [scheduleAutoScrollStateUpdate, pauseOnUpwardWheel, preserveDisclosureAnchor]);
 
   useLayoutEffect(() => {
     const nextElement = active ? messageListRef.current : null;
@@ -216,6 +228,8 @@ export function useMessageListAutoScroll({
     }
     nextElement.addEventListener("scroll", scheduleAutoScrollStateUpdate, { passive: true });
     nextElement.addEventListener("wheel", pauseOnUpwardWheel, { passive: true });
+    // Capture before React changes the disclosure layout, including keyboard clicks.
+    nextElement.addEventListener("click", preserveDisclosureAnchor, true);
 
     if (typeof ResizeObserver === "function") {
       const resizeObserver = new ResizeObserver(() => {

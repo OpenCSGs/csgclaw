@@ -212,7 +212,7 @@ export const TurnProgress = memo(function TurnProgress({
     setDisclosure({ id: progress.id, active, open: !open });
   };
   return (
-    <section className={styles.shell} ref={shell} data-turn-id={progress.id} data-preserve-scroll={open || undefined}>
+    <section className={styles.shell} ref={shell} data-turn-id={progress.id}>
       {hasProcess ? (
         <>
           <div className={styles.header}>
@@ -222,6 +222,7 @@ export const TurnProgress = memo(function TurnProgress({
               className={styles.heading}
               aria-expanded={open}
               aria-controls={id}
+              data-scroll-anchor-toggle
               onClick={toggle}
             >
               <Clock3 size={15} aria-hidden="true" />
