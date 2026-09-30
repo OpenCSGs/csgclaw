@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -407,4 +408,58 @@ func TestFailedCLIProviderCheckClearsCachedCatalog(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOpenCSGMultimodalChatCatalog(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer gk_test" {
+			t.Errorf("unexpected gateway request: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"data":[
+   {"id":"Qwen3.8-27B:xx","task":"image-text-to-text","availability":{"is_available":true}},
+   {"id":"omni","tasks":["any-to-any"]},
+   {"id":"audio-chat","task":"audio-text-to-text"},
+   {"id":"video-chat","task":"video-text-to-text"},
+   {"id":"vision-chat","task":"vision"},
+   {"id":"combined","tasks":["text-generation,image-text-to-text"]},
+   {"id":"offline","task":"image-text-to-text","availability":{"is_available":false}},
+   {"id":"caption","task":"image-to-text"},
+   {"id":"asr","task":"speech-to-text"},
+   {"id":"embedding","task":"feature-extraction"}
+  ]}`))
+	}))
+	defer upstream.Close()
+	old := defaultCSGHubCredentials
+	t.Cleanup(func() { defaultCSGHubCredentials = old })
+	defaultCSGHubCredentials = func(context.Context, *http.Client) (string, string, bool, error) {
+		return upstream.URL + "/v1", "gk_test", true, nil
+	}
+	checked := CheckModelProvider(context.Background(), ModelProviderCheckInput{ID: ModelProviderIDOpenCSG})
+	if checked.Status != ModelProviderStatusConnected {
+		t.Fatalf("check failed: %+v", checked)
+	}
+	updated, _ := ApplyModelProviderCheckResult(config.LLMConfig{}, ModelProviderIDOpenCSG, checked)
+	catalog := ModelProviderCatalogFromLLM(updated)
+	for _, provider := range catalog.Providers {
+		if provider.ID != ModelProviderIDOpenCSG {
+			continue
+		}
+		for _, id := range []string{"Qwen3.8-27B:xx", "omni", "audio-chat", "video-chat", "vision-chat", "combined"} {
+			if !slices.Contains(provider.Models, id) {
+				t.Errorf("chat model missing from UI catalog: %s; models=%v", id, provider.Models)
+			}
+		}
+		for _, id := range []string{"Qwen3.8-27B:xx", "vision-chat", "combined"} {
+			if !slices.Contains(provider.VisionModels, id) {
+				t.Errorf("vision capability missing: %s", id)
+			}
+		}
+		for _, id := range []string{"offline", "caption", "asr", "embedding"} {
+			if slices.Contains(provider.Models, id) {
+				t.Errorf("non-chat/unavailable model included: %s", id)
+			}
+		}
+		return
+	}
+	t.Fatal("OpenCSG provider missing")
 }
