@@ -515,6 +515,9 @@ func logMCPConnectionFailure(stage, agentID, appID string, c Config, credentials
 		"credential_token_set", credentials.Token != "",
 		"custom_header_count", len(credentials.Headers),
 	}
+	if stage == "session_closed" {
+		attrs = append(attrs, "reason", mcpSessionFailureReason(err))
+	}
 	if detail != nil {
 		attrs = append(attrs,
 			"error_code", detail.Code,
@@ -529,6 +532,28 @@ func logMCPConnectionFailure(stage, agentID, appID string, c Config, credentials
 		attrs = append(attrs, "error", "MCP connection failed")
 	}
 	slog.Warn("Agent App MCP connection failed", attrs...)
+}
+
+// Return only known diagnostic categories: SDK errors may contain session IDs
+// or upstream text and must never be logged verbatim.
+func mcpSessionFailureReason(err error) string {
+	switch {
+	case errors.Is(err, mcp.ErrSessionMissing):
+		return "session_expired"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	}
+	if err != nil {
+		if strings.Contains(err.Error(), "retries without progress") {
+			return "sse_retry_limit"
+		}
+		if strings.Contains(err.Error(), "failed to reconnect") {
+			return "sse_reconnect_failed"
+		}
+	}
+	return "session_closed"
 }
 
 func redactMCPLogMessage(message string, c Config, credentials Credentials) string {

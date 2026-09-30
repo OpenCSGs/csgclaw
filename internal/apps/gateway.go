@@ -122,6 +122,11 @@ func toolName(id, name string) string {
 }
 
 func (s *Service) detachLocked(e *entry) uint64 {
+	s.stopRecoveryLocked(e)
+	return s.detachConnectionLocked(e)
+}
+
+func (s *Service) detachConnectionLocked(e *entry) uint64 {
 	if e.pendingCancel != nil {
 		e.pendingCancel()
 		e.pendingCancel = nil
@@ -196,6 +201,10 @@ func (s *Service) call(ctx context.Context, agentID, id string, generation uint6
 		s.failConnectionDetail(agentID, id, conn, connectionError("app_feishu_token_rejected", "Feishu rejected the refreshed application token. Check application credentials and reconnect.", 0, true))
 	}
 	if err != nil {
+		if errors.Is(err, mcp.ErrSessionMissing) {
+			s.failConnectionDetail(agentID, id, conn, connectionError("app_mcp_connection_closed", "MCP session expired", 0, false))
+			return nil, fmt.Errorf("MCP session expired")
+		}
 		var detail *ConnectionError
 		if errors.As(err, &detail) {
 			s.failConnectionDetail(agentID, id, conn, detail)
@@ -245,6 +254,7 @@ func (s *Service) failConnection(agentID, id string, conn *connection, status, m
 	}
 	e.record.UpdatedAt = time.Now().UTC()
 	_ = s.persistLocked(id, &e.record)
+	s.startRecoveryLocked(e)
 	s.mu.Unlock()
 	conn.close()
 	s.notify(agentID, revision)
@@ -261,12 +271,14 @@ func (s *Service) watch(agentID, id string, conn *connection) {
 	revision := s.detachLocked(e)
 	e.generation++
 	e.record.Status = "error"
-	e.record.LastError = "MCP connection closed; reconnect the App"
+	e.record.LastError = "MCP connection closed"
 	e.record.LastErrorCode = "app_mcp_connection_closed"
 	e.record.LastErrorHTTPStatus = 0
 	e.record.UpdatedAt = time.Now().UTC()
 	var detail *ConnectionError
-	if !errors.As(waitErr, &detail) {
+	if errors.Is(waitErr, mcp.ErrSessionMissing) {
+		detail = connectionError("app_mcp_connection_closed", "MCP session expired", 0, false)
+	} else if !errors.As(waitErr, &detail) {
 		detail = conn.httpAuth.latestFailure()
 	}
 	if detail != nil {
@@ -274,8 +286,9 @@ func (s *Service) watch(agentID, id string, conn *connection) {
 	}
 	logMCPConnectionFailure("session_closed", agentID, e.record.AppID, e.record.Config, e.record.Credentials, waitErr, detail)
 	_ = s.persistLocked(id, &e.record)
+	s.startRecoveryLocked(e)
 	s.mu.Unlock()
-	conn.cancel()
+	conn.close()
 	s.notify(agentID, revision)
 }
 
@@ -305,14 +318,18 @@ func (s *Service) refreshTools(agentID, id string, generation uint64) {
 		return
 	}
 	if err != nil {
-		revision := s.detachLocked(e)
-		e.generation++
-		e.record.Status = "error"
-		e.record.LastError = "MCP tool discovery failed; reconnect the App"
-		_ = s.persistLocked(id, &e.record)
 		s.mu.Unlock()
-		conn.close()
-		s.notify(agentID, revision)
+		var detail *ConnectionError
+		if errors.Is(err, mcp.ErrSessionMissing) {
+			detail = connectionError("app_mcp_connection_closed", "MCP session expired", 0, false)
+		} else if !errors.As(err, &detail) {
+			detail = conn.httpAuth.latestFailure()
+		}
+		if detail != nil {
+			s.failConnectionDetail(agentID, id, conn, detail)
+		} else {
+			s.failConnection(agentID, id, conn, "error", "MCP tool discovery failed")
+		}
 		return
 	}
 	g := s.gatewayLocked(agentID)
