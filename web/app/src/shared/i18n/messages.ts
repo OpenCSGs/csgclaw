@@ -344,6 +344,7 @@ export const messages = {
     appAddFromResources: "从资源添加",
     appManageResources: "管理全局连接器",
     appManageResource: "编辑全局配置",
+    appNoAvailableResourcesTitle: "暂无可添加的连接器",
     appNoAvailableResources: "没有可添加的连接器。请先在全局资源中配置，或选择其他实例。",
     appUnbindDescription: "只解除当前 Agent 的绑定，不删除全局连接器或其他 Agent 的绑定。",
     appDeleteResourceDescription: "删除此全局连接器会移除下列所有 Agent 的绑定，并停止其工具调用。",
@@ -2517,6 +2518,7 @@ export const messages = {
     appAddFromResources: "Add from resources",
     appManageResources: "Manage global Connectors",
     appManageResource: "Edit global settings",
+    appNoAvailableResourcesTitle: "No Connectors available",
     appNoAvailableResources:
       "No Connectors are available to add. Configure a global resource first or choose another instance.",
     appUnbindDescription: "Remove this agent’s binding only. The global Connector and other agents keep their access.",

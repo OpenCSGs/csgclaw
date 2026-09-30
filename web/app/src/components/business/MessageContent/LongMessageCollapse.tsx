@@ -157,7 +157,10 @@ export function LongMessageCollapse({ expanded, html, onExpandedChange, t }: Lon
   const ToggleIcon = isExpanded ? LongMessageCollapseIcon : LongMessageExpandIcon;
 
   return (
-    <div className={classNames("long-message-collapse", collapsed && "is-collapsed", isExpanded && "is-expanded")}>
+    <div
+      className={classNames("long-message-collapse", collapsed && "is-collapsed", isExpanded && "is-expanded")}
+      data-preserve-scroll={isExpanded || undefined}
+    >
       <div
         ref={contentRef}
         id={contentId}

@@ -88,7 +88,9 @@ describe("Agent Apps", () => {
     await screen.findByText("Connect the services your agent needs");
     await user.click(screen.getByRole("button", { name: "Add" }));
     await user.click(screen.getByRole("menuitem", { name: "Add from resources" }));
-    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Work GitLab" }));
+    const resource = within(screen.getByRole("dialog")).getByRole("button", { name: /^Work GitLab/ });
+    expect(resource).toHaveTextContent("GitLab · http://localhost:8888/mcp");
+    await user.click(resource);
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(await screen.findByText("Work GitLab")).toBeVisible();
     const create = fetch.mock.calls.find(

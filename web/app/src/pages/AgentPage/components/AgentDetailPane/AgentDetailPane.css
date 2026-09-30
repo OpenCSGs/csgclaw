@@ -1475,16 +1475,35 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   min-height: 22px;
-  padding: 2px 8px;
-  border: 1px solid var(--gray-200);
-  border-radius: 999px;
-  background: var(--gray-50);
-  color: var(--gray-600);
+  padding: 2px 6px;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--gray-700);
   font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
+  font-weight: 400;
+  line-height: 18px;
   white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+.agent-profile-skill-card-grid .agent-skill-status-badge[data-enabled="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success-500);
+  vertical-align: middle;
+}
+
+:root[data-theme="dark"] .agent-profile-skill-card-grid .hub-template-source-badge {
+  border-color: var(--gray-600);
+  background: var(--gray-900);
+  color: var(--gray-100);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
 .agent-skill-card-switch-sm.csg-switch {
@@ -1500,6 +1519,26 @@
 
 .agent-skill-card-switch-sm .csg-switch-thumb[data-state="checked"] {
   transform: translateX(16px);
+}
+
+.agent-skill-card-switch-sm.csg-switch[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.9;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.agent-skill-card-switch-sm.csg-switch[aria-busy="true"] .csg-switch-thumb {
+  animation: agent-skill-switch-busy 900ms ease-in-out infinite;
+}
+
+@keyframes agent-skill-switch-busy {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.62;
+  }
 }
 
 .hub-skill-featured-icon {
@@ -2099,17 +2138,30 @@
   align-items: start;
 }
 
-.agent-detail-pane .agent-model-config-grid > .field {
+.agent-detail-pane .agent-model-config-grid > .field,
+.agent-detail-pane .agent-media-model-group > .field {
   display: grid;
   gap: 8px;
   min-width: 0;
 }
 
-.agent-detail-pane .agent-model-config-grid > .agent-image-provider-field {
-  grid-column: 1;
+.agent-detail-pane .agent-media-model-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+  min-width: 0;
 }
 
-.agent-detail-pane .agent-image-model-help {
+.agent-detail-pane .agent-image-model-group {
+  grid-column: 1 / 3;
+}
+
+.agent-detail-pane .agent-video-model-group {
+  grid-column: 3 / 5;
+}
+
+.agent-detail-pane .agent-media-model-help {
   grid-column: 1 / -1;
   display: grid;
   gap: 8px;
@@ -2205,10 +2257,19 @@
   .agent-detail-pane .agent-model-config-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .agent-detail-pane .agent-image-model-group,
+  .agent-detail-pane .agent-video-model-group {
+    grid-column: 1 / -1;
+  }
 }
 
 @container (max-width: 460px) {
   .agent-detail-pane .agent-model-config-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-detail-pane .agent-media-model-group {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -2967,23 +3028,37 @@
   contain-intrinsic-size: auto 112px;
 }
 
-.agent-connector-tool-icon {
-  position: relative;
+.agent-connector-source-badge {
+  align-self: center;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--brand-600) 28%, var(--panel));
-  color: var(--brand-600);
-}
-.agent-connector-source-badge {
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 1px 5px;
-  font-size: 10px;
-  line-height: 16px;
-  color: var(--muted);
+  gap: 6px;
+  max-width: 88px;
+  min-height: 20px;
+  padding: 1px 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--gray-700);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.agent-connector-source-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--primary);
+}
+:root[data-theme="dark"] .agent-connector-source-badge {
+  border-color: var(--gray-700);
+  background: var(--panel-strong);
+  color: var(--gray-300);
 }

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PanelLeftOpen, Plus, Search } from "lucide-react";
 import {
+  ConnectorBoxesIcon,
   SidebarAlertTriangleIcon,
   SidebarBoxIcon,
   SidebarGrid07Icon,
   SidebarLaptopIcon,
   SidebarListUnordered4Icon,
   SidebarKnowledgeBaseIcon,
-  SidebarMcpIcon,
   SidebarMessageIcon,
   SidebarPuzzlePiece02Icon,
   SidebarRobotIcon,
@@ -301,7 +301,7 @@ export function WorkspaceSidebar({
               activePane.type === WorkspacePaneTypes.apps ||
               activeContextSectionId === WorkspaceContextSectionIds.mcpServers,
             groupId: WorkspaceContextSectionIds.apps,
-            icon: navigationIcon(SidebarMcpIcon),
+            icon: navigationIcon(ConnectorBoxesIcon),
             id: "apps",
             label: t("agentAppsTab"),
             onSelect: () => onSelectApps?.(),

@@ -80,6 +80,15 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 12px;
+  background: transparent;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+.call:hover {
+  border-color: color-mix(in srgb, var(--line) 55%, var(--text));
+  background: color-mix(in srgb, var(--panel-soft) 70%, transparent);
 }
 .call summary {
   display: flex;
@@ -87,13 +96,25 @@
   align-items: flex-start;
   cursor: pointer;
   font-size: 12px;
+  color: color-mix(in srgb, var(--muted) 70%, var(--text));
+}
+.call:hover summary {
+  color: var(--text);
 }
 .call summary::before {
   content: "▸";
   color: var(--muted);
 }
+.call:hover summary::before {
+  color: var(--text);
+}
 .call[open] summary::before {
   content: "▾";
+}
+.call summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text) 30%, transparent);
+  outline-offset: 4px;
+  border-radius: var(--radius-base);
 }
 .badge {
   flex-shrink: 0;

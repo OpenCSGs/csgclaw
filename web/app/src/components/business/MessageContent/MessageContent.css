@@ -332,6 +332,7 @@
   width: 100%;
   min-inline-size: 96px;
   padding-bottom: 44px;
+  overflow-anchor: none;
 }
 
 .long-message-content {
@@ -340,6 +341,7 @@
   position: relative;
   z-index: 1;
   overflow: hidden;
+  overflow-anchor: none;
   transition:
     max-height 120ms ease-out,
     padding-bottom 120ms ease-out;

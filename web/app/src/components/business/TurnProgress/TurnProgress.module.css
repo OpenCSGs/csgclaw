@@ -47,6 +47,24 @@
   width: auto;
   padding: 0;
   border: 0;
+  color: color-mix(in srgb, var(--muted) 78%, var(--text));
+}
+
+.shell button.heading:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.shell button.heading .elapsed,
+.shell button.heading svg,
+.shell button.heading span {
+  color: color-mix(in srgb, var(--muted) 78%, var(--text));
+}
+
+.shell button.heading:hover .elapsed,
+.shell button.heading:hover svg,
+.shell button.heading:hover span {
+  color: var(--text);
 }
 
 .headerControls {
@@ -143,7 +161,16 @@
 }
 
 .shell button.toolToggle:hover {
-  background: var(--panel-strong);
+  background: transparent;
+  color: var(--text);
+}
+
+.shell button.toolToggle:hover .ordinal,
+.shell button.toolToggle:hover .toolStatus {
+  color: var(--text);
+}
+
+.shell button.toolToggle:hover .commandPreview {
   color: var(--text);
 }
 
@@ -168,7 +195,7 @@
     Menlo,
     Consolas,
     monospace;
-  color: var(--text);
+  color: color-mix(in srgb, var(--muted) 78%, var(--text));
 }
 
 .toolStatus {
