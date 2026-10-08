@@ -483,9 +483,19 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  windows-store-build:
+    if: ${{ github.event_name == 'push' && needs.prepare.outputs.release_channel == 'release' }}
+    needs: [prepare]
+    uses: ./.github/workflows/windows-store-msix.yml
+    permissions:
+      actions: write
+      contents: read
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+
   merge-and-release:
-    if: ${{ github.event_name == 'push' }}
-    needs: [prepare, build, desktop-build]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.build.result == 'success' && needs.desktop-build.result == 'success' && (needs.windows-store-build.result == 'success' || needs.windows-store-build.result == 'skipped') }}
+    needs: [prepare, build, desktop-build, windows-store-build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -504,6 +514,13 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Download Microsoft Store artifact
+        if: ${{ needs.windows-store-build.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-store-dist-windows-amd64
+          path: dist
+
       - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
@@ -512,7 +529,7 @@ jobs:
           files: dist/csgclaw*
 
   publish-desktop-oss:
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.merge-and-release.result == 'success' }}
     needs: [prepare, merge-and-release]
     concurrency:
       group: desktop-oss-${{ needs.prepare.outputs.release_channel }}
