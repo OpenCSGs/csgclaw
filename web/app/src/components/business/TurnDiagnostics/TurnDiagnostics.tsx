@@ -85,7 +85,7 @@ export function DiagnosticMessageAction({
           className="message-action-button"
           aria-label={t("diagThisTurn")}
           data-tooltip={t("diagThisTurn")}
-          data-tooltip-side="bottom"
+          data-tooltip-side="top"
           onClick={() => setOpen(true)}
         >
           <Activity aria-hidden="true" />
@@ -179,7 +179,7 @@ export function DiagnosticHeaderAction({ room, agents = [], t }: Omit<Props, "on
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Tooltip content={t("diagConversation")}>
+      <Tooltip content={t("diagConversation")} contentProps={{ side: "bottom", sideOffset: 6 }}>
         <Button
           className="icon-button"
           variant="secondaryGray"
