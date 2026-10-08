@@ -2,6 +2,8 @@ import { diagnosticTimelineRows, diagnosticDefaultHiddenCategories, diagnosticHi
 import { diagnosticLocalTime, diagnosticHiddenStats } from "./diagnostics";
 import { describe, expect, it } from "vitest";
 import {
+  selectDiagnostic,
+  diagnosticEmptyKey,
   diagnosticBreakdown,
   diagnosticEventGroups,
   diagnosticDuration,
@@ -293,4 +295,27 @@ it("attributes async video time after runtime without double counting parallel j
   expect(buckets.find((bucket) => bucket.key === "llm")?.duration).toBe(119000);
   expect(buckets.find((bucket) => bucket.key === "csgclaw")?.duration).toBe(5000);
   expect(buckets.reduce((sum, bucket) => sum + bucket.duration, 0)).toBe(130000);
+});
+
+describe("diagnostic entry scope", () => {
+  it("pins an exact execution without falling back to another reply", () => {
+    const other = { ...record, id: "other", turn_id: "other-turn" };
+    expect(selectDiagnostic([other], "", "missing-turn")).toBe("");
+    expect(selectDiagnostic([other, record], other.id, record.turn_id)).toBe(record.id);
+  });
+  it("prefers the direct manager response and otherwise the first dispatched execution", () => {
+    const manager = { ...record, id: "manager", agent_id: "manager", dispatch_ms: 5 };
+    const worker = { ...record, id: "worker", agent_id: "worker", dispatch_ms: 10 };
+    expect(selectDiagnostic([worker, manager], "", undefined, "manager")).toBe(manager.id);
+    expect(selectDiagnostic([worker, manager], "")).toBe(manager.id);
+    expect(selectDiagnostic([worker, manager], worker.id, undefined, "manager")).toBe(worker.id);
+  });
+  it("keeps empty-state explanations tied to known routing facts", () => {
+    const source = { id: "s", content: "Hello", sender_name: "Local user", created_at: record.started_at };
+    expect(diagnosticEmptyKey({ ...source, state: "waiting" })).toBe("diagWaitingExecution");
+    expect(diagnosticEmptyKey({ ...source, state: "no_execution" })).toBe("diagNoExecution");
+    expect(diagnosticEmptyKey({ ...source, state: "unavailable" })).toBe("diagEmpty");
+    expect(diagnosticEmptyKey({ ...source, state: "recorded" }, true)).toBe("diagNoMatchingRecords");
+    expect(diagnosticEmptyKey({ ...source, state: "recorded" }, false, "missing")).toBe("diagExecutionUnavailable");
+  });
 });

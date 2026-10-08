@@ -1,6 +1,35 @@
 import type { TranslateFn } from "./conversations";
 import { parseTurnProgress, progressActive } from "./turnProgress";
-import type { DiagnosticSpan, TurnDiagnostic } from "@/api/diagnostics";
+import type { DiagnosticSource, DiagnosticSpan, TurnDiagnostic } from "@/api/diagnostics";
+
+export function selectDiagnostic(
+  items: TurnDiagnostic[],
+  selected: string,
+  turn?: string,
+  primaryAgent?: string,
+): string {
+  if (turn) return items.find((item) => item.turn_id === turn)?.id || "";
+  if (items.some((item) => item.id === selected)) return selected;
+  const primary = items.filter((item) => item.agent_id === primaryAgent);
+  const candidates = primary.length ? primary : items;
+  return (
+    [...candidates].sort(
+      (a, b) =>
+        (a.dispatch_ms ?? 0) - (b.dispatch_ms ?? 0) ||
+        Date.parse(a.started_at) - Date.parse(b.started_at) ||
+        (a.runtime_start_ms ?? Number.POSITIVE_INFINITY) - (b.runtime_start_ms ?? Number.POSITIVE_INFINITY) ||
+        a.id.localeCompare(b.id),
+    )[0]?.id || ""
+  );
+}
+
+export function diagnosticEmptyKey(source?: DiagnosticSource | null, filtered = false, turn?: string): string {
+  if (filtered) return "diagNoMatchingRecords";
+  if (turn) return "diagExecutionUnavailable";
+  if (source?.state === "waiting") return "diagWaitingExecution";
+  if (source?.state === "no_execution") return "diagNoExecution";
+  return "diagEmpty";
+}
 
 export function diagnosticDuration(ms: number | undefined): string {
   if (ms === undefined || !Number.isFinite(ms)) return "N/A";

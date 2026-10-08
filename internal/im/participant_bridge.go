@@ -194,6 +194,32 @@ func (b *ParticipantBridge) SubscriberCount(participantID string) int {
 	return len(b.subscribers[participantID])
 }
 
+// MessageDeliveryState observes the actual routing queues. Seen messages have
+// already been consumed; pending or inflight messages are still being handed off.
+func (b *ParticipantBridge) MessageDeliveryState(roomID, messageID string, participantIDs []string) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	seen := false
+	for _, id := range participantIDs {
+		id = canonicalIMParticipantID(id)
+		for _, event := range b.pending[id] {
+			if event.RoomID == roomID && event.MessageID == messageID {
+				return "waiting"
+			}
+		}
+		if event, ok := b.inflight[id][messageID]; ok && event.RoomID == roomID {
+			return "waiting"
+		}
+		if _, ok := b.seen[id][messageID]; ok {
+			seen = true
+		}
+	}
+	if seen {
+		return "unavailable"
+	}
+	return "no_execution"
+}
+
 func (b *ParticipantBridge) PublishMessageEvent(room Room, sender User, message Message) []string {
 	var missed []string
 	for _, participantID := range room.Members {

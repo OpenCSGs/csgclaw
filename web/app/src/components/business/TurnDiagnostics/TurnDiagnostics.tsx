@@ -1,3 +1,5 @@
+import { useTurnDiagnostics } from "./useTurnDiagnostics";
+import { flattenMentionText } from "@/components/business/MessageContent";
 import { DiagnosticTimeline } from "./DiagnosticTimeline";
 import { DiagnosticBreakdown, DiagnosticCalls, DiagnosticSpanFields } from "./DiagnosticAnalysis";
 import { observeDiagnosticRender } from "@/shared/diagnostics/renderTiming";
@@ -24,6 +26,7 @@ import { fetchDiagnostic, fetchDiagnostics, type TurnDiagnostic } from "@/api/di
 import { fetchAgentLogsRequest } from "@/api/agents";
 import {
   diagnosticDuration,
+  diagnosticEmptyKey,
   diagnosticDefaultHiddenCategories,
   diagnosticTimelineRows,
   diagnosticHiddenStats,
@@ -75,6 +78,7 @@ export function DiagnosticMessageAction({
     );
   }, [room, source, turn, final, iconOnly]);
   if (!ref) return null;
+  const actionLabel = t(turn ? "diagExecutionAction" : "diagResponseAction");
   const meta = metadata?.csgclaw as Record<string, unknown> | null | undefined;
   return (
     <>
@@ -83,8 +87,8 @@ export function DiagnosticMessageAction({
           type="button"
           ref={action}
           className="message-action-button"
-          aria-label={t("diagThisTurn")}
-          data-tooltip={t("diagThisTurn")}
+          aria-label={actionLabel}
+          data-tooltip={actionLabel}
           data-tooltip-side="top"
           onClick={() => setOpen(true)}
         >
@@ -144,9 +148,9 @@ function InlineDiagnosticErrorContent({
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    void fetchDiagnostics(room, { source_id: source }, controller.signal)
+    void fetchDiagnostics(room, { source_id: source, turn_id: turn || "" }, controller.signal)
       .then(async (page) => {
-        const item = page.items.find((item) => item.turn_id === turn) ?? page.items[0];
+        const item = turn ? page.items.find((item) => item.turn_id === turn) : page.items[0];
         if (!item) throw new Error("missing");
         return fetchDiagnostic(room, item.id, controller.signal);
       })
@@ -197,81 +201,65 @@ export function DiagnosticHeaderAction({ room, agents = [], t }: Omit<Props, "on
 }
 
 export function TurnDiagnostics({ room, source = "", turn, agents = [], t, onClose }: Props) {
-  const [items, setItems] = useState<TurnDiagnostic[]>([]);
-  const [selected, setSelected] = useState("");
-  const [detail, setDetail] = useState<TurnDiagnostic | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
   const [agent, setAgent] = useState("");
   const [status, setStatus] = useState("");
   const [tab, setTab] = useState("turns");
   const [logs, setLogs] = useState("");
+  const [logAgent, setLogAgent] = useState("");
   const [cursor, setCursor] = useState("");
-  const [nextCursor, setNextCursor] = useState("");
   const [revision, setRevision] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (tab !== "turns") return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let loadedSummary = "";
-    const refresh = async () => {
-      try {
-        const response = await fetchDiagnostics(
-          room,
-          { source_id: source, agent_id: agent, status, cursor },
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        setItems(response.items);
-        setNextCursor(response.next_cursor);
-        const id =
-          response.items.find((item) => item.id === selected)?.id ??
-          response.items.find((item) => item.turn_id === turn)?.id ??
-          response.items[0]?.id ??
-          "";
-        if (id !== selected) setSelected(id);
-        const summaryKey = JSON.stringify(response.items.find((item) => item.id === id));
-        if (id && summaryKey !== loadedSummary) {
-          const record = await fetchDiagnostic(room, id, controller.signal);
-          if (!controller.signal.aborted) {
-            setDetail(record);
-            loadedSummary = summaryKey;
-          }
-        } else if (!id) setDetail(null);
-        setError("");
-      } catch {
-        if (!controller.signal.aborted) setError(t("diagLoadFailed"));
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-          timer = setTimeout(refresh, 2000);
-        }
-      }
-    };
-    void refresh();
-    return () => {
-      controller.abort();
-      if (timer) clearTimeout(timer);
-    };
-  }, [room, source, selected, turn, agent, status, cursor, revision, tab, t]);
-
+  const {
+    page,
+    selected,
+    select,
+    detail,
+    error: loadError,
+    loading,
+  } = useTurnDiagnostics({
+    room,
+    source,
+    turn,
+    agent,
+    status,
+    cursor,
+    revision,
+    enabled: tab === "turns",
+    t,
+  });
+  const items = page.items;
+  const nextCursor = page.next_cursor;
   const names = new Map(agents.map((item) => [item.id ?? "", item.name || item.id || ""]));
-  const agentOptions = Array.from(new Set([...names.keys(), ...items.map((item) => item.agent_id)]))
-    .filter(Boolean)
-    .map((id) => ({ value: id, label: names.get(id) || items.find((item) => item.agent_id === id)?.agent_name || id }));
-  const activeAgent = agent || detail?.agent_id || agentOptions[0]?.value || "";
+  const agentOptions = page.agents.map((item) => ({
+    value: item.id,
+    label: names.get(item.id) || item.name || item.id,
+  }));
+  const showAgentFilter = agentOptions.length > 1;
+  const showList = !source || page.total > 1 || Boolean(cursor || nextCursor);
+  const emptyLabel = t(diagnosticEmptyKey(page.source, Boolean(agent || status), turn));
+  const activeAgent = logAgent || detail?.agent_id || agentOptions[0]?.value || "";
+  const activeAgentName = agentOptions.find((item) => item.value === activeAgent)?.label || activeAgent;
+  const [logsLoading, setLogsLoading] = useState(false);
   useEffect(() => {
     if (tab !== "logs" || !activeAgent) return;
+    setLogsLoading(true);
+    setError("");
     let live = true;
     setLogs("");
     void fetchAgentLogsRequest(activeAgent, { lines: 400 })
       .then((value) => {
-        if (live) setLogs(value);
+        if (live) {
+          setLogs(value);
+          setLogsLoading(false);
+        }
       })
       .catch(() => {
-        if (live) setError(t("diagLoadFailed"));
+        if (live) {
+          setError(t("diagLoadFailed"));
+          setLogsLoading(false);
+        }
       });
     return () => {
       live = false;
@@ -307,43 +295,67 @@ export function TurnDiagnostics({ room, source = "", turn, agents = [], t, onClo
       <DialogContent className={styles.dialog}>
         <DialogHeader className={styles.header}>
           <div>
-            <DialogTitle>{t(source ? "diagThisTurn" : "diagConversation")}</DialogTitle>
-            <DialogDescription>{t("diagDescription")}</DialogDescription>
+            <DialogTitle>
+              {t(source ? (turn ? "diagExecutionTitle" : "diagResponseTitle") : "diagConversation")}
+            </DialogTitle>
+            <DialogDescription>
+              {t(source ? (turn ? "diagExecutionScope" : "diagResponseScope") : "diagDescription")}
+            </DialogDescription>
           </div>
           <DialogCloseButton label={t("close")} iconOnly size="sm" variant="tertiaryGray" />
         </DialogHeader>
+        {source ? (
+          <section className={styles.context} aria-label={t("diagTriggerMessage")}>
+            <div className={styles.contextMeta}>
+              <strong>{t("diagTriggerMessage")}</strong>
+              {page.source ? (
+                <span>
+                  {page.source.sender_name} · {new Date(page.source.created_at).toLocaleString()}
+                </span>
+              ) : null}
+            </div>
+            <p>
+              {page.source
+                ? flattenMentionText(page.source.content) || t("diagAttachmentMessage")
+                : t(loading ? "diagContextLoading" : "diagContextUnavailable")}
+            </p>
+          </section>
+        ) : null}
         <div className={styles.toolbar}>
-          <div className={styles.tabs} role="group" aria-label={t("diagConversation")}>
-            <Button
-              size="sm"
-              aria-pressed={tab === "turns"}
-              variant={tab === "turns" ? "primary" : "secondaryGray"}
-              onClick={() => setTab("turns")}
-            >
-              {t("diagTurns")}
-            </Button>
-            <Button
-              size="sm"
-              aria-pressed={tab === "logs"}
-              variant={tab === "logs" ? "primary" : "secondaryGray"}
-              onClick={() => setTab("logs")}
-            >
-              {t("agentLogsTitle")}
-            </Button>
+          <div className={styles.tabs}>
+            {tab === "logs" ? (
+              <Button
+                size="sm"
+                variant="secondaryGray"
+                onClick={() => {
+                  setTab("turns");
+                  setError("");
+                }}
+              >
+                {t("diagBackToRecords")}
+              </Button>
+            ) : (
+              <strong>{t(source ? "diagRelatedRecords" : "diagTurns")}</strong>
+            )}
           </div>
-          <Select
-            size="sm"
-            triggerClassName={styles.filter}
-            triggerProps={{ "aria-label": t("diagAgent") }}
-            value={agent}
-            options={[{ value: "", label: t("diagAllAgents") }, ...agentOptions]}
-            onValueChange={(value) => {
-              setAgent(value);
-              setCursor("");
-              setSelected("");
-              setDetail(null);
-            }}
-          />
+          {showAgentFilter ? (
+            <Select
+              size="sm"
+              triggerClassName={styles.filter}
+              triggerProps={{ "aria-label": t("diagAgent") }}
+              value={tab === "logs" ? activeAgent : agent}
+              options={tab === "logs" ? agentOptions : [{ value: "", label: t("diagAllAgents") }, ...agentOptions]}
+              onValueChange={(value) => {
+                if (tab === "logs") {
+                  setLogAgent(value);
+                  return;
+                }
+                setAgent(value);
+                setCursor("");
+                select("");
+              }}
+            />
+          ) : null}
           {tab === "turns" ? (
             <Select
               size="sm"
@@ -357,8 +369,7 @@ export function TurnDiagnostics({ room, source = "", turn, agents = [], t, onClo
               onValueChange={(value) => {
                 setStatus(value);
                 setCursor("");
-                setSelected("");
-                setDetail(null);
+                select("");
               }}
             />
           ) : null}
@@ -372,63 +383,86 @@ export function TurnDiagnostics({ room, source = "", turn, agents = [], t, onClo
             <RefreshCw size={15} />
           </Button>
         </div>
+        {error || (tab === "turns" && loadError) ? (
+          <div role="alert" className={`${styles.warning} ${styles.loadError}`}>
+            {error || loadError}
+          </div>
+        ) : null}
         <DialogBody className={styles.body}>
-          {error ? (
-            <div role="alert" className={styles.warning}>
-              {error}
-            </div>
-          ) : null}
           {tab === "logs" ? (
-            <pre className={styles.raw}>{logs || t("agentLogsEmpty")}</pre>
+            <section className={styles.logPanel}>
+              <h3>{t("diagAgentLogs", { name: activeAgentName })}</h3>
+              <p className={styles.hint}>{t("diagAgentLogsScope")}</p>
+              <pre className={styles.raw}>{logsLoading ? t("agentLogsLoading") : logs || t("agentLogsEmpty")}</pre>
+            </section>
           ) : (
             <>
-              <aside className={styles.list} aria-label={t("diagTurns")}>
-                {items.map((item) => (
-                  <button
-                    type="button"
-                    key={item.id}
-                    aria-pressed={selected === item.id}
-                    className={styles.listItem}
-                    onClick={() => {
-                      setSelected(item.id);
-                      setDetail(null);
-                      setCopied(false);
-                    }}
-                  >
-                    <strong>{names.get(item.agent_id) || item.agent_name || item.agent_id}</strong>
-                    <span>
-                      {new Date(item.started_at).toLocaleTimeString()} · {diagnosticDuration(item.total_ms)}
-                    </span>
-                    <span className={styles.status} data-error={item.status === "failed"}>
-                      {t(`diagStatus_${item.status}`)}
-                    </span>
-                  </button>
-                ))}
-                {!items.length ? <p className={styles.empty}>{t(loading ? "agentLogsLoading" : "diagEmpty")}</p> : null}
-                {cursor ? (
-                  <Button size="sm" variant="tertiaryGray" onClick={() => setCursor("")}>
-                    {t("diagLatest")}
-                  </Button>
-                ) : null}
-                {nextCursor ? (
-                  <Button
-                    size="sm"
-                    variant="tertiaryGray"
-                    onClick={() => {
-                      setCursor(nextCursor);
-                      setSelected("");
-                      setDetail(null);
-                    }}
-                  >
-                    {t("diagOlder")}
-                  </Button>
-                ) : null}
-              </aside>
+              {showList ? (
+                <aside className={styles.list} aria-label={t("diagTurns")}>
+                  {items.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      aria-pressed={selected === item.id}
+                      className={styles.listItem}
+                      onClick={() => {
+                        select(item.id);
+                        setCopied(false);
+                      }}
+                    >
+                      <strong>{names.get(item.agent_id) || item.agent_name || item.agent_id}</strong>
+                      <span>
+                        {new Date(item.started_at).toLocaleTimeString()} · {diagnosticDuration(item.total_ms)}
+                      </span>
+                      <span className={styles.status} data-error={item.status === "failed"}>
+                        {t(`diagStatus_${item.status}`)}
+                      </span>
+                    </button>
+                  ))}
+                  {!items.length ? (
+                    <p className={styles.empty}>{loading ? t("agentLogsLoading") : emptyLabel}</p>
+                  ) : null}
+                  {cursor ? (
+                    <Button size="sm" variant="tertiaryGray" onClick={() => setCursor("")}>
+                      {t(source ? "diagFirstRecords" : "diagLatest")}
+                    </Button>
+                  ) : null}
+                  {nextCursor ? (
+                    <Button
+                      size="sm"
+                      variant="tertiaryGray"
+                      onClick={() => {
+                        setCursor(nextCursor);
+                        select("");
+                      }}
+                    >
+                      {t(source ? "diagMoreRecords" : "diagOlder")}
+                    </Button>
+                  ) : null}
+                </aside>
+              ) : null}
               <main className={styles.detail}>
                 {detail ? (
                   <>
-                    <DiagnosticDetail record={detail} t={t} />
+                    <DiagnosticDetail
+                      key={detail.id}
+                      record={detail}
+                      agentName={names.get(detail.agent_id) || detail.agent_name || detail.agent_id}
+                      t={t}
+                    />
                     <div className={styles.export}>
+                      <Button
+                        size="sm"
+                        variant="secondaryGray"
+                        onClick={() => {
+                          setLogAgent(detail.agent_id);
+                          setTab("logs");
+                        }}
+                      >
+                        {t("diagViewAgentLogs", {
+                          name: names.get(detail.agent_id) || detail.agent_name || detail.agent_id,
+                        })}
+                      </Button>
                       <Button size="sm" variant="tertiaryGray" onClick={() => void exportJSON(false)}>
                         <Copy size={14} />
                         {t(copied ? "diagCopied" : "diagCopy")}
@@ -440,7 +474,13 @@ export function TurnDiagnostics({ room, source = "", turn, agents = [], t, onClo
                     </div>
                   </>
                 ) : (
-                  <p className={styles.empty}>{t(loading || items.length ? "agentLogsLoading" : "diagEmpty")}</p>
+                  <p className={styles.empty}>
+                    {loadError
+                      ? t("diagDetailUnavailable")
+                      : loading || items.length
+                        ? t("agentLogsLoading")
+                        : emptyLabel}
+                  </p>
                 )}
               </main>
             </>
@@ -451,7 +491,7 @@ export function TurnDiagnostics({ room, source = "", turn, agents = [], t, onClo
   );
 }
 
-function DiagnosticDetail({ record, t }: { record: TurnDiagnostic; t: TranslateFn }) {
+function DiagnosticDetail({ record, agentName, t }: { record: TurnDiagnostic; agentName: string; t: TranslateFn }) {
   const [owner, setOwner] = useState("");
   const [hiddenCategories, setHiddenCategories] = useState<readonly DiagnosticHiddenCategory[]>(
     diagnosticDefaultHiddenCategories,
@@ -471,6 +511,7 @@ function DiagnosticDetail({ record, t }: { record: TurnDiagnostic; t: TranslateF
     <>
       <div className={styles.titleRow}>
         <div>
+          <h2 className={styles.executionTitle}>{t("diagAgentExecution", { name: agentName })}</h2>
           <span className={styles.eyebrow}>
             {record.runtime || t("diagRuntimeUnknown")} · {record.model || t("diagModelUnknown")}
           </span>

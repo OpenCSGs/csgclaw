@@ -17,14 +17,7 @@ type ActionIconProps = {
 
 function ActionIcon({ children, size = 16, ...props }: ActionIconProps & { children: ReactNode }) {
   return (
-    <svg
-      {...props}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
+    <svg {...props} width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       {children}
     </svg>
   );
@@ -274,11 +267,7 @@ const Group = memo(
     return (
       <div className={styles.group}>
         <div className={styles.summary}>
-          {group.kind === "tool" ? (
-            <GroupToolIcon items={group.items} />
-          ) : (
-            <Clock3 size={15} aria-hidden="true" />
-          )}
+          {group.kind === "tool" ? <GroupToolIcon items={group.items} /> : <Clock3 size={15} aria-hidden="true" />}
           <span>{group.kind === "tool" ? toolGroupLabel(group.items, t) : t("progressReasoning")}</span>
         </div>
         <div className={styles.details}>

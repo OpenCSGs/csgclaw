@@ -466,3 +466,32 @@ func TestParticipantBridgeRequeueDeliversUnackedEventAgain(t *testing.T) {
 		t.Fatal("Subscribe() timed out waiting for requeued event")
 	}
 }
+
+func TestParticipantBridgeMessageDeliveryState(t *testing.T) {
+	bridge := NewParticipantBridge("")
+	room := Room{ID: "room", IsDirect: true, Members: []string{"user-admin", "user-a", "user-human"}}
+	sender := User{ID: "user-admin"}
+	message := Message{ID: "source", SenderID: sender.ID, Content: "Hello"}
+	agents := []string{"pt-a"}
+	bridge.EnqueueMessageEvent(room, sender, message, "pt-human")
+	if got := bridge.MessageDeliveryState(room.ID, message.ID, agents); got != "no_execution" {
+		t.Fatalf("human queue counted as agent: %s", got)
+	}
+	bridge.EnqueueMessageEvent(room, sender, message, "pt-a")
+	if got := bridge.MessageDeliveryState(room.ID, message.ID, agents); got != "waiting" {
+		t.Fatalf("pending=%s", got)
+	}
+	events, cancel := bridge.Subscribe("pt-a")
+	defer cancel()
+	<-events
+	if got := bridge.MessageDeliveryState(room.ID, message.ID, agents); got != "waiting" {
+		t.Fatalf("inflight=%s", got)
+	}
+	bridge.Ack("pt-a", message.ID)
+	if got := bridge.MessageDeliveryState(room.ID, message.ID, agents); got != "unavailable" {
+		t.Fatalf("consumed without timing=%s", got)
+	}
+	if got := bridge.MessageDeliveryState("other", "different", agents); got != "no_execution" {
+		t.Fatalf("cross-room state=%s", got)
+	}
+}

@@ -40,10 +40,10 @@ describe("readable diagnostic presentation", () => {
       />,
     );
     const toolbar = container.querySelector(".message-action-controls");
-    expect(toolbar).toContainElement(screen.getByRole("button", { name: "diagThisTurn" }));
+    expect(toolbar).toContainElement(screen.getByRole("button", { name: "diagExecutionAction" }));
     expect(toolbar).toContainElement(screen.getByRole("button", { name: "copyToClipboard" }));
     expect(toolbar).toContainElement(screen.getByRole("button", { name: "replyInThread" }));
-    expect(screen.getByRole("button", { name: "diagThisTurn" })).not.toHaveTextContent("diagThisTurn");
+    expect(screen.getByRole("button", { name: "diagExecutionAction" })).not.toHaveTextContent("diagExecutionAction");
   });
   it("ranks the unmeasured gap first and exposes the actual tool command", () => {
     const { container } = render(
