@@ -1,0 +1,169 @@
+name: Windows Store MSIX
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (for example 0.7.0 or 0.7.1)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  OSSUTIL_VERSION: "2.3.0"
+  OSSUTIL_LINUX_AMD64_SHA256: 3ae4d9fc85a7a6e9f5654d1599766f1a3a42a3692870887b5ae9338d582ef65a
+
+jobs:
+  build:
+    runs-on: windows-2025
+    outputs:
+      version: ${{ steps.versions.outputs.version }}
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      TARGET_OS: windows
+      TARGET_ARCH: amd64
+      CSGCLAW_MSIX_IDENTITY_NAME: ${{ vars.CSGCLAW_MSIX_IDENTITY_NAME || 'OpenCSG.CSGClaw' }}
+      CSGCLAW_MSIX_PUBLISHER: ${{ vars.CSGCLAW_MSIX_PUBLISHER || 'CN=7C19A4DC-4699-4795-AD22-A7B7A78F0DDF' }}
+      CSGCLAW_MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.CSGCLAW_MSIX_PUBLISHER_DISPLAY_NAME || 'OpenCSG' }}
+      CSGCLAW_MSIX_WINDOWS_KIT_VERSION: ${{ vars.CSGCLAW_MSIX_WINDOWS_KIT_VERSION || '10.0.26100.0' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/app/package.json
+
+      - name: Resolve package versions
+        id: versions
+        shell: bash
+        run: |
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          import { normalizeReleaseVersion } from './scripts/desktop-release-artifacts.mjs';
+
+          const appVersion = normalizeReleaseVersion(process.env.RELEASE_VERSION);
+          if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(appVersion) ||
+              appVersion.split('.').some(part => Number(part) > 65535)) {
+            throw new Error('Version must be MAJOR.MINOR.PATCH, each no greater than 65535');
+          }
+          const packageVersion = `${appVersion}.0`;
+          const commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
+          fs.appendFileSync(process.env.GITHUB_ENV,
+            `VERSION=v${appVersion}\nCSGCLAW_MSIX_PACKAGE_VERSION=${packageVersion}\nCOMMIT=${commit}\nBUILD_TIME=${new Date().toISOString()}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${appVersion}\n`);
+          console.log(`Application: ${appVersion}; MSIX: ${packageVersion}`);
+          JS
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Enable Corepack
+        shell: bash
+        run: corepack enable
+
+      - name: Check Windows SDK
+        shell: pwsh
+        run: |
+          $kitPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin\$env:CSGCLAW_MSIX_WINDOWS_KIT_VERSION\x64"
+          foreach ($tool in @("makeappx.exe", "makepri.exe", "signtool.exe")) {
+            if (-not (Test-Path (Join-Path $kitPath $tool))) {
+              throw "Windows SDK tool is missing: $tool ($kitPath)."
+            }
+          }
+
+      - name: Package Windows MSIX
+        shell: pwsh
+        run: .\scripts\build.cmd desktop-msix
+
+      - name: Stage MSIX asset
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          $assetName = "csgclaw-desktop_$($env:VERSION)_windows_amd64.msix"
+          Copy-Item -LiteralPath "desktop/out/make/msix/x64/CSGClaw.msix" -Destination (Join-Path dist $assetName) -ErrorAction Stop
+
+      - name: Upload MSIX artifact
+        id: artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-store-dist-windows-amd64
+          path: dist/*.msix
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-manual:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: write
+      contents: read
+    environment:
+      name: oss-publish
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Download MSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-store-dist-windows-amd64
+          path: desktop-release
+
+      - name: Install ossutil
+        shell: bash
+        run: |
+          archive="${RUNNER_TEMP}/ossutil-${OSSUTIL_VERSION}-linux-amd64.zip"
+          extract_dir="${RUNNER_TEMP}/ossutil"
+          bin_dir="${RUNNER_TEMP}/ossutil-bin"
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "${archive}" \
+            "https://gosspublic.alicdn.com/ossutil/v2/${OSSUTIL_VERSION}/ossutil-${OSSUTIL_VERSION}-linux-amd64.zip"
+          printf '%s  %s\n' "${OSSUTIL_LINUX_AMD64_SHA256}" "${archive}" | sha256sum --check -
+          unzip -q "${archive}" -d "${extract_dir}"
+          install -Dm755 \
+            "${extract_dir}/ossutil-${OSSUTIL_VERSION}-linux-amd64/ossutil" \
+            "${bin_dir}/ossutil"
+          echo "${bin_dir}" >> "${GITHUB_PATH}"
+
+      - name: Upload MSIX to OSS
+        shell: bash
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_REGION: cn-beijing
+          OSS_ENDPOINT: https://oss-cn-beijing.aliyuncs.com
+        run: |
+          if [[ -z "${OSS_ACCESS_KEY_ID}" || -z "${OSS_ACCESS_KEY_SECRET}" ]]; then
+            echo "::error::Configure OSS credentials in the oss-publish environment."
+            exit 1
+          fi
+          file_name="csgclaw-desktop_v${VERSION}_windows_amd64.msix"
+          object_path="csgclaw-desktop/releases/${VERSION}/${file_name}"
+          test -s "desktop-release/${file_name}"
+          ossutil cp "desktop-release/${file_name}" "oss://opencsg-public-resource/${object_path}" \
+            --ignore-existing --cache-control "public,max-age=31536000,immutable"
+          ossutil stat "oss://opencsg-public-resource/${object_path}"
+          download_url="https://opencsg-public-resource.oss-cn-beijing.aliyuncs.com/${object_path}"
+          printf 'MSIX download: [%s](%s)\n' "${file_name}" "${download_url}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Delete uploaded Actions artifact
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+        run: gh api --method DELETE --silent "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}"

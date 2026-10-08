@@ -214,6 +214,7 @@ const config: ForgeConfig = {
               packageIdentity: msixIdentity.CSGCLAW_MSIX_IDENTITY_NAME,
               publisher: msixIdentity.CSGCLAW_MSIX_PUBLISHER,
               publisherDisplayName: msixIdentity.CSGCLAW_MSIX_PUBLISHER_DISPLAY_NAME,
+              packageVersion: process.env.CSGCLAW_MSIX_PACKAGE_VERSION || desktopVersion,
               packageDisplayName: "CSGClaw",
               appDisplayName: "CSGClaw",
               packageDescription: "CSGClaw Desktop",
