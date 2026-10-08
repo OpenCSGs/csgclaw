@@ -88,6 +88,40 @@ jobs:
         shell: pwsh
         run: .\scripts\build.cmd desktop-msix
 
+      - name: Validate MSIX manifest
+        shell: pwsh
+        run: |
+          $packagePath = (Resolve-Path "desktop/out/make/msix/x64/CSGClaw.msix").Path
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($packagePath)
+          try {
+            $entry = $archive.GetEntry("AppxManifest.xml")
+            if ($null -eq $entry) {
+              throw "MSIX package is missing AppxManifest.xml."
+            }
+            $reader = [System.IO.StreamReader]::new($entry.Open())
+            try {
+              [xml]$manifest = $reader.ReadToEnd()
+            } finally {
+              $reader.Dispose()
+            }
+          } finally {
+            $archive.Dispose()
+          }
+          $desktopTargets = @($manifest.Package.Dependencies.TargetDeviceFamily |
+            Where-Object { $_.GetAttribute("Name") -eq "Windows.Desktop" })
+          if ($desktopTargets.Count -ne 1) {
+            throw "Store MSIX must have one Windows.Desktop target."
+          }
+          $minVersion = $desktopTargets[0].GetAttribute("MinVersion")
+          if ([version]$minVersion -lt [version]"10.0.17763.0") {
+            throw "Store MSIX must target Windows.Desktop with MinVersion >= 10.0.17763.0."
+          }
+          $packageVersion = $manifest.Package.Identity.GetAttribute("Version")
+          if ($packageVersion -ne $env:CSGCLAW_MSIX_PACKAGE_VERSION) {
+            throw "MSIX package version does not match $env:CSGCLAW_MSIX_PACKAGE_VERSION."
+          }
+          Write-Host "MSIX manifest validated: version=$packageVersion, MinVersion=$minVersion."
+
       - name: Stage MSIX asset
         shell: pwsh
         run: |

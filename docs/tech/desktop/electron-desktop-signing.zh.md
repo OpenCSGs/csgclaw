@@ -51,6 +51,9 @@ desktop/out/make/msix/x64/CSGClaw.msix
 
 `desktop-msix` 会依次构建 Web UI、Windows Go backend、CLI、Electron 应用和最终 MSIX。每次发布都要提高 `VERSION`，例如从 `1.0.0` 提高到 `1.0.1`。
 
+MSIX 清单显式设置 `MinVersion="10.0.17763.0"`（Windows 10 1809），满足 Microsoft Store 的最低系统版本要求。
+`CSGCLAW_MSIX_WINDOWS_KIT_VERSION` 只选择构建工具，默认是 `10.0.26100.0`；它与应用声明的最低系统版本相互独立。
+
 ### 2.3 测试与首次提交
 
 1. 使用 Windows App Certification Kit 检查 `CSGClaw.msix`。
@@ -159,7 +162,9 @@ make desktop-package-macos-signed VERSION=v0.1.0-beta.1 DESKTOP_MACOS_TARGETS=ar
 
 ## 5. CI 方案
 
-当前 GitHub Release 已自动构建官网桌面包；Microsoft Store MSIX 仍只提供本地构建，商店自动提交留作下一阶段。
+当前 GitHub Release 已自动构建官网桌面包；`Windows Store MSIX` 工作流支持构建商店 MSIX，并在手动运行时上传到 OSS。
+构建后会读取包内的 `AppxManifest.xml`，检查最低系统版本和应用包版本；不符合要求的产物不会进入上传步骤。
+OSS 包按版本保存且不覆盖，修复后重新构建时应使用新的版本号。商店资料填写和提交审核仍在 Partner Center 手动完成。
 
 首次发布仍在 Partner Center 完成公司验证、产品创建、商店资料和年龄分级。以后每周 1～2 次发版可以在 Windows Runner 自动完成：
 
