@@ -93,7 +93,7 @@ export function ConversationMessageActions({
           className="message-action-button copy-message-button"
           aria-label={copyLabel}
           data-tooltip={copyLabel}
-          data-tooltip-side="bottom"
+          data-tooltip-side="top"
           disabled={copying}
           onClick={() => void copyMessage()}
         >
@@ -111,7 +111,7 @@ export function ConversationMessageActions({
           className="message-action-button thread-hover-button"
           aria-label={t("replyInThread")}
           data-tooltip={t("replyInThread")}
-          data-tooltip-side="bottom"
+          data-tooltip-side="top"
           onClick={() => void onOpenThread()}
         >
           <MessageSquareReply aria-hidden="true" />

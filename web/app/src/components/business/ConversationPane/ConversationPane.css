@@ -2540,6 +2540,10 @@ button.message-file-attachment {
   max-width: min(100%, 1120px);
 }
 
+.message-row:not(.own) + .message-row:not(.own) {
+  margin-top: 24px;
+}
+
 .message-row > .avatar.avatar-button {
   position: relative;
   flex: 0 0 40px;
