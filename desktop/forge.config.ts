@@ -206,15 +206,16 @@ const config: ForgeConfig = {
             packageAssets: msixAssets,
             createPri: true,
             logLevel: "warn",
-            ...(process.env.CSGCLAW_MSIX_WINDOWS_KIT_VERSION
-              ? { windowsKitVersion: process.env.CSGCLAW_MSIX_WINDOWS_KIT_VERSION }
-              : {}),
+            windowsKitVersion:
+              process.env.CSGCLAW_MSIX_WINDOWS_KIT_VERSION || "10.0.26100.0",
             ...(windowsSign ? { windowsSignOptions: windowsSign } : {}),
             manifestVariables: {
               packageIdentity: msixIdentity.CSGCLAW_MSIX_IDENTITY_NAME,
               publisher: msixIdentity.CSGCLAW_MSIX_PUBLISHER,
               publisherDisplayName: msixIdentity.CSGCLAW_MSIX_PUBLISHER_DISPLAY_NAME,
               packageVersion: process.env.CSGCLAW_MSIX_PACKAGE_VERSION || desktopVersion,
+              // Store-distributed MSIX requires Windows 10 1809 or later.
+              packageMinOSVersion: "10.0.17763.0",
               packageDisplayName: "CSGClaw",
               appDisplayName: "CSGClaw",
               packageDescription: "CSGClaw Desktop",
