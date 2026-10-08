@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"csgclaw/internal/auth"
 	"csgclaw/internal/mcpschema"
 )
 
@@ -211,6 +213,11 @@ func TestRemoteServerConfigCarriesStableHubIdentity(t *testing.T) {
 }
 
 func TestFilterAvailableTemplateServersSkipsUnavailableManagedResourcesOnly(t *testing.T) {
+	originalStore := auth.Default().Store
+	auth.Default().Store = auth.NewStore(filepath.Join(t.TempDir(), "state.json"))
+	t.Cleanup(func() { auth.Default().Store = originalStore })
+	t.Setenv("CSGHUB_ACCESS_TOKEN", "")
+	t.Setenv("CSGHUB_USER_TOKEN", "")
 	svc := NewService(WithServerProber(availabilityTestProber{probe: func(_ context.Context, name string, _ map[string]any) (ProbeResult, error) {
 		if name == "allowed" {
 			return ProbeResult{Connected: true}, nil

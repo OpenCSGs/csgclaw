@@ -271,7 +271,7 @@ func (s *Service) startAvailabilityProbe(name string, config map[string]any, has
 		var probeErr error
 		select {
 		case s.availabilitySem <- struct{}{}:
-			_, probeErr = s.ProbeServer(probeCtx, name, cloned)
+			_, probeErr = s.probeAvailableServer(probeCtx, name, cloned)
 			<-s.availabilitySem
 		case <-probeCtx.Done():
 			probeErr = probeCtx.Err()
@@ -285,6 +285,24 @@ func (s *Service) startAvailabilityProbe(name string, config map[string]any, has
 		s.availabilityMu.Unlock()
 	}()
 	return probe
+}
+
+// Availability checks also run outside the HTTP probe handler, including
+// template creation. Resolve managed credentials only for this in-memory probe
+// so sanitized snapshots are checked with the current runner's identity.
+func (s *Service) probeAvailableServer(ctx context.Context, name string, config map[string]any) (ProbeResult, error) {
+	if _, managed := knowledgebase.ManagedMetadataFromServer(config); managed {
+		connection, err := knowledgebase.LoadConnection(ctx)
+		if err != nil {
+			return ProbeResult{}, err
+		}
+		prepared, err := knowledgebase.PrepareManagedServerProbe(ctx, config, connection)
+		if err != nil {
+			return ProbeResult{}, err
+		}
+		config = prepared
+	}
+	return s.ProbeServer(ctx, name, config)
 }
 
 func availabilityProbeTimeout(config map[string]any) time.Duration {
