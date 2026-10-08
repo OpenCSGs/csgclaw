@@ -1372,6 +1372,7 @@ describe("agent action visibility", () => {
         onInstallMCPServers={onInstallMCPServers}
         onDeleteMCPServer={onDeleteMCPServer}
       />,
+      { wrapper: createQueryWrapper().wrapper },
     );
 
     expect(screen.queryByLabelText("MCP Servers")).not.toBeInTheDocument();
@@ -1395,8 +1396,9 @@ describe("agent action visibility", () => {
 
     const existingCard = screen.getByText("existing").closest("article");
     expect(existingCard).not.toBeNull();
-    await user.click(within(existingCard as HTMLElement).getByRole("button", { name: "Delete" }));
+    await user.click(within(existingCard as HTMLElement).getByRole("button", { name: "existingnode" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Delete" })).getByRole("button", { name: "Delete" }));
 
     expect(onDeleteMCPServer).toHaveBeenCalledWith(existingMCP);
   });

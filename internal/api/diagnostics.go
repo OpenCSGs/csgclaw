@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"csgclaw/internal/activity"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/im"
+	"csgclaw/internal/participant"
 )
 
 // Diagnostics are a desktop UI surface. Runtime callers must not inspect other
@@ -38,15 +41,36 @@ func (h *Handler) listDiagnostics(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	items := h.im.Diagnostics().List(room, q.Get("source_id"), q.Get("agent_id"), "", q.Get("thread_id"))
+	agents := h.im.Diagnostics().List(room, q.Get("source_id"), "", "", q.Get("thread_id"))
+	options := []diagnosticAgentOption{}
+	seen := map[string]bool{}
+	for _, item := range agents {
+		if q.Get("turn_id") != "" && item.TurnID != q.Get("turn_id") || seen[item.AgentID] {
+			continue
+		}
+		seen[item.AgentID] = true
+		options = append(options, diagnosticAgentOption{ID: item.AgentID, Name: item.AgentName})
+	}
 	videos := h.diagnosticVideos(room)
 	filtered := items[:0]
 	for _, item := range items {
+		if q.Get("turn_id") != "" && item.TurnID != q.Get("turn_id") {
+			continue
+		}
 		enrichVideoDiagnostic(&item, videos[item.TurnID], false)
 		if q.Get("status") == "" || item.Status == q.Get("status") {
 			filtered = append(filtered, item)
 		}
 	}
 	items = filtered
+	if q.Get("source_id") != "" {
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].DispatchMS == items[j].DispatchMS {
+				return items[i].ID < items[j].ID
+			}
+			return items[i].DispatchMS < items[j].DispatchMS
+		})
+	}
 	limit := 50
 	if n, e := strconv.Atoi(q.Get("limit")); e == nil && n > 0 {
 		limit = min(n, 100)
@@ -66,8 +90,71 @@ func (h *Handler) listDiagnostics(w http.ResponseWriter, r *http.Request) {
 	if end < len(items) {
 		next = items[end-1].ID
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items[start:end], "next_cursor": next})
+	response := map[string]any{"items": items[start:end], "next_cursor": next, "agents": options, "total": len(items)}
+	if sourceID := q.Get("source_id"); sourceID != "" {
+		response["source"] = h.diagnosticSource(room, sourceID, len(agents) > 0)
+	}
+	writeJSON(w, http.StatusOK, response)
 }
+
+type diagnosticAgentOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type diagnosticSource struct {
+	ID             string    `json:"id"`
+	SenderName     string    `json:"sender_name"`
+	Content        string    `json:"content"`
+	CreatedAt      time.Time `json:"created_at"`
+	State          string    `json:"state"`
+	PrimaryAgentID string    `json:"primary_agent_id,omitempty"`
+}
+
+func (h *Handler) diagnosticSource(roomID, sourceID string, recorded bool) *diagnosticSource {
+	messages, _ := h.im.ListMessagesWithOptions(roomID, im.ListMessagesOptions{IncludeThreadReplies: true})
+	for _, message := range messages {
+		if message.ID != sourceID {
+			continue
+		}
+		state := h.im.Diagnostics().SourceState(roomID, sourceID)
+		if recorded {
+			state = "recorded"
+		} else if state == "waiting" && h.participantBridge != nil {
+			if delivery := h.diagnosticDeliveryState(roomID, sourceID); delivery == "unavailable" {
+				state = delivery
+			}
+		}
+		name := message.SenderID
+		if sender, ok := h.im.User(message.SenderID); ok {
+			name = sender.Name
+		}
+		content := []rune(message.Content)
+		if len(content) > 240 {
+			content = append(content[:240], '…')
+		}
+		if len(content) == 0 && len(message.Attachments) > 0 {
+			content = []rune(message.Attachments[0].Name)
+		}
+		primary := ""
+		if room, ok := h.im.Room(roomID); ok && room.IsOnDemand() {
+			primary = h.runtimeAgentIDForBridgeID(room.ManagerID)
+		}
+		return &diagnosticSource{ID: sourceID, SenderName: name, Content: string(content), CreatedAt: message.CreatedAt, State: state, PrimaryAgentID: primary}
+	}
+	return nil
+}
+func (h *Handler) diagnosticDeliveryState(roomID, sourceID string) string {
+	if h.participantBridge == nil || h.participant == nil {
+		return "unavailable"
+	}
+	ids := []string{}
+	for _, item := range h.participant.List(participant.ListOptions{Channel: participant.ChannelCSGClaw, Type: participant.TypeAgent}) {
+		ids = append(ids, item.ID)
+	}
+	return h.participantBridge.MessageDeliveryState(roomID, sourceID, ids)
+}
+
 func (h *Handler) getDiagnostic(w http.ResponseWriter, r *http.Request) {
 	room, ok := h.diagnosticRoom(w, r)
 	if !ok {

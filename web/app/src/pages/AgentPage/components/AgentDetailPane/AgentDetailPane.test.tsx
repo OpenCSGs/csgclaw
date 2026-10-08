@@ -454,12 +454,14 @@ describe("AgentDetailPane MCP snapshots", () => {
         onUpdateMCPServer={onUpdateMCPServer}
         onDeleteMCPServer={onDeleteMCPServer}
       />,
+      { wrapper: createQueryWrapper().wrapper },
     );
 
     await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
     expect(screen.getByText("agentKnowledgeMCPSourceDeleted")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "agentMCPUpdateConfig" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: new RegExp(mcpServer.description) }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
   });
 
   it("keeps source-check failures silent while the saved MCP remains usable", async () => {
@@ -479,12 +481,13 @@ describe("AgentDetailPane MCP snapshots", () => {
         },
       },
     };
-    render(<Harness workspaceSupported mcpServers={[mcpServer]} />);
+    render(<Harness workspaceSupported mcpServers={[mcpServer]} />, { wrapper: createQueryWrapper().wrapper });
 
     await user.click(screen.getByRole("button", { name: "agentAppsTab" }));
     expect(screen.queryByText("agentKnowledgeMCPSourceDeleted")).not.toBeInTheDocument();
     expect(screen.queryByText("agentKnowledgeMCPUpdateAvailable")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: new RegExp(mcpServer.description) }));
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "agentDeleteMCP" })).toBeEnabled();
   });
 });
 
@@ -554,7 +557,7 @@ it.each(["skill", "mcp"])("%s 更新期间保留其他资源状态并标记当�
     expect(control).toHaveAttribute("aria-checked", String(name !== "gamma"));
     expect(control).toHaveAttribute("aria-busy", String(name === "alpha"));
   }
-  expect(screen.getByText("resourceUpdating")).toBeVisible();
+  if (kind === "mcp") expect(screen.getByText("resourceUpdating")).toBeVisible();
   expect(onSetResourceEnabled).not.toHaveBeenCalled();
 });
 

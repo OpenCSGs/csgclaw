@@ -37,6 +37,7 @@ export type TurnDiagnostic = {
   runtime_request_id?: string;
   model?: string;
   started_at: string;
+  dispatch_ms?: number;
   status: string;
   total_ms: number;
   runtime_start_ms?: number;
@@ -47,7 +48,21 @@ export type TurnDiagnostic = {
   incomplete?: boolean;
   browser?: { first_ms?: number; complete_ms?: number; first_text_ms?: number; first_text_at?: string };
 };
-export type DiagnosticList = { items: TurnDiagnostic[]; next_cursor: string };
+export type DiagnosticSource = {
+  id: string;
+  sender_name: string;
+  content: string;
+  created_at: string;
+  state: "recorded" | "waiting" | "no_execution" | "unavailable";
+  primary_agent_id?: string;
+};
+export type DiagnosticList = {
+  items: TurnDiagnostic[];
+  next_cursor: string;
+  total: number;
+  agents: { id: string; name: string }[];
+  source?: DiagnosticSource | null;
+};
 const path = (room: string) => `/api/v1/rooms/${encodeURIComponent(room)}/diagnostics`;
 export function fetchDiagnostics(room: string, filters: Record<string, string>, signal?: AbortSignal) {
   return request<DiagnosticList>(`${path(room)}?${new URLSearchParams(filters)}`, { signal });

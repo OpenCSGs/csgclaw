@@ -20,10 +20,10 @@ import (
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/auth"
-	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/binding"
 	"csgclaw/internal/channel/csgclaw/delivery"
 	"csgclaw/internal/channel/csgclaw/execution"
+	csgclawsource "csgclaw/internal/channel/csgclaw/source"
 	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
@@ -70,7 +70,7 @@ func (r *diagnosticFixtureRuntime) Run(ctx context.Context, req agentengine.Turn
 
 func (r *diagnosticFixtureRuntime) requestModel(ctx context.Context, session, turn string) error {
 	gateway, _ := r.gateway.Load().(string)
-	req, err := http.NewRequestWithContext(ctx, "POST", gateway+"/api/v1/agents/agent-diag/llm/responses", strings.NewReader(`{"model":"fixture-model","input":"fixture","stream":true}`))
+	req, err := http.NewRequestWithContext(ctx, "POST", gateway+"/api/v1/agents/"+diagnostics.From(ctx).Snapshot().AgentID+"/llm/responses", strings.NewReader(`{"model":"fixture-model","input":"fixture","stream":true}`))
 	if err != nil {
 		return err
 	}
@@ -107,12 +107,26 @@ func TestDiagnosticsBrowserFixture(t *testing.T) {
 	}))
 	defer model.Close()
 	rt := &diagnosticFixtureRuntime{uiFixtureRuntime: uiFixtureRuntime{fakeCompatRuntime: fakeCompatRuntime{kind: agent.RuntimeKindCodex}}}
-	controller := mustNewSeededServiceWithOptions(t, []agent.Agent{{ID: "agent-diag", Name: "性能验证 Agent", Role: agent.RoleWorker, AgentProfile: agent.AgentProfile{Provider: agent.ProviderAPI, BaseURL: model.URL + "/v1", APIKey: "fixture-key", ModelID: "fixture-model", ProfileComplete: true}, RuntimeKind: agent.RuntimeKindCodex, RuntimeID: "rt-diag", Status: "running", ProfileComplete: true}}, agent.WithRuntime(rt))
+	items := []agent.Agent{}
+	for _, item := range []struct{ id, name, runtime string }{{agent.ManagerUserID, "manager", "rt-diag"}, {"agent-dev", "dev", "rt-dev"}} {
+		items = append(items, agent.Agent{ID: item.id, Name: item.name, Role: agent.RoleWorker, AgentProfile: agent.AgentProfile{Provider: agent.ProviderAPI, BaseURL: model.URL + "/v1", APIKey: "fixture-key", ModelID: "fixture-model", ProfileComplete: true}, RuntimeKind: agent.RuntimeKindCodex, RuntimeID: item.runtime, Status: "running", ProfileComplete: true})
+	}
+	controller := mustNewSeededServiceWithOptions(t, items, agent.WithRuntime(rt))
 	engine := agentengine.New(controller)
-	participants := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{{ID: "pt-diag", Channel: "csgclaw", Type: participant.TypeAgent, Name: "性能验证 Agent", AgentID: "agent-diag", ChannelUserRef: "user-diag", ChannelUserKind: participant.ChannelUserKindLocalUserID, Mentionable: true}}), participant.WithAgentEngine(engine))
+	participants := participant.NewService(participant.NewMemoryStore([]apitypes.Participant{
+		{ID: agent.ManagerParticipantID, Channel: "csgclaw", Type: participant.TypeAgent, Name: "manager", AgentID: agent.ManagerUserID, ChannelUserRef: im.ManagerUserID, ChannelUserKind: participant.ChannelUserKindLocalUserID, Mentionable: true},
+		{ID: "pt-wait", Channel: "csgclaw", Type: participant.TypeAgent, Name: "waiting-agent", AgentID: "agent-wait", ChannelUserRef: "user-wait", ChannelUserKind: participant.ChannelUserKindLocalUserID},
+		{ID: "pt-dev", Channel: "csgclaw", Type: participant.TypeAgent, Name: "dev", AgentID: "agent-dev", ChannelUserRef: "user-dev", ChannelUserKind: participant.ChannelUserKindLocalUserID, Mentionable: true},
+	}), participant.WithAgentEngine(engine))
 	bus := im.NewBus()
 	bridge := im.NewParticipantBridge("")
-	svc := im.NewServiceFromBootstrapWithBus(im.Bootstrap{CurrentUserID: im.AdminUserID, Users: []im.User{{ID: im.AdminUserID, Name: "验收用户", Role: "admin"}, {ID: "user-diag", Name: "性能验证 Agent", Role: "worker"}, {ID: "user-other", Name: "其他成员", Role: "user"}}, Rooms: []im.Room{{ID: "room-diag", Title: "Turn 性能诊断验收", Members: []string{im.AdminUserID, "user-diag", "user-other"}, NotifyAllAgents: true}}}, bus)
+	svc := im.NewServiceFromBootstrapWithBus(im.Bootstrap{CurrentUserID: im.AdminUserID, Users: []im.User{{ID: im.AdminUserID, Name: "本地用户", Role: "admin"}, {ID: im.ManagerUserID, Name: "manager", Role: "worker"}, {ID: "user-dev", Name: "dev", Role: "worker"}, {ID: "user-other", Name: "其他成员", Role: "user"}, {ID: "user-wait", Name: "waiting-agent", Role: "worker"}}, Rooms: []im.Room{
+		{ID: "room-diag", Type: apitypes.RoomTypeOnDemand, ManagerID: im.ManagerUserID, Title: "Turn 性能诊断验收", Members: []string{im.AdminUserID, im.ManagerUserID}},
+		{ID: "room-multi", Title: "多 Agent 诊断验收", Members: []string{im.AdminUserID, im.ManagerUserID, "user-dev"}},
+		{ID: "room-empty", Title: "无执行诊断验收", Members: []string{im.AdminUserID, "user-other"}, Messages: []im.Message{{ID: "expired-source", SenderID: im.AdminUserID, Content: "历史消息，诊断已不可用", CreatedAt: time.Now().Add(-8 * 24 * time.Hour), Metadata: map[string]any{"diagnostics": map[string]any{"source_id": "expired-source", "room_id": "room-empty"}}}}},
+		{ID: "room-wait", Type: apitypes.RoomTypeOnDemand, ManagerID: "user-wait", Title: "等待执行诊断验收", Members: []string{im.AdminUserID, "user-wait"}},
+	}}, bus)
+
 	store, err := delivery.NewIMTranscriptStore(svc, participants, engine)
 	if err != nil {
 		t.Fatal(err)
@@ -126,27 +140,23 @@ func TestDiagnosticsBrowserFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer manager.Close()
-	if err := manager.Ensure(channel.Binding{ID: "pt-diag", ParticipantID: "pt-diag", AgentID: "agent-diag", Channel: "csgclaw"}); err != nil {
+	source, err := csgclawsource.New(bridge, bus, participants, engine.Agents(), manager)
+	if err != nil {
 		t.Fatal(err)
 	}
+	if err := source.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	h := NewHandlerWithAuth(AgentServices{Records: controller, Workspace: controller.Workspace(), Models: controller.Models(), Runtime: controller}, engine, svc, bus, bridge, nil, llm.NewService(config.ModelConfig{}, controller), "diagnostic-fixture-token", true)
+	h.SetParticipantService(participants)
 	events, unsubscribe := bus.Subscribe()
 	defer unsubscribe()
 	go func() {
 		for event := range events {
-			if event.Type != im.EventTypeMessageCreated || event.Message == nil || event.Message.SenderID != im.AdminUserID {
-				continue
-			}
-			thread := ""
-			if event.Message.RelatesTo != nil {
-				thread = event.Message.RelatesTo.EventID
-			}
-			if err := manager.Submit(channel.Binding{ID: "pt-diag", ParticipantID: "pt-diag", AgentID: "agent-diag", Channel: "csgclaw"}, channel.Event{RoomID: event.RoomID, MessageID: event.Message.ID, Text: event.Message.Content, Locale: "zh", ThreadRootID: thread}); err != nil {
-				t.Error(err)
-			}
+			h.PublishParticipantEvent(event)
 		}
 	}()
-	h := NewHandlerWithAuth(AgentServices{Records: controller, Workspace: controller.Workspace(), Models: controller.Models(), Runtime: controller}, engine, svc, bus, bridge, nil, llm.NewService(config.ModelConfig{}, controller), "diagnostic-fixture-token", true)
-	h.SetParticipantService(participants)
 	router := h.Routes()
 	finished := make(chan struct{})
 	var once sync.Once

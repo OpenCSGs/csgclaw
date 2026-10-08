@@ -44,6 +44,13 @@ func (h *Handler) PublishParticipantEvent(evt im.Event) {
 	if evt.Type != im.EventTypeMessageCreated || evt.Message == nil || evt.Sender == nil {
 		return
 	}
+	defer func() {
+		state := h.diagnosticDeliveryState(evt.RoomID, evt.Message.ID)
+		if _, reset, _ := newConversationCommandReason(evt.Message.Content); reset {
+			state = "no_execution"
+		}
+		h.im.Diagnostics().SourceDispatched(evt.RoomID, evt.Message.ID, state)
+	}()
 	if isParticipantControlRecord(*evt.Message) && h.roomTaskSvc != nil {
 		metadata, _ := evt.Message.Metadata["csgclaw"].(map[string]any)
 		if metadata["delivery_kind"] == "turn_stopped" {

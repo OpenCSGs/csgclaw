@@ -57,6 +57,7 @@ type Snapshot struct {
 	RuntimeTurnID    string    `json:"runtime_turn_id,omitempty"`
 	RuntimeRequestID string    `json:"runtime_request_id,omitempty"`
 	StartedAt        time.Time `json:"started_at"`
+	DispatchMS       float64   `json:"dispatch_ms"`
 	Status           string    `json:"status"`
 	TotalMS          float64   `json:"total_ms"`
 	RuntimeStartMS   *float64  `json:"runtime_start_ms,omitempty"`
@@ -77,8 +78,9 @@ type Record struct {
 	eventSpans  int
 }
 type source struct {
-	started time.Time
-	ready   time.Time
+	started  time.Time
+	ready    time.Time
+	dispatch string
 }
 type Store struct {
 	mu          sync.Mutex
@@ -154,6 +156,32 @@ func (s *Store) Source(room, sourceID string, started time.Time) {
 	}
 	s.sources[key(room, sourceID)] = source{started: started, ready: time.Now()}
 }
+
+// SourceDispatched records the completed routing decision without retaining
+// message content. Empty dispatch means routing has not completed yet.
+func (s *Store) SourceDispatched(room, sourceID, dispatch string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := key(room, sourceID)
+	if src, ok := s.sources[k]; ok {
+		src.dispatch = dispatch
+		s.sources[k] = src
+	}
+}
+
+func (s *Store) SourceState(room, sourceID string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	src, ok := s.sources[key(room, sourceID)]
+	if !ok || time.Since(src.started) > Retention {
+		return "unavailable"
+	}
+	if src.dispatch == "" {
+		return "waiting"
+	}
+	return src.dispatch
+}
+
 func (s *Store) Begin(room, sourceID, thread, agent, turn string) *Record {
 	if s == nil {
 		return nil
@@ -174,7 +202,7 @@ func (s *Store) Begin(room, sourceID, thread, agent, turn string) *Record {
 	if !exists {
 		src = source{started: now, ready: now}
 	}
-	r := &Record{store: s, origin: src.started, active: map[string]int{}, data: Snapshot{ID: id, RoomID: room, SourceID: sourceID, ThreadID: thread, AgentID: agent, TurnID: turn, StartedAt: src.started, Status: "queued", Incomplete: !exists}}
+	r := &Record{store: s, origin: src.started, active: map[string]int{}, data: Snapshot{ID: id, RoomID: room, SourceID: sourceID, ThreadID: thread, AgentID: agent, TurnID: turn, StartedAt: src.started, DispatchMS: now.Sub(src.started).Seconds() * 1000, Status: "queued", Incomplete: !exists}}
 	s.records[id] = r
 	s.mu.Unlock()
 	r.Interval("message.accept", "csgclaw", src.started, src.ready)
