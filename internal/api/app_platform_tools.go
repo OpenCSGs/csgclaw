@@ -336,7 +336,7 @@ func (h *Handler) registerAppRoomTools(agentID string) {
 		}
 		return h.invokeAppPlatformHandler(ctx, agentID, http.MethodGet, nil, url.Values{"room_id": {id}}, nil, h.handleMessages)
 	})
-	h.addAppPlatformTool(agentID, "message_send", "Send a message as yourself to a room you belong to. Use mention_id for an explicitly requested notification.", platformTextFields("room_id", "content", "mention_id", "client_message_id"), []string{"room_id", "content"}, false, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
+	h.addAppPlatformTool(agentID, "message_send", "Send a message as yourself to a room you belong to. Mentions follow the room's routing policy. In an on-demand room, message mentions do not dispatch work; use room_task_dispatch to start a Worker and room_task_message for task-scoped communication.", platformTextFields("room_id", "content", "mention_id", "client_message_id"), []string{"room_id", "content"}, false, func(ctx context.Context, req *mcp.CallToolRequest, args map[string]any) (any, error) {
 		if err := h.requirePlatformRoom(agentID, platformText(args, "room_id")); err != nil {
 			return nil, err
 		}

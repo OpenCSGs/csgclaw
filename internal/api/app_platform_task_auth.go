@@ -7,6 +7,29 @@ import (
 	agent "csgclaw/internal/agentengine/agents"
 )
 
+// The unified CLI resolves a task's assignment before calling its scoped
+// operation. Admit that lookup with the same ownership rules as the operation's
+// read API, without granting access to the global task list.
+func (h *Handler) authorizeAgentTaskLookup(agentID, taskID string) bool {
+	if h.roomTaskSvc != nil {
+		if task, found := h.roomTaskSvc.Resolve(taskID); found {
+			return h.agentPlatformRoom(agentID, task.RoomID)
+		}
+	}
+	if _, err := h.appDirectTask(agentID, taskID, false); err == nil {
+		return true
+	}
+	if h.teamSvc != nil {
+		for _, task := range h.teamSvc.ListGlobalTaskViews(h.teamDirectory()) {
+			if task.Task.ID == taskID {
+				_, err := h.appTaskTeam(agentID, task.Task.TeamID, false)
+				return err == nil
+			}
+		}
+	}
+	return false
+}
+
 // Runtime CLI task notifications remain valid with Agent credentials. Each
 // admitted route resolves task/team ownership and replaces identity arguments.
 func (h *Handler) authorizeAgentTaskRoute(r *http.Request, agentID string, parts []string) bool {

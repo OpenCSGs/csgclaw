@@ -167,6 +167,9 @@ func TestAppMCPDirectTaskOwnership(t *testing.T) {
 	other := taskMCPClient(t, h, "agent-qa")
 	var task apitypes.TeamTask
 	callTaskTool(t, manager, "agent_task_create", map[string]any{"agent_id": "agent-dev", "title": "Write a summary", "body": "Use the assigned sources"}, &task)
+	if !h.authorizeAgentTaskLookup("agent-dev", task.ID) || !h.authorizeAgentTaskLookup(agent.ManagerUserID, task.ID) || h.authorizeAgentTaskLookup("agent-qa", task.ID) {
+		t.Fatal("unified task lookup did not preserve direct-task ownership")
+	}
 	if task.CreatedBy != agent.ManagerParticipantID || task.AssignedTo != "pt-dev" {
 		t.Fatalf("wrong direct task identities: %+v", task)
 	}
@@ -193,6 +196,9 @@ func TestAppMCPTeamMembershipAndApprovalOwnership(t *testing.T) {
 	callTaskTool(t, manager, "team_tasks_create", map[string]any{"team_id": meta.ID, "tasks": []any{map[string]any{"title": "Implement", "assign_to": "pt-dev"}}}, &batch)
 	if len(batch.Tasks) != 1 || batch.Tasks[0].RoomID == "" {
 		t.Fatalf("task workflow did not create execution room: %+v", batch)
+	}
+	if !h.authorizeAgentTaskLookup("agent-dev", batch.Tasks[0].ID) || h.authorizeAgentTaskLookup("agent-outsider", batch.Tasks[0].ID) {
+		t.Fatal("unified task lookup did not preserve Team membership")
 	}
 	task := batch.Tasks[0]
 	callTaskTool(t, worker, "team_task_claim", map[string]any{"team_id": meta.ID, "task_id": task.ID}, nil)
