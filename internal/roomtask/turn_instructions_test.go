@@ -62,7 +62,7 @@ func TestOnDemandPolicyInstructionsDoNotEnableOtherCoordinationScopes(t *testing
 
 func TestOnDemandTurnDirectiveRepeatsTheImmediateRoleGate(t *testing.T) {
 	manager := OnDemandTurnDirective(TurnRoleManager)
-	for _, want := range []string{"ON-DEMAND ROOM MANAGER MODE IS ACTIVE", "not the direct executor", "task submit, task plan, and task dispatch", "Do not bypass this workflow", "Only greetings"} {
+	for _, want := range []string{"ON-DEMAND ROOM MANAGER MODE IS ACTIVE", "not the direct executor", "task submit, task plan, and task dispatch", "Do not bypass this workflow", "Only non-actionable replies", "another Worker's participation"} {
 		if !strings.Contains(manager, want) {
 			t.Fatalf("Manager turn directive missing %q in %q", want, manager)
 		}

@@ -110,6 +110,9 @@ func (h *Handler) authorizeAgentPlatformRoute(r *http.Request, agentID string) b
 	if parts[0] == "agent-tasks" || parts[0] == "teams" {
 		return h.authorizeAgentTaskRoute(r, agentID, parts)
 	}
+	if len(parts) == 2 && parts[0] == "tasks" && r.Method == http.MethodGet {
+		return h.authorizeAgentTaskLookup(agentID, parts[1])
+	}
 	if len(parts) >= 3 && parts[0] == "agents" {
 		if agent.CanonicalID(parts[1]) != agent.CanonicalID(agentID) {
 			return false
@@ -128,7 +131,7 @@ func (h *Handler) authorizeAgentPlatformRoute(r *http.Request, agentID string) b
 	if len(parts) == 3 && parts[0] == "rooms" && parts[2] == "task-context" && r.Method == http.MethodGet {
 		return h.agentPlatformRoom(agentID, parts[1])
 	}
-	if p == "messages" {
+	if p == "messages" || p == "channels/csgclaw/messages" {
 		if r.Method == http.MethodGet {
 			return h.agentPlatformRoom(agentID, r.URL.Query().Get("room_id"))
 		}
