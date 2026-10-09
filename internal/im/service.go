@@ -2045,6 +2045,9 @@ func (s *Service) CreateMessageOnce(req CreateMessageRequest) (Message, bool, er
 	if !ok {
 		return Message{}, false, ErrRoomNotFound
 	}
+	if err := s.validateRoomMessageDispatchLocked(*room, senderID, content, req.Metadata); err != nil {
+		return Message{}, false, err
+	}
 	if clientMessageID != "" {
 		for _, existing := range room.Messages {
 			if existing.SenderID == senderID && existing.ClientMessageID == clientMessageID {
@@ -3344,6 +3347,16 @@ func (s *Service) contentWithMentionPrefixLocked(content, mentionID string, ownL
 	}
 
 	prefix := fmt.Sprintf("<at user_id=\"%s\">%s</at>", mentionID, displayName)
+	// Tool callers may put a participant ID in the body and also supply
+	// mention_id. Compare resolved identities before adding another prefix.
+	for _, taggedID := range MentionTagUserIDs(content) {
+		if s.resolveUserIDLocked(taggedID) == mentionID {
+			return content, nil
+		}
+	}
+	if tagged := replaceMentionNameWithTag(content, Mention{ID: mentionID, Name: displayName}); tagged != content {
+		return tagged, nil
+	}
 	if content == prefix || strings.HasPrefix(content, prefix+" ") || strings.HasPrefix(content, prefix+"\n") {
 		return content, nil
 	}

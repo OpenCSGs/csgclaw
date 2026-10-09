@@ -161,7 +161,7 @@ func (h *Handler) registerAppDirectTaskTools(agentID string) {
 		return apiCoreTask(task, h.newTeamIdentityPresenter()), nil
 	})
 	create := taskToolFields("agent_id", "title", "body")
-	h.addAppPlatformTool(agentID, "agent_task_create", "Assign a task to a worker Agent and send its task notification; Manager only.", create, []string{"agent_id", "title"}, false, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
+	h.addAppPlatformTool(agentID, "agent_task_create", "Create a personal task delivered to a worker's private chat; Manager only. For collaboration in the current on-demand room, use room_task_create, room_task_plan and room_task_dispatch instead.", create, []string{"agent_id", "title"}, false, func(ctx context.Context, _ *mcp.CallToolRequest, args map[string]any) (any, error) {
 		if err := h.requirePlatformManager(agentID); err != nil {
 			return nil, err
 		}

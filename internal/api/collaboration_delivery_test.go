@@ -103,7 +103,7 @@ func TestAgentTaskLookupUsesRoomMembership(t *testing.T) {
 	}
 }
 
-func TestManagerMessageMentionsRemainRoomMessages(t *testing.T) {
+func TestManagerMessageMentionsRespectRoomDispatchWithoutNativeMetadata(t *testing.T) {
 	h := newAppTaskTestHandler(t)
 	h.registerAppRoomTools("agent-manager")
 	client := taskMCPClient(t, h, "agent-manager")
@@ -113,6 +113,21 @@ func TestManagerMessageMentionsRemainRoomMessages(t *testing.T) {
 			t.Fatal(err)
 		}
 		before, _ := h.im.ListMessages(room.ID)
+		if roomType == apitypes.RoomTypeOnDemand {
+			for _, args := range []map[string]any{
+				{"room_id": room.ID, "mention_id": "pt-dev", "content": "Participate"},
+				{"room_id": room.ID, "content": `<at user_id="pt-dev">dev</at> Participate`},
+				{"room_id": room.ID, "content": "@dev Participate"},
+			} {
+				denyTaskTool(t, client, "message_send", args)
+			}
+			after, _ := h.im.ListMessages(room.ID)
+			if len(after) != len(before) || len(h.roomTaskSvc.List(room.ID)) != 0 {
+				t.Fatal("rejected ordinary mention changed room messages or tasks")
+			}
+			callTaskTool(t, client, "message_send", map[string]any{"room_id": room.ID, "content": "Progress announcement"}, nil)
+			continue
+		}
 		var message im.Message
 		callTaskTool(t, client, "message_send", map[string]any{"room_id": room.ID, "mention_id": "pt-dev", "content": "A room message"}, &message)
 		after, _ := h.im.ListMessages(room.ID)
