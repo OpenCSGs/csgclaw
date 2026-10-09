@@ -9,10 +9,76 @@ import (
 	"csgclaw/internal/im"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestLargeProgressPersistsWithoutBlockingOtherRooms(t *testing.T) {
+	for _, kind := range []string{"single tool", "multiple tools", "reasoning"} {
+		t.Run(kind, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "state.json")
+			bootstrap := im.Bootstrap{
+				CurrentUserID: "user",
+				Users:         []im.User{{ID: "user", Name: "User"}, {ID: "agent", Name: "Agent"}},
+				Rooms: []im.Room{
+					{ID: "room", Title: "Room", Members: []string{"user", "agent"}},
+					{ID: "other", Title: "Other room", Members: []string{"user", "agent"}},
+				},
+			}
+			if err := im.SaveBootstrap(path, bootstrap); err != nil {
+				t.Fatal(err)
+			}
+			service, err := im.NewServiceFromPath(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			store, err := NewIMTranscriptStore(service, fixedParticipantResolver{item: apitypes.Participant{ID: "participant", ChannelUserRef: "agent"}}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			turn := channel.TurnContext{AgentID: "agent", RoomID: "room", ParticipantID: "participant", TurnID: "turn-csgclaw-large", ConversationKey: "room"}
+			progress := activity.TurnProgress{ID: string(turn.TurnID), Status: "running", Items: []activity.ProgressItem{}}
+			if err := store.DeliverTurnProgress(context.Background(), turn, progress, "", true, nil); err != nil {
+				t.Fatal(err)
+			}
+			switch kind {
+			case "reasoning":
+				progress.Items = append(progress.Items, activity.ProgressItem{ID: "thought", Kind: "reasoning", Text: strings.Repeat("R", 70*1024)})
+			default:
+				count, size := 1, 64*1024
+				if kind == "multiple tools" {
+					count, size = 8, 8*1024
+				}
+				for i := 0; i < count; i++ {
+					tool := progressTool(agentengine.ToolActivity{Kind: "exec_command", Status: "completed", OutputSummary: strings.Repeat("X", size)}, nil)
+					progress.Items = append(progress.Items, activity.ProgressItem{ID: fmt.Sprintf("tool-%d", i), Kind: "tool", Tool: tool})
+				}
+			}
+			progress.Status = "succeeded"
+			if err := store.DeliverTurnProgress(context.Background(), turn, progress, "Short answer", true, nil); err != nil {
+				t.Fatalf("large progress delivery failed: %v", err)
+			}
+			if _, err := service.CreateMessage(im.CreateMessageRequest{RoomID: "other", SenderID: "user", Content: "你好"}); err != nil {
+				t.Fatalf("unrelated room blocked: %v", err)
+			}
+			if _, err := service.CreateRoom(im.CreateRoomRequest{Type: apitypes.RoomTypeOnDemand, Title: "New on-demand room", CreatorID: "user", ManagerID: "agent"}); err != nil {
+				t.Fatalf("room creation blocked: %v", err)
+			}
+			restarted, err := im.NewServiceFromPath(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			message, loaded := progressMessage(t, restarted)
+			want, _ := json.Marshal(progress)
+			got, _ := json.Marshal(loaded)
+			if message.Content != "Short answer" || string(got) != string(want) {
+				t.Fatal("restart lost answer or progress details")
+			}
+		})
+	}
+}
 
 func progressFixture(t *testing.T) (*TranscriptRenderer, *im.Service, channel.TurnContext) {
 	t.Helper()
