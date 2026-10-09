@@ -14,6 +14,7 @@ import (
 	"csgclaw/internal/im"
 	"csgclaw/internal/taskcore"
 	"csgclaw/internal/team"
+	"github.com/go-chi/chi/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -64,10 +65,12 @@ func newAppTaskTestHandler(t *testing.T) *Handler {
 func taskMCPClient(t *testing.T, h *Handler, agentID string) *mcp.ClientSession {
 	t.Helper()
 	h.registerAppPlatformTaskTools(agentID)
-	server := httptest.NewServer(h.apps.Handler(agentID))
+	router := chi.NewRouter()
+	router.Handle("/api/v1/agents/{id}/mcp", h.apps.Handler(agentID))
+	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	client := mcp.NewClient(&mcp.Implementation{Name: "task-fixture", Version: "1"}, &mcp.ClientOptions{Capabilities: &mcp.ClientCapabilities{}})
-	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: server.URL, MaxRetries: -1}, nil)
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: server.URL + "/api/v1/agents/" + agentID + "/mcp", MaxRetries: -1}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +85,8 @@ func callTaskTool(t *testing.T, client *mcp.ClientSession, name string, args map
 		t.Fatalf("%s: %v", name, err)
 	}
 	if result.IsError {
-		t.Fatalf("%s: %+v", name, result.Content)
+		content, _ := json.Marshal(result.Content)
+		t.Fatalf("%s: %s", name, content)
 	}
 	if target == nil {
 		return

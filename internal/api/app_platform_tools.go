@@ -13,6 +13,7 @@ import (
 	"csgclaw/internal/agentengine"
 	agent "csgclaw/internal/agentengine/agents"
 	"csgclaw/internal/participant"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -43,8 +44,11 @@ func (h *Handler) addAppPlatformTool(agentID, name, description string, properti
 		if request.Params == nil {
 			return platformToolFailure(fmt.Errorf("invalid tool request")), nil
 		}
-		if len(request.Params.Arguments) > 0 && json.Unmarshal(request.Params.Arguments, &args) != nil {
+		if len(request.Params.Arguments) > 0 && (json.Unmarshal(request.Params.Arguments, &args) != nil || args == nil) {
 			return platformToolFailure(fmt.Errorf("invalid tool arguments")), nil
+		}
+		if err := h.scopeAppPlatformRoomTool(agentID, name, request, args); err != nil {
+			return platformToolFailure(err), nil
 		}
 		if schemaErr != nil || resolved.Validate(args) != nil {
 			return platformToolFailure(fmt.Errorf("invalid tool arguments")), nil
@@ -66,6 +70,69 @@ func (h *Handler) addAppPlatformTool(agentID, name, description string, properti
 
 func platformToolFailure(err error) *mcp.CallToolResult {
 	return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}}}
+}
+
+// Use the native turn's persisted conversation binding, never an Agent's latest
+// room: one Agent may coordinate several rooms concurrently.
+func (h *Handler) scopeAppPlatformRoomTool(agentID, name string, request *mcp.CallToolRequest, args map[string]any) error {
+	if name != "agent_task_create" && name != "message_send" && !strings.HasPrefix(name, "room_task") {
+		return nil
+	}
+	if request.Params.Meta["x-codex-turn-metadata"] == nil {
+		return nil // Preserve clients/runtimes without the native turn contract.
+	}
+	thread, turn, err := appNativeTurnIDs(request)
+	if err != nil {
+		return err
+	}
+	rt := h.connectorCodexRuntime()
+	if rt == nil {
+		return fmt.Errorf("Codex runtime unavailable")
+	}
+	_, conversation, err := rt.AgentTurnContext(agentID, thread, turn)
+	if err != nil {
+		return err
+	}
+	return h.scopeAppPlatformRoomConversation(agentID, name, conversation, args)
+}
+
+func (h *Handler) scopeAppPlatformRoomConversation(agentID, name, conversation string, args map[string]any) error {
+	if !strings.HasPrefix(conversation, "csgclaw-im:") {
+		return nil
+	}
+	_, scope, ok := strings.Cut(conversation, ":room:")
+	if !ok {
+		return nil
+	}
+	scope, _, _ = strings.Cut(scope, ":")
+	roomID, err := url.QueryUnescape(scope)
+	if err != nil {
+		return fmt.Errorf("invalid room conversation binding")
+	}
+	roster, ok := h.roomSchedulingContext(roomID)
+	if !ok {
+		return nil // Direct and free rooms retain their existing tools.
+	}
+	if strings.HasPrefix(name, "room_task") {
+		args["room_id"] = roomID
+		return nil
+	}
+	caller := h.participantBridgeTargetForRoomMember(h.agentPlatformParticipant(agentID))
+	if !caller.matches(roster.ManagerID) {
+		return nil
+	}
+	if name == "message_send" && platformText(args, "room_id") == roomID {
+		target := h.participantBridgeTargetForRoomMember(platformText(args, "mention_id"))
+		for _, worker := range roster.WorkerIDs {
+			if target.matches(worker) {
+				return fmt.Errorf("ordinary mentions do not dispatch Workers in this on-demand room; use room_task_create, room_task_plan and room_task_dispatch, or room_task_message for an existing task")
+			}
+		}
+	}
+	if name == "agent_task_create" {
+		return fmt.Errorf("this turn belongs to on-demand room %s; use room_task_create, room_task_plan and room_task_dispatch so work and replies stay in this room; agent_task_create delivers to a private chat", roomID)
+	}
+	return nil
 }
 
 func platformTextFields(names ...string) map[string]any {
@@ -121,6 +188,8 @@ func (h *Handler) invokeAppPlatformHandler(ctx context.Context, agentID, method 
 	if err != nil {
 		return nil, fmt.Errorf("invalid platform request")
 	}
+	// Internal requests must not inherit /agents/{id}/mcp route parameters.
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, chi.NewRouteContext())
 	r, err := http.NewRequestWithContext(context.WithValue(ctx, appAgentContextKey{}, agentID), method, "http://csgclaw.internal/platform?"+query.Encode(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
