@@ -78,3 +78,16 @@ func TestOnDemandTurnDirectiveRepeatsTheImmediateRoleGate(t *testing.T) {
 		t.Fatalf("unknown role turn directive = %q, want empty", got)
 	}
 }
+
+func TestOnDemandWorkerParticipationRequiresTrackedDispatch(t *testing.T) {
+	for name, instructions := range map[string]string{
+		"policy": OnDemandPolicyInstructions(TurnRoleManager, "csgclaw-cli"),
+		"turn":   onDemandManagerTurnDirective,
+	} {
+		for _, want := range []string{"only way to schedule Worker participation", "Never use ordinary message_send", "already dispatched task"} {
+			if !strings.Contains(instructions, want) {
+				t.Errorf("%s missing %q", name, want)
+			}
+		}
+	}
+}
