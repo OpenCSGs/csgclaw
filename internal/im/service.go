@@ -319,9 +319,15 @@ func NewServiceFromPath(path string) (*Service, error) {
 }
 
 func NewServiceFromPathWithBus(path string, bus *Bus) (*Service, error) {
-	state, err := LoadBootstrap(path)
+	var migrations []sessionMigration
+	state, err := loadBootstrap(path, &migrations)
 	if err != nil {
 		return nil, err
+	}
+	for _, migration := range migrations {
+		if err := saveMessagesJSONL(migration.path, migration.roomID, migration.messages); err != nil {
+			return nil, fmt.Errorf("migrate legacy im session %s: %w", migration.roomID, err)
+		}
 	}
 	for i := range state.Rooms {
 		interruptSavedTurnProgress(state.Rooms[i].Messages)
@@ -353,6 +359,10 @@ func DefaultBootstrap() Bootstrap {
 }
 
 func LoadBootstrap(path string) (Bootstrap, error) {
+	return loadBootstrap(path, nil)
+}
+
+func loadBootstrap(path string, migrations *[]sessionMigration) (Bootstrap, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -368,7 +378,7 @@ func LoadBootstrap(path string) (Bootstrap, error) {
 	if err := json.Unmarshal(data, &persisted); err != nil {
 		return Bootstrap{}, fmt.Errorf("decode im bootstrap %q: %w; %s", path, err, bootstrapRecoveryGuidance)
 	}
-	state, err := loadPersistedBootstrap(path, persisted)
+	state, err := loadPersistedBootstrap(path, persisted, migrations)
 	if err != nil {
 		return Bootstrap{}, err
 	}
@@ -450,14 +460,14 @@ func writePersistedBootstrap(path string, persisted persistedBootstrap) error {
 	return nil
 }
 
-func loadPersistedBootstrap(path string, persisted persistedBootstrap) (Bootstrap, error) {
+func loadPersistedBootstrap(path string, persisted persistedBootstrap, migrations *[]sessionMigration) (Bootstrap, error) {
 	state := Bootstrap{
 		CurrentUserID:      persisted.CurrentUserID,
 		Users:              append([]User(nil), persisted.Users...),
 		InviteDraftUserIDs: append([]string(nil), persisted.InviteDraftUserIDs...),
 	}
 
-	rooms, err := loadPersistedRooms(path, persisted.Rooms)
+	rooms, err := loadPersistedRooms(path, persisted.Rooms, migrations)
 	if err != nil {
 		return Bootstrap{}, err
 	}
@@ -465,14 +475,14 @@ func loadPersistedBootstrap(path string, persisted persistedBootstrap) (Bootstra
 	return state, nil
 }
 
-func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error) {
+func loadPersistedRooms(statePath string, rooms []persistedRoom, migrations *[]sessionMigration) ([]Room, error) {
 	if len(rooms) == 0 {
 		return nil, nil
 	}
 
 	loaded := make([]Room, 0, len(rooms))
 	for _, room := range rooms {
-		messages, err := loadRoomMessages(statePath, room.ID, room.Messages)
+		messages, err := loadRoomMessages(statePath, room.ID, room.Messages, migrations)
 		if err != nil {
 			return nil, err
 		}
@@ -500,7 +510,7 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 	return loaded, nil
 }
 
-func loadRoomMessages(statePath, roomID, relativePath string) ([]Message, error) {
+func loadRoomMessages(statePath, roomID, relativePath string, migrations *[]sessionMigration) ([]Message, error) {
 	relativePath = strings.TrimSpace(relativePath)
 	if relativePath == "" {
 		return nil, nil
@@ -509,7 +519,7 @@ func loadRoomMessages(statePath, roomID, relativePath string) ([]Message, error)
 		return nil, fmt.Errorf("decode room %s messages: expected jsonl session path", roomID)
 	}
 	sessionPath := filepath.Join(filepath.Dir(statePath), filepath.FromSlash(relativePath))
-	return loadMessagesJSONL(sessionPath, roomID)
+	return loadSessionMessages(sessionPath, roomID, migrations)
 }
 
 func loadRoomThreads(statePath, roomID string, refs []persistedThread) ([]ThreadState, error) {

@@ -129,6 +129,16 @@ func sessionBlobRelativePath(roomID, messageID string, data []byte) (string, err
 }
 
 func loadMessagesJSONL(path, roomID string) ([]Message, error) {
+	return loadSessionMessages(path, roomID, nil)
+}
+
+type sessionMigration struct {
+	path     string
+	roomID   string
+	messages []Message
+}
+
+func loadSessionMessages(path, roomID string, migrations *[]sessionMigration) ([]Message, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -145,12 +155,18 @@ func loadMessagesJSONL(path, roomID string) ([]Message, error) {
 
 	sessionsRoot := filepath.Dir(path)
 	messages := make([]Message, 0, len(lines))
+	oversized := false
 	for _, line := range lines {
 		message, err := decodeSessionMessageLine(sessionsRoot, line)
 		if err != nil {
 			return nil, err
 		}
 		messages = append(messages, message)
+		oversized = oversized || len(line) > maxSessionJSONLLineBytes
+	}
+	// Collect work during startup reads; publish only after all history decodes.
+	if oversized && migrations != nil {
+		*migrations = append(*migrations, sessionMigration{path: path, roomID: roomID, messages: messages})
 	}
 	return messages, nil
 }
@@ -252,34 +268,23 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 	}
 
 	sessionsRoot := filepath.Dir(path)
-	if len(messages) == 0 {
-		if err := truncateSessionJSONL(path); err != nil {
-			return err
-		}
-		return removeRoomSessionBlobs(sessionsRoot, roomID)
-	}
-
 	blobDir := filepath.Join(sessionsRoot, sessionBlobsDirName, roomID)
-	if err := os.MkdirAll(blobDir, 0o755); err != nil {
-		return fmt.Errorf("create im session blobs dir: %w", err)
-	}
-
-	var data bytes.Buffer
 	keepBlobs := make(map[string]struct{}, len(messages))
-	for _, message := range messages {
-		line, blobRef, err := encodeSessionMessageLine(sessionsRoot, roomID, message)
-		if err != nil {
-			return err
-		}
-		if blobRef != "" {
-			keepBlobs[filepath.Base(blobRef)] = struct{}{}
-		}
-		data.Write(line)
-		data.WriteByte('\n')
+	source := &sessionMessagesReader{sessionsRoot: sessionsRoot, roomID: roomID, messages: messages, keepBlobs: keepBlobs}
+	update, err := sessionJSONLUpdate(path, source)
+	if err != nil {
+		return err
 	}
-
-	if err := atomicWriteFile(path, data.Bytes(), 0o600); err != nil {
-		return fmt.Errorf("write im session: %w", err)
+	if update != nil {
+		defer update.Close()
+		// Only changed sessions need a temporary file and fsync. Stream one row
+		// at a time so memory does not grow with the whole session's JSONL size.
+		if err := atomicWriteReader(path, update, 0o600); err != nil {
+			return fmt.Errorf("write im session: %w", err)
+		}
+	}
+	if len(messages) == 0 {
+		return removeRoomSessionBlobs(sessionsRoot, roomID)
 	}
 	if err := cleanupRoomSessionBlobs(blobDir, keepBlobs); err != nil {
 		return err
@@ -287,11 +292,105 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 	return nil
 }
 
-func truncateSessionJSONL(path string) error {
-	if err := atomicWriteFile(path, nil, 0o600); err != nil {
-		return fmt.Errorf("write empty im session: %w", err)
+// sessionMessagesReader encodes lazily; any later encoding error aborts the
+// atomic write before it can replace the committed session.
+type sessionMessagesReader struct {
+	sessionsRoot string
+	roomID       string
+	messages     []Message
+	pending      []byte
+	keepBlobs    map[string]struct{}
+}
+
+func (r *sessionMessagesReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
 	}
-	return nil
+	if len(r.pending) == 0 {
+		if len(r.messages) == 0 {
+			return 0, io.EOF
+		}
+		line, blobRef, err := encodeSessionMessageLine(r.sessionsRoot, r.roomID, r.messages[0])
+		if err != nil {
+			return 0, err
+		}
+		if blobRef != "" {
+			r.keepBlobs[filepath.Base(blobRef)] = struct{}{}
+		}
+		r.messages = r.messages[1:]
+		r.pending = append(line, '\n')
+	}
+	n := copy(p, r.pending)
+	r.pending = r.pending[n:]
+	return n, nil
+}
+
+// sessionJSONLUpdate returns nil for an unchanged file. At the first difference,
+// reuse the matching prefix on disk and continue the encoder without restarting
+// it or buffering the entire history.
+func sessionJSONLUpdate(path string, source io.Reader) (io.ReadCloser, error) {
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return io.NopCloser(source), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("open im session for comparison: %w", err)
+	}
+	keepOpen := false
+	defer func() {
+		if !keepOpen {
+			_ = file.Close()
+		}
+	}()
+	var matched int64
+	var current, next [32 * 1024]byte
+	for {
+		n, sourceErr := io.ReadFull(source, next[:])
+		if sourceErr != nil && sourceErr != io.EOF && sourceErr != io.ErrUnexpectedEOF {
+			return nil, sourceErr
+		}
+		m, readErr := io.ReadFull(file, current[:])
+		if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+			return nil, fmt.Errorf("compare im session: %w", readErr)
+		}
+		if !bytes.Equal(next[:n], current[:m]) {
+			keepOpen = true
+			return &sessionUpdateReader{
+				Reader: io.MultiReader(io.NewSectionReader(file, 0, matched), bytes.NewReader(next[:n]), source),
+				file:   file,
+			}, nil
+		}
+		if sourceErr != nil || readErr != nil {
+			return nil, nil
+		}
+		matched += int64(n)
+	}
+}
+
+type sessionUpdateReader struct {
+	io.Reader
+	file *os.File
+}
+
+func (r *sessionUpdateReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err == io.EOF {
+		// Release the old file before atomicWriteReader renames over it, including
+		// on Windows where open file handles can prevent replacement.
+		if closeErr := r.Close(); closeErr != nil {
+			return n, closeErr
+		}
+	}
+	return n, err
+}
+
+func (r *sessionUpdateReader) Close() error {
+	if r.file == nil {
+		return nil
+	}
+	err := r.file.Close()
+	r.file = nil
+	return err
 }
 
 func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]byte, string, error) {
@@ -338,8 +437,16 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 		return nil, "", fmt.Errorf("encode im session message: metadata exceeds %d bytes for message %s", maxSessionJSONLLineBytes, message.ID)
 	}
 	blobPath := filepath.Join(sessionsRoot, filepath.FromSlash(relativeRef))
-	if err := atomicWriteFile(blobPath, blobData, 0o600); err != nil {
-		return nil, "", fmt.Errorf("write im session blob: %w", err)
+	// The content hash names an immutable payload. Reuse committed blobs rather
+	// than writing and syncing every historical tool result on every save.
+	info, err := os.Lstat(blobPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, "", fmt.Errorf("stat im session blob: %w", err)
+	}
+	if info == nil || !info.Mode().IsRegular() || info.Size() != int64(len(blobData)) {
+		if err := atomicWriteFile(blobPath, blobData, 0o600); err != nil {
+			return nil, "", fmt.Errorf("write im session blob: %w", err)
+		}
 	}
 	return data, relativeRef, nil
 }
