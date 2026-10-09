@@ -276,7 +276,7 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $stagingDirectory = Join-Path ([IO.Path]::GetTempPath()) "csgclaw-diagnostics-$timestamp-$PID"
-$archivePath = Join-Path $OutputDirectory "csgclaw-diagnostics.zip"
+$archivePath = Join-Path $OutputDirectory "csgclaw-diagnostics-$timestamp-$PID.zip"
 $temporaryArchivePath = Join-Path $OutputDirectory ".csgclaw-diagnostics-$timestamp-$PID.zip"
 $collectedPaths = [Collections.Generic.List[string]]::new()
 $collectionErrors = [Collections.Generic.List[string]]::new()
@@ -622,24 +622,19 @@ try {
     }
 
     @(
-        "CSGClaw diagnostics: send only csgclaw-diagnostics.zip to the person investigating the issue."
+        "CSGClaw diagnostics: send only $(Split-Path -Leaf $archivePath) to the person investigating the issue."
         "Collected at: $(Get-Date -Format o)"
         "All desktop, Codex, DSH, process, network, and Windows event diagnostics are in this single archive."
-        "The next successful collection replaces this archive. No separate Agent or crash archive is generated."
+        "Each collection creates a new archive in the same output directory and keeps previous archives. No separate Agent or crash archive is generated."
         "Check collection-errors.txt for unavailable data; partial collection does not mean all diagnostics are missing."
         "Desktop logs contain at most $DesktopLogLines lines per file; Agent logs contain at most $AgentLogLines lines per source."
         "Common credentials are best-effort redacted from text. Crashpad dumps are binary and cannot be redacted."
         "Room messages, workspace documents, full runtime homes, and auth files are not intentionally collected."
     ) | Set-Content -LiteralPath (Join-Path $stagingDirectory "README.txt") -Encoding UTF8
 
-    # Build beside the destination, then replace it only after compression succeeds.
+    # Build beside the destination, then publish a new archive after compression succeeds.
     Compress-Archive -Path (Join-Path $stagingDirectory "*") -DestinationPath $temporaryArchivePath -Force
-    if (Test-Path -LiteralPath $archivePath -PathType Leaf) {
-        [IO.File]::Replace($temporaryArchivePath, $archivePath, $null)
-    }
-    else {
-        [IO.File]::Move($temporaryArchivePath, $archivePath)
-    }
+    [IO.File]::Move($temporaryArchivePath, $archivePath)
 }
 finally {
     Remove-Item -LiteralPath $stagingDirectory -Recurse -Force -ErrorAction SilentlyContinue

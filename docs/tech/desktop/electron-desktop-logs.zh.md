@@ -85,10 +85,10 @@ Windows Website/Squirrel 安装包的日志位于 Electron `userData` 目录下�
 脚本将所有信息放进桌面上的**一个 ZIP**，不会为智能体或崩溃文件另外生成压缩包：
 
 ```text
-csgclaw-diagnostics.zip
+csgclaw-diagnostics-<yyyyMMdd-HHmmss>-<PID>.zip
 ```
 
-每次成功运行更新同名 ZIP，先完成压缩再替换旧文件。旧版脚本留下的带时间戳 ZIP 不会自动删除；本次只需发送 `csgclaw-diagnostics.zip`。
+每次成功运行都在同一输出目录生成带采集时间和进程号的新 ZIP，先完成压缩再发布文件，保留之前的诊断包。只需发送本次命令输出中显示的 ZIP；无需重新编译或重启 CSGClaw 即可使用更新后的采集脚本。
 
 主要收集内容：
 
