@@ -1,13 +1,177 @@
 package im
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestSaveLargeMetadataSpillsToBlob(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions", "room.jsonl")
+	message := Message{
+		ID: "turn-final", SenderID: "agent", Content: "Short answer", CreatedAt: time.Now().UTC(),
+		Metadata: map[string]any{"csgclaw": map[string]any{
+			"delivery_kind": "final",
+			"turn_progress": map[string]any{"items": []any{
+				map[string]any{"kind": "tool", "output": strings.Repeat("工具输出\n", 12000)},
+			}},
+		}},
+	}
+	if err := saveMessagesJSONL(path, "room", []Message{message}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bytes.TrimSpace(data)) > maxSessionJSONLLineBytes {
+		t.Fatalf("session line exceeds budget: %d bytes", len(data))
+	}
+	loaded, err := loadMessagesJSONL(path, "room")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].Content != message.Content || !reflect.DeepEqual(loaded[0].Metadata, message.Metadata) {
+		t.Fatal("large message metadata did not survive save and reload")
+	}
+}
+
+func TestLoadLegacyBlobKeepsInlineMetadata(t *testing.T) {
+	dir := t.TempDir()
+	metadata := map[string]any{"csgclaw": map[string]any{"delivery_kind": "final"}}
+	line := messageToSessionLine(Message{ID: "legacy", SenderID: "agent", CreatedAt: time.Now().UTC(), Metadata: metadata})
+	line.BlobRef = "blobs/room/legacy.json"
+	path := filepath.Join(dir, filepath.FromSlash(line.BlobRef))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"content":"Legacy response"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(line)
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := decodeSessionMessageLine(dir, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message.Content != "Legacy response" || !reflect.DeepEqual(message.Metadata, metadata) {
+		t.Fatal("legacy blob lost its inline metadata")
+	}
+}
+
+func TestLegacyOversizedMetadataMigratesOnNextSave(t *testing.T) {
+	for _, format := range []string{"inline", "legacy_blob"} {
+		t.Run(format, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "state.json")
+			state := Bootstrap{
+				CurrentUserID: AdminUserID,
+				Users:         []User{{ID: AdminUserID, Name: "Admin"}, {ID: ManagerUserID, Name: "Manager"}},
+				Rooms: []Room{
+					{ID: "old-room", Title: "Historical room", Members: []string{AdminUserID, ManagerUserID}},
+					{ID: "other-room", Title: "Other room", Members: []string{AdminUserID, ManagerUserID}},
+				},
+			}
+			if err := SaveBootstrap(path, state); err != nil {
+				t.Fatal(err)
+			}
+			original := Message{
+				ID: "historical-final", SenderID: ManagerUserID, Content: "Historical answer", CreatedAt: time.Now().UTC(),
+				Metadata: map[string]any{"csgclaw": map[string]any{
+					"delivery_kind": "final",
+					"turn_progress": map[string]any{"status": "succeeded", "items": []any{
+						map[string]any{"kind": "reasoning", "text": strings.Repeat("R", 70*1024)},
+					}},
+				}},
+			}
+			// Write an old-format row directly: the new writer would already spill it.
+			row := messageToSessionLine(original)
+			if format == "legacy_blob" {
+				row.Content = ""
+				row.BlobRef = "blobs/old-room/historical-final.json"
+				blobPath := filepath.Join(filepath.Dir(path), "sessions", filepath.FromSlash(row.BlobRef))
+				if err := os.MkdirAll(filepath.Dir(blobPath), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(blobPath, []byte(`{"content":"Historical answer"}`), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			data, err := json.Marshal(row)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(data) <= maxSessionJSONLLineBytes {
+				t.Fatal("fixture must exceed the old write limit")
+			}
+			sessionPath := filepath.Join(filepath.Dir(path), "sessions", "old-room.jsonl")
+			if err := os.WriteFile(sessionPath, append(data, '\n'), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			service, err := NewServiceFromPath(path)
+			if err != nil {
+				t.Fatalf("load historical oversized metadata: %v", err)
+			}
+			if _, err := service.CreateMessage(CreateMessageRequest{RoomID: "other-room", SenderID: AdminUserID, Content: "Hello"}); err != nil {
+				t.Fatalf("historical message blocks another room: %v", err)
+			}
+			if _, err := service.CreateRoom(CreateRoomRequest{Type: "on_demand", Title: "New room", CreatorID: AdminUserID, ManagerID: ManagerUserID}); err != nil {
+				t.Fatalf("historical message blocks room creation: %v", err)
+			}
+			data, err = os.ReadFile(sessionPath)
+			if err != nil || len(bytes.TrimSpace(data)) > maxSessionJSONLLineBytes {
+				t.Fatalf("historical record was not migrated: bytes=%d, error=%v", len(data), err)
+			}
+			loaded, err := loadMessagesJSONL(sessionPath, "old-room")
+			if err != nil || len(loaded) != 1 || !reflect.DeepEqual(loaded[0], original) {
+				t.Fatalf("migration changed historical message content or metadata: %v", err)
+			}
+		})
+	}
+}
+
+func TestFailedSessionSavePreservesCommittedMessagesAndBlobs(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sessions", "room.jsonl")
+	original := []Message{
+		{ID: "large", SenderID: "agent", Content: strings.Repeat("A", 70*1024), CreatedAt: time.Now().UTC()},
+		{ID: "later", SenderID: "agent", Content: "Later message", CreatedAt: time.Now().UTC()},
+	}
+	if err := saveMessagesJSONL(path, "room", original); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := append([]Message(nil), original...)
+	updated[0].Content = strings.Repeat("B", 70*1024)
+	updated[1].Metadata = map[string]any{"invalid": make(chan struct{})}
+	if err := saveMessagesJSONL(path, "room", updated); err == nil {
+		t.Fatal("expected message encoding failure")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("failed save changed the committed session: %v", err)
+	}
+	loaded, err := loadMessagesJSONL(path, "room")
+	if err != nil || !reflect.DeepEqual(loaded, original) {
+		t.Fatalf("failed save changed committed messages or blobs: %v", err)
+	}
+	// A later successful write also collects blobs left by the failed attempt.
+	if err := saveMessagesJSONL(path, "room", original); err != nil {
+		t.Fatal(err)
+	}
+	blobs, err := os.ReadDir(filepath.Join(filepath.Dir(path), sessionBlobsDirName, "room"))
+	if err != nil || len(blobs) != 1 {
+		t.Fatalf("unreferenced blobs remain: count=%d, error=%v", len(blobs), err)
+	}
+}
 
 func TestSaveLargeMessageSpillsToBlob(t *testing.T) {
 	dir := t.TempDir()

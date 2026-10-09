@@ -3,6 +3,7 @@ package im
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,6 +42,7 @@ type sessionMessageLine struct {
 type sessionMessageBlob struct {
 	Content     string              `json:"content,omitempty"`
 	Event       *EventPayload       `json:"event,omitempty"`
+	Metadata    map[string]any      `json:"metadata,omitempty"`
 	Thread      *ThreadSummary      `json:"thread,omitempty"`
 	Attachments []MessageAttachment `json:"attachments,omitempty"`
 }
@@ -114,14 +116,16 @@ func validateSessionPathSegment(segment string) error {
 	}
 }
 
-func sessionBlobRelativePath(roomID, messageID string) (string, error) {
+func sessionBlobRelativePath(roomID, messageID string, data []byte) (string, error) {
 	if err := validateSessionPathSegment(roomID); err != nil {
 		return "", err
 	}
 	if err := validateSessionPathSegment(messageID); err != nil {
 		return "", err
 	}
-	return filepath.ToSlash(filepath.Join(sessionBlobsDirName, roomID, messageID+".json")), nil
+	// Keep the committed blob intact until the new session file is published.
+	name := fmt.Sprintf("%s-%x.json", messageID, sha256.Sum256(data))
+	return filepath.ToSlash(filepath.Join(sessionBlobsDirName, roomID, name)), nil
 }
 
 func loadMessagesJSONL(path, roomID string) ([]Message, error) {
@@ -204,6 +208,10 @@ func decodeSessionMessageLine(sessionsRoot string, line []byte) (Message, error)
 	}
 	message.Content = blob.Content
 	message.Event = blob.Event
+	// Legacy blobs keep metadata inline in the session record.
+	if blob.Metadata != nil {
+		message.Metadata = blob.Metadata
+	}
 	message.Thread = blob.Thread
 	message.Attachments = cloneMessageAttachments(blob.Attachments)
 	return message, nil
@@ -256,12 +264,7 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 		return fmt.Errorf("create im session blobs dir: %w", err)
 	}
 
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create im session: %w", err)
-	}
-	defer file.Close()
-
+	var data bytes.Buffer
 	keepBlobs := make(map[string]struct{}, len(messages))
 	for _, message := range messages {
 		line, blobRef, err := encodeSessionMessageLine(sessionsRoot, roomID, message)
@@ -271,14 +274,13 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 		if blobRef != "" {
 			keepBlobs[filepath.Base(blobRef)] = struct{}{}
 		}
-		if _, err := file.Write(line); err != nil {
-			return fmt.Errorf("write im session: %w", err)
-		}
-		if _, err := io.WriteString(file, "\n"); err != nil {
-			return fmt.Errorf("write im session newline: %w", err)
-		}
+		data.Write(line)
+		data.WriteByte('\n')
 	}
 
+	if err := atomicWriteFile(path, data.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("write im session: %w", err)
+	}
 	if err := cleanupRoomSessionBlobs(blobDir, keepBlobs); err != nil {
 		return err
 	}
@@ -286,12 +288,8 @@ func saveMessagesJSONL(path, roomID string, messages []Message) error {
 }
 
 func truncateSessionJSONL(path string) error {
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create im session: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close im session: %w", err)
+	if err := atomicWriteFile(path, nil, 0o600); err != nil {
+		return fmt.Errorf("write empty im session: %w", err)
 	}
 	return nil
 }
@@ -310,13 +308,10 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 		return data, "", nil
 	}
 
-	relativeRef, err := sessionBlobRelativePath(roomID, message.ID)
-	if err != nil {
-		return nil, "", err
-	}
 	blob := sessionMessageBlob{
 		Content:     message.Content,
 		Event:       message.Event,
+		Metadata:    message.Metadata,
 		Thread:      message.Thread,
 		Attachments: message.Attachments,
 	}
@@ -324,16 +319,14 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 	if err != nil {
 		return nil, "", fmt.Errorf("encode im session blob: %w", err)
 	}
-	blobPath := filepath.Join(sessionsRoot, filepath.FromSlash(relativeRef))
-	if err := os.MkdirAll(filepath.Dir(blobPath), 0o755); err != nil {
-		return nil, "", fmt.Errorf("create im session blob dir: %w", err)
-	}
-	if err := os.WriteFile(blobPath, blobData, 0o600); err != nil {
-		return nil, "", fmt.Errorf("write im session blob: %w", err)
+	relativeRef, err := sessionBlobRelativePath(roomID, message.ID, blobData)
+	if err != nil {
+		return nil, "", err
 	}
 
 	line.Content = ""
 	line.Event = nil
+	line.Metadata = nil
 	line.Thread = nil
 	line.Attachments = nil
 	line.BlobRef = relativeRef
@@ -343,6 +336,10 @@ func encodeSessionMessageLine(sessionsRoot, roomID string, message Message) ([]b
 	}
 	if len(data) > maxSessionJSONLLineBytes {
 		return nil, "", fmt.Errorf("encode im session message: metadata exceeds %d bytes for message %s", maxSessionJSONLLineBytes, message.ID)
+	}
+	blobPath := filepath.Join(sessionsRoot, filepath.FromSlash(relativeRef))
+	if err := atomicWriteFile(blobPath, blobData, 0o600); err != nil {
+		return nil, "", fmt.Errorf("write im session blob: %w", err)
 	}
 	return data, relativeRef, nil
 }
