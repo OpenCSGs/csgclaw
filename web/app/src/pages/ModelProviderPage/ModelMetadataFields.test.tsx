@@ -5,6 +5,33 @@ import { ModelMetadataFields } from "./ModelMetadataFields";
 import type { TranslateFn } from "@/models/conversations";
 const t: TranslateFn = (key) => key;
 describe("model context row", () => {
+  it("restores a customized context directly from the row", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onRefresh = vi.fn();
+    render(
+      <ModelMetadataFields
+        model="m"
+        value={{ context_window: 100000 }}
+        automatic={{ context_window: 1000000, context_source: "catalog" }}
+        onChange={onChange}
+        onRefresh={onRefresh}
+        t={t}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "m modelMetadataReset" }));
+    expect(onChange).toHaveBeenCalledWith(undefined);
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("modelContextResetDone");
+  });
+  it.each([
+    { value: undefined, disabled: false },
+    { value: { context_window: 100000 }, disabled: true },
+  ])("disables row restore when no override exists or the row is busy: %j", (props) => {
+    render(<ModelMetadataFields model="m" onChange={vi.fn()} onRefresh={vi.fn()} t={t} {...props} />);
+    expect(screen.getByRole("button", { name: "m modelMetadataReset" })).toBeDisabled();
+  });
   it("edits M tokens as tokens and gives immediate feedback", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
@@ -86,6 +113,7 @@ it("refreshes automatic metadata with progress and preserves manual overrides", 
   expect(onRefresh).toHaveBeenCalledTimes(1);
   expect(refresh).toHaveAttribute("aria-busy", "true");
   expect(screen.getByRole("status")).toHaveTextContent("modelContextRefreshing");
+  expect(screen.getByRole("button", { name: "m modelMetadataReset" })).toBeDisabled();
   await act(async () => complete());
   expect(screen.getByRole("status")).toHaveTextContent("modelContextRefreshed");
   expect(onChange).not.toHaveBeenCalled();

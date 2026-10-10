@@ -1,7 +1,17 @@
 import { ModelMetadataFields } from "./ModelMetadataFields";
 import { modelOverridesEqual, type ModelOverride } from "@/models/modelMetadata";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, LogIn, RefreshCw, Save, Trash2, Image as ImageIcon, Video } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  LogIn,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Trash2,
+  Image as ImageIcon,
+  Video,
+} from "lucide-react";
 import { errorMessage } from "@/api/client";
 import { checkModelProvider, deleteModelProvider, updateModelProvider } from "@/api/modelProviders";
 import { APIKeyField, ModelProviderModelList } from "@/components/business/ProfileControls";
@@ -516,13 +526,31 @@ export function ModelProviderPage() {
               </section>
 
               <section className="model-provider-card model-provider-models-card">
-                <div className="model-provider-card-heading">
-                  <h2>{t("profileModel")}</h2>
-                  <p>
-                    {modelList.length
-                      ? t("modelProviderModelCount", { count: modelList.length })
-                      : t("modelProviderNoModels")}
-                  </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="model-provider-card-heading">
+                    <h2>{t("profileModel")}</h2>
+                    <p>
+                      {modelList.length
+                        ? t("modelProviderModelCount", { count: modelList.length })
+                        : t("modelProviderNoModels")}
+                    </p>
+                  </div>
+                  <Tooltip content={t("modelContextRestoreDefaultsHint")}>
+                    <Button
+                      size="sm"
+                      disabled={
+                        Boolean(busy) || !Object.values(draft.modelOverrides).some((value) => value.context_window)
+                      }
+                      onClick={() => {
+                        setDraft((current) => ({ ...current, modelOverrides: {} }));
+                        setError("");
+                        setSaveStatus("");
+                      }}
+                    >
+                      <RotateCcw size={14} aria-hidden="true" />
+                      {t("modelContextRestoreDefaults")}
+                    </Button>
+                  </Tooltip>
                 </div>
                 <ModelProviderModelList
                   renderDetails={(model) => {

@@ -58,6 +58,12 @@ export function ModelMetadataFields({
     }
     setEditing(open);
   }
+  function restoreDefault() {
+    setEditing(false);
+    onChange(undefined);
+    setRefreshError(false);
+    setFeedback(t("modelContextResetDone"));
+  }
   return (
     <div className={`model-context-cell${changed ? " is-changed" : ""}`}>
       <PopoverRoot open={editing} onOpenChange={openEditor}>
@@ -126,13 +132,8 @@ export function ModelMetadataFields({
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={!value?.context_window}
-                onClick={() => {
-                  setEditing(false);
-                  onChange(undefined);
-                  setRefreshError(false);
-                  setFeedback(t("modelContextResetDone"));
-                }}
+                disabled={disabled || refreshing || !value?.context_window}
+                onClick={restoreDefault}
               >
                 <RotateCcw size={14} aria-hidden="true" />
                 {t("modelMetadataReset")}
@@ -156,12 +157,25 @@ export function ModelMetadataFields({
           ? t("modelContextRefreshing")
           : feedback || (changed ? t("modelContextPending") : t(`modelMetadataSource_${source}`))}
       </span>
+      <Tooltip content={t("modelMetadataReset")}>
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          className="model-context-action"
+          disabled={disabled || refreshing || !value?.context_window}
+          aria-label={`${model} ${t("modelMetadataReset")}`}
+          onClick={restoreDefault}
+        >
+          <RotateCcw size={14} aria-hidden="true" />
+        </Button>
+      </Tooltip>
       <Tooltip content={t("modelContextRefresh")}>
         <Button
           variant="ghost"
           size="sm"
           iconOnly
-          className="model-context-reset"
+          className="model-context-action"
           disabled={disabled}
           loading={refreshing}
           loadingLabel={t("modelContextRefreshing")}
