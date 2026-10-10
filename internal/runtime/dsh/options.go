@@ -10,6 +10,9 @@ import (
 
 const (
 	PermissionModeOptionKey        = "permission_mode"
+	MemoryModeOptionKey            = "memory_mode"
+	MemoryModeEnabled              = "enabled"
+	MemoryModeDisabled             = "disabled"
 	localWorkspaceDirOptionKey     = "local_workspace_dir"
 	PermissionModeReadOnly         = "read-only"
 	PermissionModeWorkspaceWrite   = "workspace-write"
@@ -21,12 +24,26 @@ type RuntimeOptions struct {
 	AutoCompact       bool
 	PermissionMode    string
 	LocalWorkspaceDir string
+	MemoryMode        string
 }
 
 func DecodeRuntimeOptions(raw map[string]any) (RuntimeOptions, error) {
-	out := RuntimeOptions{AutoCompact: true, PermissionMode: defaultPermissionMode}
+	out := RuntimeOptions{AutoCompact: true, PermissionMode: defaultPermissionMode, MemoryMode: MemoryModeEnabled}
 	if raw == nil {
 		return out, nil
+	}
+	if value, ok := raw[MemoryModeOptionKey]; ok && value != nil {
+		text, ok := value.(string)
+		if !ok {
+			return RuntimeOptions{}, fmt.Errorf("%s must be a string", MemoryModeOptionKey)
+		}
+		mode := strings.ToLower(strings.TrimSpace(text))
+		if mode != "" {
+			if mode != MemoryModeEnabled && mode != MemoryModeDisabled {
+				return RuntimeOptions{}, fmt.Errorf("%s must be %q or %q", MemoryModeOptionKey, MemoryModeEnabled, MemoryModeDisabled)
+			}
+			out.MemoryMode = mode
+		}
 	}
 	if value, ok := raw["auto_compact"]; ok && value != nil {
 		if value != "enabled" && value != "disabled" {

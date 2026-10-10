@@ -305,7 +305,7 @@ func normalizePublishSpec(spec PublishSpec) (PublishSpec, error) {
 		return PublishSpec{}, err
 	}
 	spec.RuntimeOptions = runtimeOptions
-	if !spec.IncludeMemory || (spec.RuntimeKind == runtime.KindCodex && spec.RuntimeOptions["memory_mode"] == "disabled") {
+	if !spec.IncludeMemory || ((spec.RuntimeKind == runtime.KindCodex || spec.RuntimeKind == runtime.KindDSH) && spec.RuntimeOptions["memory_mode"] == "disabled") {
 		spec.WorkspaceRef.MemoryPath = ""
 	}
 	if spec.RuntimeKind == "" {

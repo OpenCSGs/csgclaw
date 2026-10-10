@@ -141,6 +141,54 @@ func TestLocalStorePublishRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDSHMemoryTemplateRoundTrip(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "AGENTS.md"), []byte("DSH worker"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	memory := filepath.Join(t.TempDir(), "memory_summary.md")
+	if err := os.WriteFile(memory, []byte("Durable preference"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewLocalStore(t.TempDir())
+	for _, step := range []struct {
+		name, mode          string
+		include, wantMemory bool
+	}{
+		{"with-memory", "enabled", true, true},
+		{"without-opt-in", "enabled", false, false},
+		{"disabled-memory", "disabled", true, false},
+	} {
+		t.Run(step.name, func(t *testing.T) {
+			_, err := store.Publish(context.Background(), PublishSpec{Name: step.name, RuntimeKind: runtime.KindDSH, IncludeMemory: step.include, RuntimeOptions: map[string]any{"permission_mode": "read-only", "memory_mode": step.mode}, WorkspaceRef: WorkspaceRef{Kind: WorkspaceKindDir, Path: workspace, MemoryPath: memory}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ref, err := store.FetchWorkspace(context.Background(), step.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(ref.Path)
+			if (ref.MemoryPath != "") != step.wantMemory {
+				t.Fatalf("MemoryPath = %q", ref.MemoryPath)
+			}
+			if step.wantMemory {
+				data, err := os.ReadFile(ref.MemoryPath)
+				if err != nil || string(data) != "Durable preference" {
+					t.Fatalf("memory = %q, %v", data, err)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(ref.Path, "memory", "memory_summary.md")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("summary leaked into workspace: %v", err)
+			}
+			manifest, err := store.Get(context.Background(), step.name)
+			if err != nil || manifest.RuntimeOptions["memory_mode"] != step.mode {
+				t.Fatalf("template = %+v, %v", manifest, err)
+			}
+		})
+	}
+}
+
 func TestLocalStorePublishOmitsCodexMemoryWhenDisabled(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "AGENTS.md"), []byte("# Instructions\n"), 0o644); err != nil {

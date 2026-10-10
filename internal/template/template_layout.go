@@ -97,7 +97,7 @@ func materializeTemplateFS(srcFS fs.FS, templateRoot, runtimeKind string) (Works
 		}
 	}
 	var memoryPath string
-	if normalizeTemplateRuntimeKind(runtimeKind) == agentruntime.KindCodex {
+	if kind := normalizeTemplateRuntimeKind(runtimeKind); kind == agentruntime.KindCodex || kind == agentruntime.KindDSH {
 		source := filepath.ToSlash(filepath.Join(templateRoot, localMemoriesDirName, "memory_summary.md"))
 		if _, statErr := fs.Stat(srcFS, source); statErr == nil {
 			memoryPath = filepath.Join(dstRoot, codexTemplateMemoryStagingDir, "memory_summary.md")
@@ -216,7 +216,7 @@ func writeTemplateLayout(workspace WorkspaceRef, templateRoot, runtimeKind strin
 			return err
 		}
 	}
-	if source := strings.TrimSpace(workspace.MemoryPath); source != "" && normalizeTemplateRuntimeKind(runtimeKind) == agentruntime.KindCodex {
+	if source := strings.TrimSpace(workspace.MemoryPath); source != "" && (normalizeTemplateRuntimeKind(runtimeKind) == agentruntime.KindCodex || normalizeTemplateRuntimeKind(runtimeKind) == agentruntime.KindDSH) {
 		if err := copySingleTemplateFile(source, filepath.Join(templateRoot, localMemoriesDirName, "memory_summary.md")); err != nil {
 			return err
 		}
@@ -300,7 +300,8 @@ func copyTemplateSkills(source, target, runtimeKind string) error {
 }
 
 func templateUsesWorkspaceMemory(runtimeKind string) bool {
-	return normalizeTemplateRuntimeKind(runtimeKind) != agentruntime.KindCodex
+	kind := normalizeTemplateRuntimeKind(runtimeKind)
+	return kind != agentruntime.KindCodex && kind != agentruntime.KindDSH
 }
 
 func copySingleTemplateFile(source, target string) error {

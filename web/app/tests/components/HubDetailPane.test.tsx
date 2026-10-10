@@ -921,10 +921,11 @@ describe("HubDetailPane", () => {
     await user.click(screen.getByRole("button", { name: "Publish to community" }));
     expect(screen.getByRole("button", { name: "Publish template only" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Publish and deploy" })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Include agent memory" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Include agent memory" })).not.toBeChecked();
+    await user.click(screen.getByRole("checkbox", { name: "Include agent memory" }));
     await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
 
-    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true, false);
+    expect(onPublishTemplate).toHaveBeenCalledWith(localTemplate, true, true);
   });
 
   it("does not show publishing success when publishing fails", async () => {

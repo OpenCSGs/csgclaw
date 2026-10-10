@@ -413,7 +413,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const canPublishLocal =
     !isManager && (runtimeKind === "codex" || runtimeKind === "dsh" || runtimeKind === "openclaw_sandbox");
   const canPublishCommunity = !isManager && canPublishCommunityTemplateRuntime(runtimeKind);
-  const supportsTemplateMemory = runtimeKind === "codex" || runtimeKind === "openclaw_sandbox";
+  const supportsTemplateMemory = ["codex", "dsh", "openclaw_sandbox"].includes(runtimeKind);
   const hasUnsavedChanges =
     hasUnsavedChangesProp ?? Boolean(draft && savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft));
   const saveDisabled = agentProfilePageSaveDisabled(draft, item, { saving, savedDraft });
@@ -544,7 +544,7 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
   const showMCPServers = Boolean(
     draft && !isNotifierDraft && supportsMCPServers(draft.runtime_kind || item.runtime_kind),
   );
-  const showApps = runtimeKind === "codex" && !isNotifierDraft;
+  const showApps = ["codex", "dsh"].includes(runtimeKind) && !isNotifierDraft;
   const profileTabs = useMemo(
     () =>
       draft

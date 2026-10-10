@@ -25,7 +25,7 @@ func templateSafeRuntimeOptions(item Agent) (map[string]any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("agent %q runtime_options.permission_mode is invalid: %w", item.ID, err)
 		}
-		return map[string]any{runtimedsh.PermissionModeOptionKey: opts.PermissionMode}, nil
+		return map[string]any{runtimedsh.PermissionModeOptionKey: opts.PermissionMode, templateMemoryModeKey: opts.MemoryMode}, nil
 	}
 	if strings.TrimSpace(item.RuntimeKind) != RuntimeKindCodex {
 		return nil, nil

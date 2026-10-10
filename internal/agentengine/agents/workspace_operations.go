@@ -69,7 +69,7 @@ func (s *WorkspaceService) HubPublishSpec(agentID string, includeMemory bool) (h
 	}
 	memoryPath := ""
 	if includeMemory && runtimeOptions[templateMemoryModeKey] != templateMemoryModeDisabled {
-		memoryPath = codexMemoryPath(layout, got.RuntimeKind)
+		memoryPath = runtimeMemoryPath(layout, got.RuntimeKind)
 	}
 	if memoryPath != "" {
 		if _, statErr := os.Stat(memoryPath); errors.Is(statErr, os.ErrNotExist) {

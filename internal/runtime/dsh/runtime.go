@@ -269,6 +269,9 @@ func (r *Runtime) Provision(ctx context.Context, req agentruntime.ProvisionReque
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), req.Profile); err != nil {
 		return err
 	}
+	if err := provisionMemory(root, req); err != nil {
+		return fmt.Errorf("provision DSH memory: %w", err)
+	}
 	r.mu.Lock()
 	r.roots[strings.TrimSpace(req.RuntimeID)] = root
 	r.mu.Unlock()
@@ -415,6 +418,9 @@ func (r *Runtime) start(ctx context.Context, h agentruntime.Handle, spec *agentr
 	if err := writeRuntimePatch(filepath.Join(root, patchFileName), ref.Profile); err != nil {
 		return agentruntime.StateUnknown, err
 	}
+	if err := writeMemoryPatch(root, ref.RuntimeOptions); err != nil {
+		return agentruntime.StateUnknown, err
+	}
 	if err := projectSkills(root, layout.SkillsRoot, ref.SkillStates); err != nil {
 		return agentruntime.StateUnknown, err
 	}
@@ -523,7 +529,7 @@ func (r *Runtime) launch(ctx context.Context, root, workspace, binary string, pr
 }
 
 func dshLaunchArgs(root string, enablePresent bool) []string {
-	args := []string{"--profile", "acp", "--patch", filepath.Join(root, contextPatchFileName)}
+	args := []string{"--profile", "acp", "--patch", filepath.Join(root, contextPatchFileName), "--patch", filepath.Join(root, memoryPatchFileName)}
 	if enablePresent {
 		args = append(args, "--patch", filepath.Join(root, patchFileName))
 	}

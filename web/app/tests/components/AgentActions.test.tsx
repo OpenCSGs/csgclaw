@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AgentDetailPane, AgentRow, AgentView, NotificationParticipantDetailPane } from "@/pages/AgentPage/components";
 import { agentToDraft, type AgentDraft } from "@/models/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
+import { createTranslator } from "@/shared/i18n";
 
 const labels: Record<string, string> = {
   agentActivityTab: "Activity",
@@ -128,6 +129,43 @@ const worker = {
   model_id: "gpt-test",
 };
 
+it.each(["codex", "dsh"])("opens the managed connector catalog for a %s Agent", async (runtimeKind) => {
+  const requests = vi.fn(async (url: string) => {
+    if (!url.includes("connectors")) throw new Error(`Unexpected request ${url}`);
+    return Response.json({ items: [] });
+  });
+  vi.stubGlobal("fetch", requests);
+  try {
+    const user = userEvent.setup();
+    const item = { ...worker, runtime_kind: runtimeKind };
+    render(
+      <AgentDetailPane
+        item={item}
+        draft={agentToDraft(item)}
+        t={createTranslator("en")}
+        busyKey=""
+        models={[]}
+        workspaceSupported
+        onDelete={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInvite={vi.fn()}
+        onOpenDM={vi.fn()}
+        onRecreate={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+      />,
+      { wrapper: createQueryWrapper().wrapper },
+    );
+    const navigation = screen.getByRole("navigation", { name: "Profile sections" });
+    await user.click(within(navigation).getByRole("button", { name: "Connectors" }));
+    expect(await screen.findByText("Connect the services your agent needs")).toBeVisible();
+    expect(requests.mock.calls.map((args) => String(args[0]))).toContain("api/v1/agents/worker-1/connectors");
+    expect(requests.mock.calls.map((args) => String(args[0]))).toContain("api/v1/connectors/resources");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
 describe("agent action visibility", () => {
   beforeEach(() => {
     window.localStorage.removeItem(AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY);
@@ -213,14 +251,10 @@ describe("agent action visibility", () => {
       await user.click(screen.getByRole("button", { name: "More" }));
       await user.click(screen.getByRole("menuitem", { name: "Publish to community" }));
       const includeMemory = screen.queryByRole("checkbox", { name: "Include agent memory" });
-      if (runtimeKind === "codex") {
-        expect(includeMemory).toBeInTheDocument();
-        await user.click(includeMemory!);
-      } else {
-        expect(includeMemory).not.toBeInTheDocument();
-      }
+      expect(includeMemory).toBeInTheDocument();
+      await user.click(includeMemory!);
       await user.click(screen.getByRole("button", { name: "Publish and deploy" }));
-      expect(onPublish).toHaveBeenCalledWith("official_deploy", "Worker", "Agent description", runtimeKind === "codex");
+      expect(onPublish).toHaveBeenCalledWith("official_deploy", "Worker", "Agent description", true);
     },
   );
 
