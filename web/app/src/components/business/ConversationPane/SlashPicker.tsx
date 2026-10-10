@@ -1,6 +1,7 @@
 import type { SkillContinuation } from "@/models/slashCommands";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BoxIcon, TerminalIcon } from "lucide-react";
+import { TerminalIcon } from "lucide-react";
+import { SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
 import type { TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
 
@@ -98,7 +99,7 @@ export function SlashPicker({
             {candidate.type === "command" ? (
               <TerminalIcon size={18} strokeWidth={1.8} />
             ) : (
-              <BoxIcon size={18} strokeWidth={1.8} />
+              <SidebarPuzzlePiece02Icon size={18} />
             )}
           </span>
           <div className="slash-option-copy">

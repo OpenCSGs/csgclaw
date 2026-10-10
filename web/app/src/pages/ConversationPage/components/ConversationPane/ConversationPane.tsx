@@ -225,6 +225,11 @@ function ConversationPaneContent({
   slashPickerLoading = false,
   slashPickerOpen = false,
   onApplySlashCandidate = (_name) => {},
+  resources,
+  resourceListLoading,
+  resourceListHasMore,
+  resourceManageAgentID,
+  onLoadMoreResources,
   threadSlashCandidates = [],
   threadSlashIndex = 0,
   threadSlashContinuation,
@@ -644,10 +649,15 @@ function ConversationPaneContent({
           slashContinuation={slashContinuation}
           slashPickerLoading={slashPickerLoading}
           slashPickerOpen={slashPickerOpen}
+          resources={resources}
+          resourceListLoading={resourceListLoading}
+          resourceListHasMore={resourceListHasMore}
+          resourceManageAgentID={resourceManageAgentID}
           t={t}
           workingParticipants={messageControls.composerParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}
+          onLoadMoreResources={onLoadMoreResources}
           onAddAttachments={onAddAttachments}
           onComposerCompositionEnd={onComposerCompositionEnd}
           onComposerCompositionStart={onComposerCompositionStart}

@@ -1,8 +1,19 @@
 import type { SkillContinuation } from "@/models/slashCommands";
 import { WorkingTurnControls } from "./WorkingTurnControls";
-import { memo, useId, useMemo, useRef } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
-import { ArrowUp, ChevronRight, Paperclip, Plus, RotateCcw, Square, Undo2 } from "lucide-react";
+import {
+  ArrowUp,
+  BookOpen,
+  ChevronRight,
+  Paperclip,
+  Plug,
+  Plus,
+  RotateCcw,
+  Square,
+  Undo2,
+} from "lucide-react";
+import { SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
 import { CLIProxyAuthControl } from "@/components/business/ProfileControls";
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { Button, PopoverClose, PopoverContent, PopoverRoot, PopoverTrigger, Tooltip } from "@/components/ui";
@@ -14,6 +25,7 @@ import {
   insertComposerSegmentsAtSelection,
   insertPlainTextAtSelection,
   normalizeTextMentions,
+  placeCaretAtEnd,
   type ComposerMentionUser,
   type ComposerSegment,
 } from "@/models/composer";
@@ -25,6 +37,8 @@ import { AttachmentDraftStrip } from "./ConversationAttachments";
 import { dataTransferHasFiles, filesFromDataTransfer } from "./attachmentFiles";
 import {
   ConversationWorkingActions,
+  type ComposerResourceItem,
+  type ComposerResourceKind,
   type ComposerSendStatus,
   type ConversationWorkingAction,
   type ConversationWorkingParticipant,
@@ -54,6 +68,7 @@ export type ConversationComposerProps = {
   mentionableUsersByName: Map<string, ComposerMentionUser>;
   onApplyMention: (user: MentionPickerUser) => void;
   onApplySlashCandidate: (name: string) => void;
+  onApplyResource?: (resource: ComposerResourceItem) => void;
   onAddAttachments?: (files: File[]) => void;
   onComposerCompositionEnd: () => void;
   onComposerCompositionStart: () => void;
@@ -73,6 +88,11 @@ export type ConversationComposerProps = {
   slashContinuation?: SkillContinuation;
   slashPickerLoading: boolean;
   slashPickerOpen: boolean;
+  resourceListLoading?: boolean;
+  resourceListHasMore?: boolean;
+  resourceManageAgentID?: string;
+  resources?: ComposerResourceItem[];
+  onLoadMoreResources?: () => void;
   t: TranslateFn;
   workingParticipants?: ConversationWorkingParticipant[];
 };
@@ -106,6 +126,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   workingParticipants = [],
   onApplyMention,
   onApplySlashCandidate,
+  onApplyResource,
   onAddAttachments = () => {},
   onComposerCompositionEnd,
   onComposerCompositionStart,
@@ -117,16 +138,62 @@ export const ConversationComposer = memo(function ConversationComposer({
   onSendMessage,
   onStopSend,
   onStopWorkingTurn,
+  onLoadMoreResources,
   onSyncComposer,
   onUndoRemoveAttachment,
   onWorkingAction,
+  resourceListHasMore = false,
+  resourceListLoading = false,
+  resourceManageAgentID = "",
+  resources = [],
 }: ConversationComposerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerHelpId = useId();
+  const [resourcePickerKind, setResourcePickerKind] = useState<ComposerResourceKind | null>(null);
   const isSending = sendStatus === "sending";
   const interactionDisabled = composerDisabled || isSending;
   const sendDisabled = interactionDisabled || (!draftText.trim() && attachmentDrafts.length === 0);
   const actionSuggestions = useMemo(() => composerActionSuggestions(draftText), [draftText]);
+  const selectedResources = useMemo(
+    () => resources.filter((resource) => resource.kind === resourcePickerKind),
+    [resourcePickerKind, resources],
+  );
+
+  function applyResource(resource: ComposerResourceItem) {
+    setResourcePickerKind(null);
+    onApplyResource?.(resource);
+    if (onApplyResource) {
+      return;
+    }
+    editorRef.current?.focus();
+    ensureSelectionInEditor(editorRef.current);
+    insertComposerSegmentsAtSelection([
+      {
+        type: "resource",
+        displayText: resourceBadgeText(resource),
+        kind: resource.kind,
+        name: resource.name,
+        text: resourceInsertionText(resource).trim(),
+      },
+      { type: "text", text: " " },
+    ]);
+    onSyncComposer();
+  }
+
+  useEffect(() => {
+    if (!resourcePickerKind) {
+      return undefined;
+    }
+    function handleEscape(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      setResourcePickerKind(null);
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [resourcePickerKind]);
 
   function handleFiles(files: File[]) {
     if (interactionDisabled || files.length === 0) {
@@ -187,6 +254,18 @@ export const ConversationComposer = memo(function ConversationComposer({
           handleFiles(files);
         }}
       >
+        {resourcePickerKind ? (
+          <ComposerResourcePicker
+            agentID={resourceManageAgentID}
+            hasMore={resourceListHasMore}
+            items={selectedResources}
+            kind={resourcePickerKind}
+            loading={resourceListLoading}
+            t={t}
+            onLoadMore={onLoadMoreResources}
+            onSelect={applyResource}
+          />
+        ) : null}
         <AttachmentDraftStrip
           drafts={attachmentDrafts}
           progress={sendProgress}
@@ -258,7 +337,12 @@ export const ConversationComposer = memo(function ConversationComposer({
           </div>
         ) : null}
         <div className="composer-toolbar">
-          <ComposerAddMenu disabled={interactionDisabled} t={t} onAddFiles={() => fileInputRef.current?.click()} />
+          <ComposerAddMenu
+            disabled={interactionDisabled}
+            t={t}
+            onAddFiles={() => fileInputRef.current?.click()}
+            onOpenResourceKind={setResourcePickerKind}
+          />
           <input
             ref={fileInputRef}
             className="sr-only"
@@ -365,6 +449,14 @@ function ComposerWorkingIndicator({
       </div>
     </div>
   );
+}
+
+function ensureSelectionInEditor(editor: HTMLElement | null | undefined): void {
+  const selection = window.getSelection();
+  if (!editor || (selection?.rangeCount && editor.contains(selection.getRangeAt(0).commonAncestorContainer))) {
+    return;
+  }
+  placeCaretAtEnd(editor);
 }
 
 function ComposerWorkingTurn({
@@ -483,9 +575,15 @@ type ComposerAddMenuProps = {
   disabled: boolean;
   t: TranslateFn;
   onAddFiles: () => void;
+  onOpenResourceKind?: (kind: ComposerResourceKind) => void;
 };
 
-function ComposerAddMenu({ disabled, t, onAddFiles }: ComposerAddMenuProps) {
+function ComposerAddMenu({
+  disabled,
+  t,
+  onAddFiles,
+  onOpenResourceKind,
+}: ComposerAddMenuProps) {
   return (
     <PopoverRoot>
       <Tooltip content={t("composerAddContent")}>
@@ -521,7 +619,131 @@ function ComposerAddMenu({ disabled, t, onAddFiles }: ComposerAddMenuProps) {
             </button>
           </PopoverClose>
         </section>
+        <ComposerResourceCategorySection t={t} onOpenResourceKind={onOpenResourceKind} />
       </PopoverContent>
     </PopoverRoot>
   );
+}
+
+const resourceKinds: ComposerResourceKind[] = ["skill", "connector", "knowledge"];
+
+function ComposerResourceCategorySection({
+  t,
+  onOpenResourceKind,
+}: {
+  t: TranslateFn;
+  onOpenResourceKind?: (kind: ComposerResourceKind) => void;
+}) {
+  return (
+    <section className="composer-add-section composer-resource-section" aria-label={t("composerResources")}>
+      <div className="composer-add-section-label">{t("composerResources")}</div>
+      {resourceKinds.map((kind) => (
+        <PopoverClose key={kind} asChild>
+          <button type="button" className="composer-add-menu-item" onClick={() => onOpenResourceKind?.(kind)}>
+            {resourceKindIcon(kind)}
+            <span>{resourceKindLabel(kind, t)}</span>
+          </button>
+        </PopoverClose>
+      ))}
+    </section>
+  );
+}
+
+function ComposerResourcePicker({
+  agentID,
+  hasMore,
+  kind,
+  loading,
+  items,
+  t,
+  onLoadMore,
+  onSelect,
+}: {
+  agentID: string;
+  hasMore: boolean;
+  kind: ComposerResourceKind;
+  loading: boolean;
+  items: ComposerResourceItem[];
+  t: TranslateFn;
+  onLoadMore?: () => void;
+  onSelect?: (resource: ComposerResourceItem) => void;
+}) {
+  return (
+    <div className="mention-picker composer-resource-picker" role="listbox" aria-label={resourceKindLabel(kind, t)}>
+      <div className="composer-resource-picker-title">
+        <span>{resourceKindLabel(kind, t)}</span>
+        <a className="btn btn-sm btn-link-gray composer-resource-manage-button" href={resourceManageHref(agentID, kind)}>
+          {t("manage")}
+        </a>
+      </div>
+      {items.length ? (
+        <div className="composer-resource-list">
+          {items.map((resource) => (
+            <button
+              key={`${resource.kind}:${resource.id}`}
+              type="button"
+              className="composer-resource-item"
+              role="option"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onSelect?.(resource)}
+            >
+              <span className="composer-resource-icon" aria-hidden="true">
+                {resourceKindIcon(resource.kind)}
+              </span>
+              <span className="composer-resource-copy">
+                <span className="composer-resource-name">{resource.name}</span>
+                {resource.description ? (
+                  <span className="composer-resource-description">{resource.description}</span>
+                ) : null}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="composer-resource-empty">{loading ? t("loading") : t("composerResourceEmpty")}</div>
+      )}
+      {hasMore ? (
+        <div className="composer-resource-picker-footer">
+          <button type="button" className="composer-resource-load-more" onClick={onLoadMore}>
+            {loading ? t("loading") : t("loadMore")}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function resourceInsertionText(resource: ComposerResourceItem): string {
+  const prefix =
+    resource.kind === "skill" ? "/skill" : resource.kind === "knowledge" ? "@knowledge" : "@connector";
+  return `${prefix}:${resource.name} `;
+}
+
+function resourceBadgeText(resource: ComposerResourceItem): string {
+  if (resource.kind === "skill") {
+    return `/${resource.name}`;
+  }
+  return resourceInsertionText(resource).trim();
+}
+
+function resourceKindLabel(kind: ComposerResourceKind, t: TranslateFn): string {
+  if (kind === "skill") return t("skills");
+  if (kind === "knowledge") return t("knowledgeBases");
+  return t("connectors");
+}
+
+function resourceKindIcon(kind: ComposerResourceKind) {
+  if (kind === "skill") return <SidebarPuzzlePiece02Icon size={14} />;
+  if (kind === "knowledge") return <BookOpen size={14} />;
+  return <Plug size={14} />;
+}
+
+function resourceManageHref(agentID: string, kind: ComposerResourceKind): string {
+  if (!agentID) {
+    if (kind === "skill") return "#/resources";
+    if (kind === "knowledge") return "#/knowledge-bases";
+    return "#/connectors";
+  }
+  const tab = kind === "skill" ? "skills" : kind === "knowledge" ? "mcp" : "connectors";
+  return `#/agents/${encodeURIComponent(agentID)}?tab=${encodeURIComponent(tab)}`;
 }
