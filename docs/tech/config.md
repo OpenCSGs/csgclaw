@@ -4,6 +4,19 @@ English | [中文](config.zh.md)
 
 `csgclaw serve` uses the local config file for server access, bootstrap image selection, sandbox isolation, and optional channels, and it auto-creates missing local state on first run. Agent LLM provider profiles are stored in agent state and managed from the Web UI.
 
+## Codex Execution Mode
+
+Set `CSGCLAW_EXECUTION_MODE` on the CSGClaw server process before startup:
+
+- `standard`: permits reading and modifying data with the runtime's available tools (default).
+- `read_only`: permits conversation analysis and approved read-only tools; disables command execution and local filesystem access.
+
+An unset or empty value uses `standard`. Invalid values fail server startup. This process-wide setting overrides stored Agent and template `execution_mode` values. The Web UI hides the execution mode selector. Restart the server after changing the environment variable.
+
+```sh
+CSGCLAW_EXECUTION_MODE=read_only csgclaw serve
+```
+
 ## Server Address
 
 `listen_addr` is the address that the local HTTP server binds to.

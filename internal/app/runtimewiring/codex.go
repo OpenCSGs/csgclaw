@@ -16,6 +16,10 @@ func WithCodexRuntime() agent.ControllerOption {
 			return fmt.Errorf("agent service is required")
 		}
 
+		if _, err := runtimecodex.DecodeRuntimeOptions(nil); err != nil {
+			return err
+		}
+
 		host := s.PicoClawRuntimeHost()
 		events := runtimecodex.NewEventSink()
 		permissions := runtimecodex.NewPermissionBroker(events)

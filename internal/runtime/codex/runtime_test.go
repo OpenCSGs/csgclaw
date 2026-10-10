@@ -340,7 +340,7 @@ func TestRestartRequiredReturnsTrueWhenLocalWorkspaceDirChanges(t *testing.T) {
 	}
 }
 
-func TestRestartRequiredReturnsTrueWhenExecutionModeChanges(t *testing.T) {
+func TestRestartRequiredIgnoresStoredExecutionModeChanges(t *testing.T) {
 	rt := &Runtime{}
 	got, err := rt.RestartRequired(agentruntime.RuntimeConfigChange{
 		Previous: agentruntime.RuntimeConfigSnapshot{Options: map[string]any{"execution_mode": ExecutionModeStandard}},
@@ -349,8 +349,8 @@ func TestRestartRequiredReturnsTrueWhenExecutionModeChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RestartRequired() error = %v", err)
 	}
-	if !got {
-		t.Fatal("RestartRequired() = false, want true when execution_mode changes")
+	if got {
+		t.Fatal("RestartRequired() = true, want false for stored execution_mode")
 	}
 }
 
@@ -624,18 +624,21 @@ func TestDecodeRuntimeOptionsRejectsNonStringLocalWorkspaceDir(t *testing.T) {
 func TestDecodeRuntimeOptionsExecutionMode(t *testing.T) {
 	tests := []struct {
 		name    string
+		env     string
 		raw     map[string]any
 		want    string
 		wantErr bool
 	}{
-		{name: "missing defaults standard", raw: nil, want: ExecutionModeStandard},
-		{name: "empty defaults standard", raw: map[string]any{"execution_mode": "  "}, want: ExecutionModeStandard},
-		{name: "read only", raw: map[string]any{"execution_mode": " read_only "}, want: ExecutionModeReadOnly},
-		{name: "invalid", raw: map[string]any{"execution_mode": "dangerous"}, wantErr: true},
-		{name: "non string", raw: map[string]any{"execution_mode": true}, wantErr: true},
+		{name: "empty defaults standard", want: ExecutionModeStandard},
+		{name: "stored read only defaults standard", raw: map[string]any{"execution_mode": "read_only"}, want: ExecutionModeStandard},
+		{name: "read only", env: " read_only ", want: ExecutionModeReadOnly},
+		{name: "read only overrides stored standard", env: "read_only", raw: map[string]any{"execution_mode": "standard"}, want: ExecutionModeReadOnly},
+		{name: "standard overrides stored read only", env: "standard", raw: map[string]any{"execution_mode": "read_only"}, want: ExecutionModeStandard},
+		{name: "invalid", env: "dangerous", wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("CSGCLAW_EXECUTION_MODE", tt.env)
 			got, err := DecodeRuntimeOptions(tt.raw)
 			if tt.wantErr {
 				if err == nil {
@@ -648,6 +651,41 @@ func TestDecodeRuntimeOptionsExecutionMode(t *testing.T) {
 			}
 			if got.ExecutionMode != tt.want {
 				t.Fatalf("ExecutionMode = %q, want %q", got.ExecutionMode, tt.want)
+			}
+		})
+	}
+}
+
+func TestRuntimeStartUsesEnvironmentExecutionMode(t *testing.T) {
+	for _, mode := range []string{"", ExecutionModeStandard, ExecutionModeReadOnly} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			t.Setenv("CSGCLAW_EXECUTION_MODE", mode)
+			want := mode
+			if want == "" {
+				want = ExecutionModeStandard
+			}
+			stored := ExecutionModeReadOnly
+			if want == ExecutionModeReadOnly {
+				stored = ExecutionModeStandard
+			}
+			rt := newTestCodexRuntime(t.TempDir(), func(h agentruntime.Handle) (AgentRef, error) {
+				return AgentRef{ID: "u-alice", Name: "alice", RuntimeID: h.RuntimeID,
+					RuntimeOptions: map[string]any{"execution_mode": stored}}, nil
+			})
+			originalManager := rt.deps.Manager
+			started := false
+			rt.deps.Manager = fakeManager{start: func(ctx context.Context, spec SessionSpec) (*Session, error) {
+				started = true
+				if spec.ExecutionMode != want {
+					t.Fatalf("ExecutionMode = %q, want %q", spec.ExecutionMode, want)
+				}
+				return originalManager.Start(ctx, spec)
+			}}
+			if _, err := rt.Start(context.Background(), agentruntime.Handle{RuntimeID: "rt-u-alice"}); err != nil {
+				t.Fatal(err)
+			}
+			if !started {
+				t.Fatal("runtime session was not started")
 			}
 		})
 	}

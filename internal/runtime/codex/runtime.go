@@ -48,7 +48,7 @@ const (
 const readOnlyRuntimeInstructions = `CSGClaw has placed this Agent in read-only mode.
 You may answer questions, analyze content already present in the conversation, load the main SKILL.md instructions for assigned Skills, and use only available read-only data tools.
 You must not claim to read local files, inspect environment variables, run commands, execute Skill scripts, modify files or external data, or request elevated permissions.
-If the user asks for a mutating or environment-changing operation, explain in the user's language that the Agent is read-only and that they can switch to Standard mode under Agent Profile > Runtime Environment > Execution Mode. Offer a read-only analysis or plan when useful.`
+If the user asks for a mutating or environment-changing operation, explain in the user's language that the Agent is read-only and that the deployment administrator controls the execution mode. Offer a read-only analysis or plan when useful.`
 
 var (
 	runtimeDirRemoveInitialDelay = 100 * time.Millisecond

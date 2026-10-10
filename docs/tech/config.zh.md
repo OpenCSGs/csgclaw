@@ -4,6 +4,19 @@
 
 `csgclaw serve` 会使用本地配置文件中的 server 访问方式、bootstrap 镜像、sandbox 隔离方式和可选通信通道，并在首次运行时自动补齐缺失的本地状态。
 
+## Codex 运行模式
+
+在启动 CSGClaw server 前设置 `CSGCLAW_EXECUTION_MODE`：
+
+- `standard`：允许使用运行环境提供的工具读取和修改数据，默认使用此值。
+- `read_only`：允许分析对话内容和使用允许的只读工具，禁止执行命令和访问本地文件。
+
+环境变量未设置或为空时使用 `standard`，无效值会使 server 启动失败。该配置对整个进程生效，并覆盖已有 Agent 和模板中的 `execution_mode`。Web UI 隐藏运行模式选择框。修改环境变量后需要重新启动 server。
+
+```sh
+CSGCLAW_EXECUTION_MODE=read_only csgclaw serve
+```
+
 ## Server 地址
 
 `listen_addr` 是本地 HTTP server 监听的地址。
