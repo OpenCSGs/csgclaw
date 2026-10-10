@@ -1015,6 +1015,58 @@ button.composer-working-item:active {
   white-space: nowrap;
 }
 
+.composer-resource-token {
+  --composer-resource-token-bg: #f8f9fc;
+  --composer-resource-token-border: #d5d9eb;
+  --composer-resource-token-icon: #4e5ba6;
+  --composer-resource-token-text: #363f72;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  min-height: 24px;
+  margin: 0;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid var(--composer-resource-token-border);
+  border-radius: 999px;
+  background: var(--composer-resource-token-bg);
+  color: var(--composer-resource-token-text);
+  font-family: "PingFang SC", var(--font-family-text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  letter-spacing: 0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.composer-resource-token-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  color: var(--composer-resource-token-icon);
+  line-height: 0;
+}
+
+.composer-resource-token-icon svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.composer-resource-token-label {
+  color: inherit;
+  line-height: 18px;
+}
+
+:root[data-theme="dark"] .composer-resource-token {
+  --composer-resource-token-bg: color-mix(in srgb, #363f72 24%, var(--panel-strong));
+  --composer-resource-token-border: color-mix(in srgb, #d5d9eb 28%, transparent);
+  --composer-resource-token-icon: #b3b8db;
+  --composer-resource-token-text: #e9ebf8;
+}
+
 .attachment-draft-strip-shell {
   position: relative;
   min-width: 0;
@@ -1560,12 +1612,12 @@ button.message-file-attachment {
 }
 
 .composer-add-popover {
-  width: min(280px, calc(100vw - 20px));
-  max-height: min(340px, calc(100dvh - 20px));
+  width: min(240px, calc(100vw - 20px));
+  max-height: min(360px, calc(100dvh - 20px));
   overflow-y: auto;
   padding: 5px;
   display: grid;
-  gap: 1px;
+  gap: 6px;
   font-size: 12px;
 }
 
@@ -1616,6 +1668,143 @@ button.message-file-attachment {
   background: var(--field);
 }
 
+.composer-resource-section {
+  border-top: 1px solid var(--line);
+  padding-top: 5px;
+}
+
+.composer-resource-picker {
+  display: grid;
+  gap: 4px;
+}
+
+.composer-resource-picker-title {
+  position: sticky;
+  z-index: 1;
+  top: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -8px -8px 0;
+  padding: 10px 12px 7px;
+  border-radius: 8px 8px 0 0;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
+}
+
+.composer-resource-picker-title .composer-resource-manage-button {
+  --btn-height: 24px;
+  --btn-min-width: 0;
+  --btn-padding-x: 8px;
+  --btn-font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.composer-resource-list {
+  display: grid;
+  gap: 1px;
+}
+
+.composer-resource-item {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-resource-item:hover,
+.composer-resource-item:focus-visible {
+  outline: none;
+  background: var(--field);
+}
+
+.composer-resource-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in oklch, var(--text) 72%, var(--muted));
+}
+
+.composer-resource-copy {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.composer-resource-name,
+.composer-resource-description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-resource-name {
+  flex: 0 0 auto;
+  font: var(--text-sm-medium);
+}
+
+.composer-resource-description {
+  min-width: 0;
+  font: var(--text-sm-light);
+}
+
+.composer-resource-description,
+.composer-resource-empty {
+  color: var(--muted);
+}
+
+.composer-resource-empty {
+  padding: 4px 6px;
+}
+
+.composer-resource-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.composer-resource-load-more {
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.composer-resource-load-more:hover,
+.composer-resource-load-more:focus-visible {
+  outline: none;
+  background: var(--field);
+}
+
+.composer-resource-manage-button {
+  text-decoration: none;
+}
+
 .mention-picker {
   position: absolute;
   z-index: var(--z-portal-popover);
@@ -1631,6 +1820,18 @@ button.message-file-attachment {
   border-radius: 18px;
   box-shadow: var(--shadow);
   animation: rise-in 180ms ease both;
+}
+
+.mention-picker.composer-resource-picker {
+  bottom: calc(100% + 16px);
+  left: 50%;
+  width: 100%;
+  border-radius: 8px;
+  translate: -50% 0;
+}
+
+:root[data-theme="dark"] .composer-resource-picker-title {
+  background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
 }
 
 .mention-option {

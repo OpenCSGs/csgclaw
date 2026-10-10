@@ -65,6 +65,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     messageListRef,
     onApplyMention,
     onApplySlashCandidate = (_name) => {},
+    onLoadMoreResources,
     onApplyThreadSlashCandidate = (_name) => {},
     onAddAttachments,
     onAddThreadAttachments,
@@ -104,6 +105,10 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     slashContinuation,
     slashPickerLoading = false,
     slashPickerOpen = false,
+    resources,
+    resourceListLoading,
+    resourceListHasMore,
+    resourceManageAgentID,
     t,
     theme,
     threadDraftSegments,
@@ -302,10 +307,15 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
           slashContinuation={slashContinuation}
           slashPickerLoading={slashPickerLoading}
           slashPickerOpen={slashPickerOpen}
+          resources={resources}
+          resourceListLoading={resourceListLoading}
+          resourceListHasMore={resourceListHasMore}
+          resourceManageAgentID={resourceManageAgentID}
           t={floatingComposerT}
           workingParticipants={workingParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}
+          onLoadMoreResources={onLoadMoreResources}
           onAddAttachments={onAddAttachments}
           onComposerCompositionEnd={onComposerCompositionEnd}
           onComposerCompositionStart={onComposerCompositionStart}

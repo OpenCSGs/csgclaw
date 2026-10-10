@@ -12,6 +12,7 @@ import {
   sendMessageRequest,
 } from "@/api/im";
 import { useInfiniteAgentSkills } from "./useInfiniteAgentSkills";
+import { useAgentResourceLists } from "./useAgentResourceLists";
 import {
   agentMatchesUser,
   appendMessageToData,
@@ -86,6 +87,9 @@ import {
 import { localizeAPIError } from "@/shared/i18n";
 import type { IMConversation, IMMessage, IMServerEvent, IMUser, ThreadView, TranslateFn } from "@/models/conversations";
 import type { SlashPickerCandidate } from "@/models/slashCommands";
+import { mcpManagedKnowledgeBaseSource, mcpServerDisplayName } from "@/models/mcp";
+import type { MCPServer } from "@/models/mcp";
+import type { ComposerResourceItem } from "@/components/business/ConversationPane";
 import { useLegacyOpenClawWorkingFallback } from "./legacyOpenClawWorking";
 import { useAttachmentWarning } from "./useAttachmentWarning";
 import type { UseConversationControllerArgs } from "./types";
@@ -731,6 +735,31 @@ export function useConversationController({
   const removedAttachment = removedAttachmentsByConversationId[activeConversationId];
   const slashPickerEnabled = Boolean((hasActiveConversationAgent || logAgent?.id) && !slashPickerDismissed);
   const mainSkills = useInfiniteAgentSkills(activeConversationAgentId, composerSlashQuery, slashPickerEnabled);
+  const composerResources = useAgentResourceLists(activeConversationAgentId);
+  const composerResourceItems = useMemo(
+    () =>
+      [
+        ...composerResources.skills.items.map<ComposerResourceItem>((skill) => ({
+          description: skill.description,
+          enabled: skill.enabled,
+          id: skill.name,
+          kind: "skill",
+          name: skill.name,
+        })),
+        ...composerResources.mcp.items.map(mcpToComposerResource),
+      ].filter((item) => item.enabled !== false),
+    [composerResources.mcp.items, composerResources.skills.items],
+  );
+  const composerResourcesLoading = composerResources.skills.continuation.loading || composerResources.mcp.continuation.loading;
+  const composerResourcesHasMore = composerResources.skills.continuation.hasMore || composerResources.mcp.continuation.hasMore;
+  const loadMoreComposerResources = useCallback(() => {
+    if (composerResources.skills.continuation.hasMore) {
+      void composerResources.skills.continuation.loadMore();
+    }
+    if (composerResources.mcp.continuation.hasMore) {
+      void composerResources.mcp.continuation.loadMore();
+    }
+  }, [composerResources.mcp.continuation, composerResources.skills.continuation]);
   const skillOptions = mainSkills.items;
   const slashPickerLoading = mainSkills.loading;
   const slashPickerState = useMemo(
@@ -1840,6 +1869,11 @@ export function useConversationController({
       slashContinuation: mainSkills.continuation,
       slashPickerOpen: slashPickerActive,
       onApplySlashCandidate: applySlashCandidate,
+      resources: composerResourceItems,
+      resourceListLoading: composerResourcesLoading,
+      resourceListHasMore: composerResourcesHasMore,
+      resourceManageAgentID: activeConversationAgentId,
+      onLoadMoreResources: loadMoreComposerResources,
       managerProfile,
       managerProfileIncomplete,
       managerRuntimeUnavailable,
@@ -2150,4 +2184,16 @@ function fuzzySkillMatch(name: string, query: string): boolean {
     offset += 1;
   }
   return true;
+}
+
+function mcpToComposerResource(server: MCPServer): ComposerResourceItem {
+  const knowledge = mcpManagedKnowledgeBaseSource(server.config);
+  const displayName = mcpServerDisplayName(server);
+  return {
+    description: server.description,
+    enabled: server.config.enabled === false ? false : undefined,
+    id: server.name,
+    kind: knowledge ? "knowledge" : "connector",
+    name: displayName,
+  };
 }
