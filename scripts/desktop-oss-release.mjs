@@ -474,6 +474,71 @@ function parseEnvironmentFile(filePath) {
   return values;
 }
 
+export function formatReleaseError(error, seen = new Set()) {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  if (seen.has(error)) {
+    return "[circular error]";
+  }
+  seen.add(error);
+  const code = typeof error.code === "string" ? ` (${error.code})` : "";
+  const lines = [`${error.name}${code}: ${error.message}`];
+  if (error.cause !== undefined) {
+    lines.push(`caused by: ${formatReleaseError(error.cause, seen)}`);
+  }
+  if (error instanceof AggregateError) {
+    for (const underlying of error.errors) {
+      lines.push(`underlying error: ${formatReleaseError(underlying, seen)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export async function fetchDownloadsManifest(
+  url,
+  {
+    allowNotFound = false,
+    timeoutMS = 30_000,
+    retryDelayMS = 1_000,
+  } = {},
+) {
+  const attempts = 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    let retryable = true;
+    try {
+      const response = await fetch(url, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMS),
+      });
+      if (allowNotFound && response.status === 404) {
+        await response.body?.cancel();
+        return undefined;
+      }
+      if (!response.ok) {
+        retryable =
+          response.status === 408 ||
+          response.status === 429 ||
+          response.status >= 500;
+        await response.body?.cancel();
+        throw new Error(`HTTP ${response.status}`);
+      }
+      // Keep body reads within the timeout and retry a connection lost mid-read.
+      return await response.json();
+    } catch (error) {
+      const message = `cannot read downloads manifest ${url} (attempt ${attempt}/${attempts})`;
+      if (!retryable || error instanceof SyntaxError || attempt === attempts) {
+        throw new Error(message, { cause: error });
+      }
+      const delayMS = retryDelayMS * 2 ** (attempt - 1);
+      console.warn(
+        `${message}: ${formatReleaseError(error)}; retrying in ${delayMS}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMS));
+    }
+  }
+}
+
 async function uploadDesktopRelease(context, options) {
   const environmentFile = path.resolve(
     options["env-file"] || defaultEnvironmentFile,
@@ -510,11 +575,11 @@ async function uploadDesktopRelease(context, options) {
 
   runCommand("ossutil", ["version"], ossEnvironment);
   const manifestURL = `${publicBaseURL}/channels/${context.channel}/downloads.json`;
-  const currentResponse = await fetch(`${manifestURL}?current=${Date.now()}`, {
-    cache: "no-store",
-  });
-  if (currentResponse.ok) {
-    const currentManifest = await currentResponse.json();
+  const currentManifest = await fetchDownloadsManifest(
+    `${manifestURL}?current=${Date.now()}`,
+    { allowNotFound: true },
+  );
+  if (currentManifest !== undefined) {
     if (
       currentManifest.schema_version !== 1 ||
       currentManifest.channel !== context.channel ||
@@ -528,10 +593,6 @@ async function uploadDesktopRelease(context, options) {
     fs.writeFileSync(
       context.manifestPath,
       `${JSON.stringify(currentManifest, null, 2)}\n`,
-    );
-  } else if (currentResponse.status !== 404) {
-    throw new Error(
-      `cannot read current manifest: HTTP ${currentResponse.status} ${manifestURL}`,
     );
   }
   generateDownloadsManifest({
@@ -636,15 +697,9 @@ async function uploadDesktopRelease(context, options) {
     ossEnvironment,
   );
 
-  const response = await fetch(`${manifestURL}?verify=${Date.now()}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new Error(
-      `uploaded manifest verification failed: HTTP ${response.status} ${manifestURL}`,
-    );
-  }
-  const uploaded = await response.json();
+  const uploaded = await fetchDownloadsManifest(
+    `${manifestURL}?verify=${Date.now()}`,
+  );
   if (uploaded.latest !== context.version) {
     throw new Error(
       `uploaded manifest latest is ${uploaded.latest}, expected ${context.version}`,
@@ -870,7 +925,7 @@ async function main(args) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   main(process.argv.slice(2)).catch((error) => {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(formatReleaseError(error));
     process.exitCode = 1;
   });
 }

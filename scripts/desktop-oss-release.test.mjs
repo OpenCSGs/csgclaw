@@ -10,6 +10,8 @@ import {
   desktopPackageUploadPaths,
   desktopUpdateFeedPaths,
   desktopUploadPaths,
+  fetchDownloadsManifest,
+  formatReleaseError,
   generateDownloadsManifest,
   inferReleaseChannel,
   legacyMacUpdateManifestRelativePath,
@@ -19,6 +21,222 @@ import {
   validateReleaseChannel,
 } from "./desktop-oss-release.mjs";
 import { validateManualAlphaVersion } from "./desktop-release-artifacts.mjs";
+
+const manifestURL = "https://downloads.example/channels/beta/downloads.json";
+
+test("retries manifest connection failures with backoff and fresh timeouts", async (t) => {
+  const networkError = new TypeError("fetch failed", {
+    cause: Object.assign(new Error("connection reset"), { code: "ECONNRESET" }),
+  });
+  const signals = [];
+  const fetchMock = t.mock.method(globalThis, "fetch", async (url, options) => {
+    assert.equal(url, manifestURL);
+    assert.equal(options.cache, "no-store");
+    assert.ok(options.signal instanceof AbortSignal);
+    signals.push(options.signal);
+    if (signals.length < 3) {
+      throw networkError;
+    }
+    return Response.json({ latest: "0.8.0-beta.4" });
+  });
+  const warnings = t.mock.method(console, "warn", () => {});
+
+  assert.deepEqual(
+    await fetchDownloadsManifest(manifestURL, { retryDelayMS: 1 }),
+    { latest: "0.8.0-beta.4" },
+  );
+  assert.equal(fetchMock.mock.callCount(), 3);
+  assert.equal(new Set(signals).size, 3);
+  assert.equal(warnings.mock.callCount(), 2);
+  assert.match(warnings.mock.calls[0].arguments[0], /ECONNRESET/);
+  assert.match(
+    warnings.mock.calls[0].arguments[0],
+    /attempt 1\/3.*retrying in 1ms/s,
+  );
+  assert.match(
+    warnings.mock.calls[1].arguments[0],
+    /attempt 2\/3.*retrying in 2ms/s,
+  );
+});
+
+test("stops after three manifest failures and retains the underlying cause", async (t) => {
+  const networkError = new TypeError("fetch failed", {
+    cause: Object.assign(new Error("getaddrinfo ENOTFOUND downloads.example"), {
+      code: "ENOTFOUND",
+    }),
+  });
+  const fetchMock = t.mock.method(globalThis, "fetch", async () => {
+    throw networkError;
+  });
+  t.mock.method(console, "warn", () => {});
+
+  await assert.rejects(
+    fetchDownloadsManifest(manifestURL, { retryDelayMS: 0 }),
+    (error) => {
+      assert.equal(error.cause, networkError);
+      const diagnostic = formatReleaseError(error);
+      assert.ok(diagnostic.includes(manifestURL));
+      assert.match(diagnostic, /attempt 3\/3/);
+      assert.match(diagnostic, /TypeError: fetch failed/);
+      assert.match(diagnostic, /ENOTFOUND/);
+      return true;
+    },
+  );
+  assert.equal(fetchMock.mock.callCount(), 3);
+});
+
+test("retries transient HTTP errors while reading a manifest", async (t) => {
+  for (const status of [408, 429, 500, 503]) {
+    await t.test(`HTTP ${status}`, async (t) => {
+      let calls = 0;
+      t.mock.method(globalThis, "fetch", async () => {
+        calls += 1;
+        return calls === 1
+          ? new Response("temporary failure", { status })
+          : Response.json({ latest: "0.8.0-beta.4" });
+      });
+      t.mock.method(console, "warn", () => {});
+
+      assert.deepEqual(
+        await fetchDownloadsManifest(manifestURL, { retryDelayMS: 0 }),
+        { latest: "0.8.0-beta.4" },
+      );
+      assert.equal(calls, 2);
+    });
+  }
+});
+
+test("fails immediately on permanent HTTP errors and invalid JSON", async (t) => {
+  for (const [name, response, expected] of [
+    ["forbidden", new Response("forbidden", { status: 403 }), /HTTP 403/],
+    [
+      "missing verification manifest",
+      new Response("missing", { status: 404 }),
+      /HTTP 404/,
+    ],
+    ["invalid JSON", new Response("invalid JSON"), /SyntaxError/],
+  ]) {
+    await t.test(name, async (t) => {
+      const fetchMock = t.mock.method(
+        globalThis,
+        "fetch",
+        async () => response,
+      );
+      const warnings = t.mock.method(console, "warn", () => {});
+
+      await assert.rejects(fetchDownloadsManifest(manifestURL), (error) => {
+        assert.match(formatReleaseError(error), expected);
+        return true;
+      });
+      assert.equal(fetchMock.mock.callCount(), 1);
+      assert.equal(warnings.mock.callCount(), 0);
+    });
+  }
+});
+
+test("allows a missing manifest only when reading a channel before publishing", async (t) => {
+  const fetchMock = t.mock.method(
+    globalThis,
+    "fetch",
+    async () => new Response("missing", { status: 404 }),
+  );
+  assert.equal(
+    await fetchDownloadsManifest(manifestURL, { allowNotFound: true }),
+    undefined,
+  );
+  assert.equal(fetchMock.mock.callCount(), 1);
+});
+
+test("retries connections lost while consuming the manifest body", async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(
+              new TypeError("terminated", {
+                cause: Object.assign(new Error("other side closed"), {
+                  code: "UND_ERR_SOCKET",
+                }),
+              }),
+            );
+          },
+        }),
+      );
+    }
+    return Response.json({ latest: "0.8.0-beta.4" });
+  });
+  t.mock.method(console, "warn", () => {});
+
+  assert.deepEqual(
+    await fetchDownloadsManifest(manifestURL, { retryDelayMS: 0 }),
+    { latest: "0.8.0-beta.4" },
+  );
+  assert.equal(calls, 2);
+});
+
+test("bounds and retries stalled requests and body reads", async (t) => {
+  for (const phase of ["request", "body"]) {
+    await t.test(phase, async (t) => {
+      const fetchMock = t.mock.method(
+        globalThis,
+        "fetch",
+        async (_url, { signal }) => {
+          const stalled = () =>
+            new Promise((_resolve, reject) => {
+              const watchdog = setTimeout(
+                () => reject(new Error("request did not abort")),
+                1_000,
+              );
+              signal.addEventListener(
+                "abort",
+                () => {
+                  clearTimeout(watchdog);
+                  reject(signal.reason);
+                },
+                { once: true },
+              );
+            });
+          return phase === "request" ? stalled() : { ok: true, json: stalled };
+        },
+      );
+      t.mock.method(console, "warn", () => {});
+
+      await assert.rejects(
+        fetchDownloadsManifest(manifestURL, { timeoutMS: 5, retryDelayMS: 0 }),
+        (error) => {
+          assert.equal(error.cause.name, "TimeoutError");
+          assert.match(error.message, /attempt 3\/3/);
+          return true;
+        },
+      );
+      assert.equal(fetchMock.mock.callCount(), 3);
+    });
+  }
+});
+
+test("reports nested and aggregate network causes without dumping arbitrary properties", () => {
+  const connectionErrors = [
+    Object.assign(new Error("connect timed out"), { code: "ETIMEDOUT" }),
+    Object.assign(new Error("certificate expired"), {
+      code: "CERT_HAS_EXPIRED",
+    }),
+  ];
+  const error = new TypeError("fetch failed", {
+    cause: new AggregateError(connectionErrors, "all connections failed"),
+  });
+  error.environment = { OSS_ACCESS_KEY_SECRET: "must-not-be-logged" };
+  const diagnostic = formatReleaseError(error);
+  assert.match(diagnostic, /AggregateError: all connections failed/);
+  assert.match(diagnostic, /ETIMEDOUT/);
+  assert.match(diagnostic, /CERT_HAS_EXPIRED/);
+  assert.ok(!diagnostic.includes("must-not-be-logged"));
+  error.cause = error;
+  assert.match(formatReleaseError(error), /circular error/);
+  assert.equal(formatReleaseError("unexpected failure"), "unexpected failure");
+});
 
 test("normalizes public desktop versions", () => {
   assert.equal(normalizeReleaseVersion("v0.4.5-beta.1"), "0.4.5-beta.1");
