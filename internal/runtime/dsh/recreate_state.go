@@ -14,6 +14,7 @@ var recreatePersistentPathPatterns = []string{
 	filepath.Join(homeDirName, "AGENTS.md"),
 	filepath.Join(homeDirName, "agents"),
 	filepath.Join(homeDirName, sessionsDirName),
+	filepath.Join(homeDirName, "memories"),
 	filepath.Join(homeDirName, "skills"),
 	filepath.Join(homeDirName, "runtime-extensions"),
 }

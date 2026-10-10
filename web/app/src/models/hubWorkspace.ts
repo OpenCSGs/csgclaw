@@ -34,7 +34,7 @@ export function isHubTemplateMemoryEnabled(template: HubTemplate | null | undefi
   const runtimeKind = String(template?.runtime_kind ?? "")
     .trim()
     .toLowerCase();
-  if (runtimeKind !== "codex") return false;
+  if (runtimeKind !== "codex" && runtimeKind !== "dsh") return false;
   return (
     String(template?.runtime_options?.memory_mode ?? "enabled")
       .trim()

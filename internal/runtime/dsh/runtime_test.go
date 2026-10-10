@@ -386,11 +386,11 @@ func TestDSHLaunchArgsEnablePresentOverlay(t *testing.T) {
 	root := filepath.Join("tmp", "agent", hostStateDirName)
 	wantPatch := filepath.Join(root, patchFileName)
 	args := dshLaunchArgs(root, true)
-	if len(args) != 6 || args[0] != "--profile" || args[1] != "acp" || args[2] != "--patch" || args[3] != filepath.Join(root, contextPatchFileName) || args[5] != wantPatch {
+	if len(args) != 8 || args[0] != "--profile" || args[1] != "acp" || args[2] != "--patch" || args[3] != filepath.Join(root, contextPatchFileName) || args[5] != filepath.Join(root, memoryPatchFileName) || args[7] != wantPatch {
 		t.Fatalf("dshLaunchArgs() = %q", args)
 	}
 	fallback := dshLaunchArgs(root, false)
-	if len(fallback) != 4 || fallback[0] != "--profile" || fallback[1] != "acp" || fallback[3] != filepath.Join(root, contextPatchFileName) {
+	if len(fallback) != 6 || fallback[0] != "--profile" || fallback[1] != "acp" || fallback[3] != filepath.Join(root, contextPatchFileName) || fallback[5] != filepath.Join(root, memoryPatchFileName) {
 		t.Fatalf("fallback dshLaunchArgs() = %q", fallback)
 	}
 }
