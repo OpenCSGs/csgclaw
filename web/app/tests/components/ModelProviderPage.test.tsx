@@ -25,6 +25,7 @@ const labels: Record<string, string> = {
   modelProviderCheck: "Check",
   modelProviderConfiguration: "Configuration",
   modelProviderConnected: "Connected",
+  modelContextRestoreDefaults: "Restore defaults",
   modelProviderCustomSettings: "OpenAI-compatible provider settings",
   modelProviderOpenCSGSettings: "OpenCSG built-in models are served by AI Gateway.",
   modelProviderOpenCSGSignInRequired:
@@ -282,6 +283,83 @@ describe("ModelProviderPage", () => {
 
     expect(screen.queryByText("gpt-4.1")).not.toBeInTheDocument();
     expect(screen.getByText("No models")).toBeInTheDocument();
+  });
+
+  it("restores all OpenCSG model defaults even when search hides customized models, then saves", async () => {
+    const user = userEvent.setup();
+    renderModelProviderPage(
+      createCatalog({
+        id: "opencsg",
+        kind: "opencsg",
+        builtin: true,
+        display_name: "OpenCSG",
+        models: ["gpt-4.1", "qwen3.7-plus", "unknown-model"],
+        model_overrides: {
+          "gpt-4.1": { context_window: 100_000 },
+          "qwen3.7-plus": { context_window: 100_000 },
+          "unknown-model": { context_window: 100_000 },
+        },
+        model_defaults: {
+          "gpt-4.1": { context_window: 1_050_000, context_source: "provider" },
+          "qwen3.7-plus": { context_window: 1_000_000, context_source: "catalog" },
+        },
+      }),
+      "opencsg",
+    );
+    await user.type(screen.getByLabelText("Search models"), "gpt");
+    await user.click(screen.getByRole("button", { name: "Restore defaults" }));
+
+    expect(updateModelProvider).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "gpt-4.1 modelMetadataContext" })).toHaveTextContent("1.05 M tokens");
+    expect(screen.getByRole("button", { name: "Restore defaults" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    await user.clear(screen.getByLabelText("Search models"));
+    expect(screen.getByRole("button", { name: "qwen3.7-plus modelMetadataContext" })).toHaveTextContent("1 M tokens");
+    expect(screen.getByRole("button", { name: "unknown-model modelMetadataContext" })).toHaveTextContent(
+      "200 K tokens",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updateModelProvider).toHaveBeenCalledWith("opencsg", { model_overrides: {} }));
+  });
+
+  it("disables restoring defaults when the provider has no customized context sizes", async () => {
+    renderModelProviderPage();
+    await waitFor(() => expect(checkModelProvider).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Restore defaults" })).toBeDisabled();
+  });
+
+  it("restores one model from its row and saves the other model's customized context", async () => {
+    const user = userEvent.setup();
+    renderModelProviderPage(
+      createCatalog({
+        id: "opencsg",
+        kind: "opencsg",
+        builtin: true,
+        models: ["gpt-4.1", "qwen3.7-plus"],
+        model_overrides: {
+          "gpt-4.1": { context_window: 100_000 },
+          "qwen3.7-plus": { context_window: 100_000 },
+        },
+        model_defaults: {
+          "gpt-4.1": { context_window: 1_050_000, context_source: "provider" },
+          "qwen3.7-plus": { context_window: 1_000_000, context_source: "catalog" },
+        },
+      }),
+      "opencsg",
+    );
+    await user.click(screen.getByRole("button", { name: "gpt-4.1 modelMetadataReset" }));
+    expect(screen.getByRole("button", { name: "gpt-4.1 modelMetadataContext" })).toHaveTextContent("1.05 M tokens");
+    expect(screen.getByRole("button", { name: "gpt-4.1 modelMetadataReset" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "qwen3.7-plus modelMetadataContext" })).toHaveTextContent("100 K tokens");
+    expect(screen.getByRole("button", { name: "qwen3.7-plus modelMetadataReset" })).toBeEnabled();
+    expect(updateModelProvider).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(updateModelProvider).toHaveBeenCalledWith("opencsg", {
+        model_overrides: { "qwen3.7-plus": { context_window: 100_000 } },
+      }),
+    );
   });
 
   it("shows the OpenCSG built-in model page with sign-in guidance and AI Gateway address", async () => {

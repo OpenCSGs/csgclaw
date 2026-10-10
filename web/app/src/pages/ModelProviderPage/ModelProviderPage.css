@@ -810,7 +810,7 @@
 }
 .model-context-cell {
   display: grid;
-  grid-template-columns: 160px 88px 28px;
+  grid-template-columns: 160px 88px 28px 28px;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -863,7 +863,7 @@
 .model-context-source.is-pending {
   color: var(--warning);
 }
-.model-context-reset {
+.model-context-action {
   width: 28px;
   height: 28px;
 }
@@ -915,6 +915,18 @@
   color: var(--warning);
 }
 @media (max-width: 640px) {
+  .model-provider-detail-header {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: start;
+  }
+  .model-provider-detail-header .model-provider-status-pill {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .model-provider-detail-header .csg-dialog-close {
+    grid-column: 3;
+    grid-row: 1;
+  }
   .model-provider-model-card:has(.model-context-cell),
   .model-provider-model-card:has(.model-image-kind) {
     grid-template-columns: minmax(0, 1fr) 180px;
@@ -922,11 +934,14 @@
     padding-inline: 4px;
   }
   .model-context-cell {
-    grid-template-columns: minmax(0, 1fr) 28px;
+    grid-template-columns: minmax(0, 1fr) 28px 28px;
     gap: 4px;
   }
-  .model-context-source {
+  .model-context-edit {
     grid-column: 1 / -1;
+  }
+  .model-context-source {
+    grid-column: 1;
     grid-row: 2;
     white-space: normal;
   }
