@@ -264,6 +264,7 @@ export type UseAgentControllerArgs = {
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;
   refreshWorkspaceBootstrap: () => Promise<IMData | null>;
   refreshWorkspaceBootstrapConfig: () => Promise<RuntimeBootstrapConfig | null>;
+  refreshWorkspaceHubTemplates?: () => Promise<HubTemplate[]>;
   refreshWorkspaceManagerProfile: () => Promise<AgentProfileLike | null>;
   refreshWorkspaceModelProviders?: () => Promise<ModelProviderCatalog | null>;
   rooms: IMConversation[];
