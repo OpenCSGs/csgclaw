@@ -275,6 +275,7 @@ const FEISHU_REGISTRATION_MIN_POLL_SECONDS = 1;
 const FEISHU_REGISTRATION_MAX_POLL_SECONDS = 30;
 const AGENT_CREATE_NAME_RETRY_LIMIT = 20;
 const noopRefreshWorkspaceModelProviders = async (): Promise<null> => null;
+const noopRefreshWorkspaceHubTemplates = async (): Promise<HubTemplate[]> => [];
 const noopSelectModelProvider = (): void => undefined;
 
 function feishuActionKey(agentID: string, action: FeishuActionKind): string {
@@ -567,6 +568,7 @@ export function useAgentController({
   refreshWorkspaceAgents,
   refreshWorkspaceBootstrap,
   refreshWorkspaceBootstrapConfig,
+  refreshWorkspaceHubTemplates = noopRefreshWorkspaceHubTemplates,
   refreshWorkspaceManagerProfile,
   refreshWorkspaceModelProviders = noopRefreshWorkspaceModelProviders,
   rooms,
@@ -1570,18 +1572,20 @@ export function useAgentController({
     setRuntimeInstallation(null);
     setAgentBillingURL("");
     setAgentProgress(null);
-    const [refreshedBootstrapConfig, refreshedModelProviders] = await Promise.all([
+    const [refreshedBootstrapConfig, refreshedModelProviders, refreshedHubTemplates] = await Promise.all([
       refreshWorkspaceBootstrapConfig(),
       refreshWorkspaceModelProviders(),
+      refreshWorkspaceHubTemplates(),
     ]);
     const effectiveBootstrapConfig = refreshedBootstrapConfig || bootstrapConfig;
+    const effectiveHubTemplates = refreshedHubTemplates.length ? refreshedHubTemplates : hubTemplates;
     const createModelOptions = modelProviderOptionsFromCatalog(
       modelProviderCatalogForAgentAvailability(refreshedModelProviders, {
         codexAvailable: effectiveBootstrapConfig?.manager_runtime?.installed !== false,
       }),
     );
     setAgentModalBootstrapConfig(effectiveBootstrapConfig);
-    const createWorkerTemplates = createAgentSelectableTemplates(hubTemplates);
+    const createWorkerTemplates = createAgentSelectableTemplates(effectiveHubTemplates);
     const preferredRuntimeKind = "codex";
     const selectedTemplate =
       template === undefined
@@ -1595,7 +1599,7 @@ export function useAgentController({
       let draft = agentToDraft({
         avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
         image: defaultWorkerImageForRuntime(
-          hubTemplates,
+          effectiveHubTemplates,
           initialRuntime.runtime_kind,
           effectiveBootstrapConfig,
           managerAgent?.image || "",
@@ -1617,7 +1621,7 @@ export function useAgentController({
       let draft = agentToDraft({
         avatar: selectUnusedAgentAvatar(createParticipantAvatarSources),
         image: defaultWorkerImageForRuntime(
-          hubTemplates,
+          effectiveHubTemplates,
           initialRuntime.runtime_kind,
           effectiveBootstrapConfig,
           managerAgent?.image || "",

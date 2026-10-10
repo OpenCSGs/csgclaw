@@ -365,6 +365,7 @@ export function useWorkspaceController() {
     refreshWorkspaceModelProviders,
     refreshWorkspaceBootstrap,
     refreshWorkspaceBootstrapConfig,
+    refreshWorkspaceHubTemplates,
     refreshWorkspaceManagerProfile,
     rooms,
     navigatePane,
