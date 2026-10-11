@@ -1,5 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui";
+import { createTranslator, detectInitialLocale } from "@/shared/i18n";
 
 type AppErrorBoundaryProps = {
   children: React.ReactNode;
@@ -25,12 +26,13 @@ export class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, App
 
   render() {
     if (this.state.error) {
+      const t = createTranslator(detectInitialLocale());
       return (
         <div className="empty-state app-error-state">
-          <strong>CSGClaw UI crashed</strong>
-          <span>{this.state.error?.message || "Unknown frontend error"}</span>
+          <strong>{t("appErrorBoundaryTitle")}</strong>
+          <span>{t("appErrorBoundaryDescription")}</span>
           <Button className="secondary-button" onClick={() => window.location.reload()}>
-            Reload
+            {t("appErrorBoundaryReload")}
           </Button>
         </div>
       );

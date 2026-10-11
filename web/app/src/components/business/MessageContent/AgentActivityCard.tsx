@@ -3,7 +3,8 @@ import { Check, CircleHelp, Clock3, LockKeyhole, ShieldAlert, ShieldCheck, Shiel
 import { decideChannelActivity } from "@/api/agentActivities";
 import { errorMessage } from "@/api/client";
 import { AgentActivityMsgTypes } from "@/shared/constants/messages";
-import { actionOptionLabel, questionOptions, statusLabel } from "@/models/agentActivity";
+import { createTranslator } from "@/shared/i18n";
+import { questionOptions } from "@/models/agentActivity";
 import { renderMarkdown } from "./markdown";
 import type {
   AgentActivityAction,
@@ -21,18 +22,17 @@ type AgentActivityCardProps = {
 };
 
 export function AgentActivityCard({ activity, onQuestionSelect, t }: AgentActivityCardProps) {
+  const translate = t ?? createTranslator("en");
   if (activity.content.msgtype === AgentActivityMsgTypes.tool && activity.content.tool) {
     return <ToolActivityCard activity={activity} />;
   }
   if (activity.content.msgtype === AgentActivityMsgTypes.action && activity.content.action?.kind === "permission") {
-    return <PermissionActivityCard activity={activity} action={activity.content.action} />;
+    return <PermissionActivityCard activity={activity} action={activity.content.action} t={translate} />;
   }
   if (activity.content.msgtype === AgentActivityMsgTypes.question && activity.content.question) {
-    return (
-      <QuestionActivityCard question={activity.content.question} onSelect={onQuestionSelect} t={t ?? ((key) => key)} />
-    );
+    return <QuestionActivityCard question={activity.content.question} onSelect={onQuestionSelect} t={translate} />;
   }
-  return <NoticeActivityCard body={activity.content.body} />;
+  return <NoticeActivityCard body={activity.content.body} t={translate} />;
 }
 
 function QuestionActivityCard({
@@ -148,7 +148,15 @@ function ToolActivityCard({ activity }: AgentActivityCardProps) {
   return <div className="message-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(markdown) }} />;
 }
 
-function PermissionActivityCard({ action, activity }: { action: AgentActivityAction; activity: AgentActivityPayload }) {
+function PermissionActivityCard({
+  action,
+  activity,
+  t,
+}: {
+  action: AgentActivityAction;
+  activity: AgentActivityPayload;
+  t: TranslateFn;
+}) {
   const [busyOption, setBusyOption] = useState("");
   const [localStatus, setLocalStatus] = useState(action.status);
   const [error, setError] = useState("");
@@ -169,7 +177,7 @@ function PermissionActivityCard({ action, activity }: { action: AgentActivityAct
       const snapshot = await decideChannelActivity(activity.channel, action.id, option.id);
       setLocalStatus(snapshot.status || optionStatus(option));
     } catch (err) {
-      setError(errorMessage(err, "Permission decision failed"));
+      setError(errorMessage(err, t("permissionDecisionFailed")));
     } finally {
       setBusyOption("");
     }
@@ -183,9 +191,9 @@ function PermissionActivityCard({ action, activity }: { action: AgentActivityAct
         </span>
         <div className="agent-activity-title-group">
           <div className="agent-activity-title">{action.title}</div>
-          <div className="agent-activity-subtitle">Permission request</div>
+          <div className="agent-activity-subtitle">{t("permissionRequest")}</div>
         </div>
-        <span className={`agent-activity-badge status-${localStatus}`}>{statusLabel(localStatus)}</span>
+        <span className={`agent-activity-badge status-${localStatus}`}>{permissionStatusLabel(localStatus, t)}</span>
       </div>
       {isPending ? (
         <div className="agent-activity-actions">
@@ -201,7 +209,7 @@ function PermissionActivityCard({ action, activity }: { action: AgentActivityAct
               <span className="agent-activity-button-icon" aria-hidden="true">
                 {option.kind.startsWith("reject") ? <X size={14} /> : <Check size={14} />}
               </span>
-              <span>{busyOption === option.id ? "..." : actionOptionLabel(option)}</span>
+              <span>{busyOption === option.id ? "..." : permissionActionOptionLabel(option, t)}</span>
             </Button>
           ))}
         </div>
@@ -211,7 +219,7 @@ function PermissionActivityCard({ action, activity }: { action: AgentActivityAct
   );
 }
 
-function NoticeActivityCard({ body }: { body: string }) {
+function NoticeActivityCard({ body, t }: { body: string; t: TranslateFn }) {
   return (
     <section className="agent-activity-card agent-activity-notice">
       <div className="agent-activity-header">
@@ -219,7 +227,7 @@ function NoticeActivityCard({ body }: { body: string }) {
           <ShieldAlert size={16} />
         </span>
         <div className="agent-activity-title-group">
-          <div className="agent-activity-title">Agent notice</div>
+          <div className="agent-activity-title">{t("agentNoticeTitle")}</div>
           <div className="agent-activity-subtitle">{body}</div>
         </div>
       </div>
@@ -239,6 +247,43 @@ function permissionIcon(status: string) {
 
 function optionStatus(option: AgentActivityActionOption): string {
   return option.kind.startsWith("reject") ? "rejected" : "allowed";
+}
+
+function permissionStatusLabel(status: string, t: TranslateFn): string {
+  switch (status) {
+    case "allowed":
+      return t("permissionStatusAllowed");
+    case "rejected":
+      return t("permissionStatusRejected");
+    case "expired":
+      return t("permissionStatusExpired");
+    case "canceled":
+      return t("permissionStatusCanceled");
+    case "completed":
+      return t("permissionStatusCompleted");
+    case "failed":
+      return t("permissionStatusFailed");
+    case "running":
+      return t("permissionStatusRunning");
+    case "pending":
+      return t("permissionStatusPending");
+    default:
+      return t("permissionStatusUnknown");
+  }
+}
+
+function permissionActionOptionLabel(option: AgentActivityActionOption, t: TranslateFn): string {
+  switch (option.kind) {
+    case "allow_once":
+      return t("permissionAllowOnce");
+    case "allow_always":
+      return option.scope === "agent" || !option.scope ? t("permissionAllowAlwaysAgent") : t("permissionAllowAlways");
+    case "reject_once":
+    case "reject":
+      return t("permissionReject");
+    default:
+      return option.label || option.id || t("permissionAction");
+  }
 }
 
 function displayToolKind(kind: string | undefined) {

@@ -701,10 +701,19 @@ export function useAgentController({
   const managerCodexRuntimeUnavailable = bootstrapConfig?.manager_runtime?.installed === false;
   const managerAgentRuntimeUnavailable = isAgentRuntimeUnavailable(managerProfile);
   const managerRuntimeUnavailable = managerCodexRuntimeUnavailable || managerAgentRuntimeUnavailable;
+  const managerRuntimeMessageCode = String(bootstrapConfig?.manager_runtime?.message_code || "").trim();
+  const localizedManagerRuntimeMessage = managerRuntimeMessageCode ? t(`errors.${managerRuntimeMessageCode}`) : "";
+  const managerRuntimeMessage = String(bootstrapConfig?.manager_runtime?.message || "").trim();
+  const translatedLegacyManagerRuntimeMessage =
+    managerRuntimeMessage === "Bundled Codex CLI is unavailable" ? t("errors.bundled_codex_unavailable") : "";
   const managerRuntimeWarning = managerRuntimeUnavailable
     ? managerCodexRuntimeUnavailable
       ? String(
-          bootstrapConfig?.manager_runtime?.message ||
+          (managerRuntimeMessageCode && localizedManagerRuntimeMessage !== `errors.${managerRuntimeMessageCode}`
+            ? localizedManagerRuntimeMessage
+            : "") ||
+            translatedLegacyManagerRuntimeMessage ||
+            managerRuntimeMessage ||
             bootstrapConfig?.manager_runtime?.install_guidance ||
             t("managerCodexMissingWarning"),
         )

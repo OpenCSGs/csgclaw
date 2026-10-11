@@ -33,6 +33,8 @@ import { isAuthenticated } from "@/models/auth";
 import {
   MODEL_PROVIDER_IDS,
   mergeModelProviderModelIDs,
+  modelProviderMessageLabel,
+  modelProviderStatusLabel,
   modelProviderAvatarPath,
   parseModelProviderModelsText,
   providerStatusTone,
@@ -134,7 +136,7 @@ export function ModelProviderPage() {
         return result;
       } catch (err) {
         if (options.showError) {
-          setError(errorMessage(err, "Check failed"));
+          setError(errorMessage(err, t("modelProviderCheckFailed")));
         }
       } finally {
         if (options.showError) {
@@ -142,7 +144,7 @@ export function ModelProviderPage() {
         }
       }
     },
-    [providerID, refreshWorkspaceModelProviders],
+    [providerID, refreshWorkspaceModelProviders, t],
   );
 
   useEffect(() => {
@@ -259,14 +261,14 @@ export function ModelProviderPage() {
   const checkMessage =
     showOpenCSGSignIn || !checkState.status
       ? ""
-      : checkState.message ||
+      : modelProviderMessageLabel(checkState, t) ||
         (checkState.status === "connected" ? t("modelProviderConnected") : t("modelProviderCheck"));
   const statusLabel =
     isOpenCSG && !opencsgSignedIn
       ? t("csghubNotSignedIn")
       : checkState.status === "connected" || effectiveTone === "online"
         ? t("modelProviderConnected")
-        : checkState.status;
+        : modelProviderStatusLabel(checkState.status, provider, t);
 
   async function runCheck() {
     setCheckFeedback("");
@@ -276,7 +278,9 @@ export function ModelProviderPage() {
 
   async function refreshModelMetadata() {
     const result = await runCheckForDraft(draft.baseURL, draft.apiKey);
-    if (result?.status !== "connected") throw new Error(result?.message || t("modelContextCheckFailed"));
+    if (result?.status !== "connected") {
+      throw new Error(modelProviderMessageLabel(result, t) || t("modelContextCheckFailed"));
+    }
   }
 
   async function saveProvider() {
@@ -322,7 +326,7 @@ export function ModelProviderPage() {
       await deleteModelProvider(provider.id);
       setDeleteSuccess(true);
     } catch (err) {
-      setError(errorMessage(err, "Delete failed"));
+      setError(errorMessage(err, t("modelProviderDeleteFailed")));
     } finally {
       setBusy("");
     }
@@ -371,7 +375,7 @@ export function ModelProviderPage() {
               const itemModelCount = item.models.length;
               const itemMetaParts = [
                 itemModelCount ? t("modelProviderModelCount", { count: itemModelCount }) : t("modelProviderNoModels"),
-                item.message || (item.status === "connected" ? t("modelProviderConnected") : ""),
+                modelProviderMessageLabel(item, t) || (item.status === "connected" ? t("modelProviderConnected") : ""),
               ].filter(Boolean);
               return (
                 <button

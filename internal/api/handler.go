@@ -197,6 +197,7 @@ type managerRuntimeResponse struct {
 	DocsURL         string `json:"docs_url"`
 	InstallGuidance string `json:"install_guidance,omitempty"`
 	Message         string `json:"message,omitempty"`
+	MessageCode     string `json:"message_code,omitempty"`
 }
 
 const sandboxRuntimeChoiceAvailabilityTimeout = 2 * time.Second
@@ -607,6 +608,7 @@ func managerRuntimeReadiness() managerRuntimeResponse {
 	}
 	resp.Installed = false
 	resp.Message = "Bundled Codex CLI is unavailable"
+	resp.MessageCode = "bundled_codex_unavailable"
 	return resp
 }
 
@@ -656,6 +658,7 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 	if _, err := locateCodexCLI(); err != nil {
 		choices[0].Installed = false
 		choices[0].Message = "Bundled Codex CLI is unavailable"
+		choices[0].MessageCode = "bundled_codex_unavailable"
 	}
 	if _, err := (dshcli.Provider{}).Ensure(ctx); err != nil {
 		choices[1].Installed = false

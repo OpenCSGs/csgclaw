@@ -575,7 +575,7 @@ export function formatEventMessage(
     const id = typeof message.metadata?.task_id === "string" ? message.metadata.task_id : "";
     const actor = userDisplayName(message.sender_id || message.event.actor_id || "", usersById);
     return isChineseLocale(locale)
-      ? `${actor} 更新了任务${id ? ` ${id}` : ""}，交由 Manager 处理`
+      ? `${actor} 更新了任务${id ? ` ${id}` : ""}，交由管理智能体处理`
       : `${actor} updated ${id || "a task"} for Manager review`;
   }
   return message.content || "";

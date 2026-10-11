@@ -175,7 +175,7 @@ func TestServiceListReportsMissingBundledCodex(t *testing.T) {
 	service := NewService(WithCodexResolver(fakeCodexResolver{err: errors.New("bundle missing")}))
 
 	got := service.List()[0]
-	if got.Name != RuntimeCodex || got.Installed || got.Installable || got.Status != "failed" {
+	if got.Name != RuntimeCodex || got.Installed || got.Installable || got.Status != "failed" || got.MessageCode != "bundled_codex_unavailable" {
 		t.Fatalf("Codex runtime = %+v, want failed non-installable bundled runtime", got)
 	}
 	if got.Message == "" {

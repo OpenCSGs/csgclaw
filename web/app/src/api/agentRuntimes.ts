@@ -42,7 +42,7 @@ export async function installAgentRuntime(name: string, onProgress?: AgentRuntim
   if (installation.status !== "succeeded" || !installation.runtime) {
     throw {
       status: 500,
-      code: "dsh_install_failed",
+      code: "runtime_install_result_invalid",
       message: "DeepSeek Harness installation did not return a runtime",
     } satisfies ApiError;
   }

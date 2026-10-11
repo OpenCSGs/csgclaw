@@ -347,12 +347,14 @@ func (s *Service) codexRuntime() Runtime {
 	if s == nil || s.codex == nil {
 		runtimeInfo.Status = "failed"
 		runtimeInfo.Message = "Bundled Codex CLI resolver is not configured"
+		runtimeInfo.MessageCode = "bundled_codex_unavailable"
 		return runtimeInfo
 	}
 	path, err := s.codex.Ensure(context.Background())
 	if err != nil {
 		runtimeInfo.Status = "failed"
 		runtimeInfo.Message = fmt.Sprintf("Bundled Codex CLI is unavailable: %v", err)
+		runtimeInfo.MessageCode = "bundled_codex_unavailable"
 		return runtimeInfo
 	}
 	runtimeInfo.Installed = true
@@ -373,6 +375,7 @@ func (s *Service) claudeCodeRuntime() Runtime {
 		Arch:        s.resolvedGOARCH(),
 		DocsURL:     "https://docs.anthropic.com/en/docs/claude-code/overview",
 		Message:     "Claude Code runtime support is coming soon",
+		MessageCode: "claude_code_coming_soon",
 	}
 }
 

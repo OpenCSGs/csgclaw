@@ -1,5 +1,5 @@
 import { AgentActivityKinds, AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
-import type { IMMessage } from "@/models/conversations";
+import type { IMMessage, TranslateFn } from "@/models/conversations";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -354,7 +354,29 @@ export function actionOptionLabel(option: AgentActivityActionOption): string {
   return label;
 }
 
-export function statusLabel(status: string): string {
+export function statusLabel(status: string, t?: TranslateFn): string {
+  if (t) {
+    switch (status) {
+      case "allowed":
+        return t("permissionStatusAllowed");
+      case "rejected":
+        return t("permissionStatusRejected");
+      case "expired":
+        return t("permissionStatusExpired");
+      case "canceled":
+        return t("permissionStatusCanceled");
+      case "completed":
+        return t("permissionStatusCompleted");
+      case "failed":
+        return t("permissionStatusFailed");
+      case "running":
+        return t("permissionStatusRunning");
+      case "pending":
+        return t("permissionStatusPending");
+      default:
+        return t("permissionStatusUnknown");
+    }
+  }
   switch (status) {
     case "allowed":
       return "Allowed";

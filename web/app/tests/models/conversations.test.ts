@@ -708,6 +708,6 @@ it("renders historical task feedback without raw mentions, full results or contr
     "zh",
   );
   expect(output).toContain("task-12");
-  expect(output).toContain("交由 Manager 处理");
+  expect(output).toContain("交由管理智能体处理");
   expect(output).not.toMatch(/<at|room-task|coordinate|Long detailed/);
 });

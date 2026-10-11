@@ -71,12 +71,29 @@ describe("i18n messages", () => {
     expect(Object.keys(messages.zh.errors).filter((key) => /\s/.test(key))).toEqual([]);
   });
 
-  it("preserves the upstream reason for generic template publishing failures", () => {
+  it("hides English diagnostics for generic template publishing failures in Chinese", () => {
     const message =
       'publish hub template to "official": remote hub request failed with status 500: failed to update repository path';
     expect(localizeAPIError({ status: 400, code: "template_publish_failed", message }, createTranslator("zh"))).toBe(
+      "模板发布失败，请稍后重试。",
+    );
+    expect(localizeAPIError({ status: 400, code: "template_publish_failed", message }, createTranslator("en"))).toBe(
       message,
     );
+  });
+
+  it("uses a Chinese fallback for unknown English API messages", () => {
+    expect(localizeAPIError({ status: 500, message: "remote hub request failed" }, createTranslator("zh"))).toBe(
+      "操作失败，请稍后重试。",
+    );
+    expect(
+      localizeAPIError(
+        { status: 500, message: "remote hub request failed" },
+        createTranslator("zh"),
+        "remote hub request failed",
+      ),
+    ).toBe("操作失败，请稍后重试。");
+    expect(localizeAPIError({ status: 500, message: "服务暂时不可用" }, createTranslator("zh"))).toBe("服务暂时不可用");
   });
 
   it("localizes unavailable Docker errors without exposing platform diagnostics", () => {
