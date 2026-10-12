@@ -3412,6 +3412,35 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
+	case "prompt-cancel-no-active-turn", "prompt-cancel-invalid-request", "prompt-cancel-interrupt-error":
+		turnStarts := 0
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			switch msg["method"] {
+			case "thread/start":
+				return rpcResult(msg["id"], map[string]any{"threadId": "main-thread"}), true
+			case "turn/start":
+				turnStarts++
+				if turnStarts > 1 {
+					writeRPCNotification(t, "turn/completed", map[string]any{"threadId": "main-thread", "turn": map[string]any{"id": "turn-next", "status": "completed"}})
+					return rpcResult(msg["id"], map[string]any{"turnId": "turn-next"}), true
+				}
+				return rpcResult(msg["id"], map[string]any{"turnId": "turn-cancel"}), true
+			case "turn/interrupt":
+				assertTurnInterruptParams(t, msg, "main-thread", "turn-cancel")
+				code, message := appServerRPCInvalidRequest, "no active turn to interrupt"
+				if mode == "prompt-cancel-invalid-request" {
+					message = "interrupt request is invalid"
+				}
+				if mode == "prompt-cancel-interrupt-error" {
+					code = appServerRPCInternalError
+				}
+				return map[string]any{"jsonrpc": "2.0", "id": msg["id"], "error": map[string]any{
+					"code": code, "message": message,
+				}}, true
+			default:
+				return nil, false
+			}
+		})
 	case "prompt-cancel-confirmed":
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {

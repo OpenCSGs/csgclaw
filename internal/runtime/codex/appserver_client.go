@@ -215,12 +215,12 @@ func (c *appServerClient) handleServerRequest(msg appServerWireMessage) {
 func (c *appServerClient) dispatchServerRequest(req appServerServerRequest) {
 	handler := c.onServerRequest
 	if handler == nil {
-		_ = c.respondError(req.ID, -32601, fmt.Sprintf("unhandled server request: %s", req.Method))
+		_ = c.respondError(req.ID, appServerRPCMethodNotFound, fmt.Sprintf("unhandled server request: %s", req.Method))
 		return
 	}
 	result, err := handler(req)
 	if err != nil {
-		_ = c.respondError(req.ID, -32603, err.Error())
+		_ = c.respondError(req.ID, appServerRPCInternalError, err.Error())
 		return
 	}
 	if err := c.respond(req.ID, result); err != nil {
@@ -327,6 +327,12 @@ func (c *appServerClient) removePending(id int64) *appServerPendingRequest {
 func (c *appServerClient) logDebug(msg string, args ...any) {
 	if c != nil && c.logger != nil {
 		c.logger.Debug(msg, args...)
+	}
+}
+
+func (c *appServerClient) logInfo(msg string, args ...any) {
+	if c != nil && c.logger != nil {
+		c.logger.Info(msg, args...)
 	}
 }
 
