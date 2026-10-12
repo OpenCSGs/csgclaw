@@ -96,11 +96,13 @@ func TestAppServerManagerCancellationInterruptErrorCode(t *testing.T) {
 		name    string
 		mode    string
 		stopped bool
+		message string
 	}{
-		{"interrupt_succeeds", "prompt-cancel-confirmed", false},
-		{"no_active_turn", "prompt-cancel-no-active-turn", false},
-		{"invalid_request_other_message", "prompt-cancel-invalid-request", false},
-		{"other_code_same_message", "prompt-cancel-interrupt-error", true},
+		{"interrupt_succeeds", "prompt-cancel-confirmed", false, ""},
+		{"no_active_turn", "prompt-cancel-no-active-turn", false, "no active turn to interrupt"},
+		{"invalid_request_other_message", "prompt-cancel-invalid-request", true, "interrupt request is invalid"},
+		{"active_turn_id_mismatch", "prompt-cancel-turn-mismatch", true, "expected active turn id turn-cancel but found turn-active"},
+		{"other_code_same_message", "prompt-cancel-interrupt-error", true, "no active turn to interrupt"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			withAppServerHelperCommand(t, tc.mode)
@@ -162,7 +164,7 @@ func TestAppServerManagerCancellationInterruptErrorCode(t *testing.T) {
 					t.Fatalf("runtime survived: %+v", after)
 				}
 				log, err := os.ReadFile(spec.StderrPath)
-				if err != nil || !strings.Contains(string(log), "no active turn to interrupt") {
+				if err != nil || !strings.Contains(string(log), tc.message) {
 					t.Fatalf("log=%s err=%v", log, err)
 				}
 				if !strings.Contains(string(log), "codex app-server process exited") || !strings.Contains(string(log), "exit_code=") {

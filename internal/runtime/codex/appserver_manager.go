@@ -2045,10 +2045,11 @@ func (m *appServerManager) interruptAppServerTurn(live *liveSession, waiter *app
 		"threadId": threadID,
 		"turnId":   turnID,
 	}); err != nil {
-		// A rejected interrupt must not stop a healthy app-server when the
-		// request is no longer applicable (for example, the turn already ended).
+		// Codex uses InvalidRequest for both inactive turns and active-turn
+		// ID mismatches. Only its explicit inactive-turn response is safe to
+		// treat as completed cancellation; other rejections need the stop fallback.
 		var rpcErr appServerRPCError
-		if errors.As(err, &rpcErr) && rpcErr.Code == appServerRPCInvalidRequest {
+		if errors.As(err, &rpcErr) && rpcErr.Code == appServerRPCInvalidRequest && rpcErr.Message == "no active turn to interrupt" {
 			live.appClient.logInfo("codex app-server turn interrupt rejected; preserving runtime",
 				"runtime_id", live.spec.RuntimeID,
 				"thread_id", threadID,

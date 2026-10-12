@@ -3412,7 +3412,7 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				return nil, false
 			}
 		})
-	case "prompt-cancel-no-active-turn", "prompt-cancel-invalid-request", "prompt-cancel-interrupt-error":
+	case "prompt-cancel-no-active-turn", "prompt-cancel-invalid-request", "prompt-cancel-turn-mismatch", "prompt-cancel-interrupt-error":
 		turnStarts := 0
 		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
 			switch msg["method"] {
@@ -3430,6 +3430,9 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 				code, message := appServerRPCInvalidRequest, "no active turn to interrupt"
 				if mode == "prompt-cancel-invalid-request" {
 					message = "interrupt request is invalid"
+				}
+				if mode == "prompt-cancel-turn-mismatch" {
+					message = "expected active turn id turn-cancel but found turn-active"
 				}
 				if mode == "prompt-cancel-interrupt-error" {
 					code = appServerRPCInternalError
