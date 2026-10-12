@@ -50,6 +50,10 @@ show_upgrade = true
 
 ## Model Provider 配置示例
 
+当 OpenCSG AIGateway 的模型目录包含 `auto` 时，CSGClaw 默认优先选择 `auto`。
+这适用于当前登录的 OpenCSG 提供方，以及指向生产或 stg AIGateway 的自定义提供方。
+已明确选择的模型会保留；如果目录中没有 `auto`，则使用第一个可用模型。
+
 ### 本地 CSGHub-lite
 
 ```toml

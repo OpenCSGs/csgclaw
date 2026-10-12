@@ -541,7 +541,7 @@ func ListModelsForProfile(ctx context.Context, profile AgentProfile) ([]string, 
 		if err != nil {
 			return nil, err
 		}
-		return sortModelIDs(models), nil
+		return prioritizeOpenCSGAutoModel(ModelProviderIDOpenCSG, baseURL, sortModelIDs(models)), nil
 	}
 	baseURL := profileBaseURL(profile)
 	if strings.TrimSpace(baseURL) == "" {
@@ -565,7 +565,7 @@ func ListModelsForProfile(ctx context.Context, profile AgentProfile) ([]string, 
 	if err != nil {
 		return nil, err
 	}
-	return sortModelIDs(models), nil
+	return prioritizeOpenCSGAutoModel(profile.ModelProviderID, baseURL, sortModelIDs(models)), nil
 }
 
 func sortModelIDs(models []string) []string {

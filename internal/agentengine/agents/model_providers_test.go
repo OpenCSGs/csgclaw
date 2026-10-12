@@ -79,6 +79,7 @@ func TestCheckModelProviderUsesOpenCSGAIGatewayCredentials(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[
 			{"id":"opencsg/deepseek-v4","tasks":["text-generation"]},
 			{"id":"qwen3.7-plus","tasks":["text-generation","image-text-to-text"]},
+			{"id":"auto","tasks":["text-generation"],"availability":{"is_available":true}},
 			{"id":"opencsg/deepseek-v4","tasks":["text-generation"]}
 		]}`))
 	}))
@@ -98,11 +99,46 @@ func TestCheckModelProviderUsesOpenCSGAIGatewayCredentials(t *testing.T) {
 	if authHeader != "Bearer gk_builtin-test" {
 		t.Fatalf("Authorization = %q, want OpenCSG AI Gateway token", authHeader)
 	}
-	if strings.Join(got.Models, ",") != "qwen3.7-plus,opencsg/deepseek-v4" {
+	if strings.Join(got.Models, ",") != "auto,qwen3.7-plus,opencsg/deepseek-v4" {
 		t.Fatalf("Models = %+v, want deduplicated OpenCSG models", got.Models)
 	}
 	if strings.Join(got.VisionModels, ",") != "qwen3.7-plus" {
 		t.Fatalf("VisionModels = %+v, want OpenCSG tasks metadata to declare qwen3.7-plus as vision", got.VisionModels)
+	}
+}
+
+func TestModelProviderCatalogPrefersAvailableOpenCSGAuto(t *testing.T) {
+	for _, tc := range []struct {
+		name, id, baseURL string
+		models, want      []string
+	}{
+		{"signed-in gateway", ModelProviderIDOpenCSG, "https://gateway.example/v1", []string{"gpt-5", "auto", "qwen3"}, []string{"auto", "gpt-5", "qwen3"}},
+		{"production custom provider", "company-prod", "https://ai.space.opencsg.com/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
+		{"production gateway", "company-prod", "https://aigateway.opencsg.com/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
+		{"staging custom provider", "company-stg", "https://aigateway.opencsg-stg.com/v1", []string{"gpt-5", "auto"}, []string{"auto", "gpt-5"}},
+		{"auto absent", ModelProviderIDOpenCSG, "", []string{"gpt-5", "qwen3"}, []string{"gpt-5", "qwen3"}},
+		{"ordinary provider", "custom", "https://api.example/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
+		{"similar hostname", "custom", "https://aigateway.opencsg-stg.com.example/v1", []string{"gpt-5", "auto"}, []string{"gpt-5", "auto"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			original := strings.Join(tc.models, ",")
+			cfg := config.LLMConfig{Providers: map[string]config.ProviderConfig{
+				tc.id: {BaseURL: tc.baseURL, Models: tc.models},
+			}}
+			catalog := ModelProviderCatalogFromLLM(cfg)
+			var got []string
+			for _, provider := range catalog.Providers {
+				if provider.ID == tc.id {
+					got = provider.Models
+				}
+			}
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("catalog models = %v, want %v", got, tc.want)
+			}
+			if strings.Join(cfg.Providers[tc.id].Models, ",") != original {
+				t.Fatal("building the catalog modified the persisted model list")
+			}
+		})
 	}
 }
 

@@ -50,6 +50,10 @@ show_upgrade = true
 
 ## Model Provider Examples
 
+OpenCSG AIGateway uses `auto` as the initial model choice when the gateway advertises it.
+This applies to the signed-in OpenCSG provider and custom providers pointing to the production or staging AIGateway.
+An explicitly selected model remains selected; when `auto` is unavailable, CSGClaw uses the first available model.
+
 ### Local CSGHub-lite
 
 ```toml

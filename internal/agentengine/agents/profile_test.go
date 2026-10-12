@@ -693,6 +693,40 @@ func TestSortModelIDsOrdersLatestKnownFamiliesFirst(t *testing.T) {
 	}
 }
 
+func TestListModelsForOpenCSGProfilePrefersAvailableAuto(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer gateway-test" {
+			t.Errorf("unexpected model discovery request: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"gpt-5"},{"id":"auto","availability":{"is_available":true}},{"id":"unavailable","availability":{"is_available":false}}]}`))
+	}))
+	defer upstream.Close()
+	previous := defaultCSGHubCredentials
+	t.Cleanup(func() { defaultCSGHubCredentials = previous })
+	defaultCSGHubCredentials = func(context.Context, *http.Client) (string, string, bool, error) {
+		return upstream.URL + "/v1", "gateway-test", true, nil
+	}
+	models, err := ListModelsForProfile(context.Background(), AgentProfile{Provider: ProviderOpenCSG})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(models, ",") != "auto,gpt-5" {
+		t.Fatalf("profile models = %v, want available auto first", models)
+	}
+	svc, err := NewController(config.ModelConfig{}, config.ServerConfig{}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	models, err = svc.ListModelsForRequest(context.Background(), ProfileModelRequest{Provider: ProviderOpenCSG})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(models, ",") != "auto,gpt-5" {
+		t.Fatalf("profile model options = %v, want to preserve the gateway default", models)
+	}
+}
+
 func setProfileDetectionURLs(t *testing.T, csgHubLiteURL, cliProxyURL string, claudeCodeURL ...string) func() {
 	t.Helper()
 	oldCSGHubLite := defaultCSGHubLiteBaseURL
