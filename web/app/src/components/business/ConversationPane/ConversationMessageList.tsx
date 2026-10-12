@@ -1,3 +1,4 @@
+import { useEventCallback } from "@/hooks/useEventCallback";
 import { emptyCompletedProgress } from "@/models/turnProgress";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
@@ -67,7 +68,29 @@ export type ConversationMessageListProps = {
   visibleMessages: IMMessage[];
 };
 
-export const ConversationMessageList = memo(function ConversationMessageList({
+export function ConversationMessageList(props: ConversationMessageListProps) {
+  const onMessageAction = useEventCallback(props.onMessageAction);
+  const onOpenThread = useEventCallback(props.onOpenThread);
+  const onPreviewUser = useEventCallback(props.onPreviewUser);
+  const onOpenAgentDetail = useEventCallback(props.onOpenAgentDetail);
+  const onPreviewAttachment = useEventCallback(props.onPreviewAttachment);
+  const onQuestionSelect = useEventCallback(props.onQuestionSelect);
+  const onCitationSelect = useEventCallback(props.onCitationSelect);
+  return (
+    <MessageListContent
+      {...props}
+      onMessageAction={onMessageAction}
+      onOpenThread={onOpenThread}
+      onPreviewUser={onPreviewUser}
+      onOpenAgentDetail={props.onOpenAgentDetail ? onOpenAgentDetail : undefined}
+      onPreviewAttachment={props.onPreviewAttachment ? onPreviewAttachment : undefined}
+      onQuestionSelect={props.onQuestionSelect ? onQuestionSelect : undefined}
+      onCitationSelect={props.onCitationSelect ? onCitationSelect : undefined}
+    />
+  );
+}
+
+const MessageListContent = memo(function MessageListContent({
   agents = [],
   conversation,
   currentUserID = "",

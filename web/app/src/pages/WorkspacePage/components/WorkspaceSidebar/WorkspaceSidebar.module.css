@@ -691,6 +691,15 @@
     min-width: min(var(--workspace-primary-sidebar-width), 48vw);
   }
 
+  .primarySidebarCollapsed {
+    width: var(--workspace-primary-sidebar-collapsed-width);
+    min-width: var(--workspace-primary-sidebar-collapsed-width);
+  }
+
+  .primarySidebarCollapsed + .mainColumn {
+    display: none;
+  }
+
   .mainColumn {
     left: var(--workspace-current-primary-sidebar-width);
     width: calc(100vw - var(--workspace-current-primary-sidebar-width));

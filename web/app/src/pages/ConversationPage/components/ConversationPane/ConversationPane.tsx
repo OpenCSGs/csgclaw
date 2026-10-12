@@ -295,14 +295,22 @@ function ConversationPaneContent({
   const [citationSelection, setCitationSelection] = useState<CitationSelection | null>(null);
   const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
   const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
+  const mainMessages = useMemo(
+    () => conversation.messages.filter((message) => !message.relates_to),
+    [conversation.messages],
+  );
+  const threadMessages = useMemo(
+    () => (activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : []),
+    [activeThreadView],
+  );
   const questionMode = useQuestionAnswerMode({
-    messages: conversation.messages.filter((message) => !message.relates_to),
+    messages: mainMessages,
     responderID: currentUserID,
     roomID: conversation.id,
     t,
   });
   const threadQuestionMode = useQuestionAnswerMode({
-    messages: activeThreadView?.root ? [activeThreadView.root, ...(activeThreadView.replies ?? [])] : [],
+    messages: threadMessages,
     responderID: currentUserID,
     roomID: conversation.id,
     t,
@@ -598,7 +606,7 @@ function ConversationPaneContent({
         agents={agents}
         conversation={conversation}
         currentUserID={currentUserID}
-        emptyStateSlot={<></>}
+        emptyStateSlot={false}
         locale={locale}
         messageActionBusy={messageActionBusy}
         messageActionFeedback={messageActionFeedback}

@@ -576,9 +576,13 @@ export function useConversationController({
     selectedConversation && !isDirectConversation(selectedConversation) ? selectedConversation : null;
   const selectedConversationID = selectedConversation?.id ?? "";
   const selectedMessageCount = selectedConversation?.messages?.length ?? 0;
+  const authoritativeWorkingParticipants = useMemo(
+    () => workingParticipantsForRoom(selectedConversationID),
+    [selectedConversationID, workingParticipantsForRoom],
+  );
   const workingParticipants = useLegacyOpenClawWorkingFallback({
     agents,
-    authoritative: workingParticipantsForRoom(selectedConversationID),
+    authoritative: authoritativeWorkingParticipants,
     conversation: selectedConversation,
     currentUserID: data?.current_user_id,
     hasObservedWorkLease,
