@@ -154,20 +154,51 @@
 }
 
 .message-token-usage {
+  position: relative;
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  gap: 2px 8px;
+  flex: 0 1 auto;
   color: var(--muted);
   font-size: 12px;
   line-height: 22px;
-  overflow-wrap: anywhere;
-  white-space: normal;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease;
+}
+
+.message-token-usage-text,
+.message-token-usage-measure {
+  white-space: nowrap;
+}
+
+.message-token-usage-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  height: 0;
+  overflow: visible;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.message-token-usage-info {
+  flex: 0 0 22px;
+  color: var(--muted);
+}
+
+.message-token-usage-info svg {
+  width: 14px;
+  height: 14px;
+}
+
+.csg-tooltip-content.message-token-usage-tooltip {
+  box-sizing: border-box;
+  max-width: min(360px, calc(100vw - 24px));
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .message-row:hover .message-token-usage,
