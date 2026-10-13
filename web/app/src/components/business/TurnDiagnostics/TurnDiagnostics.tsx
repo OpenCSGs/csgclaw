@@ -5,6 +5,7 @@ import { DiagnosticBreakdown, DiagnosticCalls, DiagnosticSpanFields } from "./Di
 import { observeDiagnosticRender } from "@/shared/diagnostics/renderTiming";
 import { useEffect, useRef, useState } from "react";
 import { Activity, AlertCircle, ChevronDown, Clock, Copy, Download, RefreshCw } from "lucide-react";
+import { ExecutionDiagnosticIcon } from "../ConversationPane/MessageActionIcons";
 import {
   Button,
   DropdownMenuRoot,
@@ -92,7 +93,7 @@ export function DiagnosticMessageAction({
           data-tooltip-side="top"
           onClick={() => setOpen(true)}
         >
-          <Activity aria-hidden="true" />
+          <ExecutionDiagnosticIcon />
         </button>
       ) : meta?.runtime_error ? (
         <InlineDiagnosticError room={ref.room} source={ref.source} turn={ref.turn} t={t} onOpen={() => setOpen(true)} />
