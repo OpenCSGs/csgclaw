@@ -1,13 +1,11 @@
 import { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { ConversationMessageList } from "@/components/business/ConversationPane";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
 
 const t: TranslateFn = (key, params) => {
   const templates: Record<string, string> = {
-    tokenUsageToggle: "View output usage this turn",
     tokenUsageOutput: "Output this turn: {count} tokens",
     tokenUsageModel: "Model {model}",
   };
@@ -106,15 +104,10 @@ describe("ConversationMessageList profile preview", () => {
     expect(avatar.querySelector(".message-avatar-status")).not.toHaveClass("online");
   });
 
-  it("shows expandable per-reply token usage for the mocked agent reply", async () => {
-    const user = userEvent.setup();
+  it("shows output token usage and model as plain text for the mocked agent reply", () => {
     renderMessageList();
-    const usage = screen.getByRole("button", { name: "View output usage this turn" });
-    expect(usage.closest(".message-action-controls")).not.toBeNull();
-    expect(usage).toHaveAttribute("aria-expanded", "false");
-    await user.click(usage);
-    expect(usage).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Output this turn: 1.22 K tokens")).toBeInTheDocument();
+    const output = screen.getByText("Output this turn: 1.22 K tokens");
+    expect(output.closest(".message-action-controls")).not.toBeNull();
     expect(screen.getByText("Model gpt-5.6-sol")).toBeInTheDocument();
     expect(screen.queryByText(/Input/)).not.toBeInTheDocument();
   });

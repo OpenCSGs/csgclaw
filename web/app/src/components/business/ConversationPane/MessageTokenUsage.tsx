@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { ChevronDown, ChevronRight, Coins } from "lucide-react";
 import type { TranslateFn } from "@/models/conversations";
 
 type MessageTokenUsageProps = {
@@ -25,27 +23,11 @@ function trimDecimal(value: number): string {
 }
 
 export function MessageTokenUsage({ t }: MessageTokenUsageProps) {
-  const [expanded, setExpanded] = useState(false);
-
   return (
-    <div className={`message-token-usage ${expanded ? "is-expanded" : ""}`.trim()}>
-      <button
-        type="button"
-        className="message-token-usage-trigger"
-        aria-label={t("tokenUsageToggle")}
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        <Coins aria-hidden="true" size={13} />
-        {expanded ? <ChevronRight aria-hidden="true" size={13} /> : <ChevronDown aria-hidden="true" size={13} />}
-      </button>
-      {expanded ? (
-        <div className="message-token-usage-details">
-          <span>{t("tokenUsageOutput", { count: formatTokenCount(MOCK_USAGE.output) })}</span>
-          <span aria-hidden="true">·</span>
-          <span>{t("tokenUsageModel", { model: MOCK_USAGE.model })}</span>
-        </div>
-      ) : null}
+    <div className="message-token-usage">
+      <span>{t("tokenUsageOutput", { count: formatTokenCount(MOCK_USAGE.output) })}</span>
+      <span aria-hidden="true">·</span>
+      <span>{t("tokenUsageModel", { model: MOCK_USAGE.model })}</span>
     </div>
   );
 }
