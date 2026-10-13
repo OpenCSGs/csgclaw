@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Info } from "lucide-react";
 import { Tooltip } from "@/components/ui";
 import type { TranslateFn } from "@/models/conversations";
 
@@ -68,7 +67,29 @@ export function MessageTokenUsage({ t }: MessageTokenUsageProps) {
           contentProps={{ className: "message-token-usage-tooltip", side: "top", sideOffset: 6 }}
         >
           <button type="button" className="message-action-button message-token-usage-info" aria-label={details}>
-            <Info aria-hidden="true" size={14} />
+            <svg
+              aria-hidden="true"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <g clipPath="url(#message-token-usage-info-clip)">
+                <path
+                  d="M8.00001 10.6663V7.99967M8.00001 5.33301H8.00668M14.6667 7.99967C14.6667 11.6816 11.6819 14.6663 8.00001 14.6663C4.31811 14.6663 1.33334 11.6816 1.33334 7.99967C1.33334 4.31778 4.31811 1.33301 8.00001 1.33301C11.6819 1.33301 14.6667 4.31778 14.6667 7.99967Z"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </g>
+              <defs>
+                <clipPath id="message-token-usage-info-clip">
+                  <rect width="16" height="16" fill="white" />
+                </clipPath>
+              </defs>
+            </svg>
           </button>
         </Tooltip>
       ) : (

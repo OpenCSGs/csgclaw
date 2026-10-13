@@ -69,7 +69,7 @@
   right: 0;
   bottom: auto;
   z-index: 2;
-  padding-top: 2px;
+  padding-top: 8px;
   opacity: 0;
   pointer-events: auto;
   transition: opacity 140ms ease;
@@ -187,12 +187,6 @@
 
 .message-token-usage-info {
   flex: 0 0 22px;
-  color: var(--muted);
-}
-
-.message-token-usage-info svg {
-  width: 14px;
-  height: 14px;
 }
 
 .csg-tooltip-content.message-token-usage-tooltip {
@@ -722,7 +716,7 @@ button.thread-message-avatar:focus-visible {
   inset: auto;
   width: 100%;
   box-sizing: border-box;
-  padding-block: 4px;
+  padding-block: 8px;
   opacity: 1;
 }
 .message-action-leading {
@@ -746,6 +740,6 @@ button.thread-message-avatar:focus-visible {
     inset: auto;
     width: 100%;
     box-sizing: border-box;
-    padding-top: 4px;
+    padding-top: 8px;
   }
 }
