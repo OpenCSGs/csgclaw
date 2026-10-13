@@ -7,11 +7,9 @@ import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations
 
 const t: TranslateFn = (key, params) => {
   const templates: Record<string, string> = {
-    tokenUsageTotal: "{count} tokens this turn",
-    tokenUsageInput: "Input {count}",
-    tokenUsageOutput: "Output {count}",
+    tokenUsageToggle: "View output usage this turn",
+    tokenUsageOutput: "Output this turn: {count} tokens",
     tokenUsageModel: "Model {model}",
-    tokenUsageEstimate: "Sample data",
   };
   return (templates[key] || key).replace(/\{(\w+)\}/g, (_, name: string) => String(params?.[name] ?? ""));
 };
@@ -111,12 +109,13 @@ describe("ConversationMessageList profile preview", () => {
   it("shows expandable per-reply token usage for the mocked agent reply", async () => {
     const user = userEvent.setup();
     renderMessageList();
-    const usage = screen.getByRole("button", { name: /1\.6K tokens this turn/ });
+    const usage = screen.getByRole("button", { name: "View output usage this turn" });
     expect(usage.closest(".message-action-controls")).not.toBeNull();
     expect(usage).toHaveAttribute("aria-expanded", "false");
     await user.click(usage);
     expect(usage).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Input 1,284")).toBeInTheDocument();
-    expect(screen.getByText("Output 326")).toBeInTheDocument();
+    expect(screen.getByText("Output this turn: 1.22 K tokens")).toBeInTheDocument();
+    expect(screen.getByText("Model gpt-5.6-sol")).toBeInTheDocument();
+    expect(screen.queryByText(/Input/)).not.toBeInTheDocument();
   });
 });
