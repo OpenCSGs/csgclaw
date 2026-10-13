@@ -707,3 +707,13 @@ button.thread-message-avatar:focus-visible {
 .message-row:focus-within .message-hover-actions.has-leading > .message-action-button {
   opacity: 1;
 }
+
+@media (max-width: 720px) {
+  .message-hover-actions:has(.message-token-usage):not(.has-leading) {
+    position: static;
+    inset: auto;
+    width: 100%;
+    box-sizing: border-box;
+    padding-top: 4px;
+  }
+}
