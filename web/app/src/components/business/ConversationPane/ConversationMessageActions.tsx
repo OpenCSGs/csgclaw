@@ -13,6 +13,7 @@ export type ConversationMessageActionsProps = {
   metadata?: Record<string, unknown> | null;
   className?: string;
   leading?: ReactNode;
+  tokenUsage?: ReactNode;
   content?: string | null;
   image?: MessageAttachment | null;
   onOpenThread?: () => VoidOrPromise;
@@ -25,6 +26,7 @@ export function ConversationMessageActions({
   content,
   image,
   leading,
+  tokenUsage,
   onOpenThread,
   t,
 }: ConversationMessageActionsProps) {
@@ -79,7 +81,7 @@ export function ConversationMessageActions({
     }, 2000);
   }
 
-  if (!canCopy && !onOpenThread && !leading && !diagnosticReference(metadata)) {
+  if (!canCopy && !onOpenThread && !leading && !tokenUsage && !diagnosticReference(metadata)) {
     return null;
   }
 
@@ -117,6 +119,7 @@ export function ConversationMessageActions({
           <MessageSquareReply aria-hidden="true" />
         </button>
       ) : null}
+      {tokenUsage}
     </div>
   );
 }

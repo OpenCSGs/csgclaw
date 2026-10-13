@@ -1,10 +1,20 @@
 import { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ConversationMessageList } from "@/components/business/ConversationPane";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
 
-const t: TranslateFn = (key) => key;
+const t: TranslateFn = (key, params) => {
+  const templates: Record<string, string> = {
+    tokenUsageTotal: "{count} tokens this turn",
+    tokenUsageInput: "Input {count}",
+    tokenUsageOutput: "Output {count}",
+    tokenUsageModel: "Model {model}",
+    tokenUsageEstimate: "Sample data",
+  };
+  return (templates[key] || key).replace(/\{(\w+)\}/g, (_, name: string) => String(params?.[name] ?? ""));
+};
 
 const agentUser: IMUser = {
   id: "agent-1",
@@ -96,5 +106,17 @@ describe("ConversationMessageList profile preview", () => {
 
     const avatar = screen.getByRole("button", { name: "agentDetailPanel Builder" });
     expect(avatar.querySelector(".message-avatar-status")).not.toHaveClass("online");
+  });
+
+  it("shows expandable per-reply token usage for the mocked agent reply", async () => {
+    const user = userEvent.setup();
+    renderMessageList();
+    const usage = screen.getByRole("button", { name: /1\.6K tokens this turn/ });
+    expect(usage.closest(".message-action-controls")).not.toBeNull();
+    expect(usage).toHaveAttribute("aria-expanded", "false");
+    await user.click(usage);
+    expect(usage).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Input 1,284")).toBeInTheDocument();
+    expect(screen.getByText("Output 326")).toBeInTheDocument();
   });
 });
