@@ -870,6 +870,9 @@ func reconcileInterruptedUserInputMessages(imSvc *im.Service) error {
 }
 
 func refreshStartupModelProviders(ctx context.Context, cfg config.Config, configPath string, svc *agent.Controller) (config.Config, []agent.ModelProviderCheckResult, error) {
+	if strings.TrimSpace(cfg.Sandbox.Provider) == "csghub" {
+		return cfg, nil, nil
+	}
 	configPath = strings.TrimSpace(configPath)
 	if configPath == "" {
 		return cfg, nil, nil

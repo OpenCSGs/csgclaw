@@ -44,3 +44,9 @@
 - `runtime_options.execution_mode` 当前只接受 `standard` 或 `read_only`。
 - `runtime_options.memory_mode` 当前只接受 `enabled` 或 `disabled`。
 - `image.env[].secret = true` 时不能同时设置非空的 `default`。
+
+## 平台部署的模型检查
+
+当 `[sandbox].provider = "csghub"` 时，服务启动不请求模型目录；通过 `--from-template` 创建 Codex Worker 时，不在线探测模型可用性。运行时依赖、运行时选项和 MCP 配置仍会校验。模型不可用的错误在实际聊天调用时通过现有失败事件返回，不阻止平台模板 Worker 的创建。本地部署和非模板创建保持原有模型检查行为。
+
+未配置 `[bootstrap].default_worker_template` 或配置为空时，默认使用 `builtin.codex-worker`；显式配置的模板不受影响。未传 `--from-template` 但实际解析了默认模板的创建，同样跳过上述平台模型探测。

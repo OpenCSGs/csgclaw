@@ -2149,3 +2149,14 @@ func TestImageOnlyProviderCatalogRoundTrip(t *testing.T) {
 		t.Fatal("image capability was lost or promoted to chat models")
 	}
 }
+
+func TestDefaultWorkerTemplateIsCodex(t *testing.T) {
+	for _, bootstrap := range []BootstrapConfig{{}, {DefaultWorkerTemplate: " "}} {
+		if got := bootstrap.ResolvedDefaultWorkerTemplate(); got != "builtin.codex-worker" {
+			t.Fatalf("default worker template = %q", got)
+		}
+	}
+	if got := (BootstrapConfig{DefaultWorkerTemplate: "builtin.openclaw-worker"}).ResolvedDefaultWorkerTemplate(); got != "builtin.openclaw-worker" {
+		t.Fatalf("explicit template changed to %q", got)
+	}
+}

@@ -308,7 +308,7 @@ func init() {
 		if err := runtimewiring.WithOpenClawSandboxRuntime(nil)(s); err != nil {
 			return err
 		}
-		return agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex})(s)
+		return agent.WithRuntime(templateCodexTestRuntime{fakeCompatRuntime{kind: agent.RuntimeKindCodex}})(s)
 	})
 	_ = codexruntime.TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
 		return nil
@@ -3675,6 +3675,9 @@ func TestHandleAgentsCreateReplaceUsesUnifiedServiceEntry(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
+	if err := agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "builtin.openclaw-worker"})(svc); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:   "u-alice",
@@ -3711,6 +3714,9 @@ func TestHandleAgentsCreateReplaceFieldMaskMergesInService(t *testing.T) {
 	t.Cleanup(agent.TestOnlySetSandboxProvider(sandboxtest.NewProvider()))
 
 	svc := mustNewService(t)
+	if err := agent.WithBootstrapDefaultTemplates(config.BootstrapConfig{DefaultWorkerTemplate: "builtin.openclaw-worker"})(svc); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := svc.CreateRecord(context.Background(), agent.CreateRequest{
 		Spec: agent.CreateAgentSpec{
 			ID:          "u-alice",
@@ -4195,7 +4201,7 @@ func TestHandleAgentSkillsReturnsContentFromSkillsRoot(t *testing.T) {
 			DefaultManagerTemplate: config.DefaultBootstrapManagerTemplate,
 			DefaultWorkerTemplate:  config.DefaultBootstrapWorkerTemplate,
 		}),
-		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
+		agent.WithRuntime(templateCodexTestRuntime{fakeCompatRuntime{kind: agent.RuntimeKindCodex}}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -4462,7 +4468,7 @@ func newAgentSkillManagementTestServer(t *testing.T) (*Handler, *agent.Controlle
 			DefaultManagerTemplate: config.DefaultBootstrapManagerTemplate,
 			DefaultWorkerTemplate:  config.DefaultBootstrapWorkerTemplate,
 		}),
-		agent.WithRuntime(fakeCompatRuntime{kind: agent.RuntimeKindCodex}),
+		agent.WithRuntime(templateCodexTestRuntime{fakeCompatRuntime{kind: agent.RuntimeKindCodex}}),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -9357,4 +9363,17 @@ func waitForCondition(t *testing.T, timeout, interval time.Duration, fn func() b
 		time.Sleep(interval)
 	}
 	t.Fatalf("condition not met within %s", timeout)
+}
+
+// The default Codex template includes MCP configuration, as supported by the real runtime.
+type templateCodexTestRuntime struct{ fakeCompatRuntime }
+
+func (templateCodexTestRuntime) ValidateMCPServers(context.Context, agentruntime.MCPServersSnapshot) error {
+	return nil
+}
+func (templateCodexTestRuntime) MCPServersRestartRequired(agentruntime.MCPServersChange) (bool, error) {
+	return true, nil
+}
+func (templateCodexTestRuntime) ReconcileMCPServers(context.Context, agentruntime.Handle, agentruntime.MCPServersChange) error {
+	return nil
 }

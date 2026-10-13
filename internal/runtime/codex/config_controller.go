@@ -49,6 +49,9 @@ func (r *Runtime) ValidateConfig(ctx context.Context, current agentruntime.Runti
 	if _, err := DecodeRuntimeOptions(current.Options); err != nil {
 		return err
 	}
+	if current.SkipModelAvailabilityCheck {
+		return nil
+	}
 	target, ok, err := responsesProbeTarget(ctx, current.Profile)
 	if err != nil {
 		return fmt.Errorf("validate Codex provider Responses API: %w", err)

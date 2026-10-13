@@ -18,8 +18,10 @@ type RuntimeProfileConfig struct {
 }
 
 type RuntimeConfigSnapshot struct {
-	Profile RuntimeProfileConfig
-	Options map[string]any
+	// SkipModelAvailabilityCheck defers online model checks until a conversation.
+	SkipModelAvailabilityCheck bool
+	Profile                    RuntimeProfileConfig
+	Options                    map[string]any
 }
 
 type RuntimeConfigChange struct {

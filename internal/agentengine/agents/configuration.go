@@ -822,6 +822,13 @@ func mcpServersSnapshotForAgent(servers map[string]any) agentruntime.MCPServersS
 	return agentruntime.MCPServersSnapshot{Servers: cloneMCPServers(servers)}
 }
 
+// Platform template bootstrap must not depend on the model service being online.
+// Runtime options, dependencies and MCP configuration are still validated.
+func (s *Controller) validateCreateRuntimeConfig(ctx context.Context, spec CreateAgentSpec, runtimeKind string, current agentruntime.RuntimeConfigSnapshot) error {
+	current.SkipModelAvailabilityCheck = s.sandboxProviderName() == "csghub" && strings.TrimSpace(spec.FromTemplate) != ""
+	return s.validateRuntimeConfig(ctx, runtimeKind, current)
+}
+
 func (s *Controller) validateRuntimeConfig(ctx context.Context, runtimeKind string, current agentruntime.RuntimeConfigSnapshot) error {
 	if s == nil {
 		return fmt.Errorf("agent service is required")

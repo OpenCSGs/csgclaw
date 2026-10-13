@@ -329,7 +329,7 @@ const (
 	DefaultOfficialHubRegistryName  = "official"
 	DefaultOfficialHubRegistryURL   = "https://hub.opencsg.com"
 	DefaultBootstrapManagerTemplate = "builtin.manager-codex"
-	DefaultBootstrapWorkerTemplate  = "builtin.openclaw-worker"
+	DefaultBootstrapWorkerTemplate  = "builtin.codex-worker"
 	HubRegistryKindBuiltin          = "builtin"
 	HubRegistryKindLocal            = "local"
 	HubRegistryKindRemote           = "remote"

@@ -152,3 +152,25 @@ func TestRestartRequiredWhenMemoryModeChanges(t *testing.T) {
 		t.Fatal("RestartRequired() = false, want true for memory mode change")
 	}
 }
+
+func TestValidateConfigDefersModelCheck(t *testing.T) {
+	t.Cleanup(TestOnlySetResponsesAPIProbe(func(context.Context, string, string, string, map[string]string) error {
+		t.Fatal("model probe called during platform template creation")
+		return nil
+	}))
+	rt := &Runtime{}
+	if err := rt.ValidateConfig(context.Background(), agentruntime.RuntimeConfigSnapshot{SkipModelAvailabilityCheck: true}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeferredModelCheckStillValidatesRuntimeOptions(t *testing.T) {
+	rt := &Runtime{}
+	err := rt.ValidateConfig(context.Background(), agentruntime.RuntimeConfigSnapshot{
+		SkipModelAvailabilityCheck: true,
+		Options:                    map[string]any{"execution_mode": "invalid"},
+	})
+	if err == nil {
+		t.Fatal("invalid runtime options accepted")
+	}
+}

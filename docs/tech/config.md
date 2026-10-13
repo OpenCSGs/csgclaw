@@ -353,3 +353,5 @@ Channel integration is optional. CSGClaw works with the built-in Web UI by defau
 Keep `config.toml` focused on shared server, model, bootstrap, and sandbox settings. Feishu credentials live on Feishu participants in `~/.csgclaw/im/participants.json` and are written with `csgclaw-cli participant bind`; legacy `[channels.feishu]` blocks and `channels/feishu.toml` are not read by the participant-backed flow.
 
 For detailed field definitions and examples, see [Feishu Channel Configuration](channel/feishu.md).
+
+When `[bootstrap].default_worker_template` is omitted or empty, the default Worker template is `builtin.codex-worker`. Explicit template settings remain unchanged.
