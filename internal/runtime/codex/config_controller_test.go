@@ -165,10 +165,11 @@ func TestValidateConfigDefersModelCheck(t *testing.T) {
 }
 
 func TestDeferredModelCheckStillValidatesRuntimeOptions(t *testing.T) {
+	t.Setenv("CSGCLAW_EXECUTION_MODE", ExecutionModeStandard)
 	rt := &Runtime{}
 	err := rt.ValidateConfig(context.Background(), agentruntime.RuntimeConfigSnapshot{
 		SkipModelAvailabilityCheck: true,
-		Options:                    map[string]any{"execution_mode": "invalid"},
+		Options:                    map[string]any{"memory_mode": "invalid"},
 	})
 	if err == nil {
 		t.Fatal("invalid runtime options accepted")
