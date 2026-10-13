@@ -8,7 +8,15 @@ import { ConversationWorkingActions, type ConversationWorkingParticipant } from 
 function defaultTranslate(key: string, params?: Record<string, unknown>) {
   if (key === "composerAddContent") return "添加内容";
   if (key === "composerAdd") return "添加";
+  if (key === "composerResources") return "资源";
+  if (key === "composerResourceEmpty") return "暂无可选资源";
   if (key === "addAttachment") return "添加附件";
+  if (key === "skills") return "技能";
+  if (key === "connectors") return "连接器";
+  if (key === "knowledgeBases") return "知识库";
+  if (key === "manage") return "管理";
+  if (key === "loadMore") return "加载更多";
+  if (key === "loading") return "加载中";
   if (key === "connectorGitHub") return "GitHub";
   if (key === "connectorGitLab") return "GitLab";
   if (key === "connectorNotConnected") return "未连接";
@@ -217,5 +225,62 @@ describe("ConversationComposer attachment menu", () => {
     expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
     expect(screen.queryByText("GitLab")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "连接" })).not.toBeInTheDocument();
+  });
+
+  it("closes the add menu with Escape", async () => {
+    const user = userEvent.setup();
+    renderConversationComposer();
+
+    await user.click(screen.getByRole("button", { name: "添加内容" }));
+    expect(screen.getByRole("dialog", { name: "添加内容" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "添加内容" })).not.toBeInTheDocument();
+  });
+
+  it("opens a secondary resource list above the editor and inserts the selected resource", async () => {
+    const user = userEvent.setup();
+    const editorRef = createRef<HTMLDivElement>();
+    const onSyncComposer = vi.fn();
+    renderConversationComposer({
+      editorRef,
+      resourceManageAgentID: "agent-dev",
+      resources: [
+        { id: "reviewer", kind: "skill", name: "reviewer", description: "Review code" },
+        { id: "gitlab", kind: "connector", name: "GitLab", description: "Repository tools" },
+        { id: "kb", kind: "knowledge", name: "Product KB", description: "Docs" },
+      ],
+      onSyncComposer,
+    });
+
+    await user.click(screen.getByRole("button", { name: "添加内容" }));
+    expect(screen.getByText("技能")).toBeInTheDocument();
+    expect(screen.getByText("连接器")).toBeInTheDocument();
+    expect(screen.getByText("知识库")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /reviewer/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "技能" }));
+    expect(screen.getByRole("listbox", { name: "技能" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "管理" })).toHaveAttribute("href", "#/agents/agent-dev?tab=skills");
+
+    await user.click(screen.getByRole("option", { name: /reviewer/ }));
+    expect(editorRef.current).toHaveTextContent("/reviewer");
+    expect(editorRef.current?.querySelector(".composer-resource-token-skill")).toBeInTheDocument();
+    expect(onSyncComposer).toHaveBeenCalled();
+  });
+
+  it("closes the secondary resource list with Escape", async () => {
+    const user = userEvent.setup();
+    renderConversationComposer({
+      resourceManageAgentID: "agent-dev",
+      resources: [{ id: "reviewer", kind: "skill", name: "reviewer", description: "Review code" }],
+    });
+
+    await user.click(screen.getByRole("button", { name: "添加内容" }));
+    await user.click(screen.getByRole("button", { name: "技能" }));
+    expect(screen.getByRole("listbox", { name: "技能" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox", { name: "技能" })).not.toBeInTheDocument();
   });
 });

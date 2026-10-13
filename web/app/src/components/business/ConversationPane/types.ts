@@ -39,6 +39,15 @@ export const ConversationWorkingActions = {
 } as const;
 
 export type ComposerSendStatus = "failed" | "idle" | "sending";
+export type ComposerResourceKind = "connector" | "knowledge" | "skill";
+
+export type ComposerResourceItem = {
+  description?: string;
+  enabled?: boolean;
+  id: string;
+  kind: ComposerResourceKind;
+  name: string;
+};
 
 export type ConversationWorkingAction = (typeof ConversationWorkingActions)[keyof typeof ConversationWorkingActions];
 
@@ -135,6 +144,7 @@ export type ConversationPaneProps = {
   onStopWorkingTurn?: (participant: ConversationWorkingParticipant) => VoidOrPromise;
   onSendThreadReply: () => VoidOrPromise;
   onSetThreadSlashIndex?: (index: number) => void;
+  onLoadMoreResources?: () => void;
   onSyncComposer: () => void;
   onThreadDraftChange: (segments: ComposerSegment[]) => void;
   onThreadSlashQueryChange?: (query: string | null) => void;
@@ -150,6 +160,10 @@ export type ConversationPaneProps = {
   slashContinuation?: SkillContinuation;
   slashPickerLoading?: boolean;
   slashPickerOpen?: boolean;
+  resourceListHasMore?: boolean;
+  resourceListLoading?: boolean;
+  resourceManageAgentID?: string;
+  resources?: ComposerResourceItem[];
   t: TranslateFn;
   theme: ThemeMode;
   threadDraftSegments: ComposerSegment[];

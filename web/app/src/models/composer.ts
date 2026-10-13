@@ -8,6 +8,13 @@ export type ComposerSegment =
       text: string;
     }
   | {
+      displayText: string;
+      kind: "connector" | "knowledge" | "skill";
+      name: string;
+      text: string;
+      type: "resource";
+    }
+  | {
       type: "mention";
       userId: string;
       userName: string;
@@ -76,6 +83,60 @@ export function createSlashTokenElement(value: unknown): HTMLSpanElement {
   return token;
 }
 
+export function createResourceTokenElement(resource: {
+  displayText?: string | null;
+  kind: "connector" | "knowledge" | "skill";
+  name: string;
+  text: string;
+}): HTMLSpanElement {
+  const token = document.createElement("span");
+  token.className = `composer-resource-token composer-resource-token-${resource.kind}`;
+  token.dataset.composerResourceToken = "true";
+  token.dataset.composerResourceKind = resource.kind;
+  token.dataset.composerResourceName = resource.name;
+  token.dataset.composerResourceText = resource.text;
+  token.dataset.composerResourceDisplayText = resource.displayText || resource.text;
+  token.contentEditable = "false";
+
+  const icon = document.createElement("span");
+  icon.className = "composer-resource-token-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.append(createResourceTokenIcon(resource.kind));
+
+  const label = document.createElement("span");
+  label.className = "composer-resource-token-label";
+  label.textContent = token.dataset.composerResourceDisplayText;
+
+  token.append(icon, label);
+  return token;
+}
+
+function createResourceTokenIcon(kind: "connector" | "knowledge" | "skill"): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("width", "12");
+  svg.setAttribute("height", "12");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.5");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  if (kind === "knowledge") {
+    path.setAttribute("d", "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5V19.5Z");
+  } else if (kind === "connector") {
+    path.setAttribute("d", "M12 22V18M7 8H17M7 8V5A3 3 0 0 1 10 2H14A3 3 0 0 1 17 5V8M7 8H5A3 3 0 0 0 2 11V15A3 3 0 0 0 5 18H19A3 3 0 0 0 22 15V11A3 3 0 0 0 19 8H17");
+  } else {
+    path.setAttribute(
+      "d",
+      "M12 2L15.6 5.6C18 -0.7 24.7 6 18.4 8.4L22 12L18.4 15.6C16 9.3 9.3 16 15.6 18.4L12 22L8.4 18.4C6 24.7 -0.7 18 5.6 15.6L2 12L5.6 8.4C8 14.7 14.7 8 8.4 5.6L12 2Z",
+    );
+  }
+  svg.append(path);
+  return svg;
+}
+
 export function normalizeComposerSegmentsForDisplay(
   segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
 ): ComposerSegment[] {
@@ -86,6 +147,10 @@ export function normalizeComposerSegmentsForDisplay(
     }
     if (segment.type === "mention") {
       normalized.push({ type: "mention", userId: segment.userId, userName: segment.userName });
+      continue;
+    }
+    if (segment.type === "resource") {
+      normalized.push(segment);
       continue;
     }
     const text = String(segment.text ?? "");
@@ -119,6 +184,10 @@ export function appendComposerSegments(
     }
     if (segment.type === "slash") {
       parent.append(createSlashTokenElement(segment.text || ""));
+      continue;
+    }
+    if (segment.type === "resource") {
+      parent.append(createResourceTokenElement(segment));
       continue;
     }
     const parts = String(segment.text ?? "").split("\n");
@@ -175,6 +244,20 @@ export function collectComposerSegments(node: Node, segments: ComposerSegment[])
       segments.push({ type: "slash", text: element.textContent ?? "" });
       return;
     }
+    if (element.dataset?.composerResourceToken) {
+      const kind = element.dataset.composerResourceKind;
+      if (kind === "connector" || kind === "knowledge" || kind === "skill") {
+        const text = element.dataset.composerResourceText || element.textContent || "";
+        segments.push({
+          type: "resource",
+          displayText: element.dataset.composerResourceDisplayText || element.textContent || text,
+          kind,
+          name: element.dataset.composerResourceName || text,
+          text,
+        });
+      }
+      return;
+    }
     if (element.dataset?.composerCaretAnchor) {
       return;
     }
@@ -208,6 +291,10 @@ export function normalizeComposerSegments(
       normalized.push(segment);
       continue;
     }
+    if (segment.type === "resource") {
+      normalized.push(segment);
+      continue;
+    }
     const text = segment.text ?? "";
     if (!text) {
       continue;
@@ -238,6 +325,9 @@ export function segmentsToPlainText(segments: readonly ComposerSegment[] | null 
       if (segment.type === "mention") {
         return `@${segment.userName || segment.userId}`;
       }
+      if (segment.type === "resource") {
+        return segment.text ?? "";
+      }
       return segment.text ?? "";
     })
     .join("");
@@ -263,6 +353,17 @@ export function areComposerSegmentsEqual(
         return false;
       }
       return segment.userId === other.userId && segment.userName === other.userName;
+    }
+    if (segment.type === "resource") {
+      if (other.type !== "resource") {
+        return false;
+      }
+      return (
+        segment.kind === other.kind &&
+        segment.name === other.name &&
+        segment.text === other.text &&
+        segment.displayText === other.displayText
+      );
     }
     if (other.type === "mention") {
       return false;
@@ -311,6 +412,9 @@ export function serializeComposerSegments(segments: readonly ComposerSegment[] |
         const userID = segment.userId || "";
         const userName = segment.userName || userID;
         return `<at user_id="${userID}">${userName}</at>`;
+      }
+      if (segment.type === "resource") {
+        return segment.text ?? "";
       }
       return segment.text ?? "";
     })
