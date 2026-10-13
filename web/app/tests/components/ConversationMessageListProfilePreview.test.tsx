@@ -1,5 +1,6 @@
 import { createRef } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui";
 import { ConversationMessageList } from "@/components/business/ConversationPane";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
@@ -8,6 +9,7 @@ const t: TranslateFn = (key, params) => {
   const templates: Record<string, string> = {
     tokenUsageOutput: "Output this turn: {count} tokens",
     tokenUsageModel: "Model {model}",
+    tokenUsageMock: "Mock data",
   };
   return (templates[key] || key).replace(/\{(\w+)\}/g, (_, name: string) => String(params?.[name] ?? ""));
 };
@@ -39,22 +41,24 @@ function renderMessageList({
   const onOpenAgentDetail = vi.fn<(agent: AgentLike, anchor: HTMLElement) => void>();
   const onPreviewUser = vi.fn<(user: IMUser, anchor: HTMLElement) => void>();
   render(
-    <ConversationMessageList
-      agents={agents}
-      conversation={conversation}
-      locale="en"
-      messageActionBusy=""
-      messageActionFeedback={{}}
-      messageListRef={createRef<HTMLElement>()}
-      t={t}
-      theme="light"
-      usersById={new Map([[agentUser.id, agentUser]])}
-      visibleMessages={conversation.messages}
-      onMessageAction={vi.fn()}
-      onOpenAgentDetail={onOpenAgentDetail}
-      onOpenThread={vi.fn()}
-      onPreviewUser={onPreviewUser}
-    />,
+    <TooltipProvider delayDuration={0}>
+      <ConversationMessageList
+        agents={agents}
+        conversation={conversation}
+        locale="en"
+        messageActionBusy=""
+        messageActionFeedback={{}}
+        messageListRef={createRef<HTMLElement>()}
+        t={t}
+        theme="light"
+        usersById={new Map([[agentUser.id, agentUser]])}
+        visibleMessages={conversation.messages}
+        onMessageAction={vi.fn()}
+        onOpenAgentDetail={onOpenAgentDetail}
+        onOpenThread={vi.fn()}
+        onPreviewUser={onPreviewUser}
+      />
+    </TooltipProvider>,
   );
   return { onOpenAgentDetail, onPreviewUser };
 }
@@ -106,9 +110,42 @@ describe("ConversationMessageList profile preview", () => {
 
   it("shows output token usage and model as plain text for the mocked agent reply", () => {
     renderMessageList();
-    const output = screen.getByText("Output this turn: 1.22 K tokens");
+    const details = "Output this turn: 1.22 K tokens · Model gpt-5.6-sol · Mock data";
+    const output = screen.getByText(details, { selector: ".message-token-usage-text" });
     expect(output.closest(".message-action-controls")).not.toBeNull();
-    expect(screen.getByText("Model gpt-5.6-sol")).toBeInTheDocument();
     expect(screen.queryByText(/Input/)).not.toBeInTheDocument();
+  });
+
+  it("shows the mocked usage details in a tooltip when the action row is too narrow", async () => {
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.classList.contains("message-token-usage-measure") ? new DOMRect(0, 0, 260, 22) : new DOMRect();
+    });
+    const clientWidthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get() {
+        return this.classList.contains("message-action-controls") ? 100 : 0;
+      },
+    });
+
+    try {
+      renderMessageList();
+      const details = "Output this turn: 1.22 K tokens · Model gpt-5.6-sol · Mock data";
+      const infoButton = screen.getByRole("button", { name: details });
+      expect(infoButton).toBeInTheDocument();
+
+      fireEvent.focus(infoButton);
+
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(details);
+    } finally {
+      rectSpy.mockRestore();
+      if (clientWidthDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidthDescriptor);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
+      }
+    }
   });
 });

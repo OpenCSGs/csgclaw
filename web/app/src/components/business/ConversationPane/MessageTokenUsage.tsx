@@ -6,8 +6,8 @@ type MessageTokenUsageProps = {
   t: TranslateFn;
 };
 
-// Temporary UI fixture. Replace with normalized usage from message metadata
-// when the backend begins persisting per-turn model usage.
+// Temporary UI fixture while the per-turn usage API is not ready. Replace it
+// with normalized usage from message metadata once the backend exposes it.
 const MOCK_USAGE = { output: 1220, model: "gpt-5.6-sol" };
 
 function formatTokenCount(value: number): string {
@@ -30,7 +30,8 @@ export function MessageTokenUsage({ t }: MessageTokenUsageProps) {
   const [compact, setCompact] = useState(true);
   const output = t("tokenUsageOutput", { count: formatTokenCount(MOCK_USAGE.output) });
   const model = t("tokenUsageModel", { model: MOCK_USAGE.model });
-  const details = `${output} · ${model}`;
+  const mockLabel = t("tokenUsageMock");
+  const details = `${output} · ${model} · ${mockLabel}`;
 
   useEffect(() => {
     const usage = usageRef.current;
