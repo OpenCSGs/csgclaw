@@ -104,12 +104,12 @@
 
 .message-action-controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   min-width: 0;
   max-width: 100%;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px 12px;
+  gap: 0 8px;
 }
 
 .message-row:not(.own) .message-hover-actions {
@@ -123,6 +123,7 @@
 .message-action-button {
   width: 22px;
   height: 22px;
+  flex: 0 0 22px;
   border: 0;
   border-radius: 0;
   padding: 0;
@@ -159,7 +160,7 @@
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 12px;
   line-height: 22px;

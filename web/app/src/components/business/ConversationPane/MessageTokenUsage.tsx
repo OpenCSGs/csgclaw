@@ -28,7 +28,7 @@ function trimDecimal(value: number): string {
 export function MessageTokenUsage({ t }: MessageTokenUsageProps) {
   const usageRef = useRef<HTMLDivElement>(null);
   const measurementRef = useRef<HTMLSpanElement>(null);
-  const [compact, setCompact] = useState(false);
+  const [compact, setCompact] = useState(true);
   const output = t("tokenUsageOutput", { count: formatTokenCount(MOCK_USAGE.output) });
   const model = t("tokenUsageModel", { model: MOCK_USAGE.model });
   const details = `${output} · ${model}`;
@@ -40,12 +40,17 @@ export function MessageTokenUsage({ t }: MessageTokenUsageProps) {
     if (!toolbar || !measurement) return;
 
     const updateCompactMode = () => {
-      setCompact(measurement.getBoundingClientRect().width > toolbar.clientWidth + 1);
+      const otherItems = Array.from(toolbar.children).filter((child) => child !== usage);
+      const gap = Number.parseFloat(window.getComputedStyle(toolbar).columnGap) || 0;
+      const usedWidth = otherItems.reduce((total, child) => total + child.getBoundingClientRect().width, 0);
+      const availableWidth = Math.max(0, toolbar.clientWidth - usedWidth - gap * otherItems.length);
+      setCompact(measurement.getBoundingClientRect().width > availableWidth + 1);
     };
 
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(updateCompactMode) : null;
     observer?.observe(toolbar);
     observer?.observe(measurement);
+    Array.from(toolbar.children).forEach((child) => observer?.observe(child));
     window.addEventListener("resize", updateCompactMode);
     updateCompactMode();
 
