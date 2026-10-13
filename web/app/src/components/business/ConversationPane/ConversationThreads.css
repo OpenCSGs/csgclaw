@@ -104,13 +104,15 @@
 
 .message-action-controls {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 4px 12px;
 }
 
 .message-row:not(.own) .message-hover-actions {
-  right: auto;
   justify-content: flex-start;
 }
 
@@ -153,12 +155,16 @@
 
 .message-token-usage {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  gap: 2px 8px;
   color: var(--muted);
   font-size: 12px;
   line-height: 22px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms ease;
