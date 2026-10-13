@@ -15,6 +15,7 @@ import (
 	"csgclaw/internal/apitypes"
 	"csgclaw/internal/channel"
 	"csgclaw/internal/channel/csgclaw/binding"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/im"
 	"csgclaw/internal/participant"
 	agentruntime "csgclaw/internal/runtime"
@@ -311,6 +312,9 @@ func (s *Source) forward(ctx context.Context, bindingID channel.BindingID, parti
 				return
 			}
 			if s.submitWithRetry(ctx, bindingID, event) {
+				if event.TaskID != "" {
+					slog.Info("room task notification accepted by binding", "phase", "binding_ingress", "binding_id", bindingID, "participant_id", participantID, "room_id", event.RoomID, "task_id", event.TaskID, "attempt", event.TaskAttempt, "message_id", event.MessageID)
+				}
 				s.bridge.Ack(participantID, event.MessageID)
 				continue
 			}
@@ -343,14 +347,16 @@ func (s *Source) submitWithRetry(ctx context.Context, bindingID channel.BindingI
 				slog.Warn("submit built-in IM event failed; retrying",
 					"binding_id", bindingID,
 					"message_id", event.MessageID,
+					"phase", "binding_ingress", "participant_id", value.ParticipantID, "agent_id", value.AgentID, "room_id", event.RoomID, "task_id", event.TaskID, "attempt", event.TaskAttempt,
 					"retry_in", delay,
-					"error", err,
+					"error", diagnostics.Redact(err.Error()),
 				)
 			}
 		} else {
 			slog.Warn("built-in IM binding temporarily unavailable; retrying",
 				"binding_id", bindingID,
 				"message_id", event.MessageID,
+				"phase", "binding_resolution", "room_id", event.RoomID, "task_id", event.TaskID, "attempt", event.TaskAttempt,
 				"retry_in", delay,
 			)
 		}

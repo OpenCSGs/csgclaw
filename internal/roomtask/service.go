@@ -179,9 +179,17 @@ func validatePlan(items []PlanItem, roster Roster, existing ...taskcore.Task) er
 	return nil
 }
 
-// change serializes admission across parents and workers, not model execution.
-// Delivery occurs after releasing the coordinator lock.
+// change delivers projections after the durable mutation succeeds.
 func (s *Service) change(room, id string, fn func(Roster, []taskcore.Task, *taskcore.Snapshot, func() (string, error)) error) error {
+	if err := s.changeState(room, id, fn); err != nil {
+		return err
+	}
+	return s.RetryDelivery(room)
+}
+
+// changeState serializes admission across parents and workers, not model execution.
+// A claim has no outgoing projection and must not depend on replaying old messages.
+func (s *Service) changeState(room, id string, fn func(Roster, []taskcore.Task, *taskcore.Snapshot, func() (string, error)) error) error {
 	s.mu.Lock()
 	var err error
 	if s.closingRooms[room] {
@@ -203,10 +211,7 @@ func (s *Service) change(room, id string, fn func(Roster, []taskcore.Task, *task
 		})
 	}
 	s.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	return s.RetryDelivery(room)
+	return err
 }
 
 // BeginRoomDeletion prevents new room-task mutations while the caller removes
@@ -401,7 +406,11 @@ func (s *Service) UpdateExecution(room, id, actor, status, result, reason string
 	if status == taskcore.StatusCompleted {
 		status = taskcore.StatusReview
 	}
-	err := s.change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
+	change := s.change
+	if status == taskcore.StatusInProgress {
+		change = s.changeState
+	}
+	err := change(room, id, func(r Roster, _ []taskcore.Task, a *taskcore.Snapshot, _ func() (string, error)) error {
 		t := child(a, id)
 		if t == nil || !worker(r, actor) || actor != t.AssignedTo {
 			return fmt.Errorf("only the assigned current room worker can update a subtask")

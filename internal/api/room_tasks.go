@@ -2,13 +2,18 @@ package api
 
 import (
 	"csgclaw/internal/apitypes"
+	"csgclaw/internal/diagnostics"
 	"csgclaw/internal/im"
 	"csgclaw/internal/roomtask"
 	"csgclaw/internal/taskcore"
 	"csgclaw/internal/taskmeta"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func (h *Handler) SetRoomTaskCore(core *taskcore.Service) {
@@ -19,14 +24,40 @@ func (h *Handler) SetRoomTaskCore(core *taskcore.Service) {
 		h.roomTaskSvc = nil
 		return
 	}
-	h.roomTaskSvc = roomtask.NewService(core, h.roomSchedulingContext, func(p roomtask.Projection) error {
-		if p.Kind == "task_reported" || p.Kind == "task_planned" || p.Kind == "task_plan_updated" {
-			_, err := h.im.DeliverMessage(im.DeliverMessageRequest{RoomID: p.RoomID, SenderID: h.resolveCSGClawParticipantUserID(p.SenderID), MessageID: p.ID, Content: p.Content, Metadata: taskmeta.Set(map[string]any{"csgclaw": map[string]any{"delivery_kind": p.Kind}}, p.TaskID, p.Attempt)})
-			return err
-		}
-		_, err := h.im.DeliverEvent(im.DeliverEventRequest{RoomID: p.RoomID, SenderID: h.resolveCSGClawParticipantUserID(p.SenderID), MentionID: h.resolveCSGClawParticipantUserID(p.TargetID), MessageID: p.ID, Content: p.Content, Metadata: taskmeta.Set(nil, p.TaskID, p.Attempt), Event: &im.EventPayload{Key: p.Kind, ActorID: p.SenderID, Title: p.Title, TargetIDs: []string{p.TargetID}}})
+	h.roomTaskSvc = roomtask.NewService(core, h.roomSchedulingContext, h.deliverRoomTaskProjection)
+}
+
+func (h *Handler) deliverRoomTaskProjection(p roomtask.Projection) error {
+	if p.Kind == "task_reported" || p.Kind == "task_planned" || p.Kind == "task_plan_updated" {
+		_, err := h.im.DeliverMessage(im.DeliverMessageRequest{RoomID: p.RoomID, SenderID: h.resolveCSGClawParticipantUserID(p.SenderID), MessageID: p.ID, Content: p.Content, Metadata: taskmeta.Set(map[string]any{"csgclaw": map[string]any{"delivery_kind": p.Kind}}, p.TaskID, p.Attempt)})
 		return err
-	})
+	}
+	message, err := h.im.DeliverEvent(im.DeliverEventRequest{RoomID: p.RoomID, SenderID: h.resolveCSGClawParticipantUserID(p.SenderID), MentionID: h.resolveCSGClawParticipantUserID(p.TargetID), MessageID: p.ID, Content: p.Content, Metadata: taskmeta.Set(nil, p.TaskID, p.Attempt), Event: &im.EventPayload{Key: p.Kind, ActorID: p.SenderID, Title: p.Title, TargetIDs: []string{p.TargetID}}})
+	if err != nil {
+		return err
+	}
+	// Task delivery must not depend on the best-effort IM broadcast bus.
+	// Its UI notification can race this handoff; the bridge deduplicates the
+	// stable message ID before and after consumption.
+	room, ok := h.im.Room(p.RoomID)
+	if !ok {
+		return fmt.Errorf("task notification persisted but room is unavailable")
+	}
+	sender, ok := h.im.User(message.SenderID)
+	if !ok {
+		return fmt.Errorf("task notification persisted but sender is unavailable")
+	}
+	target := h.participantBridgeTargetForBridgeID(p.TargetID)
+	queued := h.enqueueParticipantMessageEventForBridgeTarget(room, sender, message, target, "")
+	if h.participantBridge != nil {
+		subscribers := h.participantBridge.SubscriberCount(target.bridgeID)
+		if !queued {
+			slog.Warn("room task notification waiting for participant", "phase", "participant_enqueue", "room_id", p.RoomID, "task_id", p.TaskID, "message_id", p.ID, "participant_id", target.bridgeID, "attempt", p.Attempt, "kind", p.Kind, "subscribers", subscribers, "delivery_state", "pending", "action", "check participant binding and runtime; notification is queued")
+		} else {
+			slog.Debug("room task notification handed off", "phase", "participant_enqueue", "room_id", p.RoomID, "task_id", p.TaskID, "message_id", p.ID, "participant_id", target.bridgeID, "attempt", p.Attempt, "kind", p.Kind, "subscribers", subscribers)
+		}
+	}
+	return nil
 }
 
 func (h *Handler) handleRoomTaskMessage(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +174,14 @@ func (h *Handler) roomTasksResponse(room string) []apitypes.RoomTask {
 	}
 	return items
 }
-func roomTaskError(w http.ResponseWriter, err error) { http.Error(w, err.Error(), http.StatusConflict) }
+func roomTaskError(w http.ResponseWriter, err error) {
+	var delivery *roomtask.DeliveryError
+	if errors.As(err, &delivery) {
+		writeCodedAPIError(w, http.StatusServiceUnavailable, "room_task_delivery_failed", diagnostics.Redact(err.Error()))
+		return
+	}
+	http.Error(w, diagnostics.Redact(err.Error()), http.StatusConflict)
+}
 func (h *Handler) handleListRoomTasks(w http.ResponseWriter, r *http.Request) {
 	if !h.requireRoomTasks(w, r) {
 		return
@@ -267,17 +305,33 @@ func (h *Handler) updateRoomTask(w http.ResponseWriter, r *http.Request, status,
 	if !ok {
 		return
 	}
-	t, err := h.roomTaskSvc.UpdateExecution(pathValue(r, "id"), pathValue(r, "task_id"), actor.bridgeID, status, result, reason, attempt)
+	start := time.Now()
+	roomID, taskID := pathValue(r, "id"), pathValue(r, "task_id")
+	t, err := h.roomTaskSvc.UpdateExecution(roomID, taskID, actor.bridgeID, status, result, reason, attempt)
+	operation := "update"
+	if status == taskcore.StatusInProgress {
+		operation = "claim"
+	}
+	phase := "task_commit"
+	var delivery *roomtask.DeliveryError
+	if errors.As(err, &delivery) {
+		phase = "message_projection"
+	}
+	attrs := []any{"phase", phase, "operation", operation, "room_id", roomID, "task_id", taskID, "participant_id", actor.bridgeID, "requested_attempt", attempt, "current_attempt", t.Attempt, "assigned_to", t.AssignedTo, "task_status", t.Status, "claimed_by", t.ClaimedBy, "duration", time.Since(start)}
 	if err != nil {
-		roomTaskError(w, err)
+		attrs = append(attrs, "error", diagnostics.Redact(err.Error()))
+		slog.Warn("room task execution request failed", attrs...)
+		roomTaskError(w, fmt.Errorf("room task %s %s by %s (attempt %d, current attempt %d, status %s): %w", taskID, operation, actor.bridgeID, attempt, t.Attempt, t.Status, err))
 		return
 	}
+	slog.Info("room task execution state committed", attrs...)
 	writeJSON(w, http.StatusOK, h.apiRoomTask(t))
 }
 
 func (h *Handler) roomTaskRuntimeCaller(w http.ResponseWriter, r *http.Request) (participantBridgeTarget, bool) {
 	caller := h.participantBridgeTargetForRoomMember(r.Header.Get("X-CSGClaw-Caller-Agent"))
 	if strings.TrimSpace(caller.bridgeID) == "" {
+		slog.Warn("room task runtime caller missing", "phase", "authorization", "room_id", pathValue(r, "id"), "task_id", pathValue(r, "task_id"), "action", "use the assigned Worker's runtime credential")
 		http.Error(w, "runtime caller identity is required", http.StatusForbidden)
 		return participantBridgeTarget{}, false
 	}
@@ -347,11 +401,17 @@ func (h *Handler) handleDispatchRoomTask(w http.ResponseWriter, r *http.Request)
 	if req.AssignedTo != "" {
 		assignee = h.participantBridgeTargetForRoomMember(req.AssignedTo).bridgeID
 	}
-	if err := h.roomTaskSvc.Dispatch(pathValue(r, "id"), pathValue(r, "task_id"), assignee); err != nil {
-		roomTaskError(w, err)
+	start := time.Now()
+	roomID, taskID := pathValue(r, "id"), pathValue(r, "task_id")
+	err := h.roomTaskSvc.Dispatch(roomID, taskID, assignee)
+	t, _ := h.roomTaskSvc.Get(roomID, taskID)
+	attrs := []any{"phase", "task_dispatch", "operation", "dispatch", "room_id", roomID, "task_id", taskID, "participant_id", t.AssignedTo, "attempt", t.Attempt, "task_status", t.Status, "waiting_on_task_id", t.WaitingOnTaskID, "duration", time.Since(start)}
+	if err != nil {
+		slog.Warn("room task dispatch failed", append(attrs, "error", diagnostics.Redact(err.Error()))...)
+		roomTaskError(w, fmt.Errorf("room task %s dispatch (status %s, attempt %d): %w", taskID, t.Status, t.Attempt, err))
 		return
 	}
-	t, _ := h.roomTaskSvc.Get(pathValue(r, "id"), pathValue(r, "task_id"))
+	slog.Info("room task dispatch recorded", attrs...)
 	writeJSON(w, http.StatusOK, h.apiRoomTask(t))
 }
 func (h *Handler) handleReviewRoomTask(w http.ResponseWriter, r *http.Request) {
