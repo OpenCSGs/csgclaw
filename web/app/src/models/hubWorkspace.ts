@@ -47,11 +47,7 @@ export function isVisibleInHubTemplateList(template: HubTemplate | null | undefi
     .trim()
     .toLowerCase();
   if (sourceKind === HUB_REGISTRY_KIND_REMOTE) {
-    return (
-      String(template?.source?.name ?? "")
-        .trim()
-        .toLowerCase() === OFFICIAL_HUB_REGISTRY_NAME
-    );
+    return true;
   }
   return (
     String(template?.role ?? "")

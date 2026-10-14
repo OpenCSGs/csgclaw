@@ -73,6 +73,22 @@ func TestOpenCSGLoginSourceRejectsUntrustedTargets(t *testing.T) {
 	}
 }
 
+func TestOpenCSGLoginSourceSupportsCustomSites(t *testing.T) {
+	service := newTestService(t, Options{OpenCSGCredentials: func(context.Context) (OpenCSGCredentials, error) {
+		return OpenCSGCredentials{BaseURL: "https://Custom.Example/", Token: "custom-login"}, nil
+	}})
+	for _, endpoint := range []string{"https://custom.example/mcp", "https://gitlab.public.custom.example/mcp"} {
+		if token, err := service.openCSGToken(context.Background(), endpoint); err != nil || token != "custom-login" {
+			t.Fatalf("custom site login rejected for %s: %v", endpoint, err)
+		}
+	}
+	for _, endpoint := range []string{"https://other.example/mcp", "https://custom.example.evil.example/mcp", "https://gitlab.public.custom.example.evil.example/mcp", "https://app.public.opencsg.com/mcp"} {
+		if token, err := service.openCSGToken(context.Background(), endpoint); err == nil || token != "" {
+			t.Fatalf("custom site credential released to %s", endpoint)
+		}
+	}
+}
+
 func TestExpiredPlatformTokenAndHTTPFailuresRemainActionable(t *testing.T) {
 	expired := "x." + base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(`{"exp":%d}`, time.Now().Add(-time.Hour).Unix()))) + ".x"
 	service := newTestService(t, Options{})

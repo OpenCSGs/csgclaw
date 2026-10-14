@@ -197,6 +197,7 @@ type managerRuntimeResponse struct {
 	DocsURL         string `json:"docs_url"`
 	InstallGuidance string `json:"install_guidance,omitempty"`
 	Message         string `json:"message,omitempty"`
+	MessageCode     string `json:"message_code,omitempty"`
 }
 
 const sandboxRuntimeChoiceAvailabilityTimeout = 2 * time.Second
@@ -607,6 +608,7 @@ func managerRuntimeReadiness() managerRuntimeResponse {
 	}
 	resp.Installed = false
 	resp.Message = "Bundled Codex CLI is unavailable"
+	resp.MessageCode = "bundled_codex_unavailable"
 	return resp
 }
 
@@ -656,6 +658,7 @@ func workerRuntimeChoices(ctx context.Context, cfg config.Config) []workerRuntim
 	if _, err := locateCodexCLI(); err != nil {
 		choices[0].Installed = false
 		choices[0].Message = "Bundled Codex CLI is unavailable"
+		choices[0].MessageCode = "bundled_codex_unavailable"
 	}
 	if _, err := (dshcli.Provider{}).Ensure(ctx); err != nil {
 		choices[1].Installed = false
@@ -2465,6 +2468,25 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
+		if req.Archived != nil && *req.Archived && !h.allowRoomManagement(w, id) {
+			return
+		}
+		if req.Configuration != nil {
+			if !h.allowRoomManagement(w, id) {
+				return
+			}
+			room, found := h.im.Room(id)
+			if !found {
+				http.NotFound(w, r)
+				return
+			}
+			cfg, err := h.validateTaskConfiguration(room, req.Configuration)
+			if err != nil {
+				writeAPIError(w, err, http.StatusBadRequest)
+				return
+			}
+			req.Configuration = cfg
+		}
 		room, err := channel.UpdateRoom(id, req)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
@@ -2476,6 +2498,9 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 		}
 		writeJSON(w, http.StatusOK, room)
 	case http.MethodDelete:
+		if !h.allowRoomManagement(w, id) {
+			return
+		}
 		var deletedRoom im.Room
 		hasDeletedRoom := false
 		if h.im != nil {
@@ -3035,6 +3060,14 @@ func (h *Handler) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.Configuration != nil {
+		cfg, err := h.validateTaskConfiguration(apitypes.Room{IsDirect: req.IsDirect, Members: req.MemberIDs}, req.Configuration)
+		if err != nil {
+			writeAPIError(w, err, http.StatusBadRequest)
+			return
+		}
+		req.Configuration = cfg
+	}
 	room, err := channel.CreateRoom(req)
 	if err != nil {
 		writeAPIError(w, err, http.StatusBadRequest)

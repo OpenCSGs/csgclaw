@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"crypto/sha256"
+	"csgclaw/internal/apitypes"
 	"csgclaw/internal/diagnostics"
 	"encoding/hex"
 	"fmt"
@@ -37,6 +38,7 @@ type idGenerator func() (agentengine.TurnID, error)
 
 // Adapter converts built-in IM events into runtime-neutral Agent Engine turns.
 type Adapter struct {
+	room        func(string) (apitypes.Room, bool)
 	diagnostics *diagnostics.Store
 	engine      Engine
 	attachments files.Resolver
@@ -53,6 +55,10 @@ type Adapter struct {
 const builtInIMAdmissionPolicy = agentengine.AdmissionWait
 
 type Option func(*Adapter)
+
+func WithTaskRooms(reader func(string) (apitypes.Room, bool)) Option {
+	return func(a *Adapter) { a.room = reader }
+}
 
 func WithDiagnostics(store *diagnostics.Store) Option {
 	return func(a *Adapter) { a.diagnostics = store }
@@ -280,13 +286,20 @@ func (a *Adapter) Run(ctx context.Context, binding channel.Binding, event channe
 		result := failed(agentengine.ErrorAgentUnavailable, "agent conversation is unavailable")
 		return a.complete(ctx, turn, result)
 	}
+	var session *contract.RoomConfiguration
+	if a.room != nil {
+		if room, ok := a.room(turn.RoomID); ok && room.Configuration != nil {
+			session = &contract.RoomConfiguration{RoomID: room.ID, Configuration: *room.Configuration}
+		}
+	}
 	result := conversation.Run(ctx, agentengine.TurnRequest{
-		ID:              turn.TurnID,
-		ConversationKey: turn.ConversationKey,
-		Input:           input,
-		Admission:       builtInIMAdmissionPolicy,
-		Continuation:    agentengine.ContinuationCreateOrResume,
-		Interaction:     agentengine.InteractionResolve,
+		RoomConfiguration: session,
+		ID:                turn.TurnID,
+		ConversationKey:   turn.ConversationKey,
+		Input:             input,
+		Admission:         builtInIMAdmissionPolicy,
+		Continuation:      agentengine.ContinuationCreateOrResume,
+		Interaction:       agentengine.InteractionResolve,
 	}, contract.MediaGenerationSink{EventSink: rendererSink{renderer: a.renderer, turn: turn, observeWork: observeWork}})
 	if result.Status != agentengine.TurnSucceeded && a.projector != nil {
 		// A failed/canceled Runtime call may not have retained its input. Prefer

@@ -1,0 +1,244 @@
+.page {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  color: var(--text);
+}
+.header {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.actions {
+  display: flex;
+  gap: 8px;
+}
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.tabs button {
+  padding: 8px 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tabs button[aria-selected="true"] {
+  color: var(--text);
+  border-color: var(--primary);
+}
+.tabs small {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.split {
+  position: relative;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+}
+.list {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 18px 12px;
+  border-right: 1px solid var(--line);
+}
+.search {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--muted);
+}
+.search:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
+.search svg {
+  flex-shrink: 0;
+}
+.page .list .search input,
+.page .list .search input:focus {
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+}
+:global(:root[data-theme="dark"]) .page .list .search input {
+  background: transparent;
+}
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 6px 12px;
+}
+.filters button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.filters button[aria-pressed="true"] {
+  background: var(--panel-soft);
+  color: var(--text);
+}
+.row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.row:hover {
+  background: var(--panel-soft);
+}
+.active {
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 26%, transparent);
+}
+.identity {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.identity strong {
+  font-size: 13px;
+  font-weight: 560;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.identity small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.avatar {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.avatar :global(.agent-avatar-image) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.detail > * {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+}
+.empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+}
+.empty h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.empty p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.emptyList {
+  padding: 16px 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.page .listToggle,
+.listBackdrop {
+  display: none;
+}
+@media (max-width: 960px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .header {
+    padding: 12px;
+    justify-content: flex-start;
+  }
+  .page .listToggle {
+    display: inline-flex;
+  }
+  .list {
+    display: none;
+  }
+  .listOpen {
+    display: block;
+    position: absolute;
+    z-index: 2;
+    inset: 0 auto 0 0;
+    width: min(320px, 100%);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+  }
+  .listBackdrop {
+    display: block;
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    border: 0;
+    background: color-mix(in srgb, var(--gray-900) 26%, transparent);
+  }
+}

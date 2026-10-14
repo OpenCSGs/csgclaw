@@ -10,6 +10,8 @@ import {
   normalizeModelProviderPreset,
   type ModelProviderPreset,
 } from "@/models/modelProviderPresets";
+import type { LocaleCode, TranslateFn } from "@/models/conversations";
+import { messages } from "@/shared/i18n/messages";
 
 export const MODEL_PROVIDER_IDS = {
   OpenCSG: "opencsg",
@@ -180,7 +182,7 @@ export function modelProviderCatalogForOpenCSGState(
       ...(!state.authenticated
         ? {
             last_checked_at: undefined,
-            message: state.authenticationRequiredMessage || "OpenCSG sign-in is required",
+            message: state.authenticationRequiredMessage,
             models: [],
             status: "failed",
           }
@@ -522,6 +524,61 @@ export function providerStatusTone(
         return "warning";
       }
       return provider?.builtin ? "online" : "neutral";
+  }
+}
+
+export function modelProviderStatusLabel(
+  status: ModelProviderStatus | null | undefined,
+  provider: Partial<Pick<ModelProvider, "builtin" | "id">> | null | undefined,
+  t: TranslateFn,
+): string {
+  switch (String(status ?? "").trim()) {
+    case "connected":
+      return t("modelProviderConnected");
+    case "failed":
+      return t("modelProviderStatusFailed");
+    case "unknown":
+    case "":
+      return t("modelProviderNotChecked");
+    default:
+      return providerStatusTone(status, provider) === "online"
+        ? t("modelProviderConnected")
+        : t("modelProviderStatusUnknown");
+  }
+}
+
+export function modelProviderMessageLabel(
+  provider: Pick<ModelProvider, "message" | "status"> | null | undefined,
+  t: TranslateFn,
+  locale?: LocaleCode,
+): string {
+  const message = String(provider?.message ?? "").trim();
+  const normalized = message.toLowerCase().replace(/\s+/g, " ");
+  switch (normalized) {
+    case "":
+      return "";
+    case "connected":
+      return t("modelProviderConnected");
+    case "base url is required":
+      return t("modelProviderBaseURLRequired");
+    case "opencsg sign-in is required":
+      return t("modelProviderOpenCSGAuthenticationRequired");
+    case "the model service is unavailable. check its configuration or try again later.":
+      return t("errors.upstream_unavailable");
+    case "claude code auth is required. run csgclaw model auth login claude-code.":
+    case "claude code auth was not found in macos keychain. run csgclaw model auth login claude-code.":
+      return t("modelProviderClaudeCodeAuthRequired");
+    default: {
+      if (provider?.status === "connected") {
+        return t("modelProviderConnected");
+      }
+      const isChinese =
+        locale === "zh" || (!locale && t("modelProviderCheckFailed") === messages.zh.modelProviderCheckFailed);
+      if (provider?.status === "failed" && isChinese && /[A-Za-z]/.test(message) && !/[\u4e00-\u9fff]/.test(message)) {
+        return t("modelProviderCheckFailed");
+      }
+      return message;
+    }
   }
 }
 

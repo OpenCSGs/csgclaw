@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AgentRuntimeSection } from "@/pages/ComputerPage/components";
+import { AgentRuntimeSection } from "@/components/business/AgentRuntimeSection";
 import { ComputerDetailPane } from "@/pages/ComputerPage/components";
 import type { AgentRuntime } from "@/models/agentRuntimes";
 import type { TranslateFn } from "@/models/conversations";

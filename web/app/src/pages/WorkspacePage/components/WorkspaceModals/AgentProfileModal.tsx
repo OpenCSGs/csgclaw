@@ -225,16 +225,17 @@ export function AgentProfileModal({
   const selectedRuntimeInstallable = selectedRuntimeMissing && selectedRuntimeChoice?.installable === true;
   const runtimeMessageKey = String(selectedRuntimeChoice?.message_code || "").trim();
   const localizedRuntimeMessage = runtimeMessageKey ? t(`errors.${runtimeMessageKey}`) : "";
+  const resolvedRuntimeMessage =
+    (runtimeMessageKey && localizedRuntimeMessage !== `errors.${runtimeMessageKey}` ? localizedRuntimeMessage : "") ||
+    selectedRuntimeChoice?.message ||
+    t("runtimeSandboxUnavailableReason");
   const selectedRuntimeUnavailableMessage =
     selectedRuntimeMissing && !selectedRuntimeInstallable
       ? sandboxEnabled
         ? t("runtimeSandboxUnavailable", {
-            reason:
-              (localizedRuntimeMessage !== `errors.${runtimeMessageKey}` ? localizedRuntimeMessage : "") ||
-              selectedRuntimeChoice?.message ||
-              t("runtimeSandboxUnavailableReason"),
+            reason: resolvedRuntimeMessage,
           })
-        : selectedRuntimeChoice?.message || t("runtimeCodexNotInstalled")
+        : resolvedRuntimeMessage || t("runtimeCodexNotInstalled")
       : "";
   const runtimeAvailabilityNotice = selectedRuntimeInstallable ? (
     <div className="agent-runtime-install-notice" role="status" aria-live="polite">
@@ -515,6 +516,7 @@ export function AgentProfileModal({
                         );
                       }}
                       triggerProps={{ "aria-label": t("templateLabel") }}
+                      emptyLabel={t("templateEmptyOptions")}
                       options={workerTemplates
                         .filter((item) => item.id)
                         .map((item) => ({

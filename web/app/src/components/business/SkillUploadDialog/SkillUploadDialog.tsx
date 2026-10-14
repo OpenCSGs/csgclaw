@@ -25,6 +25,7 @@ type RemoteSkillInstallOptions = {
 };
 
 export type SkillUploadDialogProps = {
+  zipOnly?: boolean;
   busy: boolean;
   error: string;
   installedSkills: readonly SkillSummary[];
@@ -51,6 +52,7 @@ type SkillUploadMode = "zip" | "remote";
 
 export function SkillUploadDialog({
   open,
+  zipOnly = false,
   onOpenChange,
   onInstallRemoteSkill,
   onLoadMoreRemoteSkills,
@@ -77,7 +79,8 @@ export function SkillUploadDialog({
   const [localError, setLocalError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const tabsId = useId();
-  const [mode, setMode] = useState<SkillUploadMode>("zip");
+  const [selectedMode, setMode] = useState<SkillUploadMode>("zip");
+  const mode = zipOnly ? "zip" : selectedMode;
 
   useEffect(() => {
     if (!open) {
@@ -178,7 +181,7 @@ export function SkillUploadDialog({
           <DialogCloseButton label={t("close")} size="md" variant="tertiaryGray" />
         </DialogHeader>
         <DialogBody className={styles.body}>
-          <div className={styles.mode} role="tablist" aria-label={t("resourcesSkillUpload")}>
+          <div hidden={zipOnly} className={styles.mode} role="tablist" aria-label={t("resourcesSkillUpload")}>
             <button
               type="button"
               className={styles.modeTab}

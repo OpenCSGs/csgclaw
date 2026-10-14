@@ -813,11 +813,8 @@ func appServerThreadStartParams(spec SessionSpec, publishFiles bool) map[string]
 		"developerInstructions":  runtimeinstructions.ImageGenerationPromptPolicy + "\n" + runtimeinstructions.VideoGenerationPromptPolicy,
 	}
 	if publishFiles {
-		tools := []map[string]any{appServerPublishFileToolSpec()}
-		if spec.ExecutionMode != ExecutionModeReadOnly {
-			tools = append(tools, appServerGenerateImageToolSpec(), appServerGenerateVideoToolSpec(), appServerUploadFileToolSpec())
-		}
-		params["dynamicTools"] = tools
+		// Native tools are immutable on resume; enforce the current mode in the call handler.
+		params["dynamicTools"] = []map[string]any{appServerPublishFileToolSpec(), appServerGenerateImageToolSpec(), appServerGenerateVideoToolSpec(), appServerUploadFileToolSpec()}
 	}
 	if spec.Profile.ModelID != "" {
 		params["model"] = spec.Profile.ModelID

@@ -177,6 +177,18 @@ export function useConfigController({
 
   return {
     openConfigModal,
+    settings: {
+      draft: configDraft,
+      providers: sandboxProviders,
+      hubTemplates: hubTemplates || [],
+      loading: configBusy,
+      phase: configPhase,
+      error: configError,
+      onDraftChange: patchConfigDraft,
+      onReload: () => window.location.reload(),
+      onSaveAndRestart: saveAndRestart,
+      load: loadConfig,
+    },
     configModalProps: showConfigModal
       ? {
           t,

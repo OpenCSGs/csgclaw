@@ -18,6 +18,7 @@ func WithDSHRuntime() agent.ControllerOption {
 		}
 		host := s.PicoClawRuntimeHost()
 		rt := runtimedsh.New(runtimedsh.Dependencies{
+			ResolveRoomProfile: s.TaskRuntimeProfile,
 			ResolveBinary: func(ctx context.Context) (dshcli.Info, error) {
 				return (dshcli.Provider{}).Resolve(ctx)
 			},

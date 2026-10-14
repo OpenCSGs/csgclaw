@@ -54,8 +54,8 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
     inviteActionLabel,
     locale,
     managerProfile,
-    managerProfileIncomplete,
-    managerRuntimeUnavailable,
+    composerDisabledReason = "",
+    threadComposerDisabledReason = "",
     memberMenuRef,
     mentionCandidates,
     mentionIndex,
@@ -126,8 +126,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
   const [deleteRoomBusy, setDeleteRoomBusy] = useState(false);
   const [deleteRoomError, setDeleteRoomError] = useState("");
   const [documentPreview, setDocumentPreview] = useState<DocumentPreviewRequest | null>(null);
-  const composerDisabledReason = managerRuntimeUnavailable ? t("managerCodexMissingWarning") : t("profileIncomplete");
-  const composerDisabled = Boolean(managerRuntimeUnavailable || managerProfileIncomplete);
+  const composerDisabled = Boolean(composerDisabledReason);
   const mainMessages = useMemo(
     () => conversation.messages.filter((message) => !message.relates_to),
     [conversation.messages],
@@ -217,7 +216,7 @@ export function FloatingChatPanel({ agentName, chatProps, headerAccessory, onPic
       error={threadError}
       draftSegments={threadDraftSegments}
       attachmentDrafts={threadAttachmentDrafts}
-      disabled={composerDisabled}
+      disabled={Boolean(threadComposerDisabledReason)}
       usersById={usersById}
       locale={locale}
       theme={theme}

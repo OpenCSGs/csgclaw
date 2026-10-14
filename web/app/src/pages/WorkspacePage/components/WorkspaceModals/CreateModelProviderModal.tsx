@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
 import type { ModelProviderCheckResult, ModelProviderPayload } from "@/api/modelProviders";
 import { ModelProviderModelList } from "@/components/business/ProfileControls";
-import { Button, Select } from "@/components/ui";
+import { Button, Select, DialogRoot, DialogContent, DialogTitle, DialogDescription } from "@/components/ui";
+import { localizeAPIError } from "@/shared/i18n";
 import {
   MODEL_PROVIDER_PRESETS,
   modelProviderPresetMeta,
   normalizeModelProviderPreset,
 } from "@/models/modelProviderPresets";
 import {
+  modelProviderMessageLabel,
   modelProviderAvatarPath,
   modelProviderDisplayNameExists,
   parseModelProviderModelsText,
   type ModelProviderCatalog,
 } from "@/models/modelProviders";
-import type { TranslateFn } from "@/models/conversations";
+import type { LocaleCode, TranslateFn } from "@/models/conversations";
 import { ModalCloseButton } from "./ModalCloseButton";
 
 const INITIAL_PRESET: keyof typeof MODEL_PROVIDER_PRESETS = "openai";
@@ -26,6 +28,7 @@ export type CreateModelProviderPayload = Pick<
 export type CreateModelProviderModalProps = {
   busy: boolean;
   error?: string;
+  locale?: LocaleCode;
   modelProviders?: ModelProviderCatalog | null;
   onCheckAccess?: (payload: CreateModelProviderPayload) => Promise<ModelProviderCheckResult> | ModelProviderCheckResult;
   onClose: () => void;
@@ -44,6 +47,7 @@ function requiredLabel(label: string) {
 export function CreateModelProviderModal({
   busy,
   error = "",
+  locale = "en",
   modelProviders = null,
   onCheckAccess,
   onClose,
@@ -143,14 +147,14 @@ export function CreateModelProviderModal({
         } else {
           setCheckState("empty");
         }
-        setAutoCheckMessage(result.message || t("modelProviderConnected"));
+        setAutoCheckMessage(modelProviderMessageLabel(result, t, locale) || t("modelProviderConnected"));
         return;
       }
       setCheckState("error");
-      setAutoCheckWarning(result.message || result.status || "");
+      setAutoCheckWarning(modelProviderMessageLabel(result, t, locale) || t("modelProviderStatusFailed"));
     } catch (err) {
       setCheckState("error");
-      setAutoCheckWarning(err instanceof Error ? err.message : String(err || ""));
+      setAutoCheckWarning(localizeAPIError(err, t, t("modelProviderCheckFailed")));
     } finally {
       setAutoCheckBusy(false);
     }
@@ -190,12 +194,19 @@ export function CreateModelProviderModal({
             : t("modelProviderNotChecked");
 
   return (
-    <div className="modal-backdrop" onClick={requestClose}>
-      <div className="modal-card create-model-provider-modal" onClick={(event) => event.stopPropagation()}>
+    <DialogRoot
+      open
+      onOpenChange={(open) => {
+        if (!open) requestClose();
+      }}
+    >
+      <DialogContent className="create-model-provider-modal">
         <div className="modal-header">
           <div>
-            <div className="modal-title">{t("modelProviderCreateTitle")}</div>
-            <div className="create-model-provider-subtitle">{t("modelProviderCreateSubtitle")}</div>
+            <DialogTitle className="modal-title">{t("modelProviderCreateTitle")}</DialogTitle>
+            <DialogDescription className="create-model-provider-subtitle">
+              {t("modelProviderCreateSubtitle")}
+            </DialogDescription>
             {error ? (
               <div role="alert" className="form-error create-model-provider-submit-error">
                 {error}
@@ -350,7 +361,7 @@ export function CreateModelProviderModal({
             {t("modelProviderCreateAction")}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   );
 }

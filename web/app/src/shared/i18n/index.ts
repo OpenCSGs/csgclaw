@@ -61,6 +61,9 @@ export function localizeTemplateSourceTag(source: unknown, locale: LocaleCode): 
 
 export function localizeError(raw: unknown, t: TranslateFn): string {
   const cleaned = String(raw ?? "").trim();
+  if (!cleaned) {
+    return "";
+  }
   const errorKeys = Object.keys(messages.zh.errors) as ErrorTranslationKey[];
   for (const key of errorKeys) {
     if (cleaned.includes(key)) {
@@ -80,27 +83,59 @@ export function localizeError(raw: unknown, t: TranslateFn): string {
 }
 
 export function localizeAPIError(error: unknown, t: TranslateFn, fallback = ""): string {
+  const defaultFallback = localizeErrorFallback(fallback, t) || defaultAPIError(t);
   if (error && typeof error === "object" && "code" in error) {
     const code = String((error as { code?: unknown }).code || "").trim();
     if (code) {
-      // This is a local fallback code used when the Hub did not provide a
-      // stable business code. Preserve its diagnostic message instead of
-      // replacing the only actionable reason with a generic translation.
+      const key = `errors.${code}`;
+      const localized = t(key);
+      const codeFallback = localized !== key ? localized : defaultFallback;
       if (code === "template_publish_failed" && "message" in error) {
-        const message = localizeError((error as { message?: unknown }).message, t);
+        const message = localizeUnknownError((error as { message?: unknown }).message, t, codeFallback);
         if (message) {
           return message;
         }
       }
-      const key = `errors.${code}`;
-      const localized = t(key);
       if (localized !== key) {
         return localized;
       }
     }
   }
   if (error && typeof error === "object" && "message" in error) {
-    return localizeError((error as { message?: unknown }).message, t) || fallback;
+    return localizeUnknownError((error as { message?: unknown }).message, t, defaultFallback);
   }
-  return localizeError(error, t) || fallback;
+  return localizeUnknownError(error, t, defaultFallback);
+}
+
+function localizeErrorFallback(fallback: unknown, t: TranslateFn): string {
+  const localized = localizeError(fallback, t);
+  if (isChineseTranslator(t) && isLikelyEnglishDiagnostic(localized)) {
+    return defaultAPIError(t);
+  }
+  return localized;
+}
+
+function localizeUnknownError(raw: unknown, t: TranslateFn, fallback: string): string {
+  const localized = localizeError(raw, t);
+  if (!localized) {
+    return fallback;
+  }
+  if (isChineseTranslator(t) && isLikelyEnglishDiagnostic(localized)) {
+    return fallback;
+  }
+  return localized;
+}
+
+function defaultAPIError(t: TranslateFn): string {
+  const key = "errors.unknown_api_error";
+  const localized = t(key);
+  return localized === key ? "" : localized;
+}
+
+function isChineseTranslator(t: TranslateFn): boolean {
+  return t("errors.unknown_api_error") === messages.zh.errors.unknown_api_error;
+}
+
+function isLikelyEnglishDiagnostic(value: string): boolean {
+  return /[A-Za-z]/.test(value) && !/[\u4e00-\u9fff]/.test(value);
 }

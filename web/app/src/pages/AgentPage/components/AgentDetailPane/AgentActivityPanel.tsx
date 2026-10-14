@@ -1324,7 +1324,7 @@ function activityRowView(entry: AgentActivityEntry, t: TranslateFn) {
       detail: <ActivityMessageDetail message={entry.message} t={t} />,
       label: AgentActivityKinds.other,
       summary: activity.content.action
-        ? `${activity.content.action.title} · ${statusLabel(activity.content.action.status)}`
+        ? `${activity.content.action.title} · ${statusLabel(activity.content.action.status, t)}`
         : activity.content.body,
       tone: AgentActivityKinds.other,
     };

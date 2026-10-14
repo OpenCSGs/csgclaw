@@ -1,4 +1,6 @@
 import { OpenCSGConnectionDialog } from "@/components/business/OpenCSGConnectionDialog";
+import { lazy, Suspense } from "react";
+import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { workspaceShowsFloatingChat } from "@/models/routing";
 import { AuthLoginNotice } from "../AuthLoginNotice";
@@ -14,13 +16,23 @@ import {
   ConfigSettingsModal,
 } from "../WorkspaceModals";
 
+const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((module) => ({ default: module.SettingsPage })));
+const HumanPage = lazy(() => import("@/pages/HumanPage").then((module) => ({ default: module.HumanPage })));
+
 export function WorkspaceOverlays() {
   const controller = useWorkspaceControllerContext();
+  const { current } = useWorkspaceDialogs();
   const closeLabel = controller.sidebarProps?.t?.("close") || "Close";
-  const showFloatingChat = workspaceShowsFloatingChat(controller.activePane);
+  const showFloatingChat =
+    workspaceShowsFloatingChat(controller.activePane) &&
+    !(controller.ready && controller.taskEntry && controller.activePane.type === "conversation");
 
   return (
     <>
+      <Suspense fallback={null}>
+        {current === "settings" ? <SettingsPage /> : null}
+        {current === "profile" ? <HumanPage /> : null}
+      </Suspense>
       <AuthLoginNotice
         notice={controller.authNotice}
         closeLabel={closeLabel}

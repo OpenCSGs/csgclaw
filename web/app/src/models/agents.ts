@@ -1,3 +1,4 @@
+import { localizeRole } from "@/shared/i18n";
 import {
   CLIPROXY_AUTH_PROVIDERS,
   DEFAULT_PROVIDER,
@@ -531,6 +532,7 @@ export type ManagerRuntimeLike = {
   docs_url?: string | null;
   install_guidance?: string | null;
   message?: string | null;
+  message_code?: string | null;
 };
 
 export type RuntimeChoiceLike = {
@@ -2499,4 +2501,16 @@ export function formatRuntimeKindLabel(kind: unknown, t: TranslateFn): string {
     default:
       return runtimeKind;
   }
+}
+
+export function agentRoleLabel(item: AgentLike | null | undefined, t: TranslateFn): string {
+  if (isManagerAgent(item)) {
+    return t("iaAgentsRoleGeneral");
+  }
+  const role = String(item?.role || "").trim();
+  // Agent lists use domain-role labels rather than execution-role labels.
+  if (role === "worker") {
+    return t("iaAgentsRoleWorker");
+  }
+  return role ? localizeRole(role, t) : "";
 }

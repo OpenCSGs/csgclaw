@@ -26,6 +26,14 @@ func (r *Runtime) ReconcileSkills(_ context.Context, h agentruntime.Handle, stat
 	if err != nil {
 		return err
 	}
+	opts, err := conversationRuntimeOptions(ref.RuntimeOptions)
+	if err != nil {
+		return err
+	}
+	states, err = r.conversationSkillStates(home, opts.ExecutionMode, states)
+	if err != nil {
+		return err
+	}
 	return r.writeSkillStates(home, states)
 }
 

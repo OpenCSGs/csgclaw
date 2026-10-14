@@ -65,11 +65,11 @@ func (s *Service) openCSGToken(ctx context.Context, endpoint string) (string, er
 		return "", connectionError("app_opencsg_login_required", "OpenCSG is not signed in or its login has expired. Sign in from Settings and reconnect the App.", 0, true)
 	}
 	environment, err := url.Parse(credentials.BaseURL)
-	if err != nil || environment.Scheme != "https" || (environment.Hostname() != "opencsg.com" && environment.Hostname() != "opencsg-stg.com") {
+	if err != nil || environment.Scheme != "https" || environment.Hostname() == "" || environment.User != nil || (environment.Port() != "" && environment.Port() != "443") {
 		return "", connectionError("app_opencsg_environment_mismatch", "The current OpenCSG login environment does not match this MCP service. Select the matching environment in Settings.", 0, false)
 	}
 	host := strings.ToLower(target.Hostname())
-	base := environment.Hostname()
+	base := strings.ToLower(environment.Hostname())
 	if host != base && !strings.HasSuffix(host, ".public."+base) {
 		return "", connectionError("app_opencsg_environment_mismatch", "The current OpenCSG login environment does not match this MCP service. Select the matching environment in Settings or use a manual token.", 0, false)
 	}

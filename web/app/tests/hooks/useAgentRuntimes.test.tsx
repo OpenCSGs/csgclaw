@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fetchAgentRuntimes, installAgentRuntime } from "@/api/agentRuntimes";
-import { useAgentRuntimes } from "@/pages/ComputerPage/useAgentRuntimes";
+import { useAgentRuntimes } from "@/components/business/AgentRuntimeSection/useAgentRuntimes";
 import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import type { TranslateFn } from "@/models/conversations";
 

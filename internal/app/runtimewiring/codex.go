@@ -25,7 +25,8 @@ func WithCodexRuntime() agent.ControllerOption {
 		permissions := runtimecodex.NewPermissionBroker(events)
 		userInputs := runtimecodex.NewUserInputBroker(events)
 		rt := runtimecodex.New(runtimecodex.Dependencies{
-			BinaryProvider: codexcli.Provider{},
+			ResolveRoomProfile: s.TaskRuntimeProfile,
+			BinaryProvider:     codexcli.Provider{},
 			MaterializeMCPServers: func(ctx context.Context, servers map[string]any) (map[string]any, error) {
 				return s.MaterializeRuntimeMCPServers(ctx, agent.RuntimeKindCodex, servers)
 			},

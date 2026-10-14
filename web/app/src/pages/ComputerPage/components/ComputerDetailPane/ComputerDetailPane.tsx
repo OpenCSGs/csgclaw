@@ -13,8 +13,8 @@ import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { avatarFallbackText } from "@/shared/avatar";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, TranslateFn } from "@/models/conversations";
-import { AgentRuntimeSection } from "../AgentRuntimeSection";
-import type { AgentRuntimeSectionProps } from "../AgentRuntimeSection";
+import { AgentRuntimeSection } from "@/components/business/AgentRuntimeSection";
+import type { AgentRuntimeSectionProps } from "@/components/business/AgentRuntimeSection";
 
 type VoidOrPromise = void | Promise<void>;
 

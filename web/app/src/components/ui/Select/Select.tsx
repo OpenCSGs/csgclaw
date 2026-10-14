@@ -197,7 +197,7 @@ export function Select({
   options,
   placeholder,
   searchable = false,
-  searchPlaceholder = "Search",
+  searchPlaceholder = "",
   selectedLabel,
   size = "md",
   triggerClassName,

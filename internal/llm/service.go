@@ -91,8 +91,8 @@ func NewService(defaults config.ModelConfig, agents AgentProfileReader) *Service
 	}
 }
 
-func (s *Service) Models(_ context.Context, botID string) ([]byte, int, string, error) {
-	profile, err := s.resolveProfile(botID)
+func (s *Service) Models(ctx context.Context, botID string) ([]byte, int, string, error) {
+	profile, err := s.resolveProfile(ctx, botID)
 	if err != nil {
 		return nil, 0, "", err
 	}
@@ -185,7 +185,7 @@ func (s *Service) ChatCompletions(ctx context.Context, botID string, body []byte
 // Callers that proxy streaming chat completions must copy and flush this body as
 // chunks arrive; callers that need a buffered result should use ChatCompletions.
 func (s *Service) ChatCompletionsStream(ctx context.Context, botID string, body []byte) (*UpstreamResponse, error) {
-	profile, err := s.resolveProfile(botID)
+	profile, err := s.resolveProfile(ctx, botID)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +193,7 @@ func (s *Service) ChatCompletionsStream(ctx context.Context, botID string, body 
 }
 
 func (s *Service) Responses(ctx context.Context, botID string, body []byte) (*UpstreamResponse, error) {
-	profile, err := s.resolveProfile(botID)
+	profile, err := s.resolveProfile(ctx, botID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (s *Service) ResponsesWebsocket(w http.ResponseWriter, r *http.Request, bot
 	if !websocket.IsWebSocketUpgrade(r) {
 		return &HTTPError{Status: http.StatusBadRequest, Message: "responses websocket upgrade is required"}
 	}
-	profile, err := s.resolveProfile(botID)
+	profile, err := s.resolveProfile(r.Context(), botID)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,16 @@ func (s *Service) ResponsesWebsocket(w http.ResponseWriter, r *http.Request, bot
 	return proxyResponsesWebsocket(r.Context(), downstream, upstream, responsesWebsocketClientPayloadRewriter(profile))
 }
 
-func (s *Service) resolveProfile(botID string) (agent.AgentProfile, error) {
+type taskProfileKey struct{}
+
+func WithTaskProfile(ctx context.Context, profile agent.AgentProfile) context.Context {
+	return context.WithValue(ctx, taskProfileKey{}, profile)
+}
+
+func (s *Service) resolveProfile(ctx context.Context, botID string) (agent.AgentProfile, error) {
+	if profile, ok := ctx.Value(taskProfileKey{}).(agent.AgentProfile); ok {
+		return profile, nil
+	}
 	if s.agents == nil {
 		return agent.AgentProfile{}, &HTTPError{Status: http.StatusServiceUnavailable, Message: "agent service is not configured"}
 	}

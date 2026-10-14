@@ -1,0 +1,251 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  max-width: 100%;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 560;
+  line-height: 20px;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.trigger:hover:not(:disabled),
+.trigger:focus-visible {
+  background: var(--field);
+  border-color: var(--line);
+  outline: none;
+}
+
+.trigger:disabled {
+  cursor: default;
+  color: var(--muted);
+}
+
+.triggerAvatar {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.triggerLabel {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.triggerChevron {
+  flex: 0 0 auto;
+  opacity: 0.65;
+}
+
+.popover {
+  width: min(320px, calc(100vw - 20px));
+
+  max-height: var(--radix-popover-content-available-height, calc(100dvh - 24px));
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 6px 6px 2px;
+  padding: 0 9px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--field);
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.searchField:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
+
+.popover .searchField .searchInput,
+.popover .searchField .searchInput:hover,
+.popover .searchField .searchInput:focus,
+.popover .searchField .searchInput:focus-visible {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.searchInput::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.list {
+  flex: 1 1 auto;
+  min-height: 0;
+
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+  font-size: 12px;
+}
+
+.group + .group {
+  margin-top: 2px;
+}
+
+.groupLabel {
+  padding: 6px 8px 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover,
+.row:focus-visible {
+  outline: none;
+  background: var(--field);
+}
+
+.rowActive {
+  background: var(--primary-soft);
+}
+
+.rowIcon {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  overflow: hidden;
+  color: var(--muted);
+}
+
+.rowText {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rowName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  font-weight: 560;
+  line-height: 17px;
+}
+
+.rowBadge {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 14px;
+}
+
+.rowCheck {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.empty {
+  margin: 0;
+  padding: 14px 8px 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 17px;
+  text-align: center;
+}
+
+.footer {
+  flex: 0 0 auto;
+  padding: 4px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, var(--panel-strong) 8%);
+}
+
+.footerButton {
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.footerButton:hover,
+.footerButton:focus-visible {
+  outline: none;
+  background: var(--primary-soft);
+}
+
+.avatar :global(.agent-avatar-image),
+.triggerAvatar :global(.agent-avatar-image),
+.rowIcon :global(.agent-avatar-image) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

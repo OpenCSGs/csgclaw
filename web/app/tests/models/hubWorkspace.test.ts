@@ -81,7 +81,7 @@ describe("hub workspace helpers", () => {
     ).toBe(true);
     expect(
       isVisibleInHubTemplateList({ id: "team.review-bot", role: "worker", source: { kind: "remote", name: "team" } }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("formats localized template counts", () => {

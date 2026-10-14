@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { KnowledgeBaseDiscoveryDialog } from "@/pages/WorkspacePage/components/WorkspaceSidebar/KnowledgeBaseDiscoveryDialog";
+import { KnowledgeBaseDiscoveryDialog } from "@/components/business/KnowledgeBaseDiscoveryDialog";
 
 const onLoadMore = vi.fn();
 const onSearchChange = vi.fn();

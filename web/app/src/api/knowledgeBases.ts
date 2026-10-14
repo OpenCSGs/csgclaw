@@ -1,4 +1,4 @@
-import { get } from "@/api/client";
+import { get, type ApiError } from "@/api/client";
 import type { JSONRecord } from "@/models/agents";
 import type {
   RemoteKnowledgeBase,
@@ -43,7 +43,11 @@ export async function fetchRemoteKnowledgeBaseMCPConfig(id: string): Promise<Rem
   );
   const name = stringFromUnknown(payload?.name);
   if (!name || !isJSONRecord(payload?.config)) {
-    throw new Error("AgenticHub knowledge base returned an invalid MCP configuration");
+    throw {
+      status: 500,
+      code: "knowledge_base_mcp_config_invalid",
+      message: "AgenticHub knowledge base returned an invalid MCP configuration",
+    } satisfies ApiError;
   }
   return { name, config: payload.config };
 }

@@ -151,9 +151,12 @@ function deferred<T>() {
 function renderConversationController(
   options: {
     activeConversationId?: string;
+    routedConversationId?: string;
     agents?: AgentLike[];
     data?: IMData;
     managerProfile?: AgentProfileLike | null;
+    managerProfileIncomplete?: boolean;
+    authStatuses?: Parameters<typeof useConversationController>[0]["authStatuses"];
     managerRuntimeUnavailable?: boolean;
     managerRuntimeWarning?: string;
     messageListActive?: boolean;
@@ -178,14 +181,14 @@ function renderConversationController(
     ({ activeConversationId = directConversation.id, data = defaultData, messageListActive = true }) =>
       useConversationController({
         activeConversationId,
-        activePane: { type: WorkspacePaneTypes.conversation, id: activeConversationId },
+        activePane: { type: WorkspacePaneTypes.conversation, id: options.routedConversationId ?? activeConversationId },
         agents,
         authBusyProvider: "",
-        authStatuses: {},
+        authStatuses: options.authStatuses ?? {},
         data,
         locale: "en",
         managerProfile: options.managerProfile ?? null,
-        managerProfileIncomplete: false,
+        managerProfileIncomplete: options.managerProfileIncomplete ?? false,
         managerRuntimeUnavailable: options.managerRuntimeUnavailable,
         managerRuntimeWarning: options.managerRuntimeWarning,
         hasObservedWorkLease: () => false,
@@ -225,6 +228,147 @@ describe("useConversationController", () => {
     apiMocks.deleteRoomRequest.mockReset();
     apiMocks.fetchThreadRequest.mockReset();
     apiMocks.sendMessageRequest.mockReset();
+  });
+
+  it.each(["composer", "thread"])(
+    "continues a worker task in the %s with an incomplete and unavailable Manager",
+    async (scope) => {
+      const root = { id: "root", content: "first prompt", sender_id: "u-admin" };
+      const { result } = renderConversationController({
+        managerProfileIncomplete: true,
+        managerRuntimeUnavailable: true,
+        managerProfile: { provider: "codex", model_id: "", profile_complete: false },
+        authStatuses: { codex: { authenticated: false } },
+        agents: [
+          {
+            id: "u-demo",
+            role: "worker",
+            status: "running",
+            model_config: { model_provider_id: "local", model_id: "worker-model", profile_complete: true },
+          },
+        ],
+        data: dataWithMessages([root]),
+      });
+      apiMocks.sendMessageRequest.mockResolvedValue({ id: "reply", content: "continue", sender_id: "u-admin" });
+      if (scope === "thread") {
+        await act(async () => {
+          await result.current.conversationViewProps.onOpenThread(root);
+        });
+        act(() => result.current.conversationViewProps.onThreadDraftChange([{ type: "text", text: "continue" }]));
+        expect(result.current.conversationViewProps.threadComposerDisabledReason).toBe("");
+        await act(async () => {
+          await result.current.conversationViewProps.onSendThreadReply();
+        });
+      } else {
+        const editor = document.createElement("div");
+        editor.textContent = "continue";
+        act(() => {
+          result.current.conversationViewProps.editorRef.current = editor;
+          result.current.conversationViewProps.onSyncComposer();
+        });
+        expect(result.current.conversationViewProps.composerDisabledReason).toBe("");
+        await act(async () => {
+          await result.current.conversationViewProps.onSendMessage();
+        });
+      }
+      expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+      expect(apiMocks.sendMessageRequest.mock.calls[0][0].room_id).toBe("room-1");
+    },
+  );
+
+  it.each(["opencsg", "codex"])("authenticates the %s room override instead of the Agent default", async (provider) => {
+    const guard = { ...openCSGAuthGuardStub(false), requireAuthentication: vi.fn(() => false) };
+    const data = dataWithMessages([]);
+    data.rooms[0].configuration = { model_provider_id: provider, model_id: "override-model" };
+    const { result } = renderConversationController({
+      data,
+      openCSGAuthGuard: guard,
+      authStatuses: { codex: { authenticated: false } },
+      agents: [
+        {
+          id: "u-demo",
+          role: "worker",
+          status: "running",
+          model_config: { model_provider_id: "local", model_id: "default", profile_complete: false },
+        },
+      ],
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "continue";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    expect(result.current.conversationViewProps.composerDisabledReason).toBe("");
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+    expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+    if (provider === "opencsg") expect(guard.requireAuthentication).toHaveBeenCalledOnce();
+    else expect(result.current.conversationViewProps.composerError).toBe("authRequired");
+  });
+
+  it.each([RoomTypes.free, RoomTypes.onDemand])("checks only the selected %s room recipients", async (type) => {
+    const data = dataWithMessages([]);
+    data.rooms[0] = { ...data.rooms[0], is_direct: false, type, manager_id: "u-demo" };
+    const { result } = renderConversationController({
+      data,
+      managerProfileIncomplete: true,
+      agents: [{ id: "u-demo", role: "manager", status: "running", model_config: { profile_complete: false } }],
+    });
+    const editor = document.createElement("div");
+    editor.textContent = "message to people";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    apiMocks.sendMessageRequest.mockResolvedValue({ id: "reply", content: "message to people", sender_id: "u-admin" });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+    if (type === RoomTypes.onDemand) {
+      expect(apiMocks.sendMessageRequest).not.toHaveBeenCalled();
+      expect(result.current.conversationViewProps.composerDisabledReason).toBe("profileIncomplete");
+    } else {
+      expect(apiMocks.sendMessageRequest).toHaveBeenCalledOnce();
+      expect(result.current.conversationViewProps.composerDisabledReason).toBe("");
+    }
+  });
+
+  it("renders and sends to the routed task while the previous selection is stale", async () => {
+    const oldRoom = {
+      ...directConversation,
+      id: "manager-room",
+      title: "Manager",
+      messages: [{ id: "old", content: "old manager task", sender_id: "manager" }],
+    };
+    const nextRoom = {
+      ...directConversation,
+      id: "worker-task",
+      title: "Worker task",
+      messages: [{ id: "new", content: "new task", sender_id: "u-admin" }],
+    };
+    apiMocks.sendMessageRequest.mockResolvedValue({ id: "reply", content: "continue", sender_id: "u-admin" });
+    const { result } = renderConversationController({
+      activeConversationId: oldRoom.id,
+      routedConversationId: nextRoom.id,
+      data: { ...dataWithMessages([]), rooms: [oldRoom, nextRoom] },
+    });
+    expect(result.current.selectedConversation?.id).toBe(nextRoom.id);
+    expect(result.current.visibleMessages.map((message) => message.id)).toEqual(["new"]);
+    const editor = document.createElement("div");
+    editor.textContent = "continue";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ room_id: nextRoom.id, content: "continue" }),
+      expect.anything(),
+    );
   });
 
   it("keeps an unopened thread local until the first reply is sent", async () => {
@@ -1022,6 +1166,7 @@ describe("useConversationController", () => {
     const { result } = renderConversationController({
       managerRuntimeUnavailable: true,
       managerRuntimeWarning: "Docker is not running",
+      agents: [{ id: "u-demo", role: "manager", status: "running" }],
     });
     const editor = document.createElement("div");
     editor.textContent = "hi";

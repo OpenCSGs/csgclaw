@@ -16,11 +16,19 @@ func (h *Handler) handleAgentLLMModelsByID(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
+	r, ok = h.taskLLMContext(w, r, agentID)
+	if !ok {
+		return
+	}
 	h.handleBotLLMModels(w, r, agentID)
 }
 
 func (h *Handler) handleAgentLLMChatCompletionsByID(w http.ResponseWriter, r *http.Request) {
 	agentID, ok := h.requireAgentLLMID(w, r)
+	if !ok {
+		return
+	}
+	r, ok = h.taskLLMContext(w, r, agentID)
 	if !ok {
 		return
 	}
@@ -32,11 +40,19 @@ func (h *Handler) handleAgentLLMResponsesByID(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
+	r, ok = h.taskLLMContext(w, r, agentID)
+	if !ok {
+		return
+	}
 	h.handleBotLLMResponses(w, r, agentID)
 }
 
 func (h *Handler) handleAgentLLMResponsesWebsocketByID(w http.ResponseWriter, r *http.Request) {
 	agentID, ok := h.requireAgentLLMID(w, r)
+	if !ok {
+		return
+	}
+	r, ok = h.taskLLMContext(w, r, agentID)
 	if !ok {
 		return
 	}
