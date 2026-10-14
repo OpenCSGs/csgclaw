@@ -1,10 +1,13 @@
+import { messageResources, resourceMessageText } from "@/models/conversationResources";
+import { ComposerResourceMenu, type ComposerResourceProps } from "@/components/business/ConversationResourcePicker";
+import { canSendComposer, selectedResources } from "@/models/conversationResources";
 import type { SkillContinuation } from "@/models/slashCommands";
 import { emptyCompletedProgress } from "@/models/turnProgress";
 import { messageListScrollKey, useMessageListAutoScroll } from "@/hooks/workspace/useMessageListAutoScroll";
 import { DiagnosticMessageAction } from "@/components/business/TurnDiagnostics";
 import { isImageAttachment } from "@/models/attachments";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Paperclip, X } from "lucide-react";
+import { X } from "lucide-react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { ImageGenerationStatus } from "./ImageGenerationStatus";
 import { MessageContent, MessagePreviewText } from "@/components/business/MessageContent";
@@ -70,7 +73,7 @@ type ThreadMentionState = {
   textNode?: Node;
 };
 
-export type ConversationThreadPanelProps = {
+export type ConversationThreadPanelProps = ComposerResourceProps & {
   renderTurnControls?: (message: IMMessage) => ProgressControlSlots | null;
   agents?: AgentLike[];
   disabled: boolean;
@@ -108,6 +111,8 @@ export type ConversationThreadPanelProps = {
 };
 
 export function ConversationThreadPanel({
+  resourceAgentID,
+  onPickResources,
   renderTurnControls,
   thread,
   agents = [],
@@ -303,7 +308,7 @@ export function ConversationThreadPanel({
               <MessagePreviewText
                 content={
                   thread?.summary?.context_summary?.root_excerpt ||
-                  visibleRoot.content ||
+                  resourceMessageText(visibleRoot.content, visibleRoot.metadata) ||
                   visibleRoot.attachments?.[0]?.name ||
                   t("attachment")
                 }
@@ -536,24 +541,18 @@ export function ConversationThreadPanel({
               event.currentTarget.value = "";
             }}
           />
-          <Tooltip content={t("addAttachment")}>
-            <span>
-              <Button
-                className="thread-attach-button"
-                aria-label={t("addAttachment")}
-                disabled={disabled}
-                iconOnly
-                variant="tertiaryGray"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Paperclip aria-hidden="true" size={18} />
-              </Button>
-            </span>
-          </Tooltip>
+          <ComposerResourceMenu
+            resourceAgentID={resourceAgentID}
+            onPickResources={onPickResources}
+            selected={selectedResources(draftSegments)}
+            disabled={disabled}
+            t={t}
+            onAddFiles={() => fileInputRef.current?.click()}
+          />
           <Button
             variant="primary"
             className="thread-send-button"
-            disabled={disabled || (!segmentsToPlainText(draftSegments || []).trim() && attachmentDrafts.length === 0)}
+            disabled={disabled || !canSendComposer(draftSegments, attachmentDrafts.length)}
             onClick={onSend}
           >
             <span aria-hidden="true">{IconImage("send")}</span>
@@ -637,7 +636,7 @@ function ThreadMessage({
           <span className="message-author">{name}</span>
           <MessageTimestamp parts={timestampParts} />
         </div>
-        {message.content && !message.metadata?.image_generation ? (
+        {(message.content || messageResources(message.metadata).length > 0) && !message.metadata?.image_generation ? (
           <div className="thread-message-bubble">
             <MessageContent
               key={`${message.id}:${theme}`}

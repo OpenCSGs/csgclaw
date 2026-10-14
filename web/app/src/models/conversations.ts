@@ -1,3 +1,4 @@
+import { resourceMessageText } from "./conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
 import type { ContextUsage } from "@/models/modelMetadata";
@@ -454,7 +455,7 @@ export function formatConversationPreview(
     if (isEventMessage(message)) {
       return formatEventMessage(message, usersById, locale);
     }
-    return formatMessagePreviewText(message.content);
+    return formatMessagePreviewText(resourceMessageText(message.content, message.metadata));
   }
   return conversation ? getConversationSubtitle(conversation, currentUserID, usersById, locale, t) : "";
 }

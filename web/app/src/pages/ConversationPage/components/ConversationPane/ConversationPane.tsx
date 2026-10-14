@@ -240,6 +240,9 @@ function ConversationPaneContent({
   authStatuses,
   authBusyProvider,
   onProviderLogin,
+  resourceAgentID,
+  onPickResources,
+  onPickThreadResources,
   draftSegments,
   draftText,
   attachmentDrafts,
@@ -482,6 +485,8 @@ function ConversationPaneContent({
 
   const threadPanel = activeThreadRootID ? (
     <Conversation.ThreadPanel
+      resourceAgentID={resourceAgentID}
+      onPickResources={onPickThreadResources}
       renderTurnControls={renderTurnControls}
       agents={agents}
       thread={activeThreadView}
@@ -625,6 +630,8 @@ function ConversationPaneContent({
         <AgentQuestionComposer mode={questionMode} t={t} usersById={usersById} />
       ) : (
         <Conversation.Composer
+          resourceAgentID={resourceAgentID}
+          onPickResources={onPickResources}
           authBusyProvider={authBusyProvider}
           authStatuses={authStatuses}
           composerDisabled={composerDisabled}

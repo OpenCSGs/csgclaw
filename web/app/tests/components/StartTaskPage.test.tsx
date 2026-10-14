@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { createQueryWrapper } from "../helpers/queryClient";
+import { fetchConversationResourceBatch } from "@/api/agentResources";
 import { MemoryRouter, useNavigate } from "react-router-dom";
 import { WorkspaceControllerProvider, type WorkspaceController } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
 import { StartTaskPage } from "@/pages/StartTaskPage/StartTaskPage";
 import type { IMConversation } from "@/models/conversations";
 
+vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
 vi.mock("@/api/im", () => ({ sendMessageRequest: vi.fn() }));
 const room: IMConversation = {
   id: "task-1",
@@ -72,6 +76,7 @@ function setup(
         <DialogButtons />
       </WorkspaceControllerProvider>
     </MemoryRouter>,
+    { wrapper: createQueryWrapper().wrapper },
   );
   return { create, open, onCreateAgent, requireAuth };
 }
@@ -167,4 +172,56 @@ describe("StartTaskPage task preparation", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("taskEntryMissingTarget");
     expect(create).not.toHaveBeenCalled();
   });
+});
+
+it("StartTask 使用规范化输入检查资源组合，校验失败时不创建会话", async () => {
+  vi.mocked(fetchConversationResourceBatch).mockResolvedValue({
+    items: [{ source: "mcp", id: "search", type: "connector", name: "Search", enabled: true, available: true }],
+    total: 1,
+    list_revision: "r",
+    has_more: false,
+  });
+  vi.mocked(sendMessageRequest)
+    .mockReset()
+    .mockResolvedValue({} as never);
+  const { create, open } = setup("/new?agent=u-worker");
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "composerAddContent" }));
+  await user.click(screen.getByRole("button", { name: "composerResourceConnector" }));
+  await user.click(await screen.findByRole("checkbox"));
+  await user.click(screen.getByRole("button", { name: "addAttachmentResource" }));
+  const input = screen.getByRole("textbox", { name: "taskEntryPrompt" });
+  await user.type(input, "/review");
+  expect(screen.getByRole("button", { name: "taskEntryStart" })).toBeDisabled();
+  await user.keyboard("{Enter}");
+  expect(create).not.toHaveBeenCalled();
+  expect(sendMessageRequest).not.toHaveBeenCalled();
+  await user.type(input, " 检查项目");
+  await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+  await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(sendMessageRequest).toHaveBeenCalledWith(
+    expect.objectContaining({
+      content: "检查项目",
+      resource_refs: [
+        { source: "mcp", id: "search" },
+        { source: "skill", id: "review" },
+      ],
+    }),
+  );
+});
+
+it("StartTask 支持单个 skill 的空正文输入", async () => {
+  vi.mocked(sendMessageRequest)
+    .mockReset()
+    .mockResolvedValue({} as never);
+  const { create, open } = setup("/new?agent=u-worker");
+  const user = userEvent.setup();
+  await user.type(screen.getByRole("textbox", { name: "taskEntryPrompt" }), "/review");
+  await user.click(screen.getByRole("button", { name: "taskEntryStart" }));
+  await waitFor(() => expect(open).toHaveBeenCalledWith(room));
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(sendMessageRequest).toHaveBeenCalledWith(
+    expect.objectContaining({ content: "", resource_refs: [{ source: "skill", id: "review" }] }),
+  );
 });

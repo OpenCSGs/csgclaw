@@ -106,16 +106,17 @@ type MessageAttachmentUpload struct {
 }
 
 type CreateMessageRequest struct {
-	DiagnosticStart time.Time                 `json:"-"`
-	RoomID          string                    `json:"room_id"`
-	ClientMessageID string                    `json:"client_message_id,omitempty"`
-	SenderID        string                    `json:"sender_id"`
-	Content         string                    `json:"content"`
-	Locale          string                    `json:"locale,omitempty"`
-	MentionID       string                    `json:"mention_id,omitempty"`
-	Metadata        map[string]any            `json:"metadata,omitempty"`
-	RelatesTo       *MessageRelation          `json:"relates_to,omitempty"`
-	Attachments     []MessageAttachmentUpload `json:"attachments,omitempty"`
+	ResourceSelection *ResourceSelection        `json:"-"`
+	DiagnosticStart   time.Time                 `json:"-"`
+	RoomID            string                    `json:"room_id"`
+	ClientMessageID   string                    `json:"client_message_id,omitempty"`
+	SenderID          string                    `json:"sender_id"`
+	Content           string                    `json:"content"`
+	Locale            string                    `json:"locale,omitempty"`
+	MentionID         string                    `json:"mention_id,omitempty"`
+	Metadata          map[string]any            `json:"metadata,omitempty"`
+	RelatesTo         *MessageRelation          `json:"relates_to,omitempty"`
+	Attachments       []MessageAttachmentUpload `json:"attachments,omitempty"`
 }
 
 type MessageRelation struct {

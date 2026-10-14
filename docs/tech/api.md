@@ -485,6 +485,16 @@ Generated memory content is read-only through this API.
 
 ### Agent MCP server endpoints
 
+#### `GET /api/v1/agents/{id}/resources`
+
+Lists chat resources attached to a DSH or Codex Agent. Required `type` is `skill`, `connector`, or `knowledge_base`. Required `pagination` uses the existing `cursor` or `page` parameters, with `search`, `enabled`, repeated `exclude=source:id`, and `list_revision`. Page and cursor parameters cannot be mixed.
+
+Responses contain `{items, total, list_revision, has_more, next_cursor?}`; page mode also includes `page` and `per`. Each item contains `source` (`skill`, `mcp`, or `app`), `id`, `type`, `name`, optional `description`, `enabled`, `available`, and optional `unavailable_reason`. Empty results use `[]`. Responses use `Cache-Control: no-store`.
+
+Skills reuse SkillQuery membership selection before reading metadata for the requested page. MCP identity is its configuration key; App identity is its installation ID. Knowledge bases include managed MCP servers and `llm-wiki` bindings. App availability includes binding and global enablement, connection state, and the current Agent's callable tool catalog. Credentials, connection configuration, and SKILL.md contents are excluded from summaries.
+
+Filtering precedes pagination and stable identity ordering. Invalid queries return `400 invalid_resource_query`; changed membership or query scope returns `409 resource_list_changed`. Dependency failures return `503 resource_service_unavailable`. Skills and MCP remain available when Apps is not enabled.
+
 #### `GET /api/v1/agents/{id}/mcp-servers`
 
 Returns the agent's MCP server configuration as a direct raw
@@ -1109,6 +1119,29 @@ Multipart example:
 payload={"room_id":"room-1","sender_id":"manager","content":""}
 files=@diagram.png;type=image/png
 ```
+
+#### Message resource references
+
+DSH and Codex direct messages and their thread replies accept optional `resource_refs`, with at most 16 entries:
+
+```json
+{
+  "room_id": "room-dm",
+  "sender_id": "user-admin",
+  "content": "Review this MR",
+  "resource_refs": [
+    {"source": "skill", "id": "review"},
+    {"source": "app", "id": "installation-id"},
+    {"source": "mcp", "id": "engineering-guidelines"}
+  ]
+}
+```
+
+The server trims IDs, validates attachment and availability, and deduplicates by `(source, id)` while retaining selection order. A message requires text, attachments, or exactly one valid skill. An empty message selecting only MCP, App, or multiple resources requires an attachment. Group messages and `/new` commands reject resource selections.
+
+Multipart `payload` uses the same fields. The server stores `{version: 1, agent_id, refs: [{source, id, type, name}]}` in `metadata.csgclaw.resource_selection`, replacing client-supplied values in this namespace. History uses the saved display snapshot. Execution resolves references again against the current Agent and resource state. Each message has its own selection. Legacy skill input is normalized into the same references at ingress.
+
+Successful retries with the same `client_message_id` return `201` and the original Message even if resources have subsequently changed. A changed selection is a new logical submission and needs a new ID. Errors include `400 invalid_resource_reference`, `400 invalid_request`, `409 resource_not_attached`, `409 resource_disabled`, `409 resource_unavailable`, and `503 resource_service_unavailable`. Revalidation failures after persistence use the existing execution failure result.
 
 ### Room attachment discovery and download
 

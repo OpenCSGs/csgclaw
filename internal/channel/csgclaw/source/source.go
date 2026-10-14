@@ -433,21 +433,22 @@ func usesHostRuntime(selected agentengine.Agent) bool {
 
 func botEvent(value channel.Binding, event im.ParticipantEvent) channel.Event {
 	return channel.Event{
-		RoomManager:   event.RoomManager,
-		TaskAttempt:   event.TaskAttempt,
-		TaskID:        strings.TrimSpace(event.TaskID),
-		Channel:       string(channel.ChannelCSGClaw),
-		ParticipantID: value.ParticipantID,
-		MessageID:     strings.TrimSpace(event.MessageID),
-		RoomID:        strings.TrimSpace(event.RoomID),
-		Locale:        strings.TrimSpace(event.Locale),
-		ChatType:      strings.TrimSpace(event.ChatType),
-		Text:          event.Text,
-		Attachments:   append([]channel.MessageAttachment(nil), event.Attachments...),
-		Mentions:      append([]string(nil), event.Mentions...),
-		Mentioned:     event.Mentioned,
-		ThreadRootID:  strings.TrimSpace(event.ThreadRootID),
-		ThreadContext: botThreadContext(event.ThreadContext),
+		ResourceSelection: event.ResourceSelection.Clone(),
+		RoomManager:       event.RoomManager,
+		TaskAttempt:       event.TaskAttempt,
+		TaskID:            strings.TrimSpace(event.TaskID),
+		Channel:           string(channel.ChannelCSGClaw),
+		ParticipantID:     value.ParticipantID,
+		MessageID:         strings.TrimSpace(event.MessageID),
+		RoomID:            strings.TrimSpace(event.RoomID),
+		Locale:            strings.TrimSpace(event.Locale),
+		ChatType:          strings.TrimSpace(event.ChatType),
+		Text:              event.Text,
+		Attachments:       append([]channel.MessageAttachment(nil), event.Attachments...),
+		Mentions:          append([]string(nil), event.Mentions...),
+		Mentioned:         event.Mentioned,
+		ThreadRootID:      strings.TrimSpace(event.ThreadRootID),
+		ThreadContext:     botThreadContext(event.ThreadContext),
 	}
 }
 

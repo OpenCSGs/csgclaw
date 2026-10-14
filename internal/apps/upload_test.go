@@ -36,6 +36,13 @@ func TestReadOnlyFiltersAppAndPlatformToolsAndRejectsStaleCalls(t *testing.T) {
 		writes.Add(1)
 		return &mcp.CallToolResult{}, nil
 	})
+	callable, err := s.CallableTools(t.Context(), "agent", item.InstallationID)
+	if err != nil || len(callable) != 1 || callable[0].Name != toolName(item.InstallationID, "read") {
+		t.Fatalf("可调用目录未遵循只读权限：%+v %v", callable, err)
+	}
+	if _, err := s.CallableTools(t.Context(), "other-agent", item.InstallationID); err == nil {
+		t.Fatal("可调用目录未检查 Agent 归属")
+	}
 	client := gatewayClient(t, s, "agent")
 	listed, err := client.ListTools(context.Background(), nil)
 	if err != nil || len(listed.Tools) != 1 || listed.Tools[0].Name != toolName(item.InstallationID, "read") {
@@ -48,6 +55,10 @@ func TestReadOnlyFiltersAppAndPlatformToolsAndRejectsStaleCalls(t *testing.T) {
 		t.Fatal("readonly write was admitted")
 	}
 	readonly.Store(false)
+	callable, err = s.CallableTools(t.Context(), "agent", item.InstallationID)
+	if err != nil || len(callable) != 2 {
+		t.Fatalf("可调用目录未更新权限：%+v %v", callable, err)
+	}
 	listed, err = client.ListTools(context.Background(), nil)
 	if err != nil || len(listed.Tools) != 3 {
 		t.Fatalf("read-write catalog was not restored: %+v %v", listed, err)

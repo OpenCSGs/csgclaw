@@ -73,7 +73,7 @@ func RenderRuntimeAgentsInstructionsBlockWithOptions(agentID, instructions strin
 	if path := strings.TrimSpace(options.CLIPath); path != "" {
 		command = "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
 	}
-	managedInstructions := joinManagedInstructions(untrustedExtraContextInstructions, runtimeFilePublishingInstructions, RoomAttachmentInstructions(command))
+	managedInstructions := joinManagedInstructions(untrustedExtraContextInstructions, runtimeFilePublishingInstructions, RoomAttachmentInstructions(command), ResourceSelectionInstructions)
 	role := roomtask.TurnRoleWorker
 	if strings.TrimSpace(agentID) == identity.ManagerAgentID {
 		role = roomtask.TurnRoleManager

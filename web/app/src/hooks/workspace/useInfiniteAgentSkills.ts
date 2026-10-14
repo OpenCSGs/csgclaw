@@ -1,11 +1,13 @@
+import type { AgentSkillSummary } from "@/api/agents";
 import { builtinSlashCommandNames, suggestedSlashCommandNames, type SkillContinuation } from "@/models/slashCommands";
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteAgentResources } from "./useInfiniteAgentResources";
-import { fetchAgentSkillBatch } from "@/api/agentResources";
+import { fetchAgentSkillBatch, fetchConversationResourceBatch } from "@/api/agentResources";
 import { workspaceQueryKeys } from "./workspaceQueries";
+import { conversationResourceQueryKey } from "./useConversationResources";
 
 const excludedCommands = [...builtinSlashCommandNames, ...suggestedSlashCommandNames];
-export function useInfiniteAgentSkills(agentID: string, search: string | null, enabled: boolean) {
+export function useInfiniteAgentSkills(agentID: string, search: string | null, enabled: boolean, unified = false) {
   const [settledSearch, setSettledSearch] = useState(search);
   const currentScope = useRef("");
   const scope = JSON.stringify([agentID, search, enabled]);
@@ -16,15 +18,29 @@ export function useInfiniteAgentSkills(agentID: string, search: string | null, e
     const timer = setTimeout(() => setSettledSearch(search), 150);
     return () => clearTimeout(timer);
   }, [search]);
-  const resources = useInfiniteAgentResources(
-    [...workspaceQueryKeys.agentSkills(agentID), "cursor", "chat", settledSearch ?? ""],
+  const resources = useInfiniteAgentResources<AgentSkillSummary>(
+    unified
+      ? conversationResourceQueryKey(agentID, "skill", {
+          search: settledSearch ?? "",
+          enabled: true,
+          exclude: excludedCommands.map((name) => `skill:${name}`),
+        })
+      : [...workspaceQueryKeys.agentSkills(agentID), "cursor", "chat", settledSearch ?? ""],
     (cursor, signal) =>
-      fetchAgentSkillBatch(
-        agentID,
-        cursor,
-        { search: settledSearch ?? "", enabled: true, exclude: excludedCommands },
-        signal,
-      ),
+      unified
+        ? fetchConversationResourceBatch(
+            agentID,
+            "skill",
+            cursor,
+            { search: settledSearch ?? "", enabled: true, exclude: excludedCommands.map((name) => `skill:${name}`) },
+            signal,
+          )
+        : fetchAgentSkillBatch(
+            agentID,
+            cursor,
+            { search: settledSearch ?? "", enabled: true, exclude: excludedCommands },
+            signal,
+          ),
     Boolean(agentID) && enabled && search !== null && search === settledSearch,
   );
   const ready = search === settledSearch;

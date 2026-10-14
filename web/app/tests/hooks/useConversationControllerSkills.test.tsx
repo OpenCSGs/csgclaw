@@ -3,10 +3,17 @@ import { workspaceQueryKeys } from "@/hooks/workspace/workspaceQueries";
 import { useState } from "react";
 import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { fetchAgentSkillBatch } from "@/api/agentResources";
+import { fetchConversationResourceBatch } from "@/api/agentResources";
 import type { AgentSkillSummary } from "@/api/agents";
 const batch = (items: AgentSkillSummary[]) => ({
-  items,
+  items: items.map((item) => ({
+    ...item,
+    source: "skill" as const,
+    id: item.name,
+    type: "skill" as const,
+    available: item.enabled !== false,
+    enabled: item.enabled !== false,
+  })),
   page: 1,
   per: 20,
   total: items.length,
@@ -20,7 +27,7 @@ import { WorkspacePaneTypes } from "@/models/routing";
 import { FloatingChat } from "@/pages/WorkspacePage/components/FloatingChat";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
 
-vi.mock("@/api/agentResources", () => ({ fetchAgentSkillBatch: vi.fn() }));
+vi.mock("@/api/agentResources", () => ({ fetchConversationResourceBatch: vi.fn() }));
 
 vi.mock("@/shared/realtime/imEvents", () => ({
   subscribeIMEvents: () => () => {},
@@ -133,11 +140,11 @@ function useConversationControllerHarness(fixture: SkillHarnessFixture = default
 
 describe("useConversationController skill loading", () => {
   beforeEach(() => {
-    vi.mocked(fetchAgentSkillBatch).mockReset();
+    vi.mocked(fetchConversationResourceBatch).mockReset();
   });
 
-  it("loads slash skills from the dedicated skills API", async () => {
-    vi.mocked(fetchAgentSkillBatch).mockResolvedValue(
+  it("loads slash skills through the unified resource API", async () => {
+    vi.mocked(fetchConversationResourceBatch).mockResolvedValue(
       batch([{ name: "reviewer", description: "Review pull requests", enabled: true }]),
     );
     const { result } = renderHook(() => useConversationControllerHarness(), { wrapper: createQueryWrapper().wrapper });
@@ -151,7 +158,7 @@ describe("useConversationController skill loading", () => {
     selection?.removeAllRanges();
     selection?.addRange(range);
 
-    expect(fetchAgentSkillBatch).not.toHaveBeenCalled();
+    expect(fetchConversationResourceBatch).not.toHaveBeenCalled();
     await act(async () => {
       (result.current.conversationViewProps.editorRef as { current: HTMLDivElement | null }).current = editor;
       result.current.conversationViewProps.onSyncComposer();
@@ -170,9 +177,14 @@ describe("useConversationController skill loading", () => {
       result.current.conversationViewProps.onApplySlashCandidate("reviewer");
     });
 
-    expect(editor.querySelector('[data-composer-slash-token="true"]')).toHaveTextContent("/reviewer");
+    expect(editor.querySelector("[data-composer-resource]")).toHaveTextContent("reviewer");
     expect(result.current.conversationViewProps.draftSegments).toEqual([
-      { type: "slash", text: "/reviewer" },
+      {
+        type: "resource",
+        text: "reviewer",
+        agentID: "u-skill-worker",
+        resource: { source: "skill", id: "reviewer", type: "skill", name: "reviewer" },
+      },
       { type: "text", text: " " },
     ]);
     editor.remove();
@@ -180,7 +192,7 @@ describe("useConversationController skill loading", () => {
 
   it("refreshes added skills in floating chat and navigates them with Ctrl+N and Ctrl+P", async () => {
     const user = userEvent.setup();
-    vi.mocked(fetchAgentSkillBatch)
+    vi.mocked(fetchConversationResourceBatch)
       .mockResolvedValueOnce(batch([]))
       .mockResolvedValue(
         batch([
@@ -209,16 +221,16 @@ describe("useConversationController skill loading", () => {
     }
 
     render(<Harness />, { wrapper: query.wrapper });
-    expect(fetchAgentSkillBatch).not.toHaveBeenCalled();
+    expect(fetchConversationResourceBatch).not.toHaveBeenCalled();
     const editor = screen.getByLabelText("floatingChatInputPlaceholder");
     await user.click(editor);
     await user.type(editor, "/");
-    await waitFor(() => expect(fetchAgentSkillBatch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchConversationResourceBatch).toHaveBeenCalledTimes(1));
     await act(async () => {
       await query.client.invalidateQueries({ queryKey: workspaceQueryKeys.agentSkills(floatingFixture.agent.id!) });
     });
 
-    await waitFor(() => expect(fetchAgentSkillBatch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchConversationResourceBatch).toHaveBeenCalledTimes(2));
     const picker = screen.getByRole("listbox");
     const alpha = within(picker).getByRole("option", { name: /alpha/i });
     const beta = within(picker).getByRole("option", { name: /beta/i });
@@ -237,7 +249,7 @@ describe("useConversationController skill loading", () => {
 
   it("opens the slash picker at the caret before existing draft text", async () => {
     const user = userEvent.setup();
-    vi.mocked(fetchAgentSkillBatch).mockResolvedValue(batch([]));
+    vi.mocked(fetchConversationResourceBatch).mockResolvedValue(batch([]));
 
     function Harness() {
       const controller = useConversationControllerHarness(floatingFixture);

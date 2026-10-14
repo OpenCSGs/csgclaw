@@ -475,6 +475,16 @@ Runtime 尚未生成文档时，`ready` 为 `false`。
 
 ### Agent MCP server 接口
 
+#### `GET /api/v1/agents/{id}/resources`
+
+查询当前 DSH 或 Codex Agent 已挂载的聊天资源。`type` 必填，取值为 `skill`、`connector`、`knowledge_base`。`pagination` 必填，使用现有 `cursor` 或 `page` 参数、`search`、`enabled`、`exclude` 和 `list_revision`；两种分页模式的参数不可混用。`exclude` 使用重复的 `source:id` 值。
+
+响应使用 `{items, total, list_revision, has_more, next_cursor?}`，page 模式包含 `page`、`per`。每项包含 `source`（`skill`、`mcp`、`app`）、`id`、`type`、`name`、可选 `description`、`enabled`、`available` 和可选 `unavailable_reason`。空列表返回 `[]`，响应使用 `Cache-Control: no-store`。
+
+技能通过现有 SkillQuery 选择成员后读取当前页的 metadata。MCP 使用配置 key，App 使用 installation ID；名称用于展示与搜索。知识库包含 managed MCP 和 `llm-wiki` App。App 可用性包含挂载开关、全局开关、连接状态及当前 Agent 的可调用工具目录。响应不包含凭证、连接配置或 SKILL.md 正文。
+
+过滤发生在分页之前，结果按稳定身份排序。参数无效返回 `400 invalid_resource_query`，成员集合或查询范围变化返回 `409 resource_list_changed`。依赖读取失败返回 `503 resource_service_unavailable`，未启用 Apps 时继续查询技能和 MCP。
+
 #### `GET /api/v1/agents/{id}/mcp-servers`
 
 返回 Agent 的 MCP server 配置。`servers` 是从 server 名称到 server 配置的直接原始映射。与通用 Agent 响应不同，这个接口不会脱敏已配置的 token。
@@ -1086,6 +1096,29 @@ Multipart 示例：
 payload={"room_id":"room-1","sender_id":"manager","content":""}
 files=@diagram.png;type=image/png
 ```
+
+#### 消息资源引用
+
+DSH、Codex 私信及其讨论支持可选 `resource_refs`，最多 16 项：
+
+```json
+{
+  "room_id": "room-dm",
+  "sender_id": "user-admin",
+  "content": "检查这个 MR",
+  "resource_refs": [
+    {"source": "skill", "id": "review"},
+    {"source": "app", "id": "installation-id"},
+    {"source": "mcp", "id": "engineering-guidelines"}
+  ]
+}
+```
+
+`source` 和 `id` 表示资源身份；服务端去除 ID 首尾空白，校验归属及状态，去重并保留选择顺序。正文、附件或恰好一个有效 skill 满足发送条件。仅 MCP、App 或多个资源的空正文请求需要附件。群聊和 `/new` 命令不接受资源选择。
+
+multipart 的 `payload` 使用相同字段。客户端只提交引用，服务端在 `metadata.csgclaw.resource_selection` 保存 `{version: 1, agent_id, refs: [{source, id, type, name}]}`。客户端提供的同名 metadata 被清理。历史展示使用发送时快照，执行前按照当前 Agent 和资源状态重新解析；每条消息独立声明选择。旧客户端的技能输入由入口转换为相同引用格式。
+
+`client_message_id` 的成功重试返回 `201` 与原 Message，资源变化不影响已成功请求的重试。修改选择属于新的逻辑提交，应生成新的 ID。无效引用返回 `400 invalid_resource_reference`，不满足消息规则返回 `400 invalid_request`，资源已解绑返回 `409 resource_not_attached`，停用返回 `409 resource_disabled`，连接、授权或工具不可用返回 `409 resource_unavailable`，依赖服务不可用返回 `503 resource_service_unavailable`。消息保存后的验证失败通过原有执行结果展示。
 
 ### 房间附件检索与下载
 

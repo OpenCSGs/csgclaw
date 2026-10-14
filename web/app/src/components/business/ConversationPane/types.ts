@@ -1,3 +1,4 @@
+import type { ResourceSnapshot } from "@/models/conversationResources";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import type { SkillContinuation } from "@/models/slashCommands";
 import type { ContextUsage } from "@/models/modelMetadata";
@@ -81,6 +82,9 @@ export type ConversationPaneProps = {
   conversation: IMConversation;
   conversationMembers: IMUser[];
   currentUserID?: string;
+  resourceAgentID?: string;
+  onPickResources?: (resources: ResourceSnapshot[]) => void;
+  onPickThreadResources?: (resources: ResourceSnapshot[]) => void;
   draftSegments: ComposerSegment[];
   draftText: string;
   attachmentDrafts?: AttachmentDraft[];

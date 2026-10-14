@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
+import { useContext, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Plus, MoreHorizontal } from "lucide-react";
 import {
@@ -51,6 +52,7 @@ export function GlobalAppsPanel({
   onCountChange?: (count: number) => void;
   showHeading?: boolean;
 }) {
+  const queryClient = useContext(QueryClientContext);
   const [items, setItems] = useState<AppInstallation[]>([]);
   const [definitions, setDefinitions] = useState<AppDefinition[]>([]);
   const [adding, setAdding] = useState<AppDefinition | null>(null);
@@ -111,6 +113,9 @@ export function GlobalAppsPanel({
     try {
       await operation();
       await reload();
+      await queryClient?.invalidateQueries({
+        predicate: (query) => query.queryKey[1] === "agent-mcp-servers" && query.queryKey[3] === "conversation",
+      });
       return true;
     } catch (e) {
       setError(e);
@@ -297,6 +302,9 @@ export function GlobalAppsPanel({
             if (editing && !adding) await updateAppResource(editing.installation_id, payload);
             else await createAppResource({ ...payload, app_id: definition.app_id, connect: false });
             await reload();
+            await queryClient?.invalidateQueries({
+              predicate: (query) => query.queryKey[1] === "agent-mcp-servers" && query.queryKey[3] === "conversation",
+            });
           }}
         />
       ) : null}

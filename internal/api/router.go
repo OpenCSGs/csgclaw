@@ -7,6 +7,7 @@ import (
 )
 
 func (h *Handler) Routes() chi.Router {
+	h.EnableConversationResources()
 	router := chi.NewRouter()
 	router.Use(h.authorizeAppPlatformRequests)
 	h.registerCoreRoutes(router)
@@ -63,6 +64,7 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 				r.Get("/workspace/file", h.handleAgentWorkspaceFile)
 				r.Get("/skills", h.handleAgentSkills)
 				r.Get("/skill-summaries", h.handleAgentSkillSummaries)
+				r.Get("/resources", h.handleAgentResources)
 				r.Post("/skills:batchAdd", h.handleAgentSkillsBatchAdd)
 				r.Get("/skills/file", h.handleAgentSkillsFile)
 				r.Delete("/skills/{name}", h.handleAgentSkillDelete)

@@ -423,3 +423,12 @@ func TestSourceDrainsBridgePendingAfterRetryBackpressure(t *testing.T) {
 		}
 	}
 }
+
+func TestBotEventPreservesResourceSelection(t *testing.T) {
+	selection := &apitypes.ResourceSelection{Version: 1, AgentID: "agent", Refs: []apitypes.ResourceSnapshot{{ResourceReference: apitypes.ResourceReference{Source: "app", ID: "installation"}, Type: "connector", Name: "研发搜索"}}}
+	event := botEvent(channel.Binding{ParticipantID: "participant"}, im.ParticipantEvent{RoomID: "room", MessageID: "message", ResourceSelection: selection})
+	selection.Refs[0].Name = "changed"
+	if event.ResourceSelection == nil || event.ResourceSelection.AgentID != "agent" || event.ResourceSelection.Refs[0].Name != "研发搜索" {
+		t.Fatalf("事件未保留选择快照：%+v", event)
+	}
+}

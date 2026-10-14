@@ -95,6 +95,38 @@ describe("IM API", () => {
     expect(progress).toEqual([0, 50]);
     expect(xhr.body).toBeInstanceOf(FormData);
   });
+  it.each([false, true])("资源引用在 JSON 和 multipart 中使用相同字段：%s", async (attachments) => {
+    const fetchMock = mockFetch();
+    const resource_refs = [
+      { source: "skill" as const, id: "review" },
+      { source: "app" as const, id: "installation-a" },
+    ];
+    await sendMessageRequest({
+      room_id: "room-1",
+      sender_id: "user-admin",
+      content: "任务",
+      resource_refs,
+      ...(attachments ? { attachments: [new File(["test"], "test.txt")] } : {}),
+    });
+    const body = fetchMock.mock.calls[0][1]?.body;
+    const payload = JSON.parse(body instanceof FormData ? String(body.get("payload")) : String(body));
+    expect(payload.resource_refs).toEqual(resource_refs);
+    expect(payload.content).toBe("任务");
+  });
+
+  it("附件发送保留服务端资源错误代码", async () => {
+    const Fake = createFakeXMLHttpRequest();
+    vi.stubGlobal("XMLHttpRequest", Fake);
+    const request = sendMessageRequest(
+      { room_id: "room", sender_id: "user", content: "任务", attachments: [new File(["test"], "test.txt")] },
+      { onUploadProgress: vi.fn() },
+    );
+    const xhr = Fake.latest;
+    xhr.status = 409;
+    xhr.responseText = JSON.stringify({ error: { code: "resource_disabled", message: "disabled" } });
+    xhr.emit("load", {});
+    await expect(request).rejects.toMatchObject({ status: 409, code: "resource_disabled" });
+  });
 });
 
 function createFakeXMLHttpRequest() {

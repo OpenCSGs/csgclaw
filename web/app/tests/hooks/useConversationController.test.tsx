@@ -230,6 +230,54 @@ describe("useConversationController", () => {
     apiMocks.sendMessageRequest.mockReset();
   });
 
+  it.each(["composer", "thread"])("%s 保留失败选择，重试复用请求身份，成功后清空资源", async (scope) => {
+    const root = { id: "root", content: "任务", sender_id: "u-admin" };
+    const { result } = renderConversationController({
+      data: dataWithMessages([root]),
+      agents: [{ id: "u-demo", name: "demo", role: "worker", runtime_kind: "codex", status: "running" }],
+    });
+    const selected = [{ source: "skill" as const, id: "review", type: "skill" as const, name: "review" }];
+    if (scope === "thread") {
+      await act(async () => result.current.conversationViewProps.onOpenThread(root));
+      act(() => result.current.conversationViewProps.onPickThreadResources(selected));
+    } else {
+      act(() => result.current.conversationViewProps.onPickResources(selected));
+    }
+    const send = () =>
+      scope === "thread"
+        ? result.current.conversationViewProps.onSendThreadReply()
+        : result.current.conversationViewProps.onSendMessage();
+    const segments = () =>
+      scope === "thread"
+        ? result.current.conversationViewProps.threadDraftSegments
+        : result.current.conversationViewProps.draftSegments;
+    apiMocks.sendMessageRequest.mockRejectedValueOnce({ code: "resource_disabled", message: "资源停用" });
+    await act(async () => {
+      await send();
+    });
+    expect(segments()).toEqual([expect.objectContaining({ type: "resource", agentID: "u-demo" })]);
+    const first = apiMocks.sendMessageRequest.mock.calls[0][0];
+    expect(first).toMatchObject({ content: "", resource_refs: [{ source: "skill", id: "review" }] });
+    if (scope === "thread") expect(first.relates_to).toEqual({ rel_type: "m.thread", event_id: "root" });
+    apiMocks.sendMessageRequest.mockResolvedValueOnce(successfulMessage(""));
+    apiMocks.fetchThreadRequest.mockResolvedValue({ root, replies: [] });
+    await act(async () => {
+      await send();
+    });
+    expect(apiMocks.sendMessageRequest.mock.calls[1][0].client_message_id).toBe(first.client_message_id);
+    expect(segments()).toEqual([]);
+    act(() =>
+      scope === "thread"
+        ? result.current.conversationViewProps.onPickThreadResources([{ ...selected[0], id: "other" }])
+        : result.current.conversationViewProps.onPickResources([{ ...selected[0], id: "other" }]),
+    );
+    apiMocks.sendMessageRequest.mockResolvedValueOnce(successfulMessage(""));
+    await act(async () => {
+      await send();
+    });
+    expect(apiMocks.sendMessageRequest.mock.calls[2][0].client_message_id).not.toBe(first.client_message_id);
+  });
+
   it.each(["composer", "thread"])(
     "continues a worker task in the %s with an incomplete and unavailable Manager",
     async (scope) => {

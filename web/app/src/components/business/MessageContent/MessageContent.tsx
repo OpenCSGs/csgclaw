@@ -1,3 +1,4 @@
+import { messageResources, resourceKey } from "@/models/conversationResources";
 import { TurnProgress } from "@/components/business/TurnProgress";
 import { parseTurnProgress } from "@/models/turnProgress";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +39,21 @@ export const MessageContent = memo(function MessageContent(props: MessageContent
       />
     );
   }
-  return <MessageBody {...props} diagnosticText />;
+  const resources = messageResources(props.message?.metadata);
+  return (
+    <>
+      {resources.length ? (
+        <div className="flex flex-wrap gap-2" aria-label={t?.("composerAddResources")}>
+          {resources.map((resource) => (
+            <span className="composer-slash-token" key={resourceKey(resource)} title={resourceKey(resource)}>
+              {resource.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <MessageBody {...props} diagnosticText />
+    </>
+  );
 });
 
 function MessageBody({

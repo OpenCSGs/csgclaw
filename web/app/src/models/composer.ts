@@ -1,4 +1,7 @@
+import { resourceKey, isResourceSnapshot, type ResourceSnapshot } from "./agentResources";
+
 export type ComposerSegment =
+  | { type: "resource"; text: string; resource: ResourceSnapshot; agentID?: string }
   | {
       text: string;
       type: "text";
@@ -76,12 +79,27 @@ export function createSlashTokenElement(value: unknown): HTMLSpanElement {
   return token;
 }
 
+export function createResourceTokenElement(resource: ResourceSnapshot, agentID?: string): HTMLSpanElement {
+  const token = document.createElement("span");
+  token.className = "composer-slash-token";
+  token.dataset.composerResource = JSON.stringify(resource);
+  if (agentID) token.dataset.resourceAgentId = agentID;
+  token.contentEditable = "false";
+  token.textContent = resource.name;
+  token.title = `${resource.source}:${resource.id}`;
+  return token;
+}
+
 export function normalizeComposerSegmentsForDisplay(
   segments: readonly (ComposerSegment | null | undefined)[] | null | undefined,
 ): ComposerSegment[] {
   const normalized: ComposerSegment[] = [];
   for (const segment of segments ?? []) {
     if (!segment) {
+      continue;
+    }
+    if (segment.type === "resource") {
+      normalized.push(segment);
       continue;
     }
     if (segment.type === "mention") {
@@ -106,6 +124,10 @@ export function appendComposerSegments(
   }
   for (const segment of segments ?? []) {
     if (!segment) {
+      continue;
+    }
+    if (segment.type === "resource") {
+      parent.append(createResourceTokenElement(segment.resource, segment.agentID));
       continue;
     }
     if (segment.type === "mention") {
@@ -163,6 +185,21 @@ export function collectComposerSegments(node: Node, segments: ComposerSegment[])
       return;
     }
     const element = child as HTMLElement;
+    if (element.dataset?.composerResource) {
+      try {
+        const resource: unknown = JSON.parse(element.dataset.composerResource);
+        if (isResourceSnapshot(resource))
+          segments.push({
+            type: "resource",
+            text: resource.name,
+            resource,
+            ...(element.dataset.resourceAgentId ? { agentID: element.dataset.resourceAgentId } : {}),
+          });
+      } catch {
+        /* 忽略已损坏的编辑器标签。 */
+      }
+      return;
+    }
     if (element.dataset?.userId) {
       segments.push({
         type: "mention",
@@ -202,6 +239,16 @@ export function normalizeComposerSegments(
         continue;
       }
       normalized.push(segment);
+      continue;
+    }
+    if (segment.type === "resource") {
+      if (
+        !normalized.some(
+          (existing) =>
+            existing.type === "resource" && resourceKey(existing.resource) === resourceKey(segment.resource),
+        )
+      )
+        normalized.push(segment);
       continue;
     }
     if (segment.type === "slash") {
@@ -258,6 +305,13 @@ export function areComposerSegmentsEqual(
     if (!other || segment.type !== other.type) {
       return false;
     }
+    if (segment.type === "resource") {
+      return (
+        other.type === "resource" &&
+        segment.agentID === other.agentID &&
+        JSON.stringify(segment.resource) === JSON.stringify(other.resource)
+      );
+    }
     if (segment.type === "mention") {
       if (other.type !== "mention") {
         return false;
@@ -307,6 +361,7 @@ export function updateDrafts(
 export function serializeComposerSegments(segments: readonly ComposerSegment[] | null | undefined): string {
   return (segments ?? [])
     .map((segment) => {
+      if (segment.type === "resource") return "";
       if (segment.type === "mention") {
         const userID = segment.userId || "";
         const userName = segment.userName || userID;
@@ -507,7 +562,9 @@ export function getComposerSlashQueryAtSelection(root: HTMLElement | null | unde
   const prefixRange = document.createRange();
   prefixRange.selectNodeContents(root);
   prefixRange.setEnd(state.textNode, state.startOffset);
-  if (prefixRange.toString().trim()) {
+  const prefix = prefixRange.cloneContents();
+  prefix.querySelectorAll("[data-composer-resource]").forEach((element) => element.remove());
+  if (prefix.textContent?.trim()) {
     return null;
   }
   return state.query.toLowerCase();
@@ -598,7 +655,12 @@ function hasComposerContent(node: Node): boolean {
     if (element.dataset?.composerCaretAnchor) {
       return false;
     }
-    if (element.tagName === "BR" || element.dataset?.userId || element.dataset?.composerSlashToken) {
+    if (
+      element.tagName === "BR" ||
+      element.dataset?.userId ||
+      element.dataset?.composerSlashToken ||
+      element.dataset?.composerResource
+    ) {
       return true;
     }
     return hasComposerContent(element);
@@ -757,7 +819,7 @@ function isComposerTokenNode(node: Node | null | undefined): node is HTMLElement
     return false;
   }
   const element = node as HTMLElement;
-  return Boolean(element.dataset?.userId || element.dataset?.composerSlashToken);
+  return Boolean(element.dataset?.userId || element.dataset?.composerSlashToken || element.dataset?.composerResource);
 }
 
 function getAdjacentSlashTokenContext(node: Node, offset: number): { element: HTMLElement; textNode: Text } | null {

@@ -23,3 +23,11 @@ The main composer, thread composer, and floating chat use the same infinite-quer
 The picker renders a bounded window of rows. Loading another batch keeps existing options available; failures expose a retry action. Built-in command names are shared with the controller and excluded by the backend before pagination.
 
 Complete, Profile, and chat queries have distinct cache keys under each Agent resource prefix. Existing add, delete, and enablement invalidations refresh all active views. Source synchronization also refreshes infinite MCP queries. Complete MCP draft serialization remains independent of loaded batches.
+
+## Unified conversation resources
+
+DSH and Codex private composers, thread replies, floating chat, and task creation use `GET /api/v1/agents/{id}/resources`. The resource menu and slash skill picker share summaries and the existing infinite-query implementation. The menu supports skill, connector, and knowledge-base categories; slash filters enabled skills and excludes built-in commands. Query keys retain each Agent's skill or MCP prefix so existing resource mutations refresh active queries. App binding changes refresh that Agent's resources; global App changes refresh conversation resource queries.
+
+The endpoint requires explicit pagination. Combined MCP and App results use `source:id` identity and search names, IDs, and service descriptions before pagination. Skills reuse the existing selected-page metadata reader. Search, Agent, category, enabled state, and exclusions determine query scope. Revision changes restart pagination through the existing hook.
+
+Selected resources remain in the in-memory room or thread draft across search and page changes. Drafts retain Agent identity. Both slash skills and the resource menu produce structured resource segments. Sending serializes plain task content and `resource_refs`; history renders server-generated selection snapshots. Empty text is allowed for exactly one skill. Execution revalidates the references and uses the existing channel-to-Engine input path.

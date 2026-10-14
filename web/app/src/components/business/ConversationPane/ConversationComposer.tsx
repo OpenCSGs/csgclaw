@@ -1,4 +1,5 @@
-import { ComposerAddMenu } from "./ComposerAddMenu";
+import { ComposerResourceMenu, type ComposerResourceProps } from "@/components/business/ConversationResourcePicker";
+import { canSendComposer, selectedResources } from "@/models/conversationResources";
 import type { SkillContinuation } from "@/models/slashCommands";
 import { WorkingTurnControls } from "./WorkingTurnControls";
 import { memo, useId, useMemo, useRef } from "react";
@@ -33,7 +34,7 @@ import {
   type VoidOrPromise,
 } from "./types";
 
-export type ConversationComposerProps = {
+export type ConversationComposerProps = ComposerResourceProps & {
   authBusyProvider: string;
   authStatuses: CLIProxyAuthStatusMap;
   composerDisabled: boolean;
@@ -81,6 +82,8 @@ export type ConversationComposerProps = {
 };
 
 export const ConversationComposer = memo(function ConversationComposer({
+  resourceAgentID,
+  onPickResources,
   authBusyProvider,
   authStatuses,
   composerDisabled,
@@ -130,7 +133,7 @@ export const ConversationComposer = memo(function ConversationComposer({
   const composerHelpId = useId();
   const isSending = sendStatus === "sending";
   const interactionDisabled = composerDisabled || isSending;
-  const sendDisabled = interactionDisabled || (!draftText.trim() && attachmentDrafts.length === 0);
+  const sendDisabled = interactionDisabled || !canSendComposer(draftSegments, attachmentDrafts.length);
   const actionSuggestions = useMemo(() => composerActionSuggestions(draftText), [draftText]);
 
   function handleFiles(files: File[]) {
@@ -264,7 +267,14 @@ export const ConversationComposer = memo(function ConversationComposer({
           </div>
         ) : null}
         <div className="composer-toolbar">
-          <ComposerAddMenu disabled={interactionDisabled} t={t} onAddFiles={() => fileInputRef.current?.click()} />
+          <ComposerResourceMenu
+            resourceAgentID={resourceAgentID}
+            onPickResources={onPickResources}
+            selected={selectedResources(draftSegments)}
+            disabled={interactionDisabled}
+            t={t}
+            onAddFiles={() => fileInputRef.current?.click()}
+          />
           <input
             ref={fileInputRef}
             className="sr-only"

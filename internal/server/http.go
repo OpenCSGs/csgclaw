@@ -129,6 +129,7 @@ func Run(opts Options) error {
 		}
 		defer handler.CloseConnectors()
 	}
+	handler.EnableConversationResources()
 	handler.SetEventStreamShutdown(streamCtx.Done())
 	if err := handler.RecoverRoomTasks(); err != nil {
 		return fmt.Errorf("recover room tasks: %w", err)
