@@ -47,6 +47,8 @@ import { fetchAgentMCPServerSourceStatus } from "@/api/mcp";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { fetchSkills } from "@/api/skills";
 import { openCSGAuthGuardStub } from "../helpers/openCSGAuthGuard";
+import { useOpenCSGAuthGuard, type OpenCSGAuthGuard } from "@/hooks/workspace/useOpenCSGAuthGuard";
+import { emptyAuthStatus } from "@/models/auth";
 import { createTeamRequest, deleteTeamRequest, fetchTeams, updateTeamRequest } from "@/api/tasks";
 import { useAgentController } from "@/hooks/workspace/useAgentController";
 import { WorkspacePaneTypes } from "@/models/routing";
@@ -239,6 +241,7 @@ function useAgentControllerHarness(
     modelProvidersLoaded?: boolean;
     onAgentDeleted?: (item: AgentLike) => void;
     openCSGAuthenticated?: boolean;
+    openCSGAuthGuard?: OpenCSGAuthGuard;
     bootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshedBootstrapConfig?: RuntimeBootstrapConfig | null;
     refreshMCPServers?: () => Promise<unknown>;
@@ -310,7 +313,7 @@ function useAgentControllerHarness(
     modelProviders: options.modelProviders ?? null,
     modelProvidersLoaded: options.modelProvidersLoaded ?? false,
     onAgentDeleted: options.onAgentDeleted,
-    openCSGAuthGuard,
+    openCSGAuthGuard: options.openCSGAuthGuard ?? openCSGAuthGuard,
     refreshMCPServers: options.refreshMCPServers ?? vi.fn(async () => null),
     refreshHubTemplates: refreshHubTemplatesRef.current,
     refreshWorkspaceAgents,
@@ -528,6 +531,33 @@ describe("useAgentController", () => {
   afterEach(() => {
     window.localStorage.removeItem(feishuRegistrationStorageKey);
     window.localStorage.removeItem("csgclaw.im.lastCreatedAgentModel");
+  });
+
+  it("keeps background model authentication failures inline until the user retries", async () => {
+    const authenticationError = { status: 401, code: "auth_required", message: "Sign in required" };
+    const opencsgProfile = { ...profile, provider: "opencsg", model_provider_id: "opencsg" };
+    const agent = { ...oldAgent, provider: "opencsg", model_provider_id: "opencsg", agent_profile: opencsgProfile };
+    vi.mocked(fetchAgent).mockReset().mockResolvedValue(agent);
+    vi.mocked(fetchAgentProfile).mockResolvedValue(opencsgProfile);
+    vi.mocked(fetchAgentProfileModels).mockRejectedValue(authenticationError);
+    const login = vi.fn(async () => {});
+    const status = { ...emptyAuthStatus(), authenticated: true, logged_in_at: "2026-10-14T00:00:00Z" };
+    const { result } = renderHook(
+      () => {
+        const guard = useOpenCSGAuthGuard({ login, status });
+        const { controller } = useAgentControllerHarness({ agents: [agent], openCSGAuthGuard: guard });
+        return { controller, guard };
+      },
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.controller.agentViewProps.modelError).toEqual(authenticationError));
+    expect(result.current.guard.dialogOpen).toBe(false);
+    expect(result.current.controller.agentViewProps.item?.id).toBe(agent.id);
+    act(() => {
+      result.current.controller.agentViewProps.onRetryModels();
+    });
+    expect(result.current.guard.dialogOpen).toBe(true);
+    expect(login).not.toHaveBeenCalled();
   });
 
   it("prefills the selected agent page draft before full agent/profile requests finish", async () => {
@@ -2293,12 +2323,14 @@ describe("useAgentController", () => {
       expect(result.current.controller.createTeamModalProps?.lockedTeamMemberIDs).toEqual(["agent-manager"]);
     });
 
+    act(() => result.current.controller.createTeamModalProps?.onTeamTitleChange("Renamed team"));
     await act(async () => {
       await result.current.controller.createTeamModalProps?.onCreate();
     });
 
     expect(updateTeamRequest).toHaveBeenCalledWith("team-1", {
       member_agent_ids: ["agent-worker"],
+      title: "Renamed team",
     });
   });
 

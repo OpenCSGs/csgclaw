@@ -1,3 +1,4 @@
+import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { trackDiagnosticSubmission } from "@/shared/diagnostics/renderTiming";
 import { del, get, post, resolveRequestPath, type ApiError } from "@/api/client";
 import type {
@@ -34,6 +35,11 @@ export type StartThreadPayload = {
 };
 
 export type CreateRoomPayload = {
+  configuration?: TaskConfiguration;
+  is_direct?: boolean;
+  task_session?: boolean;
+  client_request_id?: string;
+
   type: RoomType;
   manager_id?: string;
   creator_id: string;

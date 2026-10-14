@@ -1,10 +1,10 @@
+import { TaskConversationControls } from "../TaskConversationControls/TaskConversationControls";
 import { WorkingTurnControls } from "@/components/business/ConversationPane/WorkingTurnControls";
 import { workingParticipantForProgress } from "@/models/turnWorkingParticipant";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorMessage } from "@/api/client";
 import {
   Conversation,
-  ContextUsageRing,
   AgentQuestionComposer,
   type ConversationWorkingParticipant,
   type ConversationPaneProps,
@@ -216,6 +216,7 @@ function ConversationPaneContent({
   onClearRoomMessages = (_id) => {},
   inviteActionLabel,
   onInviteAction,
+  onNewTask,
   mentionCandidates,
   mentionIndex,
   onApplyMention,
@@ -366,9 +367,6 @@ function ConversationPaneContent({
         ? {
             header: (
               <>
-                {participant.showContextUsage || participant.contextUsage ? (
-                  <ContextUsageRing usage={participant.contextUsage} t={t} />
-                ) : null}
                 <WorkingTurnControls participant={participant} t={t} onStop={onStopWorkingTurn} placement="message" />
               </>
             ),
@@ -653,6 +651,16 @@ function ConversationPaneContent({
           slashPickerLoading={slashPickerLoading}
           slashPickerOpen={slashPickerOpen}
           t={t}
+          toolbar={
+            <TaskConversationControls
+              conversation={conversation}
+              participants={workingParticipantsWithActivity}
+              agents={agents}
+              t={t}
+              onNewTask={onNewTask}
+            />
+          }
+          hideWorkingContextUsage
           workingParticipants={messageControls.composerParticipants}
           onApplyMention={onApplyMention}
           onApplySlashCandidate={onApplySlashCandidate}

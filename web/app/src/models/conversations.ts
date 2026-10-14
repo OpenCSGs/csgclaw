@@ -1,3 +1,4 @@
+import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { newerProgressMessage } from "@/models/turnProgress";
 import type { ContextUsage } from "@/models/modelMetadata";
 import { flattenMentionText } from "@/components/business/MessageContent/mentions";
@@ -152,6 +153,14 @@ function videoGenerationParentMessageID(message: IMMessage): string {
 }
 
 export type IMConversation = {
+  configuration?: TaskConfiguration;
+  archived?: boolean;
+  pinned?: boolean;
+  custom_title?: boolean;
+  task_session?: boolean;
+  created_at?: string;
+  client_request_id?: string;
+
   type?: RoomType | null;
   manager_id?: string;
   description?: string | null;
@@ -856,9 +865,6 @@ export function formatTime(value: string | number | Date | null | undefined, loc
   });
 }
 
-/** Format a timestamp for sidebar list items:
- *  today → time only, yesterday → "昨天"/"Yesterday",
- *  2–7 days ago → weekday, same year → month-day, older → year-month-day. */
 export function formatSidebarTime(
   value: string | number | Date | null | undefined,
   locale: LocaleCode,

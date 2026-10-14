@@ -72,10 +72,11 @@ func (r *Runtime) RestartRequired(change agentruntime.RuntimeConfigChange) (bool
 }
 
 func (r *Runtime) ReconcileConfig(ctx context.Context, h agentruntime.Handle, change agentruntime.RuntimeConfigChange) error {
+	r.conversationState(h.RuntimeID).Clear()
 	if err := r.RefreshCodexHomeAgentsFile(ctx, h); err != nil {
 		return err
 	}
-	if !codexConversationProfileChanged(change.Previous.Profile, change.Current.Profile) {
+	if r.deps.ResolveRoomProfile != nil || !codexConversationProfileChanged(change.Previous.Profile, change.Current.Profile) {
 		return nil
 	}
 	return r.resetPersistedConversationMappings(h.RuntimeID)

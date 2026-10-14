@@ -90,3 +90,21 @@ function skillNameFromPath(value: unknown): string {
       .at(-1) || ""
   );
 }
+
+export function skillOriginKind(skill: SkillSummary | null | undefined): "builtin" | "market" | "local" {
+  const source = normalizeSkillSource(skill?.source);
+  if (source === SKILL_SOURCE_BUILTIN || source === SKILL_SOURCE_SYSTEM) {
+    return "builtin";
+  }
+  if (
+    source === SKILL_SOURCE_MARKET ||
+    source === SKILL_SOURCE_OFFICIAL ||
+    source === SKILL_SOURCE_PERSONAL ||
+    skill?.readonly
+  ) {
+    return "market";
+  }
+  return "local";
+}
+
+export const SKILL_SOURCE_MARKET = "market";

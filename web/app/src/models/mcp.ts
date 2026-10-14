@@ -359,7 +359,26 @@ export function mcpServerDetailConfig(config: JSONRecord): JSONRecord {
     const value = config[key];
     if (isJSONRecord(value)) output[key] = Object.fromEntries(Object.keys(value).map((name) => [name, "••••••"]));
   }
-  // 参数可以携带认证信息，详情只展示参数数量。
+  // Arguments may contain credentials; expose only their count.
   if (Array.isArray(config.args)) output.argument_count = config.args.length;
   return output;
 }
+
+export function mcpServerOrigin(server: MCPServer | null | undefined): MCPServerOrigin {
+  const source = String(server?.config?.source ?? "")
+    .trim()
+    .toLowerCase();
+  if (source === "system" || source === "builtin") {
+    return "builtin";
+  }
+  if (source === "market" || source === "official") {
+    return "market";
+  }
+  return "manual";
+}
+
+export function isBuiltinMCPServer(server: MCPServer | null | undefined): boolean {
+  return mcpServerOrigin(server) === "builtin";
+}
+
+export type MCPServerOrigin = "builtin" | "market" | "manual";

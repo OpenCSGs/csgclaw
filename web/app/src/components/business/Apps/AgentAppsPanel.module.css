@@ -402,6 +402,7 @@ fieldset.fields {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  container: embedded-apps / inline-size;
 }
 .sectionTitle {
   margin: 0;
@@ -413,6 +414,14 @@ fieldset.fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px 24px;
+}
+.applicationSection .applicationGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container embedded-apps (max-width: 640px) {
+  .applicationSection .applicationGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .agentGrid {
   display: grid;

@@ -2,6 +2,7 @@ package im
 
 import (
 	"csgclaw/internal/diagnostics"
+	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -247,20 +248,28 @@ type persistedBootstrap struct {
 }
 
 type persistedRoom struct {
-	Type            apitypes.RoomType `json:"type,omitempty"`
-	ManagerID       string            `json:"manager_id,omitempty"`
-	ID              string            `json:"id"`
-	Title           string            `json:"title"`
-	Subtitle        string            `json:"subtitle"`
-	Description     string            `json:"description,omitempty"`
-	Locale          string            `json:"locale,omitempty"`
-	SessionID       string            `json:"session_id,omitempty"`
-	SessionAgentID  string            `json:"session_agent_id,omitempty"`
-	IsDirect        bool              `json:"is_direct,omitempty"`
-	NotifyAllAgents bool              `json:"notify_all_agents,omitempty"`
-	Members         []string          `json:"members"`
-	Messages        string            `json:"messages"`
-	Threads         []persistedThread `json:"threads,omitempty"`
+	Configuration   *taskconfig.Config `json:"configuration,omitempty"`
+	Archived        bool               `json:"archived,omitempty"`
+	Pinned          bool               `json:"pinned,omitempty"`
+	CustomTitle     bool               `json:"custom_title,omitempty"`
+	TaskSession     bool               `json:"task_session,omitempty"`
+	CreatedBy       string             `json:"created_by,omitempty"`
+	ClientRequestID string             `json:"client_request_id,omitempty"`
+	CreatedAt       time.Time          `json:"created_at,omitzero"`
+	Type            apitypes.RoomType  `json:"type,omitempty"`
+	ManagerID       string             `json:"manager_id,omitempty"`
+	ID              string             `json:"id"`
+	Title           string             `json:"title"`
+	Subtitle        string             `json:"subtitle"`
+	Description     string             `json:"description,omitempty"`
+	Locale          string             `json:"locale,omitempty"`
+	SessionID       string             `json:"session_id,omitempty"`
+	SessionAgentID  string             `json:"session_agent_id,omitempty"`
+	IsDirect        bool               `json:"is_direct,omitempty"`
+	NotifyAllAgents bool               `json:"notify_all_agents,omitempty"`
+	Members         []string           `json:"members"`
+	Messages        string             `json:"messages"`
+	Threads         []persistedThread  `json:"threads,omitempty"`
 }
 
 type persistedThread struct {
@@ -481,6 +490,15 @@ func loadPersistedRooms(statePath string, rooms []persistedRoom) ([]Room, error)
 			return nil, err
 		}
 		loaded = append(loaded, Room{
+			Archived:        room.Archived,
+			Pinned:          room.Pinned,
+			CustomTitle:     room.CustomTitle,
+			TaskSession:     room.TaskSession,
+			Configuration:   taskconfig.Clone(room.Configuration),
+			CreatedBy:       room.CreatedBy,
+			ClientRequestID: room.ClientRequestID,
+			CreatedAt:       room.CreatedAt,
+
 			Type:            apitypes.NormalizeRoomType(room.Type),
 			ManagerID:       room.ManagerID,
 			ID:              room.ID,
@@ -654,6 +672,15 @@ func saveRoomThreadsForState(statePath string, room Room) error {
 
 func persistedRoomFromRoom(room Room) persistedRoom {
 	return persistedRoom{
+		Archived:        room.Archived,
+		Pinned:          room.Pinned,
+		CustomTitle:     room.CustomTitle,
+		TaskSession:     room.TaskSession,
+		Configuration:   taskconfig.Clone(room.Configuration),
+		CreatedBy:       room.CreatedBy,
+		ClientRequestID: room.ClientRequestID,
+		CreatedAt:       room.CreatedAt,
+
 		Type:            apitypes.NormalizeRoomType(room.Type),
 		ManagerID:       room.ManagerID,
 		ID:              room.ID,
@@ -1206,7 +1233,7 @@ func migrateLegacyManagerMentionTags(content string, managerAliases map[string]s
 
 func ensureAdminManagerRoom(rooms []Room) []Room {
 	for _, room := range rooms {
-		if room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(room, adminUserID) && containsUserIDInRoom(room, managerParticipantUserID) {
+		if !room.TaskSession && room.IsDirect && len(room.Members) == 2 && containsUserIDInRoom(room, adminUserID) && containsUserIDInRoom(room, managerParticipantUserID) {
 			normalized := room
 			if normalized.Title == "Admin & Manager" {
 				normalized.Title = "admin & manager"
@@ -1270,6 +1297,12 @@ func containsMentionID(mentions []Mention, userID string) bool {
 
 func containsUserIDInConversation(conv Conversation, userID string) bool {
 	return containsUserIDInRoom(conv, userID)
+}
+
+func (s *Service) CurrentUserID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.currentUserID
 }
 
 func (s *Service) Bootstrap() Bootstrap {
@@ -1529,17 +1562,21 @@ func (s *Service) DeleteRoom(roomID string) error {
 	if roomID == "" {
 		return ErrRoomIDRequired
 	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if _, ok := s.rooms[roomID]; !ok {
+	previous, ok := s.rooms[roomID]
+	if !ok {
 		return ErrRoomNotFound
 	}
 	delete(s.rooms, roomID)
-	s.Diagnostics().DeleteRoom(roomID)
 	s.rebuildSessionRoomIndexLocked()
-	return s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.rooms[roomID] = previous
+		s.rebuildSessionRoomIndexLocked()
+		return err
+	}
+	s.Diagnostics().DeleteRoom(roomID)
+	return nil
 }
 
 // EnsureAgentSessionRoom atomically resolves or creates the persisted room for
@@ -1660,41 +1697,60 @@ func (s *Service) UpdateRoom(roomID string, req UpdateRoomRequest) (Room, error)
 	if roomID == "" {
 		return Room{}, ErrRoomIDRequired
 	}
-	if req.NotifyAllAgents == nil {
-		return Room{}, fmt.Errorf("notify_all_agents is required")
+	if req.NotifyAllAgents == nil && req.Title == nil && req.Archived == nil && req.Pinned == nil && req.Configuration == nil {
+		return Room{}, fmt.Errorf("room update is empty")
 	}
-
+	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
+		return Room{}, ErrTitleRequired
+	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	room, ok := s.rooms[roomID]
 	if !ok {
-		s.mu.Unlock()
 		return Room{}, ErrRoomNotFound
 	}
-	if room.IsDirect {
-		s.mu.Unlock()
-		return Room{}, fmt.Errorf("direct rooms always notify their agent")
+	if req.NotifyAllAgents != nil {
+		if room.IsDirect {
+			return Room{}, fmt.Errorf("direct rooms always notify their agent")
+		}
+		if strings.TrimSpace(room.SessionID) == "" {
+			return Room{}, fmt.Errorf("group room delivery is controlled by its type and @mentions")
+		}
 	}
-	if strings.TrimSpace(room.SessionID) == "" {
-		s.mu.Unlock()
-		return Room{}, fmt.Errorf("group room delivery is controlled by its type and @mentions")
+	if req.Configuration != nil {
+		if !room.IsDirect {
+			return Room{}, fmt.Errorf("session configuration requires a direct room")
+		}
+		if room.Configuration != nil && room.Configuration.WorkspaceDir != req.Configuration.WorkspaceDir {
+			return Room{}, fmt.Errorf("the session working directory is locked; start a new task")
+		}
 	}
-	if room.NotifyAllAgents == *req.NotifyAllAgents {
-		presented := s.presentRoomLocked(*room, "")
-		s.mu.Unlock()
-		return presented, nil
+	previous := *room
+	if req.Configuration != nil {
+		room.Configuration = taskconfig.Clone(req.Configuration)
 	}
-	previous := room.NotifyAllAgents
-	room.NotifyAllAgents = *req.NotifyAllAgents
+	if req.Title != nil {
+		room.Title = strings.TrimSpace(*req.Title)
+		room.CustomTitle = true
+	}
+	if req.Archived != nil {
+		room.Archived = *req.Archived
+	}
+	if req.Pinned != nil {
+		room.Pinned = *req.Pinned
+	}
+	if req.NotifyAllAgents != nil {
+		room.NotifyAllAgents = *req.NotifyAllAgents
+	}
+	if req.Configuration == nil && room.Title == previous.Title && room.CustomTitle == previous.CustomTitle && room.Archived == previous.Archived && room.Pinned == previous.Pinned && room.NotifyAllAgents == previous.NotifyAllAgents {
+		return s.presentRoomLocked(*room, ""), nil
+	}
 	if err := s.saveRoomLocked(*room); err != nil {
-		room.NotifyAllAgents = previous
-		s.mu.Unlock()
+		*room = previous
 		return Room{}, err
 	}
 	presented := s.presentRoomLocked(*room, "")
-	bus := s.bus
-	s.mu.Unlock()
-
-	publishRoomEvent(bus, EventTypeRoomUpdated, presented)
+	s.publishRoomEventLocked(EventTypeRoomUpdated, presented)
 	return presented, nil
 }
 
@@ -2342,6 +2398,12 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		}
 		req.MemberIDs = append(append([]string(nil), req.MemberIDs...), req.ManagerID)
 	}
+	if req.IsDirect && req.Type != apitypes.RoomTypeFree {
+		return Room{}, fmt.Errorf("direct conversations must use free delivery")
+	}
+	if len(req.ClientRequestID) > 128 {
+		return Room{}, fmt.Errorf("client_request_id is too long")
+	}
 	title := strings.TrimSpace(req.Title)
 	description := strings.TrimSpace(req.Description)
 	creatorID := strings.TrimSpace(req.CreatorID)
@@ -2366,6 +2428,19 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		return Room{}, err
 	}
 
+	if req.IsDirect && len(members) != 2 {
+		return Room{}, fmt.Errorf("direct conversations require exactly two members")
+	}
+	if req.ClientRequestID != "" {
+		for _, existing := range s.rooms {
+			if existing.CreatedBy == creatorID && existing.ClientRequestID == req.ClientRequestID {
+				if existing.TaskSession != req.TaskSession || existing.IsDirect != req.IsDirect || existing.Type != req.Type || !sameRoomMembers(existing.Members, members) {
+					return Room{}, fmt.Errorf("client_request_id already belongs to another conversation")
+				}
+				return s.presentRoomLocked(*existing, req.Locale), nil
+			}
+		}
+	}
 	managerID := ""
 	if req.Type == apitypes.RoomTypeOnDemand {
 		managerID = s.resolveRoomUserIDLocked(req.ManagerID)
@@ -2374,15 +2449,21 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 		}
 	}
 	room := Room{
-		Type:        req.Type,
-		ManagerID:   managerID,
-		ID:          fmt.Sprintf("room-%d", time.Now().UnixNano()),
-		Title:       title,
-		Subtitle:    formatRoomSubtitle(len(members)),
-		Description: description,
-		Locale:      messagePresentationLocale(req.Locale),
-		IsDirect:    false,
-		Members:     members,
+		Type:            req.Type,
+		ManagerID:       managerID,
+		ID:              fmt.Sprintf("room-%d", time.Now().UnixNano()),
+		Title:           title,
+		Subtitle:        formatRoomSubtitle(len(members)),
+		Description:     description,
+		Locale:          messagePresentationLocale(req.Locale),
+		IsDirect:        req.IsDirect,
+		TaskSession:     req.TaskSession,
+		Configuration:   taskconfig.Clone(req.Configuration),
+		CustomTitle:     req.TaskSession,
+		CreatedBy:       creatorID,
+		ClientRequestID: req.ClientRequestID,
+		CreatedAt:       time.Now().UTC(),
+		Members:         members,
 		Messages: []Message{
 			{
 				ID:       fmt.Sprintf("msg-%d", time.Now().UnixNano()),
@@ -2400,6 +2481,7 @@ func (s *Service) CreateRoom(req CreateRoomRequest) (Room, error) {
 
 	s.rooms[room.ID] = &room
 	if err := s.saveLocked(); err != nil {
+		delete(s.rooms, room.ID)
 		return Room{}, err
 	}
 	presented := s.presentRoomLocked(room, messagePresentationLocale(req.Locale))
@@ -2808,7 +2890,7 @@ func (s *Service) presentRoomLocked(room Room, locale string) Room {
 	cloned := cloneRoom(room)
 	cloned.Messages = s.presentMessagesLocked(room, false, locale)
 	cloned.MemberNames = s.roomMemberNamesLocked(cloned.Members)
-	if !cloned.IsDirect || len(cloned.Members) != 2 {
+	if cloned.CustomTitle || !cloned.IsDirect || len(cloned.Members) != 2 {
 		return cloned
 	}
 
@@ -2854,6 +2936,7 @@ func (s *Service) presentConversationLocked(conv Conversation) Conversation {
 }
 
 func cloneRoom(room Room) Room {
+	room.Configuration = taskconfig.Clone(room.Configuration)
 	cloned := room
 	cloned.Members = append([]string(nil), room.Members...)
 	cloned.MemberNames = append([]string(nil), room.MemberNames...)
@@ -3522,7 +3605,7 @@ func (s *Service) bootstrapLocked() Bootstrap {
 func (s *Service) ensureAdminAgentRoomLocked(agentID, agentName string) (*Room, bool) {
 	agentUserID := s.resolveRoomUserIDLocked(agentID)
 	for _, room := range s.rooms {
-		if len(room.Members) != 2 {
+		if room.TaskSession || len(room.Members) != 2 {
 			continue
 		}
 		if containsUserIDInRoom(*room, adminUserID) && containsUserIDInRoom(*room, agentUserID) {
@@ -3614,4 +3697,20 @@ func (s *Service) saveMessageProjectionLocked(transient bool) error {
 		return nil
 	}
 	return s.saveLocked()
+}
+
+func sameRoomMembers(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[string]bool, len(a))
+	for _, member := range a {
+		set[member] = true
+	}
+	for _, member := range b {
+		if !set[member] {
+			return false
+		}
+	}
+	return true
 }

@@ -1,0 +1,95 @@
+/* File tree and preview selectors are global, outside CSS Modules. */
+
+/* Override DialogContent layout to keep the footer below the expanding body. */
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(960px, calc(100vw - 40px));
+  height: min(720px, calc(100dvh - 40px));
+  overflow: hidden;
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.footer {
+  justify-content: flex-end;
+}
+
+.footerDelete {
+  margin-right: auto;
+}
+
+.panels {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  flex: 1 1 auto;
+  gap: 0;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.panels > :global(.workspace-file-tree) {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.panels > :global(.workspace-file-preview) {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panels :global(.workspace-preview-body) {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+@media (max-width: 720px) {
+  .panels {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(140px, 220px) minmax(0, 1fr);
+  }
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--line);
+}
+
+.origin {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 18px;
+}
+
+.confirmDialog {
+  width: min(420px, calc(100vw - 40px));
+}
+
+.confirmError {
+  margin: 0;
+  padding: 0 24px;
+  color: var(--danger-700, #b42318);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}

@@ -18,3 +18,5 @@ export * from "./types";
 export * from "./useConversationDraftEditorSync";
 
 export { ContextUsageRing } from "./ContextUsageRing";
+
+export * from "./ComposerAddMenu";

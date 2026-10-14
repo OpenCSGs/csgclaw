@@ -1,3 +1,6 @@
+import type { TaskConfiguration } from "@/models/taskConfiguration";
+import { settingsDialogSearch } from "@/models/workspaceDialogs";
+import { useTaskEntry } from "./useTaskEntry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
@@ -9,6 +12,8 @@ import {
   isDirectConversation,
   resolveConversationUser,
   upsertUserInData,
+  upsertConversationInData,
+  removeConversationFromData,
 } from "@/models/conversations";
 import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
 import { MANAGER_AGENT_ID, MANAGER_AGENT_NAME, MANAGER_PARTICIPANT_ID } from "@/shared/constants/agents";
@@ -341,6 +346,7 @@ export function useWorkspaceController() {
     t,
   });
   const agent = useAgentController({
+    redirectToIncompleteManagerProfile: false,
     activeConversationId,
     activePane,
     agents,
@@ -414,6 +420,8 @@ export function useWorkspaceController() {
   const conversation = useConversationController({
     activeConversationId,
     activePane,
+    autoSelectFallbackConversation: location.pathname !== "/" && location.pathname !== "/new",
+    messageListActive: location.pathname !== "/" && location.pathname !== "/new",
     agents,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
@@ -606,7 +614,12 @@ export function useWorkspaceController() {
   const selectedTeamID = activePane.type === WorkspacePaneTypes.team ? String(activePane.id || "") : "";
   const selectedTeam = agent.teams.find((item) => item.id === selectedTeamID) ?? null;
   const selectedTeamTasks = selectedTeam ? task.tasks.filter((item) => item.team_id === selectedTeam.id) : [];
-  const selectedHumanID = activePane.type === WorkspacePaneTypes.human ? String(activePane.id || "") : "";
+  const selectedHumanID =
+    new URLSearchParams(location.search).get("dialog") === "profile"
+      ? new URLSearchParams(location.search).get("human") || ""
+      : activePane.type === WorkspacePaneTypes.human
+        ? String(activePane.id || "")
+        : "";
   const selectedHuman = selectedHumanID ? (conversation.usersById.get(selectedHumanID) ?? null) : null;
   const [showCreateModelProviderModal, setShowCreateModelProviderModal] = useState(false);
   const [createModelProviderBusy, setCreateModelProviderBusy] = useState(false);
@@ -828,7 +841,7 @@ export function useWorkspaceController() {
       }
       const refreshed = await refreshWorkspaceModelProviders();
       const next = refreshed?.providers.find((provider) => provider.id === created.id) ?? created;
-      selectModelProvider(next);
+      if (new URLSearchParams(location.search).get("dialog") !== "settings") selectModelProvider(next);
       setShowCreateModelProviderModal(false);
     } catch (_) {
       setCreateModelProviderError(t("modelProviderCreateFailed"));
@@ -874,6 +887,11 @@ export function useWorkspaceController() {
       ...hub,
       detailPaneProps: {
         ...hub.detailPaneProps,
+        onSelectSkillInPlace: hub.setSelectedHubSkillName,
+        onSelectMCPInPlace: hub.setSelectedMCPServerName,
+        onSelectKnowledgeBaseInPlace: (item: RemoteKnowledgeBase | null | undefined) =>
+          hub.setSelectedKnowledgeBaseID(item?.id || ""),
+        onCreateMCPInPlace: hub.detailPaneProps.onCreateMCP,
         onSelectTemplate: selectHubTemplate,
         onSelectSkill: (name: string | null | undefined) =>
           selectHubSkill(name ? ({ name, description: "" } as SkillSummary) : null),
@@ -911,11 +929,24 @@ export function useWorkspaceController() {
           ? t("resourcesKnowledgeBasesLoading")
           : t("resourcesLoading");
 
+  const taskEntry = useTaskEntry({
+    currentUserID: displayData?.current_user_id ?? "",
+    rooms,
+    onUpdate: (room) => setBootstrapData((current) => upsertConversationInData(current, room)),
+    onDelete: (id) => {
+      setBootstrapData((current) => removeConversationFromData(current, id));
+      if (activePane.type === WorkspacePaneTypes.conversation && activePane.id === id) navigate("/new");
+    },
+    onOpen: (room) => selectConversation(room.id, { rooms: [room] }),
+    isWorking: (id) => participantWork.workingParticipantsForRoom(id).length > 0,
+  });
+
   if (!displayData) {
     return {
       ready: false,
       loadingText: loadingError || resourceLoadingText,
       activePane,
+      configSettings: configSettings.settings,
       mainPanelHasThread: false,
       modelProviders,
       modelProvidersLoaded,
@@ -937,6 +968,11 @@ export function useWorkspaceController() {
 
   return {
     ready: true,
+    taskEntry,
+    openAgentSettings: agent.openEditAgentModal,
+    openWorkspaceSettings: (section = "") =>
+      navigate({ search: settingsDialogSearch(location.search, section) }, { replace: true }),
+    configSettings: configSettings.settings,
     loadingText: "",
     t,
     shellClassName: shell.shellClassName,
@@ -957,6 +993,7 @@ export function useWorkspaceController() {
       onOpenChange: setFloatingChatOpen,
     },
     sidebarProps: {
+      taskEntry,
       isSidebarCollapsed,
       onCollapseSidebar: () => setIsSidebarCollapsed(true),
       onExpandSidebar: () => setIsSidebarCollapsed(false),
@@ -1049,6 +1086,7 @@ export function useWorkspaceController() {
       onOpenConfigSettings: configSettings.openConfigModal,
       onOpenSettings: selectSettings,
       authStatus: auth.status,
+      authExpired: auth.status.authenticated === true && !openCSGAuthGuard.authenticated,
       authEnvironment: auth.environment,
       authBusy: auth.busy,
       authLoggingOut: auth.loggingOut,
@@ -1080,6 +1118,10 @@ export function useWorkspaceController() {
       t,
       locale,
       hub: hubViewHub,
+      onSelectTemplateInPlace: (item: HubTemplate) => {
+        setSelectedHubResourceType("template");
+        setSelectedHubTemplateId(item.id || "");
+      },
       onCreateFromTemplate: openCreateAgentFromTemplate,
     },
     agentViewProps: {
@@ -1105,6 +1147,8 @@ export function useWorkspaceController() {
     },
     conversationViewProps: {
       ...conversation.conversationViewProps,
+      onNewTask: (agentID?: string, configuration?: TaskConfiguration) =>
+        navigate(agentID ? `/new?agent=${encodeURIComponent(agentID)}` : "/new", { state: { configuration } }),
       agents: agent.agentItems,
       onOpenAgentDetail: openConversationAgentDetailFromAvatar,
       onOpenThread: openConversationThread,

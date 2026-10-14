@@ -1,6 +1,7 @@
 package apitypes
 
 import (
+	"csgclaw/internal/taskconfig"
 	"encoding/json"
 	"io"
 	"time"
@@ -196,21 +197,29 @@ func (room Room) IsOnDemand() bool {
 }
 
 type Room struct {
-	Type            RoomType      `json:"type,omitempty"`
-	ManagerID       string        `json:"manager_id,omitempty"`
-	ID              string        `json:"id"`
-	Title           string        `json:"title"`
-	Subtitle        string        `json:"subtitle"`
-	Description     string        `json:"description,omitempty"`
-	Locale          string        `json:"locale,omitempty"`
-	SessionID       string        `json:"session_id,omitempty"`
-	SessionAgentID  string        `json:"session_agent_id,omitempty"`
-	IsDirect        bool          `json:"is_direct,omitempty"`
-	NotifyAllAgents bool          `json:"notify_all_agents"`
-	Members         []string      `json:"members"`
-	MemberNames     []string      `json:"member_names,omitempty"`
-	Messages        []Message     `json:"messages"`
-	Threads         []ThreadState `json:"threads,omitempty"`
+	Configuration   *taskconfig.Config `json:"configuration,omitempty"`
+	Archived        bool               `json:"archived,omitempty"`
+	Pinned          bool               `json:"pinned,omitempty"`
+	CustomTitle     bool               `json:"custom_title,omitempty"`
+	TaskSession     bool               `json:"task_session,omitempty"`
+	CreatedBy       string             `json:"created_by,omitempty"`
+	ClientRequestID string             `json:"client_request_id,omitempty"`
+	CreatedAt       time.Time          `json:"created_at,omitzero"`
+	Type            RoomType           `json:"type,omitempty"`
+	ManagerID       string             `json:"manager_id,omitempty"`
+	ID              string             `json:"id"`
+	Title           string             `json:"title"`
+	Subtitle        string             `json:"subtitle"`
+	Description     string             `json:"description,omitempty"`
+	Locale          string             `json:"locale,omitempty"`
+	SessionID       string             `json:"session_id,omitempty"`
+	SessionAgentID  string             `json:"session_agent_id,omitempty"`
+	IsDirect        bool               `json:"is_direct,omitempty"`
+	NotifyAllAgents bool               `json:"notify_all_agents"`
+	Members         []string           `json:"members"`
+	MemberNames     []string           `json:"member_names,omitempty"`
+	Messages        []Message          `json:"messages"`
+	Threads         []ThreadState      `json:"threads,omitempty"`
 }
 
 type CreateRoomTaskRequest struct {
@@ -220,17 +229,25 @@ type CreateRoomTaskRequest struct {
 }
 
 type CreateRoomRequest struct {
-	Type        RoomType `json:"type"`
-	ManagerID   string   `json:"manager_id,omitempty"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	CreatorID   string   `json:"creator_id"`
-	MemberIDs   []string `json:"member_ids"`
-	Locale      string   `json:"locale"`
+	Configuration   *taskconfig.Config `json:"configuration,omitempty"`
+	IsDirect        bool               `json:"is_direct,omitempty"`
+	TaskSession     bool               `json:"task_session,omitempty"`
+	ClientRequestID string             `json:"client_request_id,omitempty"`
+	Type            RoomType           `json:"type"`
+	ManagerID       string             `json:"manager_id,omitempty"`
+	Title           string             `json:"title"`
+	Description     string             `json:"description"`
+	CreatorID       string             `json:"creator_id"`
+	MemberIDs       []string           `json:"member_ids"`
+	Locale          string             `json:"locale"`
 }
 
 type UpdateRoomRequest struct {
-	NotifyAllAgents *bool `json:"notify_all_agents,omitempty"`
+	Configuration   *taskconfig.Config `json:"configuration,omitempty"`
+	Title           *string            `json:"title,omitempty"`
+	Archived        *bool              `json:"archived,omitempty"`
+	Pinned          *bool              `json:"pinned,omitempty"`
+	NotifyAllAgents *bool              `json:"notify_all_agents,omitempty"`
 }
 
 type AddRoomMembersRequest struct {

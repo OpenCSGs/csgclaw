@@ -2465,6 +2465,25 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 			http.Error(w, fmt.Sprintf("decode request: %v", err), http.StatusBadRequest)
 			return
 		}
+		if req.Archived != nil && *req.Archived && !h.allowRoomManagement(w, id) {
+			return
+		}
+		if req.Configuration != nil {
+			if !h.allowRoomManagement(w, id) {
+				return
+			}
+			room, found := h.im.Room(id)
+			if !found {
+				http.NotFound(w, r)
+				return
+			}
+			cfg, err := h.validateTaskConfiguration(room, req.Configuration)
+			if err != nil {
+				writeAPIError(w, err, http.StatusBadRequest)
+				return
+			}
+			req.Configuration = cfg
+		}
 		room, err := channel.UpdateRoom(id, req)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
@@ -2476,6 +2495,9 @@ func (h *Handler) handleLocalRoomByID(w http.ResponseWriter, r *http.Request, id
 		}
 		writeJSON(w, http.StatusOK, room)
 	case http.MethodDelete:
+		if !h.allowRoomManagement(w, id) {
+			return
+		}
 		var deletedRoom im.Room
 		hasDeletedRoom := false
 		if h.im != nil {
@@ -3035,6 +3057,14 @@ func (h *Handler) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.Configuration != nil {
+		cfg, err := h.validateTaskConfiguration(apitypes.Room{IsDirect: req.IsDirect, Members: req.MemberIDs}, req.Configuration)
+		if err != nil {
+			writeAPIError(w, err, http.StatusBadRequest)
+			return
+		}
+		req.Configuration = cfg
+	}
 	room, err := channel.CreateRoom(req)
 	if err != nil {
 		writeAPIError(w, err, http.StatusBadRequest)

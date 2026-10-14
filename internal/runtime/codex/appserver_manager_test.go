@@ -3052,6 +3052,26 @@ func TestAppServerManagerHelperProcess(t *testing.T) {
 	}
 	mode := args[len(args)-1]
 	switch mode {
+	case "room-configuration":
+		threads := 0
+		runAppServerHelper(t, func(index int, msg map[string]any) (map[string]any, bool) {
+			params, _ := msg["params"].(map[string]any)
+			switch msg["method"] {
+			case "thread/start":
+				threads++
+				return rpcResult(msg["id"], map[string]any{"threadId": fmt.Sprintf("thread-%d-%d", os.Getpid(), threads)}), true
+			case "thread/resume":
+				return rpcResult(msg["id"], map[string]any{"threadId": params["threadId"]}), true
+			case "turn/start":
+				threadID := params["threadId"]
+				turnID := fmt.Sprintf("turn-%d", index)
+				writeRPCNotification(t, "turn/started", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID}})
+				writeRPCNotification(t, "turn/completed", map[string]any{"threadId": threadID, "turn": map[string]any{"id": turnID, "status": "completed"}})
+				return rpcResult(msg["id"], map[string]any{"turnId": turnID}), true
+			}
+			return nil, false
+		})
+
 	case "fail-before-handshake":
 		_, _ = fmt.Fprintln(os.Stderr, "login failed")
 		_, _ = fmt.Fprintln(os.Stderr, "api_key = sk-secret")

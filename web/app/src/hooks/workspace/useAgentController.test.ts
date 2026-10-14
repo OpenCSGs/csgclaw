@@ -17,6 +17,10 @@ describe("shouldReturnToAgentOverviewAfterAgentMissing", () => {
     ).toBe(true);
   });
 
+  it("does not treat the agent overview as a missing agent", () => {
+    expect(shouldReturnToAgentOverviewAfterAgentMissing({ type: WorkspacePaneTypes.agent, id: "" })).toBe(false);
+  });
+
   it("does not redirect non-agent panes", () => {
     expect(
       shouldReturnToAgentOverviewAfterAgentMissing({

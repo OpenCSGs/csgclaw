@@ -102,10 +102,10 @@ describe("i18n messages", () => {
     };
 
     expect(localizeAPIError(error, createTranslator("zh"))).toBe(
-      "当前房间仍有未完成的任务。请先停止或完成任务，再删除房间。",
+      "当前房间仍有未完成的任务。请先停止或完成任务，再归档或删除。",
     );
     expect(localizeAPIError(error, createTranslator("en"))).toBe(
-      "This room still has unfinished tasks. Stop or complete them before deleting the room.",
+      "This room still has unfinished tasks. Stop or complete them before archiving or deleting it.",
     );
   });
 

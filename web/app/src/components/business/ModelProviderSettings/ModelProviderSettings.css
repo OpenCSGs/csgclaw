@@ -976,3 +976,12 @@
 .model-context-source.is-error {
   color: var(--danger);
 }
+
+.model-provider-page.embedded {
+  height: auto;
+  padding: 0;
+  overflow: visible;
+}
+.model-provider-page.embedded > .model-provider-list-header {
+  display: none;
+}

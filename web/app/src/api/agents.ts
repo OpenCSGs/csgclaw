@@ -514,3 +514,22 @@ export async function setAgentResourceEnabled(
   const resource = kind === "skill" ? "skills" : "mcp-servers";
   return put(`${base}/${resource}/${encodeURIComponent(name)}/enabled`, { enabled, resource_version: resourceVersion });
 }
+
+export function fetchNotificationParticipants(): Promise<ParticipantLike[]> {
+  return get("api/v1/channels/csgclaw/participants?type=notification");
+}
+
+export function createNotificationSourceRequest(payload: { name?: string }): Promise<ParticipantLike> {
+  return post("api/v1/channels/csgclaw/participants", { type: "notification", ...payload });
+}
+
+export function deleteNotificationSourceRequest(participantID: string): Promise<void> {
+  return del(`api/v1/channels/csgclaw/participants/${encodeURIComponent(participantID)}`);
+}
+
+export function updateNotificationParticipantRequest(
+  participantID: string,
+  payload: { name?: string; metadata: JSONRecord },
+): Promise<ParticipantLike> {
+  return patch(`api/v1/channels/csgclaw/participants/${encodeURIComponent(participantID)}`, payload);
+}

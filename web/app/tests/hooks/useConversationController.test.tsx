@@ -151,6 +151,7 @@ function deferred<T>() {
 function renderConversationController(
   options: {
     activeConversationId?: string;
+    routedConversationId?: string;
     agents?: AgentLike[];
     data?: IMData;
     managerProfile?: AgentProfileLike | null;
@@ -178,7 +179,7 @@ function renderConversationController(
     ({ activeConversationId = directConversation.id, data = defaultData, messageListActive = true }) =>
       useConversationController({
         activeConversationId,
-        activePane: { type: WorkspacePaneTypes.conversation, id: activeConversationId },
+        activePane: { type: WorkspacePaneTypes.conversation, id: options.routedConversationId ?? activeConversationId },
         agents,
         authBusyProvider: "",
         authStatuses: {},
@@ -225,6 +226,42 @@ describe("useConversationController", () => {
     apiMocks.deleteRoomRequest.mockReset();
     apiMocks.fetchThreadRequest.mockReset();
     apiMocks.sendMessageRequest.mockReset();
+  });
+
+  it("renders and sends to the routed task while the previous selection is stale", async () => {
+    const oldRoom = {
+      ...directConversation,
+      id: "manager-room",
+      title: "Manager",
+      messages: [{ id: "old", content: "old manager task", sender_id: "manager" }],
+    };
+    const nextRoom = {
+      ...directConversation,
+      id: "worker-task",
+      title: "Worker task",
+      messages: [{ id: "new", content: "new task", sender_id: "u-admin" }],
+    };
+    apiMocks.sendMessageRequest.mockResolvedValue({ id: "reply", content: "continue", sender_id: "u-admin" });
+    const { result } = renderConversationController({
+      activeConversationId: oldRoom.id,
+      routedConversationId: nextRoom.id,
+      data: { ...dataWithMessages([]), rooms: [oldRoom, nextRoom] },
+    });
+    expect(result.current.selectedConversation?.id).toBe(nextRoom.id);
+    expect(result.current.visibleMessages.map((message) => message.id)).toEqual(["new"]);
+    const editor = document.createElement("div");
+    editor.textContent = "continue";
+    act(() => {
+      result.current.conversationViewProps.editorRef.current = editor;
+      result.current.conversationViewProps.onSyncComposer();
+    });
+    await act(async () => {
+      await result.current.conversationViewProps.onSendMessage();
+    });
+    expect(apiMocks.sendMessageRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ room_id: nextRoom.id, content: "continue" }),
+      expect.anything(),
+    );
   });
 
   it("keeps an unopened thread local until the first reply is sent", async () => {

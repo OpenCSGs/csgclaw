@@ -11,6 +11,8 @@ This directory documents the CSGClaw frontend under `web/app`.
 - `architecture.md`: A single ASCII architecture diagram for the frontend. Use it for a quick visual overview of build boundaries, runtime boundaries, source ownership, UI composition, data flow, dependency direction, component packaging, and quality gates.
 - `architecture.zh.md`: Chinese companion to `architecture.md`. It explains the same architecture diagram in Chinese.
 
+- `task-workspace.md`: Session configuration, runtime isolation, and task navigation contracts.
+
 ## Reading Order
 
 Start with `architecture.md` or `architecture.zh.md` when you need a fast mental model of the frontend.

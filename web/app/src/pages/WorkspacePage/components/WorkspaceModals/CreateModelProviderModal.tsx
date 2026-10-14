@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ModelProviderCheckResult, ModelProviderPayload } from "@/api/modelProviders";
 import { ModelProviderModelList } from "@/components/business/ProfileControls";
-import { Button, Select } from "@/components/ui";
+import { Button, Select, DialogRoot, DialogContent, DialogTitle, DialogDescription } from "@/components/ui";
 import {
   MODEL_PROVIDER_PRESETS,
   modelProviderPresetMeta,
@@ -190,12 +190,19 @@ export function CreateModelProviderModal({
             : t("modelProviderNotChecked");
 
   return (
-    <div className="modal-backdrop" onClick={requestClose}>
-      <div className="modal-card create-model-provider-modal" onClick={(event) => event.stopPropagation()}>
+    <DialogRoot
+      open
+      onOpenChange={(open) => {
+        if (!open) requestClose();
+      }}
+    >
+      <DialogContent className="create-model-provider-modal">
         <div className="modal-header">
           <div>
-            <div className="modal-title">{t("modelProviderCreateTitle")}</div>
-            <div className="create-model-provider-subtitle">{t("modelProviderCreateSubtitle")}</div>
+            <DialogTitle className="modal-title">{t("modelProviderCreateTitle")}</DialogTitle>
+            <DialogDescription className="create-model-provider-subtitle">
+              {t("modelProviderCreateSubtitle")}
+            </DialogDescription>
             {error ? (
               <div role="alert" className="form-error create-model-provider-submit-error">
                 {error}
@@ -350,7 +357,7 @@ export function CreateModelProviderModal({
             {t("modelProviderCreateAction")}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </DialogRoot>
   );
 }

@@ -1,9 +1,21 @@
 import { lazy, Suspense } from "react";
 import type { ComponentType, ReactElement } from "react";
-import { createHashRouter, RouterProvider } from "react-router-dom";
+import { createHashRouter, RouterProvider, Navigate, useLocation } from "react-router-dom";
+import { settingsDialogSearch } from "@/models/workspaceDialogs";
 import type { RouteObject } from "react-router-dom";
 import { WorkspacePage } from "@/pages/WorkspacePage/WorkspacePage";
 import { loadRouteModule } from "./loadRouteModule";
+
+const StartTaskPage = lazy(() =>
+  loadRouteModule(() =>
+    import("@/pages/StartTaskPage/StartTaskPage").then((module) => ({ default: module.StartTaskPage })),
+  ),
+);
+const AgentOverviewPage = lazy(() =>
+  loadRouteModule(() =>
+    import("@/pages/AgentOverviewPage/AgentOverviewPage").then((module) => ({ default: module.AgentOverviewPage })),
+  ),
+);
 
 const AppsPage = lazy(() =>
   loadRouteModule(() => import("@/pages/AppsPage/AppsPage").then((module) => ({ default: module.AppsPage }))),
@@ -29,15 +41,10 @@ const ModelProviderPage = lazy(() =>
     import("@/pages/ModelProviderPage/ModelProviderPage").then((module) => ({ default: module.ModelProviderPage })),
   ),
 );
-const SettingsPage = lazy(() =>
-  loadRouteModule(() => import("@/pages/SettingsPage").then((module) => ({ default: module.SettingsPage }))),
-);
 const SessionDemoPage = lazy(() =>
   loadRouteModule(() => import("@/pages/SessionDemoPage").then((module) => ({ default: module.SessionDemoPage }))),
 );
-const TeamPage = lazy(() =>
-  loadRouteModule(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage }))),
-);
+
 const TasksPage = lazy(() =>
   loadRouteModule(() => import("@/pages/TasksPage").then((module) => ({ default: module.TasksPage }))),
 );
@@ -50,24 +57,31 @@ function routeElement(Page: ComponentType): ReactElement {
   );
 }
 
+function SettingsRedirect() {
+  const location = useLocation();
+  return <Navigate replace to={{ pathname: "/", search: settingsDialogSearch(location.search) }} />;
+}
+
 const routes: RouteObject[] = [
   { path: "/session-demo", element: routeElement(SessionDemoPage) },
   {
     path: "/",
     element: <WorkspacePage />,
     children: [
-      { index: true, element: routeElement(ConversationPage) },
+      { index: true, element: routeElement(StartTaskPage) },
+      { path: "new", element: routeElement(StartTaskPage) },
+      { path: "agents", element: routeElement(AgentOverviewPage) },
       { path: "computer", element: routeElement(ComputerPage) },
       { path: "notifications", element: routeElement(AgentPage) },
-      { path: "agents/:agentId", element: routeElement(AgentPage) },
-      { path: "agent/:agentId", element: routeElement(AgentPage) },
+      { path: "agents/:agentId", element: routeElement(AgentOverviewPage) },
+      { path: "agent/:agentId", element: routeElement(AgentOverviewPage) },
       { path: "models/:providerId", element: routeElement(ModelProviderPage) },
       { path: "model/:providerId", element: routeElement(ModelProviderPage) },
       { path: "humans/:humanId", element: routeElement(HumanPage) },
       { path: "human/:humanId", element: routeElement(HumanPage) },
-      { path: "teams", element: routeElement(TeamPage) },
-      { path: "teams/:teamId", element: routeElement(TeamPage) },
-      { path: "team/:teamId", element: routeElement(TeamPage) },
+      { path: "teams", element: routeElement(AgentOverviewPage) },
+      { path: "teams/:teamId", element: routeElement(AgentOverviewPage) },
+      { path: "team/:teamId", element: routeElement(AgentOverviewPage) },
       { path: "connectors", element: routeElement(AppsPage) },
       { path: "connectors/:resourceId", element: routeElement(AppsPage) },
       { path: "resources", element: routeElement(HubPage) },
@@ -79,7 +93,7 @@ const routes: RouteObject[] = [
       { path: "knowledge-bases/:knowledgeBaseId", element: routeElement(HubPage) },
       { path: "tasks", element: routeElement(TasksPage) },
       { path: "tasks/:taskId", element: routeElement(TasksPage) },
-      { path: "settings", element: routeElement(SettingsPage) },
+      { path: "settings", element: <SettingsRedirect /> },
       { path: "rooms/:conversationId", element: routeElement(ConversationPage) },
       { path: "room/:conversationId", element: routeElement(ConversationPage) },
       { path: "channels/:conversationId", element: routeElement(ConversationPage) },

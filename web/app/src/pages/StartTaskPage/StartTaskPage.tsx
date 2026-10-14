@@ -1,0 +1,357 @@
+import { supportsTaskConfiguration, type TaskConfiguration } from "@/models/taskConfiguration";
+import { useMemo, useRef, useState } from "react";
+import { useSearchParams, useLocation } from "react-router-dom";
+import { ArrowUp, FileText, FolderGit2, Terminal, Users, X } from "lucide-react";
+import { Button } from "@/components/ui";
+import { useWorkspaceControllerContext } from "@/hooks/workspace";
+import { sendMessageRequest } from "@/api/im";
+import { errorMessage } from "@/api/client";
+import { localizeAPIError } from "@/shared/i18n";
+import { agentProfileConfig, resolveAgentChannelUserID } from "@/models/agents";
+import { taskConversationTitle } from "@/models/taskConversations";
+import type { IMConversation } from "@/models/conversations";
+import styles from "./StartTaskPage.module.css";
+import { TargetPicker, SOLO_TEAM_ID } from "./components/TargetPicker";
+import { TaskResourcePicker } from "./components/TaskResourcePicker";
+import { ComposerAddMenu, type TaskResourceKind } from "@/components/business/ConversationPane/ComposerAddMenu";
+import { TaskConfigurationToolbar } from "@/components/business/TaskConfigurationToolbar";
+import { useWorkspaceDialogs } from "@/hooks/workspace/useWorkspaceDialogs";
+import { TASK_EXAMPLES_HIDDEN_STORAGE_KEY } from "@/shared/storage/keys";
+import "@/components/business/ConversationPane/ConversationPane.css";
+
+export function StartTaskPage() {
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const initialTarget = params.get("team")
+    ? `team:${params.get("team")}`
+    : params.get("agent")
+      ? `agent:${params.get("agent")}`
+      : "";
+  return (
+    <StartTaskForm
+      key={`${location.pathname}:${initialTarget}`}
+      initialTarget={initialTarget}
+      initialConfiguration={location.state?.configuration}
+    />
+  );
+}
+
+function StartTaskForm({
+  initialTarget,
+  initialConfiguration,
+}: {
+  initialTarget: string;
+  initialConfiguration?: TaskConfiguration;
+}) {
+  const controller = useWorkspaceControllerContext();
+  const { openSettings } = useWorkspaceDialogs();
+  const [configuration, setConfiguration] = useState<TaskConfiguration>(initialConfiguration || {});
+  const [target, setTarget] = useState(initialTarget);
+  const [resourceKind, setResourceKind] = useState<TaskResourceKind | null>(null);
+  const [examplesHidden, setExamplesHidden] = useState(() => {
+    try {
+      return localStorage.getItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [draft, setDraft] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const created = useRef<IMConversation | null>(null);
+  const requestID = useRef(crypto.randomUUID());
+  const sendID = useRef({ fingerprint: "", id: "" });
+  const inFlight = useRef(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const sidebar = controller.ready ? controller.sidebarProps : null;
+  const agents = useMemo(() => sidebar?.workerAgentItems ?? [], [sidebar?.workerAgentItems]);
+  const teams = useMemo(() => sidebar?.teams ?? [], [sidebar?.teams]);
+  const manager = agents.find((agent) => agent.role === "manager");
+  const selected = target || `agent:${manager?.id || agents[0]?.id || ""}`;
+  if (!controller.ready || !sidebar || !controller.taskEntry) return null;
+  const readySidebar = sidebar;
+  const { t } = sidebar;
+  const entry = controller.taskEntry;
+  const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
+  const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
+  const selectedProfile = agentProfileConfig(selectedAgent);
+  const modelMissing =
+    !configuration.model_id &&
+    selectedAgent &&
+    (selectedProfile?.profile_complete === false || !selectedProfile?.model_id);
+  const targetName = selectedAgent?.name || selectedTeam?.title || t("taskEntrySolo");
+
+  async function start(empty = false, prompt = draft) {
+    if (inFlight.current || (!empty && !prompt.trim() && !files.length)) return;
+    if (!selectedAgent && !selectedTeam && selected !== "solo") {
+      setError(t("taskEntryMissingTarget"));
+      return;
+    }
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      if (modelMissing) throw new Error(t("taskEntryModelMissing"));
+      let room = created.current;
+      if (!room) {
+        const agentIDs = selectedTeam ? [selectedTeam.lead_agent_id, ...selectedTeam.member_agent_ids] : [];
+        const members = selectedAgent
+          ? [resolveAgentChannelUserID(selectedAgent) || selectedAgent.id || ""]
+          : Array.from(
+              new Set([
+                resolveAgentChannelUserID(manager) || manager?.id || "",
+                ...agentIDs.map((id) => resolveAgentChannelUserID(agents.find((item) => item.id === id)) || id),
+              ]),
+            ).filter(Boolean);
+        if (!selectedAgent && !manager) throw new Error(t("taskEntryManagerMissing"));
+        if (selectedTeam && agentIDs.some((id) => !agents.some((agent) => agent.id === id))) {
+          throw new Error(t("taskEntryMembersMissing"));
+        }
+        room = await entry.create({
+          title: taskConversationTitle(prompt, `${targetName} · ${new Date().toLocaleString(readySidebar.locale)}`),
+          member_ids: members,
+          type: selectedAgent ? "free" : "on_demand",
+          is_direct: Boolean(selectedAgent),
+          configuration: supportsTaskConfiguration(selectedAgent) ? configuration : undefined,
+          manager_id: selectedAgent ? undefined : resolveAgentChannelUserID(manager) || manager?.id || undefined,
+          client_request_id: requestID.current,
+          locale: readySidebar.locale,
+        });
+        created.current = room;
+        if (room.configuration) setConfiguration(room.configuration);
+      }
+      if (!empty) {
+        const fingerprint = JSON.stringify([prompt, files.map((file) => [file.name, file.size, file.lastModified])]);
+        if (sendID.current.fingerprint !== fingerprint) sendID.current = { fingerprint, id: crypto.randomUUID() };
+        await sendMessageRequest({
+          room_id: room.id,
+          sender_id: readySidebar.currentUserID,
+          content: prompt.trim(),
+          attachments: files,
+          client_message_id: sendID.current.id,
+          locale: readySidebar.locale,
+        });
+      }
+      entry.open(room);
+    } catch (cause) {
+      setError(localizeAPIError(cause, t, errorMessage(cause, t("sendFailed"))));
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  const examples = selectedAgent
+    ? [
+        { key: "read", icon: FolderGit2 },
+        { key: "run", icon: Terminal },
+        { key: "document", icon: FileText },
+      ]
+    : [
+        { key: "review", icon: Users },
+        { key: "research", icon: FolderGit2 },
+        { key: "plan", icon: FileText },
+      ];
+  return (
+    <section className={styles.page}>
+      <div className={styles.inner}>
+        <header className={styles.head}>
+          <h1>{t("iaStartTitle")}</h1>
+          <p>{t(selectedAgent ? "iaStartSubtitleDirect" : "iaStartSubtitleRooms")}</p>
+        </header>
+        <div className={styles.pane}>
+          <TargetPicker
+            agents={agents}
+            teams={teams}
+            usersById={sidebar.usersById}
+            value={
+              selected === "solo"
+                ? { kind: "team", id: SOLO_TEAM_ID }
+                : {
+                    kind: selected.startsWith("team:") ? "team" : "agent",
+                    id: selected.slice(selected.indexOf(":") + 1),
+                  }
+            }
+            onChange={(value) => {
+              setTarget(value.id === SOLO_TEAM_ID ? "solo" : `${value.kind}:${value.id}`);
+              setResourceKind(null);
+              setConfiguration({});
+            }}
+            locked={busy || Boolean(created.current)}
+            t={t}
+            onCreateAgent={() => void sidebar.onCreateAgent()}
+            onCreateTeam={() => void sidebar.onOpenCreateTeam()}
+          />
+          {modelMissing || !agents.length ? (
+            <div className={styles.setup} role="status">
+              <strong>{t("iaStartNeedsModelTitle")}</strong>
+              <p>{t(modelMissing ? "taskEntryModelMissing" : "taskEntryNoAgents")}</p>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() =>
+                  selectedAgent ? void controller.openAgentSettings(selectedAgent) : openSettings("models")
+                }
+              >
+                {t("iaStartNeedsModelAction")}
+              </Button>
+            </div>
+          ) : null}
+          <div className={styles.composerGroup}>
+            {resourceKind && selectedAgent?.id ? (
+              <TaskResourcePicker
+                agentID={selectedAgent.id}
+                kind={resourceKind}
+                t={t}
+                onClose={() => setResourceKind(null)}
+                onManage={() => {
+                  setResourceKind(null);
+                  void controller.openAgentSettings(selectedAgent);
+                }}
+                onPick={(names) => {
+                  const label = t(
+                    resourceKind === "skill"
+                      ? "composerResourceSkill"
+                      : resourceKind === "connector"
+                        ? "composerResourceConnector"
+                        : "composerResourceKnowledge",
+                  );
+                  setDraft((value) => `${value}${value ? "\n" : ""}${label}: ${names.join(", ")}`);
+                  setResourceKind(null);
+                }}
+              />
+            ) : null}
+            <div className={styles.composer}>
+              <textarea
+                className={styles.input}
+                aria-label={t("taskEntryPrompt")}
+                placeholder={t("iaStartComposerPlaceholder")}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                disabled={busy}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    void start();
+                  }
+                }}
+              />
+              {files.length ? (
+                <ul className={styles.files}>
+                  {files.map((file, index) => (
+                    <li key={`${file.name}-${index}`}>
+                      <span>{file.name}</span>
+                      <Button
+                        variant="tertiaryGray"
+                        size="sm"
+                        disabled={busy}
+                        aria-label={`${t("taskEntryRemove")} ${file.name}`}
+                        onClick={() => setFiles((value) => value.filter((_, at) => at !== index))}
+                      >
+                        <X size={14} />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className={styles.actions}>
+                <input
+                  type="file"
+                  multiple
+                  ref={fileInput}
+                  hidden
+                  onChange={(event) => {
+                    setFiles((value) => [...value, ...Array.from(event.target.files ?? [])]);
+                    event.target.value = "";
+                  }}
+                />
+                <ComposerAddMenu
+                  disabled={busy}
+                  t={t}
+                  onAddFiles={() => fileInput.current?.click()}
+                  onOpenResourcePicker={selectedAgent ? setResourceKind : undefined}
+                />
+                <TaskConfigurationToolbar
+                  configuration={configuration}
+                  onChange={async (value) => {
+                    if (created.current) await entry.patch(created.current.id, { configuration: value });
+                    setConfiguration(value);
+                  }}
+                  directoryLocked={Boolean(created.current)}
+                  agent={selectedAgent || manager}
+                  showModel={Boolean(selectedAgent)}
+                  disabled={busy}
+                />
+                <Button
+                  className={styles.send}
+                  iconOnly
+                  size="sm"
+                  aria-label={t("taskEntryStart")}
+                  disabled={busy || (!draft.trim() && !files.length) || Boolean(modelMissing)}
+                  onClick={() => void start()}
+                >
+                  <ArrowUp size={17} />
+                </Button>
+              </div>
+            </div>
+          </div>
+          {error ? (
+            <p role="alert" className={styles.error}>
+              {error}
+              {created.current ? ` ${t("taskEntryRetryCreated")}` : ""}
+            </p>
+          ) : null}
+          {!selectedAgent ? (
+            <button
+              className={styles.emptyRoom}
+              type="button"
+              disabled={busy || !manager}
+              onClick={() => void start(true)}
+            >
+              {t("taskEntryEmptyRoom")}
+            </button>
+          ) : null}
+        </div>
+        {!examplesHidden && !modelMissing && agents.length ? (
+          <div className={styles.examples}>
+            <span>{t("iaStartExamples")}</span>
+            <div className={styles.chips}>
+              {examples.map(({ key, icon: Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={busy}
+                  className={styles.chip}
+                  onClick={() => {
+                    const prompt = t(`iaStartExample_${key}_prompt`);
+                    setDraft(prompt);
+                    void start(false, prompt);
+                  }}
+                >
+                  <Icon size={15} />
+                  {t(`iaStartExample_${key}_title`)}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className={styles.examplesClose}
+              aria-label={t("iaStartExamplesHide")}
+              onClick={() => {
+                setExamplesHidden(true);
+                try {
+                  localStorage.setItem(TASK_EXAMPLES_HIDDEN_STORAGE_KEY, "true");
+                } catch {
+                  /* Storage may be unavailable. */
+                }
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}

@@ -398,7 +398,7 @@ function runtimeAuthenticationErrorUsesOpenCSG(
 }
 
 export function useConversationController({
-  activeConversationId,
+  activeConversationId: storedConversationId,
   activePane,
   agents,
   autoSelectFallbackConversation = true,
@@ -431,6 +431,9 @@ export function useConversationController({
   stopWorkingTurn,
   workingParticipantsForRoom,
 }: UseConversationControllerArgs) {
+  // Keep displayed messages and outgoing drafts bound to the routed conversation.
+  const activeConversationId =
+    activePane.type === WorkspacePaneTypes.conversation && activePane.id ? activePane.id : storedConversationId;
   const {
     handleAuthenticationError: handleOpenCSGAuthenticationError,
     handleRuntimeAuthenticationError: handleOpenCSGRuntimeAuthenticationError,

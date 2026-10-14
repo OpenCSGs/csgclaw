@@ -165,6 +165,18 @@ export type UseConfigControllerArgs = {
 export type ConfigController = {
   configModalProps: ConfigModalControllerProps | null;
   openConfigModal: () => void;
+  settings: {
+    draft: ConfigSettingsDraft;
+    providers: string[];
+    hubTemplates: readonly HubTemplate[];
+    loading: boolean;
+    phase: ConfigPhase;
+    error: string;
+    onDraftChange: (patch: Partial<ConfigSettingsDraft>) => void;
+    onReload: () => void;
+    onSaveAndRestart: () => Promise<void>;
+    load: () => Promise<void>;
+  };
 };
 
 export type ProfilePreviewAnchorRect = {
@@ -259,6 +271,7 @@ export type UseAgentControllerArgs = {
   openCSGAuthGuard: OpenCSGAuthGuard;
   onAgentDeleted?: (item: AgentLike) => void;
   profileDetailAgentID?: string;
+  redirectToIncompleteManagerProfile?: boolean;
   refreshMCPServers?: () => Promise<unknown>;
   refreshHubTemplates: () => Promise<void>;
   refreshWorkspaceAgents: (options?: FetchAgentsOptions) => Promise<AgentLike[]>;

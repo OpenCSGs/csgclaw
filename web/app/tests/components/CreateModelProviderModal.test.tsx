@@ -162,7 +162,7 @@ describe("CreateModelProviderModal", () => {
     const user = userEvent.setup();
     const onCheckAccess = vi.fn().mockRejectedValue(new Error("status 401 Unauthorized"));
 
-    const { container } = render(
+    render(
       <CreateModelProviderModal
         busy={false}
         modelProviders={null}
@@ -177,7 +177,7 @@ describe("CreateModelProviderModal", () => {
     await user.click(screen.getByRole("button", { name: "Check" }));
 
     await screen.findAllByText("status 401 Unauthorized");
-    const warning = container.querySelector(".create-model-provider-check-status.warning");
+    const warning = document.body.querySelector(".create-model-provider-check-status.warning");
     expect(warning).toHaveTextContent("status 401 Unauthorized");
     expect(warning).not.toHaveClass("form-error");
   });
@@ -186,7 +186,7 @@ describe("CreateModelProviderModal", () => {
     const user = userEvent.setup();
     const onCheckAccess = vi.fn().mockRejectedValue(new Error("status 401 Unauthorized"));
 
-    const { container } = render(
+    render(
       <CreateModelProviderModal
         busy={false}
         modelProviders={null}
@@ -201,9 +201,9 @@ describe("CreateModelProviderModal", () => {
     await user.click(screen.getByRole("button", { name: "Check" }));
 
     await screen.findAllByText("status 401 Unauthorized");
-    const warning = container.querySelector(".create-model-provider-check-status.warning");
-    const header = container.querySelector(".create-model-provider-modal .modal-header");
-    const body = container.querySelector(".create-model-provider-body");
+    const warning = document.body.querySelector(".create-model-provider-check-status.warning");
+    const header = document.body.querySelector(".create-model-provider-modal .modal-header");
+    const body = document.body.querySelector(".create-model-provider-body");
 
     expect(header).not.toContainElement(warning as HTMLElement);
     expect(body).toContainElement(warning as HTMLElement);

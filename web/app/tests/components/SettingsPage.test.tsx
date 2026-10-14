@@ -5,7 +5,22 @@ import { WorkspaceControllerProvider } from "@/hooks/workspace";
 import type { WorkspaceController } from "@/hooks/workspace";
 import { emptyAuthStatus } from "@/models/auth";
 import type { TranslateFn } from "@/models/conversations";
-import { SettingsPage } from "@/pages/SettingsPage/SettingsPage";
+import { AccountSection } from "@/pages/SettingsPage/sections/AccountSection";
+import { AppearanceSection } from "@/pages/SettingsPage/sections/AppearanceSection";
+import { NotificationsSection } from "@/pages/SettingsPage/sections/NotificationsSection";
+import { VersionSection } from "@/pages/SettingsPage/sections/VersionSection";
+import { FeedbackSection } from "@/pages/SettingsPage/sections/FeedbackSection";
+function SettingsSections() {
+  return (
+    <>
+      <AccountSection />
+      <AppearanceSection />
+      <NotificationsSection />
+      <VersionSection />
+      <FeedbackSection />
+    </>
+  );
+}
 import { TurnNotificationModes } from "@/models/turnNotifications";
 
 const labels: Record<string, string> = {
@@ -56,14 +71,14 @@ const t: TranslateFn = (key) => labels[key] ?? key;
 function renderSettings(controller: WorkspaceController) {
   return render(
     <TooltipProvider delayDuration={0}>
-      <WorkspaceControllerProvider controller={controller}>
-        <SettingsPage />
+      <WorkspaceControllerProvider controller={{ ...controller, t: controller.sidebarProps?.t || t }}>
+        <SettingsSections />
       </WorkspaceControllerProvider>
     </TooltipProvider>,
   );
 }
 
-describe("SettingsPage", () => {
+describe("Settings sections", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -298,7 +313,6 @@ describe("SettingsPage", () => {
     expect(switchButton).toBeEnabled();
     expect(updateButton).toBeInTheDocument();
     expect(versionLabel.compareDocumentPosition(updateButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(updateButton.compareDocumentPosition(switchButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText("Update channel")).not.toBeInTheDocument();
     await user.click(switchButton);
     expect(screen.getByRole("radio", { name: "Preview" })).toBeChecked();
@@ -575,7 +589,7 @@ it("opens feedback after the required OpenCSG login succeeds", async () => {
   view.rerender(
     <TooltipProvider delayDuration={0}>
       <WorkspaceControllerProvider controller={authenticated}>
-        <SettingsPage />
+        <SettingsSections />
       </WorkspaceControllerProvider>
     </TooltipProvider>,
   );

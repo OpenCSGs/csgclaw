@@ -57,13 +57,16 @@ export function useOpenCSGAuthGuard({ login, status }: UseOpenCSGAuthGuardArgs):
       }
       const errorObject = error as object;
       if (handledAuthenticationErrorsRef.current.has(errorObject)) {
+        if (authenticationExpired && options?.openDialog !== false) {
+          setDialogOpen(true);
+        }
         return true;
       }
       handledAuthenticationErrorsRef.current.add(errorObject);
       markAuthenticationExpired(options);
       return true;
     },
-    [markAuthenticationExpired],
+    [authenticationExpired, markAuthenticationExpired],
   );
 
   const handleRuntimeAuthenticationError = useCallback(

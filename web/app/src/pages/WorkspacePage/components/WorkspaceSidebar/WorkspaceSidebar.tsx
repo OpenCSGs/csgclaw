@@ -1,3 +1,4 @@
+import { TaskWorkspaceSidebar } from "../TaskWorkspaceSidebar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PanelLeftOpen, Plus, Search } from "lucide-react";
 import {
@@ -17,9 +18,9 @@ import {
 } from "@/components/ui/Icons";
 import { SidebarRailControlButton } from "./SidebarRailControlButton";
 import { SidebarUserButton } from "./SidebarUserButton";
-import { KnowledgeBaseDiscoveryDialog } from "./KnowledgeBaseDiscoveryDialog";
+import { KnowledgeBaseDiscoveryDialog } from "@/components/business/KnowledgeBaseDiscoveryDialog";
 import { LogoMark, LogoWordmark } from "./WorkspaceSidebarBrand";
-import { SkillUploadDialog } from "./SkillUploadDialog";
+import { SkillUploadDialog } from "@/components/business/SkillUploadDialog";
 import { WorkspacePrimaryNavigation } from "./WorkspacePrimaryNavigation";
 import { WorkspaceTabPanels } from "./WorkspaceTabPanels";
 import { WorkspaceContextSectionIds } from "./types";
@@ -47,7 +48,23 @@ const WORKSPACE_NAVIGATION_ICONS = {
   templates: SidebarGrid07Icon,
 } as const;
 
-export function WorkspaceSidebar({
+export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
+  if (!props.taskEntry) return <LegacyWorkspaceSidebar {...props} />;
+  const hideContext =
+    props.activePane.type === WorkspacePaneTypes.conversation ||
+    (props.activePane.type === WorkspacePaneTypes.agent && !props.activePane.id) ||
+    props.activePane.type === WorkspacePaneTypes.settings;
+  return (
+    <>
+      <LegacyWorkspaceSidebar {...props} hidePrimaryNavigation hideContextSidebar={hideContext} />
+      <TaskWorkspaceSidebar {...props} entry={props.taskEntry} />
+    </>
+  );
+}
+
+function LegacyWorkspaceSidebar({
+  hidePrimaryNavigation = false,
+  hideContextSidebar = false,
   isSidebarCollapsed,
   locale,
   t,
@@ -114,7 +131,7 @@ export function WorkspaceSidebar({
   teams,
   planningTaskID = "",
   startingTaskID = "",
-}: WorkspaceSidebarProps) {
+}: WorkspaceSidebarProps & { hidePrimaryNavigation?: boolean; hideContextSidebar?: boolean }) {
   const [contextQuery, setContextQuery] = useState("");
   const [internalSkillUploadOpen, setInternalSkillUploadOpen] = useState(false);
   const resolvedSkillUploadOpen = skillUploadOpen ?? internalSkillUploadOpen;
@@ -122,7 +139,7 @@ export function WorkspaceSidebar({
   const [knowledgeBaseDiscoveryOpen, setKnowledgeBaseDiscoveryOpen] = useState(false);
   const contextNavRef = useRef<HTMLElement | null>(null);
   const currentUser = usersById.get(currentUserID);
-  const hasContextSidebar = workspaceHasContextSidebar(activePane);
+  const hasContextSidebar = !hideContextSidebar && workspaceHasContextSidebar(activePane);
   const firstWorkerAgent = workerAgentItems[0] ?? agentItems[0] ?? null;
   const firstNotificationAgent = notificationAgentItems[0] ?? null;
   const firstTeam = teams[0] ?? null;
@@ -398,63 +415,65 @@ export function WorkspaceSidebar({
 
   return (
     <div className={classNames(styles.slot, !hasContextSidebar && styles.noContextSidebar)}>
-      <aside
-        className={classNames(styles.primarySidebar, isSidebarCollapsed && styles.primarySidebarCollapsed)}
-        aria-label="Sidebar navigation"
-      >
-        <div className={styles.primaryNavigationWrap}>
-          <div className={classNames(styles.primaryHeader, isSidebarCollapsed && styles.primaryHeaderCollapsed)}>
-            {isSidebarCollapsed ? (
-              <span className={styles.logoMarkSlot}>
-                <Tooltip content={t("expandSidebar")}>
-                  <button
-                    type="button"
-                    className={styles.logoMarkButton}
-                    aria-label={t("expandSidebar")}
-                    onClick={onExpandSidebar}
-                  >
-                    <span className={styles.logoMarkExpandIcon} aria-hidden="true">
-                      <PanelLeftOpen size={20} strokeWidth={1.75} />
-                    </span>
-                  </button>
-                </Tooltip>
-                <span className={styles.logoMarkVisual} aria-hidden="true">
-                  <LogoMark />
+      {!hidePrimaryNavigation ? (
+        <aside
+          className={classNames(styles.primarySidebar, isSidebarCollapsed && styles.primarySidebarCollapsed)}
+          aria-label="Sidebar navigation"
+        >
+          <div className={styles.primaryNavigationWrap}>
+            <div className={classNames(styles.primaryHeader, isSidebarCollapsed && styles.primaryHeaderCollapsed)}>
+              {isSidebarCollapsed ? (
+                <span className={styles.logoMarkSlot}>
+                  <Tooltip content={t("expandSidebar")}>
+                    <button
+                      type="button"
+                      className={styles.logoMarkButton}
+                      aria-label={t("expandSidebar")}
+                      onClick={onExpandSidebar}
+                    >
+                      <span className={styles.logoMarkExpandIcon} aria-hidden="true">
+                        <PanelLeftOpen size={20} strokeWidth={1.75} />
+                      </span>
+                    </button>
+                  </Tooltip>
+                  <span className={styles.logoMarkVisual} aria-hidden="true">
+                    <LogoMark />
+                  </span>
                 </span>
-              </span>
-            ) : (
-              <>
-                <LogoWordmark />
-                <SidebarRailControlButton
-                  className={styles.primaryHeaderControl}
-                  label={t("collapseSidebar")}
-                  markClassName={styles.primaryHeaderControlMark}
-                  mode="collapse"
-                  onClick={onCollapseSidebar}
-                />
-              </>
-            )}
+              ) : (
+                <>
+                  <LogoWordmark />
+                  <SidebarRailControlButton
+                    className={styles.primaryHeaderControl}
+                    label={t("collapseSidebar")}
+                    markClassName={styles.primaryHeaderControlMark}
+                    mode="collapse"
+                    onClick={onCollapseSidebar}
+                  />
+                </>
+              )}
+            </div>
+            <WorkspacePrimaryNavigation
+              collapsed={isSidebarCollapsed}
+              sections={primaryNavigationSections}
+              onActivate={activateNavigationItem}
+            />
           </div>
-          <WorkspacePrimaryNavigation
-            collapsed={isSidebarCollapsed}
-            sections={primaryNavigationSections}
-            onActivate={activateNavigationItem}
-          />
-        </div>
-        <div className={classNames(styles.primaryFooter, isSidebarCollapsed && styles.primaryFooterCollapsed)}>
-          <SidebarUserButton
-            active={isSettingsPane}
-            presentation={isSidebarCollapsed ? "icon" : "row"}
-            appVersion={appVersion}
-            upgradeStatus={upgradeStatus}
-            upgradeBusy={upgradeBusy}
-            upgradePhase={upgradePhase}
-            showUpgradeControls={showUpgradeControls}
-            onOpenSettings={onOpenSettings}
-            t={t}
-          />
-        </div>
-      </aside>
+          <div className={classNames(styles.primaryFooter, isSidebarCollapsed && styles.primaryFooterCollapsed)}>
+            <SidebarUserButton
+              active={isSettingsPane}
+              presentation={isSidebarCollapsed ? "icon" : "row"}
+              appVersion={appVersion}
+              upgradeStatus={upgradeStatus}
+              upgradeBusy={upgradeBusy}
+              upgradePhase={upgradePhase}
+              showUpgradeControls={showUpgradeControls}
+              onOpenSettings={onOpenSettings}
+              t={t}
+            />
+          </div>
+        </aside>
+      ) : null}
       {hasContextSidebar ? (
         <aside className={styles.mainColumn}>
           <div className={styles.contextHeader}>
