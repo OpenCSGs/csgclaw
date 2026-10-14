@@ -22,6 +22,7 @@ import {
   agentDraftMissingRequiredEnv,
   agentCreateTemplateLocked,
   applyTemplateToDraft,
+  agentTemplateDisplayName,
   composeLegacyRuntimeKind,
   createAgentSelectableTemplates,
   formatRuntimeKindLabel,
@@ -507,7 +508,7 @@ export function AgentProfileModal({
                         .filter((item) => item.id)
                         .map((item) => ({
                           value: item.id || "",
-                          label: item.name || item.id || "",
+                          label: agentTemplateDisplayName(item) || item.id || "",
                           description: String(item.description || "").trim() || undefined,
                         }))}
                     />

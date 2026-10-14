@@ -75,7 +75,6 @@ export function hubTemplateErrorCode(error: unknown): string {
 }
 
 export type HubTemplate = AgentTemplateLike & {
-  display_name?: string | null;
   namespace?: string;
   metadata?: HubTemplateMetadata | null;
   source?: HubTemplateSource | null;
@@ -176,8 +175,7 @@ export function mergeHubTemplateDetail(
 
 export function hubTemplateFullName(template: HubTemplate | null | undefined): string {
   const displayName = String(template?.display_name ?? "").trim();
-  if (displayName) return displayName;
-  const name = String(template?.name ?? "").trim();
+  const name = displayName || String(template?.name ?? "").trim();
   const namespace = String(template?.namespace ?? "").trim();
   if (namespace && name) {
     return `${namespace}/${name}`;

@@ -154,6 +154,14 @@ describe("template display names", () => {
     expect(hubTemplateFullName({ id: "local.reviewer", name: "reviewer", display_name: "代码审查助手" })).toBe(
       "代码审查助手",
     );
+    for (const namespace of ["alice", "bob"]) {
+      expect(
+        hubTemplateFullName({ id: `${namespace}/reviewer`, namespace, name: "reviewer", display_name: "代码审查助手" }),
+      ).toBe(`${namespace}/代码审查助手`);
+    }
+    expect(
+      hubTemplateFullName({ id: "alice/reviewer", namespace: "alice", name: "reviewer", display_name: "  " }),
+    ).toBe("alice/reviewer");
     expect(hubTemplateFullName({ id: "local.reviewer", name: "reviewer" })).toBe("reviewer");
     expect(hubTemplateFullName({ id: "alice/reviewer", name: "reviewer", namespace: "alice" })).toBe("alice/reviewer");
   });
