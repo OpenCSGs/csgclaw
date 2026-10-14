@@ -233,8 +233,9 @@ export function Select({
         side: lockedSide ?? "bottom",
         align: "start",
         // Let Radix choose the best side only on the first layout. Once the
-        // menu is open, keep that side stable while filtering the options.
-        avoidCollisions: lockedSide === null,
+        // menu is open, prefer that side while preserving horizontal collision
+        // adjustment near viewport edges.
+        avoidCollisions: true,
         collisionPadding: 12,
       } satisfies SelectProps["contentProps"])
     : contentProps;
