@@ -39,7 +39,10 @@ import {
 } from "@/models/agents";
 import type { AgentDraft, AgentLike, RuntimeBootstrapConfig } from "@/models/agents";
 import {
+  defaultModelIDForProvider,
+  isOpenCSGAutoModel,
   MODEL_PROVIDER_IDS,
+  modelIDsForProviderSelection,
   modelProviderAvatarPath,
   modelProviderSelectOptionsFromCatalog,
   providerNameForProviderID,
@@ -160,9 +163,20 @@ export function AgentProfileModal({
     agentDraft.model_provider_id ||
     providerOptions.find((option) => option.models.includes(agentDraft.model_id))?.id ||
     "";
+  useEffect(() => {
+    if (String(agentDraft.model_provider_id || "").trim() || !selectedProviderID) {
+      return;
+    }
+    onAgentDraftChange({
+      ...agentDraft,
+      provider: providerNameForProviderID(selectedProviderID),
+      model_provider_id: selectedProviderID,
+    });
+  }, [agentDraft, onAgentDraftChange, selectedProviderID]);
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
-  const selectedProviderModels = selectedProvider?.models ?? [];
+  const selectedProviderModels = modelIDsForProviderSelection(selectedProviderID, selectedProvider?.models ?? []);
   const selectedModelValue = agentDraft.model_id || "";
+  const selectedModelIsOpenCSGAuto = isOpenCSGAutoModel(selectedProviderID, selectedModelValue);
   const workerTemplates = useMemo(() => {
     const selectableTemplates = createAgentSelectableTemplates(hubTemplates);
     const selectedBuiltinOpenClawTemplate = hubTemplates.find(
@@ -685,6 +699,7 @@ export function AgentProfileModal({
                         <Select
                           value={selectedProviderID}
                           required
+                          placeholder={agentModelBusy ? t("profileLoadingModels") : t("profileProviderSelect")}
                           selectedLabel={
                             selectedProvider ? (
                               <ModelOptionLabel avatar={selectedProvider.avatar} model={selectedProvider.displayName} />
@@ -703,32 +718,26 @@ export function AgentProfileModal({
                               ...agentDraft,
                               provider: providerNameForProviderID(nextProvider.id),
                               model_provider_id: nextProvider.id,
-                              model_id: nextProvider.models[0] || "",
+                              model_id: defaultModelIDForProvider(nextProvider.id, nextProvider.models),
                             });
                           }}
                           triggerProps={{ "aria-label": t("profileModelProvider"), "aria-required": true }}
-                          options={[
-                            {
-                              value: "",
-                              label: agentModelBusy ? t("profileLoadingModels") : t("profileProviderSelect"),
-                            },
-                            ...providerOptions.map((option) => ({
-                              value: option.value,
-                              disabled: option.disabled,
-                              label: (
-                                <ModelOptionLabel
-                                  avatar={option.avatar}
-                                  model={option.displayName}
-                                  provider={
-                                    option.models.length
-                                      ? t("modelProviderModelCount", { count: option.models.length })
-                                      : t("modelProviderNoModels")
-                                  }
-                                />
-                              ),
-                              textValue: option.displayName,
-                            })),
-                          ]}
+                          options={providerOptions.map((option) => ({
+                            value: option.value,
+                            disabled: option.disabled,
+                            label: (
+                              <ModelOptionLabel
+                                avatar={option.avatar}
+                                model={option.displayName}
+                                provider={
+                                  option.models.length
+                                    ? t("modelProviderModelCount", { count: option.models.length })
+                                    : t("modelProviderNoModels")
+                                }
+                              />
+                            ),
+                            textValue: option.displayName,
+                          }))}
                         />
                       </label>
                       <label className="field">
@@ -741,23 +750,57 @@ export function AgentProfileModal({
                           searchable
                           searchPlaceholder={t("modelProviderModelSearch")}
                           emptyLabel={t("modelProviderNoModels")}
+                          placeholder={selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst")}
+                          selectedLabel={
+                            selectedModelValue ? (
+                              <ModelOptionLabel
+                                model={selectedModelIsOpenCSGAuto ? t("modelProviderAutoName") : selectedModelValue}
+                                title={selectedModelIsOpenCSGAuto ? t("modelProviderAutoRouteHint") : undefined}
+                                showAvatar={false}
+                              />
+                            ) : undefined
+                          }
                           triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
                           options={[
-                            {
-                              value: "",
-                              label: selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
-                            },
-                            ...selectedProviderModels.map((modelID) => ({
-                              value: modelID,
-                              label: <ModelOptionLabel model={modelID} showAvatar={false} />,
-                              textValue: modelID,
-                            })),
+                            ...selectedProviderModels.map((modelID) => {
+                              const isAuto = isOpenCSGAutoModel(selectedProviderID, modelID);
+                              return {
+                                value: modelID,
+                                label: (
+                                  <ModelOptionLabel
+                                    model={isAuto ? t("modelProviderAutoName") : modelID}
+                                    badge={isAuto ? t("modelProviderAutoBadge") : undefined}
+                                    title={isAuto ? t("modelProviderAutoRouteHint") : undefined}
+                                    showAvatar={false}
+                                  />
+                                ),
+                                description: isAuto ? t("modelProviderAutoDescription") : undefined,
+                                separatorAfter: isAuto,
+                                textValue: isAuto
+                                  ? `${modelID} ${t("modelProviderAutoName")} ${t("modelProviderAutoBadge")}`
+                                  : modelID,
+                              };
+                            }),
                             ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
                               ? [
                                   {
                                     value: selectedModelValue,
-                                    label: <ModelOptionLabel model={selectedModelValue} showAvatar={false} />,
-                                    textValue: selectedModelValue,
+                                    label: (
+                                      <ModelOptionLabel
+                                        model={
+                                          selectedModelIsOpenCSGAuto ? t("modelProviderAutoName") : selectedModelValue
+                                        }
+                                        badge={selectedModelIsOpenCSGAuto ? t("modelProviderAutoBadge") : undefined}
+                                        title={selectedModelIsOpenCSGAuto ? t("modelProviderAutoRouteHint") : undefined}
+                                        showAvatar={false}
+                                      />
+                                    ),
+                                    description: selectedModelIsOpenCSGAuto
+                                      ? t("modelProviderAutoDescription")
+                                      : undefined,
+                                    textValue: selectedModelIsOpenCSGAuto
+                                      ? `${selectedModelValue} ${t("modelProviderAutoName")} ${t("modelProviderAutoBadge")}`
+                                      : selectedModelValue,
                                   },
                                 ]
                               : []),

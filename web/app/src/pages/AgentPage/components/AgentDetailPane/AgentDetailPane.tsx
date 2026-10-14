@@ -81,7 +81,10 @@ import {
 } from "@/models/agents";
 import type { AgentDraft, AgentLike } from "@/models/agents";
 import {
+  defaultModelIDForProvider,
+  isOpenCSGAutoModel,
   MODEL_PROVIDER_IDS,
+  modelIDsForProviderSelection,
   modelProviderAvatarPath,
   modelProviderSelectOptionsFromCatalog,
   providerNameForProviderID,
@@ -537,8 +540,18 @@ export const AgentDetailPane = forwardRef<AgentDetailPaneHandle, AgentDetailPane
     draft?.model_provider_id ||
     providerOptions.find((option) => option.models.includes(draft?.model_id || ""))?.id ||
     "";
+  useEffect(() => {
+    if (!draft || String(draft.model_provider_id || "").trim() || !selectedProviderID) {
+      return;
+    }
+    onDraftChange?.({
+      ...draft,
+      provider: providerNameForProviderID(selectedProviderID),
+      model_provider_id: selectedProviderID,
+    });
+  }, [draft, onDraftChange, selectedProviderID]);
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
-  const selectedProviderModels = selectedProvider?.models ?? [];
+  const selectedProviderModels = modelIDsForProviderSelection(selectedProviderID, selectedProvider?.models ?? []);
   const selectedModelValue = draft?.model_id || "";
   const isNotifierDraft = Boolean(draft && isNotifierRuntimeDraftOnAgentPage(draft, item));
   const showMCPServers = Boolean(
@@ -1909,6 +1922,7 @@ function AgentModelPanel({
   updateDraft,
 }: AgentModelPanelProps) {
   const selectedProviderOption = providerOptions.find((option) => option.id === selectedProviderID);
+  const selectedModelIsOpenCSGAuto = isOpenCSGAutoModel(selectedProviderID, selectedModelValue);
   const imageProviderID = draft.image_generation?.provider_id || "";
   const imageModelID = draft.image_generation?.model_id || "";
   const imageProviders = providerOptions.filter(
@@ -1950,6 +1964,7 @@ function AgentModelPanel({
               <Select
                 value={selectedProviderID}
                 required
+                placeholder={modelBusy ? t("profileLoadingModels") : t("profileProviderSelect")}
                 selectedLabel={
                   selectedProviderOption ? (
                     <ModelOptionLabel
@@ -1970,30 +1985,27 @@ function AgentModelPanel({
                   updateDraft({
                     provider: providerNameForProviderID(nextProvider.id),
                     model_provider_id: nextProvider.id,
-                    model_id: nextProvider.models[0] || "",
+                    model_id: defaultModelIDForProvider(nextProvider.id, nextProvider.models),
                   });
                 }}
                 triggerProps={{ "aria-label": t("profileModelProvider"), "aria-required": true }}
-                contentProps={{ side: "bottom", align: "start", avoidCollisions: false }}
-                options={[
-                  { value: "", label: modelBusy ? t("profileLoadingModels") : t("profileProviderSelect") },
-                  ...providerOptions.map((option) => ({
-                    value: option.value,
-                    disabled: option.disabled,
-                    label: (
-                      <ModelOptionLabel
-                        avatar={option.avatar}
-                        model={option.displayName}
-                        provider={
-                          option.models.length
-                            ? t("modelProviderModelCount", { count: option.models.length })
-                            : t("modelProviderNoModels")
-                        }
-                      />
-                    ),
-                    textValue: option.displayName,
-                  })),
-                ]}
+                contentProps={{ side: "bottom", align: "start", collisionPadding: 12 }}
+                options={providerOptions.map((option) => ({
+                  value: option.value,
+                  disabled: option.disabled,
+                  label: (
+                    <ModelOptionLabel
+                      avatar={option.avatar}
+                      model={option.displayName}
+                      provider={
+                        option.models.length
+                          ? t("modelProviderModelCount", { count: option.models.length })
+                          : t("modelProviderNoModels")
+                      }
+                    />
+                  ),
+                  textValue: option.displayName,
+                }))}
               />
             </label>
             <label className="field">
@@ -2006,23 +2018,53 @@ function AgentModelPanel({
                 searchable
                 searchPlaceholder={t("modelProviderModelSearch")}
                 emptyLabel={t("modelProviderNoModels")}
+                placeholder={selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst")}
+                selectedLabel={
+                  selectedModelValue ? (
+                    <ModelOptionLabel
+                      model={selectedModelIsOpenCSGAuto ? t("modelProviderAutoName") : selectedModelValue}
+                      title={selectedModelIsOpenCSGAuto ? t("modelProviderAutoRouteHint") : undefined}
+                      showAvatar={false}
+                    />
+                  ) : undefined
+                }
                 triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
                 options={[
-                  {
-                    value: "",
-                    label: selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
-                  },
-                  ...selectedProviderModels.map((modelID) => ({
-                    value: modelID,
-                    label: <ModelOptionLabel model={modelID} showAvatar={false} />,
-                    textValue: modelID,
-                  })),
+                  ...selectedProviderModels.map((modelID) => {
+                    const isAuto = isOpenCSGAutoModel(selectedProviderID, modelID);
+                    return {
+                      value: modelID,
+                      label: (
+                        <ModelOptionLabel
+                          model={isAuto ? t("modelProviderAutoName") : modelID}
+                          badge={isAuto ? t("modelProviderAutoBadge") : undefined}
+                          title={isAuto ? t("modelProviderAutoRouteHint") : undefined}
+                          showAvatar={false}
+                        />
+                      ),
+                      description: isAuto ? t("modelProviderAutoDescription") : undefined,
+                      separatorAfter: isAuto,
+                      textValue: isAuto
+                        ? `${modelID} ${t("modelProviderAutoName")} ${t("modelProviderAutoBadge")}`
+                        : modelID,
+                    };
+                  }),
                   ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
                     ? [
                         {
                           value: selectedModelValue,
-                          label: <ModelOptionLabel model={selectedModelValue} showAvatar={false} />,
-                          textValue: selectedModelValue,
+                          label: (
+                            <ModelOptionLabel
+                              model={selectedModelIsOpenCSGAuto ? t("modelProviderAutoName") : selectedModelValue}
+                              badge={selectedModelIsOpenCSGAuto ? t("modelProviderAutoBadge") : undefined}
+                              title={selectedModelIsOpenCSGAuto ? t("modelProviderAutoRouteHint") : undefined}
+                              showAvatar={false}
+                            />
+                          ),
+                          description: selectedModelIsOpenCSGAuto ? t("modelProviderAutoDescription") : undefined,
+                          textValue: selectedModelIsOpenCSGAuto
+                            ? `${selectedModelValue} ${t("modelProviderAutoName")} ${t("modelProviderAutoBadge")}`
+                            : selectedModelValue,
                         },
                       ]
                     : []),
@@ -2061,7 +2103,7 @@ function AgentModelPanel({
                     });
                   }}
                   triggerProps={{ "aria-label": t("profileImageModelProvider") }}
-                  contentProps={{ side: "bottom", align: "start", avoidCollisions: false }}
+                  contentProps={{ side: "bottom", align: "start", collisionPadding: 12 }}
                   options={[
                     { value: "", label: t("profileImageModelNone") },
                     ...imageProviders.map((provider) => ({

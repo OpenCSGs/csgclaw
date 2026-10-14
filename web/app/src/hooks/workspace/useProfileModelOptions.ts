@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Dispatch, SetStateAction } from "react";
 import { isNotifierRuntimeDraft, modelRequestKey } from "@/models/agents";
 import type { AgentDraft } from "@/models/agents";
+import { defaultModelIDForProvider } from "@/models/modelProviders";
 import { useWorkspaceAgentProfileModelsQuery, workspaceQueryKeys } from "./workspaceQueries";
 
 export type UseProfileModelOptionsArgs = {
@@ -63,7 +64,10 @@ export function useProfileModelOptions({ draft, enabled = true, onDraftChange }:
       if (!current || modelRequestKey(current) !== requestKey || current.model_id) {
         return current;
       }
-      return { ...current, model_id: models[0] };
+      return {
+        ...current,
+        model_id: defaultModelIDForProvider(current.model_provider_id || "", models),
+      };
     });
   }, [draft, draftRequestKey, models, onDraftChange, requestKey]);
 

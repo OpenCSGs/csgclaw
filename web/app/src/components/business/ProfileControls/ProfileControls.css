@@ -240,6 +240,30 @@
 }
 
 .model-option-model {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.model-option-model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-option-badge {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.model-option-model {
   color: var(--text);
   font-size: 13px;
   font-weight: 720;

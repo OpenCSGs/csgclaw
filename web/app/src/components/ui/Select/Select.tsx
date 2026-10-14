@@ -1,6 +1,6 @@
 import { Select as RadixSelect } from "radix-ui";
-import { Check, ChevronDown, ChevronUp, Search } from "lucide-react";
-import { forwardRef, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Search } from "lucide-react";
+import { Fragment, forwardRef, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, ComponentRef, ReactNode } from "react";
 import { classNames } from "@/shared/lib/classNames";
 
@@ -10,6 +10,7 @@ export type SelectOption = {
   description?: ReactNode;
   disabled?: boolean;
   label: ReactNode;
+  separatorAfter?: boolean;
   textValue?: string;
   value: string;
 };
@@ -80,11 +81,15 @@ export const SelectTrigger = forwardRef<ComponentRef<typeof RadixSelect.Trigger>
 );
 
 export type SelectContentProps = ComponentPropsWithoutRef<typeof RadixSelect.Content> & {
+  header?: ReactNode;
   portalContainer?: ComponentPropsWithoutRef<typeof RadixSelect.Portal>["container"];
 };
 
 export const SelectContent = forwardRef<ComponentRef<typeof RadixSelect.Content>, SelectContentProps>(
-  function SelectContent({ children, className, portalContainer, position = "popper", sideOffset = 6, ...props }, ref) {
+  function SelectContent(
+    { children, className, header, portalContainer, position = "popper", sideOffset = 6, ...props },
+    ref,
+  ) {
     return (
       <RadixSelect.Portal container={portalContainer}>
         <RadixSelect.Content
@@ -94,13 +99,8 @@ export const SelectContent = forwardRef<ComponentRef<typeof RadixSelect.Content>
           sideOffset={sideOffset}
           {...props}
         >
-          <RadixSelect.ScrollUpButton className="csg-select-scroll-button flex items-center justify-center">
-            <ChevronUp aria-hidden="true" size={16} strokeWidth={2} />
-          </RadixSelect.ScrollUpButton>
+          {header}
           <RadixSelect.Viewport className="csg-select-viewport p-1">{children}</RadixSelect.Viewport>
-          <RadixSelect.ScrollDownButton className="csg-select-scroll-button flex items-center justify-center">
-            <ChevronDown aria-hidden="true" size={16} strokeWidth={2} />
-          </RadixSelect.ScrollDownButton>
         </RadixSelect.Content>
       </RadixSelect.Portal>
     );
@@ -206,6 +206,8 @@ export function Select({
   ...props
 }: SelectProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [lockedSide, setLockedSide] = useState<"top" | "bottom" | null>(null);
   const contentRef = useRef<ComponentRef<typeof RadixSelect.Content>>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const hasEmptyOption = Boolean(options?.some((option) => option.value === ""));
@@ -227,12 +229,55 @@ export function Select({
   const shouldRenderSearch = searchable && Boolean(options?.length);
   const resolvedContentProps = searchable
     ? ({
-        side: "bottom",
-        align: "start",
-        avoidCollisions: false,
         ...contentProps,
+        side: lockedSide ?? "bottom",
+        align: "start",
+        // Let Radix choose the best side only on the first layout. Once the
+        // menu is open, keep that side stable while filtering the options.
+        avoidCollisions: lockedSide === null,
+        collisionPadding: 12,
       } satisfies SelectProps["contentProps"])
     : contentProps;
+
+  const search = shouldRenderSearch ? (
+    <div className="csg-select-search" onPointerDown={(event) => event.stopPropagation()}>
+      <Search aria-hidden="true" size={14} strokeWidth={2} />
+      <input
+        ref={searchInputRef}
+        aria-label={searchPlaceholder}
+        autoComplete="off"
+        onBlur={(event) => {
+          const nextFocusedElement = event.relatedTarget;
+          if (
+            contentRef.current &&
+            nextFocusedElement instanceof Node &&
+            contentRef.current.contains(nextFocusedElement)
+          ) {
+            const input = event.currentTarget;
+            queueMicrotask(() => {
+              if (contentRef.current?.contains(document.activeElement) && document.activeElement !== input) {
+                input.focus({ preventScroll: true });
+              }
+            });
+          }
+        }}
+        onChange={(event) => setSearchQuery(event.currentTarget.value)}
+        onKeyDownCapture={(event) => {
+          if (event.key !== "Escape" && event.key !== "Tab") {
+            event.stopPropagation();
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Escape" && event.key !== "Tab") {
+            event.stopPropagation();
+          }
+        }}
+        placeholder={searchPlaceholder}
+        type="search"
+        value={searchQuery}
+      />
+    </div>
+  ) : null;
 
   useLayoutEffect(() => {
     if (!shouldRenderSearch || typeof document === "undefined") {
@@ -248,14 +293,35 @@ export function Select({
     }
   }, [searchQuery, shouldRenderSearch, filteredOptions.length]);
 
+  useLayoutEffect(() => {
+    if (!searchable || !isOpen || lockedSide || !contentRef.current) {
+      return;
+    }
+    // Radix applies collision detection after the portal is mounted. Wait for
+    // that layout pass before capturing the final side, otherwise the initial
+    // preferred side (bottom) could be locked before Radix flips it to top.
+    const frame = requestAnimationFrame(() => {
+      const side = contentRef.current?.dataset.side;
+      if (side === "top" || side === "bottom") {
+        setLockedSide(side);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen, lockedSide, searchable]);
+
   return (
     <SelectRoot
       value={toRadixValue(value, hasEmptyOption)}
       defaultValue={toRadixValue(defaultValue, hasEmptyOption)}
       onValueChange={onValueChange ? (nextValue) => onValueChange(fromRadixValue(nextValue)) : undefined}
       onOpenChange={(open) => {
+        setIsOpen(open);
+        if (open) {
+          setLockedSide(null);
+        }
         if (!open) {
           setSearchQuery("");
+          setLockedSide(null);
         }
         onOpenChange?.(open);
       }}
@@ -264,63 +330,28 @@ export function Select({
       <SelectTrigger className={triggerClassName} placeholder={placeholder} size={size} {...triggerProps}>
         {selectedLabel}
       </SelectTrigger>
-      <SelectContent ref={contentRef} className={contentClassName} {...resolvedContentProps}>
+      <SelectContent
+        ref={contentRef}
+        className={classNames(contentClassName, searchable && "csg-select-content-searchable")}
+        header={search}
+        {...resolvedContentProps}
+      >
         {children ??
           (options ? (
             <>
-              {shouldRenderSearch ? (
-                <div className="csg-select-search" onPointerDown={(event) => event.stopPropagation()}>
-                  <Search aria-hidden="true" size={15} strokeWidth={2} />
-                  <input
-                    ref={searchInputRef}
-                    aria-label={searchPlaceholder}
-                    autoComplete="off"
-                    onBlur={(event) => {
-                      const nextFocusedElement = event.relatedTarget;
-                      if (
-                        contentRef.current &&
-                        nextFocusedElement instanceof Node &&
-                        contentRef.current.contains(nextFocusedElement)
-                      ) {
-                        const input = event.currentTarget;
-                        queueMicrotask(() => {
-                          if (
-                            contentRef.current?.contains(document.activeElement) &&
-                            document.activeElement !== input
-                          ) {
-                            input.focus({ preventScroll: true });
-                          }
-                        });
-                      }
-                    }}
-                    onChange={(event) => setSearchQuery(event.currentTarget.value)}
-                    onKeyDownCapture={(event) => {
-                      if (event.key !== "Escape" && event.key !== "Tab") {
-                        event.stopPropagation();
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Escape" && event.key !== "Tab") {
-                        event.stopPropagation();
-                      }
-                    }}
-                    placeholder={searchPlaceholder}
-                    type="search"
-                    value={searchQuery}
-                  />
-                </div>
-              ) : null}
               {filteredOptions.length ? (
-                filteredOptions.map((option) => (
-                  <SelectItem
-                    key={option.value}
-                    value={toRadixValue(option.value, hasEmptyOption) ?? option.value}
-                    disabled={option.disabled}
-                    description={option.description}
-                    textValue={option.textValue}
-                  >
-                    {option.label}
-                  </SelectItem>
+                filteredOptions.map((option, index) => (
+                  <Fragment key={option.value}>
+                    <SelectItem
+                      value={toRadixValue(option.value, hasEmptyOption) ?? option.value}
+                      disabled={option.disabled}
+                      description={option.description}
+                      textValue={option.textValue}
+                    >
+                      {option.label}
+                    </SelectItem>
+                    {option.separatorAfter && index < filteredOptions.length - 1 ? <SelectSeparator /> : null}
+                  </Fragment>
                 ))
               ) : (
                 <div className="csg-select-empty">{emptyLabel ?? "No options"}</div>

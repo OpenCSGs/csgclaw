@@ -95,6 +95,36 @@ function Harness({
 }
 
 describe("AgentDetailPane metadata editing", () => {
+  it("writes an inferred model provider back to the draft so the change can be saved", async () => {
+    const onDraftChange = vi.fn();
+    render(
+      <Harness
+        draft={{ ...savedDraft, model_provider_id: "", provider: "" }}
+        modelProviders={normalizeModelProviderCatalog({
+          providers: [
+            {
+              id: "csghub-lite",
+              display_name: "CSGHub Lite",
+              status: "connected",
+              models: ["gpt-4.1-mini"],
+            },
+          ],
+        })}
+        onDraftChange={onDraftChange}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(onDraftChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model_id: "gpt-4.1-mini",
+          model_provider_id: "csghub-lite",
+          provider: "csghub_lite",
+        }),
+      ),
+    );
+  });
+
   it("preserves the skill list while applying an enablement change", async () => {
     const skills = [{ name: "reviewer", description: "Review", enabled: true }];
     const view = render(<Harness workspaceSupported skills={skills} />);
@@ -579,4 +609,33 @@ it("disables failed CLI providers even when stale models remain", async () => {
   expect(screen.getByRole("option", { name: /Codex/ })).toHaveAttribute("aria-disabled", "true");
   expect(screen.getByRole("option", { name: /Claude Code/ })).toHaveAttribute("aria-disabled", "true");
   expect(screen.getByRole("option", { name: /Available API/ })).not.toHaveAttribute("aria-disabled", "true");
+});
+
+it("recommends and selects the OpenCSG auto model while preserving its model ID", async () => {
+  const user = userEvent.setup();
+  render(
+    <Harness
+      modelProviders={normalizeModelProviderCatalog({
+        providers: [
+          { id: "opencsg", display_name: "OpenCSG", status: "connected", models: ["qwen3", "auto"] },
+          { id: "csghub-lite", display_name: "CSGHub Lite", status: "connected", models: ["gpt-4.1-mini"] },
+        ],
+      })}
+    />,
+    { wrapper: createQueryWrapper().wrapper },
+  );
+
+  await user.click(screen.getByRole("combobox", { name: "profileModelProvider" }));
+  expect(screen.queryByRole("option", { name: "profileProviderSelect" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: /OpenCSG/ }));
+
+  const modelSelect = screen.getByRole("combobox", { name: "profileModel" });
+  expect(modelSelect).toHaveTextContent("modelProviderAutoName");
+  expect(modelSelect).not.toHaveTextContent("modelProviderAutoBadge");
+
+  await user.click(modelSelect);
+  const autoOption = screen.getByRole("option", { name: /modelProviderAutoName/ });
+  expect(autoOption).toHaveTextContent("modelProviderAutoBadge");
+  expect(autoOption).toHaveTextContent("modelProviderAutoDescription");
+  expect(screen.queryByRole("option", { name: "profileSelectModel" })).not.toBeInTheDocument();
 });
