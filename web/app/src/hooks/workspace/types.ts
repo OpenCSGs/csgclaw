@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 import type { Location, NavigateFunction } from "react-router-dom";
 import type { FetchAgentsOptions } from "@/api/agents";
 import type { FetchVersionOptions } from "@/api/app";
-import type { AgentDetailPaneProps } from "@/pages/AgentPage/components";
+import type { AgentDetailPaneProps } from "@/components/business/AgentDetails";
 import type { MessageAction, MessageActionFeedback, MessageLike } from "@/components/business/MessageContent/types";
 import type { AgentLike, AgentProfileLike, RuntimeBootstrapConfig } from "@/models/agents";
 import type { IMConversation, IMData, IMUser, LocaleCode, TranslateFn, UsersById } from "@/models/conversations";
@@ -70,7 +70,6 @@ export type UseWorkspaceShellControllerArgs = {
   setIsSidebarCollapsed: WorkspaceUiState["setIsSidebarCollapsed"];
   setWorkspaceTab: WorkspaceUiState["setWorkspaceTab"];
   t: TranslateFn;
-  theme: ThemeMode;
   workspaceTab: WorkspaceTab;
 };
 

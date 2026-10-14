@@ -207,10 +207,20 @@ src/pages/WorkspacePage/components/
   - `useAgentController`: agent list/page state, create/edit modal state, manager profile setup, manager rebuild, provider auth, agent actions, agent direct messages, and template publishing.
   - `useUpgradeController`: upgrade modal state, apply-upgrade mutation, upgrade status updates, and reconnect polling.
   - `useProfilePreviewController`: participant/agent preview popover state, outside-click handling, and preview actions.
-- Keep small supporting composition hooks separate when they have clear ownership, such as shell preferences/theme/localStorage wiring or Hub selection refresh state.
+- Keep small supporting composition hooks separate when they have clear ownership, such as shell preferences/localStorage wiring or Hub selection refresh state.
+- `workspaceControllerContract.ts` defines the public ready/loading union; Context consumes this contract rather than inferring it from the root controller. Shared sidebar contracts live in `hooks/workspace/contracts/`.
+- Use `hooks/workspace/bindings/` for focused view adapters and `useModelProviderCreation` for the model-provider creation lifecycle. Keep new business flows out of the root composition hook.
+- Route pages adapt controller props to shared views. AppsPage and HubPage both compose HubDetailPane; AppsPage owns its connector-specific adaptation. AgentDetails, TeamDetailPane and ConversationWorkspace are shared business views, while AgentActivityPanel and AgentList remain AgentPage-private.
+- Controllers and business components must not import page-owned modules. Pages may compose another page through its package entrypoint or named route component; its helpers and private components stay with their owner. This convention needs no per-page exception list.
 - Keep URL navigation focused in `useWorkspaceNavigation`; it should navigate panes and synchronize route-derived state, not own feature UI state such as member menus or channel tools.
 - Controller hooks may call API functions and update query/local state, but pure parsing, normalization, serialization, and route helpers should stay in `src/models/` or `src/shared/`.
 - When adding a new workspace feature, first decide which controller owns the user-visible workflow. Add a new controller only when the feature has a distinct lifecycle or state surface that would otherwise bloat an existing one.
+
+## Application Theme
+
+`workspaceUiStore.theme` owns the user's preference. `bootstrap/AppThemeSynchronizer` applies the resolved DOM theme, persists the preference, watches system changes, updates Mermaid and synchronizes the desktop bridge. Page and shell controllers consume the preference without installing their own theme effects.
+
+`shared/theme/theme.ts` owns runtime parsing and resolution. This refactor preserves the existing inline bootstrap in `index.html`: it applies saved light/dark values before React mounts and falls back to dark for `system`. AppThemeSynchronizer resolves the system preference after React starts, so a brief dark first paint on a light system remains possible. Future changes to the inline script require updating `documentBootstrapCSPHash` in `internal/server/desktop_security.go`; the server regression test verifies the source hash. Runtime storage failures and missing system-theme APIs must not prevent theme synchronization.
 
 ## i18n And Text
 
@@ -234,7 +244,10 @@ src/pages/WorkspacePage/components/
 - Run `pnpm --dir web/app lint` after frontend source changes.
 - Run `pnpm --dir web/app format:check` before sharing changes, or `pnpm --dir web/app format` to apply Prettier formatting.
 - Run `pnpm --dir web/app test` for the frontend Vitest suite.
-- Run `pnpm --dir web/app check` for the standard frontend verification bundle.
+- Run `pnpm --dir web/app check` for the standard frontend verification bundle. `lint` runs ESLint; `test` and `check` include the Vitest ownership tests in `tests/components/UiBoundaries.test.ts`.
+- The ownership tests use `tests/helpers/sourceDependencies.ts` to inspect direct imports, re-exports and literal dynamic imports. They check directory boundaries: UI primitives do not depend on APIs, controllers, pages or application storage/realtime/platform code; shared business components and hooks do not depend on pages; cross-page composition uses public page entrypoints. Pure model helpers remain available, and no component-name allowlist is required.
+- Keep interaction and field-state tests beside the owning component when practical. Shared test utilities belong in `tests/helpers/`. Review color/token ownership in component styles and verify CSS cascade, theme colors and viewport behavior in a real browser rather than imposing a per-component list of forbidden CSS strings.
+- Run the standalone UI Lab from `web/app` with `corepack pnpm ui:lab` (or `pnpm ui:lab` using the pinned package manager). It opens `ui-lab.html`, renders real production components without API/login/controller setup, and is excluded from production build inputs. Use it for light/dark, validation, long-list and nested-dialog checks; use a real browser for portal clipping, viewport collisions and focus behavior.
 - Run `pnpm --dir web/app exec vite build --outDir /private/tmp/csgclaw-web-build --emptyOutDir` when validating bundling without touching `web/static-dist`.
 - Run `pnpm --dir web/app build` only when the generated `web/static-dist` output is intended.
 - Add or update pure unit tests for data shaping, routing, formatting, parser, serializer, and state-transition helpers. Good targets include `src/models/**`, `src/shared/lib/**`, and logic-only helpers inside component packages.

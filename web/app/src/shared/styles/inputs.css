@@ -1,6 +1,7 @@
 /* Untitled UI input field: edit these properties to update text inputs globally. */
 :root {
   --input-height-md: 44px;
+  --input-height-sm: 36px;
   --input-padding-md: 10px 14px;
   --textarea-padding-md: var(--space-3) 14px;
   --input-radius: var(--radius-md);
@@ -22,7 +23,7 @@
   --field-label-line-height: var(--text-sm-line-height);
 }
 
-:root body textarea {
+:root body textarea:not([data-csg-control]) {
   width: 100%;
   min-height: 116px;
   padding: var(--textarea-padding-md);
@@ -41,37 +42,37 @@
     background-color 160ms ease;
 }
 
-:root body textarea::placeholder {
+:root body textarea:not([data-csg-control])::placeholder {
   color: var(--input-text-placeholder);
 }
 
-:root body textarea:hover:not(:disabled, [aria-invalid="true"]) {
+:root body textarea:not([data-csg-control]):hover:not(:disabled, [aria-invalid="true"]) {
   border-color: var(--input-border-hover);
 }
 
-:root body textarea:focus {
+:root body textarea:not([data-csg-control]):focus {
   border-color: var(--input-border-focus);
   box-shadow: var(--input-shadow-focus);
 }
 
-:root body textarea:disabled {
+:root body textarea:not([data-csg-control]):disabled {
   border-color: var(--input-border);
   background-color: var(--input-background-disabled);
   color: var(--input-text-disabled);
   cursor: not-allowed;
 }
 
-:root body textarea:disabled::placeholder {
+:root body textarea:not([data-csg-control]):disabled::placeholder {
   color: var(--input-text-disabled);
 }
 
-:root body :where(.field[data-invalid="true"]) textarea,
-:root body textarea[aria-invalid="true"] {
+:root body :where(.field[data-invalid="true"]) textarea:not([data-csg-control]),
+:root body textarea:not([data-csg-control])[aria-invalid="true"] {
   border-color: var(--input-border-error);
 }
 
-:root body :where(.field[data-invalid="true"]) textarea:focus,
-:root body textarea[aria-invalid="true"]:focus {
+:root body :where(.field[data-invalid="true"]) textarea:not([data-csg-control]):focus,
+:root body textarea:not([data-csg-control])[aria-invalid="true"]:focus {
   box-shadow: var(--input-shadow-error-focus);
 }
 
@@ -99,7 +100,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ) {
   width: 100%;
   height: var(--input-height-md);
@@ -130,7 +132,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   )::placeholder {
   color: var(--input-text-placeholder);
 }
@@ -147,7 +150,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ):hover:not(:disabled, [aria-invalid="true"]) {
   border-color: var(--input-border-hover);
 }
@@ -164,7 +168,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ):focus {
   border-color: var(--input-border-focus);
   box-shadow: var(--input-shadow-focus);
@@ -182,7 +187,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ):disabled {
   border-color: var(--input-border);
   background-color: var(--input-background-disabled);
@@ -202,7 +208,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ):disabled {
   border-color: var(--input-border);
   background-color: var(--input-background-disabled);
@@ -222,7 +229,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ),
 :root
   body
@@ -236,7 +244,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   )[aria-invalid="true"] {
   border-color: var(--input-border-error);
 }
@@ -253,7 +262,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   )[aria-invalid="true"] {
   border-color: var(--input-border-error);
 }
@@ -271,7 +281,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ):focus,
 :root
   body
@@ -285,7 +296,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   )[aria-invalid="true"]:focus {
   box-shadow: var(--input-shadow-error-focus);
 }
@@ -302,7 +314,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   )[aria-invalid="true"]:focus {
   box-shadow: var(--input-shadow-error-focus);
 }
@@ -328,7 +341,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ) {
   border-color: var(--input-border);
   background-color: var(--input-background);
@@ -348,7 +362,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ):hover:not(:disabled, [aria-invalid="true"]) {
   border-color: var(--input-border-hover);
 }
@@ -365,7 +380,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ):disabled {
   border-color: var(--input-border);
   background-color: var(--input-background-disabled);
@@ -384,7 +400,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   ):focus {
   border-color: var(--input-border-focus);
   box-shadow: var(--input-shadow-focus);
@@ -403,7 +420,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   )[aria-invalid="true"] {
   border-color: var(--input-border-error);
 }
@@ -421,7 +439,8 @@
     [type="radio"],
     [type="range"],
     [type="reset"],
-    [type="submit"]
+    [type="submit"],
+    [data-csg-control]
   )[aria-invalid="true"]:focus {
   box-shadow: var(--input-shadow-error-focus);
 }

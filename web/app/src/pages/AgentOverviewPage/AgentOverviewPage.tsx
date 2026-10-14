@@ -2,7 +2,7 @@ import { resolveTeamAvatarMembers } from "@/models/tasks";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronRight, List, Plus, Search } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, PanelHeader, EmptyState } from "@/components/ui";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
 import { RoomAvatar } from "@/components/business/RoomAvatar";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
@@ -11,15 +11,24 @@ import { isVisibleInHubTemplateList } from "@/models/hubWorkspace";
 import { agentRoleLabel, type AgentLike } from "@/models/agents";
 
 import styles from "./AgentOverviewPage.module.css";
+import { useAgentViewBindings } from "@/hooks/workspace/useAgentViewBindings";
 
-const AgentPage = lazy(() => import("@/pages/AgentPage").then((module) => ({ default: module.AgentPage })));
-const TeamPage = lazy(() => import("@/pages/TeamPage").then((module) => ({ default: module.TeamPage })));
+const AgentView = lazy(() =>
+  import("@/components/business/AgentDetails").then((module) => ({ default: module.AgentView })),
+);
+const TeamDetailPane = lazy(() =>
+  import("@/components/business/TeamDetailPane").then((module) => ({ default: module.TeamDetailPane })),
+);
+const ConversationView = lazy(() =>
+  import("@/components/business/ConversationWorkspace").then((module) => ({ default: module.ConversationView })),
+);
 const HubDetailPane = lazy(() =>
   import("@/components/business/HubDetailPane").then((module) => ({ default: module.HubDetailPane })),
 );
 
 export function AgentOverviewPage() {
   const controller = useWorkspaceControllerContext();
+  const agentViewProps = useAgentViewBindings();
   const location = useLocation();
   const navigate = useNavigate();
   const requestedTab = new URLSearchParams(location.search).get("tab");
@@ -79,7 +88,7 @@ export function AgentOverviewPage() {
   };
   return (
     <section className={styles.page}>
-      <header className={styles.header}>
+      <PanelHeader className={styles.header}>
         <Button
           ref={listToggleRef}
           className={styles.listToggle}
@@ -113,7 +122,7 @@ export function AgentOverviewPage() {
             </Button>
           </div>
         ) : null}
-      </header>
+      </PanelHeader>
       <div className={styles.split}>
         {listOpen ? (
           <button type="button" className={styles.listBackdrop} aria-label={t("close")} onClick={closeList} />
@@ -226,24 +235,26 @@ export function AgentOverviewPage() {
                 <HubDetailPane {...controller.hubViewProps} inlineTemplateDetail />
               </Suspense>
             ) : (
-              <div className={styles.empty}>
-                <h2>{t("iaAgentsMarketTab")}</h2>
-                <p>{t("iaAgentsSelectTemplate")}</p>
-              </div>
+              <EmptyState
+                className={styles.empty}
+                title={t("iaAgentsMarketTab")}
+                description={t("iaAgentsSelectTemplate")}
+              />
             )
           ) : activeID && controller.activePane.type === "agent" ? (
             <Suspense fallback={null}>
-              <AgentPage />
+              {agentViewProps ? (
+                <AgentView {...agentViewProps} />
+              ) : (
+                <ConversationView {...controller.conversationViewProps} />
+              )}
             </Suspense>
           ) : activeID && controller.activePane.type === "team" ? (
             <Suspense fallback={null}>
-              <TeamPage />
+              <TeamDetailPane {...controller.teamViewProps} />
             </Suspense>
           ) : (
-            <div className={styles.empty}>
-              <h2>{t("iaAgentsMineTab")}</h2>
-              <p>{t("iaAgentsSelectAgent")}</p>
-            </div>
+            <EmptyState className={styles.empty} title={t("iaAgentsMineTab")} description={t("iaAgentsSelectAgent")} />
           )}
         </div>
       </div>

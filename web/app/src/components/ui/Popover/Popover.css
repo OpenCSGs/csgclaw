@@ -1,8 +1,8 @@
 .csg-popover-content {
   z-index: var(--z-portal-popover);
-  border: 1px solid var(--line);
+  border: 1px solid var(--popover-border);
   border-radius: var(--radius-md);
-  background: var(--panel);
+  background: var(--popover-background);
   color: var(--text);
   box-shadow: var(--shadow);
   transform-origin: var(--radix-popover-content-transform-origin);
@@ -19,8 +19,4 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-}
-
-:root[data-theme="dark"] .csg-popover-content {
-  background: var(--panel-strong);
 }

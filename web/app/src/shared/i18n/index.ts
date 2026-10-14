@@ -5,11 +5,15 @@ import type { LocaleCode, TranslateFn } from "@/models/conversations";
 type ErrorTranslationKey = keyof typeof messages.zh.errors;
 
 export function detectInitialLocale(): LocaleCode {
-  const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-  if (stored === "zh" || stored === "en") {
-    return stored;
+  try {
+    const stored = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+    if (stored === "zh" || stored === "en") {
+      return stored;
+    }
+  } catch {
+    // Browser language remains available when local storage is restricted.
   }
-  return navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
+  return typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
 export function createTranslator(locale: LocaleCode): TranslateFn {

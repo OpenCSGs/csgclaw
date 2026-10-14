@@ -8,6 +8,9 @@ import { AgentPage } from "./AgentPage";
 
 const mocked = vi.hoisted(() => ({ controller: {} as Record<string, unknown> }));
 vi.mock("@/hooks/workspace", () => ({ useWorkspaceControllerContext: () => mocked.controller }));
+vi.mock("@/hooks/workspace/useWorkspaceControllerContext", () => ({
+  useWorkspaceControllerContext: () => mocked.controller,
+}));
 
 function Location() {
   const location = useLocation();

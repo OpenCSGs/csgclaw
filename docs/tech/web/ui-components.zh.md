@@ -70,6 +70,24 @@
 
 `Select` 会把业务侧空值（`""`）映射到内部 Radix item value，因为 Radix 把空字符串保留给清空选择。调用方仍然按 `""` 正常读写即可。
 
+## Combobox、模型字段与基础表单
+
+普通 Select 用于有限枚举；搜索单选使用 Combobox。Combobox 组合共享 Popover、TextInput，焦点保留在搜索输入内：方向键跳过禁用项，Enter 确认，Escape 关闭搜索层，Tab/Shift+Tab 按表单顺序离开。IME 确认不选择选项。支持受控 value/open 和非受控 defaultValue/defaultOpen；复杂 label 提供 textValue，并传入翻译后的搜索、空状态及 loading 文案。
+
+空业务值仍为 `""`；隐藏的原生 select 保留 name/required 的提交与校验。过滤不改变已选值；异步加载或缺少选项时仍显示保存值。禁用项不能选择，loading 时不能确认。调用方通过设置 value 为 `""` 或提供明确空项清除选择。
+
+弹层默认 Portal 到 document body，逃逸滚动容器裁切。在 Dialog 内使用嵌套 modal 焦点范围；Escape 保留父弹窗，Tab 回到弹窗内的下一项。contentProps.portalContainer 可指定不会裁切内容的宿主。保持视口碰撞处理，用 UI Lab 验收长列表、窄屏和弹窗焦点。
+
+`components/business/AgentModelFields` 负责提供商信息、认证保护和切换模型规则；ModelPicker 负责失效旧模型的保留与提示。创建弹窗和详情共用这些业务字段，基础 Combobox 不依赖业务 catalog。
+
+Field 向 TextInput、TextArea、SelectTrigger 和 Combobox 传递 label/control ID、hint/error 描述、invalid 和 required 可访问状态；显式 ID 与名称优先。Field 的 required 用于字段标记，需要原生校验时同时设置控件 required。一个 Field 对应一个逻辑控件。
+
+TextInput、TextArea 拥有带 class/data 标识的样式，全局历史输入选择器排除它们。紧凑输入使用 size="sm"；组合搜索容器负责边框和背景时使用 variant="plain"，避免 `!important`。
+
+PanelHeader 提供内容与 actions 布局，EmptyState 提供标题、描述和操作，SegmentedControl 提供命名单选组及键盘导航。业务文案和持久化留给调用方。菜单表面、hover/selected、Tooltip 和 Dialog 背景颜色通过 shared/styles/tokens.css 的语义 token 管理。
+
+在 web/app 运行 `corepack pnpm ui:lab`，打开独立 ui-lab.html 展示生产组件；无需应用数据，也不进入生产构建。
+
 ## Dropdown Menu
 
 `DropdownMenu` 基于 `radix-ui` 包里的 `DropdownMenu` namespace 实现。菜单应组合共享的 `DropdownMenuRoot`、`DropdownMenuTrigger`、`DropdownMenuContent`、`DropdownMenuItem` 和 `DropdownMenuSeparator`，让页面继承一致的 hover、键盘、danger 状态、portal 和焦点行为。

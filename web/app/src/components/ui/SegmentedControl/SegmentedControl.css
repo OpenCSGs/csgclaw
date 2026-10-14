@@ -1,0 +1,38 @@
+.csg-segmented-control {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel-soft);
+}
+.csg-segmented-control-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 36px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: var(--muted);
+  font: var(--text-sm-medium);
+  cursor: pointer;
+}
+.csg-segmented-control-item[data-state="on"] {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+}
+.csg-segmented-control-item:hover {
+  color: var(--text);
+}
+.csg-segmented-control-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.csg-segmented-control-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

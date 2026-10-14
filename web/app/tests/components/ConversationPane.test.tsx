@@ -2,7 +2,7 @@ import { createQueryWrapper } from "../helpers/queryClient";
 import { createRef, useRef, useState } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ConversationPane } from "@/pages/ConversationPage/components/ConversationPane";
+import { ConversationPane } from "@/components/business/ConversationWorkspace/ConversationPane";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 import { CHAT_SIDE_PANEL_WIDTH_STORAGE_KEY } from "@/shared/storage/keys";
 import type { ConversationPaneProps } from "@/components/business/ConversationPane";

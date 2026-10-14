@@ -1,3 +1,4 @@
+import { TextInput } from "@/components/ui/FormControls";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
@@ -35,7 +36,8 @@ export function ModelProviderModelList({
       <label className="model-provider-model-search">
         <Search size={16} aria-hidden="true" />
         <span className="sr-only">{searchLabel}</span>
-        <input
+        <TextInput
+          variant="plain"
           value={filterText}
           onInput={(event) => setFilterText(event.currentTarget.value)}
           placeholder={searchLabel}

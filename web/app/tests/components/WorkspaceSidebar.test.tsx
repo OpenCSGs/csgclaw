@@ -3,7 +3,7 @@ import { emptyAuthStatus } from "@/models/auth";
 import { defaultAuthEnvironmentDraft } from "@/models/authEnvironment";
 import { WorkspacePaneTypes, WorkspaceTabs } from "@/models/routing";
 import { WorkspaceSidebar } from "@/pages/WorkspacePage/components/WorkspaceSidebar";
-import type { WorkspaceSidebarProps } from "@/pages/WorkspacePage/components/WorkspaceSidebar/types";
+import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 import type { TranslateFn } from "@/models/conversations";
 
 const labels: Record<string, string> = {

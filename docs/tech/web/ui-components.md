@@ -68,7 +68,31 @@ When adding a Radix component with a portal, expose a container escape hatch whe
 
 `Select` is built on the `Select` namespace from `radix-ui`. Prefer the data-driven `options` prop for normal forms. Use the compound exports (`SelectRoot`, `SelectTrigger`, `SelectContent`, `SelectItem`) only when a custom layout is needed.
 
+`Select` is for finite, non-searchable choices. Use `Combobox` for searchable single selection.
+
 `Select` maps an empty business value (`""`) to an internal Radix item value, because Radix reserves empty string for clearing selection. Callers should continue to read and write `""` normally.
+
+## Combobox And Model Fields
+
+`Combobox` composes the shared Popover and TextInput with a single input-focus model. Arrow keys skip disabled options, Enter confirms, Escape closes the picker, and Tab/Shift+Tab leave it in form order. IME confirmation must not select an option. `value`/`open` may be controlled; `defaultValue`/`defaultOpen` support uncontrolled use. Use `textValue` for JSX labels, and supply translated search, empty and loading labels.
+
+Empty business values remain `""`; a hidden native select preserves `name`/`required` submission. Filtering does not change the selected value, and a saved value remains visible when options are missing or loading. Disabling an option prevents selection. Loading prevents confirmation. Callers clear selection by setting `value` to `""` or providing an explicit empty option.
+
+Content portals to the document body to escape scroll-container clipping. Inside a Dialog it uses a nested modal focus scope; Escape leaves the parent dialog open and Tab returns to its next field. `contentProps.portalContainer` remains an escape hatch for a suitable unclipped host. Keep collision detection enabled and verify long lists and narrow viewports in UI Lab.
+
+Provider metadata, authentication guards, model discovery and retained unavailable models belong to `components/business/AgentModelFields`. Its `ModelPicker` wraps the generic Combobox; creation and detail views share the same provider/model field rules.
+
+## Fields And Reusable Layouts
+
+`Field` supplies control/label IDs, hint/error descriptions, invalid state and required accessibility state to TextInput, TextArea, SelectTrigger and Combobox. Explicit IDs and accessible names take precedence. `required` on Field marks the field; set `required` on the control when native form validation is needed. Keep one logical control per Field.
+
+TextInput and TextArea own their class/data-marked styles. Global legacy input selectors exclude these controls. Use `size="sm"` for compact text inputs and `variant="plain"` when a composed search container owns the border/background. Avoid overrides with `!important`.
+
+PanelHeader composes content and an optional actions slot, EmptyState displays a title/description/actions, and SegmentedControl provides a named single-choice group with keyboard navigation. Business copy and persistence remain with callers.
+
+Semantic tokens own menu surfaces, hover/selected states, tooltip colors and dialog backdrops. Add a theme role in `shared/styles/tokens.css` when a primitive needs a new color relationship. Component CSS consumes the role without repeating light/dark branches.
+
+The standalone `ui-lab.html` entry demonstrates these production components without application data. Start it with `corepack pnpm ui:lab` from `web/app`; it is a development fixture and is excluded from production build inputs.
 
 ## Dropdown Menu
 

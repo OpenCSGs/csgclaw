@@ -244,3 +244,23 @@ src/pages/WorkspacePage/components/
 - 不要手动编辑 `web/static-dist`。
 - 使用前端构建流程重新生成 embedded assets。
 - 如果验证构建意外写入了 `web/static-dist`，需要说明，并且只在明确安全或获得确认后清理。
+
+## 工作区契约与共享视图归属
+
+`hooks/workspace/workspaceControllerContract.ts` 显式定义 ready/loading 联合类型，Context 使用该契约；共享侧栏契约位于 `hooks/workspace/contracts/`。根控制器组合数据和操作；`bindings/` 负责局部视图适配，`useModelProviderCreation` 负责模型服务创建、检查、刷新和导航。
+
+路由页面负责适配 props。AppsPage 和 HubPage 共同使用 HubDetailPane，由 AppsPage 管理连接器的专属适配。AgentDetails、TeamDetailPane 和 ConversationWorkspace 是共享业务视图；AgentActivityPanel、AgentList 仍由 AgentPage 私有管理。业务组件和控制器不引用页面所属模块。页面之间可以通过 package 入口或同名路由组件进行组装，其他 helper 和私有组件归所属页面管理；规则无需逐个登记页面例外。
+
+## 应用级主题与 UI Lab
+
+`workspaceUiStore.theme` 保存用户偏好，`bootstrap/AppThemeSynchronizer` 负责 DOM 主题、持久化、系统变化订阅、Mermaid 和桌面 bridge 同步。页面和外壳控制器消费偏好，不再各自安装主题 effect。`shared/theme/theme.ts` 管理解析与默认深色退化。
+
+本轮保留 `index.html` 现有首屏脚本：React 挂载前应用保存的 light/dark，system 仍回退到深色。AppThemeSynchronizer 在 React 启动后解析系统偏好，因此浅色系统下首次显示短暂深色的可能性继续保留。未来修改首屏脚本时必须同步更新 `internal/server/desktop_security.go` 的 `documentBootstrapCSPHash`，服务端回归测试校验源码哈希。运行时存储受限或系统 API 缺失不会阻断主题同步。
+
+`lint` 运行 ESLint；`test` 和 `check` 通过 Vitest 运行 `tests/components/UiBoundaries.test.ts`。公共源码解析逻辑放在 `tests/helpers/sourceDependencies.ts`，检查直接 import、re-export 和写明路径的动态 import。
+
+检查按目录职责判断：基础 UI 不依赖 API、控制器、页面及应用 storage/realtime/platform；共享业务组件和 hooks 不依赖页面模块；跨页组装使用公开页面入口。允许使用纯 model helper，不维护按组件名称写死的名单。
+
+组件交互和字段状态的测试尽量放在组件旁边，公共测试工具放在 `tests/helpers/`。颜色与 token 归属在组件样式中审查；CSS 级联、主题颜色及视口行为补真实浏览器验证，不再按特定组件名单禁止一组 CSS 字符串。
+
+在 `web/app` 运行 `corepack pnpm ui:lab`，使用项目固定包管理器打开 `ui-lab.html`。展示入口直接使用生产组件，无需后端、账号或控制器，且不进入生产构建。验收明暗主题、错误状态、长列表和嵌套弹窗；Portal 裁切、视口碰撞和焦点行为必须补真实浏览器验证。

@@ -2,7 +2,7 @@
   position: fixed;
   z-index: var(--z-modal);
   inset: 0;
-  background: rgba(15, 23, 42, 0.38);
+  background: var(--dialog-backdrop);
 }
 
 .csg-dialog-content {
@@ -67,8 +67,4 @@
   min-height: 36px;
   padding: 0;
   border-radius: 8px;
-}
-
-:root[data-theme="dark"] .csg-dialog-overlay {
-  background: rgba(2, 6, 23, 0.58);
 }

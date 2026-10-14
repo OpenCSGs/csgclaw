@@ -433,6 +433,14 @@
   --panel-soft: var(--gray-100);
   --surface: var(--white);
   --field: var(--white);
+  --popover-background: var(--panel);
+  --popover-border: var(--line);
+  --control-hover-background: var(--primary-soft);
+  --control-selected-background: var(--primary-soft);
+  --tooltip-background: var(--panel);
+  --tooltip-border: var(--line);
+  --tooltip-text: var(--gray-700);
+  --dialog-backdrop: rgba(15, 23, 42, 0.38);
   --text: var(--gray-900);
   --muted: var(--gray-500);
   --line: var(--gray-200);
@@ -606,6 +614,11 @@
   --panel-soft: var(--gray-800);
   --surface: var(--gray-950);
   --field: var(--gray-800);
+  --popover-background: var(--panel-strong);
+  --tooltip-background: var(--gray-900);
+  --tooltip-border: var(--gray-700);
+  --tooltip-text: var(--white);
+  --dialog-backdrop: rgba(2, 6, 23, 0.58);
   --text: var(--gray-200);
   --muted: var(--gray-400);
   --line: var(--gray-700);

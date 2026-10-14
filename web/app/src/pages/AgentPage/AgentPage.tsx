@@ -1,20 +1,17 @@
-import { useLocation, useNavigate } from "react-router-dom";
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { WorkspacePaneTypes } from "@/models/routing";
-import { ConversationPage } from "@/pages/ConversationPage";
-import { AgentView } from "./components";
+import { ConversationView } from "@/components/business/ConversationWorkspace";
+import { useAgentViewBindings } from "@/hooks/workspace/useAgentViewBindings";
+import { AgentView } from "@/components/business/AgentDetails";
 
 export function AgentPage() {
   const controller = useWorkspaceControllerContext();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const search = new URLSearchParams(location.search);
+  const agentViewProps = useAgentViewBindings();
 
   if (!controller.ready) {
     return null;
   }
 
-  const agentViewProps = controller.agentViewProps;
   if (!agentViewProps?.item) {
     if (controller.activePane.type === WorkspacePaneTypes.notifications) {
       return (
@@ -25,24 +22,8 @@ export function AgentPage() {
         </section>
       );
     }
-    return <ConversationPage />;
+    return <ConversationView {...controller.conversationViewProps} />;
   }
 
-  return (
-    <AgentView
-      {...agentViewProps}
-      item={agentViewProps.item}
-      requestedProfileTab={search.get("tab") === "connectors" ? "apps" : search.get("tab") || undefined}
-      requestedAppID={search.get("connector") || undefined}
-      requestedAddAppID={search.get("add_connector") || undefined}
-      onProfileTabChange={(tab, appID) => {
-        const next = new URLSearchParams(location.search);
-        next.set("tab", tab === "apps" || tab === "mcp" ? "connectors" : tab);
-        next.delete("add_connector");
-        if (appID) next.set("connector", appID);
-        else next.delete("connector");
-        void navigate({ pathname: location.pathname, search: next.toString() });
-      }}
-    />
-  );
+  return <AgentView {...agentViewProps} />;
 }

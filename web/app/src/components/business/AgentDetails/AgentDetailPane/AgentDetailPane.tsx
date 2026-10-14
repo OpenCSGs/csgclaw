@@ -1,3 +1,4 @@
+import { AgentModelPanel } from "./components/AgentModelPanel";
 import { SidebarMcpIcon } from "@/components/ui/Icons";
 import { ResourceLoadMore } from "../ResourceLoadMore";
 import type { ResourceContinuation } from "@/hooks/workspace/useInfiniteAgentResources";
@@ -41,16 +42,12 @@ import {
 } from "@/api/agents";
 import { SHOW_AGENT_LIFECYCLE_ACTIONS } from "@/shared/constants/agents";
 import { AGENT_PROFILE_ACTIVE_TAB_STORAGE_KEY } from "@/shared/storage/keys";
-import { localizeAPIError } from "@/shared/i18n";
 import {
   EnvKeyValueEditor,
   FieldHelpTooltip,
   ClipboardCopyButton,
-  ModelOptionLabel,
   NotifierControls,
-  ReasoningControls,
   reasoningEffortLabel,
-  requiredFieldLabel,
   RuntimeOptionsFields,
 } from "@/components/business/ProfileControls";
 import {
@@ -81,9 +78,6 @@ import {
 } from "@/models/agents";
 import type { AgentDraft, AgentLike } from "@/models/agents";
 import {
-  defaultModelIDForProvider,
-  isOpenCSGAutoModel,
-  MODEL_PROVIDER_IDS,
   modelIDsForProviderSelection,
   modelProviderAvatarPath,
   modelProviderSelectOptionsFromCatalog,
@@ -122,7 +116,6 @@ import {
   DropdownMenuRoot,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Select,
   Tooltip,
 } from "@/components/ui";
 import { SidebarPuzzlePiece02Icon } from "@/components/ui/Icons";
@@ -145,7 +138,6 @@ const AGENT_PROFILE_TAB_IDS = ["profile", "channels", "instructions", "memory", 
 type AgentProfileTabID = (typeof AGENT_PROFILE_TAB_IDS)[number];
 type UpdateAgentDraft = (patch: Partial<AgentDraft>) => void;
 type RuntimeOptionSchemaList = ReturnType<typeof runtimeOptionSchemasForAgent>;
-type ModelProviderSelectOption = ReturnType<typeof modelProviderSelectOptionsFromCatalog>[number];
 const DEFAULT_AGENT_PROFILE_TAB_ID: AgentProfileTabID = "profile";
 
 type FeishuPendingRegistrationView = {
@@ -1916,354 +1908,6 @@ function AgentMCPPanel({
         </ResourceList>
       ) : null}
       <ResourceLoadMore continuation={continuation} t={t} />
-    </section>
-  );
-}
-
-type AgentModelPanelProps = {
-  draft: AgentDraft;
-  modelBusy: boolean;
-  modelError: unknown;
-  onRetryModels?: () => void | Promise<unknown>;
-  onRequireOpenCSGAuth: () => boolean;
-  providerOptions: readonly ModelProviderSelectOption[];
-  selectedModelValue: string;
-  selectedProviderID: string;
-  selectedProviderModels: readonly string[];
-  t: TranslateFn;
-  updateDraft: UpdateAgentDraft;
-};
-
-function AgentModelPanel({
-  draft,
-  modelBusy,
-  modelError,
-  onRetryModels,
-  onRequireOpenCSGAuth,
-  providerOptions,
-  selectedModelValue,
-  selectedProviderID,
-  selectedProviderModels,
-  t,
-  updateDraft,
-}: AgentModelPanelProps) {
-  const selectedProviderOption = providerOptions.find((option) => option.id === selectedProviderID);
-  const selectedModelIsOpenCSGAuto = isOpenCSGAutoModel(selectedProviderID, selectedModelValue);
-  const imageProviderID = draft.image_generation?.provider_id || "";
-  const imageModelID = draft.image_generation?.model_id || "";
-  const imageProviders = providerOptions.filter(
-    (provider) => (provider.imageModels?.length ?? 0) > 0 || provider.id === imageProviderID,
-  );
-  const selectedImageProvider = imageProviders.find((provider) => provider.id === imageProviderID);
-  const imageModels = selectedImageProvider?.imageModels ?? [];
-  const imageProviderLabel = imageProviderID ? (
-    <ModelOptionLabel
-      avatar={selectedImageProvider?.avatar || modelProviderAvatarPath(imageProviderID)}
-      model={selectedImageProvider?.displayName || imageProviderID}
-    />
-  ) : undefined;
-  const videoProviderID = draft.video_generation?.provider_id || "";
-  const videoModelID = draft.video_generation?.model_id || "";
-  const videoProviders = providerOptions.filter(
-    (provider) => (provider.videoModels?.length ?? 0) > 0 || provider.id === videoProviderID,
-  );
-  const selectedVideoProvider = videoProviders.find((provider) => provider.id === videoProviderID);
-  const videoModels = selectedVideoProvider?.videoModels ?? [];
-  const videoProviderLabel = videoProviderID ? (
-    <ModelOptionLabel
-      avatar={selectedVideoProvider?.avatar || modelProviderAvatarPath(videoProviderID)}
-      model={selectedVideoProvider?.displayName || videoProviderID}
-    />
-  ) : undefined;
-
-  return (
-    <section id="agent-profile-model" className="profile-section agent-profile-scroll-target">
-      <div className="profile-section-heading">
-        <div className="profile-section-title">{t("profileModelSection")}</div>
-        <p className="profile-section-description">{t("profileModelSectionDescription")}</p>
-      </div>
-      <div className="agent-section-form">
-        <div className="agent-page-form-content agent-model-form-content">
-          <div className="profile-runtime-grid agent-model-config-grid">
-            <label className="field">
-              {requiredFieldLabel(t("profileModelProvider"))}
-              <Select
-                value={selectedProviderID}
-                required
-                placeholder={modelBusy ? t("profileLoadingModels") : t("profileProviderSelect")}
-                selectedLabel={
-                  selectedProviderOption ? (
-                    <ModelOptionLabel
-                      avatar={selectedProviderOption.avatar}
-                      model={selectedProviderOption.displayName}
-                    />
-                  ) : undefined
-                }
-                onValueChange={(value) => {
-                  const nextProvider = providerOptions.find((option) => option.id === value);
-                  if (!nextProvider) {
-                    updateDraft({ model_id: "", model_provider_id: "" });
-                    return;
-                  }
-                  if (nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) {
-                    return;
-                  }
-                  updateDraft({
-                    provider: providerNameForProviderID(nextProvider.id),
-                    model_provider_id: nextProvider.id,
-                    model_id: defaultModelIDForProvider(nextProvider.id, nextProvider.models),
-                  });
-                }}
-                triggerProps={{ "aria-label": t("profileModelProvider"), "aria-required": true }}
-                contentProps={{ side: "bottom", align: "start", collisionPadding: 12 }}
-                options={providerOptions.map((option) => ({
-                  value: option.value,
-                  disabled: option.disabled,
-                  label: (
-                    <ModelOptionLabel
-                      avatar={option.avatar}
-                      model={option.displayName}
-                      provider={
-                        option.models.length
-                          ? t("modelProviderModelCount", { count: option.models.length })
-                          : t("modelProviderNoModels")
-                      }
-                    />
-                  ),
-                  textValue: option.displayName,
-                }))}
-              />
-            </label>
-            <label className="field">
-              {requiredFieldLabel(t("profileModel"))}
-              <Select
-                value={selectedModelValue}
-                required
-                disabled={!selectedProviderID || !selectedProviderModels.length}
-                onValueChange={(value) => updateDraft({ model_id: value })}
-                searchable
-                searchPlaceholder={t("modelProviderModelSearch")}
-                emptyLabel={t("modelProviderNoModels")}
-                placeholder={selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst")}
-                selectedLabel={
-                  selectedModelValue ? (
-                    <ModelOptionLabel
-                      model={selectedModelIsOpenCSGAuto ? t("modelProviderAutoName") : selectedModelValue}
-                      title={selectedModelIsOpenCSGAuto ? t("modelProviderAutoRouteHint") : undefined}
-                      showAvatar={false}
-                    />
-                  ) : undefined
-                }
-                triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
-                options={[
-                  ...selectedProviderModels.map((modelID) => {
-                    const isAuto = isOpenCSGAutoModel(selectedProviderID, modelID);
-                    return {
-                      value: modelID,
-                      label: (
-                        <ModelOptionLabel
-                          model={isAuto ? t("modelProviderAutoName") : modelID}
-                          badge={isAuto ? t("modelProviderAutoBadge") : undefined}
-                          title={isAuto ? t("modelProviderAutoRouteHint") : undefined}
-                          showAvatar={false}
-                        />
-                      ),
-                      description: isAuto ? t("modelProviderAutoDescription") : undefined,
-                      separatorAfter: isAuto,
-                      textValue: isAuto
-                        ? `${modelID} ${t("modelProviderAutoName")} ${t("modelProviderAutoBadge")}`
-                        : modelID,
-                    };
-                  }),
-                  ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
-                    ? [
-                        {
-                          value: selectedModelValue,
-                          label: (
-                            <ModelOptionLabel
-                              model={selectedModelIsOpenCSGAuto ? t("modelProviderAutoName") : selectedModelValue}
-                              badge={selectedModelIsOpenCSGAuto ? t("modelProviderAutoBadge") : undefined}
-                              title={selectedModelIsOpenCSGAuto ? t("modelProviderAutoRouteHint") : undefined}
-                              showAvatar={false}
-                            />
-                          ),
-                          description: selectedModelIsOpenCSGAuto ? t("modelProviderAutoDescription") : undefined,
-                          textValue: selectedModelIsOpenCSGAuto
-                            ? `${selectedModelValue} ${t("modelProviderAutoName")} ${t("modelProviderAutoBadge")}`
-                            : selectedModelValue,
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </label>
-            <ReasoningControls
-              value={draft.reasoning_effort}
-              onChange={(value) => updateDraft({ reasoning_effort: value })}
-              t={t}
-            />
-            <div className="field agent-fast-mode-field">
-              <span>{t("profileFastMode")}</span>
-              <label className="selection-item compact-toggle-row agent-fast-mode-toggle">
-                <input
-                  type="checkbox"
-                  checked={draft.enable_fast_mode}
-                  aria-label={t("profileFastMode")}
-                  onChange={() => updateDraft({ enable_fast_mode: !draft.enable_fast_mode })}
-                />
-                <small className="agent-fast-mode-help">{t("profileFastModeHelp")}</small>
-              </label>
-            </div>
-            <div className="agent-media-model-group agent-image-model-group">
-              <label className="field">
-                <span>{t("profileImageModelProvider")}</span>
-                <Select
-                  value={imageProviderID}
-                  selectedLabel={imageProviderLabel}
-                  onValueChange={(value) => {
-                    const provider = imageProviders.find((option) => option.id === value);
-                    updateDraft({
-                      image_generation: provider?.imageModels?.length
-                        ? { provider_id: provider.id, model_id: provider.imageModels[0] }
-                        : null,
-                    });
-                  }}
-                  triggerProps={{ "aria-label": t("profileImageModelProvider") }}
-                  contentProps={{ side: "bottom", align: "start", collisionPadding: 12 }}
-                  options={[
-                    { value: "", label: t("profileImageModelNone") },
-                    ...imageProviders.map((provider) => ({
-                      value: provider.id,
-                      label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
-                      textValue: provider.displayName,
-                    })),
-                    ...(imageProviderID && !selectedImageProvider
-                      ? [{ value: imageProviderID, label: imageProviderLabel, textValue: imageProviderID }]
-                      : []),
-                  ]}
-                />
-              </label>
-              <label className="field">
-                <span>{t("profileImageModel")}</span>
-                <Select
-                  value={imageModelID}
-                  disabled={!imageProviderID || !imageModels.length}
-                  onValueChange={(value) => {
-                    updateDraft({ image_generation: value ? { provider_id: imageProviderID, model_id: value } : null });
-                  }}
-                  searchable
-                  searchPlaceholder={t("modelProviderModelSearch")}
-                  emptyLabel={t("modelProviderNoModels")}
-                  triggerProps={{ "aria-label": t("profileImageModel") }}
-                  options={[
-                    ...(!imageModelID
-                      ? [
-                          {
-                            value: "",
-                            label: imageProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst"),
-                          },
-                        ]
-                      : []),
-                    ...imageModels.map((model) => ({
-                      value: model,
-                      label: <ModelOptionLabel model={model} showAvatar={false} />,
-                      textValue: model,
-                    })),
-                    ...(imageModelID && !imageModels.includes(imageModelID)
-                      ? [{ value: imageModelID, label: `${imageModelID} (${t("profileImageModelUnavailable")})` }]
-                      : []),
-                  ]}
-                />
-              </label>
-              <div className="agent-media-model-help">
-                <small>{t("profileImageModelHelp")}</small>
-                {!imageProviders.some((provider) => provider.imageModels?.length) ? (
-                  <small>{t("profileImageModelEmpty")}</small>
-                ) : null}
-              </div>
-            </div>
-            <div className="agent-media-model-group agent-video-model-group">
-              <label className="field">
-                <span>{t("profileVideoModelProvider")}</span>
-                <Select
-                  value={videoProviderID}
-                  selectedLabel={videoProviderLabel}
-                  onValueChange={(value) => {
-                    const provider = videoProviders.find((option) => option.id === value);
-                    updateDraft({
-                      video_generation: provider?.videoModels?.length
-                        ? { provider_id: provider.id, model_id: provider.videoModels[0] }
-                        : null,
-                    });
-                  }}
-                  triggerProps={{ "aria-label": t("profileVideoModelProvider") }}
-                  options={[
-                    { value: "", label: t("profileVideoModelNone") },
-                    ...videoProviders.map((provider) => ({
-                      value: provider.id,
-                      label: <ModelOptionLabel avatar={provider.avatar} model={provider.displayName} />,
-                      textValue: provider.displayName,
-                    })),
-                    ...(videoProviderID && !selectedVideoProvider
-                      ? [{ value: videoProviderID, label: videoProviderLabel, textValue: videoProviderID }]
-                      : []),
-                  ]}
-                />
-              </label>
-              <label className="field">
-                <span>{t("profileVideoModel")}</span>
-                <Select
-                  value={videoModelID}
-                  disabled={!videoProviderID || !videoModels.length}
-                  onValueChange={(value) =>
-                    updateDraft({ video_generation: value ? { provider_id: videoProviderID, model_id: value } : null })
-                  }
-                  searchable
-                  searchPlaceholder={t("modelProviderModelSearch")}
-                  emptyLabel={t("modelProviderNoModels")}
-                  triggerProps={{ "aria-label": t("profileVideoModel") }}
-                  options={videoModels.map((model) => ({ value: model, label: model }))}
-                />
-              </label>
-              <div className="agent-media-model-help">
-                <small>{t("profileVideoModelHelp")}</small>
-                {!videoProviders.some((provider) => provider.videoModels?.length) ? (
-                  <small>{t("profileVideoModelEmpty")}</small>
-                ) : null}
-              </div>
-            </div>
-            {modelError ? (
-              <div className="agent-model-load-error" role="alert">
-                <AlertCircle className="agent-model-load-error-icon" aria-hidden="true" size={20} strokeWidth={2} />
-                <div className="agent-model-load-error-content">
-                  <strong>{t("modelLoadFailed")}</strong>
-                  <p>{t("profileModelLoadErrorHelp")}</p>
-                  {selectedModelValue ? <small>{t("profileModelCurrentSelectionRetained")}</small> : null}
-                  <details className="agent-model-load-error-details">
-                    <summary>{t("profileModelErrorDetails")}</summary>
-                    <div className="agent-model-load-error-technical">
-                      <pre>{localizeAPIError(modelError, t, errorMessage(modelError, t("modelLoadFailed")))}</pre>
-                    </div>
-                  </details>
-                </div>
-                {onRetryModels ? (
-                  <Button
-                    className="agent-model-load-error-retry"
-                    loading={modelBusy}
-                    loadingLabel={t("profileLoadingModels")}
-                    size="sm"
-                    variant="secondaryGray"
-                    onClick={() => void onRetryModels()}
-                  >
-                    <RefreshCw aria-hidden="true" size={15} strokeWidth={2} />
-                    {t("retry")}
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
     </section>
   );
 }

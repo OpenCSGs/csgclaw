@@ -3,12 +3,16 @@ import { THEME_STORAGE_KEY } from "@/shared/storage/keys";
 export type ResolvedThemeMode = "light" | "dark";
 export type ThemeMode = "system" | ResolvedThemeMode;
 
+export function parseThemeMode(value: unknown): ThemeMode {
+  return value === "system" || value === "light" || value === "dark" ? value : "dark";
+}
+
 export function detectInitialTheme(): ThemeMode {
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (stored === "system" || stored === "light" || stored === "dark") {
-    return stored;
+  try {
+    return parseThemeMode(typeof window === "undefined" ? null : window.localStorage.getItem(THEME_STORAGE_KEY));
+  } catch {
+    return "dark";
   }
-  return "dark";
 }
 
 export function resolveThemeMode(theme: ThemeMode): ResolvedThemeMode {
@@ -18,5 +22,9 @@ export function resolveThemeMode(theme: ThemeMode): ResolvedThemeMode {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return "dark";
   }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  } catch {
+    return "dark";
+  }
 }

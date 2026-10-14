@@ -1,10 +1,10 @@
 .csg-tooltip-content {
   z-index: var(--z-tooltip);
   padding: 8px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--tooltip-border);
   border-radius: 8px;
-  background: var(--panel);
-  color: var(--gray-700);
+  background: var(--tooltip-background);
+  color: var(--tooltip-text);
   font-size: 12px;
   font-weight: 400;
   line-height: 16px;
@@ -30,10 +30,4 @@
 /* The Popper wrapper must be transparent to pointers as well as its content. */
 [data-radix-popper-content-wrapper]:has(> .csg-tooltip-content) {
   pointer-events: none;
-}
-
-:root[data-theme="dark"] .csg-tooltip-content {
-  border-color: var(--gray-700);
-  background: var(--gray-900);
-  color: var(--white);
 }

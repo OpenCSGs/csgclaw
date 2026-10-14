@@ -1,6 +1,5 @@
 import { createContext } from "react";
-import type { useWorkspaceController } from "./useWorkspaceController";
-
-export type WorkspaceController = ReturnType<typeof useWorkspaceController>;
+import type { WorkspaceController } from "./workspaceControllerContract";
+export type { WorkspaceController } from "./workspaceControllerContract";
 
 export const WorkspaceControllerContext = createContext<WorkspaceController | null>(null);

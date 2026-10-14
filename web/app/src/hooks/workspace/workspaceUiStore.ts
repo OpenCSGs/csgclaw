@@ -1,14 +1,10 @@
+import { readCollapsedWorkspaceGroups, readSidebarCollapsed } from "@/shared/storage/workspacePreferences";
 import { create } from "zustand";
 import { detectInitialLocale } from "@/shared/i18n";
 import { detectInitialTheme } from "@/shared/theme/theme";
 import { readStoredTurnNotificationMode, writeStoredTurnNotificationMode } from "@/shared/storage/turnNotifications";
-import { SIDEBAR_COLLAPSED_STORAGE_KEY, HUB_RESOURCE_TYPE_STORAGE_KEY } from "@/shared/storage/keys";
-import {
-  WorkspacePaneTypes,
-  paneFromLocation,
-  readCollapsedWorkspaceGroups,
-  workspaceTabForPane,
-} from "@/models/routing";
+import { HUB_RESOURCE_TYPE_STORAGE_KEY } from "@/shared/storage/keys";
+import { WorkspacePaneTypes, paneFromLocation, workspaceTabForPane } from "@/models/routing";
 import type { LocaleCode } from "@/models/conversations";
 import type { CollapsedWorkspaceGroups, WorkspaceTab } from "@/models/routing";
 import type { ThemeMode } from "@/shared/theme/theme";
@@ -92,7 +88,7 @@ export const useWorkspaceUiStore = create<WorkspaceUiState>((set) => ({
   theme: detectInitialTheme(),
   turnNotificationMode: readStoredTurnNotificationMode(),
   showToolCalls: false,
-  isSidebarCollapsed: window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true",
+  isSidebarCollapsed: readSidebarCollapsed(),
   collapsedWorkspaceGroups: readCollapsedWorkspaceGroups(),
   activeConversationId: initialPane.type === WorkspacePaneTypes.conversation ? String(initialPane.id ?? "") : "",
   floatingChatOpen: false,

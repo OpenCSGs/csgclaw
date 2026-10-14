@@ -1,0 +1,132 @@
+import type { TaskEntryController } from "@/hooks/workspace/useTaskEntry";
+import type { AgentLike } from "@/models/agents";
+import type { CreateTeamPayload } from "@/api/tasks";
+import type {
+  IMConversation,
+  IMMessage,
+  IMUser,
+  LocaleCode,
+  ThreadView,
+  TranslateFn,
+  UsersById,
+} from "@/models/conversations";
+import type { AuthStatus } from "@/models/auth";
+import type { AuthEnvironmentDraft } from "@/models/authEnvironment";
+import type { HubTemplate } from "@/models/hubWorkspace";
+import type { MCPServer } from "@/models/mcp";
+import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
+import type { ModelProvider, ModelProviderCatalog } from "@/models/modelProviders";
+import type { SkillSummary } from "@/models/skillhub";
+import type { CollapsedWorkspaceGroups, WorkspacePane, WorkspaceTab } from "@/models/routing";
+import type { WorkspaceTask, WorkspaceTeam } from "@/models/tasks";
+import type { UpgradeChannel, UpgradePhase, UpgradeStatus } from "@/models/upgradeStatus";
+import type { ThemeMode } from "@/shared/theme/theme";
+import type { WorkspaceHubController } from "@/hooks/workspace/useWorkspaceHubController";
+import type { TurnNotificationMode } from "@/models/turnNotifications";
+import type { SystemNotificationPermission } from "../useAgentTurnNotifications";
+
+export type WorkspaceSidebarProps = {
+  turnNotificationMode?: TurnNotificationMode;
+  turnNotificationPermission?: SystemNotificationPermission;
+  onRequestTurnNotificationPermission?: () => Promise<SystemNotificationPermission>;
+  onTurnNotificationModeChange?: (mode: TurnNotificationMode) => Promise<void>;
+  taskEntry?: TaskEntryController;
+  activePane: WorkspacePane;
+  onSelectApps?: () => void;
+  activeThreadRootID: string;
+  agentItems: AgentLike[];
+  agentsError: string;
+  appVersion: string;
+  channels: IMConversation[];
+  collapsedWorkspaceGroups: CollapsedWorkspaceGroups;
+  currentUserID: string;
+  currentWorkspaceLabel: string;
+  authBusy: boolean;
+  authLoggingOut: boolean;
+  authEnvironment: AuthEnvironmentDraft;
+  authError: string;
+  authPending: boolean;
+  authStatus: AuthStatus;
+  authExpired?: boolean;
+  directMessages: IMConversation[];
+  showUpgradeControls: boolean;
+  hub: WorkspaceHubController["hub"];
+  isSidebarCollapsed: boolean;
+  locale: LocaleCode;
+  modelProviders?: ModelProviderCatalog | null;
+  modelProvidersLoaded?: boolean;
+  notificationAgentItems: AgentLike[];
+  onCollapseSidebar: () => void;
+  onAuthEnvironmentChange: (environment: AuthEnvironmentDraft) => void;
+  onCreateAgent: () => void | Promise<void>;
+  onCreateModelProvider?: () => void | Promise<void>;
+  onCreateTeam: (payload: CreateTeamPayload) => Promise<void>;
+  onOpenCreateTeam: () => void | Promise<void>;
+  onOpenCreateTask: () => void | Promise<void>;
+  onOpenCreateScheduledTask?: () => void | Promise<void>;
+  onCreateNotificationParticipant: () => void | Promise<void>;
+  onCreateRoom: () => void;
+  onExpandSidebar: () => void;
+  onSkillUploadOpenChange?: (open: boolean) => void;
+  onOpenUpgrade: () => void;
+  onRefreshUpgradeStatus: () => Promise<UpgradeStatus | null>;
+  onUpgradeChannelChange: (channel: UpgradeChannel) => Promise<boolean>;
+  onOpenConfigSettings: () => void;
+  onOpenSettings: () => void;
+  onLogin: (environment?: AuthEnvironmentDraft) => void | Promise<void>;
+  onRequireOpenCSGAuthentication?: () => boolean;
+  onLogout: () => void | Promise<void>;
+  onPreviewUser: (user: IMUser | null | undefined, anchor: HTMLElement | null | undefined) => void;
+  onSelectAgent: (item: AgentLike | null | undefined) => void;
+  onSelectComputer: () => void;
+  onSelectConversation: (id: string) => void;
+  onSelectHuman: (user: IMUser | null | undefined) => void;
+  onSelectHub: () => void;
+  onSelectKnowledgeBase?: (item: RemoteKnowledgeBase | null | undefined) => void;
+  onSelectMCPServer?: (item: MCPServer | null | undefined) => void;
+  onSelectHubSkill: (item: SkillSummary | null | undefined) => void;
+  onSelectHubTemplate: (item: HubTemplate | null | undefined) => void;
+  onSelectModelProvider?: (
+    item: ModelProvider | null | undefined,
+    options?: { requireAuthentication?: boolean },
+  ) => boolean | void;
+  onSelectNotificationSection: () => void;
+  onSelectTeam: (item: WorkspaceTeam | null | undefined) => void;
+  onSelectTeamSection: () => void;
+  onSelectTaskBoardView?: (view: "tasks" | "scheduled") => void;
+  onSelectTask: (taskID?: string) => void;
+  onSelectThread: (conversationID: string, message: IMMessage | null | undefined) => void | Promise<void>;
+  onViewTaskDetails: (taskID?: string) => void;
+  onThemeChange: (theme: ThemeMode) => void;
+  onToggleWorkspaceGroup: (id: string) => void;
+  onWorkspaceTabChange: (tab: WorkspaceTab) => void;
+  onLocaleChange: (locale: LocaleCode) => void;
+  taskCount: number;
+  scheduledTaskCount?: number;
+  activeTaskBoardView?: "tasks" | "scheduled";
+  taskItems: WorkspaceTask[];
+  planningTaskID?: string;
+  startingTaskID?: string;
+  teams: WorkspaceTeam[];
+  roomCount: number;
+  runningAgentCount: number;
+  showHubNewBadge: boolean;
+  skillUploadOpen?: boolean;
+  t: TranslateFn;
+  theme: ThemeMode;
+  threadCount: number;
+  threadGroups: { conversation: IMConversation; threads: ThreadView[] }[];
+  upgradeBusy: boolean;
+  upgradeChannelBusy: boolean;
+  upgradeChannelError: string;
+  upgradeChannelLocked: boolean;
+  upgradeError: string;
+  upgradePhase: UpgradePhase;
+  upgradeStatus: UpgradeStatus | null;
+  suppressUpgradeIssue?: boolean;
+  teamActionBusy: boolean;
+  teamActionError: string;
+  usersById: UsersById;
+  workerAgentItems: AgentLike[];
+  workspaceTab: WorkspaceTab;
+};

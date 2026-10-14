@@ -1645,7 +1645,7 @@ describe("AgentProfileModal", () => {
     );
 
     await user.click(screen.getByRole("combobox", { name: "Model" }));
-    const searchInput = screen.getByRole("searchbox", { name: "Search models" });
+    const searchInput = screen.getByRole("combobox", { name: "Search models" });
     await user.type(searchInput, "qwen");
 
     expect(searchInput).toHaveFocus();

@@ -6,7 +6,7 @@ import { WORKSPACE_SECTION_ORDER_STORAGE_KEY } from "@/shared/storage/keys";
 import type { AgentLike } from "@/models/agents";
 import type { TranslateFn } from "@/models/conversations";
 import type { WorkspaceTask } from "@/models/tasks";
-import type { WorkspaceSidebarProps } from "@/pages/WorkspacePage/components/WorkspaceSidebar/types";
+import type { WorkspaceSidebarProps } from "@/hooks/workspace/contracts/sidebar";
 
 const labels: Record<string, string> = {
   agentsTab: "Agents",

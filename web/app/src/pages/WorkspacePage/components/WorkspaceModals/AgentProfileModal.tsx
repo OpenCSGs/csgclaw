@@ -1,3 +1,4 @@
+import { AgentModelFields } from "@/components/business/AgentModelFields";
 import { BOT_TYPE_NORMAL, DEFAULT_RUNTIME_KIND } from "@/shared/constants/agents";
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import {
@@ -7,7 +8,6 @@ import {
   FieldHelpTooltip,
   isBlank,
   MCPServersPanel,
-  ModelOptionLabel,
   NotifierControls,
   ReasoningControls,
   requiredFieldLabel,
@@ -40,13 +40,10 @@ import {
 } from "@/models/agents";
 import type { AgentDraft, AgentLike, RuntimeBootstrapConfig } from "@/models/agents";
 import {
-  defaultModelIDForProvider,
-  isOpenCSGAutoModel,
-  MODEL_PROVIDER_IDS,
   modelIDsForProviderSelection,
+  providerNameForProviderID,
   modelProviderAvatarPath,
   modelProviderSelectOptionsFromCatalog,
-  providerNameForProviderID,
   selectorForProviderModel,
   type ModelProviderCatalog,
   type ModelProviderOption,
@@ -177,7 +174,6 @@ export function AgentProfileModal({
   const selectedProvider = providerOptions.find((option) => option.id === selectedProviderID) ?? null;
   const selectedProviderModels = modelIDsForProviderSelection(selectedProviderID, selectedProvider?.models ?? []);
   const selectedModelValue = agentDraft.model_id || "";
-  const selectedModelIsOpenCSGAuto = isOpenCSGAutoModel(selectedProviderID, selectedModelValue);
   const workerTemplates = useMemo(() => {
     const selectableTemplates = createAgentSelectableTemplates(hubTemplates);
     const selectedBuiltinOpenClawTemplate = hubTemplates.find(
@@ -697,119 +693,16 @@ export function AgentProfileModal({
                 <div className="agent-section-form">
                   <div className="agent-section-form-content agent-model-form-content">
                     <div className="profile-runtime-grid agent-model-config-grid">
-                      <label className="field">
-                        {requiredFieldLabel(t("profileModelProvider"))}
-                        <Select
-                          value={selectedProviderID}
-                          required
-                          placeholder={agentModelBusy ? t("profileLoadingModels") : t("profileProviderSelect")}
-                          selectedLabel={
-                            selectedProvider ? (
-                              <ModelOptionLabel avatar={selectedProvider.avatar} model={selectedProvider.displayName} />
-                            ) : undefined
-                          }
-                          onValueChange={(value) => {
-                            const nextProvider = providerOptions.find((option) => option.id === value);
-                            if (!nextProvider) {
-                              onAgentDraftChange({ ...agentDraft, model_id: "", model_provider_id: "" });
-                              return;
-                            }
-                            if (nextProvider.id === MODEL_PROVIDER_IDS.OpenCSG && !onRequireOpenCSGAuth()) {
-                              return;
-                            }
-                            onAgentDraftChange({
-                              ...agentDraft,
-                              provider: providerNameForProviderID(nextProvider.id),
-                              model_provider_id: nextProvider.id,
-                              model_id: defaultModelIDForProvider(nextProvider.id, nextProvider.models),
-                            });
-                          }}
-                          triggerProps={{ "aria-label": t("profileModelProvider"), "aria-required": true }}
-                          options={providerOptions.map((option) => ({
-                            value: option.value,
-                            disabled: option.disabled,
-                            label: (
-                              <ModelOptionLabel
-                                avatar={option.avatar}
-                                model={option.displayName}
-                                provider={
-                                  option.models.length
-                                    ? t("modelProviderModelCount", { count: option.models.length })
-                                    : t("modelProviderNoModels")
-                                }
-                              />
-                            ),
-                            textValue: option.displayName,
-                          }))}
-                        />
-                      </label>
-                      <label className="field">
-                        {requiredFieldLabel(t("profileModel"))}
-                        <Select
-                          value={selectedModelValue}
-                          required
-                          disabled={!selectedProviderID || !selectedProviderModels.length}
-                          onValueChange={(value) => onAgentDraftChange({ ...agentDraft, model_id: value })}
-                          searchable
-                          searchPlaceholder={t("modelProviderModelSearch")}
-                          emptyLabel={t("modelProviderNoModels")}
-                          placeholder={selectedProviderID ? t("profileSelectModel") : t("profileProviderSelectFirst")}
-                          selectedLabel={
-                            selectedModelValue ? (
-                              <ModelOptionLabel
-                                model={selectedModelIsOpenCSGAuto ? t("modelProviderAutoName") : selectedModelValue}
-                                title={selectedModelIsOpenCSGAuto ? t("modelProviderAutoRouteHint") : undefined}
-                                showAvatar={false}
-                              />
-                            ) : undefined
-                          }
-                          triggerProps={{ "aria-label": t("profileModel"), "aria-required": true }}
-                          options={[
-                            ...selectedProviderModels.map((modelID) => {
-                              const isAuto = isOpenCSGAutoModel(selectedProviderID, modelID);
-                              return {
-                                value: modelID,
-                                label: (
-                                  <ModelOptionLabel
-                                    model={isAuto ? t("modelProviderAutoName") : modelID}
-                                    badge={isAuto ? t("modelProviderAutoBadge") : undefined}
-                                    title={isAuto ? t("modelProviderAutoRouteHint") : undefined}
-                                    showAvatar={false}
-                                  />
-                                ),
-                                description: isAuto ? t("modelProviderAutoDescription") : undefined,
-                                separatorAfter: isAuto,
-                                textValue: isAuto
-                                  ? `${modelID} ${t("modelProviderAutoName")} ${t("modelProviderAutoBadge")}`
-                                  : modelID,
-                              };
-                            }),
-                            ...(selectedModelValue && !selectedProviderModels.includes(selectedModelValue)
-                              ? [
-                                  {
-                                    value: selectedModelValue,
-                                    label: (
-                                      <ModelOptionLabel
-                                        model={
-                                          selectedModelIsOpenCSGAuto ? t("modelProviderAutoName") : selectedModelValue
-                                        }
-                                        badge={selectedModelIsOpenCSGAuto ? t("modelProviderAutoBadge") : undefined}
-                                        title={selectedModelIsOpenCSGAuto ? t("modelProviderAutoRouteHint") : undefined}
-                                        showAvatar={false}
-                                      />
-                                    ),
-                                    description: selectedModelIsOpenCSGAuto
-                                      ? t("modelProviderAutoDescription")
-                                      : undefined,
-                                    textValue: selectedModelIsOpenCSGAuto
-                                      ? `${selectedModelValue} ${t("modelProviderAutoName")} ${t("modelProviderAutoBadge")}`
-                                      : selectedModelValue,
-                                  },
-                                ]
-                              : []),
-                          ]}
-                        />
-                      </label>
+                      <AgentModelFields
+                        providerOptions={providerOptions}
+                        providerID={selectedProviderID}
+                        modelID={selectedModelValue}
+                        models={selectedProviderModels}
+                        busy={agentModelBusy}
+                        onPatch={(patch) => onAgentDraftChange({ ...agentDraft, ...patch })}
+                        onRequireOpenCSGAuth={onRequireOpenCSGAuth}
+                        t={t}
+                      />
                       <ReasoningControls
                         value={agentDraft.reasoning_effort}
                         onChange={(value) => onAgentDraftChange({ ...agentDraft, reasoning_effort: value })}

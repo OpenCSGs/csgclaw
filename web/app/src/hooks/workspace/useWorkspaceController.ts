@@ -1,22 +1,29 @@
+import { bindAgentViews } from "./bindings/agent";
+import {
+  initialsForIdentity,
+  resolveManagerDirectConversation,
+  resolveDirectConversationAgent,
+  withLocalIdentity,
+} from "@/models/workspaceIdentity";
+import { bindWorkspaceHub, saveMCPServerAndSelect } from "./bindings/hub";
+import { useModelProviderCreation } from "./useModelProviderCreation";
+import type { WorkspaceController } from "./workspaceControllerContract";
 import type { TaskConfiguration } from "@/models/taskConfiguration";
 import { settingsDialogSearch } from "@/models/workspaceDialogs";
 import { useTaskEntry } from "./useTaskEntry";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { errorMessage } from "@/api/client";
-import { checkModelProvider, createModelProvider, type ModelProviderPayload } from "@/api/modelProviders";
 import { patchCsgclawUserRequest } from "@/api/participants";
 import { createTranslator } from "@/shared/i18n";
 import {
-  agentMatchesUser,
-  isDirectConversation,
   resolveConversationUser,
   upsertUserInData,
   mergeRoomMetadataUpdateInData,
   removeConversationFromData,
 } from "@/models/conversations";
-import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
-import { MANAGER_AGENT_ID, MANAGER_AGENT_NAME, MANAGER_PARTICIPANT_ID } from "@/shared/constants/agents";
+import { isAgentRunning, resolveAgentAvatarFallback } from "@/models/agents";
+import { MANAGER_AGENT_NAME } from "@/shared/constants/agents";
 import { WorkspacePaneTypes, WorkspaceTabs, paneFromLocation } from "@/models/routing";
 import { MODEL_PROVIDER_IDS, modelProviderCatalogForOpenCSGState } from "@/models/modelProviders";
 import { useWorkspaceUiStore } from "./workspaceUiStore";
@@ -41,122 +48,11 @@ import type { HubTemplate } from "@/models/hubWorkspace";
 import type { MCPServer, MCPServerPayload } from "@/models/mcp";
 import type { RemoteKnowledgeBase } from "@/models/knowledgeBases";
 import type { ModelProvider } from "@/models/modelProviders";
-import type { IMConversation, IMData, IMUser } from "@/models/conversations";
 import type { SkillSummary } from "@/models/skillhub";
 import { TurnNotificationModes } from "@/models/turnNotifications";
 import type { TurnNotificationMode } from "@/models/turnNotifications";
 
-function isBootstrapAdminUser(user: IMUser | null | undefined) {
-  return user?.id === "u-admin" || String(user?.name ?? "").toLowerCase() === "admin";
-}
-
-export async function saveMCPServerAndSelect(
-  payload: MCPServerPayload,
-  onCreate: ((payload: MCPServerPayload) => Promise<boolean> | boolean) | undefined,
-  onSaved: (name: string) => void,
-): Promise<boolean> {
-  const saved = await onCreate?.(payload);
-  if (!saved) {
-    return false;
-  }
-  onSaved(payload.name);
-  return true;
-}
-
-function initialsForIdentity(name: string) {
-  const trimmed = name.trim();
-  if (!trimmed) {
-    return "ME";
-  }
-  const parts = trimmed.split(/\s+/).filter(Boolean);
-  if (parts.length > 1) {
-    return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
-  }
-  return trimmed.slice(0, 2).toUpperCase();
-}
-
-function resolveManagerDirectConversation(
-  rooms: readonly IMConversation[],
-  currentUserID: string,
-  managerAgent: AgentLike | null | undefined,
-): IMConversation | null {
-  if (!currentUserID) {
-    return null;
-  }
-  const managerUserIDs = new Set(
-    [
-      resolveAgentChannelUserID(managerAgent),
-      managerAgent?.id,
-      managerAgent?.user_id,
-      MANAGER_PARTICIPANT_ID,
-      MANAGER_AGENT_ID,
-    ]
-      .map((value) => String(value ?? "").trim())
-      .filter(Boolean),
-  );
-  return (
-    rooms.find(
-      (room) =>
-        isDirectConversation(room) &&
-        room.members.includes(currentUserID) &&
-        room.members.some((memberID) => memberID !== currentUserID && managerUserIDs.has(memberID)),
-    ) ?? null
-  );
-}
-
-function resolveDirectConversationAgent(
-  conversation: IMConversation | null | undefined,
-  currentUserID: string,
-  usersById: Map<string, IMUser>,
-  agents: readonly AgentLike[],
-): AgentLike | null {
-  if (!conversation || !currentUserID || !isDirectConversation(conversation)) {
-    return null;
-  }
-  const otherMemberID = conversation.members.find((id) => id && id !== currentUserID) ?? "";
-  const directUser = resolveConversationUser(conversation, currentUserID, usersById);
-  return (
-    agents.find((item) => {
-      const channelUserID = resolveAgentChannelUserID(item);
-      return (
-        Boolean(otherMemberID && (item.id === otherMemberID || item.user_id === otherMemberID)) ||
-        Boolean(channelUserID && channelUserID === otherMemberID) ||
-        agentMatchesUser(item, directUser)
-      );
-    }) ?? null
-  );
-}
-
-function withLocalIdentity(data: IMData | null, fallbackName: string): IMData | null {
-  if (!data?.current_user_id) {
-    return data;
-  }
-
-  const currentUser = data.users.find((user) => user.id === data.current_user_id);
-  if (!currentUser) {
-    return data;
-  }
-
-  const displayName = isBootstrapAdminUser(currentUser) ? fallbackName : currentUser.name;
-  if (!displayName || displayName === currentUser.name) {
-    return data;
-  }
-
-  return {
-    ...data,
-    users: data.users.map((user) =>
-      user.id === data.current_user_id
-        ? {
-            ...user,
-            avatar: user.avatar || initialsForIdentity(displayName),
-            name: displayName,
-          }
-        : user,
-    ),
-  };
-}
-
-export function useWorkspaceController() {
+export function useWorkspaceController(): WorkspaceController {
   const location = useLocation();
   const navigate = useNavigate();
   const locale = useWorkspaceUiStore((state) => state.locale);
@@ -273,7 +169,6 @@ export function useWorkspaceController() {
     setIsSidebarCollapsed,
     setWorkspaceTab,
     t,
-    theme,
     workspaceTab,
   });
   const auth = useAuthController(t);
@@ -624,9 +519,14 @@ export function useWorkspaceController() {
         ? String(activePane.id || "")
         : "";
   const selectedHuman = selectedHumanID ? (conversation.usersById.get(selectedHumanID) ?? null) : null;
-  const [showCreateModelProviderModal, setShowCreateModelProviderModal] = useState(false);
-  const [createModelProviderBusy, setCreateModelProviderBusy] = useState(false);
-  const [createModelProviderError, setCreateModelProviderError] = useState("");
+  const modelProviderCreation = useModelProviderCreation({
+    catalog: modelProviders,
+    locale,
+    refresh: refreshWorkspaceModelProviders,
+    onSelect: selectModelProvider,
+    keepCurrentPage: new URLSearchParams(location.search).get("dialog") === "settings",
+    t,
+  });
   const [humanAvatarBusyID, setHumanAvatarBusyID] = useState("");
   const [humanAvatarError, setHumanAvatarError] = useState("");
   const [humanDescriptionBusyID, setHumanDescriptionBusyID] = useState("");
@@ -822,37 +722,6 @@ export function useWorkspaceController() {
     [hub.detailPaneProps.onCreateMCP, hub.mcpCreateSource, navigatePane, rooms, setSelectedKnowledgeBaseID],
   );
 
-  function openCreateModelProviderModal() {
-    setCreateModelProviderError("");
-    setShowCreateModelProviderModal(true);
-  }
-
-  async function createOpenAIModelProvider(payload: ModelProviderPayload) {
-    if (createModelProviderBusy) {
-      return;
-    }
-    setCreateModelProviderBusy(true);
-    setCreateModelProviderError("");
-    try {
-      const created = await createModelProvider(payload);
-      if (created.id && payload.base_url && (payload.api_key || created.api_key_set)) {
-        try {
-          await checkModelProvider(created.id, payload);
-        } catch (_) {
-          // The provider was saved; the detail page can still surface a later manual check failure.
-        }
-      }
-      const refreshed = await refreshWorkspaceModelProviders();
-      const next = refreshed?.providers.find((provider) => provider.id === created.id) ?? created;
-      if (new URLSearchParams(location.search).get("dialog") !== "settings") selectModelProvider(next);
-      setShowCreateModelProviderModal(false);
-    } catch (_) {
-      setCreateModelProviderError(t("modelProviderCreateFailed"));
-    } finally {
-      setCreateModelProviderBusy(false);
-    }
-  }
-
   useEffect(() => {
     if (activePane.type !== WorkspacePaneTypes.hub) {
       return;
@@ -886,28 +755,17 @@ export function useWorkspaceController() {
   ]);
 
   const hubViewHub = useMemo(
-    () => ({
-      ...hub,
-      detailPaneProps: {
-        ...hub.detailPaneProps,
-        onSelectSkillInPlace: hub.setSelectedHubSkillName,
-        onSelectMCPInPlace: hub.setSelectedMCPServerName,
-        onSelectKnowledgeBaseInPlace: (item: RemoteKnowledgeBase | null | undefined) =>
-          hub.setSelectedKnowledgeBaseID(item?.id || ""),
-        onCreateMCPInPlace: hub.detailPaneProps.onCreateMCP,
+    () =>
+      bindWorkspaceHub({
+        hub,
         onSelectTemplate: selectHubTemplate,
-        onSelectSkill: (name: string | null | undefined) =>
-          selectHubSkill(name ? ({ name, description: "" } as SkillSummary) : null),
-        onSelectMCP: (name: string | null | undefined) =>
-          selectMCPServer(name ? ({ name, config: {} } as MCPServer) : null),
+        onSelectSkill: selectHubSkill,
+        onSelectMCP: selectMCPServer,
         onSelectKnowledgeBase: selectKnowledgeBase,
         onCreateMCP: createMCPServerAndNavigate,
         onOpenSkillUpload: () => setSkillUploadOpen(true),
-        onKnowledgeBaseLogin: () => {
-          requireOpenCSGAuthentication();
-        },
-      },
-    }),
+        onRequireAuthentication: requireOpenCSGAuthentication,
+      }),
     [
       createMCPServerAndNavigate,
       hub,
@@ -958,15 +816,12 @@ export function useWorkspaceController() {
     };
   }
 
-  const conversationAgentDetailPanelProps =
-    conversationProfileDetailAgentID && agent.agentViewProps.item?.id === conversationProfileDetailAgentID
-      ? {
-          ...agent.agentViewProps,
-          activeRoom: conversation.activeChannel,
-          item: agent.agentViewProps.item,
-          onClose: closeConversationAgentDetail,
-        }
-      : null;
+  const agentViews = bindAgentViews({
+    props: agent.agentViewProps,
+    activeRoom: conversation.activeChannel,
+    detailAgentID: conversationProfileDetailAgentID,
+    onClose: closeConversationAgentDetail,
+  });
   const mainPanelHasThread = Boolean(conversation.activeThreadRootID && conversation.selectedConversation);
 
   return {
@@ -1042,7 +897,7 @@ export function useWorkspaceController() {
       onToggleWorkspaceGroup: shell.toggleWorkspaceGroup,
       onCreateRoom: () => conversation.openCreateRoomModal(),
       onCreateAgent: agent.openCreateAgentModal,
-      onCreateModelProvider: openCreateModelProviderModal,
+      onCreateModelProvider: modelProviderCreation.open,
       onCreateNotificationParticipant: agent.openCreateNotificationParticipantModal,
       onCreateTeam: async (payload: CreateTeamPayload) => {
         await agent.agentViewProps.onCreateTeam?.(payload);
@@ -1127,10 +982,7 @@ export function useWorkspaceController() {
       },
       onCreateFromTemplate: openCreateAgentFromTemplate,
     },
-    agentViewProps: {
-      ...agent.agentViewProps,
-      activeRoom: conversation.activeChannel,
-    },
+    agentViewProps: agentViews.agentViewProps,
     computerViewProps: {
       ...agent.computerViewProps,
       channels: conversation.channels,
@@ -1156,7 +1008,7 @@ export function useWorkspaceController() {
       onOpenAgentDetail: openConversationAgentDetailFromAvatar,
       onOpenThread: openConversationThread,
       onPreviewUser: profilePreview.openParticipantPreview,
-      agentDetailPanelProps: conversationAgentDetailPanelProps,
+      agentDetailPanelProps: agentViews.detailPanelProps,
     },
     taskViewProps: {
       ...task.taskViewProps,
@@ -1182,22 +1034,7 @@ export function useWorkspaceController() {
     inviteMembersModalProps: conversation.inviteMembersModalProps,
     upgradeModalProps: upgrade.upgradeModalProps,
     configModalProps: configSettings.configModalProps,
-    createModelProviderModalProps: showCreateModelProviderModal
-      ? {
-          busy: createModelProviderBusy,
-          error: createModelProviderError,
-          locale,
-          modelProviders,
-          onClose: () => {
-            if (!createModelProviderBusy) {
-              setShowCreateModelProviderModal(false);
-            }
-          },
-          onCreate: createOpenAIModelProvider,
-          onCheckAccess: (payload: ModelProviderPayload) => checkModelProvider("openai-draft", payload),
-          t,
-        }
-      : null,
+    createModelProviderModalProps: modelProviderCreation.modalProps,
     agentProfileModalProps: agent.agentProfileModalProps,
   };
 }

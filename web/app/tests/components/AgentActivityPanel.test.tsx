@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
-import { AgentActivityPanel } from "@/pages/AgentPage/components/AgentDetailPane/AgentActivityPanel";
+import { AgentActivityPanel } from "@/pages/AgentPage/components/AgentActivityPanel/AgentActivityPanel";
 import { AgentActivityMsgTypes, CSGCLAW_AGENT_ACTIVITY_TYPE } from "@/shared/constants/messages";
 import type { IMServerEvent } from "@/models/conversations";
 

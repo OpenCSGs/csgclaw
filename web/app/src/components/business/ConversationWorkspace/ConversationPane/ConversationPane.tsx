@@ -14,7 +14,7 @@ import {
 import type { DocumentPreviewRequest } from "@/components/business/DocumentPreviewPanel";
 import { ChatSidePanel, useChatTools } from "@/components/business/ChatSidePanel";
 import { type CitationSelection } from "@/components/business/MessageContent";
-import { AgentView, type AgentDetailPaneHandle } from "@/pages/AgentPage/components";
+import { AgentView, type AgentDetailPaneHandle } from "@/components/business/AgentDetails";
 import { Button, DialogCloseButton, DialogContent, DialogRoot, DialogTitle } from "@/components/ui";
 import { normalizeAuthProviderName } from "@/models/agents";
 import { getConversationDescription, isDirectConversation, isOnDemandConversation } from "@/models/conversations";
@@ -26,7 +26,7 @@ import { ListTodo } from "lucide-react";
 import { type IMMessage } from "@/models/conversations";
 import { roomTaskParent, roomTaskMessageAnchors } from "@/models/roomTasks";
 import { localizeAPIError } from "@/shared/i18n";
-import { useRoomTasks } from "../../useRoomTasks";
+import { useRoomTasks } from "../useRoomTasks";
 import {
   conversationActivityAgents,
   conversationActivityEntries,

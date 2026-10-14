@@ -2,7 +2,7 @@ import { DiagnosticHeaderAction } from "@/components/business/TurnDiagnostics";
 import { memo } from "react";
 import type { ReactNode, RefObject } from "react";
 import { AgentAvatarContent } from "@/components/business/AgentAvatar";
-import { Button, Tooltip } from "@/components/ui";
+import { Button, Tooltip, PanelHeader } from "@/components/ui";
 import { AddUserIcon, TrashIcon, UsersIcon, WrenchIcon } from "@/components/ui/Icons";
 import type { AgentLike } from "@/models/agents";
 import type { IMConversation, IMUser, TranslateFn } from "@/models/conversations";
@@ -69,7 +69,7 @@ export const ConversationHeader = memo(function ConversationHeader({
     visibleCount === selectedMessageCount ? String(selectedMessageCount) : `${visibleCount}/${selectedMessageCount}`;
 
   return (
-    <header className="chat-header">
+    <PanelHeader className="chat-header">
       <div className="chat-header-main">
         <div className="chat-title-bar">
           <div className="chat-title-row">
@@ -217,6 +217,6 @@ export const ConversationHeader = memo(function ConversationHeader({
         </div>
         {description ? <div className="chat-subtitle">{description}</div> : null}
       </div>
-    </header>
+    </PanelHeader>
   );
 });

@@ -1,5 +1,5 @@
 import { useWorkspaceControllerContext } from "@/hooks/workspace";
-import { HubView } from "./components";
+import { HubDetailPane } from "@/components/business/HubDetailPane";
 
 export function HubPage() {
   const controller = useWorkspaceControllerContext();
@@ -8,24 +8,5 @@ export function HubPage() {
     return null;
   }
 
-  const props = controller.hubViewProps;
-  const connectorRoute = controller.activePane?.type === "apps";
-  return (
-    <HubView
-      {...props}
-      hub={
-        connectorRoute && props.hub
-          ? {
-              ...props.hub,
-              detailPaneProps: {
-                ...props.hub.detailPaneProps,
-                selectedResourceType: "mcp",
-                selectedMCPServer: null,
-                error: props.hub.detailPaneProps.mcpStateError || "",
-              },
-            }
-          : props.hub
-      }
-    />
-  );
+  return <HubDetailPane {...controller.hubViewProps} />;
 }

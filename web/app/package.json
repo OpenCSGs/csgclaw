@@ -11,6 +11,7 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "check": "eslint . && prettier . --check && tsc --noEmit && vitest run",
+    "ui:lab": "vite --open ui-lab.html",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -2,9 +2,9 @@
   z-index: var(--z-portal-popover);
   min-width: 196px;
   padding: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--popover-border);
   border-radius: var(--radius-md);
-  background: var(--panel);
+  background: var(--popover-background);
   color: var(--text);
   box-shadow: var(--shadow);
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
@@ -115,8 +115,4 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-}
-
-:root[data-theme="dark"] .csg-dropdown-menu-content {
-  background: var(--panel-strong);
 }
