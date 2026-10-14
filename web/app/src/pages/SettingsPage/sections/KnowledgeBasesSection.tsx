@@ -16,7 +16,7 @@ import styles from "../SettingsPage.module.css";
 export function KnowledgeBasesSection() {
   const controller = useWorkspaceControllerContext();
   const queryClient = useQueryClient();
-  const [connecting, setConnecting] = useState(false);
+  const [connectingID, setConnectingID] = useState("");
   const [connectError, setConnectError] = useState("");
   const hub = controller.hubViewProps?.hub;
   const detail = hub?.detailPaneProps;
@@ -27,21 +27,26 @@ export function KnowledgeBasesSection() {
   const [detailTarget, setDetailTarget] = useState<KnowledgeBaseDetailTarget | null>(null);
 
   async function connectAndReveal(kb: RemoteKnowledgeBase) {
-    if (connecting) return;
-    setConnecting(true);
+    if (connectingID) return;
+    setConnectingID(kb.id);
     setConnectError("");
     try {
       const payload = await fetchRemoteKnowledgeBaseMCPConfig(kb.id);
-      const connected = await detail?.onCreateMCPInPlace?.(payload);
+      const currentName = kb.configuredMCPName?.trim();
+      const connected = currentName
+        ? await detail?.onUpdateMCP?.(currentName, payload)
+        : await detail?.onCreateMCPInPlace?.(payload);
       if (connected) {
         await queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.knowledgeBasesScope() });
         setDetailTarget(null);
         setTab("installed");
+      } else {
+        setConnectError(t("resourcesKnowledgeBaseConfigFailed"));
       }
     } catch {
       setConnectError(t("resourcesKnowledgeBaseConfigFailed"));
     } finally {
-      setConnecting(false);
+      setConnectingID("");
     }
   }
   const authed = isAuthenticated(controller.sidebarProps?.authStatus);
@@ -140,6 +145,7 @@ export function KnowledgeBasesSection() {
       ) : (
         <MarketPane
           knowledgeBases={knowledgeBases}
+          connectingID={connectingID}
           items={marketItems}
           onConnect={(item) => void connectAndReveal(item)}
           onOpenItem={(item) => setDetailTarget({ kb: item, variant: "market" })}
@@ -151,6 +157,8 @@ export function KnowledgeBasesSection() {
 
       <KnowledgeBaseDetailDialog
         target={detailTarget}
+        connectError={connectError}
+        connecting={Boolean(connectingID)}
         t={t}
         onConnect={(kb) => void connectAndReveal(kb)}
         onOpenChange={(open) => (open ? undefined : setDetailTarget(null))}
@@ -210,6 +218,7 @@ function KnowledgeBaseCard({
 function MarketPane({
   items,
   knowledgeBases,
+  connectingID,
   onConnect,
   onLoadMore,
   onOpenItem,
@@ -218,6 +227,7 @@ function MarketPane({
 }: {
   items: readonly RemoteKnowledgeBase[];
   knowledgeBases: KnowledgeBasesView | undefined;
+  connectingID: string;
   onConnect: (item: RemoteKnowledgeBase) => void;
   onLoadMore: () => void;
   onOpenItem: (item: RemoteKnowledgeBase) => void;
@@ -263,7 +273,7 @@ function MarketPane({
     <>
       <ResourceList>
         {items.map((item) => {
-          const connecting = knowledgeBases?.copyBusyID === item.id;
+          const connecting = connectingID === item.id;
           const connected = Boolean(String(item.configuredMCPName || "").trim());
           return (
             <KnowledgeBaseCard
@@ -281,7 +291,7 @@ function MarketPane({
                         variant="secondaryGray"
                         loading={connecting}
                         aria-label={t("iaKnowledgeUpdate")}
-                        disabled={Boolean(knowledgeBases?.copyBusyID)}
+                        disabled={Boolean(connectingID)}
                         onClick={() => onConnect(item)}
                       >
                         <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
@@ -297,7 +307,7 @@ function MarketPane({
                         variant="secondaryGray"
                         loading={connecting}
                         aria-label={t("iaKnowledgeConnect")}
-                        disabled={Boolean(knowledgeBases?.copyBusyID)}
+                        disabled={Boolean(connectingID)}
                         onClick={() => onConnect(item)}
                       >
                         <Plus size={16} strokeWidth={2} aria-hidden="true" />

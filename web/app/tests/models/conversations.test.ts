@@ -17,7 +17,7 @@ import {
   isAgentRosterEvent,
   isToolCallMessage,
   latestAt,
-  mergeRoomNotificationUpdateInData,
+  mergeRoomMetadataUpdateInData,
   removeUserFromData,
   resolveAgentForUser,
   sortConversations,
@@ -492,13 +492,54 @@ describe("conversation model helpers", () => {
       message("new-message", "2026-05-15T00:01:00Z"),
     );
 
-    const next = mergeRoomNotificationUpdateInData(current, {
+    const next = mergeRoomMetadataUpdateInData(current, {
       ...staleRoom,
       notify_all_agents: true,
     });
 
     expect(next.rooms[0].notify_all_agents).toBe(true);
     expect(next.rooms[0].messages.map((item) => item.id)).toEqual(["general-message", "new-message"]);
+  });
+
+  it("syncs room metadata across clients without replacing loaded history", () => {
+    const messages = [message("latest", "2026-05-15T00:01:00Z")];
+    const threads = [{ root_message_id: "latest", context: messages }];
+    const original = room("task", "2026-05-15T00:00:00Z", {
+      messages,
+      threads,
+      configuration: { model_id: "old-model", reasoning_effort: "low" },
+    });
+    const other = room("other", "2026-05-15T00:00:00Z");
+    const current = { rooms: [original, other], users: [] };
+    const updated = {
+      ...original,
+      title: "Renamed",
+      custom_title: true,
+      pinned: true,
+      archived: true,
+      configuration: { model_id: "new-model", reasoning_effort: "high" },
+      messages: [],
+      threads: [],
+    };
+    const next = applyIMEvent(current, { type: "room.updated", room: updated });
+    expect(next.rooms[0]).toMatchObject({
+      title: "Renamed",
+      custom_title: true,
+      pinned: true,
+      archived: true,
+      configuration: updated.configuration,
+    });
+    expect(next.rooms[0].messages).toBe(messages);
+    expect(next.rooms[0].threads).toBe(threads);
+    expect(next.rooms[1]).toBe(other);
+    expect(original.configuration?.model_id).toBe("old-model");
+    // False metadata flags are omitted in the server's full room snapshot.
+    const { pinned: _pinned, archived: _archived, ...restored } = updated;
+    const final = applyIMEvent(next, { type: "room.updated", room: restored });
+    expect(final.rooms[0].pinned).toBe(false);
+    expect(final.rooms[0].archived).toBe(false);
+    expect(final.rooms[0].configuration?.model_id).toBe("new-model");
+    expect(final.rooms[0].messages).toBe(messages);
   });
 
   it("adds an unknown room received through a room notification event", () => {

@@ -94,8 +94,8 @@ export type ConversationPaneProps = {
   locale: LocaleCode;
   logAgent?: AgentLike | null;
   managerProfile?: AgentProfileLike | null;
-  managerProfileIncomplete?: boolean | null;
-  managerRuntimeUnavailable?: boolean | null;
+  composerDisabledReason?: string;
+  threadComposerDisabledReason?: string;
   memberMenuRef: RefObject<HTMLDivElement | null>;
   mentionCandidates: MentionPickerUser[];
   mentionIndex: number;

@@ -22,23 +22,34 @@ function DialogButtons() {
     </>
   );
 }
-function setup(path = "/new", model = "test-model") {
+function setup(
+  path = "/new",
+  model = "test-model",
+  options: {
+    provider?: string;
+    authenticated?: boolean;
+    configuration?: { model_provider_id: string; model_id: string };
+  } = {},
+) {
   const create = vi.fn().mockResolvedValue(room);
   const open = vi.fn();
   const onCreateAgent = vi.fn();
+  const requireAuth = vi.fn(() => options.authenticated ?? true);
   const controller = {
     ready: true,
     t: (key: string) => key,
     openAgentSettings: vi.fn(),
+    agentViewProps: { authStatuses: { codex: { authenticated: options.authenticated ?? true } } },
     taskEntry: { create, open },
     sidebarProps: {
       t: (key: string) => key,
       locale: "zh",
       currentUserID: "user-admin",
+      onRequireOpenCSGAuthentication: requireAuth,
       usersById: new Map(),
       workerAgentItems: [
         { id: "u-manager", name: "Manager", role: "manager", user_id: "manager", model_config: { model_id: model } },
-        { id: "u-worker", name: "Worker", user_id: "worker", model_id: model },
+        { id: "u-worker", name: "Worker", user_id: "worker", model_id: model, model_provider_id: options.provider },
       ],
       teams: [{ id: "team-1", title: "Team", lead_agent_id: "u-manager", member_agent_ids: ["u-worker"] }],
       onCreateAgent,
@@ -47,18 +58,43 @@ function setup(path = "/new", model = "test-model") {
     },
   } as unknown as WorkspaceController;
   render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter
+      initialEntries={[
+        {
+          pathname: path.split("?")[0],
+          search: path.includes("?") ? `?${path.split("?")[1]}` : "",
+          state: { configuration: options.configuration },
+        },
+      ]}
+    >
       <WorkspaceControllerProvider controller={controller}>
         <StartTaskPage />
         <DialogButtons />
       </WorkspaceControllerProvider>
     </MemoryRouter>,
   );
-  return { create, open, onCreateAgent };
+  return { create, open, onCreateAgent, requireAuth };
 }
 
 describe("StartTaskPage task preparation", () => {
   beforeEach(() => vi.mocked(sendMessageRequest).mockReset());
+  it.each(["opencsg", "codex"])(
+    "checks %s authentication for the selected room model before the first prompt",
+    async (provider) => {
+      const { create, requireAuth } = setup("/new?agent=u-worker", "default-model", {
+        authenticated: false,
+        provider: "local",
+        configuration: { model_provider_id: provider, model_id: "override-model" },
+      });
+      fireEvent.change(screen.getByRole("textbox", { name: "taskEntryPrompt" }), { target: { value: "continue" } });
+      fireEvent.click(screen.getByRole("button", { name: "taskEntryStart" }));
+      if (provider === "opencsg") expect(requireAuth).toHaveBeenCalledOnce();
+      else expect(await screen.findByRole("alert")).toHaveTextContent("authRequired");
+      expect(create).not.toHaveBeenCalled();
+      expect(sendMessageRequest).not.toHaveBeenCalled();
+    },
+  );
+
   it("does not create a session until sending, and preserves the created session and message id on retry", async () => {
     vi.mocked(sendMessageRequest)
       .mockRejectedValueOnce(new Error("network failure"))

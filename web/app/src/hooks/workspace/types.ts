@@ -215,6 +215,7 @@ export type ProfilePreviewController = {
 };
 
 export type UseConversationControllerArgs = {
+  modelProviders?: ModelProviderCatalog | null;
   activeConversationId: string;
   activePane: WorkspacePane;
   agents: AgentLike[];

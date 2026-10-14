@@ -1,4 +1,8 @@
-import { supportsTaskConfiguration, type TaskConfiguration } from "@/models/taskConfiguration";
+import {
+  effectiveConversationProfile,
+  supportsTaskConfiguration,
+  type TaskConfiguration,
+} from "@/models/taskConfiguration";
 import { useMemo, useRef, useState } from "react";
 import { useSearchParams, useLocation } from "react-router-dom";
 import { ArrowUp, FileText, FolderGit2, Terminal, Users, X } from "lucide-react";
@@ -7,7 +11,8 @@ import { useWorkspaceControllerContext } from "@/hooks/workspace";
 import { sendMessageRequest } from "@/api/im";
 import { errorMessage } from "@/api/client";
 import { localizeAPIError } from "@/shared/i18n";
-import { agentProfileConfig, resolveAgentChannelUserID } from "@/models/agents";
+import { normalizeAuthProviderName, providerNeedsAuth, resolveAgentChannelUserID } from "@/models/agents";
+import { modelProviderConfigUsesOpenCSG } from "@/models/modelProviders";
 import { taskConversationTitle } from "@/models/taskConversations";
 import type { IMConversation } from "@/models/conversations";
 import styles from "./StartTaskPage.module.css";
@@ -75,11 +80,11 @@ function StartTaskForm({
   const entry = controller.taskEntry;
   const selectedAgent = agents.find((agent) => selected === `agent:${agent.id}`);
   const selectedTeam = teams.find((team) => selected === `team:${team.id}`);
-  const selectedProfile = agentProfileConfig(selectedAgent);
-  const modelMissing =
-    !configuration.model_id &&
-    selectedAgent &&
-    (selectedProfile?.profile_complete === false || !selectedProfile?.model_id);
+  const recipient = selectedAgent || manager;
+  const selectedProfile = recipient
+    ? effectiveConversationProfile(recipient, selectedAgent ? configuration : undefined, controller.modelProviders)
+    : null;
+  const modelMissing = recipient && (selectedProfile?.profile_complete === false || !selectedProfile?.model_id);
   const targetName = selectedAgent?.name || selectedTeam?.title || t("taskEntrySolo");
 
   async function start(empty = false, prompt = draft) {
@@ -93,6 +98,16 @@ function StartTaskForm({
     setError("");
     try {
       if (modelMissing) throw new Error(t("taskEntryModelMissing"));
+      if (!empty) {
+        if (modelProviderConfigUsesOpenCSG(selectedProfile) && !readySidebar.onRequireOpenCSGAuthentication?.()) return;
+        const provider = normalizeAuthProviderName(selectedProfile?.provider);
+        if (
+          providerNeedsAuth(provider) &&
+          controller.agentViewProps?.authStatuses?.[provider]?.authenticated === false
+        ) {
+          throw new Error(t("authRequired"));
+        }
+      }
       let room = created.current;
       if (!room) {
         const agentIDs = selectedTeam ? [selectedTeam.lead_agent_id, ...selectedTeam.member_agent_ids] : [];

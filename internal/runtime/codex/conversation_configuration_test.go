@@ -69,11 +69,15 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 	rt := New(deps)
 	t.Cleanup(func() { _ = rt.Close() })
 	ids := map[string]string{}
-	run := func(agent, room, model string) int {
+	run := func(agent, room, model string, modes ...string) int {
+		mode := ExecutionModeReadOnly
+		if len(modes) > 0 {
+			mode = modes[0]
+		}
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		req := contract.TurnRequest{ID: "turn", ConversationKey: contract.ConversationKey(room), Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}}, RoomConfiguration: &contract.RoomConfiguration{RoomID: room, Configuration: taskconfig.Config{ModelID: model, ExecutionMode: "read_only"}}}
+		req := contract.TurnRequest{ID: "turn", ConversationKey: contract.ConversationKey(room), Input: []contract.InputPart{{Kind: contract.InputPartText, Text: "hello"}}, RoomConfiguration: &contract.RoomConfiguration{RoomID: room, Configuration: taskconfig.Config{ModelID: model, ExecutionMode: mode}}}
 		result := rt.Conversation(agent).Run(ctx, req, contract.EventSinkFunc(func(context.Context, contract.TurnEvent) error { return nil }))
 		if result.Status != contract.TurnSucceeded {
 			t.Fatalf("run %s/%s: %+v", agent, room, result)
@@ -88,7 +92,7 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 		}
 		ids[key] = meta.ConversationSessions[room]
 		live := rt.sessionManager().(*appServerManager).liveSession(agent)
-		if live.spec.Profile.ModelID != model || live.spec.ExecutionMode != "read_only" {
+		if live.spec.Profile.ModelID != model || live.spec.ExecutionMode != mode {
 			t.Fatal("incorrect process settings")
 		}
 		return live.cmd.Process.Pid
@@ -100,6 +104,11 @@ func TestRoomConfigurationReusesProcessAndNativeMappings(t *testing.T) {
 	if next := run("agent-one", "room-shared", "model-b"); first == next {
 		t.Fatal("process configuration was not refreshed")
 	}
+	standard := run("agent-one", "room-shared", "model-b", ExecutionModeStandard)
+	if readonly := run("agent-one", "room-shared", "model-b"); standard == readonly {
+		t.Fatal("mode change did not restart the process")
+	}
+	run("agent-one", "room-shared", "model-b", ExecutionModeStandard)
 	run("agent-one", "room-other", "model-c")
 	run("agent-one", "room-shared", "model-a")
 	run("agent-two", "room-shared", "model-a")

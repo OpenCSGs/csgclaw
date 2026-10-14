@@ -12,7 +12,7 @@ import {
   isDirectConversation,
   resolveConversationUser,
   upsertUserInData,
-  upsertConversationInData,
+  mergeRoomMetadataUpdateInData,
   removeConversationFromData,
 } from "@/models/conversations";
 import { isAgentRunning, resolveAgentAvatarFallback, resolveAgentChannelUserID } from "@/models/agents";
@@ -425,6 +425,7 @@ export function useWorkspaceController() {
     agents,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
+    modelProviders,
     data: displayData,
     locale,
     managerProfile,
@@ -491,6 +492,7 @@ export function useWorkspaceController() {
     autoSelectFallbackConversation: false,
     authBusyProvider: agent.cliproxyAuthBusy,
     authStatuses: agent.cliproxyAuthStatuses,
+    modelProviders,
     data: displayData,
     locale,
     managerProfile,
@@ -932,7 +934,7 @@ export function useWorkspaceController() {
   const taskEntry = useTaskEntry({
     currentUserID: displayData?.current_user_id ?? "",
     rooms,
-    onUpdate: (room) => setBootstrapData((current) => upsertConversationInData(current, room)),
+    onUpdate: (room) => setBootstrapData((current) => mergeRoomMetadataUpdateInData(current, room)),
     onDelete: (id) => {
       setBootstrapData((current) => removeConversationFromData(current, id));
       if (activePane.type === WorkspacePaneTypes.conversation && activePane.id === id) navigate("/new");

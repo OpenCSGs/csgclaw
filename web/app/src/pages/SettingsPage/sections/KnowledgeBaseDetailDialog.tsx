@@ -31,6 +31,8 @@ export function KnowledgeBaseDetailDialog({
   t,
   onOpenChange,
   onConnect,
+  connecting = false,
+  connectError = "",
   toggle,
   allowDelete = true,
   portalContainer,
@@ -40,6 +42,8 @@ export function KnowledgeBaseDetailDialog({
   t: TranslateFn;
   onOpenChange: (open: boolean) => void;
   onConnect?: (kb: RemoteKnowledgeBase) => void;
+  connecting?: boolean;
+  connectError?: string;
   /** Toggles the underlying MCP server for this agent. */
   toggle?: { enabled: boolean; busy: boolean; onToggle: () => void };
 
@@ -147,6 +151,11 @@ export function KnowledgeBaseDetailDialog({
                 </div>
               </DialogHeader>
               <DialogBody className={styles.body}>
+                {connectError ? (
+                  <p className="form-error" role="alert">
+                    {connectError}
+                  </p>
+                ) : null}
                 {variant === "market" ? (
                   previewLoading || preview ? (
                     <section className={styles.card}>
@@ -204,7 +213,7 @@ export function KnowledgeBaseDetailDialog({
                   </Button>
                 ) : null}
                 {variant === "market" && kb ? (
-                  <Button variant="primary" size="sm" onClick={() => onConnect?.(kb)}>
+                  <Button variant="primary" size="sm" loading={connecting} onClick={() => onConnect?.(kb)}>
                     {connected ? (
                       <RefreshCw size={15} strokeWidth={2} aria-hidden="true" />
                     ) : (

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -2606,13 +2607,17 @@ func TestAppServerThreadStartRegistersPublishFileDynamicTool(t *testing.T) {
 	}
 }
 
-func TestAppServerReadOnlyThreadOmitsUploadFileDynamicTool(t *testing.T) {
+func TestAppServerReadOnlyThreadKeepsResumableDynamicTools(t *testing.T) {
 	spec := testAppServerSessionSpec(t.TempDir())
 	spec.ExecutionMode = ExecutionModeReadOnly
 	params := appServerThreadStartParams(spec, true)
 	tools, ok := params["dynamicTools"].([]map[string]any)
-	if !ok || len(tools) != 1 || tools[0]["name"] != appServerPublishFileToolName {
-		t.Fatalf("dynamicTools = %#v, want publish tool only", params["dynamicTools"])
+	if !ok || len(tools) != 4 {
+		t.Fatalf("dynamicTools = %#v, want the stable engine tool set", params["dynamicTools"])
+	}
+	spec.ExecutionMode = ExecutionModeStandard
+	if !reflect.DeepEqual(tools, appServerThreadStartParams(spec, true)["dynamicTools"]) {
+		t.Fatal("execution mode changed the native thread tool set")
 	}
 }
 
@@ -2658,26 +2663,23 @@ func TestAppServerUploadFileDynamicToolUploadsToConfiguredMCPSameOrigin(t *testi
 	}
 }
 
-func TestAppServerUploadFileDynamicToolRejectsReadOnlyMode(t *testing.T) {
-	live := &liveSession{
-		spec:                  SessionSpec{ExecutionMode: ExecutionModeReadOnly},
-		filePublishingThreads: map[string]bool{"thread-1": true},
-		turnContexts:          testAppServerTurnContexts("thread-1", "turn-1", context.Background()),
-	}
-	manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
-	response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{
-		Method: "item/tool/call",
-		Params: mustJSONRaw(t, map[string]any{
-			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": appServerUploadFileToolName,
-			"arguments": map[string]any{"path": "secret.txt", "server": "parser", "uploadUri": "/upload"},
-		}),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, _ := response.(map[string]any)
-	if result["success"] != false || !strings.Contains(fmt.Sprint(result), "read-only mode") {
-		t.Fatalf("response = %#v, want read-only rejection", response)
+func TestAppServerMutatingDynamicToolsRejectReadOnlyMode(t *testing.T) {
+	for _, tool := range []string{appServerUploadFileToolName, "csgclaw_generate_image", "csgclaw_generate_video"} {
+		t.Run(tool, func(t *testing.T) {
+			live := &liveSession{spec: SessionSpec{ExecutionMode: ExecutionModeReadOnly}, filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", context.Background())}
+			manager := newAppServerManager(testAppServerManagerDepsWithSink(&recordingSink{}))
+			response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
+				"threadId": "thread-1", "turnId": "turn-1", "callId": "call-1", "tool": tool,
+				"arguments": map[string]any{"path": "secret.txt", "server": "parser", "uploadUri": "/upload", "prompt": "test"},
+			})})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, _ := response.(map[string]any)
+			if result["success"] != false || !strings.Contains(fmt.Sprint(result), "read-only mode") {
+				t.Fatalf("response = %#v, want read-only rejection", response)
+			}
+		})
 	}
 }
 
@@ -3887,5 +3889,30 @@ func TestAppServerCompletedMessageCorrectsStreamedDraft(t *testing.T) {
 	events := withoutContextUsage(sink.snapshot())
 	if len(events) != 2 || events[1].Text != "Corrected" || events[1].Payload.(map[string]any)["text_snapshot"] != true {
 		t.Fatalf("events=%+v", events)
+	}
+}
+
+func TestGenerateImageToolFollowsCurrentExecutionMode(t *testing.T) {
+	calls := 0
+	ctx := contract.WithImageGenerationHandler(context.Background(), func(context.Context, string, string) error {
+		calls++
+		return nil
+	})
+	live := &liveSession{filePublishingThreads: map[string]bool{"thread-1": true}, turnContexts: testAppServerTurnContexts("thread-1", "turn-1", ctx)}
+	manager := newAppServerManager(testAppServerManagerDeps())
+	for _, mode := range []string{ExecutionModeReadOnly, ExecutionModeStandard, ExecutionModeReadOnly, ExecutionModeStandard} {
+		live.spec.ExecutionMode = mode
+		response, err := manager.handleAppServerServerRequest("runtime-1", live, appServerServerRequest{Method: "item/tool/call", Params: mustJSONRaw(t, map[string]any{
+			"threadId": "thread-1", "turnId": "turn-1", "callId": "call-image", "tool": "csgclaw_generate_image", "arguments": map[string]any{"prompt": "blue sky"},
+		})})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.(map[string]any)["success"] != (mode == ExecutionModeStandard) {
+			t.Fatalf("mode %s: %#v", mode, response)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("generation called %d times, want two standard-mode calls", calls)
 	}
 }
